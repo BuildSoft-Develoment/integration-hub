@@ -12,11 +12,12 @@ import { SourceEditorComponent } from './components/source-editor/source-editor.
 import { SourceListComponent } from './components/source-list/source-list.component';
 import { SourceToolbarComponent } from './components/source-toolbar/source-toolbar.component';
 import { SourceCatalogStore } from './source-catalog.store';
+import { SourceEditorStateService } from './source-editor-state.service';
 
 @Component({
   selector: 'ih-source-catalog-page',
   standalone: true,
-  providers: [SourceCatalogStore],
+  providers: [SourceCatalogStore, SourceEditorStateService],
   imports: [
     CommonModule,
     FormsModule,

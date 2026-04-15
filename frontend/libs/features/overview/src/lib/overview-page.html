@@ -21,17 +21,17 @@
       <ih-overview-table-card
         [titleKey]="'overview.recentExecutions'"
         [emptyKey]="'overview.noExecutions'"
-        [rows]="recentExecutions()"
+        [rows]="store.recentExecutionsRows()"
       />
       <ih-overview-table-card
         [titleKey]="'overview.failedHighlights'"
         [emptyKey]="'overview.noFailures'"
-        [rows]="failedHighlights()"
+        [rows]="store.failedHighlightsRows()"
       />
       <ih-overview-table-card
         [titleKey]="'overview.recentAudit'"
         [emptyKey]="'overview.noAudit'"
-        [rows]="recentAudit()"
+        [rows]="store.recentAuditRows()"
       />
     </section>
   </section>

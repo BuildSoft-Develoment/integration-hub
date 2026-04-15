@@ -8,13 +8,11 @@ import {
   SourceManagerService,
 } from '@integration-hub/core/services';
 import {
-  createSourceForm,
   SourceFormModel,
   SourceRecord,
-  SourceTestResult,
-  toSourceFormModel,
 } from './source.models';
 import { SourceApiService } from './source-api.service';
+import { SourceEditorStateService } from './source-editor-state.service';
 
 type ViewMode = 'details' | 'edit';
 type SourceStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
@@ -23,6 +21,7 @@ type SourceStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 export class SourceCatalogStore implements OnDestroy {
   private readonly api = inject(SourceApiService);
   private readonly sourceManager = inject(SourceManagerService);
+  private readonly editor = inject(SourceEditorStateService);
   private readonly authService = inject(AuthService);
   private readonly feedback = inject(AppFeedbackService);
   private readonly searchDebounceMs = 300;
@@ -42,10 +41,10 @@ export class SourceCatalogStore implements OnDestroy {
   readonly drawerOpen = signal(false);
   readonly currentPage = signal(0);
   readonly pageSize = signal(8);
-  readonly viewMode = signal<ViewMode>('details');
-  readonly testResult = signal<SourceTestResult | null>(null);
-  readonly form = signal<SourceFormModel>(createSourceForm('FILESYSTEM'));
-  readonly draft = signal<SourceDraft>(this.sourceManager.createDraftFor('FILESYSTEM'));
+  readonly viewMode = this.editor.viewMode;
+  readonly testResult = this.editor.testResult;
+  readonly form = this.editor.form;
+  readonly draft = this.editor.draft;
 
   readonly canEdit = computed(() => this.authService.canAdmin());
   readonly pagedSources = computed(() => this.sources());
@@ -57,30 +56,14 @@ export class SourceCatalogStore implements OnDestroy {
   );
 
   readonly selectedForm = computed<SourceFormModel>(() => {
-    const source = this.selectedSource();
-    if (!source) {
-      return createSourceForm(this.form().sourceType || 'FILESYSTEM');
-    }
-
-    return toSourceFormModel(source);
+    return this.editor.resolveSelectedForm(this.selectedSource());
   });
 
   readonly selectedDraft = computed<SourceDraft>(() => {
-    const source = this.selectedSource();
-    if (!source) {
-      return this.sourceManager.createDraftFor(this.selectedForm().sourceType);
-    }
-
-    return this.sourceManager.hydrateDraft(source.sourceType, source.configurationJson);
+    return this.editor.resolveSelectedDraft(this.selectedSource());
   });
 
-  readonly formTitle = computed(() =>
-    this.viewMode() === 'edit'
-      ? this.form().id
-        ? 'sources.edit'
-        : 'sources.create'
-      : 'sources.detail'
-  );
+  readonly formTitle = this.editor.formTitle;
 
   async load(): Promise<void> {
     await this.loadSources(true);
@@ -93,14 +76,14 @@ export class SourceCatalogStore implements OnDestroy {
   selectSource(source: SourceRecord): void {
     this.selectedSourceId.set(source.id);
     this.selectedSource.set(source);
-    this.viewMode.set('details');
-    this.testResult.set(null);
+    this.editor.showDetails();
+    this.editor.clearTestResult();
     this.drawerOpen.set(true);
   }
 
   closeDrawer(): void {
     this.drawerOpen.set(false);
-    this.testResult.set(null);
+    this.editor.clearTestResult();
   }
 
   previousPage(): void {
@@ -137,61 +120,35 @@ export class SourceCatalogStore implements OnDestroy {
 
   startCreate(): void {
     const sourceType = this.form().sourceType || 'FILESYSTEM';
-    this.form.set(createSourceForm(sourceType));
-    this.draft.set(this.sourceManager.createDraftFor(sourceType));
-    this.viewMode.set('edit');
-    this.testResult.set(null);
+    this.editor.startCreate(sourceType);
     this.drawerOpen.set(true);
   }
 
   startEdit(source: SourceRecord): void {
     this.selectedSourceId.set(source.id);
     this.selectedSource.set(source);
-    this.form.set(toSourceFormModel(source));
-    this.draft.set(
-      this.sourceManager.hydrateDraft(source.sourceType, source.configurationJson)
-    );
-    this.viewMode.set('edit');
-    this.testResult.set(null);
+    this.editor.startEdit(source);
     this.drawerOpen.set(true);
   }
 
   cancelEdit(): void {
     this.drawerOpen.set(false);
-    this.viewMode.set('details');
-    this.testResult.set(null);
+    this.editor.cancelEdit();
   }
 
   updateFormField<K extends keyof SourceFormModel>(
     field: K,
     value: SourceFormModel[K]
   ): void {
-    const nextForm = {
-      ...this.form(),
-      [field]: value,
-    };
-
-    this.form.set(nextForm);
-
-    if (field === 'sourceType') {
-      this.draft.set(this.sourceManager.createDraftFor(value as SourceProviderType));
-      this.testResult.set(null);
-    }
+    this.editor.updateFormField(field, value);
   }
 
   updateDraft(patch: Partial<SourceDraft>): void {
-    this.draft.update((current) => ({
-      ...current,
-      ...patch,
-    }));
-    this.testResult.set(null);
+    this.editor.updateDraft(patch);
   }
 
   patchForm(patch: Partial<SourceFormModel>): void {
-    this.form.update((current) => ({
-      ...current,
-      ...patch,
-    }));
+    this.editor.patchForm(patch);
   }
 
   async save(): Promise<void> {

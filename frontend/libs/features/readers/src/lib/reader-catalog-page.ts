@@ -7,11 +7,12 @@ import { ReaderEditorComponent } from './components/reader-editor/reader-editor.
 import { ReaderListComponent } from './components/reader-list/reader-list.component';
 import { ReaderToolbarComponent } from './components/reader-toolbar/reader-toolbar.component';
 import { ReaderCatalogStore } from './reader-catalog.store';
+import { ReaderEditorStateService } from './reader-editor-state.service';
 
 @Component({
   selector: 'ih-reader-catalog-page',
   standalone: true,
-  providers: [ReaderCatalogStore],
+  providers: [ReaderCatalogStore, ReaderEditorStateService],
   imports: [CommonModule, MatSidenavModule, ReaderToolbarComponent, ReaderListComponent, ReaderEditorComponent],
   templateUrl: './reader-catalog-page.html',
   styleUrl: './reader-catalog-page.css',

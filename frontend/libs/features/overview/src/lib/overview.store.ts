@@ -2,6 +2,7 @@ import { computed, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { OverviewApiService } from './overview-api.service';
 import { OverviewSummaryRecord } from './overview.models';
+import { OverviewTableRow } from './overview-row.model';
 
 @Injectable()
 export class OverviewStore {
@@ -26,6 +27,33 @@ export class OverviewStore {
       { key: 'scheduled', titleKey: 'overview.metric.scheduled', value: summary.scheduledProcesses, detail: null },
     ];
   });
+
+  readonly recentExecutionsRows = computed<OverviewTableRow[]>(() =>
+    (this.summary()?.recentExecutions ?? []).map((item) => ({
+      primary: item.processName,
+      secondary: `#${item.id}`,
+      status: item.status,
+      timestamp: item.startedAt,
+    }))
+  );
+
+  readonly failedHighlightsRows = computed<OverviewTableRow[]>(() =>
+    (this.summary()?.failedExecutionHighlights ?? []).map((item) => ({
+      primary: item.processName,
+      secondary: `#${item.id}`,
+      status: item.status,
+      timestamp: item.finishedAt,
+    }))
+  );
+
+  readonly recentAuditRows = computed<OverviewTableRow[]>(() =>
+    (this.summary()?.recentAuditEvents ?? []).map((item) => ({
+      primary: item.eventType,
+      secondary: item.message || `#${item.id}`,
+      status: item.status,
+      timestamp: item.createdAt,
+    }))
+  );
 
   async load(): Promise<void> {
     this.loading.set(true);

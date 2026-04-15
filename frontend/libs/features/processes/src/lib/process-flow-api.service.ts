@@ -1,4 +1,4 @@
-import { Injectable } from '@angular/core';
+import { inject, Injectable } from '@angular/core';
 import { FMoveNodesEvent } from '@foblex/flow';
 import { DEFAULT_PROCESS_FLOW_NODE_SIZE, ProcessFlowLayout, ProcessFlowNodePosition, ProcessFlowNodeSize } from './process-flow.models';
 import { ProcessFlowMapper } from './process-flow.mapper';
@@ -24,8 +24,8 @@ interface ProcessFlowHistoryEntry {
 
 @Injectable()
 export class ProcessFlowApiService {
-  private readonly mapper = new ProcessFlowMapper();
-  private readonly sync = new ProcessFlowSyncService(this.mapper);
+  private readonly mapper = inject(ProcessFlowMapper);
+  private readonly sync = inject(ProcessFlowSyncService);
   private history: ProcessFlowHistoryEntry[] = [];
   private future: ProcessFlowHistoryEntry[] = [];
   public model: ProcessFlowDesignerModel | null = null;

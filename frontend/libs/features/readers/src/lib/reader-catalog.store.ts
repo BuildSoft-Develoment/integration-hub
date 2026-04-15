@@ -7,12 +7,11 @@ import {
   ReaderManagerService,
 } from '@integration-hub/core/services';
 import {
-  createReaderForm,
   ReaderFormModel,
   ReaderRecord,
-  toReaderFormModel,
 } from './reader.models';
 import { ReaderApiService } from './reader-api.service';
+import { ReaderEditorStateService } from './reader-editor-state.service';
 
 type ViewMode = 'details' | 'edit';
 
@@ -20,6 +19,7 @@ type ViewMode = 'details' | 'edit';
 export class ReaderCatalogStore implements OnDestroy {
   private readonly api = inject(ReaderApiService);
   private readonly readerManager = inject(ReaderManagerService);
+  private readonly editor = inject(ReaderEditorStateService);
   private readonly authService = inject(AuthService);
   private readonly feedback = inject(AppFeedbackService);
   private readonly searchDebounceMs = 300;
@@ -37,36 +37,22 @@ export class ReaderCatalogStore implements OnDestroy {
   readonly drawerOpen = signal(false);
   readonly currentPage = signal(0);
   readonly pageSize = signal(8);
-  readonly viewMode = signal<ViewMode>('details');
-  readonly form = signal<ReaderFormModel>(createReaderForm('TXT'));
-  readonly draft = signal<ReaderDraft>(this.readerManager.createDraftFor('TXT'));
+  readonly viewMode = this.editor.viewMode;
+  readonly form = this.editor.form;
+  readonly draft = this.editor.draft;
 
   readonly canEdit = computed(() => this.authService.canAdmin());
   readonly pagedReaders = computed(() => this.readers());
 
   readonly selectedForm = computed<ReaderFormModel>(() => {
-    const reader = this.selectedReader();
-    if (!reader) {
-      return createReaderForm(this.form().readerType || 'TXT');
-    }
-    return toReaderFormModel(reader);
+    return this.editor.resolveSelectedForm(this.selectedReader());
   });
 
   readonly selectedDraft = computed<ReaderDraft>(() => {
-    const reader = this.selectedReader();
-    if (!reader) {
-      return this.readerManager.createDraftFor(this.selectedForm().readerType);
-    }
-    return this.readerManager.hydrateDraft(reader.readerType, reader.configurationJson);
+    return this.editor.resolveSelectedDraft(this.selectedReader());
   });
 
-  readonly formTitle = computed(() =>
-    this.viewMode() === 'edit'
-      ? this.form().id
-        ? 'readers.edit'
-        : 'readers.create'
-      : 'readers.detail'
-  );
+  readonly formTitle = this.editor.formTitle;
 
   async load(): Promise<void> {
     await this.loadReaders(true);
@@ -79,7 +65,7 @@ export class ReaderCatalogStore implements OnDestroy {
   selectReader(reader: ReaderRecord): void {
     this.selectedReaderId.set(reader.id);
     this.selectedReader.set(reader);
-    this.viewMode.set('details');
+    this.editor.showDetails();
     this.drawerOpen.set(true);
   }
 
@@ -107,49 +93,32 @@ export class ReaderCatalogStore implements OnDestroy {
 
   startCreate(): void {
     const readerType = this.form().readerType || 'TXT';
-    this.form.set(createReaderForm(readerType));
-    this.draft.set(this.readerManager.createDraftFor(readerType));
-    this.viewMode.set('edit');
+    this.editor.startCreate(readerType);
     this.drawerOpen.set(true);
   }
 
   startEdit(reader: ReaderRecord): void {
     this.selectedReaderId.set(reader.id);
     this.selectedReader.set(reader);
-    this.form.set(toReaderFormModel(reader));
-    this.draft.set(this.readerManager.hydrateDraft(reader.readerType, reader.configurationJson));
-    this.viewMode.set('edit');
+    this.editor.startEdit(reader);
     this.drawerOpen.set(true);
   }
 
   cancelEdit(): void {
     this.drawerOpen.set(false);
-    this.viewMode.set('details');
+    this.editor.cancelEdit();
   }
 
   updateFormField<K extends keyof ReaderFormModel>(field: K, value: ReaderFormModel[K]): void {
-    const nextForm = {
-      ...this.form(),
-      [field]: value,
-    };
-    this.form.set(nextForm);
-    if (field === 'readerType') {
-      this.draft.set(this.readerManager.createDraftFor(value as ReaderProviderType));
-    }
+    this.editor.updateFormField(field, value);
   }
 
   patchForm(patch: Partial<ReaderFormModel>): void {
-    this.form.update((current) => ({
-      ...current,
-      ...patch,
-    }));
+    this.editor.patchForm(patch);
   }
 
   updateDraft(patch: Partial<ReaderDraft>): void {
-    this.draft.update((current) => ({
-      ...current,
-      ...patch,
-    }));
+    this.editor.updateDraft(patch);
   }
 
   async save(): Promise<void> {
