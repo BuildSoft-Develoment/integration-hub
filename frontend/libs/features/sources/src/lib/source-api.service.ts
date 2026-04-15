@@ -1,17 +1,45 @@
-import { HttpClient } from '@angular/common/http';
-import { HttpContext } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { SKIP_GLOBAL_ERROR_FEEDBACK } from '@integration-hub/core/services';
 import { SourceRecord, SourceTestResult } from './source.models';
+
+export interface SourcePageResponse {
+  total: number;
+  items: SourceRecord[];
+}
+
+export interface SourceQueryParams {
+  search?: string;
+  type?: string;
+  status?: string;
+  page?: number;
+  size?: number;
+}
 
 @Injectable({ providedIn: 'root' })
 export class SourceApiService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = '/api/source-definitions';
 
-  list(): Observable<SourceRecord[]> {
-    return this.http.get<SourceRecord[]>(this.baseUrl);
+  list(params: SourceQueryParams): Observable<SourcePageResponse> {
+    let httpParams = new HttpParams()
+      .set('page', String(params.page ?? 0))
+      .set('size', String(params.size ?? 8));
+
+    if (params.search?.trim()) {
+      httpParams = httpParams.set('q', params.search.trim());
+    }
+    if (params.type && params.type !== 'ALL') {
+      httpParams = httpParams.set('type', params.type);
+    }
+    if (params.status && params.status !== 'ALL') {
+      httpParams = httpParams.set('status', params.status);
+    }
+
+    return this.http.get<SourcePageResponse>('/api/query/source-definitions', {
+      params: httpParams,
+    });
   }
 
   create(payload: {

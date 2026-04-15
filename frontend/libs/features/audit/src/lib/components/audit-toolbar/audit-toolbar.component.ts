@@ -5,6 +5,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { I18nService } from '@integration-hub/core/services';
+import { auditEventLabel } from '../../audit-event-label';
 
 @Component({
   selector: 'ih-audit-toolbar',
@@ -28,7 +29,7 @@ import { I18nService } from '@integration-hub/core/services';
           <mat-select [ngModel]="eventTypeFilter()" (ngModelChange)="eventTypeFilterChange.emit($event)">
             <mat-option value="ALL">{{ i18n.t('audit.allEventTypes') }}</mat-option>
             @for (item of eventTypeOptions(); track item) {
-              <mat-option [value]="item">{{ item }}</mat-option>
+              <mat-option [value]="item">{{ eventTypeLabel(item) }}</mat-option>
             }
           </mat-select>
         </mat-form-field>
@@ -37,9 +38,11 @@ import { I18nService } from '@integration-hub/core/services';
           <mat-label>{{ i18n.t('common.status') }}</mat-label>
           <mat-select [ngModel]="statusFilter()" (ngModelChange)="statusFilterChange.emit($event)">
             <mat-option value="ALL">{{ i18n.t('audit.allStatuses') }}</mat-option>
+            <mat-option value="RUNNING">{{ i18n.t('audit.status.RUNNING') }}</mat-option>
             <mat-option value="COMPLETED">{{ i18n.t('audit.status.COMPLETED') }}</mat-option>
             <mat-option value="FAILED">{{ i18n.t('audit.status.FAILED') }}</mat-option>
             <mat-option value="PENDING">{{ i18n.t('audit.status.PENDING') }}</mat-option>
+            <mat-option value="COMPLETED_WITH_ERRORS">{{ i18n.t('audit.status.COMPLETED_WITH_ERRORS') }}</mat-option>
           </mat-select>
         </mat-form-field>
       </div>
@@ -54,10 +57,14 @@ export class AuditToolbarComponent {
 
   readonly search = input('');
   readonly eventTypeFilter = input('ALL');
-  readonly statusFilter = input<'ALL' | 'COMPLETED' | 'FAILED' | 'PENDING'>('ALL');
+  readonly statusFilter = input<'ALL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PENDING' | 'COMPLETED_WITH_ERRORS'>('ALL');
   readonly eventTypeOptions = input.required<readonly string[]>();
 
   readonly searchChange = output<string>();
   readonly eventTypeFilterChange = output<string>();
-  readonly statusFilterChange = output<'ALL' | 'COMPLETED' | 'FAILED' | 'PENDING'>();
+  readonly statusFilterChange = output<'ALL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PENDING' | 'COMPLETED_WITH_ERRORS'>();
+
+  eventTypeLabel(value: string): string {
+    return auditEventLabel(this.i18n, value);
+  }
 }

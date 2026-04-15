@@ -17,7 +17,7 @@
         <section class="sources-list-shell ih-catalog-list-shell">
           <ih-source-list
             [sources]="store.pagedSources()"
-            [totalLength]="store.filteredSources().length"
+            [totalLength]="store.totalLength()"
             [selectedSourceId]="store.selectedSource()?.id ?? null"
             [pageIndex]="store.currentPage()"
             [pageSize]="store.pageSize()"

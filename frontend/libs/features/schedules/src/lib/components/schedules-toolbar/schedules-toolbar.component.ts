@@ -13,14 +13,9 @@ import { I18nService } from '@integration-hub/core/services';
   imports: [CommonModule, FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule],
   template: `
     <section class="toolbar-shell ih-catalog-toolbar">
-      <div class="toolbar-heading ih-catalog-toolbar__heading">
-        <div class="toolbar-copy ih-catalog-toolbar__copy">
-          <h2 class="ih-section-title">{{ i18n.t('schedules.title') }}</h2>
-          <p class="ih-muted">{{ i18n.t('schedules.subtitle') }}</p>
-        </div>
-        <button mat-stroked-button type="button" class="create-button ih-catalog-action" (click)="refresh.emit()">
-          {{ i18n.t('common.refresh') }}
-        </button>
+      <div class="toolbar-copy ih-catalog-toolbar__copy">
+        <h2 class="ih-section-title">{{ i18n.t('schedules.title') }}</h2>
+        <p class="ih-muted">{{ i18n.t('schedules.subtitle') }}</p>
       </div>
 
       <div class="toolbar-filters ih-catalog-toolbar__filters">
@@ -47,10 +42,38 @@ import { I18nService } from '@integration-hub/core/services';
           </mat-select>
         </mat-form-field>
       </div>
+
+      <button mat-stroked-button type="button" class="create-button ih-catalog-action" (click)="refresh.emit()">
+        {{ i18n.t('common.refresh') }}
+      </button>
     </section>
   `,
   styles: [`
+    .toolbar-shell { grid-template-columns:minmax(0,1fr); }
+    .toolbar-copy { min-width:0; }
+    .toolbar-filters {
+      display:grid;
+      grid-template-columns:repeat(3, minmax(0, 1fr));
+      gap:0.8rem;
+      align-items:center;
+      min-width:0;
+    }
+    .toolbar-filters > * { min-width:0; }
+    .toolbar-search,
+    .toolbar-select { display:block; width:100%; min-width:0; }
+    .toolbar-search .mat-mdc-form-field,
+    .toolbar-select .mat-mdc-form-field { width:100%; }
     .create-button { justify-self:start; }
+    @media (max-width: 1180px) {
+      .toolbar-filters {
+        grid-template-columns:1fr;
+      }
+    }
+    @media (max-width: 760px) {
+      .create-button {
+        width:100%;
+      }
+    }
   `],
 })
 export class SchedulesToolbarComponent {

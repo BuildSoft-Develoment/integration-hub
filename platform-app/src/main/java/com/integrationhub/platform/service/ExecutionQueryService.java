@@ -1,11 +1,13 @@
 package com.integrationhub.platform.service;
 
 import com.integrationhub.platform.api.query.AuditEventResponse;
+import com.integrationhub.platform.api.query.AuditEventPageResponse;
 import com.integrationhub.platform.api.query.OverviewMetricResponse;
 import com.integrationhub.platform.api.query.ProcessedSourceFileResponse;
 import com.integrationhub.platform.api.query.OverviewSummaryResponse;
 import com.integrationhub.platform.api.query.ProcessExecutionResponse;
 import com.integrationhub.platform.api.query.ProcessTaskExecutionResponse;
+import com.integrationhub.platform.api.query.QueryPageResponse;
 import com.integrationhub.platform.domain.ExecutionStatus;
 import com.integrationhub.platform.entity.AuditEvent;
 import com.integrationhub.platform.entity.ProcessExecution;
@@ -59,7 +61,7 @@ public class ExecutionQueryService {
         return toExecutionResponse(processExecutionRepository.findRequired(processExecutionId));
     }
 
-    public List<ProcessExecutionResponse> listExecutions(Long processDefinitionId, String status, int page, int size) {
+    public QueryPageResponse<ProcessExecutionResponse> listExecutions(Long processDefinitionId, String status, String queryText, String mode, int page, int size) {
         var query = new StringBuilder("from ProcessExecution e where 1=1");
         var parameters = new HashMap<String, Object>();
 
@@ -71,11 +73,47 @@ public class ExecutionQueryService {
             query.append(" and e.status = :status");
             parameters.put("status", ExecutionStatus.valueOf(status.toUpperCase()));
         }
+        applyExecutionMode(query, parameters, mode);
+        if (queryText != null && !queryText.isBlank()) {
+            applyExecutionSearch(query, parameters, queryText);
+        }
         query.append(" order by e.id desc");
 
         var result = processExecutionRepository.findExecutions(query.toString(), parameters);
+        var total = result.count();
         result.page(page, size);
-        return result.list().stream().map(this::toExecutionResponse).collect(Collectors.toList());
+        return new QueryPageResponse<>(
+                total,
+                result.list().stream().map(this::toExecutionResponse).collect(Collectors.toList())
+        );
+    }
+
+    private void applyExecutionSearch(StringBuilder query, HashMap<String, Object> parameters, String queryText) {
+        var normalized = queryText.trim().toLowerCase();
+        query.append(" and (lower(e.processDefinition.name) like :queryText");
+        parameters.put("queryText", "%" + normalized + "%");
+        if (normalized.chars().allMatch(Character::isDigit)) {
+            query.append(" or e.id = :searchId or e.processDefinition.id = :searchId");
+            parameters.put("searchId", Long.valueOf(normalized));
+        }
+        query.append(")");
+    }
+
+    private void applyExecutionMode(StringBuilder query, HashMap<String, Object> parameters, String mode) {
+        if (mode == null || mode.isBlank() || "ALL".equalsIgnoreCase(mode)) {
+            return;
+        }
+
+        if ("SCHEDULED".equalsIgnoreCase(mode)) {
+            query.append(" and e.triggerSource = :scheduledTriggerSource");
+            parameters.put("scheduledTriggerSource", "SCHEDULED");
+            return;
+        }
+
+        if ("MANUAL".equalsIgnoreCase(mode)) {
+            query.append(" and (e.triggerSource is null or e.triggerSource <> :scheduledTriggerSource)");
+            parameters.put("scheduledTriggerSource", "SCHEDULED");
+        }
     }
 
     @Transactional
@@ -93,8 +131,8 @@ public class ExecutionQueryService {
     }
 
     @Transactional
-    public List<AuditEventResponse> listAuditEvents(Long processExecutionId, Long taskDefinitionId, String eventType,
-                                                    LocalDateTime createdFrom, LocalDateTime createdTo, int page, int size) {
+    public AuditEventPageResponse listAuditEvents(Long processExecutionId, Long taskDefinitionId, String eventType, String status,
+                                                  String queryText, LocalDateTime createdFrom, LocalDateTime createdTo, int page, int size) {
         var query = new StringBuilder("from AuditEvent e where 1=1");
         var parameters = new HashMap<String, Object>();
 
@@ -110,6 +148,21 @@ public class ExecutionQueryService {
             query.append(" and e.eventType = :eventType");
             parameters.put("eventType", eventType);
         }
+        if (status != null && !status.isBlank()) {
+            query.append(" and e.status = :status");
+            parameters.put("status", status.toUpperCase());
+        }
+        if (queryText != null && !queryText.isBlank()) {
+            var normalized = queryText.trim().toLowerCase();
+            query.append(" and (lower(e.eventType) like :queryText or lower(coalesce(e.message, '')) like :queryText");
+            parameters.put("queryText", "%" + normalized + "%");
+
+            if (normalized.chars().allMatch(Character::isDigit)) {
+                query.append(" or e.id = :searchId or e.processExecution.id = :searchId or e.taskDefinition.id = :searchId");
+                parameters.put("searchId", Long.valueOf(normalized));
+            }
+            query.append(")");
+        }
         if (createdFrom != null) {
             query.append(" and e.createdAt >= :createdFrom");
             parameters.put("createdFrom", createdFrom);
@@ -121,8 +174,13 @@ public class ExecutionQueryService {
         query.append(" order by e.id desc");
 
         var result = auditEventRepository.findAuditEvents(query.toString(), parameters);
+        var total = result.count();
         result.page(page, size);
-        return result.list().stream().map(this::toAuditEventResponse).collect(Collectors.toList());
+        return new AuditEventPageResponse(
+                total,
+                result.list().stream().map(this::toAuditEventResponse).collect(Collectors.toList()),
+                auditEventRepository.listEventTypes()
+        );
     }
 
     @Transactional

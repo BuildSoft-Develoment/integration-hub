@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { computed, inject, Injectable, signal } from '@angular/core';
+import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ConnectionDraft, ConnectionProviderType } from '@integration-hub/core/providers';
 import {
@@ -20,20 +20,25 @@ type ViewMode = 'details' | 'edit';
 type StatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
 @Injectable()
-export class ConnectionCatalogStore {
+export class ConnectionCatalogStore implements OnDestroy {
   private readonly api = inject(ConnectionApiService);
   private readonly connectionManager = inject(ConnectionManagerService);
   private readonly authService = inject(AuthService);
   private readonly feedback = inject(AppFeedbackService);
+  private readonly searchDebounceMs = 300;
+  private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+  private requestSequence = 0;
 
   readonly loading = signal(false);
   readonly saving = signal(false);
   readonly testing = signal(false);
   readonly connections = signal<ConnectionRecord[]>([]);
+  readonly totalLength = signal(0);
   readonly search = signal('');
   readonly typeFilter = signal<'ALL' | ConnectionProviderType>('ALL');
   readonly statusFilter = signal<StatusFilter>('ALL');
   readonly selectedConnectionId = signal<number | null>(null);
+  readonly selectedConnection = signal<ConnectionRecord | null>(null);
   readonly drawerOpen = signal(false);
   readonly currentPage = signal(0);
   readonly pageSize = signal(8);
@@ -43,41 +48,7 @@ export class ConnectionCatalogStore {
   readonly draft = signal<ConnectionDraft>(this.connectionManager.createDraftFor('POSTGRESQL'));
 
   readonly canEdit = computed(() => this.authService.canAdmin());
-
-  readonly filteredConnections = computed(() => {
-    const search = this.search().trim().toLowerCase();
-    const typeFilter = this.typeFilter();
-    const statusFilter = this.statusFilter();
-    return this.connections().filter((connection) => {
-      const matchesSearch =
-        !search ||
-        connection.name.toLowerCase().includes(search) ||
-        String(connection.id).includes(search);
-      const matchesType = typeFilter === 'ALL' || connection.connectionType === typeFilter;
-      const matchesStatus =
-        statusFilter === 'ALL' ||
-        (statusFilter === 'ACTIVE' && connection.active) ||
-        (statusFilter === 'INACTIVE' && !connection.active);
-      return matchesSearch && matchesType && matchesStatus;
-    });
-  });
-
-  readonly totalPages = computed(() =>
-    Math.max(1, Math.ceil(this.filteredConnections().length / this.pageSize()))
-  );
-
-  readonly pagedConnections = computed(() => {
-    const pageIndex = Math.min(this.currentPage(), this.totalPages() - 1);
-    const size = this.pageSize();
-    const start = pageIndex * size;
-    return this.filteredConnections().slice(start, start + size);
-  });
-
-  readonly selectedConnection = computed(
-    () =>
-      this.connections().find((connection) => connection.id === this.selectedConnectionId()) ??
-      null
-  );
+  readonly pagedConnections = computed(() => this.connections());
 
   readonly selectedForm = computed<ConnectionFormModel>(() => {
     const connection = this.selectedConnection();
@@ -107,18 +78,16 @@ export class ConnectionCatalogStore {
   );
 
   async load(): Promise<void> {
-    this.loading.set(true);
-    try {
-      const result = await firstValueFrom(this.api.list());
-      this.connections.set(result);
-      this.currentPage.set(0);
-    } finally {
-      this.loading.set(false);
-    }
+    await this.loadConnections(true);
+  }
+
+  ngOnDestroy(): void {
+    this.clearSearchDebounce();
   }
 
   selectConnection(connection: ConnectionRecord): void {
     this.selectedConnectionId.set(connection.id);
+    this.selectedConnection.set(connection);
     this.viewMode.set('details');
     this.testResult.set(null);
     this.drawerOpen.set(true);
@@ -130,28 +99,27 @@ export class ConnectionCatalogStore {
   }
 
   updatePagination(pageIndex: number, pageSize: number): void {
+    this.clearSearchDebounce();
     this.pageSize.set(pageSize);
-    this.currentPage.set(
-      Math.max(
-        0,
-        Math.min(pageIndex, Math.ceil(this.filteredConnections().length / pageSize) - 1 || 0)
-      )
-    );
+    this.currentPage.set(pageIndex);
+    void this.loadConnections(false);
   }
 
   updateSearch(value: string): void {
     this.search.set(value);
-    this.currentPage.set(0);
+    this.scheduleSearchReload();
   }
 
   updateTypeFilter(value: 'ALL' | ConnectionProviderType): void {
     this.typeFilter.set(value);
-    this.currentPage.set(0);
+    this.clearSearchDebounce();
+    void this.loadConnections(true);
   }
 
   updateStatusFilter(value: StatusFilter): void {
     this.statusFilter.set(value);
-    this.currentPage.set(0);
+    this.clearSearchDebounce();
+    void this.loadConnections(true);
   }
 
   startCreate(): void {
@@ -165,6 +133,7 @@ export class ConnectionCatalogStore {
 
   startEdit(connection: ConnectionRecord): void {
     this.selectedConnectionId.set(connection.id);
+    this.selectedConnection.set(connection);
     this.form.set(toConnectionFormModel(connection));
     this.draft.set(
       this.connectionManager.hydrateDraft(connection.connectionType, connection.configurationJson)
@@ -228,11 +197,12 @@ export class ConnectionCatalogStore {
         ? await firstValueFrom(this.api.update(form.id, payload))
         : await firstValueFrom(this.api.create(payload));
 
-      await this.load();
       this.selectedConnectionId.set(saved.id);
+      this.selectedConnection.set(saved);
       this.viewMode.set('details');
       this.drawerOpen.set(true);
       this.testResult.set(null);
+      await this.loadConnections(false);
       this.feedback[form.id ? 'updated' : 'created']('entities.connection');
     } finally {
       this.saving.set(false);
@@ -269,11 +239,66 @@ export class ConnectionCatalogStore {
   }
 
   async toggleActive(connection: ConnectionRecord): Promise<void> {
-    await firstValueFrom(this.api.setActive(connection.id, !connection.active));
-    await this.load();
-    this.selectedConnectionId.set(connection.id);
+    const updated = await firstValueFrom(this.api.setActive(connection.id, !connection.active));
+    this.selectedConnectionId.set(updated.id);
+    this.selectedConnection.set(updated);
     this.drawerOpen.set(true);
+    await this.loadConnections(false);
     this.feedback[connection.active ? 'deactivated' : 'activated']('entities.connection');
+  }
+
+  private async loadConnections(resetPage: boolean): Promise<void> {
+    if (resetPage) {
+      this.currentPage.set(0);
+    }
+
+    const requestId = ++this.requestSequence;
+    this.loading.set(true);
+    try {
+      const response = await firstValueFrom(
+        this.api.list({
+          search: this.search(),
+          type: this.typeFilter(),
+          status: this.statusFilter(),
+          page: this.currentPage(),
+          size: this.pageSize(),
+        })
+      );
+
+      if (requestId !== this.requestSequence) {
+        return;
+      }
+
+      this.connections.set(response.items);
+      this.totalLength.set(response.total);
+
+      const selectedId = this.selectedConnectionId();
+      if (selectedId != null) {
+        const refreshed = response.items.find((item) => item.id === selectedId);
+        if (refreshed) {
+          this.selectedConnection.set(refreshed);
+        }
+      }
+    } finally {
+      if (requestId === this.requestSequence) {
+        this.loading.set(false);
+      }
+    }
+  }
+
+  private scheduleSearchReload(): void {
+    this.clearSearchDebounce();
+    this.searchDebounceHandle = setTimeout(() => {
+      this.searchDebounceHandle = null;
+      void this.loadConnections(true);
+    }, this.searchDebounceMs);
+  }
+
+  private clearSearchDebounce(): void {
+    if (this.searchDebounceHandle != null) {
+      clearTimeout(this.searchDebounceHandle);
+      this.searchDebounceHandle = null;
+    }
   }
 
   private resolveErrorMessage(error: unknown): string {

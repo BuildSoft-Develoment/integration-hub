@@ -16,7 +16,7 @@
         <section class="processes-list-shell">
           <ih-process-list
             [processes]="store.pagedProcesses()"
-            [totalLength]="store.filteredProcesses().length"
+            [totalLength]="store.totalLength()"
             [selectedProcessId]="store.selectedProcess()?.id ?? null"
             [pageIndex]="store.currentPage()"
             [pageSize]="store.pageSize()"

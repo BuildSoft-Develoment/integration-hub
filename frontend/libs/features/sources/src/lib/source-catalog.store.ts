@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { computed, inject, Injectable, signal } from '@angular/core';
+import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { SourceDraft, SourceProviderType } from '@integration-hub/core/providers';
 import {
@@ -20,20 +20,25 @@ type ViewMode = 'details' | 'edit';
 type SourceStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
 @Injectable()
-export class SourceCatalogStore {
+export class SourceCatalogStore implements OnDestroy {
   private readonly api = inject(SourceApiService);
   private readonly sourceManager = inject(SourceManagerService);
   private readonly authService = inject(AuthService);
   private readonly feedback = inject(AppFeedbackService);
+  private readonly searchDebounceMs = 300;
+  private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+  private requestSequence = 0;
 
   readonly loading = signal(false);
   readonly saving = signal(false);
   readonly testing = signal(false);
   readonly sources = signal<SourceRecord[]>([]);
+  readonly totalLength = signal(0);
   readonly search = signal('');
   readonly typeFilter = signal<'ALL' | SourceProviderType>('ALL');
   readonly statusFilter = signal<SourceStatusFilter>('ALL');
   readonly selectedSourceId = signal<number | null>(null);
+  readonly selectedSource = signal<SourceRecord | null>(null);
   readonly drawerOpen = signal(false);
   readonly currentPage = signal(0);
   readonly pageSize = signal(8);
@@ -43,47 +48,11 @@ export class SourceCatalogStore {
   readonly draft = signal<SourceDraft>(this.sourceManager.createDraftFor('FILESYSTEM'));
 
   readonly canEdit = computed(() => this.authService.canAdmin());
-
-  readonly filteredSources = computed(() => {
-    const search = this.search().trim().toLowerCase();
-    const typeFilter = this.typeFilter();
-    const statusFilter = this.statusFilter();
-
-    return this.sources().filter((source) => {
-      const matchesSearch =
-        !search ||
-        source.name.toLowerCase().includes(search) ||
-        String(source.id).includes(search);
-      const matchesType = typeFilter === 'ALL' || source.sourceType === typeFilter;
-      const matchesStatus =
-        statusFilter === 'ALL' ||
-        (statusFilter === 'ACTIVE' && source.active) ||
-        (statusFilter === 'INACTIVE' && !source.active);
-      return matchesSearch && matchesType && matchesStatus;
-    });
-  });
-
-  readonly totalPages = computed(() =>
-    Math.max(1, Math.ceil(this.filteredSources().length / this.pageSize()))
-  );
-
-  readonly pagedSources = computed(() => {
-    const pageIndex = Math.min(this.currentPage(), this.totalPages() - 1);
-    const size = this.pageSize();
-    const start = pageIndex * size;
-    return this.filteredSources().slice(start, start + size);
-  });
-
-  readonly selectedSource = computed(
-    () =>
-      this.sources().find((source) => source.id === this.selectedSourceId()) ?? null
-  );
+  readonly pagedSources = computed(() => this.sources());
 
   readonly activeProvider = computed(() =>
     this.sourceManager.resolve(
-      this.viewMode() === 'edit'
-        ? this.form().sourceType
-        : this.selectedForm().sourceType
+      this.viewMode() === 'edit' ? this.form().sourceType : this.selectedForm().sourceType
     )
   );
 
@@ -114,19 +83,16 @@ export class SourceCatalogStore {
   );
 
   async load(): Promise<void> {
-    this.loading.set(true);
+    await this.loadSources(true);
+  }
 
-    try {
-      const result = await firstValueFrom(this.api.list());
-      this.sources.set(result);
-      this.currentPage.set(0);
-    } finally {
-      this.loading.set(false);
-    }
+  ngOnDestroy(): void {
+    this.clearSearchDebounce();
   }
 
   selectSource(source: SourceRecord): void {
     this.selectedSourceId.set(source.id);
+    this.selectedSource.set(source);
     this.viewMode.set('details');
     this.testResult.set(null);
     this.drawerOpen.set(true);
@@ -138,31 +104,35 @@ export class SourceCatalogStore {
   }
 
   previousPage(): void {
-    this.currentPage.update((page) => Math.max(0, page - 1));
+    this.updatePagination(Math.max(0, this.currentPage() - 1), this.pageSize());
   }
 
   nextPage(): void {
-    this.currentPage.update((page) => Math.min(this.totalPages() - 1, page + 1));
+    this.updatePagination(this.currentPage() + 1, this.pageSize());
   }
 
   updatePagination(pageIndex: number, pageSize: number): void {
+    this.clearSearchDebounce();
     this.pageSize.set(pageSize);
-    this.currentPage.set(Math.max(0, Math.min(pageIndex, Math.ceil(this.filteredSources().length / pageSize) - 1 || 0)));
+    this.currentPage.set(pageIndex);
+    void this.loadSources(false);
   }
 
   updateSearch(value: string): void {
     this.search.set(value);
-    this.currentPage.set(0);
+    this.scheduleSearchReload();
   }
 
   updateTypeFilter(value: 'ALL' | SourceProviderType): void {
     this.typeFilter.set(value);
-    this.currentPage.set(0);
+    this.clearSearchDebounce();
+    void this.loadSources(true);
   }
 
   updateStatusFilter(value: SourceStatusFilter): void {
     this.statusFilter.set(value);
-    this.currentPage.set(0);
+    this.clearSearchDebounce();
+    void this.loadSources(true);
   }
 
   startCreate(): void {
@@ -176,6 +146,7 @@ export class SourceCatalogStore {
 
   startEdit(source: SourceRecord): void {
     this.selectedSourceId.set(source.id);
+    this.selectedSource.set(source);
     this.form.set(toSourceFormModel(source));
     this.draft.set(
       this.sourceManager.hydrateDraft(source.sourceType, source.configurationJson)
@@ -244,11 +215,12 @@ export class SourceCatalogStore {
         ? await firstValueFrom(this.api.update(form.id, payload))
         : await firstValueFrom(this.api.create(payload));
 
-      await this.load();
       this.selectedSourceId.set(saved.id);
+      this.selectedSource.set(saved);
       this.viewMode.set('details');
       this.drawerOpen.set(true);
       this.testResult.set(null);
+      await this.loadSources(false);
       this.feedback[form.id ? 'updated' : 'created']('entities.source');
     } finally {
       this.saving.set(false);
@@ -285,12 +257,68 @@ export class SourceCatalogStore {
   }
 
   async toggleActive(source: SourceRecord): Promise<void> {
-    await firstValueFrom(this.api.setActive(source.id, !source.active));
-    await this.load();
-    this.selectedSourceId.set(source.id);
+    const updated = await firstValueFrom(this.api.setActive(source.id, !source.active));
+    this.selectedSourceId.set(updated.id);
+    this.selectedSource.set(updated);
     this.drawerOpen.set(true);
     this.testResult.set(null);
+    await this.loadSources(false);
     this.feedback[source.active ? 'deactivated' : 'activated']('entities.source');
+  }
+
+  private async loadSources(resetPage: boolean): Promise<void> {
+    if (resetPage) {
+      this.currentPage.set(0);
+    }
+
+    const requestId = ++this.requestSequence;
+    this.loading.set(true);
+
+    try {
+      const response = await firstValueFrom(
+        this.api.list({
+          search: this.search(),
+          type: this.typeFilter(),
+          status: this.statusFilter(),
+          page: this.currentPage(),
+          size: this.pageSize(),
+        })
+      );
+
+      if (requestId !== this.requestSequence) {
+        return;
+      }
+
+      this.sources.set(response.items);
+      this.totalLength.set(response.total);
+
+      const selectedId = this.selectedSourceId();
+      if (selectedId != null) {
+        const refreshed = response.items.find((item) => item.id === selectedId);
+        if (refreshed) {
+          this.selectedSource.set(refreshed);
+        }
+      }
+    } finally {
+      if (requestId === this.requestSequence) {
+        this.loading.set(false);
+      }
+    }
+  }
+
+  private scheduleSearchReload(): void {
+    this.clearSearchDebounce();
+    this.searchDebounceHandle = setTimeout(() => {
+      this.searchDebounceHandle = null;
+      void this.loadSources(true);
+    }, this.searchDebounceMs);
+  }
+
+  private clearSearchDebounce(): void {
+    if (this.searchDebounceHandle != null) {
+      clearTimeout(this.searchDebounceHandle);
+      this.searchDebounceHandle = null;
+    }
   }
 
   private resolveErrorMessage(error: unknown): string {

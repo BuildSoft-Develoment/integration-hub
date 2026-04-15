@@ -1,4 +1,4 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
+import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { AppFeedbackService, AuthService } from '@integration-hub/core/services';
 import { ScheduleRecord } from './schedules.models';
@@ -8,68 +8,43 @@ type ModeFilter = 'ALL' | 'SCHEDULED' | 'MANUAL';
 type StatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 
 @Injectable()
-export class SchedulesStore {
+export class SchedulesStore implements OnDestroy {
   private readonly api = inject(SchedulesApiService);
   private readonly auth = inject(AuthService);
   private readonly feedback = inject(AppFeedbackService);
+  private readonly searchDebounceMs = 300;
+  private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+  private requestSequence = 0;
 
   readonly loading = signal(false);
   readonly executing = signal(false);
   readonly schedules = signal<ScheduleRecord[]>([]);
+  readonly totalLength = signal(0);
   readonly search = signal('');
   readonly modeFilter = signal<ModeFilter>('ALL');
   readonly statusFilter = signal<StatusFilter>('ALL');
   readonly selectedScheduleId = signal<number | null>(null);
+  readonly selectedSchedule = signal<ScheduleRecord | null>(null);
   readonly drawerOpen = signal(false);
   readonly currentPage = signal(0);
   readonly pageSize = signal(8);
 
-  readonly canOperate = computed(() => this.auth.hasAnyRole(['platform-admin', 'integration-admin', 'operator']));
-
-  readonly filteredSchedules = computed(() => {
-    const search = this.search().trim().toLowerCase();
-    const mode = this.modeFilter();
-    const status = this.statusFilter();
-
-    return this.schedules().filter((item) => {
-      const matchesSearch =
-        !search ||
-        item.name.toLowerCase().includes(search) ||
-        String(item.id).includes(search) ||
-        (item.description ?? '').toLowerCase().includes(search);
-      const matchesMode =
-        mode === 'ALL' ||
-        (mode === 'SCHEDULED' && item.scheduled) ||
-        (mode === 'MANUAL' && !item.scheduled);
-      const matchesStatus =
-        status === 'ALL' ||
-        (status === 'ACTIVE' && item.active) ||
-        (status === 'INACTIVE' && !item.active);
-      return matchesSearch && matchesMode && matchesStatus;
-    });
-  });
-
-  readonly pagedSchedules = computed(() => {
-    const start = this.currentPage() * this.pageSize();
-    return this.filteredSchedules().slice(start, start + this.pageSize());
-  });
-
-  readonly selectedSchedule = computed(
-    () => this.schedules().find((item) => item.id === this.selectedScheduleId()) ?? null
+  readonly canOperate = computed(() =>
+    this.auth.hasAnyRole(['platform-admin', 'integration-admin', 'operator'])
   );
+  readonly pagedSchedules = computed(() => this.schedules());
 
   async load(): Promise<void> {
-    this.loading.set(true);
-    try {
-      this.schedules.set(await firstValueFrom(this.api.list()));
-      this.currentPage.set(0);
-    } finally {
-      this.loading.set(false);
-    }
+    await this.loadSchedules(true);
+  }
+
+  ngOnDestroy(): void {
+    this.clearSearchDebounce();
   }
 
   selectSchedule(schedule: ScheduleRecord): void {
     this.selectedScheduleId.set(schedule.id);
+    this.selectedSchedule.set(schedule);
     this.drawerOpen.set(true);
   }
 
@@ -79,31 +54,95 @@ export class SchedulesStore {
 
   updateSearch(value: string): void {
     this.search.set(value);
-    this.currentPage.set(0);
+    this.scheduleSearchReload();
   }
 
   updateModeFilter(value: ModeFilter): void {
     this.modeFilter.set(value);
-    this.currentPage.set(0);
+    this.clearSearchDebounce();
+    void this.loadSchedules(true);
   }
 
   updateStatusFilter(value: StatusFilter): void {
     this.statusFilter.set(value);
-    this.currentPage.set(0);
+    this.clearSearchDebounce();
+    void this.loadSchedules(true);
   }
 
   updatePagination(pageIndex: number, pageSize: number): void {
+    this.clearSearchDebounce();
     this.pageSize.set(pageSize);
     this.currentPage.set(pageIndex);
+    void this.loadSchedules(false);
   }
 
   async execute(schedule: ScheduleRecord): Promise<void> {
+    if (!schedule.scheduled) {
+      this.feedback.info('schedules.manualExecutionBlocked');
+      return;
+    }
+
     this.executing.set(true);
     try {
       await firstValueFrom(this.api.execute(schedule.id));
       this.feedback.info('schedules.executed', { name: schedule.name });
+      await this.loadSchedules(false);
     } finally {
       this.executing.set(false);
+    }
+  }
+
+  private async loadSchedules(resetPage: boolean): Promise<void> {
+    if (resetPage) {
+      this.currentPage.set(0);
+    }
+
+    const requestId = ++this.requestSequence;
+    this.loading.set(true);
+    try {
+      const response = await firstValueFrom(
+        this.api.list({
+          search: this.search(),
+          mode: this.modeFilter(),
+          status: this.statusFilter(),
+          page: this.currentPage(),
+          size: this.pageSize(),
+        })
+      );
+
+      if (requestId !== this.requestSequence) {
+        return;
+      }
+
+      this.schedules.set(response.items);
+      this.totalLength.set(response.total);
+
+      const selectedId = this.selectedScheduleId();
+      if (selectedId != null) {
+        const refreshed = response.items.find((item) => item.id === selectedId);
+        if (refreshed) {
+          this.selectedSchedule.set(refreshed);
+        }
+      }
+    } finally {
+      if (requestId === this.requestSequence) {
+        this.loading.set(false);
+      }
+    }
+  }
+
+  private scheduleSearchReload(): void {
+    this.clearSearchDebounce();
+    this.searchDebounceHandle = setTimeout(() => {
+      this.searchDebounceHandle = null;
+      void this.loadSchedules(true);
+    }, this.searchDebounceMs);
+  }
+
+  private clearSearchDebounce(): void {
+    if (this.searchDebounceHandle != null) {
+      clearTimeout(this.searchDebounceHandle);
+      this.searchDebounceHandle = null;
     }
   }
 }

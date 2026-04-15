@@ -45,11 +45,12 @@ import { ScheduleRecord } from '../../schedules.models';
     </div>
   `,
   styles: [`
+    :host { display:block; min-height:0; height:100%; }
+    .list-card { min-height:100%; height:100%; display:grid; grid-template-rows:auto minmax(0,1fr) auto; }
+    .table-body { min-height:0; }
     .row-type,.row-status { display:flex; align-items:center; }
     .row-status { font-size:0.86rem; color:var(--ih-text-soft); }
-    @media (max-height: 700px) and (min-width: 761px) {
-      .row-copy small, .row-status { font-size:0.8rem; }
-    }
+    .row-copy small { color:var(--ih-text-soft); }
   `],
 })
 export class SchedulesListComponent {

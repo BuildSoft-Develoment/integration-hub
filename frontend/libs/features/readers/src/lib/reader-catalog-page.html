@@ -15,7 +15,7 @@
         <section class="readers-list-shell">
           <ih-reader-list
             [readers]="store.pagedReaders()"
-            [totalLength]="store.filteredReaders().length"
+            [totalLength]="store.totalLength()"
             [selectedReaderId]="store.selectedReader()?.id ?? null"
             [pageIndex]="store.currentPage()"
             [pageSize]="store.pageSize()"

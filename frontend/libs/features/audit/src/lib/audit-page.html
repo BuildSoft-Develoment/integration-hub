@@ -15,7 +15,7 @@
         <section class="audit-list-shell ih-catalog-list-shell">
           <ih-audit-list
             [events]="store.pagedEvents()"
-            [totalLength]="store.filteredEvents().length"
+            [totalLength]="store.totalLength()"
             [selectedEventId]="store.selectedEvent()?.id ?? null"
             [pageIndex]="store.currentPage()"
             [pageSize]="store.pageSize()"

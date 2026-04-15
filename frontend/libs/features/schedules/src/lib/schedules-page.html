@@ -15,7 +15,7 @@
         <section class="schedules-list-shell ih-catalog-list-shell">
           <ih-schedules-list
             [schedules]="store.pagedSchedules()"
-            [totalLength]="store.filteredSchedules().length"
+            [totalLength]="store.totalLength()"
             [selectedScheduleId]="store.selectedSchedule()?.id ?? null"
             [pageIndex]="store.currentPage()"
             [pageSize]="store.pageSize()"
@@ -33,6 +33,7 @@
         [canOperate]="store.canOperate()"
         (close)="store.closeDrawer()"
         (run)="store.selectedSchedule() && store.execute(store.selectedSchedule()!)"
+        (openProcesses)="openProcesses()"
       />
     </mat-drawer>
   </mat-drawer-container>

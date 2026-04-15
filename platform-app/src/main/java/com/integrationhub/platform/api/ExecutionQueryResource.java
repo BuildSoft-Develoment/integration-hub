@@ -1,9 +1,10 @@
 package com.integrationhub.platform.api;
 
-import com.integrationhub.platform.api.query.AuditEventResponse;
+import com.integrationhub.platform.api.query.AuditEventPageResponse;
 import com.integrationhub.platform.api.query.OverviewSummaryResponse;
 import com.integrationhub.platform.api.query.ProcessExecutionResponse;
 import com.integrationhub.platform.api.query.ProcessTaskExecutionResponse;
+import com.integrationhub.platform.api.query.QueryPageResponse;
 import com.integrationhub.platform.service.ExecutionQueryService;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.DefaultValue;
@@ -37,13 +38,15 @@ public class ExecutionQueryResource {
     @GET
     @Path("/process-executions")
     @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
-    public List<ProcessExecutionResponse> listExecutions(
+    public QueryPageResponse<ProcessExecutionResponse> listExecutions(
             @QueryParam("processDefinitionId") Long processDefinitionId,
             @QueryParam("status") String status,
+            @QueryParam("q") String queryText,
+            @QueryParam("mode") String mode,
             @DefaultValue("0") @QueryParam("page") int page,
             @DefaultValue("10") @QueryParam("size") int size
     ) {
-        return executionQueryService.listExecutions(processDefinitionId, status, page, size);
+        return executionQueryService.listExecutions(processDefinitionId, status, queryText, mode, page, size);
     }
 
     @GET
@@ -70,15 +73,17 @@ public class ExecutionQueryResource {
     @GET
     @Path("/audit-events")
     @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
-    public List<AuditEventResponse> listAuditEvents(
+    public AuditEventPageResponse listAuditEvents(
             @QueryParam("processExecutionId") Long processExecutionId,
             @QueryParam("taskDefinitionId") Long taskDefinitionId,
             @QueryParam("eventType") String eventType,
+            @QueryParam("status") String status,
+            @QueryParam("q") String queryText,
             @QueryParam("createdFrom") LocalDateTime createdFrom,
             @QueryParam("createdTo") LocalDateTime createdTo,
             @DefaultValue("0") @QueryParam("page") int page,
             @DefaultValue("50") @QueryParam("size") int size
     ) {
-        return executionQueryService.listAuditEvents(processExecutionId, taskDefinitionId, eventType, createdFrom, createdTo, page, size);
+        return executionQueryService.listAuditEvents(processExecutionId, taskDefinitionId, eventType, status, queryText, createdFrom, createdTo, page, size);
     }
 }
