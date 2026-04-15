@@ -1,0 +1,59 @@
+<section class="page-grid process-page">
+  <mat-drawer-container class="processes-drawer-container">
+    <mat-drawer-content [class.processes-content-hidden]="store.drawerOpen()">
+      <section class="processes-workspace">
+        <ih-process-toolbar
+          [search]="store.search()"
+          [scheduleFilter]="store.scheduleFilter()"
+          [statusFilter]="store.statusFilter()"
+          [canEdit]="store.canEdit()"
+          (searchChange)="store.updateSearch($event)"
+          (scheduleFilterChange)="store.updateScheduleFilter($event)"
+          (statusFilterChange)="store.updateStatusFilter($event)"
+          (create)="store.startCreate()"
+        />
+
+        <section class="processes-list-shell">
+          <ih-process-list
+            [processes]="store.pagedProcesses()"
+            [totalLength]="store.filteredProcesses().length"
+            [selectedProcessId]="store.selectedProcess()?.id ?? null"
+            [pageIndex]="store.currentPage()"
+            [pageSize]="store.pageSize()"
+            (selectProcess)="store.selectProcess($event)"
+            (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
+          />
+        </section>
+      </section>
+    </mat-drawer-content>
+
+    <mat-drawer class="processes-drawer" position="end" mode="over" [opened]="store.drawerOpen()" (closedStart)="store.closeDrawer()">
+      <ih-process-editor
+        [form]="store.form()"
+        [sources]="store.sources()"
+        [readers]="store.readers()"
+        [connections]="store.connections()"
+        [titleKey]="store.formTitle()"
+        [saving]="store.saving()"
+        [executing]="store.executing()"
+        [readonly]="store.viewMode() !== 'edit'"
+        [canEdit]="store.canEdit()"
+        [canOperate]="store.canOperate()"
+        (patchForm)="store.patchForm($event)"
+        (flowLayoutChange)="store.applyFlowLayout($event)"
+        (addTask)="store.addTask($event)"
+        (addTaskAt)="store.addTaskAt($event.taskType, $event.position)"
+        (patchTask)="store.updateTask($event.clientId, $event.patch)"
+        (flowStateChange)="store.applyFlowState($event.layout, $event.tasks)"
+        (removeTask)="store.removeTask($event)"
+        (save)="store.save()"
+        (cancel)="store.cancelEdit()"
+        (close)="store.closeDrawer()"
+        (edit)="store.selectedProcess() && store.startEdit(store.selectedProcess()!)"
+        (toggleActive)="store.selectedProcess() && store.toggleActive(store.selectedProcess()!)"
+        (execute)="store.selectedProcess() && store.execute(store.selectedProcess()!)"
+      />
+    </mat-drawer>
+  </mat-drawer-container>
+</section>
+

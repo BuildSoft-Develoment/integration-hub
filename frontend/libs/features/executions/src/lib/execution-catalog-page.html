@@ -1,0 +1,35 @@
+<section class="page-grid execution-page">
+  <mat-drawer-container class="executions-drawer-container">
+    <mat-drawer-content>
+      <section class="executions-workspace">
+        <ih-execution-toolbar
+          [search]="store.search()"
+          [statusFilter]="store.statusFilter()"
+          (searchChange)="store.updateSearch($event)"
+          (statusFilterChange)="store.updateStatusFilter($event)"
+        />
+
+        <section class="executions-list-shell">
+          <ih-execution-list
+            [executions]="store.pagedExecutions()"
+            [totalLength]="store.filteredExecutions().length"
+            [selectedExecutionId]="store.selectedExecution()?.id ?? null"
+            [pageIndex]="store.currentPage()"
+            [pageSize]="store.pageSize()"
+            (selectExecution)="store.selectExecution($event)"
+            (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
+          />
+        </section>
+      </section>
+    </mat-drawer-content>
+
+    <mat-drawer class="executions-drawer" position="end" mode="over" [opened]="store.drawerOpen()" (closedStart)="store.closeDrawer()">
+      <ih-execution-editor
+        [execution]="store.selectedExecution()"
+        [tasks]="store.tasks()"
+        [loading]="store.loadingDetails()"
+        (close)="store.closeDrawer()"
+      />
+    </mat-drawer>
+  </mat-drawer-container>
+</section>

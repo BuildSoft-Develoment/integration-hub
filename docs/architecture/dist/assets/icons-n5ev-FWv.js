@@ -1,0 +1,1 @@
+import{j as r}from"./likec4-B7Z4dvkO.js";const e={};function c({node:n,...t}){const o=e[n.icon??""];return o?r.jsx(o,t):null}function s(n){if(n==="integration-hub-architecture")return c;throw new Error("Unknown projectId: "+n)}function i({projectId:n,...t}){const o=s(n);return r.jsx(o,t)}export{i as ProjectIcons};

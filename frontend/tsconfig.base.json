@@ -1,0 +1,32 @@
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "rootDir": ".",
+    "sourceMap": true,
+    "declaration": false,
+    "moduleResolution": "node",
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "es2015",
+    "module": "esnext",
+    "lib": ["es2020", "dom"],
+    "skipLibCheck": true,
+    "skipDefaultLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@integration-hub/core/providers": ["libs/core/providers/src/index.ts"],
+      "@integration-hub/core/services": ["libs/core/services/src/index.ts"],
+      "@integration-hub/shared/ui": ["libs/shared/ui/src/index.ts"],
+      "@integration-hub/features/sources": ["libs/features/sources/src/index.ts"],
+      "@integration-hub/features/connections": ["libs/features/connections/src/index.ts"],
+      "@integration-hub/features/readers": ["libs/features/readers/src/index.ts"],
+      "@integration-hub/features/processes": ["libs/features/processes/src/index.ts"],
+      "@integration-hub/features/executions": ["libs/features/executions/src/index.ts"],
+      "@integration-hub/features/overview": ["libs/features/overview/src/index.ts"],
+      "@integration-hub/features/schedules": ["libs/features/schedules/src/index.ts"],
+      "@integration-hub/features/audit": ["libs/features/audit/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", "tmp"]
+}

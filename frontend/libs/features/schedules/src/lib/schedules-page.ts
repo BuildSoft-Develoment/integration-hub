@@ -1,0 +1,23 @@
+import { CommonModule } from '@angular/common';
+import { Component, inject, OnInit } from '@angular/core';
+import { MatSidenavModule } from '@angular/material/sidenav';
+import { SchedulesEditorComponent } from './components/schedules-editor/schedules-editor.component';
+import { SchedulesListComponent } from './components/schedules-list/schedules-list.component';
+import { SchedulesToolbarComponent } from './components/schedules-toolbar/schedules-toolbar.component';
+import { SchedulesStore } from './schedules.store';
+
+@Component({
+  selector: 'ih-schedules-page',
+  standalone: true,
+  providers: [SchedulesStore],
+  imports: [CommonModule, MatSidenavModule, SchedulesToolbarComponent, SchedulesListComponent, SchedulesEditorComponent],
+  templateUrl: './schedules-page.html',
+  styleUrl: './schedules-page.css',
+})
+export class SchedulesPageComponent implements OnInit {
+  readonly store = inject(SchedulesStore);
+
+  ngOnInit(): void {
+    void this.store.load();
+  }
+}

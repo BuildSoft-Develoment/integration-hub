@@ -1,0 +1,16 @@
+target/
+**/target/
+.idea/
+.vscode/
+*.iml
+.classpath
+.project
+.settings/
+frontend-nx-temp/
+frontend-react-legacy-20260404/
+_frontend_git_backup/
+**/node_modules/
+.angular/
+.nx/
+*.log
+*.err

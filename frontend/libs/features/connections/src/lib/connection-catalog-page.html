@@ -1,0 +1,61 @@
+<section class="page-grid connection-page">
+  <mat-drawer-container class="connections-drawer-container">
+    <mat-drawer-content>
+      <section class="connections-workspace">
+        <ih-connection-toolbar
+          [search]="store.search()"
+          [typeFilter]="store.typeFilter()"
+          [statusFilter]="store.statusFilter()"
+          [canEdit]="store.canEdit()"
+          [providerOptions]="providerOptions()"
+          (searchChange)="store.updateSearch($event)"
+          (typeFilterChange)="store.updateTypeFilter($event)"
+          (statusFilterChange)="store.updateStatusFilter($event)"
+          (create)="store.startCreate()"
+        />
+
+        <section class="connections-list-shell">
+          <ih-connection-list
+            [connections]="store.pagedConnections()"
+            [totalLength]="store.filteredConnections().length"
+            [selectedConnectionId]="store.selectedConnection()?.id ?? null"
+            [providerOptions]="providerOptions()"
+            [pageIndex]="store.currentPage()"
+            [pageSize]="store.pageSize()"
+            (selectConnection)="store.selectConnection($event)"
+            (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
+          />
+        </section>
+      </section>
+    </mat-drawer-content>
+
+    <mat-drawer
+      class="connections-drawer"
+      position="end"
+      mode="over"
+      [opened]="store.drawerOpen()"
+      (closedStart)="store.closeDrawer()"
+    >
+      <ih-connection-editor
+        [form]="store.viewMode() === 'edit' ? store.form() : store.selectedForm()"
+        [draft]="store.viewMode() === 'edit' ? store.draft() : store.selectedDraft()"
+        [providerOptions]="providerOptions()"
+        [titleKey]="store.formTitle()"
+        [saving]="store.saving()"
+        [testing]="store.testing()"
+        [testResult]="store.testResult()"
+        [readonly]="store.viewMode() !== 'edit'"
+        [canEdit]="store.canEdit()"
+        (patchForm)="store.patchForm($event)"
+        (connectionTypeChange)="updateConnectionType($event)"
+        (patchDraft)="store.updateDraft($event)"
+        (save)="store.save()"
+        (test)="store.testConnection()"
+        (cancel)="store.cancelEdit()"
+        (close)="store.closeDrawer()"
+        (edit)="store.selectedConnection() && store.startEdit(store.selectedConnection()!)"
+        (toggleActive)="store.selectedConnection() && store.toggleActive(store.selectedConnection()!)"
+      />
+    </mat-drawer>
+  </mat-drawer-container>
+</section>

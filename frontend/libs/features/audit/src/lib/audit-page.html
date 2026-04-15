@@ -1,0 +1,33 @@
+<section class="page-grid audit-page ih-catalog-grid">
+  <mat-drawer-container class="audit-drawer-container ih-catalog-drawer-container">
+    <mat-drawer-content>
+      <section class="audit-workspace ih-catalog-workspace">
+        <ih-audit-toolbar
+          [search]="store.search()"
+          [eventTypeFilter]="store.eventTypeFilter()"
+          [statusFilter]="store.statusFilter()"
+          [eventTypeOptions]="store.eventTypeOptions()"
+          (searchChange)="store.updateSearch($event)"
+          (eventTypeFilterChange)="store.updateEventTypeFilter($event)"
+          (statusFilterChange)="store.updateStatusFilter($event)"
+        />
+
+        <section class="audit-list-shell ih-catalog-list-shell">
+          <ih-audit-list
+            [events]="store.pagedEvents()"
+            [totalLength]="store.filteredEvents().length"
+            [selectedEventId]="store.selectedEvent()?.id ?? null"
+            [pageIndex]="store.currentPage()"
+            [pageSize]="store.pageSize()"
+            (selectEvent)="store.selectEvent($event)"
+            (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
+          />
+        </section>
+      </section>
+    </mat-drawer-content>
+
+    <mat-drawer class="audit-drawer ih-catalog-drawer" position="end" mode="over" [opened]="store.drawerOpen()" (closedStart)="store.closeDrawer()">
+      <ih-audit-editor [event]="store.selectedEvent()" (close)="store.closeDrawer()" />
+    </mat-drawer>
+  </mat-drawer-container>
+</section>

@@ -1,0 +1,55 @@
+import { CommonModule } from '@angular/common';
+import { Component } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
+import { SourceTypeFormComponentBase } from './source-type-form.abstract';
+
+@Component({
+  selector: 'ih-source-rest-form',
+  standalone: true,
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule],
+  template: `
+    <div class="form-grid">
+      <mat-form-field class="full"><mat-label>{{ i18n.t('ui.url') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().url" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('url', $event)" /></mat-form-field>
+      <mat-form-field>
+        <mat-label>{{ i18n.t('ui.method') }}</mat-label>
+        <mat-select [disabled]="readonly()" [ngModel]="draft().method" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('method', $event)">
+          <mat-option value="GET">GET</mat-option>
+          <mat-option value="POST">POST</mat-option>
+          <mat-option value="PUT">PUT</mat-option>
+          <mat-option value="DELETE">DELETE</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>{{ i18n.t('ui.authType') }}</mat-label>
+        <mat-select [disabled]="readonly()" [ngModel]="draft().authType" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('authType', $event)">
+          <mat-option value="">{{ i18n.t('ui.authNone') }}</mat-option>
+          <mat-option value="basic">{{ i18n.t('ui.authBasic') }}</mat-option>
+          <mat-option value="bearer">{{ i18n.t('ui.authBearer') }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+      @if (draft().authType === 'basic') {
+        <mat-form-field><mat-label>{{ i18n.t('ui.username') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().username" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('username', $event)" /></mat-form-field>
+        <mat-form-field><mat-label>{{ i18n.t('ui.password') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().password" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('password', $event)" /></mat-form-field>
+      }
+      @if (draft().authType === 'bearer') {
+        <mat-form-field class="full"><mat-label>{{ i18n.t('ui.bearerToken') }}</mat-label><textarea matInput [disabled]="readonly()" rows="3" [ngModel]="draft().token" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('token', $event)"></textarea></mat-form-field>
+      }
+      <mat-form-field><mat-label>{{ i18n.t('ui.fileName') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().fileName" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('fileName', $event)" /></mat-form-field>
+      <mat-form-field><mat-label>{{ i18n.t('ui.timeoutSeconds') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().timeoutSeconds" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('timeoutSeconds', $event)" /></mat-form-field>
+      <mat-form-field><mat-label>{{ i18n.t('ui.mediaType') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().mediaType" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('mediaType', $event)" /></mat-form-field>
+      <mat-form-field class="full"><mat-label>{{ i18n.t('ui.headersJson') }}</mat-label><textarea matInput [disabled]="readonly()" rows="4" [ngModel]="draft().headersJson" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('headersJson', $event)"></textarea></mat-form-field>
+      <mat-form-field class="full"><mat-label>{{ i18n.t('ui.body') }}</mat-label><textarea matInput [disabled]="readonly()" rows="5" [ngModel]="draft().body" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('body', $event)"></textarea></mat-form-field>
+    </div>
+  `,
+  styles: [
+    `
+      .form-grid { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .full { grid-column: 1 / -1; }
+      @media (max-width: 900px) { .form-grid { grid-template-columns: 1fr; } }
+    `,
+  ],
+})
+export class SourceRestFormComponent extends SourceTypeFormComponentBase {}

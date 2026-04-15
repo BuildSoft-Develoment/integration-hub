@@ -1,0 +1,38 @@
+<section class="page-grid overview-page">
+  <section class="overview-shell">
+    <header class="overview-header">
+      <div class="overview-copy">
+        <h2 class="ih-section-title">{{ i18n.t('overview.title') }}</h2>
+        <p class="ih-muted">{{ i18n.t('overview.subtitle') }}</p>
+      </div>
+    </header>
+
+    <section class="metrics-grid">
+      @for (metric of store.metrics(); track metric.key) {
+        <ih-overview-metric-card
+          [titleKey]="metric.titleKey"
+          [value]="metric.value"
+          [detail]="metric.detail"
+        />
+      }
+    </section>
+
+    <section class="tables-grid">
+      <ih-overview-table-card
+        [titleKey]="'overview.recentExecutions'"
+        [emptyKey]="'overview.noExecutions'"
+        [rows]="recentExecutions()"
+      />
+      <ih-overview-table-card
+        [titleKey]="'overview.failedHighlights'"
+        [emptyKey]="'overview.noFailures'"
+        [rows]="failedHighlights()"
+      />
+      <ih-overview-table-card
+        [titleKey]="'overview.recentAudit'"
+        [emptyKey]="'overview.noAudit'"
+        [rows]="recentAudit()"
+      />
+    </section>
+  </section>
+</section>

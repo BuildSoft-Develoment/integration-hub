@@ -1,0 +1,55 @@
+<section class="page-grid reader-page">
+  <mat-drawer-container class="readers-drawer-container">
+    <mat-drawer-content>
+      <section class="readers-workspace">
+        <ih-reader-toolbar
+          [search]="store.search()"
+          [typeFilter]="store.typeFilter()"
+          [canEdit]="store.canEdit()"
+          [providerOptions]="providerOptions()"
+          (searchChange)="store.updateSearch($event)"
+          (typeFilterChange)="store.updateTypeFilter($event)"
+          (create)="store.startCreate()"
+        />
+
+        <section class="readers-list-shell">
+          <ih-reader-list
+            [readers]="store.pagedReaders()"
+            [totalLength]="store.filteredReaders().length"
+            [selectedReaderId]="store.selectedReader()?.id ?? null"
+            [pageIndex]="store.currentPage()"
+            [pageSize]="store.pageSize()"
+            (selectReader)="store.selectReader($event)"
+            (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
+          />
+        </section>
+      </section>
+    </mat-drawer-content>
+
+    <mat-drawer
+      class="readers-drawer"
+      position="end"
+      mode="over"
+      [opened]="store.drawerOpen()"
+      (closedStart)="store.closeDrawer()"
+    >
+      <ih-reader-editor
+        [form]="store.viewMode() === 'edit' ? store.form() : store.selectedForm()"
+        [draft]="store.viewMode() === 'edit' ? store.draft() : store.selectedDraft()"
+        [providerOptions]="providerOptions()"
+        [titleKey]="store.formTitle()"
+        [saving]="store.saving()"
+        [readonly]="store.viewMode() !== 'edit'"
+        [canEdit]="store.canEdit()"
+        (patchForm)="store.patchForm($event)"
+        (readerTypeChange)="updateReaderType($event)"
+        (patchDraft)="store.updateDraft($event)"
+        (save)="store.save()"
+        (cancel)="store.cancelEdit()"
+        (close)="store.closeDrawer()"
+        (edit)="store.selectedReader() && store.startEdit(store.selectedReader()!)"
+        (toggleActive)="store.selectedReader() && store.toggleActive(store.selectedReader()!)"
+      />
+    </mat-drawer>
+  </mat-drawer-container>
+</section>

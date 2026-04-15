@@ -1,0 +1,60 @@
+<section class="page-grid source-page ih-catalog-grid">
+  <mat-drawer-container class="sources-drawer-container ih-catalog-drawer-container">
+    <mat-drawer-content>
+      <section class="sources-workspace ih-catalog-workspace">
+        <ih-source-toolbar
+          [search]="store.search()"
+          [typeFilter]="store.typeFilter()"
+          [statusFilter]="store.statusFilter()"
+          [canEdit]="store.canEdit()"
+          [providerOptions]="providerOptions()"
+          (searchChange)="store.updateSearch($event)"
+          (typeFilterChange)="store.updateTypeFilter($event)"
+          (statusFilterChange)="store.updateStatusFilter($event)"
+          (create)="store.startCreate()"
+        />
+
+        <section class="sources-list-shell ih-catalog-list-shell">
+          <ih-source-list
+            [sources]="store.pagedSources()"
+            [totalLength]="store.filteredSources().length"
+            [selectedSourceId]="store.selectedSource()?.id ?? null"
+            [pageIndex]="store.currentPage()"
+            [pageSize]="store.pageSize()"
+            (selectSource)="store.selectSource($event)"
+            (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
+          />
+        </section>
+      </section>
+    </mat-drawer-content>
+
+    <mat-drawer
+      class="sources-drawer ih-catalog-drawer"
+      position="end"
+      mode="over"
+      [opened]="store.drawerOpen()"
+      (closedStart)="store.closeDrawer()"
+    >
+      <ih-source-editor
+        [form]="store.viewMode() === 'edit' ? store.form() : store.selectedForm()"
+        [draft]="store.viewMode() === 'edit' ? store.draft() : store.selectedDraft()"
+        [providerOptions]="providerOptions()"
+        [titleKey]="store.formTitle()"
+        [saving]="store.saving()"
+        [testing]="store.testing()"
+        [testResult]="store.testResult()"
+        [readonly]="store.viewMode() !== 'edit'"
+        [canEdit]="store.canEdit()"
+        (patchForm)="store.patchForm($event)"
+        (sourceTypeChange)="updateSourceType($event)"
+        (patchDraft)="store.updateDraft($event)"
+        (save)="store.save()"
+        (test)="store.testSource()"
+        (cancel)="store.cancelEdit()"
+        (close)="store.closeDrawer()"
+        (edit)="store.selectedSource() && store.startEdit(store.selectedSource()!)"
+        (toggleActive)="store.selectedSource() && store.toggleActive(store.selectedSource()!)"
+      />
+    </mat-drawer>
+  </mat-drawer-container>
+</section>
