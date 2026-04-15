@@ -37,7 +37,7 @@ Ya estan implementados de forma inicial:
 
 ## Keycloak
 
-Se dejo una base importable del realm en [keycloak/integration-hub-realm.json](C:/chatgtp/quarkus/keycloak/integration-hub-realm.json).
+Se dejo una base importable del realm en [keycloak/integration-hub-realm.json](/keycloak/integration-hub-realm.json).
 
 Incluye:
 
@@ -82,7 +82,7 @@ Incluye:
 
 ### Configuracion UI
 
-La SPA lee la configuracion OIDC desde [index.html](C:/chatgtp/quarkus/platform-app/src/main/resources/META-INF/resources/index.html):
+La SPA lee la configuracion OIDC desde [index.html](/platform-app/src/main/resources/META-INF/resources/index.html):
 
 ```html
 window.__ihConfig = {
@@ -284,9 +284,9 @@ El task `DB_EXECUTE_FN` se implementa como provider separado de `DB_EXECUTE_SP`.
 
 Se dejo una base de preparacion para compilacion nativa en:
 
-- [pom.xml](C:/chatgtp/quarkus/pom.xml) con perfil `native`
-- [application.properties](C:/chatgtp/quarkus/platform-app/src/main/resources/application.properties)
-- [native-image.properties](C:/chatgtp/quarkus/platform-app/src/main/resources/META-INF/native-image/com.integrationhub/platform-app/native-image.properties)
+- [pom.xml](/pom.xml) con perfil `native`
+- [application.properties](/platform-app/src/main/resources/application.properties)
+- [native-image.properties](/platform-app/src/main/resources/META-INF/native-image/com.integrationhub/platform-app/native-image.properties)
 
 ### Ajustes incluidos
 
@@ -397,7 +397,7 @@ Compatibilidad validada con pruebas de integracion reales para DB_EXECUTE_SP:
 - SQL Server
 - Oracle
 
-La bateria multi-motor vive en [StoredProcedureTaskProviderCompatibilityTest](C:/chatgtp/quarkus/platform-app/src/test/java/com/integrationhub/platform/provider/task/StoredProcedureTaskProviderCompatibilityTest.java).
+La bateria multi-motor vive en [StoredProcedureTaskProviderCompatibilityTest](/platform-app/src/test/java/com/integrationhub/platform/provider/task/StoredProcedureTaskProviderCompatibilityTest.java).
 
 Campos persistidos por archivo:
 
@@ -475,14 +475,14 @@ Y puedes consultar procesos programados en:
 
 ## Entorno local end-to-end
 
-Se dejo una base operativa en [docker-compose.yml](C:/chatgtp/quarkus/docker-compose.yml) para levantar:
+Se dejo una base operativa en [docker-compose.yml](/docker-compose.yml) para levantar:
 
 - PostgreSQL en `localhost:5432`
 - Keycloak en `http://localhost:8180`
 - OpenTelemetry Collector en `localhost:4317`
 - Jaeger UI en `http://localhost:16686`
 
-La configuracion del collector esta en [otel/otel-collector-config.yaml](C:/chatgtp/quarkus/otel/otel-collector-config.yaml).
+La configuracion del collector esta en [otel/otel-collector-config.yaml](/otel/otel-collector-config.yaml).
 
 ### Arranque rapido
 
@@ -533,9 +533,9 @@ docker compose down -v
 
 Se dejo una base de pruebas de integracion en:
 
-- [CatalogAndExecutionResourceIT.java](C:/chatgtp/quarkus/platform-app/src/test/java/com/integrationhub/platform/integration/CatalogAndExecutionResourceIT.java)
-- [PostgresTestResource.java](C:/chatgtp/quarkus/platform-app/src/test/java/com/integrationhub/platform/integration/PostgresTestResource.java)
-- [IntegrationTestProfile.java](C:/chatgtp/quarkus/platform-app/src/test/java/com/integrationhub/platform/integration/IntegrationTestProfile.java)
+- [CatalogAndExecutionResourceIT.java](/platform-app/src/test/java/com/integrationhub/platform/integration/CatalogAndExecutionResourceIT.java)
+- [PostgresTestResource.java](/platform-app/src/test/java/com/integrationhub/platform/integration/PostgresTestResource.java)
+- [IntegrationTestProfile.java](/platform-app/src/test/java/com/integrationhub/platform/integration/IntegrationTestProfile.java)
 
 Cobertura inicial:
 
@@ -608,10 +608,10 @@ Diseno aplicado:
 
 
 
-Guia local ampliada: [FILE-VAULT-LOCAL.md](C:/chatgtp/quarkus/docs/architecture/FILE-VAULT-LOCAL.md)
+Guia local ampliada: [FILE-VAULT-LOCAL.md](/docs/architecture/FILE-VAULT-LOCAL.md)
 
 
-Guia de connectionRef con File Vault: [CONNECTIONREF-FILE-VAULT.md](C:/chatgtp/quarkus/docs/architecture/CONNECTIONREF-FILE-VAULT.md)
+Guia de connectionRef con File Vault: [CONNECTIONREF-FILE-VAULT.md](/docs/architecture/CONNECTIONREF-FILE-VAULT.md)
 
 
 
@@ -629,9 +629,9 @@ El mismo contrato `${secret:...}` ya puede usarse en distintos tipos de conexion
 
 Ejemplos listos:
 
-- [connection-jdbc-file-vault.json](C:/chatgtp/quarkus/docs/examples/connection-jdbc-file-vault.json)
-- [connection-rest-file-vault.json](C:/chatgtp/quarkus/docs/examples/connection-rest-file-vault.json)
-- [connection-sftp-file-vault.json](C:/chatgtp/quarkus/docs/examples/connection-sftp-file-vault.json)
+- [connection-jdbc-file-vault.json](/docs/examples/connection-jdbc-file-vault.json)
+- [connection-rest-file-vault.json](/docs/examples/connection-rest-file-vault.json)
+- [connection-sftp-file-vault.json](/docs/examples/connection-sftp-file-vault.json)
 
 ### Ejemplos de claves logicas para tasks
 
@@ -646,9 +646,9 @@ El mismo contrato tambien puede usarse en tareas dinamicas:
 
 ## Frontend Angular Nx
 
-La base nueva del frontend ya corre sobre Angular 21 + Nx en `frontend`, con Quinoa apuntando a `dist/browser`. Ver detalle en [FRONTEND-NX-ANGULAR.md](C:/chatgtp/quarkus/docs/architecture/FRONTEND-NX-ANGULAR.md).
+La base nueva del frontend ya corre sobre Angular 21 + Nx en `frontend`, con Quinoa apuntando a `dist/browser`. Ver detalle en [FRONTEND-NX-ANGULAR.md](/docs/architecture/FRONTEND-NX-ANGULAR.md).
 
-Frontend actual: Angular 21 + Angular Material + Angular CDK + Angular Aria + TailwindCSS v4 + Signals, integrado con Nx, Quinoa, hash routing y Keycloak. Ver [FRONTEND-NX-ANGULAR.md](C:/chatgtp/quarkus/docs/architecture/FRONTEND-NX-ANGULAR.md).
+Frontend actual: Angular 21 + Angular Material + Angular CDK + Angular Aria + TailwindCSS v4 + Signals, integrado con Nx, Quinoa, hash routing y Keycloak. Ver [FRONTEND-NX-ANGULAR.md](/docs/architecture/FRONTEND-NX-ANGULAR.md).
 
 ## Convenciones frontend
 
@@ -677,11 +677,11 @@ El frontend Angular ya usa una capa estandar de feedback para operaciones CRUD y
 
 Piezas principales:
 
-- [app-feedback.service.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/app-feedback.service.ts)
-- [ui-message.service.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/ui-message.service.ts)
-- [ui-message.presentation.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/ui-message.presentation.ts)
-- [ui-message-snackbar.component.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/ui-message-snackbar.component.ts)
-- [http-error.interceptor.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/http-error.interceptor.ts)
+- [app-feedback.service.ts](/frontend/libs/core/services/src/lib/app-feedback.service.ts)
+- [ui-message.service.ts](/frontend/libs/core/services/src/lib/ui-message.service.ts)
+- [ui-message.presentation.ts](/frontend/libs/core/services/src/lib/ui-message.presentation.ts)
+- [ui-message-snackbar.component.ts](/frontend/libs/core/services/src/lib/ui-message-snackbar.component.ts)
+- [http-error.interceptor.ts](/frontend/libs/core/services/src/lib/http-error.interceptor.ts)
 
 Regla aplicada:
 

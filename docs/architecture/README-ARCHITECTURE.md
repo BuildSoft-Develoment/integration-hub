@@ -8,17 +8,17 @@ Centralizar la navegacion de la documentacion tecnica y funcional de la platafor
 
 ## 1. Modelo arquitectonico
 
-- [Modelo LikeC4](C:/chatgtp/quarkus/docs/architecture/integration-hub.likec4)
-- [Visor generado LikeC4](C:/chatgtp/quarkus/docs/architecture/dist/index.html)
-- [Configuracion LikeC4](C:/chatgtp/quarkus/docs/architecture/likec4.config.mjs)
+- [Modelo LikeC4](/docs/architecture/integration-hub.likec4)
+- [Visor generado LikeC4](/docs/architecture/dist/index.html)
+- [Configuracion LikeC4](/docs/architecture/likec4.config.mjs)
 
 ## 2. Decisiones de arquitectura
 
-- [ADR-001 Platform Architecture](C:/chatgtp/quarkus/docs/architecture/ADR-001-platform-architecture.md)
+- [ADR-001 Platform Architecture](/docs/architecture/ADR-001-platform-architecture.md)
 
 ## 3. Despliegue
 
-- [Deployment On-Prem](C:/chatgtp/quarkus/docs/architecture/DEPLOYMENT-ONPREM.md)
+- [Deployment On-Prem](/docs/architecture/DEPLOYMENT-ONPREM.md)
 
 Cubre:
 - `DEV` sobre Docker
@@ -28,7 +28,7 @@ Cubre:
 
 ## 4. Casos de uso
 
-- [Use Cases](C:/chatgtp/quarkus/docs/architecture/USE-CASES.md)
+- [Use Cases](/docs/architecture/USE-CASES.md)
 
 Cubre:
 - configuracion de fuentes
@@ -40,7 +40,7 @@ Cubre:
 
 ## 5. Requisitos no funcionales
 
-- [NFRs](C:/chatgtp/quarkus/docs/architecture/NFRs.md)
+- [NFRs](/docs/architecture/NFRs.md)
 
 Cubre:
 - disponibilidad
@@ -53,7 +53,7 @@ Cubre:
 
 ## 6. Riesgos
 
-- [RISKS](C:/chatgtp/quarkus/docs/architecture/RISKS.md)
+- [RISKS](/docs/architecture/RISKS.md)
 
 Cubre:
 - complejidad del motor configurable
@@ -65,7 +65,7 @@ Cubre:
 
 ## 7. Trazabilidad
 
-- [TRACEABILITY](C:/chatgtp/quarkus/docs/architecture/TRACEABILITY.md)
+- [TRACEABILITY](/docs/architecture/TRACEABILITY.md)
 
 Relaciona:
 - casos de uso
@@ -76,9 +76,9 @@ Relaciona:
 
 ## 8. Operacion y capacidad
 
-- [RUNBOOK Operations](C:/chatgtp/quarkus/docs/architecture/RUNBOOK-OPERATIONS.md)
-- [CAPACITY Sizing](C:/chatgtp/quarkus/docs/architecture/CAPACITY-SIZING.md)
-- [ROADMAP](C:/chatgtp/quarkus/docs/architecture/ROADMAP.md)
+- [RUNBOOK Operations](/docs/architecture/RUNBOOK-OPERATIONS.md)
+- [CAPACITY Sizing](/docs/architecture/CAPACITY-SIZING.md)
+- [ROADMAP](/docs/architecture/ROADMAP.md)
 
 Cubre:
 - arranque y verificaciones operativas
@@ -121,12 +121,12 @@ Cubre:
 
 ## Recomendacion de lectura
 
-1. Revisar [ADR-001 Platform Architecture](C:/chatgtp/quarkus/docs/architecture/ADR-001-platform-architecture.md)
-2. Navegar las vistas en [Visor generado LikeC4](C:/chatgtp/quarkus/docs/architecture/dist/index.html)
-3. Validar despliegue en [Deployment On-Prem](C:/chatgtp/quarkus/docs/architecture/DEPLOYMENT-ONPREM.md)
-4. Revisar negocio en [Use Cases](C:/chatgtp/quarkus/docs/architecture/USE-CASES.md)
-5. Revisar [RUNBOOK Operations](C:/chatgtp/quarkus/docs/architecture/RUNBOOK-OPERATIONS.md) y [CAPACITY Sizing](C:/chatgtp/quarkus/docs/architecture/CAPACITY-SIZING.md)
-6. Cerrar con [NFRs](C:/chatgtp/quarkus/docs/architecture/NFRs.md), [RISKS](C:/chatgtp/quarkus/docs/architecture/RISKS.md) y [TRACEABILITY](C:/chatgtp/quarkus/docs/architecture/TRACEABILITY.md)
+1. Revisar [ADR-001 Platform Architecture](/docs/architecture/ADR-001-platform-architecture.md)
+2. Navegar las vistas en [Visor generado LikeC4](/docs/architecture/dist/index.html)
+3. Validar despliegue en [Deployment On-Prem](/docs/architecture/DEPLOYMENT-ONPREM.md)
+4. Revisar negocio en [Use Cases](/docs/architecture/USE-CASES.md)
+5. Revisar [RUNBOOK Operations](/docs/architecture/RUNBOOK-OPERATIONS.md) y [CAPACITY Sizing](/docs/architecture/CAPACITY-SIZING.md)
+6. Cerrar con [NFRs](/docs/architecture/NFRs.md), [RISKS](/docs/architecture/RISKS.md) y [TRACEABILITY](/docs/architecture/TRACEABILITY.md)
 
 ## Estado actual
 

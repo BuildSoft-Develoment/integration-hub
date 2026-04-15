@@ -216,11 +216,11 @@ Se hicieron muchos ajustes finos de:
 
 Revisar primero estos documentos:
 
-- [README.md](C:/chatgtp/quarkus/README.md)
-- [TRACEABILITY.md](C:/chatgtp/quarkus/docs/architecture/TRACEABILITY.md)
-- [OPERATIONS-BACKLOG.md](C:/chatgtp/quarkus/docs/architecture/OPERATIONS-BACKLOG.md)
-- [ROADMAP.md](C:/chatgtp/quarkus/docs/architecture/ROADMAP.md)
-- [RUNBOOK-OPERATIONS.md](C:/chatgtp/quarkus/docs/architecture/RUNBOOK-OPERATIONS.md)
+- [README.md](/README.md)
+- [TRACEABILITY.md](/docs/architecture/TRACEABILITY.md)
+- [OPERATIONS-BACKLOG.md](/docs/architecture/OPERATIONS-BACKLOG.md)
+- [ROADMAP.md](/docs/architecture/ROADMAP.md)
+- [RUNBOOK-OPERATIONS.md](/docs/architecture/RUNBOOK-OPERATIONS.md)
 
 ## Recomendacion de siguiente frente
 
@@ -233,14 +233,14 @@ El siguiente frente sugerido no es tanto de core pipeline, sino de operacion:
 
 Ver detalle en:
 
-- [OPERATIONS-BACKLOG.md](C:/chatgtp/quarkus/docs/architecture/OPERATIONS-BACKLOG.md)
+- [OPERATIONS-BACKLOG.md](/docs/architecture/OPERATIONS-BACKLOG.md)
 
 ## Prompt sugerido para retomar
 
 Usar algo parecido a esto al retomar en otra sesion:
 
 ```
-Estoy retomando el proyecto Integration Hub en C:\chatgtp\quarkus.
+Estoy retomando el proyecto Integration Hub en /.
 
 Antes ya se implemento una fase grande de multiarchivo y operacion:
 - seleccion multiarchivo para FILESYSTEM/FTP/SFTP
@@ -284,7 +284,7 @@ Si se retoma en otra maquina y aun no esta el codigo en GitHub o no se sincroniz
 
 
 
-- ejemplo operativo de connectionRef local: [CONNECTIONREF-FILE-VAULT.md](C:/chatgtp/quarkus/docs/architecture/CONNECTIONREF-FILE-VAULT.md)
+- ejemplo operativo de connectionRef local: [CONNECTIONREF-FILE-VAULT.md](/docs/architecture/CONNECTIONREF-FILE-VAULT.md)
 
 
 
@@ -295,14 +295,14 @@ Si se retoma en otra maquina y aun no esta el codigo en GitHub o no se sincroniz
 
 
 
-- helper adicional para tareas: [set-task-secret.cmd](C:/chatgtp/quarkus/set-task-secret.cmd)
+- helper adicional para tareas: [set-task-secret.cmd](/set-task-secret.cmd)
 - ejemplo de key logica para tasks: `${secret:tasks/rest/notificacion1/password}`
 
 
 
 ## Frontend Angular Nx base
 
-Quedo creada la nueva base Angular 21 + Nx en C:\chatgtp\quarkus\frontend, reemplazando el frontend anterior. El backup del React legado quedo en C:\chatgtp\quarkus\frontend-react-legacy-20260404. Mas detalle en C:\chatgtp\quarkus\docs\architecture\FRONTEND-NX-ANGULAR.md.
+Quedo creada la nueva base Angular 21 + Nx en /frontend, reemplazando el frontend anterior. El backup del React legado quedo en /frontend-react-legacy-20260404. Mas detalle en /docs/architecture/FRONTEND-NX-ANGULAR.md.
 
 ### Convenciones activas de arquitectura frontend
 
@@ -352,7 +352,7 @@ Ya quedaron integrados withHashLocation, luxon, Keycloak y la primera feature re
 - panel lateral de detalle/edici?n
 - formularios espec?ficos por tipo separados por estrategia
 
-Ver [FRONTEND-NX-ANGULAR.md](C:/chatgtp/quarkus/docs/architecture/FRONTEND-NX-ANGULAR.md).
+Ver [FRONTEND-NX-ANGULAR.md](/docs/architecture/FRONTEND-NX-ANGULAR.md).
 
 ## Frontend feedback estandar
 
@@ -393,9 +393,9 @@ Caso alineado:
 
 Tests agregados:
 
-- [app-feedback.service.spec.ts](C:/chatgtp/quarkus/frontend/apps/web/src/app/app-feedback.service.spec.ts)
-- [http-error.interceptor.spec.ts](C:/chatgtp/quarkus/frontend/apps/web/src/app/http-error.interceptor.spec.ts)
-- [connection-catalog.store.spec.ts](C:/chatgtp/quarkus/frontend/apps/web/src/app/connection-catalog.store.spec.ts)
+- [app-feedback.service.spec.ts](/frontend/apps/web/src/app/app-feedback.service.spec.ts)
+- [http-error.interceptor.spec.ts](/frontend/apps/web/src/app/http-error.interceptor.spec.ts)
+- [connection-catalog.store.spec.ts](/frontend/apps/web/src/app/connection-catalog.store.spec.ts)
 
 
 ## Source test y feedback

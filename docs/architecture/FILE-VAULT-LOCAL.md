@@ -54,13 +54,13 @@ Con eso:
 
 Script helper:
 
-- [create-file-vault-secret.cmd](C:/chatgtp/quarkus/create-file-vault-secret.cmd)
+- [create-file-vault-secret.cmd](/create-file-vault-secret.cmd)
 
 Uso:
 
 ```bat
 set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-25.0.2.10-hotspot
-C:\chatgtp\quarkus\create-file-vault-secret.cmd C:\chatgtp\quarkus\secrets\dev-secrets.p12 change-me connections/db/conexion1 admin
+/create-file-vault-secret.cmd /secrets/dev-secrets.p12 change-me connections/db/conexion1 admin
 ```
 
 Eso crea o actualiza el alias `connections/db/conexion1` dentro de `dev-secrets.p12` con el valor `admin`.
@@ -71,7 +71,7 @@ Eso crea o actualiza el alias `connections/db/conexion1` dentro de `dev-secrets.
 
 ```bat
 set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-25.0.2.10-hotspot
-C:\chatgtp\quarkus\create-file-vault-secret.cmd C:\chatgtp\quarkus\secrets\dev-secrets.p12 change-me connections/db/conexion1 admin
+/create-file-vault-secret.cmd /secrets/dev-secrets.p12 change-me connections/db/conexion1 admin
 ```
 
 2. En la definicion de conexion usar la referencia logica:
@@ -113,32 +113,32 @@ Tambien quedan sembrados en el keystore local estos aliases de ejemplo:
 
 Archivos ejemplo:
 
-- [connection-rest-file-vault.json](C:/chatgtp/quarkus/docs/examples/connection-rest-file-vault.json)
-- [connection-sftp-file-vault.json](C:/chatgtp/quarkus/docs/examples/connection-sftp-file-vault.json)
+- [connection-rest-file-vault.json](/docs/examples/connection-rest-file-vault.json)
+- [connection-sftp-file-vault.json](/docs/examples/connection-sftp-file-vault.json)
 
 ## Operacion del keystore
 
 Helpers disponibles:
 
 - crear o actualizar un secreto:
-  - [create-file-vault-secret.cmd](C:/chatgtp/quarkus/create-file-vault-secret.cmd)
+  - [create-file-vault-secret.cmd](/create-file-vault-secret.cmd)
 - listar aliases:
-  - [list-file-vault-secrets.cmd](C:/chatgtp/quarkus/list-file-vault-secrets.cmd)
+  - [list-file-vault-secrets.cmd](/list-file-vault-secrets.cmd)
 - borrar un alias:
-  - [delete-file-vault-secret.cmd](C:/chatgtp/quarkus/delete-file-vault-secret.cmd)
+  - [delete-file-vault-secret.cmd](/delete-file-vault-secret.cmd)
 
 Listar:
 
 ```bat
 set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-25.0.2.10-hotspot
-C:\chatgtp\quarkus\list-file-vault-secrets.cmd C:\chatgtp\quarkus\secrets\dev-secrets.p12 change-me
+/list-file-vault-secrets.cmd /secrets/dev-secrets.p12 change-me
 ```
 
 Borrar:
 
 ```bat
 set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-25.0.2.10-hotspot
-C:\chatgtp\quarkus\delete-file-vault-secret.cmd C:\chatgtp\quarkus\secrets\dev-secrets.p12 change-me connections/db/conexion1
+/delete-file-vault-secret.cmd /secrets/dev-secrets.p12 change-me connections/db/conexion1
 ```
 
 
@@ -147,13 +147,13 @@ C:\chatgtp\quarkus\delete-file-vault-secret.cmd C:\chatgtp\quarkus\secrets\dev-s
 
 Helper guiado para tareas:
 
-- [set-task-secret.cmd](C:/chatgtp/quarkus/set-task-secret.cmd)
+- [set-task-secret.cmd](/set-task-secret.cmd)
 
 Uso:
 
 ```bat
 set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-25.0.2.10-hotspot
-C:\chatgtp\quarkus\set-task-secret.cmd C:\chatgtp\quarkus\secrets\dev-secrets.p12 change-me rest notificacion1 token-demo
+/set-task-secret.cmd /secrets/dev-secrets.p12 change-me rest notificacion1 token-demo
 ```
 
 Eso crea el alias:

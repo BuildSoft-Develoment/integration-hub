@@ -201,7 +201,7 @@ Se recomienda priorizar segun este orden:
 
 ## Referencias
 
-- [README.md](C:/chatgtp/quarkus/README.md)
-- [TRACEABILITY.md](C:/chatgtp/quarkus/docs/architecture/TRACEABILITY.md)
-- [ROADMAP.md](C:/chatgtp/quarkus/docs/architecture/ROADMAP.md)
-- [RUNBOOK-OPERATIONS.md](C:/chatgtp/quarkus/docs/architecture/RUNBOOK-OPERATIONS.md)
+- [README.md](/README.md)
+- [TRACEABILITY.md](/docs/architecture/TRACEABILITY.md)
+- [ROADMAP.md](/docs/architecture/ROADMAP.md)
+- [RUNBOOK-OPERATIONS.md](/docs/architecture/RUNBOOK-OPERATIONS.md)

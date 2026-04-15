@@ -206,5 +206,5 @@ Resultado:
 
 ## Relacion con arquitectura
 
-- [integration-hub.likec4](C:/chatgtp/quarkus/docs/architecture/integration-hub.likec4)
-- [DEPLOYMENT-ONPREM.md](C:/chatgtp/quarkus/docs/architecture/DEPLOYMENT-ONPREM.md)
+- [integration-hub.likec4](/docs/architecture/integration-hub.likec4)
+- [DEPLOYMENT-ONPREM.md](/docs/architecture/DEPLOYMENT-ONPREM.md)

@@ -77,8 +77,8 @@ Este enfoque permite:
 
 ## Diagramas relacionados
 
-- [integration-hub.likec4](C:/chatgtp/quarkus/docs/architecture/integration-hub.likec4)
-- [LikeC4 dist](C:/chatgtp/quarkus/docs/architecture/dist/index.html)
+- [integration-hub.likec4](/docs/architecture/integration-hub.likec4)
+- [LikeC4 dist](/docs/architecture/dist/index.html)
 ## Decision adicional sobre conectividad de destino
 
 Para la tarea `DB_WRITE` se adopta el siguiente criterio:

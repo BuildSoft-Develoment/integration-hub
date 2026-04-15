@@ -1,9 +1,9 @@
 # Frontend Nx Angular
 ## Estado actual
 El frontend React anterior fue reemplazado por un nuevo workspace Angular 21 sobre Nx en:
-- C:\chatgtp\quarkus\frontend
+- /frontend
 El backup del frontend anterior qued? en:
-- C:\chatgtp\quarkus\frontend-react-legacy-20260404
+- /frontend-react-legacy-20260404
 ## Stack base validado
 - Angular 21
 - Nx monorepo
@@ -21,37 +21,37 @@ El backup del frontend anterior qued? en:
 - Quinoa integrado con Quarkus
 - Hash routing con withHashLocation
 ## Integraci?n con Quinoa
-En [application.properties](C:/chatgtp/quarkus/platform-app/src/main/resources/application.properties):
+En [application.properties](/platform-app/src/main/resources/application.properties):
 - quarkus.quinoa.ui-dir=../frontend
 - quarkus.quinoa.build-dir=dist/browser
 El build validado sale en:
-- C:\chatgtp\quarkus\frontend\dist\browser
+- /frontend/dist/browser
 ## Arquitectura base
 Se dej? una base orientada a SOLID y extensibilidad en:
-- C:\chatgtp\quarkus\frontend\libs\core\providers
-- C:\chatgtp\quarkus\frontend\libs\core\services
-- C:\chatgtp\quarkus\frontend\libs\shared\ui
-- C:\chatgtp\quarkus\frontend\libs\features\sources
+- /frontend/libs/core/providers
+- /frontend/libs/core/services
+- /frontend/libs/shared/ui
+- /frontend/libs/features/sources
 ### Provider pattern inicial
 Primer dominio aterrizado con API real:
 - sources
 Piezas principales:
-- [source-provider.abstract.ts](C:/chatgtp/quarkus/frontend/libs/core/providers/src/lib/sources/source-provider.abstract.ts)
-- [source-provider.token.ts](C:/chatgtp/quarkus/frontend/libs/core/providers/src/lib/source-provider.token.ts)
+- [source-provider.abstract.ts](/frontend/libs/core/providers/src/lib/sources/source-provider.abstract.ts)
+- [source-provider.token.ts](/frontend/libs/core/providers/src/lib/source-provider.token.ts)
 - providers concretos:
-  - [file-system-source.provider.ts](C:/chatgtp/quarkus/frontend/libs/core/providers/src/lib/implementations/sources/file-system-source.provider.ts)
-  - [ftp-source.provider.ts](C:/chatgtp/quarkus/frontend/libs/core/providers/src/lib/implementations/sources/ftp-source.provider.ts)
-  - [sftp-source.provider.ts](C:/chatgtp/quarkus/frontend/libs/core/providers/src/lib/implementations/sources/sftp-source.provider.ts)
-  - [rest-source.provider.ts](C:/chatgtp/quarkus/frontend/libs/core/providers/src/lib/implementations/sources/rest-source.provider.ts)
-- [source-manager.service.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/source-manager.service.ts)
-- [source-api.service.ts](C:/chatgtp/quarkus/frontend/libs/features/sources/src/lib/source-api.service.ts)
-- [source-catalog.store.ts](C:/chatgtp/quarkus/frontend/libs/features/sources/src/lib/source-catalog.store.ts)
-- [source-catalog-page.ts](C:/chatgtp/quarkus/frontend/libs/features/sources/src/lib/source-catalog-page.ts)
+  - [file-system-source.provider.ts](/frontend/libs/core/providers/src/lib/implementations/sources/file-system-source.provider.ts)
+  - [ftp-source.provider.ts](/frontend/libs/core/providers/src/lib/implementations/sources/ftp-source.provider.ts)
+  - [sftp-source.provider.ts](/frontend/libs/core/providers/src/lib/implementations/sources/sftp-source.provider.ts)
+  - [rest-source.provider.ts](/frontend/libs/core/providers/src/lib/implementations/sources/rest-source.provider.ts)
+- [source-manager.service.ts](/frontend/libs/core/services/src/lib/source-manager.service.ts)
+- [source-api.service.ts](/frontend/libs/features/sources/src/lib/source-api.service.ts)
+- [source-catalog.store.ts](/frontend/libs/features/sources/src/lib/source-catalog.store.ts)
+- [source-catalog-page.ts](/frontend/libs/features/sources/src/lib/source-catalog-page.ts)
 - componentes de layout/estrategia:
-  - [source-list.component.ts](C:/chatgtp/quarkus/frontend/libs/features/sources/src/lib/components/source-list/source-list.component.ts)
-  - [source-inspector.component.ts](C:/chatgtp/quarkus/frontend/libs/features/sources/src/lib/components/source-inspector/source-inspector.component.ts)
-  - [source-editor.component.ts](C:/chatgtp/quarkus/frontend/libs/features/sources/src/lib/components/source-editor/source-editor.component.ts)
-  - [source-type-form-host.component.ts](C:/chatgtp/quarkus/frontend/libs/features/sources/src/lib/components/source-type-form/source-type-form-host.component.ts)
+  - [source-list.component.ts](/frontend/libs/features/sources/src/lib/components/source-list/source-list.component.ts)
+  - [source-inspector.component.ts](/frontend/libs/features/sources/src/lib/components/source-inspector/source-inspector.component.ts)
+  - [source-editor.component.ts](/frontend/libs/features/sources/src/lib/components/source-editor/source-editor.component.ts)
+  - [source-type-form-host.component.ts](/frontend/libs/features/sources/src/lib/components/source-type-form/source-type-form-host.component.ts)
 Este patr?n est? pensado para repetirse luego en:
 - readers
 - tasks
@@ -59,9 +59,9 @@ Este patr?n est? pensado para repetirse luego en:
 - processes
 ## Seguridad frontend
 Se integr? Keycloak en frontend con:
-- [auth.service.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/auth.service.ts)
-- [auth.interceptor.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/auth.interceptor.ts)
-- [auth.guard.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/auth.guard.ts)
+- [auth.service.ts](/frontend/libs/core/services/src/lib/auth.service.ts)
+- [auth.interceptor.ts](/frontend/libs/core/services/src/lib/auth.interceptor.ts)
+- [auth.guard.ts](/frontend/libs/core/services/src/lib/auth.guard.ts)
 Configuraci?n por defecto alineada con el realm local:
 - URL: http://localhost:8180
 - Realm: integration-hub
@@ -71,9 +71,9 @@ El route sources ya qued? protegido con:
 - validaci?n de roles platform-admin, integration-admin, auditor
 ## Router y fechas
 Qued? activado:
-- withHashLocation() en [app.config.ts](C:/chatgtp/quarkus/frontend/apps/web/src/app/app.config.ts)
-- lazy routing para sources en [app.routes.ts](C:/chatgtp/quarkus/frontend/apps/web/src/app/app.routes.ts)
-- base de fechas con Luxon en [date-time.service.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/date-time.service.ts)
+- withHashLocation() en [app.config.ts](/frontend/apps/web/src/app/app.config.ts)
+- lazy routing para sources en [app.routes.ts](/frontend/apps/web/src/app/app.routes.ts)
+- base de fechas con Luxon en [date-time.service.ts](/frontend/libs/core/services/src/lib/date-time.service.ts)
 ## UI actual
 Se dej? un shell inicial con:
 - sidenav
@@ -89,9 +89,9 @@ Se dej? un shell inicial con:
   - formulario por strategy/provider
   - create/edit/activate
 Archivos principales:
-- [app-shell.component.ts](C:/chatgtp/quarkus/frontend/libs/shared/ui/src/lib/app-shell/app-shell.component.ts)
-- [app-shell.component.html](C:/chatgtp/quarkus/frontend/libs/shared/ui/src/lib/app-shell/app-shell.component.html)
-- [source-catalog-page.html](C:/chatgtp/quarkus/frontend/libs/features/sources/src/lib/source-catalog-page.html)
+- [app-shell.component.ts](/frontend/libs/shared/ui/src/lib/app-shell/app-shell.component.ts)
+- [app-shell.component.html](/frontend/libs/shared/ui/src/lib/app-shell/app-shell.component.html)
+- [source-catalog-page.html](/frontend/libs/features/sources/src/lib/source-catalog-page.html)
 ### Patr?n visual actual para sources
 /sources qued? como referencia inicial para los siguientes dominios:
 - resumen superior con tiles
@@ -117,10 +117,10 @@ Patron esperado:
 
 Ejemplos:
 
-- [source-catalog-page.ts](C:/chatgtp/quarkus/frontend/libs/features/sources/src/lib/source-catalog-page.ts)
-- [schedules-page.ts](C:/chatgtp/quarkus/frontend/libs/features/schedules/src/lib/schedules-page.ts)
-- [overview-page.ts](C:/chatgtp/quarkus/frontend/libs/features/overview/src/lib/overview-page.ts)
-- [audit-page.ts](C:/chatgtp/quarkus/frontend/libs/features/audit/src/lib/audit-page.ts)
+- [source-catalog-page.ts](/frontend/libs/features/sources/src/lib/source-catalog-page.ts)
+- [schedules-page.ts](/frontend/libs/features/schedules/src/lib/schedules-page.ts)
+- [overview-page.ts](/frontend/libs/features/overview/src/lib/overview-page.ts)
+- [audit-page.ts](/frontend/libs/features/audit/src/lib/audit-page.ts)
 
 ### Regla de uso de `catalog`
 
@@ -134,11 +134,11 @@ Usar `catalog` cuando la feature tiene este patron:
 
 Ejemplos:
 
-- [source-catalog-page.ts](C:/chatgtp/quarkus/frontend/libs/features/sources/src/lib/source-catalog-page.ts)
-- [reader-catalog-page.ts](C:/chatgtp/quarkus/frontend/libs/features/readers/src/lib/reader-catalog-page.ts)
-- [connection-catalog-page.ts](C:/chatgtp/quarkus/frontend/libs/features/connections/src/lib/connection-catalog-page.ts)
-- [process-catalog-page.ts](C:/chatgtp/quarkus/frontend/libs/features/processes/src/lib/process-catalog-page.ts)
-- [execution-catalog-page.ts](C:/chatgtp/quarkus/frontend/libs/features/executions/src/lib/execution-catalog-page.ts)
+- [source-catalog-page.ts](/frontend/libs/features/sources/src/lib/source-catalog-page.ts)
+- [reader-catalog-page.ts](/frontend/libs/features/readers/src/lib/reader-catalog-page.ts)
+- [connection-catalog-page.ts](/frontend/libs/features/connections/src/lib/connection-catalog-page.ts)
+- [process-catalog-page.ts](/frontend/libs/features/processes/src/lib/process-catalog-page.ts)
+- [execution-catalog-page.ts](/frontend/libs/features/executions/src/lib/execution-catalog-page.ts)
 
 ### Regla de uso de `page`
 
@@ -151,18 +151,18 @@ Usar `page` simple cuando la feature representa una pantalla mas directa de:
 
 Ejemplos:
 
-- [overview-page.ts](C:/chatgtp/quarkus/frontend/libs/features/overview/src/lib/overview-page.ts)
-- [audit-page.ts](C:/chatgtp/quarkus/frontend/libs/features/audit/src/lib/audit-page.ts)
-- [schedules-page.ts](C:/chatgtp/quarkus/frontend/libs/features/schedules/src/lib/schedules-page.ts)
+- [overview-page.ts](/frontend/libs/features/overview/src/lib/overview-page.ts)
+- [audit-page.ts](/frontend/libs/features/audit/src/lib/audit-page.ts)
+- [schedules-page.ts](/frontend/libs/features/schedules/src/lib/schedules-page.ts)
 
 ### Nomenclatura de tokens
 
 La convencion actual de tokens en `core/providers` es explicita por dominio:
 
-- [source-provider.token.ts](C:/chatgtp/quarkus/frontend/libs/core/providers/src/lib/source-provider.token.ts)
-- [reader-provider.token.ts](C:/chatgtp/quarkus/frontend/libs/core/providers/src/lib/reader-provider.token.ts)
-- [connection-provider.token.ts](C:/chatgtp/quarkus/frontend/libs/core/providers/src/lib/connection-provider.token.ts)
-- [process-task-provider.token.ts](C:/chatgtp/quarkus/frontend/libs/core/providers/src/lib/process-task-provider.token.ts)
+- [source-provider.token.ts](/frontend/libs/core/providers/src/lib/source-provider.token.ts)
+- [reader-provider.token.ts](/frontend/libs/core/providers/src/lib/reader-provider.token.ts)
+- [connection-provider.token.ts](/frontend/libs/core/providers/src/lib/connection-provider.token.ts)
+- [process-task-provider.token.ts](/frontend/libs/core/providers/src/lib/process-task-provider.token.ts)
 
 ### Providers por dominio
 
@@ -170,10 +170,10 @@ Las implementaciones concretas ya no viven mezcladas en una sola carpeta.
 
 Ahora quedan separadas por dominio en:
 
-- [implementations/sources](C:/chatgtp/quarkus/frontend/libs/core/providers/src/lib/implementations/sources)
-- [implementations/readers](C:/chatgtp/quarkus/frontend/libs/core/providers/src/lib/implementations/readers)
-- [implementations/connections](C:/chatgtp/quarkus/frontend/libs/core/providers/src/lib/implementations/connections)
-- [implementations/tasks](C:/chatgtp/quarkus/frontend/libs/core/providers/src/lib/implementations/tasks)
+- [implementations/sources](/frontend/libs/core/providers/src/lib/implementations/sources)
+- [implementations/readers](/frontend/libs/core/providers/src/lib/implementations/readers)
+- [implementations/connections](/frontend/libs/core/providers/src/lib/implementations/connections)
+- [implementations/tasks](/frontend/libs/core/providers/src/lib/implementations/tasks)
 
 Esto deja mas claro:
 
@@ -187,11 +187,11 @@ Esto deja mas claro:
 Quedo definida una capa transversal de feedback para el frontend Angular:
 
 - presentacion visual:
-  - [ui-message.service.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/ui-message.service.ts)
+  - [ui-message.service.ts](/frontend/libs/core/services/src/lib/ui-message.service.ts)
 - semantica de mensajes:
-  - [app-feedback.service.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/app-feedback.service.ts)
+  - [app-feedback.service.ts](/frontend/libs/core/services/src/lib/app-feedback.service.ts)
 - captura global de errores HTTP:
-  - [http-error.interceptor.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/http-error.interceptor.ts)
+  - [http-error.interceptor.ts](/frontend/libs/core/services/src/lib/http-error.interceptor.ts)
 
 Regla aplicada:
 
@@ -240,7 +240,7 @@ Esto sirve como patron para futuros casos como:
 - `preview file`
 - `validate process`
 ## Comandos ?tiles
-Desde C:\chatgtp\quarkus\frontend:
+Desde /frontend:
 - 
 pm run build
 - 
@@ -269,10 +269,10 @@ Eso permite aterrizar primero:
 ## Feedback contextual y severidades
 - 	est connection y 	est source siguen la misma regla: exito en panel + snack-bar, error solo en panel.
 - Los snackbars ya no usan texto plano directo; ahora pasan por una arquitectura en capas:
-  - [app-feedback.service.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/app-feedback.service.ts)
-  - [ui-message.service.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/ui-message.service.ts)
-  - [ui-message.presentation.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/ui-message.presentation.ts)
-  - [ui-message-snackbar.component.ts](C:/chatgtp/quarkus/frontend/libs/core/services/src/lib/ui-message-snackbar.component.ts)
+  - [app-feedback.service.ts](/frontend/libs/core/services/src/lib/app-feedback.service.ts)
+  - [ui-message.service.ts](/frontend/libs/core/services/src/lib/ui-message.service.ts)
+  - [ui-message.presentation.ts](/frontend/libs/core/services/src/lib/ui-message.presentation.ts)
+  - [ui-message-snackbar.component.ts](/frontend/libs/core/services/src/lib/ui-message-snackbar.component.ts)
 - AppFeedbackService resuelve mensajes semanticos (created, updated, ctivated, deactivated, deleted, 	estSuccess).
 - UiMessageService abre el snackbar usando una sola API desde stores y componentes.
 - ui-message.presentation.ts resuelve la presentacion por severidad, separando el mapeo kind -> iconografia para mantener SOLID.
