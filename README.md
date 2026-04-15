@@ -57,7 +57,8 @@ Incluye:
 
 `integration-hub-ui`
 
-- cliente publico para React + PatternFly
+- cliente publico para la SPA Angular 21
+- stack UI: Angular Material, Angular CDK, Angular Aria, TailwindCSS v4 y Signals
 - `standard flow` habilitado
 - `PKCE S256` habilitado
 - redirect URIs:
@@ -645,9 +646,9 @@ El mismo contrato tambien puede usarse en tareas dinamicas:
 
 ## Frontend Angular Nx
 
-La base nueva del frontend ya corre sobre Angular 21 + Nx en rontend, con Quinoa apuntando a dist/browser. Ver detalle en docs/architecture/FRONTEND-NX-ANGULAR.md.
+La base nueva del frontend ya corre sobre Angular 21 + Nx en `frontend`, con Quinoa apuntando a `dist/browser`. Ver detalle en [FRONTEND-NX-ANGULAR.md](C:/chatgtp/quarkus/docs/architecture/FRONTEND-NX-ANGULAR.md).
 
-Frontend actual: Angular 21 + Nx con Quinoa, hash routing, Keycloak y feature real de sources. Ver [FRONTEND-NX-ANGULAR.md](C:/chatgtp/quarkus/docs/architecture/FRONTEND-NX-ANGULAR.md).
+Frontend actual: Angular 21 + Angular Material + Angular CDK + Angular Aria + TailwindCSS v4 + Signals, integrado con Nx, Quinoa, hash routing y Keycloak. Ver [FRONTEND-NX-ANGULAR.md](C:/chatgtp/quarkus/docs/architecture/FRONTEND-NX-ANGULAR.md).
 
 ## Convenciones frontend
 

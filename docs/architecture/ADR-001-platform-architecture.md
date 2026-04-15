@@ -14,14 +14,15 @@ La plataforma debe permitir:
 - asegurar acceso con `Keycloak` externo
 - persistir configuracion, ejecuciones y auditoria en `PostgreSQL`
 - compilar la aplicacion principal con `Quarkus Native`
-- operar una consola administrativa web con `React + PatternFly`
+- operar una consola administrativa web con `Angular 21`, `Angular Material`, `Angular CDK`, `Angular Aria`, `TailwindCSS v4` y `Signals`
 
 ## Decision
 
 Se adopta una arquitectura basada en:
 
 - `Quarkus` como backend principal
-- `React + PatternFly` como consola administrativa
+- `Angular 21` como base de la consola administrativa
+- `Angular Material`, `Angular CDK`, `Angular Aria`, `TailwindCSS v4` y `Signals` como stack principal de UI
 - `Quinoa` para integrar el frontend al ecosistema Quarkus
 - `Keycloak` externo para autenticacion y autorizacion OIDC
 - `PostgreSQL` para catalogo, ejecuciones, auditoria y staging
@@ -55,7 +56,7 @@ Este enfoque permite:
 - modelo consistente para nuevas fuentes, readers y tareas
 - mayor trazabilidad operativa con auditoria y spans
 - alineacion con el ecosistema Quarkus
-- UI enterprise consistente con PatternFly
+- UI administrativa moderna y consistente sobre Angular Material y CDK
 
 ### Negativas
 
@@ -65,7 +66,7 @@ Este enfoque permite:
 
 ## Implementacion actual
 
-- `Admin Console` en React + PatternFly servida por Quinoa
+- `Admin Console` en Angular 21 servida por Quinoa
 - `Admin API`, `Execution API`, `Query API` y `Scheduler` en Quarkus
 - `Process Engine` con `SourceProviderRegistry`, `ReaderProviderRegistry` y `TaskProviderRegistry`
 - providers concretos para `filesystem`, `ftp`, `sftp`, `rest`

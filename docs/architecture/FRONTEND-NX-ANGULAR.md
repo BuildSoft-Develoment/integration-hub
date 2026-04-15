@@ -9,7 +9,8 @@ El backup del frontend anterior qued? en:
 - Nx monorepo
 - Angular Material
 - Angular CDK
-- TailwindCSS
+- Angular Aria
+- TailwindCSS v4
 - CSS
 - Signals
 - Standalone components

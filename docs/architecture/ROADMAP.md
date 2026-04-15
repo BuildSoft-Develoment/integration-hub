@@ -28,7 +28,7 @@ Cerrar la base tecnica de la plataforma y asegurar consistencia entre backend, f
 ## Entregables
 
 - backend funcional
-- UI React + PatternFly integrada
+- UI Angular 21 integrada con Angular Material, Angular CDK, Angular Aria, TailwindCSS v4 y Signals
 - seguridad con Keycloak externo
 - vistas LikeC4 y documentos base
 

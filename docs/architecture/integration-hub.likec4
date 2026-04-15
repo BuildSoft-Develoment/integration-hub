@@ -103,7 +103,7 @@ model {
 
   integrationHub = system 'Integration Hub Platform' {
     container adminConsole 'Admin Console App (Front)' {
-      component reactApp 'React + PatternFly UI'
+      component angularApp 'Angular 21 UI'
       component oidcClient 'OIDC Client'
       component processDesigner 'Process Designer'
       component operationsConsole 'Operations Console'
@@ -201,9 +201,9 @@ model {
   integrationHub.quarkusApp -> observability.otel 'Exporta trazas'
   observability.otel -> observability.jaeger 'Entrega trazas'
 
-  integrationHub.adminConsole.reactApp -> integrationHub.adminConsole.oidcClient 'Gestiona sesion'
-  integrationHub.adminConsole.reactApp -> integrationHub.adminConsole.processDesigner 'Configura catalogos y procesos'
-  integrationHub.adminConsole.reactApp -> integrationHub.adminConsole.operationsConsole 'Consulta y ejecuta procesos'
+  integrationHub.adminConsole.angularApp -> integrationHub.adminConsole.oidcClient 'Gestiona sesion'
+  integrationHub.adminConsole.angularApp -> integrationHub.adminConsole.processDesigner 'Configura catalogos y procesos'
+  integrationHub.adminConsole.angularApp -> integrationHub.adminConsole.operationsConsole 'Consulta y ejecuta procesos'
   integrationHub.adminConsole.oidcClient -> iam 'Login y refresh token'
   integrationHub.adminConsole.processDesigner -> integrationHub.quarkusApp.processDefinitionResource 'CRUD de procesos'
   integrationHub.adminConsole.processDesigner -> integrationHub.quarkusApp.sourceDefinitionResource 'CRUD de sources'
