@@ -1,11 +1,12 @@
+import { inject, Injectable } from '@angular/core';
 import { normalizeTaskOrders, ProcessTaskFormModel } from './process.models';
 import { ProcessFlowLayout, ProcessFlowNodePosition, ProcessTaskFlowContext } from './process-flow.models';
 import { ProcessFlowMapper } from './process-flow.mapper';
 
+@Injectable({ providedIn: 'root' })
 export class ProcessFlowSyncService {
   private readonly connectorSuffixPattern = /-(in|out)$/;
-
-  constructor(private readonly mapper: ProcessFlowMapper = new ProcessFlowMapper()) {}
+  private readonly mapper = inject(ProcessFlowMapper);
 
   initialize(context: ProcessTaskFlowContext): ProcessFlowLayout {
     const normalizedTasks = normalizeTaskOrders(context.tasks);

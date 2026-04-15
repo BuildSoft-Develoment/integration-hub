@@ -1,3 +1,4 @@
+import { Injectable } from '@angular/core';
 import { ProcessTaskFormModel } from './process.models';
 import {
   DEFAULT_PROCESS_FLOW_NODE_SIZE,
@@ -8,6 +9,7 @@ import {
   ProcessFlowNodePosition,
 } from './process-flow.models';
 
+@Injectable({ providedIn: 'root' })
 export class ProcessFlowMapper {
   private readonly horizontalGap = 340;
   private readonly startX = 80;

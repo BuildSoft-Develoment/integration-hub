@@ -4,6 +4,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
 import { ConnectionProviderType } from '@integration-hub/core/providers';
 import { ConnectionManagerService } from '@integration-hub/core/services';
 import { ConnectionCatalogStore } from './connection-catalog.store';
+import { ConnectionEditorStateService } from './connection-editor-state.service';
 import { ConnectionEditorComponent } from './components/connection-editor/connection-editor.component';
 import { ConnectionListComponent } from './components/connection-list/connection-list.component';
 import { ConnectionToolbarComponent } from './components/connection-toolbar/connection-toolbar.component';
@@ -11,7 +12,7 @@ import { ConnectionToolbarComponent } from './components/connection-toolbar/conn
 @Component({
   selector: 'ih-connection-catalog-page',
   standalone: true,
-  providers: [ConnectionCatalogStore],
+  providers: [ConnectionCatalogStore, ConnectionEditorStateService],
   imports: [
     CommonModule,
     MatSidenavModule,

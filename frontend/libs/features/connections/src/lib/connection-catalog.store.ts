@@ -10,11 +10,9 @@ import {
 import {
   ConnectionFormModel,
   ConnectionRecord,
-  ConnectionTestResult,
-  createConnectionForm,
-  toConnectionFormModel,
 } from './connection.models';
 import { ConnectionApiService } from './connection-api.service';
+import { ConnectionEditorStateService } from './connection-editor-state.service';
 
 type ViewMode = 'details' | 'edit';
 type StatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
@@ -23,6 +21,7 @@ type StatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 export class ConnectionCatalogStore implements OnDestroy {
   private readonly api = inject(ConnectionApiService);
   private readonly connectionManager = inject(ConnectionManagerService);
+  private readonly editor = inject(ConnectionEditorStateService);
   private readonly authService = inject(AuthService);
   private readonly feedback = inject(AppFeedbackService);
   private readonly searchDebounceMs = 300;
@@ -42,40 +41,23 @@ export class ConnectionCatalogStore implements OnDestroy {
   readonly drawerOpen = signal(false);
   readonly currentPage = signal(0);
   readonly pageSize = signal(8);
-  readonly viewMode = signal<ViewMode>('details');
-  readonly testResult = signal<ConnectionTestResult | null>(null);
-  readonly form = signal<ConnectionFormModel>(createConnectionForm('POSTGRESQL'));
-  readonly draft = signal<ConnectionDraft>(this.connectionManager.createDraftFor('POSTGRESQL'));
+  readonly viewMode = this.editor.viewMode;
+  readonly testResult = this.editor.testResult;
+  readonly form = this.editor.form;
+  readonly draft = this.editor.draft;
 
   readonly canEdit = computed(() => this.authService.canAdmin());
   readonly pagedConnections = computed(() => this.connections());
 
   readonly selectedForm = computed<ConnectionFormModel>(() => {
-    const connection = this.selectedConnection();
-    if (!connection) {
-      return createConnectionForm(this.form().connectionType || 'POSTGRESQL');
-    }
-    return toConnectionFormModel(connection);
+    return this.editor.resolveSelectedForm(this.selectedConnection());
   });
 
   readonly selectedDraft = computed<ConnectionDraft>(() => {
-    const connection = this.selectedConnection();
-    if (!connection) {
-      return this.connectionManager.createDraftFor(this.selectedForm().connectionType);
-    }
-    return this.connectionManager.hydrateDraft(
-      connection.connectionType,
-      connection.configurationJson
-    );
+    return this.editor.resolveSelectedDraft(this.selectedConnection());
   });
 
-  readonly formTitle = computed(() =>
-    this.viewMode() === 'edit'
-      ? this.form().id
-        ? 'connections.edit'
-        : 'connections.create'
-      : 'connections.detail'
-  );
+  readonly formTitle = this.editor.formTitle;
 
   async load(): Promise<void> {
     await this.loadConnections(true);
@@ -88,14 +70,14 @@ export class ConnectionCatalogStore implements OnDestroy {
   selectConnection(connection: ConnectionRecord): void {
     this.selectedConnectionId.set(connection.id);
     this.selectedConnection.set(connection);
-    this.viewMode.set('details');
-    this.testResult.set(null);
+    this.editor.showDetails();
+    this.editor.clearTestResult();
     this.drawerOpen.set(true);
   }
 
   closeDrawer(): void {
     this.drawerOpen.set(false);
-    this.testResult.set(null);
+    this.editor.clearTestResult();
   }
 
   updatePagination(pageIndex: number, pageSize: number): void {
@@ -124,59 +106,35 @@ export class ConnectionCatalogStore implements OnDestroy {
 
   startCreate(): void {
     const connectionType = this.form().connectionType || 'POSTGRESQL';
-    this.form.set(createConnectionForm(connectionType));
-    this.draft.set(this.connectionManager.createDraftFor(connectionType));
-    this.viewMode.set('edit');
-    this.testResult.set(null);
+    this.editor.startCreate(connectionType);
     this.drawerOpen.set(true);
   }
 
   startEdit(connection: ConnectionRecord): void {
     this.selectedConnectionId.set(connection.id);
     this.selectedConnection.set(connection);
-    this.form.set(toConnectionFormModel(connection));
-    this.draft.set(
-      this.connectionManager.hydrateDraft(connection.connectionType, connection.configurationJson)
-    );
-    this.viewMode.set('edit');
-    this.testResult.set(null);
+    this.editor.startEdit(connection);
     this.drawerOpen.set(true);
   }
 
   cancelEdit(): void {
     this.drawerOpen.set(false);
-    this.viewMode.set('details');
-    this.testResult.set(null);
+    this.editor.cancelEdit();
   }
 
   updateFormField<K extends keyof ConnectionFormModel>(
     field: K,
     value: ConnectionFormModel[K]
   ): void {
-    const nextForm = {
-      ...this.form(),
-      [field]: value,
-    };
-    this.form.set(nextForm);
-    if (field === 'connectionType') {
-      this.draft.set(this.connectionManager.createDraftFor(value as ConnectionProviderType));
-      this.testResult.set(null);
-    }
+    this.editor.updateFormField(field, value);
   }
 
   patchForm(patch: Partial<ConnectionFormModel>): void {
-    this.form.update((current) => ({
-      ...current,
-      ...patch,
-    }));
+    this.editor.patchForm(patch);
   }
 
   updateDraft(patch: Partial<ConnectionDraft>): void {
-    this.draft.update((current) => ({
-      ...current,
-      ...patch,
-    }));
-    this.testResult.set(null);
+    this.editor.updateDraft(patch);
   }
 
   async save(): Promise<void> {

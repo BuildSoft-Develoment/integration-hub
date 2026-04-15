@@ -4,17 +4,18 @@ import { AppFeedbackService, AuthService } from '@integration-hub/core/services'
 import { ProcessApiService } from './process-api.service';
 import { ProcessFlowApiService } from './process-flow-api.service';
 import { ProcessFlowNodePosition } from './process-flow.models';
-import { ProcessFlowMapper } from './process-flow.mapper';
+import { ProcessFormFactoryService } from './process-form-factory.service';
 import { ProcessFlowSyncService } from './process-flow-sync.service';
 import {
-  createProcessForm,
   createTaskForm,
+  ConnectionRef,
   normalizeTaskOrders,
   ProcessFormModel,
   ProcessRecord,
   ProcessTaskFormModel,
   ProcessTaskType,
-  toProcessFormModel,
+  ReaderRef,
+  SourceRef,
 } from './process.models';
 
 type ViewMode = 'details' | 'edit';
@@ -26,9 +27,9 @@ export class ProcessCatalogStore implements OnDestroy {
   private readonly api = inject(ProcessApiService);
   private readonly auth = inject(AuthService);
   private readonly feedback = inject(AppFeedbackService);
+  private readonly formFactory = inject(ProcessFormFactoryService);
   private readonly flowApi = inject(ProcessFlowApiService);
-  private readonly flowMapper = new ProcessFlowMapper();
-  private readonly flowSync = new ProcessFlowSyncService(this.flowMapper);
+  private readonly flowSync = inject(ProcessFlowSyncService);
   private readonly searchDebounceMs = 300;
   private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
   private requestSequence = 0;
@@ -39,9 +40,9 @@ export class ProcessCatalogStore implements OnDestroy {
   readonly executing = signal(false);
   readonly processes = signal<ProcessRecord[]>([]);
   readonly totalLength = signal(0);
-  readonly sources = signal<any[]>([]);
-  readonly readers = signal<any[]>([]);
-  readonly connections = signal<any[]>([]);
+  readonly sources = signal<SourceRef[]>([]);
+  readonly readers = signal<ReaderRef[]>([]);
+  readonly connections = signal<ConnectionRef[]>([]);
   readonly search = signal('');
   readonly scheduleFilter = signal<ScheduleFilter>('ALL');
   readonly statusFilter = signal<StatusFilter>('ALL');
@@ -51,7 +52,7 @@ export class ProcessCatalogStore implements OnDestroy {
   readonly currentPage = signal(0);
   readonly pageSize = signal(8);
   readonly viewMode = signal<ViewMode>('details');
-  readonly form = signal<ProcessFormModel>(createProcessForm());
+  readonly form = signal<ProcessFormModel>(this.formFactory.create());
 
   readonly canEdit = computed(() => this.auth.canAdmin());
   readonly canOperate = computed(() =>
@@ -80,7 +81,7 @@ export class ProcessCatalogStore implements OnDestroy {
   selectProcess(process: ProcessRecord): void {
     this.selectedProcessId.set(process.id);
     this.selectedProcess.set(process);
-    this.form.set(toProcessFormModel(process));
+    this.form.set(this.formFactory.fromRecord(process));
     this.viewMode.set('details');
     this.drawerOpen.set(true);
   }
@@ -114,7 +115,7 @@ export class ProcessCatalogStore implements OnDestroy {
   }
 
   startCreate(): void {
-    this.form.set(createProcessForm());
+    this.form.set(this.formFactory.create());
     this.viewMode.set('edit');
     this.drawerOpen.set(true);
   }
@@ -122,7 +123,7 @@ export class ProcessCatalogStore implements OnDestroy {
   startEdit(process: ProcessRecord): void {
     this.selectedProcessId.set(process.id);
     this.selectedProcess.set(process);
-    this.form.set(toProcessFormModel(process));
+    this.form.set(this.formFactory.fromRecord(process));
     this.viewMode.set('edit');
     this.drawerOpen.set(true);
   }
@@ -272,7 +273,7 @@ export class ProcessCatalogStore implements OnDestroy {
 
       this.selectedProcessId.set(saved.id);
       this.selectedProcess.set(saved);
-      this.form.set(toProcessFormModel(saved));
+      this.form.set(this.formFactory.fromRecord(saved));
       this.viewMode.set('details');
       this.drawerOpen.set(true);
       await this.loadProcesses(false);
@@ -287,7 +288,7 @@ export class ProcessCatalogStore implements OnDestroy {
     this.selectedProcessId.set(updated.id);
     this.selectedProcess.set(updated);
     if (this.viewMode() === 'details') {
-      this.form.set(toProcessFormModel(updated));
+      this.form.set(this.formFactory.fromRecord(updated));
     }
     this.drawerOpen.set(true);
     await this.loadProcesses(false);
@@ -350,7 +351,7 @@ export class ProcessCatalogStore implements OnDestroy {
         if (refreshed) {
           this.selectedProcess.set(refreshed);
           if (this.viewMode() === 'details') {
-            this.form.set(toProcessFormModel(refreshed));
+            this.form.set(this.formFactory.fromRecord(refreshed));
           }
         }
       }
