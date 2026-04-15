@@ -20,6 +20,12 @@ public class AuditEventRepository implements PanacheRepository<AuditEvent> {
         return query;
     }
 
+    public java.util.List<String> listEventTypes() {
+        return getEntityManager()
+                .createQuery("select distinct e.eventType from AuditEvent e order by e.eventType", String.class)
+                .getResultList();
+    }
+
     public String findLatestTaskPayload(Long processExecutionId, Long taskDefinitionId) {
         return find("from AuditEvent e where e.processExecution.id = ?1 and e.taskDefinition.id = ?2 and e.eventType in (?3) order by e.id desc",
                 processExecutionId,

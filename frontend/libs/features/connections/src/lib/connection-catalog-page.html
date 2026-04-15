@@ -17,7 +17,7 @@
         <section class="connections-list-shell">
           <ih-connection-list
             [connections]="store.pagedConnections()"
-            [totalLength]="store.filteredConnections().length"
+            [totalLength]="store.totalLength()"
             [selectedConnectionId]="store.selectedConnection()?.id ?? null"
             [providerOptions]="providerOptions()"
             [pageIndex]="store.currentPage()"

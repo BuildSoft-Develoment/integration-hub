@@ -1,68 +1,41 @@
-import { computed, inject, Injectable, signal } from '@angular/core';
+import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { AuditApiService } from './audit-api.service';
 import { AuditRecord } from './audit.models';
 
-type StatusFilter = 'ALL' | 'COMPLETED' | 'FAILED' | 'PENDING';
+type StatusFilter = 'ALL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PENDING' | 'COMPLETED_WITH_ERRORS';
 
 @Injectable()
-export class AuditStore {
+export class AuditStore implements OnDestroy {
   private readonly api = inject(AuditApiService);
+  private readonly searchDebounceMs = 300;
+  private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
+  private requestSequence = 0;
 
   readonly loading = signal(false);
   readonly events = signal<AuditRecord[]>([]);
+  readonly totalLength = signal(0);
+  readonly eventTypeOptions = signal<string[]>([]);
   readonly search = signal('');
   readonly eventTypeFilter = signal('ALL');
   readonly statusFilter = signal<StatusFilter>('ALL');
-  readonly selectedEventId = signal<number | null>(null);
+  readonly selectedEvent = signal<AuditRecord | null>(null);
   readonly drawerOpen = signal(false);
   readonly currentPage = signal(0);
   readonly pageSize = signal(8);
 
-  readonly eventTypeOptions = computed(() =>
-    Array.from(new Set(this.events().map((item) => item.eventType).filter(Boolean))).sort()
-  );
-
-  readonly filteredEvents = computed(() => {
-    const search = this.search().trim().toLowerCase();
-    const eventType = this.eventTypeFilter();
-    const status = this.statusFilter();
-
-    return this.events().filter((item) => {
-      const matchesSearch =
-        !search ||
-        String(item.id).includes(search) ||
-        String(item.processExecutionId ?? '').includes(search) ||
-        String(item.taskDefinitionId ?? '').includes(search) ||
-        item.eventType.toLowerCase().includes(search) ||
-        (item.message ?? '').toLowerCase().includes(search);
-      const matchesEventType = eventType === 'ALL' || item.eventType === eventType;
-      const matchesStatus = status === 'ALL' || item.status === status;
-      return matchesSearch && matchesEventType && matchesStatus;
-    });
-  });
-
-  readonly pagedEvents = computed(() => {
-    const start = this.currentPage() * this.pageSize();
-    return this.filteredEvents().slice(start, start + this.pageSize());
-  });
-
-  readonly selectedEvent = computed(
-    () => this.events().find((item) => item.id === this.selectedEventId()) ?? null
-  );
+  readonly pagedEvents = computed(() => this.events());
 
   async load(): Promise<void> {
-    this.loading.set(true);
-    try {
-      this.events.set(await firstValueFrom(this.api.list()));
-      this.currentPage.set(0);
-    } finally {
-      this.loading.set(false);
-    }
+    await this.loadEvents(true);
+  }
+
+  ngOnDestroy(): void {
+    this.clearSearchDebounce();
   }
 
   selectEvent(event: AuditRecord): void {
-    this.selectedEventId.set(event.id);
+    this.selectedEvent.set(event);
     this.drawerOpen.set(true);
   }
 
@@ -72,21 +45,76 @@ export class AuditStore {
 
   updateSearch(value: string): void {
     this.search.set(value);
-    this.currentPage.set(0);
+    this.clearSearchDebounce();
+    this.searchDebounceHandle = setTimeout(() => {
+      this.searchDebounceHandle = null;
+      void this.loadEvents(true);
+    }, this.searchDebounceMs);
   }
 
   updateEventTypeFilter(value: string): void {
     this.eventTypeFilter.set(value);
-    this.currentPage.set(0);
+    this.clearSearchDebounce();
+    void this.loadEvents(true);
   }
 
   updateStatusFilter(value: StatusFilter): void {
     this.statusFilter.set(value);
-    this.currentPage.set(0);
+    this.clearSearchDebounce();
+    void this.loadEvents(true);
   }
 
   updatePagination(pageIndex: number, pageSize: number): void {
+    this.clearSearchDebounce();
     this.pageSize.set(pageSize);
     this.currentPage.set(pageIndex);
+    void this.loadEvents(false);
+  }
+
+  private async loadEvents(resetPage: boolean): Promise<void> {
+    if (resetPage) {
+      this.currentPage.set(0);
+    }
+
+    const requestId = ++this.requestSequence;
+    this.loading.set(true);
+    try {
+      const response = await firstValueFrom(
+        this.api.list({
+          search: this.search(),
+          eventType: this.eventTypeFilter(),
+          status: this.statusFilter(),
+          page: this.currentPage(),
+          size: this.pageSize(),
+        })
+      );
+
+      if (requestId !== this.requestSequence) {
+        return;
+      }
+
+      this.events.set(response.items);
+      this.totalLength.set(response.total);
+      this.eventTypeOptions.set(response.eventTypeOptions);
+
+      const selectedId = this.selectedEvent()?.id;
+      if (selectedId != null) {
+        const refreshed = response.items.find((item) => item.id === selectedId);
+        if (refreshed) {
+          this.selectedEvent.set(refreshed);
+        }
+      }
+    } finally {
+      if (requestId === this.requestSequence) {
+        this.loading.set(false);
+      }
+    }
+  }
+
+  private clearSearchDebounce(): void {
+    if (this.searchDebounceHandle != null) {
+      clearTimeout(this.searchDebounceHandle);
+      this.searchDebounceHandle = null;
+    }
   }
 }

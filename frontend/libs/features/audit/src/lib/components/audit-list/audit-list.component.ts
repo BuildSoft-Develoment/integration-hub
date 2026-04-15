@@ -4,6 +4,8 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
 import { AuditRecord } from '../../audit.models';
+import { auditEventLabel } from '../../audit-event-label';
+import { taskTypeLabel } from '../../task-type-label';
 
 @Component({
   selector: 'ih-audit-list',
@@ -21,10 +23,13 @@ import { AuditRecord } from '../../audit.models';
         @for (event of events(); track event.id) {
           <button type="button" class="table-row ih-catalog-table-row" [class.table-row--selected]="selectedEventId() === event.id" [class.ih-catalog-table-row--selected]="selectedEventId() === event.id" (click)="selectEvent.emit(event)">
             <div class="row-primary ih-catalog-row-primary">
-              <div class="row-avatar ih-catalog-row-avatar">{{ event.eventType.slice(0, 1).toUpperCase() }}</div>
+              <div class="row-avatar ih-catalog-row-avatar">{{ eventLabel(event).slice(0, 1).toUpperCase() }}</div>
               <div class="row-copy ih-catalog-row-copy">
-                <strong>{{ event.eventType }}</strong>
+                <strong>{{ eventLabel(event) }}</strong>
                 <small>#{{ event.id }} · PE {{ event.processExecutionId ?? '-' }}</small>
+                @if (event.taskType || event.taskDefinitionId != null) {
+                  <small class="row-task">{{ taskLabel(event) }}</small>
+                }
               </div>
             </div>
 
@@ -47,6 +52,7 @@ import { AuditRecord } from '../../audit.models';
   styles: [`
     .row-type,.row-status { display:flex; align-items:center; }
     .row-status { font-size:0.86rem; color:var(--ih-text-soft); }
+    .row-task { color:var(--ih-text-soft); }
   `],
 })
 export class AuditListComponent {
@@ -68,10 +74,34 @@ export class AuditListComponent {
   }
 
   statusLabel(status: string): string {
-    return this.i18n.t(`audit.status.${status}`);
+    const auditStatus = this.i18n.t(`audit.status.${status}`);
+    if (auditStatus !== `audit.status.${status}`) {
+      return auditStatus;
+    }
+
+    const executionStatus = this.i18n.t(`executionStatus.${status}`);
+    return executionStatus !== `executionStatus.${status}` ? executionStatus : status;
   }
 
   formatDate(value: string | null): string {
     return value ? this.dateTime.formatIso(value) : '-';
+  }
+
+  eventLabel(event: AuditRecord): string {
+    return auditEventLabel(this.i18n, event.eventType);
+  }
+
+  taskLabel(event: AuditRecord): string {
+    const label = taskTypeLabel(this.i18n, event.taskType);
+    if (event.taskType && event.taskDefinitionId != null) {
+      return `${label} · TD ${event.taskDefinitionId}`;
+    }
+    if (event.taskType) {
+      return label;
+    }
+    if (event.taskDefinitionId != null) {
+      return `TD ${event.taskDefinitionId}`;
+    }
+    return '-';
   }
 }

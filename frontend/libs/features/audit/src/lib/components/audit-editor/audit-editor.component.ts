@@ -2,7 +2,9 @@ import { CommonModule } from '@angular/common';
 import { Component, computed, inject, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
+import { auditEventLabel } from '../../audit-event-label';
 import { AuditRecord } from '../../audit.models';
+import { taskTypeLabel } from '../../task-type-label';
 
 @Component({
   selector: 'ih-audit-editor',
@@ -18,10 +20,14 @@ import { AuditRecord } from '../../audit.models';
         @if (event()) {
           <div class="profile-stack">
             <div class="profile-header">
-              <div class="profile-avatar">{{ event()!.eventType.slice(0, 1).toUpperCase() }}</div>
+              <div class="profile-avatar">{{ eventLabel(event()!).slice(0, 1).toUpperCase() }}</div>
               <div class="profile-copy">
-                <h3 class="profile-name">{{ event()!.eventType }}</h3>
+                <h3 class="profile-name">{{ eventLabel(event()!) }}</h3>
                 <p class="profile-subtitle">#{{ event()!.id }} · {{ statusLabel(event()!.status) }}</p>
+                @if (event()!.taskType || event()!.taskDefinitionId != null) {
+                  <p class="profile-subtitle">{{ taskLabel(event()!) }}</p>
+                }
+                <p class="profile-subtitle profile-subtitle--technical">{{ event()!.eventType }}</p>
               </div>
             </div>
           </div>
@@ -33,9 +39,11 @@ import { AuditRecord } from '../../audit.models';
             </div>
             <div class="detail-grid">
               <div><strong>{{ i18n.t('audit.executionId') }}</strong>: {{ event()!.processExecutionId ?? '-' }}</div>
+              <div><strong>{{ i18n.t('audit.taskType') }}</strong>: {{ taskTypeDescription(event()!.taskType) }}</div>
               <div><strong>{{ i18n.t('audit.taskDefinitionId') }}</strong>: {{ event()!.taskDefinitionId ?? '-' }}</div>
               <div><strong>{{ i18n.t('common.status') }}</strong>: {{ statusLabel(event()!.status) }}</div>
               <div><strong>{{ i18n.t('audit.createdAt') }}</strong>: {{ formatDate(event()!.createdAt) }}</div>
+              <div><strong>{{ i18n.t('audit.eventType') }}</strong>: {{ eventLabel(event()!) }}</div>
             </div>
             @if (event()!.message) {
               <div class="detail-block">
@@ -94,6 +102,7 @@ import { AuditRecord } from '../../audit.models';
     .section-eyebrow { margin:0; font-size:0.74rem; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--ih-text-soft); }
     .profile-name { margin:0; font-size:1.45rem; font-weight:700; letter-spacing:-0.03em; overflow-wrap:anywhere; }
     .profile-subtitle { margin:0; color:var(--ih-text-soft); overflow-wrap:anywhere; }
+    .profile-subtitle--technical { font-size:0.8rem; opacity:0.8; }
     .form-section { display:grid; gap:0.9rem; padding:0.95rem; border:1px solid var(--ih-border); border-radius:18px; background:color-mix(in srgb, var(--ih-surface-alt) 93%, transparent); min-width:0; margin-bottom:0.9rem; }
     .section-header h4 { margin:0.28rem 0 0; font-size:1rem; overflow-wrap:anywhere; }
     .detail-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0.7rem; }
@@ -131,10 +140,38 @@ export class AuditEditorComponent {
   });
 
   statusLabel(status: string): string {
-    return this.i18n.t(`audit.status.${status}`);
+    const auditStatus = this.i18n.t(`audit.status.${status}`);
+    if (auditStatus !== `audit.status.${status}`) {
+      return auditStatus;
+    }
+
+    const executionStatus = this.i18n.t(`executionStatus.${status}`);
+    return executionStatus !== `executionStatus.${status}` ? executionStatus : status;
   }
 
   formatDate(value: string | null): string {
     return value ? this.dateTime.formatIso(value) : '-';
+  }
+
+  eventLabel(event: AuditRecord): string {
+    return auditEventLabel(this.i18n, event.eventType);
+  }
+
+  taskLabel(event: AuditRecord): string {
+    const label = this.taskTypeDescription(event.taskType);
+    if (event.taskType && event.taskDefinitionId != null) {
+      return `${label} · ${this.i18n.t('audit.taskDefinitionId')} ${event.taskDefinitionId}`;
+    }
+    if (event.taskType) {
+      return label;
+    }
+    if (event.taskDefinitionId != null) {
+      return `${this.i18n.t('audit.taskDefinitionId')} ${event.taskDefinitionId}`;
+    }
+    return '-';
+  }
+
+  taskTypeDescription(taskType: string | null): string {
+    return taskTypeLabel(this.i18n, taskType);
   }
 }
