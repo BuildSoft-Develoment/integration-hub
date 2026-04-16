@@ -101,7 +101,7 @@ public class ProcessTaskRuntimeService {
         return TaskRunResult.generic(result.details(), sourcePayload, readResult, result.outputs());
     }
 
-    @Transactional
+    @Transactional(Transactional.TxType.NOT_SUPPORTED)
     public FileReadDbWriteResult runFileReadToDbWrite(Long processExecutionId,
                                                       ProcessExecutionStateService.TaskPlan fileReadPlan,
                                                       ProcessExecutionStateService.TaskPlan dbWritePlan,

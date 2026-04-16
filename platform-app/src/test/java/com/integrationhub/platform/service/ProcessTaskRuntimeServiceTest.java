@@ -15,7 +15,9 @@ import com.integrationhub.platform.spi.SelectedSourceFile;
 import com.integrationhub.platform.spi.SourcePayload;
 import com.integrationhub.platform.spi.SourceProvider;
 import org.junit.jupiter.api.Test;
+import jakarta.transaction.Transactional;
 
+import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -26,6 +28,22 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class ProcessTaskRuntimeServiceTest {
+
+    @Test
+    void pipelineRunsOutsideJtaTransaction() throws NoSuchMethodException {
+        Method method = ProcessTaskRuntimeService.class.getMethod(
+                "runFileReadToDbWrite",
+                Long.class,
+                ProcessExecutionStateService.TaskPlan.class,
+                ProcessExecutionStateService.TaskPlan.class,
+                Map.class,
+                List.class
+        );
+
+        var transactional = method.getAnnotation(Transactional.class);
+
+        assertEquals(Transactional.TxType.NOT_SUPPORTED, transactional.value());
+    }
 
     @Test
     void pipelineStopsAtFirstErrorWhenPolicyIsFailFast() {
