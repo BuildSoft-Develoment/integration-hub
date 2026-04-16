@@ -3,12 +3,14 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { of, throwError } from 'rxjs';
 import {
   AppFeedbackService,
+  AuthAccessService,
   AuthService,
   ConnectionManagerService,
 } from '@integration-hub/core/services';
 import { ConnectionDraft } from '@integration-hub/core/providers';
 import { ConnectionCatalogStore } from '../../../../libs/features/connections/src/lib/connection-catalog.store';
 import { ConnectionApiService } from '../../../../libs/features/connections/src/lib/connection-api.service';
+import { ConnectionEditorStateService } from '../../../../libs/features/connections/src/lib/connection-editor-state.service';
 
 describe('ConnectionCatalogStore', () => {
   let store: ConnectionCatalogStore;
@@ -45,6 +47,7 @@ describe('ConnectionCatalogStore', () => {
     TestBed.configureTestingModule({
       providers: [
         ConnectionCatalogStore,
+        ConnectionEditorStateService,
         {
           provide: ConnectionApiService,
           useValue: api,
@@ -60,6 +63,10 @@ describe('ConnectionCatalogStore', () => {
         },
         {
           provide: AuthService,
+          useValue: {},
+        },
+        {
+          provide: AuthAccessService,
           useValue: {
             canAdmin: () => true,
           },

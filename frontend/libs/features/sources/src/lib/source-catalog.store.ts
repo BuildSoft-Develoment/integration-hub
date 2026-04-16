@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { SourceDraft, SourceProviderType } from '@integration-hub/core/providers';
 import {
   AppFeedbackService,
-  AuthService,
+  AuthAccessService,
   SourceManagerService,
 } from '@integration-hub/core/services';
 import {
@@ -22,7 +22,7 @@ export class SourceCatalogStore implements OnDestroy {
   private readonly api = inject(SourceApiService);
   private readonly sourceManager = inject(SourceManagerService);
   private readonly editor = inject(SourceEditorStateService);
-  private readonly authService = inject(AuthService);
+  private readonly access = inject(AuthAccessService);
   private readonly feedback = inject(AppFeedbackService);
   private readonly searchDebounceMs = 300;
   private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
@@ -46,7 +46,7 @@ export class SourceCatalogStore implements OnDestroy {
   readonly form = this.editor.form;
   readonly draft = this.editor.draft;
 
-  readonly canEdit = computed(() => this.authService.canAdmin());
+  readonly canEdit = computed(() => this.access.canAdmin());
   readonly pagedSources = computed(() => this.sources());
 
   readonly activeProvider = computed(() =>

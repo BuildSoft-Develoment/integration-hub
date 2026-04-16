@@ -221,13 +221,16 @@ export class RestCallTaskProvider extends ProcessTaskProvider<RestCallTaskDraft>
     }
     try {
       const parsed = new URL(normalized);
-      const queryParameters = Array.from(parsed.searchParams.entries()).map(([name, value]) => ({
-        name,
-        sourceKind: 'expression' as const,
-        sourceKey: '',
-        sourceLabel: '',
-        expression: value,
-      }));
+      const queryParameters: ProcessTaskBodyFieldBindingDraft[] = [];
+      parsed.searchParams.forEach((value, name) => {
+        queryParameters.push({
+          name,
+          sourceKind: 'expression',
+          sourceKey: '',
+          sourceLabel: '',
+          expression: value,
+        });
+      });
       return {
         baseUrl: parsed.origin,
         pathTemplate: parsed.pathname,

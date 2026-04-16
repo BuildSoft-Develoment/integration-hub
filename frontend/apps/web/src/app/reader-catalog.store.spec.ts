@@ -2,12 +2,14 @@ import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import {
   AppFeedbackService,
+  AuthAccessService,
   AuthService,
   ReaderManagerService,
 } from '@integration-hub/core/services';
 import { ReaderDraft } from '@integration-hub/core/providers';
 import { ReaderCatalogStore } from '../../../../libs/features/readers/src/lib/reader-catalog.store';
 import { ReaderApiService } from '../../../../libs/features/readers/src/lib/reader-api.service';
+import { ReaderEditorStateService } from '../../../../libs/features/readers/src/lib/reader-editor-state.service';
 
 describe('ReaderCatalogStore', () => {
   let store: ReaderCatalogStore;
@@ -31,10 +33,11 @@ describe('ReaderCatalogStore', () => {
     TestBed.configureTestingModule({
       providers: [
         ReaderCatalogStore,
+        ReaderEditorStateService,
         {
           provide: ReaderApiService,
           useValue: {
-            list: () => of([]),
+            list: () => of({ items: [], total: 0 }),
             create: () =>
               of({
                 id: 1,
@@ -72,6 +75,10 @@ describe('ReaderCatalogStore', () => {
         },
         {
           provide: AuthService,
+          useValue: {},
+        },
+        {
+          provide: AuthAccessService,
           useValue: {
             canAdmin: () => true,
           },

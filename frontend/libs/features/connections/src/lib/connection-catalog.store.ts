@@ -4,7 +4,7 @@ import { firstValueFrom } from 'rxjs';
 import { ConnectionDraft, ConnectionProviderType } from '@integration-hub/core/providers';
 import {
   AppFeedbackService,
-  AuthService,
+  AuthAccessService,
   ConnectionManagerService,
 } from '@integration-hub/core/services';
 import {
@@ -22,7 +22,7 @@ export class ConnectionCatalogStore implements OnDestroy {
   private readonly api = inject(ConnectionApiService);
   private readonly connectionManager = inject(ConnectionManagerService);
   private readonly editor = inject(ConnectionEditorStateService);
-  private readonly authService = inject(AuthService);
+  private readonly access = inject(AuthAccessService);
   private readonly feedback = inject(AppFeedbackService);
   private readonly searchDebounceMs = 300;
   private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
@@ -46,7 +46,7 @@ export class ConnectionCatalogStore implements OnDestroy {
   readonly form = this.editor.form;
   readonly draft = this.editor.draft;
 
-  readonly canEdit = computed(() => this.authService.canAdmin());
+  readonly canEdit = computed(() => this.access.canAdmin());
   readonly pagedConnections = computed(() => this.connections());
 
   readonly selectedForm = computed<ConnectionFormModel>(() => {

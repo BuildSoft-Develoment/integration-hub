@@ -1,0 +1,119 @@
+<button
+  mat-icon-button
+  type="button"
+  class="theme-toggle-button"
+  [attr.aria-label]="i18n.t('shell.openThemeMenu')"
+  [matMenuTriggerFor]="themeMenu"
+>
+  <svg class="theme-toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+    <path
+      d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.15 7.15 0 0 0-1.63-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.58.22-1.12.53-1.63.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.31.6.22l2.39-.96c.51.41 1.05.72 1.63.94l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.58-.22 1.12-.53 1.63-.94l2.39.96c.22.09.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58ZM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5Z"
+      fill="currentColor"
+    />
+  </svg>
+</button>
+
+<mat-menu #themeMenu="matMenu" panelClass="theme-menu-panel" xPosition="before" yPosition="below" [overlapTrigger]="false">
+  <div class="theme-menu-content ih-theme-menu" (click)="$event.stopPropagation()">
+    <div class="theme-card__header ih-theme-menu__header">
+      <p class="section-eyebrow ih-section-eyebrow">{{ i18n.t('shell.theme') }}</p>
+      <small class="theme-card__saving">
+        @if (preferences.saving()) {
+          {{ i18n.t('shell.saving') }}
+        }
+      </small>
+    </div>
+
+    <div class="theme-menu-list ih-theme-menu__list">
+      <button mat-menu-item type="button" [matMenuTriggerFor]="schemeMenu">
+        <span class="theme-menu-item__label">{{ i18n.t('shell.scheme') }}</span>
+        <span class="theme-menu-item__value">{{ currentModeLabel() }}</span>
+      </button>
+
+      <button mat-menu-item type="button" [matMenuTriggerFor]="presetMenu">
+        <span class="theme-menu-item__label">{{ i18n.t('shell.preset') }}</span>
+        <span class="theme-menu-item__value">{{ i18n.t('shell.preset.' + theme.preset()) }}</span>
+      </button>
+
+      <button mat-menu-item type="button" [matMenuTriggerFor]="densityMenu">
+        <span class="theme-menu-item__label">{{ i18n.t('shell.density') }}</span>
+        <span class="theme-menu-item__value">{{ i18n.t('shell.density.' + theme.density()) }}</span>
+      </button>
+
+      <button mat-menu-item type="button" [matMenuTriggerFor]="localeMenu">
+        <span class="theme-menu-item__label">{{ i18n.t('shell.locale') }}</span>
+        <span class="theme-menu-item__value">{{ i18n.locale().toUpperCase() }}</span>
+      </button>
+
+      <button mat-menu-item type="button" [matMenuTriggerFor]="sidebarMenu">
+        <span class="theme-menu-item__label">{{ i18n.t('shell.sidebar') }}</span>
+        <span class="theme-menu-item__value">{{ currentSidebarLabel() }}</span>
+      </button>
+    </div>
+  </div>
+</mat-menu>
+
+<mat-menu #schemeMenu="matMenu" panelClass="theme-menu-panel" xPosition="before" yPosition="below" [overlapTrigger]="false">
+  @for (option of modeOptions; track option.value) {
+    <button mat-menu-item type="button" (click)="preferences.updateMode(option.value)">
+      {{ i18n.t(option.labelKey) }}
+    </button>
+  }
+</mat-menu>
+
+<mat-menu #presetMenu="matMenu" panelClass="theme-menu-panel" xPosition="before" yPosition="below" [overlapTrigger]="false">
+  @for (option of presetOptions; track option.value) {
+    <button mat-menu-item type="button" (click)="preferences.updatePreset(option.value)">
+      {{ i18n.t(option.labelKey) }}
+    </button>
+  }
+
+  <button mat-menu-item type="button" [matMenuTriggerFor]="customColorsMenu" (mouseenter)="setCustomPreset()">
+    {{ i18n.t('shell.preset.custom') }}
+  </button>
+</mat-menu>
+
+<mat-menu #densityMenu="matMenu" panelClass="theme-menu-panel" xPosition="before" yPosition="below" [overlapTrigger]="false">
+  @for (option of densityOptions; track option.value) {
+    <button mat-menu-item type="button" (click)="preferences.updateDensity(option.value)">
+      {{ i18n.t(option.labelKey) }}
+    </button>
+  }
+</mat-menu>
+
+<mat-menu #localeMenu="matMenu" panelClass="theme-menu-panel" xPosition="before" yPosition="below" [overlapTrigger]="false">
+  @for (option of localeOptions; track option.value) {
+    <button mat-menu-item type="button" (click)="preferences.updateLocale(option.value)">
+      {{ option.labelKey }}
+    </button>
+  }
+</mat-menu>
+
+<mat-menu #sidebarMenu="matMenu" panelClass="theme-menu-panel" xPosition="before" yPosition="below" [overlapTrigger]="false">
+  @for (option of sidebarOptions; track option.value) {
+    <button mat-menu-item type="button" (click)="preferences.updateSidebarMode(option.value)">
+      {{ i18n.t(option.labelKey) }}
+    </button>
+  }
+</mat-menu>
+
+<mat-menu #customColorsMenu="matMenu" panelClass="theme-menu-panel" xPosition="before" yPosition="below" [overlapTrigger]="false">
+  <div class="theme-menu-content ih-theme-menu" (click)="$event.stopPropagation()">
+    <div class="theme-colors-block theme-colors-block--inline ih-theme-colors-block">
+      <p class="section-eyebrow ih-section-eyebrow">{{ i18n.t('shell.customColors') }}</p>
+      <div class="theme-colors ih-theme-colors">
+        @for (field of customColorFields; track field.value) {
+          <label class="theme-color-field ih-theme-color-field">
+            <span>{{ i18n.t(field.labelKey) }}</span>
+            <input
+              type="color"
+              [value]="colorValue(field.value)"
+              (input)="preferences.updateCustomColor(field.value, $any($event.target).value)"
+            />
+            <code>{{ colorValue(field.value) }}</code>
+          </label>
+        }
+      </div>
+    </div>
+  </div>
+</mat-menu>

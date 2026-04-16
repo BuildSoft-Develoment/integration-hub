@@ -26,6 +26,16 @@ Cubre:
 - `PRO` en Kubernetes con HA de 2 nodos
 - seguridad, observabilidad, backup y operacion
 
+## 3.1 Frontend Angular
+
+- [Frontend Nx Angular](/docs/architecture/FRONTEND-NX-ANGULAR.md)
+
+Cubre:
+- stack y convenciones del frontend Angular
+- patrones por feature
+- estado actual de la feature `processes`
+- uso de `signals`, stores y servicios por responsabilidad
+
 ## 4. Casos de uso
 
 - [Use Cases](/docs/architecture/USE-CASES.md)

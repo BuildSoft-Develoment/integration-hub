@@ -1,5 +1,6 @@
 import { Route } from '@angular/router';
-import { authGuard, roleGuard } from '@integration-hub/core/services';
+
+import { appSectionGuard } from './app-route-access.policy';
 
 export const appRoutes: Route[] = [
   {
@@ -9,10 +10,7 @@ export const appRoutes: Route[] = [
   },
   {
     path: 'overview',
-    canActivate: [
-      authGuard,
-      roleGuard(['platform-admin', 'integration-admin', 'operator', 'auditor']),
-    ],
+    canActivate: [appSectionGuard('overview')],
     loadChildren: () =>
       import('@integration-hub/features/overview').then(
         (module) => module.overviewRoutes
@@ -20,10 +18,7 @@ export const appRoutes: Route[] = [
   },
   {
     path: 'sources',
-    canActivate: [
-      authGuard,
-      roleGuard(['platform-admin', 'integration-admin', 'auditor']),
-    ],
+    canActivate: [appSectionGuard('sources')],
     loadChildren: () =>
       import('@integration-hub/features/sources').then(
         (module) => module.sourceCatalogRoutes
@@ -31,10 +26,7 @@ export const appRoutes: Route[] = [
   },
   {
     path: 'connections',
-    canActivate: [
-      authGuard,
-      roleGuard(['platform-admin', 'integration-admin', 'auditor']),
-    ],
+    canActivate: [appSectionGuard('connections')],
     loadChildren: () =>
       import('@integration-hub/features/connections').then(
         (module) => module.connectionCatalogRoutes
@@ -42,10 +34,7 @@ export const appRoutes: Route[] = [
   },
   {
     path: 'readers',
-    canActivate: [
-      authGuard,
-      roleGuard(['platform-admin', 'integration-admin', 'auditor']),
-    ],
+    canActivate: [appSectionGuard('readers')],
     loadChildren: () =>
       import('@integration-hub/features/readers').then(
         (module) => module.readerCatalogRoutes
@@ -53,10 +42,7 @@ export const appRoutes: Route[] = [
   },
   {
     path: 'processes',
-    canActivate: [
-      authGuard,
-      roleGuard(['platform-admin', 'integration-admin', 'operator', 'auditor']),
-    ],
+    canActivate: [appSectionGuard('processes')],
     loadChildren: () =>
       import('@integration-hub/features/processes').then(
         (module) => module.processCatalogRoutes
@@ -64,10 +50,7 @@ export const appRoutes: Route[] = [
   },
   {
     path: 'executions',
-    canActivate: [
-      authGuard,
-      roleGuard(['platform-admin', 'integration-admin', 'operator', 'auditor']),
-    ],
+    canActivate: [appSectionGuard('executions')],
     loadChildren: () =>
       import('@integration-hub/features/executions').then(
         (module) => module.executionCatalogRoutes
@@ -75,10 +58,7 @@ export const appRoutes: Route[] = [
   },
   {
     path: 'schedules',
-    canActivate: [
-      authGuard,
-      roleGuard(['platform-admin', 'integration-admin', 'operator', 'auditor']),
-    ],
+    canActivate: [appSectionGuard('schedules')],
     loadChildren: () =>
       import('@integration-hub/features/schedules').then(
         (module) => module.schedulesRoutes
@@ -86,10 +66,7 @@ export const appRoutes: Route[] = [
   },
   {
     path: 'audit',
-    canActivate: [
-      authGuard,
-      roleGuard(['platform-admin', 'integration-admin', 'operator', 'auditor']),
-    ],
+    canActivate: [appSectionGuard('audit')],
     loadChildren: () =>
       import('@integration-hub/features/audit').then(
         (module) => module.auditRoutes

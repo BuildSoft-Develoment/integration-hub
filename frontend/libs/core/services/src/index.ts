@@ -2,6 +2,7 @@ export * from './lib/auth.guard';
 export * from './lib/auth.interceptor';
 export * from './lib/http-error.interceptor';
 export * from './lib/app-feedback.service';
+export * from './lib/auth-access.service';
 export * from './lib/auth.service';
 export * from './lib/date-time.service';
 export * from './lib/connection-manager.service';
