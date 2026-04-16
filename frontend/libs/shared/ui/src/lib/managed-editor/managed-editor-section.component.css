@@ -1,0 +1,38 @@
+.form-section {
+  display: grid;
+  gap: 0.9rem;
+  padding: 0.95rem;
+  border: 1px solid var(--ih-border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--ih-surface-alt) 93%, transparent);
+  min-width: 0;
+}
+
+.section-eyebrow {
+  margin: 0;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ih-text-soft);
+}
+
+.section-header h4 {
+  margin: 0.28rem 0 0;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+@media (max-height: 700px) and (min-width: 761px) {
+  .form-section {
+    gap: 0.7rem;
+    padding: 0.8rem;
+  }
+}
+
+@media (max-width: 760px) {
+  .form-section {
+    padding: 0.8rem;
+    border-radius: 16px;
+  }
+}

@@ -1,0 +1,5 @@
+@if (result()) {
+  <div class="test-result" [class.test-result--danger]="!result()!.success">
+    {{ result()!.message }}
+  </div>
+}

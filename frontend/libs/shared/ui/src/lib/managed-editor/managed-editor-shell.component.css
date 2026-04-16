@@ -1,0 +1,28 @@
+.panel-card {
+  min-height: 100%;
+  height: 100%;
+}
+
+.panel-body {
+  min-height: 100%;
+  display: grid;
+  align-content: start;
+  padding: 1rem;
+  overflow: auto;
+}
+
+.panel-topbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.65rem;
+}
+
+@media (max-height: 700px) and (min-width: 761px) {
+  .panel-body {
+    padding: 0.85rem;
+  }
+
+  .panel-topbar {
+    margin-bottom: 0.45rem;
+  }
+}
