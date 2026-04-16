@@ -1,0 +1,13 @@
+<section class="panel-card ih-drawer-editor">
+  <div class="panel-body ih-drawer-editor__body">
+    <div class="panel-topbar">
+      <button mat-stroked-button type="button" (click)="close.emit()">
+        {{ i18n.t('common.close') }}
+      </button>
+    </div>
+
+    <ng-content select="[editor-header]" />
+    <ng-content select="[editor-readonly-actions]" />
+    <ng-content select="[editor-form]" />
+  </div>
+</section>

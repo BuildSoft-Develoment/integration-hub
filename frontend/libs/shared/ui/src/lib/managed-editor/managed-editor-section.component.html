@@ -1,0 +1,8 @@
+<section class="form-section">
+  <div class="section-header">
+    <p class="section-eyebrow">{{ i18n.t(eyebrowKey()) }}</p>
+    <h4>{{ titleKey() ? i18n.t(titleKey()!) : title() }}</h4>
+  </div>
+
+  <ng-content />
+</section>

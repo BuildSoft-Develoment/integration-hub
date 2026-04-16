@@ -1,0 +1,17 @@
+@if (!readonly()) {
+  <div class="form-actions">
+    @if (showTest()) {
+      <button mat-stroked-button type="button" (click)="test.emit()" [disabled]="testing()">
+        {{ testing() ? i18n.t(testingLabelKey()) : i18n.t(testLabelKey()) }}
+      </button>
+    }
+
+    <button mat-flat-button type="submit" [disabled]="saving()">
+      {{ entityExists() ? i18n.t('common.saveChanges') : i18n.t('common.create') }}
+    </button>
+
+    <button mat-stroked-button type="button" (click)="cancel.emit()">
+      {{ i18n.t('common.cancel') }}
+    </button>
+  </div>
+}

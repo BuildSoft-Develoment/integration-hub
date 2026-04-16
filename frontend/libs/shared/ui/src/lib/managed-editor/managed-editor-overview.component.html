@@ -1,0 +1,39 @@
+<ih-managed-editor-section [eyebrowKey]="'ui.overview'" [titleKey]="sectionTitleKey()">
+  <div class="hero-grid">
+    <mat-form-field class="field-span-2">
+      <mat-label>{{ i18n.t('common.name') }}</mat-label>
+      <input
+        matInput
+        [disabled]="readonly()"
+        [ngModel]="name()"
+        (ngModelChange)="nameChange.emit($event)"
+        [name]="fieldPrefix() + 'Name'"
+      />
+    </mat-form-field>
+
+    <mat-form-field>
+      <mat-label>{{ i18n.t('common.type') }}</mat-label>
+      <mat-select
+        [disabled]="readonly()"
+        [ngModel]="selectedType()"
+        (ngModelChange)="typeChange.emit($event)"
+        [name]="fieldPrefix() + 'Type'"
+      >
+        @for (provider of providerOptions(); track provider.type) {
+          <mat-option [value]="provider.type">{{ provider.label }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <div class="toggle-wrap">
+      <mat-slide-toggle
+        [disabled]="readonly()"
+        [ngModel]="active()"
+        (ngModelChange)="activeChange.emit($event)"
+        [name]="fieldPrefix() + 'Active'"
+      >
+        {{ i18n.t('common.active') }}
+      </mat-slide-toggle>
+    </div>
+  </div>
+</ih-managed-editor-section>
