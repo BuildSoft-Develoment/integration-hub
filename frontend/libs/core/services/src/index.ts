@@ -6,6 +6,7 @@ export * from './lib/auth-access.service';
 export * from './lib/auth.service';
 export * from './lib/date-time.service';
 export * from './lib/connection-manager.service';
+export * from './lib/managed-editor-state.base';
 export * from './lib/process-task-manager.service';
 export * from './lib/reader-manager.service';
 export * from './lib/source-manager.service';

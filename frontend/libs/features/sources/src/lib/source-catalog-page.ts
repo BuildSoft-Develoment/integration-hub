@@ -11,13 +11,20 @@ import { I18nService, SourceManagerService } from '@integration-hub/core/service
 import { SourceEditorComponent } from './components/source-editor/source-editor.component';
 import { SourceListComponent } from './components/source-list/source-list.component';
 import { SourceToolbarComponent } from './components/source-toolbar/source-toolbar.component';
+import { SourceCatalogCommandService } from './source-catalog-command.service';
+import { SourceCatalogQueryStore } from './source-catalog-query.store';
 import { SourceCatalogStore } from './source-catalog.store';
 import { SourceEditorStateService } from './source-editor-state.service';
 
 @Component({
   selector: 'ih-source-catalog-page',
   standalone: true,
-  providers: [SourceCatalogStore, SourceEditorStateService],
+  providers: [
+    SourceCatalogStore,
+    SourceCatalogQueryStore,
+    SourceCatalogCommandService,
+    SourceEditorStateService,
+  ],
   imports: [
     CommonModule,
     FormsModule,

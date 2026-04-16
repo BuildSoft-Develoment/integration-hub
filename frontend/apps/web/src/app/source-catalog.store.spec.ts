@@ -1,3 +1,6 @@
+import '../../../../libs/features/sources/src/lib/source-catalog-command.service.spec';
+import '../../../../libs/features/sources/src/lib/source-catalog-query.store.spec';
+import '../../../../libs/features/sources/src/lib/source-editor-state.service.spec';
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { of, throwError } from 'rxjs';
@@ -9,6 +12,8 @@ import {
 } from '@integration-hub/core/services';
 import { SourceDraft } from '@integration-hub/core/providers';
 import { SourceCatalogStore } from '../../../../libs/features/sources/src/lib/source-catalog.store';
+import { SourceCatalogCommandService } from '../../../../libs/features/sources/src/lib/source-catalog-command.service';
+import { SourceCatalogQueryStore } from '../../../../libs/features/sources/src/lib/source-catalog-query.store';
 import { SourceApiService } from '../../../../libs/features/sources/src/lib/source-api.service';
 import { SourceEditorStateService } from '../../../../libs/features/sources/src/lib/source-editor-state.service';
 
@@ -37,6 +42,8 @@ describe('SourceCatalogStore', () => {
     TestBed.configureTestingModule({
       providers: [
         SourceCatalogStore,
+        SourceCatalogQueryStore,
+        SourceCatalogCommandService,
         SourceEditorStateService,
         {
           provide: SourceApiService,

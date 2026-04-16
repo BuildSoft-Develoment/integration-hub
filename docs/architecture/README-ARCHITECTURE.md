@@ -34,6 +34,9 @@ Cubre:
 - stack y convenciones del frontend Angular
 - patrones por feature
 - estado actual de la feature `processes`
+- estado actual de la feature `executions`
+- convencion de `QueryStore + CommandService + thin facade`
+- alineacion entre `providers`, managers y state services
 - uso de `signals`, stores y servicios por responsabilidad
 
 ## 4. Casos de uso
