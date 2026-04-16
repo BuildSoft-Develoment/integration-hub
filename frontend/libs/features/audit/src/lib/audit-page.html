@@ -1,33 +1,34 @@
 <section class="page-grid audit-page ih-catalog-grid">
+  @let vm = viewModel();
   <mat-drawer-container class="audit-drawer-container ih-catalog-drawer-container">
     <mat-drawer-content>
       <section class="audit-workspace ih-catalog-workspace">
         <ih-audit-toolbar
-          [search]="store.search()"
-          [eventTypeFilter]="store.eventTypeFilter()"
-          [statusFilter]="store.statusFilter()"
-          [eventTypeOptions]="store.eventTypeOptions()"
-          (searchChange)="store.updateSearch($event)"
-          (eventTypeFilterChange)="store.updateEventTypeFilter($event)"
-          (statusFilterChange)="store.updateStatusFilter($event)"
+          [search]="vm.search"
+          [eventTypeFilter]="vm.eventTypeFilter"
+          [statusFilter]="vm.statusFilter"
+          [eventTypeOptions]="vm.eventTypeOptions"
+          (searchChange)="updateSearch($event)"
+          (eventTypeFilterChange)="updateEventTypeFilter($event)"
+          (statusFilterChange)="updateStatusFilter($event)"
         />
 
         <section class="audit-list-shell ih-catalog-list-shell">
           <ih-audit-list
-            [events]="store.pagedEvents()"
-            [totalLength]="store.totalLength()"
-            [selectedEventId]="store.selectedEvent()?.id ?? null"
-            [pageIndex]="store.currentPage()"
-            [pageSize]="store.pageSize()"
-            (selectEvent)="store.selectEvent($event)"
-            (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
+            [events]="vm.events"
+            [totalLength]="vm.totalLength"
+            [selectedEventId]="vm.selectedEvent?.id ?? null"
+            [pageIndex]="vm.pageIndex"
+            [pageSize]="vm.pageSize"
+            (selectEvent)="selectEvent($event)"
+            (pageChange)="updatePagination($event)"
           />
         </section>
       </section>
     </mat-drawer-content>
 
-    <mat-drawer class="audit-drawer ih-catalog-drawer" position="end" mode="over" [opened]="store.drawerOpen()" (closedStart)="store.closeDrawer()">
-      <ih-audit-editor [event]="store.selectedEvent()" (close)="store.closeDrawer()" />
+    <mat-drawer class="audit-drawer ih-catalog-drawer" position="end" mode="over" [opened]="vm.drawerOpen" (closedStart)="closeDrawer()">
+      <ih-audit-editor [event]="vm.selectedEvent" (close)="closeDrawer()" />
     </mat-drawer>
   </mat-drawer-container>
 </section>

@@ -1,38 +1,39 @@
 <section class="page-grid schedule-page ih-catalog-grid">
+  @let vm = viewModel();
   <mat-drawer-container class="schedules-drawer-container ih-catalog-drawer-container">
     <mat-drawer-content>
       <section class="schedules-workspace ih-catalog-workspace">
         <ih-schedules-toolbar
-          [search]="store.search()"
-          [modeFilter]="store.modeFilter()"
-          [statusFilter]="store.statusFilter()"
-          (searchChange)="store.updateSearch($event)"
-          (modeFilterChange)="store.updateModeFilter($event)"
-          (statusFilterChange)="store.updateStatusFilter($event)"
-          (refresh)="store.load()"
+          [search]="vm.search"
+          [modeFilter]="vm.modeFilter"
+          [statusFilter]="vm.statusFilter"
+          (searchChange)="updateSearch($event)"
+          (modeFilterChange)="updateModeFilter($event)"
+          (statusFilterChange)="updateStatusFilter($event)"
+          (refresh)="refresh()"
         />
 
         <section class="schedules-list-shell ih-catalog-list-shell">
           <ih-schedules-list
-            [schedules]="store.pagedSchedules()"
-            [totalLength]="store.totalLength()"
-            [selectedScheduleId]="store.selectedSchedule()?.id ?? null"
-            [pageIndex]="store.currentPage()"
-            [pageSize]="store.pageSize()"
-            (selectSchedule)="store.selectSchedule($event)"
-            (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
+            [schedules]="vm.schedules"
+            [totalLength]="vm.totalLength"
+            [selectedScheduleId]="vm.selectedSchedule?.id ?? null"
+            [pageIndex]="vm.pageIndex"
+            [pageSize]="vm.pageSize"
+            (selectSchedule)="selectSchedule($event)"
+            (pageChange)="updatePagination($event)"
           />
         </section>
       </section>
     </mat-drawer-content>
 
-    <mat-drawer class="schedules-drawer ih-catalog-drawer" position="end" mode="over" [opened]="store.drawerOpen()" (closedStart)="store.closeDrawer()">
+    <mat-drawer class="schedules-drawer ih-catalog-drawer" position="end" mode="over" [opened]="vm.drawerOpen" (closedStart)="closeDrawer()">
       <ih-schedules-editor
-        [schedule]="store.selectedSchedule()"
-        [executing]="store.executing()"
-        [canOperate]="store.canOperate()"
-        (close)="store.closeDrawer()"
-        (run)="store.selectedSchedule() && store.execute(store.selectedSchedule()!)"
+        [schedule]="vm.selectedSchedule"
+        [executing]="vm.executing"
+        [canOperate]="vm.canOperate"
+        (close)="closeDrawer()"
+        (run)="runSelected()"
         (openProcesses)="openProcesses()"
       />
     </mat-drawer>
