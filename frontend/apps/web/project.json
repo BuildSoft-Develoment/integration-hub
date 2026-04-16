@@ -63,7 +63,9 @@
     },
     "test": {
       "executor": "@angular/build:unit-test",
-      "options": {}
+      "options": {
+        "include": ["apps/web/src/**/*.spec.ts", "libs/**/*.spec.ts"]
+      }
     },
     "serve-static": {
       "continuous": true,

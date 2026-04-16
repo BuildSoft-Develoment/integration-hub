@@ -1,3 +1,6 @@
+import '../../../../libs/features/readers/src/lib/reader-catalog-command.service.spec';
+import '../../../../libs/features/readers/src/lib/reader-catalog-query.store.spec';
+import '../../../../libs/features/readers/src/lib/reader-editor-state.service.spec';
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import {
@@ -8,6 +11,8 @@ import {
 } from '@integration-hub/core/services';
 import { ReaderDraft } from '@integration-hub/core/providers';
 import { ReaderCatalogStore } from '../../../../libs/features/readers/src/lib/reader-catalog.store';
+import { ReaderCatalogCommandService } from '../../../../libs/features/readers/src/lib/reader-catalog-command.service';
+import { ReaderCatalogQueryStore } from '../../../../libs/features/readers/src/lib/reader-catalog-query.store';
 import { ReaderApiService } from '../../../../libs/features/readers/src/lib/reader-api.service';
 import { ReaderEditorStateService } from '../../../../libs/features/readers/src/lib/reader-editor-state.service';
 
@@ -33,6 +38,8 @@ describe('ReaderCatalogStore', () => {
     TestBed.configureTestingModule({
       providers: [
         ReaderCatalogStore,
+        ReaderCatalogQueryStore,
+        ReaderCatalogCommandService,
         ReaderEditorStateService,
         {
           provide: ReaderApiService,

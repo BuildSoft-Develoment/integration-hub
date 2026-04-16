@@ -3,40 +3,46 @@
     <mat-drawer-content>
       <section class="executions-workspace ih-catalog-workspace">
         <ih-execution-toolbar
-          [search]="store.search()"
-          [modeFilter]="store.modeFilter()"
-          [statusFilter]="store.statusFilter()"
-          (searchChange)="store.updateSearch($event)"
-          (modeFilterChange)="store.updateModeFilter($event)"
-          (statusFilterChange)="store.updateStatusFilter($event)"
+          [search]="viewModel().toolbar.search"
+          [modeFilter]="viewModel().toolbar.modeFilter"
+          [statusFilter]="viewModel().toolbar.statusFilter"
+          (searchChange)="updateSearch($event)"
+          (modeFilterChange)="updateModeFilter($event)"
+          (statusFilterChange)="updateStatusFilter($event)"
         />
 
         <section class="executions-list-shell ih-catalog-list-shell">
           <ih-execution-list
-            [executions]="store.pagedExecutions()"
-            [totalLength]="store.totalLength()"
-            [selectedExecutionId]="store.selectedExecution()?.id ?? null"
-            [pageIndex]="store.currentPage()"
-            [pageSize]="store.pageSize()"
-            (selectExecution)="store.selectExecution($event)"
-            (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
+            [executions]="viewModel().list.executions"
+            [totalLength]="viewModel().list.totalLength"
+            [selectedExecutionId]="viewModel().list.selectedExecutionId"
+            [pageIndex]="viewModel().list.pageIndex"
+            [pageSize]="viewModel().list.pageSize"
+            (selectExecution)="selectExecution($event)"
+            (pageChange)="updatePagination($event.pageIndex, $event.pageSize)"
           />
         </section>
       </section>
     </mat-drawer-content>
 
-    <mat-drawer class="executions-drawer ih-catalog-drawer" position="end" mode="over" [opened]="store.drawerOpen()" (closedStart)="store.closeDrawer()">
+    <mat-drawer
+      class="executions-drawer ih-catalog-drawer"
+      position="end"
+      mode="over"
+      [opened]="viewModel().editor.opened"
+      (closedStart)="closeDrawer()"
+    >
       <ih-execution-editor
-        [execution]="store.selectedExecution()"
-        [tasks]="store.tasks()"
-        [children]="store.children()"
-        [navigationStack]="store.navigationStack()"
-        [loading]="store.loadingDetails()"
-        [actionBusy]="store.actionRunning()"
-        (close)="store.closeDrawer()"
-        (openExecution)="store.openRelatedExecution($event)"
-        (goBack)="store.goBackToPreviousExecution()"
-        (fileAction)="store.runFileAction($event)"
+        [execution]="viewModel().editor.execution"
+        [tasks]="viewModel().editor.tasks"
+        [children]="viewModel().editor.children"
+        [navigationStack]="viewModel().editor.navigationStack"
+        [loading]="viewModel().editor.loading"
+        [actionBusy]="viewModel().editor.actionBusy"
+        (close)="closeDrawer()"
+        (openExecution)="openExecution($event)"
+        (goBack)="goBack()"
+        (fileAction)="runFileAction($event)"
       />
     </mat-drawer>
   </mat-drawer-container>

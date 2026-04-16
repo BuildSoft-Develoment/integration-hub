@@ -395,3 +395,187 @@ Para cambios futuros en `processes`:
 - cambios de formulario o flow -> `ProcessEditorStore`
 - nuevas referencias externas -> `ProcessReferenceStore`
 - composicion visual -> pagina o componentes presentacionales
+
+## Convencion SOLID actual por feature
+
+La convencion actual del frontend busca seguir la misma direccion de dependencias que el backend:
+
+- providers y managers como frontera de infraestructura
+- stores y command services como capa de aplicacion de la feature
+- components y pages como capa de presentacion
+
+### Regla de dependencias
+
+- `core/providers`
+  - define contratos, tokens e implementaciones concretas por dominio
+- `core/services`
+  - expone managers y servicios transversales
+  - los managers coordinan providers concretos
+- `features/*`
+  - consumen managers, APIs y stores
+  - no deberian conocer implementaciones concretas de providers
+- `page providers`
+  - se usan solo para estado por pantalla y servicios con ciclo de vida de ruta
+  - no para infraestructura compartida
+
+### Patron recomendado para features catalogo
+
+Cuando una feature tiene lista, filtros, seleccion, drawer y acciones, la estructura objetivo es:
+
+- `*-catalog-page`
+  - compone UI
+  - expone `viewModel()` basado en `signals`
+  - traduce eventos de UI a comandos explicitos
+- `*-catalog.store`
+  - fachada delgada y estable para la pagina
+  - coordina stores y servicios internos
+- `*-catalog-query.store`
+  - listado
+  - filtros
+  - paginacion
+  - seleccion y refresh del catalogo
+- `*-catalog-command.service`
+  - persistencia
+  - acciones laterales como `test`, `toggleActive` o `execute`
+  - feedback al usuario
+- `*-editor-state.service` o `*-editor.store`
+  - formulario
+  - draft
+  - view mode
+  - estado local del editor
+
+### Regla de `providers` por pagina
+
+La pagina debe proveer solo las piezas stateful de la feature. Ejemplo tipico:
+
+- `CatalogStore`
+- `CatalogQueryStore`
+- `CatalogCommandService`
+- `EditorStateService`
+
+Los managers siguen resolviendose por DI global, normalmente desde `core/services`, para mantener:
+
+- `SRP`
+- `DIP`
+- `OCP`
+
+### Base compartida de editor
+
+Para evitar duplicacion entre features con comportamiento parecido, ahora existe:
+
+- [managed-editor-state.base.ts](/frontend/libs/core/services/src/lib/managed-editor-state.base.ts)
+
+Esta base concentra:
+
+- `viewMode`
+- `form`
+- `draft`
+- `formTitle`
+- `startCreate`
+- `startEdit`
+- `cancelEdit`
+- `patchForm`
+- `updateFormField`
+- resolucion del item seleccionado
+
+Cada feature conserva solo su logica particular.
+
+## Feature executions
+
+La feature `/executions` quedo alineada al mismo patron de capas con `signals` y specs propios.
+
+### Estructura actual
+
+- pagina:
+  - [execution-catalog-page.ts](/frontend/libs/features/executions/src/lib/execution-catalog-page.ts)
+  - [execution-catalog-page.html](/frontend/libs/features/executions/src/lib/execution-catalog-page.html)
+- fachada:
+  - [execution-catalog.store.ts](/frontend/libs/features/executions/src/lib/execution-catalog.store.ts)
+- query:
+  - [execution-catalog-query.store.ts](/frontend/libs/features/executions/src/lib/execution-catalog-query.store.ts)
+- detalle:
+  - [execution-detail.store.ts](/frontend/libs/features/executions/src/lib/execution-detail.store.ts)
+- comandos:
+  - [execution-catalog-command.service.ts](/frontend/libs/features/executions/src/lib/execution-catalog-command.service.ts)
+- editor:
+  - [execution-editor.store.ts](/frontend/libs/features/executions/src/lib/components/execution-editor/execution-editor.store.ts)
+- archivos:
+  - [execution-files-panel.store.ts](/frontend/libs/features/executions/src/lib/components/execution-files-panel/execution-files-panel.store.ts)
+
+### Regla de mantenimiento
+
+- cambios de listado -> `ExecutionCatalogQueryStore`
+- cambios de detalle o lineage -> `ExecutionDetailStore`
+- cambios de acciones sobre archivos -> `ExecutionCatalogCommandService`
+- cambios de estado local del editor -> `ExecutionEditorStore`
+- cambios de seleccion y filtros de archivos -> `ExecutionFilesPanelStore`
+
+## Familia sources, connections y readers
+
+Las features `/sources`, `/connections` y `/readers` quedaron alineadas entre si para reducir mezcla y duplicacion.
+
+### Estructura actual por feature
+
+- page:
+  - `*-catalog-page`
+- fachada:
+  - `*-catalog.store`
+- query:
+  - `*-catalog-query.store`
+- comandos:
+  - `*-catalog-command.service`
+- editor:
+  - `*-editor-state.service`
+
+### Relacion con managers y providers
+
+- `SourceManagerService`, `ConnectionManagerService` y `ReaderManagerService`
+  - siguen siendo la frontera de dominio hacia providers
+- `CatalogCommandService`
+  - usa manager + api service
+- `EditorStateService`
+  - resuelve draft e hidratacion a traves del manager
+- `CatalogStore`
+  - no conoce implementaciones concretas de providers
+
+### Regla de mantenimiento
+
+- cambios de listado/filtros -> `QueryStore`
+- cambios de `save`, `test`, `toggleActive` -> `CommandService`
+- cambios de editor o draft -> `EditorStateService`
+- cambios visuales -> page y componentes presentacionales
+
+## Testing por feature
+
+La convencion actual es dejar specs propios dentro de cada libreria de feature y hacer que el target de tests de `apps/web` los incluya.
+
+Ejemplos recientes:
+
+- `processes`
+  - [process-catalog.store.spec.ts](/frontend/libs/features/processes/src/lib/process-catalog.store.spec.ts)
+  - [process-editor.store.spec.ts](/frontend/libs/features/processes/src/lib/process-editor.store.spec.ts)
+  - [process-reference.store.spec.ts](/frontend/libs/features/processes/src/lib/process-reference.store.spec.ts)
+- `executions`
+  - [execution-catalog-query.store.spec.ts](/frontend/libs/features/executions/src/lib/execution-catalog-query.store.spec.ts)
+  - [execution-detail.store.spec.ts](/frontend/libs/features/executions/src/lib/execution-detail.store.spec.ts)
+  - [execution-catalog-command.service.spec.ts](/frontend/libs/features/executions/src/lib/execution-catalog-command.service.spec.ts)
+  - [execution-editor.store.spec.ts](/frontend/libs/features/executions/src/lib/components/execution-editor/execution-editor.store.spec.ts)
+  - [execution-files-panel.store.spec.ts](/frontend/libs/features/executions/src/lib/components/execution-files-panel/execution-files-panel.store.spec.ts)
+- `sources`
+  - [source-editor-state.service.spec.ts](/frontend/libs/features/sources/src/lib/source-editor-state.service.spec.ts)
+  - [source-catalog-query.store.spec.ts](/frontend/libs/features/sources/src/lib/source-catalog-query.store.spec.ts)
+  - [source-catalog-command.service.spec.ts](/frontend/libs/features/sources/src/lib/source-catalog-command.service.spec.ts)
+- `connections`
+  - [connection-editor-state.service.spec.ts](/frontend/libs/features/connections/src/lib/connection-editor-state.service.spec.ts)
+  - [connection-catalog-query.store.spec.ts](/frontend/libs/features/connections/src/lib/connection-catalog-query.store.spec.ts)
+  - [connection-catalog-command.service.spec.ts](/frontend/libs/features/connections/src/lib/connection-catalog-command.service.spec.ts)
+- `readers`
+  - [reader-editor-state.service.spec.ts](/frontend/libs/features/readers/src/lib/reader-editor-state.service.spec.ts)
+  - [reader-catalog-query.store.spec.ts](/frontend/libs/features/readers/src/lib/reader-catalog-query.store.spec.ts)
+  - [reader-catalog-command.service.spec.ts](/frontend/libs/features/readers/src/lib/reader-catalog-command.service.spec.ts)
+
+Validacion reciente:
+
+- `npm.cmd run test -- --watch=false` OK
+- `npm.cmd run build` OK
+- `60` tests pasando

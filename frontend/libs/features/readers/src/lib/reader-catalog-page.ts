@@ -6,13 +6,20 @@ import { I18nService, ReaderManagerService } from '@integration-hub/core/service
 import { ReaderEditorComponent } from './components/reader-editor/reader-editor.component';
 import { ReaderListComponent } from './components/reader-list/reader-list.component';
 import { ReaderToolbarComponent } from './components/reader-toolbar/reader-toolbar.component';
+import { ReaderCatalogCommandService } from './reader-catalog-command.service';
+import { ReaderCatalogQueryStore } from './reader-catalog-query.store';
 import { ReaderCatalogStore } from './reader-catalog.store';
 import { ReaderEditorStateService } from './reader-editor-state.service';
 
 @Component({
   selector: 'ih-reader-catalog-page',
   standalone: true,
-  providers: [ReaderCatalogStore, ReaderEditorStateService],
+  providers: [
+    ReaderCatalogStore,
+    ReaderCatalogQueryStore,
+    ReaderCatalogCommandService,
+    ReaderEditorStateService,
+  ],
   imports: [CommonModule, MatSidenavModule, ReaderToolbarComponent, ReaderListComponent, ReaderEditorComponent],
   templateUrl: './reader-catalog-page.html',
   styleUrl: './reader-catalog-page.css',

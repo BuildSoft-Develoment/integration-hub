@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { Observable, of } from 'rxjs';
+import { of, Subject } from 'rxjs';
 
 import { ProcessApiService } from './process-api.service';
 import { ProcessReferenceStore } from './process-reference.store';
@@ -54,24 +54,18 @@ describe('ProcessReferenceStore', () => {
   });
 
   it('should expose loading state while the first load is in progress', async () => {
-    let resolveSources: ((value: [{ id: number; name: string }]) => void) | null =
-      null;
+    const sources$ = new Subject<Array<{ id: number; name: string }>>();
 
     listSources.mockImplementationOnce(
-      () =>
-        new Observable((subscriber) => {
-          resolveSources = (value) => {
-            subscriber.next(value);
-            subscriber.complete();
-          };
-        })
+      () => sources$.asObservable()
     );
 
     const loadPromise = store.ensureLoaded();
 
     expect(store.loading()).toBeTruthy();
 
-    resolveSources?.([{ id: 1, name: 'source-a' }]);
+    sources$.next([{ id: 1, name: 'source-a' }]);
+    sources$.complete();
     await loadPromise;
 
     expect(store.loading()).toBeFalsy();

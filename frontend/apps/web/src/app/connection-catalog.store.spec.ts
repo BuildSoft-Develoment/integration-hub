@@ -1,3 +1,6 @@
+import '../../../../libs/features/connections/src/lib/connection-catalog-command.service.spec';
+import '../../../../libs/features/connections/src/lib/connection-catalog-query.store.spec';
+import '../../../../libs/features/connections/src/lib/connection-editor-state.service.spec';
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { of, throwError } from 'rxjs';
@@ -9,6 +12,8 @@ import {
 } from '@integration-hub/core/services';
 import { ConnectionDraft } from '@integration-hub/core/providers';
 import { ConnectionCatalogStore } from '../../../../libs/features/connections/src/lib/connection-catalog.store';
+import { ConnectionCatalogCommandService } from '../../../../libs/features/connections/src/lib/connection-catalog-command.service';
+import { ConnectionCatalogQueryStore } from '../../../../libs/features/connections/src/lib/connection-catalog-query.store';
 import { ConnectionApiService } from '../../../../libs/features/connections/src/lib/connection-api.service';
 import { ConnectionEditorStateService } from '../../../../libs/features/connections/src/lib/connection-editor-state.service';
 
@@ -47,6 +52,8 @@ describe('ConnectionCatalogStore', () => {
     TestBed.configureTestingModule({
       providers: [
         ConnectionCatalogStore,
+        ConnectionCatalogQueryStore,
+        ConnectionCatalogCommandService,
         ConnectionEditorStateService,
         {
           provide: ConnectionApiService,
