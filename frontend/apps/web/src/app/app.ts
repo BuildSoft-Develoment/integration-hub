@@ -1,9 +1,9 @@
 import { Component } from '@angular/core';
-import { AppShellComponent } from '@integration-hub/shared/ui';
+import { AppLayoutComponent } from '@integration-hub/shared/ui';
 
 @Component({
   standalone: true,
-  imports: [AppShellComponent],
+  imports: [AppLayoutComponent],
   selector: 'app-root',
   templateUrl: './app.html',
   styleUrl: './app.css',

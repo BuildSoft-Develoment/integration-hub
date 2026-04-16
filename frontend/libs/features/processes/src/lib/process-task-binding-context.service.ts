@@ -136,7 +136,9 @@ export class ProcessTaskBindingContextService {
     const candidates = tasks
       .filter((item) => item.taskType === 'FILE_READ' && item.taskOrder < currentOrder)
       .sort((a, b) => a.taskOrder - b.taskOrder);
-    return candidates.at(-1) ?? tasks.find((item) => item.taskType === 'FILE_READ') ?? null;
+    const lastCandidate =
+      candidates.length > 0 ? candidates[candidates.length - 1] : null;
+    return lastCandidate ?? tasks.find((item) => item.taskType === 'FILE_READ') ?? null;
   }
 
   private parseObject(configurationJson: string, key: string): Record<string, string> {

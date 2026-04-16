@@ -9,16 +9,22 @@ import { provideRouter, withHashLocation } from '@angular/router';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { MatPaginatorIntl } from '@angular/material/paginator';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
-import { appRoutes } from './app.routes';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { importProvidersFrom } from '@angular/core';
-import { provideConnectionProviders, provideReaderProviders, provideSourceProviders } from '@integration-hub/core/providers';
+import {
+  provideConnectionProviders,
+  provideReaderProviders,
+  provideSourceProviders,
+} from '@integration-hub/core/providers';
+import { appRoutes } from './app.routes';
 import {
   authInterceptor,
   AuthService,
   httpErrorInterceptor,
   PaginatorIntlService,
 } from '@integration-hub/core/services';
+
+import { appNavigationProvider } from './app-navigation.providers';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -30,6 +36,7 @@ export const appConfig: ApplicationConfig = {
     provideSourceProviders(),
     provideReaderProviders(),
     provideConnectionProviders(),
+    appNavigationProvider,
     {
       provide: MAT_FORM_FIELD_DEFAULT_OPTIONS,
       useValue: {

@@ -1,6 +1,9 @@
 import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { AppFeedbackService, AuthService } from '@integration-hub/core/services';
+import {
+  AppFeedbackService,
+  AuthAccessService,
+} from '@integration-hub/core/services';
 import { ScheduleRecord } from './schedules.models';
 import { SchedulesApiService } from './schedules-api.service';
 
@@ -10,7 +13,7 @@ type StatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 @Injectable()
 export class SchedulesStore implements OnDestroy {
   private readonly api = inject(SchedulesApiService);
-  private readonly auth = inject(AuthService);
+  private readonly access = inject(AuthAccessService);
   private readonly feedback = inject(AppFeedbackService);
   private readonly searchDebounceMs = 300;
   private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
@@ -29,9 +32,7 @@ export class SchedulesStore implements OnDestroy {
   readonly currentPage = signal(0);
   readonly pageSize = signal(8);
 
-  readonly canOperate = computed(() =>
-    this.auth.hasAnyRole(['platform-admin', 'integration-admin', 'operator'])
-  );
+  readonly canOperate = computed(() => this.access.canOperate());
   readonly pagedSchedules = computed(() => this.schedules());
 
   async load(): Promise<void> {

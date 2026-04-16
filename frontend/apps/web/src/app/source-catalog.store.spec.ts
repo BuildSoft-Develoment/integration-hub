@@ -3,12 +3,14 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { of, throwError } from 'rxjs';
 import {
   AppFeedbackService,
+  AuthAccessService,
   AuthService,
   SourceManagerService,
 } from '@integration-hub/core/services';
 import { SourceDraft } from '@integration-hub/core/providers';
 import { SourceCatalogStore } from '../../../../libs/features/sources/src/lib/source-catalog.store';
 import { SourceApiService } from '../../../../libs/features/sources/src/lib/source-api.service';
+import { SourceEditorStateService } from '../../../../libs/features/sources/src/lib/source-editor-state.service';
 
 describe('SourceCatalogStore', () => {
   let store: SourceCatalogStore;
@@ -35,6 +37,7 @@ describe('SourceCatalogStore', () => {
     TestBed.configureTestingModule({
       providers: [
         SourceCatalogStore,
+        SourceEditorStateService,
         {
           provide: SourceApiService,
           useValue: {
@@ -77,6 +80,10 @@ describe('SourceCatalogStore', () => {
         },
         {
           provide: AuthService,
+          useValue: {},
+        },
+        {
+          provide: AuthAccessService,
           useValue: {
             canAdmin: () => true,
           },

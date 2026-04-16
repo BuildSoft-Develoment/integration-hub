@@ -1,11 +1,23 @@
+import { TestBed } from '@angular/core/testing';
+
 import { ProcessFlowMapper } from '../../../../libs/features/processes/src/lib/process-flow.mapper';
 import { ProcessFlowSyncService } from '../../../../libs/features/processes/src/lib/process-flow-sync.service';
 import { createTaskForm } from '../../../../libs/features/processes/src/lib/process.models';
 
 describe('ProcessFlowSyncService', () => {
+  let mapper: ProcessFlowMapper;
+  let sync: ProcessFlowSyncService;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      providers: [ProcessFlowMapper, ProcessFlowSyncService],
+    });
+
+    mapper = TestBed.inject(ProcessFlowMapper);
+    sync = TestBed.inject(ProcessFlowSyncService);
+  });
+
   it('should reorder tasks based on the connected flow', () => {
-    const mapper = new ProcessFlowMapper();
-    const sync = new ProcessFlowSyncService(mapper);
     const first = createTaskForm('FILE_READ', 1);
     const second = createTaskForm('DB_WRITE', 2);
     const third = createTaskForm('NOTIFICATION', 3);
@@ -35,8 +47,6 @@ describe('ProcessFlowSyncService', () => {
   });
 
   it('should keep only one outgoing and one incoming connection per node', () => {
-    const mapper = new ProcessFlowMapper();
-    const sync = new ProcessFlowSyncService(mapper);
     const first = createTaskForm('FILE_READ', 1);
     const second = createTaskForm('DB_WRITE', 2);
     const third = createTaskForm('REST_CALL', 3);
@@ -54,8 +64,6 @@ describe('ProcessFlowSyncService', () => {
   });
 
   it('should preserve node positions and connectors when task client ids change after reload', () => {
-    const mapper = new ProcessFlowMapper();
-    const sync = new ProcessFlowSyncService(mapper);
     const first = createTaskForm('FILE_READ', 1);
     const second = createTaskForm('DB_WRITE', 2);
     const layout = mapper.createLayout([first, second]);
@@ -105,8 +113,6 @@ describe('ProcessFlowSyncService', () => {
   });
 
   it('should reconcile old saved designer layouts without taskOrder using graph order', () => {
-    const mapper = new ProcessFlowMapper();
-    const sync = new ProcessFlowSyncService(mapper);
     const first = createTaskForm('FILE_READ', 1);
     const second = createTaskForm('DB_WRITE', 2);
     const third = createTaskForm('DB_EXECUTE_SP', 3);

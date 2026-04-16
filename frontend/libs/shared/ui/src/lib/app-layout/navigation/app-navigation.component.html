@@ -1,0 +1,7 @@
+<nav class="nav-block">
+  @for (item of items(); track item.id) {
+    <a mat-list-item [routerLink]="item.route" routerLinkActive="is-active" (click)="onItemSelected()">
+      {{ i18n.t(item.labelKey) }}
+    </a>
+  }
+</nav>

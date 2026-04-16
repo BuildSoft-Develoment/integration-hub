@@ -45,27 +45,6 @@ export class AuthService {
     return Boolean(current.url && current.realm && current.clientId);
   });
 
-  readonly canAdmin = computed(
-    () =>
-      this.hasRole('platform-admin') || this.hasRole('integration-admin')
-  );
-
-  readonly roleSummary = computed(() => {
-    if (this.canAdmin()) {
-      return 'Administracion completa';
-    }
-
-    if (this.hasRole('operator')) {
-      return 'Operacion y monitoreo';
-    }
-
-    if (this.hasRole('auditor')) {
-      return 'Consulta y auditoria';
-    }
-
-    return 'Sin permisos';
-  });
-
   async initialize(): Promise<void> {
     if (!this.isConfigured()) {
       this.ready.set(true);

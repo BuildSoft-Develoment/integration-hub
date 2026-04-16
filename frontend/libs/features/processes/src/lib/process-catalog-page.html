@@ -1,57 +1,57 @@
 <section class="page-grid process-page">
   <mat-drawer-container class="processes-drawer-container">
-    <mat-drawer-content [class.processes-content-hidden]="store.drawerOpen()">
+    <mat-drawer-content [class.processes-content-hidden]="viewModel().drawerOpen">
       <section class="processes-workspace">
         <ih-process-toolbar
-          [search]="store.search()"
-          [scheduleFilter]="store.scheduleFilter()"
-          [statusFilter]="store.statusFilter()"
-          [canEdit]="store.canEdit()"
-          (searchChange)="store.updateSearch($event)"
-          (scheduleFilterChange)="store.updateScheduleFilter($event)"
-          (statusFilterChange)="store.updateStatusFilter($event)"
-          (create)="store.startCreate()"
+          [search]="viewModel().toolbar.search"
+          [scheduleFilter]="viewModel().toolbar.scheduleFilter"
+          [statusFilter]="viewModel().toolbar.statusFilter"
+          [canEdit]="viewModel().toolbar.canEdit"
+          (searchChange)="updateSearch($event)"
+          (scheduleFilterChange)="updateScheduleFilter($event)"
+          (statusFilterChange)="updateStatusFilter($event)"
+          (create)="createProcess()"
         />
 
         <section class="processes-list-shell">
           <ih-process-list
-            [processes]="store.pagedProcesses()"
-            [totalLength]="store.totalLength()"
-            [selectedProcessId]="store.selectedProcess()?.id ?? null"
-            [pageIndex]="store.currentPage()"
-            [pageSize]="store.pageSize()"
-            (selectProcess)="store.selectProcess($event)"
-            (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
+            [processes]="viewModel().list.processes"
+            [totalLength]="viewModel().list.totalLength"
+            [selectedProcessId]="viewModel().list.selectedProcessId"
+            [pageIndex]="viewModel().list.pageIndex"
+            [pageSize]="viewModel().list.pageSize"
+            (selectProcess)="selectProcess($event)"
+            (pageChange)="updatePagination($event)"
           />
         </section>
       </section>
     </mat-drawer-content>
 
-    <mat-drawer class="processes-drawer" position="end" mode="over" [opened]="store.drawerOpen()" (closedStart)="store.closeDrawer()">
+    <mat-drawer class="processes-drawer" position="end" mode="over" [opened]="viewModel().drawerOpen" (closedStart)="closeDrawer()">
       <ih-process-editor
-        [form]="store.form()"
-        [sources]="store.sources()"
-        [readers]="store.readers()"
-        [connections]="store.connections()"
-        [titleKey]="store.formTitle()"
-        [saving]="store.saving()"
-        [executing]="store.executing()"
-        [readonly]="store.viewMode() !== 'edit'"
-        [canEdit]="store.canEdit()"
-        [canOperate]="store.canOperate()"
-        (patchForm)="store.patchForm($event)"
-        (flowLayoutChange)="store.applyFlowLayout($event)"
-        (addTask)="store.addTask($event)"
-        (addTaskAt)="store.addTaskAt($event.taskType, $event.position)"
-        (patchTask)="store.updateTask($event.clientId, $event.patch)"
-        (flowStateChange)="store.applyFlowState($event.layout, $event.tasks)"
-        (removeTask)="store.removeTask($event)"
-        (save)="store.save()"
-        (cancel)="store.cancelEdit()"
-        (close)="store.closeDrawer()"
-        (edit)="store.selectedProcess() && store.startEdit(store.selectedProcess()!)"
-        (toggleActive)="store.selectedProcess() && store.toggleActive(store.selectedProcess()!)"
-        (execute)="store.selectedProcess() && store.execute(store.selectedProcess()!)"
+        [form]="viewModel().editor.form"
+        [sources]="viewModel().editor.sources"
+        [readers]="viewModel().editor.readers"
+        [connections]="viewModel().editor.connections"
+        [titleKey]="viewModel().editor.titleKey"
+        [saving]="viewModel().editor.saving"
+        [executing]="viewModel().editor.executing"
+        [readonly]="viewModel().editor.readonly"
+        [canEdit]="viewModel().editor.canEdit"
+        [canOperate]="viewModel().editor.canOperate"
+        (patchForm)="patchForm($event)"
+        (flowLayoutChange)="applyFlowLayout($event)"
+        (addTask)="addTask($event)"
+        (addTaskAt)="addTaskAt($event)"
+        (patchTask)="patchTask($event)"
+        (flowStateChange)="applyFlowState($event)"
+        (removeTask)="removeTask($event)"
+        (save)="saveProcess()"
+        (cancel)="cancelEdit()"
+        (close)="closeDrawer()"
+        (edit)="editSelectedProcess()"
+        (toggleActive)="toggleSelectedProcess()"
+        (execute)="executeSelectedProcess()"
       />
     </mat-drawer>
   </mat-drawer-container>

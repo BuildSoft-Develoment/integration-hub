@@ -3,7 +3,7 @@ import { firstValueFrom } from 'rxjs';
 import { ReaderDraft, ReaderProviderType } from '@integration-hub/core/providers';
 import {
   AppFeedbackService,
-  AuthService,
+  AuthAccessService,
   ReaderManagerService,
 } from '@integration-hub/core/services';
 import {
@@ -20,7 +20,7 @@ export class ReaderCatalogStore implements OnDestroy {
   private readonly api = inject(ReaderApiService);
   private readonly readerManager = inject(ReaderManagerService);
   private readonly editor = inject(ReaderEditorStateService);
-  private readonly authService = inject(AuthService);
+  private readonly access = inject(AuthAccessService);
   private readonly feedback = inject(AppFeedbackService);
   private readonly searchDebounceMs = 300;
   private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
@@ -41,7 +41,7 @@ export class ReaderCatalogStore implements OnDestroy {
   readonly form = this.editor.form;
   readonly draft = this.editor.draft;
 
-  readonly canEdit = computed(() => this.authService.canAdmin());
+  readonly canEdit = computed(() => this.access.canAdmin());
   readonly pagedReaders = computed(() => this.readers());
 
   readonly selectedForm = computed<ReaderFormModel>(() => {

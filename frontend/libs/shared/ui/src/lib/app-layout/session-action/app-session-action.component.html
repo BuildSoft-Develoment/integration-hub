@@ -1,0 +1,57 @@
+<button
+  mat-icon-button
+  type="button"
+  class="theme-toggle-button"
+  [attr.aria-label]="i18n.t('shell.openSessionMenu')"
+  [matMenuTriggerFor]="sessionMenu"
+>
+  <svg class="theme-toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+    <path
+      d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-3.33 0-6 1.79-6 4v1h12v-1c0-2.21-2.67-4-6-4Z"
+      fill="currentColor"
+    />
+  </svg>
+</button>
+
+<mat-menu #sessionMenu="matMenu" panelClass="theme-menu-panel" xPosition="before" yPosition="below" [overlapTrigger]="false">
+  <div class="theme-menu-content ih-theme-menu" (click)="$event.stopPropagation()">
+    <div class="theme-card__header ih-theme-menu__header">
+      <p class="section-eyebrow ih-section-eyebrow">{{ i18n.t('layout.session') }}</p>
+    </div>
+
+    <div class="session-menu-grid ih-session-menu-grid">
+      <div class="session-line ih-session-line">
+        <span>{{ i18n.t('common.status') }}</span>
+        <strong>
+          @if (auth.ready()) {
+            {{ auth.authenticated() ? i18n.t('layout.status.authenticated') : i18n.t('layout.status.guest') }}
+          } @else {
+            {{ i18n.t('layout.status.waiting') }}
+          }
+        </strong>
+      </div>
+
+      <div class="session-line ih-session-line">
+        <span>{{ i18n.t('layout.user') }}</span>
+        <strong>{{ auth.username() || i18n.t('layout.anonymous') }}</strong>
+      </div>
+
+      <div class="session-line ih-session-line">
+        <span>{{ i18n.t('layout.roles') }}</span>
+        <strong>{{ access.roleSummary() }}</strong>
+      </div>
+    </div>
+
+    <div class="session-menu-actions ih-session-menu-actions">
+      @if (auth.authenticated()) {
+        <button mat-menu-item type="button" class="session-action-item" (click)="auth.logout()">
+          {{ i18n.t('layout.logout') }}
+        </button>
+      } @else {
+        <button mat-menu-item type="button" class="session-action-item" (click)="auth.login()">
+          {{ i18n.t('layout.login') }}
+        </button>
+      }
+    </div>
+  </div>
+</mat-menu>

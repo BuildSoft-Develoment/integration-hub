@@ -460,7 +460,13 @@ export class ProcessDbWriteTaskFormComponent {
     const candidates = this.tasks()
       .filter((item) => item.taskType === 'FILE_READ' && item.taskOrder < currentOrder)
       .sort((a, b) => a.taskOrder - b.taskOrder);
-    return candidates.at(-1) ?? this.tasks().find((item) => item.taskType === 'FILE_READ') ?? null;
+    const lastCandidate =
+      candidates.length > 0 ? candidates[candidates.length - 1] : null;
+    return (
+      lastCandidate ??
+      this.tasks().find((item) => item.taskType === 'FILE_READ') ??
+      null
+    );
   }
 
   private parseObject(configurationJson: string, key: string): Record<string, string> {

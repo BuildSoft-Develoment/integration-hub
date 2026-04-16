@@ -287,3 +287,111 @@ Eso permite aterrizar primero:
   - borde lateral por severidad
   - titulo de severidad
   - icono SVG propio, sin depender de fonts
+
+## Feature processes
+
+La feature `/processes` ya no usa un store monolitico. Quedo separada por capas con `signals`, una fachada estable para la pagina y componentes mas pequenos en el editor.
+
+### Estructura actual
+
+- pagina:
+  - [process-catalog-page.ts](/frontend/libs/features/processes/src/lib/process-catalog-page.ts)
+  - [process-catalog-page.html](/frontend/libs/features/processes/src/lib/process-catalog-page.html)
+- fachada publica:
+  - [process-catalog.store.ts](/frontend/libs/features/processes/src/lib/process-catalog.store.ts)
+- query de catalogo:
+  - [process-catalog-query.store.ts](/frontend/libs/features/processes/src/lib/process-catalog-query.store.ts)
+- comandos:
+  - [process-catalog-command.service.ts](/frontend/libs/features/processes/src/lib/process-catalog-command.service.ts)
+- editor:
+  - [process-editor.store.ts](/frontend/libs/features/processes/src/lib/process-editor.store.ts)
+- referencias:
+  - [process-reference.store.ts](/frontend/libs/features/processes/src/lib/process-reference.store.ts)
+
+### Responsabilidades
+
+- `ProcessCatalogPageComponent`
+  - expone `viewModel()` para lectura
+  - traduce eventos de UI a comandos explicitos
+- `ProcessCatalogStore`
+  - mantiene una API estable hacia la pagina
+  - coordina query, editor, referencias y comandos
+- `ProcessCatalogQueryStore`
+  - listado
+  - filtros
+  - paginacion
+  - debounce de busqueda
+  - refresh del item seleccionado
+- `ProcessCatalogCommandService`
+  - `save`
+  - `toggleActive`
+  - `execute`
+  - feedback al usuario
+- `ProcessEditorStore`
+  - drawer
+  - seleccion
+  - formulario
+  - flow y tareas
+- `ProcessReferenceStore`
+  - carga y cache de `sources`, `readers` y `connections`
+  - lazy load cuando el editor realmente lo necesita
+
+### Flujo actual
+
+#### Listado inicial
+
+1. la pagina llama `store.load()`
+2. `ProcessCatalogStore` delega en `ProcessCatalogQueryStore`
+3. se carga solo el catalogo
+4. las referencias no se cargan al entrar a la ruta
+
+#### Apertura del editor
+
+1. la pagina dispara `selectProcess`, `startCreate` o `startEdit`
+2. `ProcessCatalogStore` llama `prepareEditor()`
+3. `ProcessReferenceStore.ensureLoaded()` resuelve referencias si aun no existen
+4. `ProcessEditorStore` abre el drawer y prepara estado y formulario
+
+#### Guardado o ejecucion
+
+1. la pagina llama `store.save()` o `store.execute()`
+2. `ProcessCatalogStore` delega en `ProcessCatalogCommandService`
+3. el comando usa `ProcessApiService`
+4. se refresca el catalogo via `ProcessCatalogQueryStore.reload()`
+5. el editor conserva el contexto necesario
+
+### Editor dividido
+
+El editor visual tambien fue partido para bajar mezcla de responsabilidades:
+
+- shell:
+  - [process-editor.component.ts](/frontend/libs/features/processes/src/lib/components/process-editor/process-editor.component.ts)
+- header:
+  - [process-editor-header.component.ts](/frontend/libs/features/processes/src/lib/components/process-editor/process-editor-header.component.ts)
+- acciones readonly:
+  - [process-editor-actions.component.ts](/frontend/libs/features/processes/src/lib/components/process-editor/process-editor-actions.component.ts)
+- overview:
+  - [process-editor-overview.component.ts](/frontend/libs/features/processes/src/lib/components/process-editor/process-editor-overview.component.ts)
+
+### Testing
+
+La feature ya cuenta con specs propios:
+
+- [process-catalog.store.spec.ts](/frontend/libs/features/processes/src/lib/process-catalog.store.spec.ts)
+- [process-editor.store.spec.ts](/frontend/libs/features/processes/src/lib/process-editor.store.spec.ts)
+- [process-reference.store.spec.ts](/frontend/libs/features/processes/src/lib/process-reference.store.spec.ts)
+
+Validacion reciente:
+
+- `npm.cmd run test -- --watch=false` OK
+- `npm.cmd run build` OK
+
+### Regla de mantenimiento
+
+Para cambios futuros en `processes`:
+
+- cambios de listado -> `ProcessCatalogQueryStore`
+- cambios de persistencia o acciones -> `ProcessCatalogCommandService`
+- cambios de formulario o flow -> `ProcessEditorStore`
+- nuevas referencias externas -> `ProcessReferenceStore`
+- composicion visual -> pagina o componentes presentacionales
