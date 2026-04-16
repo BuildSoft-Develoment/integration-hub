@@ -2,6 +2,7 @@ package com.integrationhub.platform.provider.reader;
 
 import org.apache.commons.jexl3.JexlBuilder;
 import org.apache.commons.jexl3.JexlEngine;
+import org.apache.commons.jexl3.JexlScript;
 import org.apache.commons.jexl3.MapContext;
 
 import java.math.BigDecimal;
@@ -14,10 +15,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 final class ReaderFieldSupport {
 
     private static final JexlEngine JEXL = createJexlEngine();
+    private static final ConcurrentMap<String, JexlScript> SCRIPT_CACHE = new ConcurrentHashMap<>();
 
     private ReaderFieldSupport() {
     }
@@ -110,7 +114,7 @@ final class ReaderFieldSupport {
             context.set("valid", true);
             context.set("skipRecord", false);
             context.set("message", null);
-            var scriptResult = JEXL.createScript(field.script()).execute(context);
+            var scriptResult = compiledScript(field.script()).execute(context);
             var resultingValue = context.has("value") ? context.get("value") : row.get(field.name());
             var skipRecord = toBoolean(context.get("skipRecord"));
             var valid = !context.has("valid") || toBoolean(context.get("valid"));
@@ -137,6 +141,10 @@ final class ReaderFieldSupport {
             return booleanValue;
         }
         return Boolean.parseBoolean(String.valueOf(value));
+    }
+
+    private static JexlScript compiledScript(String script) {
+        return SCRIPT_CACHE.computeIfAbsent(script, JEXL::createScript);
     }
 
     private static Object coerceType(ConfiguredField field, Object value) {
