@@ -60,8 +60,10 @@ import { ProcessTaskFormHostComponent } from '../process-task-form/process-task-
   `,
   styles: [`
       :host {
-        inset: 0;
-        z-index: 80;
+        position: fixed;
+        inset: 0 0 0 var(--ih-shell-sidebar-width);
+        display: block;
+        z-index: 1300;
         overflow: hidden;
       }
       .task-modal-backdrop {
