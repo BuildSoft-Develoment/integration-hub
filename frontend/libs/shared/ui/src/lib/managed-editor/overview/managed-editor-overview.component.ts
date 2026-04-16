@@ -8,8 +8,8 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { I18nService } from '@integration-hub/core/services';
 import { inject } from '@angular/core';
 
-import { ManagedEditorOption } from './managed-editor.models';
-import { ManagedEditorSectionComponent } from './managed-editor-section.component';
+import { ManagedEditorOption } from '../managed-editor.models';
+import { ManagedEditorSectionComponent } from '../section/managed-editor-section.component';
 
 @Component({
   selector: 'ih-managed-editor-overview',

@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, input } from '@angular/core';
 
-import { ManagedEditorTestResult } from './managed-editor.models';
+import { ManagedEditorTestResult } from '../managed-editor.models';
 
 @Component({
   selector: 'ih-managed-editor-test-result',
