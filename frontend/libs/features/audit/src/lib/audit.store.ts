@@ -96,18 +96,24 @@ export class AuditStore implements OnDestroy {
       this.events.set(response.items);
       this.totalLength.set(response.total);
       this.eventTypeOptions.set(response.eventTypeOptions);
-
-      const selectedId = this.selectedEvent()?.id;
-      if (selectedId != null) {
-        const refreshed = response.items.find((item) => item.id === selectedId);
-        if (refreshed) {
-          this.selectedEvent.set(refreshed);
-        }
-      }
+      this.syncSelectedEvent(response.items);
     } finally {
       if (requestId === this.requestSequence) {
         this.loading.set(false);
       }
+    }
+  }
+
+  private syncSelectedEvent(items: readonly AuditRecord[]): void {
+    const selectedId = this.selectedEvent()?.id;
+    if (selectedId == null) {
+      return;
+    }
+
+    const refreshed = items.find((item) => item.id === selectedId) ?? null;
+    this.selectedEvent.set(refreshed);
+    if (!refreshed) {
+      this.drawerOpen.set(false);
     }
   }
 

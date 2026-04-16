@@ -117,18 +117,24 @@ export class SchedulesStore implements OnDestroy {
 
       this.schedules.set(response.items);
       this.totalLength.set(response.total);
-
-      const selectedId = this.selectedScheduleId();
-      if (selectedId != null) {
-        const refreshed = response.items.find((item) => item.id === selectedId);
-        if (refreshed) {
-          this.selectedSchedule.set(refreshed);
-        }
-      }
+      this.syncSelectedSchedule(response.items);
     } finally {
       if (requestId === this.requestSequence) {
         this.loading.set(false);
       }
+    }
+  }
+
+  private syncSelectedSchedule(items: readonly ScheduleRecord[]): void {
+    const selectedId = this.selectedScheduleId();
+    if (selectedId == null) {
+      return;
+    }
+
+    const refreshed = items.find((item) => item.id === selectedId) ?? null;
+    this.selectedSchedule.set(refreshed);
+    if (!refreshed) {
+      this.drawerOpen.set(false);
     }
   }
 

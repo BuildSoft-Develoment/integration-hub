@@ -480,6 +480,27 @@ Esta base concentra:
 
 Cada feature conserva solo su logica particular.
 
+### Helpers de presentacion compartidos
+
+Cuando una feature tiene lista + drawer y ambos necesitan las mismas reglas de formateo o rotulado, la logica de presentacion compartida no deberia duplicarse en dos componentes.
+
+En esos casos se recomienda extraer un servicio de presentacion con `providedIn: 'root'` que concentre:
+
+- labels derivados de traducciones
+- formato de fechas
+- labels compactos y extendidos para el mismo concepto
+- reglas de fallback para estados o tipos desconocidos
+
+Ejemplo actual:
+
+- [audit-presentation.service.ts](/frontend/libs/features/audit/src/lib/audit-presentation.service.ts)
+
+Regla de mantenimiento:
+
+- si una regla solo afecta un componente, queda local
+- si la misma regla aparece en lista, drawer, card o dialog del mismo dominio, moverla a un helper de presentacion
+- estos helpers no hacen llamadas HTTP ni guardan estado mutable de pantalla
+
 ## Feature executions
 
 La feature `/executions` quedo alineada al mismo patron de capas con `signals` y specs propios.
@@ -545,6 +566,39 @@ Las features `/sources`, `/connections` y `/readers` quedaron alineadas entre si
 - cambios de editor o draft -> `EditorStateService`
 - cambios visuales -> page y componentes presentacionales
 
+## Features overview, audit y schedules
+
+Estas features se mantuvieron mas compactas porque su complejidad real es menor que `processes` o `executions`, pero ya quedaron con una base mas segura de mantenimiento.
+
+### Overview
+
+- [overview.store.ts](/frontend/libs/features/overview/src/lib/overview.store.ts)
+  - carga un resumen agregado
+  - expone filas derivadas para cards y tablas
+- no necesita hoy separacion extra en `QueryStore` y `CommandService`
+
+### Audit
+
+- [audit.store.ts](/frontend/libs/features/audit/src/lib/audit.store.ts)
+  - maneja query, filtros, paginacion y seleccion
+- [audit-page.ts](/frontend/libs/features/audit/src/lib/audit-page.ts)
+  - expone `viewModel()` y comandos explicitos
+- [audit-presentation.service.ts](/frontend/libs/features/audit/src/lib/audit-presentation.service.ts)
+  - evita drift entre lista y drawer
+
+### Schedules
+
+- [schedules.store.ts](/frontend/libs/features/schedules/src/lib/schedules.store.ts)
+  - mantiene listado, seleccion y ejecucion puntual
+- [schedules-page.ts](/frontend/libs/features/schedules/src/lib/schedules-page.ts)
+  - expone `viewModel()` y comandos explicitos
+- por tamano actual, no se justifico aun partir en mas capas
+
+### Regla de mantenimiento
+
+- si `audit` o `schedules` crecen en acciones o flujos laterales, el siguiente paso es separarlos en `QueryStore` + `CommandService`
+- mientras sigan siendo features compactas, se prioriza mantenerlas pequenas y bien testeadas antes que sobrefragmentarlas
+
 ## Testing por feature
 
 La convencion actual es dejar specs propios dentro de cada libreria de feature y hacer que el target de tests de `apps/web` los incluya.
@@ -573,9 +627,16 @@ Ejemplos recientes:
   - [reader-editor-state.service.spec.ts](/frontend/libs/features/readers/src/lib/reader-editor-state.service.spec.ts)
   - [reader-catalog-query.store.spec.ts](/frontend/libs/features/readers/src/lib/reader-catalog-query.store.spec.ts)
   - [reader-catalog-command.service.spec.ts](/frontend/libs/features/readers/src/lib/reader-catalog-command.service.spec.ts)
+- `overview`
+  - [overview.store.spec.ts](/frontend/libs/features/overview/src/lib/overview.store.spec.ts)
+- `audit`
+  - [audit.store.spec.ts](/frontend/libs/features/audit/src/lib/audit.store.spec.ts)
+  - [audit-presentation.service.spec.ts](/frontend/libs/features/audit/src/lib/audit-presentation.service.spec.ts)
+- `schedules`
+  - [schedules.store.spec.ts](/frontend/libs/features/schedules/src/lib/schedules.store.spec.ts)
 
 Validacion reciente:
 
 - `npm.cmd run test -- --watch=false` OK
 - `npm.cmd run build` OK
-- `60` tests pasando
+- `69` tests pasando

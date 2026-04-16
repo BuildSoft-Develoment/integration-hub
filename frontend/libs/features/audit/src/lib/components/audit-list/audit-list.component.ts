@@ -2,10 +2,10 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
-import { DateTimeService, I18nService } from '@integration-hub/core/services';
+import { I18nService } from '@integration-hub/core/services';
+
+import { AuditPresentationService } from '../../audit-presentation.service';
 import { AuditRecord } from '../../audit.models';
-import { auditEventLabel } from '../../audit-event-label';
-import { taskTypeLabel } from '../../task-type-label';
 
 @Component({
   selector: 'ih-audit-list',
@@ -57,7 +57,7 @@ import { taskTypeLabel } from '../../task-type-label';
 })
 export class AuditListComponent {
   readonly i18n = inject(I18nService);
-  readonly dateTime = inject(DateTimeService);
+  readonly presentation = inject(AuditPresentationService);
 
   readonly events = input.required<readonly AuditRecord[]>();
   readonly totalLength = input.required<number>();
@@ -74,34 +74,18 @@ export class AuditListComponent {
   }
 
   statusLabel(status: string): string {
-    const auditStatus = this.i18n.t(`audit.status.${status}`);
-    if (auditStatus !== `audit.status.${status}`) {
-      return auditStatus;
-    }
-
-    const executionStatus = this.i18n.t(`executionStatus.${status}`);
-    return executionStatus !== `executionStatus.${status}` ? executionStatus : status;
+    return this.presentation.statusLabel(status);
   }
 
   formatDate(value: string | null): string {
-    return value ? this.dateTime.formatIso(value) : '-';
+    return this.presentation.formatDate(value);
   }
 
   eventLabel(event: AuditRecord): string {
-    return auditEventLabel(this.i18n, event.eventType);
+    return this.presentation.eventLabel(event.eventType);
   }
 
   taskLabel(event: AuditRecord): string {
-    const label = taskTypeLabel(this.i18n, event.taskType);
-    if (event.taskType && event.taskDefinitionId != null) {
-      return `${label} · TD ${event.taskDefinitionId}`;
-    }
-    if (event.taskType) {
-      return label;
-    }
-    if (event.taskDefinitionId != null) {
-      return `TD ${event.taskDefinitionId}`;
-    }
-    return '-';
+    return this.presentation.compactTaskLabel(event);
   }
 }
