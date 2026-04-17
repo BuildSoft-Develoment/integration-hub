@@ -1,0 +1,20 @@
+@switch (readerType()) {
+      @case ('TXT') {
+        <ih-reader-txt-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" />
+      }
+      @case ('CSV') {
+        <ih-reader-csv-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" />
+      }
+      @case ('XLS') {
+        <ih-reader-excel-form [draft]="draft()" [readonly]="readonly()" [excelType]="'XLS'" (patchDraft)="patchDraft.emit($event)" />
+      }
+      @case ('XLSX') {
+        <ih-reader-excel-form [draft]="draft()" [readonly]="readonly()" [excelType]="'XLSX'" (patchDraft)="patchDraft.emit($event)" />
+      }
+      @case ('XML') {
+        <ih-reader-xml-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" />
+      }
+      @default {
+        <ih-reader-json-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" />
+      }
+    }

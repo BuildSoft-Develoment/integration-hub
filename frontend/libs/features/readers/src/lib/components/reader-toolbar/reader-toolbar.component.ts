@@ -12,44 +12,12 @@ import { I18nService } from '@integration-hub/core/services';
   selector: 'ih-reader-toolbar',
   standalone: true,
   imports: [CommonModule, FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule],
-  template: `
-    <section class="toolbar-shell ih-catalog-toolbar">
-      <div class="toolbar-heading ih-catalog-toolbar__heading">
-        <div class="toolbar-copy ih-catalog-toolbar__copy">
-          <h2 class="ih-section-title">{{ i18n.t('readers.title') }}</h2>
-          <p class="ih-muted">{{ i18n.t('readers.subtitle') }}</p>
-        </div>
-
-        @if (canEdit()) {
-          <button mat-flat-button type="button" class="create-button ih-catalog-action" (click)="create.emit()">
-            {{ i18n.t('readers.create') }}
-          </button>
-        }
-      </div>
-
-      <div class="toolbar-filters ih-catalog-toolbar__filters">
-        <mat-form-field class="toolbar-search">
-          <mat-label>{{ i18n.t('readers.search') }}</mat-label>
-          <input matInput [ngModel]="search()" (ngModelChange)="searchChange.emit($event)" />
-        </mat-form-field>
-
-        <mat-form-field class="toolbar-select">
-          <mat-label>{{ i18n.t('common.type') }}</mat-label>
-          <mat-select [ngModel]="typeFilter()" (ngModelChange)="typeFilterChange.emit($event)">
-            <mat-option value="ALL">{{ i18n.t('readers.allTypes') }}</mat-option>
-            @for (provider of providerOptions(); track provider.type) {
-              <mat-option [value]="provider.type">{{ provider.label }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-      </div>
-    </section>
-  `,
   styles: [
     `
       .create-button { justify-self: start; }
     `,
   ],
+    templateUrl: './reader-toolbar.component.html'
 })
 export class ReaderToolbarComponent {
   readonly i18n = inject(I18nService);

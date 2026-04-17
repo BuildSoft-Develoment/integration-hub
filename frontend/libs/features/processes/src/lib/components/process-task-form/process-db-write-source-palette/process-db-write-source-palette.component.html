@@ -1,0 +1,77 @@
+<section class="source-palette">
+      <div class="source-palette__header ih-section-header">
+        <p class="ih-section-eyebrow">{{ i18n.t('ui.dbWriteAvailableSources') }}</p>
+        <h5>{{ i18n.t('ui.dbWriteAvailableSourcesHint') }}</h5>
+      </div>
+
+      <div class="source-palette__groups ih-thin-scroll">
+        @for (group of orderedGroups(); track group.key; let index = $index) {
+          <section class="source-palette__group ih-soft-panel ih-source-group">
+            <div class="source-palette__group-bar ih-source-group__bar">
+              <button type="button" class="source-palette__group-toggle ih-source-group__toggle" (click)="toggleGroup(group.key)">
+                <span class="source-palette__group-chevron ih-source-group__chevron" [class.source-palette__group-chevron--open]="isExpanded(group.key)">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m6 9 6 6 6-6" />
+                  </svg>
+                </span>
+                <span class="source-palette__group-title ih-source-group__title">{{ groupLabel(group.key) }}</span>
+                <span class="source-palette__group-count ih-source-group__count">{{ group.items.length }}</span>
+              </button>
+
+              <div class="source-palette__group-actions ih-source-group__actions">
+                <button type="button" class="source-palette__group-icon ih-round-icon-button ih-source-group__icon" [disabled]="index === 0" [attr.aria-label]="i18n.t('ui.moveUp')" (click)="moveGroup(index, -1)">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m12 6-5 6h10z" />
+                  </svg>
+                </button>
+                <button type="button" class="source-palette__group-icon ih-round-icon-button ih-source-group__icon" [disabled]="index === orderedGroups().length - 1" [attr.aria-label]="i18n.t('ui.moveDown')" (click)="moveGroup(index, 1)">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="m12 18 5-6H7z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            @if (isExpanded(group.key)) {
+              <div class="source-palette__group-items ih-source-items">
+                @for (item of group.items; track item.kind + ':' + item.key) {
+                  <button
+                    type="button"
+                    class="source-palette__item source-palette__item--compact ih-source-item"
+                    [class.source-palette__item--dragging]="draggingSource()?.key === item.key && draggingSource()?.kind === item.kind"
+                    [class.source-palette__item--readonly]="readonly()"
+                    [disabled]="readonly()"
+                    [title]="item.label"
+                    draggable="true"
+                    (dragstart)="handleDragStart($event, item)"
+                    (dragend)="sourceDragEnd.emit()"
+                  >
+                    <span class="source-palette__kind ih-source-item__kind" [class.source-palette__kind--field]="item.kind === 'field'" [class.source-palette__kind--variable]="item.kind === 'variable'" [class.source-palette__kind--metadata]="item.kind === 'metadata'" [class.ih-source-item__kind--field]="item.kind === 'field'" [class.ih-source-item__kind--variable]="item.kind === 'variable'" [class.ih-source-item__kind--metadata]="item.kind === 'metadata'">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        @switch (item.kind) {
+                          @case ('field') {
+                            <path d="M5 6h14M5 12h14M5 18h9" />
+                          }
+                          @case ('variable') {
+                            <path d="M8 5 4 12l4 7M16 5l4 7-4 7M13 4l-2 16" />
+                          }
+                          @default {
+                            <path d="M12 3v18M4 8h16M7 13h10M9 18h6" />
+                          }
+                        }
+                      </svg>
+                    </span>
+                    <span class="source-palette__copy ih-source-item__copy">
+                      <strong>{{ item.label }}</strong>
+                      @if (item.hint) {
+                        <small>{{ item.hint }}</small>
+                      }
+                    </span>
+                  </button>
+                }
+              </div>
+            }
+          </section>
+        }
+      </div>
+    </section>

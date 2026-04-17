@@ -13,36 +13,6 @@ interface TableRow {
   selector: 'ih-overview-table-card',
   standalone: true,
   imports: [CommonModule],
-  template: `
-    <article class="table-card">
-      <div class="table-card__header">
-        <h3>{{ i18n.t(titleKey()) }}</h3>
-      </div>
-
-      <div class="table-card__body">
-        @for (row of rows(); track row.primary + '-' + ($index)) {
-          <div class="table-card__row">
-            <div class="table-card__copy">
-              <strong>{{ row.primary }}</strong>
-              @if (row.secondary) {
-                <small>{{ row.secondary }}</small>
-              }
-            </div>
-            <div class="table-card__meta">
-              @if (row.status) {
-                <span class="table-card__badge">{{ row.status }}</span>
-              }
-              @if (row.timestamp) {
-                <small>{{ formatDate(row.timestamp) }}</small>
-              }
-            </div>
-          </div>
-        } @empty {
-          <div class="empty-state ih-muted">{{ i18n.t(emptyKey()) }}</div>
-        }
-      </div>
-    </article>
-  `,
   styles: [`
     .table-card { display:grid; grid-template-rows:auto minmax(0,1fr); border:1px solid var(--ih-border); border-radius:20px; background:color-mix(in srgb, var(--ih-surface-alt) 96%, transparent); min-height:100%; }
     .table-card__header { padding:1rem 1rem 0.8rem; border-bottom:1px solid var(--ih-border); }
@@ -58,6 +28,7 @@ interface TableRow {
     .empty-state { min-height:12rem; display:grid; place-items:center; padding:1rem; text-align:center; }
     @media (max-width: 760px) { .table-card__row { grid-template-columns:1fr; } .table-card__meta { justify-items:start; text-align:left; } }
   `],
+    templateUrl: './overview-table-card.component.html'
 })
 export class OverviewTableCardComponent {
   readonly i18n = inject(I18nService);

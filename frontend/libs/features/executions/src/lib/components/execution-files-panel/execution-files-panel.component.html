@@ -1,0 +1,155 @@
+@if (!task()) {
+      <div class="empty-state ih-muted">{{ i18n.t('executions.taskDetailEmpty') }}</div>
+    } @else {
+      <section class="files-shell">
+        <div class="files-toolbar">
+          <div class="files-toolbar__chips">
+            @for (quickFilter of store.quickFilters; track quickFilter.value) {
+              <button
+                mat-stroked-button
+                type="button"
+                [class.files-toolbar__chip--active]="store.filters().status === quickFilter.value"
+                (click)="store.setStatusFilter(quickFilter.value)"
+              >
+                {{ quickFilter.label }}
+              </button>
+            }
+          </div>
+
+          <div class="files-toolbar__actions">
+            <button
+              mat-stroked-button
+              type="button"
+              [disabled]="!store.filteredFiles().length"
+              (click)="download('all', store.filteredFiles())"
+            >
+              {{ i18n.t('executions.exportFileSummaryCsv') }}
+            </button>
+            <button
+              mat-stroked-button
+              type="button"
+              [disabled]="!store.completedFiles().length"
+              (click)="download('completed', store.completedFiles())"
+            >
+              {{ i18n.t('executions.exportCompletedCsv') }}
+            </button>
+            <button
+              mat-stroked-button
+              type="button"
+              [disabled]="!store.failedFiles().length"
+              (click)="download('failed', store.failedFiles())"
+            >
+              {{ i18n.t('executions.exportFailedCsv') }}
+            </button>
+            <button
+              mat-stroked-button
+              type="button"
+              [disabled]="!store.pendingFiles().length"
+              (click)="download('pending', store.pendingFiles())"
+            >
+              {{ i18n.t('executions.exportPendingCsv') }}
+            </button>
+          </div>
+        </div>
+
+        <div class="files-filters">
+          <mat-form-field>
+            <mat-label>{{ i18n.t('executions.fileNameSearch') }}</mat-label>
+            <input matInput [ngModel]="store.filters().name" (ngModelChange)="store.updateFilters({ name: $event })" />
+          </mat-form-field>
+
+          <mat-form-field>
+            <mat-label>{{ i18n.t('executions.filePathSearch') }}</mat-label>
+            <input matInput [ngModel]="store.filters().path" (ngModelChange)="store.updateFilters({ path: $event })" />
+          </mat-form-field>
+
+          <mat-form-field>
+            <mat-label>{{ i18n.t('executions.fileStatusFilter') }}</mat-label>
+            <mat-select [ngModel]="store.filters().status" (ngModelChange)="store.updateFilters({ status: $event })">
+              <mat-option value="">{{ i18n.t('executions.allFileStatuses') }}</mat-option>
+              <mat-option value="COMPLETED">COMPLETADO</mat-option>
+              <mat-option value="FAILED">FALLIDO</mat-option>
+              <mat-option value="PENDING">PENDIENTE</mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field>
+            <mat-label>{{ i18n.t('executions.fileModifiedFrom') }}</mat-label>
+            <input matInput type="datetime-local" [ngModel]="store.filters().modifiedFrom" (ngModelChange)="store.updateFilters({ modifiedFrom: $event })" />
+          </mat-form-field>
+
+          <mat-form-field>
+            <mat-label>{{ i18n.t('executions.fileModifiedTo') }}</mat-label>
+            <input matInput type="datetime-local" [ngModel]="store.filters().modifiedTo" (ngModelChange)="store.updateFilters({ modifiedTo: $event })" />
+          </mat-form-field>
+
+          <mat-form-field>
+            <mat-label>{{ i18n.t('executions.fileMinSize') }}</mat-label>
+            <input matInput type="number" [ngModel]="store.filters().minSize" (ngModelChange)="store.updateFilters({ minSize: $event })" />
+          </mat-form-field>
+
+          <mat-form-field>
+            <mat-label>{{ i18n.t('executions.fileMaxSize') }}</mat-label>
+            <input matInput type="number" [ngModel]="store.filters().maxSize" (ngModelChange)="store.updateFilters({ maxSize: $event })" />
+          </mat-form-field>
+        </div>
+
+        <div class="files-selection">
+          <div class="files-selection__copy">
+            <strong>{{ i18n.t('executions.selectedFiles') }}: {{ store.selectedRows().length }}</strong>
+            <span class="ih-muted">
+              {{ i18n.t('executions.processedFiles') }}: {{ store.allFiles().length }} ·
+              {{ i18n.t('executions.exportCompletedCsv') }} {{ store.completedFiles().length }} ·
+              {{ i18n.t('executions.exportFailedCsv') }} {{ store.failedFiles().length }} ·
+              {{ i18n.t('executions.exportPendingCsv') }} {{ store.pendingFiles().length }}
+            </span>
+          </div>
+
+          <div class="files-selection__actions">
+            <button
+              mat-stroked-button
+              type="button"
+              [disabled]="actionBusy() || !store.failedFiles().length || !execution()?.processDefinitionId"
+              (click)="emitAction('retryFailed', store.failedFiles())"
+            >
+              {{ i18n.t('executions.retryFailedFiles') }}
+            </button>
+            <button
+              mat-stroked-button
+              type="button"
+              [disabled]="actionBusy() || !store.pendingFiles().length || !execution()?.processDefinitionId"
+              (click)="emitAction('processPending', store.pendingFiles())"
+            >
+              {{ i18n.t('executions.processPendingFiles') }}
+            </button>
+            <button
+              mat-flat-button
+              type="button"
+              color="primary"
+              [disabled]="actionBusy() || !store.selectedRows().length || !execution()?.processDefinitionId"
+              (click)="emitAction('reprocessSelected', store.selectedRows())"
+            >
+              {{ i18n.t('executions.reprocessSelectedFiles') }}
+            </button>
+            <button mat-button type="button" (click)="store.clearFiltersAndSelection()">
+              {{ i18n.t('executions.clearFileFilters') }}
+            </button>
+          </div>
+        </div>
+
+        @if (!store.allFiles().length) {
+          <div class="empty-state ih-muted">{{ i18n.t('executions.sourceFilesEmpty') }}</div>
+        } @else {
+          <ih-execution-files-table
+            [files]="store.filteredFiles()"
+            [selectedKeys]="store.selectedKeys()"
+            [allVisibleSelected]="store.isAllVisibleSelected()"
+            [partiallySelected]="store.isPartiallySelected()"
+            [statusClass]="store.statusClass.bind(store)"
+            [rowKey]="store.rowKey.bind(store)"
+            (toggleAllVisible)="store.toggleAllVisible($event)"
+            (toggleRow)="store.toggleRow($event.file, $event.checked)"
+          />
+        }
+      </section>
+    }

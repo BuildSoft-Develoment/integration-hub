@@ -29,72 +29,7 @@ export interface UiMessageSnackBarData {
       </div>
     </div>
   `,
-  styles: [
-    `
-      .snackbar-content {
-        display: flex;
-        align-items: center;
-        gap: 0.85rem;
-        min-width: 16rem;
-      }
-
-      .snackbar-icon {
-        display: grid;
-        place-items: center;
-        width: 2rem;
-        height: 2rem;
-        border-radius: 999px;
-        flex: 0 0 auto;
-        color: #fff;
-        background: #475569;
-      }
-
-      .snackbar-content[data-kind='success'] .snackbar-icon {
-        background: #16a34a;
-      }
-
-      .snackbar-content[data-kind='error'] .snackbar-icon {
-        background: #dc2626;
-      }
-
-      .snackbar-content[data-kind='warning'] .snackbar-icon {
-        background: #f59e0b;
-      }
-
-      .snackbar-content[data-kind='info'] .snackbar-icon {
-        background: #3b82f6;
-      }
-
-      .snackbar-svg {
-        width: 1.05rem;
-        height: 1.05rem;
-        stroke: currentColor;
-        fill: none;
-        stroke-width: 2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-      }
-
-      .snackbar-copy {
-        display: grid;
-        gap: 0.12rem;
-        min-width: 0;
-      }
-
-      .snackbar-title {
-        font-size: 0.82rem;
-        line-height: 1.1;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-      }
-
-      .snackbar-message {
-        font-size: 0.95rem;
-        line-height: 1.35;
-        word-break: break-word;
-      }
-    `,
-  ],
+    styleUrl: './ui-message-snackbar.component.css'
 })
 export class UiMessageSnackbarComponent {
   readonly data = inject<UiMessageSnackBarData>(MAT_SNACK_BAR_DATA);

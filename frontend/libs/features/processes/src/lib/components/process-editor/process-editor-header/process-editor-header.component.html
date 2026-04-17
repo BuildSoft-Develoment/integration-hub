@@ -1,0 +1,21 @@
+<div class="panel-topbar">
+      <button mat-stroked-button type="button" (click)="close.emit()">
+        {{ i18n.t('common.close') }}
+      </button>
+    </div>
+
+    <div class="profile-stack">
+      <div class="profile-header">
+        <div class="profile-avatar">P</div>
+        <div class="profile-copy">
+          <h3 class="profile-name">{{ i18n.t(titleKey()) }}</h3>
+          <p class="profile-subtitle">
+            {{
+              scheduled()
+                ? i18n.t('status.scheduled')
+                : i18n.t('status.manual')
+            }}
+          </p>
+        </div>
+      </div>
+    </div>

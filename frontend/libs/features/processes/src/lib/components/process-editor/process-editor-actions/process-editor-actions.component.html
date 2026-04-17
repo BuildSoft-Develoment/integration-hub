@@ -1,0 +1,26 @@
+<div class="panel-actions">
+      @if (canEdit()) {
+        <button mat-flat-button type="button" (click)="edit.emit()">
+          {{ i18n.t('common.edit') }}
+        </button>
+        <button mat-stroked-button type="button" (click)="toggleActive.emit()">
+          {{
+            active() ? i18n.t('common.disable') : i18n.t('common.enable')
+          }}
+        </button>
+      }
+      @if (canOperate()) {
+        <button
+          mat-stroked-button
+          type="button"
+          (click)="execute.emit()"
+          [disabled]="executing()"
+        >
+          {{
+            executing()
+              ? i18n.t('processes.running')
+              : i18n.t('processes.run')
+          }}
+        </button>
+      }
+    </div>

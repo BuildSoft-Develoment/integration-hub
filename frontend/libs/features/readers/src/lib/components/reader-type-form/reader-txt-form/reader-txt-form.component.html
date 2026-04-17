@@ -1,0 +1,33 @@
+<div class="form-grid">
+      <mat-form-field>
+        <mat-label>{{ i18n.t('ui.modeLabel') }}</mat-label>
+        <mat-select [disabled]="readonly()" [ngModel]="draft().mode || 'delimited'" (ngModelChange)="patchDraft.emit({ mode: $event })">
+          <mat-option value="delimited">delimited</mat-option>
+          <mat-option value="fixed-length">fixed-length</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>{{ i18n.t('ui.encoding') }}</mat-label>
+        <input matInput [disabled]="readonly()" [ngModel]="draft().encoding" (ngModelChange)="patchDraft.emit({ encoding: $event })" />
+      </mat-form-field>
+      <mat-form-field>
+        <mat-label>{{ i18n.t('ui.dataStartsAtRow') }}</mat-label>
+        <input matInput [disabled]="readonly()" [ngModel]="draft().rowData" (ngModelChange)="patchDraft.emit({ rowData: $event })" />
+      </mat-form-field>
+    </div>
+
+    @if (draft().mode !== 'fixed-length') {
+      <div class="subsection-gap">
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.delimiter') }}</mat-label>
+          <input matInput [disabled]="readonly()" [ngModel]="draft().delimiter" (ngModelChange)="patchDraft.emit({ delimiter: $event })" />
+        </mat-form-field>
+      </div>
+    }
+
+    <ih-reader-field-definitions-editor
+      [variant]="draft().mode === 'fixed-length' ? 'range' : 'position'"
+      [readonly]="readonly()"
+      [fields]="draft().mode === 'fixed-length' ? draft().fixedFields || [] : draft().fields || []"
+      (fieldsChange)="patchDraft.emit(draft().mode === 'fixed-length' ? { fixedFields: $event } : { fields: $event })"
+    />

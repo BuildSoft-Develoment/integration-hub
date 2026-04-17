@@ -1,0 +1,137 @@
+<section class="task-shell">
+      <div class="task-shell__header">
+        <div>
+          <p class="section-eyebrow">{{ i18n.t('ui.provider') }}</p>
+          <h4>{{ i18n.t('ui.tasks', { count: tasks().length }) }}</h4>
+        </div>
+      </div>
+
+      <div class="task-designer">
+        <div class="task-flow-shell" [class.task-flow-shell--expanded]="expanded()">
+          @if (!readonly()) {
+            <div class="task-flow-shell__palette" [class.task-flow-shell__palette--expanded]="expanded()">
+              <ih-process-flow-palette />
+            </div>
+          }
+
+          <div class="task-flow-shell__actions" [class.task-flow-shell__actions--expanded]="expanded()">
+            <ih-process-flow-action-panel
+              [nodeCount]="tasks().length"
+              [hasSelection]="hasSelection()"
+              [canUndo]="flowApiService.canUndo()"
+              [canRedo]="flowApiService.canRedo()"
+              [expanded]="expanded()"
+              (action)="handleAction($event)"
+            />
+          </div>
+
+          <f-flow
+            fDraggable
+            class="task-flow-root"
+            (fCreateNode)="handleCreateNode($event)"
+            (fCreateConnection)="handleCreateConnection($event)"
+            (fReassignConnection)="handleReassignConnection($event)"
+            (fMoveNodes)="handleMoveNodes($event)"
+            (fSelectionChange)="handleSelectionChange($event)"
+          >
+            <f-background>
+              <f-circle-pattern />
+            </f-background>
+            <f-line-alignment [fAlignThreshold]="20" />
+            <f-selection-area />
+
+              <f-canvas
+              #canvasRef
+              fZoom
+              class="task-flow-canvas"
+              [scale]="designerModel().transform?.zoom"
+              [position]="canvasPosition()"
+              [debounceTime]="120"
+              (fCanvasChange)="handleCanvasChange($event)"
+            >
+              @for (edge of flowLayout().edges; track edge.id) {
+                <f-connection
+                  fBehavior="fixed"
+                  [fConnectionId]="edge.id"
+                  [fOffset]="24"
+                  fType="segment"
+                  [fOutputId]="edge.source + '-out'"
+                  [fInputId]="edge.target + '-in'"
+                  fOutputSide="bottom"
+                  fInputSide="top"
+                >
+                  <svg viewBox="0 0 700 700" fMarker [type]="'end'" [height]="5" [width]="5" [refX]="4" [refY]="2.5">
+                    <path d="M0,0L700,350L0,700L150,350z" />
+                  </svg>
+                </f-connection>
+              }
+
+              <f-connection-for-create fType="segment" [fOffset]="24">
+                <svg viewBox="0 0 700 700" fMarker [type]="'end'" [height]="5" [width]="5" [refX]="4" [refY]="2.5">
+                  <path d="M0,0L700,350L0,700L150,350z" />
+                </svg>
+              </f-connection-for-create>
+
+              @for (node of flowLayout().nodes; track node.id) {
+                <div
+                  fNode
+                  fDragHandle
+                  [class.task-node-host--active]="selectedTaskId() === node.taskRef"
+                  [fNodeId]="node.id"
+                  [fNodePosition]="node.position"
+                  [fNodeSize]="node.size"
+                >
+                  <div
+                    class="task-node__port task-node__port--in"
+                    fNodeInput
+                    [fInputId]="node.id + '-in'"
+                    fInputConnectableSide="top"
+                  ></div>
+
+                  <ih-process-flow-node
+                    [node]="node"
+                    [ordinal]="taskOrdinal(node.taskRef)"
+                    [title]="taskTypeLabel(node.type)"
+                    [summary]="summarizeByRef(node.taskRef)"
+                    [presentation]="nodePresentation(node)"
+                    (edit)="openTask($event)"
+                    (expandedChange)="resizeNode(node.id, $event)"
+                  />
+
+                  <div
+                    class="task-node__port task-node__port--out"
+                    fNodeOutput
+                    [fOutputId]="node.id + '-out'"
+                    [fOutputDisabled]="readonly()"
+                    fOutputConnectableSide="bottom"
+                    (click)="removeOutgoingConnection(node.id, $event)"
+                  >
+                    @if (!readonly() && outgoingConnectionId(node.id)) {
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M6 6 18 18M18 6 6 18" />
+                      </svg>
+                    }
+                  </div>
+                </div>
+              }
+            </f-canvas>
+
+            <f-minimap class="task-flow-shell__minimap" [fMinSize]="1800" />
+          </f-flow>
+        </div>
+      </div>
+
+      @if (selectedTask(); as activeTask) {
+        <ih-process-task-modal
+          [task]="activeTask"
+          [tasks]="tasks()"
+          [index]="selectedTaskIndex()"
+          [sources]="sources()"
+          [readers]="readers()"
+          [connections]="connections()"
+          [readonly]="readonly()"
+          (patchTask)="patchTask.emit({ clientId: activeTask.clientId, patch: $event })"
+          (close)="closeTask()"
+        />
+      }
+    </section>

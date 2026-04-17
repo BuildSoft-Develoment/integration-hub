@@ -1,0 +1,77 @@
+<div class="task-form-stack ih-compact-section">
+      <div class="task-grid task-grid--primary">
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.connection') }}</mat-label>
+          <mat-select [disabled]="readonly()" [ngModel]="draft().connectionRef" (ngModelChange)="handleConnectionChange($event)">
+            <mat-option value="">{{ i18n.t('ui.platformDatasource') }}</mat-option>
+            @for (connection of connections(); track connection.id) {
+              <mat-option [value]="connection.name">{{ connection.name }} ({{ connection.connectionType }})</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.modeLabel') }}</mat-label>
+          <mat-select [disabled]="readonly()" [ngModel]="draft().mode" (ngModelChange)="updateDraft({ mode: $event })">
+            <mat-option value="insert">{{ i18n.t('ui.dbWriteMode.insert') }}</mat-option>
+            <mat-option value="update">{{ i18n.t('ui.dbWriteMode.update') }}</mat-option>
+            <mat-option value="upsert">{{ i18n.t('ui.dbWriteMode.upsert') }}</mat-option>
+            <mat-option value="batch-update">{{ i18n.t('ui.dbWriteMode.batchUpdate') }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.batchSize') }}</mat-label>
+          <input matInput [disabled]="readonly()" [ngModel]="draft().batchSize" (ngModelChange)="updateDraft({ batchSize: $event })" />
+        </mat-form-field>
+      </div>
+
+      <div class="task-grid task-grid--metadata">
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.schema') }}</mat-label>
+          <mat-select [disabled]="readonly() || !selectedConnection()" [ngModel]="draft().targetSchema" (ngModelChange)="handleSchemaChange($event)">
+            <mat-option value="">{{ i18n.t('ui.allSchemas') }}</mat-option>
+            @for (schema of schemas(); track schema.name) {
+              <mat-option [value]="schema.name">{{ schema.name }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <ih-process-db-write-table-selector
+          class="task-grid__table-field"
+          [disabled]="readonly() || !selectedConnection()"
+          [query]="tableQuery()"
+          [tables]="tables()"
+          (queryChange)="handleTableQueryChange($event)"
+          (tableSelect)="handleTableAutocompleteSelect($event)"
+        />
+      </div>
+
+      @if (!selectedConnection()) {
+        <div class="task-note ih-soft-panel">{{ i18n.t('ui.dbWriteConnectionHint') }}</div>
+      } @else if (loadingColumns()) {
+        <div class="task-note ih-soft-panel">{{ i18n.t('ui.loading') }}</div>
+      }
+    </div>
+
+    <div class="mapping-workspace">
+      <ih-process-db-write-source-palette
+        [groups]="groupedSources()"
+        [draggingSource]="draggingSource()"
+        [readonly]="readonly()"
+        (sourceDragStart)="draggingSource.set($event)"
+        (sourceDragEnd)="draggingSource.set(null)"
+      />
+
+      <ih-process-db-write-mapping-board
+        [columns]="columns()"
+        [mappings]="draft().mappings"
+        [sourceGroups]="groupedSources()"
+        [readonly]="readonly()"
+        [draggingSource]="draggingSource()"
+        (sourceDrop)="assignSource($event.columnName, $event.source)"
+        (expressionChange)="updateExpression($event.columnName, $event.expression)"
+        (keyChange)="updateKey($event.columnName, $event.value)"
+        (clear)="clearMapping($event)"
+      />
+    </div>

@@ -1,0 +1,23 @@
+.info-tile {
+        height: 100%;
+      }
+
+      .label {
+        font-size: 0.82rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--ih-text-soft);
+      }
+
+      .value {
+        margin-top: 0.4rem;
+        font-size: clamp(1.7rem, 2vw, 2.2rem);
+        font-weight: 700;
+        letter-spacing: -0.05em;
+      }
+
+      .detail {
+        margin-top: 0.5rem;
+        font-size: 0.92rem;
+      }

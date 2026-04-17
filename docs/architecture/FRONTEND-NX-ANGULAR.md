@@ -105,6 +105,13 @@ Esto evita crecer con if/switch grandes dentro del contenedor y deja la p?gina l
 
 ## Convenciones actuales
 
+### Componentes y Templates
+
+**Regla de extracción de templates y estilos:**
+- **No usar inline templates o inline styles** si superan las **20-30 líneas**.
+- Cuando un componente excede este tamaño, es obligatorio separar su vista en un archivo `.html` físico y sus reglas en un `.css` (referenciándolos mediante `templateUrl` y `styleUrl`).
+- Solo utilizar `template: \`...\`` y `styles: [\`...\`]` si el componente es extremadamente pequeño o es un puro *wrapper* visual presentacional de no más de un par de decenas de líneas, de manera que pueda leerse sin "scrolling" o dificultar el seguimiento de la lógica del componente.
+
 ### Nomenclatura de pages
 
 Las pages de feature ya no usan sufijo `.component` en archivos principales.

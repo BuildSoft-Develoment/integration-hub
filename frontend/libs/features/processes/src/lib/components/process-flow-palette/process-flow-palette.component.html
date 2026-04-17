@@ -1,0 +1,19 @@
+<div class="flow-palette">
+      @for (taskType of taskTypes; track taskType) {
+        <button
+          fExternalItem
+          type="button"
+          class="flow-palette__item"
+          [fData]="taskType"
+          [matTooltip]="taskLabel(taskType)"
+          matTooltipPosition="right"
+        >
+          <span class="flow-palette__icon" [ngClass]="presentation(taskType).toneClass" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path [attr.d]="presentation(taskType).iconPath" />
+            </svg>
+          </span>
+          <span class="flow-palette__label">{{ presentation(taskType).badge }}</span>
+        </button>
+      }
+    </div>

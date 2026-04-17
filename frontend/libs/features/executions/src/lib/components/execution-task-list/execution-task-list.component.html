@@ -1,0 +1,129 @@
+<section class="task-shell">
+      <div class="task-shell__header">
+        <div>
+          <p class="section-eyebrow">{{ i18n.t('ui.tasks', { count: tasks().length }) }}</p>
+          <h4>{{ i18n.t('executions.tasksTitle') }}</h4>
+        </div>
+      </div>
+
+      <mat-accordion class="task-accordion">
+        @for (task of tasks(); track task.id; let index = $index) {
+          <mat-expansion-panel [expanded]="selectedTaskId() === task.id" (opened)="selectTask.emit(task.id)">
+            <mat-expansion-panel-header>
+              <mat-panel-title>
+                {{ i18n.t('ui.task', { index: index + 1 }) }}
+              </mat-panel-title>
+              <mat-panel-description>
+                {{ task.taskType }} | {{ statusLabel(task.status) }}
+              </mat-panel-description>
+            </mat-expansion-panel-header>
+
+            <div class="task-card">
+              <div class="task-details">
+                <div><strong>{{ i18n.t('ui.taskType') }}</strong>: {{ task.taskType }}</div>
+                <div><strong>{{ i18n.t('common.status') }}</strong>: {{ statusLabel(task.status) }}</div>
+                <div><strong>{{ i18n.t('executions.executedAt') }}</strong>: {{ formatDate(task.executedAt) }}</div>
+                <div><strong>{{ i18n.t('executions.startedAt') }}</strong>: {{ formatDate(task.startedAt) }}</div>
+                <div><strong>{{ i18n.t('executions.finishedAt') }}</strong>: {{ formatDate(task.finishedAt) }}</div>
+              </div>
+
+              @if (failure(task)) {
+                <section class="task-card__surface task-card__surface--error">
+                  <strong>{{ failure(task)!.title }}</strong>
+                  <p>{{ failure(task)!.summary }}</p>
+                </section>
+              }
+
+              @if (readSummary(task)) {
+                <section class="task-card__surface">
+                  <div class="task-summary-metrics">
+                    <span class="summary-pill summary-pill--success">Validos: {{ readSummary(task)!.validCount ?? '-' }}</span>
+                    <span class="summary-pill summary-pill--warning">Omitidos: {{ readSummary(task)!.skippedCount ?? '-' }}</span>
+                    @if (readSummary(task)!.writtenCount != null) {
+                      <span class="summary-pill summary-pill--info">Escritos: {{ readSummary(task)!.writtenCount }}</span>
+                    }
+                    <span class="summary-pill">Archivos: {{ readSummary(task)!.files.length || readSummary(task)!.completedFilesCount || 0 }}</span>
+                    @if (readSummary(task)!.failedFiles.length) {
+                      <span class="summary-pill summary-pill--danger">Fallidos: {{ readSummary(task)!.failedFiles.length }}</span>
+                    }
+                  </div>
+                  <p class="task-summary-text">{{ readSummary(task)!.summary }}</p>
+
+                  @if (readSummary(task)!.files.length) {
+                    <div class="task-list-block">
+                      <strong>Resumen por archivo</strong>
+                      <ul>
+                        @for (file of readSummary(task)!.files; track file.fileName + '-' + $index) {
+                          <li>
+                            <strong>{{ file.fileName || '-' }}</strong>:
+                            validos={{ file.recordCount ?? '-' }},
+                            omitidos={{ file.skippedCount ?? '-' }}
+                            @if (file.writtenCount != null) {
+                              , escritos={{ file.writtenCount }}
+                            }
+                          </li>
+                        }
+                      </ul>
+                    </div>
+                  }
+
+                  @if (readSummary(task)!.failedFiles.length) {
+                    <div class="task-list-block">
+                      <strong>Archivos fallidos ({{ readSummary(task)!.failedFiles.length }})</strong>
+                      <ul>
+                        @for (file of readSummary(task)!.failedFiles; track file.fileName + '-' + $index) {
+                          <li>
+                            <strong>{{ file.fileName || '-' }}</strong>: {{ file.message || '-' }}
+                          </li>
+                        }
+                      </ul>
+                    </div>
+                  }
+
+                  @if (readSummary(task)!.skippedRows.length) {
+                    <div class="task-list-actions">
+                      <button mat-stroked-button type="button" (click)="downloadSkipped(task)">
+                        {{ i18n.t('executions.downloadSkippedRows') }}
+                      </button>
+                    </div>
+                    <div class="task-list-block">
+                      <strong>{{ i18n.t('executions.skippedRows') }}</strong>
+                      <ul>
+                        @for (row of readSummary(task)!.skippedRows; track (row.rowNumber || 0) + '-' + row.reason) {
+                          <li>row {{ row.rowNumber ?? '-' }}: {{ row.reason }}</li>
+                        }
+                      </ul>
+                    </div>
+                  }
+                </section>
+              }
+
+              @if (task.payloadJson) {
+                <div class="task-block">
+                  <strong>{{ i18n.t('executions.payloadJson') }}</strong>
+                  <pre>{{ task.payloadJson }}</pre>
+                </div>
+              }
+
+              @if (outputEntries(task).length) {
+                <div class="task-block">
+                  <strong>{{ i18n.t('executions.taskOutputs') }}</strong>
+                  <ul>
+                    @for (entry of outputEntries(task); track entry[0]) {
+                      <li><strong>{{ entry[0] }}</strong>: {{ formatOutput(entry[1]) }}</li>
+                    }
+                  </ul>
+                </div>
+              }
+
+              @if (task.details) {
+                <div class="task-block">
+                  <strong>{{ i18n.t('executions.details') }}</strong>
+                  <pre>{{ task.details }}</pre>
+                </div>
+              }
+            </div>
+          </mat-expansion-panel>
+        }
+      </mat-accordion>
+    </section>

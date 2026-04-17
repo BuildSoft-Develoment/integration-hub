@@ -1,0 +1,19 @@
+<mat-form-field class="table-selector">
+      <mat-label>{{ i18n.t('ui.targetTable') }}</mat-label>
+      <input
+        matInput
+        [disabled]="disabled()"
+        [ngModel]="query()"
+        (ngModelChange)="queryChange.emit($event)"
+        [matAutocomplete]="tableAutocomplete"
+      />
+      <mat-autocomplete
+        #tableAutocomplete="matAutocomplete"
+        [displayWith]="displayTableLabel"
+        (optionSelected)="tableSelect.emit($event.option.value)"
+      >
+        @for (table of tables(); track table.qualifiedName) {
+          <mat-option [value]="table">{{ table.qualifiedName }}</mat-option>
+        }
+      </mat-autocomplete>
+    </mat-form-field>

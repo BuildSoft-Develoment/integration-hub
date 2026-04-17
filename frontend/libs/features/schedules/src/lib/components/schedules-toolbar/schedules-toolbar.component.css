@@ -1,0 +1,25 @@
+.toolbar-shell { grid-template-columns:minmax(0,1fr); }
+    .toolbar-copy { min-width:0; }
+    .toolbar-filters {
+      display:grid;
+      grid-template-columns:repeat(3, minmax(0, 1fr));
+      gap:0.8rem;
+      align-items:center;
+      min-width:0;
+    }
+    .toolbar-filters > * { min-width:0; }
+    .toolbar-search,
+    .toolbar-select { display:block; width:100%; min-width:0; }
+    .toolbar-search .mat-mdc-form-field,
+    .toolbar-select .mat-mdc-form-field { width:100%; }
+    .create-button { justify-self:start; }
+    @media (max-width: 1180px) {
+      .toolbar-filters {
+        grid-template-columns:1fr;
+      }
+    }
+    @media (max-width: 760px) {
+      .create-button {
+        width:100%;
+      }
+    }

@@ -1,0 +1,21 @@
+:host {
+        display: block;
+        min-width: 0;
+      }
+      :host.task-form-host--workspace {
+        min-height: 0;
+        height: 100%;
+      }
+      .task-form-shell {
+        display: grid;
+        gap: 1rem;
+        min-width: 0;
+      }
+      .task-form-shell > * {
+        min-width: 0;
+        max-width: 100%;
+      }
+      .task-form-shell--workspace {
+        min-height: 0;
+        height: 100%;
+      }

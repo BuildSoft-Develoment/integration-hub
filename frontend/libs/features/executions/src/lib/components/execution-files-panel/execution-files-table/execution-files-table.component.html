@@ -1,0 +1,48 @@
+<div class="files-table">
+      <div class="files-table__head">
+        <div class="files-table__sel">
+          <mat-checkbox
+            [checked]="allVisibleSelected()"
+            [indeterminate]="partiallySelected()"
+            (change)="toggleAllVisible.emit($event.checked)"
+          />
+        </div>
+        <span>Archivo</span>
+        <span>{{ i18n.t('common.status') }}</span>
+        <span>Validos</span>
+        <span>Omitidos</span>
+        <span>Escritos</span>
+        <span>Tamano</span>
+        <span>{{ i18n.t('executions.fileModifiedTo') }}</span>
+      </div>
+
+      <div class="files-table__body">
+        @for (file of files(); track rowKey()(file)) {
+          <div class="files-table__row">
+            <div class="files-table__sel">
+              <mat-checkbox
+                [checked]="selectedKeys().includes(rowKey()(file))"
+                (change)="toggleRow.emit({ file, checked: $event.checked })"
+              />
+            </div>
+            <div class="files-table__file">
+              <strong>{{ file.fileName || '-' }}</strong>
+              <small>{{ file.filePath || '-' }}</small>
+            </div>
+            <div><span class="status-pill" [class]="statusClass()(file.status)">{{ file.status || '-' }}</span></div>
+            <span>{{ file.recordCount ?? '-' }}</span>
+            <span>{{ file.skippedCount ?? '-' }}</span>
+            <span>{{ file.writtenCount ?? '-' }}</span>
+            <span>{{ fileSize(file.fileSize) }}</span>
+            <div class="files-table__date">
+              <span>{{ formatDate(file.lastModified) }}</span>
+              @if (file.errorMessage) {
+                <small class="files-table__error">{{ file.errorMessage }}</small>
+              }
+            </div>
+          </div>
+        } @empty {
+          <div class="empty-inline ih-muted">{{ i18n.t('executions.noMatchingFiles') }}</div>
+        }
+      </div>
+    </div>

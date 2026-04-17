@@ -1,0 +1,46 @@
+<section class="path-builder">
+      <div class="path-builder__header">
+        <p class="section-eyebrow">{{ i18n.t('ui.restPathParameters') }}</p>
+        <h5>{{ i18n.t('ui.restPathParametersHint') }}</h5>
+      </div>
+
+      <div class="path-builder__field-shell">
+        <label class="path-builder__field-label">{{ i18n.t('ui.restPathBuilderLabel') }}</label>
+        <mat-form-field class="path-builder__field" subscriptSizing="dynamic">
+          <mat-chip-grid #chipGrid aria-label="REST path segments">
+            @for (segment of segments(); track trackSegment(segment, $index); let index = $index) {
+              <mat-chip-row [removable]="!readonly()" (removed)="removeSegment(index)">
+                {{ displaySegment(segment) }}
+                @if (!readonly()) {
+                  <button matChipRemove type="button" [attr.aria-label]="i18n.t('ui.remove')">x</button>
+                }
+              </mat-chip-row>
+            }
+          </mat-chip-grid>
+          <input
+            #pathTrigger="matAutocompleteTrigger"
+            [disabled]="readonly()"
+            [placeholder]="i18n.t('ui.restPathBuilderPlaceholder')"
+            [ngModel]="segmentInput()"
+            (ngModelChange)="segmentInput.set($event)"
+            [matChipInputFor]="chipGrid"
+            [matAutocomplete]="auto"
+            (matChipInputTokenEnd)="commitTypedSegment()"
+            (blur)="handleInputBlur(pathTrigger)"
+          />
+          <mat-autocomplete #auto="matAutocomplete" (optionSelected)="selectAutocompleteOption($event)">
+            @for (group of groupedSuggestions(); track group.key) {
+              <mat-optgroup [label]="group.label">
+                @for (item of group.items; track item.trackKey) {
+                  <mat-option [value]="item.trackKey">{{ item.label }}</mat-option>
+                }
+              </mat-optgroup>
+            }
+          </mat-autocomplete>
+        </mat-form-field>
+      </div>
+
+      @if (!segments().length) {
+        <div class="path-builder__empty">{{ i18n.t('ui.restPathSegmentsEmpty') }}</div>
+      }
+    </section>

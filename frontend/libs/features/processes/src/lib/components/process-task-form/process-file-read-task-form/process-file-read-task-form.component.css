@@ -1,0 +1,28 @@
+:host {
+        display: grid;
+        gap: 1rem;
+        min-width: 0;
+      }
+      .task-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+        gap: 0.95rem;
+        min-width: 0;
+      }
+      .full-width {
+        width: 100%;
+      }
+      .task-note {
+        padding: 0.85rem 1rem;
+        border-radius: 16px;
+        border: 1px dashed var(--ih-border);
+        color: var(--ih-text-soft);
+        background: color-mix(in srgb, var(--ih-surface-alt) 76%, transparent);
+      }
+      .task-note--warning {
+        border-color: color-mix(in srgb, var(--ih-warning, #d97706) 35%, var(--ih-border));
+        color: color-mix(in srgb, var(--ih-warning, #d97706) 78%, var(--ih-text));
+      }
+      textarea {
+        min-height: 8rem;
+      }
