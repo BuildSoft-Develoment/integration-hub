@@ -1,8 +1,8 @@
 package com.integrationhub.platform.provider.reader;
 
-import com.integrationhub.platform.spi.ReadRecord;
-import com.integrationhub.platform.spi.ReadResult;
-import com.integrationhub.platform.spi.ReadSkip;
+import com.integrationhub.platform.spi.reader.ReadRecord;
+import com.integrationhub.platform.spi.reader.ReadResult;
+import com.integrationhub.platform.spi.reader.ReadSkip;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;

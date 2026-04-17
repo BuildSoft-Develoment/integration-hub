@@ -1,7 +1,7 @@
 package com.integrationhub.platform.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.api.SourceTestResponse;
+import com.integrationhub.platform.api.response.source.SourceTestResponse;
 import com.integrationhub.platform.domain.SourceType;
 import com.integrationhub.platform.service.secret.ConfigSecretValueProvider;
 import com.integrationhub.platform.service.secret.EnvironmentSecretValueProvider;
