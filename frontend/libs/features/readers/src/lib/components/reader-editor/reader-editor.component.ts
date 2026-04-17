@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, input, output } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import {
   ReaderDraft,
   ReaderProviderDescriptor,
@@ -14,6 +15,7 @@ import { ReaderTypeFormHostComponent } from '../reader-type-form/reader-type-for
   standalone: true,
   imports: [
     CommonModule,
+    FormsModule,
     ManagedEditorFormActionsComponent,
     ManagedEditorHeaderComponent,
     ManagedEditorOverviewComponent,

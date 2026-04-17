@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { I18nService } from '@integration-hub/core/services';
 import { ProcessFlowLayout } from '../../process-flow.models';
@@ -14,6 +15,7 @@ import { ProcessTaskListComponent } from '../process-task-list/process-task-list
   standalone: true,
   imports: [
     CommonModule,
+    FormsModule,
     MatButtonModule,
     ProcessEditorActionsComponent,
     ProcessEditorHeaderComponent,
