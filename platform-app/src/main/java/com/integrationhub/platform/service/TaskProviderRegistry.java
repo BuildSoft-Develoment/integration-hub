@@ -1,7 +1,6 @@
 package com.integrationhub.platform.service;
 
-import com.integrationhub.platform.provider.task.StoredProcedureTaskProvider;
-import com.integrationhub.platform.spi.TaskProvider;
+import com.integrationhub.platform.spi.task.TaskProvider;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
@@ -9,7 +8,6 @@ import jakarta.enterprise.inject.Instance;
 import org.jboss.logging.Logger;
 
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @ApplicationScoped
 public class TaskProviderRegistry {
@@ -17,12 +15,9 @@ public class TaskProviderRegistry {
     private static final Logger LOG = Logger.getLogger(TaskProviderRegistry.class);
 
     private final Instance<TaskProvider> providers;
-    private final StoredProcedureTaskProvider storedProcedureTaskProvider;
 
-    public TaskProviderRegistry(Instance<TaskProvider> providers,
-                                StoredProcedureTaskProvider storedProcedureTaskProvider) {
+    public TaskProviderRegistry(Instance<TaskProvider> providers) {
         this.providers = providers;
-        this.storedProcedureTaskProvider = storedProcedureTaskProvider;
     }
 
     void logProviders(@Observes StartupEvent event) {
@@ -30,7 +25,7 @@ public class TaskProviderRegistry {
     }
 
     public TaskProvider resolve(String type) {
-        return providerStream()
+        return providers.stream()
                 .filter(provider -> provider.type().equalsIgnoreCase(type))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -39,13 +34,9 @@ public class TaskProviderRegistry {
     }
 
     private String availableProviders() {
-        return providerStream()
+        return providers.stream()
                 .map(provider -> provider.type() + "(" + provider.getClass().getSimpleName() + ")")
                 .sorted()
                 .collect(Collectors.joining(", "));
-    }
-
-    private Stream<TaskProvider> providerStream() {
-        return Stream.concat(providers.stream(), Stream.of(storedProcedureTaskProvider)).distinct();
     }
 }

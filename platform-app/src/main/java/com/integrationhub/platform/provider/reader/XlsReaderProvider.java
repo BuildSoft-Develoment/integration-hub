@@ -1,9 +1,9 @@
 package com.integrationhub.platform.provider.reader;
 
-import com.integrationhub.platform.spi.ReadBatchConsumer;
-import com.integrationhub.platform.spi.ReadResult;
-import com.integrationhub.platform.spi.ReaderProvider;
-import com.integrationhub.platform.spi.SourcePayload;
+import com.integrationhub.platform.spi.reader.ReadBatchConsumer;
+import com.integrationhub.platform.spi.reader.ReadResult;
+import com.integrationhub.platform.spi.reader.ReaderProvider;
+import com.integrationhub.platform.spi.source.SourcePayload;
 import io.quarkus.arc.properties.UnlessBuildProperty;
 import jakarta.enterprise.context.ApplicationScoped;
 

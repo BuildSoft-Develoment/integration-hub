@@ -1,8 +1,8 @@
 package com.integrationhub.platform.provider.source;
 
-import com.integrationhub.platform.spi.SelectedSourceFile;
-import com.integrationhub.platform.spi.SourcePayload;
-import com.integrationhub.platform.spi.SourceProvider;
+import com.integrationhub.platform.spi.source.SelectedSourceFile;
+import com.integrationhub.platform.spi.source.SourcePayload;
+import com.integrationhub.platform.spi.source.SourceProvider;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.io.IOException;

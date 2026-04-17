@@ -1,11 +1,11 @@
 package com.integrationhub.platform.provider.reader;
 
-import com.integrationhub.platform.spi.ReadBatch;
-import com.integrationhub.platform.spi.ReadBatchConsumer;
-import com.integrationhub.platform.spi.ReadRecord;
-import com.integrationhub.platform.spi.ReadResult;
-import com.integrationhub.platform.spi.ReadSkip;
-import com.integrationhub.platform.spi.SourcePayload;
+import com.integrationhub.platform.spi.reader.ReadBatch;
+import com.integrationhub.platform.spi.reader.ReadBatchConsumer;
+import com.integrationhub.platform.spi.reader.ReadRecord;
+import com.integrationhub.platform.spi.reader.ReadResult;
+import com.integrationhub.platform.spi.reader.ReadSkip;
+import com.integrationhub.platform.spi.source.SourcePayload;
 import org.apache.poi.hssf.eventusermodel.FormatTrackingHSSFListener;
 import org.apache.poi.hssf.eventusermodel.HSSFEventFactory;
 import org.apache.poi.hssf.eventusermodel.HSSFListener;
