@@ -1,5 +1,6 @@
 package com.integrationhub.platform.provider.task;
 
+import com.integrationhub.platform.domain.ConnectionType;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.wait.strategy.Wait;
@@ -26,9 +27,10 @@ class StoredProcedureTaskProviderOracleCompatibilityTest extends StoredProcedure
                 .waitingFor(Wait.forListeningPort().withStartupTimeout(Duration.ofMinutes(8)))) {
             oracle.start();
             prepareOracle(oracle);
-            var provider = provider(dataSource(oracleJdbcUrl(oracle), "test", "test"));
+            var provider = provider(dataSource(oracleJdbcUrl(oracle), "test", "test"), ConnectionType.ORACLE);
 
             var result = provider.execute(taskContext(), Map.of(
+                    "connectionRef", "oracle-test",
                     "procedureName", "sp_collect_result",
                     "parameters", List.of(
                             Map.of("name", "p_idinstancia", "value", "idinstancia", "jdbcType", "VARCHAR", "direction", "IN"),

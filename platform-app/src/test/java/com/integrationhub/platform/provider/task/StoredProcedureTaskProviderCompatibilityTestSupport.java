@@ -1,5 +1,6 @@
 package com.integrationhub.platform.provider.task;
 
+import com.integrationhub.platform.domain.ConnectionType;
 import com.integrationhub.platform.domain.ExecutionStatus;
 import com.integrationhub.platform.domain.TaskType;
 import com.integrationhub.platform.entity.ProcessExecution;
@@ -26,17 +27,21 @@ import java.util.stream.Stream;
 
 abstract class StoredProcedureTaskProviderCompatibilityTestSupport {
 
-    protected StoredProcedureTaskProvider provider(DataSource dataSource) {
+    protected StoredProcedureTaskProvider provider(DataSource dataSource, ConnectionType connectionType) {
         var connectionPoolManager = new ConnectionPoolManager(null, null) {
             @Override
-            public DataSource resolveJdbcDataSource(String connectionRef) {
-                return dataSource;
+            public JdbcConnectionTarget resolveJdbcTarget(String connectionRef) {
+                return new JdbcConnectionTarget(dataSource, connectionType);
             }
         };
         return new StoredProcedureTaskProvider(
-                dataSource,
                 connectionPoolManager,
-                fixedDialectInstance(List.of(new PostgreSqlStoredProcedureDialect(), new GenericStoredProcedureDialect()))
+                fixedDialectInstance(List.of(
+                        new PostgreSqlStoredProcedureDialect(),
+                        new MySqlStoredProcedureDialect(),
+                        new OracleStoredProcedureDialect(),
+                        new SqlServerStoredProcedureDialect()
+                ))
         );
     }
 

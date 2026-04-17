@@ -1,5 +1,6 @@
 package com.integrationhub.platform.provider.task;
 
+import com.integrationhub.platform.domain.ConnectionType;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -25,9 +26,10 @@ class StoredProcedureTaskProviderPostgreSqlCompatibilityTest extends StoredProce
     @Test
     void executesProcedureWithOutputsOnPostgreSql() throws Exception {
         preparePostgreSql();
-        var provider = provider(dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword()));
+        var provider = provider(dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword()), ConnectionType.POSTGRESQL);
 
         var result = provider.execute(taskContext(), Map.of(
+                "connectionRef", "postgres-test",
                 "procedureName", "public.sp_collect_result",
                 "parameters", List.of(
                         Map.of("name", "p_idinstancia", "value", "idinstancia", "jdbcType", "VARCHAR", "direction", "IN"),

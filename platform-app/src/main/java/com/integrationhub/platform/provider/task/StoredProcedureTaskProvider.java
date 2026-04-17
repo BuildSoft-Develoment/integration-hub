@@ -1,5 +1,6 @@
 package com.integrationhub.platform.provider.task;
 
+import com.integrationhub.platform.domain.ConnectionType;
 import com.integrationhub.platform.service.ConnectionPoolManager;
 import com.integrationhub.platform.spi.ReadResult;
 import com.integrationhub.platform.spi.SourcePayload;
@@ -10,26 +11,19 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
-import javax.sql.DataSource;
-import java.sql.CallableStatement;
-import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 @ApplicationScoped
 public class StoredProcedureTaskProvider implements TaskProvider {
 
-    private final DataSource dataSource;
     private final ConnectionPoolManager connectionPoolManager;
     private final Instance<StoredProcedureDialect> dialects;
 
     @Inject
-    public StoredProcedureTaskProvider(DataSource dataSource,
-                                       ConnectionPoolManager connectionPoolManager,
+    public StoredProcedureTaskProvider(ConnectionPoolManager connectionPoolManager,
                                        Instance<StoredProcedureDialect> dialects) {
-        this.dataSource = dataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.dialects = dialects;
     }
@@ -66,86 +60,42 @@ public class StoredProcedureTaskProvider implements TaskProvider {
                 .map(parameter -> StoredProcedureRuntimeSupport.resolveParameter(parameter, runtimeVariables))
                 .toList();
 
-        var outputs = executeProcedure(resolveDataSource(configuration), procedureName, timeoutSeconds, resolvedParameters);
+        var outputs = executeProcedure(resolveTarget(configuration), procedureName, timeoutSeconds, resolvedParameters);
         return TaskResult.success("Stored procedure " + procedureName + " executed with " + resolvedParameters.size() + " parameter(s)", outputs);
     }
 
-    private DataSource resolveDataSource(Map<String, Object> configuration) {
+    private ConnectionPoolManager.JdbcConnectionTarget resolveTarget(Map<String, Object> configuration) {
         return DbTaskSupport.connectionRef(configuration)
-                .map(connectionPoolManager::resolveJdbcDataSource)
-                .orElse(dataSource);
+                .map(connectionPoolManager::resolveJdbcTarget)
+                .orElseThrow(() -> new IllegalArgumentException("Stored procedure tasks require connectionRef"));
     }
 
-    private Map<String, Object> executeProcedure(DataSource targetDataSource,
+    private Map<String, Object> executeProcedure(ConnectionPoolManager.JdbcConnectionTarget target,
                                                  String procedureName,
                                                  int timeoutSeconds,
                                                  List<StoredProcedureRuntimeSupport.ResolvedParameter> parameters) {
-        try (var connection = targetDataSource.getConnection()) {
-            var dialect = resolveDialect(connection);
-            var sql = dialect.callStatement(procedureName, parameters);
-            try (CallableStatement statement = connection.prepareCall(sql)) {
-                statement.setQueryTimeout(timeoutSeconds);
-                for (int index = 0; index < parameters.size(); index++) {
-                    var parameter = parameters.get(index);
-                    if (parameter.direction() == StoredProcedureRuntimeSupport.ParameterDirection.OUT
-                            || parameter.direction() == StoredProcedureRuntimeSupport.ParameterDirection.INOUT) {
-                        statement.registerOutParameter(index + 1, parameter.sqlType());
-                    }
-                    if (parameter.direction() == StoredProcedureRuntimeSupport.ParameterDirection.IN
-                            || parameter.direction() == StoredProcedureRuntimeSupport.ParameterDirection.INOUT) {
-                        if (parameter.value() == null) {
-                            statement.setNull(index + 1, parameter.sqlType());
-                        } else {
-                            statement.setObject(index + 1, parameter.value(), parameter.sqlType());
-                        }
-                    }
-                }
-                statement.execute();
-                return collectOutputs(statement, parameters);
-            }
+        var dialect = resolveDialect(target.connectionType());
+        try (var connection = target.dataSource().getConnection()) {
+            return dialect.execute(connection, procedureName, timeoutSeconds, parameters);
         } catch (SQLException e) {
-            throw new IllegalStateException(buildErrorMessage(targetDataSource, procedureName, parameters, e), e);
+            throw new IllegalStateException(buildErrorMessage(target, dialect, procedureName, parameters, e), e);
         }
     }
 
-    private Map<String, Object> collectOutputs(CallableStatement statement,
-                                               List<StoredProcedureRuntimeSupport.ResolvedParameter> parameters) throws SQLException {
-        var outputs = new LinkedHashMap<String, Object>();
-        for (int index = 0; index < parameters.size(); index++) {
-            var parameter = parameters.get(index);
-            if (parameter.direction() == StoredProcedureRuntimeSupport.ParameterDirection.OUT
-                    || parameter.direction() == StoredProcedureRuntimeSupport.ParameterDirection.INOUT) {
-                outputs.put(normalizeOutputName(parameter.name()), statement.getObject(index + 1));
-            }
-        }
-        return outputs;
-    }
-
-    private String normalizeOutputName(String parameterName) {
-        if (parameterName == null) {
-            return null;
-        }
-        return parameterName.replaceFirst("^@+", "");
-    }
-
-    private String buildErrorMessage(DataSource targetDataSource,
+    private String buildErrorMessage(ConnectionPoolManager.JdbcConnectionTarget target,
+                                     StoredProcedureDialect dialect,
                                      String procedureName,
                                      List<StoredProcedureRuntimeSupport.ResolvedParameter> parameters,
                                      SQLException error) {
         var baseMessage = "Cannot execute stored procedure " + procedureName + " with parameters " + describeParameters(parameters);
-        try (Connection connection = targetDataSource.getConnection()) {
-            return resolveDialect(connection).buildErrorMessage(targetDataSource, procedureName, parameters, error, baseMessage);
-        } catch (SQLException ignored) {
-            return baseMessage;
-        }
+        return dialect.buildErrorMessage(target.dataSource(), procedureName, parameters, error, baseMessage);
     }
 
-    private StoredProcedureDialect resolveDialect(Connection connection) throws SQLException {
-        var productName = connection.getMetaData().getDatabaseProductName();
+    private StoredProcedureDialect resolveDialect(ConnectionType connectionType) {
         return dialects.stream()
-                .filter(dialect -> dialect.supports(productName))
+                .filter(dialect -> dialect.connectionType() == connectionType)
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("Unsupported database product for stored procedure execution: " + productName));
+                .orElseThrow(() -> new IllegalStateException("Unsupported connection type for stored procedure execution: " + connectionType));
     }
 
     private String describeParameters(List<StoredProcedureRuntimeSupport.ResolvedParameter> parameters) {
