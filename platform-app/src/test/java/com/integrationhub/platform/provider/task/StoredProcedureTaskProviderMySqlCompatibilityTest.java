@@ -1,5 +1,6 @@
 package com.integrationhub.platform.provider.task;
 
+import com.integrationhub.platform.domain.ConnectionType;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -25,9 +26,10 @@ class StoredProcedureTaskProviderMySqlCompatibilityTest extends StoredProcedureT
     @Test
     void executesProcedureWithOutputsOnMySql() throws Exception {
         prepareMySql();
-        var provider = provider(dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword()));
+        var provider = provider(dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword()), ConnectionType.MYSQL);
 
         var result = provider.execute(taskContext(), Map.of(
+                "connectionRef", "mysql-test",
                 "procedureName", "sp_collect_result",
                 "parameters", List.of(
                         Map.of("name", "p_idinstancia", "value", "idinstancia", "jdbcType", "VARCHAR", "direction", "IN"),

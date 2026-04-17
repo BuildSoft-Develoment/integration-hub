@@ -1,5 +1,6 @@
 package com.integrationhub.platform.provider.task;
 
+import com.integrationhub.platform.domain.ConnectionType;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MSSQLServerContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -23,9 +24,10 @@ class StoredProcedureTaskProviderSqlServerCompatibilityTest extends StoredProced
     @Test
     void executesProcedureWithOutputsOnSqlServer() throws Exception {
         prepareSqlServer();
-        var provider = provider(dataSource(SQLSERVER.getJdbcUrl(), SQLSERVER.getUsername(), SQLSERVER.getPassword()));
+        var provider = provider(dataSource(SQLSERVER.getJdbcUrl(), SQLSERVER.getUsername(), SQLSERVER.getPassword()), ConnectionType.SQLSERVER);
 
         var result = provider.execute(taskContext(), Map.of(
+                "connectionRef", "sqlserver-test",
                 "procedureName", "dbo.sp_collect_result",
                 "parameters", List.of(
                         Map.of("name", "@p_idinstancia", "value", "idinstancia", "jdbcType", "VARCHAR", "direction", "IN"),

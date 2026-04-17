@@ -1,19 +1,23 @@
 package com.integrationhub.platform.provider.task;
 
+import com.integrationhub.platform.domain.ConnectionType;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @ApplicationScoped
-class PostgreSqlStoredProcedureDialect implements StoredProcedureDialect {
+class PostgreSqlStoredProcedureDialect extends AbstractStoredProcedureDialect {
 
     @Override
-    public boolean supports(String databaseProductName) {
-        return databaseProductName != null && databaseProductName.trim().toUpperCase().contains("POSTGRES");
+    public ConnectionType connectionType() {
+        return ConnectionType.POSTGRESQL;
     }
 
     @Override
@@ -22,6 +26,28 @@ class PostgreSqlStoredProcedureDialect implements StoredProcedureDialect {
                 .map(parameter -> "cast(? as " + StoredProcedureRuntimeSupport.postgresType(parameter.jdbcType()) + ")")
                 .toList();
         return "call " + procedureName + "(" + String.join(", ", placeholders) + ")";
+    }
+
+    @Override
+    public Map<String, Object> execute(Connection connection,
+                                       String procedureName,
+                                       int timeoutSeconds,
+                                       List<StoredProcedureRuntimeSupport.ResolvedParameter> parameters) throws SQLException {
+        if (parameters.stream().noneMatch(this::isOutputParameter)) {
+            return super.execute(connection, procedureName, timeoutSeconds, parameters);
+        }
+        var sql = callStatement(procedureName, parameters);
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setQueryTimeout(timeoutSeconds);
+            bindPreparedStatement(statement, parameters);
+            var hasResultSet = statement.execute();
+            if (!hasResultSet) {
+                throw new SQLException("PostgreSQL procedure did not return an output result set");
+            }
+            try (ResultSet resultSet = statement.getResultSet()) {
+                return collectResultSetOutputs(resultSet, parameters);
+            }
+        }
     }
 
     @Override

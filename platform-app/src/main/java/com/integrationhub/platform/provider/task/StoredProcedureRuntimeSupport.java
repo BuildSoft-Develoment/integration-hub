@@ -89,16 +89,20 @@ final class StoredProcedureRuntimeSupport {
     }
 
     static String postgresType(String jdbcType) {
-        var normalizedType = jdbcType == null ? "VARCHAR" : jdbcType.trim().toUpperCase();
+        var normalizedType = normalizeJdbcType(jdbcType);
         return switch (normalizedType) {
             case "VARCHAR", "STRING" -> "varchar";
             case "TEXT" -> "text";
             case "INTEGER", "INT" -> "integer";
             case "BIGINT", "LONG" -> "bigint";
             case "DECIMAL", "NUMERIC" -> "numeric";
+            case "DOUBLE" -> "double precision";
+            case "REAL" -> "real";
             case "BOOLEAN" -> "boolean";
+            case "CHAR" -> "char";
             case "DATE" -> "date";
             case "TIMESTAMP" -> "timestamp";
+            case "BYTEA" -> "bytea";
             default -> throw new IllegalArgumentException("Unsupported JDBC type for PostgreSQL stored procedure parameter: " + jdbcType);
         };
     }
@@ -107,12 +111,14 @@ final class StoredProcedureRuntimeSupport {
         if (rawValue == null) {
             return null;
         }
-        var normalizedType = jdbcType == null ? "VARCHAR" : jdbcType.trim().toUpperCase();
+        var normalizedType = normalizeJdbcType(jdbcType);
         return switch (normalizedType) {
-            case "VARCHAR", "STRING", "TEXT" -> String.valueOf(rawValue);
+            case "VARCHAR", "STRING", "TEXT", "CHAR" -> String.valueOf(rawValue);
             case "INTEGER", "INT" -> rawValue instanceof Integer integerValue ? integerValue : Integer.parseInt(String.valueOf(rawValue));
             case "BIGINT", "LONG" -> rawValue instanceof Long longValue ? longValue : Long.parseLong(String.valueOf(rawValue));
             case "DECIMAL", "NUMERIC" -> rawValue instanceof BigDecimal decimalValue ? decimalValue : new BigDecimal(String.valueOf(rawValue));
+            case "DOUBLE" -> rawValue instanceof Double doubleValue ? doubleValue : Double.parseDouble(String.valueOf(rawValue));
+            case "REAL" -> rawValue instanceof Float floatValue ? floatValue : Float.parseFloat(String.valueOf(rawValue));
             case "BOOLEAN" -> rawValue instanceof Boolean booleanValue ? booleanValue : Boolean.parseBoolean(String.valueOf(rawValue));
             case "DATE" -> toSqlDate(rawValue);
             case "TIMESTAMP" -> toSqlTimestamp(rawValue);
@@ -153,16 +159,43 @@ final class StoredProcedureRuntimeSupport {
     }
 
     private static int sqlType(String jdbcType) {
-        var normalizedType = jdbcType == null ? "VARCHAR" : jdbcType.trim().toUpperCase();
+        var normalizedType = normalizeJdbcType(jdbcType);
         return switch (normalizedType) {
             case "VARCHAR", "STRING", "TEXT" -> Types.VARCHAR;
+            case "CHAR" -> Types.CHAR;
             case "INTEGER", "INT" -> Types.INTEGER;
             case "BIGINT", "LONG" -> Types.BIGINT;
             case "DECIMAL", "NUMERIC" -> Types.NUMERIC;
+            case "DOUBLE" -> Types.DOUBLE;
+            case "REAL" -> Types.REAL;
             case "BOOLEAN" -> Types.BOOLEAN;
             case "DATE" -> Types.DATE;
             case "TIMESTAMP" -> Types.TIMESTAMP;
+            case "BYTEA" -> Types.BINARY;
             default -> throw new IllegalArgumentException("Unsupported JDBC type for stored procedure parameter: " + jdbcType);
+        };
+    }
+
+    private static String normalizeJdbcType(String jdbcType) {
+        if (jdbcType == null || jdbcType.isBlank()) {
+            return "VARCHAR";
+        }
+        var normalized = jdbcType.trim().toUpperCase();
+        return switch (normalized) {
+            case "VARCHAR", "CHARACTER VARYING", "CHAR VARYING", "STRING" -> "VARCHAR";
+            case "TEXT" -> "TEXT";
+            case "CHAR", "CHARACTER", "BPCHAR" -> "CHAR";
+            case "INTEGER", "INT", "INT4", "SERIAL", "SERIAL4" -> "INTEGER";
+            case "BIGINT", "LONG", "INT8", "BIGSERIAL", "SERIAL8" -> "BIGINT";
+            case "SMALLINT", "INT2", "SMALLSERIAL", "SERIAL2" -> "INTEGER";
+            case "DECIMAL", "NUMERIC" -> "NUMERIC";
+            case "DOUBLE", "DOUBLE PRECISION", "FLOAT8" -> "DOUBLE";
+            case "REAL", "FLOAT4" -> "REAL";
+            case "BOOLEAN", "BOOL" -> "BOOLEAN";
+            case "DATE" -> "DATE";
+            case "TIMESTAMP", "TIMESTAMP WITHOUT TIME ZONE", "TIMESTAMP WITH TIME ZONE", "TIMESTAMPTZ" -> "TIMESTAMP";
+            case "BYTEA", "BINARY", "VARBINARY" -> "BYTEA";
+            default -> normalized;
         };
     }
 

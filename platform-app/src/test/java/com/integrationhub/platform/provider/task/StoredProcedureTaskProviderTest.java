@@ -55,14 +55,18 @@ class StoredProcedureTaskProviderTest {
         inject(mapper, "objectMapper", new com.fasterxml.jackson.databind.ObjectMapper());
         var connectionPoolManager = new ConnectionPoolManager(null, null) {
             @Override
-            public DataSource resolveJdbcDataSource(String connectionRef) {
-                return dataSource();
+            public JdbcConnectionTarget resolveJdbcTarget(String connectionRef) {
+                return new JdbcConnectionTarget(dataSource(), ConnectionType.POSTGRESQL);
             }
         };
         provider = new StoredProcedureTaskProvider(
-                dataSource(),
                 connectionPoolManager,
-                fixedDialectInstance(List.of(new PostgreSqlStoredProcedureDialect(), new GenericStoredProcedureDialect()))
+                fixedDialectInstance(List.of(
+                        new PostgreSqlStoredProcedureDialect(),
+                        new MySqlStoredProcedureDialect(),
+                        new OracleStoredProcedureDialect(),
+                        new SqlServerStoredProcedureDialect()
+                ))
         );
 
         try (Connection connection = dataSource().getConnection();
@@ -73,6 +77,8 @@ class StoredProcedureTaskProviderTest {
             statement.executeUpdate("create or replace procedure public.sp_insert_result(p_id bigint, p_empresa varchar, p_fecha_proceso date, p_origen varchar, p_record_count integer) language plpgsql as $$ begin insert into public.sp_result (id, empresa, fecha_proceso, origen, record_count) values (p_id, p_empresa, p_fecha_proceso, p_origen, p_record_count); end; $$");
             statement.executeUpdate("drop procedure if exists public.sp_collect_result(varchar, out varchar, out integer)");
             statement.executeUpdate("create or replace procedure public.sp_collect_result(in p_idinstancia varchar, out resultado varchar, out filas_actualizadas integer) language plpgsql as $$ begin resultado := 'OK-' || p_idinstancia; filas_actualizadas := 7; end; $$");
+            statement.executeUpdate("drop procedure if exists public.p_procesar(text, out text, out int4)");
+            statement.executeUpdate("create or replace procedure public.p_procesar(in p_idinstancia text, out resultado text, out filas_actualizadas int4) language plpgsql as $$ begin resultado := 'OK-' || p_idinstancia; filas_actualizadas := 11; end; $$");
         }
     }
 
@@ -114,6 +120,7 @@ class StoredProcedureTaskProviderTest {
         context.attributes().put("executionVariables", Map.of("idinstancia", "ABC123"));
 
         var result = provider.execute(context, Map.of(
+                "connectionRef", "erp-postgres",
                 "procedureName", "public.sp_collect_result",
                 "parameters", List.of(
                         Map.of("name", "p_idinstancia", "value", "idinstancia", "jdbcType", "VARCHAR", "direction", "IN"),
@@ -125,6 +132,26 @@ class StoredProcedureTaskProviderTest {
         assertTrue(result.success());
         assertEquals("OK-ABC123", result.outputs().get("resultado"));
         assertEquals(7, ((Number) result.outputs().get("filas_actualizadas")).intValue());
+    }
+
+    @Test
+    void capturesOutputParametersFromStoredProcedureUsingPostgreSqlMetadataTypes() {
+        var context = taskContext();
+        context.attributes().put("executionVariables", Map.of("idinstancia", "ABC123"));
+
+        var result = provider.execute(context, Map.of(
+                "connectionRef", "erp-postgres",
+                "procedureName", "public.p_procesar",
+                "parameters", List.of(
+                        Map.of("name", "p_idinstancia", "value", "idinstancia", "jdbcType", "TEXT", "direction", "IN"),
+                        Map.of("name", "resultado", "jdbcType", "TEXT", "direction", "OUT"),
+                        Map.of("name", "filas_actualizadas", "jdbcType", "INT4", "direction", "OUT")
+                )
+        ));
+
+        assertTrue(result.success());
+        assertEquals("OK-ABC123", result.outputs().get("resultado"));
+        assertEquals(11, ((Number) result.outputs().get("filas_actualizadas")).intValue());
     }
 
     @Test
@@ -158,9 +185,13 @@ class StoredProcedureTaskProviderTest {
 
         var realConnectionPoolManager = new ConnectionPoolManager(repository, mapper);
         var realProvider = new StoredProcedureTaskProvider(
-                dataSource(),
                 realConnectionPoolManager,
-                fixedDialectInstance(List.of(new PostgreSqlStoredProcedureDialect(), new GenericStoredProcedureDialect()))
+                fixedDialectInstance(List.of(
+                        new PostgreSqlStoredProcedureDialect(),
+                        new MySqlStoredProcedureDialect(),
+                        new OracleStoredProcedureDialect(),
+                        new SqlServerStoredProcedureDialect()
+                ))
         );
 
         var context = taskContext();

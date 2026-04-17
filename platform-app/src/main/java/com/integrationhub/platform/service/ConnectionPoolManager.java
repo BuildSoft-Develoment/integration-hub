@@ -1,4 +1,5 @@
 package com.integrationhub.platform.service;
+import com.integrationhub.platform.domain.ConnectionType;
 import com.integrationhub.platform.entity.ConnectionDefinition;
 import com.integrationhub.platform.repository.ConnectionDefinitionRepository;
 import io.agroal.api.AgroalDataSource;
@@ -24,12 +25,13 @@ public class ConnectionPoolManager {
         this.connectionDefinitionRepository = connectionDefinitionRepository;
         this.jsonConfigurationMapper = jsonConfigurationMapper;
     }
+    public JdbcConnectionTarget resolveJdbcTarget(String connectionRef) {
+        var definition = findRequiredJdbcDefinition(connectionRef);
+        var dataSource = dataSources.computeIfAbsent(definition.id, ignored -> createJdbcDataSource(definition));
+        return new JdbcConnectionTarget(dataSource, definition.connectionType);
+    }
     public DataSource resolveJdbcDataSource(String connectionRef) {
-        var definition = connectionDefinitionRepository.findActiveRequiredByName(connectionRef);
-        if (!definition.connectionType.isJdbc()) {
-            throw new IllegalArgumentException("Connection type is not JDBC: " + definition.connectionType);
-        }
-        return dataSources.computeIfAbsent(definition.id, ignored -> createJdbcDataSource(definition));
+        return resolveJdbcTarget(connectionRef).dataSource();
     }
     public void testJdbcConnection(String connectionName, String configurationJson) {
         var definition = new ConnectionDefinition();
@@ -116,5 +118,14 @@ public class ConnectionPoolManager {
             return defaultValue;
         }
         return Integer.parseInt(String.valueOf(value));
+    }
+    private ConnectionDefinition findRequiredJdbcDefinition(String connectionRef) {
+        var definition = connectionDefinitionRepository.findActiveRequiredByName(connectionRef);
+        if (!definition.connectionType.isJdbc()) {
+            throw new IllegalArgumentException("Connection type is not JDBC: " + definition.connectionType);
+        }
+        return definition;
+    }
+    public record JdbcConnectionTarget(DataSource dataSource, ConnectionType connectionType) {
     }
 }
