@@ -8,7 +8,7 @@ import {
 } from '@integration-hub/core/providers';
 import { ManagedEditorFormActionsComponent, ManagedEditorHeaderComponent, ManagedEditorOverviewComponent, ManagedEditorReadonlyActionsComponent, ManagedEditorSectionComponent, ManagedEditorShellComponent } from '@integration-hub/shared/ui';
 import { ReaderFormModel } from '../../reader.models';
-import { ReaderTypeFormHostComponent } from '../reader-type-form/reader-type-form-host.component';
+import { ReaderTypeFormHostComponent } from '../reader-type-form/reader-type-form-host/reader-type-form-host.component';
 
 @Component({
   selector: 'ih-reader-editor',
@@ -24,55 +24,6 @@ import { ReaderTypeFormHostComponent } from '../reader-type-form/reader-type-for
     ManagedEditorShellComponent,
     ReaderTypeFormHostComponent,
   ],
-  template: `
-    <ih-managed-editor-shell (close)="close.emit()">
-      <ih-managed-editor-header
-        editor-header
-        [titleKey]="titleKey()"
-        [subtitle]="providerLabel()"
-      />
-
-      <ih-managed-editor-readonly-actions
-        editor-readonly-actions
-        [readonly]="readonly()"
-        [canEdit]="canEdit()"
-        [active]="form().active"
-        (edit)="edit.emit()"
-        (toggleActive)="toggleActive.emit()"
-      />
-
-      <form editor-form class="editor-form" (ngSubmit)="!readonly() && save.emit()">
-        <ih-managed-editor-overview
-          [sectionTitleKey]="'readers.definitionProfile'"
-          [fieldPrefix]="'reader'"
-          [name]="form().name"
-          [selectedType]="form().readerType"
-          [active]="form().active"
-          [readonly]="readonly()"
-          [providerOptions]="providerOptions()"
-          (nameChange)="patchForm.emit({ name: $event })"
-          (typeChange)="changeReaderType($event)"
-          (activeChange)="patchForm.emit({ active: $event })"
-        />
-
-        <ih-managed-editor-section [eyebrowKey]="'ui.provider'" [title]="providerLabel()">
-          <ih-reader-type-form-host
-            [readerType]="form().readerType"
-            [draft]="draft()"
-            [readonly]="readonly()"
-            (patchDraft)="patchDraft.emit($event)"
-          />
-        </ih-managed-editor-section>
-
-        <ih-managed-editor-form-actions
-          [readonly]="readonly()"
-          [saving]="saving()"
-          [entityExists]="!!form().id"
-          (cancel)="cancel.emit()"
-        />
-      </form>
-    </ih-managed-editor-shell>
-  `,
   styles: [`
     .editor-form {
       display: grid;
@@ -86,6 +37,7 @@ import { ReaderTypeFormHostComponent } from '../reader-type-form/reader-type-for
       }
     }
   `],
+    templateUrl: './reader-editor.component.html'
 })
 export class ReaderEditorComponent {
   readonly form = input.required<ReaderFormModel>();

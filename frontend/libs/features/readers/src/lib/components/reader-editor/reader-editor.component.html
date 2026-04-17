@@ -1,0 +1,47 @@
+<ih-managed-editor-shell (close)="close.emit()">
+      <ih-managed-editor-header
+        editor-header
+        [titleKey]="titleKey()"
+        [subtitle]="providerLabel()"
+      />
+
+      <ih-managed-editor-readonly-actions
+        editor-readonly-actions
+        [readonly]="readonly()"
+        [canEdit]="canEdit()"
+        [active]="form().active"
+        (edit)="edit.emit()"
+        (toggleActive)="toggleActive.emit()"
+      />
+
+      <form editor-form class="editor-form" (ngSubmit)="!readonly() && save.emit()">
+        <ih-managed-editor-overview
+          [sectionTitleKey]="'readers.definitionProfile'"
+          [fieldPrefix]="'reader'"
+          [name]="form().name"
+          [selectedType]="form().readerType"
+          [active]="form().active"
+          [readonly]="readonly()"
+          [providerOptions]="providerOptions()"
+          (nameChange)="patchForm.emit({ name: $event })"
+          (typeChange)="changeReaderType($event)"
+          (activeChange)="patchForm.emit({ active: $event })"
+        />
+
+        <ih-managed-editor-section [eyebrowKey]="'ui.provider'" [title]="providerLabel()">
+          <ih-reader-type-form-host
+            [readerType]="form().readerType"
+            [draft]="draft()"
+            [readonly]="readonly()"
+            (patchDraft)="patchDraft.emit($event)"
+          />
+        </ih-managed-editor-section>
+
+        <ih-managed-editor-form-actions
+          [readonly]="readonly()"
+          [saving]="saving()"
+          [entityExists]="!!form().id"
+          (cancel)="cancel.emit()"
+        />
+      </form>
+    </ih-managed-editor-shell>

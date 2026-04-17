@@ -1,0 +1,59 @@
+@if (execution()) {
+      <div class="tab-body">
+        <section class="form-section">
+          <div class="section-header">
+            <p class="section-eyebrow">{{ i18n.t('ui.overview') }}</p>
+            <h4>{{ i18n.t('executions.detail') }}</h4>
+          </div>
+
+          <div class="detail-grid">
+            <div><strong>{{ i18n.t('executions.processDefinitionId') }}</strong>: {{ execution()!.processDefinitionId }}</div>
+            <div><strong>{{ i18n.t('common.status') }}</strong>: {{ statusLabel(execution()!.status) }}</div>
+            <div><strong>{{ i18n.t('executions.triggerSource') }}</strong>: {{ triggerLabel(execution()!.triggerSource) }}</div>
+            <div><strong>{{ i18n.t('executions.sourceExecutionId') }}</strong>: {{ execution()!.sourceExecutionId ?? '-' }}</div>
+            <div><strong>{{ i18n.t('executions.startedAt') }}</strong>: {{ formatDate(execution()!.startedAt) }}</div>
+            <div><strong>{{ i18n.t('executions.finishedAt') }}</strong>: {{ formatDate(execution()!.finishedAt) }}</div>
+          </div>
+        </section>
+
+        @if (failedExecutionSummary()) {
+          <section class="form-section form-section--error">
+            <div class="section-header">
+              <p class="section-eyebrow">{{ i18n.t('executions.failureSummary') }}</p>
+              <h4>{{ failedExecutionSummary()!.title }}</h4>
+            </div>
+            <p class="section-copy">{{ failedExecutionSummary()!.summary }}</p>
+          </section>
+        }
+
+        @if (selectedTaskSummary()) {
+          <section class="form-section">
+            <div class="section-header">
+              <p class="section-eyebrow">{{ i18n.t('executions.selectedTaskSummary') }}</p>
+              <h4>{{ selectedTask() ? selectedTask()!.taskType : i18n.t('executions.tasksTitle') }}</h4>
+            </div>
+
+            <div class="summary-metrics">
+              <span class="summary-pill summary-pill--success">Validos {{ selectedTaskSummary()!.validCount ?? '-' }}</span>
+              <span class="summary-pill summary-pill--warning">Omitidos {{ selectedTaskSummary()!.skippedCount ?? '-' }}</span>
+              @if (selectedTaskSummary()!.writtenCount != null) {
+                <span class="summary-pill summary-pill--info">Escritos {{ selectedTaskSummary()!.writtenCount }}</span>
+              }
+              <span class="summary-pill">Archivos {{ selectedTaskSummary()!.files.length || selectedTaskSummary()!.completedFilesCount || 0 }}</span>
+            </div>
+
+            <p class="section-copy">{{ selectedTaskSummary()!.summary }}</p>
+          </section>
+        }
+
+        @if (execution()!.details) {
+          <section class="form-section">
+            <div class="section-header">
+              <p class="section-eyebrow">{{ i18n.t('executions.details') }}</p>
+              <h4>{{ i18n.t('executions.details') }}</h4>
+            </div>
+            <pre>{{ execution()!.details }}</pre>
+          </section>
+        }
+      </div>
+    }

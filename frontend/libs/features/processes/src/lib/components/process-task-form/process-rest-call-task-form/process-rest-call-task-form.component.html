@@ -1,0 +1,246 @@
+<div class="task-grid">
+      <mat-form-field>
+        <mat-label>{{ i18n.t('ui.modeLabel') }}</mat-label>
+        <mat-select [disabled]="readonly()" [ngModel]="draft().mode" (ngModelChange)="updateDraft({ mode: $event })">
+          <mat-option value="per-record">{{ i18n.t('ui.restMode.perRecord') }}</mat-option>
+          <mat-option value="single-request">{{ i18n.t('ui.restMode.singleRequest') }}</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field>
+        <mat-label>{{ i18n.t('ui.method') }}</mat-label>
+        <mat-select [disabled]="readonly()" [ngModel]="draft().method" (ngModelChange)="updateDraft({ method: $event })">
+          @for (method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']; track method) {
+            <mat-option [value]="method">{{ method }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field>
+        <mat-label>{{ i18n.t('ui.timeoutSeconds') }}</mat-label>
+        <input matInput [disabled]="readonly()" [ngModel]="draft().timeoutSeconds" (ngModelChange)="updateDraft({ timeoutSeconds: $event })" />
+      </mat-form-field>
+    </div>
+
+    <section class="rest-section ih-form-card">
+      <div class="rest-section__header">
+        <p class="section-eyebrow">{{ i18n.t('ui.restUrlSection') }}</p>
+        <h5>{{ i18n.t('ui.restUrlSectionHint') }}</h5>
+      </div>
+
+      <mat-form-field class="full-width">
+        <mat-label>{{ i18n.t('ui.restBaseUrl') }}</mat-label>
+        <input matInput [disabled]="readonly()" [ngModel]="draft().baseUrl" (ngModelChange)="updateDraft({ baseUrl: $event })" />
+      </mat-form-field>
+
+      <mat-form-field class="full-width">
+        <mat-label>{{ i18n.t('ui.restResolvedUrl') }}</mat-label>
+        <input matInput [value]="resolvedUrl()" readonly />
+      </mat-form-field>
+    </section>
+
+    <mat-tab-group animationDuration="0ms" class="rest-tabs">
+      <mat-tab [label]="i18n.t('ui.restQueryParameters')">
+        <div class="rest-tab-content">
+          <ih-process-rest-path-builder
+            [segments]="pathSegmentEntries()"
+            [sourceGroups]="groupedSources()"
+            [readonly]="readonly()"
+            (segmentsChange)="updatePathSegments($event)"
+          />
+
+          <ih-process-task-binding-board
+            [entries]="queryEntries()"
+            [sourceGroups]="groupedSources()"
+            [readonly]="readonly()"
+            [showJdbcType]="false"
+            [showDirection]="false"
+            [titleKey]="'ui.restQueryParameters'"
+            [hintKey]="'ui.restQueryParametersHint'"
+            [nameLabelKey]="'ui.restQueryParamName'"
+            [addLabelKey]="'ui.restAddQueryParam'"
+            [expressionLabelKey]="'ui.restValueTemplate'"
+            (entriesChange)="updateSectionEntries('queryParameters', $event)"
+            (requestAddEntry)="addBindingEntry('queryParameters')"
+          />
+        </div>
+      </mat-tab>
+
+      <mat-tab [label]="i18n.t('ui.restAuthSection')">
+        <div class="rest-tab-content">
+          <section class="rest-section ih-form-card">
+            <div class="rest-section__header">
+              <p class="section-eyebrow">{{ i18n.t('ui.restAuthSection') }}</p>
+              <h5>{{ i18n.t('ui.restAuthSectionHint') }}</h5>
+            </div>
+
+            <mat-form-field>
+              <mat-label>{{ i18n.t('ui.authType') }}</mat-label>
+              <mat-select [disabled]="readonly()" [ngModel]="draft().authType" (ngModelChange)="updateDraft({ authType: $event })">
+                <mat-option value="">{{ i18n.t('ui.authNone') }}</mat-option>
+                <mat-option value="basic">{{ i18n.t('ui.authBasic') }}</mat-option>
+                <mat-option value="bearer">{{ i18n.t('ui.authBearer') }}</mat-option>
+                <mat-option value="login-request">{{ i18n.t('ui.authLoginRequest') }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            @if (draft().authType === 'basic') {
+              <div class="task-grid">
+                <mat-form-field>
+                  <mat-label>{{ i18n.t('ui.username') }}</mat-label>
+                  <input matInput [disabled]="readonly()" [ngModel]="draft().username" (ngModelChange)="updateDraft({ username: $event })" />
+                </mat-form-field>
+
+                <mat-form-field>
+                  <mat-label>{{ i18n.t('ui.password') }}</mat-label>
+                  <input matInput [disabled]="readonly()" [ngModel]="draft().password" (ngModelChange)="updateDraft({ password: $event })" />
+                </mat-form-field>
+              </div>
+            }
+
+            @if (draft().authType === 'bearer') {
+              <mat-form-field class="full-width">
+                <mat-label>{{ i18n.t('ui.bearerToken') }}</mat-label>
+                <input matInput [disabled]="readonly()" [ngModel]="draft().token" (ngModelChange)="updateDraft({ token: $event })" />
+              </mat-form-field>
+            }
+
+            @if (draft().authType === 'login-request') {
+              <div class="task-grid">
+                <mat-form-field>
+                  <mat-label>{{ i18n.t('ui.loginUrl') }}</mat-label>
+                  <input matInput [disabled]="readonly()" [ngModel]="draft().loginUrl" (ngModelChange)="updateDraft({ loginUrl: $event })" />
+                </mat-form-field>
+
+                <mat-form-field>
+                  <mat-label>{{ i18n.t('ui.loginMethod') }}</mat-label>
+                  <mat-select [disabled]="readonly()" [ngModel]="draft().loginMethod" (ngModelChange)="updateDraft({ loginMethod: $event })">
+                    @for (method of ['POST', 'PUT', 'PATCH']; track method) {
+                      <mat-option [value]="method">{{ method }}</mat-option>
+                    }
+                  </mat-select>
+                </mat-form-field>
+
+                <mat-form-field>
+                  <mat-label>{{ i18n.t('ui.tokenPath') }}</mat-label>
+                  <input matInput [disabled]="readonly()" [ngModel]="draft().tokenPath" (ngModelChange)="updateDraft({ tokenPath: $event })" />
+                </mat-form-field>
+              </div>
+
+              <mat-form-field class="full-width">
+                <mat-label>{{ i18n.t('ui.headersJson') }}</mat-label>
+                <textarea matInput [disabled]="readonly()" [ngModel]="draft().loginHeadersJson" (ngModelChange)="updateDraft({ loginHeadersJson: $event })"></textarea>
+              </mat-form-field>
+
+              <mat-form-field class="full-width">
+                <mat-label>{{ i18n.t('ui.loginBody') }}</mat-label>
+                <textarea matInput [disabled]="readonly()" [ngModel]="draft().loginBodyTemplate" (ngModelChange)="updateDraft({ loginBodyTemplate: $event })"></textarea>
+              </mat-form-field>
+            }
+          </section>
+        </div>
+      </mat-tab>
+
+      <mat-tab [label]="i18n.t('ui.restHeaders')">
+        <div class="rest-tab-content">
+          <ih-process-task-binding-board
+            [entries]="headerEntries()"
+            [sourceGroups]="groupedSources()"
+            [readonly]="readonly()"
+            [showJdbcType]="false"
+            [showDirection]="false"
+            [titleKey]="'ui.restHeaders'"
+            [hintKey]="'ui.restHeadersHint'"
+            [nameLabelKey]="'ui.restHeaderName'"
+            [addLabelKey]="'ui.restAddHeader'"
+            [expressionLabelKey]="'ui.restValueTemplate'"
+            (entriesChange)="updateSectionEntries('headerMappings', $event)"
+            (requestAddEntry)="addBindingEntry('headerMappings')"
+          />
+        </div>
+      </mat-tab>
+
+      <mat-tab [label]="i18n.t('ui.body')">
+        <div class="rest-tab-content">
+          <section class="rest-section ih-form-card">
+            <div class="rest-section__header">
+              <p class="ih-section-eyebrow">{{ i18n.t('ui.restBodyTemplate') }}</p>
+              <h5>{{ i18n.t('ui.restBodyTemplateHint') }}</h5>
+            </div>
+
+            <div class="rest-body-workspace">
+              <div class="rest-body-editor">
+                <mat-form-field class="full-width">
+                  <mat-label>{{ i18n.t('ui.restBodyJsonTemplate') }}</mat-label>
+                  <textarea
+                    #bodyTemplateInput
+                    matInput
+                    [disabled]="readonly()"
+                    [ngModel]="draft().bodyTemplate"
+                    (ngModelChange)="handleBodyTemplateChange(bodyTemplateInput, $event)"
+                    (click)="handleBodyInteraction(bodyTemplateInput)"
+                    (keyup)="handleBodyInteraction(bodyTemplateInput)"
+                    (select)="handleBodyInteraction(bodyTemplateInput)"
+                    (keydown)="handleBodyKeydown($event, bodyTemplateInput)"
+                    (blur)="handleBodyBlur()"
+                  ></textarea>
+                </mat-form-field>
+
+                @if (bodyAutocompleteVisible()) {
+                    <section class="rest-body-autocomplete ih-panel-surface">
+                    @if (bodyAutocompleteGroups().length) {
+                      @for (group of bodyAutocompleteGroups(); track group.key) {
+                        <div class="rest-body-autocomplete__group">
+                          <header class="rest-body-autocomplete__title">{{ i18n.t(group.key) }}</header>
+                          <div class="rest-body-autocomplete__items">
+                            @for (item of group.items; track item.key) {
+                              <button
+                                type="button"
+                                class="rest-body-autocomplete__option ih-token-chip"
+                                [disabled]="readonly()"
+                                (mousedown)="insertBodyAutocomplete(item)"
+                              >
+                                {{ item.label }}
+                              </button>
+                            }
+                          </div>
+                        </div>
+                      }
+                    } @else {
+                      <div class="rest-body-autocomplete__empty">{{ i18n.t('ui.restBodyAutocompleteEmpty') }}</div>
+                    }
+                  </section>
+                }
+              </div>
+
+              <aside class="rest-token-panel ih-soft-panel">
+                <div class="rest-token-panel__header">
+                  <p class="ih-section-eyebrow">{{ i18n.t('ui.restBodyTokens') }}</p>
+                  <h5>{{ i18n.t('ui.restBodyTokensHint') }}</h5>
+                </div>
+
+                <div class="rest-token-groups">
+                  @for (group of groupedSources(); track group.key) {
+                    <section class="rest-token-group">
+                      <header class="rest-token-group__title">{{ i18n.t(group.key) }}</header>
+                      <div class="rest-token-group__items">
+                        @for (item of group.items; track item.key) {
+                          <button
+                            type="button"
+                            class="rest-token-chip ih-token-chip"
+                            [disabled]="readonly()"
+                            (click)="insertBodyToken(item.key)"
+                          >
+                            {{ item.label }}
+                          </button>
+                        }
+                      </div>
+                    </section>
+                  }
+                </div>
+              </aside>
+            </div>
+          </section>
+        </div>
+      </mat-tab>
+    </mat-tab-group>

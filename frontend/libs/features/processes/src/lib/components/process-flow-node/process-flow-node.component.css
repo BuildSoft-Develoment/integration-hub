@@ -1,0 +1,174 @@
+.task-node {
+        --task-node-accent: var(--ih-accent-strong);
+        position: relative;
+        display: grid;
+        gap: 0.26rem;
+        align-content: start;
+        box-sizing: border-box;
+        height: 100%;
+        padding: 0.58rem 0.64rem 1.1rem 0.72rem;
+        border-radius: 16px;
+        border: 1px solid var(--ih-border);
+        background:
+          radial-gradient(circle at top right, color-mix(in srgb, var(--task-node-accent) 18%, transparent), transparent 45%),
+          color-mix(in srgb, var(--ih-surface-alt) 94%, transparent);
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+        min-height: 92px;
+        min-width: 0;
+        overflow: visible;
+        transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+      }
+      .task-node--expanded {
+        padding-bottom: 1.28rem;
+      }
+      .task-node:hover {
+        transform: translateY(-1px);
+      }
+      .task-node__header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.6rem;
+      }
+      .task-node__meta {
+        font-size: 0.62rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ih-text-soft);
+      }
+      .task-node__edit {
+        display: inline-grid;
+        place-items: center;
+        width: 1.48rem;
+        height: 1.48rem;
+        border: 0;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--task-node-accent) 10%, transparent);
+        color: var(--task-node-accent);
+        cursor: pointer;
+        transition: background-color 120ms ease, transform 120ms ease;
+      }
+      .task-node__edit:hover {
+        background: color-mix(in srgb, var(--task-node-accent) 18%, transparent);
+        transform: translateY(-1px);
+      }
+      .task-node__edit svg {
+        width: 0.82rem;
+        height: 0.82rem;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .task-node__identity {
+        display: flex;
+        align-items: center;
+        gap: 0.32rem;
+        min-width: 0;
+      }
+      .task-node__icon {
+        display: inline-grid;
+        place-items: center;
+        width: 1.28rem;
+        height: 1.28rem;
+        border-radius: 0.42rem;
+        color: var(--task-node-accent);
+        background: color-mix(in srgb, var(--task-node-accent) 10%, transparent);
+      }
+      .task-node__icon svg {
+        width: 0.76rem;
+        height: 0.76rem;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .task-node__badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.12rem 0.34rem;
+        border-radius: 999px;
+        font-size: 0.56rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        background: color-mix(in srgb, var(--task-node-accent) 12%, transparent);
+        color: var(--task-node-accent);
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .task-node__title-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.38rem;
+        align-items: center;
+        min-width: 0;
+      }
+      .task-node__title {
+        font-size: 0.78rem;
+        line-height: 1.12;
+        overflow-wrap: anywhere;
+      }
+      .task-node__expand {
+        display: inline-grid;
+        place-items: center;
+        width: 1.22rem;
+        height: 1.22rem;
+        padding: 0;
+        border: 0;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--task-node-accent) 8%, transparent);
+        color: var(--task-node-accent);
+        cursor: pointer;
+        transition: background-color 120ms ease;
+      }
+      .task-node__expand:hover {
+        background: color-mix(in srgb, var(--task-node-accent) 14%, transparent);
+      }
+      .task-node__expand svg {
+        width: 0.72rem;
+        height: 0.72rem;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 1.9;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        transition: transform 120ms ease;
+      }
+      .task-node__expand svg.is-open {
+        transform: rotate(180deg);
+      }
+      .task-node__summary-wrap {
+        padding-top: 0.08rem;
+        border-top: 1px dashed color-mix(in srgb, var(--task-node-accent) 18%, var(--ih-border));
+      }
+      .task-node__summary {
+        color: var(--ih-text-soft);
+        line-height: 1.25;
+        font-size: 0.68rem;
+        overflow-wrap: anywhere;
+        display: block;
+      }
+      .task-node--source {
+        --task-node-accent: #0f766e;
+      }
+      .task-node--database {
+        --task-node-accent: #1d4ed8;
+      }
+      .task-node--procedure {
+        --task-node-accent: #7c3aed;
+      }
+      .task-node--function {
+        --task-node-accent: #9333ea;
+      }
+      .task-node--integration {
+        --task-node-accent: #ea580c;
+      }
+      .task-node--notification {
+        --task-node-accent: #b45309;
+      }

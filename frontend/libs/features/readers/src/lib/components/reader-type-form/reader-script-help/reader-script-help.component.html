@@ -1,0 +1,34 @@
+<mat-expansion-panel class="script-help-panel">
+      <mat-expansion-panel-header>
+        <mat-panel-title>{{ i18n.t('ui.legendExamples') }}</mat-panel-title>
+        <mat-panel-description>{{ i18n.t('ui.script') }}</mat-panel-description>
+      </mat-expansion-panel-header>
+
+      <div class="script-help-body">
+        <p class="ih-muted script-intro">{{ i18n.t('ui.scriptHelpIntro') }}</p>
+
+        <section class="script-help-section">
+          <h5>{{ i18n.t('ui.scriptReferenceTitle') }}</h5>
+          <div class="script-reference-grid">
+            @for (item of referenceKeys; track item) {
+              <div class="script-reference-card">
+                <strong>{{ i18n.t('ui.scriptReference.' + item + '.title') }}</strong>
+                <p>{{ i18n.t('ui.scriptReference.' + item + '.body') }}</p>
+              </div>
+            }
+          </div>
+        </section>
+
+        <section class="script-help-section">
+          <h5>{{ i18n.t('ui.legendExamples') }}</h5>
+          <div class="script-example-grid">
+            @for (example of examples; track example.titleKey) {
+              <div class="script-example-card">
+                <strong>{{ i18n.t(example.titleKey) }}</strong>
+                <pre>{{ example.code }}</pre>
+              </div>
+            }
+          </div>
+        </section>
+      </div>
+    </mat-expansion-panel>

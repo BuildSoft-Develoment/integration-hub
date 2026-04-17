@@ -1,0 +1,38 @@
+<div class="task-grid">
+      <mat-form-field>
+        <mat-label>{{ i18n.t('ui.sourceDefinition') }}</mat-label>
+        <mat-select [disabled]="readonly()" [ngModel]="draft().sourceDefinitionId" (ngModelChange)="updateDraft({ sourceDefinitionId: $event })">
+          <mat-option [value]="null">{{ i18n.t('ui.selectSource') }}</mat-option>
+          @for (source of sources(); track source.id) {
+            <mat-option [value]="source.id">{{ source.id }} - {{ source.name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field>
+        <mat-label>{{ i18n.t('ui.readerDefinition') }}</mat-label>
+        <mat-select [disabled]="readonly()" [ngModel]="draft().readerDefinitionId" (ngModelChange)="updateDraft({ readerDefinitionId: $event })">
+          <mat-option [value]="null">{{ i18n.t('ui.selectReader') }}</mat-option>
+          @for (reader of filteredReaders(); track reader.id) {
+            <mat-option [value]="reader.id">{{ reader.id }} - {{ reader.name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    </div>
+
+    @if (selectedSourceHint()) {
+      <div class="task-note">
+        {{ i18n.t('ui.fileReadCompatibilityHint', { value: selectedSourceHint() }) }}
+      </div>
+    }
+
+    @if (showReaderWarning()) {
+      <div class="task-note task-note--warning">
+        {{ i18n.t('ui.fileReadReaderMismatch') }}
+      </div>
+    }
+
+    <mat-form-field class="full-width">
+      <mat-label>{{ i18n.t('ui.sourceVariablesText') }}</mat-label>
+      <textarea matInput [disabled]="readonly()" [ngModel]="draft().sourceVariablesText" (ngModelChange)="updateDraft({ sourceVariablesText: $event })"></textarea>
+    </mat-form-field>

@@ -1,0 +1,63 @@
+<section class="panel-card ih-drawer-editor">
+      <div class="panel-body ih-drawer-editor__body">
+        <div class="panel-topbar">
+          <button mat-stroked-button type="button" (click)="close.emit()">
+            {{ i18n.t('common.close') }}
+          </button>
+        </div>
+
+        @if (schedule()) {
+          <div class="profile-stack">
+            <div class="profile-header">
+              <div class="profile-avatar">{{ modeLabel().slice(0, 1).toUpperCase() }}</div>
+              <div class="profile-copy">
+                <h3 class="profile-name">{{ i18n.t('schedules.detail') }}</h3>
+                <p class="profile-subtitle">{{ modeLabel() }}</p>
+              </div>
+            </div>
+          </div>
+
+          <section class="form-section">
+            <div class="section-header">
+              <p class="section-eyebrow">{{ i18n.t('ui.overview') }}</p>
+              <h4>{{ i18n.t('schedules.detail') }}</h4>
+            </div>
+
+            <div class="detail-grid">
+              <div><strong>{{ i18n.t('common.status') }}</strong>: {{ schedule()!.active ? i18n.t('status.active') : i18n.t('status.inactive') }}</div>
+              <div><strong>{{ i18n.t('processes.mode') }}</strong>: {{ schedule()!.scheduled ? i18n.t('status.scheduled') : i18n.t('status.manual') }}</div>
+              <div><strong>{{ i18n.t('schedules.frequency') }}</strong>: {{ schedule()!.scheduleEvery || '-' }}</div>
+              <div><strong>{{ i18n.t('schedules.nextRun') }}</strong>: {{ formatDate(schedule()!.nextRunAt) }}</div>
+              <div><strong>{{ i18n.t('schedules.lastRun') }}</strong>: {{ formatDate(schedule()!.lastRunAt) }}</div>
+            </div>
+
+            @if (schedule()!.description) {
+              <div class="detail-block">
+                <strong>{{ i18n.t('processes.description') }}</strong>
+                <p>{{ schedule()!.description }}</p>
+              </div>
+            }
+          </section>
+
+          @if (canRun()) {
+            <section class="actions-row">
+              <button mat-flat-button type="button" [disabled]="executing()" (click)="run.emit()">
+                {{ executing() ? i18n.t('processes.running') : i18n.t('processes.run') }}
+              </button>
+            </section>
+          } @else if (showManualGuidance()) {
+            <section class="manual-notice" aria-live="polite">
+              <strong>{{ i18n.t('schedules.manualNoticeTitle') }}</strong>
+              <p>{{ i18n.t('schedules.manualNoticeBody') }}</p>
+              <div class="actions-row">
+                <button mat-stroked-button type="button" (click)="openProcesses.emit()">
+                  {{ i18n.t('schedules.openProcesses') }}
+                </button>
+              </div>
+            </section>
+          }
+        } @else {
+          <div class="empty-state ih-muted">{{ i18n.t('schedules.emptySelection') }}</div>
+        }
+      </div>
+    </section>

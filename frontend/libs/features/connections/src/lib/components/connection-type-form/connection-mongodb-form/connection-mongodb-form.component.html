@@ -1,0 +1,21 @@
+<div class="form-grid">
+      <mat-form-field class="field-span-2">
+        <mat-label>{{ i18n.t('connections.mongoConnectionString') }}</mat-label>
+        <textarea matInput rows="4" [disabled]="readonly()" [ngModel]="draft().connectionString || ''" (ngModelChange)="update('connectionString', $event)" name="mongoConnectionString"></textarea>
+      </mat-form-field>
+
+      <mat-form-field>
+        <mat-label>{{ i18n.t('connections.database') }}</mat-label>
+        <input matInput [disabled]="readonly()" [ngModel]="draft().database || ''" (ngModelChange)="update('database', $event)" name="mongoDatabase" />
+      </mat-form-field>
+
+      <mat-form-field>
+        <mat-label>{{ i18n.t('connections.connectTimeoutMillis') }}</mat-label>
+        <input matInput [disabled]="readonly()" [ngModel]="draft().connectTimeoutMillis || ''" (ngModelChange)="update('connectTimeoutMillis', $event)" name="mongoConnectTimeoutMillis" />
+      </mat-form-field>
+
+      <mat-form-field>
+        <mat-label>{{ i18n.t('connections.readTimeoutMillis') }}</mat-label>
+        <input matInput [disabled]="readonly()" [ngModel]="draft().readTimeoutMillis || ''" (ngModelChange)="update('readTimeoutMillis', $event)" name="mongoReadTimeoutMillis" />
+      </mat-form-field>
+    </div>

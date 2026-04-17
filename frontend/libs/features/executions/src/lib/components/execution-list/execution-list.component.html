@@ -1,0 +1,50 @@
+<div class="list-card ih-catalog-list">
+      <div class="table-head ih-catalog-table-head">
+        <span>{{ i18n.t('common.name') }}</span>
+        <span>{{ i18n.t('common.status') }}</span>
+        <span>{{ i18n.t('executions.finishedAt') }}</span>
+      </div>
+
+      <div class="table-body ih-catalog-table-body ih-thin-scroll">
+        @for (execution of executions(); track execution.id) {
+          <button
+            type="button"
+            class="table-row ih-catalog-table-row"
+            [class.table-row--selected]="selectedExecutionId() === execution.id"
+            [class.ih-catalog-table-row--selected]="selectedExecutionId() === execution.id"
+            (click)="selectExecution.emit(execution)"
+          >
+            <div class="row-primary ih-catalog-row-primary">
+              <div class="row-avatar ih-catalog-row-avatar">{{ execution.processName.slice(0, 1).toUpperCase() }}</div>
+              <div class="row-copy ih-catalog-row-copy">
+                <strong>{{ execution.processName }}</strong>
+                <small>ID {{ execution.id }} · Proceso {{ execution.processDefinitionId }}</small>
+                @if (execution.sourceExecutionId) {
+                  <small class="row-linkage">Origen #{{ execution.sourceExecutionId }}</small>
+                }
+              </div>
+            </div>
+
+            <div class="row-type ih-catalog-row-meta">
+              <mat-chip-set>
+                <mat-chip>{{ statusLabel(execution.status) }}</mat-chip>
+                @if (execution.triggerSource) {
+                  <mat-chip>{{ triggerLabel(execution.triggerSource) }}</mat-chip>
+                }
+              </mat-chip-set>
+            </div>
+
+            <div class="row-status ih-catalog-row-meta">
+              <div class="row-dates">
+                <span>{{ formatDate(execution.finishedAt || execution.startedAt) }}</span>
+                <small>{{ i18n.t('executions.startedAt') }} {{ formatDate(execution.startedAt) }}</small>
+              </div>
+            </div>
+          </button>
+        } @empty {
+          <div class="empty-state ih-catalog-empty-state ih-muted">{{ i18n.t('executions.noData') }}</div>
+        }
+      </div>
+
+      <mat-paginator class="list-paginator ih-catalog-paginator" [length]="totalLength()" [pageIndex]="pageIndex()" [pageSize]="pageSize()" [pageSizeOptions]="pageSizeOptions()" [hidePageSize]="false" [showFirstLastButtons]="false" (page)="onPageChange($event)" />
+    </div>

@@ -1,0 +1,43 @@
+<section class="field-section">
+      <div class="field-stack__header">
+        <strong>{{ i18n.t('ui.fieldDefinitions', { count: fields().length }) }}</strong>
+
+        <div class="field-stack__actions">
+          @if (fields().length > 1) {
+            <button mat-button type="button" (click)="expandAll()">
+              {{ i18n.t('common.expandAll') }}
+            </button>
+            <button mat-button type="button" (click)="collapseAll()">
+              {{ i18n.t('common.collapseAll') }}
+            </button>
+          }
+          @if (!readonly()) {
+            <button mat-stroked-button type="button" (click)="addField()">
+              {{ i18n.t('ui.addField') }}
+            </button>
+          }
+        </div>
+      </div>
+
+      @if (fields().length) {
+        <mat-accordion class="field-accordion" [multi]="true">
+          @for (field of fields(); track $index) {
+            <ih-reader-field-definition-panel
+              [index]="$index"
+              [field]="field"
+              [variant]="variant()"
+              [readonly]="readonly()"
+              [expanded]="expandedState()[$index]"
+              [active]="activeIndex() === $index"
+              (opened)="setExpanded($index, true)"
+              (closed)="setExpanded($index, false)"
+              (activated)="setActive($index)"
+              (update)="updateField($index, $event)"
+              (remove)="removeField($index)"
+            />
+          }
+        </mat-accordion>
+      } @else {
+        <div class="field-empty ih-muted">{{ i18n.t('ui.addFieldEmpty') }}</div>
+      }
+    </section>

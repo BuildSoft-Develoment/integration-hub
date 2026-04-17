@@ -1,0 +1,50 @@
+<section class="toolbar-shell ih-catalog-toolbar">
+      <div class="toolbar-heading ih-catalog-toolbar__heading">
+        <div class="toolbar-copy ih-catalog-toolbar__copy">
+          <h2 class="ih-section-title">{{ i18n.t('connections.title') }}</h2>
+          <p class="ih-muted">{{ i18n.t('connections.subtitle') }}</p>
+        </div>
+
+        @if (canEdit()) {
+          <button mat-flat-button type="button" class="create-button ih-catalog-action" (click)="create.emit()">
+            {{ i18n.t('connections.create') }}
+          </button>
+        }
+      </div>
+
+      <div class="toolbar-filters ih-catalog-toolbar__filters">
+        <mat-form-field class="toolbar-search">
+          <mat-label>{{ i18n.t('connections.search') }}</mat-label>
+          <input
+            matInput
+            [ngModel]="search()"
+            (ngModelChange)="searchChange.emit($event)"
+          />
+        </mat-form-field>
+
+        <mat-form-field class="toolbar-select">
+          <mat-label>{{ i18n.t('common.type') }}</mat-label>
+          <mat-select
+            [ngModel]="typeFilter()"
+            (ngModelChange)="typeFilterChange.emit($event)"
+          >
+            <mat-option value="ALL">{{ i18n.t('connections.allTypes') }}</mat-option>
+            @for (provider of providerOptions(); track provider.type) {
+              <mat-option [value]="provider.type">{{ provider.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field class="toolbar-select">
+          <mat-label>{{ i18n.t('common.status') }}</mat-label>
+          <mat-select
+            [ngModel]="statusFilter()"
+            (ngModelChange)="statusFilterChange.emit($event)"
+          >
+            <mat-option value="ALL">{{ i18n.t('sources.allStatuses') }}</mat-option>
+            <mat-option value="ACTIVE">{{ i18n.t('status.active') }}</mat-option>
+            <mat-option value="INACTIVE">{{ i18n.t('status.inactive') }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+    </section>

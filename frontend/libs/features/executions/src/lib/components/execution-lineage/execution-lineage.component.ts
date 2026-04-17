@@ -9,74 +9,6 @@ import { formatTriggerSourceLabel } from '../../execution-detail.utils';
   selector: 'ih-execution-lineage',
   standalone: true,
   imports: [CommonModule, MatButtonModule],
-  template: `
-    <section class="lineage-shell">
-      <div class="lineage-breadcrumb">
-        @for (entry of navigationStack(); track entry.executionId; let index = $index) {
-          <button type="button" class="lineage-breadcrumb__link" (click)="openExecution.emit(entry.executionId)">
-            {{ entry.label }}
-          </button>
-          <span class="lineage-breadcrumb__sep">/</span>
-        }
-        <span class="lineage-breadcrumb__current">
-          {{ execution() ? 'Ejecucion ' + execution()!.id : i18n.t('executions.currentExecution') }}
-        </span>
-      </div>
-
-      <div class="lineage-actions">
-        @if (execution()?.sourceExecutionId) {
-          <button mat-stroked-button type="button" (click)="openExecution.emit(execution()!.sourceExecutionId!)">
-            {{ i18n.t('executions.openSourceExecution') }}
-          </button>
-        }
-        @if (navigationStack().length) {
-          <button mat-button type="button" (click)="goBack.emit()">
-            {{ i18n.t('executions.backToPreviousExecution') }}
-          </button>
-        }
-      </div>
-
-      <section class="lineage-card">
-        <div class="lineage-card__header">
-          <p class="section-eyebrow">{{ i18n.t('executions.detail') }}</p>
-          <h4>{{ execution() ? 'Ejecucion actual' : i18n.t('executions.noLineage') }}</h4>
-        </div>
-
-        @if (execution()) {
-          <div class="lineage-record">
-            <strong>#{{ execution()!.id }} · {{ execution()!.processName }}</strong>
-            <span>{{ i18n.t('common.status') }}: {{ statusLabel(execution()!.status) }}</span>
-            <span>{{ i18n.t('executions.triggerSource') }}: {{ triggerLabel(execution()!.triggerSource) }}</span>
-            <span>{{ i18n.t('executions.startedAt') }}: {{ formatDate(execution()!.startedAt) }}</span>
-          </div>
-        }
-      </section>
-
-      <section class="lineage-card">
-        <div class="lineage-card__header">
-          <p class="section-eyebrow">{{ i18n.t('executions.childExecutions') }}</p>
-          <h4>{{ i18n.t('executions.childExecutions') }} ({{ children().length }})</h4>
-        </div>
-
-        <div class="lineage-list">
-          @for (child of children(); track child.id) {
-            <button type="button" class="lineage-list__item" (click)="openExecution.emit(child.id)">
-              <div class="lineage-list__copy">
-                <strong>#{{ child.id }} · {{ child.processName }}</strong>
-                <small>{{ i18n.t('executions.triggerSource') }}: {{ triggerLabel(child.triggerSource) }}</small>
-              </div>
-              <div class="lineage-list__meta">
-                <span>{{ statusLabel(child.status) }}</span>
-                <small>{{ formatDate(child.startedAt) }}</small>
-              </div>
-            </button>
-          } @empty {
-            <div class="empty-inline ih-muted">{{ i18n.t('executions.noChildExecutions') }}</div>
-          }
-        </div>
-      </section>
-    </section>
-  `,
   styles: [`
     .lineage-shell { display:grid; gap:1rem; padding-top:0.25rem; }
     .lineage-breadcrumb { display:flex; flex-wrap:wrap; gap:0.35rem; align-items:center; color:var(--ih-text-soft); }
@@ -96,6 +28,7 @@ import { formatTriggerSourceLabel } from '../../execution-detail.utils';
     .empty-inline { padding:0.35rem 0; }
     @media (max-width: 900px) { .lineage-list__item { grid-template-columns:1fr; } .lineage-list__meta { justify-items:start; text-align:left; } }
   `],
+    templateUrl: './execution-lineage.component.html'
 })
 export class ExecutionLineageComponent {
   readonly i18n = inject(I18nService);

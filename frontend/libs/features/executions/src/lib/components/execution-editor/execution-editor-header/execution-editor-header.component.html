@@ -1,0 +1,24 @@
+@if (execution()) {
+      <div class="profile-stack">
+        <div class="profile-header">
+          <div class="profile-avatar">{{ execution()!.processName.slice(0, 1).toUpperCase() }}</div>
+          <div class="profile-copy">
+            <h3 class="profile-name">{{ execution()!.processName }}</h3>
+            <p class="profile-subtitle">#{{ execution()!.id }} · {{ statusLabel(execution()!.status) }}</p>
+          </div>
+        </div>
+
+        <div class="profile-badges">
+          <span class="profile-badge">{{ triggerLabel(execution()!.triggerSource) }}</span>
+          @if (execution()!.sourceExecutionId) {
+            <span class="profile-badge profile-badge--accent">Origen #{{ execution()!.sourceExecutionId }}</span>
+          }
+          @if (childrenCount()) {
+            <span class="profile-badge">{{ i18n.t('executions.childExecutions') }} {{ childrenCount() }}</span>
+          }
+          @if (failedTaskType()) {
+            <span class="profile-badge profile-badge--danger">{{ i18n.t('executions.failedAtTask') }} {{ failedTaskType() }}</span>
+          }
+        </div>
+      </div>
+    }

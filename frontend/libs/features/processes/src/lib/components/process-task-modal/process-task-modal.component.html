@@ -1,0 +1,41 @@
+<div class="task-modal-backdrop" (click)="close.emit()"></div>
+
+    <section class="task-modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+      <header class="task-modal-header">
+        <div class="task-modal-copy">
+          <p class="section-eyebrow">{{ i18n.t('ui.provider') }}</p>
+          <h3>{{ i18n.t('ui.task', { index: index() + 1 }) }}</h3>
+          <p class="task-modal-summary">{{ taskTypeLabel(task().taskType) }}</p>
+        </div>
+
+        <div class="task-modal-actions">
+          <button mat-icon-button type="button" (click)="close.emit()" [attr.aria-label]="i18n.t('common.close')">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M6 6 18 18M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div
+        class="task-modal-body"
+        [class.task-modal-body--workspace]="usesWorkspaceLayout()"
+        [class.task-modal-body--rest]="isRestTask()"
+      >
+        <section
+          class="task-modal-section"
+          [class.task-modal-section--workspace]="usesWorkspaceLayout()"
+          [class.task-modal-section--rest]="isRestTask()"
+        >
+          <ih-process-task-form-host
+            [task]="task()"
+            [tasks]="tasks()"
+            [sources]="sources()"
+            [readers]="readers()"
+            [connections]="connections()"
+            [readonly]="readonly()"
+            (patchTask)="patchTask.emit($event)"
+          />
+        </section>
+      </div>
+    </section>

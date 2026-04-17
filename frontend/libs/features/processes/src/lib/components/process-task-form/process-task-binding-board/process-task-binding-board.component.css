@@ -1,0 +1,77 @@
+:host { display: grid; gap: 1rem; min-width: 0; min-height: 0; }
+      .binding-board { display: grid; gap: 0.9rem; min-width: 0; }
+      .binding-board--scrollable {
+        grid-template-rows: auto minmax(0, 1fr) auto;
+        min-height: 0;
+        height: 90%;
+      }
+      .binding-board--compact-scroll {
+        height: auto;
+        max-height: 100%;
+      }
+      .binding-board__rows { display: grid; gap: 0.85rem; min-width: 0; }
+      .binding-board__rows--scrollable {
+        min-height: 0;
+        overflow: auto;
+        padding-right: 0.2rem;
+        padding-bottom: 0.9rem;
+      }
+      .binding-board--compact-scroll .binding-board__rows--scrollable {
+        max-height: min(24rem, calc(100vh - 26rem));
+      }
+      .binding-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        align-items: start;
+        gap: 0.85rem;
+        padding: 0.85rem;
+        border: 1px solid var(--ih-border);
+        border-radius: 16px;
+        background: color-mix(in srgb, var(--ih-surface) 97%, transparent);
+      }
+      .binding-row--routine {
+        grid-template-columns:
+          minmax(180px, 0.85fr)
+          minmax(180px, 1fr)
+          minmax(180px, 1fr);
+        align-items: center;
+        gap: 0.65rem;
+        padding: 0.6rem 0.7rem;
+        border-radius: 14px;
+      }
+      .binding-row mat-form-field {
+        align-self: start;
+      }
+      .binding-row--routine mat-form-field {
+        align-self: center;
+      }
+      .binding-row__target {
+        display: grid;
+        gap: 0.2rem;
+        align-self: center;
+        min-width: 0;
+      }
+      .binding-row__target strong,
+      .binding-row__target small {
+        overflow-wrap: anywhere;
+      }
+      .binding-row__target small {
+        color: var(--ih-text-soft);
+      }
+      .binding-row__expression { width: 100%; }
+      .binding-row--routine .binding-row__expression,
+      .binding-row--routine mat-form-field {
+        margin-bottom: -0.15rem;
+      }
+      .binding-board__add { justify-self: start; }
+      @media (max-width: 1080px) {
+        .binding-board--scrollable {
+          grid-template-rows: auto;
+          height: auto;
+        }
+        .binding-board__rows--scrollable {
+          overflow: visible;
+          padding-right: 0;
+          padding-bottom: 0;
+        }
+      }

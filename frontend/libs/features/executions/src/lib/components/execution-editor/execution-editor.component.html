@@ -1,0 +1,65 @@
+<section class="panel-card ih-drawer-editor">
+      <div class="panel-body ih-drawer-editor__body">
+        <div class="panel-topbar">
+          <button mat-stroked-button type="button" (click)="close.emit()">{{ i18n.t('common.close') }}</button>
+        </div>
+
+        @if (execution()) {
+          <ih-execution-editor-header
+            [execution]="execution()"
+            [childrenCount]="children().length"
+            [failedTaskType]="store.failedTask()?.taskType ?? null"
+          />
+
+          <mat-tab-group animationDuration="0ms" class="execution-tabs">
+            <mat-tab [label]="i18n.t('executions.summaryTab')">
+              <ih-execution-editor-summary
+                [execution]="execution()"
+                [selectedTask]="store.selectedTask()"
+                [selectedTaskSummary]="store.selectedTaskSummary()"
+                [failedExecutionSummary]="store.failedExecutionSummary()"
+              />
+            </mat-tab>
+
+            <mat-tab [label]="i18n.t('executions.tasksTab')">
+              <div class="tab-body">
+                <section class="form-section">
+                  <ih-execution-task-list
+                    [tasks]="tasks()"
+                    [selectedTaskId]="store.selectedTaskId()"
+                    (selectTask)="store.selectTask($event)"
+                  />
+                </section>
+              </div>
+            </mat-tab>
+
+            <mat-tab [label]="i18n.t('executions.filesTab')">
+              <ih-execution-editor-files-tab
+                [execution]="execution()"
+                [tasks]="tasks()"
+                [actionBusy]="actionBusy()"
+                (fileAction)="fileAction.emit($event)"
+              />
+            </mat-tab>
+
+            <mat-tab [label]="i18n.t('executions.lineageTab')">
+              <div class="tab-body">
+                <section class="form-section">
+                  <ih-execution-lineage
+                    [execution]="execution()"
+                    [children]="children()"
+                    [navigationStack]="navigationStack()"
+                    (openExecution)="openExecution.emit($event)"
+                    (goBack)="goBack.emit()"
+                  />
+                </section>
+              </div>
+            </mat-tab>
+          </mat-tab-group>
+        } @else if (loading()) {
+          <div class="empty-state ih-muted">{{ i18n.t('executions.loadingDetail') }}</div>
+        } @else {
+          <div class="empty-state ih-muted">{{ i18n.t('executions.emptySelection') }}</div>
+        }
+      </div>
+    </section>

@@ -1,0 +1,79 @@
+<section class="panel-card ih-drawer-editor">
+      <div class="panel-body ih-drawer-editor__body">
+        <div class="panel-topbar">
+          <button mat-stroked-button type="button" (click)="close.emit()">{{ i18n.t('common.close') }}</button>
+        </div>
+
+        @if (event()) {
+          <div class="profile-stack">
+            <div class="profile-header">
+              <div class="profile-avatar">{{ eventLabel(event()!).slice(0, 1).toUpperCase() }}</div>
+              <div class="profile-copy">
+                <h3 class="profile-name">{{ eventLabel(event()!) }}</h3>
+                <p class="profile-subtitle">#{{ event()!.id }} · {{ statusLabel(event()!.status) }}</p>
+                @if (event()!.taskType || event()!.taskDefinitionId != null) {
+                  <p class="profile-subtitle">{{ taskLabel(event()!) }}</p>
+                }
+                <p class="profile-subtitle profile-subtitle--technical">{{ event()!.eventType }}</p>
+              </div>
+            </div>
+          </div>
+
+          <section class="form-section">
+            <div class="section-header">
+              <p class="section-eyebrow">{{ i18n.t('ui.overview') }}</p>
+              <h4>{{ i18n.t('audit.detail') }}</h4>
+            </div>
+            <div class="detail-grid">
+              <div><strong>{{ i18n.t('audit.executionId') }}</strong>: {{ event()!.processExecutionId ?? '-' }}</div>
+              <div><strong>{{ i18n.t('audit.taskType') }}</strong>: {{ taskTypeDescription(event()!.taskType) }}</div>
+              <div><strong>{{ i18n.t('audit.taskDefinitionId') }}</strong>: {{ event()!.taskDefinitionId ?? '-' }}</div>
+              <div><strong>{{ i18n.t('common.status') }}</strong>: {{ statusLabel(event()!.status) }}</div>
+              <div><strong>{{ i18n.t('audit.createdAt') }}</strong>: {{ formatDate(event()!.createdAt) }}</div>
+              <div><strong>{{ i18n.t('audit.eventType') }}</strong>: {{ eventLabel(event()!) }}</div>
+            </div>
+            @if (event()!.message) {
+              <div class="detail-block">
+                <strong>{{ i18n.t('audit.message') }}</strong>
+                <p>{{ event()!.message }}</p>
+              </div>
+            }
+          </section>
+
+          @if (event()!.payloadJson) {
+            <section class="form-section">
+              <div class="section-header">
+                <p class="section-eyebrow">{{ i18n.t('ui.configSection') }}</p>
+                <h4>{{ i18n.t('audit.payloadJson') }}</h4>
+              </div>
+              <pre>{{ prettyPayload() }}</pre>
+            </section>
+          }
+
+          <section class="form-section">
+            <div class="section-header">
+              <p class="section-eyebrow">{{ i18n.t('audit.processedFiles') }}</p>
+              <h4>{{ i18n.t('audit.processedFiles') }}</h4>
+            </div>
+            <div class="file-list">
+              @for (file of event()!.processedFiles; track file.id) {
+                <div class="file-row">
+                  <div class="file-copy">
+                    <strong>{{ file.fileName || '-' }}</strong>
+                    <small>{{ file.filePath || file.mediaType || '-' }}</small>
+                  </div>
+                  <div class="file-meta">
+                    <span>{{ file.status || '-' }}</span>
+                    <small>{{ file.recordCount ?? 0 }}/{{ file.writtenCount ?? 0 }}</small>
+                  </div>
+                </div>
+              } @empty {
+                <div class="empty-inline ih-muted">{{ i18n.t('audit.noFiles') }}</div>
+              }
+            </div>
+          </section>
+        } @else {
+          <div class="empty-state ih-muted">{{ i18n.t('audit.emptySelection') }}</div>
+        }
+      </div>
+    </section>

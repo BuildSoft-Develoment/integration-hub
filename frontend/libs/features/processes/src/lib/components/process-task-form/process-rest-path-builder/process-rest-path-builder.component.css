@@ -1,0 +1,43 @@
+:host {
+        display: block;
+      }
+      .path-builder {
+        display: grid;
+        gap: 0.9rem;
+      }
+      .path-builder__header {
+        display: grid;
+        gap: 0.22rem;
+      }
+      .section-eyebrow {
+        margin: 0;
+        font-size: 0.74rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ih-text-soft);
+      }
+      .path-builder__header h5 {
+        margin: 0;
+        font-size: 0.98rem;
+      }
+      .path-builder__field-shell {
+        display: grid;
+        gap: 0.35rem;
+      }
+      .path-builder__field-label {
+        font-size: 0.84rem;
+        font-weight: 600;
+        color: var(--ih-text-soft);
+      }
+      .path-builder__field {
+        width: 100%;
+      }
+      .path-builder__field ::ng-deep .mat-mdc-form-field-infix {
+        min-height: 3.5rem;
+        padding-top: 0.75rem;
+      }
+      .path-builder__empty {
+        color: var(--ih-text-soft);
+        font-size: 0.86rem;
+      }

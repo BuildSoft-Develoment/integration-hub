@@ -1,0 +1,21 @@
+<div class="form-grid">
+      <mat-form-field class="field-span-2">
+        <mat-label>{{ i18n.t('ui.recordElement') }}</mat-label>
+        <input matInput [disabled]="readonly()" [ngModel]="draft().recordElement" (ngModelChange)="patchDraft.emit({ recordElement: $event })" />
+      </mat-form-field>
+      <div class="checkbox-wrap">
+        <mat-checkbox [disabled]="readonly()" [ngModel]="draft().includeAttributes" (ngModelChange)="patchDraft.emit({ includeAttributes: $event })">
+          {{ i18n.t('ui.includeAttributes') }}
+        </mat-checkbox>
+      </div>
+      <div class="checkbox-wrap">
+        <mat-checkbox [disabled]="readonly()" [ngModel]="draft().trimValues" (ngModelChange)="patchDraft.emit({ trimValues: $event })">
+          {{ i18n.t('ui.trimValues') }}
+        </mat-checkbox>
+      </div>
+    </div>
+
+    <mat-form-field>
+      <mat-label>{{ i18n.t('ui.fieldMappings') }}</mat-label>
+      <textarea matInput rows="6" [disabled]="readonly()" [ngModel]="draft().fieldMappingsText" (ngModelChange)="patchDraft.emit({ fieldMappingsText: $event })"></textarea>
+    </mat-form-field>

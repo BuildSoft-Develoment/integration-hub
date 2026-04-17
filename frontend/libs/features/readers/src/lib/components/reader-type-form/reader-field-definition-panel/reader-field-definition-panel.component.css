@@ -1,0 +1,48 @@
+.field-panel {
+        border: 1px solid var(--ih-border);
+        border-radius: 12px !important;
+        background: color-mix(in srgb, var(--ih-surface) 20%, transparent);
+        box-shadow: none !important;
+        margin: 0 !important;
+        transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+      }
+      .field-panel--active {
+        border-color: color-mix(in srgb, var(--ih-accent) 48%, var(--ih-border));
+        background: color-mix(in srgb, var(--ih-accent) 7%, var(--ih-surface-alt));
+        box-shadow: inset 3px 0 0 var(--ih-accent);
+      }
+      .field-panel__header {
+        min-height: 46px;
+        padding-inline: 0.85rem;
+      }
+      .field-panel__header.mat-expanded {
+        min-height: 48px;
+      }
+      .field-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 0.55rem;
+        padding-top: 0.1rem;
+      }
+      .field-span-full {
+        grid-column: 1 / -1;
+      }
+      .field-toggle {
+        display: flex;
+        align-items: center;
+        min-height: 36px;
+        padding-top: 0.1rem;
+      }
+      .field-actions {
+        display: flex;
+        justify-content: flex-end;
+        padding-top: 0.25rem;
+      }
+      @container (max-width: 900px) {
+        .field-grid {
+          grid-template-columns: 1fr;
+        }
+        .field-span-full {
+          grid-column: auto;
+        }
+      }

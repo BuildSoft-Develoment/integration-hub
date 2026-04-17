@@ -1,0 +1,218 @@
+.task-shell {
+        display: grid;
+        gap: 0.9rem;
+      }
+      .task-shell__header {
+        display: flex;
+        gap: 1rem;
+        align-items: end;
+        justify-content: space-between;
+      }
+      .section-eyebrow {
+        margin: 0;
+        font-size: 0.74rem;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--ih-text-soft);
+      }
+      h4 {
+        margin: 0.28rem 0 0;
+        font-size: 1rem;
+      }
+      .task-designer {
+        display: block;
+        min-height: 580px;
+      }
+      .task-flow-shell {
+        position: relative;
+        min-height: 580px;
+        border: 1px solid var(--ih-border);
+        border-radius: 22px;
+        background:
+          radial-gradient(circle at top left, color-mix(in srgb, var(--ih-accent) 7%, transparent), transparent 32%),
+          linear-gradient(180deg, color-mix(in srgb, var(--ih-surface-alt) 95%, transparent), color-mix(in srgb, var(--ih-surface) 96%, transparent));
+        overflow: hidden;
+      }
+      .task-flow-shell--expanded {
+        position: fixed;
+        inset: 0 0 0 var(--ih-shell-sidebar-width);
+        min-height: 0;
+        z-index: 1200;
+        border-radius: 0;
+        border: 0;
+        box-shadow: none;
+        background:
+          radial-gradient(circle at top left, color-mix(in srgb, var(--ih-accent) 5%, transparent), transparent 24%),
+          linear-gradient(
+            180deg,
+            color-mix(in srgb, var(--ih-surface-alt) 100%, transparent),
+            color-mix(in srgb, var(--ih-surface) 100%, transparent)
+          );
+      }
+      .task-flow-shell__palette {
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+        z-index: 5;
+        width: 80px;
+        max-width: calc(100% - 8rem);
+      }
+      .task-flow-shell__palette--expanded {
+        position: fixed;
+        top: 1.25rem;
+        left: calc(var(--ih-shell-sidebar-width) + 1.25rem);
+        z-index: 1210;
+        width: 80px;
+        min-width: 80px;
+        max-width: calc(100vw - var(--ih-shell-sidebar-width) - 7rem);
+        pointer-events: auto;
+      }
+      .task-flow-shell__actions {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        z-index: 5;
+      }
+      .task-flow-shell__actions--expanded {
+        position: fixed;
+        top: 1.25rem;
+        right: 1.25rem;
+        z-index: 1210;
+      }
+      .task-flow-root,
+      .task-flow-canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+        min-height: 580px;
+      }
+      .task-flow-shell--expanded .task-flow-root,
+      .task-flow-shell--expanded .task-flow-canvas {
+        min-height: 100%;
+      }
+      :host ::ng-deep f-connection path,
+      :host ::ng-deep f-connection-for-create path {
+        stroke: color-mix(in srgb, var(--ih-accent-strong) 78%, #0f172a) !important;
+        stroke-width: 2.75px !important;
+        fill: none !important;
+      }
+      :host ::ng-deep f-connection:hover path {
+        stroke: color-mix(in srgb, var(--ih-accent-strong) 92%, white 8%) !important;
+        stroke-width: 3.1px !important;
+      }
+      :host ::ng-deep f-connection-marker path {
+        fill: color-mix(in srgb, var(--ih-accent-strong) 78%, #0f172a) !important;
+      }
+      :host ::ng-deep .f-connection-selection path {
+        stroke: color-mix(in srgb, var(--ih-accent-strong) 36%, transparent) !important;
+        stroke-width: 10px !important;
+      }
+      :host ::ng-deep .f-line-alignment line {
+        stroke: color-mix(in srgb, var(--ih-accent) 30%, transparent) !important;
+        stroke-width: 1.5px !important;
+      }
+      .task-flow-shell__minimap {
+        position: absolute;
+        right: 1rem;
+        bottom: 1rem;
+        z-index: 4;
+        width: 220px;
+        height: 160px;
+        border-radius: 18px;
+        overflow: hidden;
+        border: 1px solid var(--ih-border);
+        background: color-mix(in srgb, var(--ih-surface) 92%, transparent);
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+        backdrop-filter: blur(10px);
+      }
+      .task-node-host--active {
+        display: block;
+        border-radius: 18px;
+        box-shadow: 0 18px 34px rgba(15, 23, 42, 0.16);
+      }
+      :host ::ng-deep .f-node-selected .task-node,
+      .task-node-host--active .task-node {
+        border-color: color-mix(in srgb, var(--ih-accent) 48%, var(--ih-border));
+        box-shadow:
+          0 0 0 3px color-mix(in srgb, var(--ih-accent) 16%, transparent),
+          0 18px 34px rgba(15, 23, 42, 0.14);
+      }
+      .task-node__port {
+        position: absolute;
+        left: 50%;
+        width: 13px;
+        height: 13px;
+        border-radius: 999px;
+        background: var(--ih-accent);
+        border: 2px solid white;
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--ih-accent) 18%, transparent);
+        transform: translateX(-50%);
+        z-index: 3;
+        transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+      }
+      .task-node__port--in {
+        top: -6px;
+      }
+      .task-node__port--out {
+        bottom: -6px;
+        display: inline-grid;
+        place-items: center;
+        cursor: pointer;
+      }
+      .task-node__port--out svg {
+        width: 0.54rem;
+        height: 0.54rem;
+        stroke: white;
+        fill: none;
+        stroke-width: 2.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        pointer-events: none;
+      }
+      .task-node-host--active .task-node__port,
+      :host ::ng-deep .f-node-selected .task-node__port {
+        transform: translateX(-50%) scale(1.08);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--ih-accent) 24%, transparent);
+      }
+      @media (max-width: 760px) {
+        .task-flow-shell--expanded {
+          inset: 0;
+          border-radius: 0;
+          border: 0;
+        }
+        .task-flow-shell,
+        .task-flow-root,
+        .task-flow-canvas {
+          min-height: 460px;
+        }
+        .task-flow-shell__palette {
+          top: 0.75rem;
+          left: 0.75rem;
+          width: 80px;
+          max-width: calc(100% - 7rem);
+        }
+        .task-flow-shell__palette--expanded {
+          position: fixed;
+          top: 0.75rem;
+          left: calc(var(--ih-shell-sidebar-width) + 0.75rem);
+          width: 80px;
+          min-width: 80px;
+          max-width: calc(100vw - var(--ih-shell-sidebar-width) - 6rem);
+        }
+        .task-flow-shell__actions {
+          top: 0.75rem;
+          right: 0.75rem;
+        }
+        .task-flow-shell__actions--expanded {
+          position: fixed;
+          top: 0.75rem;
+          right: 0.75rem;
+        }
+        .task-flow-shell__minimap {
+          right: 0.75rem;
+          bottom: 0.75rem;
+          width: 160px;
+          height: 120px;
+        }
+      }
