@@ -3,7 +3,7 @@ import { Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { I18nService } from '@integration-hub/core/services';
-import { SourceRecord } from '../../source.models';
+import { SourceRecord } from '../../models/source.models';
 
 @Component({
   selector: 'ih-source-list',

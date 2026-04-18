@@ -3,8 +3,8 @@ import { Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
-import { formatTriggerSourceLabel } from '../../execution-detail.utils';
-import { ProcessExecutionRecord } from '../../execution.models';
+import { formatTriggerSourceLabel } from '../../details/execution-detail.utils';
+import { ProcessExecutionRecord } from '../../models/execution.models';
 
 @Component({
   selector: 'ih-execution-list',

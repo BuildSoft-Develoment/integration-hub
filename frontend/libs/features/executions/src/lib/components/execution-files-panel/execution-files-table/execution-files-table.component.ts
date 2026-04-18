@@ -4,8 +4,8 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
 
-import { formatFileSize } from '../../../execution-detail.utils';
-import { ProcessedSourceFileRecord } from '../../../execution.models';
+import { formatFileSize } from '../../../details/execution-detail.utils';
+import { ProcessedSourceFileRecord } from '../../../models/execution.models';
 
 @Component({
   selector: 'ih-execution-files-table',

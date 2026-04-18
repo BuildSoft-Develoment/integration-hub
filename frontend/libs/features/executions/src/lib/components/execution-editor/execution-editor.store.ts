@@ -3,11 +3,11 @@ import { Injectable, signal, computed } from '@angular/core';
 import {
   buildTaskReadSummary,
   summarizeFailure,
-} from '../../execution-detail.utils';
+} from '../../details/execution-detail.utils';
 import {
   ProcessExecutionRecord,
   ProcessTaskExecutionRecord,
-} from '../../execution.models';
+} from '../../models/execution.models';
 
 @Injectable()
 export class ExecutionEditorStore {

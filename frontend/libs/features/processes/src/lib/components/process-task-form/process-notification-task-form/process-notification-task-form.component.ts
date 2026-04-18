@@ -5,7 +5,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { I18nService } from '@integration-hub/core/services';
-import { ProcessTaskFormModel } from '../../../process.models';
+import { ProcessTaskFormModel } from '../../../models/process.models';
 import { ProcessTaskManagerService } from '@integration-hub/core/services';
 import { NotificationTaskDraft } from '@integration-hub/core/providers';
 

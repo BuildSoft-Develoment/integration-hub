@@ -8,8 +8,8 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatTabsModule } from '@angular/material/tabs';
 import { ProcessTaskBodyFieldBindingDraft, ProcessTaskParameterBindingDraft, RestCallTaskDraft } from '@integration-hub/core/providers';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
-import { ProcessTaskFormModel, ReaderRef } from '../../../process.models';
-import { ProcessTaskBindingContextService } from '../../../process-task-binding-context.service';
+import { ProcessTaskFormModel, ReaderRef } from '../../../models/process.models';
+import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
 import { ProcessRestPathBuilderComponent } from '../process-rest-path-builder/process-rest-path-builder.component';
 import { ProcessTaskBindingBoardComponent } from '../process-task-binding-board/process-task-binding-board.component';
 

@@ -1,1 +1,1 @@
-export * from './lib/connection-catalog.routes';
+export * from './lib/catalog/connection-catalog.routes';

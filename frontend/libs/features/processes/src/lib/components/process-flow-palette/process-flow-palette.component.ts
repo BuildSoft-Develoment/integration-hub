@@ -4,8 +4,8 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { FFlowModule } from '@foblex/flow';
 import { ProcessTaskManagerService } from '@integration-hub/core/services';
-import { processTaskTypes, ProcessTaskType } from '../../process.models';
-import { getProcessFlowNodePresentation } from '../../process-flow.presentation';
+import { processTaskTypes, ProcessTaskType } from '../../models/process.models';
+import { getProcessFlowNodePresentation } from '../../flow/process-flow.presentation';
 
 @Component({
   selector: 'ih-process-flow-palette',

@@ -27,6 +27,7 @@ export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
     type: 'DB_WRITE' as const,
     labelKey: 'processTask.DB_WRITE',
     descriptionKey: 'processTaskDescription.DB_WRITE',
+    modalLayout: 'workspace' as const,
   };
 
   createDraft(): DbWriteTaskDraft {

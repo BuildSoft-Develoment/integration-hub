@@ -1,1 +1,1 @@
-export * from './lib/execution-catalog.routes';
+export * from './lib/catalog/execution-catalog.routes';

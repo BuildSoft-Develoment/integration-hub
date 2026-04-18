@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, HostListener, computed, effect, inject, input, output, signal } from '@angular/core';
 import { I18nService } from '@integration-hub/core/services';
-import { DbWriteSourceItem } from '../../../process-db-write.models';
+import { DbWriteSourceItem } from '../../../models/process-db-write.models';
 
 @Component({
   selector: 'ih-process-db-write-source-palette',

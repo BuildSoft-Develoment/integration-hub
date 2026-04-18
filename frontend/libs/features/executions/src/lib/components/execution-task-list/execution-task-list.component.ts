@@ -9,8 +9,8 @@ import {
   formatTaskOutputValue,
   summarizeFailure,
   taskOutputEntries,
-} from '../../execution-detail.utils';
-import { ProcessTaskExecutionRecord } from '../../execution.models';
+} from '../../details/execution-detail.utils';
+import { ProcessTaskExecutionRecord } from '../../models/execution.models';
 
 @Component({
   selector: 'ih-execution-task-list',

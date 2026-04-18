@@ -7,7 +7,7 @@ import {
   SourceProviderType,
 } from '@integration-hub/core/providers';
 import { ManagedEditorFormActionsComponent, ManagedEditorHeaderComponent, ManagedEditorOverviewComponent, ManagedEditorReadonlyActionsComponent, ManagedEditorSectionComponent, ManagedEditorShellComponent, ManagedEditorTestResultComponent } from '@integration-hub/shared/ui';
-import { SourceFormModel, SourceTestResult } from '../../source.models';
+import { SourceFormModel, SourceTestResult } from '../../models/source.models';
 import { SourceTypeFormHostComponent } from '../source-type-form/source-type-form-host/source-type-form-host.component';
 
 @Component({

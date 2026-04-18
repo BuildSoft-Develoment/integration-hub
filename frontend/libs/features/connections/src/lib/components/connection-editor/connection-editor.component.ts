@@ -10,7 +10,7 @@ import {
 } from '@integration-hub/core/providers';
 import { ConnectionManagerService } from '@integration-hub/core/services';
 import { ManagedEditorFormActionsComponent, ManagedEditorHeaderComponent, ManagedEditorOverviewComponent, ManagedEditorReadonlyActionsComponent, ManagedEditorSectionComponent, ManagedEditorShellComponent, ManagedEditorTestResultComponent } from '@integration-hub/shared/ui';
-import { ConnectionFormModel, ConnectionTestResult } from '../../connection.models';
+import { ConnectionFormModel, ConnectionTestResult } from '../../models/connection.models';
 import { ConnectionTypeFormHostComponent } from '../connection-type-form/connection-type-form-host/connection-type-form-host.component';
 
 @Component({

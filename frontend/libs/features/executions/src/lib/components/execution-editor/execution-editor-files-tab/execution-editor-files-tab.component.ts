@@ -8,7 +8,7 @@ import {
   ExecutionFileActionRequest,
   ProcessExecutionRecord,
   ProcessTaskExecutionRecord,
-} from '../../../execution.models';
+} from '../../../models/execution.models';
 import { ExecutionFilesPanelComponent } from '../../execution-files-panel/execution-files-panel.component';
 
 @Component({

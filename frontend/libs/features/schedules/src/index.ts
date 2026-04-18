@@ -1,1 +1,1 @@
-export * from './lib/schedules.routes';
+export * from './lib/catalog/schedules.routes';

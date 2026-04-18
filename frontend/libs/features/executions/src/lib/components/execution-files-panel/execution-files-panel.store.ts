@@ -4,12 +4,12 @@ import {
   createEmptyProcessedFileFilters,
   fileReference,
   filterProcessedFileRows,
-} from '../../execution-detail.utils';
+} from '../../details/execution-detail.utils';
 import {
   ProcessTaskExecutionRecord,
   ProcessedFileFilters,
   ProcessedSourceFileRecord,
-} from '../../execution.models';
+} from '../../models/execution.models';
 
 @Injectable()
 export class ExecutionFilesPanelStore {

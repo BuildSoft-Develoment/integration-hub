@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, ElementRef, input, output, signal, viewChild } from '@angular/core';
-import { ProcessFlowNode } from '../../process-flow.models';
-import { getProcessFlowNodePresentation } from '../../process-flow.presentation';
+import { ProcessFlowNode } from '../../models/process-flow.models';
+import { getProcessFlowNodePresentation } from '../../flow/process-flow.presentation';
 
 interface ProcessFlowNodeExpandedChange {
   expanded: boolean;

@@ -5,7 +5,7 @@ import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { I18nService } from '@integration-hub/core/services';
-import { DbWriteTableRef } from '../../../process-db-write.models';
+import { DbWriteTableRef } from '../../../models/process-db-write.models';
 
 @Component({
   selector: 'ih-process-db-write-table-selector',

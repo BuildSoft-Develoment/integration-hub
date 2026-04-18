@@ -5,10 +5,10 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { I18nService } from '@integration-hub/core/services';
-import { ProcessTaskFormModel, ReaderRef, SourceRef } from '../../../process.models';
+import { ProcessTaskFormModel, ReaderRef, SourceRef } from '../../../models/process.models';
 import { FileReadTaskDraft } from '@integration-hub/core/providers';
 import { ProcessTaskManagerService } from '@integration-hub/core/services';
-import { ProcessTaskBindingContextService } from '../../../process-task-binding-context.service';
+import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
 
 @Component({
   selector: 'ih-process-file-read-task-form',

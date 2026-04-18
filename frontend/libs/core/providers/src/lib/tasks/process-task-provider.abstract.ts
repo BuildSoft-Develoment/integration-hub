@@ -11,6 +11,7 @@ export interface ProcessTaskProviderDescriptor {
   type: ProcessTaskType;
   labelKey: string;
   descriptionKey: string;
+  modalLayout?: 'workspace' | 'rest';
 }
 
 export abstract class ProcessTaskProvider<TDraft> {

@@ -9,15 +9,15 @@ import { MatSelectModule } from '@angular/material/select';
 import { DbWriteMappingDraft, DbWriteTaskDraft } from '@integration-hub/core/providers';
 import { I18nService, ProcessTaskManagerService, ReaderManagerService } from '@integration-hub/core/services';
 import { firstValueFrom } from 'rxjs';
-import { ConnectionRef, ProcessTaskFormModel, ReaderRef } from '../../../process.models';
-import { ProcessApiService } from '../../../process-api.service';
+import { ConnectionRef, ProcessTaskFormModel, ReaderRef } from '../../../models/process.models';
+import { ProcessApiService } from '../../../api/process-api.service';
 import {
   DB_WRITE_METADATA_ITEMS,
   DbWriteColumnRef,
   DbWriteSchemaRef,
   DbWriteSourceItem,
   DbWriteTableRef,
-} from '../../../process-db-write.models';
+} from '../../../models/process-db-write.models';
 import { ProcessDbWriteMappingBoardComponent } from '../process-db-write-mapping-board/process-db-write-mapping-board.component';
 import { ProcessDbWriteSourcePaletteComponent } from '../process-db-write-source-palette/process-db-write-source-palette.component';
 import { ProcessDbWriteTableSelectorComponent } from '../process-db-write-table-selector/process-db-write-table-selector.component';

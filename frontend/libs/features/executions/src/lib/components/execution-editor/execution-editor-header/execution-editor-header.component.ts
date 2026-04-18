@@ -3,8 +3,8 @@ import { Component, inject, input } from '@angular/core';
 
 import { I18nService } from '@integration-hub/core/services';
 
-import { formatTriggerSourceLabel } from '../../../execution-detail.utils';
-import { ProcessExecutionRecord } from '../../../execution.models';
+import { formatTriggerSourceLabel } from '../../../details/execution-detail.utils';
+import { ProcessExecutionRecord } from '../../../models/execution.models';
 
 @Component({
   selector: 'ih-execution-editor-header',

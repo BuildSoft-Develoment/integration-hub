@@ -3,7 +3,7 @@ import { Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
-import { ConnectionRef, ProcessTaskFormModel, ProcessTaskType, ReaderRef, SourceRef } from '../../process.models';
+import { ConnectionRef, ProcessTaskFormModel, ProcessTaskType, ReaderRef, SourceRef } from '../../models/process.models';
 import { ProcessTaskFormHostComponent } from '../process-task-form/process-task-form-host/process-task-form-host.component';
 
 @Component({
@@ -37,14 +37,7 @@ export class ProcessTaskModalComponent {
     return this.manager.label(taskType);
   }
 
-  usesWorkspaceLayout(): boolean {
-    return this.task().taskType === 'DB_WRITE'
-      || this.task().taskType === 'DB_EXECUTE_SP'
-      || this.task().taskType === 'DB_EXECUTE_FN'
-      || this.task().taskType === 'REST_CALL';
-  }
-
-  isRestTask(): boolean {
-    return this.task().taskType === 'REST_CALL';
+  modalLayout(): 'workspace' | 'rest' | 'default' {
+    return this.manager.modalLayout(this.task().taskType);
   }
 }

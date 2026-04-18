@@ -8,11 +8,11 @@ import { MatSelectModule } from '@angular/material/select';
 import { DbExecuteFunctionTaskDraft, ProcessTaskParameterBindingDraft } from '@integration-hub/core/providers';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { firstValueFrom } from 'rxjs';
-import { ConnectionRef, ProcessTaskFormModel, ReaderRef } from '../../../process.models';
-import { ProcessApiService } from '../../../process-api.service';
-import { ProcessTaskBindingContextService } from '../../../process-task-binding-context.service';
-import { DbRoutineRef } from '../../../process-db-routine.models';
-import { DbWriteSchemaRef } from '../../../process-db-write.models';
+import { ConnectionRef, ProcessTaskFormModel, ReaderRef } from '../../../models/process.models';
+import { ProcessApiService } from '../../../api/process-api.service';
+import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
+import { DbRoutineRef } from '../../../models/process-db-routine.models';
+import { DbWriteSchemaRef } from '../../../models/process-db-write.models';
 import { ProcessDbRoutineSelectorComponent } from '../process-db-routine-selector/process-db-routine-selector.component';
 import { ProcessTaskBindingBoardComponent } from '../process-task-binding-board/process-task-binding-board.component';
 

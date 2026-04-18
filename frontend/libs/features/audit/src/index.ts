@@ -1,1 +1,1 @@
-export * from './lib/audit.routes';
+export * from './lib/catalog/audit.routes';
