@@ -34,7 +34,9 @@ export class ProcessFileReadTaskFormComponent {
     sourceDefinitionId: null,
     readerDefinitionId: null,
     sourceVariablesText: '',
+    batchSize: '500',
     parallel: false,
+    parallelMode: 'file',
     maxConcurrency: null,
   });
   readonly selectedSource = computed(() => this.sources().find((item) => item.id === this.draft().sourceDefinitionId) ?? null);

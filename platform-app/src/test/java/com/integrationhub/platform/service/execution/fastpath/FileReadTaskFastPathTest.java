@@ -1,0 +1,197 @@
+package com.integrationhub.platform.service.execution.fastpath;
+
+import com.integrationhub.platform.domain.TaskType;
+import com.integrationhub.platform.entity.ProcessExecution;
+import com.integrationhub.platform.service.JsonConfigurationMapper;
+import com.integrationhub.platform.service.TaskProviderRegistry;
+import com.integrationhub.platform.service.execution.ProcessExecutionAuditMapper;
+import com.integrationhub.platform.service.execution.ProcessExecutionStateService;
+import com.integrationhub.platform.service.execution.ProcessedSourceFileService;
+import com.integrationhub.platform.service.execution.StreamingPipelineService;
+import com.integrationhub.platform.spi.source.SelectedSourceFile;
+import com.integrationhub.platform.spi.task.BatchTaskProvider;
+import com.integrationhub.platform.spi.task.TaskContext;
+import com.integrationhub.platform.spi.task.TaskResult;
+import org.junit.jupiter.api.Test;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+
+class FileReadTaskFastPathTest {
+
+    @Test
+    void continuePolicyCompletesProcessWithErrorsWithoutRethrowing() {
+        var execution = new ProcessExecution();
+        var stateService = new RecordingStateService(execution);
+        var processedSourceFileService = new RecordingProcessedSourceFileService();
+        var taskProviderRegistry = new BatchTaskProviderRegistry();
+        var auditMapper = new ProcessExecutionAuditMapper(new JsonConfigurationMapper());
+        var pipelineService = new FailingStreamingPipelineService();
+
+        var fastPath = new FileReadTaskFastPath(
+                pipelineService,
+                stateService,
+                auditMapper,
+                processedSourceFileService,
+                taskProviderRegistry
+        );
+
+        var result = fastPath.execute(
+                77L,
+                fileReadPlan("continue"),
+                sinkPlan(),
+                Map.of(),
+                List.of(),
+                "MANUAL"
+        );
+
+        assertSame(execution, result);
+        assertEquals(2, stateService.completedWithErrorsCount.get());
+        assertEquals(1, stateService.completedProcessWithErrorsCount.get());
+        assertEquals(0, stateService.failedTaskCount.get());
+        assertEquals(1, processedSourceFileService.recordPipelineFilesCount.get());
+    }
+
+    private ProcessExecutionStateService.TaskPlan fileReadPlan(String fileErrorPolicy) {
+        return new ProcessExecutionStateService.TaskPlan(
+                10L,
+                1,
+                TaskType.FILE_READ,
+                "{}",
+                100L,
+                "Clientes",
+                "FILESYSTEM",
+                "{\"fileErrorPolicy\":\"" + fileErrorPolicy + "\"}",
+                200L,
+                "TXT",
+                "{}"
+        );
+    }
+
+    private ProcessExecutionStateService.TaskPlan sinkPlan() {
+        return new ProcessExecutionStateService.TaskPlan(
+                20L,
+                2,
+                TaskType.DB_WRITE,
+                "{\"targetTable\":\"public.cliente_target\",\"mode\":\"insert\"}",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+    }
+
+    private static final class RecordingStateService extends ProcessExecutionStateService {
+        private final ProcessExecution execution;
+        private final AtomicInteger completedWithErrorsCount = new AtomicInteger();
+        private final AtomicInteger completedProcessWithErrorsCount = new AtomicInteger();
+        private final AtomicInteger failedTaskCount = new AtomicInteger();
+        private final AtomicInteger sequence = new AtomicInteger();
+
+        private RecordingStateService(ProcessExecution execution) {
+            super(null, null, null, null, null);
+            this.execution = execution;
+        }
+
+        @Override
+        public Long startTask(Long processExecutionId, Long taskDefinitionId, String taskType, Integer taskOrder) {
+            return sequence.incrementAndGet() * 10L;
+        }
+
+        @Override
+        public void completeTaskWithErrors(Long processExecutionId, Long taskExecutionId, String details, Object payload) {
+            completedWithErrorsCount.incrementAndGet();
+        }
+
+        @Override
+        public void completeProcessWithErrors(Long processExecutionId, String details) {
+            completedProcessWithErrorsCount.incrementAndGet();
+        }
+
+        @Override
+        public void failTask(Long processExecutionId, Long taskExecutionId, String message, Object payload) {
+            failedTaskCount.incrementAndGet();
+        }
+
+        @Override
+        public ProcessExecution getExecution(Long processExecutionId) {
+            return execution;
+        }
+    }
+
+    private static final class RecordingProcessedSourceFileService extends ProcessedSourceFileService {
+        private final AtomicInteger recordPipelineFilesCount = new AtomicInteger();
+
+        private RecordingProcessedSourceFileService() {
+            super(null, null, null);
+        }
+
+        @Override
+        public void recordPipelineFiles(Long processExecutionId,
+                                        Long taskDefinitionId,
+                                        List<SelectedSourceFile> selectedFiles,
+                                        List<StreamingPipelineService.BatchSummary> completedFiles,
+                                        List<StreamingPipelineService.StreamFailureSummary> failedFiles) {
+            recordPipelineFilesCount.incrementAndGet();
+        }
+    }
+
+    private static final class BatchTaskProviderRegistry extends TaskProviderRegistry {
+        private BatchTaskProviderRegistry() {
+            super(null);
+        }
+
+        @Override
+        public com.integrationhub.platform.spi.task.TaskProvider resolve(String type) {
+            return new BatchTaskProvider() {
+                @Override
+                public String type() {
+                    return "DB_WRITE";
+                }
+
+                @Override
+                public TaskResult executeRecords(TaskContext context,
+                                                 Map<String, Object> configuration,
+                                                 List<com.integrationhub.platform.spi.reader.ReadRecord> records,
+                                                 com.integrationhub.platform.spi.source.SourcePayload sourcePayload) {
+                    return TaskResult.success("ok");
+                }
+            };
+        }
+    }
+
+    private static final class FailingStreamingPipelineService extends StreamingPipelineService {
+        private FailingStreamingPipelineService() {
+            super(null, null, null, null, null, null);
+        }
+
+        @Override
+        public StreamingResult run(Long processExecutionId,
+                                   ProcessExecutionStateService.TaskPlan sourcePlan,
+                                   ProcessExecutionStateService.TaskPlan sinkTaskPlan,
+                                   Map<String, String> executionVariables,
+                                   List<String> selectedFileReferences) {
+            var selectedFile = new SelectedSourceFile("clientes_fail.txt", "/tmp/clientes_fail.txt", "text/plain", 10L, Instant.now());
+            throw new StreamingPipelineException(
+                    "Streaming completed with 1 error(s)",
+                    selectedFile.name(),
+                    List.of(new StreamingPipelineService.BatchSummary("clientes_ok.txt", 1, 0, 1)),
+                    List.of(selectedFile),
+                    1,
+                    0,
+                    1,
+                    List.of(),
+                    List.of(new StreamingPipelineService.StreamFailureSummary(selectedFile.name(), "Cannot insert records")),
+                    null
+            );
+        }
+    }
+}

@@ -10,6 +10,16 @@ export interface ProcessPageResponse {
   items: ProcessRecord[];
 }
 
+export interface ProcessExecutionStartResponse {
+  id: number;
+  status: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  sourceExecutionId: number | null;
+  triggerSource: string | null;
+  details: string | null;
+}
+
 export interface ProcessQueryParams {
   search?: string;
   mode?: string;
@@ -83,8 +93,8 @@ export class ProcessApiService {
     return this.http.post<ProcessRecord>(`${this.baseUrl}/${processDefinitionId}/activation/${active}`, {});
   }
 
-  execute(processDefinitionId: number): Observable<unknown> {
-    return this.http.post(`/api/process-executions/${processDefinitionId}`, {});
+  execute(processDefinitionId: number): Observable<ProcessExecutionStartResponse> {
+    return this.http.post<ProcessExecutionStartResponse>(`/api/process-executions/${processDefinitionId}`, {});
   }
 
   listSources(): Observable<SourceRef[]> {

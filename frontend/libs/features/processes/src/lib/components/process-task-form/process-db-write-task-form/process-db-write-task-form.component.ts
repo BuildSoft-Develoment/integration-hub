@@ -65,7 +65,7 @@ export class ProcessDbWriteTaskFormComponent {
     mode: 'insert',
     targetSchema: '',
     targetTable: '',
-    batchSize: '1000',
+    jdbcBatchSize: '1000',
     mappings: [],
   });
 

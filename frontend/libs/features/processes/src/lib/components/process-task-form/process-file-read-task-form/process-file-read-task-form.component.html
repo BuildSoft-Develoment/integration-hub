@@ -40,11 +40,24 @@
     <div class="task-section">
       <div class="task-section-header">{{ i18n.t('ui.executionOptions') }}</div>
       <div class="task-grid task-grid--align-center">
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.batchSize') }}</mat-label>
+          <input matInput type="number" [disabled]="readonly()" [ngModel]="draft().batchSize" (ngModelChange)="updateDraft({ batchSize: $event })" min="1">
+        </mat-form-field>
+
         <mat-slide-toggle [disabled]="readonly()" [ngModel]="draft().parallel" (ngModelChange)="updateDraft({ parallel: $event })">
           {{ i18n.t('ui.parallelProcessing') }}
         </mat-slide-toggle>
 
         @if (draft().parallel) {
+          <mat-form-field>
+            <mat-label>{{ i18n.t('ui.parallelMode') }}</mat-label>
+            <mat-select [disabled]="readonly()" [ngModel]="draft().parallelMode" (ngModelChange)="updateDraft({ parallelMode: $event })">
+              <mat-option value="file">{{ i18n.t('ui.parallelModeFile') }}</mat-option>
+              <mat-option value="batch">{{ i18n.t('ui.parallelModeBatch') }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+
           <mat-form-field>
             <mat-label>{{ i18n.t('ui.maxConcurrency') }}</mat-label>
             <input matInput type="number" [disabled]="readonly()" [ngModel]="draft().maxConcurrency" (ngModelChange)="updateDraft({ maxConcurrency: $event })" min="1" max="20">

@@ -60,7 +60,34 @@ public class ProcessExecutionService {
         var plan = processExecutionStateService.loadExecutionPlan(processDefinitionId);
         processSpan.setAttribute("process.definition.name", plan.processName());
         var processExecutionId = processExecutionStateService.startProcess(plan.processDefinitionId(), plan.processName(), sourceExecutionId, normalizedTriggerSource);
+        return executeLoadedPlan(plan, processExecutionId, normalizedExecutionVariables, normalizedSelectedFiles, normalizedTriggerSource, processSpan);
+    }
 
+    public com.integrationhub.platform.entity.ProcessExecution executeQueued(Long processExecutionId,
+                                                                             Long processDefinitionId,
+                                                                             Map<String, String> executionVariables,
+                                                                             List<String> selectedFiles,
+                                                                             String triggerSource) {
+        var normalizedExecutionVariables = executionVariables == null ? Map.<String, String>of() : Map.copyOf(executionVariables);
+        var normalizedSelectedFiles = selectedFiles == null ? List.<String>of() : selectedFiles.stream().filter(value -> value != null && !value.isBlank()).map(String::trim).distinct().toList();
+        var normalizedTriggerSource = triggerSource == null || triggerSource.isBlank() ? "MANUAL" : triggerSource;
+
+        var processSpan = tracer.spanBuilder("process.execute.async").startSpan();
+        processSpan.setAttribute("process.execution.id", processExecutionId);
+        processSpan.setAttribute("process.definition.id", processDefinitionId);
+        processSpan.setAttribute("process.trigger.source", normalizedTriggerSource);
+
+        var plan = processExecutionStateService.loadExecutionPlan(processDefinitionId);
+        processSpan.setAttribute("process.definition.name", plan.processName());
+        return executeLoadedPlan(plan, processExecutionId, normalizedExecutionVariables, normalizedSelectedFiles, normalizedTriggerSource, processSpan);
+    }
+
+    private com.integrationhub.platform.entity.ProcessExecution executeLoadedPlan(ProcessExecutionStateService.ExecutionPlan plan,
+                                                                                  Long processExecutionId,
+                                                                                  Map<String, String> executionVariables,
+                                                                                  List<String> selectedFiles,
+                                                                                  String triggerSource,
+                                                                                  io.opentelemetry.api.trace.Span processSpan) {
         try {
             SourcePayload sourcePayload = null;
             ReadResult readResult = null;
@@ -74,7 +101,7 @@ public class ProcessExecutionService {
                 // 1. Try Optimized Fast Paths (e.g. Pipeline FILE_READ -> BATCH_SINK)
                 var fastPath = resolveFastPath(taskPlan, nextTaskPlan);
                 if (fastPath != null) {
-                    var result = fastPath.execute(processExecutionId, taskPlan, nextTaskPlan, normalizedExecutionVariables, normalizedSelectedFiles, normalizedTriggerSource);
+                    var result = fastPath.execute(processExecutionId, taskPlan, nextTaskPlan, executionVariables, selectedFiles, triggerSource);
                     if (result != null) return result; // Pipeline forced an early exit
                     index += fastPath.consumedTaskCount() - 1;
                     continue;
@@ -89,7 +116,7 @@ public class ProcessExecutionService {
 
                 var taskExecutionId = processExecutionStateService.startTask(processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType().name(), taskPlan.taskOrder());
                 try {
-                    var runResult = processTaskRuntimeService.runTask(processExecutionId, taskPlan, sourcePayload, readResult, normalizedExecutionVariables, taskOutputs, normalizedSelectedFiles);
+                    var runResult = processTaskRuntimeService.runTask(processExecutionId, taskPlan, sourcePayload, readResult, executionVariables, taskOutputs, selectedFiles);
                     String taskDetails;
                     Object taskPayload;
 
@@ -97,7 +124,7 @@ public class ProcessExecutionService {
                         sourcePayload = runResult.sourcePayload();
                         readResult = runResult.readResult();
                         taskDetails = auditMapper.buildReadDetails(taskPlan.sourceName(), readResult, List.of());
-                        taskPayload = auditMapper.buildReadAuditPayload(taskPlan, readResult, List.of(), List.of(), normalizedExecutionVariables, normalizedTriggerSource);
+                        taskPayload = auditMapper.buildReadAuditPayload(taskPlan, readResult, List.of(), List.of(), executionVariables, triggerSource);
                         taskSpan.setAttribute("records.count", readResult.recordCount());
                     } else {
                         taskDetails = auditMapper.buildTaskDetails(taskPlan, runResult.details());
@@ -110,7 +137,7 @@ public class ProcessExecutionService {
                     processExecutionStateService.completeTask(processExecutionId, taskExecutionId, taskDetails, taskPayload);
                 } catch (Exception taskError) {
                     var message = taskError.getMessage() == null ? taskError.getClass().getSimpleName() : taskError.getMessage();
-                    processExecutionStateService.failTask(processExecutionId, taskExecutionId, message, auditMapper.buildTaskFailurePayload(taskPlan, normalizedExecutionVariables, normalizedTriggerSource));
+                    processExecutionStateService.failTask(processExecutionId, taskExecutionId, message, auditMapper.buildTaskFailurePayload(taskPlan, executionVariables, triggerSource));
                     taskSpan.recordException(taskError);
                     taskSpan.setStatus(StatusCode.ERROR, message);
                     throw taskError;

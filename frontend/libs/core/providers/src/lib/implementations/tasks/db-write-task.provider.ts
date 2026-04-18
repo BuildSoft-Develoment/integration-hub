@@ -17,7 +17,7 @@ export interface DbWriteTaskDraft {
   mode: string;
   targetSchema: string;
   targetTable: string;
-  batchSize: string;
+  jdbcBatchSize: string;
   mappings: DbWriteMappingDraft[];
 }
 
@@ -36,7 +36,7 @@ export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
       mode: 'insert',
       targetSchema: '',
       targetTable: '',
-      batchSize: '1000',
+      jdbcBatchSize: '1000',
       mappings: [],
     };
   }
@@ -81,7 +81,7 @@ export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
       mode: String(config.mode || 'insert'),
       targetSchema: schema,
       targetTable: table,
-      batchSize: String(config.batchSize ?? 1000),
+      jdbcBatchSize: String(config.jdbcBatchSize ?? 1000),
       mappings: Array.from(rowsByColumn.values()),
     };
   }
@@ -110,7 +110,7 @@ export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
     const payload: any = {
       mode: draft.mode || 'insert',
       targetTable: qualifiedTable,
-      batchSize: Number(draft.batchSize || 1000),
+      jdbcBatchSize: Number(draft.jdbcBatchSize || 1000),
     };
     if (draft.connectionRef) payload.connectionRef = draft.connectionRef;
     if (keyColumns.length) payload.keyColumns = keyColumns;

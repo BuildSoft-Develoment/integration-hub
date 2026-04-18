@@ -71,6 +71,46 @@ public class ProcessExecutionStateService {
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public Long queueProcess(Long processDefinitionId,
+                             String processName,
+                             Long sourceExecutionId,
+                             String triggerSource,
+                             String requestPayloadJson) {
+        var definition = processDefinitionRepository.findRequired(processDefinitionId);
+        var execution = new ProcessExecution();
+        execution.processDefinition = definition;
+        execution.status = ExecutionStatus.PENDING;
+        execution.startedAt = LocalDateTime.now();
+        execution.sourceExecutionId = sourceExecutionId;
+        execution.triggerSource = triggerSource;
+        execution.requestPayloadJson = requestPayloadJson;
+        execution.details = "Execution queued";
+        processExecutionRepository.persist(execution);
+        var payload = new java.util.LinkedHashMap<String, Object>();
+        payload.put("processDefinitionId", definition.id);
+        payload.put("processName", processName);
+        if (sourceExecutionId != null) payload.put("sourceExecutionId", sourceExecutionId);
+        if (triggerSource != null && !triggerSource.isBlank()) payload.put("triggerSource", triggerSource);
+        auditService.record(execution, null, "PROCESS_QUEUED", "PENDING", "Process execution queued", payload);
+        return execution.id;
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public boolean markProcessRunningIfPending(Long processExecutionId) {
+        var execution = processExecutionRepository.findById(processExecutionId);
+        if (execution == null || execution.status != ExecutionStatus.PENDING) {
+            return false;
+        }
+        execution.status = ExecutionStatus.RUNNING;
+        execution.details = "Process execution started";
+        auditService.record(execution, null, "PROCESS_STARTED", "RUNNING", "Process execution started", Map.of(
+                "processDefinitionId", execution.processDefinition.id,
+                "processName", execution.processDefinition.name
+        ));
+        return true;
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
     public Long startTask(Long processExecutionId, Long taskDefinitionId, String taskType, Integer taskOrder) {
         var execution = processExecutionRepository.findById(processExecutionId);
         var taskDefinition = processTaskDefinitionRepository.findById(taskDefinitionId);
@@ -147,6 +187,29 @@ public class ProcessExecutionStateService {
         return processExecutionRepository.findById(processExecutionId);
     }
 
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public long countPendingProcesses() {
+        return processExecutionRepository.countPendingExecutions();
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public List<Long> listPendingProcessExecutionIds(int limit) {
+        return processExecutionRepository.listPendingExecutions(limit).stream()
+                .map(execution -> execution.id)
+                .toList();
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public QueuedExecution loadQueuedExecution(Long processExecutionId) {
+        var execution = processExecutionRepository.findRequired(processExecutionId);
+        return new QueuedExecution(
+                execution.id,
+                execution.processDefinition.id,
+                execution.triggerSource,
+                execution.requestPayloadJson
+        );
+    }
+
     private TaskPlan toTaskPlan(ProcessTaskDefinition task) {
         return new TaskPlan(
                 task.id,
@@ -164,6 +227,14 @@ public class ProcessExecutionStateService {
     }
 
     public record ExecutionPlan(Long processDefinitionId, String processName, List<TaskPlan> tasks) {
+    }
+
+    public record QueuedExecution(
+            Long processExecutionId,
+            Long processDefinitionId,
+            String triggerSource,
+            String requestPayloadJson
+    ) {
     }
 
     public record TaskPlan(

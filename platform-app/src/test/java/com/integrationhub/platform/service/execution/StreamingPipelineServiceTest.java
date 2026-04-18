@@ -24,7 +24,11 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -91,7 +95,7 @@ class StreamingPipelineServiceTest {
 
     @Test
     void pipelineRunsInParallel() {
-        var service = serviceForPolicy("failFast", true, List.of(
+        var service = serviceForPolicy("failFast", true, null, List.of(
                 new SelectedSourceFile("file1.txt", "/tmp/file1.txt", "text/plain", 10L, Instant.now()),
                 new SelectedSourceFile("file2.txt", "/tmp/file2.txt", "text/plain", 10L, Instant.now()),
                 new SelectedSourceFile("file3.txt", "/tmp/file3.txt", "text/plain", 10L, Instant.now())
@@ -106,7 +110,148 @@ class StreamingPipelineServiceTest {
         assertEquals(3, result.readResult().recordCount());
     }
 
-    private StreamingPipelineService serviceForPolicy(String policy, boolean parallel, List<SelectedSourceFile> selectedFiles) {
+    @Test
+    void pipelineHonorsConfiguredMaxConcurrency() {
+        var selectedFiles = List.of(
+                new SelectedSourceFile("file1.txt", "/tmp/file1.txt", "text/plain", 10L, Instant.now()),
+                new SelectedSourceFile("file2.txt", "/tmp/file2.txt", "text/plain", 10L, Instant.now()),
+                new SelectedSourceFile("file3.txt", "/tmp/file3.txt", "text/plain", 10L, Instant.now()),
+                new SelectedSourceFile("file4.txt", "/tmp/file4.txt", "text/plain", 10L, Instant.now())
+        );
+        var maxObserved = new AtomicInteger();
+        var inFlight = new AtomicInteger();
+        var service = serviceForPolicy(
+                "failFast",
+                true,
+                2,
+                selectedFiles,
+                sourcePayload -> {
+                    var current = inFlight.incrementAndGet();
+                    maxObserved.accumulateAndGet(current, Math::max);
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("Interrupted");
+                    } finally {
+                        inFlight.decrementAndGet();
+                    }
+                    return TaskResult.success("ok");
+                },
+                new AtomicInteger()
+        );
+
+        var result = service.run(1L, taskPlan("failFast", true, 2), dbWritePlan(), Map.of(), List.of());
+
+        assertEquals(4, result.readResult().recordCount());
+        assertTrue(maxObserved.get() <= 2, "Expected max concurrency <= 2 but was " + maxObserved.get());
+    }
+
+    @Test
+    void pipelineRunsBatchesInParallelWithinSingleFile() {
+        var selectedFiles = List.of(
+                new SelectedSourceFile("clientes_big.txt", "/tmp/clientes_big.txt", "text/plain", 10L, Instant.now())
+        );
+        var maxObserved = new AtomicInteger();
+        var inFlight = new AtomicInteger();
+        var service = serviceForPolicy(
+                "failFast",
+                true,
+                2,
+                "batch",
+                selectedFiles,
+                readBatches(List.of(
+                        List.of(Map.of("id", 1)),
+                        List.of(Map.of("id", 2)),
+                        List.of(Map.of("id", 3)),
+                        List.of(Map.of("id", 4))
+                )),
+                sourcePayload -> {
+                    var current = inFlight.incrementAndGet();
+                    maxObserved.accumulateAndGet(current, Math::max);
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new IllegalStateException("Interrupted");
+                    } finally {
+                        inFlight.decrementAndGet();
+                    }
+                    return TaskResult.success("ok");
+                },
+                new AtomicInteger()
+        );
+
+        var result = service.run(1L, taskPlan("failFast", true, 2, "batch"), dbWritePlan(), Map.of(), List.of());
+
+        assertEquals(4, result.readResult().recordCount());
+        assertTrue(maxObserved.get() <= 2, "Expected batch concurrency <= 2 but was " + maxObserved.get());
+        assertTrue(maxObserved.get() > 1, "Expected more than one batch in flight");
+    }
+
+    @Test
+    void parallelFailFastStopsSchedulingNewFilesAfterFirstError() {
+        var openCount = new AtomicInteger();
+        var service = serviceForPolicy(
+                "failFast",
+                true,
+                1,
+                List.of(
+                        new SelectedSourceFile("clientes_fail.txt", "/tmp/clientes_fail.txt", "text/plain", 10L, Instant.now()),
+                        new SelectedSourceFile("clientes_ok_1.txt", "/tmp/clientes_ok_1.txt", "text/plain", 10L, Instant.now()),
+                        new SelectedSourceFile("clientes_ok_2.txt", "/tmp/clientes_ok_2.txt", "text/plain", 10L, Instant.now())
+                ),
+                sourcePayload -> {
+                    if (sourcePayload != null && sourcePayload.name().contains("fail")) {
+                        throw new IllegalStateException("Cannot insert records");
+                    }
+                    return TaskResult.success("ok");
+                },
+                openCount
+        );
+
+        var error = assertThrows(StreamingPipelineService.StreamingPipelineException.class,
+                () -> service.run(1L, taskPlan("failFast", true, 1), dbWritePlan(), Map.of(), List.of()));
+
+        assertEquals("clientes_fail.txt", error.failedFileName());
+        assertEquals(1, openCount.get());
+    }
+
+    private StreamingPipelineService serviceForPolicy(String policy,
+                                                      boolean parallel,
+                                                      List<SelectedSourceFile> selectedFiles) {
+        return serviceForPolicy(policy, parallel, null, selectedFiles);
+    }
+
+    private StreamingPipelineService serviceForPolicy(String policy,
+                                                      boolean parallel,
+                                                      Integer maxConcurrency,
+                                                      List<SelectedSourceFile> selectedFiles) {
+        return serviceForPolicy(policy, parallel, maxConcurrency, "file", selectedFiles, defaultReaderBehavior(), sourcePayload -> {
+            if (sourcePayload != null && sourcePayload.name().contains("fail")) {
+                throw new IllegalStateException("Cannot insert records");
+            }
+            return TaskResult.success("ok");
+        }, new AtomicInteger());
+    }
+
+    private StreamingPipelineService serviceForPolicy(String policy,
+                                                      boolean parallel,
+                                                      Integer maxConcurrency,
+                                                      List<SelectedSourceFile> selectedFiles,
+                                                      java.util.function.Function<SourcePayload, TaskResult> sinkBehavior,
+                                                      AtomicInteger openCount) {
+        return serviceForPolicy(policy, parallel, maxConcurrency, "file", selectedFiles, defaultReaderBehavior(), sinkBehavior, openCount);
+    }
+
+    private StreamingPipelineService serviceForPolicy(String policy,
+                                                      boolean parallel,
+                                                      Integer maxConcurrency,
+                                                      String parallelMode,
+                                                      List<SelectedSourceFile> selectedFiles,
+                                                      ReaderProvider readerProvider,
+                                                      java.util.function.Function<SourcePayload, TaskResult> sinkBehavior,
+                                                      AtomicInteger openCount) {
         var mapper = new JsonConfigurationMapper();
         var runtimeSupport = new FileReadRuntimeSupport(mapper);
 
@@ -121,6 +266,7 @@ class StreamingPipelineServiceTest {
 
             @Override
             public SourcePayload openFile(SelectedSourceFile selectedFile, Map<String, Object> configuration) {
+                openCount.incrementAndGet();
                 return SourcePayload.fromBytes(selectedFile.name(), selectedFile.name().getBytes(), selectedFile.mediaType());
             }
         };
@@ -133,18 +279,7 @@ class StreamingPipelineServiceTest {
         var readerRegistry = new ReaderProviderRegistry(null) {
             @Override
             public ReaderProvider resolve(String type) {
-                return new ReaderProvider() {
-                    @Override
-                    public String type() { return "TXT"; }
-
-                    @Override
-                    public ReadResult readInBatches(SourcePayload payload, Map<String, Object> configuration, int batchSize, ReadBatchConsumer consumer) {
-                        var values = new LinkedHashMap<String, Object>();
-                        values.put("id", payload.name());
-                        consumer.accept(new ReadBatch(payload.name(), 1, List.of(new ReadRecord(values))));
-                        return new ReadResult(List.of(), 1, 0, List.of());
-                    }
-                };
+                return readerProvider;
             }
         };
 
@@ -154,10 +289,7 @@ class StreamingPipelineServiceTest {
 
             @Override
             public TaskResult executeRecords(TaskContext context, Map<String, Object> configuration, List<ReadRecord> records, SourcePayload sourcePayload) {
-                if (sourcePayload != null && sourcePayload.name().contains("fail")) {
-                    throw new IllegalStateException("Cannot insert records");
-                }
-                return TaskResult.success("ok");
+                return sinkBehavior.apply(sourcePayload);
             }
         };
 
@@ -169,51 +301,98 @@ class StreamingPipelineServiceTest {
             }
         };
 
-        // Mock ManagedExecutor for unit test
-        org.eclipse.microprofile.context.ManagedExecutor executor = new org.eclipse.microprofile.context.ManagedExecutor() {
-            @Override public void execute(Runnable command) { command.run(); }
-            @Override public <T> java.util.concurrent.CompletableFuture<T> completedFuture(T value) { return java.util.concurrent.CompletableFuture.completedFuture(value); }
-            @Override public <T> java.util.concurrent.CompletableFuture<T> failedFuture(Throwable ex) { return java.util.concurrent.CompletableFuture.failedFuture(ex); }
-            @Override public <T> java.util.concurrent.CompletableFuture<T> supplyAsync(java.util.function.Supplier<T> supplier) { return java.util.concurrent.CompletableFuture.supplyAsync(supplier, this); }
-            @Override public java.util.concurrent.CompletableFuture<Void> runAsync(Runnable runnable) { return java.util.concurrent.CompletableFuture.runAsync(runnable, this); }
-            @Override public <U> java.util.concurrent.CompletionStage<U> completedStage(U value) { return java.util.concurrent.CompletableFuture.completedStage(value); }
-            @Override public <U> java.util.concurrent.CompletionStage<U> failedStage(Throwable ex) { return java.util.concurrent.CompletableFuture.failedStage(ex); }
-            @Override public <T> java.util.concurrent.CompletableFuture<T> newIncompleteFuture() { return new java.util.concurrent.CompletableFuture<>(); }
-            @Override public <T> java.util.concurrent.CompletableFuture<T> copy(java.util.concurrent.CompletableFuture<T> f) { return f.copy(); }
-            @Override public <T> java.util.concurrent.CompletionStage<T> copy(java.util.concurrent.CompletionStage<T> f) { return f.toCompletableFuture().copy(); }
-            
-            @Override public org.eclipse.microprofile.context.ThreadContext getThreadContext() { return null; }
-            
-            @Override public void shutdown() {}
-            @Override public List<Runnable> shutdownNow() { return List.of(); }
-            @Override public boolean isShutdown() { return false; }
-            @Override public boolean isTerminated() { return false; }
-            @Override public boolean awaitTermination(long timeout, java.util.concurrent.TimeUnit unit) { return true; }
-            @Override public <T> java.util.concurrent.Future<T> submit(java.util.concurrent.Callable<T> task) { return null; }
-            @Override public <T> java.util.concurrent.Future<T> submit(Runnable task, T result) { return null; }
-            @Override public java.util.concurrent.Future<?> submit(Runnable task) { return null; }
-            @Override public <T> List<java.util.concurrent.Future<T>> invokeAll(java.util.Collection<? extends java.util.concurrent.Callable<T>> tasks) { return null; }
-            @Override public <T> List<java.util.concurrent.Future<T>> invokeAll(java.util.Collection<? extends java.util.concurrent.Callable<T>> tasks, long timeout, java.util.concurrent.TimeUnit unit) { return null; }
-            @Override public <T> T invokeAny(java.util.Collection<? extends java.util.concurrent.Callable<T>> tasks) { return null; }
-            @Override public <T> T invokeAny(java.util.Collection<? extends java.util.concurrent.Callable<T>> tasks, long timeout, java.util.concurrent.TimeUnit unit) { return null; }
-        };
+        ExecutorService delegate = parallel
+                ? Executors.newCachedThreadPool()
+                : Executors.newSingleThreadExecutor();
+        org.eclipse.microprofile.context.ManagedExecutor executor = managedExecutor(delegate);
 
         return new StreamingPipelineService(
                 sourceRegistry,
                 readerRegistry,
                 taskProviderRegistry,
                 runtimeSupport,
+                new StreamingPipelineWorker(runtimeSupport),
                 executor
         );
     }
 
-    private ProcessExecutionStateService.TaskPlan taskPlan(String fileErrorPolicy, boolean parallel) {
-        String sourceConfigurationJson = "{\"fileErrorPolicy\":\"" + fileErrorPolicy + "\", \"parallel\":" + parallel + "}";
+    private ReaderProvider defaultReaderBehavior() {
+        return readBatches(List.of(List.of(Map.of("id", "default"))));
+    }
+
+    private ReaderProvider readBatches(List<List<Map<String, Object>>> batches) {
+        return new ReaderProvider() {
+            @Override
+            public String type() { return "TXT"; }
+
+            @Override
+            public ReadResult readInBatches(SourcePayload payload, Map<String, Object> configuration, int batchSize, ReadBatchConsumer consumer) {
+                var total = 0;
+                var batchNumber = 1;
+                for (var batchRecords : batches) {
+                    var records = batchRecords.stream()
+                            .map(values -> new ReadRecord(new LinkedHashMap<>(values)))
+                            .toList();
+                    consumer.accept(new ReadBatch(payload.name(), batchNumber++, records));
+                    total += records.size();
+                }
+                return new ReadResult(List.of(), total, 0, List.of());
+            }
+        };
+    }
+
+    private org.eclipse.microprofile.context.ManagedExecutor managedExecutor(ExecutorService delegate) {
+        return new org.eclipse.microprofile.context.ManagedExecutor() {
+            @Override public void execute(Runnable command) { delegate.execute(command); }
+            @Override public <T> java.util.concurrent.CompletableFuture<T> completedFuture(T value) { return java.util.concurrent.CompletableFuture.completedFuture(value); }
+            @Override public <T> java.util.concurrent.CompletableFuture<T> failedFuture(Throwable ex) { return java.util.concurrent.CompletableFuture.failedFuture(ex); }
+            @Override public <T> java.util.concurrent.CompletableFuture<T> supplyAsync(java.util.function.Supplier<T> supplier) { return java.util.concurrent.CompletableFuture.supplyAsync(supplier, delegate); }
+            @Override public java.util.concurrent.CompletableFuture<Void> runAsync(Runnable runnable) { return java.util.concurrent.CompletableFuture.runAsync(runnable, delegate); }
+            @Override public <U> java.util.concurrent.CompletionStage<U> completedStage(U value) { return java.util.concurrent.CompletableFuture.completedStage(value); }
+            @Override public <U> java.util.concurrent.CompletionStage<U> failedStage(Throwable ex) { return java.util.concurrent.CompletableFuture.failedStage(ex); }
+            @Override public <T> java.util.concurrent.CompletableFuture<T> newIncompleteFuture() { return new java.util.concurrent.CompletableFuture<>(); }
+            @Override public <T> java.util.concurrent.CompletableFuture<T> copy(java.util.concurrent.CompletableFuture<T> f) { return f.copy(); }
+            @Override public <T> java.util.concurrent.CompletionStage<T> copy(java.util.concurrent.CompletionStage<T> f) { return f.toCompletableFuture().copy(); }
+            @Override public org.eclipse.microprofile.context.ThreadContext getThreadContext() { return null; }
+            @Override public void shutdown() { delegate.shutdown(); }
+            @Override public List<Runnable> shutdownNow() { return delegate.shutdownNow(); }
+            @Override public boolean isShutdown() { return delegate.isShutdown(); }
+            @Override public boolean isTerminated() { return delegate.isTerminated(); }
+            @Override public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException { return delegate.awaitTermination(timeout, unit); }
+            @Override public <T> Future<T> submit(java.util.concurrent.Callable<T> task) { return delegate.submit(task); }
+            @Override public <T> Future<T> submit(Runnable task, T result) { return delegate.submit(task, result); }
+            @Override public Future<?> submit(Runnable task) { return delegate.submit(task); }
+            @Override public <T> List<Future<T>> invokeAll(java.util.Collection<? extends java.util.concurrent.Callable<T>> tasks) throws InterruptedException { return delegate.invokeAll(tasks); }
+            @Override public <T> List<Future<T>> invokeAll(java.util.Collection<? extends java.util.concurrent.Callable<T>> tasks, long timeout, TimeUnit unit) throws InterruptedException { return delegate.invokeAll(tasks, timeout, unit); }
+            @Override public <T> T invokeAny(java.util.Collection<? extends java.util.concurrent.Callable<T>> tasks) throws InterruptedException, java.util.concurrent.ExecutionException { return delegate.invokeAny(tasks); }
+            @Override public <T> T invokeAny(java.util.Collection<? extends java.util.concurrent.Callable<T>> tasks, long timeout, TimeUnit unit) throws InterruptedException, java.util.concurrent.ExecutionException, java.util.concurrent.TimeoutException { return delegate.invokeAny(tasks, timeout, unit); }
+        };
+    }
+
+    private ProcessExecutionStateService.TaskPlan taskPlan(String fileErrorPolicy, boolean parallel, Integer maxConcurrency, String parallelMode) {
+        var sourceConfiguration = new StringBuilder()
+                .append("{\"fileErrorPolicy\":\"").append(fileErrorPolicy).append("\",")
+                .append("\"parallel\":").append(parallel);
+        if (maxConcurrency != null) {
+            sourceConfiguration.append(",\"maxConcurrency\":").append(maxConcurrency);
+        }
+        if (parallelMode != null && !parallelMode.isBlank()) {
+            sourceConfiguration.append(",\"parallelMode\":\"").append(parallelMode).append("\"");
+        }
+        sourceConfiguration.append("}");
         return new ProcessExecutionStateService.TaskPlan(
                 10L, 1, TaskType.FILE_READ, "{}",
-                100L, "Source QA", "FILESYSTEM", sourceConfigurationJson,
+                100L, "Source QA", "FILESYSTEM", sourceConfiguration.toString(),
                 200L, "TXT", "{}"
         );
+    }
+
+    private ProcessExecutionStateService.TaskPlan taskPlan(String fileErrorPolicy, boolean parallel, Integer maxConcurrency) {
+        return taskPlan(fileErrorPolicy, parallel, maxConcurrency, "file");
+    }
+
+    private ProcessExecutionStateService.TaskPlan taskPlan(String fileErrorPolicy, boolean parallel) {
+        return taskPlan(fileErrorPolicy, parallel, null);
     }
 
     private ProcessExecutionStateService.TaskPlan dbWritePlan() {

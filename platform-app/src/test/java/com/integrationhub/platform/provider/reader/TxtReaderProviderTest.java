@@ -35,7 +35,7 @@ class TxtReaderProviderTest {
         ReadResult result = read(provider, payload, Map.of(
                 "mode", "delimited",
                 "delimiter", "|",
-                "rowData", 1,
+                "rowData", 2,
                 "fields", List.of(
                         Map.of("name", "dni", "position", 1),
                         Map.of("name", "nombre", "position", 2),
@@ -66,7 +66,7 @@ class TxtReaderProviderTest {
         ReadResult result = read(provider, payload, Map.of(
                 "mode", "delimited",
                 "delimiter", "|",
-                "rowData", 1,
+                "rowData", 2,
                 "fields", List.of(
                         Map.of("name", "dni", "position", 1, "type", "NUMBER", "required", true),
                         Map.of("name", "nombre", "position", 2, "type", "TEXT", "size", 10,
@@ -123,7 +123,7 @@ class TxtReaderProviderTest {
 
         ReadResult result = read(provider, payload, Map.of(
                 "mode", "fixed-length",
-                "rowData", 1,
+                "rowData", 2,
                 "fields", List.of(
                         Map.of("name", "dni", "start", 1, "end", 8),
                         Map.of("name", "nombre", "start", 9, "end", 15),
@@ -136,6 +136,31 @@ class TxtReaderProviderTest {
         assertEquals("1", result.records().get(0).values().get("dni"));
         assertEquals("xx1", result.records().get(0).values().get("nombre"));
         assertEquals("red", result.records().get(3).values().get("color"));
+    }
+
+    @Test
+    void treatsRowDataAsOneBasedRowNumber() {
+        var payload = SourcePayload.fromBytes(
+                "cliente.txt",
+                """
+                1|xx1|11|red
+                2|xx2|12|blue
+                """.getBytes(StandardCharsets.UTF_8),
+                "text/plain"
+        );
+
+        ReadResult result = read(provider, payload, Map.of(
+                "mode", "delimited",
+                "delimiter", "|",
+                "rowData", 1,
+                "fields", List.of(
+                        Map.of("name", "dni", "position", 1),
+                        Map.of("name", "nombre", "position", 2)
+                )
+        ));
+
+        assertEquals(2, result.recordCount());
+        assertEquals("1", result.records().get(0).values().get("dni"));
     }
 
     private ReadResult read(TxtReaderProvider provider, SourcePayload payload, Map<String, Object> configuration) {

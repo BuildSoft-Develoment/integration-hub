@@ -4,8 +4,10 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
 import {
+  buildTaskDbWriteSummary,
   buildTaskReadSummary,
   downloadSkippedRowsCsv,
+  formatExecutionDate,
   formatTaskOutputValue,
   summarizeFailure,
   taskOutputEntries,
@@ -31,6 +33,10 @@ export class ExecutionTaskListComponent {
     return buildTaskReadSummary(task);
   }
 
+  dbWriteSummary(task: ProcessTaskExecutionRecord) {
+    return buildTaskDbWriteSummary(task);
+  }
+
   outputEntries(task: ProcessTaskExecutionRecord): Array<[string, unknown]> {
     return taskOutputEntries(task.payloadJson);
   }
@@ -48,7 +54,7 @@ export class ExecutionTaskListComponent {
   }
 
   formatDate(value: string | null): string {
-    return value ? this.dateTime.formatIso(value) : '-';
+    return formatExecutionDate(this.dateTime, value);
   }
 
   statusLabel(status: string): string {

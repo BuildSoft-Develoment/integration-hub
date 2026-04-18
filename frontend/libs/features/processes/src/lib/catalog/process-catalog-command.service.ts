@@ -64,8 +64,11 @@ export class ProcessCatalogCommandService {
 
   async execute(process: ProcessRecord): Promise<void> {
     await this.editor.trackExecuting(async () => {
-      await firstValueFrom(this.api.execute(process.id));
-      this.feedback.info('processes.executed');
+      const execution = await firstValueFrom(this.api.execute(process.id));
+      this.feedback.info('processes.queued', {
+        id: execution.id,
+        status: execution.status,
+      });
       await this.query.reload();
       this.editor.markSelectedProcess(process.id);
       this.editor.drawerOpen.set(true);

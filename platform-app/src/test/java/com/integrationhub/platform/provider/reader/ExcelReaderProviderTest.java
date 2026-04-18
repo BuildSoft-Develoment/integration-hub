@@ -29,7 +29,7 @@ class ExcelReaderProviderTest {
 
         ReadResult result = read(xlsReaderProvider, payload, Map.of(
                 "sheetIndex", 0,
-                "rowData", 1,
+                "rowData", 2,
                 "fields", List.of(
                         Map.of("name", "codigo", "position", 1),
                         Map.of("name", "nombre", "position", 2)
@@ -52,7 +52,7 @@ class ExcelReaderProviderTest {
 
         ReadResult result = read(xlsxReaderProvider, payload, Map.of(
                 "sheetIndex", 1,
-                "rowData", 1,
+                "rowData", 2,
                 "fields", List.of(
                         Map.of("name", "codigo", "position", 1),
                         Map.of("name", "nombre", "position", 2)
@@ -75,7 +75,7 @@ class ExcelReaderProviderTest {
 
         ReadResult result = read(xlsxReaderProvider, payload, Map.of(
                 "sheetIndex", 1,
-                "rowData", 1,
+                "rowData", 2,
                 "fields", List.of(
                         Map.of("name", "dni", "position", 1),
                         Map.of("name", "nombre", "position", 2),
@@ -101,7 +101,7 @@ class ExcelReaderProviderTest {
 
         ReadResult result = read(xlsxReaderProvider, payload, Map.of(
                 "sheetIndex", 0,
-                "rowData", 1,
+                "rowData", 2,
                 "fields", List.of(
                         Map.of("name", "dni", "position", 1, "type", "NUMBER", "required", true),
                         Map.of("name", "nombre", "position", 2, "script", "if (value == null || value == '') { valid = false; } else { value = value.toUpperCase(); }"),
@@ -114,6 +114,27 @@ class ExcelReaderProviderTest {
         assertEquals(new BigDecimal("1"), result.records().get(0).values().get("dni"));
         assertEquals("XX1", result.records().get(0).values().get("nombre"));
         assertEquals(new BigDecimal("14"), result.records().get(3).values().get("total"));
+    }
+
+    @Test
+    void treatsExcelRowDataAsOneBasedRowNumber() throws IOException {
+        SourcePayload payload = SourcePayload.fromBytes(
+                "clientes.xlsx",
+                buildRowsWithoutHeaderWorkbookBytes(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        );
+
+        ReadResult result = read(xlsxReaderProvider, payload, Map.of(
+                "sheetIndex", 0,
+                "rowData", 1,
+                "fields", List.of(
+                        Map.of("name", "codigo", "position", 1),
+                        Map.of("name", "nombre", "position", 2)
+                )
+        ));
+
+        assertEquals(2, result.recordCount());
+        assertEquals("001", result.records().get(0).values().get("codigo"));
     }
 
     private ReadResult read(ReaderProvider provider, SourcePayload payload, Map<String, Object> configuration) {
@@ -148,6 +169,20 @@ class ExcelReaderProviderTest {
             writeCustomerRows(sheet1);
             var sheet2 = workbook.createSheet("Hoja 2");
             writeCustomerRows(sheet2);
+            workbook.write(outputStream);
+            return outputStream.toByteArray();
+        }
+    }
+
+    private byte[] buildRowsWithoutHeaderWorkbookBytes() throws IOException {
+        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            Sheet sheet = workbook.createSheet("Hoja 1");
+            var row1 = sheet.createRow(0);
+            row1.createCell(0).setCellValue("001");
+            row1.createCell(1).setCellValue("Ana");
+            var row2 = sheet.createRow(1);
+            row2.createCell(0).setCellValue("002");
+            row2.createCell(1).setCellValue("Luis");
             workbook.write(outputStream);
             return outputStream.toByteArray();
         }

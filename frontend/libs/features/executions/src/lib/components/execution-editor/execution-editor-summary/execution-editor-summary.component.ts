@@ -3,7 +3,7 @@ import { Component, inject, input } from '@angular/core';
 
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
 
-import { formatTriggerSourceLabel } from '../../../details/execution-detail.utils';
+import { formatExecutionDate, formatTriggerSourceLabel } from '../../../details/execution-detail.utils';
 import {
   ProcessExecutionRecord,
   ProcessTaskExecutionRecord,
@@ -47,7 +47,7 @@ export class ExecutionEditorSummaryComponent {
   }
 
   formatDate(value: string | null): string {
-    return value ? this.dateTime.formatIso(value) : '-';
+    return formatExecutionDate(this.dateTime, value);
   }
 
   triggerLabel(value: string | null): string {

@@ -2,7 +2,7 @@ package com.integrationhub.platform.service.process;
 
 import com.integrationhub.platform.repository.ProcessDefinitionRepository;
 import com.integrationhub.platform.service.execution.AuditService;
-import com.integrationhub.platform.service.execution.ProcessExecutionService;
+import com.integrationhub.platform.service.execution.ProcessExecutionCommandService;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
@@ -10,6 +10,7 @@ import org.jboss.logging.Logger;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 @ApplicationScoped
@@ -17,16 +18,16 @@ public class ProcessSchedulerService {
 
     private static final Logger LOG = Logger.getLogger(ProcessSchedulerService.class);
 
-    private final ProcessExecutionService processExecutionService;
+    private final ProcessExecutionCommandService processExecutionCommandService;
     private final AuditService auditService;
     private final ProcessDefinitionRepository processDefinitionRepository;
 
     public ProcessSchedulerService(
-            ProcessExecutionService processExecutionService,
+            ProcessExecutionCommandService processExecutionCommandService,
             AuditService auditService,
             ProcessDefinitionRepository processDefinitionRepository
     ) {
-        this.processExecutionService = processExecutionService;
+        this.processExecutionCommandService = processExecutionCommandService;
         this.auditService = auditService;
         this.processDefinitionRepository = processDefinitionRepository;
     }
@@ -39,13 +40,13 @@ public class ProcessSchedulerService {
 
         for (var definition : dueProcesses) {
             try {
-                LOG.infov("Running scheduled process {0} ({1})", definition.name, definition.id);
-                processExecutionService.execute(definition.id, Map.of(), "SCHEDULED");
+                LOG.infov("Queueing scheduled process {0} ({1})", definition.name, definition.id);
+                var execution = processExecutionCommandService.startAsync(definition.id, Map.of(), List.of(), null, "SCHEDULED");
                 definition.lastRunAt = now;
                 definition.nextRunAt = now.plus(parseEvery(definition.scheduleEvery));
-                auditService.record((Long) null, (Long) null, "PROCESS_SCHEDULED_EXECUTION", "COMPLETED",
-                        "Scheduled execution completed for process " + definition.name,
-                        Map.of("processDefinitionId", definition.id, "scheduleEvery", definition.scheduleEvery));
+                auditService.record((Long) null, (Long) null, "PROCESS_SCHEDULED_EXECUTION", "PENDING",
+                        "Scheduled execution queued for process " + definition.name,
+                        Map.of("processDefinitionId", definition.id, "processExecutionId", execution.id, "scheduleEvery", definition.scheduleEvery));
             } catch (Exception e) {
                 definition.nextRunAt = now.plus(parseEvery(definition.scheduleEvery));
                 auditService.record((Long) null, (Long) null, "PROCESS_SCHEDULED_EXECUTION", "FAILED",

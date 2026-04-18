@@ -38,8 +38,8 @@ final class XlsxStreamingReaderSupport {
             throw new IllegalArgumentException("Excel reader requires fields with positions");
         }
 
-        var sheetIndex = optionalInt(configuration, "sheetIndex", 0);
-        var dataStartRowIndex = optionalInt(configuration, "rowData", 1);
+        var sheetIndex = ReaderRowSupport.optionalInt(configuration, "sheetIndex", 0);
+        var dataStartRowIndex = ReaderRowSupport.dataStartRowIndex(configuration, 1);
         var trimValues = Boolean.parseBoolean(String.valueOf(configuration.getOrDefault("trimValues", true)));
         var context = new StreamingContext(payload.name(), configuredFields, dataStartRowIndex, trimValues, Math.max(batchSize, 1), consumer);
 
@@ -75,14 +75,6 @@ final class XlsxStreamingReaderSupport {
         } catch (OpenXML4JException | SAXException | IOException | ParserConfigurationException e) {
             throw new IllegalArgumentException("Invalid XLSX payload", e);
         }
-    }
-
-    private static int optionalInt(Map<String, Object> configuration, String key, int defaultValue) {
-        var value = configuration.get(key);
-        if (value == null || String.valueOf(value).isBlank()) {
-            return defaultValue;
-        }
-        return Integer.parseInt(String.valueOf(value));
     }
 
     private static final class StreamingContext {

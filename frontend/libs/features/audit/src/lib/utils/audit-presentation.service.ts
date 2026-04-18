@@ -21,7 +21,7 @@ export class AuditPresentationService {
   }
 
   formatDate(value: string | null): string {
-    return value ? this.dateTime.formatIso(value) : '-';
+    return value ? this.dateTime.formatIso(value, 'dd LLL yyyy, HH:mm:ss') : '-';
   }
 
   eventLabel(eventType: string | null): string {

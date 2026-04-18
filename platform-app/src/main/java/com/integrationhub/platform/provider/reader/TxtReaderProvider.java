@@ -46,7 +46,7 @@ public class TxtReaderProvider implements ReaderProvider {
         var rawDelimiter = String.valueOf(configuration.getOrDefault("delimiter", ","));
         var delimiter = "\\t".equals(rawDelimiter) ? "\t" : rawDelimiter;
         var encoding = String.valueOf(configuration.getOrDefault("encoding", "UTF-8"));
-        var dataStartRowIndex = optionalInt(configuration, "rowData", optionalInt(configuration, "dataStartRowIndex", 0));
+        var dataStartRowIndex = ReaderRowSupport.dataStartRowIndex(configuration, 1);
         var configuredFields = ReaderFieldSupport.configuredFields(configuration.get("fields"), "TXT");
         if (configuredFields.isEmpty()) {
             throw new IllegalArgumentException("TXT delimited mode requires field definitions");
@@ -98,7 +98,7 @@ public class TxtReaderProvider implements ReaderProvider {
                                        int batchSize,
                                        ReadBatchConsumer consumer) {
         var encoding = String.valueOf(configuration.getOrDefault("encoding", "UTF-8"));
-        var dataStartRowIndex = optionalInt(configuration, "rowData", optionalInt(configuration, "dataStartRowIndex", 0));
+        var dataStartRowIndex = ReaderRowSupport.dataStartRowIndex(configuration, 1);
         var configuredFields = ReaderFieldSupport.configuredFields(configuration.get("fields"), "TXT");
         if (configuredFields.isEmpty()) {
             throw new IllegalArgumentException("TXT fixed-length mode requires field definitions");
@@ -161,13 +161,6 @@ public class TxtReaderProvider implements ReaderProvider {
         records.clear();
     }
 
-    private int optionalInt(Map<String, Object> configuration, String key, int defaultValue) {
-        var value = configuration.get(key);
-        if (value == null || String.valueOf(value).isBlank()) {
-            return defaultValue;
-        }
-        return Integer.parseInt(String.valueOf(value));
-    }
 }
 
 

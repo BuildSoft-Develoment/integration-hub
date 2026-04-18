@@ -98,6 +98,19 @@
                 </section>
               }
 
+              @if (dbWriteSummary(task)) {
+                <section class="task-card__surface">
+                  <div class="task-summary-metrics">
+                    <span class="summary-pill summary-pill--success">{{ i18n.t('executions.recordsProcessed') }}: {{ dbWriteSummary(task)!.processedCount ?? '-' }}</span>
+                    <span class="summary-pill summary-pill--info">{{ i18n.t('executions.recordsWritten') }}: {{ dbWriteSummary(task)!.writtenCount ?? '-' }}</span>
+                    <span class="summary-pill">{{ i18n.t('executions.writeMode') }}: {{ dbWriteSummary(task)!.mode ?? '-' }}</span>
+                  </div>
+                  @if (dbWriteSummary(task)!.targetTable) {
+                    <p class="task-summary-text">{{ i18n.t('executions.targetTable') }}: {{ dbWriteSummary(task)!.targetTable }}</p>
+                  }
+                </section>
+              }
+
               @if (task.payloadJson) {
                 <div class="task-block">
                   <strong>{{ i18n.t('executions.payloadJson') }}</strong>

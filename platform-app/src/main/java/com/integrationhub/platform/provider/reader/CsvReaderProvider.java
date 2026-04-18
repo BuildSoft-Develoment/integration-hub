@@ -34,7 +34,7 @@ public class CsvReaderProvider implements ReaderProvider {
         var rawDelimiter = String.valueOf(configuration.getOrDefault("delimiter", ","));
         var delimiter = "\\t".equals(rawDelimiter) ? "\t" : rawDelimiter;
         var encoding = String.valueOf(configuration.getOrDefault("encoding", "UTF-8"));
-        var dataStartRowIndex = optionalInt(configuration, "rowData", 0);
+        var dataStartRowIndex = ReaderRowSupport.dataStartRowIndex(configuration, 1);
         var configuredFields = ReaderFieldSupport.configuredFields(configuration.get("fields"), "CSV");
         if (configuredFields.isEmpty()) {
             throw new IllegalArgumentException("CSV requires field definitions");
@@ -90,14 +90,6 @@ public class CsvReaderProvider implements ReaderProvider {
         }
         consumer.accept(new ReadBatch(payload.name(), batchNumber, List.copyOf(records)));
         records.clear();
-    }
-
-    private int optionalInt(Map<String, Object> configuration, String key, int defaultValue) {
-        var value = configuration.get(key);
-        if (value == null || String.valueOf(value).isBlank()) {
-            return defaultValue;
-        }
-        return Integer.parseInt(String.valueOf(value));
     }
 }
 

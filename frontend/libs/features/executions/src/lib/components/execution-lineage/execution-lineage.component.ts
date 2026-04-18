@@ -3,7 +3,7 @@ import { Component, inject, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
 import { ExecutionNavigationEntry, ProcessExecutionRecord } from '../../models/execution.models';
-import { formatTriggerSourceLabel } from '../../details/execution-detail.utils';
+import { formatExecutionDate, formatTriggerSourceLabel } from '../../details/execution-detail.utils';
 
 @Component({
   selector: 'ih-execution-lineage',
@@ -45,7 +45,7 @@ export class ExecutionLineageComponent {
   }
 
   formatDate(value: string | null): string {
-    return value ? this.dateTime.formatIso(value) : '-';
+    return formatExecutionDate(this.dateTime, value);
   }
 
   triggerLabel(value: string | null): string {
