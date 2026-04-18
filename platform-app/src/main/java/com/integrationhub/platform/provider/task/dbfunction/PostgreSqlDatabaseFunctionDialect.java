@@ -1,7 +1,7 @@
 package com.integrationhub.platform.provider.task.dbfunction;
 
+import com.integrationhub.platform.domain.ConnectionType;
 import com.integrationhub.platform.provider.task.common.StoredProcedureRuntimeSupport;
-import com.integrationhub.platform.provider.task.dbwrite.DbTaskSupport;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.sql.Connection;
@@ -10,22 +10,21 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @ApplicationScoped
-public class PostgreSqlDatabaseFunctionDialect implements DatabaseFunctionDialect {
+public class PostgreSqlDatabaseFunctionDialect extends AbstractDatabaseFunctionDialect {
 
     @Override
-    public boolean supports(String databaseProductName) {
-        return databaseProductName != null && databaseProductName.toLowerCase().contains("postgres");
+    public ConnectionType connectionType() {
+        return ConnectionType.POSTGRESQL;
     }
 
     @Override
     public String selectStatement(String functionName,
                                   List<StoredProcedureRuntimeSupport.ResolvedParameter> parameters,
                                   String resultAlias) {
-        var qualifiedName = DbTaskSupport.sanitizeQualifiedIdentifier(functionName);
         var placeholders = parameters.stream()
                 .map(parameter -> "cast(? as " + StoredProcedureRuntimeSupport.postgresType(parameter.jdbcType()) + ")")
                 .collect(Collectors.joining(", "));
-        return "select * from " + qualifiedName + "(" + placeholders + ")";
+        return "select * from " + sanitizeQualifiedFunctionName(functionName) + "(" + placeholders + ")";
     }
 
     @Override

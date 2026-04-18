@@ -1,11 +1,7 @@
-package com.integrationhub.platform.provider.task;
+package com.integrationhub.platform.provider.task.dbfunction;
 
-import com.integrationhub.platform.domain.ExecutionStatus;
-import com.integrationhub.platform.domain.TaskType;
-import com.integrationhub.platform.entity.ProcessExecution;
-import com.integrationhub.platform.entity.ProcessTaskDefinition;
-import com.integrationhub.platform.service.ConnectionPoolManager;
-import com.integrationhub.platform.spi.TaskContext;
+import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.task.TaskContext;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.util.TypeLiteral;
 
@@ -35,23 +31,17 @@ abstract class DatabaseFunctionTaskProviderCompatibilityTestSupport {
         return new DatabaseFunctionTaskProvider(
                 dataSource,
                 connectionPoolManager,
-                fixedDialectInstance(List.of(new PostgreSqlDatabaseFunctionDialect(), new MySqlDatabaseFunctionDialect(), new SqlServerDatabaseFunctionDialect(), new OracleDatabaseFunctionDialect(), new GenericDatabaseFunctionDialect()))
+                fixedDialectInstance(List.of(
+                        new PostgreSqlDatabaseFunctionDialect(),
+                        new MySqlDatabaseFunctionDialect(),
+                        new SqlServerDatabaseFunctionDialect(),
+                        new OracleDatabaseFunctionDialect()
+                ))
         );
     }
 
     protected TaskContext taskContext() {
-        var execution = new ProcessExecution();
-        execution.id = 301L;
-        execution.status = ExecutionStatus.RUNNING;
-        execution.startedAt = LocalDateTime.now();
-
-        var taskDefinition = new ProcessTaskDefinition();
-        taskDefinition.id = 401L;
-        taskDefinition.taskType = TaskType.DB_EXECUTE_FN;
-        taskDefinition.taskOrder = 1;
-        taskDefinition.configurationJson = "{}";
-
-        var context = new TaskContext(execution, taskDefinition);
+        var context = new TaskContext(301L, 401L);
         context.attributes().put("executionVariables", Map.of("idinstancia", "ABC123", "empresa", "C910"));
         return context;
     }
