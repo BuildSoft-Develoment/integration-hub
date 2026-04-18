@@ -1,4 +1,4 @@
-package com.integrationhub.platform.provider.task;
+package com.integrationhub.platform.provider.task.common;
 
 import org.junit.jupiter.api.Test;
 

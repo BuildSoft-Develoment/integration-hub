@@ -1,8 +1,9 @@
-package com.integrationhub.platform.service;
+package com.integrationhub.platform.service.source;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.api.response.source.SourceTestResponse;
 import com.integrationhub.platform.domain.SourceType;
+import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.secret.ConfigSecretValueProvider;
 import com.integrationhub.platform.service.secret.EnvironmentSecretValueProvider;
 import com.integrationhub.platform.service.secret.FileVaultSecretClient;
@@ -11,9 +12,9 @@ import com.integrationhub.platform.service.secret.FileVaultSecretValueProvider;
 import com.integrationhub.platform.service.secret.SecretLocationMapper;
 import com.integrationhub.platform.service.secret.SecretResolver;
 import com.integrationhub.platform.service.secret.SecretValueProvider;
-import com.integrationhub.platform.spi.SelectedSourceFile;
-import com.integrationhub.platform.spi.SourcePayload;
-import com.integrationhub.platform.spi.SourceProvider;
+import com.integrationhub.platform.spi.source.SelectedSourceFile;
+import com.integrationhub.platform.spi.source.SourcePayload;
+import com.integrationhub.platform.spi.source.SourceProvider;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -93,7 +94,7 @@ class SourceCatalogServiceTest {
                 new FileVaultSecretLocationMapper(config, true);
         SecretValueProvider vaultProvider = new FileVaultSecretValueProvider(fileVaultSecretClient, locationMapper, true);
         SecretResolver secretResolver = new SecretResolver(List.of(envProvider, configProvider, vaultProvider));
-        return new JsonConfigurationMapper(new ObjectMapper(), secretResolver, true);
+        return new JsonConfigurationMapper(new ObjectMapper(), secretResolver);
     }
 
     private static final class StubSourceProviderRegistry extends SourceProviderRegistry {

@@ -1,8 +1,8 @@
 package com.integrationhub.platform.provider.reader;
 
-import com.integrationhub.platform.spi.ReadRecord;
-import com.integrationhub.platform.spi.ReadResult;
-import com.integrationhub.platform.spi.SourcePayload;
+import com.integrationhub.platform.spi.reader.ReadRecord;
+import com.integrationhub.platform.spi.reader.ReadResult;
+import com.integrationhub.platform.spi.source.SourcePayload;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;

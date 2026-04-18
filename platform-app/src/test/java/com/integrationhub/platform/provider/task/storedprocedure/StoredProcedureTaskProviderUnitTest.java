@@ -1,12 +1,8 @@
-package com.integrationhub.platform.provider.task;
+package com.integrationhub.platform.provider.task.storedprocedure;
 
 import com.integrationhub.platform.domain.ConnectionType;
-import com.integrationhub.platform.domain.ExecutionStatus;
-import com.integrationhub.platform.domain.TaskType;
-import com.integrationhub.platform.entity.ProcessExecution;
-import com.integrationhub.platform.entity.ProcessTaskDefinition;
-import com.integrationhub.platform.service.ConnectionPoolManager;
-import com.integrationhub.platform.spi.TaskContext;
+import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.task.TaskContext;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.util.TypeLiteral;
 import org.junit.jupiter.api.Test;
@@ -20,7 +16,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -154,18 +149,7 @@ class StoredProcedureTaskProviderUnitTest {
     }
 
     private static TaskContext taskContext() {
-        var execution = new ProcessExecution();
-        execution.id = 300L;
-        execution.status = ExecutionStatus.RUNNING;
-        execution.startedAt = LocalDateTime.now();
-
-        var taskDefinition = new ProcessTaskDefinition();
-        taskDefinition.id = 400L;
-        taskDefinition.taskType = TaskType.DB_EXECUTE_SP;
-        taskDefinition.taskOrder = 1;
-        taskDefinition.configurationJson = "{}";
-
-        var context = new TaskContext(execution, taskDefinition);
+        var context = new TaskContext(300L, 400L);
         context.attributes().put("executionVariables", Map.of("idinstancia", "ABC123"));
         return context;
     }

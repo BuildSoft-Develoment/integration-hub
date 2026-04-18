@@ -1,6 +1,6 @@
 package com.integrationhub.platform.provider.reader;
 
-import com.integrationhub.platform.spi.SourcePayload;
+import com.integrationhub.platform.spi.source.SourcePayload;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;

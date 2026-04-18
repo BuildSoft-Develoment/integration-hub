@@ -1,8 +1,9 @@
 package com.integrationhub.platform.provider.reader;
 
-import com.integrationhub.platform.spi.ReadRecord;
-import com.integrationhub.platform.spi.ReadResult;
-import com.integrationhub.platform.spi.SourcePayload;
+import com.integrationhub.platform.spi.reader.ReadRecord;
+import com.integrationhub.platform.spi.reader.ReadResult;
+import com.integrationhub.platform.spi.reader.ReaderProvider;
+import com.integrationhub.platform.spi.source.SourcePayload;
 import org.apache.poi.hssf.usermodel.HSSFWorkbook;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -115,7 +116,7 @@ class ExcelReaderProviderTest {
         assertEquals(new BigDecimal("14"), result.records().get(3).values().get("total"));
     }
 
-    private ReadResult read(com.integrationhub.platform.spi.ReaderProvider provider, SourcePayload payload, Map<String, Object> configuration) {
+    private ReadResult read(ReaderProvider provider, SourcePayload payload, Map<String, Object> configuration) {
         var records = new ArrayList<ReadRecord>();
         var result = provider.readInBatches(payload, configuration, 2, batch -> records.addAll(batch.records()));
         return new ReadResult(List.copyOf(records), result.recordCount(), result.skippedCount(), result.skippedRows());
