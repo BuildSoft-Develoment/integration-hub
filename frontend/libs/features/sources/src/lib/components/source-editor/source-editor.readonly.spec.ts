@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { SourceDraft, SourceProviderDescriptor } from '@integration-hub/core/providers';
-import { SourceEditorComponent } from '@integration-hub/features/sources';
+import { SourceEditorComponent } from './source-editor.component';
 
 describe('SourceEditorComponent readonly parity', () => {
   const providerOptions: readonly SourceProviderDescriptor[] = [

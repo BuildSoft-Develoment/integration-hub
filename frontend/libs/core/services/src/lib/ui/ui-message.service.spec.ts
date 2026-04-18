@@ -4,7 +4,7 @@ import {
   UiMessageService,
 } from '@integration-hub/core/services';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { UiMessageSnackbarComponent } from '../../../../libs/core/services/src/lib/ui-message-snackbar.component';
+import { UiMessageSnackbarComponent } from '@integration-hub/shared/ui';
 
 describe('UiMessageService', () => {
   let service: UiMessageService;

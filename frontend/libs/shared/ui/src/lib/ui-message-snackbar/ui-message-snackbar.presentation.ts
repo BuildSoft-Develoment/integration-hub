@@ -1,4 +1,4 @@
-import { UiMessageKind } from './ui-message.service';
+import { UiMessageKind } from './ui-message-snackbar.component';
 
 export interface UiMessagePresentation {
   iconPaths: readonly string[];

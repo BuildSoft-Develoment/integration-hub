@@ -13,6 +13,7 @@
     "lib": ["es2020", "dom"],
     "skipLibCheck": true,
     "skipDefaultLibCheck": true,
+    "types": ["vitest/globals"],
     "baseUrl": ".",
     "paths": {
       "@integration-hub/core/providers": ["libs/core/providers/src/index.ts"],

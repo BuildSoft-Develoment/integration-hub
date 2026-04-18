@@ -24,7 +24,7 @@ import {
   PaginatorIntlService,
 } from '@integration-hub/core/services';
 
-import { appNavigationProvider } from './app-navigation.providers';
+import { appNavigationProvider } from './core/app-navigation.providers';
 
 export const appConfig: ApplicationConfig = {
   providers: [

@@ -11,3 +11,4 @@ export * from './lib/managed-editor/readonly-actions/managed-editor-readonly-act
 export * from './lib/managed-editor/section/managed-editor-section.component';
 export * from './lib/managed-editor/shell/managed-editor-shell.component';
 export * from './lib/managed-editor/test-result/managed-editor-test-result.component';
+export * from './lib/ui-message-snackbar/ui-message-snackbar.component';

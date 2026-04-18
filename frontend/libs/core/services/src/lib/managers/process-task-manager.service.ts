@@ -1,5 +1,5 @@
 import { computed, inject, Injectable } from '@angular/core';
-import { I18nService } from './i18n.service';
+import { I18nService } from '../i18n/i18n.service';
 import {
   PROCESS_TASK_PROVIDERS,
   ProcessTaskFormModel,

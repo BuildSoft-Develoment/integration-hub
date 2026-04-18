@@ -1,8 +1,9 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject } from '@angular/core';
 import { MAT_SNACK_BAR_DATA, MatSnackBarModule } from '@angular/material/snack-bar';
-import { UiMessageKind } from './ui-message.service';
-import { resolveUiMessagePresentation } from './ui-message.presentation';
+import { resolveUiMessagePresentation } from './ui-message-snackbar.presentation';
+
+export type UiMessageKind = 'success' | 'error' | 'warning' | 'info';
 
 export interface UiMessageSnackBarData {
   kind: UiMessageKind;
