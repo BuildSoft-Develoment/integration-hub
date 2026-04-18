@@ -91,6 +91,25 @@ public class FileReadRuntimeSupport {
         return "continue".equalsIgnoreCase(normalized) ? "continue" : "failFast";
     }
 
+    public boolean isParallelEnabled(Map<String, Object> configuration) {
+        var value = configuration.get("parallel");
+        if (value == null) return false;
+        if (value instanceof Boolean b) return b;
+        return "true".equalsIgnoreCase(String.valueOf(value).trim());
+    }
+
+    public int maxConcurrency(Map<String, Object> configuration) {
+        var value = configuration.get("maxConcurrency");
+        if (value == null || String.valueOf(value).isBlank()) {
+            return 0; // 0 means use default pool size
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value).trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
     private void mergeTemplateVariables(Map<String, Object> sourceConfiguration,
                                         Map<String, Object> taskConfiguration,
                                         Map<String, String> executionVariables) {

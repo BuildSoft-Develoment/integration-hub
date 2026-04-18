@@ -31,15 +31,15 @@ public class ProcessedSourceFileService {
     public void recordPipelineFiles(Long processExecutionId,
                                     Long taskDefinitionId,
                                     List<SelectedSourceFile> selectedFiles,
-                                    List<FileReadDbWritePipelineService.FileReadSummary> completedFiles,
-                                    List<FileReadDbWritePipelineService.FileFailureSummary> failedFiles) {
+                                    List<StreamingPipelineService.BatchSummary> completedFiles,
+                                    List<StreamingPipelineService.StreamFailureSummary> failedFiles) {
         var execution = processExecutionRepository.findById(processExecutionId);
         var taskDefinition = processTaskDefinitionRepository.findById(taskDefinitionId);
         processedSourceFileRepository.deleteByExecutionAndTask(processExecutionId, taskDefinitionId);
 
-        var completedByName = new HashMap<String, FileReadDbWritePipelineService.FileReadSummary>();
+        var completedByName = new HashMap<String, StreamingPipelineService.BatchSummary>();
         completedFiles.forEach(summary -> completedByName.put(summary.fileName(), summary));
-        var failedByName = new HashMap<String, FileReadDbWritePipelineService.FileFailureSummary>();
+        var failedByName = new HashMap<String, StreamingPipelineService.StreamFailureSummary>();
         failedFiles.forEach(summary -> failedByName.put(summary.fileName(), summary));
 
         for (var file : selectedFiles) {

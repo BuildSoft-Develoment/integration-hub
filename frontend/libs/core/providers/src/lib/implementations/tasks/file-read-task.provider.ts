@@ -7,6 +7,8 @@ export interface FileReadTaskDraft {
   sourceDefinitionId: number | null;
   readerDefinitionId: number | null;
   sourceVariablesText: string;
+  parallel: boolean;
+  maxConcurrency: number | null;
 }
 
 @Injectable()
@@ -22,6 +24,8 @@ export class FileReadTaskProvider extends ProcessTaskProvider<FileReadTaskDraft>
       sourceDefinitionId: null,
       readerDefinitionId: null,
       sourceVariablesText: '',
+      parallel: false,
+      maxConcurrency: null,
     };
   }
 
@@ -33,6 +37,8 @@ export class FileReadTaskProvider extends ProcessTaskProvider<FileReadTaskDraft>
       sourceVariablesText: Object.entries(config.sourceVariables || {})
         .map(([key, value]) => `${key}=${String(value)}`)
         .join('\n'),
+      parallel: !!config.parallel,
+      maxConcurrency: config.maxConcurrency ?? null,
     };
   }
 
@@ -50,12 +56,19 @@ export class FileReadTaskProvider extends ProcessTaskProvider<FileReadTaskDraft>
         }
         return acc;
       }, {});
+    
+    const config: any = { sourceVariables };
+    if (draft.parallel) {
+      config.parallel = true;
+      if (draft.maxConcurrency != null) {
+        config.maxConcurrency = draft.maxConcurrency;
+      }
+    }
+
     return {
       sourceDefinitionId: draft.sourceDefinitionId,
       readerDefinitionId: draft.readerDefinitionId,
-      configurationJson: Object.keys(sourceVariables).length
-        ? this.toPrettyJson({ sourceVariables })
-        : '{}',
+      configurationJson: this.toPrettyJson(config),
     };
   }
 

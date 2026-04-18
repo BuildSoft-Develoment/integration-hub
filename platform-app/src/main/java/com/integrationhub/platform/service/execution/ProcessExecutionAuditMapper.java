@@ -20,7 +20,7 @@ public class ProcessExecutionAuditMapper {
 
     public String buildReadDetails(String sourceName,
                                    ReadResult readResult,
-                                   List<FileReadTaskPipelineService.FileReadSummary> fileSummaries) {
+                                   List<StreamingPipelineService.BatchSummary> fileSummaries) {
         var lines = new StringBuilder()
                 .append("Read completed for source ")
                 .append(sourceName)
@@ -56,7 +56,7 @@ public class ProcessExecutionAuditMapper {
 
     public Map<String, Object> buildReadAuditPayload(ProcessExecutionStateService.TaskPlan taskPlan,
                                                       ReadResult readResult,
-                                                      List<FileReadTaskPipelineService.FileReadSummary> fileSummaries,
+                                                      List<StreamingPipelineService.BatchSummary> fileSummaries,
                                                       List<SelectedSourceFile> selectedFiles,
                                                       Map<String, String> executionVariables,
                                                       String triggerSource) {
@@ -96,7 +96,7 @@ public class ProcessExecutionAuditMapper {
     }
 
     public String buildPipelineFailureDetails(String sourceName,
-                                               FileReadTaskPipelineService.FileReadTaskPipelineException failure) {
+                                               StreamingPipelineService.StreamingPipelineException failure) {
         var lines = new StringBuilder()
                 .append("Read/Sink pipeline failed for source ")
                 .append(sourceName)
@@ -172,7 +172,7 @@ public class ProcessExecutionAuditMapper {
     }
 
     public Map<String, Object> buildPipelineFailurePayload(ProcessExecutionStateService.TaskPlan taskPlan,
-                                                            FileReadTaskPipelineService.FileReadTaskPipelineException failure,
+                                                            StreamingPipelineService.StreamingPipelineException failure,
                                                             Map<String, String> executionVariables,
                                                             String triggerSource,
                                                             String taskType) {

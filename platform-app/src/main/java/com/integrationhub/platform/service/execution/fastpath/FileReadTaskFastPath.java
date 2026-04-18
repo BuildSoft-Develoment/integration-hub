@@ -3,7 +3,7 @@ package com.integrationhub.platform.service.execution.fastpath;
 import com.integrationhub.platform.domain.TaskType;
 import com.integrationhub.platform.entity.ProcessExecution;
 import com.integrationhub.platform.service.TaskProviderRegistry;
-import com.integrationhub.platform.service.execution.FileReadTaskPipelineService;
+import com.integrationhub.platform.service.execution.StreamingPipelineService;
 import com.integrationhub.platform.service.execution.ProcessExecutionAuditMapper;
 import com.integrationhub.platform.service.execution.ProcessExecutionStateService;
 import com.integrationhub.platform.service.execution.ProcessedSourceFileService;
@@ -19,13 +19,13 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
 
     private static final Set<String> SUPPORTED_READERS = Set.of("TXT", "CSV", "XLS", "XLSX");
 
-    private final FileReadTaskPipelineService pipelineService;
+    private final StreamingPipelineService pipelineService;
     private final ProcessExecutionStateService stateService;
     private final ProcessExecutionAuditMapper auditMapper;
     private final ProcessedSourceFileService processedSourceFileService;
     private final TaskProviderRegistry taskProviderRegistry;
 
-    public FileReadTaskFastPath(FileReadTaskPipelineService pipelineService,
+    public FileReadTaskFastPath(StreamingPipelineService pipelineService,
                                 ProcessExecutionStateService stateService,
                                 ProcessExecutionAuditMapper auditMapper,
                                 ProcessedSourceFileService processedSourceFileService,
@@ -104,7 +104,7 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
                             String triggerSource,
                             Exception error) {
 
-        if (error instanceof FileReadTaskPipelineService.FileReadTaskPipelineException pipelineFailure) {
+        if (error instanceof StreamingPipelineService.StreamingPipelineException pipelineFailure) {
             var failureDetails = auditMapper.buildPipelineFailureDetails(current.sourceName(), pipelineFailure);
             var failurePayloadRead = auditMapper.buildPipelineFailurePayload(current, pipelineFailure, executionVariables, triggerSource, current.taskType().name());
             var failurePayloadSink = auditMapper.buildPipelineFailurePayload(current, pipelineFailure, executionVariables, triggerSource, next.taskType().name());
