@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { I18nService } from '@integration-hub/core/services';
 import { ProcessTaskFormModel, ReaderRef, SourceRef } from '../../../models/process.models';
 import { FileReadTaskDraft } from '@integration-hub/core/providers';
@@ -13,7 +14,7 @@ import { ProcessTaskBindingContextService } from '../../../forms/process-task-bi
 @Component({
   selector: 'ih-process-file-read-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule],
     templateUrl: './process-file-read-task-form.component.html',
     styleUrl: './process-file-read-task-form.component.css'
 })
@@ -33,6 +34,8 @@ export class ProcessFileReadTaskFormComponent {
     sourceDefinitionId: null,
     readerDefinitionId: null,
     sourceVariablesText: '',
+    parallel: false,
+    maxConcurrency: null,
   });
   readonly selectedSource = computed(() => this.sources().find((item) => item.id === this.draft().sourceDefinitionId) ?? null);
   readonly compatibleReaderTypes = computed(() => this.bindingContext.inferCompatibleReaders(this.selectedSource()));

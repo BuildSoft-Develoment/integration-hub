@@ -36,3 +36,19 @@
       <mat-label>{{ i18n.t('ui.sourceVariablesText') }}</mat-label>
       <textarea matInput [disabled]="readonly()" [ngModel]="draft().sourceVariablesText" (ngModelChange)="updateDraft({ sourceVariablesText: $event })"></textarea>
     </mat-form-field>
+
+    <div class="task-section">
+      <div class="task-section-header">{{ i18n.t('ui.executionOptions') }}</div>
+      <div class="task-grid task-grid--align-center">
+        <mat-slide-toggle [disabled]="readonly()" [ngModel]="draft().parallel" (ngModelChange)="updateDraft({ parallel: $event })">
+          {{ i18n.t('ui.parallelProcessing') }}
+        </mat-slide-toggle>
+
+        @if (draft().parallel) {
+          <mat-form-field>
+            <mat-label>{{ i18n.t('ui.maxConcurrency') }}</mat-label>
+            <input matInput type="number" [disabled]="readonly()" [ngModel]="draft().maxConcurrency" (ngModelChange)="updateDraft({ maxConcurrency: $event })" min="1" max="20">
+          </mat-form-field>
+        }
+      </div>
+    </div>
