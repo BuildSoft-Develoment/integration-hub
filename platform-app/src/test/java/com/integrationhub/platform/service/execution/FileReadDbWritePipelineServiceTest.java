@@ -1,25 +1,25 @@
-package com.integrationhub.platform.service;
+package com.integrationhub.platform.service.execution;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.domain.TaskType;
-import com.integrationhub.platform.entity.ProcessExecution;
-import com.integrationhub.platform.entity.ProcessTaskDefinition;
-import com.integrationhub.platform.provider.task.DbWriteTaskProvider;
-import com.integrationhub.platform.repository.ProcessExecutionRepository;
-import com.integrationhub.platform.repository.ProcessTaskDefinitionRepository;
-import com.integrationhub.platform.spi.ReadBatch;
-import com.integrationhub.platform.spi.ReadBatchConsumer;
-import com.integrationhub.platform.spi.ReadRecord;
-import com.integrationhub.platform.spi.ReadResult;
-import com.integrationhub.platform.spi.SelectedSourceFile;
-import com.integrationhub.platform.spi.SourcePayload;
-import com.integrationhub.platform.spi.SourceProvider;
-import org.junit.jupiter.api.Test;
+import com.integrationhub.platform.provider.task.dbwrite.DbWriteTaskProvider;
+import com.integrationhub.platform.service.JsonConfigurationMapper;
+import com.integrationhub.platform.service.reader.ReaderProviderRegistry;
+import com.integrationhub.platform.service.source.SourceProviderRegistry;
+import com.integrationhub.platform.spi.reader.ReadBatch;
+import com.integrationhub.platform.spi.reader.ReadBatchConsumer;
+import com.integrationhub.platform.spi.reader.ReadRecord;
+import com.integrationhub.platform.spi.reader.ReadResult;
+import com.integrationhub.platform.spi.reader.ReaderProvider;
+import com.integrationhub.platform.spi.source.SelectedSourceFile;
+import com.integrationhub.platform.spi.source.SourcePayload;
+import com.integrationhub.platform.spi.source.SourceProvider;
+import com.integrationhub.platform.spi.task.TaskContext;
+import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.transaction.Transactional;
+import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -27,12 +27,12 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-class ProcessTaskRuntimeServiceTest {
+class FileReadDbWritePipelineServiceTest {
 
     @Test
     void pipelineRunsOutsideJtaTransaction() throws NoSuchMethodException {
-        Method method = ProcessTaskRuntimeService.class.getMethod(
-                "runFileReadToDbWrite",
+        Method method = FileReadDbWritePipelineService.class.getMethod(
+                "run",
                 Long.class,
                 ProcessExecutionStateService.TaskPlan.class,
                 ProcessExecutionStateService.TaskPlan.class,
@@ -55,8 +55,8 @@ class ProcessTaskRuntimeServiceTest {
         var fileReadPlan = taskPlan("failFast");
         var dbWritePlan = dbWritePlan();
 
-        var error = assertThrows(ProcessTaskRuntimeService.FileReadDbWritePipelineException.class,
-                () -> service.runFileReadToDbWrite(1L, fileReadPlan, dbWritePlan, Map.of(), List.of()));
+        var error = assertThrows(FileReadDbWritePipelineService.FileReadDbWritePipelineException.class,
+                () -> service.run(1L, fileReadPlan, dbWritePlan, Map.of(), List.of()));
 
         assertEquals("clientes_fail.txt", error.failedFileName());
         assertEquals(1, error.completedFiles().size());
@@ -76,8 +76,8 @@ class ProcessTaskRuntimeServiceTest {
         var fileReadPlan = taskPlan("continue");
         var dbWritePlan = dbWritePlan();
 
-        var error = assertThrows(ProcessTaskRuntimeService.FileReadDbWritePipelineException.class,
-                () -> service.runFileReadToDbWrite(1L, fileReadPlan, dbWritePlan, Map.of(), List.of()));
+        var error = assertThrows(FileReadDbWritePipelineService.FileReadDbWritePipelineException.class,
+                () -> service.run(1L, fileReadPlan, dbWritePlan, Map.of(), List.of()));
 
         assertEquals("clientes_fail.txt", error.failedFileName());
         assertEquals(1, error.completedFiles().size());
@@ -88,9 +88,9 @@ class ProcessTaskRuntimeServiceTest {
         assertEquals(1, error.writtenCount());
     }
 
-    private ProcessTaskRuntimeService serviceForPolicy(String policy, List<SelectedSourceFile> selectedFiles) {
+    private FileReadDbWritePipelineService serviceForPolicy(String policy, List<SelectedSourceFile> selectedFiles) {
         var mapper = new JsonConfigurationMapper();
-        mapper.objectMapper = new ObjectMapper();
+        var runtimeSupport = new FileReadRuntimeSupport(mapper);
 
         SourceProvider sourceProvider = new SourceProvider() {
             @Override
@@ -118,8 +118,8 @@ class ProcessTaskRuntimeServiceTest {
 
         var readerRegistry = new ReaderProviderRegistry(null) {
             @Override
-            public com.integrationhub.platform.spi.ReaderProvider resolve(String type) {
-                return new com.integrationhub.platform.spi.ReaderProvider() {
+            public ReaderProvider resolve(String type) {
+                return new ReaderProvider() {
                     @Override
                     public String type() {
                         return "TXT";
@@ -136,46 +136,24 @@ class ProcessTaskRuntimeServiceTest {
             }
         };
 
-        var executionRepository = new ProcessExecutionRepository() {
-            @Override
-            public ProcessExecution findById(Long id) {
-                var execution = new ProcessExecution();
-                execution.id = id;
-                return execution;
-            }
-        };
-
-        var taskDefinitionRepository = new ProcessTaskDefinitionRepository() {
-            @Override
-            public ProcessTaskDefinition findById(Long id) {
-                var task = new ProcessTaskDefinition();
-                task.id = id;
-                task.taskType = TaskType.DB_WRITE;
-                return task;
-            }
-        };
-
         var dbWriteProvider = new DbWriteTaskProvider(null, null, null) {
             @Override
-            public com.integrationhub.platform.spi.TaskResult executeRecords(com.integrationhub.platform.spi.TaskContext context,
-                                                                             Map<String, Object> configuration,
-                                                                             List<ReadRecord> records,
-                                                                             SourcePayload sourcePayload) {
+            public TaskResult executeRecords(TaskContext context,
+                                             Map<String, Object> configuration,
+                                             List<ReadRecord> records,
+                                             SourcePayload sourcePayload) {
                 if (sourcePayload != null && sourcePayload.name().contains("fail")) {
                     throw new IllegalStateException("Cannot insert records into public.cliente_target");
                 }
-                return com.integrationhub.platform.spi.TaskResult.success("ok");
+                return TaskResult.success("ok");
             }
         };
 
-        return new ProcessTaskRuntimeService(
-                mapper,
+        return new FileReadDbWritePipelineService(
                 sourceRegistry,
                 readerRegistry,
-                null,
-                executionRepository,
-                taskDefinitionRepository,
-                dbWriteProvider
+                dbWriteProvider,
+                runtimeSupport
         );
     }
 

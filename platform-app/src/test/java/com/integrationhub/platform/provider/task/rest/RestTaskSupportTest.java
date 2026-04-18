@@ -1,11 +1,8 @@
-package com.integrationhub.platform.provider.task;
+package com.integrationhub.platform.provider.task.rest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.domain.TaskType;
-import com.integrationhub.platform.entity.ProcessExecution;
-import com.integrationhub.platform.entity.ProcessTaskDefinition;
-import com.integrationhub.platform.spi.ReadRecord;
-import com.integrationhub.platform.spi.TaskContext;
+import com.integrationhub.platform.spi.reader.ReadRecord;
+import com.integrationhub.platform.spi.task.TaskContext;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -57,13 +54,6 @@ class RestTaskSupportTest {
     }
 
     private TaskContext taskContext() {
-        ProcessExecution execution = new ProcessExecution();
-        execution.id = 99L;
-
-        ProcessTaskDefinition taskDefinition = new ProcessTaskDefinition();
-        taskDefinition.id = 7L;
-        taskDefinition.taskType = TaskType.REST_CALL;
-
-        return new TaskContext(execution, taskDefinition);
+        return new TaskContext(99L, 7L);
     }
 }

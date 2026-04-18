@@ -1,4 +1,4 @@
-package com.integrationhub.platform.provider.task;
+package com.integrationhub.platform.provider.task.storedprocedure;
 
 import com.integrationhub.platform.domain.ConnectionType;
 import org.junit.jupiter.api.Test;

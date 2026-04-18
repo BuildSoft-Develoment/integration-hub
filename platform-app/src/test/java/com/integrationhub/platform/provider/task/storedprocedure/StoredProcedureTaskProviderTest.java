@@ -1,18 +1,14 @@
-package com.integrationhub.platform.provider.task;
+package com.integrationhub.platform.provider.task.storedprocedure;
 
 import com.integrationhub.platform.domain.ConnectionType;
-import com.integrationhub.platform.domain.ExecutionStatus;
-import com.integrationhub.platform.domain.TaskType;
 import com.integrationhub.platform.entity.ConnectionDefinition;
-import com.integrationhub.platform.entity.ProcessExecution;
-import com.integrationhub.platform.entity.ProcessTaskDefinition;
 import com.integrationhub.platform.repository.ConnectionDefinitionRepository;
-import com.integrationhub.platform.service.ConnectionPoolManager;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
-import com.integrationhub.platform.spi.ReadRecord;
-import com.integrationhub.platform.spi.ReadResult;
-import com.integrationhub.platform.spi.SourcePayload;
-import com.integrationhub.platform.spi.TaskContext;
+import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.reader.ReadRecord;
+import com.integrationhub.platform.spi.reader.ReadResult;
+import com.integrationhub.platform.spi.source.SourcePayload;
+import com.integrationhub.platform.spi.task.TaskContext;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.util.TypeLiteral;
 import org.junit.jupiter.api.AfterAll;
@@ -25,11 +21,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 
 import javax.sql.DataSource;
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Field;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.time.LocalDateTime;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -52,7 +46,6 @@ class StoredProcedureTaskProviderTest {
     @BeforeEach
     void setUpSchema() throws Exception {
         var mapper = new JsonConfigurationMapper();
-        inject(mapper, "objectMapper", new com.fasterxml.jackson.databind.ObjectMapper());
         var connectionPoolManager = new ConnectionPoolManager(null, null) {
             @Override
             public JdbcConnectionTarget resolveJdbcTarget(String connectionRef) {
@@ -157,7 +150,6 @@ class StoredProcedureTaskProviderTest {
     @Test
     void executesStoredProcedureUsingResolvedConnectionRef() throws Exception {
         var mapper = new JsonConfigurationMapper();
-        inject(mapper, "objectMapper", new com.fasterxml.jackson.databind.ObjectMapper());
 
         var definition = new ConnectionDefinition();
         definition.id = 999L;
@@ -275,18 +267,7 @@ class StoredProcedureTaskProviderTest {
     }
 
     private static TaskContext taskContext() {
-        var execution = new ProcessExecution();
-        execution.id = 300L;
-        execution.status = ExecutionStatus.RUNNING;
-        execution.startedAt = LocalDateTime.now();
-
-        var taskDefinition = new ProcessTaskDefinition();
-        taskDefinition.id = 400L;
-        taskDefinition.taskType = TaskType.DB_EXECUTE_SP;
-        taskDefinition.taskOrder = 1;
-        taskDefinition.configurationJson = "{}";
-
-        return new TaskContext(execution, taskDefinition);
+        return new TaskContext(300L, 400L);
     }
 
     private static DataSource dataSource() {
@@ -295,12 +276,6 @@ class StoredProcedureTaskProviderTest {
         dataSource.setUser(POSTGRES.getUsername());
         dataSource.setPassword(POSTGRES.getPassword());
         return dataSource;
-    }
-
-    private static void inject(Object target, String fieldName, Object value) throws Exception {
-        Field field = target.getClass().getDeclaredField(fieldName);
-        field.setAccessible(true);
-        field.set(target, value);
     }
 
     private String singleValue(String sql) throws Exception {
