@@ -1,6 +1,6 @@
 import { effect, inject, Injectable } from '@angular/core';
 import { MatPaginatorIntl } from '@angular/material/paginator';
-import { I18nService } from './i18n.service';
+import { I18nService } from '../i18n/i18n.service';
 
 @Injectable({ providedIn: 'root' })
 export class PaginatorIntlService extends MatPaginatorIntl {

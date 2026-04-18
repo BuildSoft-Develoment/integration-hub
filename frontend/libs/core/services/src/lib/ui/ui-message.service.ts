@@ -1,12 +1,11 @@
 import { inject, Injectable } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { I18nService } from './i18n.service';
+import { I18nService } from '../i18n/i18n.service';
 import {
+  UiMessageKind,
   UiMessageSnackBarData,
   UiMessageSnackbarComponent,
-} from './ui-message-snackbar.component';
-
-export type UiMessageKind = 'success' | 'error' | 'warning' | 'info';
+} from '@integration-hub/shared/ui';
 
 export interface UiMessageOptions {
   kind?: UiMessageKind;

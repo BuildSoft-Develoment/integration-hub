@@ -1,6 +1,6 @@
 import { Route } from '@angular/router';
 
-import { appSectionGuard } from './app-route-access.policy';
+import { appSectionGuard } from './core/app-route-access.policy';
 
 export const appRoutes: Route[] = [
   {

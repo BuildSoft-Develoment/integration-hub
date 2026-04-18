@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
-import { ProcessFlowApiService } from '../../../../libs/features/processes/src/lib/process-flow-api.service';
-import { ProcessFlowMapper } from '../../../../libs/features/processes/src/lib/process-flow.mapper';
-import { createTaskForm } from '../../../../libs/features/processes/src/lib/process.models';
+import { ProcessFlowApiService } from './process-flow-api.service';
+import { ProcessFlowMapper } from '../flow/process-flow.mapper';
+import { createTaskForm } from '../models/process.models';
 
 describe('ProcessFlowApiService', () => {
   it('should expose a designer-friendly model with connector ids', () => {
@@ -17,7 +17,7 @@ describe('ProcessFlowApiService', () => {
 
     const model = service.toDesignerModel(layout);
 
-    expect(model.nodes[first.clientId]).toEqual(
+    expect((model.nodes as any)[first.clientId]).toEqual(
       expect.objectContaining({
         id: first.clientId,
         taskRef: first.clientId,
@@ -25,7 +25,7 @@ describe('ProcessFlowApiService', () => {
         size: { width: 220, height: 120 },
       })
     );
-    expect(model.connections[`edge-${first.clientId}-${second.clientId}`]).toEqual({
+    expect((model.connections as any)[`edge-${first.clientId}-${second.clientId}`]).toEqual({
       id: `edge-${first.clientId}-${second.clientId}`,
       source: `${first.clientId}-out`,
       target: `${second.clientId}-in`,
@@ -91,9 +91,9 @@ describe('ProcessFlowApiService', () => {
 
     expect(removed.tasks).toHaveLength(1);
     expect(restored.tasks).toHaveLength(2);
-    expect(restored.tasks.map((task) => task.clientId)).toEqual([first.clientId, second.clientId]);
-    expect(restored.layout.nodes.map((node) => node.id)).toEqual([first.clientId, second.clientId]);
-    expect(restored.layout.nodes.every((node) => node.size?.width === 220 && node.size?.height === 120)).toBe(true);
+    expect(restored.tasks.map((task: any) => task.clientId)).toEqual([first.clientId, second.clientId]);
+    expect(restored.layout.nodes.map((node: any) => node.id)).toEqual([first.clientId, second.clientId]);
+    expect(restored.layout.nodes.every((node: any) => node.size?.width === 220 && node.size?.height === 120)).toBe(true);
   });
 
   it('should undo node moves as a single drag operation', () => {
@@ -113,9 +113,9 @@ describe('ProcessFlowApiService', () => {
     } as any);
     const restored = service.undo(moved, [first, second]);
 
-    expect(moved.nodes.find((node) => node.id === first.clientId)?.position).toEqual({ x: 500, y: 240 });
-    expect(restored.layout.nodes.find((node) => node.id === first.clientId)?.position).toEqual(
-      layout.nodes.find((node) => node.id === first.clientId)?.position
+    expect(moved.nodes.find((node: any) => node.id === first.clientId)?.position).toEqual({ x: 500, y: 240 });
+    expect(restored.layout.nodes.find((node: any) => node.id === first.clientId)?.position).toEqual(
+      layout.nodes.find((node: any) => node.id === first.clientId)?.position
     );
   });
 

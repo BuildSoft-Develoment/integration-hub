@@ -5,7 +5,7 @@ import {
 } from '@angular/common/http';
 import { inject } from '@angular/core';
 import { catchError, throwError } from 'rxjs';
-import { AppFeedbackService } from './app-feedback.service';
+import { AppFeedbackService } from '../ui/app-feedback.service';
 
 export const SKIP_GLOBAL_ERROR_FEEDBACK = new HttpContextToken<boolean>(() => false);
 

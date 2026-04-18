@@ -1,8 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 
-import { ProcessFlowMapper } from '../../../../libs/features/processes/src/lib/process-flow.mapper';
-import { ProcessFlowSyncService } from '../../../../libs/features/processes/src/lib/process-flow-sync.service';
-import { createTaskForm } from '../../../../libs/features/processes/src/lib/process.models';
+import { ProcessFlowMapper } from './process-flow.mapper';
+import { ProcessFlowSyncService } from './process-flow-sync.service';
+import { createTaskForm } from '../models/process.models';
 
 describe('ProcessFlowSyncService', () => {
   let mapper: ProcessFlowMapper;
@@ -38,12 +38,12 @@ describe('ProcessFlowSyncService', () => {
 
     const orderedTasks = sync.synchronizeTasks(connectedLayout, [first, second, third]);
 
-    expect(orderedTasks.map((task) => task.clientId)).toEqual([
+    expect(orderedTasks.map((task: any) => task.clientId)).toEqual([
       first.clientId,
       second.clientId,
       third.clientId,
     ]);
-    expect(orderedTasks.map((task) => task.taskOrder)).toEqual([1, 2, 3]);
+    expect(orderedTasks.map((task: any) => task.taskOrder)).toEqual([1, 2, 3]);
   });
 
   it('should keep only one outgoing and one incoming connection per node', () => {
@@ -96,10 +96,10 @@ describe('ProcessFlowSyncService', () => {
       { ...second, clientId: 'task-102', taskOrder: 2 },
     ];
 
-    const synchronized = sync.synchronizeLayout(persistedLikeLayout, reloadedTasks);
+    const synchronized = sync.synchronizeLayout(persistedLikeLayout as any, reloadedTasks as any);
 
-    expect(synchronized.nodes.map((node) => node.id)).toEqual(['task-101', 'task-102']);
-    expect(synchronized.nodes.map((node) => node.position)).toEqual([
+    expect(synchronized.nodes.map((node: any) => node.id)).toEqual(['task-101', 'task-102']);
+    expect(synchronized.nodes.map((node: any) => node.position)).toEqual([
       { x: 140, y: 180 },
       { x: 520, y: 240 },
     ]);
@@ -137,9 +137,9 @@ describe('ProcessFlowSyncService', () => {
       { ...third, clientId: 'task-203', taskOrder: 3 },
     ];
 
-    const synchronized = sync.synchronizeLayout(oldSavedLayout, reloadedTasks);
+    const synchronized = sync.synchronizeLayout(oldSavedLayout as any, reloadedTasks as any);
 
-    expect(synchronized.nodes.map((node) => ({ id: node.id, position: node.position }))).toEqual([
+    expect(synchronized.nodes.map((node: any) => ({ id: node.id, position: node.position }))).toEqual([
       { id: 'task-201', position: { x: 131, y: 42 } },
       { id: 'task-202', position: { x: 472, y: 81 } },
       { id: 'task-203', position: { x: 794, y: 123 } },

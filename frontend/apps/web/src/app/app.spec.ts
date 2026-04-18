@@ -2,9 +2,9 @@ import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 import { provideRouter } from '@angular/router';
 import { SystemThemeConfigService } from '@integration-hub/core/services';
-import { App } from './app';
+import { AppComponent } from './app.component';
 
-describe('App', () => {
+describe('AppComponent', () => {
   beforeEach(async () => {
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
@@ -21,7 +21,7 @@ describe('App', () => {
     });
 
     await TestBed.configureTestingModule({
-      imports: [App],
+      imports: [AppComponent],
       providers: [
         provideRouter([]),
         {
@@ -56,7 +56,7 @@ describe('App', () => {
   });
 
   it('should render the app layout', async () => {
-    const fixture = TestBed.createComponent(App);
+    const fixture = TestBed.createComponent(AppComponent);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('ih-app-layout')).not.toBeNull();

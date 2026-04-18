@@ -5,9 +5,9 @@ import { AppLayoutComponent } from '@integration-hub/shared/ui';
   standalone: true,
   imports: [AppLayoutComponent],
   selector: 'app-root',
-  templateUrl: './app.html',
-  styleUrl: './app.css',
+  templateUrl: './app.component.html',
+  styleUrl: './app.component.css',
 })
-export class App {
+export class AppComponent {
   protected readonly title = 'integration-hub-web';
 }
