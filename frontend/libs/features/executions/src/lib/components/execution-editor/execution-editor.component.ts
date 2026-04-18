@@ -8,7 +8,7 @@ import {
   ExecutionNavigationEntry,
   ProcessExecutionRecord,
   ProcessTaskExecutionRecord,
-} from '../../execution.models';
+} from '../../models/execution.models';
 import { ExecutionLineageComponent } from '../execution-lineage/execution-lineage.component';
 import { ExecutionTaskListComponent } from '../execution-task-list/execution-task-list.component';
 import { ExecutionEditorFilesTabComponent } from './execution-editor-files-tab/execution-editor-files-tab.component';

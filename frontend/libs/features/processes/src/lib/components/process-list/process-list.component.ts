@@ -3,7 +3,7 @@ import { Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { I18nService } from '@integration-hub/core/services';
-import { ProcessRecord } from '../../process.models';
+import { ProcessRecord } from '../../models/process.models';
 
 @Component({
   selector: 'ih-process-list',

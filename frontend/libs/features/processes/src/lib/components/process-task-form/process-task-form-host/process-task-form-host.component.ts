@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, input, output } from '@angular/core';
-import { ConnectionRef, ProcessTaskFormModel, ReaderRef, SourceRef } from '../../../process.models';
+import { ConnectionRef, ProcessTaskFormModel, ReaderRef, SourceRef } from '../../../models/process.models';
 import { ProcessDbExecuteFnTaskFormComponent } from '../process-db-execute-fn-task-form/process-db-execute-fn-task-form.component';
 import { ProcessDbExecuteSpTaskFormComponent } from '../process-db-execute-sp-task-form/process-db-execute-sp-task-form.component';
 import { ProcessDbWriteTaskFormComponent } from '../process-db-write-task-form/process-db-write-task-form.component';

@@ -19,13 +19,13 @@
 
       <div
         class="task-modal-body"
-        [class.task-modal-body--workspace]="usesWorkspaceLayout()"
-        [class.task-modal-body--rest]="isRestTask()"
+        [class.task-modal-body--workspace]="modalLayout() === 'workspace' || modalLayout() === 'rest'"
+        [class.task-modal-body--rest]="modalLayout() === 'rest'"
       >
         <section
           class="task-modal-section"
-          [class.task-modal-section--workspace]="usesWorkspaceLayout()"
-          [class.task-modal-section--rest]="isRestTask()"
+          [class.task-modal-section--workspace]="modalLayout() === 'workspace' || modalLayout() === 'rest'"
+          [class.task-modal-section--rest]="modalLayout() === 'rest'"
         >
           <ih-process-task-form-host
             [task]="task()"

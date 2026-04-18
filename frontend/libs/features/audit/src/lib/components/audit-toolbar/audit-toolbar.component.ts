@@ -5,7 +5,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { I18nService } from '@integration-hub/core/services';
-import { auditEventLabel } from '../../audit-event-label';
+import { auditEventLabel } from '../../utils/audit-event-label';
 
 @Component({
   selector: 'ih-audit-toolbar',

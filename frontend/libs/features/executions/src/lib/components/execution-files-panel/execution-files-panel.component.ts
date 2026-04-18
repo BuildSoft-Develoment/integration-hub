@@ -8,13 +8,13 @@ import { MatSelectModule } from '@angular/material/select';
 
 import { I18nService } from '@integration-hub/core/services';
 
-import { downloadProcessedFilesCsv } from '../../execution-detail.utils';
+import { downloadProcessedFilesCsv } from '../../details/execution-detail.utils';
 import {
   ExecutionFileActionRequest,
   ProcessTaskExecutionRecord,
   ProcessExecutionRecord,
   ProcessedSourceFileRecord,
-} from '../../execution.models';
+} from '../../models/execution.models';
 import { ExecutionFilesTableComponent } from './execution-files-table/execution-files-table.component';
 import { ExecutionFilesPanelStore } from './execution-files-panel.store';
 

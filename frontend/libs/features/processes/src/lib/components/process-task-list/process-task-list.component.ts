@@ -10,10 +10,10 @@ import {
   FZoomDirective,
 } from '@foblex/flow';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
-import { ProcessFlowLayout, ProcessFlowNode } from '../../process-flow.models';
-import { ProcessFlowApiService } from '../../process-flow-api.service';
-import { getProcessFlowNodePresentation } from '../../process-flow.presentation';
-import { ConnectionRef, ProcessTaskFormModel, ProcessTaskType, ReaderRef, SourceRef } from '../../process.models';
+import { ProcessFlowLayout, ProcessFlowNode } from '../../models/process-flow.models';
+import { ProcessFlowApiService } from '../../api/process-flow-api.service';
+import { getProcessFlowNodePresentation } from '../../flow/process-flow.presentation';
+import { ConnectionRef, ProcessTaskFormModel, ProcessTaskType, ReaderRef, SourceRef } from '../../models/process.models';
 import {
   ProcessFlowAction,
   ProcessFlowActionPanelComponent,

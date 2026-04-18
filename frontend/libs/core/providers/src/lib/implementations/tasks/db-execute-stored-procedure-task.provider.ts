@@ -18,6 +18,7 @@ export class DbExecuteStoredProcedureTaskProvider extends ProcessTaskProvider<Db
     type: 'DB_EXECUTE_SP' as const,
     labelKey: 'processTask.DB_EXECUTE_SP',
     descriptionKey: 'processTaskDescription.DB_EXECUTE_SP',
+    modalLayout: 'workspace' as const,
   };
 
   createDraft(): DbExecuteStoredProcedureTaskDraft {

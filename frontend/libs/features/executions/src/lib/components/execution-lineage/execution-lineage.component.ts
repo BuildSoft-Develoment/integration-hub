@@ -2,8 +2,8 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
-import { ExecutionNavigationEntry, ProcessExecutionRecord } from '../../execution.models';
-import { formatTriggerSourceLabel } from '../../execution-detail.utils';
+import { ExecutionNavigationEntry, ProcessExecutionRecord } from '../../models/execution.models';
+import { formatTriggerSourceLabel } from '../../details/execution-detail.utils';
 
 @Component({
   selector: 'ih-execution-lineage',

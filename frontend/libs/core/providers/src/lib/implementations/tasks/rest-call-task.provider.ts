@@ -34,6 +34,7 @@ export class RestCallTaskProvider extends ProcessTaskProvider<RestCallTaskDraft>
     type: 'REST_CALL' as const,
     labelKey: 'processTask.REST_CALL',
     descriptionKey: 'processTaskDescription.REST_CALL',
+    modalLayout: 'rest' as const,
   };
 
   createDraft(): RestCallTaskDraft {

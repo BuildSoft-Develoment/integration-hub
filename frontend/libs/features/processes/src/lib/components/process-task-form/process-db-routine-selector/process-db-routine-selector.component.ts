@@ -5,7 +5,7 @@ import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { I18nService } from '@integration-hub/core/services';
-import { DbRoutineRef } from '../../../process-db-routine.models';
+import { DbRoutineRef } from '../../../models/process-db-routine.models';
 
 @Component({
   selector: 'ih-process-db-routine-selector',

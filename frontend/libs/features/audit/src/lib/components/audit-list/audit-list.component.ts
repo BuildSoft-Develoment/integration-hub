@@ -4,8 +4,8 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { I18nService } from '@integration-hub/core/services';
 
-import { AuditPresentationService } from '../../audit-presentation.service';
-import { AuditRecord } from '../../audit.models';
+import { AuditPresentationService } from '../../utils/audit-presentation.service';
+import { AuditRecord } from '../../models/audit.models';
 
 @Component({
   selector: 'ih-audit-list',

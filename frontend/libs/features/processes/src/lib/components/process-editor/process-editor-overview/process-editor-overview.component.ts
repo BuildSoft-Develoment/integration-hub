@@ -6,7 +6,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { I18nService } from '@integration-hub/core/services';
 
-import { ProcessFormModel } from '../../../process.models';
+import { ProcessFormModel } from '../../../models/process.models';
 
 @Component({
   selector: 'ih-process-editor-overview',

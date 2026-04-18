@@ -23,6 +23,10 @@ export class ProcessTaskManagerService {
     return this.resolve(type) ? this.i18n.t(this.resolve(type)!.descriptor.labelKey) : type;
   }
 
+  modalLayout(type: ProcessTaskType): 'workspace' | 'rest' | 'default' {
+    return this.resolve(type)?.descriptor.modalLayout ?? 'default';
+  }
+
   hydrateDraft<TDraft>(task: ProcessTaskFormModel): TDraft | null {
     return (this.resolve(task.taskType)?.hydrateDraft(task) as TDraft | undefined) ?? null;
   }

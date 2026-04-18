@@ -3,7 +3,7 @@ import { Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
-import { ScheduleRecord } from '../../schedules.models';
+import { ScheduleRecord } from '../../models/schedules.models';
 
 @Component({
   selector: 'ih-schedules-list',

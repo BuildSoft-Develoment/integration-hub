@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { I18nService } from '@integration-hub/core/services';
-import { ConnectionRef, ProcessTaskFormModel } from '../../../process.models';
+import { ConnectionRef, ProcessTaskFormModel } from '../../../models/process.models';
 
 @Component({
   selector: 'ih-process-json-task-form',

@@ -1,1 +1,1 @@
-export * from './lib/overview.routes';
+export * from './lib/catalog/overview.routes';

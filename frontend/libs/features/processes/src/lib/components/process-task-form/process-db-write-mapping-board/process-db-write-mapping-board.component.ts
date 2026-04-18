@@ -7,7 +7,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { I18nService } from '@integration-hub/core/services';
 import { DbWriteMappingDraft } from '@integration-hub/core/providers';
-import { DbWriteColumnRef, DbWriteSourceItem } from '../../../process-db-write.models';
+import { DbWriteColumnRef, DbWriteSourceItem } from '../../../models/process-db-write.models';
 
 @Component({
   selector: 'ih-process-db-write-mapping-board',

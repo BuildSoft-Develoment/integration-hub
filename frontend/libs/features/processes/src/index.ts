@@ -1,2 +1,2 @@
-export * from './lib/process-catalog.routes';
-export * from './lib/process-api.service';
+export * from './lib/catalog/process-catalog.routes';
+export * from './lib/api/process-api.service';

@@ -7,7 +7,7 @@ import {
   ReaderProviderType,
 } from '@integration-hub/core/providers';
 import { ManagedEditorFormActionsComponent, ManagedEditorHeaderComponent, ManagedEditorOverviewComponent, ManagedEditorReadonlyActionsComponent, ManagedEditorSectionComponent, ManagedEditorShellComponent } from '@integration-hub/shared/ui';
-import { ReaderFormModel } from '../../reader.models';
+import { ReaderFormModel } from '../../models/reader.models';
 import { ReaderTypeFormHostComponent } from '../reader-type-form/reader-type-form-host/reader-type-form-host.component';
 
 @Component({

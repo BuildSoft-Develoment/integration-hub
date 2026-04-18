@@ -19,6 +19,7 @@ export class DbExecuteFunctionTaskProvider extends ProcessTaskProvider<DbExecute
     type: 'DB_EXECUTE_FN' as const,
     labelKey: 'processTask.DB_EXECUTE_FN',
     descriptionKey: 'processTaskDescription.DB_EXECUTE_FN',
+    modalLayout: 'workspace' as const,
   };
 
   createDraft(): DbExecuteFunctionTaskDraft {

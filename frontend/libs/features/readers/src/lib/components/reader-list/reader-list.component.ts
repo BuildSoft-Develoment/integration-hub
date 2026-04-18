@@ -3,7 +3,7 @@ import { Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { I18nService } from '@integration-hub/core/services';
-import { ReaderRecord } from '../../reader.models';
+import { ReaderRecord } from '../../models/reader.models';
 
 @Component({
   selector: 'ih-reader-list',

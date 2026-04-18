@@ -3,13 +3,13 @@ import { Component, inject, input } from '@angular/core';
 
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
 
-import { formatTriggerSourceLabel } from '../../../execution-detail.utils';
+import { formatTriggerSourceLabel } from '../../../details/execution-detail.utils';
 import {
   ProcessExecutionRecord,
   ProcessTaskExecutionRecord,
   TaskFailureSummary,
   TaskReadSummary,
-} from '../../../execution.models';
+} from '../../../models/execution.models';
 
 @Component({
   selector: 'ih-execution-editor-summary',

@@ -4,7 +4,7 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { ConnectionProviderDescriptor } from '@integration-hub/core/providers';
 import { I18nService } from '@integration-hub/core/services';
-import { ConnectionRecord } from '../../connection.models';
+import { ConnectionRecord } from '../../models/connection.models';
 
 @Component({
   selector: 'ih-connection-list',
