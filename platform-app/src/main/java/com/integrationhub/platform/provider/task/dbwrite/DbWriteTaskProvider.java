@@ -8,6 +8,7 @@ import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.source.SourcePayload;
 import com.integrationhub.platform.spi.task.TaskContext;
+import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -20,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 @ApplicationScoped
-public class DbWriteTaskProvider implements TaskProvider {
+public class DbWriteTaskProvider implements BatchTaskProvider {
 
     private static final String STAGING_TABLE = "staging_record";
 
@@ -42,15 +43,6 @@ public class DbWriteTaskProvider implements TaskProvider {
     }
 
     @Override
-    public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
-        var readResult = (ReadResult) context.attributes().get("readResult");
-        var sourcePayload = (SourcePayload) context.attributes().get("sourcePayload");
-        if (readResult == null || readResult.records().isEmpty()) {
-            return TaskResult.success("DB write skipped because there are no parsed records");
-        }
-        return executeRecords(context, configuration, readResult.records(), sourcePayload);
-    }
-
     public TaskResult executeRecords(TaskContext context,
                                      Map<String, Object> configuration,
                                      List<ReadRecord> records,

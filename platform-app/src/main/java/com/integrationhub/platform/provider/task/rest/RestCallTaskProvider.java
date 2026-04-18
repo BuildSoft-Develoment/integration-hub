@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.task.TaskContext;
+import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -21,7 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 @ApplicationScoped
-public class RestCallTaskProvider implements TaskProvider {
+public class RestCallTaskProvider implements BatchTaskProvider {
 
     private final HttpClient httpClient = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.NORMAL)
@@ -36,7 +37,7 @@ public class RestCallTaskProvider implements TaskProvider {
     }
 
     @Override
-    public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
+    public TaskResult executeRecords(TaskContext context, Map<String, Object> configuration, List<ReadRecord> records, com.integrationhub.platform.spi.source.SourcePayload sourcePayload) {
         String mode = String.valueOf(configuration.getOrDefault("mode", "per-record"));
         String method = String.valueOf(configuration.getOrDefault("method", "POST")).toUpperCase();
         String urlTemplate = RestTaskSupport.requireString(configuration, "url");
@@ -44,9 +45,6 @@ public class RestCallTaskProvider implements TaskProvider {
                 : String.valueOf(configuration.get("bodyTemplate"));
         int timeoutSeconds = RestTaskSupport.optionalInt(configuration, "timeoutSeconds", 20);
         Map<String, String> headers = RestTaskSupport.stringMap(configuration, "headers");
-
-        ReadResult readResult = (ReadResult) context.attributes().get("readResult");
-        List<ReadRecord> records = readResult == null ? List.of() : readResult.records();
 
         return switch (mode.toLowerCase()) {
             case "single" -> executeSingle(configuration, method, urlTemplate, bodyTemplate, timeoutSeconds, headers,

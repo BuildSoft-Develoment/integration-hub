@@ -1,12 +1,13 @@
 package com.integrationhub.platform.service.execution;
 
 import com.integrationhub.platform.domain.TaskType;
-import com.integrationhub.platform.provider.task.dbwrite.DbWriteTaskProvider;
+import com.integrationhub.platform.service.TaskProviderRegistry;
 import com.integrationhub.platform.service.reader.ReaderProviderRegistry;
 import com.integrationhub.platform.service.source.SourceProviderRegistry;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.reader.ReadSkip;
 import com.integrationhub.platform.spi.source.SelectedSourceFile;
+import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
@@ -16,34 +17,39 @@ import java.util.List;
 import java.util.Map;
 
 @ApplicationScoped
-public class FileReadDbWritePipelineService {
+public class FileReadTaskPipelineService {
 
     private final SourceProviderRegistry sourceProviderRegistry;
     private final ReaderProviderRegistry readerProviderRegistry;
-    private final DbWriteTaskProvider dbWriteTaskProvider;
+    private final TaskProviderRegistry taskProviderRegistry;
     private final FileReadRuntimeSupport fileReadRuntimeSupport;
 
-    public FileReadDbWritePipelineService(SourceProviderRegistry sourceProviderRegistry,
-                                          ReaderProviderRegistry readerProviderRegistry,
-                                          DbWriteTaskProvider dbWriteTaskProvider,
-                                          FileReadRuntimeSupport fileReadRuntimeSupport) {
+    public FileReadTaskPipelineService(SourceProviderRegistry sourceProviderRegistry,
+                                       ReaderProviderRegistry readerProviderRegistry,
+                                       TaskProviderRegistry taskProviderRegistry,
+                                       FileReadRuntimeSupport fileReadRuntimeSupport) {
         this.sourceProviderRegistry = sourceProviderRegistry;
         this.readerProviderRegistry = readerProviderRegistry;
-        this.dbWriteTaskProvider = dbWriteTaskProvider;
+        this.taskProviderRegistry = taskProviderRegistry;
         this.fileReadRuntimeSupport = fileReadRuntimeSupport;
     }
 
     @Transactional(Transactional.TxType.NOT_SUPPORTED)
-    public FileReadDbWriteResult run(Long processExecutionId,
-                                     ProcessExecutionStateService.TaskPlan fileReadPlan,
-                                     ProcessExecutionStateService.TaskPlan dbWritePlan,
-                                     Map<String, String> executionVariables,
-                                     List<String> selectedFileReferences) {
-        if (fileReadPlan.taskType() != TaskType.FILE_READ || dbWritePlan.taskType() != TaskType.DB_WRITE) {
-            throw new IllegalArgumentException("Pipeline requires FILE_READ followed by DB_WRITE");
+    public FileReadTaskResult run(Long processExecutionId,
+                                  ProcessExecutionStateService.TaskPlan fileReadPlan,
+                                  ProcessExecutionStateService.TaskPlan sinkTaskPlan,
+                                  Map<String, String> executionVariables,
+                                  List<String> selectedFileReferences) {
+        if (fileReadPlan.taskType() != TaskType.FILE_READ) {
+            throw new IllegalArgumentException("Pipeline requires a FILE_READ task as source");
         }
         if (fileReadPlan.sourceType() == null || fileReadPlan.readerType() == null) {
             throw new IllegalArgumentException("FILE_READ task requires linked sourceDefinition and readerDefinition");
+        }
+
+        var provider = taskProviderRegistry.resolve(sinkTaskPlan.taskType().name());
+        if (!(provider instanceof BatchTaskProvider sinkTaskProvider)) {
+            throw new IllegalArgumentException("Pipeline sink task " + sinkTaskPlan.taskType() + " must implement BatchTaskProvider");
         }
 
         var sourceProvider = sourceProviderRegistry.resolve(fileReadPlan.sourceType());
@@ -54,19 +60,19 @@ public class FileReadDbWritePipelineService {
                 executionVariables
         );
         var readerConfiguration = fileReadRuntimeSupport.configuration(fileReadPlan.readerConfigurationJson());
-        var dbWriteConfiguration = fileReadRuntimeSupport.configuration(dbWritePlan.configurationJson());
+        var sinkConfiguration = fileReadRuntimeSupport.configuration(sinkTaskPlan.configurationJson());
 
         var selectedFiles = fileReadRuntimeSupport.filterSelectedFiles(
                 sourceProvider.selectFiles(sourceConfiguration),
                 selectedFileReferences
         );
-        var dbTaskContext = new TaskContext(processExecutionId, dbWritePlan.taskDefinitionId());
+        var sinkTaskContext = new TaskContext(processExecutionId, sinkTaskPlan.taskDefinitionId());
         if (executionVariables != null && !executionVariables.isEmpty()) {
-            dbTaskContext.attributes().put("executionVariables", executionVariables);
+            sinkTaskContext.attributes().put("executionVariables", executionVariables);
         }
 
-        int batchSize = Math.max(fileReadRuntimeSupport.batchSize(dbWriteConfiguration), 1);
-        int totalWritten = 0;
+        int batchSize = Math.max(fileReadRuntimeSupport.batchSize(sinkConfiguration), 1);
+        int totalProcessed = 0;
         int totalValid = 0;
         int totalSkipped = 0;
         var aggregatedSkips = new ArrayList<ReadSkip>();
@@ -77,11 +83,11 @@ public class FileReadDbWritePipelineService {
         for (var selectedFile : selectedFiles) {
             try {
                 var payload = sourceProvider.openFile(selectedFile, sourceConfiguration);
-                dbTaskContext.attributes().put("sourcePayload", payload);
-                int beforeWritten = totalWritten;
+                sinkTaskContext.attributes().put("sourcePayload", payload);
+                int beforeProcessed = totalProcessed;
                 var fileResult = readerProvider.readInBatches(payload, readerConfiguration, batchSize, batch -> {
                     var enrichedRecords = fileReadRuntimeSupport.enrichRecordsWithSourceMetadata(batch.records(), payload);
-                    var writeResult = dbWriteTaskProvider.executeRecords(dbTaskContext, dbWriteConfiguration, enrichedRecords, payload);
+                    var writeResult = sinkTaskProvider.executeRecords(sinkTaskContext, sinkConfiguration, enrichedRecords, payload);
                     if (!writeResult.success()) {
                         throw new IllegalStateException(writeResult.details());
                     }
@@ -89,20 +95,20 @@ public class FileReadDbWritePipelineService {
                 totalValid += fileResult.recordCount();
                 totalSkipped += fileResult.skippedCount();
                 aggregatedSkips.addAll(fileResult.skippedRows());
-                totalWritten += fileResult.recordCount();
-                fileSummaries.add(new FileReadSummary(selectedFile.name(), fileResult.recordCount(), fileResult.skippedCount(), totalWritten - beforeWritten));
+                totalProcessed += fileResult.recordCount();
+                fileSummaries.add(new FileReadSummary(selectedFile.name(), fileResult.recordCount(), fileResult.skippedCount(), totalProcessed - beforeProcessed));
             } catch (Exception fileError) {
                 var message = fileError.getMessage() == null ? fileError.getClass().getSimpleName() : fileError.getMessage();
                 failedFiles.add(new FileFailureSummary(selectedFile.name(), message));
                 if (!"continue".equals(fileErrorPolicy)) {
-                    throw new FileReadDbWritePipelineException(
+                    throw new FileReadTaskPipelineException(
                             "Processing failed for file " + selectedFile.name() + ": " + message,
                             selectedFile.name(),
                             List.copyOf(fileSummaries),
                             List.copyOf(selectedFiles),
                             totalValid,
                             totalSkipped,
-                            totalWritten,
+                            totalProcessed,
                             List.copyOf(aggregatedSkips),
                             List.copyOf(failedFiles),
                             fileError
@@ -112,14 +118,14 @@ public class FileReadDbWritePipelineService {
         }
 
         if (!failedFiles.isEmpty()) {
-            throw new FileReadDbWritePipelineException(
+            throw new FileReadTaskPipelineException(
                     "Processing completed with errors in " + failedFiles.size() + " file(s)",
                     failedFiles.getFirst().fileName(),
                     List.copyOf(fileSummaries),
                     List.copyOf(selectedFiles),
                     totalValid,
                     totalSkipped,
-                    totalWritten,
+                    totalProcessed,
                     List.copyOf(aggregatedSkips),
                     List.copyOf(failedFiles),
                     null
@@ -127,13 +133,13 @@ public class FileReadDbWritePipelineService {
         }
 
         var summary = new ReadResult(List.of(), totalValid, totalSkipped, List.copyOf(aggregatedSkips));
-        return new FileReadDbWriteResult(summary, List.copyOf(fileSummaries), List.copyOf(selectedFiles), totalWritten);
+        return new FileReadTaskResult(summary, List.copyOf(fileSummaries), List.copyOf(selectedFiles), totalProcessed);
     }
 
-    public record FileReadDbWriteResult(ReadResult readResult,
-                                        List<FileReadSummary> fileSummaries,
-                                        List<SelectedSourceFile> selectedFiles,
-                                        int writtenCount) {
+    public record FileReadTaskResult(ReadResult readResult,
+                                     List<FileReadSummary> fileSummaries,
+                                     List<SelectedSourceFile> selectedFiles,
+                                     int processedCount) {
     }
 
     public record FileReadSummary(String fileName, int recordCount, int skippedCount, int writtenCount) {
@@ -142,7 +148,7 @@ public class FileReadDbWritePipelineService {
     public record FileFailureSummary(String fileName, String message) {
     }
 
-    public static final class FileReadDbWritePipelineException extends RuntimeException {
+    public static final class FileReadTaskPipelineException extends RuntimeException {
         private final String failedFileName;
         private final List<FileReadSummary> completedFiles;
         private final List<SelectedSourceFile> selectedFiles;
@@ -152,16 +158,16 @@ public class FileReadDbWritePipelineService {
         private final List<ReadSkip> skippedRows;
         private final List<FileFailureSummary> failedFiles;
 
-        public FileReadDbWritePipelineException(String message,
-                                                String failedFileName,
-                                                List<FileReadSummary> completedFiles,
-                                                List<SelectedSourceFile> selectedFiles,
-                                                int validCount,
-                                                int skippedCount,
-                                                int writtenCount,
-                                                List<ReadSkip> skippedRows,
-                                                List<FileFailureSummary> failedFiles,
-                                                Throwable cause) {
+        public FileReadTaskPipelineException(String message,
+                                             String failedFileName,
+                                             List<FileReadSummary> completedFiles,
+                                             List<SelectedSourceFile> selectedFiles,
+                                             int validCount,
+                                             int skippedCount,
+                                             int writtenCount,
+                                             List<ReadSkip> skippedRows,
+                                             List<FileFailureSummary> failedFiles,
+                                             Throwable cause) {
             super(message, cause);
             this.failedFileName = failedFileName;
             this.completedFiles = completedFiles;

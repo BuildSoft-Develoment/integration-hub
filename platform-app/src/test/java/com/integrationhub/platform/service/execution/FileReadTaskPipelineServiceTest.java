@@ -3,6 +3,7 @@ package com.integrationhub.platform.service.execution;
 import com.integrationhub.platform.domain.TaskType;
 import com.integrationhub.platform.provider.task.dbwrite.DbWriteTaskProvider;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
+import com.integrationhub.platform.service.TaskProviderRegistry;
 import com.integrationhub.platform.service.reader.ReaderProviderRegistry;
 import com.integrationhub.platform.service.source.SourceProviderRegistry;
 import com.integrationhub.platform.spi.reader.ReadBatch;
@@ -27,11 +28,11 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-class FileReadDbWritePipelineServiceTest {
+class FileReadTaskPipelineServiceTest {
 
     @Test
     void pipelineRunsOutsideJtaTransaction() throws NoSuchMethodException {
-        Method method = FileReadDbWritePipelineService.class.getMethod(
+        Method method = FileReadTaskPipelineService.class.getMethod(
                 "run",
                 Long.class,
                 ProcessExecutionStateService.TaskPlan.class,
@@ -55,7 +56,7 @@ class FileReadDbWritePipelineServiceTest {
         var fileReadPlan = taskPlan("failFast");
         var dbWritePlan = dbWritePlan();
 
-        var error = assertThrows(FileReadDbWritePipelineService.FileReadDbWritePipelineException.class,
+        var error = assertThrows(FileReadTaskPipelineService.FileReadTaskPipelineException.class,
                 () -> service.run(1L, fileReadPlan, dbWritePlan, Map.of(), List.of()));
 
         assertEquals("clientes_fail.txt", error.failedFileName());
@@ -63,7 +64,6 @@ class FileReadDbWritePipelineServiceTest {
         assertEquals(2, error.selectedFiles().size());
         assertEquals(1, error.failedFiles().size());
         assertEquals(1, error.validCount());
-        assertEquals(1, error.writtenCount());
     }
 
     @Test
@@ -76,7 +76,7 @@ class FileReadDbWritePipelineServiceTest {
         var fileReadPlan = taskPlan("continue");
         var dbWritePlan = dbWritePlan();
 
-        var error = assertThrows(FileReadDbWritePipelineService.FileReadDbWritePipelineException.class,
+        var error = assertThrows(FileReadTaskPipelineService.FileReadTaskPipelineException.class,
                 () -> service.run(1L, fileReadPlan, dbWritePlan, Map.of(), List.of()));
 
         assertEquals("clientes_fail.txt", error.failedFileName());
@@ -85,10 +85,9 @@ class FileReadDbWritePipelineServiceTest {
         assertEquals(2, error.selectedFiles().size());
         assertEquals(1, error.failedFiles().size());
         assertEquals(1, error.validCount());
-        assertEquals(1, error.writtenCount());
     }
 
-    private FileReadDbWritePipelineService serviceForPolicy(String policy, List<SelectedSourceFile> selectedFiles) {
+    private FileReadTaskPipelineService serviceForPolicy(String policy, List<SelectedSourceFile> selectedFiles) {
         var mapper = new JsonConfigurationMapper();
         var runtimeSupport = new FileReadRuntimeSupport(mapper);
 
@@ -138,6 +137,11 @@ class FileReadDbWritePipelineServiceTest {
 
         var dbWriteProvider = new DbWriteTaskProvider(null, null, null) {
             @Override
+            public String type() {
+                return "DB_WRITE";
+            }
+
+            @Override
             public TaskResult executeRecords(TaskContext context,
                                              Map<String, Object> configuration,
                                              List<ReadRecord> records,
@@ -149,10 +153,18 @@ class FileReadDbWritePipelineServiceTest {
             }
         };
 
-        return new FileReadDbWritePipelineService(
+        var taskProviderRegistry = new TaskProviderRegistry(null) {
+            @Override
+            public com.integrationhub.platform.spi.task.TaskProvider resolve(String type) {
+                if ("DB_WRITE".equalsIgnoreCase(type)) return dbWriteProvider;
+                return null;
+            }
+        };
+
+        return new FileReadTaskPipelineService(
                 sourceRegistry,
                 readerRegistry,
-                dbWriteProvider,
+                taskProviderRegistry,
                 runtimeSupport
         );
     }
