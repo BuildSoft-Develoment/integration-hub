@@ -3,13 +3,21 @@ import {
   ProcessedFileFilters,
   ProcessedSourceFileRecord,
   TaskFailureSummary,
+  TaskDbWriteSummary,
   TaskProcessedFileSummaryRecord,
   TaskReadSummary,
   TaskSkippedRowRecord,
 } from '../models/execution.models';
+import { DateTimeService } from '@integration-hub/core/services';
+
+const EXECUTION_DATE_FORMAT = 'dd LLL yyyy, HH:mm:ss';
 
 export interface ParsedTaskPayload {
   outputs?: Record<string, unknown>;
+}
+
+export function formatExecutionDate(dateTime: DateTimeService, value: string | null | undefined): string {
+  return value ? dateTime.formatIso(value, EXECUTION_DATE_FORMAT) : '-';
 }
 
 export function createEmptyProcessedFileFilters(): ProcessedFileFilters {
@@ -136,7 +144,40 @@ export function buildTaskReadSummary(task: ProcessTaskExecutionRecord | null | u
   if (!task) {
     return null;
   }
+  if (task.taskType !== 'FILE_READ') {
+    return null;
+  }
   return mergeReadSummaries(processedFilesSummary(task.processedFiles), parseReadDetails(task.details));
+}
+
+export function buildTaskDbWriteSummary(task: ProcessTaskExecutionRecord | null | undefined): TaskDbWriteSummary | null {
+  if (!task || task.taskType !== 'DB_WRITE') {
+    return null;
+  }
+
+  const payload = parseTaskPayload(task.payloadJson) as (ParsedTaskPayload & {
+    processedCount?: unknown;
+    writtenCount?: unknown;
+    mode?: unknown;
+    targetTable?: unknown;
+  }) | null;
+  const outputs = payload?.outputs && typeof payload.outputs === 'object' ? payload.outputs as Record<string, unknown> : {};
+
+  const processedCount = toNullableNumber(outputs['processedCount'] ?? payload?.processedCount);
+  const writtenCount = toNullableNumber(outputs['writtenCount'] ?? payload?.writtenCount);
+  const mode = toNullableString(outputs['mode'] ?? payload?.mode);
+  const targetTable = toNullableString(outputs['targetTable'] ?? payload?.targetTable);
+
+  if (processedCount == null && writtenCount == null && mode == null && targetTable == null) {
+    return null;
+  }
+
+  return {
+    processedCount,
+    writtenCount,
+    mode,
+    targetTable,
+  };
 }
 
 export function summarizeFailure(details: string | null | undefined): TaskFailureSummary | null {
@@ -381,4 +422,20 @@ function firstMeaningfulLine(text: string): string {
       .map((line) => line.trim())
       .find(Boolean) || ''
   );
+}
+
+function toNullableNumber(value: unknown): number | null {
+  if (value == null || value === '') {
+    return null;
+  }
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function toNullableString(value: unknown): string | null {
+  if (value == null) {
+    return null;
+  }
+  const normalized = String(value).trim();
+  return normalized ? normalized : null;
 }

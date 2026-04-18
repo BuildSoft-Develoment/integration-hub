@@ -128,8 +128,8 @@ public final class DbTaskSupport {
         return keys;
     }
 
-    public static int batchSize(Map<String, Object> configuration) {
-        var value = configuration.get("batchSize");
+    public static int jdbcBatchSize(Map<String, Object> configuration) {
+        var value = configuration.get("jdbcBatchSize");
         if (value == null || String.valueOf(value).isBlank()) {
             return 500;
         }

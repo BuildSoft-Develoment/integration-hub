@@ -59,8 +59,11 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
             if (!isInsertLike(mode)) {
                 throw new IllegalArgumentException("staging_record only supports insert-like DB_WRITE modes");
             }
-            var inserted = insertIntoStaging(resolveDataSource(configuration), context, sourcePayload, effectiveRecords, DbTaskSupport.batchSize(configuration));
-            return TaskResult.success("Inserted " + inserted + " records into staging_record using mode " + mode);
+            var inserted = insertIntoStaging(resolveDataSource(configuration), context, sourcePayload, effectiveRecords, DbTaskSupport.jdbcBatchSize(configuration));
+            return TaskResult.success(
+                    "Inserted " + inserted + " records into staging_record using mode " + mode,
+                    successOutputs(mode, STAGING_TABLE, effectiveRecords.size(), inserted)
+            );
         }
 
         var targetDataSource = resolveDataSource(configuration);
@@ -71,12 +74,15 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
 
         var keyColumns = DbTaskSupport.keyColumns(configuration);
         var affected = switch (mode) {
-            case "insert", "jdbc-batch" -> insertDynamic(targetDataSource, targetTable, effectiveRecords, assignments, DbTaskSupport.batchSize(configuration));
-            case "update", "batch-update" -> updateDynamic(targetDataSource, targetTable, effectiveRecords, assignments, keyColumns, DbTaskSupport.batchSize(configuration));
-            case "upsert" -> upsertDynamic(targetDataSource, targetTable, effectiveRecords, assignments, keyColumns, DbTaskSupport.batchSize(configuration));
+            case "insert", "jdbc-batch" -> insertDynamic(targetDataSource, targetTable, effectiveRecords, assignments, DbTaskSupport.jdbcBatchSize(configuration));
+            case "update", "batch-update" -> updateDynamic(targetDataSource, targetTable, effectiveRecords, assignments, keyColumns, DbTaskSupport.jdbcBatchSize(configuration));
+            case "upsert" -> upsertDynamic(targetDataSource, targetTable, effectiveRecords, assignments, keyColumns, DbTaskSupport.jdbcBatchSize(configuration));
             default -> throw new IllegalArgumentException("Unsupported DB_WRITE mode: " + mode);
         };
-        return TaskResult.success("DB write completed on " + targetTable + " affecting " + affected + " records using mode " + mode);
+        return TaskResult.success(
+                "DB write completed on " + targetTable + " affecting " + affected + " records using mode " + mode,
+                successOutputs(mode, targetTable, effectiveRecords.size(), affected)
+        );
     }
 
 
@@ -125,6 +131,15 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
 
     private boolean isInsertLike(String mode) {
         return "insert".equals(mode) || "jdbc-batch".equals(mode);
+    }
+
+    private Map<String, Object> successOutputs(String mode, String targetTable, int processedCount, int writtenCount) {
+        return Map.of(
+                "mode", mode,
+                "targetTable", targetTable,
+                "processedCount", processedCount,
+                "writtenCount", writtenCount
+        );
     }
 
     private int insertIntoStaging(DataSource targetDataSource,

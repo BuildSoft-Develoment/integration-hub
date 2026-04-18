@@ -95,6 +95,26 @@ public class ProcessExecutionAuditMapper {
         return customDetails != null ? customDetails : "Task " + plan.taskType().name() + " (" + plan.taskDefinitionId() + ") completed";
     }
 
+    public Map<String, Object> buildBatchSinkAuditPayload(ProcessExecutionStateService.TaskPlan taskPlan,
+                                                          int processedCount,
+                                                          int writtenCount,
+                                                          List<StreamingPipelineService.BatchSummary> fileSummaries) {
+        var taskConfiguration = jsonConfigurationMapper.toMap(taskPlan.configurationJson());
+        var payload = new java.util.LinkedHashMap<String, Object>();
+        payload.put("taskType", taskPlan.taskType().name());
+        payload.put("processedCount", processedCount);
+        payload.put("writtenCount", writtenCount);
+        payload.put("mode", String.valueOf(taskConfiguration.getOrDefault("mode", "")));
+        if (taskConfiguration.get("targetTable") != null) {
+            payload.put("targetTable", String.valueOf(taskConfiguration.get("targetTable")));
+        }
+        payload.put("files", fileSummaries.stream().map(summary -> Map.of(
+                "fileName", summary.fileName(),
+                "processedCount", summary.writtenCount()
+        )).toList());
+        return payload;
+    }
+
     public String buildPipelineFailureDetails(String sourceName,
                                                StreamingPipelineService.StreamingPipelineException failure) {
         var lines = new StringBuilder()

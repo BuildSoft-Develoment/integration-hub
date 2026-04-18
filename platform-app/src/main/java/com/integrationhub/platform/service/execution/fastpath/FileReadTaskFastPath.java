@@ -79,30 +79,27 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
                     processExecutionId,
                     sinkTaskExecutionId,
                     auditMapper.buildTaskDetails(next, "Pipeline sink completed with " + pipelineResult.processedCount() + " records processed"),
-                    Map.of(
-                            "taskType", next.taskType().name(),
-                            "processedCount", pipelineResult.processedCount(),
-                            "files", pipelineResult.fileSummaries().stream().map(summary -> Map.of(
-                                    "fileName", summary.fileName(),
-                                    "processedCount", summary.writtenCount()
-                            )).toList()
+                    auditMapper.buildBatchSinkAuditPayload(
+                            next,
+                            pipelineResult.processedCount(),
+                            pipelineResult.processedCount(),
+                            pipelineResult.fileSummaries()
                     )
             );
             return null; // Continue process
         } catch (Exception pipelineError) {
-            handleError(processExecutionId, current, next, readTaskExecutionId, sinkTaskExecutionId, executionVariables, triggerSource, pipelineError);
-            return stateService.getExecution(processExecutionId); // Interrupt with manual return to ensure fail-fast
+            return handleError(processExecutionId, current, next, readTaskExecutionId, sinkTaskExecutionId, executionVariables, triggerSource, pipelineError);
         }
     }
 
-    private void handleError(Long processExecutionId,
-                            ProcessExecutionStateService.TaskPlan current,
-                            ProcessExecutionStateService.TaskPlan next,
-                            Long readExecutionId,
-                            Long sinkExecutionId,
-                            Map<String, String> executionVariables,
-                            String triggerSource,
-                            Exception error) {
+    private ProcessExecution handleError(Long processExecutionId,
+                                         ProcessExecutionStateService.TaskPlan current,
+                                         ProcessExecutionStateService.TaskPlan next,
+                                         Long readExecutionId,
+                                         Long sinkExecutionId,
+                                         Map<String, String> executionVariables,
+                                         String triggerSource,
+                                         Exception error) {
 
         if (error instanceof StreamingPipelineService.StreamingPipelineException pipelineFailure) {
             var failureDetails = auditMapper.buildPipelineFailureDetails(current.sourceName(), pipelineFailure);
@@ -122,11 +119,12 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
                 stateService.completeTaskWithErrors(processExecutionId, readExecutionId, failureDetails, failurePayloadRead);
                 stateService.completeTaskWithErrors(processExecutionId, sinkExecutionId, failureDetails, failurePayloadSink);
                 stateService.completeProcessWithErrors(processExecutionId, failureDetails);
-            } else {
-                stateService.failTask(processExecutionId, readExecutionId, failureDetails, failurePayloadRead);
-                stateService.failTask(processExecutionId, sinkExecutionId, failureDetails, failurePayloadSink);
-                // The caller (ProcessExecutionService) will handle the process failure if we re-throw or return state
+                return stateService.getExecution(processExecutionId);
             }
+
+            stateService.failTask(processExecutionId, readExecutionId, failureDetails, failurePayloadRead);
+            stateService.failTask(processExecutionId, sinkExecutionId, failureDetails, failurePayloadSink);
+            // The caller (ProcessExecutionService) will mark the process as failed.
         } else {
             var message = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
             var payloadRead = auditMapper.buildTaskFailurePayload(current, executionVariables, triggerSource);

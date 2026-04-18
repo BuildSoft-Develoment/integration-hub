@@ -21,8 +21,8 @@
         </mat-form-field>
 
         <mat-form-field>
-          <mat-label>{{ i18n.t('ui.batchSize') }}</mat-label>
-          <input matInput [disabled]="readonly()" [ngModel]="draft().batchSize" (ngModelChange)="updateDraft({ batchSize: $event })" />
+          <mat-label>{{ i18n.t('ui.jdbcBatchSize') }}</mat-label>
+          <input matInput [disabled]="readonly()" [ngModel]="draft().jdbcBatchSize" (ngModelChange)="updateDraft({ jdbcBatchSize: $event })" />
         </mat-form-field>
       </div>
 

@@ -67,6 +67,13 @@ export interface TaskReadSummary {
   failedFiles: TaskProcessedFileSummaryRecord[];
 }
 
+export interface TaskDbWriteSummary {
+  processedCount: number | null;
+  writtenCount: number | null;
+  mode: string | null;
+  targetTable: string | null;
+}
+
 export interface TaskFailureSummary {
   title: string;
   summary: string;

@@ -7,6 +7,7 @@ import io.quarkus.hibernate.orm.panache.PanacheRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.util.Map;
+import java.util.List;
 
 @ApplicationScoped
 public class ProcessExecutionRepository implements PanacheRepository<ProcessExecution> {
@@ -41,5 +42,15 @@ public class ProcessExecutionRepository implements PanacheRepository<ProcessExec
 
     public PanacheQuery<ProcessExecution> findChildrenBySourceExecutionId(Long sourceExecutionId) {
         return find("from ProcessExecution e where e.sourceExecutionId = ?1 order by e.id desc", sourceExecutionId);
+    }
+
+    public long countPendingExecutions() {
+        return count("status", ExecutionStatus.PENDING);
+    }
+
+    public List<ProcessExecution> listPendingExecutions(int limit) {
+        var query = find("from ProcessExecution e where e.status = ?1 order by e.id asc", ExecutionStatus.PENDING);
+        query.page(0, Math.max(limit, 1));
+        return query.list();
     }
 }

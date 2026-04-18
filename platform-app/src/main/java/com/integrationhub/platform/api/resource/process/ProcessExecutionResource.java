@@ -3,7 +3,7 @@ package com.integrationhub.platform.api.resource.process;
 import com.integrationhub.platform.api.mapper.execution.ExecutionApiMapper;
 import com.integrationhub.platform.api.request.process.ProcessExecutionRequest;
 import com.integrationhub.platform.api.response.execution.ProcessExecutionStartResponse;
-import com.integrationhub.platform.service.execution.ProcessExecutionService;
+import com.integrationhub.platform.service.execution.ProcessExecutionCommandService;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -17,12 +17,12 @@ import java.util.Map;
 @Produces(MediaType.APPLICATION_JSON)
 public class ProcessExecutionResource {
 
-    private final ProcessExecutionService processExecutionService;
+    private final ProcessExecutionCommandService processExecutionCommandService;
     private final ExecutionApiMapper executionApiMapper;
 
-    public ProcessExecutionResource(ProcessExecutionService processExecutionService,
+    public ProcessExecutionResource(ProcessExecutionCommandService processExecutionCommandService,
                                     ExecutionApiMapper executionApiMapper) {
-        this.processExecutionService = processExecutionService;
+        this.processExecutionCommandService = processExecutionCommandService;
         this.executionApiMapper = executionApiMapper;
     }
 
@@ -39,7 +39,7 @@ public class ProcessExecutionResource {
         var sourceExecutionId = request == null ? null : request.sourceExecutionId();
         var triggerSource = selectedFiles.isEmpty() ? "MANUAL" : "MANUAL_RETRY_FAILED";
         return executionApiMapper.toStartResponse(
-                processExecutionService.execute(processDefinitionId, executionVariables, selectedFiles, sourceExecutionId, triggerSource)
+                processExecutionCommandService.startAsync(processDefinitionId, executionVariables, selectedFiles, sourceExecutionId, triggerSource)
         );
     }
 }

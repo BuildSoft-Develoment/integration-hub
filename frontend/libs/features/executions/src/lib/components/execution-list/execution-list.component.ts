@@ -3,7 +3,7 @@ import { Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
-import { formatTriggerSourceLabel } from '../../details/execution-detail.utils';
+import { formatExecutionDate, formatTriggerSourceLabel } from '../../details/execution-detail.utils';
 import { ProcessExecutionRecord } from '../../models/execution.models';
 
 @Component({
@@ -43,6 +43,6 @@ export class ExecutionListComponent {
   }
 
   formatDate(value: string | null): string {
-    return value ? this.dateTime.formatIso(value) : '-';
+    return formatExecutionDate(this.dateTime, value);
   }
 }

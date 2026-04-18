@@ -44,6 +44,9 @@ public class ProcessExecution {
     @Column(name = "trigger_source", length = 40)
     public String triggerSource;
 
+    @Column(name = "request_payload_json", columnDefinition = "text")
+    public String requestPayloadJson;
+
     @Column(columnDefinition = "text")
     public String details;
 }

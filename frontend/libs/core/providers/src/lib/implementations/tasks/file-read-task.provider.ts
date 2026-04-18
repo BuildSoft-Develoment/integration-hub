@@ -7,7 +7,9 @@ export interface FileReadTaskDraft {
   sourceDefinitionId: number | null;
   readerDefinitionId: number | null;
   sourceVariablesText: string;
+  batchSize: string;
   parallel: boolean;
+  parallelMode: 'file' | 'batch';
   maxConcurrency: number | null;
 }
 
@@ -24,7 +26,9 @@ export class FileReadTaskProvider extends ProcessTaskProvider<FileReadTaskDraft>
       sourceDefinitionId: null,
       readerDefinitionId: null,
       sourceVariablesText: '',
+      batchSize: '500',
       parallel: false,
+      parallelMode: 'file',
       maxConcurrency: null,
     };
   }
@@ -37,7 +41,9 @@ export class FileReadTaskProvider extends ProcessTaskProvider<FileReadTaskDraft>
       sourceVariablesText: Object.entries(config.sourceVariables || {})
         .map(([key, value]) => `${key}=${String(value)}`)
         .join('\n'),
+      batchSize: String(config.batchSize ?? 500),
       parallel: !!config.parallel,
+      parallelMode: config.parallelMode === 'batch' ? 'batch' : 'file',
       maxConcurrency: config.maxConcurrency ?? null,
     };
   }
@@ -57,9 +63,13 @@ export class FileReadTaskProvider extends ProcessTaskProvider<FileReadTaskDraft>
         return acc;
       }, {});
     
-    const config: any = { sourceVariables };
+    const config: any = {
+      sourceVariables,
+      batchSize: Number(draft.batchSize || 500),
+    };
     if (draft.parallel) {
       config.parallel = true;
+      config.parallelMode = draft.parallelMode || 'file';
       if (draft.maxConcurrency != null) {
         config.maxConcurrency = draft.maxConcurrency;
       }

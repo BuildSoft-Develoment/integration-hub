@@ -32,7 +32,7 @@ class CsvReaderProviderTest {
 
         ReadResult result = read(provider, payload, Map.of(
                 "delimiter", ";",
-                "rowData", 1,
+                "rowData", 2,
                 "fields", List.of(
                         Map.of("name", "dni", "position", 1),
                         Map.of("name", "nombre", "position", 2),
@@ -61,7 +61,7 @@ class CsvReaderProviderTest {
 
         ReadResult result = read(provider, payload, Map.of(
                 "delimiter", ";",
-                "rowData", 0,
+                "rowData", 1,
                 "fields", List.of(
                         Map.of("name", "dni", "position", 1, "type", "NUMBER", "required", true),
                         Map.of("name", "nombre", "position", 2, "size", 10,
@@ -92,7 +92,7 @@ class CsvReaderProviderTest {
 
         ReadResult result = read(provider, payload, Map.of(
                 "delimiter", ";",
-                "rowData", 0,
+                "rowData", 1,
                 "fields", List.of(
                         Map.of("name", "dni", "position", 1),
                         Map.of("name", "nombre", "position", 2),
@@ -119,11 +119,35 @@ class CsvReaderProviderTest {
 
         var error = assertThrows(IllegalArgumentException.class, () -> provider.readInBatches(payload, Map.of(
                 "delimiter", ";",
-                "rowData", 0
+                "rowData", 1
         ), 2, batch -> {
         }));
 
         assertEquals("CSV requires field definitions", error.getMessage());
+    }
+
+    @Test
+    void treatsCsvRowDataAsOneBasedRowNumber() {
+        var payload = SourcePayload.fromBytes(
+                "clientes.csv",
+                """
+                1;xx1;11;red
+                2;xx2;12;blue
+                """.getBytes(StandardCharsets.UTF_8),
+                "text/csv"
+        );
+
+        ReadResult result = read(provider, payload, Map.of(
+                "delimiter", ";",
+                "rowData", 1,
+                "fields", List.of(
+                        Map.of("name", "dni", "position", 1),
+                        Map.of("name", "nombre", "position", 2)
+                )
+        ));
+
+        assertEquals(2, result.recordCount());
+        assertEquals("1", result.records().get(0).values().get("dni"));
     }
 
     private ReadResult read(CsvReaderProvider provider, SourcePayload payload, Map<String, Object> configuration) {

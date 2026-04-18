@@ -4,7 +4,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
 
-import { formatFileSize } from '../../../details/execution-detail.utils';
+import { formatExecutionDate, formatFileSize } from '../../../details/execution-detail.utils';
 import { ProcessedSourceFileRecord } from '../../../models/execution.models';
 
 @Component({
@@ -31,7 +31,7 @@ export class ExecutionFilesTableComponent {
   readonly toggleAllVisible = output<boolean>();
 
   formatDate(value: string | null): string {
-    return value ? this.dateTime.formatIso(value) : '-';
+    return formatExecutionDate(this.dateTime, value);
   }
 
   fileSize(value: number | null): string {

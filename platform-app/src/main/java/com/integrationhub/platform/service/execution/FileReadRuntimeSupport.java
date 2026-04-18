@@ -29,6 +29,7 @@ public class FileReadRuntimeSupport {
         var sourceConfiguration = new LinkedHashMap<>(jsonConfigurationMapper.toMap(sourceConfigurationJson));
         var taskConfiguration = jsonConfigurationMapper.toMap(taskConfigurationJson);
         mergeTemplateVariables(sourceConfiguration, taskConfiguration, executionVariables);
+        mergeExecutionOptions(sourceConfiguration, taskConfiguration);
         return sourceConfiguration;
     }
 
@@ -110,6 +111,10 @@ public class FileReadRuntimeSupport {
         }
     }
 
+    public StreamingParallelMode parallelMode(Map<String, Object> configuration) {
+        return StreamingParallelMode.from(configuration.get("parallelMode"));
+    }
+
     private void mergeTemplateVariables(Map<String, Object> sourceConfiguration,
                                         Map<String, Object> taskConfiguration,
                                         Map<String, String> executionVariables) {
@@ -125,6 +130,21 @@ public class FileReadRuntimeSupport {
         }
         if (!mergedVariables.isEmpty()) {
             sourceConfiguration.put("templateVariables", mergedVariables);
+        }
+    }
+
+    private void mergeExecutionOptions(Map<String, Object> sourceConfiguration,
+                                       Map<String, Object> taskConfiguration) {
+        mergeExecutionOption(sourceConfiguration, taskConfiguration, "parallel");
+        mergeExecutionOption(sourceConfiguration, taskConfiguration, "parallelMode");
+        mergeExecutionOption(sourceConfiguration, taskConfiguration, "maxConcurrency");
+    }
+
+    private void mergeExecutionOption(Map<String, Object> sourceConfiguration,
+                                      Map<String, Object> taskConfiguration,
+                                      String key) {
+        if (taskConfiguration.containsKey(key)) {
+            sourceConfiguration.put(key, taskConfiguration.get(key));
         }
     }
 
