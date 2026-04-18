@@ -1,4 +1,4 @@
-package com.integrationhub.platform.provider.task;
+package com.integrationhub.platform.provider.task.dbfunction;
 
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.PostgreSQLContainer;

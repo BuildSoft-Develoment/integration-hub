@@ -1,5 +1,6 @@
 package com.integrationhub.platform.provider.task.dbfunction;
 
+import com.integrationhub.platform.domain.ConnectionType;
 import com.integrationhub.platform.provider.task.common.StoredProcedureRuntimeSupport;
 import com.integrationhub.platform.provider.task.common.TaskOutputSupport;
 import com.integrationhub.platform.provider.task.dbwrite.DbTaskSupport;
@@ -15,11 +16,7 @@ import jakarta.inject.Inject;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -72,80 +69,75 @@ public class DatabaseFunctionTaskProvider implements TaskProvider {
                 .map(parameter -> StoredProcedureRuntimeSupport.resolveParameter(parameter, runtimeVariables))
                 .toList();
 
-        var outputs = executeFunction(resolveDataSource(configuration), functionName, timeoutSeconds, resolvedParameters, resultAlias);
+        var outputs = executeFunction(resolveTarget(configuration), functionName, timeoutSeconds, resolvedParameters, resultAlias);
         return TaskResult.success("Database function " + functionName + " executed with " + resolvedParameters.size() + " parameter(s)", outputs);
     }
 
-    private DataSource resolveDataSource(Map<String, Object> configuration) {
+    private DatabaseFunctionExecutionTarget resolveTarget(Map<String, Object> configuration) {
         return DbTaskSupport.connectionRef(configuration)
-                .map(connectionPoolManager::resolveJdbcDataSource)
-                .orElse(dataSource);
+                .map(connectionPoolManager::resolveJdbcTarget)
+                .map(target -> new DatabaseFunctionExecutionTarget(target.dataSource(), target.connectionType()))
+                .orElseGet(() -> new DatabaseFunctionExecutionTarget(dataSource, null));
     }
 
-    private Map<String, Object> executeFunction(DataSource targetDataSource,
+    private Map<String, Object> executeFunction(DatabaseFunctionExecutionTarget target,
                                                 String functionName,
                                                 int timeoutSeconds,
                                                 List<StoredProcedureRuntimeSupport.ResolvedParameter> parameters,
                                                 String resultAlias) {
-        try (var connection = targetDataSource.getConnection()) {
-            var dialect = resolveDialect(connection);
-            var sql = dialect.selectStatement(functionName, parameters, resultAlias);
-            try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setQueryTimeout(timeoutSeconds);
-                for (int index = 0; index < parameters.size(); index++) {
-                    var parameter = parameters.get(index);
-                    if (parameter.value() == null) {
-                        statement.setNull(index + 1, parameter.sqlType());
-                    } else {
-                        statement.setObject(index + 1, parameter.value(), parameter.sqlType());
-                    }
-                }
-                try (ResultSet resultSet = statement.executeQuery()) {
-                    return collectOutputs(resultSet);
-                }
-            }
+        try (var connection = target.dataSource().getConnection()) {
+            var dialect = resolveDialect(target.connectionType(), connection);
+            return dialect.execute(connection, functionName, timeoutSeconds, parameters, resultAlias);
         } catch (SQLException error) {
-            throw new IllegalStateException(buildErrorMessage(targetDataSource, functionName, parameters, error), error);
+            throw new IllegalStateException(buildErrorMessage(target, functionName, parameters, error), error);
         }
     }
 
-    private Map<String, Object> collectOutputs(ResultSet resultSet) throws SQLException {
-        if (!resultSet.next()) {
-            return Map.of();
-        }
-        var outputs = new LinkedHashMap<String, Object>();
-        ResultSetMetaData metadata = resultSet.getMetaData();
-        for (int index = 1; index <= metadata.getColumnCount(); index++) {
-            outputs.put(normalizeOutputName(metadata.getColumnLabel(index)), resultSet.getObject(index));
-        }
-        return outputs;
-    }
-
-    private String normalizeOutputName(String columnLabel) {
-        if (columnLabel == null) {
-            return null;
-        }
-        return columnLabel.replaceFirst("^@+", "");
-    }
-
-    private String buildErrorMessage(DataSource targetDataSource,
+    private String buildErrorMessage(DatabaseFunctionExecutionTarget target,
                                      String functionName,
                                      List<StoredProcedureRuntimeSupport.ResolvedParameter> parameters,
                                      SQLException error) {
         var baseMessage = "Cannot execute database function " + functionName + " with parameters " + describeParameters(parameters);
-        try (Connection connection = targetDataSource.getConnection()) {
-            return resolveDialect(connection).buildErrorMessage(functionName, parameters, error, baseMessage, connection);
+        try (Connection connection = target.dataSource().getConnection()) {
+            return resolveDialect(target.connectionType(), connection).buildErrorMessage(functionName, parameters, error, baseMessage, connection);
         } catch (SQLException ignored) {
             return baseMessage;
         }
     }
 
-    private DatabaseFunctionDialect resolveDialect(Connection connection) throws SQLException {
-        var productName = connection.getMetaData().getDatabaseProductName();
+    private DatabaseFunctionDialect resolveDialect(ConnectionType connectionType, Connection connection) throws SQLException {
+        if (connectionType != null) {
+            return dialects.stream()
+                    .filter(dialect -> dialect.connectionType() == connectionType)
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("Unsupported connection type for database function execution: " + connectionType));
+        }
+        var inferredConnectionType = inferConnectionType(connection);
         return dialects.stream()
-                .filter(dialect -> dialect.supports(productName))
+                .filter(dialect -> dialect.connectionType() == inferredConnectionType)
                 .findFirst()
-                .orElseThrow(() -> new IllegalStateException("Unsupported database product for database function execution: " + productName));
+                .orElseThrow(() -> new IllegalStateException("Unsupported connection type for database function execution: " + inferredConnectionType));
+    }
+
+    private ConnectionType inferConnectionType(Connection connection) throws SQLException {
+        var productName = connection.getMetaData().getDatabaseProductName();
+        if (productName == null) {
+            throw new IllegalStateException("Unsupported database product for database function execution: null");
+        }
+        var normalizedProductName = productName.trim().toUpperCase();
+        if (normalizedProductName.contains("POSTGRES")) {
+            return ConnectionType.POSTGRESQL;
+        }
+        if (normalizedProductName.contains("MYSQL")) {
+            return ConnectionType.MYSQL;
+        }
+        if (normalizedProductName.contains("ORACLE")) {
+            return ConnectionType.ORACLE;
+        }
+        if (normalizedProductName.contains("SQL SERVER") || normalizedProductName.contains("MICROSOFT SQL SERVER")) {
+            return ConnectionType.SQLSERVER;
+        }
+        throw new IllegalStateException("Unsupported database product for database function execution: " + productName);
     }
 
     private String describeParameters(List<StoredProcedureRuntimeSupport.ResolvedParameter> parameters) {
@@ -153,5 +145,8 @@ public class DatabaseFunctionTaskProvider implements TaskProvider {
                 .map(parameter -> parameter.name() + "=" + parameter.jdbcType() + "(" + parameter.direction().name() + ")")
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("<none>");
+    }
+
+    private record DatabaseFunctionExecutionTarget(DataSource dataSource, ConnectionType connectionType) {
     }
 }
