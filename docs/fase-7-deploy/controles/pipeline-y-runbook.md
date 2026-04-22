@@ -15,7 +15,6 @@ Conectar el control de integracion y despliegue con la ejecucion operativa paso 
 ## Baseline actual
 
 - `ci/pipeline-baseline.md` describe el puente de pipeline mientras no todo viva en workflows reales
-- `ci/scripts/check-docs.py` valida consistencia documental
 - `ops/fase-7-deploy/runbook.md` describe el flujo de despliegue por ambientes
 
 ## Flujo esperado

@@ -35,4 +35,4 @@ La documentacion funcional y tecnica del frontend se relaciona con:
 
 - `docs/fase-2-ux-ui/02.00-ux-ui.md`
 - `docs/fase-5-construccion/05.00-estructura-construccion-actual.md`
-- `docs/architecture/FRONTEND-NX-ANGULAR.md`
+- `docs/fase-5-construccion/modulos/frontend-nx-angular.md`

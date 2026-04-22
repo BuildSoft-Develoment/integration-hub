@@ -18,7 +18,6 @@ Concentrar la verificacion minima que acompana la construccion antes de pasar a 
 - `test-quarkus-jdk25.cmd`
 - `npm run build` dentro de `frontend/`
 - `npm run test -- --watch=false` dentro de `frontend/`
-- `python ci/scripts/check-docs.py` cuando hay cambios documentales relevantes
 
 ## Trazabilidad esperada
 
