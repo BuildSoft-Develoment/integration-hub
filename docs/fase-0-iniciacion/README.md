@@ -23,5 +23,5 @@ Esta fase usa numeracion compuesta `00.xx`. El prefijo `00` identifica la fase y
 - [00.02-roadmap](00.02-roadmap.md)
 - [00.03-estimacion-tiempo-costo](00.03-estimacion-tiempo-costo.md)
 - [00.04-roles-y-responsabilidades](00.04-roles-y-responsabilidades.md)
-- [00.05-checklist-adopcion](00.05-checklist-adopcion.md)
-- [00.06-ruta-guiada-caso-canonico](00.06-ruta-guiada-caso-canonico.md)
+- [00.05-checklist-preparacion-proyecto](00.05-checklist-preparacion-proyecto.md)
+- [00.06-ruta-guiada-integration-hub](00.06-ruta-guiada-integration-hub.md)

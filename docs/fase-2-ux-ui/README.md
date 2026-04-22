@@ -4,7 +4,7 @@
 
 <!-- nav-guided:start -->
 ## Navegacion guiada
-- Anterior: [Analisis de requerimientos](../fase-1-analisis-requerimientos/01.00-analisis-requerimientos.md)
+- Anterior: [HU-04 Auditar y reprocesar](../fase-1-analisis-requerimientos/historias-usuario/HU-04-auditar-y-reprocesar.md)
 - Siguiente: [UX/UI](02.00-ux-ui.md)
 <!-- nav-guided:end -->
 

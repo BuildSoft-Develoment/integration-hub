@@ -13,11 +13,11 @@ Este repositorio implementa una plataforma de integracion configurable y adopta 
    - `docs/fase-0-iniciacion/00.04-roles-y-responsabilidades.md`
    - `docs/transversal/90.10-entregables-minimos-por-fase.md`
    - `docs/transversal/90.11-checklist-entregables.md`
-2. Revisar `plantillas/` antes de crear nuevos artefactos y usar `ejemplos/` solo como referencia, no como nivel minimo esperado.
+2. Trabajar siempre sobre artefactos oficiales del proyecto y usar referencias de apoyo solo como insumo, nunca como entregable final.
 3. Si el trabajo involucra IA, revisar tambien:
    - `docs/transversal/90.00-estandar-ia.md`
    - `docs/transversal/90.12-mapa-ia-por-fase.md`
-   - `docs/transversal/90.14-instanciacion-fases-proyectos-reales.md`
+   - `docs/transversal/90.14-criterios-consolidacion-documental.md`
    - `ai/README.md`
    - `ai/agents/README.md`
    - `ai/prompts/README.md`
@@ -38,7 +38,7 @@ Este repositorio implementa una plataforma de integracion configurable y adopta 
    - `docs/fase-3-arquitectura/03.03-plan-despliegue.md`
    - `likec4/*`
    - `docs/fase-3-arquitectura/adr/*`
-7. Para SDD, usar `docs/fase-4-sdd/04.00-spec-driven-development.md`, `docs/fase-4-sdd/04.01-checklist-spec-driven-development.md` y `plantillas/fase-4-sdd/spec-*`.
+7. Para SDD, usar `docs/fase-4-sdd/04.00-spec-driven-development.md`, `docs/fase-4-sdd/04.01-checklist-spec-driven-development.md` y crear la carpeta oficial de la feature en `specs/`.
 8. No inventar decisiones tecnicas sin `ADR` o justificacion explicita.
 9. Respetar la estructura real del codigo:
    - backend en `platform-app/`

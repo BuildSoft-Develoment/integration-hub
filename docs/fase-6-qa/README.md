@@ -4,7 +4,7 @@
 
 <!-- nav-guided:start -->
 ## Navegacion guiada
-- Anterior: [Plantilla de proyecto base](../fase-5-construccion/05.00-plantilla-proyecto-base.md)
+- Anterior: [Estructura de construccion actual](../fase-5-construccion/05.00-estructura-construccion-actual.md)
 - Siguiente: [Plan de pruebas](06.00-plan-pruebas.md)
 <!-- nav-guided:end -->
 
