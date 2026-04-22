@@ -85,8 +85,8 @@ Este enfoque permite:
 
 ## Diagramas relacionados
 
-- [integration-hub.likec4](/docs/architecture/integration-hub.likec4)
-- [LikeC4 dist](/docs/architecture/dist/index.html)
+- [integration-hub.likec4](../../../likec4/integration-hub.likec4)
+- [LikeC4 README](../../../likec4/README.md)
 ## Decision adicional sobre conectividad de destino
 
 Para la tarea `DB_WRITE` se adopta el siguiente criterio:

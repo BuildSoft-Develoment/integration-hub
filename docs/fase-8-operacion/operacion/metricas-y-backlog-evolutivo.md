@@ -25,13 +25,41 @@ Relacionar el seguimiento operativo con las metricas minimas y las mejoras poste
 
 - `ops/fase-8-operacion/metricas.md`
 - `ops/observabilidad.md`
-- `docs/architecture/CAPACITY-SIZING.md`
+- `docs/fase-8-operacion/08.00-operacion-continua.md`
+
+## Baseline de capacidad
+
+### DEV
+
+- 1 host Docker
+- 4 vCPU
+- 8 GB RAM
+- 50 GB disco
+
+### PRE
+
+- 1 nodo de aplicacion
+- 4 a 8 vCPU
+- 16 GB RAM
+- 100 GB disco
+
+### PROD
+
+- 2 nodos de aplicacion `Kubernetes`
+- 4 a 8 vCPU por nodo
+- 16 a 32 GB RAM por nodo
+- `PostgreSQL` primary + replica
+- `Keycloak` dimensionado para usuarios concurrentes
 
 ## Backlog evolutivo
 
 - mejorar visibilidad de errores y tiempos por flujo
 - formalizar mas indicadores operativos por feature
 - sostener alineacion entre incidentes, metricas y decisiones futuras
+- introducir notificaciones operativas para ejecuciones con errores o archivos pendientes
+- ampliar reportes operativos por proceso, fuente o reader
+- evaluar acciones masivas y reproceso avanzado sobre lotes grandes
+- reforzar auditoria fina sobre reprocesos y acciones manuales sensibles
 
 ## Regla de madurez
 

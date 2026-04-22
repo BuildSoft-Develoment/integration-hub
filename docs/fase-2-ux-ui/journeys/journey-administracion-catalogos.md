@@ -64,4 +64,4 @@ Un usuario administrativo necesita registrar o ajustar una configuracion base pa
 - `UC-02 Configurar reader`
 - `HU-01 Administrar fuentes`
 - `HU-02 Configurar readers`
-- `docs/architecture/FRONTEND-NX-ANGULAR.md`
+- `docs/fase-5-construccion/modulos/frontend-nx-angular.md`

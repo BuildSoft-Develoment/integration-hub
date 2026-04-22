@@ -702,10 +702,10 @@ Diseno aplicado:
 
 
 
-Guia local ampliada: [FILE-VAULT-LOCAL.md](/docs/architecture/FILE-VAULT-LOCAL.md)
+Guia local ampliada: [seguridad-secretos.md](ops/seguridad-secretos.md)
 
 
-Guia de connectionRef con File Vault: [CONNECTIONREF-FILE-VAULT.md](/docs/architecture/CONNECTIONREF-FILE-VAULT.md)
+Guia de connectionRef con File Vault: [seguridad-secretos.md](ops/seguridad-secretos.md)
 
 
 
@@ -740,9 +740,9 @@ El mismo contrato tambien puede usarse en tareas dinamicas:
 
 ## Frontend Angular Nx
 
-La base nueva del frontend ya corre sobre Angular 21 + Nx en `frontend`, con Quinoa apuntando a `dist/browser`. Ver detalle en [FRONTEND-NX-ANGULAR.md](/docs/architecture/FRONTEND-NX-ANGULAR.md).
+La base nueva del frontend ya corre sobre Angular 21 + Nx en `frontend`, con Quinoa apuntando a `dist/browser`. Ver detalle en [frontend-nx-angular.md](docs/fase-5-construccion/modulos/frontend-nx-angular.md).
 
-Frontend actual: Angular 21 + Angular Material + Angular CDK + Angular Aria + TailwindCSS v4 + Signals, integrado con Nx, Quinoa, hash routing y Keycloak. Ver [FRONTEND-NX-ANGULAR.md](/docs/architecture/FRONTEND-NX-ANGULAR.md).
+Frontend actual: Angular 21 + Angular Material + Angular CDK + Angular Aria + TailwindCSS v4 + Signals, integrado con Nx, Quinoa, hash routing y Keycloak. Ver [frontend-nx-angular.md](docs/fase-5-construccion/modulos/frontend-nx-angular.md).
 
 ## Convenciones frontend
 

@@ -47,4 +47,4 @@ docs/
 
 - [../transversal/90.14-criterios-consolidacion-documental.md](../transversal/90.14-criterios-consolidacion-documental.md)
 - [../transversal/90.12-mapa-ia-por-fase.md](../transversal/90.12-mapa-ia-por-fase.md)
-- [../architecture/FRONTEND-NX-ANGULAR.md](../architecture/FRONTEND-NX-ANGULAR.md)
+- [../fase-5-construccion/modulos/frontend-nx-angular.md](../fase-5-construccion/modulos/frontend-nx-angular.md)

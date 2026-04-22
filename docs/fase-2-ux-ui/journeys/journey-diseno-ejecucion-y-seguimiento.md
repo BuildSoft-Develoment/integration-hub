@@ -62,4 +62,4 @@ Describir el recorrido principal desde el diseno del proceso hasta su ejecucion,
 - `UC-04 Monitorear y reprocesar ejecucion`
 - `HU-03 Disenar y ejecutar procesos`
 - `HU-04 Auditar y reprocesar`
-- `docs/architecture/FRONTEND-NX-ANGULAR.md`
+- `docs/fase-5-construccion/modulos/frontend-nx-angular.md`

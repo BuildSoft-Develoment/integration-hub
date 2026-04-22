@@ -12,4 +12,4 @@ Carpeta fuente del modelo de arquitectura como codigo del repositorio.
 ## Regla de uso
 
 - editar el modelo fuente en esta carpeta
-- mantener `docs/architecture/dist/` como salida compatible mientras siga siendo referenciada por documentacion previa
+- mantener la fase 3 alineada con este modelo cuando cambien componentes, relaciones o despliegue
