@@ -2,6 +2,12 @@
 
 [README principal](../README.md)
 
+<!-- nav-guided:start -->
+## Navegacion guiada
+- Anterior: [README principal](../README.md)
+- Siguiente: [Fase 0 - Iniciacion](fase-0-iniciacion/README.md)
+<!-- nav-guided:end -->
+
 Esta documentacion adopta la estructura del template de referencia, aterrizada al proyecto real `Integration Hub` sobre `Quarkus`, `Angular/Nx`, `Keycloak`, `PostgreSQL` y `OpenTelemetry`.
 
 ## Regla de numeracion
@@ -54,7 +60,7 @@ Esta documentacion adopta la estructura del template de referencia, aterrizada a
 - [Analisis de requerimientos](fase-1-analisis-requerimientos/01.00-analisis-requerimientos.md)
 - [Roadmap](fase-0-iniciacion/00.02-roadmap.md)
 
-### Arquitectura y liderazgo tecnico
+### Arquitecto
 
 - [Arquitectura](fase-3-arquitectura/03.00-arquitectura.md)
 - [Decisiones de tecnologia](fase-3-arquitectura/03.01-decisiones-tecnologia.md)
@@ -62,20 +68,35 @@ Esta documentacion adopta la estructura del template de referencia, aterrizada a
 - [LikeC4](../likec4/README.md)
 - [Mapa IA por fase](transversal/90.12-mapa-ia-por-fase.md)
 
-### Desarrollo
+### Tech Lead
 
 - [SDD](fase-4-sdd/04.00-spec-driven-development.md)
 - [Construccion](fase-5-construccion/05.00-plantilla-proyecto-base.md)
 - [Specs](../specs/README.md)
+- [Documentacion transversal](transversal/README.md)
+
+### Desarrollador
+
+- [SDD](fase-4-sdd/04.00-spec-driven-development.md)
+- [Construccion](fase-5-construccion/05.00-plantilla-proyecto-base.md)
+- [Specs](../specs/README.md)
+- [Source](../src/README.md)
+- [Tests](../tests/README.md)
 - [Frontend](../frontend/README.md)
 - [AI](../ai/README.md)
 - `platform-app/` como modulo backend ejecutable
 
-### QA y operaciones
+### QA
 
 - [Plan de pruebas](fase-6-qa/06.00-plan-pruebas.md)
 - [Checklist de salida](fase-7-deploy/07.00-checklist-salida-produccion.md)
-- [Operacion continua](fase-8-operacion/08.00-operacion-continua.md)
 - [QA aplicado](../qa/README.md)
+- [Documentacion transversal](transversal/README.md)
+
+### DevOps y operaciones
+
+- [Arquitectura](fase-3-arquitectura/03.00-arquitectura.md)
+- [Checklist de salida](fase-7-deploy/07.00-checklist-salida-produccion.md)
+- [Operacion continua](fase-8-operacion/08.00-operacion-continua.md)
 - [Ops aplicado](../ops/README.md)
 - [CI baseline](../ci/README.md)

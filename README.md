@@ -1,17 +1,36 @@
 # Integration Hub
 
+<!-- nav-guided:start -->
+## Navegacion guiada
+- Anterior: Inicio del repositorio
+- Siguiente: [Indice de documentacion](docs/README.md)
+<!-- nav-guided:end -->
+
+Plataforma de integracion configurable sobre `Quarkus`, `Angular/Nx`, `Keycloak`, `PostgreSQL` y `OpenTelemetry`, alineada al template estructurado y adaptada a una estructura ejecutable real.
+
+## Primera lectura en 10 minutos
+
+1. Lee el bloque de alcance y estado actual de este README.
+2. Abre [docs/README.md](docs/README.md) y recorre el indice por fases.
+3. Lee [docs/fase-0-iniciacion/00.00-guia-de-uso.md](docs/fase-0-iniciacion/00.00-guia-de-uso.md).
+4. Lee [docs/fase-0-iniciacion/00.06-ruta-guiada-caso-canonico.md](docs/fase-0-iniciacion/00.06-ruta-guiada-caso-canonico.md).
+5. Revisa [docs/transversal/90.12-mapa-ia-por-fase.md](docs/transversal/90.12-mapa-ia-por-fase.md).
+
 ## Navegacion documental
 
-La documentacion del proyecto fue reorganizada segun el template estructurado y ahora tiene como indice principal:
+La documentacion principal del proyecto vive en:
 
 - [docs/README.md](docs/README.md)
 - [ai/README.md](ai/README.md)
 - [specs/README.md](specs/README.md)
+- [src/README.md](src/README.md)
+- [tests/README.md](tests/README.md)
 - [qa/README.md](qa/README.md)
 - [ops/README.md](ops/README.md)
 - [ci/README.md](ci/README.md)
 - [likec4/README.md](likec4/README.md)
 - [diagramas/README.md](diagramas/README.md)
+- [plantillas/README.md](plantillas/README.md)
 
 Base inicial para una plataforma de integracion configurable sobre Quarkus con:
 
@@ -26,6 +45,17 @@ Base inicial para una plataforma de integracion configurable sobre Quarkus con:
 ## Modulos
 
 - `platform-app`: aplicacion principal Quarkus con el motor base
+- `frontend`: workspace Nx/Angular para la consola administrativa
+
+## Estructura principal
+
+- `docs/`: documentacion por fases y transversal
+- `plantillas/`: baseline reutilizable por fase
+- `specs/`: features bajo `Spec-Driven Development (SDD)`
+- `ai/`: agents, prompts, skills y ejemplos
+- `platform-app/`: backend ejecutable
+- `frontend/`: frontend ejecutable
+- `qa/`, `ops/`, `ci/`, `releases/`: calidad, operacion, pipeline y snapshots
 
 ## Estado actual
 
@@ -108,6 +138,15 @@ window.__ihConfig = {
 ```
 
 Si cambias realm, host o client id, ajusta ese bloque.
+
+## Resultado esperado del estandar
+
+El repositorio debe permitir:
+
+- entender direccion, arquitectura y operacion sin depender de contexto oral,
+- llevar nuevas capacidades a `specs/` antes de construir,
+- trabajar con IA sin perder gobernanza documental,
+- evolucionar el sistema sin mover la estructura real que ya funciona.
 ## OpenTelemetry
 
 Configuracion base en `application.properties`:

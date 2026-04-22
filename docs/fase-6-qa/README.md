@@ -1,6 +1,12 @@
 # Fase 6 - QA
 
-[Indice docs](../README.md)
+[README principal](../../README.md) | [Indice docs](../README.md)
+
+<!-- nav-guided:start -->
+## Navegacion guiada
+- Anterior: [Plantilla de proyecto base](../fase-5-construccion/05.00-plantilla-proyecto-base.md)
+- Siguiente: [Plan de pruebas](06.00-plan-pruebas.md)
+<!-- nav-guided:end -->
 
 ## Contenido
 

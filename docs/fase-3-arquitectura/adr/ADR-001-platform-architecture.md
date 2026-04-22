@@ -1,5 +1,13 @@
 # ADR-001 Platform Architecture
 
+[README principal](../../../README.md) | [Indice docs](../../README.md) | [Volver a ADR](README.md)
+
+<!-- nav-guided:start -->
+## Navegacion guiada
+- Anterior: [ADR](README.md)
+- Siguiente: [Fase 4 - Spec-Driven Development](../../fase-4-sdd/README.md)
+<!-- nav-guided:end -->
+
 ## Estado
 
 Aceptado
