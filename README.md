@@ -8,6 +8,19 @@
 
 Plataforma de integracion configurable sobre `Quarkus`, `Angular/Nx`, `Keycloak`, `PostgreSQL` y `OpenTelemetry`, alineada al template estructurado y adaptada a una estructura ejecutable real.
 
+Baseline documental activo: `v0.4.0`.
+
+## Contenido
+
+- [Primera lectura en 10 minutos](#primera-lectura-en-10-minutos)
+- [Que resuelve](#que-resuelve)
+- [Para quien sirve](#para-quien-sirve)
+- [Como empezar rapido](#como-empezar-rapido)
+- [Ruta recomendada de adopcion](#ruta-recomendada-de-adopcion)
+- [Navegacion documental](#navegacion-documental)
+- [Estructura principal](#estructura-principal)
+- [Resultado esperado del estandar](#resultado-esperado-del-estandar)
+
 ## Primera lectura en 10 minutos
 
 1. Lee el bloque de alcance y estado actual de este README.
@@ -15,6 +28,37 @@ Plataforma de integracion configurable sobre `Quarkus`, `Angular/Nx`, `Keycloak`
 3. Lee [docs/fase-0-iniciacion/00.00-guia-de-uso.md](docs/fase-0-iniciacion/00.00-guia-de-uso.md).
 4. Lee [docs/fase-0-iniciacion/00.06-ruta-guiada-caso-canonico.md](docs/fase-0-iniciacion/00.06-ruta-guiada-caso-canonico.md).
 5. Revisa [docs/transversal/90.12-mapa-ia-por-fase.md](docs/transversal/90.12-mapa-ia-por-fase.md).
+
+## Que resuelve
+
+Ordena el trabajo del proyecto con un estandar unico para:
+
+- definir vision, alcance y requerimientos
+- conectar arquitectura, despliegue y operacion con artefactos minimos
+- convertir necesidades en `Spec-Driven Development (SDD)`
+- usar IA sin perder gobernanza documental
+- preservar la estructura ejecutable real del sistema
+
+## Para quien sirve
+
+- equipos que mantienen y evolucionan `Integration Hub`
+- arquitectos y tech leads que necesitan trazabilidad real
+- desarrolladores que entran al proyecto y necesitan una ruta clara
+- equipos que quieren usar IA sobre una base documental mas gobernable
+
+## Como empezar rapido
+
+1. Revisar [docs/README.md](docs/README.md) y [docs/fase-0-iniciacion/00.00-guia-de-uso.md](docs/fase-0-iniciacion/00.00-guia-de-uso.md).
+2. Entender el alcance con [docs/fase-0-iniciacion/00.01-vision-proyecto.md](docs/fase-0-iniciacion/00.01-vision-proyecto.md) y [docs/fase-1-analisis-requerimientos/01.00-analisis-requerimientos.md](docs/fase-1-analisis-requerimientos/01.00-analisis-requerimientos.md).
+3. Revisar arquitectura y despliegue en [docs/fase-3-arquitectura/README.md](docs/fase-3-arquitectura/README.md), [likec4/README.md](likec4/README.md) y [ops/README.md](ops/README.md).
+4. Para construir, usar [docs/fase-4-sdd/README.md](docs/fase-4-sdd/README.md), [specs/README.md](specs/README.md), [src/README.md](src/README.md) y [tests/README.md](tests/README.md).
+
+## Ruta recomendada de adopcion
+
+- Usar [docs/README.md](docs/README.md) como indice general de la documentacion.
+- Usar [docs/fase-0-iniciacion/00.06-ruta-guiada-caso-canonico.md](docs/fase-0-iniciacion/00.06-ruta-guiada-caso-canonico.md) para entender el flujo end-to-end.
+- Usar [docs/transversal/90.10-entregables-minimos-por-fase.md](docs/transversal/90.10-entregables-minimos-por-fase.md) y [docs/transversal/90.11-checklist-entregables.md](docs/transversal/90.11-checklist-entregables.md) como contrato minimo.
+- Usar [docs/transversal/90.14-instanciacion-fases-proyectos-reales.md](docs/transversal/90.14-instanciacion-fases-proyectos-reales.md) para evitar que documentos finales parezcan plantilla.
 
 ## Navegacion documental
 

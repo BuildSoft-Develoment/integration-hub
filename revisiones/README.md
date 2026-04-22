@@ -10,4 +10,5 @@ Carpeta para informes de revision tecnica, documental o de consistencia.
 - [2026-04-21-plan-migracion-documentacion-template.md](2026-04-21-plan-migracion-documentacion-template.md)
 - [2026-04-22-plan-alineacion-template-ia.md](2026-04-22-plan-alineacion-template-ia.md)
 - [2026-04-22-revision-profunda-template-actualizado.md](2026-04-22-revision-profunda-template-actualizado.md)
+- [2026-04-22-revision-profunda-template-reglas-actualizadas.md](2026-04-22-revision-profunda-template-reglas-actualizadas.md)
 - [2026-04-22-plan-alineacion-profunda-template-actualizado.md](2026-04-22-plan-alineacion-profunda-template-actualizado.md)
