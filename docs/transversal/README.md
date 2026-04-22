@@ -4,7 +4,7 @@
 
 <!-- nav-guided:start -->
 ## Navegacion guiada
-- Anterior: [Operacion continua](../fase-8-operacion/08.00-operacion-continua.md)
+- Anterior: [Metricas y backlog evolutivo](../fase-8-operacion/operacion/metricas-y-backlog-evolutivo.md)
 - Siguiente: [Estandar para IA](90.00-estandar-ia.md)
 <!-- nav-guided:end -->
 
