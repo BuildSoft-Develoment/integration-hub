@@ -1,26 +1,14 @@
-# AI
+# IA aplicada al proyecto
 
 [README principal](../README.md) | [Indice docs](../docs/README.md)
 
-Carpeta base para artefactos `AI-first` del repositorio.
+Documentacion del uso real de IA en `Integration Hub`.
 
-## Estructura
+## Contenido
 
-- `agents/`: roles especializados de IA por dominio o fase
-- `prompts/`: instrucciones reutilizables para producir entregables concretos
-- `skills/`: capacidades reutilizables de trabajo o revision
-- `ejemplos/`: formas de uso aterrizadas al proyecto
+- [usos-permitidos.md](usos-permitidos.md)
+- [controles-y-salidas.md](controles-y-salidas.md)
 
-## Flujo recomendado
+## Regla principal
 
-1. Leer `docs/transversal/90.00-estandar-ia.md`.
-2. Leer `docs/transversal/90.12-mapa-ia-por-fase.md`.
-3. Identificar si la necesidad requiere un `agent`, un `prompt` o una `skill`.
-4. Llevar siempre la salida final a una ruta canonica del repositorio.
-
-## Navegacion
-
-- [agents/README.md](agents/README.md)
-- [prompts/README.md](prompts/README.md)
-- [skills/README.md](skills/README.md)
-- [ejemplos/README.md](ejemplos/README.md)
+La IA en este proyecto se usa como apoyo para analizar, redactar, revisar, implementar y verificar trabajo sobre artefactos oficiales. No se documenta como una biblioteca metodologica independiente del producto.

@@ -123,6 +123,6 @@ Esta guia reune las reglas practicas para editar este repositorio sin romper su 
 <a id="ia-aplicada-al-repositorio"></a>
 ## IA aplicada al repositorio
 
-- Cualquier salida producida con agentes, prompts o skills debe terminar en una ruta canonica del repositorio.
+- Cualquier salida producida con IA debe terminar en una ruta canonica del repositorio.
 - Una salida de IA no reemplaza un documento oficial; lo ayuda a producirse o actualizarse.
 - Si la IA introduce un cambio arquitectonico, reflejar la decision en `docs/fase-3-arquitectura/adr/` antes de cerrar el cambio.

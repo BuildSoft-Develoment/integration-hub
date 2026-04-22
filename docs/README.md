@@ -69,8 +69,8 @@ Esta documentacion describe el estado real de `Integration Hub` sobre `Quarkus`,
 - [Source](../src/README.md)
 - [Tests](../tests/README.md)
 - [Frontend](../frontend/README.md)
-- [Prompts IA](../ai/prompts/README.md)
-- [Ejemplos IA](../ai/ejemplos/README.md)
+- [IA aplicada](../ai/README.md)
+- [Controles de IA](../ai/controles-y-salidas.md)
 
 ### QA
 
