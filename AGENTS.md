@@ -2,7 +2,7 @@
 
 ## Proposito
 
-Este repositorio implementa una plataforma de integracion configurable y adopta una forma de trabajo `AI-first` gobernada por documentacion estructurada.
+Este repositorio implementa una plataforma de integracion configurable y usa IA como apoyo gobernado por documentacion estructurada.
 
 ## Como debe trabajar un agente
 
@@ -19,10 +19,8 @@ Este repositorio implementa una plataforma de integracion configurable y adopta 
    - `docs/transversal/90.12-mapa-ia-por-fase.md`
    - `docs/transversal/90.14-criterios-consolidacion-documental.md`
    - `ai/README.md`
-   - `ai/agents/README.md`
-   - `ai/prompts/README.md`
-   - `ai/skills/README.md`
-   - `ai/ejemplos/README.md`
+   - `ai/usos-permitidos.md`
+   - `ai/controles-y-salidas.md`
 4. Mantener una sola nomenclatura:
    - `Spec-Driven Development (SDD)`
    - fases `0` a `8`

@@ -94,7 +94,7 @@ Base inicial para una plataforma de integracion configurable sobre Quarkus con:
 
 - `docs/`: documentacion por fases y transversal
 - `specs/`: features bajo `Spec-Driven Development (SDD)`
-- `ai/`: agents, prompts, skills y ejemplos
+- `ai/`: criterios, controles y usos reales de IA en el proyecto
 - `platform-app/`: backend ejecutable
 - `frontend/`: frontend ejecutable
 - `qa/`, `ops/`, `ci/`, `releases/`: calidad, operacion, pipeline y snapshots

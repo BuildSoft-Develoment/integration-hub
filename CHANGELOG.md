@@ -10,6 +10,7 @@ Todos los cambios relevantes del proyecto a nivel documental y de estandarizacio
 - Se eliminaron nombres y contenidos de corte plantilla en `fase-0`, `fase-5` y transversal para que la documentacion oficial describa el proyecto real.
 - Se consolido `fase-1` con modulos, casos de uso e historias de usuario como documentacion oficial del proyecto.
 - Se retiro la carpeta `plantillas/` del arbol activo del repositorio.
+- Se retiro la biblioteca metodologica de `ai/` y se reemplazo por documentacion del uso real de IA en el proyecto.
 - Se alinearon `docs/README.md`, `AGENTS.md`, `CONTRIBUTING.md` y `README.md` al template actualizado.
 - Se agrego `ci/scripts/check-docs.py` para validar BOM, enlaces, anclas y `nav-guided`.
 - Se documento la nueva ola de estandarizacion en `releases/v0.4.0-template-updated-rules-alignment.md`.
