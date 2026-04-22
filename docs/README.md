@@ -24,6 +24,7 @@ Esta documentacion adopta la estructura del template de referencia, aterrizada a
 
 ## Artefactos aplicados
 
+- [AI](../ai/README.md)
 - [Specs](../specs/README.md)
 - [QA](../qa/README.md)
 - [Ops](../ops/README.md)
@@ -31,6 +32,11 @@ Esta documentacion adopta la estructura del template de referencia, aterrizada a
 - [Releases](../releases/README.md)
 - [LikeC4](../likec4/README.md)
 - [Ejemplos](../ejemplos/README.md)
+- [Diagramas](../diagramas/README.md)
+- [Estimacion](../estimacion/README.md)
+- [Escenarios](../escenarios/README.md)
+- [Stacks](../stacks/README.md)
+- [Revisiones](../revisiones/README.md)
 
 ## Ruta recomendada
 
@@ -54,6 +60,7 @@ Esta documentacion adopta la estructura del template de referencia, aterrizada a
 - [Decisiones de tecnologia](fase-3-arquitectura/03.01-decisiones-tecnologia.md)
 - [ADR](fase-3-arquitectura/adr/README.md)
 - [LikeC4](../likec4/README.md)
+- [Mapa IA por fase](transversal/90.12-mapa-ia-por-fase.md)
 
 ### Desarrollo
 
@@ -61,6 +68,7 @@ Esta documentacion adopta la estructura del template de referencia, aterrizada a
 - [Construccion](fase-5-construccion/05.00-plantilla-proyecto-base.md)
 - [Specs](../specs/README.md)
 - [Frontend](../frontend/README.md)
+- [AI](../ai/README.md)
 - `platform-app/` como modulo backend ejecutable
 
 ### QA y operaciones

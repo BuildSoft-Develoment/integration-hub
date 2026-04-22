@@ -5,11 +5,13 @@
 La documentacion del proyecto fue reorganizada segun el template estructurado y ahora tiene como indice principal:
 
 - [docs/README.md](docs/README.md)
+- [ai/README.md](ai/README.md)
 - [specs/README.md](specs/README.md)
 - [qa/README.md](qa/README.md)
 - [ops/README.md](ops/README.md)
 - [ci/README.md](ci/README.md)
 - [likec4/README.md](likec4/README.md)
+- [diagramas/README.md](diagramas/README.md)
 
 Base inicial para una plataforma de integracion configurable sobre Quarkus con:
 
