@@ -116,7 +116,6 @@ Esta guia reune las reglas practicas para editar este repositorio sin romper su 
 
 - Revisar que los enlaces markdown nuevos o modificados resuelvan a archivos existentes.
 - Revisar que las anclas internas coincidan con los `<a id="..."></a>` o con encabezados reales.
-- Ejecutar el script de verificacion si esta disponible: `python ci/scripts/check-docs.py`.
 - Confirmar que `nav-guided` sigue cerrando el ciclo desde `README.md` hacia `docs/` y de vuelta al indice.
 - Si el cambio toca IA, revisar `docs/transversal/90.00-estandar-ia.md`.
 
