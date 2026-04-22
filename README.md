@@ -6,7 +6,7 @@
 - Siguiente: [Indice de documentacion](docs/README.md)
 <!-- nav-guided:end -->
 
-Plataforma de integracion configurable sobre `Quarkus`, `Angular/Nx`, `Keycloak`, `PostgreSQL` y `OpenTelemetry`, alineada al template estructurado y adaptada a una estructura ejecutable real.
+Plataforma de integracion configurable sobre `Quarkus`, `Angular/Nx`, `Keycloak`, `PostgreSQL` y `OpenTelemetry`, documentada por fases y alineada a la estructura ejecutable real del proyecto.
 
 Baseline documental activo: `v0.4.0`.
 
@@ -16,7 +16,7 @@ Baseline documental activo: `v0.4.0`.
 - [Que resuelve](#que-resuelve)
 - [Para quien sirve](#para-quien-sirve)
 - [Como empezar rapido](#como-empezar-rapido)
-- [Ruta recomendada de adopcion](#ruta-recomendada-de-adopcion)
+- [Ruta recomendada de lectura](#ruta-recomendada-de-lectura)
 - [Navegacion documental](#navegacion-documental)
 - [Estructura principal](#estructura-principal)
 - [Resultado esperado del estandar](#resultado-esperado-del-estandar)
@@ -26,7 +26,7 @@ Baseline documental activo: `v0.4.0`.
 1. Lee el bloque de alcance y estado actual de este README.
 2. Abre [docs/README.md](docs/README.md) y recorre el indice por fases.
 3. Lee [docs/fase-0-iniciacion/00.00-guia-de-uso.md](docs/fase-0-iniciacion/00.00-guia-de-uso.md).
-4. Lee [docs/fase-0-iniciacion/00.06-ruta-guiada-caso-canonico.md](docs/fase-0-iniciacion/00.06-ruta-guiada-caso-canonico.md).
+4. Lee [docs/fase-0-iniciacion/00.06-ruta-guiada-integration-hub.md](docs/fase-0-iniciacion/00.06-ruta-guiada-integration-hub.md).
 5. Revisa [docs/transversal/90.12-mapa-ia-por-fase.md](docs/transversal/90.12-mapa-ia-por-fase.md).
 
 ## Que resuelve
@@ -53,12 +53,12 @@ Ordena el trabajo del proyecto con un estandar unico para:
 3. Revisar arquitectura y despliegue en [docs/fase-3-arquitectura/README.md](docs/fase-3-arquitectura/README.md), [likec4/README.md](likec4/README.md) y [ops/README.md](ops/README.md).
 4. Para construir, usar [docs/fase-4-sdd/README.md](docs/fase-4-sdd/README.md), [specs/README.md](specs/README.md), [src/README.md](src/README.md) y [tests/README.md](tests/README.md).
 
-## Ruta recomendada de adopcion
+## Ruta recomendada de lectura
 
 - Usar [docs/README.md](docs/README.md) como indice general de la documentacion.
-- Usar [docs/fase-0-iniciacion/00.06-ruta-guiada-caso-canonico.md](docs/fase-0-iniciacion/00.06-ruta-guiada-caso-canonico.md) para entender el flujo end-to-end.
+- Usar [docs/fase-0-iniciacion/00.06-ruta-guiada-integration-hub.md](docs/fase-0-iniciacion/00.06-ruta-guiada-integration-hub.md) para entender el flujo end-to-end.
 - Usar [docs/transversal/90.10-entregables-minimos-por-fase.md](docs/transversal/90.10-entregables-minimos-por-fase.md) y [docs/transversal/90.11-checklist-entregables.md](docs/transversal/90.11-checklist-entregables.md) como contrato minimo.
-- Usar [docs/transversal/90.14-instanciacion-fases-proyectos-reales.md](docs/transversal/90.14-instanciacion-fases-proyectos-reales.md) para evitar que documentos finales parezcan plantilla.
+- Usar [docs/transversal/90.14-criterios-consolidacion-documental.md](docs/transversal/90.14-criterios-consolidacion-documental.md) para mantener los entregables oficiales enfocados en el proyecto real.
 
 ## Navegacion documental
 
@@ -74,7 +74,6 @@ La documentacion principal del proyecto vive en:
 - [ci/README.md](ci/README.md)
 - [likec4/README.md](likec4/README.md)
 - [diagramas/README.md](diagramas/README.md)
-- [plantillas/README.md](plantillas/README.md)
 
 Base inicial para una plataforma de integracion configurable sobre Quarkus con:
 
@@ -94,7 +93,6 @@ Base inicial para una plataforma de integracion configurable sobre Quarkus con:
 ## Estructura principal
 
 - `docs/`: documentacion por fases y transversal
-- `plantillas/`: baseline reutilizable por fase
 - `specs/`: features bajo `Spec-Driven Development (SDD)`
 - `ai/`: agents, prompts, skills y ejemplos
 - `platform-app/`: backend ejecutable

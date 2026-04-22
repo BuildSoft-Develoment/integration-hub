@@ -8,7 +8,7 @@
 - Siguiente: [Fase 0 - Iniciacion](fase-0-iniciacion/README.md)
 <!-- nav-guided:end -->
 
-Esta documentacion adopta la estructura del template de referencia, aterrizada al proyecto real `Integration Hub` sobre `Quarkus`, `Angular/Nx`, `Keycloak`, `PostgreSQL` y `OpenTelemetry`.
+Esta documentacion describe el estado real de `Integration Hub` sobre `Quarkus`, `Angular/Nx`, `Keycloak`, `PostgreSQL` y `OpenTelemetry`.
 
 ## Regla de numeracion
 
@@ -43,7 +43,7 @@ Esta documentacion adopta la estructura del template de referencia, aterrizada a
 - [Fase 0 - Iniciacion](fase-0-iniciacion/README.md)
 - [Fase 1 - Analisis y requerimientos](fase-1-analisis-requerimientos/README.md)
 - [Fase 2 - UX/UI](fase-2-ux-ui/README.md)
-- [Ruta guiada del caso canonico](fase-0-iniciacion/00.06-ruta-guiada-caso-canonico.md)
+- [Ruta guiada del proyecto](fase-0-iniciacion/00.06-ruta-guiada-integration-hub.md)
 - [Documentacion transversal](transversal/README.md)
 
 ### Arquitecto
@@ -93,8 +93,8 @@ Esta documentacion adopta la estructura del template de referencia, aterrizada a
 - [AGENTS.md](../AGENTS.md)
 - [AI](../ai/README.md)
 - [Specs](../specs/README.md)
-- [Caso canonico guiado](fase-0-iniciacion/00.06-ruta-guiada-caso-canonico.md)
-- [Instanciacion de fases en proyectos reales](transversal/90.14-instanciacion-fases-proyectos-reales.md)
+- [Ruta guiada del proyecto](fase-0-iniciacion/00.06-ruta-guiada-integration-hub.md)
+- [Criterios de consolidacion documental](transversal/90.14-criterios-consolidacion-documental.md)
 - [Escenarios](../escenarios/README.md)
 - [Stacks](../stacks/README.md)
 - [Revisiones](../revisiones/README.md)

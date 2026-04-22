@@ -18,9 +18,3 @@ Cada feature debe incluir:
 - `spec-funcional.md`
 - `spec-tecnica.md`
 - `spec-tareas.md`
-
-## Plantillas relacionadas
-
-- `plantillas/fase-4-sdd/spec-funcional.md`
-- `plantillas/fase-4-sdd/spec-tecnica.md`
-- `plantillas/fase-4-sdd/spec-tareas.md`

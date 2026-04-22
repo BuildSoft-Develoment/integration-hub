@@ -5,7 +5,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [Checklist SDD](../fase-4-sdd/04.01-checklist-spec-driven-development.md)
-- Siguiente: [Plantilla de proyecto base](05.00-plantilla-proyecto-base.md)
+- Siguiente: [Estructura de construccion actual](05.00-estructura-construccion-actual.md)
 <!-- nav-guided:end -->
 
 ## Objetivo
@@ -14,4 +14,4 @@ Explicar como se materializa la fase de construccion sobre la estructura real de
 
 ## Contenido
 
-- [05.00-plantilla-proyecto-base](05.00-plantilla-proyecto-base.md)
+- [05.00-estructura-construccion-actual](05.00-estructura-construccion-actual.md)

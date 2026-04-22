@@ -24,9 +24,9 @@ Esta guia reune las reglas practicas para editar este repositorio sin romper su 
 
 - La documentacion y el codigo deben mantenerse alineados.
 - No crear rutas paralelas para artefactos que ya tienen ubicacion oficial.
-- No mover codigo ejecutable solo para parecerse al template.
+- No mover codigo ejecutable solo para armonizar la forma documental.
 - Toda salida de IA debe terminar en una ruta canonica.
-- Si un entregable final sigue sonando a plantilla, todavia no esta terminado.
+- Si un entregable final sigue sonando a instructivo o borrador, todavia no esta terminado.
 
 <a id="antes-de-editar"></a>
 ## Antes de editar
@@ -34,7 +34,7 @@ Esta guia reune las reglas practicas para editar este repositorio sin romper su 
 1. Leer `AGENTS.md` y el bloque `Primera lectura en 10 minutos` de `README.md`.
 2. Revisar `docs/README.md`.
 3. Revisar `docs/transversal/90.07-convenciones-y-naming.md`.
-4. Revisar `docs/transversal/90.14-instanciacion-fases-proyectos-reales.md`.
+4. Revisar `docs/transversal/90.14-criterios-consolidacion-documental.md`.
 5. Si el cambio afecta arquitectura, preparar o actualizar un `ADR`.
 
 <a id="convenciones-de-escritura"></a>
@@ -75,8 +75,8 @@ Esta guia reune las reglas practicas para editar este repositorio sin romper su 
 
 - backend real: `platform-app/`
 - frontend real: `frontend/`
-- la equivalencia con `src/` y `tests/` del template esta documentada en `docs/transversal/90.06-equivalencias-estructura-real.md`
-- la alineacion al template en este proyecto es semantica y documental, no una migracion fisica del codigo ejecutable
+- la estructura real del repositorio y sus puntos de entrada documentales estan descritos en `docs/transversal/90.06-estructura-repositorio-real.md`
+- la documentacion debe describir la estructura real del proyecto, no forzar una migracion fisica del codigo ejecutable
 
 <a id="agregar-o-actualizar-una-fase"></a>
 ## Agregar o actualizar una fase
@@ -90,7 +90,7 @@ Esta guia reune las reglas practicas para editar este repositorio sin romper su 
 ## Agregar o actualizar una feature (SDD)
 
 1. Crear o actualizar la carpeta `specs/NNN-nombre-feature/`.
-2. Agregar `spec-funcional.md`, `spec-tecnica.md` y `spec-tareas.md` usando `plantillas/fase-4-sdd/`.
+2. Agregar `spec-funcional.md`, `spec-tecnica.md` y `spec-tareas.md` en la carpeta oficial de la feature.
 3. Reflejar el impacto en codigo real (`platform-app/`, `frontend/`) y en las puertas de entrada documentales (`src/`, `tests/`) cuando corresponda.
 4. Agregar pruebas minimas y trazabilidad a `qa/` si la feature llega a validacion.
 
