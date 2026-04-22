@@ -1,3 +1,3 @@
 # Deploy - Catalogo de readers
 
-- validar configuraciones por formato y ejemplos soportados
+- validar configuraciones soportadas por formato y su evidencia operativa

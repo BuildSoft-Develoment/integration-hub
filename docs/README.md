@@ -95,6 +95,7 @@ Esta documentacion describe el estado real de `Integration Hub` sobre `Quarkus`,
 - [Specs](../specs/README.md)
 - [Ruta guiada del proyecto](fase-0-iniciacion/00.06-ruta-guiada-integration-hub.md)
 - [Criterios de consolidacion documental](transversal/90.14-criterios-consolidacion-documental.md)
+- [Ejemplos tecnicos de configuracion](../ejemplos/README.md)
 - [Escenarios](../escenarios/README.md)
 - [Stacks](../stacks/README.md)
 - [Revisiones](../revisiones/README.md)
@@ -107,4 +108,3 @@ Esta documentacion describe el estado real de `Integration Hub` sobre `Quarkus`,
 - [Releases](../releases/README.md)
 - [Diagramas](../diagramas/README.md)
 - [Estimacion](../estimacion/README.md)
-- [Ejemplos](../ejemplos/README.md)
