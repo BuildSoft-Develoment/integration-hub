@@ -1,0 +1,14 @@
+{
+  "jdbcUrl": "jdbc:postgresql://localhost:5432/bdtrama",
+  "username": "postgres",
+  "password": "${secret:connections/db/conexion1/password}",
+  "minSize": 0,
+  "maxSize": 10,
+  "acquisitionTimeoutSeconds": 30,
+  "validationTimeoutSeconds": 5,
+  "reapTimeoutMinutes": 5,
+  "jdbcProperties": {
+    "ApplicationName": "integration-hub-local"
+  }
+}
+

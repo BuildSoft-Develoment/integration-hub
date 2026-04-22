@@ -1,0 +1,7 @@
+{
+  "host": "sftp.example.local",
+  "port": 22,
+  "username": "demo-user",
+  "password": "${secret:connections/sftp/proveedor1/password}",
+  "remotePath": "/inbound/clientes"
+}
