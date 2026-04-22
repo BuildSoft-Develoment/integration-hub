@@ -1,8 +1,8 @@
-# Ejemplos
+# Ejemplos tecnicos
 
 [README principal](../README.md) | [Indice docs](../docs/README.md)
 
-Ejemplos aplicados de configuracion reutilizable del proyecto.
+Activos tecnicos de apoyo para configuraciones reutilizables del proyecto.
 
 ## Contenido
 
@@ -12,5 +12,6 @@ Ejemplos aplicados de configuracion reutilizable del proyecto.
 
 ## Regla de uso
 
-- mantener aqui ejemplos reutilizables y estables
-- si el ejemplo depende de un flujo operativo real, documentarlo tambien en `docs/` u `ops/`
+- mantener aqui solo archivos tecnicos reutilizables y estables
+- esta carpeta no reemplaza documentacion oficial por fase, `specs/`, `qa/` u `ops/`
+- si el activo depende de un flujo operativo real, documentarlo en la ruta oficial correspondiente

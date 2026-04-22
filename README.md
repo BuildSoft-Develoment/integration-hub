@@ -721,11 +721,11 @@ El mismo contrato `${secret:...}` ya puede usarse en distintos tipos de conexion
 - SFTP:
   - `${secret:connections/sftp/proveedor1/password}`
 
-Ejemplos listos:
+Archivos tecnicos listos:
 
-- [connection-jdbc-file-vault.json](/docs/examples/connection-jdbc-file-vault.json)
-- [connection-rest-file-vault.json](/docs/examples/connection-rest-file-vault.json)
-- [connection-sftp-file-vault.json](/docs/examples/connection-sftp-file-vault.json)
+- [connection-jdbc-file-vault.json](/ejemplos/connection-jdbc-file-vault.json)
+- [connection-rest-file-vault.json](/ejemplos/connection-rest-file-vault.json)
+- [connection-sftp-file-vault.json](/ejemplos/connection-sftp-file-vault.json)
 
 ### Ejemplos de claves logicas para tasks
 

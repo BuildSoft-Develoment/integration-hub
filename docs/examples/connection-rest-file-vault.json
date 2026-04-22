@@ -1,7 +1,0 @@
-{
-  "baseUrl": "https://api.erp.local",
-  "authType": "bearer",
-  "token": "${secret:connections/rest/erp/password}",
-  "connectTimeoutSeconds": 15,
-  "readTimeoutSeconds": 30
-}
