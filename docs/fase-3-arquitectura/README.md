@@ -1,6 +1,12 @@
 # Fase 3 - Arquitectura
 
-[Indice docs](../README.md)
+[README principal](../../README.md) | [Indice docs](../README.md)
+
+<!-- nav-guided:start -->
+## Navegacion guiada
+- Anterior: [UX/UI](../fase-2-ux-ui/02.00-ux-ui.md)
+- Siguiente: [Arquitectura](03.00-arquitectura.md)
+<!-- nav-guided:end -->
 
 ## Contenido
 

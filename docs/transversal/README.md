@@ -1,6 +1,16 @@
 # Documentacion transversal
 
-[Indice docs](../README.md)
+[README principal](../../README.md) | [Indice docs](../README.md)
+
+<!-- nav-guided:start -->
+## Navegacion guiada
+- Anterior: [Operacion continua](../fase-8-operacion/08.00-operacion-continua.md)
+- Siguiente: [Estandar para IA](90.00-estandar-ia.md)
+<!-- nav-guided:end -->
+
+## Objetivo
+
+Centralizar las reglas de consistencia, IA, naming, entregables y modos de trabajo del repositorio.
 
 ## Contenido
 

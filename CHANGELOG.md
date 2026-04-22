@@ -2,6 +2,15 @@
 
 Todos los cambios relevantes del proyecto a nivel documental y de estandarizacion se registran aqui.
 
+## v0.3.0
+
+- Se normalizo `docs/` con breadcrumbs y recorrido `nav-guided` en fases y transversal.
+- Se agrego `plantillas/` como baseline metodologico alineado al template actualizado.
+- Se agregaron `src/README.md` y `tests/README.md` como puertas de entrada compatibles con el estandar.
+- Se fortalecio onboarding en `README.md`, `docs/README.md` y `docs/fase-0-iniciacion/00.06-ruta-guiada-caso-canonico.md`.
+- Se reforzo `90.07-convenciones-y-naming.md` al nivel operativo del template.
+- Se movieron planes historicos fuera de `docs/` hacia `revisiones/`.
+
 ## v0.2.0
 
 - Se completo la segunda ola de alineacion al template.

@@ -29,6 +29,7 @@ Este repositorio implementa una plataforma de integracion configurable y adopta 
    - backend en `platform-app/`
    - frontend en `frontend/`
    - pruebas distribuidas por stack
+   - puerta de entrada documental compatible en `src/README.md` y `tests/README.md`
 
 ## Salidas esperadas por dominio
 

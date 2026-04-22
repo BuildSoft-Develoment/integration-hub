@@ -22,6 +22,8 @@ Esta guia reune reglas practicas para editar el repositorio sin romper consisten
 
 - direccion y fases: `docs/`
 - features: `specs/`
+- equivalencia de codigo: `src/`
+- equivalencia de pruebas: `tests/`
 - QA: `qa/`
 - deploy y operacion: `ops/`
 - pipeline: `ci/`
