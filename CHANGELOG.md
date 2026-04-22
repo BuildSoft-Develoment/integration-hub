@@ -2,6 +2,15 @@
 
 Todos los cambios relevantes del proyecto a nivel documental y de estandarizacion se registran aqui.
 
+## v0.4.0
+
+- Se completo el bloque transversal del estandar con `90.02`, `90.03`, `90.04`, `90.05`, `90.08`, `90.09` y `90.14`.
+- Se cerro el recorrido `nav-guided` transversal hasta `90.14-instanciacion-fases-proyectos-reales.md`.
+- Se fusiono `90.06` con la semantica del template y la estructura real del proyecto sin mover `platform-app/` ni `frontend/`.
+- Se alinearon `docs/README.md`, `AGENTS.md`, `CONTRIBUTING.md` y `README.md` al template actualizado.
+- Se agrego `ci/scripts/check-docs.py` para validar BOM, enlaces, anclas y `nav-guided`.
+- Se documento la nueva ola de estandarizacion en `releases/v0.4.0-template-updated-rules-alignment.md`.
+
 ## v0.3.0
 
 - Se normalizo `docs/` con breadcrumbs y recorrido `nav-guided` en fases y transversal.
