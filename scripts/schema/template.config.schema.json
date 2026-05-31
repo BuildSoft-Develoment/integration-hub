@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://project-template.example/template.config.schema.json",
+  "title": "Template config for new-service.mjs",
+  "description": "Schema que valida template.config.*.json consumido por scripts/new-service.mjs. Permite campos adicionales para no romper forward-compat, pero exige las claves minimas requeridas para instanciar un proyecto real.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["project", "github", "support", "runtime", "terraform", "catalog", "auth", "observability", "dr", "secrets"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "project": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "name",
+        "slug",
+        "apiServiceName",
+        "webComponentName",
+        "apiResourceName",
+        "apiResourcePlural",
+        "apiResourcePath",
+        "javaBasePackage",
+        "backstageOwner",
+        "backstageSystem",
+        "databaseResourceName",
+        "costCenter"
+      ],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "slug": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$" },
+        "apiServiceName": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$" },
+        "webComponentName": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$" },
+        "apiResourceName": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "apiResourcePlural": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "apiResourcePath": { "type": "string", "pattern": "^/[a-z0-9][a-z0-9-]*(/[a-z0-9][a-z0-9-]*)*$" },
+        "javaBasePackage": { "type": "string", "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$" },
+        "backstageOwner": { "type": "string", "minLength": 1 },
+        "backstageSystem": { "type": "string", "minLength": 1 },
+        "databaseResourceName": { "type": "string", "minLength": 1 },
+        "databaseName": { "type": "string", "pattern": "^[a-z][a-z0-9_\\-]*$" },
+        "featureFlagPrefix": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*[a-z0-9]$" },
+        "costCenter": { "type": "string", "minLength": 1 }
+      }
+    },
+    "github": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["organization", "repository"],
+      "properties": {
+        "organization": { "type": "string", "minLength": 1 },
+        "repository": { "type": "string", "minLength": 1 }
+      }
+    },
+    "support": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["url"],
+      "properties": {
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["containerImage"],
+      "properties": {
+        "containerImage": { "type": "string", "minLength": 1 }
+      }
+    },
+    "terraform": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["stateBucket", "lockTable", "devDomain", "stagingDomain", "prodDomain"],
+      "properties": {
+        "stateBucket": { "type": "string", "minLength": 1 },
+        "lockTable": { "type": "string", "minLength": 1 },
+        "devDomain": { "type": "string", "minLength": 1 },
+        "stagingDomain": { "type": "string", "minLength": 1 },
+        "prodDomain": { "type": "string", "minLength": 1 }
+      }
+    },
+    "catalog": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["portalUrl", "apiUrl"],
+      "properties": {
+        "portalUrl": { "type": "string", "format": "uri" },
+        "apiUrl": { "type": "string", "format": "uri" }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["oidcIssuer", "oidcJwksUrl", "oidcAudience"],
+      "properties": {
+        "oidcIssuer": { "type": "string", "format": "uri" },
+        "oidcJwksUrl": { "type": "string", "format": "uri" },
+        "oidcAudience": { "type": "string", "minLength": 1 },
+        "oidcRolesClaim": { "type": "string", "default": "roles" }
+      }
+    },
+    "observability": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["prometheusUrl", "grafanaUrl"],
+      "properties": {
+        "prometheusUrl": { "type": "string", "format": "uri" },
+        "grafanaUrl": { "type": "string", "format": "uri" },
+        "tempoUrl": { "type": "string", "format": "uri" },
+        "lokiUrl": { "type": "string", "format": "uri" },
+        "otelCollectorEndpoint": { "type": "string", "minLength": 1 }
+      }
+    },
+    "dr": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["tier", "rto", "rpo", "primaryRegion", "secondaryRegion"],
+      "properties": {
+        "tier": { "enum": ["tier-0", "tier-1", "tier-2", "tier-3"] },
+        "rto": { "type": "string", "pattern": "^[0-9]+(s|m|h|d)$" },
+        "rpo": { "type": "string", "pattern": "^[0-9]+(s|m|h|d)$" },
+        "primaryRegion": { "type": "string", "minLength": 1 },
+        "secondaryRegion": { "type": "string", "minLength": 1 }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["provider"],
+      "properties": {
+        "provider": { "enum": ["vault", "aws", "gcp"] },
+        "kvPath": { "type": "string", "minLength": 1 },
+        "externalSecretsRefreshInterval": { "type": "string", "pattern": "^[0-9]+(s|m|h)$" }
+      }
+    }
+  }
+}

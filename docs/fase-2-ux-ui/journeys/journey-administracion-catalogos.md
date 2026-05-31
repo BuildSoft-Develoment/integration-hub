@@ -4,7 +4,7 @@
 
 <!-- nav-guided:start -->
 ## Navegacion guiada
-- Anterior: [UX/UI](../02.00-ux-ui.md)
+- Anterior: [Rubrica de Calidad de Prototipo HTML5](../02.16-rubrica-calidad-prototipo-html5.md)
 - Siguiente: [Journey de diseno, ejecucion y seguimiento](journey-diseno-ejecucion-y-seguimiento.md)
 <!-- nav-guided:end -->
 

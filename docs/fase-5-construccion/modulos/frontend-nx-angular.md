@@ -2,6 +2,12 @@
 
 [README principal](../../../README.md) | [Indice docs](../../README.md) | [Volver a la fase](../README.md)
 
+<!-- nav-guided:start -->
+## Navegacion guiada
+- Anterior: [Fase 5 - Construccion](../README.md)
+- Siguiente: [Indice docs](../../README.md)
+<!-- nav-guided:end -->
+
 ## Objetivo
 
 Consolidar la estructura tecnica real del frontend Angular del proyecto y sus convenciones activas de implementacion.

@@ -6,6 +6,20 @@
 - servicio: `ReaderCatalogService`
 - persistencia: `ReaderDefinitionRepository`
 
+## Modelo de datos
+
+Tabla `reader_definition` (Flyway `V1__initial_schema.sql`):
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | bigserial | PK |
+| `name` | varchar(120) | unico, no nulo |
+| `reader_type` | varchar(40) | `txt`, `csv`, `xls`, `xlsx`, `json`, `xml` |
+| `active` | boolean | default true |
+| `configuration_json` | text | layout y opciones de interpretacion |
+
+Indices: PK en `id`; UNIQUE en `name`.
+
 ## Consideraciones tecnicas
 
 - el backend debe validar configuraciones por reader

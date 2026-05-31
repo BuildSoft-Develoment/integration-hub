@@ -1,0 +1,19 @@
+{
+  "name": "streaming-catalog",
+  "description": "Plataforma de streaming con catalogo, player, perfiles familiares y recomendaciones.",
+  "stack": {
+    "frontend": "React 18 + Next.js + TypeScript",
+    "backend": "NestJS + TypeScript",
+    "bd": "PostgreSQL + Redis (cache)",
+    "auth": "Auth0 / OIDC"
+  },
+  "default_brand": "vibrant",
+  "default_features": [
+    { "slug": "001-catalogo", "entidad": "titulo", "rfs": ["RF-01", "RF-02"], "hus": ["HU-01"] },
+    { "slug": "002-perfiles", "entidad": "perfil", "rfs": ["RF-03"], "hus": ["HU-02"] }
+  ],
+  "notes": [
+    "El hero del primer viewport es critico (Principio 5).",
+    "Cada feature visual usa la misma marca; varia el layout (Principio 7)."
+  ]
+}

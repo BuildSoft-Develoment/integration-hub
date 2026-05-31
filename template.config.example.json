@@ -1,0 +1,52 @@
+{
+  "$schema": "./scripts/schema/template.config.schema.json",
+  "project": {
+    "name": "Integration Hub",
+    "slug": "integration-hub",
+    "apiServiceName": "integration-hub-api",
+    "webComponentName": "integration-hub-web",
+    "apiResourceName": "integration",
+    "apiResourcePlural": "integrations",
+    "apiResourcePath": "/api/integrations",
+    "javaBasePackage": "com.acme.integrationhub",
+    "databaseName": "integration_hub",
+    "featureFlagPrefix": "integration-hub",
+    "backstageOwner": "team-integration-hub",
+    "backstageSystem": "integration-hub",
+    "databaseResourceName": "integration-hub-db",
+    "costCenter": "CC-100"
+  },
+  "github": {
+    "organization": "acme",
+    "repository": "integration-hub"
+  },
+  "support": {
+    "url": "https://support.acme.example/integration-hub"
+  },
+  "runtime": {
+    "containerImage": "ghcr.io/acme/integration-hub-api"
+  },
+  "auth": {
+    "oidcIssuer": "https://iam.acme.example/realms/integration-hub",
+    "oidcJwksUrl": "https://iam.acme.example/realms/integration-hub/protocol/openid-connect/certs",
+    "oidcAudience": "https://api.integration-hub.acme.example",
+    "oidcRolesClaim": "roles"
+  },
+  "observability": {
+    "prometheusUrl": "https://prometheus.ops.acme.example",
+    "grafanaUrl": "https://grafana.ops.acme.example",
+    "tempoUrl": "https://tempo.ops.acme.example",
+    "lokiUrl": "https://loki.ops.acme.example",
+    "otelCollectorEndpoint": "otel-collector.ops.acme.example:4317"
+  },
+  "secrets": {
+    "provider": "vault",
+    "kvPath": "secret/acme/integration-hub",
+    "externalSecretsRefreshInterval": "1h"
+  },
+  "prototype": {
+    "golden_sim_threshold": 0.75,
+    "brand_hue": 222,
+    "brand_saturation": 55
+  }
+}

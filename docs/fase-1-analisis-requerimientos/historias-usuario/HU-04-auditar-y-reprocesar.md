@@ -5,7 +5,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [HU-03 Disenar y ejecutar procesos](HU-03-disenar-y-ejecutar-procesos.md)
-- Siguiente: [Fase 2 - UX/UI](../../fase-2-ux-ui/README.md)
+- Siguiente: [Matriz de huecos de fase 1](../01.01-matriz-huecos-fase-1.md)
 <!-- nav-guided:end -->
 
 ## Como

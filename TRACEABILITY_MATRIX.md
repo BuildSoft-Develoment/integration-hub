@@ -1,0 +1,90 @@
+# TRACEABILITY_MATRIX
+
+> Matriz global de trazabilidad: rollup de todas las features del proyecto. Cada feature
+> mantiene el detalle en su `specs/<feature>/` (spec-funcional, spec-tecnica, spec-tareas,
+> tdd-evidence). Este archivo consolida la vista para responder rapido "que requerimiento
+> esta cubierto, por que feature, con que codigo y prueba".
+>
+> Feature reconstruida por reingenieria sobre codigo en produccion: el codigo y las
+> pruebas existen y operan; la evidencia formal RED-GREEN se mantiene `pending` en
+> `tdd-evidence.md` hasta su captura y validacion humana.
+>
+> `node scripts/ai-framework-agent.mjs sync-memory` parsea este archivo y las
+> `traceability.md` por feature para poblar `ai_trace_links` y `ai_gate_runs`.
+>
+> Nota de numeracion: cada feature usa numeracion local `RF-001..RF-005` en su
+> `spec-funcional.md`. La columna "Req. global" referencia el requerimiento agregado del
+> documento de analisis `docs/fase-1-analisis-requerimientos/01.00-analisis-requerimientos.md`
+> (requerimientos funcionales 1 a 7 / no funcionales 1 a 5).
+>
+> Nota de columnas: `Codigo`, `Test`, `BD` y `API` declaran UN artefacto atomico verificable
+> por fila (clase, clase de prueba, tabla, ruta), de modo que `check:trace-drift` resuelva cada
+> enlace contra el repo. Las rutas `API` se verifican contra `contracts/api/openapi.yaml`,
+> generado desde los `specs/<feature>/api-contract.md` con `npm run generate:openapi`.
+
+## Matriz global
+
+| Feature | RF | Req. global | Backlog (HU) | API | BD | Codigo | Test | Estado | Evidencia |
+|---|---|---|---|---|---|---|---|---|---|
+| 001-catalogo-fuentes | RF-001 | funcional 1 (fuentes) | Administrar fuentes | POST /api/source-definitions | source_definition | SourceCatalogService | SourceCatalogServiceTest | Implementado | specs/001-catalogo-fuentes/tdd-evidence.md |
+| 001-catalogo-fuentes | RF-002 | funcional 1 (fuentes) | Administrar fuentes | POST /api/source-definitions/{sourceDefinitionId}/activation/{active} | source_definition | SourceDefinitionResource | SourceCatalogServiceTest | Implementado | specs/001-catalogo-fuentes/tdd-evidence.md |
+| 001-catalogo-fuentes | RF-003 | funcional 1 (fuentes) | Administrar fuentes | POST /api/source-definitions | source_definition | JsonConfigurationMapper | JsonConfigurationMapperTest | Implementado | specs/001-catalogo-fuentes/tdd-evidence.md |
+| 001-catalogo-fuentes | RF-004 | no funcional 2 (seguridad/secretos) | Administrar fuentes | POST /api/source-definitions | source_definition | FileVaultSecretValueProvider | FileVaultSecretValueProviderTest | Implementado | specs/001-catalogo-fuentes/tdd-evidence.md |
+| 001-catalogo-fuentes | RF-005 | funcional 3 (FILE_READ) | Administrar fuentes | POST /api/source-definitions/test | source_definition | FilesystemSourceProvider | FilesystemSourceProviderTest | Implementado | specs/001-catalogo-fuentes/tdd-evidence.md |
+| 002-catalogo-readers | RF-001 | funcional 2 (readers) | Configurar readers | POST /api/reader-definitions | reader_definition | ReaderDefinitionResource | CsvReaderProviderTest | Implementado | specs/002-catalogo-readers/tdd-evidence.md |
+| 002-catalogo-readers | RF-002 | funcional 2 (readers) | Configurar readers | POST /api/reader-definitions | reader_definition | ReaderCatalogService | ReaderFieldSupportTest | Implementado | specs/002-catalogo-readers/tdd-evidence.md |
+| 002-catalogo-readers | RF-003 | funcional 2 (readers) | Configurar readers | POST /api/reader-definitions | reader_definition | TxtReaderProvider | TxtReaderProviderTest | Implementado | specs/002-catalogo-readers/tdd-evidence.md |
+| 002-catalogo-readers | RF-004 | funcional 2 (readers) | Configurar readers | POST /api/reader-definitions/{readerDefinitionId}/activation/{active} | reader_definition | XlsxReaderProvider | ExcelReaderProviderTest | Implementado | specs/002-catalogo-readers/tdd-evidence.md |
+| 002-catalogo-readers | RF-005 | funcional 3 (Process Designer) | Configurar readers | GET /api/reader-definitions | reader_definition | ReaderDefinitionResource | CsvReaderProviderTest | Implementado | specs/002-catalogo-readers/tdd-evidence.md |
+| 003-diseno-y-ejecucion-procesos | RF-001 | funcional 3 (procesos) | Disenar y ejecutar procesos | POST /api/process-definitions | process_definition | ProcessDefinitionResource | CatalogAndExecutionResourceIT | Implementado | specs/003-diseno-y-ejecucion-procesos/tdd-evidence.md |
+| 003-diseno-y-ejecucion-procesos | RF-002 | funcional 3 (tipos de tarea) | Disenar y ejecutar procesos | POST /api/process-definitions | process_task_definition | DbWriteTaskProvider | DbWriteTaskProviderTest | Implementado | specs/003-diseno-y-ejecucion-procesos/tdd-evidence.md |
+| 003-diseno-y-ejecucion-procesos | RF-003 | funcional 3 (activar) | Disenar y ejecutar procesos | POST /api/process-definitions/{processDefinitionId}/activation/{active} | process_definition | ProcessSchedulerService | CatalogAndExecutionResourceIT | Implementado | specs/003-diseno-y-ejecucion-procesos/tdd-evidence.md |
+| 003-diseno-y-ejecucion-procesos | RF-004 | funcional 4 (ejecutar manual/scheduler) | Disenar y ejecutar procesos | POST /api/process-definitions | process_execution | StreamingPipelineService | StreamingPipelineServiceTest | Implementado | specs/003-diseno-y-ejecucion-procesos/tdd-evidence.md |
+| 003-diseno-y-ejecucion-procesos | RF-005 | funcional 6 (linaje/reproceso) | Disenar y ejecutar procesos | GET /api/query/process-executions | process_execution | ProcessExecutionService | FileReadTaskFastPathTest | Implementado | specs/003-diseno-y-ejecucion-procesos/tdd-evidence.md |
+| 004-observabilidad-y-auditoria | RF-001 | funcional 5 (consultar ejecuciones/auditoria) | Auditar y reprocesar | GET /api/query/process-executions | process_execution | ExecutionQueryResource | CatalogAndExecutionResourceIT | Implementado | specs/004-observabilidad-y-auditoria/tdd-evidence.md |
+| 004-observabilidad-y-auditoria | RF-002 | funcional 5 (detalle tarea/archivo) | Auditar y reprocesar | GET /api/query/process-executions/{processExecutionId}/tasks | process_task_execution | ExecutionQueryService | CatalogAndExecutionResourceIT | Implementado | specs/004-observabilidad-y-auditoria/tdd-evidence.md |
+| 004-observabilidad-y-auditoria | RF-003 | funcional 5 (overview/relacionadas) | Auditar y reprocesar | GET /api/query/process-executions/{processExecutionId}/children | process_execution | ExecutionQueryService | CatalogAndExecutionResourceIT | Implementado | specs/004-observabilidad-y-auditoria/tdd-evidence.md |
+| 004-observabilidad-y-auditoria | RF-004 | funcional 5 (resumen operativo) | Auditar y reprocesar | GET /api/query/overview-summary | process_execution | ExecutionQueryResource | CatalogAndExecutionResourceIT | Implementado | specs/004-observabilidad-y-auditoria/tdd-evidence.md |
+| 004-observabilidad-y-auditoria | RF-005 | no funcional 1 (trazabilidad) | Auditar y reprocesar | GET /api/query/audit-events | audit_event | AuditService | StreamingPipelineServiceTest | Implementado | specs/004-observabilidad-y-auditoria/tdd-evidence.md |
+
+Reglas:
+- Una fila por requerimiento por feature, agrupadas por feature.
+- `Codigo`, `Test` y `BD`: UN artefacto atomico verificable por celda (sin listas separadas
+  por coma) para que `check:trace-drift` resuelva el enlace contra el repo.
+- `Endpoint`: ruta documental para lectura humana; no se ingiere como enlace de traza.
+- `Estado`: valores cortos y consistentes (`En diseno SDD`, `En desarrollo`, `Prototipo validado`, `Implementado`, `En QA`, `Cerrado`).
+- Celdas sin dato: usa `-`.
+- El detalle por feature vive en `specs/<feature>/`; este archivo es el resumen.
+
+## Estado de gates por feature
+
+| Feature | Gate | Estado | Evidencia |
+|---|---|---|---|
+| 001-catalogo-fuentes | gate-spdd-approved | pending | specs/001-catalogo-fuentes/spec-funcional.md |
+| 002-catalogo-readers | gate-spdd-approved | pending | specs/002-catalogo-readers/spec-funcional.md |
+| 003-diseno-y-ejecucion-procesos | gate-spdd-approved | pending | specs/003-diseno-y-ejecucion-procesos/spec-funcional.md |
+| 004-observabilidad-y-auditoria | gate-spdd-approved | pending | specs/004-observabilidad-y-auditoria/spec-funcional.md |
+
+## Requerimientos sin implementacion
+
+- Ninguno: las cuatro features tienen codigo y prueba asociados en produccion. Lo unico
+  pendiente es la captura formal de evidencia RED-GREEN (estado `pending` en cada
+  `tdd-evidence.md`), tarea de validacion, no de implementacion.
+
+## Decisiones transversales
+
+- La correlacion operativa base entre auditoria, trazas y ejecucion es `processExecutionId`.
+- Los secretos se referencian con el contrato `${secret:...}` y nunca se persisten en claro
+  (ver `001-catalogo-fuentes` RF-004 y ADR-002).
+- El motor usa el patron providers + registries (source/reader/task) para extensibilidad
+  sin acoplar flujos (ver ADR-001 y ADR-002).
+
+## Preguntas abiertas globales
+
+- Confirmar con el equipo el mapeo definitivo entre la numeracion local `RF-001..RF-005`
+  por feature y los requerimientos globales `funcional 1..7 / no funcional 1..5` del
+  documento de analisis, para fijar la trazabilidad bidireccional.
+- El contrato `contracts/api/openapi.yaml` ya publica las 16 rutas reales (`@Path` de
+  `platform-app`), generado desde los `specs/<feature>/api-contract.md` con
+  `npm run generate:openapi`. Pendiente de fase 4/7: enriquecer cada operacion con
+  request/response schemas y parametros completos (hoy documenta ruta + 200 minimo).

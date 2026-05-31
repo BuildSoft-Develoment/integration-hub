@@ -1,0 +1,18 @@
+{
+  "name": "saas-backoffice",
+  "description": "Backoffice operativo SaaS multi-tenant con bandejas, filtros y auditoria.",
+  "stack": {
+    "frontend": "Angular 17 + Nx workspace",
+    "backend": "Spring Boot 3 + Java 21",
+    "bd": "PostgreSQL 16",
+    "auth": "Keycloak (OIDC)"
+  },
+  "default_brand": "default",
+  "default_features": [
+    { "slug": "001-bandeja", "entidad": "expediente", "rfs": ["RF-01", "RF-02"], "hus": ["HU-01"] }
+  ],
+  "notes": [
+    "Pensado para flujos transaccionales: tabla principal + detalle + acciones por rol.",
+    "Asume RBAC granular y multi-tenant; la entidad principal va de la mano con tabla `tenant_id`."
+  ]
+}

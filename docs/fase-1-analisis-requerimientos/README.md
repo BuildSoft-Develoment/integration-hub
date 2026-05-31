@@ -4,7 +4,7 @@
 
 <!-- nav-guided:start -->
 ## Navegacion guiada
-- Anterior: [Ruta guiada Integration Hub](../fase-0-iniciacion/00.06-ruta-guiada-integration-hub.md)
+- Anterior: [De idea a documentacion inicial con IA](../fase-0-iniciacion/00.10-idea-a-documentacion-inicial-con-ia.md)
 - Siguiente: [Analisis de requerimientos](01.00-analisis-requerimientos.md)
 <!-- nav-guided:end -->
 

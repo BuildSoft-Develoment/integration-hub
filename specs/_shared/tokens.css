@@ -1,0 +1,224 @@
+/* =====================================================================
+ * specs/_shared/tokens.css  (v12.61)
+ * Sistema de diseño compartido para prototipos HTML5 en modo portfolio-spa.
+ *
+ * USO (opt-in): cada spec enlaza este archivo con ruta relativa desde
+ *   specs/NNN-feature/prototype-html5/index.html:
+ *     <link rel="stylesheet" href="../../_shared/tokens.css">
+ *
+ * REGLA: este archivo SOLO contiene tokens de bajo nivel (paleta neutra,
+ * tipografia, espaciado, radios, sombras, breakpoints) + reset minimo.
+ * NO contiene layout de dominio. Cada spec define su propio hue de marca
+ * (--brand-h) y su layout especifico en su <style> local.
+ *
+ * El validador check-html5-prototype-quality.mjs (v12.61) RESUELVE este
+ * <link> y cuenta estos tokens como parte del prototipo (asi mover el
+ * sistema de diseño a _shared/ NO baja el nivel de calidad).
+ * El validador check-prototype-diversity.mjs IGNORA las lineas que
+ * referencian _shared/ al calcular el hash de estructura (compartir
+ * infraestructura no es clonar).
+ * ===================================================================== */
+
+:root {
+  /* ── Marca: cada spec sobrescribe --brand-h en su <style> local ── */
+  --brand-h: 222;
+  --brand-s: 70%;
+  --brand: hsl(var(--brand-h) var(--brand-s) 48%);
+  --brand-strong: hsl(var(--brand-h) var(--brand-s) 38%);
+  --brand-soft: hsl(var(--brand-h) var(--brand-s) 95%);
+  --brand-ring: hsl(var(--brand-h) var(--brand-s) 70%);
+  --on-brand: #ffffff;
+
+  /* ── Paleta neutra ── */
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface-2: #f1f3f6;
+  --border: #e2e6ec;
+  --border-strong: #cdd3dc;
+  --text: #1c2330;
+  --text-muted: #5a6473;
+  --text-faint: #8a93a3;
+
+  /* ── Colores semanticos de estado ── */
+  --ok: #1f9d57;
+  --ok-soft: #e6f6ec;
+  --warn: #c9870a;
+  --warn-soft: #fbf2dd;
+  --danger: #d23b3b;
+  --danger-soft: #fbe7e7;
+  --info: #2b6cb0;
+  --info-soft: #e6f0fa;
+
+  /* ── Tipografia ── */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.85rem;
+  --fs-base: 0.95rem;
+  --fs-lg: 1.15rem;
+  --fs-xl: 1.5rem;
+  --fs-2xl: 2rem;
+  --lh-tight: 1.2;
+  --lh-base: 1.5;
+  --fw-normal: 400;
+  --fw-medium: 550;
+  --fw-bold: 700;
+
+  /* ── Espaciado (escala 4px) ── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-8: 48px;
+
+  /* ── Radios y bordes ── */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* ── Sombras ── */
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --shadow: 0 4px 14px rgba(16, 24, 40, 0.08);
+  --shadow-lg: 0 12px 32px rgba(16, 24, 40, 0.16);
+
+  /* ── Capas (z-index) ── */
+  --z-modal: 1000;
+  --z-toast: 1100;
+
+  /* ── Transiciones ── */
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-fast: 120ms;
+  --dur: 200ms;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1420;
+    --surface: #171d2b;
+    --surface-2: #1f2738;
+    --border: #2a3346;
+    --border-strong: #3a4660;
+    --text: #eef2f8;
+    --text-muted: #aab4c5;
+    --text-faint: #7a8698;
+    --brand-soft: hsl(var(--brand-h) var(--brand-s) 18%);
+  }
+}
+
+/* ── Reset minimo ── */
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  color: var(--text);
+  background: var(--bg);
+}
+h1, h2, h3, h4 { line-height: var(--lh-tight); margin: 0 0 var(--sp-3); }
+a { color: var(--brand-strong); }
+button { font: inherit; cursor: pointer; }
+img { max-width: 100%; display: block; }
+:focus-visible { outline: 2px solid var(--brand-ring); outline-offset: 2px; }
+
+/* ── Primitivas reutilizables (clases utilitarias, no layout de dominio) ── */
+.u-btn {
+  display: inline-flex; align-items: center; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface); color: var(--text);
+  font-weight: var(--fw-medium);
+  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);
+}
+.u-btn:hover { background: var(--surface-2); }
+.u-btn--primary { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
+.u-btn--primary:hover { background: var(--brand-strong); border-color: var(--brand-strong); }
+.u-btn--ghost { background: transparent; border-color: transparent; color: var(--brand-strong); }
+
+.u-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: var(--sp-5);
+}
+
+.u-badge {
+  display: inline-flex; align-items: center; gap: var(--sp-1);
+  padding: 2px var(--sp-2);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs); font-weight: var(--fw-medium);
+  background: var(--surface-2); color: var(--text-muted);
+}
+.u-badge--ok { background: var(--ok-soft); color: var(--ok); }
+.u-badge--warn { background: var(--warn-soft); color: var(--warn); }
+.u-badge--danger { background: var(--danger-soft); color: var(--danger); }
+.u-badge--info { background: var(--info-soft); color: var(--info); }
+
+.u-skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--border) 37%, var(--surface-2) 63%);
+  background-size: 400% 100%;
+  animation: u-shimmer 1.4s ease infinite;
+  border-radius: var(--radius-sm);
+}
+@keyframes u-shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+
+.u-empty, .u-error {
+  display: grid; place-items: center; gap: var(--sp-3);
+  padding: var(--sp-8) var(--sp-4);
+  text-align: center; color: var(--text-muted);
+}
+
+/* ── Toast (consumido por ui.js Toast) ── */
+.u-toast-host {
+  position: fixed; right: var(--sp-4); bottom: var(--sp-4);
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  z-index: var(--z-toast);
+}
+.u-toast {
+  min-width: 240px; max-width: 360px;
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius);
+  background: var(--text); color: #fff;
+  box-shadow: var(--shadow-lg);
+  animation: u-toast-in var(--dur) var(--ease);
+}
+.u-toast--ok { background: var(--ok); }
+.u-toast--warn { background: var(--warn); }
+.u-toast--danger { background: var(--danger); }
+@keyframes u-toast-in { from { transform: translateY(8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ── Modal (consumido por ui.js Modal) ── */
+.u-modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(16, 24, 40, 0.45);
+  display: grid; place-items: center;
+  z-index: var(--z-modal);
+  animation: u-fade var(--dur) var(--ease);
+}
+.u-modal {
+  width: min(560px, 92vw);
+  max-height: 86vh; overflow: auto;
+  background: var(--surface); color: var(--text);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: var(--sp-6);
+}
+@keyframes u-fade { from { opacity: 0; } to { opacity: 1; } }
+
+[hidden] { display: none !important; }
+
+/* ── Responsive: breakpoints base del sistema ── */
+@media (max-width: 1024px) {
+  :root { --fs-2xl: 1.7rem; --sp-8: 36px; }
+}
+@media (max-width: 640px) {
+  :root { --fs-xl: 1.3rem; --fs-2xl: 1.5rem; --sp-6: 24px; }
+  .u-toast-host { left: var(--sp-4); right: var(--sp-4); }
+  .u-toast { min-width: 0; max-width: none; }
+}
