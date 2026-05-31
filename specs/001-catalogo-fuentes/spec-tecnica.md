@@ -2,10 +2,19 @@
 
 ## Componentes relacionados
 
-- frontend: formularios y vistas de catalogo
-- backend: `SourceDefinitionResource`
-- servicio: `SourceCatalogService`
-- persistencia: `SourceDefinitionRepository`
+### Backend (`platform-app`)
+- API: `SourceDefinitionResource` (`/api/source-definitions`).
+- Servicio: `SourceCatalogService`; mapeo/validacion `JsonConfigurationMapper`.
+- Secretos: `FileVaultSecretValueProvider` resuelve el contrato `${secret:...}`.
+- Providers de fuente (registry): `FilesystemSourceProvider` (y FTP/SFTP/REST segun `SourceType`).
+- Persistencia (Panache): `SourceDefinitionRepository`.
+
+### Frontend (`frontend/libs/features/sources`, Angular/Nx)
+- API: `source-api.service.ts`.
+- Estado (CQRS): `source-catalog.store.ts`, `source-catalog-query.store.ts`,
+  `source-catalog-command.service.ts`, `source-editor-state.service.ts`.
+- Componentes: `source-list`, `source-editor`, `source-type-form` (parametros por tipo),
+  `source-inspector`, `source-toolbar`. Descriptores de provider en `frontend/libs/core/providers/sources`.
 
 ## Modelo de datos
 

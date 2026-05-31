@@ -2,10 +2,18 @@
 
 ## Componentes relacionados
 
-- frontend: `Operations Console`, vista `overview`
-- backend: `ExecutionQueryResource`
-- servicios: `ExecutionQueryService`, `AuditService`, `ProcessedSourceFileService`
-- persistencia: `AuditEventRepository`, `ProcessedSourceFileRepository`
+### Backend (`platform-app`)
+- API: `ExecutionQueryResource` (`/api/query/*`: overview-summary, process-executions, `/{id}`, `/children`, `/tasks`, audit-events).
+- Servicios: `ExecutionQueryService`, `AuditService`, `ProcessedSourceFileService`, `ProcessExecutionService`.
+- Persistencia (Panache): `AuditEventRepository`, `ProcessedSourceFileRepository`, `ProcessExecutionRepository`, `ProcessTaskExecutionRepository`.
+
+### Frontend (`frontend/libs/features/executions` + `frontend/libs/features/audit`, Angular/Nx)
+- API: `execution-api.service.ts`, `audit-api.service.ts`.
+- Estado (CQRS): `execution-catalog.store.ts`, `execution-catalog-query.store.ts`,
+  `execution-detail.store.ts`, `execution-files-panel.store.ts`, `audit.store.ts`.
+- Componentes: `execution-list`, `execution-editor` (summary/header/files-tab), `execution-task-list`,
+  `execution-files-panel`, `execution-lineage` (linaje/reproceso), `execution-toolbar`;
+  `audit-list`, `audit-editor`, `audit-toolbar`. Correlacion por `processExecutionId`.
 
 ## Modelo de datos
 
