@@ -6,7 +6,7 @@ info:
     Este archivo es generado automaticamente desde los api-contract.md
     de cada specs/<feature>/. NO editar a mano — perdera los cambios al
     proximo `npm run generate:openapi`.
-    Features fuente: 001-catalogo-fuentes, 002-catalogo-readers, 003-diseno-y-ejecucion-procesos, 004-observabilidad-y-auditoria
+    Features fuente: 001-catalogo-fuentes, 002-catalogo-readers, 003-diseno-y-ejecucion-procesos, 004-observabilidad-y-auditoria, 005-catalogo-conexiones, 006-programacion-procesos
 servers:
   - url: /
 paths:
@@ -222,6 +222,94 @@ paths:
         '200':
           description: OK
       x-source-feature: "004-observabilidad-y-auditoria"
+  /api/connection-definitions:
+    get:
+      summary: Lista las conexiones configuradas
+      operationId: listConnectionDefinitions
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "005-catalogo-conexiones"
+    post:
+      summary: Crea una conexion
+      operationId: createConnectionDefinition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectionDefinition"
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "005-catalogo-conexiones"
+  /api/connection-definitions/test:
+    post:
+      summary: Prueba la conectividad de una conexion
+      operationId: testConnectionDefinition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectionDefinition"
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "005-catalogo-conexiones"
+  /api/connection-definitions/{connectionDefinitionId}:
+    put:
+      summary: Actualiza una conexion
+      operationId: updateConnectionDefinition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectionDefinition"
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "005-catalogo-conexiones"
+  /api/connection-definitions/{connectionDefinitionId}/activation/{active}:
+    post:
+      summary: Activa o desactiva una conexion
+      operationId: setConnectionDefinitionActive
+      requestBody:
+        required: false
+        description: Sin cuerpo; el estado se indica en la ruta ({active}).
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ConnectionDefinition"
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "005-catalogo-conexiones"
+  /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/tables:
+    get:
+      summary: Lista tablas (introspeccion JDBC)
+      operationId: listConnectionTables
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "005-catalogo-conexiones"
+  /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/procedures:
+    get:
+      summary: Lista procedimientos (introspeccion JDBC)
+      operationId: listConnectionProcedures
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "005-catalogo-conexiones"
+  /api/process-schedules:
+    get:
+      summary: Lista las programaciones de proceso vigentes
+      operationId: listProcessSchedules
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "006-programacion-procesos"
 
 components:
   schemas:
@@ -307,5 +395,42 @@ components:
         status:
           type: string
         createdAt:
+          type: string
+          format: date-time
+    ConnectionDefinition:
+      type: object
+      required:
+        - id
+        - name
+        - connectionType
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        connectionType:
+          type: string
+        active:
+          type: boolean
+        configurationJson:
+          type: string
+    ProcessSchedule:
+      type: object
+      required:
+        - processDefinitionId
+        - scheduled
+      properties:
+        processDefinitionId:
+          type: integer
+          format: int64
+        scheduled:
+          type: boolean
+        scheduleEvery:
+          type: string
+        nextRunAt:
+          type: string
+          format: date-time
+        lastRunAt:
           type: string
           format: date-time

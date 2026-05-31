@@ -1,5 +1,7 @@
 package com.integrationhub.platform.api.resource.execution;
 
+// @trace RF-001, RF-004 (reingenieria: clase que implementa el/los RF en produccion)
+
 import com.integrationhub.platform.api.response.common.PageResponse;
 import com.integrationhub.platform.api.response.execution.AuditEventPageResponse;
 import com.integrationhub.platform.api.response.execution.OverviewSummaryResponse;

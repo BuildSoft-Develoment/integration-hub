@@ -2,9 +2,19 @@
 
 ## Componentes relacionados
 
-- backend: `ReaderDefinitionResource`
-- servicio: `ReaderCatalogService`
-- persistencia: `ReaderDefinitionRepository`
+### Backend (`platform-app`)
+- API: `ReaderDefinitionResource` (`/api/reader-definitions`).
+- Servicio: `ReaderCatalogService`.
+- Providers de reader (registry), uno por `ReaderType`: `TxtReaderProvider`, `CsvReaderProvider`,
+  `XlsReaderProvider`, `XlsxReaderProvider`, `JsonReaderProvider`, `XmlReaderProvider`.
+- Persistencia (Panache): `ReaderDefinitionRepository`.
+
+### Frontend (`frontend/libs/features/readers`, Angular/Nx)
+- API: `reader-api.service.ts`.
+- Estado (CQRS): `reader-catalog.store.ts`, `reader-catalog-query.store.ts`,
+  `reader-catalog-command.service.ts`, `reader-editor-state.service.ts`.
+- Componentes: `reader-list`, `reader-editor`, `reader-type-form` (layout/opciones por formato),
+  `reader-toolbar`. Descriptores de provider en `frontend/libs/core/providers/readers`.
 
 ## Modelo de datos
 

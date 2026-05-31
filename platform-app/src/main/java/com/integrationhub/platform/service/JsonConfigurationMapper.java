@@ -1,5 +1,7 @@
 package com.integrationhub.platform.service;
 
+// @trace RF-003 (reingenieria: clase que implementa el/los RF en produccion)
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;

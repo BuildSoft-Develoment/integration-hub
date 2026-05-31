@@ -130,6 +130,13 @@ if (reengineering) {
   if (files["spec-funcional.md"] && !/^---\s*\n/.test(files["spec-funcional.md"])) {
     files["spec-funcional.md"] = `---\norigin: reingenieria\n---\n\n` + files["spec-funcional.md"];
   }
+  // Quitar del README los enlaces a artefactos de Fase 2 (evita enlaces rotos).
+  if (files["README.md"]) {
+    files["README.md"] = files["README.md"]
+      .split(/\r?\n/)
+      .filter((l) => !/(prototype\.md|prototype-validation\.md|product-design\.md|spdd-frontend\.md|prototype-html5|Generar prototipo)/i.test(l))
+      .join("\n");
+  }
   for (const f of FASE2_FILES) delete files[f];
 }
 for (const [name, content] of Object.entries(files)) {

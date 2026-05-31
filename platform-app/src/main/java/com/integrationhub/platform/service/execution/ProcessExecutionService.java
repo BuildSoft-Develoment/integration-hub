@@ -1,5 +1,7 @@
 package com.integrationhub.platform.service.execution;
 
+// @trace RF-005 (reingenieria: clase que implementa el/los RF en produccion)
+
 import com.integrationhub.platform.service.execution.fastpath.ExecutionFastPath;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.source.SourcePayload;
