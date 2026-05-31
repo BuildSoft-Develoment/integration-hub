@@ -1,3 +1,7 @@
+---
+origin: reingenieria
+---
+
 # Spec funcional - Catalogo de readers
 
 ## Objetivo

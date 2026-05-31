@@ -1,3 +1,7 @@
+---
+origin: reingenieria
+---
+
 # Spec funcional - Diseno y ejecucion de procesos
 
 ## Objetivo

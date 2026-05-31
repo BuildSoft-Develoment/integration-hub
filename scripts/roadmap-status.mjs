@@ -28,7 +28,7 @@
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { listIncludedFeatures } from "../ci/scripts/_lib/feature-filter.mjs";
+import { listIncludedFeatures, isReengineering } from "../ci/scripts/_lib/feature-filter.mjs";
 import { loadIgnoreConfig, shouldIgnorePath } from "../ci/scripts/_lib/ignore-paths.mjs";
 import { summarizePrototypeStates } from "../ci/scripts/_lib/prototype-state.mjs";
 
@@ -70,8 +70,8 @@ console.log(`Features detectadas: ${features.length} bajo specs/`);
 console.log(``);
 console.log(`Estado por fase:`);
 for (const p of phases) {
-  const icon = p.status === "complete" ? "✓" : p.status === "partial" ? "⚠" : "⊘";
-  const label = p.status === "complete" ? "COMPLETA" : p.status === "partial" ? "PARCIAL" : "NO INICIADA";
+  const icon = p.status === "complete" ? "✓" : p.status === "partial" ? "⚠" : p.status === "n-a" ? "—" : "⊘";
+  const label = p.status === "complete" ? "COMPLETA" : p.status === "partial" ? "PARCIAL" : p.status === "n-a" ? "N/A" : "NO INICIADA";
   console.log(`  Fase ${p.id} (${p.name.padEnd(20)})  ${icon} ${label.padEnd(12)}  (${p.detail})`);
 }
 console.log(``);
@@ -164,8 +164,17 @@ function analyzePhase1() {
 }
 
 function analyzePhase2() {
-  const features = listFeatures();
-  if (features.length === 0) return { id: 2, name: "UX/UI", status: "not-started", detail: "0 features bajo specs/" };
+  const allFeatures = listFeatures();
+  if (allFeatures.length === 0) return { id: 2, name: "UX/UI", status: "not-started", detail: "0 features bajo specs/" };
+  // v12.139: las features de reingenieria (producto real ya construido) NO requieren
+  // Fase 2 / prototipo. Se excluyen del computo. Si TODAS son reingenieria, la fase
+  // no aplica (N/A); si hay mezcla, se evalua solo sobre las features nuevas.
+  const reCount = allFeatures.filter((f) => f.reengineering).length;
+  const features = allFeatures.filter((f) => !f.reengineering);
+  if (features.length === 0) {
+    return { id: 2, name: "UX/UI", status: "n-a", detail: `${reCount} feature(s) de reingenieria — Fase 2 (prototipo/SPDD) no aplica` };
+  }
+  const reNote = reCount > 0 ? ` (${reCount} reingenieria excluida(s))` : "";
   const withPrototype = features.filter((f) => f.gates.includes("gate-prototype-ready") || existsSync(join(root, "specs", f.slug, "prototype-html5", "index.html"))).length;
   const withSpddApproved = features.filter((f) => f.gates.includes("gate-spdd-approved")).length;
   const total = features.length;
@@ -188,7 +197,7 @@ function analyzePhase2() {
     else if (missingProto > 0) advanceNote = `; avance 2→3 habilitado solo para ${ps.withPrototype} con prototipo (${missingProto} sin prototipo aun)`;
     else advanceNote = "; avance 2→3 habilitado";
   }
-  return { id: 2, name: "UX/UI", status, detail: `${withPrototype}/${total} con prototipo, ${withSpddApproved}/${total} SPDD aprobado, ${humanApproved}/${ps.withPrototype || 0} human-approved${advanceNote}` };
+  return { id: 2, name: "UX/UI", status, detail: `${withPrototype}/${total} con prototipo, ${withSpddApproved}/${total} SPDD aprobado, ${humanApproved}/${ps.withPrototype || 0} human-approved${advanceNote}${reNote}` };
 }
 
 function analyzePhase3() {
@@ -369,7 +378,13 @@ function listFeatures() {
       const gateMatches = text.match(/gate-[a-z0-9-]+/g) || [];
       for (const g of new Set(gateMatches)) gates.push(g);
     }
-    const REQUIRED = ["spec-funcional.md", "spec-tecnica.md", "traceability.md", "prototype.md", "prototype-validation.md", "product-design.md", "spdd-frontend.md", "api-contract.md", "ui-test-cases.md"];
+    // v12.139: features de reingenieria (codigo ya construido) quedan exentas de
+    // los artefactos de Fase 2 (prototipo/SPDD/product-design). El resto del set
+    // canonico se mantiene exigible.
+    const reengineering = isReengineering(slug, specsRoot);
+    const BASE_REQUIRED = ["spec-funcional.md", "spec-tecnica.md", "traceability.md", "api-contract.md", "ui-test-cases.md"];
+    const FASE2_REQUIRED = ["prototype.md", "prototype-validation.md", "product-design.md", "spdd-frontend.md"];
+    const REQUIRED = reengineering ? BASE_REQUIRED : [...BASE_REQUIRED, ...FASE2_REQUIRED];
     for (const r of REQUIRED) {
       if (!existsSync(join(specsRoot, slug, r))) missing.push(r);
     }
@@ -380,7 +395,7 @@ function listFeatures() {
     if (gates.includes("gate-qa-passed")) phase = 6;
     if (gates.includes("gate-deploy-ready")) phase = 7;
     if (gates.includes("gate-operations-ready")) phase = 8;
-    features.push({ slug, phase, gates, missing });
+    features.push({ slug, phase, gates, missing, reengineering });
   }
   return features;
 }

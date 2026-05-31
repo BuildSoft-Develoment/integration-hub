@@ -29,7 +29,7 @@
 
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { listIncludedFeatures } from "./_lib/feature-filter.mjs";
+import { listIncludedFeatures, isReengineering } from "./_lib/feature-filter.mjs";
 import { resolveStrict } from "./_lib/strict-mode.mjs";
 
 const args = parseArgs(process.argv.slice(2));
@@ -42,6 +42,9 @@ function frontmatter(text) {
   return m ? m[1] : "";
 }
 function optedOut(slug) {
+  // Reingenieria (codigo ya construido): exenta de Fase 2 / prototipo.
+  if (isReengineering(slug, join(root, "specs"))) return true;
+  // Opt-out explicito para features no visuales / backend-only.
   for (const f of ["spec-funcional.md", "traceability.md"]) {
     const p = join(root, "specs", slug, f);
     if (!existsSync(p)) continue;

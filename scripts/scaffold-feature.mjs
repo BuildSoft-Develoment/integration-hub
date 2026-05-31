@@ -68,6 +68,9 @@ Argumentos:
   --entidad <name>        nombre de la entidad BD principal. Default: derivado del slug.
   --endpoint "M /p,M /p"  lista de endpoints. Default: GET /api/<entidad>.
   --root <path>           directorio raiz del proyecto. Default: cwd.
+  --origin <modo>         "nuevo" (default, rigor completo) | "reingenieria"
+                          (codigo ya construido: omite los artefactos de Fase 2
+                          prototipo/SPDD/product-design y estampa el frontmatter).
   --force                 sobrescribir si el slug existe.
   --interactive           preguntar valores faltantes en el prompt.
 
@@ -104,27 +107,47 @@ const hus = csv(args.hus, "HU-01");
 const entidad = (args.entidad || slug.replace(/^\d+-/, "").replace(/-/g, "_")).toLowerCase();
 const endpoints = csv(args.endpoint, `GET /api/${entidad}`);
 
+// v12.139: --origin reingenieria genera la feature SIN los artefactos de Fase 2
+// (prototipo/SPDD/product-design), porque el producto real ya esta construido.
+// Default "nuevo" = set canonico completo (rigor metodologico total).
+const REENGINEERING_ORIGINS = new Set(["reingenieria", "reingeniería", "brownfield", "existing-code", "existing_code"]);
+const originRaw = args.origin ? String(args.origin).trim().toLowerCase() : "nuevo";
+const reengineering = REENGINEERING_ORIGINS.has(originRaw);
+const FASE2_FILES = ["prototype.md", "prototype-validation.md", "product-design.md", "spdd-frontend.md", "prototype-html5/index.html"];
+
 const featureDir = join(root, "specs", slug);
 if (existsSync(featureDir) && !args.force) {
   console.error(`Error: ${featureDir} ya existe. Usa --force para sobrescribir.`);
   process.exit(2);
 }
 mkdirSync(featureDir, { recursive: true });
-mkdirSync(join(featureDir, "prototype-html5"), { recursive: true });
+// El dir de prototipo solo se crea para features nuevas (Fase 2 aplica).
+if (!reengineering) mkdirSync(join(featureDir, "prototype-html5"), { recursive: true });
 
 const ctx = { slug, titulo, rfs, rnfs, hus, entidad, endpoints, primaryRf: rfs[0], primaryHu: hus[0] };
 const files = buildCanonicalFiles(ctx);
+if (reengineering) {
+  if (files["spec-funcional.md"] && !/^---\s*\n/.test(files["spec-funcional.md"])) {
+    files["spec-funcional.md"] = `---\norigin: reingenieria\n---\n\n` + files["spec-funcional.md"];
+  }
+  for (const f of FASE2_FILES) delete files[f];
+}
 for (const [name, content] of Object.entries(files)) {
   writeFileSync(join(featureDir, name), content, "utf8");
 }
 
 // Verificacion inmediata: cuenta de archivos canonicos generados por scaffold-feature.
 // v12.106: spec-tareas.md es ahora ciudadano de primera clase del scaffold.
-const REQUIRED = [
-  "spec-funcional.md", "spec-tecnica.md", "spec-tareas.md", "tdd-evidence.md", "traceability.md",
-  "prototype.md", "prototype-validation.md", "product-design.md",
-  "spdd-frontend.md", "api-contract.md", "ui-test-cases.md",
-];
+const REQUIRED = reengineering
+  ? [
+      "spec-funcional.md", "spec-tecnica.md", "spec-tareas.md", "tdd-evidence.md", "traceability.md",
+      "api-contract.md", "ui-test-cases.md",
+    ]
+  : [
+      "spec-funcional.md", "spec-tecnica.md", "spec-tareas.md", "tdd-evidence.md", "traceability.md",
+      "prototype.md", "prototype-validation.md", "product-design.md",
+      "spdd-frontend.md", "api-contract.md", "ui-test-cases.md",
+    ];
 const present = new Set(readdirSync(featureDir));
 const missing = REQUIRED.filter((f) => !present.has(f));
 
@@ -156,14 +179,23 @@ if (args.domain) {
 
 console.log("");
 console.log("Proximos pasos:");
-console.log(`  1. Editar specs/${slug}/spec-funcional.md (rellenar reglas reales del dominio)`);
-console.log(`  2. Editar specs/${slug}/spec-tecnica.md (columnas reales de la tabla ${entidad})`);
-console.log(`  3. Editar specs/${slug}/api-contract.md (request/response reales)`);
-console.log(`  4. Generar el prototipo en su lugar (freeform por default v12.116+):`);
-console.log(`        npm run scaffold:prototype -- --feature ${slug}`);
-console.log(`     (NO crees prototype/<feature>/ — el prototipo va SIEMPRE en specs/${slug}/prototype-html5/.`);
-console.log(`     Goldens en ejemplos/fase-2-ux-ui/prototype-html5-golden/ son REFERENCIA visual, no plantilla a copiar.)`);
-console.log(`  5. npm run memory:sync && npm run check:project`);
+if (reengineering) {
+  console.log(`  (origin: reingenieria — Fase 2 / prototipo EXENTA; el resto de la metodologia aplica)`);
+  console.log(`  1. Editar specs/${slug}/spec-funcional.md (reglas reales segun el codigo existente)`);
+  console.log(`  2. Editar specs/${slug}/spec-tecnica.md (columnas reales de la tabla ${entidad})`);
+  console.log(`  3. Editar specs/${slug}/api-contract.md (rutas/contratos reales del codigo)`);
+  console.log(`  4. Editar specs/${slug}/traceability.md y tdd-evidence.md (GREEN real de las pruebas)`);
+  console.log(`  5. npm run memory:sync && npm run check:project`);
+} else {
+  console.log(`  1. Editar specs/${slug}/spec-funcional.md (rellenar reglas reales del dominio)`);
+  console.log(`  2. Editar specs/${slug}/spec-tecnica.md (columnas reales de la tabla ${entidad})`);
+  console.log(`  3. Editar specs/${slug}/api-contract.md (request/response reales)`);
+  console.log(`  4. Generar el prototipo en su lugar (freeform por default v12.116+):`);
+  console.log(`        npm run scaffold:prototype -- --feature ${slug}`);
+  console.log(`     (NO crees prototype/<feature>/ — el prototipo va SIEMPRE en specs/${slug}/prototype-html5/.`);
+  console.log(`     Goldens en ejemplos/fase-2-ux-ui/prototype-html5-golden/ son REFERENCIA visual, no plantilla a copiar.)`);
+  console.log(`  5. npm run memory:sync && npm run check:project`);
+}
 process.exit(0);
 
 // ─────────────────────────────────────────────────────────────────────────
