@@ -1,5 +1,7 @@
 package com.integrationhub.platform.api.resource.source;
 
+// @trace RF-001, RF-002 (reingenieria: clase que implementa el/los RF en produccion)
+
 import com.integrationhub.platform.api.mapper.source.SourceApiMapper;
 import com.integrationhub.platform.api.request.source.SourceDefinitionRequest;
 import com.integrationhub.platform.api.response.source.SourceDefinitionResponse;

@@ -227,7 +227,7 @@ function analyzePhase4() {
 }
 
 function analyzePhase5() {
-  const srcDirs = ["src", "backend", "frontend"];
+  const srcDirs = ["src", "backend", "frontend", "platform-app"];
   let codeFiles = 0;
   let withTrace = 0;
   for (const d of srcDirs) {
@@ -247,16 +247,22 @@ function analyzePhase5() {
 }
 
 function analyzePhase6() {
-  const testDirs = ["tests", "qa/automated", "src"];
+  const testDirs = ["tests", "qa/automated", "src", "platform-app", "backend", "frontend"];
   let testFiles = 0;
   for (const d of testDirs) {
     const abs = join(root, d);
     if (!existsSync(abs)) continue;
-    testFiles += walkDir(abs).filter((f) => /\.(test|spec)\.(ts|tsx|js|jsx|java|kt|py)$/.test(f)).length;
+    // v12.139: ademas de *.test/*.spec (JS/TS), reconoce convenciones JVM
+    // (*Test.java, *Tests.java, *IT.java, *Spec.kt) para proyectos backend.
+    testFiles += walkDir(abs).filter((f) => /\.(test|spec)\.(ts|tsx|js|jsx|java|kt|py)$/.test(f) || /(Test|Tests|IT|Spec)\.(java|kt)$/.test(f)).length;
   }
-  const lcov = existsSync(join(root, "qa/coverage/lcov.info")) || existsSync(join(root, "coverage/lcov.info"));
-  const status = testFiles === 0 ? "not-started" : lcov ? "complete" : "partial";
-  return { id: 6, name: "QA", status, detail: `${testFiles} archivos de test, lcov.info: ${lcov ? "si" : "no"}` };
+  // Cobertura: lcov (JS) o reporte JaCoCo (JVM).
+  const cov = existsSync(join(root, "qa/coverage/lcov.info"))
+    || existsSync(join(root, "coverage/lcov.info"))
+    || existsSync(join(root, "platform-app/target/site/jacoco/jacoco.xml"))
+    || existsSync(join(root, "platform-app/target/site/jacoco/index.html"));
+  const status = testFiles === 0 ? "not-started" : cov ? "complete" : "partial";
+  return { id: 6, name: "QA", status, detail: `${testFiles} archivos de test, cobertura: ${cov ? "si" : "no (pendiente JaCoCo/lcov)"}` };
 }
 
 function analyzePhase7() {

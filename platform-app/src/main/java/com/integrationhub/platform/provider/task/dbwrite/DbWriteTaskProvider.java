@@ -1,5 +1,7 @@
 package com.integrationhub.platform.provider.task.dbwrite;
 
+// @trace RF-002 (reingenieria: clase que implementa el/los RF en produccion)
+
 import com.integrationhub.platform.provider.task.common.StoredProcedureRuntimeSupport;
 import com.integrationhub.platform.provider.task.common.TaskOutputSupport;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
