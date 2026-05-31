@@ -102,6 +102,40 @@ export function listAllFeatures(rootDir) {
     }));
 }
 
+// Valores de `origin` (frontmatter de spec-funcional.md) que marcan una feature
+// como reingenieria sobre codigo existente. Default (ausente/desconocido) = "nuevo".
+const REENGINEERING_ORIGINS = new Set([
+  "reingenieria", "reingeniería", "brownfield", "existing-code", "existing_code",
+]);
+
+/**
+ * Devuelve el origen declarado de una feature: "reingenieria" | "nuevo".
+ * Lee el frontmatter `origin:` de specs/<slug>/spec-funcional.md.
+ * Default seguro: "nuevo" (rigor metodologico completo) si no se declara o el
+ * valor es desconocido — asi ningun feature nuevo se exenta por olvido.
+ */
+export function getFeatureOrigin(slug, specsRoot) {
+  if (!slug || !specsRoot) return "nuevo";
+  const specPath = join(specsRoot, slug, "spec-funcional.md");
+  if (!existsSync(specPath)) return "nuevo";
+  try {
+    const fm = parseFrontmatter(readFileSync(specPath, "utf8"));
+    const raw = fm && fm.origin != null ? String(fm.origin).trim().toLowerCase() : "";
+    return REENGINEERING_ORIGINS.has(raw) ? "reingenieria" : "nuevo";
+  } catch {
+    return "nuevo";
+  }
+}
+
+/**
+ * Predicado: true si la feature es de reingenieria (codigo ya construido).
+ * Una feature de reingenieria queda exenta SOLO de la Fase 2 (prototipo/SPDD);
+ * el resto de la metodologia se mantiene exigible.
+ */
+export function isReengineering(slug, specsRoot) {
+  return getFeatureOrigin(slug, specsRoot) === "reingenieria";
+}
+
 /**
  * Parser minimalista de frontmatter YAML.
  * Soporta scalars (string, number, boolean) — no listas ni objetos anidados.

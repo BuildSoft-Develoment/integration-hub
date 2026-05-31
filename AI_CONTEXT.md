@@ -20,7 +20,7 @@ v0.4.0
 - Resumen en una linea: plataforma Quarkus operativa (194 archivos Java) con motor de ejecucion de tareas multi-provider (REST, DB_WRITE, DB_EXECUTE_SP, DB_EXECUTE_FN, NOTIFICATION) sobre fuentes filesystem/ftp/sftp/rest y readers txt/csv/xls/xlsx/json/xml; se esta instanciando la capa de gobernanza (memoria viva, trazabilidad RF->codigo->test, gates con firma humana) sin perder lo que ya corre.
 - Ultima actualizacion (auto):
 <!-- auto:start name=ultima-actualizacion -->
-2026-05-30 23:12
+2026-05-31 21:22
 <!-- auto:end -->
 
 ## Features y su estado
@@ -30,22 +30,30 @@ Features base bajo SDD en `specs/`. La siguiente tabla la regenera
 <!-- auto:start name=features -->
 | Feature | Estado consolidado | Gates |
 |---|---|---|
-| 001-catalogo-fuentes | Bloqueado: gate-prototype-ready | gate-prototype-ready=pending; gate-spdd-approved=pending |
-| 002-catalogo-readers | Bloqueado: gate-prototype-ready | gate-prototype-ready=pending; gate-spdd-approved=pending |
-| 003-diseno-y-ejecucion-procesos | Bloqueado: gate-prototype-ready | gate-prototype-ready=pending; gate-spdd-approved=pending |
-| 004-observabilidad-y-auditoria | Bloqueado: gate-prototype-ready | gate-prototype-ready=pending; gate-spdd-approved=pending |
+| 001-catalogo-fuentes | Bloqueado: gate-prototype-ready | gate-prototype-ready=pending; gate-qa-passed=pending; gate-sdd-approved=pending; gate-spdd-approved=n/a (reingenieria) |
+| 002-catalogo-readers | Bloqueado: gate-prototype-ready | gate-prototype-ready=pending; gate-qa-passed=pending; gate-sdd-approved=pending; gate-spdd-approved=n/a (reingenieria) |
+| 003-diseno-y-ejecucion-procesos | Bloqueado: gate-prototype-ready | gate-prototype-ready=pending; gate-qa-passed=pending; gate-sdd-approved=pending; gate-spdd-approved=n/a (reingenieria) |
+| 004-observabilidad-y-auditoria | Bloqueado: gate-prototype-ready | gate-prototype-ready=pending; gate-qa-passed=pending; gate-sdd-approved=pending; gate-spdd-approved=n/a (reingenieria) |
 <!-- auto:end -->
 
 ## Gates pendientes
 <!-- auto:start name=gates-pendientes -->
-- `gate-prototype-ready` en `specs/001-catalogo-fuentes` — pending (ultimo: Natan Angel Davila Lopez, 2026-04-21)
-- `gate-spdd-approved` en `specs/001-catalogo-fuentes` — pending
-- `gate-prototype-ready` en `specs/002-catalogo-readers` — pending (ultimo: Natan Angel Davila Lopez, 2026-04-21)
-- `gate-spdd-approved` en `specs/002-catalogo-readers` — pending
-- `gate-prototype-ready` en `specs/003-diseno-y-ejecucion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-04-21)
-- `gate-spdd-approved` en `specs/003-diseno-y-ejecucion-procesos` — pending
-- `gate-prototype-ready` en `specs/004-observabilidad-y-auditoria` — pending (ultimo: Natan Angel Davila Lopez, 2026-04-21)
-- `gate-spdd-approved` en `specs/004-observabilidad-y-auditoria` — pending
+- `gate-prototype-ready` en `specs/001-catalogo-fuentes` — pending (ultimo: Natan Angel Davila Lopez, 2026-05-31)
+- `gate-qa-passed` en `specs/001-catalogo-fuentes` — pending
+- `gate-sdd-approved` en `specs/001-catalogo-fuentes` — pending
+- `gate-spdd-approved` en `specs/001-catalogo-fuentes` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-05-31)
+- `gate-prototype-ready` en `specs/002-catalogo-readers` — pending (ultimo: Natan Angel Davila Lopez, 2026-05-31)
+- `gate-qa-passed` en `specs/002-catalogo-readers` — pending
+- `gate-sdd-approved` en `specs/002-catalogo-readers` — pending
+- `gate-spdd-approved` en `specs/002-catalogo-readers` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-05-31)
+- `gate-prototype-ready` en `specs/003-diseno-y-ejecucion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-05-31)
+- `gate-qa-passed` en `specs/003-diseno-y-ejecucion-procesos` — pending
+- `gate-sdd-approved` en `specs/003-diseno-y-ejecucion-procesos` — pending
+- `gate-spdd-approved` en `specs/003-diseno-y-ejecucion-procesos` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-05-31)
+- `gate-prototype-ready` en `specs/004-observabilidad-y-auditoria` — pending (ultimo: Natan Angel Davila Lopez, 2026-05-31)
+- `gate-qa-passed` en `specs/004-observabilidad-y-auditoria` — pending
+- `gate-sdd-approved` en `specs/004-observabilidad-y-auditoria` — pending
+- `gate-spdd-approved` en `specs/004-observabilidad-y-auditoria` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-05-31)
 <!-- auto:end -->
 
 ## Sesiones recientes
@@ -55,8 +63,11 @@ Features base bajo SDD en `specs/`. La siguiente tabla la regenera
 
 ## Decisiones recientes
 <!-- auto:start name=decisiones-recientes -->
-- `ADR-002` ADR-002 Principios de diseno (SOLID) _(Aceptado)_ — [ver](docs/fase-3-arquitectura/adr/ADR-002-principios-diseno.md)
-- `ADR-001` ADR-001 Platform Architecture _(Aceptado)_ — [ver](docs/fase-3-arquitectura/adr/ADR-001-platform-architecture.md)
+- Secretos referenciados con el contrato `${secret:...}`, nunca persistidos en claro (ADR-002). _(registrada)_ — [ver](specs/001-catalogo-fuentes/traceability.md)
+- Patron providers + registries para fuentes (ADR-001). _(registrada)_ — [ver](specs/001-catalogo-fuentes/traceability.md)
+- Motor providers + registries para tipos de tarea (DbWrite, StoredProcedure, etc.) (ADR-001). _(registrada)_ — [ver](specs/003-diseno-y-ejecucion-procesos/traceability.md)
+- Correlacion operativa por `processExecutionId` (ADR-002). _(registrada)_ — [ver](specs/003-diseno-y-ejecucion-procesos/traceability.md)
+- Correlacion de auditoria, trazas y ejecucion por `processExecutionId` (ADR-002). _(registrada)_ — [ver](specs/004-observabilidad-y-auditoria/traceability.md)
 <!-- auto:end -->
 
 ## Proximos pasos

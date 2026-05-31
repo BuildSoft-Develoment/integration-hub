@@ -58,12 +58,19 @@ Reglas:
 
 ## Estado de gates por feature
 
+> Las cuatro features estan declaradas con `origin: reingenieria` en su
+> `spec-funcional.md` (codigo ya construido y operativo). Por la metodologia
+> (CONSTITUTION.md, Principio 4 — excepcion de reingenieria), la **Fase 2 (UX/UI ·
+> prototipo · SPDD) no aplica**, por lo que el `gate-spdd-approved` queda **n/a**. El
+> resto de la metodologia (spec-funcional, spec-tecnica, traceability, api-contract,
+> spec-tareas, tdd-evidence, BD, trazabilidad) se mantiene exigible.
+
 | Feature | Gate | Estado | Evidencia |
 |---|---|---|---|
-| 001-catalogo-fuentes | gate-spdd-approved | pending | specs/001-catalogo-fuentes/spec-funcional.md |
-| 002-catalogo-readers | gate-spdd-approved | pending | specs/002-catalogo-readers/spec-funcional.md |
-| 003-diseno-y-ejecucion-procesos | gate-spdd-approved | pending | specs/003-diseno-y-ejecucion-procesos/spec-funcional.md |
-| 004-observabilidad-y-auditoria | gate-spdd-approved | pending | specs/004-observabilidad-y-auditoria/spec-funcional.md |
+| 001-catalogo-fuentes | gate-spdd-approved | n/a (reingenieria) | specs/001-catalogo-fuentes/spec-funcional.md (origin: reingenieria) |
+| 002-catalogo-readers | gate-spdd-approved | n/a (reingenieria) | specs/002-catalogo-readers/spec-funcional.md (origin: reingenieria) |
+| 003-diseno-y-ejecucion-procesos | gate-spdd-approved | n/a (reingenieria) | specs/003-diseno-y-ejecucion-procesos/spec-funcional.md (origin: reingenieria) |
+| 004-observabilidad-y-auditoria | gate-spdd-approved | n/a (reingenieria) | specs/004-observabilidad-y-auditoria/spec-funcional.md (origin: reingenieria) |
 
 ## Requerimientos sin implementacion
 

@@ -1,3 +1,7 @@
+---
+origin: reingenieria
+---
+
 # Spec funcional - Observabilidad y auditoria
 
 ## Objetivo
