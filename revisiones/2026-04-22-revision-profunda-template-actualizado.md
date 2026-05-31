@@ -27,9 +27,9 @@ Sin embargo, todavia no cumple el nivel de estandar del template actualizado. La
 
 Evidencia:
 
-- [docs/README.md](C:\chatgtp\quarkus\docs\README.md)
-- [docs/fase-0-iniciacion/README.md](C:\chatgtp\quarkus\docs\fase-0-iniciacion\README.md)
-- [docs/transversal/90.07-convenciones-y-naming.md](C:\chatgtp\quarkus\docs\transversal\90.07-convenciones-y-naming.md)
+- docs/README.md
+- docs/fase-0-iniciacion/README.md
+- docs/transversal/90.07-convenciones-y-naming.md
 
 Observacion:
 
@@ -47,7 +47,7 @@ Evidencia:
 
 - carpeta inexistente: `C:\chatgtp\quarkus\plantillas\`
 - referencia del template: `C:\template\project-template\plantillas\`
-- documento dependiente: [docs/fase-4-sdd/04.00-spec-driven-development.md](C:\chatgtp\quarkus\docs\fase-4-sdd\04.00-spec-driven-development.md)
+- documento dependiente: docs/fase-4-sdd/04.00-spec-driven-development.md
 
 Observacion:
 
@@ -63,8 +63,8 @@ Impacto:
 
 Evidencia:
 
-- [docs/architecture/README-ARCHITECTURE.md](C:\chatgtp\quarkus\docs\architecture\README-ARCHITECTURE.md)
-- [docs/fase-3-arquitectura/README.md](C:\chatgtp\quarkus\docs\fase-3-arquitectura\README.md)
+- docs/architecture/README-ARCHITECTURE.md
+- docs/fase-3-arquitectura/README.md
 - `C:\chatgtp\quarkus\docs\examples\`
 - `C:\chatgtp\quarkus\ejemplos\`
 
@@ -82,8 +82,8 @@ Impacto:
 
 Evidencia:
 
-- [docs/README.md](C:\chatgtp\quarkus\docs\README.md)
-- [docs/fase-5-construccion/05.00-plantilla-proyecto-base.md](C:\chatgtp\quarkus\docs\fase-5-construccion\05.00-plantilla-proyecto-base.md)
+- docs/README.md
+- docs/fase-5-construccion/05.00-plantilla-proyecto-base.md
 - archivo ausente: `C:\chatgtp\quarkus\src\README.md`
 - archivo ausente: `C:\chatgtp\quarkus\tests\README.md`
 
@@ -101,7 +101,7 @@ Impacto:
 
 Evidencia:
 
-- [README.md](C:\chatgtp\quarkus\README.md)
+- README.md
 - template de referencia: `C:\template\project-template\README.md`
 
 Observacion:
@@ -117,7 +117,7 @@ Impacto:
 
 Evidencia:
 
-- [docs/transversal/90.07-convenciones-y-naming.md](C:\chatgtp\quarkus\docs\transversal\90.07-convenciones-y-naming.md)
+- docs/transversal/90.07-convenciones-y-naming.md
 - template de referencia: `C:\template\project-template\docs\transversal\90.07-convenciones-y-naming.md`
 
 Observacion:
@@ -141,8 +141,8 @@ Evidencia:
   - `quarkus-dev.log`
   - otros similares
 - planes operativos en `docs/`:
-  - [PLAN-MIGRACION-DOCUMENTACION-TEMPLATE.md](C:\chatgtp\quarkus\docs\PLAN-MIGRACION-DOCUMENTACION-TEMPLATE.md)
-  - [PLAN-ALINEACION-TEMPLATE-IA.md](C:\chatgtp\quarkus\docs\PLAN-ALINEACION-TEMPLATE-IA.md)
+  - docs/PLAN-MIGRACION-DOCUMENTACION-TEMPLATE.md
+  - docs/PLAN-ALINEACION-TEMPLATE-IA.md
 
 Observacion:
 

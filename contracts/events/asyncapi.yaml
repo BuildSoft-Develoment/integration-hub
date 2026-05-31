@@ -1,0 +1,53 @@
+asyncapi: 3.0.0
+info:
+  title: Integration Hub - Eventos
+  version: 0.4.0
+  description: >-
+    Contrato de eventos asincronos del Integration Hub. Cubre la auditoria
+    gobernada y las notificaciones emitidas por el motor de ejecucion de tareas.
+defaultContentType: application/json
+channels:
+  auditLog:
+    address: integration-hub.audit-log
+    messages:
+      auditLogEntry:
+        $ref: '#/components/messages/AuditLogEntry'
+  notifications:
+    address: integration-hub.notifications
+    messages:
+      notification:
+        $ref: '#/components/messages/Notification'
+operations:
+  publishAuditLog:
+    action: send
+    channel:
+      $ref: '#/channels/auditLog'
+  publishNotification:
+    action: send
+    channel:
+      $ref: '#/channels/notifications'
+components:
+  messages:
+    AuditLogEntry:
+      name: AuditLogEntry
+      title: Entrada de auditoria
+      payload:
+        $ref: ./audit-log.schema.json
+    Notification:
+      name: Notification
+      title: Notificacion de ejecucion
+      payload:
+        type: object
+        required: [notificationId, executionId, status, emittedAt]
+        properties:
+          notificationId:
+            type: string
+            format: uuid
+          executionId:
+            type: string
+          status:
+            type: string
+            enum: [STARTED, COMPLETED, FAILED]
+          emittedAt:
+            type: string
+            format: date-time

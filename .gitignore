@@ -14,3 +14,49 @@ _frontend_git_backup/
 .nx/
 *.log
 *.err
+
+# ───────────────────────────────────────────────────────────────────────────
+# Framework AI-first empresarial (capa operativa instanciada desde el template).
+# ───────────────────────────────────────────────────────────────────────────
+# Temporales / backups locales
+*.tmp
+*.bak
+*.old
+*~
+.tmp/
+
+# Bundles distribuibles regenerables
+dist/
+
+# git worktrees creados por agent:start (sandboxes locales por T-NNN)
+worktrees/
+.worktrees/
+**/worktrees/
+
+# Memoria local del agente IA (regenerable con memory:bootstrap)
+ai/memory/*.db
+ai/memory/*.sqlite
+ai/memory/*.db-*
+ai/memory/*.sqlite-*
+ai/memory/memory-report.html
+
+# Directorio de agente interno por proyecto real
+.agent/*.db
+.agent/*.sqlite
+.agent/*.db-*
+.agent/runs/
+ai-framework-*.db
+ai-framework-*.sqlite
+
+# Estado del roadmap regenerable con 'npm run roadmap:sync'
+ROADMAP_STATE.json
+
+# Orquestacion multiagente (regenerables / volatiles)
+ai/locks/
+AGENT_BOARD.md
+
+# Artefactos transpilados por 'install:agent --agent claude' / 'skills:transpile'
+.claude/skills/
+.claude/commands/
+.claude/protocols/
+.claude/mcp.json

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://integration-hub.acme.example/contracts/events/audit-log.schema.json",
+  "title": "AuditLogEntry",
+  "description": "Evento de auditoria emitido por el Integration Hub ante toda accion gobernada (alta/baja de sources, connections, processes y ejecuciones de tareas).",
+  "type": "object",
+  "required": ["eventId", "occurredAt", "actor", "action", "resourceType", "resourceId", "outcome"],
+  "additionalProperties": false,
+  "properties": {
+    "eventId": { "type": "string", "format": "uuid" },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "actor": {
+      "type": "object",
+      "required": ["subject", "role"],
+      "properties": {
+        "subject": { "type": "string", "description": "Sub del token OIDC." },
+        "role": {
+          "type": "string",
+          "enum": ["platform-admin", "integration-admin", "operator", "auditor", "scheduler"]
+        }
+      }
+    },
+    "action": {
+      "type": "string",
+      "enum": ["CREATE", "UPDATE", "DELETE", "EXECUTE", "READ"]
+    },
+    "resourceType": {
+      "type": "string",
+      "enum": ["SOURCE", "READER", "CONNECTION", "PROCESS", "EXECUTION", "TASK", "NOTIFICATION"]
+    },
+    "resourceId": { "type": "string" },
+    "outcome": { "type": "string", "enum": ["SUCCESS", "FAILURE"] },
+    "correlationId": { "type": "string", "description": "Traza distribuida (OpenTelemetry)." },
+    "detail": { "type": "object", "description": "Metadatos adicionales no sensibles." }
+  }
+}

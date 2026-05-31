@@ -2,6 +2,12 @@
 
 [README principal](../../../README.md) | [Indice docs](../../README.md) | [Volver a la fase](../README.md)
 
+<!-- nav-guided:start -->
+## Navegacion guiada
+- Anterior: [Fase 3 - Arquitectura](../README.md)
+- Siguiente: [Indice docs](../../README.md)
+<!-- nav-guided:end -->
+
 ## Objetivo
 
 Consolidar los requisitos no funcionales y riesgos arquitectonicos que condicionan la evolucion y la operacion de la plataforma.

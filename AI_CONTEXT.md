@@ -1,0 +1,90 @@
+# AI_CONTEXT
+
+> Primer archivo que un agente IA debe leer al retomar este repositorio.
+> `AGENTS.md` explica COMO debe trabajar el agente. Este archivo explica EN QUE
+> ESTADO esta el proyecto AHORA. Se mantiene vivo: actualizalo al cerrar cada
+> fase, feature o gate.
+
+## Identidad
+- Proyecto: Integration Hub — plataforma de integracion configurable, gobernada, auditable y observable.
+- Dominio: orquestacion de integraciones batch (fuentes -> readers -> procesos -> ejecucion de tareas) con consola web administrativa y backend Quarkus.
+- <!-- auto:start name=stack -->
+Node >=22.0.0
+<!-- auto:end -->
+- Version actual: <!-- auto:start name=version -->
+v0.4.0
+<!-- auto:end -->
+
+## Estado actual
+- Fase activa: reingenieria — alinear documentacion existente al framework AI-first (fases 0-8) a partir del codigo ya funcionando.
+- Resumen en una linea: plataforma Quarkus operativa (194 archivos Java) con motor de ejecucion de tareas multi-provider (REST, DB_WRITE, DB_EXECUTE_SP, DB_EXECUTE_FN, NOTIFICATION) sobre fuentes filesystem/ftp/sftp/rest y readers txt/csv/xls/xlsx/json/xml; se esta instanciando la capa de gobernanza (memoria viva, trazabilidad RF->codigo->test, gates con firma humana) sin perder lo que ya corre.
+- Ultima actualizacion (auto):
+<!-- auto:start name=ultima-actualizacion -->
+2026-05-30 23:12
+<!-- auto:end -->
+
+## Features y su estado
+Features base bajo SDD en `specs/`. La siguiente tabla la regenera
+`regenerate-context` desde la BD; no edites manualmente entre los marcadores.
+
+<!-- auto:start name=features -->
+| Feature | Estado consolidado | Gates |
+|---|---|---|
+| 001-catalogo-fuentes | Bloqueado: gate-prototype-ready | gate-prototype-ready=pending; gate-spdd-approved=pending |
+| 002-catalogo-readers | Bloqueado: gate-prototype-ready | gate-prototype-ready=pending; gate-spdd-approved=pending |
+| 003-diseno-y-ejecucion-procesos | Bloqueado: gate-prototype-ready | gate-prototype-ready=pending; gate-spdd-approved=pending |
+| 004-observabilidad-y-auditoria | Bloqueado: gate-prototype-ready | gate-prototype-ready=pending; gate-spdd-approved=pending |
+<!-- auto:end -->
+
+## Gates pendientes
+<!-- auto:start name=gates-pendientes -->
+- `gate-prototype-ready` en `specs/001-catalogo-fuentes` — pending (ultimo: Natan Angel Davila Lopez, 2026-04-21)
+- `gate-spdd-approved` en `specs/001-catalogo-fuentes` — pending
+- `gate-prototype-ready` en `specs/002-catalogo-readers` — pending (ultimo: Natan Angel Davila Lopez, 2026-04-21)
+- `gate-spdd-approved` en `specs/002-catalogo-readers` — pending
+- `gate-prototype-ready` en `specs/003-diseno-y-ejecucion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-04-21)
+- `gate-spdd-approved` en `specs/003-diseno-y-ejecucion-procesos` — pending
+- `gate-prototype-ready` en `specs/004-observabilidad-y-auditoria` — pending (ultimo: Natan Angel Davila Lopez, 2026-04-21)
+- `gate-spdd-approved` en `specs/004-observabilidad-y-auditoria` — pending
+<!-- auto:end -->
+
+## Sesiones recientes
+<!-- auto:start name=sesiones-recientes -->
+- _(sin entradas en SESSION_LOG.md)_
+<!-- auto:end -->
+
+## Decisiones recientes
+<!-- auto:start name=decisiones-recientes -->
+- `ADR-002` ADR-002 Principios de diseno (SOLID) _(Aceptado)_ — [ver](docs/fase-3-arquitectura/adr/ADR-002-principios-diseno.md)
+- `ADR-001` ADR-001 Platform Architecture _(Aceptado)_ — [ver](docs/fase-3-arquitectura/adr/ADR-001-platform-architecture.md)
+<!-- auto:end -->
+
+## Proximos pasos
+1. Generar `ROADMAP_STATE.json` real con `roadmap:sync` (mapea fases 0-8 al estado actual de docs/specs/codigo).
+2. Reconciliar la documentacion existente a la fase canonica correcta y completar los artefactos minimos por fase.
+3. Construir trazabilidad RF -> codigo -> test desde los 194 archivos Java y las 4 specs.
+4. Correr `check:all` y usar los hallazgos como checklist de reingenieria por fase.
+
+## Como cargar contexto rapido
+```sh
+node scripts/ai-framework-agent.mjs index-docs   # indexa Markdown + FTS5
+node scripts/ai-framework-agent.mjs sync-memory  # puebla trazabilidad/gates/decisiones
+node scripts/ai-framework-agent.mjs status       # estado de la memoria
+node scripts/ai-framework-agent.mjs search --query "<tema>"
+```
+La BD `ai/memory/framework-agent.db` es un indice reconstruible. La fuente de
+verdad son los Markdown y el codigo. Si la BD contradice un Markdown, gana el Markdown.
+
+## Punteros clave
+- `AGENTS.md` — contrato de trabajo del agente.
+- `CONSTITUTION.md` — principios no negociables del framework.
+- `AGENT_RUNTIME.md` — disciplina de ejecucion del agente.
+- `docs/README.md` — indice de documentacion por fase (0-8 + transversal).
+- `specs/README.md` — features base bajo SDD.
+- `ai/memory/README.md` — como funciona la memoria del agente.
+- `README.md` — vision general del Integration Hub.
+
+## Como actualizar este archivo
+- Actualiza `Estado actual` y `Proximos pasos` al cerrar cada sesion de trabajo.
+- Actualiza `Features y su estado` y `Gates pendientes` al mover un gate.
+- Tras actualizar, corre `sync-memory` para reflejarlo en la memoria del agente.

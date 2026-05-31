@@ -4,7 +4,7 @@
 
 <!-- nav-guided:start -->
 ## Navegacion guiada
-- Anterior: [HU-04 Auditar y reprocesar](../fase-1-analisis-requerimientos/historias-usuario/HU-04-auditar-y-reprocesar.md)
+- Anterior: [Matriz de huecos de fase 1](../fase-1-analisis-requerimientos/01.01-matriz-huecos-fase-1.md)
 - Siguiente: [UX/UI](02.00-ux-ui.md)
 <!-- nav-guided:end -->
 
