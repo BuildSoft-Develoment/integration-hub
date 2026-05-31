@@ -187,9 +187,9 @@
 <!-- ── 1. BANNER ── -->
 <div class="banner">
   <span class="banner-tag spdd">◆ SPDD HUB</span>
-  <span class="banner-tag info">Integration Hub · 4 specs · 0 prototipos</span>
-  <span class="banner-tag warn">⏳ 4 VALIDACIONES HUMANA PENDIENTES</span>
-  <span class="banner-tag date">2026-05-30</span>
+  <span class="banner-tag info">Integration Hub · 6 specs · 0 prototipos</span>
+  <span class="banner-tag warn">⏳ 6 VALIDACIONES HUMANA PENDIENTES</span>
+  <span class="banner-tag date">2026-05-31</span>
 </div>
 
 <!-- ── 2. HERO ── -->
@@ -200,10 +200,10 @@
     <p class="hero-subtitle">Hub de Prototipos — Navegación End-to-End</p>
     <p class="hero-desc">Centro de navegación para todos los prototipos HTML5 del producto. Cada spec es una vertical funcional completa. Abre cualquier prototipo para validar flujos y diseño antes de implementar.</p>
     <div class="hero-stats">
-      <div class="stat"><span class="stat-num">4</span><span class="stat-label">Specs</span></div>
+      <div class="stat"><span class="stat-num">6</span><span class="stat-label">Specs</span></div>
       <div class="stat"><span class="stat-num">0</span><span class="stat-label">Prototipos HTML5</span></div>
       <div class="stat"><span class="stat-num">0</span><span class="stat-label">Actores</span></div>
-      <div class="stat"><span class="stat-num">4</span><span class="stat-label">Flujos cubiertos</span></div>
+      <div class="stat"><span class="stat-num">6</span><span class="stat-label">Flujos cubiertos</span></div>
       <div class="stat"><span class="stat-num">0</span><span class="stat-label">Backend real</span></div>
     </div>
   </div>
@@ -227,7 +227,7 @@
 <section>
   <div class="container">
     <div class="section-label">Prototipos por Spec</div>
-    <h2 class="section-title">4 verticales funcionales</h2>
+    <h2 class="section-title">6 verticales funcionales</h2>
     <p class="section-sub">Cada prototipo es un archivo HTML5 autocontenido sin backend real. Cubre flujos completos con datos mock, navegación entre pantallas y validación visual de invariantes críticos.</p>
     <div class="specs-grid">
       <!-- @auto:start name=specs -->
@@ -238,7 +238,12 @@
         </div>
         <h3 class="spec-title">Catalogo Fuentes</h3>
         <p class="spec-desc">Permitir que integration-admin configure y mantenga fuentes filesystem, ftp, sftp y rest.</p>
-        
+        <ul class="invariants">
+        <li><span class="inv-icon">🔴</span>RF-001: SourceCatalogService</li>
+        <li><span class="inv-icon">🔴</span>RF-002: SourceDefinitionResource</li>
+        <li><span class="inv-icon">🔴</span>RF-003: JsonConfigurationMapper</li>
+        <li><span class="inv-icon">🔴</span>RF-004: FileVaultSecretValueProvider</li>
+        </ul>
         <div class="card-bottom">
           <div class="actor-chips"></div>
           <span class="open-btn" style="opacity:0.5;cursor:not-allowed">Pendiente</span>
@@ -251,7 +256,12 @@
         </div>
         <h3 class="spec-title">Catalogo Readers</h3>
         <p class="spec-desc">Configurar como interpretar archivos o payloads de entrada segun formato.</p>
-        
+        <ul class="invariants">
+        <li><span class="inv-icon">🔴</span>RF-001: ReaderDefinitionResource</li>
+        <li><span class="inv-icon">🔴</span>RF-002: ReaderCatalogService</li>
+        <li><span class="inv-icon">🔴</span>RF-003: TxtReaderProvider</li>
+        <li><span class="inv-icon">🔴</span>RF-004: XlsxReaderProvider</li>
+        </ul>
         <div class="card-bottom">
           <div class="actor-chips"></div>
           <span class="open-btn" style="opacity:0.5;cursor:not-allowed">Pendiente</span>
@@ -264,7 +274,12 @@
         </div>
         <h3 class="spec-title">Diseno Y Ejecucion Procesos</h3>
         <p class="spec-desc">Permitir disenar procesos configurables y ejecutarlos de forma manual o programada.</p>
-        
+        <ul class="invariants">
+        <li><span class="inv-icon">🔴</span>RF-001: ProcessDefinitionResource</li>
+        <li><span class="inv-icon">🔴</span>RF-002: DbWriteTaskProvider</li>
+        <li><span class="inv-icon">🔴</span>RF-003: ProcessSchedulerService</li>
+        <li><span class="inv-icon">🔴</span>RF-004: StreamingPipelineService</li>
+        </ul>
         <div class="card-bottom">
           <div class="actor-chips"></div>
           <span class="open-btn" style="opacity:0.5;cursor:not-allowed">Pendiente</span>
@@ -277,7 +292,48 @@
         </div>
         <h3 class="spec-title">Observabilidad Y Auditoria</h3>
         <p class="spec-desc">Dar visibilidad operativa y trazabilidad completa sobre procesos, tareas y archivos procesados.</p>
-        
+        <ul class="invariants">
+        <li><span class="inv-icon">🔴</span>RF-001: ExecutionQueryResource</li>
+        <li><span class="inv-icon">🔴</span>RF-002: ExecutionQueryService</li>
+        <li><span class="inv-icon">🔴</span>RF-003: ExecutionQueryService</li>
+        <li><span class="inv-icon">🔴</span>RF-004: ExecutionQueryResource</li>
+        </ul>
+        <div class="card-bottom">
+          <div class="actor-chips"></div>
+          <span class="open-btn" style="opacity:0.5;cursor:not-allowed">Pendiente</span>
+        </div>
+      </div>
+      <div class="spec-card" style="--card-clr:hsl(222 55% 38%)">
+        <div class="card-top">
+          <span class="spec-num-badge">SPEC 005</span>
+          <span class="status-pill pendiente">⏳ pendiente</span>
+        </div>
+        <h3 class="spec-title">Catalogo Conexiones</h3>
+        <p class="spec-desc">Permitir que perfiles administrativos configuren y mantengan conexiones a motores de datos (ORACLE, POSTGRESQL, SQLSERVER, MYSQL, MONGODB) que las tareas de proceso usan como destino u origen, e introspeccionar su metadata para mapear tabla</p>
+        <ul class="invariants">
+        <li><span class="inv-icon">🔴</span>RF-001: ConnectionCatalogService</li>
+        <li><span class="inv-icon">🔴</span>RF-002: ConnectionDefinitionResource</li>
+        <li><span class="inv-icon">🔴</span>RF-003: ConnectionApiMapper</li>
+        <li><span class="inv-icon">🔴</span>RF-004: ConnectionMetadataService</li>
+        </ul>
+        <div class="card-bottom">
+          <div class="actor-chips"></div>
+          <span class="open-btn" style="opacity:0.5;cursor:not-allowed">Pendiente</span>
+        </div>
+      </div>
+      <div class="spec-card" style="--card-clr:hsl(222 55% 44%)">
+        <div class="card-top">
+          <span class="spec-num-badge">SPEC 006</span>
+          <span class="status-pill pendiente">⏳ pendiente</span>
+        </div>
+        <h3 class="spec-title">Programacion Procesos</h3>
+        <p class="spec-desc">Permitir programar la ejecucion automatica de procesos (scheduling) y consultar las programaciones vigentes, dejando que el motor dispare ejecuciones de los procesos activos segun su frecuencia configurada.</p>
+        <ul class="invariants">
+        <li><span class="inv-icon">🔴</span>RF-001: ProcessCatalogService</li>
+        <li><span class="inv-icon">🔴</span>RF-002: ProcessSchedulerService</li>
+        <li><span class="inv-icon">🔴</span>RF-003: ProcessScheduleQueryService</li>
+        <li><span class="inv-icon">🔴</span>RF-004: ProcessSchedulerService</li>
+        </ul>
         <div class="card-bottom">
           <div class="actor-chips"></div>
           <span class="open-btn" style="opacity:0.5;cursor:not-allowed">Pendiente</span>
@@ -330,48 +386,72 @@
             <td><div class="row-num"><div class="dot" style="background:hsl(222 55% 38%)"></div><a class="sp-link" href="../specs/001-catalogo-fuentes/" target="_blank">001</a></div></td>
             <td>Catalogo Fuentes</td>
             <td><span class="missing">✗</span></td>
-            <td><span class="missing">✗</span></td>
-            <td><span class="missing">✗</span></td>
             <td><span class="ok">✓</span></td>
             <td><span class="ok">✓</span></td>
             <td><span class="ok">✓</span></td>
-            <td><span class="missing">✗</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
             <td><span class="cov-status pend">Pendiente</span></td>
           </tr>
           <tr>
             <td><div class="row-num"><div class="dot" style="background:hsl(222 55% 44%)"></div><a class="sp-link" href="../specs/002-catalogo-readers/" target="_blank">002</a></div></td>
             <td>Catalogo Readers</td>
             <td><span class="missing">✗</span></td>
-            <td><span class="missing">✗</span></td>
-            <td><span class="missing">✗</span></td>
             <td><span class="ok">✓</span></td>
             <td><span class="ok">✓</span></td>
             <td><span class="ok">✓</span></td>
-            <td><span class="missing">✗</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
             <td><span class="cov-status pend">Pendiente</span></td>
           </tr>
           <tr>
             <td><div class="row-num"><div class="dot" style="background:hsl(222 55% 50%)"></div><a class="sp-link" href="../specs/003-diseno-y-ejecucion-procesos/" target="_blank">003</a></div></td>
             <td>Diseno Y Ejecucion Procesos</td>
             <td><span class="missing">✗</span></td>
-            <td><span class="missing">✗</span></td>
-            <td><span class="missing">✗</span></td>
             <td><span class="ok">✓</span></td>
             <td><span class="ok">✓</span></td>
             <td><span class="ok">✓</span></td>
-            <td><span class="missing">✗</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
             <td><span class="cov-status pend">Pendiente</span></td>
           </tr>
           <tr>
             <td><div class="row-num"><div class="dot" style="background:hsl(222 55% 56%)"></div><a class="sp-link" href="../specs/004-observabilidad-y-auditoria/" target="_blank">004</a></div></td>
             <td>Observabilidad Y Auditoria</td>
             <td><span class="missing">✗</span></td>
-            <td><span class="missing">✗</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="cov-status pend">Pendiente</span></td>
+          </tr>
+          <tr>
+            <td><div class="row-num"><div class="dot" style="background:hsl(222 55% 38%)"></div><a class="sp-link" href="../specs/005-catalogo-conexiones/" target="_blank">005</a></div></td>
+            <td>Catalogo Conexiones</td>
             <td><span class="missing">✗</span></td>
             <td><span class="ok">✓</span></td>
             <td><span class="ok">✓</span></td>
             <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="cov-status pend">Pendiente</span></td>
+          </tr>
+          <tr>
+            <td><div class="row-num"><div class="dot" style="background:hsl(222 55% 44%)"></div><a class="sp-link" href="../specs/006-programacion-procesos/" target="_blank">006</a></div></td>
+            <td>Programacion Procesos</td>
             <td><span class="missing">✗</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
+            <td><span class="ok">✓</span></td>
             <td><span class="cov-status pend">Pendiente</span></td>
           </tr>
         </tbody>
@@ -412,6 +492,8 @@
       <a class="doc-link" href="../specs/002-catalogo-readers/"><span class="icon">📁</span>002 — Catalogo Readers</a>
       <a class="doc-link" href="../specs/003-diseno-y-ejecucion-procesos/"><span class="icon">📁</span>003 — Diseno Y Ejecucion Procesos</a>
       <a class="doc-link" href="../specs/004-observabilidad-y-auditoria/"><span class="icon">📁</span>004 — Observabilidad Y Auditoria</a>
+      <a class="doc-link" href="../specs/005-catalogo-conexiones/"><span class="icon">📁</span>005 — Catalogo Conexiones</a>
+      <a class="doc-link" href="../specs/006-programacion-procesos/"><span class="icon">📁</span>006 — Programacion Procesos</a>
       <!-- @auto:end -->
     </div>
   </div>
@@ -420,7 +502,7 @@
 <!-- ── 9. FOOTER ── -->
 <footer>
   <div class="container">
-    <p><strong>Integration Hub</strong> · SPDD Hub v0.1 · 2026-05-30</p>
+    <p><strong>Integration Hub</strong> · SPDD Hub v0.1 · 2026-05-31</p>
     <p>Sin backend real · Sin credenciales reales · Datos mock representativos del dominio.</p>
     <div class="stack-tags">
       <!-- @auto:start name=stack -->

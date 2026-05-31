@@ -46,6 +46,15 @@
 | 004-observabilidad-y-auditoria | RF-003 | funcional 5 (overview/relacionadas) | Auditar y reprocesar | GET /api/query/process-executions/{processExecutionId}/children | process_execution | ExecutionQueryService | CatalogAndExecutionResourceIT | Implementado | specs/004-observabilidad-y-auditoria/tdd-evidence.md |
 | 004-observabilidad-y-auditoria | RF-004 | funcional 5 (resumen operativo) | Auditar y reprocesar | GET /api/query/overview-summary | process_execution | ExecutionQueryResource | CatalogAndExecutionResourceIT | Implementado | specs/004-observabilidad-y-auditoria/tdd-evidence.md |
 | 004-observabilidad-y-auditoria | RF-005 | no funcional 1 (trazabilidad) | Auditar y reprocesar | GET /api/query/audit-events | audit_event | AuditService | StreamingPipelineServiceTest | Implementado | specs/004-observabilidad-y-auditoria/tdd-evidence.md |
+| 005-catalogo-conexiones | RF-001 | funcional 3 (tareas DB) | Administrar conexiones | POST /api/connection-definitions | connection_definition | ConnectionCatalogService | - | Implementado | specs/005-catalogo-conexiones/tdd-evidence.md |
+| 005-catalogo-conexiones | RF-002 | funcional 3 (tareas DB) | Administrar conexiones | POST /api/connection-definitions/test | connection_definition | ConnectionDefinitionResource | - | Implementado | specs/005-catalogo-conexiones/tdd-evidence.md |
+| 005-catalogo-conexiones | RF-003 | no funcional 2 (seguridad/secretos) | Administrar conexiones | POST /api/connection-definitions | connection_definition | ConnectionApiMapper | - | Implementado | specs/005-catalogo-conexiones/tdd-evidence.md |
+| 005-catalogo-conexiones | RF-004 | funcional 3 (mapeo destino DB) | Administrar conexiones | GET /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/tables | connection_definition | ConnectionMetadataService | - | Implementado | specs/005-catalogo-conexiones/tdd-evidence.md |
+| 005-catalogo-conexiones | RF-005 | funcional 3 (rutinas SP/FN) | Administrar conexiones | GET /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/procedures | connection_definition | ConnectionMetadataService | - | Implementado | specs/005-catalogo-conexiones/tdd-evidence.md |
+| 006-programacion-procesos | RF-001 | funcional 4 (ejecutar programada) | Programar procesos | POST /api/process-definitions | process_definition | ProcessCatalogService | - | Implementado | specs/006-programacion-procesos/tdd-evidence.md |
+| 006-programacion-procesos | RF-002 | funcional 4 (scheduler) | Programar procesos | - | process_definition | ProcessSchedulerService | - | Implementado | specs/006-programacion-procesos/tdd-evidence.md |
+| 006-programacion-procesos | RF-003 | funcional 4 (consultar programaciones) | Programar procesos | GET /api/process-schedules | process_definition | ProcessScheduleQueryService | - | Implementado | specs/006-programacion-procesos/tdd-evidence.md |
+| 006-programacion-procesos | RF-004 | no funcional 3 (robustez scheduler) | Programar procesos | - | process_definition | ProcessSchedulerService | - | Implementado | specs/006-programacion-procesos/tdd-evidence.md |
 
 Reglas:
 - Una fila por requerimiento por feature, agrupadas por feature.
@@ -58,7 +67,7 @@ Reglas:
 
 ## Estado de gates por feature
 
-> Las cuatro features estan declaradas con `origin: reingenieria` en su
+> Las seis features estan declaradas con `origin: reingenieria` en su
 > `spec-funcional.md` (codigo ya construido y operativo). Por la metodologia
 > (CONSTITUTION.md, Principio 4 — excepcion de reingenieria), la **Fase 2 (UX/UI ·
 > prototipo · SPDD) no aplica**, por lo que el `gate-spdd-approved` queda **n/a**. El
@@ -71,12 +80,14 @@ Reglas:
 | 002-catalogo-readers | gate-spdd-approved | n/a (reingenieria) | specs/002-catalogo-readers/spec-funcional.md (origin: reingenieria) |
 | 003-diseno-y-ejecucion-procesos | gate-spdd-approved | n/a (reingenieria) | specs/003-diseno-y-ejecucion-procesos/spec-funcional.md (origin: reingenieria) |
 | 004-observabilidad-y-auditoria | gate-spdd-approved | n/a (reingenieria) | specs/004-observabilidad-y-auditoria/spec-funcional.md (origin: reingenieria) |
+| 005-catalogo-conexiones | gate-spdd-approved | n/a (reingenieria) | specs/005-catalogo-conexiones/spec-funcional.md (origin: reingenieria) |
+| 006-programacion-procesos | gate-spdd-approved | n/a (reingenieria) | specs/006-programacion-procesos/spec-funcional.md (origin: reingenieria) |
 
 ## Requerimientos sin implementacion
 
-- Ninguno: las cuatro features tienen codigo y prueba asociados en produccion. Lo unico
-  pendiente es la captura formal de evidencia RED-GREEN (estado `pending` en cada
-  `tdd-evidence.md`), tarea de validacion, no de implementacion.
+- Ninguno: las seis features tienen codigo asociado en produccion. Pendiente: captura formal de
+  evidencia RED-GREEN (estado `pending` en cada `tdd-evidence.md`) y, en 005/006, cobertura de
+  pruebas dedicada (`Test = -`); ambas son tareas de validacion, no de implementacion.
 
 ## Decisiones transversales
 
