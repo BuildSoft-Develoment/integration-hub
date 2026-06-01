@@ -17,7 +17,7 @@ Matriz viva RF -> API -> BD -> Codigo -> Test, detalle del rollup global en
 |---|---|---|---|---|---|---|---|---|---|
 | RF-001 | - | - | - | POST /api/process-definitions | process_definition | ProcessCatalogService | - | Implementado | tdd-evidence.md |
 | RF-002 | - | - | - | - | process_definition | ProcessSchedulerService | - | Implementado | tdd-evidence.md |
-| RF-003 | - | - | - | GET /api/process-schedules | process_definition | ProcessScheduleQueryService | - | Implementado | tdd-evidence.md |
+| RF-003 | - | - | - | GET /api/process-schedules | process_definition | ProcessScheduleQueryService | ProcessScheduleQueryServiceTest | Implementado | tdd-evidence.md |
 | RF-004 | - | - | - | - | process_definition | ProcessSchedulerService | - | Implementado | tdd-evidence.md |
 
 ## Gates

@@ -16,7 +16,7 @@ Matriz viva RF -> API -> BD -> Codigo -> Test de la feature, detalle del rollup 
 |---|---|---|---|---|---|---|---|---|---|
 | RF-001 | - | - | - | POST /api/connection-definitions | connection_definition | ConnectionCatalogService | - | Implementado | tdd-evidence.md |
 | RF-002 | - | - | - | POST /api/connection-definitions/test | connection_definition | ConnectionDefinitionResource | - | Implementado | tdd-evidence.md |
-| RF-003 | - | - | - | POST /api/connection-definitions | connection_definition | ConnectionApiMapper | - | Implementado | tdd-evidence.md |
+| RF-003 | - | - | - | POST /api/connection-definitions | connection_definition | ConnectionApiMapper | ConnectionApiMapperTest | Implementado | tdd-evidence.md |
 | RF-004 | - | - | - | GET /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/tables | connection_definition | ConnectionMetadataService | - | Implementado | tdd-evidence.md |
 | RF-005 | - | - | - | GET /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/procedures | connection_definition | ConnectionMetadataService | - | Implementado | tdd-evidence.md |
 
