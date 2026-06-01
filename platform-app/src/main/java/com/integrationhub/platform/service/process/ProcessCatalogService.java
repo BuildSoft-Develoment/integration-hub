@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
+// @trace RF-001 (reingenieria: clase que implementa el/los RF en produccion)
 @ApplicationScoped
 public class ProcessCatalogService {
 

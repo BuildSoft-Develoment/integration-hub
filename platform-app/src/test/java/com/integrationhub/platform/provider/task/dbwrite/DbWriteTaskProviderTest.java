@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Testcontainers
+// @covers RF-002 (reingenieria: prueba que cubre el/los RF en produccion)
 class DbWriteTaskProviderTest {
 
     @Container

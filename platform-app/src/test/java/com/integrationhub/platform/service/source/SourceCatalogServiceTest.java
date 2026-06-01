@@ -27,6 +27,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+// @covers RF-001, RF-002 (reingenieria: prueba que cubre el/los RF en produccion)
 class SourceCatalogServiceTest {
 
     @AfterEach

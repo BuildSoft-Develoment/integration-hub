@@ -6457,7 +6457,10 @@ function diffSince(root, db, ref) {
 
 // S3.1 harvest-trace: escanea source code por @trace/@implements/@covers y
 // emite trace_links de tipo source con confianza 0.8 (inferido).
-const HARVEST_SOURCE_DIRS = ["src", "backend", "frontend", "tests"];
+// Debe mantenerse en sintonia con SOURCE_SEARCH_DIRS (drift-checker): los proyectos
+// monoliticos Maven/Gradle ubican el codigo en un modulo (p.ej. platform-app/), no en
+// src/ raiz. Sin platform-app el harvest escanea dirs vacios y cosecha 0 @trace.
+const HARVEST_SOURCE_DIRS = ["src", "backend", "frontend", "tests", "platform-app"];
 const HARVEST_EXTENSIONS = new Set([
   ".ts", ".tsx", ".js", ".mjs", ".cjs",
   ".java", ".kt",
@@ -6498,7 +6501,10 @@ function harvestTraceFromSource(root, db) {
     )
     VALUES ('source', ?, ?, ?, ?, ?, ?, 'implemented', 'source-harvest', ?, 'documented')
   `);
-  const tagRe = /@(trace|implements|covers|fixes)\s+(RF-\d+|RNF-\d+|HU-\d+|ADR-\d+)/gi;
+  // Captura la palabra clave + UNA LISTA de codigos separados por coma:
+  //   `@trace RF-001` y tambien `@trace RF-001, RF-002, RF-003`.
+  // El grupo 2 es la lista completa; abajo se separa y se emite un link por codigo.
+  const tagRe = /@(trace|implements|covers|fixes)\s+((?:RF-\d+|RNF-\d+|HU-\d+|ADR-\d+)(?:\s*,\s*(?:RF-\d+|RNF-\d+|HU-\d+|ADR-\d+))*)/gi;
   let count = 0;
   db.exec("BEGIN");
   try {
@@ -6508,7 +6514,8 @@ function harvestTraceFromSource(root, db) {
       let m;
       while ((m = tagRe.exec(text)) !== null) {
         const tag = m[1].toLowerCase();
-        const target = m[2].toUpperCase();
+        const targets = m[2].toUpperCase().split(",").map((s) => s.trim()).filter(Boolean);
+        for (const target of targets) {
         const relation =
           tag === "trace"
             ? "trazado-en"
@@ -6532,6 +6539,7 @@ function harvestTraceFromSource(root, db) {
         const evidenceRef = `${rel}:${line} @${tag} ${target}`;
         insert.run(rel, targetType, target, relation, 0.8, evidenceRef, rel);
         count += 1;
+        }
       }
     }
     db.exec("COMMIT");

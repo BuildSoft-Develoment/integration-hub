@@ -14,6 +14,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+// @covers RF-001, RF-005 (reingenieria: prueba que cubre el/los RF en produccion)
 class CsvReaderProviderTest {
 
     private final CsvReaderProvider provider = new CsvReaderProvider();

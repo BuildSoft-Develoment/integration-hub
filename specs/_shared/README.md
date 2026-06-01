@@ -47,7 +47,7 @@ La ruta `href`/`src` sube dos niveles desde el `index.html` de la feature
 | `mock-api.js` | `MockApi` | API simulada de bajo nivel: latencia, inyección de error, CRUD en memoria. **No** trae datos de dominio. |
 | `app-state.js` | `AppState` | Estado/sesión en localStorage (sobrevive `target=_blank`), pub/sub cross-tab. |
 | `ui.js` | `UI` | Primitivas transversales: toast, modal, skeleton/empty/error, formateadores. **No** define layout de dominio. |
-| `nav.js` | `SharedNav` | Sidebar/menu COMPARTIDO + cross-link + navegacion CON contexto + breadcrumb "volver" + guards por rol + badges + responsive. `SharedNav.mount('#spdd-nav', { active:'<slug>', brand })`. Helper de navegacion (permitido), no un app-shell. |
+| `nav.js` | `SharedNav` | Sidebar/menu COMPARTIDO + cross-link + navegacion CON contexto + breadcrumb "volver" + guards por rol + badges + responsive. `SharedNav.mount('#spdd-nav', { active: currentFeatureSlug, brand })`. Helper de navegacion (permitido), no un app-shell. |
 | `nav-items.js` | `SPDD_NAV_ITEMS` | Manifiesto UNICO de la lista de features del sidebar (slug/label/icon + opcional `roles`/`badge`). `scaffold:prototype --mode portfolio-spa` lo actualiza solo. |
 | `seed.js` | `SharedSeed` | Datos COMUNES cross-spec (opcional): entidades que varias features comparten (ej. "miembro") para que se vean consistentes. `SharedSeed.register/get/resource`. Vacio por defecto. |
 

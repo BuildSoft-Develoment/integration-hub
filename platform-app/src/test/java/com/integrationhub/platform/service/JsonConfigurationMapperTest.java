@@ -20,6 +20,7 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+// @covers RF-003 (reingenieria: prueba que cubre el/los RF en produccion)
 class JsonConfigurationMapperTest {
 
     private final JsonConfigurationMapper mapper = mapper();
