@@ -1,5 +1,7 @@
 package com.integrationhub.platform.service.connection;
 
+// @trace RF-004, RF-005 (reingenieria: clase que implementa el/los RF en produccion)
+
 import com.integrationhub.platform.api.response.connection.ConnectionColumnResponse;
 import com.integrationhub.platform.api.response.connection.ConnectionRoutineParameterResponse;
 import com.integrationhub.platform.api.response.connection.ConnectionRoutineResponse;

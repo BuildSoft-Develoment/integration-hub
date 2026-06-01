@@ -1,5 +1,7 @@
 package com.integrationhub.platform.api.resource.connection;
 
+// @trace RF-002 (reingenieria: clase que implementa el/los RF en produccion)
+
 import com.integrationhub.platform.api.mapper.connection.ConnectionApiMapper;
 import com.integrationhub.platform.api.request.connection.ConnectionDefinitionRequest;
 import com.integrationhub.platform.api.response.connection.ConnectionColumnResponse;
