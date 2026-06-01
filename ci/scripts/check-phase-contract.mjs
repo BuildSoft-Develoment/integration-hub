@@ -20,7 +20,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { listIncludedFeatures } from "./_lib/feature-filter.mjs";
+import { listIncludedFeatures, isReengineering } from "./_lib/feature-filter.mjs";
 import { getPhaseContract } from "./_lib/phase-contracts.mjs";
 import { resolveStrict } from "./_lib/strict-mode.mjs";
 
@@ -38,7 +38,11 @@ for (const slug of features) {
   const text = readFileSync(tracePath, "utf8");
 
   // Inferir fase actual desde gates approved.
-  let phase = 2; // default fase UX/UI (donde una feature recien creada vive)
+  // Reingenieria (origin: reingenieria): la Fase 2 (UX/UI · prototipo · SPDD) NO
+  // aplica (el producto ya esta construido). El piso es Fase 4 (SDD), no Fase 2,
+  // para no exigir prototype.md/prototype-validation.md que esas features no tienen.
+  const reengineering = isReengineering(slug, join(root, "specs"));
+  let phase = reengineering ? 4 : 2; // default UX/UI para nuevo; SDD para reingenieria
   if (/gate-operations-ready[^\n]*approved/i.test(text)) phase = 8;
   else if (/gate-deploy-ready[^\n]*approved/i.test(text)) phase = 7;
   else if (/gate-qa-passed[^\n]*approved/i.test(text)) phase = 6;
