@@ -5,7 +5,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [HU-05 Administrar conexiones](HU-05-administrar-conexiones.md)
-- Siguiente: [Matriz de huecos de fase 1](../01.01-matriz-huecos-fase-1.md)
+- Siguiente: [HU-07 Administrar tema del sistema](HU-07-administrar-tema-del-sistema.md)
 <!-- nav-guided:end -->
 
 ## Como

@@ -6,7 +6,7 @@ info:
     Este archivo es generado automaticamente desde los api-contract.md
     de cada specs/<feature>/. NO editar a mano — perdera los cambios al
     proximo `npm run generate:openapi`.
-    Features fuente: 001-catalogo-fuentes, 002-catalogo-readers, 003-diseno-y-ejecucion-procesos, 004-observabilidad-y-auditoria, 005-catalogo-conexiones, 006-programacion-procesos
+    Features fuente: 001-catalogo-fuentes, 002-catalogo-readers, 003-diseno-y-ejecucion-procesos, 004-observabilidad-y-auditoria, 005-catalogo-conexiones, 006-programacion-procesos, 007-tema-del-sistema
 servers:
   - url: /
 paths:
@@ -310,6 +310,27 @@ paths:
         '200':
           description: OK
       x-source-feature: "006-programacion-procesos"
+  /api/system/theme:
+    get:
+      summary: Obtiene la configuracion de tema del sistema
+      operationId: getSystemTheme
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "007-tema-del-sistema"
+    put:
+      summary: Actualiza la configuracion de tema del sistema
+      operationId: updateSystemTheme
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SystemThemeSetting"
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "007-tema-del-sistema"
 
 components:
   schemas:
@@ -434,3 +455,24 @@ components:
         lastRunAt:
           type: string
           format: date-time
+    SystemThemeSetting:
+      type: object
+      required:
+        - scheme
+      properties:
+        scheme:
+          type: string
+        preset:
+          type: string
+        density:
+          type: string
+        primaryColor:
+          type: string
+        errorColor:
+          type: string
+        neutralColor:
+          type: string
+        locale:
+          type: string
+        sidebarMode:
+          type: string

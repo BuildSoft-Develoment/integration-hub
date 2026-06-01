@@ -4,7 +4,7 @@
 
 <!-- nav-guided:start -->
 ## Navegacion guiada
-- Anterior: [UC-06 Programar proceso](../casos-de-uso/UC-06-programar-proceso.md)
+- Anterior: [UC-07 Configurar tema del sistema](../casos-de-uso/UC-07-configurar-tema.md)
 - Siguiente: [HU-02 Configurar readers](HU-02-configurar-readers.md)
 <!-- nav-guided:end -->
 

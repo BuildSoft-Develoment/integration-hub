@@ -55,6 +55,9 @@
 | 006-programacion-procesos | RF-002 | funcional 4 (scheduler) | Programar procesos | - | process_definition | ProcessSchedulerService | - | Implementado | specs/006-programacion-procesos/tdd-evidence.md |
 | 006-programacion-procesos | RF-003 | funcional 4 (consultar programaciones) | Programar procesos | GET /api/process-schedules | process_definition | ProcessScheduleQueryService | - | Implementado | specs/006-programacion-procesos/tdd-evidence.md |
 | 006-programacion-procesos | RF-004 | no funcional 3 (robustez scheduler) | Programar procesos | - | process_definition | ProcessSchedulerService | - | Implementado | specs/006-programacion-procesos/tdd-evidence.md |
+| 007-tema-del-sistema | RF-001 | funcional 10 (tema/consola) | Administrar tema del sistema | GET /api/system/theme | system_theme_setting | SystemThemeSettingService | - | Implementado | specs/007-tema-del-sistema/tdd-evidence.md |
+| 007-tema-del-sistema | RF-002 | funcional 10 (tema/consola) | Administrar tema del sistema | PUT /api/system/theme | system_theme_setting | SystemThemeSettingResource | - | Implementado | specs/007-tema-del-sistema/tdd-evidence.md |
+| 007-tema-del-sistema | RF-003 | funcional 10 (tema/consola) | Administrar tema del sistema | PUT /api/system/theme | system_theme_setting | SystemThemeSettingApiMapper | - | Implementado | specs/007-tema-del-sistema/tdd-evidence.md |
 
 Reglas:
 - Una fila por requerimiento por feature, agrupadas por feature.
@@ -67,7 +70,7 @@ Reglas:
 
 ## Estado de gates por feature
 
-> Las seis features estan declaradas con `origin: reingenieria` en su
+> Las siete features estan declaradas con `origin: reingenieria` en su
 > `spec-funcional.md` (codigo ya construido y operativo). Por la metodologia
 > (CONSTITUTION.md, Principio 4 — excepcion de reingenieria), la **Fase 2 (UX/UI ·
 > prototipo · SPDD) no aplica**, por lo que el `gate-spdd-approved` queda **n/a**. El
@@ -82,10 +85,11 @@ Reglas:
 | 004-observabilidad-y-auditoria | gate-spdd-approved | n/a (reingenieria) | specs/004-observabilidad-y-auditoria/spec-funcional.md (origin: reingenieria) |
 | 005-catalogo-conexiones | gate-spdd-approved | n/a (reingenieria) | specs/005-catalogo-conexiones/spec-funcional.md (origin: reingenieria) |
 | 006-programacion-procesos | gate-spdd-approved | n/a (reingenieria) | specs/006-programacion-procesos/spec-funcional.md (origin: reingenieria) |
+| 007-tema-del-sistema | gate-spdd-approved | n/a (reingenieria) | specs/007-tema-del-sistema/spec-funcional.md (origin: reingenieria) |
 
 ## Requerimientos sin implementacion
 
-- Ninguno: las seis features tienen codigo asociado en produccion. Pendiente: captura formal de
+- Ninguno: las siete features tienen codigo asociado en produccion. Pendiente: captura formal de
   evidencia RED-GREEN (estado `pending` en cada `tdd-evidence.md`) y, en 005/006, cobertura de
   pruebas dedicada (`Test = -`); ambas son tareas de validacion, no de implementacion.
 
