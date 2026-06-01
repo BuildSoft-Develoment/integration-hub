@@ -4,7 +4,7 @@
 
 <!-- nav-guided:start -->
 ## Navegacion guiada
-- Anterior: [UC-04 Monitorear y reprocesar ejecucion](../casos-de-uso/UC-04-monitorear-y-reprocesar-ejecucion.md)
+- Anterior: [UC-06 Programar proceso](../casos-de-uso/UC-06-programar-proceso.md)
 - Siguiente: [HU-02 Configurar readers](HU-02-configurar-readers.md)
 <!-- nav-guided:end -->
 
