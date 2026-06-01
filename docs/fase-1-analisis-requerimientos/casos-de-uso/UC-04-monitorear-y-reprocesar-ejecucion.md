@@ -5,7 +5,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [UC-03 Definir y ejecutar proceso](UC-03-definir-y-ejecutar-proceso.md)
-- Siguiente: [HU-01 Administrar fuentes](../historias-usuario/HU-01-administrar-fuentes.md)
+- Siguiente: [UC-05 Configurar conexion](UC-05-configurar-conexion.md)
 <!-- nav-guided:end -->
 
 ## Actor principal

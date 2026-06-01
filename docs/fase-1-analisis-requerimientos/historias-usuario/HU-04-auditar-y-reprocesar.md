@@ -5,7 +5,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [HU-03 Disenar y ejecutar procesos](HU-03-disenar-y-ejecutar-procesos.md)
-- Siguiente: [Matriz de huecos de fase 1](../01.01-matriz-huecos-fase-1.md)
+- Siguiente: [HU-05 Administrar conexiones](HU-05-administrar-conexiones.md)
 <!-- nav-guided:end -->
 
 ## Como
