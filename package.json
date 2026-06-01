@@ -99,6 +99,8 @@
     "check:all": "npm run check:template && npm run check:project",
     "check:all:trace": "node scripts/check-all-trace.mjs",
     "validate": "node scripts/validate.mjs",
+    "test:stack": "mvn -pl platform-app test",
+    "test:smoke": "mvn -q -pl platform-app test -Dtest=*ApiMapperTest",
     "project:clarify": "node scripts/project-clarify.mjs",
     "project:analyze": "node scripts/project-analyze.mjs",
     "project:checklist": "node scripts/project-checklist.mjs",
