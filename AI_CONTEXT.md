@@ -20,7 +20,7 @@ v0.4.0
 - Resumen en una linea: plataforma Quarkus operativa (194 archivos Java) con motor de ejecucion de tareas multi-provider (REST, DB_WRITE, DB_EXECUTE_SP, DB_EXECUTE_FN, NOTIFICATION) sobre fuentes filesystem/ftp/sftp/rest y readers txt/csv/xls/xlsx/json/xml; se esta instanciando la capa de gobernanza (memoria viva, trazabilidad RF->codigo->test, gates con firma humana) sin perder lo que ya corre.
 - Ultima actualizacion (auto):
 <!-- auto:start name=ultima-actualizacion -->
-2026-06-01 02:27
+2026-06-01 03:54
 <!-- auto:end -->
 
 ## Features y su estado
@@ -36,6 +36,7 @@ Features base bajo SDD en `specs/`. La siguiente tabla la regenera
 | 004-observabilidad-y-auditoria | Bloqueado: gate-prototype-ready | gate-prototype-ready=pending; gate-qa-passed=pending; gate-sdd-approved=pending; gate-spdd-approved=n/a (reingenieria) |
 | 005-catalogo-conexiones | Bloqueado: gate-qa-passed | gate-qa-passed=pending; gate-sdd-approved=pending; gate-spdd-approved=n/a (reingenieria) |
 | 006-programacion-procesos | Bloqueado: gate-qa-passed | gate-qa-passed=pending; gate-sdd-approved=pending; gate-spdd-approved=n/a (reingenieria) |
+| 007-tema-del-sistema | Bloqueado: gate-qa-passed | gate-qa-passed=pending; gate-sdd-approved=pending; gate-spdd-approved=n/a (reingenieria) |
 <!-- auto:end -->
 
 ## Gates pendientes
@@ -62,6 +63,9 @@ Features base bajo SDD en `specs/`. La siguiente tabla la regenera
 - `gate-qa-passed` en `specs/006-programacion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-05-31)
 - `gate-sdd-approved` en `specs/006-programacion-procesos` — pending (ultimo: Natan Angel Davila Lopez, 2026-05-31)
 - `gate-spdd-approved` en `specs/006-programacion-procesos` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-05-31)
+- `gate-qa-passed` en `specs/007-tema-del-sistema` — pending
+- `gate-sdd-approved` en `specs/007-tema-del-sistema` — pending
+- `gate-spdd-approved` en `specs/007-tema-del-sistema` — n/a (reingenieria) (ultimo: Natan Angel Davila Lopez, 2026-05-31)
 <!-- auto:end -->
 
 ## Sesiones recientes

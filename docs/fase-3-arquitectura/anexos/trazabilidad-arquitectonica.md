@@ -24,6 +24,7 @@ Relacionar casos de uso principales con frontend, backend, servicios y persisten
 | UC-05 Ejecutar proceso programado | `schedules` | `ProcessSchedulerService` | `ProcessExecutionService`, `Process Engine`, `AuditService`, `ProcessedSourceFileService` | `ProcessDefinitionRepository`, `ProcessExecutionRepository`, `ProcessTaskExecutionRepository`, `AuditEventRepository`, `ProcessedSourceFileRepository` |
 | UC-06 Consultar ejecuciones | `executions` | `ExecutionQueryResource` | `ExecutionQueryService` | `ProcessExecutionRepository`, `ProcessTaskExecutionRepository`, `ProcessedSourceFileRepository` |
 | UC-07 Consultar auditoria | `audit` | `ExecutionQueryResource` | `ExecutionQueryService`, `AuditService` | `AuditEventRepository`, `ProcessedSourceFileRepository` |
+| UC-07 Configurar tema del sistema | `core/services` (theme) + `app-theme-action` | `SystemThemeSettingResource` | `SystemThemeSettingService` | `SystemThemeSettingRepository`, `PostgreSQL` |
 | UC-08 Administrar acceso | `frontend` protegido | recursos protegidos | `Keycloak` | `Keycloak` |
 | UC-09 Operacion por ambiente | `overview`, `executions`, `audit` | health, metrics y runtime | despliegue y operacion | `PostgreSQL`, `Keycloak`, observabilidad |
 

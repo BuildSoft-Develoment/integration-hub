@@ -5,7 +5,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [UC-05 Configurar conexion](UC-05-configurar-conexion.md)
-- Siguiente: [HU-01 Administrar fuentes](../historias-usuario/HU-01-administrar-fuentes.md)
+- Siguiente: [UC-07 Configurar tema del sistema](UC-07-configurar-tema.md)
 <!-- nav-guided:end -->
 
 ## Actor principal

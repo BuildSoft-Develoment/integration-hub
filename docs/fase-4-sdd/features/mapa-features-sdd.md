@@ -22,6 +22,7 @@ Dar una vista consolidada de las features que hoy estructuran `SDD` dentro del p
 | `004` | observabilidad y auditoria | ejecuciones, trazabilidad, overview y auditoria | funcional, tecnica, tareas |
 | `005` | catalogo de conexiones | conexiones `ORACLE`/`POSTGRESQL`/`SQLSERVER`/`MYSQL`/`MONGODB` + metadata JDBC | funcional, tecnica, tareas |
 | `006` | programacion de procesos | scheduling (`scheduled`/`schedule_every`) y consulta de programaciones | funcional, tecnica, tareas |
+| `007` | tema del sistema | apariencia/tema, idioma y sidebar de la consola (singleton `system_theme_setting`) | funcional, tecnica, tareas |
 
 > Todas las features estan en modo `origin: reingenieria` (codigo ya construido): la Fase 2
 > (prototipo/SPDD) no aplica; el resto del set canonico (incl. `api-contract`, `traceability`,
