@@ -17,13 +17,20 @@
 ## Modelo de datos
 
 La programacion NO es una entidad separada: vive como columnas de `process_definition`
-(documentada en `specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md`), agregadas por Flyway
-`V2__process_schedule.sql`:
+(tabla base documentada en `specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md`), agregadas
+por Flyway `V2__process_schedule.sql`.
 
-- `scheduled` (boolean, default false) — indica si el proceso esta programado.
-- `schedule_every` (varchar(40)) — frecuencia/cadencia de disparo.
-- `next_run_at` (timestamp, nullable) — proximo disparo calculado.
-- `last_run_at` (timestamp, nullable) — ultimo disparo efectuado.
+Tabla `process_definition` (columnas de programacion, `V2`):
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | bigserial | PK (definida en `V1`) |
+| `scheduled` | boolean | default false; indica si el proceso esta programado |
+| `schedule_every` | varchar(40) | frecuencia/cadencia de disparo |
+| `next_run_at` | timestamp | proximo disparo calculado (nullable) |
+| `last_run_at` | timestamp | ultimo disparo efectuado (nullable) |
+
+Indices: PK en `id` (las columnas de programacion no agregan indices propios).
 
 El disparo programado genera un `process_execution` con `trigger_source = scheduler`
 (ver `V7__process_execution_retry_lineage.sql`), con la misma evidencia que la ejecucion manual.
