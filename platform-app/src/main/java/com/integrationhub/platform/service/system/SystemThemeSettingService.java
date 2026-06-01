@@ -1,5 +1,7 @@
 package com.integrationhub.platform.service.system;
 
+// @trace RF-001 (reingenieria: clase que implementa el/los RF en produccion)
+
 import com.integrationhub.platform.api.mapper.system.SystemThemeSettingApiMapper;
 import com.integrationhub.platform.api.request.system.SystemThemeSettingRequest;
 import com.integrationhub.platform.api.response.system.SystemThemeSettingResponse;
