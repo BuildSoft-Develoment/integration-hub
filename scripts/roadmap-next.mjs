@@ -56,7 +56,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve, join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { listIncludedFeatures } from "../ci/scripts/_lib/feature-filter.mjs";
+import { listIncludedFeatures, isReengineering } from "../ci/scripts/_lib/feature-filter.mjs";
 import { getPhaseContract, getTouchPolicy, getAgentProfile, getDefinitionOfDone, getTransitionRequest } from "../ci/scripts/_lib/phase-contracts.mjs";
 import { computePrototypeState } from "../ci/scripts/_lib/prototype-state.mjs";
 import { activeLockOwner } from "../ci/scripts/_lib/agent-locks.mjs";
@@ -174,8 +174,13 @@ function enrichFeatures() {
         }
       }
     }
+    // v12.139: reingenieria exime la Fase 2 (prototipo/SPDD). El set requerido omite
+    // los 4 artefactos de Fase 2 y la fase efectiva arranca en SDD (4), no en 2.
+    const reengineering = isReengineering(slug, join(root, "specs"));
+    const BASE_REQUIRED = ["spec-funcional.md", "spec-tecnica.md", "traceability.md", "api-contract.md", "ui-test-cases.md"];
+    const FASE2_REQUIRED = ["prototype.md", "prototype-validation.md", "product-design.md", "spdd-frontend.md"];
     const missing = [];
-    const REQUIRED = ["spec-funcional.md", "spec-tecnica.md", "traceability.md", "prototype.md", "prototype-validation.md", "product-design.md", "spdd-frontend.md", "api-contract.md", "ui-test-cases.md"];
+    const REQUIRED = reengineering ? BASE_REQUIRED : [...BASE_REQUIRED, ...FASE2_REQUIRED];
     for (const r of REQUIRED) {
       if (!existsSync(join(root, "specs", slug, r))) missing.push(r);
     }
@@ -183,7 +188,7 @@ function enrichFeatures() {
     // v12.62: estado visual del prototipo (ladder de 5 peldaños).
     const protoState = computePrototypeState(root, slug);
     // Inferir fase + readiness.
-    let phase = 2;
+    let phase = reengineering ? 4 : 2;
     if (gates["gate-sdd-approved"] === "approved") phase = 4;
     if (gates["gate-build-ready"] === "approved") phase = 5;
     if (gates["gate-qa-passed"] === "approved") phase = 6;

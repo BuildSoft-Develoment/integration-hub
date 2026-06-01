@@ -14,8 +14,8 @@ Matriz viva RF -> API -> BD -> Codigo -> Test, detalle del rollup global en
 
 | RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia |
 |---|---|---|---|---|---|---|---|---|---|
-| RF-001 | - | - | - | GET /api/system/theme | system_theme_setting | SystemThemeSettingService | - | Implementado | tdd-evidence.md |
-| RF-002 | - | - | - | PUT /api/system/theme | system_theme_setting | SystemThemeSettingResource | - | Implementado | tdd-evidence.md |
+| RF-001 | - | - | - | GET /api/system/theme | system_theme_setting | SystemThemeSettingService | SystemThemeSettingServiceTest | Implementado | tdd-evidence.md |
+| RF-002 | - | - | - | PUT /api/system/theme | system_theme_setting | SystemThemeSettingResource | SystemThemeSettingServiceTest | Implementado | tdd-evidence.md |
 | RF-003 | - | - | - | PUT /api/system/theme | system_theme_setting | SystemThemeSettingApiMapper | SystemThemeSettingApiMapperTest | Implementado | tdd-evidence.md |
 
 ## Gates
