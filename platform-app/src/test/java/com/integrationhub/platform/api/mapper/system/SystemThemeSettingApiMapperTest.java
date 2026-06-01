@@ -1,6 +1,5 @@
 package com.integrationhub.platform.api.mapper.system;
 
-import com.integrationhub.platform.api.response.system.SystemThemeSettingResponse;
 import com.integrationhub.platform.entity.SystemThemeSetting;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +11,7 @@ class SystemThemeSettingApiMapperTest {
 
     @Test
     void toResponseMapsAllFields() {
-        SystemThemeSetting setting = new SystemThemeSetting();
+        var setting = new SystemThemeSetting();
         setting.id = 1L;
         setting.scheme = "dark";
         setting.preset = "default";
@@ -23,7 +22,7 @@ class SystemThemeSettingApiMapperTest {
         setting.errorColor = "#C62828";
         setting.neutralColor = "#455A64";
 
-        SystemThemeSettingResponse response = mapper.toResponse(setting);
+        var response = mapper.toResponse(setting);
 
         assertEquals("dark", response.scheme());
         assertEquals("default", response.preset());

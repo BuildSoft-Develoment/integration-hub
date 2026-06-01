@@ -18,17 +18,16 @@ class ProcessScheduleQueryServiceTest {
 
     @Test
     void listScheduledMapsRepositoryResults() {
-        ProcessDefinitionRepository repository = mock(ProcessDefinitionRepository.class);
-        ProcessDefinitionApiMapper apiMapper = mock(ProcessDefinitionApiMapper.class);
+        var repository = mock(ProcessDefinitionRepository.class);
+        var apiMapper = mock(ProcessDefinitionApiMapper.class);
 
-        ProcessDefinition definition = new ProcessDefinition();
-        ProcessScheduleResponse expected = new ProcessScheduleResponse(
+        var definition = new ProcessDefinition();
+        var expected = new ProcessScheduleResponse(
                 1L, "carga-diaria", "carga nocturna", true, true, "0 0 2 * * ?", null, null);
         when(repository.listScheduled()).thenReturn(List.of(definition));
         when(apiMapper.toScheduleResponse(definition)).thenReturn(expected);
 
-        List<ProcessScheduleResponse> result =
-                new ProcessScheduleQueryService(repository, apiMapper).listScheduled();
+        var result = new ProcessScheduleQueryService(repository, apiMapper).listScheduled();
 
         assertEquals(1, result.size());
         assertSame(expected, result.get(0));
@@ -37,12 +36,11 @@ class ProcessScheduleQueryServiceTest {
 
     @Test
     void listScheduledReturnsEmptyWhenNoneScheduled() {
-        ProcessDefinitionRepository repository = mock(ProcessDefinitionRepository.class);
-        ProcessDefinitionApiMapper apiMapper = mock(ProcessDefinitionApiMapper.class);
+        var repository = mock(ProcessDefinitionRepository.class);
+        var apiMapper = mock(ProcessDefinitionApiMapper.class);
         when(repository.listScheduled()).thenReturn(List.of());
 
-        List<ProcessScheduleResponse> result =
-                new ProcessScheduleQueryService(repository, apiMapper).listScheduled();
+        var result = new ProcessScheduleQueryService(repository, apiMapper).listScheduled();
 
         assertEquals(0, result.size());
     }

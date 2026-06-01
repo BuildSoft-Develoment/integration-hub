@@ -1,0 +1,75 @@
+package com.integrationhub.platform.service.system;
+
+import com.integrationhub.platform.api.mapper.system.SystemThemeSettingApiMapper;
+import com.integrationhub.platform.api.request.system.SystemThemeSettingRequest;
+import com.integrationhub.platform.entity.SystemThemeSetting;
+import com.integrationhub.platform.repository.SystemThemeSettingRepository;
+import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class SystemThemeSettingServiceTest {
+
+    private final SystemThemeSettingApiMapper apiMapper = new SystemThemeSettingApiMapper();
+
+    @Test
+    void getCreatesDefaultSingletonWhenAbsent() {
+        var repository = mock(SystemThemeSettingRepository.class);
+        when(repository.findSingleton()).thenReturn(null);
+
+        var service = new SystemThemeSettingService(repository, apiMapper);
+        var response = service.get();
+
+        assertEquals("light", response.scheme());
+        assertEquals("horizon", response.preset());
+        assertEquals("es", response.locale());
+        verify(repository).persist(any(SystemThemeSetting.class));
+    }
+
+    @Test
+    void getReturnsExistingSingleton() {
+        var repository = mock(SystemThemeSettingRepository.class);
+        var existing = new SystemThemeSetting();
+        existing.id = 1L;
+        existing.scheme = "dark";
+        existing.preset = "horizon";
+        existing.density = "compact";
+        existing.locale = "en";
+        existing.sidebarMode = "collapsed";
+        existing.primaryColor = "#111111";
+        existing.errorColor = "#222222";
+        existing.neutralColor = "#333333";
+        when(repository.findSingleton()).thenReturn(existing);
+
+        var response = new SystemThemeSettingService(repository, apiMapper).get();
+
+        assertEquals("dark", response.scheme());
+        assertEquals("en", response.locale());
+        assertEquals("collapsed", response.sidebarMode());
+    }
+
+    @Test
+    void updateNormalizesBlankValuesToDefaults() {
+        var repository = mock(SystemThemeSettingRepository.class);
+        var existing = new SystemThemeSetting();
+        existing.id = 1L;
+        when(repository.findSingleton()).thenReturn(existing);
+
+        var request = new SystemThemeSettingRequest(
+                "dark", "  ", null, "en", "", "#AAA", null, "  ");
+        var response = new SystemThemeSettingService(repository, apiMapper).update(request);
+
+        // Valores provistos se respetan; blancos/nulos caen a default.
+        assertEquals("dark", response.scheme());
+        assertEquals("horizon", response.preset());      // "  " -> default
+        assertEquals("comfortable", response.density());  // null -> default
+        assertEquals("en", response.locale());
+        assertEquals("expanded", response.sidebarMode()); // "" -> default
+        assertEquals("#AAA", response.primary());
+        assertEquals("#E5484D", response.error());        // null -> default
+    }
+}

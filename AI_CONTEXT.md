@@ -20,7 +20,7 @@ v0.4.0
 - Resumen en una linea: plataforma Quarkus operativa (194 archivos Java) con motor de ejecucion de tareas multi-provider (REST, DB_WRITE, DB_EXECUTE_SP, DB_EXECUTE_FN, NOTIFICATION) sobre fuentes filesystem/ftp/sftp/rest y readers txt/csv/xls/xlsx/json/xml; se esta instanciando la capa de gobernanza (memoria viva, trazabilidad RF->codigo->test, gates con firma humana) sin perder lo que ya corre.
 - Ultima actualizacion (auto):
 <!-- auto:start name=ultima-actualizacion -->
-2026-06-01 04:29
+2026-06-01 07:12
 <!-- auto:end -->
 
 ## Features y su estado
