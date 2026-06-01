@@ -1566,7 +1566,11 @@ function syncMemory(root, db) {
     // Tablas derivadas: se reconstruyen completas en cada sync.
     db.exec("DELETE FROM ai_evidence_items");
     db.exec("DELETE FROM ai_gate_runs");
-    db.exec("DELETE FROM ai_trace_links");
+    // v12.139: preservar los links de @trace cosechados del codigo (origin='source-harvest').
+    // sync reconstruye los links de MATRIZ (desde .md), pero los @trace vienen del CODIGO
+    // (otra fuente de verdad) y los gestiona `harvest-trace` con su propio delete+repoblado.
+    // Antes un `DELETE` total los borraba en cada sync (harvest->sync dejaba 0 links).
+    db.exec("DELETE FROM ai_trace_links WHERE COALESCE(origin,'') <> 'source-harvest'");
     db.exec("DELETE FROM ai_open_questions");
     db.exec("DELETE FROM ai_decisions");
     db.exec("DELETE FROM ai_session_events");

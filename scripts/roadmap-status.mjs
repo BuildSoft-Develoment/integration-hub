@@ -227,9 +227,16 @@ function analyzePhase4() {
 }
 
 function analyzePhase5() {
+  // v12.139: completitud por COBERTURA DE RF, no por ratio de archivos.
+  // La metodologia (90.35) exige @trace en las clases que IMPLEMENTAN RFs
+  // (services/resources/mappers/providers), NO en cada archivo (DTOs, enums,
+  // records, config, entidades no llevan @trace). Exigir 373/373 nunca completa.
+  // Criterio correcto: cada RF con `Codigo` declarado en su matriz tiene >=1
+  // @trace en codigo. Se escanea el codigo fuente (independiente de la BD).
   const srcDirs = ["src", "backend", "frontend", "platform-app"];
   let codeFiles = 0;
-  let withTrace = 0;
+  const tracedCodes = new Set();
+  const tagRe = /@(?:trace|covers|implements)\s+((?:RF-\d+|RNF-\d+|HU-\d+)(?:\s*,\s*(?:RF-\d+|RNF-\d+|HU-\d+))*)/gi;
   for (const d of srcDirs) {
     const abs = join(root, d);
     if (!existsSync(abs)) continue;
@@ -238,12 +245,44 @@ function analyzePhase5() {
     for (const f of files) {
       try {
         const t = readFileSync(f, "utf8");
-        if (/@(trace|covers|implements)\s+(RF|RNF|HU)-\d+/i.test(t)) withTrace += 1;
+        let m;
+        while ((m = tagRe.exec(t)) !== null) {
+          for (const code of m[1].toUpperCase().split(",").map((s) => s.trim()).filter(Boolean)) {
+            tracedCodes.add(code);
+          }
+        }
       } catch {}
     }
   }
-  const status = codeFiles === 0 ? "not-started" : withTrace === codeFiles ? "complete" : "partial";
-  return { id: 5, name: "Construccion", status, detail: `${codeFiles} archivos codigo, ${withTrace} con @trace` };
+  if (codeFiles === 0) {
+    return { id: 5, name: "Construccion", status: "not-started", detail: "0 archivos de codigo" };
+  }
+
+  // RFs declarados CON codigo en las matrices (Codigo != '-').
+  const specsRoot = join(root, "specs");
+  const declared = [];
+  for (const slug of listIncludedFeatures(root)) {
+    const tp = join(specsRoot, slug, "traceability.md");
+    if (!existsSync(tp)) continue;
+    for (const line of readFileSync(tp, "utf8").split("\n")) {
+      const rfm = line.match(/^\|\s*(RF-\d+|RNF-\d+)\s*\|/i);
+      if (!rfm) continue;
+      const cells = line.split("|").map((c) => c.trim());
+      const codigo = (cells[7] || "").toLowerCase();
+      if (codigo && !["-", "—", "n/a", "na", "tbd", "pendiente"].includes(codigo)) {
+        declared.push(rfm[1].toUpperCase());
+      }
+    }
+  }
+  const totalRF = declared.length;
+  const tracedRF = declared.filter((rf) => tracedCodes.has(rf)).length;
+  let status;
+  if (totalRF === 0) status = "partial"; // hay codigo pero ninguna matriz declara Codigo aun
+  else status = tracedRF === totalRF ? "complete" : "partial";
+  const detail = totalRF === 0
+    ? `${codeFiles} archivos codigo (ninguna matriz declara Codigo)`
+    : `${tracedRF}/${totalRF} RF con @trace en codigo (${codeFiles} archivos)`;
+  return { id: 5, name: "Construccion", status, detail };
 }
 
 function analyzePhase6() {
