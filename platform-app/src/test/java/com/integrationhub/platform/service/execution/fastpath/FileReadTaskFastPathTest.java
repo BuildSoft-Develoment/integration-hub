@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
+// @covers RF-005 (reingenieria: prueba que cubre el/los RF en produccion)
 class FileReadTaskFastPathTest {
 
     @Test

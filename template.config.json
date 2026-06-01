@@ -1,0 +1,70 @@
+{
+  "$schema": "./scripts/schema/template.config.schema.json",
+  "project": {
+    "name": "Integration Hub",
+    "slug": "integration-hub",
+    "apiServiceName": "integration-hub-api",
+    "webComponentName": "integration-hub-web",
+    "apiResourceName": "process",
+    "apiResourcePlural": "processes",
+    "apiResourcePath": "/api/process-definitions",
+    "javaBasePackage": "com.integrationhub.platform",
+    "databaseName": "bdtrama",
+    "featureFlagPrefix": "integration-hub",
+    "backstageOwner": "team-integration-hub",
+    "backstageSystem": "integration-hub",
+    "databaseResourceName": "integration-hub-db",
+    "costCenter": "CC-100"
+  },
+  "github": {
+    "organization": "ndavilal88",
+    "repository": "integration-hub"
+  },
+  "support": {
+    "url": "https://github.com/ndavilal88/integration-hub/issues"
+  },
+  "runtime": {
+    "containerImage": "ghcr.io/ndavilal88/integration-hub-api"
+  },
+  "terraform": {
+    "stateBucket": "integration-hub-tfstate",
+    "lockTable": "integration-hub-tf-lock",
+    "devDomain": "dev.integration-hub.local",
+    "stagingDomain": "staging.integration-hub.local",
+    "prodDomain": "integration-hub.local"
+  },
+  "catalog": {
+    "portalUrl": "http://localhost:7007",
+    "apiUrl": "http://localhost:7007/api/catalog"
+  },
+  "auth": {
+    "oidcIssuer": "http://localhost:8180/realms/integration-hub",
+    "oidcJwksUrl": "http://localhost:8180/realms/integration-hub/protocol/openid-connect/certs",
+    "oidcAudience": "integration-hub-api",
+    "oidcRolesClaim": "roles"
+  },
+  "observability": {
+    "prometheusUrl": "http://localhost:9090",
+    "grafanaUrl": "http://localhost:3000",
+    "tempoUrl": "http://localhost:3200",
+    "lokiUrl": "http://localhost:3100",
+    "otelCollectorEndpoint": "localhost:4317"
+  },
+  "dr": {
+    "tier": "tier-3",
+    "rto": "24h",
+    "rpo": "24h",
+    "primaryRegion": "on-prem",
+    "secondaryRegion": "on-prem"
+  },
+  "secrets": {
+    "provider": "file-vault",
+    "kvPath": "secret/integration-hub",
+    "externalSecretsRefreshInterval": "1h"
+  },
+  "prototype": {
+    "golden_sim_threshold": 0.75,
+    "brand_hue": 222,
+    "brand_saturation": 55
+  }
+}

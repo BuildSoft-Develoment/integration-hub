@@ -12,6 +12,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+// @covers RF-001, RF-002 (reingenieria: prueba que cubre el/los RF en produccion)
 class SystemThemeSettingServiceTest {
 
     private final SystemThemeSettingApiMapper apiMapper = new SystemThemeSettingApiMapper();

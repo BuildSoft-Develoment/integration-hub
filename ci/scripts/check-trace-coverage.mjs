@@ -65,6 +65,25 @@ function phaseToNumber(phaseStr) {
   return null;
 }
 
+// v12.139: senal de construccion INDEPENDIENTE DEL LAYOUT. En proyectos
+// monoliticos (Maven/Gradle: codigo en platform-app/, no en src/<slug>/) y en
+// reingenieria, no existe src/<feature>/. Pero la metodologia (90.35) define que
+// la columna `Codigo` de la matriz es `-` ANTES de fase 5 y se llena al construir.
+// Por tanto: si la feature ya tiene links RF->codigo reales (cosechados de su
+// traceability.md), entro en construccion (fase >= 5) sea cual sea el layout.
+function hasBuiltCodeLinks(scope) {
+  const row = db
+    .prepare(
+      `SELECT COUNT(*) AS c FROM ai_trace_links
+       WHERE source_type IN ('RF', 'origen', 'requerimiento')
+         AND target_type = 'codigo'
+         AND link_status IN ('implemented', 'validated')
+         AND (source_file LIKE ? OR evidence_ref LIKE ?)`,
+    )
+    .get(`${scope}/%`, `%${scope}%`);
+  return (row?.c ?? 0) > 0;
+}
+
 const featureScopes = db
   .prepare(
     `SELECT DISTINCT phase_scope AS scope FROM ai_gate_runs
@@ -91,6 +110,8 @@ const activeFeatures = featureScopes.filter((scope) => {
   for (const candidate of ["src", "backend", "frontend"]) {
     if (existsSync(join(root, candidate, slug))) return true;
   }
+  // Layout monolitico/reingenieria: codigo real ya mapeado en la matriz.
+  if (hasBuiltCodeLinks(scope)) return true;
   return false;
 });
 

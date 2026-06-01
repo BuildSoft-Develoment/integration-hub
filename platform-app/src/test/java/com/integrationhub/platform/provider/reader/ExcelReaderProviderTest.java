@@ -18,6 +18,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+// @covers RF-004 (reingenieria: prueba que cubre el/los RF en produccion)
 class ExcelReaderProviderTest {
 
     private final XlsReaderProvider xlsReaderProvider = new XlsReaderProvider();

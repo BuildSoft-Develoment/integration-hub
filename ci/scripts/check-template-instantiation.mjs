@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { isReengineering } from "./_lib/feature-filter.mjs";
 
 const DEFAULT_MODE = "instantiated";
 const TEXT_EXTENSIONS = new Set([
@@ -57,6 +58,18 @@ const IGNORED_PATHS = new Set([
   "scripts/init-project.ps1",
   "scripts/init-project.sh",
 ]);
+// Tooling del framework que se entrega VERBATIM (lo refresca template-upgrade
+// --force-framework). Su codigo fuente contiene tokens del template (__FOO__) y
+// referencias canonicas (/api/expedientes) como PATRONES DE DETECCION o plantillas
+// del generador — no son artefactos del proyecto sin instanciar. El validador debe
+// verificar el contenido INSTANCIADO del proyecto (src/, docs/, specs/, .github/,
+// ops/, stacks/), no su propia caja de herramientas. Sin esto, ningun proyecto
+// instanciado podria pasar (p.ej. check-rbac-consistency.mjs contiene
+// __API_RESOURCE_NAME__ porque es el token que busca).
+const IGNORED_PREFIXES = [
+  "ci/scripts/",
+  "scripts/",
+];
 const SENSITIVE_PREFIXES = [
   ".github/",
   "ops/",
@@ -160,6 +173,9 @@ function collectFiles(rootDir) {
       if (IGNORED_PATHS.has(relative)) {
         continue;
       }
+      if (IGNORED_PREFIXES.some((prefix) => relative.startsWith(prefix))) {
+        continue;
+      }
       files.push({ absolute, relative });
     }
   };
@@ -248,19 +264,26 @@ const REQUIRED_AI_CONTEXT_AUTO_ZONES = [
 // para no romper proyectos instanciados antes de v12.106. Decision del usuario en
 // v12.114: no se mantiene back-compat (los proyectos antiguos se recrean desde cero),
 // asi que la verdad canonica es 10 archivos por feature.
-const REQUIRED_FEATURE_FILES = [
+// Reingenieria (origin: reingenieria): la Fase 2 (UX/UI · prototipo · SPDD) NO aplica
+// porque el producto ya esta construido y operando. Estos 4 archivos quedan EXENTOS
+// para esas features (mismo criterio que roadmap-status/next, check-prototype-coverage
+// y scaffold-feature). Las features "nuevo" conservan los 10 canonicos.
+const FASE2_FEATURE_FILES = [
+  "prototype.md",
+  "prototype-validation.md",
+  "product-design.md",
+  "spdd-frontend.md",
+];
+const BASE_FEATURE_FILES = [
   "spec-funcional.md",
   "spec-tecnica.md",
   "spec-tareas.md",
   "tdd-evidence.md",
   "traceability.md",
-  "prototype.md",
-  "prototype-validation.md",
-  "product-design.md",
-  "spdd-frontend.md",
   "api-contract.md",
   "ui-test-cases.md",
 ];
+const REQUIRED_FEATURE_FILES = [...BASE_FEATURE_FILES, ...FASE2_FEATURE_FILES];
 // v12.95 — REGLA DE ORO de los terminos residuales (NO la rompas):
 //   Un termino residual debe matchear SOLO residuo REAL del scaffold:
 //     - terminos del DOMINIO-ejemplo (bandeja, expediente, el slug 001-bandeja-...),
@@ -281,7 +304,9 @@ const FORBIDDEN_RESIDUAL_TERMS = [
   { pattern: /\b(expediente|expedientes)\b/gi, label: "termino del template ejemplo: expediente" },
   { pattern: /001-bandeja-trabajo-expedientes/g, label: "slug del template ejemplo" },
   { pattern: /\$\(date\)/g, label: "shell var $(date) no expandido" },
-  { pattern: /<feature>|<slug>|<org>|\$\{ctx\.[\w.]+\}/g, label: "placeholder sin expandir" },
+  // `specs/<feature>/` y `specs/<slug>/` son la NOTACION CANONICA de rutas en la
+  // metodologia (no placeholders sin instanciar): se eximen con lookbehind de `specs/`.
+  { pattern: /(?<!specs\/)<feature>|(?<!specs\/)<slug>|<org>|\$\{ctx\.[\w.]+\}/g, label: "placeholder sin expandir" },
 ];
 
 // v12.95: vocabulario GENERICO de metodologia que un proyecto instanciado usa
@@ -369,7 +394,11 @@ function checkFeatureCompleteness(rootDir) {
     const featureDir = path.join(specsDir, f.name);
     let presentFiles;
     try { presentFiles = new Set(fs.readdirSync(featureDir)); } catch { continue; }
-    for (const req of REQUIRED_FEATURE_FILES) {
+    // Reingenieria: Fase 2 (prototipo/SPDD/product-design) no aplica -> solo BASE.
+    const required = isReengineering(f.name, specsDir)
+      ? BASE_FEATURE_FILES
+      : REQUIRED_FEATURE_FILES;
+    for (const req of required) {
       if (!presentFiles.has(req)) {
         findings.push(`specs/${f.name}/${req}:1: archivo canonico faltante`);
       }

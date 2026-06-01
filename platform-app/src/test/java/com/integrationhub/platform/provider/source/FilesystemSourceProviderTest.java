@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+// @covers RF-005 (reingenieria: prueba que cubre el/los RF en produccion)
 class FilesystemSourceProviderTest {
 
     private final FilesystemSourceProvider provider = new FilesystemSourceProvider();
