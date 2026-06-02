@@ -1928,6 +1928,8 @@ const MEMORY_CLIENT_JS = [
   "  function execAction(id, arg){",
   "    var a = findAction(id); if(!a) return;",
   "    setRunning(true);",
+  "    // v12.139: trae la consola a la vista al elegir una accion (no obligar a hacer scroll).",
+  "    var __con = el('console'); if(__con && __con.scrollIntoView) __con.scrollIntoView({behavior:'smooth', block:'center'});",
   "    consoleLine('cmd', '$ '+a.label+(arg?' --'+a.arg.name.replace(/^--/,'')+' '+arg:''));",
   "    var t0 = Date.now();",
   "    var ctrl = ('AbortController' in window) ? new AbortController() : null;",
