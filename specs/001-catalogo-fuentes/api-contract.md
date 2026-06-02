@@ -85,6 +85,13 @@ paths:
       responses:
         '200':
           description: OK
+  /api/query/source-definitions:
+    get:
+      summary: Lista (query) las fuentes con filtros (q, type, status) y paginacion
+      operationId: querySourceDefinitions
+      responses:
+        '200':
+          description: OK
 ```
 
 ## Schema OpenAPI

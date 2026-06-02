@@ -69,7 +69,7 @@
     "check:feature-dependencies": "node ci/scripts/check-feature-dependencies.mjs",
     "check:phase-contract": "node ci/scripts/check-phase-contract.mjs",
     "check:validation-coverage": "node ci/scripts/check-validation-coverage.mjs",
-    "check:api-vs-code": "node ci/scripts/check-api-vs-code.mjs",
+    "check:api-vs-code": "node ci/scripts/check-api-vs-code.mjs --strict",
     "roadmap:next": "node scripts/roadmap-next.mjs",
     "roadmap:next:text": "node scripts/roadmap-next.mjs --format text",
     "roadmap:sync": "node scripts/roadmap-sync.mjs",

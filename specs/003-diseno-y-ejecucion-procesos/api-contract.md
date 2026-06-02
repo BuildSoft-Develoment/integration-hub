@@ -71,6 +71,27 @@ paths:
       responses:
         '200':
           description: OK
+  /api/query/process-definitions:
+    get:
+      summary: Lista (query) los procesos con filtros (q, mode, status) y paginacion
+      operationId: queryProcessDefinitions
+      responses:
+        '200':
+          description: OK
+  /api/process-executions/{processDefinitionId}:
+    post:
+      summary: Dispara la ejecucion de un proceso definido
+      operationId: triggerProcessExecution
+      requestBody:
+        required: false
+        description: Parametros opcionales de ejecucion; el proceso objetivo se indica en la ruta ({processDefinitionId}).
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
 ```
 
 ## Schema OpenAPI

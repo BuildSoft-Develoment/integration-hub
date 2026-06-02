@@ -24,6 +24,13 @@ paths:
       responses:
         '200':
           description: OK
+  /api/query/process-schedules:
+    get:
+      summary: Lista (query) las programaciones con filtros (q, mode, status) y paginacion
+      operationId: queryProcessSchedules
+      responses:
+        '200':
+          description: OK
 ```
 
 ## Schema OpenAPI

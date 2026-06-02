@@ -103,6 +103,48 @@ paths:
       responses:
         '200':
           description: OK
+  /api/query/connection-definitions:
+    get:
+      summary: Lista (query) las conexiones con filtros (q, type, status) y paginacion
+      operationId: queryConnectionDefinitions
+      responses:
+        '200':
+          description: OK
+  /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/schemas:
+    get:
+      summary: Lista esquemas (introspeccion JDBC)
+      operationId: listConnectionSchemas
+      responses:
+        '200':
+          description: OK
+  /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/columns:
+    get:
+      summary: Lista columnas de una tabla (introspeccion JDBC)
+      operationId: listConnectionColumns
+      responses:
+        '200':
+          description: OK
+  /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/procedure-parameters:
+    get:
+      summary: Lista parametros de un procedimiento (introspeccion JDBC)
+      operationId: listConnectionProcedureParameters
+      responses:
+        '200':
+          description: OK
+  /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/functions:
+    get:
+      summary: Lista funciones (introspeccion JDBC)
+      operationId: listConnectionFunctions
+      responses:
+        '200':
+          description: OK
+  /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/function-parameters:
+    get:
+      summary: Lista parametros de una funcion (introspeccion JDBC)
+      operationId: listConnectionFunctionParameters
+      responses:
+        '200':
+          description: OK
 ```
 
 ## Schema OpenAPI
