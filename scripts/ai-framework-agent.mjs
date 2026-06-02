@@ -2081,6 +2081,9 @@ function memoryHtmlShell(dataScript) {
   .fview-code { padding-left:12px; white-space:pre; overflow-x:auto; }
   .fview-frame { width:100%; height:68vh; border:0; background:var(--surface); }
   /* v12.80: panel multiagente */
+  .agent-summary { display:flex; flex-wrap:wrap; gap:16px; align-items:center; margin:2px 0 12px; font-size:12px; color:var(--muted); }
+  .agent-summary .agent-sum-item { display:inline-flex; align-items:center; gap:6px; }
+  .agent-summary strong { color:var(--ink); font-size:15px; }
   .agent-board { width:100%; border-collapse:collapse; font-size:12.5px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
   .agent-board th, .agent-board td { border-bottom:1px solid var(--line); padding:8px 12px; text-align:left; }
   .agent-board th { background:var(--bg); font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); }

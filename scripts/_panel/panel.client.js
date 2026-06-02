@@ -985,7 +985,16 @@
   function renderAgents(d, ar){
     if(d.error){ el('agents-host').innerHTML = '<p class="empty">'+esc(d.error)+'</p>'; return; }
     var rows = d.rows||[];
-    var html = '<table class="agent-board"><thead><tr><th>Feature</th><th>Prototipo</th><th>Lock</th><th>Expira</th><th>Accion</th></tr></thead><tbody>';
+    // v12.141 (D): resumen del tablero (features / bloqueadas / libres / expiradas).
+    var nActive=0, nExpired=0; rows.forEach(function(f){ var lk=f.lock; if(lk && !lk.expired) nActive++; else if(lk && lk.expired) nExpired++; });
+    var nFree = rows.length - nActive - nExpired;
+    var html = '<div class="agent-summary">'
+      + '<span class="agent-sum-item"><strong>'+rows.length+'</strong> features</span>'
+      + '<span class="agent-sum-item"><span class="st-badge st-warn">'+nActive+'</span> bloqueadas</span>'
+      + '<span class="agent-sum-item"><span class="st-badge st-muted">'+nFree+'</span> libres</span>'
+      + (nExpired ? '<span class="agent-sum-item"><span class="st-badge st-err">'+nExpired+'</span> expiradas</span>' : '')
+      + '</div>';
+    html += '<table class="agent-board"><thead><tr><th>Feature</th><th>Prototipo</th><th>Lock</th><th>Expira</th><th>Accion</th></tr></thead><tbody>';
     rows.forEach(function(f){
       var lk = f.lock;
       var active = lk && !lk.expired;
