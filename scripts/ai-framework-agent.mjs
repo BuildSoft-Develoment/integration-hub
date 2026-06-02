@@ -1731,6 +1731,13 @@ const MEMORY_CLIENT_JS = [
   "    for(var r=0;r<rows.length;r++){ h += '<tr>'; for(var c=0;c<cols.length;c++) h += cell(rows[r][cols[c]]); h += '</tr>'; }",
   "    return h + '</tbody></table>';",
   "  }",
+  "  // v12.140: tabla con filtro local (P2). El filtrado vive en un listener delegado por data-table-filter.",
+  "  function filterTable(id, headers, rows, cols, ph){",
+  "    if(!rows || !rows.length) return '<p class=\"empty\">Sin registros.</p>';",
+  "    var inp = '<input class=\"table-filter\" type=\"text\" data-table-filter=\"'+id+'\" aria-label=\"Filtrar tabla\" placeholder=\"'+esc(ph||('Filtrar '+rows.length+' filas…'))+'\">';",
+  "    var tbl = table(headers, rows, cols).replace('<table>', '<table id=\"'+id+'\">');",
+  "    return '<div class=\"table-filter-wrap\">'+inp+'<span class=\"table-filter-count\" id=\"'+id+'-count\"></span></div>'+tbl;",
+  "  }",
   "  function renderStats(s){",
   "    var items = [['Documentos',s.documents],['Chunks',s.chunks],['Trace links',s.traceLinks],['Gate runs',s.gateRuns],['Evidencia',s.evidence],['Decisiones',s.decisions],['Preguntas',s.openQuestions]];",
   "    var h = ''; for(var i=0;i<items.length;i++){ h += '<div class=\"stat\"><div class=\"stat-v\">'+esc(items[i][1])+'</div><div class=\"stat-l\">'+esc(items[i][0])+'</div></div>'; }",
@@ -1739,7 +1746,7 @@ const MEMORY_CLIENT_JS = [
   "  }",
   "  function renderAll(d){",
   "    renderStats(d.stats);",
-  "    el('tab-trace').innerHTML = table(['Origen','Ref','Relacion','Destino','Ref destino','Evidencia'], d.traceLinks, ['source_type','source_ref','relation','target_type','target_ref','evidence_ref']);",
+  "    el('tab-trace').innerHTML = filterTable('tbl-trace', ['Origen','Ref','Relacion','Destino','Ref destino','Evidencia'], d.traceLinks, ['source_type','source_ref','relation','target_type','target_ref','evidence_ref'], 'Filtrar trace links (RF, archivo, relacion…)');",
   "    // v12.139: tab Gates = resumen por gate (cantidades) + detalle por feature.",
   "    var GR = d.gateRuns || [];",
   "    var byGate = {};",
@@ -1748,7 +1755,7 @@ const MEMORY_CLIENT_JS = [
   "    var gHtml = '<h4 style=\"margin:0 0 6px\">Resumen por gate <span class=\"muted\" style=\"font-weight:400\">('+GR.length+' registros · '+agg.length+' gates)</span></h4>';",
   "    gHtml += table(['Gate','Aprobados','Pendientes','N/A','Otros'], agg, ['gate','aprobados','pendientes','na','otros']);",
   "    gHtml += '<h4 style=\"margin:14px 0 6px\">Detalle por feature</h4>';",
-  "    gHtml += table(['Gate','Scope','Estado','Evidencia'], GR, ['gate','phase_scope','status','summary']);",
+  "    gHtml += filterTable('tbl-gates', ['Gate','Scope','Estado','Evidencia'], GR, ['gate','phase_scope','status','summary'], 'Filtrar gates (gate, feature, estado…)');",
   "    el('tab-gates').innerHTML = gHtml;",
   "    el('tab-decisions').innerHTML = table(['Ref','Titulo','Estado','ADR'], d.decisions, ['decision_ref','title','status','adr_path']);",
   "    el('tab-evidence').innerHTML = table(['Tipo','Ruta','Descripcion','Estado'], d.evidence, ['evidence_type','path','description','status']);",
@@ -2971,6 +2978,8 @@ const MEMORY_CLIENT_JS = [
   "  function toggleFilesTree(){ var lay=document.querySelector('#pane-files .files-layout'); if(!lay) return; var off=lay.classList.toggle('tree-collapsed'); var b=el('files-tree-toggle'); if(b) b.textContent = off ? '⮞ Mostrar arbol' : '⮜ Ocultar arbol'; }",
   "  document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ var p=el('pane-files'); if(p && p.classList.contains('fs-mode')) toggleFilesFullscreen(); } });",
   "  document.addEventListener('click', function(e){ var t = e.target.closest('.tab'); if(t) showTab(t.dataset.tab); var st = e.target.closest('.subtab[data-subtab]'); if(st) showSubtab(st.dataset.subtab); var ts = e.target.closest('[data-trace-sub]'); if(ts) showTraceSub(ts.dataset.traceSub); });",
+  "  // v12.140: filtro local de tablas grandes (P2) via listener delegado.",
+  "  document.addEventListener('input', function(e){ var inp = e.target && e.target.closest && e.target.closest('[data-table-filter]'); if(!inp) return; var t = el(inp.getAttribute('data-table-filter')); if(!t) return; var q = (inp.value||'').toLowerCase(); var rows = t.querySelectorAll('tbody tr'); var shown=0; for(var i=0;i<rows.length;i++){ var ok = rows[i].textContent.toLowerCase().indexOf(q)>=0; rows[i].style.display = ok?'':'none'; if(ok) shown++; } var cnt = el(inp.getAttribute('data-table-filter')+'-count'); if(cnt) cnt.textContent = shown+' / '+rows.length; });",
   "  el('search-q').addEventListener('keydown', function(e){ if(e.key==='Enter') doSearch(); });",
   "  el('search-btn').addEventListener('click', doSearch);",
   "  if(el('console-clear')) el('console-clear').addEventListener('click', consoleClear);",
@@ -3053,6 +3062,9 @@ function memoryHtmlShell(dataScript) {
   .mode-badge.static { background:#FEF3C7; color:#92400E; }
   .sev-blocker { color:var(--danger); } .sev-gate { color:var(--warn); } .sev-info { color:var(--muted); }
   .sev-ok { color:var(--ok); } .sev-na { color:var(--muted); }
+  .table-filter-wrap { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .table-filter { flex:0 1 320px; padding:6px 10px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; }
+  .table-filter-count { font-size:11px; color:var(--muted); font-family:var(--mono); }
   .tab { padding:8px 14px; font-size:13px; cursor:pointer; border:none; background:transparent; color:var(--muted); border-bottom:2px solid transparent; white-space:nowrap; flex:0 0 auto; }
   .tab:hover { color:var(--text); }
   .tab.active { color:var(--brand); border-bottom-color:var(--brand); font-weight:600; }
