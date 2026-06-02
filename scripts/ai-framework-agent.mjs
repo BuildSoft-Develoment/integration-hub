@@ -1759,6 +1759,9 @@ function memoryHtmlShell(dataScript) {
   .nav .tab .nav-ic { display:inline-block; width:18px; text-align:center; margin-right:4px; opacity:.9; }
   .nav-group { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); opacity:.65; margin:12px 0 3px 10px; user-select:none; }
   .content { flex:1 1 auto; min-width:0; }
+  #nav-back-wrap { margin-bottom:10px; }
+  .nav-back { font-size:12px; font-weight:600; padding:5px 12px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:var(--text); cursor:pointer; }
+  .nav-back:hover { border-color:var(--brand); color:var(--brand-dark); background:var(--brand-light); }
   @media (max-width:820px) {
     .wrap { flex-direction:column; }
     .sidebar { position:static; flex:none; width:100%; }
@@ -1768,6 +1771,9 @@ function memoryHtmlShell(dataScript) {
   }
   .stats { display:grid; grid-template-columns:repeat(8,1fr); gap:10px; margin-bottom:20px; }
   .stat { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:12px; text-align:center; }
+  /* v12.141: stats de Inicio navegables (boton). */
+  button.stat { font:inherit; color:inherit; cursor:pointer; display:block; width:100%; transition:border-color .15s, transform .05s; }
+  button.stat:hover { border-color:var(--brand); transform:translateY(-1px); }
   .stat-v { font-size:22px; font-weight:800; color:var(--brand); }
   .stat-l { font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); margin-top:2px; }
   .searchbar { display:flex; gap:8px; margin-bottom:18px; }
@@ -1892,6 +1898,9 @@ function memoryHtmlShell(dataScript) {
   .preset-btn .req { color:var(--warn); font-weight:700; }
   /* v12.23: panel Acciones */
   .actions-layout { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+  /* v12.141 fix: columnas con min-width:0 para que la consola en nowrap haga scroll
+     interno y NO ensanche su columna (antes empujaba la barra de botones fuera de vista). */
+  .actions-layout > div { min-width:0; }
   @media (max-width:900px){ .actions-layout { grid-template-columns:1fr; } .stats{ grid-template-columns:repeat(4,1fr);} }
   .action-cat { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:12px 14px; margin-bottom:12px; }
   .action-cat h3 { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:8px; }
@@ -1907,6 +1916,32 @@ function memoryHtmlShell(dataScript) {
   .action-btn.danger { background:#FEF2F2; color:#991B1B; border-color:#FCA5A5; }
   .action-btn.danger:hover { background:#B91C1C; color:#fff; border-color:#B91C1C; }
   .action-btn:disabled { opacity:.5; cursor:wait; }
+  /* v12.141 (E-1/E-3/E-4): toolbar de filtro, quick row (fav/recientes), item+estrella, badge escribe. */
+  .actions-toolbar { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  #actions-filter { flex:1; padding:7px 11px; border:1px solid var(--line); border-radius:var(--radius); font-size:13px; background:var(--surface); color:var(--text); outline:none; }
+  #actions-filter:focus { border-color:var(--brand); }
+  .action-quick { margin-bottom:10px; display:flex; flex-direction:column; gap:6px; }
+  .action-quick-row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .action-quick-l { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); margin-right:2px; }
+  .action-chip { font-size:11.5px; padding:4px 10px; border-radius:999px; border:1px solid var(--line); background:var(--brand-light); color:var(--brand-dark); cursor:pointer; }
+  .action-chip:hover { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .action-chip.danger { background:#FEF2F2; color:#991B1B; border-color:#FCA5A5; }
+  .action-chip:disabled { opacity:.5; cursor:wait; }
+  .action-item { } .action-row { display:flex; align-items:flex-start; gap:6px; }
+  .action-row .action-btn { flex:1 1 auto; }
+  .action-fav { flex:0 0 auto; align-self:stretch; background:transparent; border:1px solid var(--line); border-radius:var(--radius); color:var(--muted); cursor:pointer; font-size:13px; padding:0 8px; }
+  .action-fav.on { color:#D97706; border-color:#FCD34D; }
+  .action-fav:hover { background:var(--line-soft); }
+  .action-write-badge { display:inline-block; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.3px; padding:0 5px; border-radius:999px; background:#FEF3C7; color:#92400E; margin-left:6px; vertical-align:middle; }
+  /* v12.141 (E-2): barra de estado de ejecucion. */
+  .exec-status { font-size:12.5px; min-height:20px; margin-bottom:6px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+  .exec-status code { background:var(--line-soft); padding:0 5px; border-radius:3px; }
+  .exec-dot { width:9px; height:9px; border-radius:50%; display:inline-block; flex:0 0 auto; }
+  .exec-dot.run { background:var(--brand); animation:execpulse 1s ease-in-out infinite; }
+  .exec-dot.ok { background:#16A34A; } .exec-dot.err { background:#DC2626; } .exec-dot.warn { background:#D97706; }
+  @keyframes execpulse { 0%,100%{ opacity:1; } 50%{ opacity:.25; } }
+  .exec-rerun { font-size:11px; font-weight:600; padding:3px 9px; border-radius:6px; border:1px solid var(--line); background:var(--brand-light); color:var(--brand-dark); cursor:pointer; }
+  .exec-rerun:hover { filter:brightness(.97); }
   .action-arg { margin:6px 0; padding:6px 10px; background:var(--line-soft); border-radius:var(--radius); font-size:12px; color:var(--muted); }
   .action-arg input { margin-left:6px; padding:3px 6px; border:1px solid var(--line); border-radius:4px; font-size:12px; font-family:var(--mono); width:160px; }
   .console { background:#0F172A; color:#E2E8F0; border-radius:var(--radius); padding:12px; font-family:var(--mono); font-size:12.5px; min-height:380px; max-height:520px; overflow-y:auto; white-space:pre-wrap; word-break:break-word; line-height:1.5; }
@@ -1918,6 +1953,12 @@ function memoryHtmlShell(dataScript) {
   .console-bar { display:flex; gap:6px; margin-bottom:8px; justify-content:flex-end; }
   .console-bar button { padding:5px 10px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); font-size:11.5px; color:var(--text); cursor:pointer; }
   .console-bar button:hover { background:var(--brand-light); }
+  .console-bar button.on { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .console-search { margin-right:auto; padding:5px 10px; border:1px solid var(--line); border-radius:var(--radius); font-size:11.5px; background:var(--surface); color:var(--text); outline:none; min-width:160px; }
+  .console-search:focus { border-color:var(--brand); }
+  .console.nowrap { white-space:pre; overflow-x:auto; word-break:normal; }
+  .console .hl { background:rgba(250,204,21,.18); }
+  .console .dim { opacity:.35; }
   .modal-bg { position:fixed; inset:0; background:rgba(15,23,42,.6); display:none; align-items:center; justify-content:center; z-index:100; }
   .modal-bg.show { display:flex; }
   .modal { background:var(--surface); padding:22px; border-radius:var(--radius); max-width:480px; box-shadow:0 8px 32px rgba(0,0,0,.2); }
@@ -1948,6 +1989,7 @@ function memoryHtmlShell(dataScript) {
   .history-detail .err { color:#FCA5A5; }
   .kbd { display:inline-block; padding:1px 5px; background:var(--line-soft); border:1px solid var(--line); border-radius:3px; font-family:var(--mono); font-size:10.5px; color:var(--muted); }
   .actions-help { margin-top:10px; padding:8px 10px; background:var(--line-soft); border-radius:var(--radius); font-size:11.5px; color:var(--muted); line-height:1.6; }
+  .actions-help > summary { cursor:pointer; }
   /* v12.26: stats sub-tab + export buttons */
   .stats-table { width:100%; border-collapse:collapse; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; font-size:12.5px; }
   .stats-table thead { background:var(--line-soft); }
@@ -2239,6 +2281,7 @@ function memoryHtmlShell(dataScript) {
     </nav>
   </aside>
   <main class="content">
+  <div id="nav-back-wrap" style="display:none"><button id="nav-back" type="button" class="nav-back">← Volver</button></div>
   <div class="pane active" id="pane-home">
     <div id="home-host"><div class="skeleton skeleton-row" style="width:40%"></div><div class="skeleton skeleton-row" style="width:90%"></div><div class="skeleton skeleton-row" style="width:75%"></div></div>
   </div>
@@ -2310,8 +2353,8 @@ function memoryHtmlShell(dataScript) {
       <div class="actions-layout">
         <div>
           <div id="actions-host"><p class="empty">Cargando acciones…</p></div>
-          <div class="actions-help">
-            <strong>Atajos (Alt+Shift, evita los reservados del navegador):</strong>
+          <details class="actions-help">
+            <summary><strong>ⓘ Atajos de teclado</strong> <span class="muted" style="font-weight:400">(Alt+Shift, evita los reservados del navegador)</span></summary>
             <span class="kbd">Alt+Shift+S</span> sync-memory ·
             <span class="kbd">Alt+Shift+R</span> memory-report ·
             <span class="kbd">Alt+Shift+E</span> regen contexto ·
@@ -2320,14 +2363,18 @@ function memoryHtmlShell(dataScript) {
             <span class="kbd">Alt+Shift+H</span> historial ·
             <span class="kbd">Alt+Shift+T</span> stats ·
             <span class="kbd">Alt+Shift+D</span> tendencias
-          </div>
+          </details>
         </div>
         <div>
           <div class="console-bar">
+            <input id="console-search" class="console-search" type="text" placeholder="buscar en salida…" aria-label="Buscar en la salida de la consola">
+            <button id="console-ts" title="Mostrar/ocultar timestamps por linea">⏱ tiempos</button>
+            <button id="console-wrap" title="Ajuste de linea on/off">↩ wrap</button>
             <button id="console-stop" style="display:none;background:#FEE2E2;color:#991B1B;border-color:#FCA5A5;font-weight:600;">■ Detener</button>
             <button id="console-clear">Limpiar</button>
             <button id="console-copy">Copiar</button>
           </div>
+          <div id="exec-status" class="exec-status"></div>
           <div class="console" id="console" role="log" aria-live="polite" aria-label="Salida de la consola de acciones"><span class="muted">Esperando accion… Las acciones solo estan disponibles en modo <strong>live</strong> (memory-serve), no en el reporte estatico.</span></div>
         </div>
       </div>

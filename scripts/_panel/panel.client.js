@@ -31,9 +31,10 @@
   // v12.141: la barra de stats se movio a Inicio. statsGridHtml arma el grid reusable.
   function statsGridHtml(s){
     s = s || {};
-    var items = [['Documentos',s.documents],['Chunks',s.chunks],['Trace links',s.traceLinks],['Gate runs',s.gateRuns],['Evidencia',s.evidence],['Decisiones',s.decisions],['Preguntas',s.openQuestions]];
-    var h = ''; for(var i=0;i<items.length;i++){ h += '<div class="stat"><div class="stat-v">'+esc(items[i][1]==null?0:items[i][1])+'</div><div class="stat-l">'+esc(items[i][0])+'</div></div>'; }
-    h += '<div class="stat"><div class="stat-v">'+(s.fts?'si':'no')+'</div><div class="stat-l">FTS5</div></div>';
+    // [label, valor, tab destino] — clicables, navegan a su seccion (via wireHome -> data-home-goto).
+    var items = [['Documentos',s.documents,'docs'],['Chunks',s.chunks,'search'],['Trace links',s.traceLinks,'trace'],['Gate runs',s.gateRuns,'gates'],['Evidencia',s.evidence,'evidence'],['Decisiones',s.decisions,'decisions'],['Preguntas',s.openQuestions,'questions']];
+    var h = ''; for(var i=0;i<items.length;i++){ h += '<button class="stat" type="button" data-home-goto="'+items[i][2]+'" title="Ir a '+esc(items[i][0])+'"><div class="stat-v">'+esc(items[i][1]==null?0:items[i][1])+'</div><div class="stat-l">'+esc(items[i][0])+'</div></button>'; }
+    h += '<button class="stat" type="button" data-home-goto="search" title="Ir a Busqueda (FTS5)"><div class="stat-v">'+(s.fts?'si':'no')+'</div><div class="stat-l">FTS5</div></button>';
     return h;
   }
   function renderStats(s){ var n = el('stats'); if(n) n.innerHTML = statsGridHtml(s); } // compat: solo si existe el contenedor global
@@ -194,33 +195,69 @@
     c.scrollTop = c.scrollHeight;
   }
   var PROGRESS_RE = /^\[progress\]\s+(\d+)\/(\d+)\s+(.+)$/;
+  // v12.141 (E-5): timestamps opcionales por linea + buscar en la salida.
+  var __consoleTs = false;
+  function nowTs(){ var d=new Date(); function p(n){ return (n<10?'0':'')+n; } return p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); }
   function consoleLine(cls, text){
     var m = (cls === 'err') ? null : PROGRESS_RE.exec(text||'');
     if(m){ renderProgress(Number(m[1]), Number(m[2]), m[3]); return; }
     __progressBar = null; // cualquier otra linea cierra la barra activa
-    var c=el('console'); var span=document.createElement('span'); if(cls) span.className=cls; span.textContent=text+'\n'; c.appendChild(span); c.scrollTop=c.scrollHeight;
+    var c=el('console'); var span=document.createElement('span'); if(cls) span.className=cls; span.textContent=(__consoleTs?'['+nowTs()+'] ':'')+text+'\n'; c.appendChild(span); c.scrollTop=c.scrollHeight;
   }
+  function consoleSearch(q){ q=(q||'').toLowerCase(); var c=el('console'); if(!c) return; var sp=c.children; for(var i=0;i<sp.length;i++){ var n=sp[i]; if(n.classList && n.classList.contains('progress-line')) continue; if(!n.classList) continue; if(!q){ n.classList.remove('hl','dim'); continue; } var t=(n.textContent||'').toLowerCase(); if(t.indexOf(q)>=0){ n.classList.add('hl'); n.classList.remove('dim'); } else { n.classList.add('dim'); n.classList.remove('hl'); } } }
   function consoleClear(){ el('console').innerHTML = '<span class="muted">Consola limpia.</span>\n'; }
   function consoleCopy(){ var t=el('console').innerText||''; if(navigator.clipboard) navigator.clipboard.writeText(t); }
   var CATEGORY_LABEL = { universal:'Comandos universales · siempre disponibles', memoria:'Memoria · rebuild / update DB', validador:'Validadores · read-only, exit code', reporte:'Reportes · snapshots y packs', generador:'Generadores · ESCRIBEN archivos del repo' };
+  // v12.141 (E-3): recientes (de action-runs) + favoritos (localStorage).
+  var RECENT_IDS = [];
+  function computeRecent(rows){ var seen={}, out=[]; (rows||[]).forEach(function(r){ var id=r.action_id; if(id && !seen[id]){ seen[id]=1; out.push(id); } }); return out.slice(0,6); }
+  function favList(){ try{ return JSON.parse(localStorage.getItem('aif-fav-actions')||'[]'); }catch(e){ return []; } }
+  function isFav(id){ return favList().indexOf(id)>=0; }
+  function favToggle(id){ var f=favList(); var i=f.indexOf(id); if(i>=0) f.splice(i,1); else f.unshift(id); try{ localStorage.setItem('aif-fav-actions', JSON.stringify(f.slice(0,12))); }catch(e){} if(ACTIONS_CACHE) renderActions(ACTIONS_CACHE); }
+  function quickChip(a){ return '<button class="action-chip'+(a.danger?' danger':'')+'" type="button" data-action="'+esc(a.id)+'" title="'+esc(a.hint||a.label)+'">'+esc(a.label)+'</button>'; }
   function renderActions(actions){
     var byCat = { universal:[], memoria:[], validador:[], reporte:[], generador:[] };
     actions.forEach(function(a){ (byCat[a.category]=byCat[a.category]||[]).push(a); });
+    var byId={}; actions.forEach(function(a){ byId[a.id]=a; });
     var html='';
+    // E-1: filtro de comandos
+    html += '<div class="actions-toolbar"><input id="actions-filter" type="text" placeholder="filtrar acciones (nombre, id, descripcion)…" aria-label="Filtrar acciones"><span class="muted" id="actions-filter-count" style="font-size:11px"></span></div>';
+    // E-3: favoritos + recientes
+    var favs = favList().map(function(id){ return byId[id]; }).filter(Boolean);
+    var recents = RECENT_IDS.map(function(id){ return byId[id]; }).filter(Boolean);
+    if(favs.length || recents.length){
+      html += '<div class="action-quick">';
+      if(favs.length){ html += '<div class="action-quick-row"><span class="action-quick-l">★ Favoritos</span>'; favs.forEach(function(a){ html += quickChip(a); }); html += '</div>'; }
+      if(recents.length){ html += '<div class="action-quick-row"><span class="action-quick-l">↻ Recientes</span>'; recents.forEach(function(a){ html += quickChip(a); }); html += '</div>'; }
+      html += '</div>';
+    }
     ['universal','memoria','validador','reporte','generador'].forEach(function(cat){
       if(!byCat[cat] || !byCat[cat].length) return;
-      html += '<details class="action-cat" open><summary>'+esc(CATEGORY_LABEL[cat]||cat)+' <span class="muted" style="font-weight:400;font-size:11px">('+byCat[cat].length+')</span></summary><div class="action-grid">';
+      html += '<details class="action-cat" open data-cat="'+cat+'"><summary>'+esc(CATEGORY_LABEL[cat]||cat)+' <span class="muted" style="font-weight:400;font-size:11px">('+byCat[cat].length+')</span></summary><div class="action-grid">';
       byCat[cat].forEach(function(a){
-        var classes = 'action-btn' + (a.danger?' danger':'');
+        var search = (a.label+' '+(a.hint||'')+' '+a.id).toLowerCase();
+        var badge = a.danger ? '<span class="action-write-badge" title="Escribe archivos del repo">escribe</span>' : '';
+        var star = '<button class="action-fav'+(isFav(a.id)?' on':'')+'" type="button" data-fav="'+esc(a.id)+'" title="Fijar/quitar favorito" aria-label="Favorito">'+(isFav(a.id)?'★':'☆')+'</button>';
         var argBlock = '';
         if(a.arg){ argBlock = '<div class="action-arg">'+esc(a.arg.name)+(a.arg.required?' <span style="color:#B45309">*</span>':'')+': <input id="arg-'+esc(a.id)+'" placeholder="'+esc(a.arg.hint||'')+'" /></div>'; }
-        html += '<button class="'+classes+'" data-action="'+esc(a.id)+'">'+esc(a.label)+'<span class="ah">'+esc(a.hint||'')+'</span></button>'+argBlock;
+        html += '<div class="action-item" data-search="'+esc(search)+'"><div class="action-row"><button class="action-btn'+(a.danger?' danger':'')+'" data-action="'+esc(a.id)+'">'+esc(a.label)+badge+'<span class="ah">'+esc(a.hint||'')+'</span></button>'+star+'</div>'+argBlock+'</div>';
       });
       html += '</div></details>';
     });
     el('actions-host').innerHTML = html;
-    var btns = el('actions-host').querySelectorAll('.action-btn');
+    var btns = el('actions-host').querySelectorAll('.action-btn, .action-chip');
     for(var i=0;i<btns.length;i++){ btns[i].addEventListener('click', function(ev){ onActionClick(ev.currentTarget.getAttribute('data-action')); }); }
+    var stars = el('actions-host').querySelectorAll('[data-fav]');
+    for(var k=0;k<stars.length;k++){ stars[k].addEventListener('click', function(ev){ ev.stopPropagation(); favToggle(ev.currentTarget.getAttribute('data-fav')); }); }
+    var fi = el('actions-filter'); if(fi){ fi.addEventListener('input', filterActions); }
+  }
+  function filterActions(){
+    var fi = el('actions-filter'); if(!fi) return; var q=(fi.value||'').toLowerCase().trim();
+    var items = el('actions-host').querySelectorAll('.action-item'); var shown=0;
+    for(var i=0;i<items.length;i++){ var ok = !q || items[i].getAttribute('data-search').indexOf(q)>=0; items[i].style.display = ok?'':'none'; if(ok) shown++; }
+    var cats = el('actions-host').querySelectorAll('.action-cat');
+    for(var c=0;c<cats.length;c++){ var its=cats[c].querySelectorAll('.action-item'); var vis=0; for(var x=0;x<its.length;x++){ if(its[x].style.display!=='none') vis++; } cats[c].style.display = vis?'':'none'; if(q && vis) cats[c].open = true; }
+    var cnt = el('actions-filter-count'); if(cnt) cnt.textContent = q ? (shown+' coinciden') : '';
   }
   function findAction(id){ if(!ACTIONS_CACHE) return null; for(var i=0;i<ACTIONS_CACHE.length;i++) if(ACTIONS_CACHE[i].id===id) return ACTIONS_CACHE[i]; return null; }
   function onActionClick(id){
@@ -239,14 +276,27 @@
   // Soporta cancelacion: el cliente aborta la conexion fetch, el server
   // detecta req.close y envia SIGTERM al child.
   var __execController = null;
+  // v12.141 (E-2): estado de ejecucion claro + re-ejecutar.
+  var LAST_RUN = null, LAST_EXIT = null;
+  function setExecStatus(html){ var s = el('exec-status'); if(s) s.innerHTML = html; }
+  function updateExecStatus(){
+    if(!LAST_RUN){ setExecStatus(''); return; }
+    var lbl = esc(LAST_RUN.label || LAST_RUN.id);
+    var rerun = '<button class="exec-rerun" type="button" data-rerun="1" title="Re-ejecutar">↻ Re-ejecutar</button>';
+    if(LAST_EXIT == null){ setExecStatus('<span class="exec-dot run"></span> Ejecutando <code>'+lbl+'</code>…'); }
+    else if(LAST_EXIT.aborted){ setExecStatus('<span class="exec-dot warn"></span> <code>'+lbl+'</code> cancelado '+rerun); }
+    else if(LAST_EXIT.code === 0){ setExecStatus('<span class="exec-dot ok"></span> <code>'+lbl+'</code> · OK · exit 0 · '+(LAST_EXIT.ms/1000).toFixed(1)+'s '+rerun); }
+    else { setExecStatus('<span class="exec-dot err"></span> <code>'+lbl+'</code> · exit '+LAST_EXIT.code+(LAST_EXIT.timedOut?' · TIMEOUT':'')+' · '+(LAST_EXIT.ms/1000).toFixed(1)+'s '+rerun); }
+  }
   function setRunning(running){
-    var btns = el('actions-host').querySelectorAll('.action-btn');
+    var btns = el('actions-host').querySelectorAll('.action-btn, .action-chip, .action-fav');
     for(var i=0;i<btns.length;i++) btns[i].disabled = !!running;
     var stop = el('console-stop'); if(stop) stop.style.display = running ? 'inline-block' : 'none';
   }
   function execAction(id, arg){
     var a = findAction(id); if(!a) return;
     setRunning(true);
+    LAST_RUN = { id:id, arg:arg, label:a.label }; LAST_EXIT = null; updateExecStatus();
     // v12.139: trae la consola a la vista al elegir una accion (no obligar a hacer scroll).
     var __con = el('console'); if(__con && __con.scrollIntoView) __con.scrollIntoView({behavior:'smooth', block:'center'});
     consoleLine('cmd', '$ '+a.label+(arg?' --'+a.arg.name.replace(/^--/,'')+' '+arg:''));
@@ -274,6 +324,7 @@
         flushPending('stdout'); flushPending('stderr');
         var ms = data.durationMs || (Date.now()-t0);
         var s = (ms/1000).toFixed(1);
+        LAST_EXIT = { code:data.exitCode, ms:ms, signal:data.signal, timedOut:data.timedOut };
         if(data.exitCode === 0) consoleLine('ok', '─ exit 0 · '+s+'s ─');
         else consoleLine('err', '─ exit '+data.exitCode+(data.signal?' ('+data.signal+')':'')+(data.timedOut?' · TIMEOUT':'')+' · '+s+'s ─');
         return;
@@ -314,11 +365,12 @@
       }
       return pump();
     }).catch(function(err){
-      if(err && err.name==='AbortError'){ consoleLine('info', '… cancelado por el usuario'); }
+      if(err && err.name==='AbortError'){ LAST_EXIT = { aborted:true }; consoleLine('info', '… cancelado por el usuario'); }
       else consoleLine('err', '✗ Error de red: '+(err && err.message ? err.message : err));
     }).then(function(){
       __execController = null;
       setRunning(false);
+      updateExecStatus();
       if(['sync-memory','index-docs','embed-docs','regenerate-context','harvest-trace'].indexOf(id)>=0){
         fetch('/api/snapshot').then(function(r){return r.json();}).then(function(d){ MEM=d; renderAll(d); consoleLine('info', '… snapshot recargado'); }).catch(function(){});
       }
@@ -335,7 +387,10 @@
   }
   function loadActions(){
     if(MODE !== 'live'){ el('actions-host').innerHTML = '<p class="empty">Las acciones solo estan disponibles en modo live (memory-serve). Arranca el server con: <code>node scripts/ai-framework-agent.mjs memory-serve</code> o <code>npm run memory:serve</code>.</p>'; return; }
-    fetch('/api/actions').then(function(r){return r.json();}).then(function(actions){ ACTIONS_CACHE = actions; renderActions(actions); loadAlerts(); }).catch(function(){ el('actions-host').innerHTML='<p class="empty">No se pudo cargar /api/actions.</p>'; });
+    Promise.all([
+      fetch('/api/actions').then(function(r){return r.json();}),
+      fetch('/api/action-runs?limit=25').then(function(r){return r.json();}).catch(function(){return [];})
+    ]).then(function(arr){ ACTIONS_CACHE = arr[0]; RECENT_IDS = computeRecent(arr[1]); renderActions(arr[0]); loadAlerts(); }).catch(function(){ el('actions-host').innerHTML='<p class="empty">No se pudo cargar /api/actions.</p>'; });
   }
   // v12.28: alertas activas (acciones con >=3 fallos consecutivos al final).
   function loadAlerts(){
@@ -426,7 +481,7 @@
     var fm = multiCsv('filter-mode'); if(fm) params.set('act_mode', fm);
     var fsl = (el('filter-slow')||{}).value; if(fsl) params.set('act_slow', fsl);
     var qs = params.toString();
-    window.history.replaceState(null, '', window.location.pathname + (qs ? '?'+qs : '') + window.location.hash);
+    window.history.replaceState(history.state || null, '', window.location.pathname + (qs ? '?'+qs : '') + window.location.hash);
   }
   function writeTrendFiltersToUrl(){
     var params = new URLSearchParams(window.location.search);
@@ -434,7 +489,7 @@
     var ta = (el('trend-action')||{}).value; if(ta) params.set('trend_action', ta);
     var td = (el('trend-days')||{}).value; if(td && td !== '30') params.set('trend_days', td);
     var qs = params.toString();
-    window.history.replaceState(null, '', window.location.pathname + (qs ? '?'+qs : '') + window.location.hash);
+    window.history.replaceState(history.state || null, '', window.location.pathname + (qs ? '?'+qs : '') + window.location.hash);
   }
   // v12.25: Historial de acciones + re-ejecucion ----------------------
   function fmtAgo(iso){
@@ -805,19 +860,23 @@
     }
     return svg + '</svg>';
   }
-  function showSubtab(name){
+  function showSubtab(name, fromPop){
     var tabs = document.querySelectorAll('.subtab'); for(var i=0;i<tabs.length;i++) tabs[i].classList.toggle('active', tabs[i].dataset.subtab===name);
     var panes = document.querySelectorAll('.subpane'); for(var j=0;j<panes.length;j++) panes[j].classList.toggle('active', panes[j].id===('subpane-'+name));
     if(name==='history') loadHistory();
     if(name==='stats') loadStats();
     if(name==='trends') loadTrends();
+    if(fromPop) return; // restaurando desde el historial: no reescribir el estado
     // v12.32: persistir sub-tab activo en URL. 'run' es el default, no se escribe.
+    // v12.141: PRESERVA el estado de navegacion {tab,from} (antes pasaba null y rompia "Volver").
     try {
       var p = new URLSearchParams(window.location.search);
       if(name && name !== 'run') p.set('act_subtab', name); else p.delete('act_subtab');
       var qs = p.toString();
-      window.history.replaceState(null, '', window.location.pathname + (qs ? '?'+qs : '') + window.location.hash);
+      var prev = history.state || {};
+      window.history.replaceState({ tab: prev.tab || 'actions', sub: name, from: (prev.from != null ? prev.from : null) }, '', window.location.pathname + (qs ? '?'+qs : '') + window.location.hash);
     } catch {}
+    updateBackBtn();
   }
   // v12.25: atajos de teclado para las acciones mas usadas
   var SHORTCUTS = { 'KeyS':'sync-memory', 'KeyR':'memory-report', 'KeyE':'regenerate-context', 'KeyC':'check-trace-drift' };
@@ -902,10 +961,14 @@
       });
     }
   }
-  function showTraceSub(name){
+  function showTraceSub(name, fromPop){
     var subs = document.querySelectorAll('[data-trace-sub]'); for(var i=0;i<subs.length;i++) subs[i].classList.toggle('active', subs[i].dataset.traceSub===name);
     var panes = document.querySelectorAll('#pane-trace .subpane'); for(var j=0;j<panes.length;j++) panes[j].classList.toggle('active', panes[j].id===('trace-sub-'+name));
     if(name==='by-feature') loadCoverageByFeature();
+    if(fromPop) return;
+    // v12.141: registra el sub-tab de Trazabilidad en el estado para "Volver".
+    try { var prev = history.state || {}; window.history.replaceState({ tab: prev.tab || 'trace', sub: name, from: (prev.from != null ? prev.from : null) }, '', window.location.href); } catch {}
+    updateBackBtn();
   }
   // v12.70: visor de proyecto (pestana Proyecto).
   var FILES_TREE = null;
@@ -1038,7 +1101,7 @@
     var a = agentId();
     postLocks('/api/locks/release', { feature:feature, agent:a||undefined }).then(function(res){ if(!res.j.ok){ if(confirm((res.j.error||'No se pudo liberar')+'\n\n¿Forzar liberacion?')){ postLocks('/api/locks/release',{feature:feature, force:true}).then(function(){ loadAgents(); }); return; } } loadAgents(); });
   }
-  function showTab(name){
+  function showTab(name, fromPop){
     var tabs = document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ var on = tabs[i].dataset.tab===name; tabs[i].classList.toggle('active', on); tabs[i].setAttribute('aria-selected', on?'true':'false'); tabs[i].setAttribute('tabindex', on?'0':'-1'); }
     var panes = document.querySelectorAll('.pane'); for(var j=0;j<panes.length;j++) panes[j].classList.toggle('active', panes[j].id===('pane-'+name));
     if(name==='home') loadHome();
@@ -1047,7 +1110,12 @@
     if(name==='files' && !FILES_TREE) loadFilesTree();
     if(name==='agents') loadAgents();
     try{ localStorage.setItem('aif-tab', name); }catch(e){}
+    // v12.141: historial de navegacion para "volver donde estaba" (browser back / Alt+<- / boton).
+    if(!fromPop){ try{ var st = history.state; if(!st || st.tab == null){ history.replaceState({ tab:name, from:null }, '', '#'+name); } else if(st.tab !== name){ history.pushState({ tab:name, from:st.tab }, '', '#'+name); } }catch(e){} }
+    updateBackBtn();
   }
+  function tabLabel(t){ var b = document.querySelector('.nav .tab[data-tab="'+t+'"]'); return b ? b.textContent.trim().replace(/^[^0-9A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/, '') : t; }
+  function updateBackBtn(){ var w = el('nav-back-wrap'), b = el('nav-back'); if(!w || !b) return; var from = history.state && history.state.from; if(from){ b.textContent = '← Volver a ' + tabLabel(from); w.style.display = ''; } else { w.style.display = 'none'; } }
   // UX-1: vista Inicio / Resumen — entrada por defecto orientada a tarea ("donde estoy / que hago").
   function loadHome(){
     var host = el('home-host'); if(!host) return;
@@ -1378,6 +1446,8 @@
         (M.documents||[]).forEach(function(x){ (function(p){ if(!p)return; items.push({ label:'Doc: '+p, kind:'doc', run:function(){ showTab('docs'); } }); })(x.path); });
         (M.decisions||[]).forEach(function(x){ (function(d){ if(!d)return; items.push({ label:'Decision: '+d, kind:'decision', run:function(){ showTab('decisions'); } }); })(x.decision_ref||x.title); });
       }
+      // E-7: ejecutar una accion desde el palette (respeta el confirm de las que escriben).
+      if(ACTIONS_CACHE){ ACTIONS_CACHE.forEach(function(a){ (function(ac){ items.push({ label:'Ejecutar: '+ac.label, kind:'accion', run:function(){ showTab('actions'); showSubtab('run'); onActionClick(ac.id); } }); })(a); }); }
     }
     function render(){ var q=inp.value.toLowerCase(); filtered = items.filter(function(it){ return it.label.toLowerCase().indexOf(q)>=0; }); if(sel>=filtered.length) sel=0; if(!filtered.length){ list.innerHTML='<li class="cmdk-empty">Sin coincidencias</li>'; return; } var h=''; filtered.forEach(function(it,i){ h+='<li role="option" data-i="'+i+'" class="'+(i===sel?'sel':'')+'">'+esc(it.label)+'<span class="cmdk-kind">'+esc(it.kind)+'</span></li>'; }); list.innerHTML=h; }
     function openP(){ build(); inp.value=''; sel=0; render(); bg.classList.add('show'); setTimeout(function(){ inp.focus(); }, 0); }
@@ -1395,6 +1465,12 @@
   if(el('console-clear')) el('console-clear').addEventListener('click', consoleClear);
   if(el('console-copy')) el('console-copy').addEventListener('click', consoleCopy);
   if(el('console-stop')) el('console-stop').addEventListener('click', stopAction);
+  // v12.141 (E-5): timestamps / wrap / buscar en la consola.
+  if(el('console-ts')) el('console-ts').addEventListener('click', function(){ __consoleTs = !__consoleTs; this.classList.toggle('on', __consoleTs); });
+  if(el('console-wrap')) el('console-wrap').addEventListener('click', function(){ var c=el('console'); var off = c.classList.toggle('nowrap'); this.classList.toggle('on', off); });
+  if(el('console-search')) el('console-search').addEventListener('input', function(){ consoleSearch(this.value); });
+  // v12.141 (E-2): re-ejecutar la ultima accion desde la barra de estado.
+  document.addEventListener('click', function(e){ var r = e.target && e.target.closest && e.target.closest('[data-rerun]'); if(!r) return; if(LAST_RUN) execAction(LAST_RUN.id, LAST_RUN.arg); });
   // v12.140: tema claro/oscuro persistido (localStorage) con fallback a prefers-color-scheme.
   (function(){ function applyTheme(t){ if(t==='dark') document.documentElement.setAttribute('data-theme','dark'); else document.documentElement.removeAttribute('data-theme'); } var saved=null; try{ saved=localStorage.getItem('aif-theme'); }catch(e){} var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; applyTheme(saved || (sysDark?'dark':'light')); var tb=el('theme-toggle'); if(tb) tb.addEventListener('click', function(){ var dark = document.documentElement.getAttribute('data-theme')==='dark'; var next = dark?'light':'dark'; applyTheme(next); try{ localStorage.setItem('aif-theme', next); }catch(e){} }); })();
   // v12.140: badge de modo en el header (live = datos en vivo via memory-serve; static = reporte).
@@ -1429,4 +1505,7 @@
   document.addEventListener('click', function(e){ var a = e.target && e.target.closest && e.target.closest('[data-open-file]'); if(!a) return; e.preventDefault(); var p = a.getAttribute('data-open-file'); showTab('files'); if(typeof openFile==='function') openFile(p); });
   // v12.141 (D): click en un segmento de carpeta del breadcrumb -> filtra el arbol del visor.
   document.addEventListener('click', function(e){ var cr = e.target && e.target.closest && e.target.closest('[data-crumb]'); if(!cr) return; e.preventDefault(); var ff = el('files-filter'); if(ff){ ff.value = cr.getAttribute('data-crumb'); ff.dispatchEvent(new Event('input',{bubbles:true})); ff.scrollIntoView({behavior:'smooth',block:'center'}); } });
+  // v12.141: "volver donde estaba" — boton + Atras del navegador via history.popstate.
+  if(el('nav-back')) el('nav-back').addEventListener('click', function(){ history.back(); });
+  window.addEventListener('popstate', function(ev){ var s = ev.state || {}; var t = s.tab || (location.hash||'').replace(/^#/, '') || 'home'; if(document.querySelector('.tab[data-tab="'+t+'"]')){ showTab(t, true); if(s.sub){ if(t==='actions') showSubtab(s.sub, true); else if(t==='trace') showTraceSub(s.sub, true); } } else { updateBackBtn(); } });
 })();
