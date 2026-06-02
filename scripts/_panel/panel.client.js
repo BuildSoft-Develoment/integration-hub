@@ -1018,8 +1018,73 @@
     if(d.kind==='binary'){ v.innerHTML = head + '<p class="empty">Archivo binario — no se puede mostrar como texto.</p>'; return; }
     if(d.kind==='too-large'){ v.innerHTML = head + '<p class="empty">Archivo demasiado grande para previsualizar.</p>'; return; }
     if(d.kind==='markdown'){ v.innerHTML = head + '<div class="fview-body"><div class="md-body">'+d.html+'</div></div>'; addViewerTools(d); return; }
+    // v12.144: visor OpenAPI integrado (sin dependencias) en modo live para specs openapi.*/swagger.*.
+    if(MODE==='live' && isOpenapiFile(d)){ renderOpenapiViewer(d, head); return; }
     v.innerHTML = head + '<div class="fview-body"><div class="fview-pre">'+gutterHtml(d.lines||[])+'</div></div>';
     addViewerTools(d);
+  }
+  // v12.144: visor OpenAPI integrado — resumen de endpoints + schemas (parser YAML ligero, sin deps).
+  function isOpenapiFile(d){
+    if(/openapi\.(ya?ml|json)$/i.test(d.path||'')) return true;
+    var ext = (d.ext||'').toLowerCase();
+    if(ext!=='yaml' && ext!=='yml' && ext!=='json') return false;
+    var sample = (d.lines||[]).slice(0,40).join('\n');
+    return /(^|\n)\s*openapi\s*:/.test(sample) || /(^|\n)\s*swagger\s*:/.test(sample);
+  }
+  function renderOpenapiViewer(d, head){
+    var v = el('files-viewer');
+    v.innerHTML = head
+      + '<div class="oa-toolbar"><span class="oa-title">📘 OpenAPI</span><span class="oa-count" id="oa-count"></span>'
+      + '<button class="oa-mode on" type="button" data-oa-mode="api">Resumen</button>'
+      + '<button class="oa-mode" type="button" data-oa-mode="raw">Raw</button></div>'
+      + '<div id="oa-summary" class="oa-summary"><p class="empty">Cargando spec…</p></div>'
+      + '<div id="oa-raw" class="fview-body" style="display:none"><div class="fview-pre">'+gutterHtml(d.lines||[])+'</div></div>';
+    var btns = v.querySelectorAll('[data-oa-mode]');
+    for(var i=0;i<btns.length;i++){ btns[i].addEventListener('click', function(ev){ var m=ev.currentTarget.getAttribute('data-oa-mode'); var all=v.querySelectorAll('[data-oa-mode]'); for(var k=0;k<all.length;k++) all[k].classList.toggle('on', all[k]===ev.currentTarget); var s=el('oa-summary'), raw=el('oa-raw'); if(s) s.style.display=m==='api'?'':'none'; if(raw) raw.style.display=m==='raw'?'':'none'; }); }
+    fetch('/api/files/raw?path='+encodeURIComponent(d.path)).then(function(r){return r.text();}).then(function(t){ renderOpenapiSummary(t); }).catch(function(){ var s=el('oa-summary'); if(s) s.innerHTML='<p class="empty">No se pudo cargar el spec (/api/files/raw).</p>'; });
+  }
+  function parseOpenapi(text){
+    var lines=text.split(/\r?\n/), ops=[], schemas=[];
+    var inPaths=false, inSchemas=false, curPath=null, cur=null, curSchema=null;
+    function flushOp(){ if(cur){ cur.block=cur.buf.join('\n'); delete cur.buf; ops.push(cur); cur=null; } }
+    function flushSchema(){ if(curSchema){ curSchema.block=curSchema.buf.join('\n'); delete curSchema.buf; schemas.push(curSchema); curSchema=null; } }
+    for(var i=0;i<lines.length;i++){
+      var ln=lines[i];
+      if(/^\S/.test(ln)){ flushOp(); flushSchema(); curPath=null; inSchemas=false; inPaths=/^paths:/.test(ln); continue; }
+      if(inPaths){
+        var pm=ln.match(/^  (\/\S*):\s*$/); if(pm){ flushOp(); curPath=pm[1]; continue; }
+        var mm=ln.match(/^    (get|post|put|patch|delete|head|options):\s*$/i);
+        if(mm && curPath){ flushOp(); cur={method:mm[1].toUpperCase(), path:curPath, summary:'', buf:[ln]}; continue; }
+        if(cur){ cur.buf.push(ln); var sm=ln.match(/^\s+summary:\s*(.+)$/); if(sm && !cur.summary) cur.summary=sm[1].replace(/^['"]|['"]$/g,''); }
+        continue;
+      }
+      if(/^  schemas:\s*$/.test(ln)){ inSchemas=true; flushSchema(); continue; }
+      if(inSchemas){
+        var snm=ln.match(/^    ([A-Za-z0-9_]+):\s*$/); if(snm){ flushSchema(); curSchema={name:snm[1], buf:[ln]}; continue; }
+        if(/^  \S/.test(ln)){ flushSchema(); inSchemas=false; continue; }
+        if(curSchema) curSchema.buf.push(ln);
+      }
+    }
+    flushOp(); flushSchema();
+    return { ops:ops, schemas:schemas };
+  }
+  function renderOpenapiSummary(text){
+    var host=el('oa-summary'); if(!host) return;
+    var p=parseOpenapi(text);
+    var cnt=el('oa-count'); if(cnt) cnt.textContent=p.ops.length+' endpoints · '+p.schemas.length+' schemas';
+    if(!p.ops.length && !p.schemas.length){ host.innerHTML='<p class="empty">No se reconocieron paths/schemas; usa la vista Raw.</p>'; return; }
+    var byPath={}, order=[];
+    p.ops.forEach(function(o){ if(!byPath[o.path]){ byPath[o.path]=[]; order.push(o.path); } byPath[o.path].push(o); });
+    var h='<div class="oa-section-h">Endpoints ('+p.ops.length+')</div>';
+    order.forEach(function(path){ byPath[path].forEach(function(o){
+      var ml=o.method.toLowerCase(); var mc='oa-m-'+(['get','post','put','patch','delete'].indexOf(ml)>=0?ml:'other');
+      h+='<details class="oa-op"><summary><span class="oa-m '+mc+'">'+esc(o.method)+'</span><span class="oa-path">'+esc(path)+'</span>'+(o.summary?'<span class="oa-sum">'+esc(o.summary)+'</span>':'')+'</summary><pre>'+esc(o.block)+'</pre></details>';
+    }); });
+    if(p.schemas.length){
+      h+='<div class="oa-section-h">Schemas ('+p.schemas.length+')</div>';
+      p.schemas.forEach(function(s){ h+='<details class="oa-op"><summary><span class="oa-path">'+esc(s.name)+'</span></summary><pre>'+esc(s.block)+'</pre></details>'; });
+    }
+    host.innerHTML=h;
   }
   function addViewerTools(d){
     var v=el('files-viewer'); var tools=v.querySelector('.fview-tools'); if(!tools) return;
