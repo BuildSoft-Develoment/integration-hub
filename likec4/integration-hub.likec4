@@ -79,7 +79,7 @@ model {
     container postgresDb 'PostgreSQL'
     container sqlServerDb 'SQL Server'
     container mysqlDb 'MySQL'
-    container mongoDb 'MongoDB'
+    container mongoDb 'MongoDB (parcial: no implementado)'
   }
   iam = system 'Keycloak'
   db = system 'PostgreSQL'
@@ -135,7 +135,7 @@ model {
           component connectionRegistry 'Connection Registry'
           component connectionPoolManager 'Connection Pool Manager'
           component jdbcWriteExecutor 'Jdbc Write Executor'
-          component mongoWriteExecutor 'Mongo Write Executor'
+          component mongoWriteExecutor 'Mongo Write Executor (no implementado)'
           component restCallTaskProvider 'RestCallTaskProvider'
           component notificationTaskProvider 'NotificationTaskProvider'
         }
@@ -260,7 +260,7 @@ model {
   integrationHub.quarkusApp.processEngine.taskProviders.dbWriteTaskProvider -> integrationHub.quarkusApp.processEngine.taskProviders.connectionRegistry 'Resuelve connectionRef'
   integrationHub.quarkusApp.processEngine.taskProviders.connectionRegistry -> integrationHub.quarkusApp.processEngine.taskProviders.connectionPoolManager 'Obtiene pool JDBC'
   integrationHub.quarkusApp.processEngine.taskProviders.dbWriteTaskProvider -> integrationHub.quarkusApp.processEngine.taskProviders.jdbcWriteExecutor 'Escribe en motores relacionales'
-  integrationHub.quarkusApp.processEngine.taskProviders.dbWriteTaskProvider -> integrationHub.quarkusApp.processEngine.taskProviders.mongoWriteExecutor 'Escribe en MongoDB'
+  integrationHub.quarkusApp.processEngine.taskProviders.dbWriteTaskProvider -> integrationHub.quarkusApp.processEngine.taskProviders.mongoWriteExecutor 'Escribe en MongoDB (no implementado)'
   integrationHub.quarkusApp.processExecutionService -> integrationHub.quarkusApp.processEngine.taskProviders.restCallTaskProvider 'Ejecuta REST_CALL'
   integrationHub.quarkusApp.processExecutionService -> integrationHub.quarkusApp.processEngine.taskProviders.notificationTaskProvider 'Ejecuta NOTIFICATION'
 

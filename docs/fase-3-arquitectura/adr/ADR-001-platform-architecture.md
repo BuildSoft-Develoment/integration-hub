@@ -95,7 +95,7 @@ Para la tarea `DB_WRITE` se adopta el siguiente criterio:
 - `JDBC` plano se usa para escritura hacia bases externas dinamicas
 - `Agroal` se usa de forma programatica para pool de conexiones relacionales externas
 - `Oracle`, `PostgreSQL`, `SQL Server` y `MySQL` se tratan como destinos JDBC
-- `MongoDB` se trata como un destino no relacional separado y no usa `Agroal`
+- `MongoDB` se trata como un destino no relacional separado y no usa `Agroal`. **Estado actual: PARCIAL / no implementado** — es catalogable como `ConnectionType.MONGODB`, pero la prueba de conexion devuelve "not implemented yet" (`ConnectionCatalogService`), `ConnectionType.isJdbc()` lo excluye y `DB_WRITE` resuelve solo `DataSource` JDBC (`DbWriteTaskProvider`). Pendiente: proveedor de conectividad + escritura real y su evidencia.
 
 ### Razonamiento
 
