@@ -1759,6 +1759,9 @@ function memoryHtmlShell(dataScript) {
   .nav .tab .nav-ic { display:inline-block; width:18px; text-align:center; margin-right:4px; opacity:.9; }
   .nav-group { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); opacity:.65; margin:12px 0 3px 10px; user-select:none; }
   .content { flex:1 1 auto; min-width:0; }
+  #nav-back-wrap { margin-bottom:10px; }
+  .nav-back { font-size:12px; font-weight:600; padding:5px 12px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:var(--text); cursor:pointer; }
+  .nav-back:hover { border-color:var(--brand); color:var(--brand-dark); background:var(--brand-light); }
   @media (max-width:820px) {
     .wrap { flex-direction:column; }
     .sidebar { position:static; flex:none; width:100%; }
@@ -2242,6 +2245,7 @@ function memoryHtmlShell(dataScript) {
     </nav>
   </aside>
   <main class="content">
+  <div id="nav-back-wrap" style="display:none"><button id="nav-back" type="button" class="nav-back">← Volver</button></div>
   <div class="pane active" id="pane-home">
     <div id="home-host"><div class="skeleton skeleton-row" style="width:40%"></div><div class="skeleton skeleton-row" style="width:90%"></div><div class="skeleton skeleton-row" style="width:75%"></div></div>
   </div>

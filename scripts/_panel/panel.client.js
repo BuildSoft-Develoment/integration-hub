@@ -1039,7 +1039,7 @@
     var a = agentId();
     postLocks('/api/locks/release', { feature:feature, agent:a||undefined }).then(function(res){ if(!res.j.ok){ if(confirm((res.j.error||'No se pudo liberar')+'\n\n¿Forzar liberacion?')){ postLocks('/api/locks/release',{feature:feature, force:true}).then(function(){ loadAgents(); }); return; } } loadAgents(); });
   }
-  function showTab(name){
+  function showTab(name, fromPop){
     var tabs = document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ var on = tabs[i].dataset.tab===name; tabs[i].classList.toggle('active', on); tabs[i].setAttribute('aria-selected', on?'true':'false'); tabs[i].setAttribute('tabindex', on?'0':'-1'); }
     var panes = document.querySelectorAll('.pane'); for(var j=0;j<panes.length;j++) panes[j].classList.toggle('active', panes[j].id===('pane-'+name));
     if(name==='home') loadHome();
@@ -1048,7 +1048,12 @@
     if(name==='files' && !FILES_TREE) loadFilesTree();
     if(name==='agents') loadAgents();
     try{ localStorage.setItem('aif-tab', name); }catch(e){}
+    // v12.141: historial de navegacion para "volver donde estaba" (browser back / Alt+<- / boton).
+    if(!fromPop){ try{ var st = history.state; if(!st || st.tab == null){ history.replaceState({ tab:name, from:null }, '', '#'+name); } else if(st.tab !== name){ history.pushState({ tab:name, from:st.tab }, '', '#'+name); } }catch(e){} }
+    updateBackBtn();
   }
+  function tabLabel(t){ var b = document.querySelector('.nav .tab[data-tab="'+t+'"]'); return b ? b.textContent.trim().replace(/^[^0-9A-Za-zÁÉÍÓÚÜÑáéíóúüñ]+/, '') : t; }
+  function updateBackBtn(){ var w = el('nav-back-wrap'), b = el('nav-back'); if(!w || !b) return; var from = history.state && history.state.from; if(from){ b.textContent = '← Volver a ' + tabLabel(from); w.style.display = ''; } else { w.style.display = 'none'; } }
   // UX-1: vista Inicio / Resumen — entrada por defecto orientada a tarea ("donde estoy / que hago").
   function loadHome(){
     var host = el('home-host'); if(!host) return;
@@ -1430,4 +1435,7 @@
   document.addEventListener('click', function(e){ var a = e.target && e.target.closest && e.target.closest('[data-open-file]'); if(!a) return; e.preventDefault(); var p = a.getAttribute('data-open-file'); showTab('files'); if(typeof openFile==='function') openFile(p); });
   // v12.141 (D): click en un segmento de carpeta del breadcrumb -> filtra el arbol del visor.
   document.addEventListener('click', function(e){ var cr = e.target && e.target.closest && e.target.closest('[data-crumb]'); if(!cr) return; e.preventDefault(); var ff = el('files-filter'); if(ff){ ff.value = cr.getAttribute('data-crumb'); ff.dispatchEvent(new Event('input',{bubbles:true})); ff.scrollIntoView({behavior:'smooth',block:'center'}); } });
+  // v12.141: "volver donde estaba" — boton + Atras del navegador via history.popstate.
+  if(el('nav-back')) el('nav-back').addEventListener('click', function(){ history.back(); });
+  window.addEventListener('popstate', function(ev){ var t = (ev.state && ev.state.tab) || (location.hash||'').replace(/^#/, '') || 'home'; if(document.querySelector('.tab[data-tab="'+t+'"]')){ showTab(t, true); } else { updateBackBtn(); } });
 })();
