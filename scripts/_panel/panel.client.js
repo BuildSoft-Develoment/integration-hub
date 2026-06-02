@@ -427,7 +427,7 @@
     var fm = multiCsv('filter-mode'); if(fm) params.set('act_mode', fm);
     var fsl = (el('filter-slow')||{}).value; if(fsl) params.set('act_slow', fsl);
     var qs = params.toString();
-    window.history.replaceState(null, '', window.location.pathname + (qs ? '?'+qs : '') + window.location.hash);
+    window.history.replaceState(history.state || null, '', window.location.pathname + (qs ? '?'+qs : '') + window.location.hash);
   }
   function writeTrendFiltersToUrl(){
     var params = new URLSearchParams(window.location.search);
@@ -435,7 +435,7 @@
     var ta = (el('trend-action')||{}).value; if(ta) params.set('trend_action', ta);
     var td = (el('trend-days')||{}).value; if(td && td !== '30') params.set('trend_days', td);
     var qs = params.toString();
-    window.history.replaceState(null, '', window.location.pathname + (qs ? '?'+qs : '') + window.location.hash);
+    window.history.replaceState(history.state || null, '', window.location.pathname + (qs ? '?'+qs : '') + window.location.hash);
   }
   // v12.25: Historial de acciones + re-ejecucion ----------------------
   function fmtAgo(iso){
@@ -806,19 +806,23 @@
     }
     return svg + '</svg>';
   }
-  function showSubtab(name){
+  function showSubtab(name, fromPop){
     var tabs = document.querySelectorAll('.subtab'); for(var i=0;i<tabs.length;i++) tabs[i].classList.toggle('active', tabs[i].dataset.subtab===name);
     var panes = document.querySelectorAll('.subpane'); for(var j=0;j<panes.length;j++) panes[j].classList.toggle('active', panes[j].id===('subpane-'+name));
     if(name==='history') loadHistory();
     if(name==='stats') loadStats();
     if(name==='trends') loadTrends();
+    if(fromPop) return; // restaurando desde el historial: no reescribir el estado
     // v12.32: persistir sub-tab activo en URL. 'run' es el default, no se escribe.
+    // v12.141: PRESERVA el estado de navegacion {tab,from} (antes pasaba null y rompia "Volver").
     try {
       var p = new URLSearchParams(window.location.search);
       if(name && name !== 'run') p.set('act_subtab', name); else p.delete('act_subtab');
       var qs = p.toString();
-      window.history.replaceState(null, '', window.location.pathname + (qs ? '?'+qs : '') + window.location.hash);
+      var prev = history.state || {};
+      window.history.replaceState({ tab: prev.tab || 'actions', sub: name, from: (prev.from != null ? prev.from : null) }, '', window.location.pathname + (qs ? '?'+qs : '') + window.location.hash);
     } catch {}
+    updateBackBtn();
   }
   // v12.25: atajos de teclado para las acciones mas usadas
   var SHORTCUTS = { 'KeyS':'sync-memory', 'KeyR':'memory-report', 'KeyE':'regenerate-context', 'KeyC':'check-trace-drift' };
@@ -903,10 +907,14 @@
       });
     }
   }
-  function showTraceSub(name){
+  function showTraceSub(name, fromPop){
     var subs = document.querySelectorAll('[data-trace-sub]'); for(var i=0;i<subs.length;i++) subs[i].classList.toggle('active', subs[i].dataset.traceSub===name);
     var panes = document.querySelectorAll('#pane-trace .subpane'); for(var j=0;j<panes.length;j++) panes[j].classList.toggle('active', panes[j].id===('trace-sub-'+name));
     if(name==='by-feature') loadCoverageByFeature();
+    if(fromPop) return;
+    // v12.141: registra el sub-tab de Trazabilidad en el estado para "Volver".
+    try { var prev = history.state || {}; window.history.replaceState({ tab: prev.tab || 'trace', sub: name, from: (prev.from != null ? prev.from : null) }, '', window.location.href); } catch {}
+    updateBackBtn();
   }
   // v12.70: visor de proyecto (pestana Proyecto).
   var FILES_TREE = null;
@@ -1437,5 +1445,5 @@
   document.addEventListener('click', function(e){ var cr = e.target && e.target.closest && e.target.closest('[data-crumb]'); if(!cr) return; e.preventDefault(); var ff = el('files-filter'); if(ff){ ff.value = cr.getAttribute('data-crumb'); ff.dispatchEvent(new Event('input',{bubbles:true})); ff.scrollIntoView({behavior:'smooth',block:'center'}); } });
   // v12.141: "volver donde estaba" — boton + Atras del navegador via history.popstate.
   if(el('nav-back')) el('nav-back').addEventListener('click', function(){ history.back(); });
-  window.addEventListener('popstate', function(ev){ var t = (ev.state && ev.state.tab) || (location.hash||'').replace(/^#/, '') || 'home'; if(document.querySelector('.tab[data-tab="'+t+'"]')){ showTab(t, true); } else { updateBackBtn(); } });
+  window.addEventListener('popstate', function(ev){ var s = ev.state || {}; var t = s.tab || (location.hash||'').replace(/^#/, '') || 'home'; if(document.querySelector('.tab[data-tab="'+t+'"]')){ showTab(t, true); if(s.sub){ if(t==='actions') showSubtab(s.sub, true); else if(t==='trace') showTraceSub(s.sub, true); } } else { updateBackBtn(); } });
 })();
