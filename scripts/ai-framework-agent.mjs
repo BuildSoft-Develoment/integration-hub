@@ -2710,8 +2710,9 @@ const MEMORY_CLIENT_JS = [
   "    Promise.all([",
   "      fetch('/api/roadmap/status').then(function(r){return r.json();}),",
   "      fetch('/api/roadmap/next').then(function(r){return r.json();}).catch(function(){return null;}),",
-  "      fetch('/api/agent-runs?limit=10').then(function(r){return r.json();}).catch(function(){return null;})",
-  "    ]).then(function(arr){ ROADMAP_STATE = { status: arr[0], next: arr[1], agentRuns: arr[2] }; renderRoadmap(); })",
+  "      fetch('/api/agent-runs?limit=10').then(function(r){return r.json();}).catch(function(){return null;}),",
+  "      fetch('/api/roadmap/pending').then(function(r){return r.json();}).catch(function(){return null;})",
+  "    ]).then(function(arr){ ROADMAP_STATE = { status: arr[0], next: arr[1], agentRuns: arr[2], pending: arr[3] }; renderRoadmap(); })",
   "    .catch(function(){ el('roadmap-host').innerHTML = '<p class=\"empty\">No se pudo cargar /api/roadmap/status. Verifica que scripts/roadmap-status.mjs existe (corre: npm run template:upgrade -- --apply).</p>'; });",
   "  }",
   "  function renderRoadmap(){",
@@ -2720,6 +2721,21 @@ const MEMORY_CLIENT_JS = [
   "    var html = '';",
   "    // Cabecera con proyecto + version + features.",
   "    html += '<div class=\"roadmap-section\"><h4>Proyecto · ' + esc(st.project||'-') + ' · template ' + esc(st.templateVersion||'-') + ' · ' + (st.features?st.features.length:0) + ' features</h4></div>';",
+  "    // v12.139: Pendientes por fase (consume /api/roadmap/pending = roadmap-pending.mjs --json).",
+  "    var pend = ROADMAP_STATE.pending;",
+  "    if(pend && pend.phases){",
+  "      var pb=0,pg=0,pi=0; pend.phases.forEach(function(ph){ (ph.items||[]).forEach(function(it){ if(it.severity==='blocker')pb++; else if(it.severity==='gate')pg++; else pi++; }); });",
+  "      html += '<div class=\"roadmap-section\"><h4>📋 Pendientes por fase <span class=\"muted\" style=\"font-weight:400\">('+pb+' blocker · '+pg+' gate · '+pi+' info)</span></h4>';",
+  "      pend.phases.forEach(function(ph){",
+  "        if(ph.na){ html += '<div style=\"margin:3px 0;color:var(--muted)\">Fase '+ph.phase+' ('+esc(ph.name)+') — ⊘ N/A (reingenieria)</div>'; return; }",
+  "        if(!ph.items || !ph.items.length){ html += '<div style=\"margin:3px 0;color:#3a7\">Fase '+ph.phase+' ('+esc(ph.name)+') — ✓ sin pendientes</div>'; return; }",
+  "        html += '<div style=\"margin:6px 0\"><strong>Fase '+ph.phase+' ('+esc(ph.name)+')</strong><ul style=\"margin:2px 0 6px 0\">';",
+  "        ph.items.forEach(function(it){ var ic = it.severity==='blocker'?'✗':(it.severity==='gate'?'🔒':'◦'); var col = it.severity==='blocker'?'#c33':(it.severity==='gate'?'#a60':'var(--muted)'); html += '<li style=\"color:'+col+'\">'+ic+' <span class=\"muted\">['+esc(it.kind)+']</span> <code>'+esc(it.item)+'</code> — '+esc(it.detail)+'</li>'; });",
+  "        html += '</ul></div>';",
+  "      });",
+  "      html += '<p class=\"muted\" style=\"font-size:11px\">✗ blocker (el agente puede resolver) · 🔒 gate (firma humana) · ◦ info (validacion sin corrida registrada). Fuente: <code>npm run roadmap:pending</code></p>';",
+  "      html += '</div>';",
+  "    }",
   "    // v12.127: widget de las 3 capas del framework AI-first empresarial.",
   "    // Hace VISIBLE en el panel la arquitectura ortogonal: governance (Capa 2) +",
   "    // execution discipline (Capa 1) + lifecycle compat (Capa 3). Es referencia visual",
@@ -4257,6 +4273,36 @@ async function serveMemory(root, db, dbPath, port) {
           if (child.status !== 0 || !child.stdout) {
             res.writeHead(500, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "roadmap-status fallo", stderr: child.stderr?.slice(0, 500) }));
+            return;
+          }
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(child.stdout);
+          return;
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: String(e.message || e) }));
+          return;
+        }
+      }
+      // v12.139: pendientes por fase (consume scripts/roadmap-pending.mjs --json).
+      if (url.pathname === "/api/roadmap/pending") {
+        try {
+          const rootDir = process.cwd();
+          const scriptPath = path.join(rootDir, "scripts", "roadmap-pending.mjs");
+          if (!fs.existsSync(scriptPath)) {
+            res.writeHead(404, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "roadmap-pending.mjs no existe en este proyecto. Corre: npm run template:upgrade -- --apply" }));
+            return;
+          }
+          const argv = [scriptPath, "--json", "--root", rootDir];
+          const phaseQ = url.searchParams.get("phase");
+          const featureQ = url.searchParams.get("feature");
+          if (phaseQ != null && /^\d+$/.test(phaseQ)) argv.push("--phase", phaseQ);
+          if (featureQ) argv.push("--feature", featureQ);
+          const child = spawnSync(process.execPath, argv, { encoding: "utf8", timeout: 15000 });
+          if (child.status !== 0 || !child.stdout) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "roadmap-pending fallo", stderr: child.stderr?.slice(0, 500) }));
             return;
           }
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
