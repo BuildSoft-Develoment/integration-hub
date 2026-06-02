@@ -2714,7 +2714,7 @@ const MEMORY_CLIENT_JS = [
   "    postLocks('/api/locks/release', { feature:feature, agent:a||undefined }).then(function(res){ if(!res.j.ok){ if(confirm((res.j.error||'No se pudo liberar')+'\\n\\n¿Forzar liberacion?')){ postLocks('/api/locks/release',{feature:feature, force:true}).then(function(){ loadAgents(); }); return; } } loadAgents(); });",
   "  }",
   "  function showTab(name){",
-  "    var tabs = document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++) tabs[i].classList.toggle('active', tabs[i].dataset.tab===name);",
+  "    var tabs = document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ var on = tabs[i].dataset.tab===name; tabs[i].classList.toggle('active', on); tabs[i].setAttribute('aria-selected', on?'true':'false'); tabs[i].setAttribute('tabindex', on?'0':'-1'); }",
   "    var panes = document.querySelectorAll('.pane'); for(var j=0;j<panes.length;j++) panes[j].classList.toggle('active', panes[j].id===('pane-'+name));",
   "    if(name==='actions' && !ACTIONS_CACHE) loadActions();",
   "    if(name==='roadmap') loadRoadmap();",
@@ -2978,6 +2978,8 @@ const MEMORY_CLIENT_JS = [
   "  if(el('console-stop')) el('console-stop').addEventListener('click', stopAction);",
   "  // v12.140: tema claro/oscuro persistido (localStorage) con fallback a prefers-color-scheme.",
   "  (function(){ function applyTheme(t){ if(t==='dark') document.documentElement.setAttribute('data-theme','dark'); else document.documentElement.removeAttribute('data-theme'); } var saved=null; try{ saved=localStorage.getItem('aif-theme'); }catch(e){} var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; applyTheme(saved || (sysDark?'dark':'light')); var tb=el('theme-toggle'); if(tb) tb.addEventListener('click', function(){ var dark = document.documentElement.getAttribute('data-theme')==='dark'; var next = dark?'light':'dark'; applyTheme(next); try{ localStorage.setItem('aif-theme', next); }catch(e){} }); })();",
+  "  // v12.140: accesibilidad de las pestanas (ARIA tablist/tab/tabpanel + roving tabindex + flechas).",
+  "  (function(){ var tl = document.querySelector('.tabs'); if(tl){ tl.setAttribute('role','tablist'); tl.setAttribute('aria-label','Secciones del panel'); } var tabs = document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ var on = tabs[i].classList.contains('active'); tabs[i].setAttribute('role','tab'); tabs[i].setAttribute('aria-selected', on?'true':'false'); tabs[i].setAttribute('tabindex', on?'0':'-1'); } var panes = document.querySelectorAll('.pane'); for(var j=0;j<panes.length;j++){ panes[j].setAttribute('role','tabpanel'); panes[j].setAttribute('tabindex','0'); } if(tl) tl.addEventListener('keydown', function(e){ if(e.key!=='ArrowRight' && e.key!=='ArrowLeft') return; var arr=[].slice.call(document.querySelectorAll('.tab')); var idx=arr.indexOf(document.activeElement); if(idx<0) return; var n = e.key==='ArrowRight' ? (idx+1)%arr.length : (idx-1+arr.length)%arr.length; arr[n].focus(); showTab(arr[n].dataset.tab); e.preventDefault(); }); })();",
   "  if(el('history-refresh')) el('history-refresh').addEventListener('click', loadHistory);",
   "  if(el('stats-refresh')) el('stats-refresh').addEventListener('click', loadStats);",
   "  if(el('trends-refresh')) el('trends-refresh').addEventListener('click', loadTrends);",
@@ -3404,7 +3406,7 @@ function memoryHtmlShell(dataScript) {
 <div class="wrap">
   <div class="stats" id="stats"></div>
   <div class="searchbar">
-    <input id="search-q" type="text" placeholder="Buscar en la memoria (trazabilidad, decisiones, documentos…)">
+    <input id="search-q" type="text" aria-label="Buscar en la memoria del agente" placeholder="Buscar en la memoria (trazabilidad, decisiones, documentos…)">
     <button id="search-btn">Buscar</button>
   </div>
   <div class="tabs">
@@ -3502,7 +3504,7 @@ function memoryHtmlShell(dataScript) {
             <button id="console-clear">Limpiar</button>
             <button id="console-copy">Copiar</button>
           </div>
-          <div class="console" id="console"><span class="muted">Esperando accion… Las acciones solo estan disponibles en modo <strong>live</strong> (memory-serve), no en el reporte estatico.</span></div>
+          <div class="console" id="console" role="log" aria-live="polite" aria-label="Salida de la consola de acciones"><span class="muted">Esperando accion… Las acciones solo estan disponibles en modo <strong>live</strong> (memory-serve), no en el reporte estatico.</span></div>
         </div>
       </div>
     </div>
