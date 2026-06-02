@@ -34,7 +34,10 @@ Codigo existente -> SDD (spec-tecnica) -> Trazabilidad -> QA (evidencia GREEN re
 | Gate | Estado | Aprobador | Fecha | Evidencia |
 |---|---|---|---|---|
 | gate-sdd-approved | pending | — | — | spec-tecnica.md |
+| gate-build-ready | pending | — | — | traceability.md |
 | gate-qa-passed | pending | — | — | tdd-evidence.md |
+| gate-deploy-ready | pending | — | — | ops/runbooks/001-catalogo-fuentes-runbook.md |
+| gate-operations-ready | pending | — | — | ops/runbooks/001-catalogo-fuentes-runbook.md |
 
 ## Decisiones
 - Secretos referenciados con el contrato `${secret:...}`, nunca persistidos en claro (ADR-002).

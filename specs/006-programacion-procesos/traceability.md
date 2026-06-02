@@ -26,7 +26,10 @@ Matriz viva RF -> API -> BD -> Codigo -> Test, detalle del rollup global en
 | Gate | Estado | Aprobador | Fecha | Evidencia |
 |---|---|---|---|---|
 | gate-sdd-approved | pending | — | — | spec-tecnica.md |
+| gate-build-ready | pending | — | — | traceability.md |
 | gate-qa-passed | pending | — | — | tdd-evidence.md |
+| gate-deploy-ready | pending | — | — | ops/runbooks/006-programacion-procesos-runbook.md |
+| gate-operations-ready | pending | — | — | ops/runbooks/006-programacion-procesos-runbook.md |
 
 ## Decisiones
 - La programacion es atributo de `process_definition` (columnas `scheduled`/`schedule_every`/

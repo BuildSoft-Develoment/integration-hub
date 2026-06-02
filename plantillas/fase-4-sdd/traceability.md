@@ -29,10 +29,15 @@ Product Design -> SPDD -> Prototipo HTML5 -> SDD -> Construccion -> QA
 | RNF-NN | HU-NN | spdd-frontend.md | prototype-html5/index.html | GET /api/<entidad> | - | - | - | Pendiente prototipo | prototype.md |
 
 ## Gates
-| Gate | Estado | Evidencia |
-|---|---|---|
-| gate-prototype-ready | Pendiente | prototype-validation.md |
-| gate-spdd-approved | Pendiente | spdd-frontend.md |
+| Gate | Estado | Aprobador | Fecha | Evidencia |
+|---|---|---|---|---|
+| gate-prototype-ready | pending | — | — | prototype-validation.md |
+| gate-spdd-approved | pending | — | — | spdd-frontend.md |
+| gate-sdd-approved | pending | — | — | spec-tecnica.md |
+| gate-build-ready | pending | — | — | traceability.md |
+| gate-qa-passed | pending | — | — | tdd-evidence.md |
+| gate-deploy-ready | pending | — | — | ops/runbooks/<nnn-feature>-runbook.md |
+| gate-operations-ready | pending | — | — | ops/runbooks/<nnn-feature>-runbook.md |
 
 ## Decisiones
 - <Decision 1 — link a ADR si aplica>
