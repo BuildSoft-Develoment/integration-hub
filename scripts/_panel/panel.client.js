@@ -19,12 +19,24 @@
     var tbl = table(headers, rows, cols).replace('<table>', '<table id="'+id+'">');
     return '<div class="table-filter-wrap">'+inp+'<span class="table-filter-count" id="'+id+'-count"></span></div>'+tbl;
   }
-  function renderStats(s){
+  // UX-4: estados reutilizables (loading skeleton + error con reintento + aviso de modo).
+  function skeleton(widths){ var w = widths || ['40%','90%','70%','55%']; var h=''; for(var i=0;i<w.length;i++) h += '<div class="skeleton skeleton-row" style="width:'+w[i]+'"></div>'; return h; }
+  function errorState(hostId, msg, retry){ var h = el(hostId); if(!h) return; h.innerHTML = '<div class="error-state">'+esc(msg)+'<br><button class="retry-btn" type="button">↻ Reintentar</button></div>'; var b = h.querySelector('.retry-btn'); if(b && retry) b.addEventListener('click', retry); }
+  function modeNotice(what){ return '<p class="empty">'+esc(what)+' solo disponible en modo <strong>live</strong> (memory-serve). Arranca con <code>npm run memory:serve</code>.</p>'; }
+  // UX-5: onboarding dismissible + barra de atajos (compartidos por la vista Inicio).
+  function onboardHtml(){ var seen=false; try{ seen = localStorage.getItem('aif-onboard')==='1'; }catch(e){} if(seen) return ''; return '<div class="onboard-banner"><span>👋 <strong>Panel de memoria del agente.</strong> Esta es la vista <em>Inicio</em>: salud del proyecto, siguiente accion segura y accesos rapidos. Pulsa <kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> para buscar e ir a cualquier seccion. <span class="mode-badge live">live</span> habilita acciones; <span class="mode-badge static">static</span> es solo lectura.</span><button class="onboard-x" type="button" aria-label="Cerrar">×</button></div>'; }
+  function shortcutsHtml(){ return '<div class="shortcuts-bar"><span><kbd>Ctrl</kbd>/<kbd>⌘</kbd>+<kbd>K</kbd> buscar / ir a</span><span><kbd>↑</kbd><kbd>↓</kbd> navegar secciones</span><span><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>H</kbd> historial · <kbd>T</kbd> stats · <kbd>D</kbd> tendencias</span><span><kbd>Esc</kbd> cancelar accion</span></div>'; }
+  // UX-3: salto desde el command palette a una tabla con filtro aplicado.
+  function gotoFilter(tableId, value){ setTimeout(function(){ var inp = document.querySelector('[data-table-filter="'+tableId+'"]'); if(inp){ inp.value = value; inp.dispatchEvent(new Event('input',{bubbles:true})); inp.scrollIntoView({behavior:'smooth',block:'center'}); } }, 60); }
+  // v12.141: la barra de stats se movio a Inicio. statsGridHtml arma el grid reusable.
+  function statsGridHtml(s){
+    s = s || {};
     var items = [['Documentos',s.documents],['Chunks',s.chunks],['Trace links',s.traceLinks],['Gate runs',s.gateRuns],['Evidencia',s.evidence],['Decisiones',s.decisions],['Preguntas',s.openQuestions]];
-    var h = ''; for(var i=0;i<items.length;i++){ h += '<div class="stat"><div class="stat-v">'+esc(items[i][1])+'</div><div class="stat-l">'+esc(items[i][0])+'</div></div>'; }
+    var h = ''; for(var i=0;i<items.length;i++){ h += '<div class="stat"><div class="stat-v">'+esc(items[i][1]==null?0:items[i][1])+'</div><div class="stat-l">'+esc(items[i][0])+'</div></div>'; }
     h += '<div class="stat"><div class="stat-v">'+(s.fts?'si':'no')+'</div><div class="stat-l">FTS5</div></div>';
-    el('stats').innerHTML = h;
+    return h;
   }
+  function renderStats(s){ var n = el('stats'); if(n) n.innerHTML = statsGridHtml(s); } // compat: solo si existe el contenedor global
   function renderAll(d){
     renderStats(d.stats);
     el('tab-trace').innerHTML = filterTable('tbl-trace', ['Origen','Ref','Relacion','Destino','Ref destino','Evidencia'], d.traceLinks, ['source_type','source_ref','relation','target_type','target_ref','evidence_ref'], 'Filtrar trace links (RF, archivo, relacion…)');
@@ -38,12 +50,23 @@
     gHtml += '<h4 style="margin:14px 0 6px">Detalle por feature</h4>';
     gHtml += filterTable('tbl-gates', ['Gate','Scope','Estado','Evidencia'], GR, ['gate','phase_scope','status','summary'], 'Filtrar gates (gate, feature, estado…)');
     el('tab-gates').innerHTML = gHtml;
-    el('tab-decisions').innerHTML = table(['Ref','Titulo','Estado','ADR'], d.decisions, ['decision_ref','title','status','adr_path']);
-    el('tab-evidence').innerHTML = table(['Tipo','Ruta','Descripcion','Estado'], d.evidence, ['evidence_type','path','description','status']);
-    el('tab-questions').innerHTML = table(['Fase','Pregunta','Fuente','Estado'], d.openQuestions, ['phase','question','source_ref','status']);
-    el('tab-docs').innerHTML = table(['Ruta','Tipo','Fase','Titulo'], d.documents, ['path','kind','phase','title']);
+    // v12.141: estas 4 tablas pasan a filterTable -> ganan filtro local + orden por columna (table[id]).
+    el('tab-decisions').innerHTML = filterTable('tbl-decisions', ['Ref','Titulo','Estado','ADR'], d.decisions, ['decision_ref','title','status','adr_path'], 'Filtrar decisiones (ref, titulo, estado…)');
+    el('tab-evidence').innerHTML = filterTable('tbl-evidence', ['Tipo','Ruta','Descripcion','Estado'], d.evidence, ['evidence_type','path','description','status'], 'Filtrar evidencia (tipo, ruta, estado…)');
+    el('tab-questions').innerHTML = filterTable('tbl-questions', ['Fase','Pregunta','Fuente','Estado'], d.openQuestions, ['phase','question','source_ref','status'], 'Filtrar preguntas (fase, texto, estado…)');
+    el('tab-docs').innerHTML = filterTable('tbl-docs', ['Ruta','Tipo','Fase','Titulo'], d.documents, ['path','kind','phase','title'], 'Filtrar documentos (ruta, tipo, fase…)');
+    // v12.141: rutas de archivo clicables (abren en pestaña Proyecto) en trace/evidencia/docs/decisiones.
+    linkifyPaths('tbl-trace'); linkifyPaths('tbl-evidence'); linkifyPaths('tbl-docs'); linkifyPaths('tbl-decisions');
+    // v12.141 (D): badges de color por estado en Gates(col2)/Preguntas(col3)/Decisiones(col2).
+    badgeifyStatusCol('tbl-gates', 2); badgeifyStatusCol('tbl-questions', 3); badgeifyStatusCol('tbl-decisions', 2);
     el('meta').textContent = 'BD: ' + d.dbPath + '  |  modo: ' + d.mode + '  |  ' + d.generatedAt;
   }
+  // Convierte celdas con aspecto de ruta de repo en enlaces que abren el archivo en Proyecto.
+  var PATH_RE = /^[A-Za-z0-9._-]+(?:\/[A-Za-z0-9._-]+)+\.[A-Za-z0-9]+$/;
+  function linkifyPaths(tableId){ if(MODE!=='live') return; var t = el(tableId); if(!t) return; var cells = t.querySelectorAll('tbody td'); for(var i=0;i<cells.length;i++){ var txt = cells[i].textContent.trim(); if(PATH_RE.test(txt)){ cells[i].innerHTML = '<a class="path-link" data-open-file="'+esc(txt)+'" title="Abrir en Proyecto">'+esc(txt)+'</a>'; } } }
+  // Clase de badge segun el estado textual (approved/pending/open/resolved/...).
+  function statusBadgeClass(v){ var s = String(v||'').toLowerCase(); if(/^(approved|validated|implemented|resolved|closed|done|pass|ok)/.test(s)) return 'st-ok'; if(/^(pending|open|in[_ -]?progress|partial|concerns|drift|planned)/.test(s)) return 'st-warn'; if(/^(n\/?a|no aplica|skipped|deferred)/.test(s)) return 'st-muted'; if(/^(blocked|failed|fail|error|rejected)/.test(s)) return 'st-err'; return 'st-info'; }
+  function badgeifyStatusCol(tableId, colIndex){ var t = el(tableId); if(!t) return; var rows = t.querySelectorAll('tbody tr'); for(var i=0;i<rows.length;i++){ var c = rows[i].cells[colIndex]; if(!c) continue; var v = c.textContent.trim(); if(!v || v==='-') continue; c.innerHTML = '<span class="st-badge '+statusBadgeClass(v)+'">'+esc(v)+'</span>'; } }
   function matchesAll(haystack, terms){ var l=String(haystack||'').toLowerCase(); for(var i=0;i<terms.length;i++){ if(l.indexOf(terms[i])<0) return false; } return true; }
   function staticSearch(q){
     q = q.toLowerCase().trim(); if(!q) return [];
@@ -186,14 +209,14 @@
     var html='';
     ['universal','memoria','validador','reporte','generador'].forEach(function(cat){
       if(!byCat[cat] || !byCat[cat].length) return;
-      html += '<div class="action-cat"><h3>'+esc(CATEGORY_LABEL[cat]||cat)+'</h3><div class="action-grid">';
+      html += '<details class="action-cat" open><summary>'+esc(CATEGORY_LABEL[cat]||cat)+' <span class="muted" style="font-weight:400;font-size:11px">('+byCat[cat].length+')</span></summary><div class="action-grid">';
       byCat[cat].forEach(function(a){
         var classes = 'action-btn' + (a.danger?' danger':'');
         var argBlock = '';
         if(a.arg){ argBlock = '<div class="action-arg">'+esc(a.arg.name)+(a.arg.required?' <span style="color:#B45309">*</span>':'')+': <input id="arg-'+esc(a.id)+'" placeholder="'+esc(a.arg.hint||'')+'" /></div>'; }
         html += '<button class="'+classes+'" data-action="'+esc(a.id)+'">'+esc(a.label)+'<span class="ah">'+esc(a.hint||'')+'</span></button>'+argBlock;
       });
-      html += '</div></div>';
+      html += '</div></details>';
     });
     el('actions-host').innerHTML = html;
     var btns = el('actions-host').querySelectorAll('.action-btn');
@@ -800,7 +823,10 @@
   var SHORTCUTS = { 'KeyS':'sync-memory', 'KeyR':'memory-report', 'KeyE':'regenerate-context', 'KeyC':'check-trace-drift' };
   document.addEventListener('keydown', function(ev){
     if(ev.key === 'Escape'){ if(__execController) stopAction(); return; }
-    if(!(ev.ctrlKey && ev.shiftKey)) return;
+    // v12.141: Alt+Shift+letra (Ctrl+Shift chocaba con atajos reservados del navegador:
+    // reabrir pestana, recarga forzada, DevTools, incognito). No dispara dentro de inputs.
+    if(!(ev.altKey && ev.shiftKey)) return;
+    var _t = ev.target; if(_t && /^(INPUT|TEXTAREA|SELECT)$/.test(_t.tagName)) return;
     if(ev.code === 'KeyH'){ ev.preventDefault(); showTab('actions'); showSubtab('history'); return; }
     if(ev.code === 'KeyT'){ ev.preventDefault(); showTab('actions'); showSubtab('stats'); return; }
     if(ev.code === 'KeyD'){ ev.preventDefault(); showTab('actions'); showSubtab('trends'); return; }
@@ -911,6 +937,8 @@
     var files = el('files-tree').querySelectorAll('[data-fpath]');
     for(var i=0;i<files.length;i++){ files[i].addEventListener('click', function(ev){ var p=ev.currentTarget.getAttribute('data-fpath'); var prev=el('files-tree').querySelector('.ftree-file.sel'); if(prev) prev.classList.remove('sel'); ev.currentTarget.classList.add('sel'); openFile(p); }); }
   }
+  // v12.141 (D): breadcrumb segmentado de la ruta abierta; click en una carpeta filtra el arbol.
+  function crumbsHtml(p){ var parts = String(p||'').split('/'); var acc = ''; var out = '<span class="fview-crumbs">'; for(var i=0;i<parts.length;i++){ var last = i===parts.length-1; acc += (i?'/':'') + parts[i]; if(last){ out += '<span class="crumb-file">'+esc(parts[i])+'</span>'; } else { out += '<a class="crumb" data-crumb="'+esc(acc)+'">'+esc(parts[i])+'</a><span class="crumb-sep">/</span>'; } } return out + '</span>'; }
   function openFile(p){
     el('files-viewer').innerHTML = '<p class="empty">Cargando '+esc(p)+'…</p>';
     fetch('/api/files/read?path='+encodeURIComponent(p)).then(function(r){return r.json();}).then(function(d){ renderFileContent(d); }).catch(function(){ el('files-viewer').innerHTML='<p class="empty">No se pudo leer el archivo.</p>'; });
@@ -922,7 +950,7 @@
     if(d.path) CURRENT_FILE = d.path;
     if(d.error){ v.innerHTML = '<p class="empty">'+esc(d.error)+'</p>'; return; }
     var kb = (d.size/1024).toFixed(1);
-    var head = '<div class="fview-head"><code>'+esc(d.path)+'</code> <span class="muted">· '+kb+' KB · '+esc(d.ext||'')+'</span><span class="fview-tools"></span></div>';
+    var head = '<div class="fview-head">'+crumbsHtml(d.path)+' <span class="muted">· '+kb+' KB · '+esc(d.ext||'')+'</span><span class="fview-tools"></span></div>';
     if(d.kind==='image'){ v.innerHTML = head + '<div class="fview-img"><img src="'+d.dataUrl+'" alt="'+esc(d.path)+'"/></div>'; return; }
     if(d.kind==='binary'){ v.innerHTML = head + '<p class="empty">Archivo binario — no se puede mostrar como texto.</p>'; return; }
     if(d.kind==='too-large'){ v.innerHTML = head + '<p class="empty">Archivo demasiado grande para previsualizar.</p>'; return; }
@@ -961,7 +989,7 @@
     rows.forEach(function(f){
       var lk = f.lock;
       var active = lk && !lk.expired;
-      var lockTxt = active ? ('🔒 '+esc(lk.agent)) : (lk && lk.expired ? '⏰ expirado ('+esc(lk.agent)+')' : '— libre');
+      var lockTxt = active ? ('<span class="st-badge st-warn">🔒 '+esc(lk.agent)+'</span>') : (lk && lk.expired ? '<span class="st-badge st-err">⏰ expirado · '+esc(lk.agent)+'</span>' : '<span class="st-badge st-muted">libre</span>');
       var exp = active ? esc(String(lk.expires_at).slice(0,16).replace('T',' ')) : '—';
       var act = active ? ('<button data-release="'+esc(f.slug)+'">Liberar</button>') : ('<button data-claim="'+esc(f.slug)+'">Reclamar</button>');
       html += '<tr><td><code>'+esc(f.slug)+'</code></td><td>'+esc(f.prototype_state||'—')+'</td><td>'+lockTxt+'</td><td>'+exp+'</td><td>'+act+'</td></tr>';
@@ -1004,23 +1032,94 @@
   function showTab(name){
     var tabs = document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ var on = tabs[i].dataset.tab===name; tabs[i].classList.toggle('active', on); tabs[i].setAttribute('aria-selected', on?'true':'false'); tabs[i].setAttribute('tabindex', on?'0':'-1'); }
     var panes = document.querySelectorAll('.pane'); for(var j=0;j<panes.length;j++) panes[j].classList.toggle('active', panes[j].id===('pane-'+name));
+    if(name==='home') loadHome();
     if(name==='actions' && !ACTIONS_CACHE) loadActions();
     if(name==='roadmap') loadRoadmap();
     if(name==='files' && !FILES_TREE) loadFilesTree();
     if(name==='agents') loadAgents();
+    try{ localStorage.setItem('aif-tab', name); }catch(e){}
+  }
+  // UX-1: vista Inicio / Resumen — entrada por defecto orientada a tarea ("donde estoy / que hago").
+  function loadHome(){
+    var host = el('home-host'); if(!host) return;
+    if(MODE !== 'live'){ renderHomeStatic(); return; }
+    host.innerHTML = skeleton(['35%','92%','70%','50%']);
+    Promise.all([
+      fetch('/api/roadmap/status').then(function(r){return r.json();}),
+      fetch('/api/roadmap/next').then(function(r){return r.json();}).catch(function(){return null;}),
+      fetch('/api/roadmap/pending').then(function(r){return r.json();}).catch(function(){return null;}),
+      fetch('/api/action-runs?limit=5').then(function(r){return r.json();}).catch(function(){return null;})
+    ]).then(function(arr){ renderHome(arr[0], arr[1], arr[2], arr[3]); })
+    .catch(function(){ errorState('home-host', 'No se pudo cargar el resumen del proyecto (/api/roadmap/status).', loadHome); });
+  }
+  function homeKpi(cls, val, label, goto){ return '<button class="home-kpi '+cls+'" type="button" data-home-goto="'+goto+'"><div class="home-kpi-v">'+esc(val)+'</div><div class="home-kpi-l">'+esc(label)+'</div></button>'; }
+  function renderHome(st, nx, pend, runs){
+    var host = el('home-host'); if(!host) return;
+    if(!st || st.error){ errorState('home-host', 'Error al leer el estado: '+((st&&st.error)||'sin datos'), loadHome); return; }
+    var phs = st.phases || [];
+    var wsum=0, denom=0, nC=0, nP=0, nNA=0;
+    phs.forEach(function(p){ if(p.status==='n-a'){ nNA++; return; } denom++; if(p.status==='complete'){ wsum+=1; nC++; } else if(p.status==='partial'){ wsum+=0.5; nP++; } });
+    var pct = denom>0 ? Math.round(wsum/denom*100) : 0;
+    var pBlk=0, pGate=0; if(pend && pend.phases){ pend.phases.forEach(function(ph){ (ph.items||[]).forEach(function(it){ if(it.severity==='blocker')pBlk++; else if(it.severity==='gate')pGate++; }); }); }
+    var s = (MEM && MEM.stats) || {};
+    var h = onboardHtml();
+    h += '<div class="home-hero"><div class="home-pct">'+pct+'%</div><div style="min-width:160px"><div style="font-weight:700;font-size:15px">'+esc(st.project||'Proyecto')+'</div><div class="home-meta">template '+esc(st.templateVersion||'-')+' · '+(st.features?st.features.length:0)+' features · '+nC+'/'+denom+' fases completas'+(nP?' · '+nP+' parciales':'')+(nNA?' · '+nNA+' N/A':'')+'</div></div><div style="flex:1;min-width:180px"><div class="proj-progress"><div class="proj-progress-fill" style="width:'+pct+'%"></div><span class="proj-progress-label">'+pct+'%</span></div></div></div>';
+    h += '<div class="home-grid">';
+    h += homeKpi(pBlk?'blocker':'ok', pBlk, 'Blockers', 'roadmap');
+    h += homeKpi(pGate?'gate':'ok', pGate, 'Gates por firmar', 'gates');
+    h += '</div>';
+    // v12.141: la barra de stats global se movio aqui (Memoria del agente).
+    h += '<div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin:2px 0 6px">Memoria del agente</div>';
+    h += '<div class="stats">'+statsGridHtml(s)+'</div>';
+    if(nx && !nx.error && nx.next_action){
+      var rc = nx.agent_readiness==='ready_for_ai'?'#16A34A':(nx.agent_readiness==='needs_human'?'#D97706':'#DC2626');
+      h += '<div class="home-next" style="border-left-color:'+rc+'"><h4>→ Siguiente accion segura <span class="mode-badge" style="background:'+rc+';color:#fff">'+esc(nx.agent_readiness||'')+'</span></h4>';
+      h += '<div style="font-size:14px;font-weight:600;color:var(--accent)">'+esc(nx.next_action)+'</div>';
+      if(nx.feature) h += '<div class="home-meta" style="margin-top:4px">Feature: <code>'+esc(nx.feature)+'</code> · Fase '+esc(nx.phase)+'</div>';
+      h += '<div class="home-actions"><button class="home-btn" type="button" data-home-goto="roadmap">Ver roadmap completo</button><button class="home-btn" type="button" data-home-goto="actions">Ir a Acciones</button></div></div>';
+    } else {
+      h += '<div class="home-next"><h4>Accesos rapidos</h4><div class="home-actions"><button class="home-btn" type="button" data-home-goto="roadmap">Roadmap</button><button class="home-btn" type="button" data-home-goto="actions">Acciones</button><button class="home-btn" type="button" data-home-goto="trace">Trazabilidad</button></div></div>';
+    }
+    // Ultimas corridas (de /api/action-runs) — atajo al historial.
+    var rrows = runs && runs.length ? runs : null;
+    if(rrows){
+      h += '<div class="home-next"><h4>Ultimas corridas <span class="muted" style="font-weight:400;font-size:11px">(de Acciones › Historial)</span></h4><div class="home-runs">';
+      rrows.slice(0,5).forEach(function(r){ h += '<div class="home-run"><span class="home-run-st">'+badgeForRun(r)+'</span><code>'+esc(r.action_id)+(r.arg?' '+esc(r.arg):'')+'</code><span class="muted home-run-ago">'+esc(typeof fmtAgo==='function'?fmtAgo(r.started_at):r.started_at)+'</span></div>'; });
+      h += '</div><div class="home-actions"><button class="home-btn" type="button" data-home-goto="actions">Ver historial completo</button></div></div>';
+    }
+    h += shortcutsHtml();
+    host.innerHTML = h; wireHome(host);
+  }
+  function renderHomeStatic(){
+    var host = el('home-host'); if(!host) return;
+    var s = (MEM && MEM.stats) || {};
+    var h = onboardHtml();
+    h += '<div class="home-hero"><div style="min-width:200px"><div style="font-weight:700;font-size:15px">Reporte estatico de memoria</div><div class="home-meta">Snapshot de la BD del agente. El roadmap, los KPIs en vivo y las acciones requieren <code>npm run memory:serve</code>.</div></div></div>';
+    h += '<div class="home-grid">';
+    h += homeKpi('', s.traceLinks||0, 'Trace links', 'trace');
+    h += homeKpi('', s.gateRuns||0, 'Gate runs', 'gates');
+    h += homeKpi('', s.documents||0, 'Documentos', 'docs');
+    h += homeKpi('', s.evidence||0, 'Evidencia', 'evidence');
+    h += '</div>';
+    h += shortcutsHtml();
+    host.innerHTML = h; wireHome(host);
+  }
+  function wireHome(host){
+    var btns = host.querySelectorAll('[data-home-goto]'); for(var i=0;i<btns.length;i++){ btns[i].addEventListener('click', function(ev){ showTab(ev.currentTarget.getAttribute('data-home-goto')); }); }
+    var ox = host.querySelector('.onboard-x'); if(ox) ox.addEventListener('click', function(){ try{ localStorage.setItem('aif-onboard','1'); }catch(e){} var b = host.querySelector('.onboard-banner'); if(b && b.parentNode) b.parentNode.removeChild(b); });
   }
   // v12.54: Roadmap pane. Carga estado de las 9 fases + comandos recientes + sugeridos.
   var ROADMAP_STATE = null;
   function loadRoadmap(){
-    if(MODE !== 'live'){ el('roadmap-host').innerHTML = '<p class="empty">Roadmap solo disponible en modo live (memory-serve). Arranca con: <code>npm run memory:serve</code></p>'; return; }
-    el('roadmap-host').innerHTML = '<p class="empty">Cargando estado del roadmap…</p>';
+    if(MODE !== 'live'){ el('roadmap-host').innerHTML = modeNotice('El roadmap'); return; }
+    el('roadmap-host').innerHTML = skeleton(['30%','85%','60%','70%','45%']);
     Promise.all([
       fetch('/api/roadmap/status').then(function(r){return r.json();}),
       fetch('/api/roadmap/next').then(function(r){return r.json();}).catch(function(){return null;}),
       fetch('/api/agent-runs?limit=10').then(function(r){return r.json();}).catch(function(){return null;}),
       fetch('/api/roadmap/pending').then(function(r){return r.json();}).catch(function(){return null;})
     ]).then(function(arr){ ROADMAP_STATE = { status: arr[0], next: arr[1], agentRuns: arr[2], pending: arr[3] }; renderRoadmap(); })
-    .catch(function(){ el('roadmap-host').innerHTML = '<p class="empty">No se pudo cargar /api/roadmap/status. Verifica que scripts/roadmap-status.mjs existe (corre: npm run template:upgrade -- --apply).</p>'; });
+    .catch(function(){ errorState('roadmap-host', 'No se pudo cargar /api/roadmap/status. Verifica que scripts/roadmap-status.mjs existe (corre: npm run template:upgrade -- --apply).', loadRoadmap); });
   }
   function renderRoadmap(){
     var st = ROADMAP_STATE.status;
@@ -1061,12 +1160,13 @@
     // Hace VISIBLE en el panel la arquitectura ortogonal: governance (Capa 2) +
     // execution discipline (Capa 1) + lifecycle compat (Capa 3). Es referencia visual
     // permanente para que el agente sepa donde esta parado.
-    html += '<div class="roadmap-section"><h4>🧩 Capas del framework</h4>';
-    html += '<div class="capa-stack">';
+    // v12.141: colapsable (referencia permanente pero plegada por defecto -> menos scroll).
+    html += '<details class="roadmap-section"><summary style="cursor:pointer;font-weight:600;font-size:14px">🧩 Capas del framework <span class="muted" style="font-weight:400;font-size:11px">(referencia)</span></summary>';
+    html += '<div class="capa-stack" style="margin-top:10px">';
     html += '  <div class="capa capa-1"><span class="capa-tag">Capa 1</span><strong>Execution Discipline</strong><small>como ejecutar (protocolos + TDD + reviews + worktrees)</small><div class="capa-refs"><code>AGENT_RUNTIME.md</code> · <code>ai/protocols/</code> · <code>agent:protocol/start/review/finish</code></div></div>';
     html += '  <div class="capa capa-2"><span class="capa-tag">Capa 2</span><strong>Project Governance</strong><small>que es el proyecto (memoria + gates + trazabilidad + 9 fases)</small><div class="capa-refs"><code>CONSTITUTION.md</code> · <code>AGENTS.md</code> · <code>ROADMAP_STATE.json</code> · 47 validadores</div></div>';
     html += '  <div class="capa capa-3"><span class="capa-tag">Capa 3</span><strong>Lifecycle Compat</strong><small>interop spec-kit (opt-in)</small><div class="capa-refs"><code>specs/&lt;slug&gt;/.specify/</code> · <code>npm run specify:compat -- --all</code></div></div>';
-    html += '</div></div>';
+    html += '</div></details>';
     // Grid de fases.
     html += '<div class="roadmap-grid">';
     (st.phases||[]).forEach(function(p){
@@ -1117,8 +1217,8 @@
     if(ar && !ar.schema_missing){
       var statusColor = { in_progress:'#3B82F6', implementer_done:'#D97706', spec_review_passed:'#22D3EE', quality_review_passed:'#22D3EE', done_with_concerns:'#D97706', approved:'#16A34A', blocked:'#DC2626' };
       var ledgerColor = (ar.runs && ar.runs.length) ? '#1E40AF' : '#94A3B8';
-      html += '<div class="roadmap-section" style="border-left:4px solid '+ledgerColor+'">';
-      html += '<h4>🛠️ Agent Execution Ledger (Capa 1) <span style="background:'+ledgerColor+';color:#fff;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">'+(ar.runs.length||0)+' runs</span></h4>';
+      html += '<details class="roadmap-section" style="border-left:4px solid '+ledgerColor+'">';
+      html += '<summary style="cursor:pointer;font-weight:600;font-size:14px">🛠️ Agent Execution Ledger (Capa 1) <span style="background:'+ledgerColor+';color:#fff;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px">'+(ar.runs.length||0)+' runs</span></summary>';
       if(!ar.runs || ar.runs.length===0){
         html += '<p class="empty">Sin runs de agent:* aun. Inicia un T-NNN con <code>npm run agent:start -- --feature &lt;slug&gt; --task &lt;T-NNN&gt; --agent &lt;yo&gt;</code>.</p>';
       } else {
@@ -1143,7 +1243,7 @@
         html += '</div>';
       }
       html += '<div class="agent-ledger-help">Flujo: <code>npm run agent:protocol</code> → <code>agent:start</code> → trabajo TDD → <code>agent:review --stage both --reviewer &lt;otro&gt;</code> → <code>agent:finish</code>. Reviewer ≠ implementer (Principio 1).</div>';
-      html += '</div>';
+      html += '</details>';
     } else if (ar && ar.schema_missing){
       html += '<div class="roadmap-section"><h4>🛠️ Agent Execution Ledger</h4><p class="empty">Las 3 tablas SQLite (ai_task_runs / ai_task_reviews / ai_task_review_findings) aun no existen. Corre <code>npm run memory:bootstrap</code> tras actualizar a v12.122+.</p></div>';
     }
@@ -1261,7 +1361,15 @@
   document.addEventListener('click', function(e){ var t = e.target.closest('.tab'); if(t) showTab(t.dataset.tab); var st = e.target.closest('.subtab[data-subtab]'); if(st) showSubtab(st.dataset.subtab); var ts = e.target.closest('[data-trace-sub]'); if(ts) showTraceSub(ts.dataset.traceSub); });
   // v12.140: command palette (Ctrl/Cmd-K) — navegacion rapida a pestanas y fases (P2).
   (function(){ var bg=el('cmdk-bg'), inp=el('cmdk-input'), list=el('cmdk-list'); if(!bg||!inp||!list) return; var items=[], filtered=[], sel=0;
-    function build(){ items=[]; var tabs=document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ (function(tb){ items.push({ label:'Ir a: '+tb.textContent.trim(), kind:'tab', run:function(){ showTab(tb.dataset.tab); } }); })(tabs[i]); } for(var p=0;p<=8;p++){ (function(ph){ items.push({ label:'Roadmap -> Fase '+ph, kind:'fase', run:function(){ showTab('roadmap'); setTimeout(function(){ var t=el('pend-phase-'+ph); if(t) t.scrollIntoView({behavior:'smooth',block:'center'}); }, 250); } }); })(p); } }
+    function build(){ items=[]; var tabs=document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ (function(tb){ items.push({ label:'Ir a: '+tb.textContent.trim(), kind:'tab', run:function(){ showTab(tb.dataset.tab); } }); })(tabs[i]); } for(var p=0;p<=8;p++){ (function(ph){ items.push({ label:'Roadmap -> Fase '+ph, kind:'fase', run:function(){ showTab('roadmap'); setTimeout(function(){ var t=el('pend-phase-'+ph); if(t) t.scrollIntoView({behavior:'smooth',block:'center'}); }, 250); } }); })(p); }
+      // UX-3: indexar contenido (RFs, gates, docs, decisiones) para "buscar cualquier cosa" desde Ctrl/K.
+      var M = MEM || window.__MEMORY__; if(M){
+        var seenRf={}; (M.traceLinks||[]).forEach(function(x){ var rf=x.source_ref; if(!rf||seenRf[rf])return; seenRf[rf]=1; items.push({ label:'RF: '+rf, kind:'trace', run:function(){ showTab('trace'); if(typeof showTraceSub==='function') showTraceSub('links'); gotoFilter('tbl-trace', rf); } }); });
+        var seenG={}; (M.gateRuns||[]).forEach(function(x){ var g=x.gate; if(!g||seenG[g])return; seenG[g]=1; items.push({ label:'Gate: '+g, kind:'gate', run:function(){ showTab('gates'); gotoFilter('tbl-gates', g); } }); });
+        (M.documents||[]).forEach(function(x){ (function(p){ if(!p)return; items.push({ label:'Doc: '+p, kind:'doc', run:function(){ showTab('docs'); } }); })(x.path); });
+        (M.decisions||[]).forEach(function(x){ (function(d){ if(!d)return; items.push({ label:'Decision: '+d, kind:'decision', run:function(){ showTab('decisions'); } }); })(x.decision_ref||x.title); });
+      }
+    }
     function render(){ var q=inp.value.toLowerCase(); filtered = items.filter(function(it){ return it.label.toLowerCase().indexOf(q)>=0; }); if(sel>=filtered.length) sel=0; if(!filtered.length){ list.innerHTML='<li class="cmdk-empty">Sin coincidencias</li>'; return; } var h=''; filtered.forEach(function(it,i){ h+='<li role="option" data-i="'+i+'" class="'+(i===sel?'sel':'')+'">'+esc(it.label)+'<span class="cmdk-kind">'+esc(it.kind)+'</span></li>'; }); list.innerHTML=h; }
     function openP(){ build(); inp.value=''; sel=0; render(); bg.classList.add('show'); setTimeout(function(){ inp.focus(); }, 0); }
     function closeP(){ bg.classList.remove('show'); }
@@ -1283,7 +1391,7 @@
   // v12.140: badge de modo en el header (live = datos en vivo via memory-serve; static = reporte).
   (function(){ var mb=el('mode-badge'); if(mb){ var live = MODE==='live'; mb.textContent = live?'live':'static'; mb.className = 'mode-badge '+(live?'live':'static'); mb.title = live?'Datos en vivo (memory-serve): acciones y refresco disponibles':'Reporte estatico: solo metadata, sin acciones'; } })();
   // v12.140: accesibilidad de las pestanas (ARIA tablist/tab/tabpanel + roving tabindex + flechas).
-  (function(){ var tl = document.querySelector('.tabs'); if(tl){ tl.setAttribute('role','tablist'); tl.setAttribute('aria-label','Secciones del panel'); } var tabs = document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ var on = tabs[i].classList.contains('active'); tabs[i].setAttribute('role','tab'); tabs[i].setAttribute('aria-selected', on?'true':'false'); tabs[i].setAttribute('tabindex', on?'0':'-1'); } var panes = document.querySelectorAll('.pane'); for(var j=0;j<panes.length;j++){ panes[j].setAttribute('role','tabpanel'); panes[j].setAttribute('tabindex','0'); } if(tl) tl.addEventListener('keydown', function(e){ if(e.key!=='ArrowRight' && e.key!=='ArrowLeft') return; var arr=[].slice.call(document.querySelectorAll('.tab')); var idx=arr.indexOf(document.activeElement); if(idx<0) return; var n = e.key==='ArrowRight' ? (idx+1)%arr.length : (idx-1+arr.length)%arr.length; arr[n].focus(); showTab(arr[n].dataset.tab); e.preventDefault(); }); })();
+  (function(){ var tl = document.querySelector('.nav'); if(tl){ tl.setAttribute('role','tablist'); tl.setAttribute('aria-orientation','vertical'); tl.setAttribute('aria-label','Secciones del panel'); } var tabs = document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ var on = tabs[i].classList.contains('active'); tabs[i].setAttribute('role','tab'); tabs[i].setAttribute('aria-selected', on?'true':'false'); tabs[i].setAttribute('tabindex', on?'0':'-1'); } var panes = document.querySelectorAll('.pane'); for(var j=0;j<panes.length;j++){ panes[j].setAttribute('role','tabpanel'); panes[j].setAttribute('tabindex','0'); } if(tl) tl.addEventListener('keydown', function(e){ var fwd = (e.key==='ArrowDown'||e.key==='ArrowRight'), back = (e.key==='ArrowUp'||e.key==='ArrowLeft'); if(!fwd && !back) return; var arr=[].slice.call(document.querySelectorAll('.nav .tab')); var idx=arr.indexOf(document.activeElement); if(idx<0) return; var n = fwd ? (idx+1)%arr.length : (idx-1+arr.length)%arr.length; arr[n].focus(); showTab(arr[n].dataset.tab); e.preventDefault(); }); })();
   if(el('history-refresh')) el('history-refresh').addEventListener('click', loadHistory);
   if(el('stats-refresh')) el('stats-refresh').addEventListener('click', loadStats);
   if(el('trends-refresh')) el('trends-refresh').addEventListener('click', loadTrends);
@@ -1305,5 +1413,11 @@
   if(__explicitSubtab && MODE === 'live'){ showTab('actions'); showSubtab(__explicitSubtab); }
   else if(__hasTrendFilters && MODE === 'live'){ showTab('actions'); showSubtab('trends'); }
   else if(__hasActFilters && MODE === 'live'){ showTab('actions'); showSubtab('history'); }
-  else { showTab('trace'); }
+  else { var __last=null; try{ __last=localStorage.getItem('aif-tab'); }catch(e){} var __valid = __last && document.querySelector('.tab[data-tab="'+__last+'"]'); showTab(__valid ? __last : 'home'); }
+  // UX-6: ordenar tablas grandes haciendo click en el encabezado (solo tablas con id, p.ej. trace/gates).
+  document.addEventListener('click', function(e){ var th = e.target && e.target.closest && e.target.closest('table[id] thead th'); if(!th) return; var tbl = th.closest('table'); var tbody = tbl.tBodies[0]; if(!tbody) return; var idx = Array.prototype.indexOf.call(th.parentNode.children, th); var dir = th.getAttribute('data-sort')==='asc' ? 'desc' : 'asc'; var heads = th.parentNode.children; for(var i=0;i<heads.length;i++){ heads[i].removeAttribute('data-sort'); var oi=heads[i].querySelector('.sort-ind'); if(oi) oi.parentNode.removeChild(oi); } th.setAttribute('data-sort', dir); var rows = Array.prototype.slice.call(tbody.rows); rows.sort(function(a,b){ var x=(a.cells[idx]?a.cells[idx].textContent:'').trim(), y=(b.cells[idx]?b.cells[idx].textContent:'').trim(); var nx=parseFloat(x), ny=parseFloat(y); var cmp; if(!isNaN(nx)&&!isNaN(ny)&&x!==''&&y!=='') cmp=nx-ny; else cmp = x.toLowerCase()<y.toLowerCase()?-1:(x.toLowerCase()>y.toLowerCase()?1:0); return dir==='asc'?cmp:-cmp; }); rows.forEach(function(r){ tbody.appendChild(r); }); var ind=document.createElement('span'); ind.className='sort-ind'; ind.textContent = dir==='asc'?'▲':'▼'; th.appendChild(ind); });
+  // v12.141: click en una ruta clicable -> abrir el archivo en la pestaña Proyecto.
+  document.addEventListener('click', function(e){ var a = e.target && e.target.closest && e.target.closest('[data-open-file]'); if(!a) return; e.preventDefault(); var p = a.getAttribute('data-open-file'); showTab('files'); if(typeof openFile==='function') openFile(p); });
+  // v12.141 (D): click en un segmento de carpeta del breadcrumb -> filtra el arbol del visor.
+  document.addEventListener('click', function(e){ var cr = e.target && e.target.closest && e.target.closest('[data-crumb]'); if(!cr) return; e.preventDefault(); var ff = el('files-filter'); if(ff){ ff.value = cr.getAttribute('data-crumb'); ff.dispatchEvent(new Event('input',{bubbles:true})); ff.scrollIntoView({behavior:'smooth',block:'center'}); } });
 })();

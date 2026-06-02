@@ -1717,6 +1717,8 @@ function buildMemorySnapshot(db, dbPath, mode) {
 // Cliente JS de la UI. Sin backticks ni `${` para poder vivir dentro del
 // template literal exterior sin escapes.
 const MEMORY_CLIENT_JS = fs.readFileSync(new URL("./_panel/panel.client.js", import.meta.url), "utf8").trimEnd(); // v12.140: front extraido a archivo (P3); trimEnd => salida byte-identica
+// Cliente del REPORTE estatico (memory-report.html). Independiente del front del live.
+const REPORT_CLIENT_JS = fs.readFileSync(new URL("./_panel/report.client.js", import.meta.url), "utf8").trimEnd();
 
 function memoryHtmlShell(dataScript) {
   return `<!DOCTYPE html>
@@ -1747,7 +1749,23 @@ function memoryHtmlShell(dataScript) {
   header { background:var(--brand); color:#fff; padding:18px 24px; }
   header h1 { font-size:18px; font-weight:700; }
   header .meta { font-size:12px; opacity:.85; margin-top:4px; font-family:var(--mono); }
-  .wrap { max-width:1180px; margin:0 auto; padding:20px 24px 48px; }
+  .wrap { max-width:1320px; margin:0 auto; padding:20px 24px 48px; display:flex; gap:20px; align-items:flex-start; }
+  /* v12.141 (C): navegacion lateral (sidebar) agrupada por familia, en vez de barra superior de tabs. */
+  .sidebar { flex:0 0 208px; position:sticky; top:16px; align-self:flex-start; }
+  .nav { display:flex; flex-direction:column; gap:2px; }
+  .nav .tab { display:block; width:100%; text-align:left; padding:8px 12px; border:none; border-left:3px solid transparent; border-bottom:none; border-radius:6px; background:transparent; color:var(--text); font-size:13px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .nav .tab:hover { background:var(--line-soft); }
+  .nav .tab.active { background:var(--brand-light); color:var(--brand-dark); border-left-color:var(--brand); font-weight:600; }
+  .nav .tab .nav-ic { display:inline-block; width:18px; text-align:center; margin-right:4px; opacity:.9; }
+  .nav-group { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); opacity:.65; margin:12px 0 3px 10px; user-select:none; }
+  .content { flex:1 1 auto; min-width:0; }
+  @media (max-width:820px) {
+    .wrap { flex-direction:column; }
+    .sidebar { position:static; flex:none; width:100%; }
+    .nav { flex-direction:row; flex-wrap:wrap; gap:4px; }
+    .nav .tab { width:auto; }
+    .nav-group { width:100%; margin:8px 0 2px; }
+  }
   .stats { display:grid; grid-template-columns:repeat(8,1fr); gap:10px; margin-bottom:20px; }
   .stat { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:12px; text-align:center; }
   .stat-v { font-size:22px; font-weight:800; color:var(--brand); }
@@ -1764,6 +1782,15 @@ function memoryHtmlShell(dataScript) {
   .mode-badge.static { background:#FEF3C7; color:#92400E; }
   .sev-blocker { color:var(--danger); } .sev-gate { color:var(--warn); } .sev-info { color:var(--muted); }
   .sev-ok { color:var(--ok); } .sev-na { color:var(--muted); }
+  /* v12.141 (D): badges de estado en tablas (Gates/Preguntas/Decisiones). */
+  .st-badge { display:inline-block; font-size:10px; font-weight:700; padding:1px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:.3px; white-space:nowrap; }
+  .st-ok { background:#DCFCE7; color:#166534; } .st-warn { background:#FEF3C7; color:#92400E; }
+  .st-err { background:#FEE2E2; color:#991B1B; } .st-muted { background:var(--line-soft); color:var(--muted); }
+  .st-info { background:#E0E7FF; color:#3730A3; }
+  [data-theme=\"dark\"] .st-ok { background:rgba(52,211,153,0.15); color:#6EE7B7; }
+  [data-theme=\"dark\"] .st-warn { background:rgba(251,191,36,0.15); color:#FCD34D; }
+  [data-theme=\"dark\"] .st-err { background:rgba(248,113,113,0.15); color:#FCA5A5; }
+  [data-theme=\"dark\"] .st-info { background:rgba(129,140,248,0.18); color:#C7D2FE; }
   .table-filter-wrap { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
   .table-filter { flex:0 1 320px; padding:6px 10px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; }
   .table-filter-count { font-size:11px; color:var(--muted); font-family:var(--mono); }
@@ -1802,6 +1829,49 @@ function memoryHtmlShell(dataScript) {
   .phase-seg.partial { background:#FEF3C7; border-color:#FCD34D; color:#92400E; }
   .phase-seg.not-started { background:var(--line-soft); color:var(--muted); }
   .phase-seg.na { background:repeating-linear-gradient(45deg,#F1F5F9,#F1F5F9 4px,#E2E8F0 4px,#E2E8F0 8px); color:var(--muted); }
+  /* UX-2 (v12.141): rotulos de grupo como SEPARADOR, no como tab. Micro, tenue, con
+     divisor vertical, sin afordancia de boton (no hover, cursor normal, no clicable). */
+  .tab-group { flex:0 0 auto; display:flex; align-items:center; align-self:stretch; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--muted); opacity:.5; margin-left:8px; padding-left:12px; border-left:1px solid var(--line); border-bottom:none; cursor:default; user-select:none; pointer-events:none; }
+  /* UX-1: vista Inicio / Resumen */
+  .home-hero { display:flex; flex-wrap:wrap; align-items:center; gap:14px; padding:16px 18px; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); margin-bottom:14px; }
+  .home-hero .home-pct { font-size:34px; font-weight:800; color:var(--brand); line-height:1; }
+  .home-hero .home-meta { font-size:12px; color:var(--muted); }
+  .home-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:14px; }
+  .home-kpi { border:1px solid var(--line); border-radius:var(--radius); padding:12px 14px; background:var(--surface); cursor:pointer; text-align:left; transition:border-color .15s,transform .05s; }
+  .home-kpi:hover { border-color:var(--brand); transform:translateY(-1px); }
+  .home-kpi .home-kpi-v { font-size:24px; font-weight:800; line-height:1.1; }
+  .home-kpi .home-kpi-l { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-top:2px; }
+  .home-kpi.blocker .home-kpi-v { color:#DC2626; } .home-kpi.gate .home-kpi-v { color:#D97706; } .home-kpi.ok .home-kpi-v { color:#16A34A; }
+  .home-next { border:1px solid var(--line); border-left:4px solid var(--brand); border-radius:var(--radius); padding:14px 16px; background:var(--surface); margin-bottom:14px; }
+  .home-next h4 { margin:0 0 6px; font-size:13px; }
+  .home-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  .home-btn { font-size:12px; font-weight:600; padding:7px 13px; border-radius:6px; border:1px solid var(--line); background:var(--brand-light); color:var(--brand-dark); cursor:pointer; }
+  .home-btn:hover { filter:brightness(.97); }
+  .home-runs { display:flex; flex-direction:column; gap:4px; margin:4px 0; }
+  .home-run { display:flex; align-items:center; gap:8px; font-size:12px; padding:3px 0; border-bottom:1px solid var(--line-soft); }
+  .home-run code { font-size:11.5px; }
+  .home-run-ago { margin-left:auto; font-size:11px; white-space:nowrap; }
+  /* UX-4: estados loading / error reutilizables */
+  .skeleton { border-radius:6px; background:linear-gradient(90deg,var(--line-soft) 25%,var(--line) 37%,var(--line-soft) 63%); background-size:400% 100%; animation:skel 1.3s ease infinite; }
+  @keyframes skel { 0%{ background-position:100% 0; } 100%{ background-position:0 0; } }
+  .skeleton-row { height:16px; margin:8px 0; }
+  .error-state { border:1px solid #FCA5A5; background:#FEF2F2; color:#991B1B; border-radius:var(--radius); padding:14px 16px; font-size:13px; }
+  [data-theme="dark"] .error-state { background:#3a1a1a; border-color:#7f1d1d; color:#fecaca; }
+  .error-state .retry-btn { margin-top:8px; font-size:12px; font-weight:600; padding:6px 12px; border-radius:6px; border:1px solid currentColor; background:transparent; color:inherit; cursor:pointer; }
+  /* UX-5: onboarding + atajos */
+  .onboard-banner { display:flex; align-items:flex-start; gap:10px; border:1px solid var(--brand); background:var(--brand-light); color:var(--text); border-radius:var(--radius); padding:12px 14px; margin-bottom:14px; font-size:12.5px; }
+  .onboard-banner .onboard-x { margin-left:auto; cursor:pointer; border:none; background:transparent; color:var(--muted); font-size:16px; line-height:1; padding:0 4px; }
+  .shortcuts-bar { margin-top:18px; padding-top:10px; border-top:1px solid var(--line); font-size:11px; color:var(--muted); display:flex; flex-wrap:wrap; gap:14px; }
+  .shortcuts-bar kbd { font-family:var(--mono); background:var(--line-soft); border:1px solid var(--line); border-radius:4px; padding:1px 5px; font-size:10.5px; color:var(--text); }
+  table[id] thead th { cursor:pointer; user-select:none; } table[id] thead th:hover { color:var(--brand); }
+  .sort-ind { font-size:9px; opacity:.6; margin-left:3px; }
+  .path-link { color:var(--accent); cursor:pointer; text-decoration:underline; }
+  .path-link:hover { color:var(--brand-dark); }
+  .fview-crumbs { font-family:var(--mono); font-size:12px; }
+  .fview-crumbs .crumb { color:var(--accent); cursor:pointer; text-decoration:none; }
+  .fview-crumbs .crumb:hover { text-decoration:underline; }
+  .fview-crumbs .crumb-sep { color:var(--muted); margin:0 1px; }
+  .fview-crumbs .crumb-file { font-weight:700; color:var(--ink); }
   tr:last-child td { border-bottom:none; }
   tbody tr:hover td { background:var(--line-soft); }
   .empty { color:var(--muted); font-size:13px; padding:18px; }
@@ -1825,6 +1895,10 @@ function memoryHtmlShell(dataScript) {
   @media (max-width:900px){ .actions-layout { grid-template-columns:1fr; } .stats{ grid-template-columns:repeat(4,1fr);} }
   .action-cat { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:12px 14px; margin-bottom:12px; }
   .action-cat h3 { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:8px; }
+  .action-cat > summary { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:8px; cursor:pointer; list-style:none; }
+  .action-cat > summary::-webkit-details-marker { display:none; }
+  .action-cat > summary::before { content:'▾ '; opacity:.6; }
+  .action-cat:not([open]) > summary::before { content:'▸ '; }
   .action-grid { display:grid; grid-template-columns:1fr; gap:5px; }
   .action-btn { text-align:left; padding:8px 11px; background:var(--brand-light); color:var(--brand-dark); border:1px solid var(--line); border-radius:var(--radius); font-size:12.5px; cursor:pointer; transition:.15s; display:flex; flex-direction:column; gap:2px; }
   .action-btn:hover { background:var(--brand); color:#fff; border-color:var(--brand); }
@@ -1962,6 +2036,12 @@ function memoryHtmlShell(dataScript) {
   .pane-capa-banner.capa-3-banner { border-left-color:#0891B2; background:#ECFEFF; }
   .pane-capa-banner strong { color:var(--ink); font-weight:700; }
   .pane-capa-banner code { background:rgba(0,0,0,0.05); padding:0 4px; border-radius:3px; font-size:10.5px; }
+  /* v12.141: override dark (los fondos claros hardcodeados eran ilegibles en tema oscuro). */
+  [data-theme=\"dark\"] .pane-capa-banner { background:var(--line-soft); }
+  [data-theme=\"dark\"] .pane-capa-banner.capa-1-banner { background:rgba(124,58,237,0.14); }
+  [data-theme=\"dark\"] .pane-capa-banner.capa-2-banner { background:rgba(59,130,246,0.14); }
+  [data-theme=\"dark\"] .pane-capa-banner.capa-3-banner { background:rgba(8,145,178,0.16); }
+  [data-theme=\"dark\"] .pane-capa-banner code { background:rgba(255,255,255,0.10); }
   .agent-active-runs { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
   .agent-active-runs h4 { font-size:12px; font-weight:700; color:var(--ink); margin-bottom:8px; display:flex; align-items:center; gap:8px; }
   .agent-active-count { background:#7C3AED; color:#fff; padding:1px 8px; border-radius:999px; font-size:10px; font-weight:700; }
@@ -2136,25 +2216,30 @@ function memoryHtmlShell(dataScript) {
   <div class="meta" id="meta">Cargando…</div>
 </header>
 <div class="wrap">
-  <div class="stats" id="stats"></div>
-  <div class="searchbar">
-    <input id="search-q" type="text" aria-label="Buscar en la memoria del agente" placeholder="Buscar en la memoria (trazabilidad, decisiones, documentos…)">
-    <button id="search-btn">Buscar</button>
+  <aside class="sidebar">
+    <nav class="nav" aria-label="Secciones del panel">
+      <button class="tab active" data-tab="home"><span class="nav-ic">🏠</span> Inicio</button>
+      <div class="nav-group">Gobernanza</div>
+      <button class="tab" data-tab="roadmap"><span class="nav-ic">🗺️</span> Roadmap</button>
+      <button class="tab" data-tab="trace"><span class="nav-ic">🔗</span> Trazabilidad</button>
+      <button class="tab" data-tab="gates"><span class="nav-ic">🔒</span> Gates</button>
+      <button class="tab" data-tab="evidence"><span class="nav-ic">📎</span> Evidencia</button>
+      <button class="tab" data-tab="decisions"><span class="nav-ic">📌</span> Decisiones</button>
+      <button class="tab" data-tab="questions"><span class="nav-ic">❓</span> Preguntas</button>
+      <div class="nav-group">Ejecucion</div>
+      <button class="tab" data-tab="actions"><span class="nav-ic">▶️</span> Acciones</button>
+      <button class="tab" data-tab="agents"><span class="nav-ic">👥</span> Multiagente</button>
+      <div class="nav-group">Exploracion</div>
+      <button class="tab" data-tab="search"><span class="nav-ic">🔍</span> Busqueda</button>
+      <button class="tab" data-tab="docs"><span class="nav-ic">📄</span> Documentos</button>
+      <button class="tab" data-tab="files"><span class="nav-ic">📁</span> Proyecto</button>
+    </nav>
+  </aside>
+  <main class="content">
+  <div class="pane active" id="pane-home">
+    <div id="home-host"><div class="skeleton skeleton-row" style="width:40%"></div><div class="skeleton skeleton-row" style="width:90%"></div><div class="skeleton skeleton-row" style="width:75%"></div></div>
   </div>
-  <div class="tabs">
-    <button class="tab active" data-tab="trace">Trazabilidad</button>
-    <button class="tab" data-tab="gates">Gates</button>
-    <button class="tab" data-tab="decisions">Decisiones</button>
-    <button class="tab" data-tab="evidence">Evidencia</button>
-    <button class="tab" data-tab="questions">Preguntas abiertas</button>
-    <button class="tab" data-tab="docs">Documentos</button>
-    <button class="tab" data-tab="search">Busqueda</button>
-    <button class="tab" data-tab="actions">Acciones</button>
-    <button class="tab" data-tab="roadmap">Roadmap</button>
-    <button class="tab" data-tab="files">Proyecto</button>
-    <button class="tab" data-tab="agents">Multiagente</button>
-  </div>
-  <div class="pane active" id="pane-trace">
+  <div class="pane" id="pane-trace">
     <div class="pane-capa-banner capa-2-banner"><strong>Capa 2 · Trazabilidad</strong> · datos en <code>ai_trace_links</code> (matriz 10 cols por feature). <span class="muted">Capa 1 actualiza estos links al cerrar tareas via <code>npm run agent:finish</code>; los campos <code>Codigo</code>/<code>Test</code> pasan de <code>-</code> a paths reales.</span></div>
     <div class="subtabs">
       <button class="subtab active" data-trace-sub="links">Trace links</button>
@@ -2202,6 +2287,10 @@ function memoryHtmlShell(dataScript) {
   </div>
   <div class="pane" id="pane-search">
     <div class="pane-capa-banner capa-2-banner"><strong>Capa 2 · Busqueda</strong> · FTS5 + embeddings locales sobre 2800+ chunks. <span class="muted">Encuentra Capa 1 (AGENT_RUNTIME, protocolos, skills) y Capa 3 (.specify alias) ademas del corpus canonico.</span></div>
+    <div class="searchbar">
+      <input id="search-q" type="text" aria-label="Buscar en la memoria del agente" placeholder="Buscar en la memoria (trazabilidad, decisiones, documentos…)">
+      <button id="search-btn">Buscar</button>
+    </div>
     <div id="presets-host"></div>
     <div id="search-out"><p class="empty">Escribe una consulta y pulsa Buscar, o usa una consulta rapida.</p></div>
   </div>
@@ -2219,15 +2308,15 @@ function memoryHtmlShell(dataScript) {
         <div>
           <div id="actions-host"><p class="empty">Cargando acciones…</p></div>
           <div class="actions-help">
-            <strong>Atajos:</strong>
-            <span class="kbd">Ctrl+Shift+S</span> sync-memory ·
-            <span class="kbd">Ctrl+Shift+R</span> memory-report ·
-            <span class="kbd">Ctrl+Shift+E</span> regen contexto ·
-            <span class="kbd">Ctrl+Shift+C</span> check:trace-drift ·
+            <strong>Atajos (Alt+Shift, evita los reservados del navegador):</strong>
+            <span class="kbd">Alt+Shift+S</span> sync-memory ·
+            <span class="kbd">Alt+Shift+R</span> memory-report ·
+            <span class="kbd">Alt+Shift+E</span> regen contexto ·
+            <span class="kbd">Alt+Shift+C</span> check:trace-drift ·
             <span class="kbd">Esc</span> detener job actual ·
-            <span class="kbd">Ctrl+Shift+H</span> historial ·
-            <span class="kbd">Ctrl+Shift+T</span> stats ·
-            <span class="kbd">Ctrl+Shift+D</span> tendencias
+            <span class="kbd">Alt+Shift+H</span> historial ·
+            <span class="kbd">Alt+Shift+T</span> stats ·
+            <span class="kbd">Alt+Shift+D</span> tendencias
           </div>
         </div>
         <div>
@@ -2344,6 +2433,7 @@ function memoryHtmlShell(dataScript) {
     </div>
     <div id="agents-host"><p class="empty">Cargando tablero…</p></div>
   </div>
+  </main>
 </div>
 <div class="modal-bg" id="modal-bg">
   <div class="modal">
@@ -2368,13 +2458,104 @@ function memoryHtmlShell(dataScript) {
 `;
 }
 
+// v12.141: el reporte estatico deja de ser un clon del panel live. Es un RESUMEN
+// EJECUTIVO autocontenido (salud por fases + KPIs + pendientes), con su propio
+// shell ligero y su propio cliente (report.client.js). Sin pestañas inertes.
+function memoryReportShell(dataScript) {
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memoria del agente IA — reporte</title>
+<style>
+  :root {
+    --brand:#1F4E79; --brand-dark:#163A5C; --brand-light:#E8F0F9;
+    --bg:#F3F4F6; --surface:#fff; --line:#E5E7EB; --line-soft:#F1F5F9;
+    --text:#1F2937; --ink:#1F2937; --muted:#6B7280;
+    --ok:#047857; --warn:#B45309; --danger:#DC2626; --accent:#1F4E79;
+    --font:'Segoe UI',system-ui,sans-serif; --mono:'Consolas',monospace; --radius:8px;
+  }
+  [data-theme=\"dark\"] {
+    --brand:#3B82F6; --brand-dark:#1E40AF; --brand-light:#1E293B;
+    --bg:#0B1220; --surface:#111827; --line:#243042; --line-soft:#1A2433;
+    --text:#E5E7EB; --ink:#F1F5F9; --muted:#94A3B8;
+    --ok:#34D399; --warn:#FBBF24; --danger:#F87171; --accent:#60A5FA;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); background:var(--bg); color:var(--text); transition:background .2s,color .2s; }
+  header { background:var(--brand); color:#fff; padding:18px 24px; }
+  header h1 { font-size:18px; font-weight:700; }
+  header .meta { font-size:12px; opacity:.85; margin-top:4px; font-family:var(--mono); }
+  .mode-badge { display:inline-block; font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px; margin-left:8px; vertical-align:middle; text-transform:uppercase; letter-spacing:.4px; background:#FEF3C7; color:#92400E; }
+  .wrap { max-width:1080px; margin:0 auto; padding:20px 24px 48px; }
+  .muted { color:var(--muted); }
+  code { font-family:var(--mono); background:var(--line-soft); padding:1px 5px; border-radius:4px; font-size:12px; }
+  .r-hero { display:flex; flex-wrap:wrap; align-items:center; gap:14px; padding:16px 18px; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); margin-bottom:16px; }
+  .r-hero .r-pct { font-size:34px; font-weight:800; color:var(--brand); line-height:1; }
+  .r-section { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; margin-bottom:16px; }
+  .r-section h3 { font-size:14px; margin-bottom:10px; }
+  .proj-progress { position:relative; height:22px; background:var(--line-soft); border:1px solid var(--line); border-radius:11px; overflow:hidden; }
+  .proj-progress-fill { height:100%; background:linear-gradient(90deg,#34D399,#10B981); transition:width .4s ease; }
+  .proj-progress-label { position:absolute; top:0; left:50%; transform:translateX(-50%); line-height:22px; font-size:12px; font-weight:700; color:var(--ink); }
+  .phase-segs { display:flex; gap:4px; flex-wrap:wrap; }
+  .phase-seg { flex:1 1 0; min-width:40px; border:1px solid var(--line); border-radius:5px; padding:6px 4px; font-size:12px; font-weight:600; font-family:var(--mono); text-align:center; background:var(--surface); color:var(--ink); }
+  .phase-seg.complete { background:#DCFCE7; border-color:#86EFAC; color:#166534; }
+  .phase-seg.partial { background:#FEF3C7; border-color:#FCD34D; color:#92400E; }
+  .phase-seg.not-started { background:var(--line-soft); color:var(--muted); }
+  .phase-seg.na { background:repeating-linear-gradient(45deg,#F1F5F9,#F1F5F9 4px,#E2E8F0 4px,#E2E8F0 8px); color:var(--muted); }
+  .r-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }
+  .r-kpi { border:1px solid var(--line); border-radius:var(--radius); padding:12px 14px; background:var(--bg); }
+  .r-kpi-v { font-size:24px; font-weight:800; color:var(--brand); line-height:1.1; }
+  .r-kpi-l { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-top:2px; }
+  .r-ph { margin:6px 0; font-size:13px; }
+  .r-ph ul { margin:2px 0 6px 18px; font-size:12.5px; }
+</style>
+</head>
+<body>
+<header>
+  <button id="theme-toggle" title="Cambiar tema claro/oscuro" aria-label="Cambiar tema" style="float:right;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer">🌓</button>
+  <h1 style="display:inline-block">Memoria del agente IA — reporte</h1><span class="mode-badge">static</span>
+  <div class="meta" id="meta">Reporte estatico</div>
+</header>
+<div class="wrap">
+  <div id="report-host"></div>
+</div>
+<script>${dataScript}</script>
+<script>${REPORT_CLIENT_JS}</script>
+</body>
+</html>
+`;
+}
+
 function writeMemoryReport(root, db, dbPath) {
   const snapshot = buildMemorySnapshot(db, dbPath, "static");
-  const dataScript = `window.__MEMORY__ = ${JSON.stringify(snapshot)};`;
-  const html = memoryHtmlShell(dataScript);
+  // v12.141: embeber el estado del roadmap EN GENERACION para que el reporte muestre
+  // salud/pendientes reales sin servidor. Si fallan, se degrada a KPIs del snapshot.
+  const roadmap = runJsonScript(root, "roadmap-status.mjs", ["--json"]);
+  const pending = runJsonScript(root, "roadmap-pending.mjs", ["--json"]);
+  const dataScript = [
+    `window.__MEMORY__ = ${JSON.stringify(snapshot)};`,
+    `window.__ROADMAP__ = ${JSON.stringify(roadmap)};`,
+    `window.__PENDING__ = ${JSON.stringify(pending)};`,
+  ].join("\n");
+  const html = memoryReportShell(dataScript);
   const outPath = path.join(root, "ai", "memory", "memory-report.html");
   writeFileEnsured(outPath, html);
   return { outPath, snapshot };
+}
+
+// Corre un script de scripts/ que emite JSON por stdout; devuelve el objeto o null.
+function runJsonScript(root, scriptName, extraArgs = []) {
+  try {
+    const scriptPath = path.join(root, "scripts", scriptName);
+    if (!fs.existsSync(scriptPath)) return null;
+    const res = spawnSync(process.execPath, [scriptPath, ...extraArgs], { cwd: root, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+    if (res.status !== 0 || !res.stdout) return null;
+    return JSON.parse(res.stdout);
+  } catch {
+    return null;
+  }
 }
 
 // v12.23: catalogo whitelisted de acciones ejecutables desde el front embebido.
