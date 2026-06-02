@@ -1050,6 +1050,14 @@ function syncGateRuns(db, files, root) {
   const seen = new Set();
   let count = 0;
   for (const file of ordered) {
+    // v12.139: el ledger canonico de gates es traceability.md (## Gates) y la
+    // matriz raiz TRACEABILITY_MATRIX.md. Antes se cosechaban gates de CUALQUIER
+    // mencion `gate-x: estado` en prosa (p.ej. checklists en spec-funcional.md o
+    // spec-tareas.md), inflando ai_gate_runs con gates que ni siquiera viven en la
+    // tabla de gates (ruido en el panel: spdd/prototype "Otros"). Solo cosechar de
+    // los archivos de trazabilidad mantiene una sola fuente de verdad.
+    const baseName = String(file.rel).replace(/\\/g, "/").split("/").pop().toLowerCase();
+    if (!/^traceability(_matrix)?\.md$/.test(baseName)) continue;
     const scope = specScopeOf(file.rel);
     const git = root ? gitLastChange(root, file.rel) : { author: null, date: null };
     // Acepta el gate con o sin backticks. El separador debe ser ":" para no
@@ -1735,10 +1743,10 @@ const MEMORY_CLIENT_JS = [
   "    // v12.139: tab Gates = resumen por gate (cantidades) + detalle por feature.",
   "    var GR = d.gateRuns || [];",
   "    var byGate = {};",
-  "    GR.forEach(function(x){ var g = byGate[x.gate] || (byGate[x.gate] = { gate:x.gate, approved:0, pending:0, otros:0, total:0 }); g.total++; if(x.status==='approved') g.approved++; else if(x.status==='pending') g.pending++; else g.otros++; });",
-  "    var agg = Object.keys(byGate).sort().map(function(k){ var g = byGate[k]; return { gate:g.gate, aprobados:g.approved+' / '+g.total, pendientes:String(g.pending), otros:String(g.otros) }; });",
+  "    GR.forEach(function(x){ var g = byGate[x.gate] || (byGate[x.gate] = { gate:x.gate, approved:0, pending:0, na:0, otros:0, total:0 }); g.total++; var s=(x.status||'').toLowerCase(); if(s==='approved') g.approved++; else if(s==='pending') g.pending++; else if(/^n\\/?a\\b|no aplica/.test(s)) g.na++; else g.otros++; });",
+  "    var agg = Object.keys(byGate).sort().map(function(k){ var g = byGate[k]; return { gate:g.gate, aprobados:g.approved+' / '+g.total, pendientes:String(g.pending), na:String(g.na), otros:String(g.otros) }; });",
   "    var gHtml = '<h4 style=\"margin:0 0 6px\">Resumen por gate <span class=\"muted\" style=\"font-weight:400\">('+GR.length+' registros · '+agg.length+' gates)</span></h4>';",
-  "    gHtml += table(['Gate','Aprobados','Pendientes','Otros'], agg, ['gate','aprobados','pendientes','otros']);",
+  "    gHtml += table(['Gate','Aprobados','Pendientes','N/A','Otros'], agg, ['gate','aprobados','pendientes','na','otros']);",
   "    gHtml += '<h4 style=\"margin:14px 0 6px\">Detalle por feature</h4>';",
   "    gHtml += table(['Gate','Scope','Estado','Evidencia'], GR, ['gate','phase_scope','status','summary']);",
   "    el('tab-gates').innerHTML = gHtml;",
