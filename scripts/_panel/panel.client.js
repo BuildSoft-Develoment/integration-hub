@@ -31,9 +31,10 @@
   // v12.141: la barra de stats se movio a Inicio. statsGridHtml arma el grid reusable.
   function statsGridHtml(s){
     s = s || {};
-    var items = [['Documentos',s.documents],['Chunks',s.chunks],['Trace links',s.traceLinks],['Gate runs',s.gateRuns],['Evidencia',s.evidence],['Decisiones',s.decisions],['Preguntas',s.openQuestions]];
-    var h = ''; for(var i=0;i<items.length;i++){ h += '<div class="stat"><div class="stat-v">'+esc(items[i][1]==null?0:items[i][1])+'</div><div class="stat-l">'+esc(items[i][0])+'</div></div>'; }
-    h += '<div class="stat"><div class="stat-v">'+(s.fts?'si':'no')+'</div><div class="stat-l">FTS5</div></div>';
+    // [label, valor, tab destino] — clicables, navegan a su seccion (via wireHome -> data-home-goto).
+    var items = [['Documentos',s.documents,'docs'],['Chunks',s.chunks,'search'],['Trace links',s.traceLinks,'trace'],['Gate runs',s.gateRuns,'gates'],['Evidencia',s.evidence,'evidence'],['Decisiones',s.decisions,'decisions'],['Preguntas',s.openQuestions,'questions']];
+    var h = ''; for(var i=0;i<items.length;i++){ h += '<button class="stat" type="button" data-home-goto="'+items[i][2]+'" title="Ir a '+esc(items[i][0])+'"><div class="stat-v">'+esc(items[i][1]==null?0:items[i][1])+'</div><div class="stat-l">'+esc(items[i][0])+'</div></button>'; }
+    h += '<button class="stat" type="button" data-home-goto="search" title="Ir a Busqueda (FTS5)"><div class="stat-v">'+(s.fts?'si':'no')+'</div><div class="stat-l">FTS5</div></button>';
     return h;
   }
   function renderStats(s){ var n = el('stats'); if(n) n.innerHTML = statsGridHtml(s); } // compat: solo si existe el contenedor global

@@ -1768,6 +1768,9 @@ function memoryHtmlShell(dataScript) {
   }
   .stats { display:grid; grid-template-columns:repeat(8,1fr); gap:10px; margin-bottom:20px; }
   .stat { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:12px; text-align:center; }
+  /* v12.141: stats de Inicio navegables (boton). */
+  button.stat { font:inherit; color:inherit; cursor:pointer; display:block; width:100%; transition:border-color .15s, transform .05s; }
+  button.stat:hover { border-color:var(--brand); transform:translateY(-1px); }
   .stat-v { font-size:22px; font-weight:800; color:var(--brand); }
   .stat-l { font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); margin-top:2px; }
   .searchbar { display:flex; gap:8px; margin-bottom:18px; }
