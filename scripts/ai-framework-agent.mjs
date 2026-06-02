@@ -2740,15 +2740,29 @@ const MEMORY_CLIENT_JS = [
   "    var html = '';",
   "    // Cabecera con proyecto + version + features.",
   "    html += '<div class=\"roadmap-section\"><h4>Proyecto · ' + esc(st.project||'-') + ' · template ' + esc(st.templateVersion||'-') + ' · ' + (st.features?st.features.length:0) + ' features</h4></div>';",
+  "    // v12.139: barra de progreso del proyecto por fases (ponderada: complete=1, partial=0.5; N/A excluida del calculo).",
+  "    var phs = st.phases || [];",
+  "    var wsum=0, denom=0, nC=0, nP=0, nS=0, nNA=0;",
+  "    phs.forEach(function(p){ if(p.status==='n-a'){ nNA++; return; } denom++; if(p.status==='complete'){ wsum+=1; nC++; } else if(p.status==='partial'){ wsum+=0.5; nP++; } else { nS++; } });",
+  "    var pct = denom>0 ? Math.round(wsum/denom*100) : 0;",
+  "    var pBlk=0, pGate=0; if(ROADMAP_STATE.pending && ROADMAP_STATE.pending.phases){ ROADMAP_STATE.pending.phases.forEach(function(ph){ (ph.items||[]).forEach(function(it){ if(it.severity==='blocker')pBlk++; else if(it.severity==='gate')pGate++; }); }); }",
+  "    html += '<div class=\"roadmap-section\"><h4>Progreso del proyecto</h4>';",
+  "    html += '<div class=\"proj-progress\"><div class=\"proj-progress-fill\" style=\"width:'+pct+'%\"></div><span class=\"proj-progress-label\">'+pct+'%</span></div>';",
+  "    html += '<div class=\"muted\" style=\"font-size:12px;margin:6px 0 8px\">'+nC+'/'+denom+' fases completas · '+nP+' parciales'+(nS?' · '+nS+' sin empezar':'')+(nNA?' · '+nNA+' N/A':'')+' · '+pBlk+' blockers · '+pGate+' gates por firmar</div>';",
+  "    html += '<div class=\"phase-segs\">';",
+  "    phs.forEach(function(p){ var cls = p.status==='complete'?'complete':(p.status==='partial'?'partial':(p.status==='n-a'?'na':'not-started')); var ic = p.status==='complete'?'✓':(p.status==='partial'?'◐':(p.status==='n-a'?'⊘':'·')); html += '<button class=\"phase-seg '+cls+'\" data-goto-phase=\"'+p.id+'\" title=\"Fase '+p.id+' · '+esc(p.name)+(p.detail?' — '+esc(p.detail):'')+'\">'+p.id+' '+ic+'</button>'; });",
+  "    html += '</div>';",
+  "    html += '<p class=\"muted\" style=\"font-size:11px;margin-top:4px\">verde=completa · ámbar=parcial · gris=sin empezar · rayado=N/A. Click en una fase para ver sus pendientes.</p>';",
+  "    html += '</div>';",
   "    // v12.139: Pendientes por fase (consume /api/roadmap/pending = roadmap-pending.mjs --json).",
   "    var pend = ROADMAP_STATE.pending;",
   "    if(pend && pend.phases){",
   "      var pb=0,pg=0,pi=0; pend.phases.forEach(function(ph){ (ph.items||[]).forEach(function(it){ if(it.severity==='blocker')pb++; else if(it.severity==='gate')pg++; else pi++; }); });",
   "      html += '<div class=\"roadmap-section\"><h4>📋 Pendientes por fase <span class=\"muted\" style=\"font-weight:400\">('+pb+' blocker · '+pg+' gate · '+pi+' info)</span></h4>';",
   "      pend.phases.forEach(function(ph){",
-  "        if(ph.na){ html += '<div style=\"margin:3px 0;color:var(--muted)\">Fase '+ph.phase+' ('+esc(ph.name)+') — ⊘ N/A (reingenieria)</div>'; return; }",
-  "        if(!ph.items || !ph.items.length){ html += '<div style=\"margin:3px 0;color:#3a7\">Fase '+ph.phase+' ('+esc(ph.name)+') — ✓ sin pendientes</div>'; return; }",
-  "        html += '<div style=\"margin:6px 0\"><strong>Fase '+ph.phase+' ('+esc(ph.name)+')</strong><ul style=\"margin:2px 0 6px 0\">';",
+  "        if(ph.na){ html += '<div id=\"pend-phase-'+ph.phase+'\" style=\"margin:3px 0;color:var(--muted)\">Fase '+ph.phase+' ('+esc(ph.name)+') — ⊘ N/A (reingenieria)</div>'; return; }",
+  "        if(!ph.items || !ph.items.length){ html += '<div id=\"pend-phase-'+ph.phase+'\" style=\"margin:3px 0;color:#3a7\">Fase '+ph.phase+' ('+esc(ph.name)+') — ✓ sin pendientes</div>'; return; }",
+  "        html += '<div id=\"pend-phase-'+ph.phase+'\" style=\"margin:6px 0\"><strong>Fase '+ph.phase+' ('+esc(ph.name)+')</strong><ul style=\"margin:2px 0 6px 0\">';",
   "        ph.items.forEach(function(it){ var ic = it.severity==='blocker'?'✗':(it.severity==='gate'?'🔒':'◦'); var col = it.severity==='blocker'?'#c33':(it.severity==='gate'?'#a60':'var(--muted)'); html += '<li style=\"color:'+col+'\">'+ic+' <span class=\"muted\">['+esc(it.kind)+']</span> <code>'+esc(it.item)+'</code> — '+esc(it.detail)+'</li>'; });",
   "        html += '</ul></div>';",
   "      });",
@@ -2893,6 +2907,9 @@ const MEMORY_CLIENT_JS = [
   "    el('roadmap-host').innerHTML = html;",
   "    // Click handlers.",
   "    var ga = el('roadmap-host').querySelector('[data-goto-actions]'); if(ga) ga.addEventListener('click', function(){ showTab('actions'); showSubtab('run'); });",
+  "    // v12.139: click en un segmento de fase -> scroll a sus pendientes + highlight breve.",
+  "    var segs = el('roadmap-host').querySelectorAll('[data-goto-phase]');",
+  "    for(var si=0; si<segs.length; si++){ segs[si].addEventListener('click', function(ev){ var ph = ev.currentTarget.getAttribute('data-goto-phase'); var tgt = el('pend-phase-'+ph); if(tgt){ tgt.scrollIntoView({behavior:'smooth', block:'center'}); tgt.style.transition='background .3s'; var ob=tgt.style.background; tgt.style.background='var(--brand-light)'; setTimeout(function(){ tgt.style.background=ob; }, 1200); } }); }",
   "    document.querySelectorAll('.phase-card').forEach(function(c){ c.addEventListener('click', function(){ document.querySelectorAll('.phase-card').forEach(function(x){x.classList.remove('selected')}); c.classList.add('selected'); var pid = c.getAttribute('data-phase'); if(pid !== null) loadPhaseContract(pid); }); });",
   "  }",
   "  // v12.58/v12.59: cargar contrato + status de ejecucion (cruce con BD ai_action_runs).",
@@ -3027,6 +3044,17 @@ function memoryHtmlShell(dataScript) {
   /* v12.139: trace links con paths/evidence_ref largos -> wrap de celdas + scroll horizontal de respaldo. */
   #tab-trace table, #tab-trace-by-feature table { table-layout:fixed; }
   #tab-trace, #tab-trace-by-feature, #tab-gates, #tab-evidence, #tab-docs { overflow-x:auto; }
+  /* v12.139: barra de progreso del proyecto por fases. */
+  .proj-progress { position:relative; height:22px; background:var(--line-soft); border:1px solid var(--line); border-radius:11px; overflow:hidden; }
+  .proj-progress-fill { height:100%; background:linear-gradient(90deg,#34D399,#10B981); transition:width .4s ease; }
+  .proj-progress-label { position:absolute; top:0; left:50%; transform:translateX(-50%); line-height:22px; font-size:12px; font-weight:700; color:var(--ink); }
+  .phase-segs { display:flex; gap:4px; flex-wrap:wrap; }
+  .phase-seg { flex:1 1 0; min-width:40px; border:1px solid var(--line); border-radius:5px; padding:6px 4px; font-size:12px; font-weight:600; font-family:var(--mono); cursor:pointer; background:var(--surface); color:var(--ink); }
+  .phase-seg:hover { filter:brightness(.96); }
+  .phase-seg.complete { background:#DCFCE7; border-color:#86EFAC; color:#166534; }
+  .phase-seg.partial { background:#FEF3C7; border-color:#FCD34D; color:#92400E; }
+  .phase-seg.not-started { background:var(--line-soft); color:var(--muted); }
+  .phase-seg.na { background:repeating-linear-gradient(45deg,#F1F5F9,#F1F5F9 4px,#E2E8F0 4px,#E2E8F0 8px); color:var(--muted); }
   tr:last-child td { border-bottom:none; }
   tbody tr:hover td { background:var(--line-soft); }
   .empty { color:var(--muted); font-size:13px; padding:18px; }
