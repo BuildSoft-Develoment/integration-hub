@@ -34,7 +34,10 @@ Codigo existente -> SDD (spec-tecnica) -> Trazabilidad -> QA (evidencia GREEN re
 | Gate | Estado | Aprobador | Fecha | Evidencia |
 |---|---|---|---|---|
 | gate-sdd-approved | pending | — | — | spec-tecnica.md |
+| gate-build-ready | pending | — | — | traceability.md |
 | gate-qa-passed | pending | — | — | tdd-evidence.md |
+| gate-deploy-ready | pending | — | — | ops/runbooks/003-diseno-y-ejecucion-procesos-runbook.md |
+| gate-operations-ready | pending | — | — | ops/runbooks/003-diseno-y-ejecucion-procesos-runbook.md |
 
 ## Decisiones
 - Motor providers + registries para tipos de tarea (DbWrite, StoredProcedure, etc.) (ADR-001).

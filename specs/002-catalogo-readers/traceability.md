@@ -34,7 +34,10 @@ Codigo existente -> SDD (spec-tecnica) -> Trazabilidad -> QA (evidencia GREEN re
 | Gate | Estado | Aprobador | Fecha | Evidencia |
 |---|---|---|---|---|
 | gate-sdd-approved | pending | — | — | spec-tecnica.md |
+| gate-build-ready | pending | — | — | traceability.md |
 | gate-qa-passed | pending | — | — | tdd-evidence.md |
+| gate-deploy-ready | pending | — | — | ops/runbooks/002-catalogo-readers-runbook.md |
+| gate-operations-ready | pending | — | — | ops/runbooks/002-catalogo-readers-runbook.md |
 
 ## Decisiones
 - Cada formato de reader (CSV/TXT/XLSX) se implementa como provider en el registry (ADR-001).

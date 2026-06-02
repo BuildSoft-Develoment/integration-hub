@@ -84,6 +84,7 @@
     "template:upgrade": "node scripts/template-upgrade.mjs",
     "template:upgrade:apply": "node scripts/template-upgrade.mjs --apply",
     "roadmap:status": "node scripts/roadmap-status.mjs",
+    "roadmap:pending": "node scripts/roadmap-pending.mjs",
     "roadmap:status:json": "node scripts/roadmap-status.mjs --json",
     "generate:openapi": "node scripts/generate-openapi.mjs",
     "generate:openapi:check": "node scripts/generate-openapi.mjs --check",

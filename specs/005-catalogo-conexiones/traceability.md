@@ -26,7 +26,10 @@ Matriz viva RF -> API -> BD -> Codigo -> Test de la feature, detalle del rollup 
 | Gate | Estado | Aprobador | Fecha | Evidencia |
 |---|---|---|---|---|
 | gate-sdd-approved | pending | — | — | spec-tecnica.md |
+| gate-build-ready | pending | — | — | traceability.md |
 | gate-qa-passed | pending | — | — | tdd-evidence.md |
+| gate-deploy-ready | pending | — | — | ops/runbooks/005-catalogo-conexiones-runbook.md |
+| gate-operations-ready | pending | — | — | ops/runbooks/005-catalogo-conexiones-runbook.md |
 
 ## Decisiones
 - Metadata JDBC introspeccionada en vivo (no persistida) via `ConnectionMetadataService`.
