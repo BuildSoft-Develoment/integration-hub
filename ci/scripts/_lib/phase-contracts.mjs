@@ -358,7 +358,7 @@ export const PHASE_CONTRACTS = [
     debeValidar: [
       "npm run check:test-documented",
       "npm run check:trace-coverage",
-      "Tests del stack (npm test, mvn test, etc.)",
+      "npm run test:stack  (tests del stack; wrapea mvn test / npm test / pytest segun el proyecto)",
     ],
     debeEntregar: [
       "Tests automatizados con @covers RF-XX por cada RF productivo",
@@ -404,7 +404,7 @@ export const PHASE_CONTRACTS = [
     debeValidar: [
       "npm run check:release-binding",
       "npm run check:project",
-      "Tests de smoke pre-release",
+      "npm run test:smoke  (smoke pre-release del stack; subconjunto rapido de tests)",
     ],
     debeEntregar: [
       "Release notes con cobertura explicita de features",
