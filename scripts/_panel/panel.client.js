@@ -195,33 +195,69 @@
     c.scrollTop = c.scrollHeight;
   }
   var PROGRESS_RE = /^\[progress\]\s+(\d+)\/(\d+)\s+(.+)$/;
+  // v12.141 (E-5): timestamps opcionales por linea + buscar en la salida.
+  var __consoleTs = false;
+  function nowTs(){ var d=new Date(); function p(n){ return (n<10?'0':'')+n; } return p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); }
   function consoleLine(cls, text){
     var m = (cls === 'err') ? null : PROGRESS_RE.exec(text||'');
     if(m){ renderProgress(Number(m[1]), Number(m[2]), m[3]); return; }
     __progressBar = null; // cualquier otra linea cierra la barra activa
-    var c=el('console'); var span=document.createElement('span'); if(cls) span.className=cls; span.textContent=text+'\n'; c.appendChild(span); c.scrollTop=c.scrollHeight;
+    var c=el('console'); var span=document.createElement('span'); if(cls) span.className=cls; span.textContent=(__consoleTs?'['+nowTs()+'] ':'')+text+'\n'; c.appendChild(span); c.scrollTop=c.scrollHeight;
   }
+  function consoleSearch(q){ q=(q||'').toLowerCase(); var c=el('console'); if(!c) return; var sp=c.children; for(var i=0;i<sp.length;i++){ var n=sp[i]; if(n.classList && n.classList.contains('progress-line')) continue; if(!n.classList) continue; if(!q){ n.classList.remove('hl','dim'); continue; } var t=(n.textContent||'').toLowerCase(); if(t.indexOf(q)>=0){ n.classList.add('hl'); n.classList.remove('dim'); } else { n.classList.add('dim'); n.classList.remove('hl'); } } }
   function consoleClear(){ el('console').innerHTML = '<span class="muted">Consola limpia.</span>\n'; }
   function consoleCopy(){ var t=el('console').innerText||''; if(navigator.clipboard) navigator.clipboard.writeText(t); }
   var CATEGORY_LABEL = { universal:'Comandos universales · siempre disponibles', memoria:'Memoria · rebuild / update DB', validador:'Validadores · read-only, exit code', reporte:'Reportes · snapshots y packs', generador:'Generadores · ESCRIBEN archivos del repo' };
+  // v12.141 (E-3): recientes (de action-runs) + favoritos (localStorage).
+  var RECENT_IDS = [];
+  function computeRecent(rows){ var seen={}, out=[]; (rows||[]).forEach(function(r){ var id=r.action_id; if(id && !seen[id]){ seen[id]=1; out.push(id); } }); return out.slice(0,6); }
+  function favList(){ try{ return JSON.parse(localStorage.getItem('aif-fav-actions')||'[]'); }catch(e){ return []; } }
+  function isFav(id){ return favList().indexOf(id)>=0; }
+  function favToggle(id){ var f=favList(); var i=f.indexOf(id); if(i>=0) f.splice(i,1); else f.unshift(id); try{ localStorage.setItem('aif-fav-actions', JSON.stringify(f.slice(0,12))); }catch(e){} if(ACTIONS_CACHE) renderActions(ACTIONS_CACHE); }
+  function quickChip(a){ return '<button class="action-chip'+(a.danger?' danger':'')+'" type="button" data-action="'+esc(a.id)+'" title="'+esc(a.hint||a.label)+'">'+esc(a.label)+'</button>'; }
   function renderActions(actions){
     var byCat = { universal:[], memoria:[], validador:[], reporte:[], generador:[] };
     actions.forEach(function(a){ (byCat[a.category]=byCat[a.category]||[]).push(a); });
+    var byId={}; actions.forEach(function(a){ byId[a.id]=a; });
     var html='';
+    // E-1: filtro de comandos
+    html += '<div class="actions-toolbar"><input id="actions-filter" type="text" placeholder="filtrar acciones (nombre, id, descripcion)…" aria-label="Filtrar acciones"><span class="muted" id="actions-filter-count" style="font-size:11px"></span></div>';
+    // E-3: favoritos + recientes
+    var favs = favList().map(function(id){ return byId[id]; }).filter(Boolean);
+    var recents = RECENT_IDS.map(function(id){ return byId[id]; }).filter(Boolean);
+    if(favs.length || recents.length){
+      html += '<div class="action-quick">';
+      if(favs.length){ html += '<div class="action-quick-row"><span class="action-quick-l">★ Favoritos</span>'; favs.forEach(function(a){ html += quickChip(a); }); html += '</div>'; }
+      if(recents.length){ html += '<div class="action-quick-row"><span class="action-quick-l">↻ Recientes</span>'; recents.forEach(function(a){ html += quickChip(a); }); html += '</div>'; }
+      html += '</div>';
+    }
     ['universal','memoria','validador','reporte','generador'].forEach(function(cat){
       if(!byCat[cat] || !byCat[cat].length) return;
-      html += '<details class="action-cat" open><summary>'+esc(CATEGORY_LABEL[cat]||cat)+' <span class="muted" style="font-weight:400;font-size:11px">('+byCat[cat].length+')</span></summary><div class="action-grid">';
+      html += '<details class="action-cat" open data-cat="'+cat+'"><summary>'+esc(CATEGORY_LABEL[cat]||cat)+' <span class="muted" style="font-weight:400;font-size:11px">('+byCat[cat].length+')</span></summary><div class="action-grid">';
       byCat[cat].forEach(function(a){
-        var classes = 'action-btn' + (a.danger?' danger':'');
+        var search = (a.label+' '+(a.hint||'')+' '+a.id).toLowerCase();
+        var badge = a.danger ? '<span class="action-write-badge" title="Escribe archivos del repo">escribe</span>' : '';
+        var star = '<button class="action-fav'+(isFav(a.id)?' on':'')+'" type="button" data-fav="'+esc(a.id)+'" title="Fijar/quitar favorito" aria-label="Favorito">'+(isFav(a.id)?'★':'☆')+'</button>';
         var argBlock = '';
         if(a.arg){ argBlock = '<div class="action-arg">'+esc(a.arg.name)+(a.arg.required?' <span style="color:#B45309">*</span>':'')+': <input id="arg-'+esc(a.id)+'" placeholder="'+esc(a.arg.hint||'')+'" /></div>'; }
-        html += '<button class="'+classes+'" data-action="'+esc(a.id)+'">'+esc(a.label)+'<span class="ah">'+esc(a.hint||'')+'</span></button>'+argBlock;
+        html += '<div class="action-item" data-search="'+esc(search)+'"><div class="action-row"><button class="action-btn'+(a.danger?' danger':'')+'" data-action="'+esc(a.id)+'">'+esc(a.label)+badge+'<span class="ah">'+esc(a.hint||'')+'</span></button>'+star+'</div>'+argBlock+'</div>';
       });
       html += '</div></details>';
     });
     el('actions-host').innerHTML = html;
-    var btns = el('actions-host').querySelectorAll('.action-btn');
+    var btns = el('actions-host').querySelectorAll('.action-btn, .action-chip');
     for(var i=0;i<btns.length;i++){ btns[i].addEventListener('click', function(ev){ onActionClick(ev.currentTarget.getAttribute('data-action')); }); }
+    var stars = el('actions-host').querySelectorAll('[data-fav]');
+    for(var k=0;k<stars.length;k++){ stars[k].addEventListener('click', function(ev){ ev.stopPropagation(); favToggle(ev.currentTarget.getAttribute('data-fav')); }); }
+    var fi = el('actions-filter'); if(fi){ fi.addEventListener('input', filterActions); }
+  }
+  function filterActions(){
+    var fi = el('actions-filter'); if(!fi) return; var q=(fi.value||'').toLowerCase().trim();
+    var items = el('actions-host').querySelectorAll('.action-item'); var shown=0;
+    for(var i=0;i<items.length;i++){ var ok = !q || items[i].getAttribute('data-search').indexOf(q)>=0; items[i].style.display = ok?'':'none'; if(ok) shown++; }
+    var cats = el('actions-host').querySelectorAll('.action-cat');
+    for(var c=0;c<cats.length;c++){ var its=cats[c].querySelectorAll('.action-item'); var vis=0; for(var x=0;x<its.length;x++){ if(its[x].style.display!=='none') vis++; } cats[c].style.display = vis?'':'none'; if(q && vis) cats[c].open = true; }
+    var cnt = el('actions-filter-count'); if(cnt) cnt.textContent = q ? (shown+' coinciden') : '';
   }
   function findAction(id){ if(!ACTIONS_CACHE) return null; for(var i=0;i<ACTIONS_CACHE.length;i++) if(ACTIONS_CACHE[i].id===id) return ACTIONS_CACHE[i]; return null; }
   function onActionClick(id){
@@ -240,14 +276,27 @@
   // Soporta cancelacion: el cliente aborta la conexion fetch, el server
   // detecta req.close y envia SIGTERM al child.
   var __execController = null;
+  // v12.141 (E-2): estado de ejecucion claro + re-ejecutar.
+  var LAST_RUN = null, LAST_EXIT = null;
+  function setExecStatus(html){ var s = el('exec-status'); if(s) s.innerHTML = html; }
+  function updateExecStatus(){
+    if(!LAST_RUN){ setExecStatus(''); return; }
+    var lbl = esc(LAST_RUN.label || LAST_RUN.id);
+    var rerun = '<button class="exec-rerun" type="button" data-rerun="1" title="Re-ejecutar">↻ Re-ejecutar</button>';
+    if(LAST_EXIT == null){ setExecStatus('<span class="exec-dot run"></span> Ejecutando <code>'+lbl+'</code>…'); }
+    else if(LAST_EXIT.aborted){ setExecStatus('<span class="exec-dot warn"></span> <code>'+lbl+'</code> cancelado '+rerun); }
+    else if(LAST_EXIT.code === 0){ setExecStatus('<span class="exec-dot ok"></span> <code>'+lbl+'</code> · OK · exit 0 · '+(LAST_EXIT.ms/1000).toFixed(1)+'s '+rerun); }
+    else { setExecStatus('<span class="exec-dot err"></span> <code>'+lbl+'</code> · exit '+LAST_EXIT.code+(LAST_EXIT.timedOut?' · TIMEOUT':'')+' · '+(LAST_EXIT.ms/1000).toFixed(1)+'s '+rerun); }
+  }
   function setRunning(running){
-    var btns = el('actions-host').querySelectorAll('.action-btn');
+    var btns = el('actions-host').querySelectorAll('.action-btn, .action-chip, .action-fav');
     for(var i=0;i<btns.length;i++) btns[i].disabled = !!running;
     var stop = el('console-stop'); if(stop) stop.style.display = running ? 'inline-block' : 'none';
   }
   function execAction(id, arg){
     var a = findAction(id); if(!a) return;
     setRunning(true);
+    LAST_RUN = { id:id, arg:arg, label:a.label }; LAST_EXIT = null; updateExecStatus();
     // v12.139: trae la consola a la vista al elegir una accion (no obligar a hacer scroll).
     var __con = el('console'); if(__con && __con.scrollIntoView) __con.scrollIntoView({behavior:'smooth', block:'center'});
     consoleLine('cmd', '$ '+a.label+(arg?' --'+a.arg.name.replace(/^--/,'')+' '+arg:''));
@@ -275,6 +324,7 @@
         flushPending('stdout'); flushPending('stderr');
         var ms = data.durationMs || (Date.now()-t0);
         var s = (ms/1000).toFixed(1);
+        LAST_EXIT = { code:data.exitCode, ms:ms, signal:data.signal, timedOut:data.timedOut };
         if(data.exitCode === 0) consoleLine('ok', '─ exit 0 · '+s+'s ─');
         else consoleLine('err', '─ exit '+data.exitCode+(data.signal?' ('+data.signal+')':'')+(data.timedOut?' · TIMEOUT':'')+' · '+s+'s ─');
         return;
@@ -315,11 +365,12 @@
       }
       return pump();
     }).catch(function(err){
-      if(err && err.name==='AbortError'){ consoleLine('info', '… cancelado por el usuario'); }
+      if(err && err.name==='AbortError'){ LAST_EXIT = { aborted:true }; consoleLine('info', '… cancelado por el usuario'); }
       else consoleLine('err', '✗ Error de red: '+(err && err.message ? err.message : err));
     }).then(function(){
       __execController = null;
       setRunning(false);
+      updateExecStatus();
       if(['sync-memory','index-docs','embed-docs','regenerate-context','harvest-trace'].indexOf(id)>=0){
         fetch('/api/snapshot').then(function(r){return r.json();}).then(function(d){ MEM=d; renderAll(d); consoleLine('info', '… snapshot recargado'); }).catch(function(){});
       }
@@ -336,7 +387,10 @@
   }
   function loadActions(){
     if(MODE !== 'live'){ el('actions-host').innerHTML = '<p class="empty">Las acciones solo estan disponibles en modo live (memory-serve). Arranca el server con: <code>node scripts/ai-framework-agent.mjs memory-serve</code> o <code>npm run memory:serve</code>.</p>'; return; }
-    fetch('/api/actions').then(function(r){return r.json();}).then(function(actions){ ACTIONS_CACHE = actions; renderActions(actions); loadAlerts(); }).catch(function(){ el('actions-host').innerHTML='<p class="empty">No se pudo cargar /api/actions.</p>'; });
+    Promise.all([
+      fetch('/api/actions').then(function(r){return r.json();}),
+      fetch('/api/action-runs?limit=25').then(function(r){return r.json();}).catch(function(){return [];})
+    ]).then(function(arr){ ACTIONS_CACHE = arr[0]; RECENT_IDS = computeRecent(arr[1]); renderActions(arr[0]); loadAlerts(); }).catch(function(){ el('actions-host').innerHTML='<p class="empty">No se pudo cargar /api/actions.</p>'; });
   }
   // v12.28: alertas activas (acciones con >=3 fallos consecutivos al final).
   function loadAlerts(){
@@ -1392,6 +1446,8 @@
         (M.documents||[]).forEach(function(x){ (function(p){ if(!p)return; items.push({ label:'Doc: '+p, kind:'doc', run:function(){ showTab('docs'); } }); })(x.path); });
         (M.decisions||[]).forEach(function(x){ (function(d){ if(!d)return; items.push({ label:'Decision: '+d, kind:'decision', run:function(){ showTab('decisions'); } }); })(x.decision_ref||x.title); });
       }
+      // E-7: ejecutar una accion desde el palette (respeta el confirm de las que escriben).
+      if(ACTIONS_CACHE){ ACTIONS_CACHE.forEach(function(a){ (function(ac){ items.push({ label:'Ejecutar: '+ac.label, kind:'accion', run:function(){ showTab('actions'); showSubtab('run'); onActionClick(ac.id); } }); })(a); }); }
     }
     function render(){ var q=inp.value.toLowerCase(); filtered = items.filter(function(it){ return it.label.toLowerCase().indexOf(q)>=0; }); if(sel>=filtered.length) sel=0; if(!filtered.length){ list.innerHTML='<li class="cmdk-empty">Sin coincidencias</li>'; return; } var h=''; filtered.forEach(function(it,i){ h+='<li role="option" data-i="'+i+'" class="'+(i===sel?'sel':'')+'">'+esc(it.label)+'<span class="cmdk-kind">'+esc(it.kind)+'</span></li>'; }); list.innerHTML=h; }
     function openP(){ build(); inp.value=''; sel=0; render(); bg.classList.add('show'); setTimeout(function(){ inp.focus(); }, 0); }
@@ -1409,6 +1465,12 @@
   if(el('console-clear')) el('console-clear').addEventListener('click', consoleClear);
   if(el('console-copy')) el('console-copy').addEventListener('click', consoleCopy);
   if(el('console-stop')) el('console-stop').addEventListener('click', stopAction);
+  // v12.141 (E-5): timestamps / wrap / buscar en la consola.
+  if(el('console-ts')) el('console-ts').addEventListener('click', function(){ __consoleTs = !__consoleTs; this.classList.toggle('on', __consoleTs); });
+  if(el('console-wrap')) el('console-wrap').addEventListener('click', function(){ var c=el('console'); var off = c.classList.toggle('nowrap'); this.classList.toggle('on', off); });
+  if(el('console-search')) el('console-search').addEventListener('input', function(){ consoleSearch(this.value); });
+  // v12.141 (E-2): re-ejecutar la ultima accion desde la barra de estado.
+  document.addEventListener('click', function(e){ var r = e.target && e.target.closest && e.target.closest('[data-rerun]'); if(!r) return; if(LAST_RUN) execAction(LAST_RUN.id, LAST_RUN.arg); });
   // v12.140: tema claro/oscuro persistido (localStorage) con fallback a prefers-color-scheme.
   (function(){ function applyTheme(t){ if(t==='dark') document.documentElement.setAttribute('data-theme','dark'); else document.documentElement.removeAttribute('data-theme'); } var saved=null; try{ saved=localStorage.getItem('aif-theme'); }catch(e){} var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; applyTheme(saved || (sysDark?'dark':'light')); var tb=el('theme-toggle'); if(tb) tb.addEventListener('click', function(){ var dark = document.documentElement.getAttribute('data-theme')==='dark'; var next = dark?'light':'dark'; applyTheme(next); try{ localStorage.setItem('aif-theme', next); }catch(e){} }); })();
   // v12.140: badge de modo en el header (live = datos en vivo via memory-serve; static = reporte).
