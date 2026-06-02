@@ -2978,6 +2978,18 @@ const MEMORY_CLIENT_JS = [
   "  function toggleFilesTree(){ var lay=document.querySelector('#pane-files .files-layout'); if(!lay) return; var off=lay.classList.toggle('tree-collapsed'); var b=el('files-tree-toggle'); if(b) b.textContent = off ? '⮞ Mostrar arbol' : '⮜ Ocultar arbol'; }",
   "  document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ var p=el('pane-files'); if(p && p.classList.contains('fs-mode')) toggleFilesFullscreen(); } });",
   "  document.addEventListener('click', function(e){ var t = e.target.closest('.tab'); if(t) showTab(t.dataset.tab); var st = e.target.closest('.subtab[data-subtab]'); if(st) showSubtab(st.dataset.subtab); var ts = e.target.closest('[data-trace-sub]'); if(ts) showTraceSub(ts.dataset.traceSub); });",
+  "  // v12.140: command palette (Ctrl/Cmd-K) — navegacion rapida a pestanas y fases (P2).",
+  "  (function(){ var bg=el('cmdk-bg'), inp=el('cmdk-input'), list=el('cmdk-list'); if(!bg||!inp||!list) return; var items=[], filtered=[], sel=0;",
+  "    function build(){ items=[]; var tabs=document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ (function(tb){ items.push({ label:'Ir a: '+tb.textContent.trim(), kind:'tab', run:function(){ showTab(tb.dataset.tab); } }); })(tabs[i]); } for(var p=0;p<=8;p++){ (function(ph){ items.push({ label:'Roadmap -> Fase '+ph, kind:'fase', run:function(){ showTab('roadmap'); setTimeout(function(){ var t=el('pend-phase-'+ph); if(t) t.scrollIntoView({behavior:'smooth',block:'center'}); }, 250); } }); })(p); } }",
+  "    function render(){ var q=inp.value.toLowerCase(); filtered = items.filter(function(it){ return it.label.toLowerCase().indexOf(q)>=0; }); if(sel>=filtered.length) sel=0; if(!filtered.length){ list.innerHTML='<li class=\"cmdk-empty\">Sin coincidencias</li>'; return; } var h=''; filtered.forEach(function(it,i){ h+='<li role=\"option\" data-i=\"'+i+'\" class=\"'+(i===sel?'sel':'')+'\">'+esc(it.label)+'<span class=\"cmdk-kind\">'+esc(it.kind)+'</span></li>'; }); list.innerHTML=h; }",
+  "    function openP(){ build(); inp.value=''; sel=0; render(); bg.classList.add('show'); setTimeout(function(){ inp.focus(); }, 0); }",
+  "    function closeP(){ bg.classList.remove('show'); }",
+  "    function exec(){ var it=filtered[sel]; if(it){ closeP(); it.run(); } }",
+  "    document.addEventListener('keydown', function(e){ if((e.ctrlKey||e.metaKey) && (e.key==='k'||e.key==='K')){ e.preventDefault(); if(bg.classList.contains('show')) closeP(); else openP(); return; } if(!bg.classList.contains('show')) return; if(e.key==='Escape'){ closeP(); } else if(e.key==='ArrowDown'){ sel=Math.min(sel+1,filtered.length-1); render(); e.preventDefault(); } else if(e.key==='ArrowUp'){ sel=Math.max(sel-1,0); render(); e.preventDefault(); } else if(e.key==='Enter'){ exec(); e.preventDefault(); } });",
+  "    inp.addEventListener('input', render);",
+  "    list.addEventListener('click', function(e){ var li=e.target.closest('li[data-i]'); if(li){ sel=parseInt(li.getAttribute('data-i'),10); exec(); } });",
+  "    bg.addEventListener('click', function(e){ if(e.target===bg) closeP(); });",
+  "  })();",
   "  // v12.140: filtro local de tablas grandes (P2) via listener delegado.",
   "  document.addEventListener('input', function(e){ var inp = e.target && e.target.closest && e.target.closest('[data-table-filter]'); if(!inp) return; var t = el(inp.getAttribute('data-table-filter')); if(!t) return; var q = (inp.value||'').toLowerCase(); var rows = t.querySelectorAll('tbody tr'); var shown=0; for(var i=0;i<rows.length;i++){ var ok = rows[i].textContent.toLowerCase().indexOf(q)>=0; rows[i].style.display = ok?'':'none'; if(ok) shown++; } var cnt = el(inp.getAttribute('data-table-filter')+'-count'); if(cnt) cnt.textContent = shown+' / '+rows.length; });",
   "  el('search-q').addEventListener('keydown', function(e){ if(e.key==='Enter') doSearch(); });",
@@ -3065,6 +3077,16 @@ function memoryHtmlShell(dataScript) {
   .table-filter-wrap { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
   .table-filter { flex:0 1 320px; padding:6px 10px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; }
   .table-filter-count { font-size:11px; color:var(--muted); font-family:var(--mono); }
+  /* v12.140: command palette (Ctrl/Cmd-K). */
+  .cmdk-bg { position:fixed; inset:0; background:rgba(15,23,42,.55); display:none; align-items:flex-start; justify-content:center; z-index:200; padding-top:12vh; }
+  .cmdk-bg.show { display:flex; }
+  .cmdk { width:min(560px,92vw); background:var(--surface); border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 40px rgba(0,0,0,.3); overflow:hidden; }
+  .cmdk input { width:100%; padding:14px 16px; border:none; border-bottom:1px solid var(--line); font-size:15px; background:var(--surface); color:var(--text); outline:none; }
+  .cmdk ul { list-style:none; max-height:50vh; overflow-y:auto; }
+  .cmdk li { padding:10px 16px; font-size:13px; cursor:pointer; display:flex; justify-content:space-between; gap:10px; color:var(--text); }
+  .cmdk li .cmdk-kind { font-size:10px; color:var(--muted); font-family:var(--mono); text-transform:uppercase; }
+  .cmdk li.sel, .cmdk li:hover { background:var(--brand-light); }
+  .cmdk-empty { padding:14px 16px; color:var(--muted); font-size:13px; }
   .tab { padding:8px 14px; font-size:13px; cursor:pointer; border:none; background:transparent; color:var(--muted); border-bottom:2px solid transparent; white-space:nowrap; flex:0 0 auto; }
   .tab:hover { color:var(--text); }
   .tab.active { color:var(--brand); border-bottom-color:var(--brand); font-weight:600; }
@@ -3641,6 +3663,12 @@ function memoryHtmlShell(dataScript) {
       <button class="cancel" id="modal-cancel">Cancelar</button>
       <button class="confirm" id="modal-confirm">Ejecutar</button>
     </div>
+  </div>
+</div>
+<div class="cmdk-bg" id="cmdk-bg" role="dialog" aria-modal="true" aria-label="Paleta de comandos">
+  <div class="cmdk">
+    <input id="cmdk-input" type="text" autocomplete="off" placeholder="Ir a… (pestaña o fase del roadmap) · Esc para cerrar" aria-label="Buscar comando o destino">
+    <ul id="cmdk-list" role="listbox"></ul>
   </div>
 </div>
 <script>${dataScript}</script>
