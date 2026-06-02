@@ -2978,6 +2978,8 @@ const MEMORY_CLIENT_JS = [
   "  if(el('console-stop')) el('console-stop').addEventListener('click', stopAction);",
   "  // v12.140: tema claro/oscuro persistido (localStorage) con fallback a prefers-color-scheme.",
   "  (function(){ function applyTheme(t){ if(t==='dark') document.documentElement.setAttribute('data-theme','dark'); else document.documentElement.removeAttribute('data-theme'); } var saved=null; try{ saved=localStorage.getItem('aif-theme'); }catch(e){} var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; applyTheme(saved || (sysDark?'dark':'light')); var tb=el('theme-toggle'); if(tb) tb.addEventListener('click', function(){ var dark = document.documentElement.getAttribute('data-theme')==='dark'; var next = dark?'light':'dark'; applyTheme(next); try{ localStorage.setItem('aif-theme', next); }catch(e){} }); })();",
+  "  // v12.140: badge de modo en el header (live = datos en vivo via memory-serve; static = reporte).",
+  "  (function(){ var mb=el('mode-badge'); if(mb){ var live = MODE==='live'; mb.textContent = live?'live':'static'; mb.className = 'mode-badge '+(live?'live':'static'); mb.title = live?'Datos en vivo (memory-serve): acciones y refresco disponibles':'Reporte estatico: solo metadata, sin acciones'; } })();",
   "  // v12.140: accesibilidad de las pestanas (ARIA tablist/tab/tabpanel + roving tabindex + flechas).",
   "  (function(){ var tl = document.querySelector('.tabs'); if(tl){ tl.setAttribute('role','tablist'); tl.setAttribute('aria-label','Secciones del panel'); } var tabs = document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ var on = tabs[i].classList.contains('active'); tabs[i].setAttribute('role','tab'); tabs[i].setAttribute('aria-selected', on?'true':'false'); tabs[i].setAttribute('tabindex', on?'0':'-1'); } var panes = document.querySelectorAll('.pane'); for(var j=0;j<panes.length;j++){ panes[j].setAttribute('role','tabpanel'); panes[j].setAttribute('tabindex','0'); } if(tl) tl.addEventListener('keydown', function(e){ if(e.key!=='ArrowRight' && e.key!=='ArrowLeft') return; var arr=[].slice.call(document.querySelectorAll('.tab')); var idx=arr.indexOf(document.activeElement); if(idx<0) return; var n = e.key==='ArrowRight' ? (idx+1)%arr.length : (idx-1+arr.length)%arr.length; arr[n].focus(); showTab(arr[n].dataset.tab); e.preventDefault(); }); })();",
   "  if(el('history-refresh')) el('history-refresh').addEventListener('click', loadHistory);",
@@ -3044,7 +3046,13 @@ function memoryHtmlShell(dataScript) {
   .searchbar input:focus { border-color:var(--brand); }
   .searchbar button { padding:9px 16px; background:var(--brand); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; }
   .searchbar button:hover { background:var(--brand-dark); }
-  .tabs { display:flex; gap:4px; flex-wrap:nowrap; overflow-x:auto; border-bottom:1px solid var(--line); margin-bottom:16px; scrollbar-width:thin; }
+  .tabs { display:flex; gap:4px; flex-wrap:nowrap; overflow-x:auto; border-bottom:1px solid var(--line); margin-bottom:16px; scrollbar-width:thin; position:sticky; top:0; z-index:20; background:var(--bg); }
+  /* v12.140: badge de modo (live/static) + clases utilitarias de severidad tokenizadas. */
+  .mode-badge { display:inline-block; font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px; margin-left:8px; vertical-align:middle; text-transform:uppercase; letter-spacing:.4px; }
+  .mode-badge.live { background:#DCFCE7; color:#166534; }
+  .mode-badge.static { background:#FEF3C7; color:#92400E; }
+  .sev-blocker { color:var(--danger); } .sev-gate { color:var(--warn); } .sev-info { color:var(--muted); }
+  .sev-ok { color:var(--ok); } .sev-na { color:var(--muted); }
   .tab { padding:8px 14px; font-size:13px; cursor:pointer; border:none; background:transparent; color:var(--muted); border-bottom:2px solid transparent; white-space:nowrap; flex:0 0 auto; }
   .tab:hover { color:var(--text); }
   .tab.active { color:var(--brand); border-bottom-color:var(--brand); font-weight:600; }
@@ -3400,7 +3408,7 @@ function memoryHtmlShell(dataScript) {
 <body>
 <header>
   <button id="theme-toggle" title="Cambiar tema claro/oscuro" aria-label="Cambiar tema" style="float:right;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer">🌓</button>
-  <h1>Memoria del agente IA — consulta</h1>
+  <h1 style="display:inline-block">Memoria del agente IA — consulta</h1><span id="mode-badge" class="mode-badge"></span>
   <div class="meta" id="meta">Cargando…</div>
 </header>
 <div class="wrap">
