@@ -1050,6 +1050,14 @@ function syncGateRuns(db, files, root) {
   const seen = new Set();
   let count = 0;
   for (const file of ordered) {
+    // v12.139: el ledger canonico de gates es traceability.md (## Gates) y la
+    // matriz raiz TRACEABILITY_MATRIX.md. Antes se cosechaban gates de CUALQUIER
+    // mencion `gate-x: estado` en prosa (p.ej. checklists en spec-funcional.md o
+    // spec-tareas.md), inflando ai_gate_runs con gates que ni siquiera viven en la
+    // tabla de gates (ruido en el panel: spdd/prototype "Otros"). Solo cosechar de
+    // los archivos de trazabilidad mantiene una sola fuente de verdad.
+    const baseName = String(file.rel).replace(/\\/g, "/").split("/").pop().toLowerCase();
+    if (!/^traceability(_matrix)?\.md$/.test(baseName)) continue;
     const scope = specScopeOf(file.rel);
     const git = root ? gitLastChange(root, file.rel) : { author: null, date: null };
     // Acepta el gate con o sin backticks. El separador debe ser ":" para no
@@ -1708,1246 +1716,9 @@ function buildMemorySnapshot(db, dbPath, mode) {
 
 // Cliente JS de la UI. Sin backticks ni `${` para poder vivir dentro del
 // template literal exterior sin escapes.
-const MEMORY_CLIENT_JS = [
-  "(function(){",
-  "  var MEM = window.__MEMORY__ || null;",
-  "  var MODE = window.__MEMORY_MODE__ || (MEM ? 'static' : 'live');",
-  "  var el = function(id){ return document.getElementById(id); };",
-  "  var esc = function(s){ s = (s==null?'':String(s)); return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };",
-  "  // v12.32: helper compartido para serializar selectedOptions de un <select multiple> como CSV.",
-  "  function multiCsv(id){ var n=el(id); if(!n) return ''; if(n.multiple){ var arr=[]; for(var i=0;i<n.selectedOptions.length;i++) arr.push(n.selectedOptions[i].value); return arr.filter(Boolean).join(','); } return n.value||''; }",
-  "  function cell(v){ return '<td>' + esc(v||'-') + '</td>'; }",
-  "  function table(headers, rows, cols){",
-  "    if(!rows || !rows.length) return '<p class=\"empty\">Sin registros.</p>';",
-  "    var h = '<table><thead><tr>'; for(var i=0;i<headers.length;i++) h += '<th>'+esc(headers[i])+'</th>'; h += '</tr></thead><tbody>';",
-  "    for(var r=0;r<rows.length;r++){ h += '<tr>'; for(var c=0;c<cols.length;c++) h += cell(rows[r][cols[c]]); h += '</tr>'; }",
-  "    return h + '</tbody></table>';",
-  "  }",
-  "  function renderStats(s){",
-  "    var items = [['Documentos',s.documents],['Chunks',s.chunks],['Trace links',s.traceLinks],['Gate runs',s.gateRuns],['Evidencia',s.evidence],['Decisiones',s.decisions],['Preguntas',s.openQuestions]];",
-  "    var h = ''; for(var i=0;i<items.length;i++){ h += '<div class=\"stat\"><div class=\"stat-v\">'+esc(items[i][1])+'</div><div class=\"stat-l\">'+esc(items[i][0])+'</div></div>'; }",
-  "    h += '<div class=\"stat\"><div class=\"stat-v\">'+(s.fts?'si':'no')+'</div><div class=\"stat-l\">FTS5</div></div>';",
-  "    el('stats').innerHTML = h;",
-  "  }",
-  "  function renderAll(d){",
-  "    renderStats(d.stats);",
-  "    el('tab-trace').innerHTML = table(['Origen','Ref','Relacion','Destino','Ref destino','Evidencia'], d.traceLinks, ['source_type','source_ref','relation','target_type','target_ref','evidence_ref']);",
-  "    el('tab-gates').innerHTML = table(['Gate','Scope','Estado','Fuente'], d.gateRuns, ['gate','phase_scope','status','summary']);",
-  "    el('tab-decisions').innerHTML = table(['Ref','Titulo','Estado','ADR'], d.decisions, ['decision_ref','title','status','adr_path']);",
-  "    el('tab-evidence').innerHTML = table(['Tipo','Ruta','Descripcion','Estado'], d.evidence, ['evidence_type','path','description','status']);",
-  "    el('tab-questions').innerHTML = table(['Fase','Pregunta','Fuente','Estado'], d.openQuestions, ['phase','question','source_ref','status']);",
-  "    el('tab-docs').innerHTML = table(['Ruta','Tipo','Fase','Titulo'], d.documents, ['path','kind','phase','title']);",
-  "    el('meta').textContent = 'BD: ' + d.dbPath + '  |  modo: ' + d.mode + '  |  ' + d.generatedAt;",
-  "  }",
-  "  function matchesAll(haystack, terms){ var l=String(haystack||'').toLowerCase(); for(var i=0;i<terms.length;i++){ if(l.indexOf(terms[i])<0) return false; } return true; }",
-  "  function staticSearch(q){",
-  "    q = q.toLowerCase().trim(); if(!q) return [];",
-  "    var terms = q.split(/\\s+/);",
-  "    var out = [];",
-  "    (MEM.documents||[]).forEach(function(x){ if(matchesAll(x.path+' '+(x.title||''), terms)) out.push({t:'doc', ref:x.path, path:x.path, excerpt:x.title||''}); });",
-  "    (MEM.traceLinks||[]).forEach(function(x){ var hay=x.source_ref+' '+x.relation+' '+x.target_ref+' '+(x.evidence_ref||''); if(matchesAll(hay, terms)) out.push({t:'trace', ref:x.source_ref+' -['+x.relation+']-> '+x.target_ref, path:x.evidence_ref||'', excerpt:(x.source_type||'')+' -> '+(x.target_type||'')}); });",
-  "    (MEM.decisions||[]).forEach(function(x){ if(matchesAll((x.decision_ref||'')+' '+(x.title||'')+' '+(x.status||''), terms)) out.push({t:'decision', ref:x.decision_ref||x.title, path:x.adr_path||'', excerpt:(x.title||'')+' ('+x.status+')'}); });",
-  "    (MEM.gateRuns||[]).forEach(function(x){ if(matchesAll(x.gate+' '+x.phase_scope+' '+x.status, terms)) out.push({t:'gate', ref:x.gate+' ('+x.phase_scope+')', path:x.summary||'', excerpt:x.status}); });",
-  "    (MEM.openQuestions||[]).forEach(function(x){ if(matchesAll(x.question, terms)) out.push({t:'pregunta', ref:x.source_ref||'', path:x.source_ref||'', excerpt:x.question}); });",
-  "    return out.slice(0,60);",
-  "  }",
-  "  function renderSearch(rows, label){",
-  "    var modeNote = MODE==='live' ? 'live (metadata + chunks)' : 'estatico (solo metadata; sin chunks)';",
-  "    var hdr = '<div class=\"count\"><strong>'+(rows.length)+'</strong> resultado'+(rows.length===1?'':'s')+(label?' · '+esc(label):'')+' <span class=\"mode-note\">[modo: '+esc(modeNote)+']</span></div>';",
-  "    if(!rows.length){ el('search-out').innerHTML = hdr + '<p class=\"empty\">Sin resultados.</p>'; return; }",
-  "    var byType = {}; for(var k=0;k<rows.length;k++){ var tt=rows[k].t||rows[k].kind||'-'; byType[tt]=(byType[tt]||0)+1; }",
-  "    var typeOrder = ['chunk','doc','trace','decision','gate','pregunta','api','rf','prototipo'];",
-  "    var chips=''; for(var i0=0;i0<typeOrder.length;i0++){ var tt0=typeOrder[i0]; if(byType[tt0]) chips += '<span class=\"badge\">'+esc(tt0)+': '+byType[tt0]+'</span> '; }",
-  "    for(var t in byType){ if(typeOrder.indexOf(t)<0) chips += '<span class=\"badge\">'+esc(t)+': '+byType[t]+'</span> '; }",
-  "    var h = hdr + '<div class=\"chips\">'+chips+'</div>' + '<table><thead><tr><th>Tipo</th><th>Resultado</th></tr></thead><tbody>';",
-  "    for(var i=0;i<rows.length;i++){ var r=rows[i]; h += '<tr><td><span class=\"badge\">'+esc(r.t||r.kind||'')+'</span></td><td>'+esc(r.ref || (r.path+' :: '+(r.heading||'')))+(r.excerpt?'<div class=\"excerpt\">'+esc(r.excerpt)+'</div>':'')+'</td></tr>'; }",
-  "    el('search-out').innerHTML = h + '</tbody></table>';",
-  "  }",
-  "  function doSearch(){",
-  "    var q = el('search-q').value;",
-  "    if(!q || !q.trim()){ el('search-out').innerHTML = '<p class=\"empty\">Escribe una consulta y pulsa Buscar.</p>'; return; }",
-  "    if(MODE === 'live'){",
-  "      fetch('/api/search?q=' + encodeURIComponent(q)).then(function(r){return r.json();}).then(function(rows){renderSearch(rows, 'busqueda: '+q);}).catch(function(){ el('search-out').innerHTML='<p class=\"empty\">Error de busqueda.</p>'; });",
-  "    } else {",
-  "      renderSearch(staticSearch(q), 'busqueda: '+q);",
-  "    }",
-  "  }",
-  "  // ---- Preset queries (Consultas rapidas) ------------------------------",
-  "  function runQueryClient(key, arg){",
-  "    arg = (arg||'').trim();",
-  "    var out=[]; var like = arg.toLowerCase();",
-  "    var T = MEM.traceLinks||[], D = MEM.decisions||[], G = MEM.gateRuns||[], C = MEM.documents||[], Q = MEM.openQuestions||[];",
-  "    function dec(s){ return String(s||'').toLowerCase(); }",
-  "    switch(key){",
-  "      case 'docs-for':",
-  "        if(!arg) return [];",
-  "        T.forEach(function(x){ if(x.source_ref===arg || (x.target_ref||'').indexOf(arg)>=0) out.push({t:'trace', ref:x.source_ref+' -['+x.relation+']-> '+x.target_ref, path:x.evidence_ref||'', excerpt:'tipo destino: '+x.target_type}); });",
-  "        C.forEach(function(x){ if((x.path||'').toLowerCase().indexOf(like)>=0 || (x.title||'').toLowerCase().indexOf(like)>=0) out.push({t:'doc', ref:x.path, path:x.path, excerpt:x.title||''}); });",
-  "        return out;",
-  "      case 'apis-for':",
-  "        if(!arg) return [];",
-  "        T.forEach(function(x){ if(x.source_ref===arg && x.target_type==='api') out.push({t:'api', ref:x.source_ref+' → '+x.target_ref, path:x.evidence_ref||'', excerpt:x.target_ref}); });",
-  "        return out;",
-  "      case 'features-pending-qa':",
-  "        G.forEach(function(x){ var s=dec(x.status); if((x.phase_scope||'').indexOf('specs/')===0 && s.indexOf('aprob')<0 && s.indexOf('cerrad')<0) out.push({t:'gate', ref:x.gate+' · '+x.phase_scope.replace(/^specs\\//,''), path:x.phase_scope, excerpt:x.status}); });",
-  "        return out;",
-  "      case 'validated-prototypes':",
-  "        G.forEach(function(x){ var s=dec(x.status); if(x.gate==='gate-prototype-ready' && (s.indexOf('valid')>=0 || s.indexOf('listo')>=0 || s.indexOf('aprob')>=0)) out.push({t:'prototipo', ref:x.phase_scope.replace(/^specs\\//,''), path:x.phase_scope, excerpt:x.status}); });",
-  "        return out;",
-  "      case 'decisions-pending':",
-  "        D.forEach(function(x){ var s=dec(x.status); if(s.indexOf('aprob')<0 && s.indexOf('aceptad')<0 && s.indexOf('cerrad')<0) out.push({t:'decision', ref:x.decision_ref||x.title, path:x.adr_path||'', excerpt:(x.title||'')+' · estado: '+x.status}); });",
-  "        return out;",
-  "      case 'failed-gates':",
-  "        G.forEach(function(x){ var s=dec(x.status); if(s.indexOf('bloque')>=0||s.indexOf('falla')>=0||s.indexOf('recha')>=0||s.indexOf('error')>=0) out.push({t:'gate', ref:x.gate+' · '+x.phase_scope, path:x.phase_scope, excerpt:x.status}); });",
-  "        return out;",
-  "      case 'rf-without-code': {",
-  "        var withCode = {}; T.forEach(function(x){ if(x.target_type==='codigo') withCode[x.source_ref]=true; });",
-  "        var rfs = {}; T.forEach(function(x){ if((x.source_type==='RF'||x.source_type==='requerimiento')) rfs[x.source_ref]=true; });",
-  "        for(var rf in rfs){ if(!withCode[rf]) out.push({t:'rf', ref:rf, path:'', excerpt:'sin trace_link de target_type=codigo'}); }",
-  "        out.sort(function(a,b){return a.ref<b.ref?-1:1;}); return out;",
-  "      }",
-  "      case 'rf-without-test': {",
-  "        var withTest = {}; T.forEach(function(x){ if(x.target_type==='test') withTest[x.source_ref]=true; });",
-  "        var rfs2 = {}; T.forEach(function(x){ if((x.source_type==='RF'||x.source_type==='requerimiento')) rfs2[x.source_ref]=true; });",
-  "        for(var rf2 in rfs2){ if(!withTest[rf2]) out.push({t:'rf', ref:rf2, path:'', excerpt:'sin trace_link de target_type=test'}); }",
-  "        out.sort(function(a,b){return a.ref<b.ref?-1:1;}); return out;",
-  "      }",
-  "      case 'rf-implemented': {",
-  "        var c={}, t2={}; T.forEach(function(x){ if(x.source_type==='RF'||x.source_type==='requerimiento'){ if(x.target_type==='codigo') c[x.source_ref]=true; if(x.target_type==='test') t2[x.source_ref]=true; }});",
-  "        for(var rf3 in c){ if(t2[rf3]) out.push({t:'rf', ref:rf3, path:'', excerpt:'tiene codigo y test'}); }",
-  "        out.sort(function(a,b){return a.ref<b.ref?-1:1;}); return out;",
-  "      }",
-  "      case 'decisions-about':",
-  "        if(!arg) return [];",
-  "        D.forEach(function(x){ var blob=(dec(x.title)+' '+dec(x.status)+' '+dec(x.tags||'')); if(blob.indexOf(like)>=0) out.push({t:'decision', ref:x.decision_ref||x.title, path:x.adr_path||'', excerpt:(x.title||'')+' · '+x.status+(x.tags?' · tags: '+x.tags:'')}); });",
-  "        return out;",
-  "      default: return [];",
-  "    }",
-  "  }",
-  "  function runPreset(key, label){",
-  "    var preset = (MEM.presets||[]).find(function(p){return p.key===key;}) || {key:key, requiresArg:false};",
-  "    var arg = '';",
-  "    if(preset.requiresArg){ arg = (el('preset-arg')||{}).value || ''; if(!arg.trim()){ el('search-out').innerHTML = '<p class=\"empty\">Esta consulta requiere un argumento. Escribelo arriba y vuelve a pulsar.</p>'; return; } }",
-  "    var labelText = (label||preset.label||key) + (arg ? ' · arg: '+arg : '');",
-  "    if(MODE === 'live'){",
-  "      fetch('/api/query?preset='+encodeURIComponent(key)+(arg?'&arg='+encodeURIComponent(arg):'')).then(function(r){return r.json();}).then(function(rows){ if(rows && rows.error){ el('search-out').innerHTML='<p class=\"empty\">'+esc(rows.error)+'</p>'; return; } renderSearch(rows||[], labelText); }).catch(function(){ el('search-out').innerHTML='<p class=\"empty\">Error consultando preset.</p>'; });",
-  "    } else {",
-  "      renderSearch(runQueryClient(key, arg), labelText);",
-  "    }",
-  "  }",
-  "  function renderPresetButtons(){",
-  "    var presets = MEM.presets || [];",
-  "    if(!presets.length){ return; }",
-  "    var html = '<div class=\"presets\"><div class=\"presets-title\">Consultas rapidas</div>';",
-  "    html += '<input id=\"preset-arg\" type=\"text\" placeholder=\"Argumento (RF-02, Keycloak, reportes…) cuando aplique\" />';",
-  "    html += '<div class=\"preset-grid\">';",
-  "    for(var i=0;i<presets.length;i++){ var p=presets[i]; html += '<button class=\"preset-btn\" data-key=\"'+esc(p.key)+'\" title=\"'+esc(p.hint||'')+'\">'+esc(p.label)+(p.requiresArg?' <span class=\"req\">*</span>':'')+'</button>'; }",
-  "    html += '</div></div>';",
-  "    var host = el('presets-host'); if(host) host.innerHTML = html;",
-  "    var btns = document.querySelectorAll('.preset-btn'); for(var j=0;j<btns.length;j++){ btns[j].addEventListener('click', function(ev){ runPreset(ev.currentTarget.getAttribute('data-key')); }); }",
-  "  }",
-  "  // ---- Acciones (Validador / Sync / Reporte / Generador) --------------",
-  "  var ACTIONS_CACHE = null;",
-  "  // v12.27: si la linea matchea `[progress] X/Y label`, actualizamos una barra",
-  "  // de progreso en lugar de imprimir una linea nueva por tick.",
-  "  var __progressBar = null;",
-  "  function renderProgress(done, total, label){",
-  "    var c = el('console');",
-  "    if(!__progressBar){",
-  "      var wrap = document.createElement('div'); wrap.className = 'progress-line';",
-  "      wrap.innerHTML = '<div class=\"progress-text\"></div><div class=\"progress-bar\"><div class=\"progress-fill\"></div></div>';",
-  "      c.appendChild(wrap);",
-  "      __progressBar = { wrap:wrap, text:wrap.querySelector('.progress-text'), fill:wrap.querySelector('.progress-fill') };",
-  "    }",
-  "    var pct = total > 0 ? Math.min(100, (done*100/total)) : 0;",
-  "    __progressBar.text.textContent = label+': '+done+'/'+total+' ('+pct.toFixed(0)+'%)';",
-  "    __progressBar.fill.style.width = pct.toFixed(1)+'%';",
-  "    if(done >= total) __progressBar = null; // proxima linea de progreso crea barra nueva",
-  "    c.scrollTop = c.scrollHeight;",
-  "  }",
-  "  var PROGRESS_RE = /^\\[progress\\]\\s+(\\d+)\\/(\\d+)\\s+(.+)$/;",
-  "  function consoleLine(cls, text){",
-  "    var m = (cls === 'err') ? null : PROGRESS_RE.exec(text||'');",
-  "    if(m){ renderProgress(Number(m[1]), Number(m[2]), m[3]); return; }",
-  "    __progressBar = null; // cualquier otra linea cierra la barra activa",
-  "    var c=el('console'); var span=document.createElement('span'); if(cls) span.className=cls; span.textContent=text+'\\n'; c.appendChild(span); c.scrollTop=c.scrollHeight;",
-  "  }",
-  "  function consoleClear(){ el('console').innerHTML = '<span class=\"muted\">Consola limpia.</span>\\n'; }",
-  "  function consoleCopy(){ var t=el('console').innerText||''; if(navigator.clipboard) navigator.clipboard.writeText(t); }",
-  "  var CATEGORY_LABEL = { universal:'Comandos universales · siempre disponibles', memoria:'Memoria · rebuild / update DB', validador:'Validadores · read-only, exit code', reporte:'Reportes · snapshots y packs', generador:'Generadores · ESCRIBEN archivos del repo' };",
-  "  function renderActions(actions){",
-  "    var byCat = { universal:[], memoria:[], validador:[], reporte:[], generador:[] };",
-  "    actions.forEach(function(a){ (byCat[a.category]=byCat[a.category]||[]).push(a); });",
-  "    var html='';",
-  "    ['universal','memoria','validador','reporte','generador'].forEach(function(cat){",
-  "      if(!byCat[cat] || !byCat[cat].length) return;",
-  "      html += '<div class=\"action-cat\"><h3>'+esc(CATEGORY_LABEL[cat]||cat)+'</h3><div class=\"action-grid\">';",
-  "      byCat[cat].forEach(function(a){",
-  "        var classes = 'action-btn' + (a.danger?' danger':'');",
-  "        var argBlock = '';",
-  "        if(a.arg){ argBlock = '<div class=\"action-arg\">'+esc(a.arg.name)+(a.arg.required?' <span style=\"color:#B45309\">*</span>':'')+': <input id=\"arg-'+esc(a.id)+'\" placeholder=\"'+esc(a.arg.hint||'')+'\" /></div>'; }",
-  "        html += '<button class=\"'+classes+'\" data-action=\"'+esc(a.id)+'\">'+esc(a.label)+'<span class=\"ah\">'+esc(a.hint||'')+'</span></button>'+argBlock;",
-  "      });",
-  "      html += '</div></div>';",
-  "    });",
-  "    el('actions-host').innerHTML = html;",
-  "    var btns = el('actions-host').querySelectorAll('.action-btn');",
-  "    for(var i=0;i<btns.length;i++){ btns[i].addEventListener('click', function(ev){ onActionClick(ev.currentTarget.getAttribute('data-action')); }); }",
-  "  }",
-  "  function findAction(id){ if(!ACTIONS_CACHE) return null; for(var i=0;i<ACTIONS_CACHE.length;i++) if(ACTIONS_CACHE[i].id===id) return ACTIONS_CACHE[i]; return null; }",
-  "  function onActionClick(id){",
-  "    var a = findAction(id); if(!a) return;",
-  "    var arg = '';",
-  "    if(a.arg){ var input = el('arg-'+id); arg = input ? (input.value||'').trim() : ''; if(a.arg.required && !arg){ alert('Esta accion requiere '+a.arg.name); return; } }",
-  "    if(a.danger){",
-  "      el('modal-title').textContent = 'Confirmar: '+a.label;",
-  "      el('modal-msg').textContent = (a.hint||'')+'\\n\\nEsta accion modifica archivos del repo. ¿Continuar?';",
-  "      el('modal-bg').classList.add('show');",
-  "      el('modal-confirm').onclick = function(){ el('modal-bg').classList.remove('show'); execAction(id, arg); };",
-  "      el('modal-cancel').onclick = function(){ el('modal-bg').classList.remove('show'); };",
-  "    } else { execAction(id, arg); }",
-  "  }",
-  "  // v12.24: ejecucion via SSE — stdout/stderr aparecen linea por linea.",
-  "  // Soporta cancelacion: el cliente aborta la conexion fetch, el server",
-  "  // detecta req.close y envia SIGTERM al child.",
-  "  var __execController = null;",
-  "  function setRunning(running){",
-  "    var btns = el('actions-host').querySelectorAll('.action-btn');",
-  "    for(var i=0;i<btns.length;i++) btns[i].disabled = !!running;",
-  "    var stop = el('console-stop'); if(stop) stop.style.display = running ? 'inline-block' : 'none';",
-  "  }",
-  "  function execAction(id, arg){",
-  "    var a = findAction(id); if(!a) return;",
-  "    setRunning(true);",
-  "    consoleLine('cmd', '$ '+a.label+(arg?' --'+a.arg.name.replace(/^--/,'')+' '+arg:''));",
-  "    var t0 = Date.now();",
-  "    var ctrl = ('AbortController' in window) ? new AbortController() : null;",
-  "    __execController = ctrl;",
-  "    var buf = '';",
-  "    var pending = { stdout: '', stderr: '' };",
-  "    function flushPending(kind){ var s=pending[kind]; if(s){ consoleLine(kind==='stderr'?'err':'', s.replace(/\\n$/,'')); pending[kind]=''; } }",
-  "    function handleEvent(type, dataStr){",
-  "      var data; try { data = JSON.parse(dataStr); } catch { return; }",
-  "      if(type==='meta'){ consoleLine('muted', 'pid '+data.pid+' · '+(data.argv||[]).join(' ')); return; }",
-  "      if(type==='stdout' || type==='stderr'){",
-  "        // Buffer por linea: emite cada vez que llega un \\n para no romper el flow.",
-  "        pending[type] += data.chunk||'';",
-  "        var idx;",
-  "        while((idx = pending[type].indexOf('\\n')) >= 0){",
-  "          var line = pending[type].slice(0, idx);",
-  "          pending[type] = pending[type].slice(idx+1);",
-  "          consoleLine(type==='stderr'?'err':'', line);",
-  "        }",
-  "        return;",
-  "      }",
-  "      if(type==='exit'){",
-  "        flushPending('stdout'); flushPending('stderr');",
-  "        var ms = data.durationMs || (Date.now()-t0);",
-  "        var s = (ms/1000).toFixed(1);",
-  "        if(data.exitCode === 0) consoleLine('ok', '─ exit 0 · '+s+'s ─');",
-  "        else consoleLine('err', '─ exit '+data.exitCode+(data.signal?' ('+data.signal+')':'')+(data.timedOut?' · TIMEOUT':'')+' · '+s+'s ─');",
-  "        return;",
-  "      }",
-  "      if(type==='error'){ flushPending('stdout'); flushPending('stderr'); consoleLine('err', '✗ '+(data.message||'error')); return; }",
-  "    }",
-  "    function parseSseBuffer(){",
-  "      // Eventos SSE separados por blank line; cada evento puede traer event:/data:.",
-  "      var idx;",
-  "      while((idx = buf.indexOf('\\n\\n')) >= 0){",
-  "        var raw = buf.slice(0, idx); buf = buf.slice(idx+2);",
-  "        var lines = raw.split('\\n'); var ev='message', dat='';",
-  "        for(var li=0; li<lines.length; li++){",
-  "          var ln = lines[li]; if(!ln || ln.charAt(0)===':') continue;",
-  "          if(ln.indexOf('event:')===0) ev = ln.slice(6).trim();",
-  "          else if(ln.indexOf('data:')===0) dat += (dat?'\\n':'') + ln.slice(5).trimStart();",
-  "        }",
-  "        if(dat) handleEvent(ev, dat);",
-  "      }",
-  "    }",
-  "    fetch('/api/exec', {",
-  "      method:'POST',",
-  "      headers:{ 'Content-Type':'application/json', 'Accept':'text/event-stream' },",
-  "      body: JSON.stringify({ id:id, arg:arg||undefined }),",
-  "      signal: ctrl ? ctrl.signal : undefined,",
-  "    }).then(function(r){",
-  "      if(!r.ok || !r.body || (r.headers.get('content-type')||'').indexOf('text/event-stream')<0){",
-  "        return r.json().then(function(j){ consoleLine('err', '✗ '+(j && j.error ? j.error : ('HTTP '+r.status))); });",
-  "      }",
-  "      var reader = r.body.getReader(); var dec = new TextDecoder('utf-8');",
-  "      function pump(){",
-  "        return reader.read().then(function(step){",
-  "          if(step.done){ flushPending('stdout'); flushPending('stderr'); return; }",
-  "          buf += dec.decode(step.value, { stream:true });",
-  "          parseSseBuffer();",
-  "          return pump();",
-  "        });",
-  "      }",
-  "      return pump();",
-  "    }).catch(function(err){",
-  "      if(err && err.name==='AbortError'){ consoleLine('info', '… cancelado por el usuario'); }",
-  "      else consoleLine('err', '✗ Error de red: '+(err && err.message ? err.message : err));",
-  "    }).then(function(){",
-  "      __execController = null;",
-  "      setRunning(false);",
-  "      if(['sync-memory','index-docs','embed-docs','regenerate-context','harvest-trace'].indexOf(id)>=0){",
-  "        fetch('/api/snapshot').then(function(r){return r.json();}).then(function(d){ MEM=d; renderAll(d); consoleLine('info', '… snapshot recargado'); }).catch(function(){});",
-  "      }",
-  "      // Si el subpane Historial o Stats esta visible, refrescarlo silenciosamente.",
-  "      var hp = el('subpane-history'); if(hp && hp.classList.contains('active')) loadHistory();",
-  "      var sp = el('subpane-stats'); if(sp && sp.classList.contains('active')) loadStats();",
-  "    });",
-  "  }",
-  "  function stopAction(){",
-  "    if(!__execController){ return; }",
-  "    consoleLine('info', '… enviando cancelacion (SIGTERM)…');",
-  "    fetch('/api/exec', { method:'DELETE' }).catch(function(){});",
-  "    try { __execController.abort(); } catch {}",
-  "  }",
-  "  function loadActions(){",
-  "    if(MODE !== 'live'){ el('actions-host').innerHTML = '<p class=\"empty\">Las acciones solo estan disponibles en modo live (memory-serve). Arranca el server con: <code>node scripts/ai-framework-agent.mjs memory-serve</code> o <code>npm run memory:serve</code>.</p>'; return; }",
-  "    fetch('/api/actions').then(function(r){return r.json();}).then(function(actions){ ACTIONS_CACHE = actions; renderActions(actions); loadAlerts(); }).catch(function(){ el('actions-host').innerHTML='<p class=\"empty\">No se pudo cargar /api/actions.</p>'; });",
-  "  }",
-  "  // v12.28: alertas activas (acciones con >=3 fallos consecutivos al final).",
-  "  function loadAlerts(){",
-  "    if(MODE !== 'live') return;",
-  "    fetch('/api/action-runs/alerts').then(function(r){return r.json();}).then(renderAlerts).catch(function(){});",
-  "  }",
-  "  function renderAlerts(alerts){",
-  "    var bar = el('alerts-banner'); if(!bar) return;",
-  "    if(!alerts || !alerts.length){ bar.className = 'alerts-banner'; bar.innerHTML = ''; return; }",
-  "    // v12.32: dos tipos de alerta (failure-streak + duration-threshold).",
-  "    // v12.45: kind='combined' agrupa ambos del mismo action_id en una sola card.",
-  "    var nStreak = 0, nSlow = 0, nCombined = 0;",
-  "    alerts.forEach(function(a){",
-  "      var k = a.kind || 'failure-streak';",
-  "      if(k === 'combined'){ nCombined++; (a.kinds||[]).forEach(function(kk){ if(kk==='failure-streak') nStreak++; else if(kk==='duration-threshold') nSlow++; }); }",
-  "      else if(k === 'duration-threshold') nSlow++;",
-  "      else nStreak++;",
-  "    });",
-  "    var headBits = [];",
-  "    if(nStreak) headBits.push(nStreak+' con fallos consecutivos');",
-  "    if(nSlow) headBits.push(nSlow+' lentas (p95+%)');",
-  "    if(nCombined) headBits.push(nCombined+' combinadas');",
-  "    var html = '<h4>⚠ '+headBits.join(' · ')+'</h4>';",
-  "    for(var i=0;i<alerts.length;i++){",
-  "      var a = alerts[i];",
-  "      var kind = a.kind || 'failure-streak';",
-  "      var detail;",
-  "      if(kind === 'combined'){",
-  "        var bits = (a.parts||[]).map(function(p){",
-  "          if(p.kind==='duration-threshold') return '🐢 '+esc(p.detail||'');",
-  "          return p.consecutive_failures+' fallos · ultimo OK: '+esc(p.last_success?fmtAgo(p.last_success):'nunca');",
-  "        });",
-  "        detail = '<span title=\"agrupada\">⚠+🐢</span> '+bits.join(' &nbsp; · &nbsp; ');",
-  "      } else if(kind === 'duration-threshold'){",
-  "        detail = '🐢 '+esc(a.detail||'');",
-  "      } else {",
-  "        detail = a.consecutive_failures+' fallos consecutivos · '+esc(a.last_success ? 'ultimo OK: '+fmtAgo(a.last_success) : 'nunca tuvo OK');",
-  "      }",
-  "      html += '<div class=\"alert-item\"><strong>'+esc(a.action_id)+'</strong>: '+detail;",
-  "      html += ' <a data-replay=\"'+esc(a.action_id)+'\">↻ re-ejecutar</a>';",
-  "      html += ' <a data-history-filter=\"'+esc(a.action_id)+'\">ver historial</a>';",
-  "      // v12.45 (C2): snooze por kind especifico si la alerta no es 'combined'.",
-  "      var snoozeKind = (kind === 'combined') ? '' : kind;",
-  "      var kindAttr = snoozeKind ? ' data-snooze-kind=\"'+esc(snoozeKind)+'\"' : '';",
-  "      var kindLabel = snoozeKind === 'duration-threshold' ? ' (solo slow)' : (snoozeKind === 'failure-streak' ? ' (solo fail)' : '');",
-  "      html += ' <a data-snooze=\"'+esc(a.action_id)+'\" data-duration=\"24h\"'+kindAttr+'>🔕 silenciar 24h'+kindLabel+'</a>';",
-  "      html += ' <a data-snooze=\"'+esc(a.action_id)+'\" data-duration=\"7d\"'+kindAttr+'>7d</a>';",
-  "      html += ' <a data-snooze=\"'+esc(a.action_id)+'\" data-duration=\"forever\"'+kindAttr+'>forever</a>';",
-  "      html += '</div>';",
-  "    }",
-  "    bar.innerHTML = html; bar.className = 'alerts-banner show';",
-  "    var rep = bar.querySelectorAll('[data-replay]');",
-  "    for(var j=0;j<rep.length;j++){ rep[j].addEventListener('click', function(ev){ var aid = ev.currentTarget.getAttribute('data-replay'); showSubtab('run'); execAction(aid, ''); }); }",
-  "    var hl = bar.querySelectorAll('[data-history-filter]');",
-  "    for(var m=0;m<hl.length;m++){ hl[m].addEventListener('click', function(ev){ var aid = ev.currentTarget.getAttribute('data-history-filter'); showSubtab('history'); var sel = el('filter-action'); if(sel){ sel.value = aid; sel.dispatchEvent(new Event('change')); } }); }",
-  "    var sn = bar.querySelectorAll('[data-snooze]');",
-  "    for(var k=0;k<sn.length;k++){ sn[k].addEventListener('click', function(ev){",
-  "      var aid = ev.currentTarget.getAttribute('data-snooze');",
-  "      var dur = ev.currentTarget.getAttribute('data-duration');",
-  "      var snKind = ev.currentTarget.getAttribute('data-snooze-kind') || null;",
-  "      var kindLabel = snKind ? ' (kind='+snKind+')' : '';",
-  "      var reason = (dur === 'forever') ? (prompt('Razon del snooze permanente para '+aid+kindLabel+' (ej. \"es by-design\"):', '') || 'sin razon') : '';",
-  "      var payload = { action_id: aid, duration: dur, reason: reason };",
-  "      if(snKind) payload.kind = snKind;",
-  "      fetch('/api/action-runs/snoozes', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(payload) })",
-  "        .then(function(r){ return r.json(); })",
-  "        .then(function(j){ if(j.ok){ loadAlerts(); } else { alert('No se pudo silenciar: '+(j.error||'')); } });",
-  "    }); }",
-  "  }",
-  "  // v12.28: persistir filtros del Historial en URL para compartir / volver.",
-  "  function setMulti(id, csv){ var n=el(id); if(!n||!csv) return; var vals = csv.split(',').map(function(x){return x.trim();}); if(n.multiple){ for(var i=0;i<n.options.length;i++) n.options[i].selected = vals.indexOf(n.options[i].value)>=0; } else { n.value = csv; } }",
-  "  function readFiltersFromUrl(){",
-  "    var params = new URLSearchParams(window.location.search);",
-  "    if(params.get('act_action')) setMulti('filter-action', params.get('act_action'));",
-  "    if(params.get('act_status')) setMulti('filter-status', params.get('act_status'));",
-  "    if(el('filter-since') && params.get('act_since')) el('filter-since').value = params.get('act_since');",
-  "    if(params.get('act_mode')) setMulti('filter-mode', params.get('act_mode'));",
-  "    if(el('filter-slow') && params.get('act_slow')) el('filter-slow').value = params.get('act_slow');",
-  "    if(el('trend-action') && params.get('trend_action')) el('trend-action').value = params.get('trend_action');",
-  "    if(el('trend-days') && params.get('trend_days')) el('trend-days').value = params.get('trend_days');",
-  "  }",
-  "  function writeFiltersToUrl(){",
-  "    var params = new URLSearchParams(window.location.search);",
-  "    ['act_action','act_status','act_since','act_mode','act_slow'].forEach(function(p){ params.delete(p); });",
-  "    var fa = multiCsv('filter-action'); if(fa) params.set('act_action', fa);",
-  "    var fs = multiCsv('filter-status'); if(fs) params.set('act_status', fs);",
-  "    var fsi = (el('filter-since')||{}).value; if(fsi) params.set('act_since', fsi);",
-  "    var fm = multiCsv('filter-mode'); if(fm) params.set('act_mode', fm);",
-  "    var fsl = (el('filter-slow')||{}).value; if(fsl) params.set('act_slow', fsl);",
-  "    var qs = params.toString();",
-  "    window.history.replaceState(null, '', window.location.pathname + (qs ? '?'+qs : '') + window.location.hash);",
-  "  }",
-  "  function writeTrendFiltersToUrl(){",
-  "    var params = new URLSearchParams(window.location.search);",
-  "    ['trend_action','trend_days'].forEach(function(p){ params.delete(p); });",
-  "    var ta = (el('trend-action')||{}).value; if(ta) params.set('trend_action', ta);",
-  "    var td = (el('trend-days')||{}).value; if(td && td !== '30') params.set('trend_days', td);",
-  "    var qs = params.toString();",
-  "    window.history.replaceState(null, '', window.location.pathname + (qs ? '?'+qs : '') + window.location.hash);",
-  "  }",
-  "  // v12.25: Historial de acciones + re-ejecucion ----------------------",
-  "  function fmtAgo(iso){",
-  "    if(!iso) return '-';",
-  "    var t = Date.parse(iso); if(isNaN(t)) return iso;",
-  "    var s = Math.floor((Date.now()-t)/1000);",
-  "    if(s<60) return s+'s';",
-  "    if(s<3600) return Math.floor(s/60)+'min';",
-  "    if(s<86400) return Math.floor(s/3600)+'h';",
-  "    return Math.floor(s/86400)+'d';",
-  "  }",
-  "  function fmtDuration(ms){ if(ms==null) return '-'; if(ms<1000) return ms+'ms'; return (ms/1000).toFixed(1)+'s'; }",
-  "  function badgeForRun(r){",
-  "    if(r.cancelled) return '<span class=\"badge cancelled\">cancelled</span>';",
-  "    if(r.exit_code === 0) return '<span class=\"badge ok\">exit 0</span>';",
-  "    if(r.exit_code != null) return '<span class=\"badge fail\">exit '+esc(r.exit_code)+'</span>';",
-  "    if(r.signal) return '<span class=\"badge fail\">'+esc(r.signal)+'</span>';",
-  "    if(r.finished_at) return '<span class=\"badge fail\">?</span>';",
-  "    return '<span class=\"badge\">corriendo…</span>';",
-  "  }",
-  "  function renderHistory(rows){",
-  "    if(!rows.length){ el('history-host').innerHTML = '<p class=\"empty\">Sin runs registrados todavia. Ejecuta una accion y vuelve.</p>'; return; }",
-  "    var html = '<div class=\"history-row\" style=\"font-weight:700;color:var(--muted);font-size:11px;text-transform:uppercase;\"><div>Cuando</div><div>Accion</div><div>Duracion</div><div>Modo</div><div>Estado</div><div></div></div>';",
-  "    for(var i=0;i<rows.length;i++){",
-  "      var r = rows[i];",
-  "      var argStr = r.arg ? ' <span class=\"arg\">'+esc(r.arg)+'</span>' : '';",
-  "      html += '<div class=\"history-row\" data-runid=\"'+esc(r.id)+'\">';",
-  "      html += '<div class=\"when\" title=\"'+esc(r.started_at)+'\">'+esc(fmtAgo(r.started_at))+'</div>';",
-  "      html += '<div class=\"action\">'+esc(r.action_id)+argStr+'</div>';",
-  "      html += '<div>'+esc(fmtDuration(r.duration_ms))+'</div>';",
-  "      html += '<div><span class=\"badge\">'+esc(r.mode||'-')+'</span></div>';",
-  "      html += '<div>'+badgeForRun(r)+'</div>';",
-  "      html += '<div><button class=\"replay\" data-action=\"'+esc(r.action_id)+'\" data-arg=\"'+esc(r.arg||'')+'\">↻ Re-ejecutar</button></div>';",
-  "      html += '</div>';",
-  "      var detail = '';",
-  "      if(r.stdout_tail) detail += r.stdout_tail;",
-  "      if(r.stderr_tail) detail += (detail?'\\n':'') + '[stderr]\\n' + r.stderr_tail;",
-  "      if(detail) html += '<details class=\"history-detail-wrap\" style=\"margin-bottom:6px;\"><summary style=\"cursor:pointer;font-size:11px;color:var(--muted);margin-left:80px;\">ver tail de salida</summary><div class=\"history-detail\">'+esc(detail)+'</div></details>';",
-  "    }",
-  "    el('history-host').innerHTML = html;",
-  "    var btns = el('history-host').querySelectorAll('.replay');",
-  "    for(var j=0;j<btns.length;j++){ btns[j].addEventListener('click', function(ev){ var b=ev.currentTarget; var aid=b.getAttribute('data-action'); var arg=b.getAttribute('data-arg'); showSubtab('run'); execAction(aid, arg); }); }",
-  "  }",
-  "  function loadHistory(){",
-  "    if(MODE !== 'live'){ el('history-host').innerHTML = '<p class=\"empty\">El historial solo esta disponible en modo live.</p>'; return; }",
-  "    var fa = multiCsv('filter-action');",
-  "    var fs = multiCsv('filter-status');",
-  "    var fsi = (el('filter-since')||{}).value || '';",
-  "    var fm = multiCsv('filter-mode');",
-  "    var fsl = (el('filter-slow')||{}).value || '';",
-  "    var qs = [];",
-  "    if(fa) qs.push('action_id='+encodeURIComponent(fa));",
-  "    if(fs) qs.push('status='+encodeURIComponent(fs));",
-  "    if(fsi) qs.push('since='+encodeURIComponent(fsi));",
-  "    if(fm) qs.push('mode='+encodeURIComponent(fm));",
-  "    if(fsl) qs.push('slow='+encodeURIComponent(fsl));",
-  "    qs.push('limit=100');",
-  "    writeFiltersToUrl();",
-  "    fetch('/api/action-runs?'+qs.join('&')).then(function(r){return r.json();}).then(function(rows){ renderHistory(rows); populateActionFilter(rows); var fc=el('filter-count'); if(fc) fc.textContent = rows.length + (rows.length===100 ? '+ ' : ' ') + 'runs'; }).catch(function(){ el('history-host').innerHTML = '<p class=\"empty\">No se pudo cargar /api/action-runs.</p>'; });",
-  "  }",
-  "  function populateActionFilter(rows){",
-  "    var sel = el('filter-action'); if(!sel) return;",
-  "    // v12.32: preservar valores seleccionados (multi-select) entre repobladas.",
-  "    var cur = [];",
-  "    if(sel.multiple){ for(var s=0;s<sel.selectedOptions.length;s++) cur.push(sel.selectedOptions[s].value); }",
-  "    else if(sel.value) cur.push(sel.value);",
-  "    var ids = {};",
-  "    (rows||[]).forEach(function(r){ ids[r.action_id] = true; });",
-  "    (ACTIONS_CACHE||[]).forEach(function(a){ ids[a.id] = true; });",
-  "    var keys = Object.keys(ids).sort();",
-  "    if(sel.options.length === keys.length) { /* re-marcar por si CSS o repintar */ }",
-  "    var html = '';",
-  "    if(!sel.multiple) html += '<option value=\"\">— todas —</option>';",
-  "    for(var i=0;i<keys.length;i++){ var k=keys[i]; var sl = cur.indexOf(k)>=0 ? ' selected' : ''; html += '<option value=\"'+esc(k)+'\"'+sl+'>'+esc(k)+'</option>'; }",
-  "    sel.innerHTML = html;",
-  "  }",
-  "  // v12.26: stats agregados por accion ----------------------------------",
-  "  function renderStatsAgg(rows, trendRows){",
-  "    if(!rows.length){ el('stats-host').innerHTML = '<p class=\"empty\">Sin datos todavia. Ejecuta acciones y vuelve.</p>'; return; }",
-  "    var trendByAction = {};",
-  "    (trendRows||[]).forEach(function(t){ trendByAction[t.action_id] = t.series; });",
-  "    var totals = { runs:0, ok:0, fail:0, can:0 };",
-  "    for(var i=0;i<rows.length;i++){ totals.runs+=rows[i].total||0; totals.ok+=rows[i].ok||0; totals.fail+=rows[i].fail||0; totals.can+=rows[i].cancelled||0; }",
-  "    var overall = totals.runs > 0 ? (100 * totals.ok / totals.runs).toFixed(1)+'%' : '-';",
-  "    var html = '<div class=\"stats-summary\">';",
-  "    html += '<div class=\"stat\"><div class=\"stat-v\">'+totals.runs+'</div><div class=\"stat-l\">Total runs</div></div>';",
-  "    html += '<div class=\"stat\"><div class=\"stat-v\" style=\"color:var(--ok)\">'+totals.ok+'</div><div class=\"stat-l\">Exitos</div></div>';",
-  "    html += '<div class=\"stat\"><div class=\"stat-v\" style=\"color:#B91C1C\">'+totals.fail+'</div><div class=\"stat-l\">Fallos</div></div>';",
-  "    html += '<div class=\"stat\"><div class=\"stat-v\">'+overall+'</div><div class=\"stat-l\">Success rate</div></div>';",
-  "    html += '</div>';",
-  "    html += '<table class=\"stats-table\"><thead><tr>';",
-  "    html += '<th>Accion</th><th class=\"num\">Total</th><th class=\"num\">OK</th><th class=\"num\">Fail</th><th class=\"num\">Cancel</th><th class=\"num\">Avg</th><th class=\"num\">p50</th><th class=\"num\">p95</th><th class=\"num\">Min</th><th class=\"num\">Max</th><th class=\"num\">Success</th><th>Ultima</th><th class=\"sparkline-cell\">14d</th>';",
-  "    html += '</tr></thead><tbody>';",
-  "    for(var k=0;k<rows.length;k++){",
-  "      var r = rows[k];",
-  "      var rateClass = (r.success_rate>=95)?'ok':((r.success_rate>=70)?'':'fail');",
-  "      var spark = sparklineSvg(trendByAction[r.action_id]);",
-  "      html += '<tr>';",
-  "      html += '<td class=\"action\">'+esc(r.action_id)+'</td>';",
-  "      html += '<td class=\"num\">'+esc(r.total)+'</td>';",
-  "      html += '<td class=\"num ok\">'+esc(r.ok)+'</td>';",
-  "      html += '<td class=\"num fail\">'+esc(r.fail)+'</td>';",
-  "      html += '<td class=\"num can\">'+esc(r.cancelled)+'</td>';",
-  "      html += '<td class=\"num\">'+esc(fmtDuration(r.avg_ms))+'</td>';",
-  "      html += '<td class=\"num\">'+esc(fmtDuration(r.p50_ms))+'</td>';",
-  "      html += '<td class=\"num\">'+esc(fmtDuration(r.p95_ms))+'</td>';",
-  "      html += '<td class=\"num\">'+esc(fmtDuration(r.min_ms))+'</td>';",
-  "      html += '<td class=\"num\">'+esc(fmtDuration(r.max_ms))+'</td>';",
-  "      html += '<td class=\"num '+rateClass+'\">'+(r.success_rate==null?'-':esc(r.success_rate)+'%')+'</td>';",
-  "      html += '<td class=\"when\" title=\"'+esc(r.last_run||'')+'\">'+esc(fmtAgo(r.last_run))+'</td>';",
-  "      html += '<td class=\"sparkline-cell\">'+spark+'</td>';",
-  "      html += '</tr>';",
-  "    }",
-  "    html += '</tbody></table>';",
-  "    el('stats-host').innerHTML = html;",
-  "  }",
-  "  // v12.29: Dashboard de tendencias ---------------------------------",
-  "  function buildLineChart(series, opts){",
-  "    var W = opts.width || 720, H = opts.height || 200;",
-  "    var padL = 40, padR = 12, padT = 14, padB = 28;",
-  "    var iw = W - padL - padR, ih = H - padT - padB;",
-  "    var n = series.length;",
-  "    if(!n) return '<p class=\"empty\">Sin datos en el periodo.</p>';",
-  "    var xs = function(i){ return padL + (n === 1 ? iw/2 : (i * iw / (n - 1))); };",
-  "    var ys = function(v){ return padT + ih - (v / 100) * ih; };",
-  "    // Eje Y: lineas en 0/25/50/75/100",
-  "    var grid = '';",
-  "    [0, 25, 50, 75, 100].forEach(function(v){",
-  "      var y = ys(v);",
-  "      grid += '<line class=\"grid-line\" x1=\"'+padL+'\" x2=\"'+(W-padR)+'\" y1=\"'+y+'\" y2=\"'+y+'\"/>';",
-  "      grid += '<text class=\"axis-label\" x=\"'+(padL-6)+'\" y=\"'+(y+3)+'\" text-anchor=\"end\">'+v+'%</text>';",
-  "    });",
-  "    // Path por puntos con success_rate != null. Los nulls rompen el path.",
-  "    var path = ''; var pts = '';",
-  "    var lastWasValid = false;",
-  "    for(var i=0;i<n;i++){",
-  "      var s = series[i];",
-  "      if(s.success_rate == null){ lastWasValid = false; continue; }",
-  "      var x = xs(i), y = ys(s.success_rate);",
-  "      path += (lastWasValid ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1) + ' ';",
-  "      pts += '<circle class=\"data-point\" cx=\"'+x.toFixed(1)+'\" cy=\"'+y.toFixed(1)+'\" r=\"2.5\"><title>'+esc(s.day)+': '+s.success_rate+'% ('+s.ok+'/'+s.total+')</title></circle>';",
-  "      lastWasValid = true;",
-  "    }",
-  "    // Eje X: etiquetas en ~6 ticks",
-  "    var step = Math.max(1, Math.floor(n / 6));",
-  "    var xlab = '';",
-  "    for(var k=0;k<n;k+=step){",
-  "      var lx = xs(k); var ld = series[k].day.slice(5); // MM-DD",
-  "      xlab += '<text class=\"axis-label\" x=\"'+lx+'\" y=\"'+(H-padB+14)+'\" text-anchor=\"middle\">'+esc(ld)+'</text>';",
-  "    }",
-  "    var axis = '<line class=\"axis-line\" x1=\"'+padL+'\" x2=\"'+(W-padR)+'\" y1=\"'+(padT+ih)+'\" y2=\"'+(padT+ih)+'\"/>';",
-  "    axis += '<line class=\"axis-line\" x1=\"'+padL+'\" x2=\"'+padL+'\" y1=\"'+padT+'\" y2=\"'+(padT+ih)+'\"/>';",
-  "    var line = path ? '<path class=\"data-line\" d=\"'+path.trim()+'\"/>' : '';",
-  "    return '<svg class=\"chart-svg\" viewBox=\"0 0 '+W+' '+H+'\" preserveAspectRatio=\"xMidYMid meet\">'+grid+axis+line+pts+xlab+'</svg>';",
-  "  }",
-  "  function buildStackedBars(series, opts){",
-  "    var W = opts.width || 720, H = opts.height || 180;",
-  "    var padL = 40, padR = 12, padT = 14, padB = 28;",
-  "    var iw = W - padL - padR, ih = H - padT - padB;",
-  "    var n = series.length;",
-  "    if(!n) return '<p class=\"empty\">Sin datos en el periodo.</p>';",
-  "    var maxTotal = Math.max.apply(null, series.map(function(s){ return s.total||0; })) || 1;",
-  "    var bw = Math.max(2, Math.floor(iw / n) - 1);",
-  "    var bars = '';",
-  "    for(var i=0;i<n;i++){",
-  "      var s = series[i];",
-  "      if(s.total === 0) continue;",
-  "      var x = padL + i * (iw / n);",
-  "      var hOk = s.ok > 0 ? (s.ok / maxTotal) * ih : 0;",
-  "      var hFail = s.fail > 0 ? (s.fail / maxTotal) * ih : 0;",
-  "      var hCancel = s.cancelled > 0 ? (s.cancelled / maxTotal) * ih : 0;",
-  "      var yBase = padT + ih;",
-  "      var tip = s.day+': '+s.total+' runs ('+s.ok+' ok / '+s.fail+' fail / '+s.cancelled+' cancel) · click para drill-down';",
-  "      // v12.30: wrap del grupo de barras en <g> con data-day para drill-down al click.",
-  "      bars += '<g class=\"bar-group\" data-day=\"'+esc(s.day)+'\" style=\"cursor:pointer\"><title>'+esc(tip)+'</title>';",
-  "      if(hOk > 0){ yBase -= hOk; bars += '<rect class=\"bar-ok\" x=\"'+x.toFixed(1)+'\" y=\"'+yBase.toFixed(1)+'\" width=\"'+bw+'\" height=\"'+hOk.toFixed(1)+'\"/>'; }",
-  "      if(hFail > 0){ yBase -= hFail; bars += '<rect class=\"bar-fail\" x=\"'+x.toFixed(1)+'\" y=\"'+yBase.toFixed(1)+'\" width=\"'+bw+'\" height=\"'+hFail.toFixed(1)+'\"/>'; }",
-  "      if(hCancel > 0){ yBase -= hCancel; bars += '<rect class=\"bar-cancel\" x=\"'+x.toFixed(1)+'\" y=\"'+yBase.toFixed(1)+'\" width=\"'+bw+'\" height=\"'+hCancel.toFixed(1)+'\"/>'; }",
-  "      bars += '</g>';",
-  "    }",
-  "    // Eje Y: 0 y max",
-  "    var ylab = '<text class=\"axis-label\" x=\"'+(padL-6)+'\" y=\"'+(padT+ih+3)+'\" text-anchor=\"end\">0</text>';",
-  "    ylab += '<text class=\"axis-label\" x=\"'+(padL-6)+'\" y=\"'+(padT+3)+'\" text-anchor=\"end\">'+maxTotal+'</text>';",
-  "    var step = Math.max(1, Math.floor(n / 6));",
-  "    var xlab = '';",
-  "    for(var k=0;k<n;k+=step){",
-  "      var lx = padL + k * (iw / n) + bw/2; var ld = series[k].day.slice(5);",
-  "      xlab += '<text class=\"axis-label\" x=\"'+lx+'\" y=\"'+(H-padB+14)+'\" text-anchor=\"middle\">'+esc(ld)+'</text>';",
-  "    }",
-  "    var axis = '<line class=\"axis-line\" x1=\"'+padL+'\" x2=\"'+(W-padR)+'\" y1=\"'+(padT+ih)+'\" y2=\"'+(padT+ih)+'\"/>';",
-  "    axis += '<line class=\"axis-line\" x1=\"'+padL+'\" x2=\"'+padL+'\" y1=\"'+padT+'\" y2=\"'+(padT+ih)+'\"/>';",
-  "    return '<svg class=\"chart-svg\" viewBox=\"0 0 '+W+' '+H+'\" preserveAspectRatio=\"xMidYMid meet\">'+axis+ylab+bars+xlab+'</svg>';",
-  "  }",
-  "  function renderCompareBanner(c){",
-  "    function deltaClass(v, inverse){",
-  "      if(v == null) return 'flat';",
-  "      if(Math.abs(v) < 0.1) return 'flat';",
-  "      return (v > 0) === !inverse ? 'up' : 'down';",
-  "    }",
-  "    function fmtDelta(v, suffix){ if(v == null) return '—'; var sign = v > 0 ? '+' : ''; return sign+v+(suffix||''); }",
-  "    var html = '<div class=\"compare-banner\">';",
-  "    html += '<div class=\"compare-card\"><h4>Success rate</h4>';",
-  "    html += '<div class=\"v\">'+(c.current.success_rate==null?'—':c.current.success_rate+'%')+'</div>';",
-  "    html += '<div class=\"delta '+deltaClass(c.delta_success_pp, false)+'\">'+fmtDelta(c.delta_success_pp,' pp')+' vs anterior</div>';",
-  "    html += '<div class=\"sub\">prev: '+(c.previous.success_rate==null?'—':c.previous.success_rate+'%')+'</div></div>';",
-  "    html += '<div class=\"compare-card\"><h4>Volumen</h4>';",
-  "    html += '<div class=\"v\">'+c.current.total+' runs</div>';",
-  "    html += '<div class=\"delta '+deltaClass(c.delta_volume_pct, false)+'\">'+fmtDelta(c.delta_volume_pct,'%')+' vs anterior</div>';",
-  "    html += '<div class=\"sub\">prev: '+c.previous.total+' runs</div></div>';",
-  "    html += '<div class=\"compare-card\"><h4>Fallos</h4>';",
-  "    html += '<div class=\"v\" style=\"color:#B91C1C\">'+c.current.fail+'</div>';",
-  "    var failDelta = c.previous.fail > 0 ? +(100 * (c.current.fail - c.previous.fail) / c.previous.fail).toFixed(1) : null;",
-  "    html += '<div class=\"delta '+deltaClass(failDelta, true)+'\">'+fmtDelta(failDelta,'%')+' vs anterior</div>';",
-  "    html += '<div class=\"sub\">prev: '+c.previous.fail+' fallos</div></div>';",
-  "    html += '</div>';",
-  "    return html;",
-  "  }",
-  "  function renderTrendsDashboard(d, hostId){",
-  "    hostId = hostId || 'trends-host';",
-  "    var suffix = (hostId === 'trends-host') ? '' : '-b';",
-  "    if(!d || !d.series || !d.series.length){ el(hostId).innerHTML = '<p class=\"empty\">Sin datos en el periodo seleccionado.</p>'; return; }",
-  "    var html = '';",
-  "    // v12.30: cabecera explicita del scope del banner (todas vs accion individual)",
-  "    var scopeLabel = d.action_id ? ('comparando <strong>'+esc(d.action_id)+'</strong>') : '<strong>todas las acciones</strong> (agregado)';",
-  "    html += '<div style=\"font-size:12px;color:var(--muted);margin-bottom:8px;\">'+scopeLabel+' · ventana actual: '+d.compare.current.window_days+'d · ventana previa: '+d.compare.previous.window_days+'d</div>';",
-  "    html += renderCompareBanner(d.compare);",
-  "    // v12.30: barra de export PNG (uno por chart).",
-  "    html += '<div class=\"chart-wrap\"><div style=\"display:flex;justify-content:space-between;align-items:center;\"><h4>Success rate diario ('+d.days_window+' dias)'+(d.action_id?' · '+esc(d.action_id):'')+'</h4><button class=\"export-png\" data-target=\"chart-line'+suffix+'\" style=\"padding:4px 10px;font-size:11px;background:var(--brand-light);color:var(--brand-dark);border:1px solid var(--line);border-radius:4px;cursor:pointer;\">⬇ PNG</button></div>';",
-  "    html += '<div id=\"chart-line'+suffix+'\">'+buildLineChart(d.series, { width: 720, height: 200 })+'</div>';",
-  "    html += '<div class=\"chart-legend\"><span><span class=\"swatch\" style=\"background:#06B6D4\"></span>success_rate (%)</span><span class=\"sub\">eje Y: 0-100% · eje X: dia</span></div>';",
-  "    html += '</div>';",
-  "    html += '<div class=\"chart-wrap\"><div style=\"display:flex;justify-content:space-between;align-items:center;\"><h4>Volumen diario (stacked: ok/fail/cancel) · click en barra = drill-down</h4><button class=\"export-png\" data-target=\"chart-bars'+suffix+'\" style=\"padding:4px 10px;font-size:11px;background:var(--brand-light);color:var(--brand-dark);border:1px solid var(--line);border-radius:4px;cursor:pointer;\">⬇ PNG</button></div>';",
-  "    html += '<div id=\"chart-bars'+suffix+'\">'+buildStackedBars(d.series, { width: 720, height: 180 })+'</div>';",
-  "    html += '<div class=\"chart-legend\"><span><span class=\"swatch\" style=\"background:#10B981\"></span>ok</span><span><span class=\"swatch\" style=\"background:#DC2626\"></span>fail</span><span><span class=\"swatch\" style=\"background:#F59E0B\"></span>cancelled</span></div>';",
-  "    html += '</div>';",
-  "    if(d.top_actions && d.top_actions.length){",
-  "      html += '<div class=\"chart-wrap\"><h4>Top '+d.top_actions.length+' acciones por volumen</h4>';",
-  "      html += '<table class=\"stats-table\"><thead><tr><th>Accion</th><th class=\"num\">Runs</th><th class=\"num\">OK</th><th class=\"num\">Fail</th><th class=\"num\">Cancel</th><th class=\"num\">Success</th></tr></thead><tbody>';",
-  "      d.top_actions.forEach(function(t){",
-  "        var rc = (t.success_rate>=95)?'ok':((t.success_rate>=70)?'':'fail');",
-  "        html += '<tr><td class=\"action\"><a style=\"cursor:pointer;color:var(--brand);text-decoration:underline;\" data-trend-action=\"'+esc(t.action_id)+'\">'+esc(t.action_id)+'</a></td><td class=\"num\">'+t.total+'</td><td class=\"num ok\">'+t.ok+'</td><td class=\"num fail\">'+t.fail+'</td><td class=\"num can\">'+t.cancelled+'</td><td class=\"num '+rc+'\">'+(t.success_rate==null?'—':t.success_rate+'%')+'</td></tr>';",
-  "      });",
-  "      html += '</tbody></table></div>';",
-  "    }",
-  "    el(hostId).innerHTML = html;",
-  "    // v12.30: wire drill-down (click en barra del stacked) -> Historial filtrado por dia.",
-  "    var groups = el(hostId).querySelectorAll('.bar-group');",
-  "    for(var i=0;i<groups.length;i++){",
-  "      groups[i].addEventListener('click', function(ev){",
-  "        var day = ev.currentTarget.getAttribute('data-day');",
-  "        var aid = d.action_id || ((el('trend-action')||{}).value || '');",
-  "        // Setear filtros del Historial y abrirlo.",
-  "        if(el('filter-action')) el('filter-action').value = aid;",
-  "        if(el('filter-status')) el('filter-status').value = '';",
-  "        if(el('filter-since')) el('filter-since').value = day;",
-  "        showSubtab('history');",
-  "      });",
-  "    }",
-  "    // v12.30: click en accion del top -> setear filtro de Tendencias y re-cargar.",
-  "    var tops = el(hostId).querySelectorAll('[data-trend-action]');",
-  "    for(var j=0;j<tops.length;j++){",
-  "      tops[j].addEventListener('click', function(ev){ var aid = ev.currentTarget.getAttribute('data-trend-action'); var sel = el('trend-action'); if(sel){ sel.value = aid; sel.dispatchEvent(new Event('change')); } });",
-  "    }",
-  "    // v12.30: wire export PNG.",
-  "    var pngs = el(hostId).querySelectorAll('.export-png');",
-  "    for(var k=0;k<pngs.length;k++){",
-  "      pngs[k].addEventListener('click', function(ev){ exportChartAsPng(ev.currentTarget.getAttribute('data-target'), d); });",
-  "    }",
-  "  }",
-  "  // v12.30: convierte SVG a PNG via Canvas y dispara descarga.",
-  "  function exportChartAsPng(targetId, dashboardData){",
-  "    var container = el(targetId); if(!container) return;",
-  "    var svg = container.querySelector('svg'); if(!svg) return;",
-  "    // Serializar el SVG con declaracion XML.",
-  "    var serializer = new XMLSerializer();",
-  "    var svgStr = serializer.serializeToString(svg);",
-  "    if(!svgStr.match(/^<svg[^>]+xmlns/)) svgStr = svgStr.replace(/^<svg/, '<svg xmlns=\"http://www.w3.org/2000/svg\"');",
-  "    var blob = new Blob([svgStr], { type: 'image/svg+xml;charset=utf-8' });",
-  "    var URLctor = window.URL || window.webkitURL;",
-  "    var imgUrl = URLctor.createObjectURL(blob);",
-  "    var img = new Image();",
-  "    img.onload = function(){",
-  "      var vb = svg.getAttribute('viewBox');",
-  "      var W = vb ? Number(vb.split(/\\s+/)[2]) : svg.width.baseVal.value;",
-  "      var H = vb ? Number(vb.split(/\\s+/)[3]) : svg.height.baseVal.value;",
-  "      var scale = 2; // 2x para mejor calidad",
-  "      var canvas = document.createElement('canvas'); canvas.width = W*scale; canvas.height = H*scale;",
-  "      var ctx = canvas.getContext('2d');",
-  "      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0,0,canvas.width,canvas.height);",
-  "      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);",
-  "      URLctor.revokeObjectURL(imgUrl);",
-  "      canvas.toBlob(function(pngBlob){",
-  "        if(!pngBlob) return;",
-  "        var dlUrl = URLctor.createObjectURL(pngBlob);",
-  "        var a = document.createElement('a');",
-  "        var stamp = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);",
-  "        var aid = (dashboardData && dashboardData.action_id) || 'all';",
-  "        a.href = dlUrl; a.download = 'dashboard-'+aid+'-'+targetId+'-'+stamp+'.png';",
-  "        document.body.appendChild(a); a.click(); document.body.removeChild(a);",
-  "        setTimeout(function(){ URLctor.revokeObjectURL(dlUrl); }, 1000);",
-  "      }, 'image/png');",
-  "    };",
-  "    img.onerror = function(){ alert('No se pudo exportar el SVG a PNG.'); URLctor.revokeObjectURL(imgUrl); };",
-  "    img.src = imgUrl;",
-  "  }",
-  "  function loadTrends(){",
-  "    if(MODE !== 'live'){ el('trends-host').innerHTML = '<p class=\"empty\">Tendencias solo en modo live.</p>'; return; }",
-  "    var aid = (el('trend-action')||{}).value || '';",
-  "    var aidB = (el('trend-action-b')||{}).value || '';",
-  "    var days = (el('trend-days')||{}).value || '30';",
-  "    var qs = 'days='+encodeURIComponent(days) + (aid ? '&action_id='+encodeURIComponent(aid) : '');",
-  "    fetch('/api/action-runs/dashboard?'+qs).then(function(r){return r.json();}).then(function(d){ renderTrendsDashboard(d, 'trends-host'); }).catch(function(){ el('trends-host').innerHTML = '<p class=\"empty\">No se pudo cargar /api/action-runs/dashboard.</p>'; });",
-  "    // v12.45 (C5): si hay una segunda accion seleccionada, fetch + render lado a lado.",
-  "    var hostB = el('trends-host-b');",
-  "    if(hostB){",
-  "      if(aidB && aidB !== aid){",
-  "        var qsB = 'days='+encodeURIComponent(days) + '&action_id='+encodeURIComponent(aidB);",
-  "        hostB.innerHTML = '<p class=\"empty\">Cargando comparacion ('+esc(aidB)+')…</p>';",
-  "        fetch('/api/action-runs/dashboard?'+qsB).then(function(r){return r.json();}).then(function(d){ renderTrendsDashboard(d, 'trends-host-b'); }).catch(function(){ hostB.innerHTML = '<p class=\"empty\">No se pudo cargar comparacion.</p>'; });",
-  "      } else { hostB.innerHTML = ''; }",
-  "    }",
-  "    // v12.45 (C4): actualizar link de export Markdown.",
-  "    var mdLink = el('trends-export-md'); if(mdLink){ mdLink.href = '/api/action-runs/dashboard?format=md&'+qs; }",
-  "    // Autopopular el selector de accion con los ids del catalogo + historial.",
-  "    var sel = el('trend-action'); var selB = el('trend-action-b');",
-  "    if(sel && sel.options.length <= 1){",
-  "      var ids = {}; (ACTIONS_CACHE||[]).forEach(function(a){ ids[a.id] = true; });",
-  "      var html = '<option value=\"\">— todas (agregado) —</option>';",
-  "      Object.keys(ids).sort().forEach(function(k){ html += '<option value=\"'+esc(k)+'\">'+esc(k)+'</option>'; });",
-  "      var cur = sel.value; sel.innerHTML = html; if(cur) sel.value = cur;",
-  "    }",
-  "    if(selB && selB.options.length <= 1){",
-  "      var ids2 = {}; (ACTIONS_CACHE||[]).forEach(function(a){ ids2[a.id] = true; });",
-  "      var html2 = '<option value=\"\">— ninguna —</option>';",
-  "      Object.keys(ids2).sort().forEach(function(k){ html2 += '<option value=\"'+esc(k)+'\">'+esc(k)+'</option>'; });",
-  "      var cur2 = selB.value; selB.innerHTML = html2; if(cur2) selB.value = cur2;",
-  "    }",
-  "  }",
-  "  function loadStats(){",
-  "    if(MODE !== 'live'){ el('stats-host').innerHTML = '<p class=\"empty\">Stats solo en modo live.</p>'; return; }",
-  "    Promise.all([",
-  "      fetch('/api/action-runs/stats').then(function(r){return r.json();}),",
-  "      fetch('/api/action-runs/trend?days=14').then(function(r){return r.json();}).catch(function(){return [];}),",
-  "    ]).then(function(arr){ renderStatsAgg(arr[0], arr[1]); }).catch(function(){ el('stats-host').innerHTML = '<p class=\"empty\">No se pudo cargar /api/action-runs/stats.</p>'; });",
-  "  }",
-  "  // v12.28: sparkline SVG inline. Cada barra es 1 dia; altura proporcional a total runs",
-  "  // y color por estado: verde si todos ok, rojo si hubo fail, amarillo si solo cancelled.",
-  "  function sparklineSvg(series){",
-  "    if(!series || !series.length) return '<span class=\"muted\">-</span>';",
-  "    var w = 120, h = 22, bar = Math.max(2, Math.floor((w - series.length) / series.length));",
-  "    var maxTotal = Math.max.apply(null, series.map(function(s){ return s.total||0; }));",
-  "    if(maxTotal === 0) return '<span class=\"muted\">sin runs</span>';",
-  "    var svg = '<svg class=\"sparkline\" width=\"'+w+'\" height=\"'+h+'\" viewBox=\"0 0 '+w+' '+h+'\">';",
-  "    for(var i=0;i<series.length;i++){",
-  "      var s = series[i];",
-  "      var total = s.total||0;",
-  "      var bh = total > 0 ? Math.max(2, Math.round((total / maxTotal) * (h - 2))) : 1;",
-  "      var x = i * (bar + 1);",
-  "      var y = h - bh;",
-  "      var color = '#E5E7EB';",
-  "      if(total > 0){",
-  "        if(s.fail > 0) color = '#DC2626';",
-  "        else if(s.cancelled > 0 && s.ok === 0) color = '#F59E0B';",
-  "        else color = '#10B981';",
-  "      }",
-  "      var title = s.day+': '+total+' runs ('+s.ok+' ok / '+s.fail+' fail / '+s.cancelled+' cancel)';",
-  "      svg += '<rect x=\"'+x+'\" y=\"'+y+'\" width=\"'+bar+'\" height=\"'+bh+'\" fill=\"'+color+'\"><title>'+esc(title)+'</title></rect>';",
-  "    }",
-  "    return svg + '</svg>';",
-  "  }",
-  "  function showSubtab(name){",
-  "    var tabs = document.querySelectorAll('.subtab'); for(var i=0;i<tabs.length;i++) tabs[i].classList.toggle('active', tabs[i].dataset.subtab===name);",
-  "    var panes = document.querySelectorAll('.subpane'); for(var j=0;j<panes.length;j++) panes[j].classList.toggle('active', panes[j].id===('subpane-'+name));",
-  "    if(name==='history') loadHistory();",
-  "    if(name==='stats') loadStats();",
-  "    if(name==='trends') loadTrends();",
-  "    // v12.32: persistir sub-tab activo en URL. 'run' es el default, no se escribe.",
-  "    try {",
-  "      var p = new URLSearchParams(window.location.search);",
-  "      if(name && name !== 'run') p.set('act_subtab', name); else p.delete('act_subtab');",
-  "      var qs = p.toString();",
-  "      window.history.replaceState(null, '', window.location.pathname + (qs ? '?'+qs : '') + window.location.hash);",
-  "    } catch {}",
-  "  }",
-  "  // v12.25: atajos de teclado para las acciones mas usadas",
-  "  var SHORTCUTS = { 'KeyS':'sync-memory', 'KeyR':'memory-report', 'KeyE':'regenerate-context', 'KeyC':'check-trace-drift' };",
-  "  document.addEventListener('keydown', function(ev){",
-  "    if(ev.key === 'Escape'){ if(__execController) stopAction(); return; }",
-  "    if(!(ev.ctrlKey && ev.shiftKey)) return;",
-  "    if(ev.code === 'KeyH'){ ev.preventDefault(); showTab('actions'); showSubtab('history'); return; }",
-  "    if(ev.code === 'KeyT'){ ev.preventDefault(); showTab('actions'); showSubtab('stats'); return; }",
-  "    if(ev.code === 'KeyD'){ ev.preventDefault(); showTab('actions'); showSubtab('trends'); return; }",
-  "    var aid = SHORTCUTS[ev.code]; if(!aid) return;",
-  "    ev.preventDefault();",
-  "    showTab('actions'); showSubtab('run');",
-  "    if(MODE === 'live'){ if(!ACTIONS_CACHE) loadActions(); execAction(aid, ''); }",
-  "  });",
-  "  // v12.43: coverage-by-feature view en sub-tab de Trazabilidad.",
-  "  // v12.45 (E3): cache local del payload + filtro display_status sin re-fetch.",
-  "  var COVERAGE_CACHE = null;",
-  "  function loadCoverageByFeature(){",
-  "    if(MODE !== 'live'){ el('tab-trace-by-feature').innerHTML = '<p class=\"empty\">Solo disponible en modo live (memory-serve).</p>'; return; }",
-  "    fetch('/api/coverage-by-feature').then(function(r){return r.json();}).then(function(data){ COVERAGE_CACHE = data; renderCoverageByFeature(data); }).catch(function(){ el('tab-trace-by-feature').innerHTML = '<p class=\"empty\">No se pudo cargar /api/coverage-by-feature.</p>'; });",
-  "  }",
-  "  function applyTraceDsFilter(){ if(COVERAGE_CACHE) renderCoverageByFeature(COVERAGE_CACHE); }",
-  "  function renderCoverageByFeature(features){",
-  "    var dsFilter = (el('trace-ds-filter')||{}).value || '';",
-  "    if(!features || !features.length){ el('tab-trace-by-feature').innerHTML = '<p class=\"empty\">Sin trace links registrados.</p>'; return; }",
-  "    var html = '';",
-  "    for(var i=0;i<features.length;i++){",
-  "      var f = features[i];",
-  "      html += '<div class=\"feature-card\">';",
-  "      html += '<h3>'+esc(f.feature)+'</h3>';",
-  "      html += '<div class=\"feature-meta\">'+f.source_count+' RF/RNF · '+f.links+' trace links · sources: '+f.sources.map(esc).join(', ')+'</div>';",
-  "      // Status breakdown como pills.",
-  "      html += '<div>';",
-  "      for(var st in f.status_breakdown){",
-  "        var cls = (st && st !== '(null)') ? st : '';",
-  "        html += '<span class=\"status-pill '+esc(cls)+'\">'+esc(st)+': '+f.status_breakdown[st]+'</span>';",
-  "      }",
-  "      html += '</div>';",
-  "      // Targets agrupados por tipo.",
-  "      var typeOrder = ['hu','spdd','prototipo','api','bd','codigo','test','estado'];",
-  "      var seenTypes = {};",
-  "      for(var ti=0; ti<typeOrder.length; ti++){",
-  "        var t = typeOrder[ti];",
-  "        if(!f.targets_by_type[t]) continue;",
-  "        seenTypes[t] = true;",
-  "        var visible = f.targets_by_type[t].filter(function(lk){ return !dsFilter || (lk.display_status||'') === dsFilter; });",
-  "        if(!visible.length) continue;",
-  "        html += '<div class=\"target-group\"><div class=\"gtitle\">'+esc(t)+' ('+visible.length+(dsFilter?' / '+f.targets_by_type[t].length:'')+')</div><ul>';",
-  "        for(var k=0; k<visible.length; k++){",
-  "          var lk = visible[k];",
-  "          html += '<li><strong>'+esc(lk.source_ref)+'</strong> → '+esc(lk.target_ref)+' <span class=\"status-pill '+esc(lk.display_status||'')+'\">'+esc(lk.display_status||'-')+'</span>';",
-  "          if(lk.evidence_ref){ html += ' <span class=\"ev\">'+esc(lk.evidence_ref)+'</span>'; html += ' <a href=\"#\" class=\"ev-git\" data-ev=\"'+esc(lk.evidence_ref)+'\" title=\"Ver historial git del archivo\">[git]</a>'; }",
-  "          html += '</li>';",
-  "        }",
-  "        html += '</ul></div>';",
-  "      }",
-  "      for(var ot in f.targets_by_type){",
-  "        if(seenTypes[ot]) continue;",
-  "        html += '<div class=\"target-group\"><div class=\"gtitle\">'+esc(ot)+' ('+f.targets_by_type[ot].length+')</div></div>';",
-  "      }",
-  "      html += '</div>';",
-  "    }",
-  "    el('tab-trace-by-feature').innerHTML = html;",
-  "    // v12.45 (F2): wire drill-down git history en links de evidencia.",
-  "    var gitLinks = el('tab-trace-by-feature').querySelectorAll('.ev-git');",
-  "    for(var gi=0; gi<gitLinks.length; gi++){",
-  "      gitLinks[gi].addEventListener('click', function(ev){",
-  "        ev.preventDefault();",
-  "        var path = ev.currentTarget.getAttribute('data-ev');",
-  "        if(!path) return;",
-  "        var cleanPath = path.split(/[\\s:]/)[0];",
-  "        fetch('/api/file-git-history?path='+encodeURIComponent(cleanPath)+'&limit=10').then(function(r){return r.json();}).then(function(d){",
-  "          var lines = ['Historial git de '+cleanPath+':',''];",
-  "          if(d.error){ lines.push('Error: '+d.error); }",
-  "          else if(!d.commits || !d.commits.length){ lines.push('(sin commits)'); }",
-  "          else { d.commits.forEach(function(c){ lines.push(c.sha+'  '+c.date+'  '+(c.author||'?')+'  '+c.subject); }); }",
-  "          alert(lines.join('\\n'));",
-  "        }).catch(function(err){ alert('No se pudo cargar el git history: '+err); });",
-  "      });",
-  "    }",
-  "  }",
-  "  function showTraceSub(name){",
-  "    var subs = document.querySelectorAll('[data-trace-sub]'); for(var i=0;i<subs.length;i++) subs[i].classList.toggle('active', subs[i].dataset.traceSub===name);",
-  "    var panes = document.querySelectorAll('#pane-trace .subpane'); for(var j=0;j<panes.length;j++) panes[j].classList.toggle('active', panes[j].id===('trace-sub-'+name));",
-  "    if(name==='by-feature') loadCoverageByFeature();",
-  "  }",
-  "  // v12.70: visor de proyecto (pestana Proyecto).",
-  "  var FILES_TREE = null;",
-  "  var CURRENT_FILE = null;",
-  "  // v12.74: resuelve un href relativo contra el directorio del archivo actual.",
-  "  function resolveRel(base, href){ href=(href||'').split('#')[0].split('?')[0]; if(!href) return null; var baseDir = base && base.indexOf('/')>=0 ? base.replace(/\\/[^/]*$/,'') : ''; var parts = baseDir ? baseDir.split('/') : []; var hp = href.split('/'); for(var i=0;i<hp.length;i++){ var s=hp[i]; if(s===''||s==='.') continue; if(s==='..') parts.pop(); else parts.push(s); } return parts.join('/'); }",
-  "  function loadFilesTree(){",
-  "    if(MODE !== 'live'){ el('files-tree').innerHTML = '<p class=\"empty\">El visor solo esta disponible en modo live (npm run memory:serve).</p>'; return; }",
-  "    el('files-tree').innerHTML = '<p class=\"empty\">Cargando arbol…</p>';",
-  "    fetch('/api/files/tree').then(function(r){return r.json();}).then(function(t){ FILES_TREE = t; renderFilesTree(); }).catch(function(){ el('files-tree').innerHTML='<p class=\"empty\">No se pudo cargar /api/files/tree.</p>'; });",
-  "  }",
-  "  function ficon(name){ var e=(name.split('.').pop()||'').toLowerCase(); if(e==='md')return '📄'; if(e==='js'||e==='mjs'||e==='ts')return '🟨'; if(e==='json')return '🔧'; if(e==='html')return '🌐'; if(e==='css')return '🎨'; if(['png','jpg','jpeg','gif','webp','svg','ico','bmp'].indexOf(e)>=0)return '🖼'; return '📃'; }",
-  "  function renderFilesTree(){",
-  "    if(!FILES_TREE){ return; }",
-  "    var filter = ((el('files-filter') && el('files-filter').value) || '').toLowerCase();",
-  "    function node(n){",
-  "      if(n.type==='dir'){",
-  "        var kids = (n.children||[]).map(node).filter(Boolean);",
-  "        if(filter && kids.length===0 && n.name.toLowerCase().indexOf(filter)<0) return '';",
-  "        var open = filter ? ' open' : '';",
-  "        return '<details class=\"ftree-dir\"'+open+'><summary>📁 '+esc(n.name)+'</summary><div class=\"ftree-children\">'+kids.join('')+'</div></details>';",
-  "      }",
-  "      if(filter && n.name.toLowerCase().indexOf(filter)<0) return '';",
-  "      return '<div class=\"ftree-file\" data-fpath=\"'+esc(n.path)+'\" title=\"'+esc(n.path)+'\">'+ficon(n.name)+' '+esc(n.name)+'</div>';",
-  "    }",
-  "    var html = (FILES_TREE.children||[]).map(node).filter(Boolean).join('');",
-  "    if(FILES_TREE.truncated) html += '<p class=\"empty\">(arbol truncado: demasiados archivos)</p>';",
-  "    el('files-tree').innerHTML = html || '<p class=\"empty\">Sin coincidencias.</p>';",
-  "    var files = el('files-tree').querySelectorAll('[data-fpath]');",
-  "    for(var i=0;i<files.length;i++){ files[i].addEventListener('click', function(ev){ var p=ev.currentTarget.getAttribute('data-fpath'); var prev=el('files-tree').querySelector('.ftree-file.sel'); if(prev) prev.classList.remove('sel'); ev.currentTarget.classList.add('sel'); openFile(p); }); }",
-  "  }",
-  "  function openFile(p){",
-  "    el('files-viewer').innerHTML = '<p class=\"empty\">Cargando '+esc(p)+'…</p>';",
-  "    fetch('/api/files/read?path='+encodeURIComponent(p)).then(function(r){return r.json();}).then(function(d){ renderFileContent(d); }).catch(function(){ el('files-viewer').innerHTML='<p class=\"empty\">No se pudo leer el archivo.</p>'; });",
-  "  }",
-  "  function gutterHtml(lineHtmlArr){ var o=''; for(var i=0;i<lineHtmlArr.length;i++){ o+='<div class=\"fview-line\"><span class=\"fview-ln\">'+(i+1)+'</span><span class=\"fview-code\">'+lineHtmlArr[i]+'</span></div>'; } return o; }",
-  "  function gutterRaw(text){ var ls=(text||'').split('\\n'); var a=[]; for(var i=0;i<ls.length;i++) a.push(esc(ls[i])); return gutterHtml(a); }",
-  "  function renderFileContent(d){",
-  "    var v=el('files-viewer');",
-  "    if(d.path) CURRENT_FILE = d.path;",
-  "    if(d.error){ v.innerHTML = '<p class=\"empty\">'+esc(d.error)+'</p>'; return; }",
-  "    var kb = (d.size/1024).toFixed(1);",
-  "    var head = '<div class=\"fview-head\"><code>'+esc(d.path)+'</code> <span class=\"muted\">· '+kb+' KB · '+esc(d.ext||'')+'</span><span class=\"fview-tools\"></span></div>';",
-  "    if(d.kind==='image'){ v.innerHTML = head + '<div class=\"fview-img\"><img src=\"'+d.dataUrl+'\" alt=\"'+esc(d.path)+'\"/></div>'; return; }",
-  "    if(d.kind==='binary'){ v.innerHTML = head + '<p class=\"empty\">Archivo binario — no se puede mostrar como texto.</p>'; return; }",
-  "    if(d.kind==='too-large'){ v.innerHTML = head + '<p class=\"empty\">Archivo demasiado grande para previsualizar.</p>'; return; }",
-  "    if(d.kind==='markdown'){ v.innerHTML = head + '<div class=\"fview-body\"><div class=\"md-body\">'+d.html+'</div></div>'; addViewerTools(d); return; }",
-  "    v.innerHTML = head + '<div class=\"fview-body\"><div class=\"fview-pre\">'+gutterHtml(d.lines||[])+'</div></div>';",
-  "    addViewerTools(d);",
-  "  }",
-  "  function addViewerTools(d){",
-  "    var v=el('files-viewer'); var tools=v.querySelector('.fview-tools'); if(!tools) return;",
-  "    var body=v.querySelector('.fview-body'); var defaultHTML = body ? body.innerHTML : '';",
-  "    var btns='';",
-  "    if(d.kind==='markdown') btns+='<button data-valt>Fuente</button>';",
-  "    if(d.kind==='html') btns+='<button data-valt>Vista</button>';",
-  "    btns+='<button data-vcopy>Copiar</button>';",
-  "    tools.innerHTML=btns;",
-  "    var showingAlt=false; var alt=tools.querySelector('[data-valt]');",
-  "    if(alt) alt.addEventListener('click', function(){ showingAlt=!showingAlt; if(!showingAlt){ body.innerHTML=defaultHTML; alt.textContent=(d.kind==='html'?'Vista':'Fuente'); return; } if(d.kind==='html'){ alt.textContent='Fuente'; body.innerHTML=''; var f=document.createElement('iframe'); f.className='fview-frame'; f.setAttribute('sandbox','allow-scripts allow-same-origin'); body.appendChild(f); f.srcdoc=d.content; } else { alt.textContent='Vista'; body.innerHTML='<div class=\"fview-pre\">'+gutterRaw(d.content)+'</div>'; } });",
-  "    var cp=tools.querySelector('[data-vcopy]'); if(cp) cp.addEventListener('click', function(){ if(navigator.clipboard){ navigator.clipboard.writeText(d.content||''); cp.textContent='Copiado'; setTimeout(function(){cp.textContent='Copiar';},1200); } });",
-  "  }",
-  "  // v12.80: panel multiagente (locks claim/release + tablero).",
-  "  function agentId(){ return (el('agent-id') && el('agent-id').value.trim()) || ''; }",
-  "  function loadAgents(){",
-  "    if(MODE !== 'live'){ el('agents-host').innerHTML = '<p class=\"empty\">El multiagente solo esta disponible en modo live (npm run memory:serve).</p>'; return; }",
-  "    var saved = localStorage.getItem('spdd-agent-id'); if(saved && el('agent-id') && !el('agent-id').value) el('agent-id').value = saved;",
-  "    el('agents-host').innerHTML = '<p class=\"empty\">Cargando tablero…</p>';",
-  "    // v12.128: tambien trae los runs SQLite (Capa 1) ademas de los locks de feature (legacy).",
-  "    Promise.all([",
-  "      fetch('/api/locks').then(function(r){return r.json();}).catch(function(){return {error:'locks no disponible',rows:[],locks:[]};}),",
-  "      fetch('/api/agent-runs?limit=20').then(function(r){return r.json();}).catch(function(){return null;})",
-  "    ]).then(function(arr){ renderAgents(arr[0], arr[1]); }).catch(function(){ el('agents-host').innerHTML='<p class=\"empty\">No se pudo cargar /api/locks ni /api/agent-runs.</p>'; });",
-  "  }",
-  "  function renderAgents(d, ar){",
-  "    if(d.error){ el('agents-host').innerHTML = '<p class=\"empty\">'+esc(d.error)+'</p>'; return; }",
-  "    var rows = d.rows||[];",
-  "    var html = '<table class=\"agent-board\"><thead><tr><th>Feature</th><th>Prototipo</th><th>Lock</th><th>Expira</th><th>Accion</th></tr></thead><tbody>';",
-  "    rows.forEach(function(f){",
-  "      var lk = f.lock;",
-  "      var active = lk && !lk.expired;",
-  "      var lockTxt = active ? ('🔒 '+esc(lk.agent)) : (lk && lk.expired ? '⏰ expirado ('+esc(lk.agent)+')' : '— libre');",
-  "      var exp = active ? esc(String(lk.expires_at).slice(0,16).replace('T',' ')) : '—';",
-  "      var act = active ? ('<button data-release=\"'+esc(f.slug)+'\">Liberar</button>') : ('<button data-claim=\"'+esc(f.slug)+'\">Reclamar</button>');",
-  "      html += '<tr><td><code>'+esc(f.slug)+'</code></td><td>'+esc(f.prototype_state||'—')+'</td><td>'+lockTxt+'</td><td>'+exp+'</td><td>'+act+'</td></tr>';",
-  "    });",
-  "    html += '</tbody></table>';",
-  "    var expired = (d.locks||[]).filter(function(l){return l.expired;});",
-  "    if(expired.length) html += '<p class=\"agent-warn\">⏰ '+expired.length+' lock(s) expirados — usa “Purgar expirados”.</p>';",
-  "    // v12.128: widget de active runs (Capa 1 — agent:start/finish + reviews).",
-  "    if(ar && !ar.schema_missing){",
-  "      var active = (ar.runs||[]).filter(function(r){ return r.status==='in_progress' || r.status==='implementer_done' || r.status==='spec_review_passed'; });",
-  "      html += '<div class=\"agent-active-runs\"><h4>🛠️ Active runs (Capa 1) <span class=\"agent-active-count\">'+active.length+'</span></h4>';",
-  "      if(active.length===0){",
-  "        html += '<p class=\"empty\">Sin runs activos. Inicia un T-NNN con <code>npm run agent:start -- --feature &lt;slug&gt; --task &lt;T-NNN&gt; --agent &lt;tu-agente&gt;</code>.</p>';",
-  "      } else {",
-  "        html += '<table class=\"agent-board\"><thead><tr><th>Feature</th><th>Task</th><th>Implementer</th><th>Status</th><th>Started</th></tr></thead><tbody>';",
-  "        active.forEach(function(r){",
-  "          var col = r.status==='in_progress'?'#3B82F6':(r.status==='implementer_done'?'#D97706':'#22D3EE');",
-  "          html += '<tr><td><code>'+esc(r.feature)+'</code></td><td><code>'+esc(r.task_id)+'</code></td><td>'+esc(r.agent)+'</td><td><span class=\"agent-run-status\" style=\"background:'+col+';color:#fff\">'+esc(r.status)+'</span></td><td class=\"muted\">'+esc(String(r.started_at||'').slice(0,16))+'</td></tr>';",
-  "        });",
-  "        html += '</tbody></table>';",
-  "      }",
-  "      html += '<p class=\"muted\" style=\"font-size:11px;margin-top:6px\">Reviewer != implementer (Principio 1 anti-self-approval). Total runs en BD: '+(ar.total||0)+'.</p></div>';",
-  "    } else if (ar && ar.schema_missing){",
-  "      html += '<div class=\"agent-active-runs\"><p class=\"empty\">Las 3 tablas SQLite de Capa 1 (ai_task_runs / ai_task_reviews / ai_task_review_findings) aun no existen. Corre <code>npm run memory:bootstrap</code>.</p></div>';",
-  "    }",
-  "    el('agents-host').innerHTML = html;",
-  "    el('agents-host').querySelectorAll('[data-claim]').forEach(function(b){ b.addEventListener('click', function(e){ doClaim(e.currentTarget.getAttribute('data-claim')); }); });",
-  "    el('agents-host').querySelectorAll('[data-release]').forEach(function(b){ b.addEventListener('click', function(e){ doRelease(e.currentTarget.getAttribute('data-release')); }); });",
-  "  }",
-  "  function postLocks(path, payload){ return fetch(path, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) }).then(function(r){return r.json().then(function(j){return {status:r.status, j:j};});}); }",
-  "  function doClaim(feature){",
-  "    var a = agentId(); if(!a){ alert('Escribe tu nombre de agente arriba (campo Agente).'); return; }",
-  "    localStorage.setItem('spdd-agent-id', a);",
-  "    postLocks('/api/locks/claim', { feature:feature, agent:a }).then(function(res){ if(!res.j.ok){ alert('No se pudo reclamar: '+(res.j.error||res.status)); } loadAgents(); });",
-  "  }",
-  "  function doRelease(feature){",
-  "    var a = agentId();",
-  "    postLocks('/api/locks/release', { feature:feature, agent:a||undefined }).then(function(res){ if(!res.j.ok){ if(confirm((res.j.error||'No se pudo liberar')+'\\n\\n¿Forzar liberacion?')){ postLocks('/api/locks/release',{feature:feature, force:true}).then(function(){ loadAgents(); }); return; } } loadAgents(); });",
-  "  }",
-  "  function showTab(name){",
-  "    var tabs = document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++) tabs[i].classList.toggle('active', tabs[i].dataset.tab===name);",
-  "    var panes = document.querySelectorAll('.pane'); for(var j=0;j<panes.length;j++) panes[j].classList.toggle('active', panes[j].id===('pane-'+name));",
-  "    if(name==='actions' && !ACTIONS_CACHE) loadActions();",
-  "    if(name==='roadmap') loadRoadmap();",
-  "    if(name==='files' && !FILES_TREE) loadFilesTree();",
-  "    if(name==='agents') loadAgents();",
-  "  }",
-  "  // v12.54: Roadmap pane. Carga estado de las 9 fases + comandos recientes + sugeridos.",
-  "  var ROADMAP_STATE = null;",
-  "  function loadRoadmap(){",
-  "    if(MODE !== 'live'){ el('roadmap-host').innerHTML = '<p class=\"empty\">Roadmap solo disponible en modo live (memory-serve). Arranca con: <code>npm run memory:serve</code></p>'; return; }",
-  "    el('roadmap-host').innerHTML = '<p class=\"empty\">Cargando estado del roadmap…</p>';",
-  "    Promise.all([",
-  "      fetch('/api/roadmap/status').then(function(r){return r.json();}),",
-  "      fetch('/api/roadmap/next').then(function(r){return r.json();}).catch(function(){return null;}),",
-  "      fetch('/api/agent-runs?limit=10').then(function(r){return r.json();}).catch(function(){return null;})",
-  "    ]).then(function(arr){ ROADMAP_STATE = { status: arr[0], next: arr[1], agentRuns: arr[2] }; renderRoadmap(); })",
-  "    .catch(function(){ el('roadmap-host').innerHTML = '<p class=\"empty\">No se pudo cargar /api/roadmap/status. Verifica que scripts/roadmap-status.mjs existe (corre: npm run template:upgrade -- --apply).</p>'; });",
-  "  }",
-  "  function renderRoadmap(){",
-  "    var st = ROADMAP_STATE.status;",
-  "    if(st.error){ el('roadmap-host').innerHTML = '<p class=\"empty\">Error: '+esc(st.error)+'</p>'; return; }",
-  "    var html = '';",
-  "    // Cabecera con proyecto + version + features.",
-  "    html += '<div class=\"roadmap-section\"><h4>Proyecto · ' + esc(st.project||'-') + ' · template ' + esc(st.templateVersion||'-') + ' · ' + (st.features?st.features.length:0) + ' features</h4></div>';",
-  "    // v12.127: widget de las 3 capas del framework AI-first empresarial.",
-  "    // Hace VISIBLE en el panel la arquitectura ortogonal: governance (Capa 2) +",
-  "    // execution discipline (Capa 1) + lifecycle compat (Capa 3). Es referencia visual",
-  "    // permanente para que el agente sepa donde esta parado.",
-  "    html += '<div class=\"roadmap-section\"><h4>🧩 Capas del framework</h4>';",
-  "    html += '<div class=\"capa-stack\">';",
-  "    html += '  <div class=\"capa capa-1\"><span class=\"capa-tag\">Capa 1</span><strong>Execution Discipline</strong><small>como ejecutar (protocolos + TDD + reviews + worktrees)</small><div class=\"capa-refs\"><code>AGENT_RUNTIME.md</code> · <code>ai/protocols/</code> · <code>agent:protocol/start/review/finish</code></div></div>';",
-  "    html += '  <div class=\"capa capa-2\"><span class=\"capa-tag\">Capa 2</span><strong>Project Governance</strong><small>que es el proyecto (memoria + gates + trazabilidad + 9 fases)</small><div class=\"capa-refs\"><code>CONSTITUTION.md</code> · <code>AGENTS.md</code> · <code>ROADMAP_STATE.json</code> · 47 validadores</div></div>';",
-  "    html += '  <div class=\"capa capa-3\"><span class=\"capa-tag\">Capa 3</span><strong>Lifecycle Compat</strong><small>interop spec-kit (opt-in)</small><div class=\"capa-refs\"><code>specs/&lt;slug&gt;/.specify/</code> · <code>npm run specify:compat -- --all</code></div></div>';",
-  "    html += '</div></div>';",
-  "    // Grid de fases.",
-  "    html += '<div class=\"roadmap-grid\">';",
-  "    (st.phases||[]).forEach(function(p){",
-  "      var icon = p.status==='complete'?'✓':(p.status==='partial'?'⚠':'⊘');",
-  "      var label = p.status==='complete'?'COMPLETA':(p.status==='partial'?'PARCIAL':'NO INICIADA');",
-  "      html += '<div class=\"phase-card '+esc(p.status)+'\" data-phase=\"'+p.id+'\">';",
-  "      html += '<div class=\"phase-num\">Fase '+p.id+'</div>';",
-  "      html += '<div class=\"phase-name\">'+esc(p.name)+'</div>';",
-  "      html += '<div class=\"phase-status '+esc(p.status)+'\">'+icon+' '+label+'</div>';",
-  "      html += '<div class=\"phase-detail\">'+esc(p.detail)+'</div>';",
-  "      html += '</div>';",
-  "    });",
-  "    html += '</div>';",
-  "    // v12.62: semaforo de estado visual de prototipos (5 peldaños).",
-  "    // v12.117: lee `phase2to3.project_ready` (granular). Antes leia phase2to3Ready (atajo legacy) que se interpretaba como 'todo el proyecto puede avanzar' cuando no era cierto si habia features sin prototipo.",
-  "    var ps = st.prototypeStates;",
-  "    if(ps && ps.withPrototype > 0){",
-  "      var pp = ps.phase2to3 || { project_ready: !!ps.phase2to3Ready, ready_features: [], blocked_features: [] };",
-  "      var advanceColor = pp.project_ready ? '#16A34A' : '#D97706';",
-  "      var advanceLabel = pp.project_ready ? 'proyecto avanza 2→3' : (pp.ready_features.length ? 'avance solo para '+pp.ready_features.length : '2→3 bloqueado');",
-  "      html += '<div class=\"roadmap-section\" style=\"border-left:4px solid '+advanceColor+'\">';",
-  "      html += '<h4>🚦 Estado visual de prototipos (fase 2) <span style=\"background:'+advanceColor+';color:#fff;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px\">'+esc(advanceLabel)+'</span></h4>';",
-  "      var c = ps.counts || {};",
-  "      var ladder = [['exists','#DC2626'],['auto-quality','#DC2626'],['visible-product','#D97706'],['human-review-pending','#D97706'],['human-approved','#16A34A']];",
-  "      html += '<div class=\"proto-ladder\">';",
-  "      ladder.forEach(function(rung){ var n=c[rung[0]]||0; html += '<div class=\"proto-rung\" style=\"opacity:'+(n>0?1:0.4)+'\"><span class=\"proto-rung-dot\" style=\"background:'+rung[1]+'\"></span><span class=\"proto-rung-label\">'+rung[0]+'</span><span class=\"proto-rung-count\">'+n+'</span></div>'; });",
-  "      html += '</div>';",
-  "      html += '<div class=\"proto-feature-list\">';",
-  "      (ps.features||[]).forEach(function(f){",
-  "        if(f.state==='none') return;",
-  "        var dot = f.light==='green'?'🟢':(f.light==='amber'?'🟡':'🔴');",
-  "        html += '<div class=\"proto-feature-row\"><span>'+dot+'</span><code>'+esc(f.slug)+'</code><span class=\"proto-feature-state\">'+esc(f.state)+'</span><span class=\"proto-feature-note\">'+esc(f.blockedBy||f.reviewer||'')+'</span></div>';",
-  "      });",
-  "      html += '</div>';",
-  "      if(!pp.project_ready){",
-  "        var msg = '';",
-  "        if(pp.ready_features && pp.ready_features.length){ msg += '✓ Avance 2→3 habilitado SOLO para '+pp.ready_features.length+' feature(s) con prototipo human-approved'; }",
-  "        if(pp.blocked_features && pp.blocked_features.length){ msg += (msg?' · ':'')+'⚠ '+pp.blocked_features.length+' feature(s) bloqueadas o sin prototipo: '+pp.blocked_features.map(esc).join(', '); }",
-  "        if(!msg){ msg = '⚠ Avance fase 2 → 3 BLOQUEADO'; }",
-  "        html += '<div class=\"proto-advance-warn\">'+msg+'</div>';",
-  "      } else {",
-  "        html += '<div class=\"proto-advance-ok\">✓ Todas las features estan human-approved. El proyecto entero puede avanzar a fase 3.</div>';",
-  "      }",
-  "      html += '</div>';",
-  "    }",
-  "    // v12.127: Agent Execution Ledger (Capa 1) — runs + reviews recientes desde SQLite.",
-  "    var ar = ROADMAP_STATE.agentRuns;",
-  "    if(ar && !ar.schema_missing){",
-  "      var statusColor = { in_progress:'#3B82F6', implementer_done:'#D97706', spec_review_passed:'#22D3EE', quality_review_passed:'#22D3EE', done_with_concerns:'#D97706', approved:'#16A34A', blocked:'#DC2626' };",
-  "      var ledgerColor = (ar.runs && ar.runs.length) ? '#1E40AF' : '#94A3B8';",
-  "      html += '<div class=\"roadmap-section\" style=\"border-left:4px solid '+ledgerColor+'\">';",
-  "      html += '<h4>🛠️ Agent Execution Ledger (Capa 1) <span style=\"background:'+ledgerColor+';color:#fff;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px\">'+(ar.runs.length||0)+' runs</span></h4>';",
-  "      if(!ar.runs || ar.runs.length===0){",
-  "        html += '<p class=\"empty\">Sin runs de agent:* aun. Inicia un T-NNN con <code>npm run agent:start -- --feature &lt;slug&gt; --task &lt;T-NNN&gt; --agent &lt;yo&gt;</code>.</p>';",
-  "      } else {",
-  "        html += '<div class=\"agent-runs-list\">';",
-  "        ar.runs.forEach(function(run){",
-  "          var col = statusColor[run.status] || '#6B7280';",
-  "          var reviews = (ar.reviewsByRun||{})[run.run_uuid] || [];",
-  "          html += '<div class=\"agent-run-row\" style=\"border-left:3px solid '+col+'\">';",
-  "          html += '<div class=\"agent-run-head\"><code>'+esc(run.feature)+'</code> · <code>'+esc(run.task_id)+'</code> <span class=\"agent-run-status\" style=\"background:'+col+';color:#fff\">'+esc(run.status)+'</span></div>';",
-  "          html += '<div class=\"agent-run-meta\">implementer: <code>'+esc(run.agent)+'</code> · started '+esc(run.started_at||'')+(run.finished_at?(' · finished '+esc(run.finished_at)):'')+'</div>';",
-  "          if(reviews.length){",
-  "            html += '<div class=\"agent-run-reviews\">';",
-  "            reviews.forEach(function(rv){",
-  "              var rcol = rv.result==='pass'?'#16A34A':(rv.result==='concerns'?'#D97706':'#DC2626');",
-  "              var fc = rv.findings_count||{blocker:0,major:0,minor:0};",
-  "              html += '<span class=\"agent-review-chip\" style=\"border-color:'+rcol+';color:'+rcol+'\" title=\"reviewer: '+esc(rv.reviewer_agent)+'\">'+esc(rv.stage)+': '+esc(rv.result)+(fc.blocker?(' ✗'+fc.blocker):'')+(fc.major?(' ⚠'+fc.major):'')+'</span>';",
-  "            });",
-  "            html += '</div>';",
-  "          }",
-  "          html += '</div>';",
-  "        });",
-  "        html += '</div>';",
-  "      }",
-  "      html += '<div class=\"agent-ledger-help\">Flujo: <code>npm run agent:protocol</code> → <code>agent:start</code> → trabajo TDD → <code>agent:review --stage both --reviewer &lt;otro&gt;</code> → <code>agent:finish</code>. Reviewer ≠ implementer (Principio 1).</div>';",
-  "      html += '</div>';",
-  "    } else if (ar && ar.schema_missing){",
-  "      html += '<div class=\"roadmap-section\"><h4>🛠️ Agent Execution Ledger</h4><p class=\"empty\">Las 3 tablas SQLite (ai_task_runs / ai_task_reviews / ai_task_review_findings) aun no existen. Corre <code>npm run memory:bootstrap</code> tras actualizar a v12.122+.</p></div>';",
-  "    }",
-  "    // v12.56: tarjeta de Next Action (roadmap:next) prominente.",
-  "    var nx = ROADMAP_STATE.next;",
-  "    if(nx && !nx.error){",
-  "      var readinessColor = nx.agent_readiness === 'ready_for_ai' ? '#16A34A' : (nx.agent_readiness === 'needs_human' ? '#D97706' : '#DC2626');",
-  "      html += '<div class=\"roadmap-section\" style=\"border-left:4px solid '+readinessColor+'\">';",
-  "      html += '<h4>→ Siguiente accion segura para el agente <span style=\"background:'+readinessColor+';color:#fff;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px\">'+esc(nx.agent_readiness)+'</span></h4>';",
-  "      html += '<div style=\"font-size:14px;font-weight:600;color:var(--accent);margin-bottom:6px\">'+esc(nx.next_action)+'</div>';",
-  "      if(nx.feature) html += '<div style=\"font-size:11px;color:var(--muted);margin-bottom:8px\">Feature target: <code>'+esc(nx.feature)+'</code> · Fase '+nx.phase+'</div>';",
-  "      if(nx.allowed_actions && nx.allowed_actions.length){",
-  "        html += '<div style=\"margin-top:8px\"><strong style=\"font-size:11px;color:#16A34A\">✓ Puedes hacer:</strong><ul style=\"margin:4px 0 4px 20px;font-size:11.5px\">';",
-  "        nx.allowed_actions.slice(0,5).forEach(function(a){ html += '<li>'+esc(a)+'</li>'; });",
-  "        html += '</ul></div>';",
-  "      }",
-  "      if(nx.forbidden_actions && nx.forbidden_actions.length){",
-  "        html += '<div style=\"margin-top:6px\"><strong style=\"font-size:11px;color:#DC2626\">✗ NO puedes hacer:</strong><ul style=\"margin:4px 0 4px 20px;font-size:11.5px;color:var(--muted)\">';",
-  "        nx.forbidden_actions.slice(0,3).forEach(function(a){ html += '<li>'+esc(a)+'</li>'; });",
-  "        html += '</ul></div>';",
-  "      }",
-  "      if(nx.must_read && nx.must_read.length){",
-  "        html += '<div style=\"margin-top:6px\"><strong style=\"font-size:11px\">📖 Lee primero:</strong><ul style=\"margin:4px 0 4px 20px;font-size:11.5px;font-family:var(--mono)\">';",
-  "        nx.must_read.slice(0,4).forEach(function(r){ html += '<li>'+esc(r)+'</li>'; });",
-  "        html += '</ul></div>';",
-  "      }",
-  "      if(nx.commands_to_run && nx.commands_to_run.length){",
-  "        html += '<div style=\"margin-top:6px\"><strong style=\"font-size:11px\">$ Comandos sugeridos (en orden):</strong><pre style=\"background:#0F172A;color:#E2E8F0;padding:8px 12px;border-radius:4px;font-size:11px;margin-top:4px;overflow-x:auto\">';",
-  "        nx.commands_to_run.forEach(function(c){ html += esc(c)+'\\n'; });",
-  "        html += '</pre></div>';",
-  "      }",
-  "      html += '</div>';",
-  "    }",
-  "    // Bloqueadores.",
-  "    if(st.blockers && st.blockers.length){",
-  "      html += '<div class=\"roadmap-section\"><h4>⚠ Bloqueadores activos ('+st.blockers.length+')</h4>';",
-  "      st.blockers.forEach(function(b){ html += '<div class=\"blocker-item\">'+esc(b)+'</div>'; });",
-  "      html += '</div>';",
-  "    }",
-  "    // Siguiente accion recomendada.",
-  "    if(st.nextAction && st.nextAction.length){",
-  "      html += '<div class=\"roadmap-section\"><h4>→ Siguiente accion recomendada</h4>';",
-  "      st.nextAction.forEach(function(a){ html += '<div class=\"next-action\">'+esc(a)+'</div>'; });",
-  "      html += '</div>';",
-  "    }",
-  "    // v12.70: los comandos universales + el historial de ejecuciones viven en la",
-  "    // pestana Acciones (Ejecutar / Historial). Aqui solo dejamos un acceso directo.",
-  "    html += '<div class=\"roadmap-section\"><h4>🛠 Comandos y ejecucion</h4><p class=\"empty\">Ejecuta cualquier comando del catalogo y revisa el historial de ejecuciones en la pestana <a data-goto-actions style=\"cursor:pointer;color:var(--accent);text-decoration:underline;font-weight:600\">Acciones</a> (subpestanas Ejecutar e Historial).</p></div>';",
-  "    el('roadmap-host').innerHTML = html;",
-  "    // Click handlers.",
-  "    var ga = el('roadmap-host').querySelector('[data-goto-actions]'); if(ga) ga.addEventListener('click', function(){ showTab('actions'); showSubtab('run'); });",
-  "    document.querySelectorAll('.phase-card').forEach(function(c){ c.addEventListener('click', function(){ document.querySelectorAll('.phase-card').forEach(function(x){x.classList.remove('selected')}); c.classList.add('selected'); var pid = c.getAttribute('data-phase'); if(pid !== null) loadPhaseContract(pid); }); });",
-  "  }",
-  "  // v12.58/v12.59: cargar contrato + status de ejecucion (cruce con BD ai_action_runs).",
-  "  function loadPhaseContract(phaseId){",
-  "    Promise.all([",
-  "      fetch('/api/roadmap/contract/' + phaseId).then(function(r){return r.json();}),",
-  "      fetch('/api/roadmap/contract-status/' + phaseId).then(function(r){return r.json();}).catch(function(){return null;})",
-  "    ]).then(function(arr){ renderPhaseContract(arr[0], arr[1]); }).catch(function(){ var pc=el('phase-contract-panel'); if(pc) pc.innerHTML='<p class=\"empty\">No se pudo cargar el contrato.</p>'; });",
-  "  }",
-  "  function renderPhaseContract(c, statusData){",
-  "    var panel = el('phase-contract-panel');",
-  "    if(!panel) return;",
-  "    if(c.error){ panel.innerHTML = '<p class=\"empty\">'+esc(c.error)+'</p>'; return; }",
-  "    // Mapa comando -> estado de ejecucion (passed/failed/never) desde la BD.",
-  "    var execMap = {};",
-  "    if(statusData && statusData.validations){ statusData.validations.forEach(function(v){ execMap[v.command] = v; }); }",
-  "    var html = '<div class=\"contract-card\">';",
-  "    html += '<div class=\"contract-head\"><strong>Contrato de ejecucion — Fase '+c.id+'</strong> <span class=\"contract-name\">'+esc(c.name)+'</span></div>';",
-  "    html += '<div class=\"contract-objective\">'+esc(c.objective)+'</div>';",
-  "    function sect(icon,title,items,cls){",
-  "      var h = '<div class=\"contract-section '+cls+'\"><h5>'+icon+' '+title+'</h5><ul>';",
-  "      (items||[]).forEach(function(it){ h += '<li>'+esc(it)+'</li>'; });",
-  "      return h + '</ul></div>';",
-  "    }",
-  "    // v12.59: seccion 'Debe validar' con check de ejecucion desde la BD inteligente.",
-  "    function sectValidate(items){",
-  "      var legendTitle = 'El estado viene de la BD ai_action_runs: solo se registran corridas via el panel (Acciones), el agente, npm run validate o el git hook. Las corridas sueltas en terminal (npm run check:all) NO se registran.';",
-  "      var h = '<div class=\"contract-section validate\"><h5>🔍 Debe validar <span class=\"exec-legend\" title=\"'+esc(legendTitle)+'\">(✓ registrado · ◦ sin registro · ⚠ fallo) ⓘ</span></h5><ul>';",
-  "      (items||[]).forEach(function(it){",
-  "        var v = execMap[it];",
-  "        var badge = '';",
-  "        if(v){",
-  "          if(v.status==='passed'){ badge = '<span class=\"exec-badge ok\" title=\"ultima corrida registrada OK: '+esc(v.last_run||'')+'\">✓ registrado</span>'; }",
-  "          else if(v.status==='failed'){ badge = '<span class=\"exec-badge fail\" title=\"exit '+v.last_exit_code+' en la ultima corrida registrada\">⚠ fallo (exit '+v.last_exit_code+')</span>'; }",
-  "          else { badge = '<span class=\"exec-badge never\" title=\"sin corridas registradas (puede haberse ejecutado en terminal sin registrarse)\">◦ sin registro</span>'; }",
-  "        } else { badge = '<span class=\"exec-badge never\" title=\"sin corridas registradas (puede haberse ejecutado en terminal sin registrarse)\">◦ sin registro</span>'; }",
-  "        h += '<li>'+esc(it)+' '+badge+'</li>';",
-  "      });",
-  "      return h + '</ul></div>';",
-  "    }",
-  "    html += '<div class=\"contract-grid\">';",
-  "    html += sect('✓','Puede hacer', c.puede, 'allowed');",
-  "    html += sect('✗','NO puede hacer', c.noPuede, 'forbidden');",
-  "    html += sect('📖','Debe leer', c.debeLeer, 'read');",
-  "    html += sect('✏','Debe actualizar', c.debeActualizar, 'update');",
-  "    html += sectValidate(c.debeValidar);",
-  "    html += sect('📤','Debe entregar', c.debeEntregar, 'deliver');",
-  "    html += '</div>';",
-  "    if(statusData && statusData.summary){ html += '<div class=\"contract-exec-summary\">Corridas registradas: <strong>'+statusData.summary.passed+'/'+statusData.summary.total+'</strong> OK · '+statusData.summary.never+' sin registro <span title=\"registro = panel/agente/npm run validate/git hook; las corridas en terminal no cuentan\">ⓘ</span> (BD ai_action_runs)</div>'; }",
-  "    if(c.gates && c.gates.length){ html += '<div class=\"contract-gates\"><strong>Gates de la fase:</strong> '+c.gates.map(function(g){return '<code>'+esc(g)+'</code>'}).join(', ')+'</div>'; }",
-  "    html += '</div>';",
-  "    panel.innerHTML = html;",
-  "    panel.scrollIntoView({behavior:'smooth', block:'nearest'});",
-  "  }",
-  "  // Refresh button del roadmap.",
-  "  setTimeout(function(){ var rr=el('roadmap-refresh'); if(rr) rr.addEventListener('click', loadRoadmap); }, 0);",
-  "  setTimeout(function(){ var fr=el('files-refresh'); if(fr) fr.addEventListener('click', function(){ FILES_TREE=null; loadFilesTree(); }); var ff=el('files-filter'); if(ff) ff.addEventListener('input', function(){ if(FILES_TREE) renderFilesTree(); }); var ffs=el('files-fullscreen'); if(ffs) ffs.addEventListener('click', toggleFilesFullscreen); var ftt=el('files-tree-toggle'); if(ftt) ftt.addEventListener('click', toggleFilesTree); var fv=el('files-viewer'); if(fv) fv.addEventListener('click', function(ev){ var a=ev.target.closest && ev.target.closest('.md-body a[href]'); if(!a) return; var href=a.getAttribute('href')||''; if(/^(https?:|mailto:|tel:)/i.test(href)) return; if(href.charAt(0)==='#') return; ev.preventDefault(); var rp=resolveRel(CURRENT_FILE, href); if(rp) openFile(rp); }); var ar=el('agents-refresh'); if(ar) ar.addEventListener('click', loadAgents); var ap=el('agents-prune'); if(ap) ap.addEventListener('click', function(){ postLocks('/api/locks/release',{prune:true}).then(function(){ loadAgents(); }); }); var aid=el('agent-id'); if(aid) aid.addEventListener('change', function(){ localStorage.setItem('spdd-agent-id', aid.value.trim()); }); }, 0);",
-  "  function toggleFilesFullscreen(){ var p=el('pane-files'); if(!p) return; var on=p.classList.toggle('fs-mode'); var b=el('files-fullscreen'); if(b) b.textContent = on ? '⛶ Salir de pantalla completa' : '⛶ Pantalla completa'; document.body.classList.toggle('fs-lock', on); }",
-  "  function toggleFilesTree(){ var lay=document.querySelector('#pane-files .files-layout'); if(!lay) return; var off=lay.classList.toggle('tree-collapsed'); var b=el('files-tree-toggle'); if(b) b.textContent = off ? '⮞ Mostrar arbol' : '⮜ Ocultar arbol'; }",
-  "  document.addEventListener('keydown', function(e){ if(e.key==='Escape'){ var p=el('pane-files'); if(p && p.classList.contains('fs-mode')) toggleFilesFullscreen(); } });",
-  "  document.addEventListener('click', function(e){ var t = e.target.closest('.tab'); if(t) showTab(t.dataset.tab); var st = e.target.closest('.subtab[data-subtab]'); if(st) showSubtab(st.dataset.subtab); var ts = e.target.closest('[data-trace-sub]'); if(ts) showTraceSub(ts.dataset.traceSub); });",
-  "  el('search-q').addEventListener('keydown', function(e){ if(e.key==='Enter') doSearch(); });",
-  "  el('search-btn').addEventListener('click', doSearch);",
-  "  if(el('console-clear')) el('console-clear').addEventListener('click', consoleClear);",
-  "  if(el('console-copy')) el('console-copy').addEventListener('click', consoleCopy);",
-  "  if(el('console-stop')) el('console-stop').addEventListener('click', stopAction);",
-  "  if(el('history-refresh')) el('history-refresh').addEventListener('click', loadHistory);",
-  "  if(el('stats-refresh')) el('stats-refresh').addEventListener('click', loadStats);",
-  "  if(el('trends-refresh')) el('trends-refresh').addEventListener('click', loadTrends);",
-  "  ['filter-action','filter-status','filter-since','filter-mode','filter-slow'].forEach(function(id){ var n=el(id); if(n) n.addEventListener('change', loadHistory); });",
-  "  ['trend-action','trend-action-b','trend-days'].forEach(function(id){ var n=el(id); if(n) n.addEventListener('change', function(){ writeTrendFiltersToUrl(); loadTrends(); }); });",
-  "  // v12.45 (E3): filtro display_status en Trazabilidad/Por feature.",
-  "  if(el('trace-ds-filter')) el('trace-ds-filter').addEventListener('change', applyTraceDsFilter);",
-  "  if(MODE === 'live'){",
-  "    fetch('/api/snapshot').then(function(r){return r.json();}).then(function(d){ MEM=d; renderAll(d); renderPresetButtons(); }).catch(function(){ el('meta').textContent='No se pudo cargar /api/snapshot'; });",
-  "  } else {",
-  "    renderAll(MEM); renderPresetButtons();",
-  "  }",
-  "  // v12.28/v12.30/v12.32: si la URL trae filtros, abrir el sub-tab apropiado.",
-  "  var __urlParams = new URLSearchParams(window.location.search);",
-  "  var __hasActFilters = ['act_action','act_status','act_since','act_mode','act_slow'].some(function(p){ return __urlParams.has(p); });",
-  "  var __hasTrendFilters = ['trend_action','trend_days'].some(function(p){ return __urlParams.has(p); });",
-  "  var __explicitSubtab = __urlParams.get('act_subtab');",
-  "  readFiltersFromUrl();",
-  "  if(__explicitSubtab && MODE === 'live'){ showTab('actions'); showSubtab(__explicitSubtab); }",
-  "  else if(__hasTrendFilters && MODE === 'live'){ showTab('actions'); showSubtab('trends'); }",
-  "  else if(__hasActFilters && MODE === 'live'){ showTab('actions'); showSubtab('history'); }",
-  "  else { showTab('trace'); }",
-  "})();",
-].join("\n");
+const MEMORY_CLIENT_JS = fs.readFileSync(new URL("./_panel/panel.client.js", import.meta.url), "utf8").trimEnd(); // v12.140: front extraido a archivo (P3); trimEnd => salida byte-identica
+// Cliente del REPORTE estatico (memory-report.html). Independiente del front del live.
+const REPORT_CLIENT_JS = fs.readFileSync(new URL("./_panel/report.client.js", import.meta.url), "utf8").trimEnd();
 
 function memoryHtmlShell(dataScript) {
   return `<!DOCTYPE html>
@@ -2960,15 +1731,41 @@ function memoryHtmlShell(dataScript) {
   :root {
     --brand:#1F4E79; --brand-dark:#163A5C; --brand-light:#E8F0F9;
     --bg:#F3F4F6; --surface:#fff; --line:#E5E7EB; --line-soft:#F1F5F9;
-    --text:#1F2937; --muted:#6B7280; --ok:#047857; --warn:#B45309;
+    --text:#1F2937; --ink:#1F2937; --muted:#6B7280;
+    --ok:#047857; --warn:#B45309; --danger:#DC2626; --info:#7C3AED; --accent:#1F4E79;
     --font:'Segoe UI',system-ui,sans-serif; --mono:'Consolas',monospace; --radius:8px;
   }
+  /* v12.140: tema oscuro (toggle persistido + prefers-color-scheme). Solo reasigna tokens. */
+  [data-theme=\"dark\"] {
+    --brand:#3B82F6; --brand-dark:#1E40AF; --brand-light:#1E293B;
+    --bg:#0B1220; --surface:#111827; --line:#243042; --line-soft:#1A2433;
+    --text:#E5E7EB; --ink:#F1F5F9; --muted:#94A3B8;
+    --ok:#34D399; --warn:#FBBF24; --danger:#F87171; --info:#A78BFA; --accent:#60A5FA;
+  }
   * { box-sizing:border-box; margin:0; padding:0; }
-  body { font-family:var(--font); background:var(--bg); color:var(--text); }
+  body { font-family:var(--font); background:var(--bg); color:var(--text); transition:background .2s, color .2s; }
+  /* v12.140: controles de formulario adaptados al tema (evita texto negro de UA sobre superficie oscura en dark). */
+  .wrap input, .wrap select, .wrap textarea { background:var(--surface); color:var(--text); border-color:var(--line); }
   header { background:var(--brand); color:#fff; padding:18px 24px; }
   header h1 { font-size:18px; font-weight:700; }
   header .meta { font-size:12px; opacity:.85; margin-top:4px; font-family:var(--mono); }
-  .wrap { max-width:1180px; margin:0 auto; padding:20px 24px 48px; }
+  .wrap { max-width:1320px; margin:0 auto; padding:20px 24px 48px; display:flex; gap:20px; align-items:flex-start; }
+  /* v12.141 (C): navegacion lateral (sidebar) agrupada por familia, en vez de barra superior de tabs. */
+  .sidebar { flex:0 0 208px; position:sticky; top:16px; align-self:flex-start; }
+  .nav { display:flex; flex-direction:column; gap:2px; }
+  .nav .tab { display:block; width:100%; text-align:left; padding:8px 12px; border:none; border-left:3px solid transparent; border-bottom:none; border-radius:6px; background:transparent; color:var(--text); font-size:13px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .nav .tab:hover { background:var(--line-soft); }
+  .nav .tab.active { background:var(--brand-light); color:var(--brand-dark); border-left-color:var(--brand); font-weight:600; }
+  .nav .tab .nav-ic { display:inline-block; width:18px; text-align:center; margin-right:4px; opacity:.9; }
+  .nav-group { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); opacity:.65; margin:12px 0 3px 10px; user-select:none; }
+  .content { flex:1 1 auto; min-width:0; }
+  @media (max-width:820px) {
+    .wrap { flex-direction:column; }
+    .sidebar { position:static; flex:none; width:100%; }
+    .nav { flex-direction:row; flex-wrap:wrap; gap:4px; }
+    .nav .tab { width:auto; }
+    .nav-group { width:100%; margin:8px 0 2px; }
+  }
   .stats { display:grid; grid-template-columns:repeat(8,1fr); gap:10px; margin-bottom:20px; }
   .stat { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:12px; text-align:center; }
   .stat-v { font-size:22px; font-weight:800; color:var(--brand); }
@@ -2978,17 +1775,103 @@ function memoryHtmlShell(dataScript) {
   .searchbar input:focus { border-color:var(--brand); }
   .searchbar button { padding:9px 16px; background:var(--brand); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; }
   .searchbar button:hover { background:var(--brand-dark); }
-  .tabs { display:flex; gap:4px; flex-wrap:wrap; border-bottom:1px solid var(--line); margin-bottom:16px; }
-  .tab { padding:8px 14px; font-size:13px; cursor:pointer; border:none; background:transparent; color:var(--muted); border-bottom:2px solid transparent; }
+  .tabs { display:flex; gap:4px; flex-wrap:nowrap; overflow-x:auto; border-bottom:1px solid var(--line); margin-bottom:16px; scrollbar-width:thin; position:sticky; top:0; z-index:20; background:var(--bg); }
+  /* v12.140: badge de modo (live/static) + clases utilitarias de severidad tokenizadas. */
+  .mode-badge { display:inline-block; font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px; margin-left:8px; vertical-align:middle; text-transform:uppercase; letter-spacing:.4px; }
+  .mode-badge.live { background:#DCFCE7; color:#166534; }
+  .mode-badge.static { background:#FEF3C7; color:#92400E; }
+  .sev-blocker { color:var(--danger); } .sev-gate { color:var(--warn); } .sev-info { color:var(--muted); }
+  .sev-ok { color:var(--ok); } .sev-na { color:var(--muted); }
+  /* v12.141 (D): badges de estado en tablas (Gates/Preguntas/Decisiones). */
+  .st-badge { display:inline-block; font-size:10px; font-weight:700; padding:1px 8px; border-radius:999px; text-transform:uppercase; letter-spacing:.3px; white-space:nowrap; }
+  .st-ok { background:#DCFCE7; color:#166534; } .st-warn { background:#FEF3C7; color:#92400E; }
+  .st-err { background:#FEE2E2; color:#991B1B; } .st-muted { background:var(--line-soft); color:var(--muted); }
+  .st-info { background:#E0E7FF; color:#3730A3; }
+  [data-theme=\"dark\"] .st-ok { background:rgba(52,211,153,0.15); color:#6EE7B7; }
+  [data-theme=\"dark\"] .st-warn { background:rgba(251,191,36,0.15); color:#FCD34D; }
+  [data-theme=\"dark\"] .st-err { background:rgba(248,113,113,0.15); color:#FCA5A5; }
+  [data-theme=\"dark\"] .st-info { background:rgba(129,140,248,0.18); color:#C7D2FE; }
+  .table-filter-wrap { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+  .table-filter { flex:0 1 320px; padding:6px 10px; border:1px solid var(--line); border-radius:6px; font-size:12.5px; }
+  .table-filter-count { font-size:11px; color:var(--muted); font-family:var(--mono); }
+  /* v12.140: command palette (Ctrl/Cmd-K). */
+  .cmdk-bg { position:fixed; inset:0; background:rgba(15,23,42,.55); display:none; align-items:flex-start; justify-content:center; z-index:200; padding-top:12vh; }
+  .cmdk-bg.show { display:flex; }
+  .cmdk { width:min(560px,92vw); background:var(--surface); border:1px solid var(--line); border-radius:10px; box-shadow:0 12px 40px rgba(0,0,0,.3); overflow:hidden; }
+  .cmdk input { width:100%; padding:14px 16px; border:none; border-bottom:1px solid var(--line); font-size:15px; background:var(--surface); color:var(--text); outline:none; }
+  .cmdk ul { list-style:none; max-height:50vh; overflow-y:auto; }
+  .cmdk li { padding:10px 16px; font-size:13px; cursor:pointer; display:flex; justify-content:space-between; gap:10px; color:var(--text); }
+  .cmdk li .cmdk-kind { font-size:10px; color:var(--muted); font-family:var(--mono); text-transform:uppercase; }
+  .cmdk li.sel, .cmdk li:hover { background:var(--brand-light); }
+  .cmdk-empty { padding:14px 16px; color:var(--muted); font-size:13px; }
+  .tab { padding:8px 14px; font-size:13px; cursor:pointer; border:none; background:transparent; color:var(--muted); border-bottom:2px solid transparent; white-space:nowrap; flex:0 0 auto; }
   .tab:hover { color:var(--text); }
   .tab.active { color:var(--brand); border-bottom-color:var(--brand); font-weight:600; }
+  .tab:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; border-radius:4px; }
   .pane { display:none; }
   .pane.active { display:block; }
   table { width:100%; border-collapse:collapse; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
   thead { background:var(--line-soft); }
   th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); padding:9px 12px; border-bottom:1px solid var(--line); }
-  td { font-size:13px; padding:9px 12px; border-bottom:1px solid var(--line-soft); vertical-align:top; }
+  td { font-size:13px; padding:9px 12px; border-bottom:1px solid var(--line-soft); vertical-align:top; word-break:break-word; overflow-wrap:anywhere; }
   td:first-child { white-space:nowrap; font-family:var(--mono); font-size:12px; }
+  /* v12.139: trace links con paths/evidence_ref largos -> wrap de celdas + scroll horizontal de respaldo. */
+  #tab-trace table, #tab-trace-by-feature table { table-layout:fixed; }
+  #tab-trace, #tab-trace-by-feature, #tab-gates, #tab-evidence, #tab-docs { overflow-x:auto; }
+  /* v12.139: barra de progreso del proyecto por fases. */
+  .proj-progress { position:relative; height:22px; background:var(--line-soft); border:1px solid var(--line); border-radius:11px; overflow:hidden; }
+  .proj-progress-fill { height:100%; background:linear-gradient(90deg,#34D399,#10B981); transition:width .4s ease; }
+  .proj-progress-label { position:absolute; top:0; left:50%; transform:translateX(-50%); line-height:22px; font-size:12px; font-weight:700; color:var(--ink); }
+  .phase-segs { display:flex; gap:4px; flex-wrap:wrap; }
+  .phase-seg { flex:1 1 0; min-width:40px; border:1px solid var(--line); border-radius:5px; padding:6px 4px; font-size:12px; font-weight:600; font-family:var(--mono); cursor:pointer; background:var(--surface); color:var(--ink); }
+  .phase-seg:hover { filter:brightness(.96); }
+  .phase-seg.complete { background:#DCFCE7; border-color:#86EFAC; color:#166534; }
+  .phase-seg.partial { background:#FEF3C7; border-color:#FCD34D; color:#92400E; }
+  .phase-seg.not-started { background:var(--line-soft); color:var(--muted); }
+  .phase-seg.na { background:repeating-linear-gradient(45deg,#F1F5F9,#F1F5F9 4px,#E2E8F0 4px,#E2E8F0 8px); color:var(--muted); }
+  /* UX-2 (v12.141): rotulos de grupo como SEPARADOR, no como tab. Micro, tenue, con
+     divisor vertical, sin afordancia de boton (no hover, cursor normal, no clicable). */
+  .tab-group { flex:0 0 auto; display:flex; align-items:center; align-self:stretch; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1px; color:var(--muted); opacity:.5; margin-left:8px; padding-left:12px; border-left:1px solid var(--line); border-bottom:none; cursor:default; user-select:none; pointer-events:none; }
+  /* UX-1: vista Inicio / Resumen */
+  .home-hero { display:flex; flex-wrap:wrap; align-items:center; gap:14px; padding:16px 18px; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); margin-bottom:14px; }
+  .home-hero .home-pct { font-size:34px; font-weight:800; color:var(--brand); line-height:1; }
+  .home-hero .home-meta { font-size:12px; color:var(--muted); }
+  .home-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:14px; }
+  .home-kpi { border:1px solid var(--line); border-radius:var(--radius); padding:12px 14px; background:var(--surface); cursor:pointer; text-align:left; transition:border-color .15s,transform .05s; }
+  .home-kpi:hover { border-color:var(--brand); transform:translateY(-1px); }
+  .home-kpi .home-kpi-v { font-size:24px; font-weight:800; line-height:1.1; }
+  .home-kpi .home-kpi-l { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-top:2px; }
+  .home-kpi.blocker .home-kpi-v { color:#DC2626; } .home-kpi.gate .home-kpi-v { color:#D97706; } .home-kpi.ok .home-kpi-v { color:#16A34A; }
+  .home-next { border:1px solid var(--line); border-left:4px solid var(--brand); border-radius:var(--radius); padding:14px 16px; background:var(--surface); margin-bottom:14px; }
+  .home-next h4 { margin:0 0 6px; font-size:13px; }
+  .home-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+  .home-btn { font-size:12px; font-weight:600; padding:7px 13px; border-radius:6px; border:1px solid var(--line); background:var(--brand-light); color:var(--brand-dark); cursor:pointer; }
+  .home-btn:hover { filter:brightness(.97); }
+  .home-runs { display:flex; flex-direction:column; gap:4px; margin:4px 0; }
+  .home-run { display:flex; align-items:center; gap:8px; font-size:12px; padding:3px 0; border-bottom:1px solid var(--line-soft); }
+  .home-run code { font-size:11.5px; }
+  .home-run-ago { margin-left:auto; font-size:11px; white-space:nowrap; }
+  /* UX-4: estados loading / error reutilizables */
+  .skeleton { border-radius:6px; background:linear-gradient(90deg,var(--line-soft) 25%,var(--line) 37%,var(--line-soft) 63%); background-size:400% 100%; animation:skel 1.3s ease infinite; }
+  @keyframes skel { 0%{ background-position:100% 0; } 100%{ background-position:0 0; } }
+  .skeleton-row { height:16px; margin:8px 0; }
+  .error-state { border:1px solid #FCA5A5; background:#FEF2F2; color:#991B1B; border-radius:var(--radius); padding:14px 16px; font-size:13px; }
+  [data-theme="dark"] .error-state { background:#3a1a1a; border-color:#7f1d1d; color:#fecaca; }
+  .error-state .retry-btn { margin-top:8px; font-size:12px; font-weight:600; padding:6px 12px; border-radius:6px; border:1px solid currentColor; background:transparent; color:inherit; cursor:pointer; }
+  /* UX-5: onboarding + atajos */
+  .onboard-banner { display:flex; align-items:flex-start; gap:10px; border:1px solid var(--brand); background:var(--brand-light); color:var(--text); border-radius:var(--radius); padding:12px 14px; margin-bottom:14px; font-size:12.5px; }
+  .onboard-banner .onboard-x { margin-left:auto; cursor:pointer; border:none; background:transparent; color:var(--muted); font-size:16px; line-height:1; padding:0 4px; }
+  .shortcuts-bar { margin-top:18px; padding-top:10px; border-top:1px solid var(--line); font-size:11px; color:var(--muted); display:flex; flex-wrap:wrap; gap:14px; }
+  .shortcuts-bar kbd { font-family:var(--mono); background:var(--line-soft); border:1px solid var(--line); border-radius:4px; padding:1px 5px; font-size:10.5px; color:var(--text); }
+  table[id] thead th { cursor:pointer; user-select:none; } table[id] thead th:hover { color:var(--brand); }
+  .sort-ind { font-size:9px; opacity:.6; margin-left:3px; }
+  .path-link { color:var(--accent); cursor:pointer; text-decoration:underline; }
+  .path-link:hover { color:var(--brand-dark); }
+  .fview-crumbs { font-family:var(--mono); font-size:12px; }
+  .fview-crumbs .crumb { color:var(--accent); cursor:pointer; text-decoration:none; }
+  .fview-crumbs .crumb:hover { text-decoration:underline; }
+  .fview-crumbs .crumb-sep { color:var(--muted); margin:0 1px; }
+  .fview-crumbs .crumb-file { font-weight:700; color:var(--ink); }
   tr:last-child td { border-bottom:none; }
   tbody tr:hover td { background:var(--line-soft); }
   .empty { color:var(--muted); font-size:13px; padding:18px; }
@@ -3012,6 +1895,10 @@ function memoryHtmlShell(dataScript) {
   @media (max-width:900px){ .actions-layout { grid-template-columns:1fr; } .stats{ grid-template-columns:repeat(4,1fr);} }
   .action-cat { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:12px 14px; margin-bottom:12px; }
   .action-cat h3 { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:8px; }
+  .action-cat > summary { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:8px; cursor:pointer; list-style:none; }
+  .action-cat > summary::-webkit-details-marker { display:none; }
+  .action-cat > summary::before { content:'▾ '; opacity:.6; }
+  .action-cat:not([open]) > summary::before { content:'▸ '; }
   .action-grid { display:grid; grid-template-columns:1fr; gap:5px; }
   .action-btn { text-align:left; padding:8px 11px; background:var(--brand-light); color:var(--brand-dark); border:1px solid var(--line); border-radius:var(--radius); font-size:12.5px; cursor:pointer; transition:.15s; display:flex; flex-direction:column; gap:2px; }
   .action-btn:hover { background:var(--brand); color:#fff; border-color:var(--brand); }
@@ -3033,7 +1920,7 @@ function memoryHtmlShell(dataScript) {
   .console-bar button:hover { background:var(--brand-light); }
   .modal-bg { position:fixed; inset:0; background:rgba(15,23,42,.6); display:none; align-items:center; justify-content:center; z-index:100; }
   .modal-bg.show { display:flex; }
-  .modal { background:#fff; padding:22px; border-radius:var(--radius); max-width:480px; box-shadow:0 8px 32px rgba(0,0,0,.2); }
+  .modal { background:var(--surface); padding:22px; border-radius:var(--radius); max-width:480px; box-shadow:0 8px 32px rgba(0,0,0,.2); }
   .modal h3 { font-size:15px; margin-bottom:10px; color:var(--brand-dark); }
   .modal p { font-size:13px; color:var(--text); margin-bottom:14px; line-height:1.5; }
   .modal .row { display:flex; gap:8px; justify-content:flex-end; }
@@ -3079,7 +1966,7 @@ function memoryHtmlShell(dataScript) {
   /* v12.27: filtros del Historial */
   .filter-bar { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; padding:8px 10px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); font-size:12px; align-items:center; }
   .filter-bar label { color:var(--muted); font-size:11px; margin-right:2px; }
-  .filter-bar select, .filter-bar input { padding:4px 8px; border:1px solid var(--line); border-radius:4px; font-size:12px; font-family:var(--font); background:#fff; }
+  .filter-bar select, .filter-bar input { padding:4px 8px; border:1px solid var(--line); border-radius:4px; font-size:12px; font-family:var(--font); background:var(--surface); }
   .filter-bar .filter-count { margin-left:auto; color:var(--muted); font-size:11px; }
   /* v12.27: barra de progreso en consola */
   .console .progress-line { display:block; margin:4px 0; padding:4px 6px; background:#1E293B; border-radius:4px; }
@@ -3096,7 +1983,7 @@ function memoryHtmlShell(dataScript) {
   /* v12.54: roadmap pane */
   .roadmap-toolbar { display:flex; gap:8px; align-items:center; padding:10px 12px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); margin-bottom:14px; }
   .roadmap-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; margin-bottom:18px; }
-  .phase-card { background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:12px 14px; position:relative; overflow:hidden; cursor:pointer; transition:.15s; }
+  .phase-card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:12px 14px; position:relative; overflow:hidden; cursor:pointer; transition:.15s; }
   .phase-card:hover { box-shadow:0 4px 12px rgba(0,0,0,.06); border-color:var(--brand); }
   .phase-card.selected { border-color:var(--brand); box-shadow:0 0 0 2px var(--brand-light); }
   .phase-card::before { content:""; position:absolute; top:0; left:0; width:4px; height:100%; background:var(--line); }
@@ -3110,7 +1997,7 @@ function memoryHtmlShell(dataScript) {
   .phase-status.partial { color:#D97706; }
   .phase-status.not-started { color:#94A3B8; }
   .phase-detail { font-size:11px; color:var(--muted); margin-top:4px; }
-  .roadmap-section { background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; margin-bottom:14px; }
+  .roadmap-section { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; margin-bottom:14px; }
   .roadmap-section h4 { font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); font-weight:700; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; }
   .blocker-item { padding:8px 12px; background:#FEF2F2; border:1px solid #FCA5A5; border-left:3px solid #DC2626; border-radius:4px; margin-bottom:6px; font-size:12px; color:#7F1D1D; }
   .next-action { padding:10px 14px; background:#EFF6FF; border:1px solid #BFDBFE; border-left:3px solid #2563EB; border-radius:4px; margin-bottom:6px; font-size:13px; color:#1E3A8A; font-weight:500; }
@@ -3118,7 +2005,7 @@ function memoryHtmlShell(dataScript) {
   .proto-rung { display:flex; align-items:center; gap:6px; padding:4px 10px; background:#F8FAFC; border:1px solid var(--line); border-radius:999px; font-size:11px; }
   .proto-rung-dot { width:10px; height:10px; border-radius:50%; display:inline-block; }
   .proto-rung-label { font-weight:600; color:var(--ink); }
-  .proto-rung-count { font-weight:700; color:var(--muted); background:#fff; border:1px solid var(--line); border-radius:999px; padding:0 6px; min-width:18px; text-align:center; }
+  .proto-rung-count { font-weight:700; color:var(--muted); background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:0 6px; min-width:18px; text-align:center; }
   .proto-feature-list { display:flex; flex-direction:column; gap:4px; margin-bottom:10px; }
   .proto-feature-row { display:grid; grid-template-columns:auto auto auto 1fr; gap:8px; align-items:center; font-size:12px; padding:4px 0; border-bottom:1px solid var(--line); }
   .proto-feature-state { font-family:var(--mono); font-size:11px; color:var(--brand); font-weight:600; }
@@ -3130,7 +2017,7 @@ function memoryHtmlShell(dataScript) {
   .capa.capa-1 { border-left-color:#7C3AED; background:#F5F3FF; }
   .capa.capa-2 { border-left-color:#1E40AF; background:#EFF6FF; }
   .capa.capa-3 { border-left-color:#0891B2; background:#ECFEFF; }
-  .capa .capa-tag { display:inline-block; background:#fff; border:1px solid var(--line); border-radius:999px; padding:1px 8px; font-size:10px; color:var(--muted); margin-bottom:4px; }
+  .capa .capa-tag { display:inline-block; background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:1px 8px; font-size:10px; color:var(--muted); margin-bottom:4px; }
   .capa strong { display:block; font-size:13px; color:var(--ink); margin-bottom:4px; }
   .capa small { display:block; color:var(--muted); font-size:11px; margin-bottom:6px; }
   .capa .capa-refs { font-size:10.5px; color:var(--muted); line-height:1.5; }
@@ -3140,7 +2027,7 @@ function memoryHtmlShell(dataScript) {
   .agent-run-status { padding:1px 8px; border-radius:999px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.4px; }
   .agent-run-meta { font-size:11px; color:var(--muted); margin-bottom:6px; }
   .agent-run-reviews { display:flex; gap:6px; flex-wrap:wrap; }
-  .agent-review-chip { padding:2px 8px; border:1px solid; border-radius:999px; font-size:10.5px; background:#fff; font-weight:600; }
+  .agent-review-chip { padding:2px 8px; border:1px solid; border-radius:999px; font-size:10.5px; background:var(--surface); font-weight:600; }
   .agent-ledger-help { font-size:11px; color:var(--muted); border-top:1px dashed var(--line); padding-top:8px; margin-top:8px; }
   /* v12.128: banners de capa por pane + active runs en multiagente */
   .pane-capa-banner { background:#F8FAFC; border:1px solid var(--line); border-left:4px solid #6B7280; border-radius:4px; padding:8px 12px; margin-bottom:12px; font-size:11.5px; color:var(--ink); line-height:1.5; }
@@ -3149,6 +2036,12 @@ function memoryHtmlShell(dataScript) {
   .pane-capa-banner.capa-3-banner { border-left-color:#0891B2; background:#ECFEFF; }
   .pane-capa-banner strong { color:var(--ink); font-weight:700; }
   .pane-capa-banner code { background:rgba(0,0,0,0.05); padding:0 4px; border-radius:3px; font-size:10.5px; }
+  /* v12.141: override dark (los fondos claros hardcodeados eran ilegibles en tema oscuro). */
+  [data-theme=\"dark\"] .pane-capa-banner { background:var(--line-soft); }
+  [data-theme=\"dark\"] .pane-capa-banner.capa-1-banner { background:rgba(124,58,237,0.14); }
+  [data-theme=\"dark\"] .pane-capa-banner.capa-2-banner { background:rgba(59,130,246,0.14); }
+  [data-theme=\"dark\"] .pane-capa-banner.capa-3-banner { background:rgba(8,145,178,0.16); }
+  [data-theme=\"dark\"] .pane-capa-banner code { background:rgba(255,255,255,0.10); }
   .agent-active-runs { margin-top:14px; padding-top:12px; border-top:1px solid var(--line); }
   .agent-active-runs h4 { font-size:12px; font-weight:700; color:var(--ink); margin-bottom:8px; display:flex; align-items:center; gap:8px; }
   .agent-active-count { background:#7C3AED; color:#fff; padding:1px 8px; border-radius:999px; font-size:10px; font-weight:700; }
@@ -3156,8 +2049,8 @@ function memoryHtmlShell(dataScript) {
   .proto-advance-ok { padding:10px 14px; background:#F0FDF4; border:1px solid #86EFAC; border-left:3px solid #16A34A; border-radius:4px; font-size:12px; color:#166534; }
   /* v12.70: visor de proyecto */
   .files-layout { display:grid; grid-template-columns:300px 1fr; gap:12px; align-items:start; }
-  .files-tree { max-height:70vh; overflow:auto; border:1px solid var(--line); border-radius:var(--radius); padding:8px; background:#fff; font-size:12.5px; }
-  .files-viewer { max-height:70vh; overflow:auto; border:1px solid var(--line); border-radius:var(--radius); background:#fff; }
+  .files-tree { max-height:70vh; overflow:auto; border:1px solid var(--line); border-radius:var(--radius); padding:8px; background:var(--surface); font-size:12.5px; }
+  .files-viewer { max-height:70vh; overflow:auto; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); }
   /* v12.73: contraer el arbol */
   .files-layout.tree-collapsed { grid-template-columns:1fr; }
   .files-layout.tree-collapsed .files-tree { display:none; }
@@ -3186,9 +2079,12 @@ function memoryHtmlShell(dataScript) {
   .fview-line:hover { background:var(--bg); }
   .fview-ln { flex:0 0 48px; text-align:right; padding-right:10px; color:var(--muted); user-select:none; border-right:1px solid var(--line); }
   .fview-code { padding-left:12px; white-space:pre; overflow-x:auto; }
-  .fview-frame { width:100%; height:68vh; border:0; background:#fff; }
+  .fview-frame { width:100%; height:68vh; border:0; background:var(--surface); }
   /* v12.80: panel multiagente */
-  .agent-board { width:100%; border-collapse:collapse; font-size:12.5px; background:#fff; border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
+  .agent-summary { display:flex; flex-wrap:wrap; gap:16px; align-items:center; margin:2px 0 12px; font-size:12px; color:var(--muted); }
+  .agent-summary .agent-sum-item { display:inline-flex; align-items:center; gap:6px; }
+  .agent-summary strong { color:var(--ink); font-size:15px; }
+  .agent-board { width:100%; border-collapse:collapse; font-size:12.5px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
   .agent-board th, .agent-board td { border-bottom:1px solid var(--line); padding:8px 12px; text-align:left; }
   .agent-board th { background:var(--bg); font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); }
   .agent-board tr:last-child td { border-bottom:0; }
@@ -3227,7 +2123,7 @@ function memoryHtmlShell(dataScript) {
   .timeline-action { font-weight:600; font-family:var(--mono); font-size:11.5px; }
   .timeline-meta { font-size:10px; color:var(--muted); }
   .timeline-time { font-size:10px; color:var(--muted); font-family:var(--mono); white-space:nowrap; }
-  .timeline-replay { padding:3px 9px; border:1px solid var(--line); border-radius:4px; font-size:11px; background:#fff; cursor:pointer; }
+  .timeline-replay { padding:3px 9px; border:1px solid var(--line); border-radius:4px; font-size:11px; background:var(--surface); cursor:pointer; }
   .timeline-replay:hover { background:var(--brand); color:#fff; border-color:var(--brand); }
   .cmd-suggestions { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:10px; }
   .cmd-card { padding:10px 12px; background:var(--surface); border:1px solid var(--line); border-radius:4px; }
@@ -3236,12 +2132,12 @@ function memoryHtmlShell(dataScript) {
   .cmd-card-run { display:inline-block; margin-top:6px; padding:4px 10px; background:var(--brand); color:#fff; border-radius:4px; font-size:11px; font-weight:600; cursor:pointer; border:0; }
   .cmd-card-run:hover { background:#1E3A8A; }
   /* v12.58: contract panel por fase */
-  .contract-card { background:#fff; border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:14px; }
+  .contract-card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-bottom:14px; }
   .contract-head { font-size:13px; margin-bottom:6px; color:var(--brand); }
   .contract-head .contract-name { color:var(--ink); font-weight:600; margin-left:6px; }
   .contract-objective { font-size:13px; color:var(--ink); margin-bottom:14px; font-style:italic; padding:8px 12px; background:var(--surface); border-radius:4px; }
   .contract-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:10px; margin-bottom:12px; }
-  .contract-section { padding:10px 12px; border-radius:6px; border:1px solid var(--line); background:#fff; }
+  .contract-section { padding:10px 12px; border-radius:6px; border:1px solid var(--line); background:var(--surface); }
   .contract-section h5 { font-size:11px; text-transform:uppercase; letter-spacing:.6px; font-weight:700; margin-bottom:6px; display:flex; align-items:center; gap:6px; }
   .contract-section ul { list-style:none; padding:0; margin:0; }
   .contract-section li { font-size:12px; padding:3px 0; line-height:1.45; color:var(--ink); border-bottom:1px solid var(--line-soft); }
@@ -3275,7 +2171,7 @@ function memoryHtmlShell(dataScript) {
   /* v12.29: dashboard de tendencias */
   .trend-controls { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:14px; padding:10px 12px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); }
   .trend-controls label { font-size:11px; color:var(--muted); }
-  .trend-controls select, .trend-controls button { padding:5px 10px; border:1px solid var(--line); border-radius:4px; font-size:12px; background:#fff; }
+  .trend-controls select, .trend-controls button { padding:5px 10px; border:1px solid var(--line); border-radius:4px; font-size:12px; background:var(--surface); }
   .compare-banner { display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; margin-bottom:14px; }
   .compare-card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px; }
   .compare-card h4 { font-size:10.5px; text-transform:uppercase; color:var(--muted); letter-spacing:.5px; margin-bottom:6px; }
@@ -3318,29 +2214,35 @@ function memoryHtmlShell(dataScript) {
 </head>
 <body>
 <header>
-  <h1>Memoria del agente IA — consulta</h1>
+  <button id="theme-toggle" title="Cambiar tema claro/oscuro" aria-label="Cambiar tema" style="float:right;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer">🌓</button>
+  <h1 style="display:inline-block">Memoria del agente IA — consulta</h1><span id="mode-badge" class="mode-badge"></span>
   <div class="meta" id="meta">Cargando…</div>
 </header>
 <div class="wrap">
-  <div class="stats" id="stats"></div>
-  <div class="searchbar">
-    <input id="search-q" type="text" placeholder="Buscar en la memoria (trazabilidad, decisiones, documentos…)">
-    <button id="search-btn">Buscar</button>
+  <aside class="sidebar">
+    <nav class="nav" aria-label="Secciones del panel">
+      <button class="tab active" data-tab="home"><span class="nav-ic">🏠</span> Inicio</button>
+      <div class="nav-group">Gobernanza</div>
+      <button class="tab" data-tab="roadmap"><span class="nav-ic">🗺️</span> Roadmap</button>
+      <button class="tab" data-tab="trace"><span class="nav-ic">🔗</span> Trazabilidad</button>
+      <button class="tab" data-tab="gates"><span class="nav-ic">🔒</span> Gates</button>
+      <button class="tab" data-tab="evidence"><span class="nav-ic">📎</span> Evidencia</button>
+      <button class="tab" data-tab="decisions"><span class="nav-ic">📌</span> Decisiones</button>
+      <button class="tab" data-tab="questions"><span class="nav-ic">❓</span> Preguntas</button>
+      <div class="nav-group">Ejecucion</div>
+      <button class="tab" data-tab="actions"><span class="nav-ic">▶️</span> Acciones</button>
+      <button class="tab" data-tab="agents"><span class="nav-ic">👥</span> Multiagente</button>
+      <div class="nav-group">Exploracion</div>
+      <button class="tab" data-tab="search"><span class="nav-ic">🔍</span> Busqueda</button>
+      <button class="tab" data-tab="docs"><span class="nav-ic">📄</span> Documentos</button>
+      <button class="tab" data-tab="files"><span class="nav-ic">📁</span> Proyecto</button>
+    </nav>
+  </aside>
+  <main class="content">
+  <div class="pane active" id="pane-home">
+    <div id="home-host"><div class="skeleton skeleton-row" style="width:40%"></div><div class="skeleton skeleton-row" style="width:90%"></div><div class="skeleton skeleton-row" style="width:75%"></div></div>
   </div>
-  <div class="tabs">
-    <button class="tab active" data-tab="trace">Trazabilidad</button>
-    <button class="tab" data-tab="gates">Gates</button>
-    <button class="tab" data-tab="decisions">Decisiones</button>
-    <button class="tab" data-tab="evidence">Evidencia</button>
-    <button class="tab" data-tab="questions">Preguntas abiertas</button>
-    <button class="tab" data-tab="docs">Documentos</button>
-    <button class="tab" data-tab="search">Busqueda</button>
-    <button class="tab" data-tab="actions">Acciones</button>
-    <button class="tab" data-tab="roadmap">Roadmap</button>
-    <button class="tab" data-tab="files">Proyecto</button>
-    <button class="tab" data-tab="agents">Multiagente</button>
-  </div>
-  <div class="pane active" id="pane-trace">
+  <div class="pane" id="pane-trace">
     <div class="pane-capa-banner capa-2-banner"><strong>Capa 2 · Trazabilidad</strong> · datos en <code>ai_trace_links</code> (matriz 10 cols por feature). <span class="muted">Capa 1 actualiza estos links al cerrar tareas via <code>npm run agent:finish</code>; los campos <code>Codigo</code>/<code>Test</code> pasan de <code>-</code> a paths reales.</span></div>
     <div class="subtabs">
       <button class="subtab active" data-trace-sub="links">Trace links</button>
@@ -3388,6 +2290,10 @@ function memoryHtmlShell(dataScript) {
   </div>
   <div class="pane" id="pane-search">
     <div class="pane-capa-banner capa-2-banner"><strong>Capa 2 · Busqueda</strong> · FTS5 + embeddings locales sobre 2800+ chunks. <span class="muted">Encuentra Capa 1 (AGENT_RUNTIME, protocolos, skills) y Capa 3 (.specify alias) ademas del corpus canonico.</span></div>
+    <div class="searchbar">
+      <input id="search-q" type="text" aria-label="Buscar en la memoria del agente" placeholder="Buscar en la memoria (trazabilidad, decisiones, documentos…)">
+      <button id="search-btn">Buscar</button>
+    </div>
     <div id="presets-host"></div>
     <div id="search-out"><p class="empty">Escribe una consulta y pulsa Buscar, o usa una consulta rapida.</p></div>
   </div>
@@ -3405,15 +2311,15 @@ function memoryHtmlShell(dataScript) {
         <div>
           <div id="actions-host"><p class="empty">Cargando acciones…</p></div>
           <div class="actions-help">
-            <strong>Atajos:</strong>
-            <span class="kbd">Ctrl+Shift+S</span> sync-memory ·
-            <span class="kbd">Ctrl+Shift+R</span> memory-report ·
-            <span class="kbd">Ctrl+Shift+E</span> regen contexto ·
-            <span class="kbd">Ctrl+Shift+C</span> check:trace-drift ·
+            <strong>Atajos (Alt+Shift, evita los reservados del navegador):</strong>
+            <span class="kbd">Alt+Shift+S</span> sync-memory ·
+            <span class="kbd">Alt+Shift+R</span> memory-report ·
+            <span class="kbd">Alt+Shift+E</span> regen contexto ·
+            <span class="kbd">Alt+Shift+C</span> check:trace-drift ·
             <span class="kbd">Esc</span> detener job actual ·
-            <span class="kbd">Ctrl+Shift+H</span> historial ·
-            <span class="kbd">Ctrl+Shift+T</span> stats ·
-            <span class="kbd">Ctrl+Shift+D</span> tendencias
+            <span class="kbd">Alt+Shift+H</span> historial ·
+            <span class="kbd">Alt+Shift+T</span> stats ·
+            <span class="kbd">Alt+Shift+D</span> tendencias
           </div>
         </div>
         <div>
@@ -3422,7 +2328,7 @@ function memoryHtmlShell(dataScript) {
             <button id="console-clear">Limpiar</button>
             <button id="console-copy">Copiar</button>
           </div>
-          <div class="console" id="console"><span class="muted">Esperando accion… Las acciones solo estan disponibles en modo <strong>live</strong> (memory-serve), no en el reporte estatico.</span></div>
+          <div class="console" id="console" role="log" aria-live="polite" aria-label="Salida de la consola de acciones"><span class="muted">Esperando accion… Las acciones solo estan disponibles en modo <strong>live</strong> (memory-serve), no en el reporte estatico.</span></div>
         </div>
       </div>
     </div>
@@ -3530,6 +2436,7 @@ function memoryHtmlShell(dataScript) {
     </div>
     <div id="agents-host"><p class="empty">Cargando tablero…</p></div>
   </div>
+  </main>
 </div>
 <div class="modal-bg" id="modal-bg">
   <div class="modal">
@@ -3541,6 +2448,12 @@ function memoryHtmlShell(dataScript) {
     </div>
   </div>
 </div>
+<div class="cmdk-bg" id="cmdk-bg" role="dialog" aria-modal="true" aria-label="Paleta de comandos">
+  <div class="cmdk">
+    <input id="cmdk-input" type="text" autocomplete="off" placeholder="Ir a… (pestaña o fase del roadmap) · Esc para cerrar" aria-label="Buscar comando o destino">
+    <ul id="cmdk-list" role="listbox"></ul>
+  </div>
+</div>
 <script>${dataScript}</script>
 <script>${MEMORY_CLIENT_JS}</script>
 </body>
@@ -3548,13 +2461,104 @@ function memoryHtmlShell(dataScript) {
 `;
 }
 
+// v12.141: el reporte estatico deja de ser un clon del panel live. Es un RESUMEN
+// EJECUTIVO autocontenido (salud por fases + KPIs + pendientes), con su propio
+// shell ligero y su propio cliente (report.client.js). Sin pestañas inertes.
+function memoryReportShell(dataScript) {
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memoria del agente IA — reporte</title>
+<style>
+  :root {
+    --brand:#1F4E79; --brand-dark:#163A5C; --brand-light:#E8F0F9;
+    --bg:#F3F4F6; --surface:#fff; --line:#E5E7EB; --line-soft:#F1F5F9;
+    --text:#1F2937; --ink:#1F2937; --muted:#6B7280;
+    --ok:#047857; --warn:#B45309; --danger:#DC2626; --accent:#1F4E79;
+    --font:'Segoe UI',system-ui,sans-serif; --mono:'Consolas',monospace; --radius:8px;
+  }
+  [data-theme=\"dark\"] {
+    --brand:#3B82F6; --brand-dark:#1E40AF; --brand-light:#1E293B;
+    --bg:#0B1220; --surface:#111827; --line:#243042; --line-soft:#1A2433;
+    --text:#E5E7EB; --ink:#F1F5F9; --muted:#94A3B8;
+    --ok:#34D399; --warn:#FBBF24; --danger:#F87171; --accent:#60A5FA;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:var(--font); background:var(--bg); color:var(--text); transition:background .2s,color .2s; }
+  header { background:var(--brand); color:#fff; padding:18px 24px; }
+  header h1 { font-size:18px; font-weight:700; }
+  header .meta { font-size:12px; opacity:.85; margin-top:4px; font-family:var(--mono); }
+  .mode-badge { display:inline-block; font-size:10px; font-weight:700; padding:2px 8px; border-radius:999px; margin-left:8px; vertical-align:middle; text-transform:uppercase; letter-spacing:.4px; background:#FEF3C7; color:#92400E; }
+  .wrap { max-width:1080px; margin:0 auto; padding:20px 24px 48px; }
+  .muted { color:var(--muted); }
+  code { font-family:var(--mono); background:var(--line-soft); padding:1px 5px; border-radius:4px; font-size:12px; }
+  .r-hero { display:flex; flex-wrap:wrap; align-items:center; gap:14px; padding:16px 18px; border:1px solid var(--line); border-radius:var(--radius); background:var(--surface); margin-bottom:16px; }
+  .r-hero .r-pct { font-size:34px; font-weight:800; color:var(--brand); line-height:1; }
+  .r-section { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; margin-bottom:16px; }
+  .r-section h3 { font-size:14px; margin-bottom:10px; }
+  .proj-progress { position:relative; height:22px; background:var(--line-soft); border:1px solid var(--line); border-radius:11px; overflow:hidden; }
+  .proj-progress-fill { height:100%; background:linear-gradient(90deg,#34D399,#10B981); transition:width .4s ease; }
+  .proj-progress-label { position:absolute; top:0; left:50%; transform:translateX(-50%); line-height:22px; font-size:12px; font-weight:700; color:var(--ink); }
+  .phase-segs { display:flex; gap:4px; flex-wrap:wrap; }
+  .phase-seg { flex:1 1 0; min-width:40px; border:1px solid var(--line); border-radius:5px; padding:6px 4px; font-size:12px; font-weight:600; font-family:var(--mono); text-align:center; background:var(--surface); color:var(--ink); }
+  .phase-seg.complete { background:#DCFCE7; border-color:#86EFAC; color:#166534; }
+  .phase-seg.partial { background:#FEF3C7; border-color:#FCD34D; color:#92400E; }
+  .phase-seg.not-started { background:var(--line-soft); color:var(--muted); }
+  .phase-seg.na { background:repeating-linear-gradient(45deg,#F1F5F9,#F1F5F9 4px,#E2E8F0 4px,#E2E8F0 8px); color:var(--muted); }
+  .r-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }
+  .r-kpi { border:1px solid var(--line); border-radius:var(--radius); padding:12px 14px; background:var(--bg); }
+  .r-kpi-v { font-size:24px; font-weight:800; color:var(--brand); line-height:1.1; }
+  .r-kpi-l { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.4px; margin-top:2px; }
+  .r-ph { margin:6px 0; font-size:13px; }
+  .r-ph ul { margin:2px 0 6px 18px; font-size:12.5px; }
+</style>
+</head>
+<body>
+<header>
+  <button id="theme-toggle" title="Cambiar tema claro/oscuro" aria-label="Cambiar tema" style="float:right;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer">🌓</button>
+  <h1 style="display:inline-block">Memoria del agente IA — reporte</h1><span class="mode-badge">static</span>
+  <div class="meta" id="meta">Reporte estatico</div>
+</header>
+<div class="wrap">
+  <div id="report-host"></div>
+</div>
+<script>${dataScript}</script>
+<script>${REPORT_CLIENT_JS}</script>
+</body>
+</html>
+`;
+}
+
 function writeMemoryReport(root, db, dbPath) {
   const snapshot = buildMemorySnapshot(db, dbPath, "static");
-  const dataScript = `window.__MEMORY__ = ${JSON.stringify(snapshot)};`;
-  const html = memoryHtmlShell(dataScript);
+  // v12.141: embeber el estado del roadmap EN GENERACION para que el reporte muestre
+  // salud/pendientes reales sin servidor. Si fallan, se degrada a KPIs del snapshot.
+  const roadmap = runJsonScript(root, "roadmap-status.mjs", ["--json"]);
+  const pending = runJsonScript(root, "roadmap-pending.mjs", ["--json"]);
+  const dataScript = [
+    `window.__MEMORY__ = ${JSON.stringify(snapshot)};`,
+    `window.__ROADMAP__ = ${JSON.stringify(roadmap)};`,
+    `window.__PENDING__ = ${JSON.stringify(pending)};`,
+  ].join("\n");
+  const html = memoryReportShell(dataScript);
   const outPath = path.join(root, "ai", "memory", "memory-report.html");
   writeFileEnsured(outPath, html);
   return { outPath, snapshot };
+}
+
+// Corre un script de scripts/ que emite JSON por stdout; devuelve el objeto o null.
+function runJsonScript(root, scriptName, extraArgs = []) {
+  try {
+    const scriptPath = path.join(root, "scripts", scriptName);
+    if (!fs.existsSync(scriptPath)) return null;
+    const res = spawnSync(process.execPath, [scriptPath, ...extraArgs], { cwd: root, encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+    if (res.status !== 0 || !res.stdout) return null;
+    return JSON.parse(res.stdout);
+  } catch {
+    return null;
+  }
 }
 
 // v12.23: catalogo whitelisted de acciones ejecutables desde el front embebido.
@@ -4257,6 +3261,36 @@ async function serveMemory(root, db, dbPath, port) {
           if (child.status !== 0 || !child.stdout) {
             res.writeHead(500, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ error: "roadmap-status fallo", stderr: child.stderr?.slice(0, 500) }));
+            return;
+          }
+          res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+          res.end(child.stdout);
+          return;
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: String(e.message || e) }));
+          return;
+        }
+      }
+      // v12.139: pendientes por fase (consume scripts/roadmap-pending.mjs --json).
+      if (url.pathname === "/api/roadmap/pending") {
+        try {
+          const rootDir = process.cwd();
+          const scriptPath = path.join(rootDir, "scripts", "roadmap-pending.mjs");
+          if (!fs.existsSync(scriptPath)) {
+            res.writeHead(404, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "roadmap-pending.mjs no existe en este proyecto. Corre: npm run template:upgrade -- --apply" }));
+            return;
+          }
+          const argv = [scriptPath, "--json", "--root", rootDir];
+          const phaseQ = url.searchParams.get("phase");
+          const featureQ = url.searchParams.get("feature");
+          if (phaseQ != null && /^\d+$/.test(phaseQ)) argv.push("--phase", phaseQ);
+          if (featureQ) argv.push("--feature", featureQ);
+          const child = spawnSync(process.execPath, argv, { encoding: "utf8", timeout: 15000 });
+          if (child.status !== 0 || !child.stdout) {
+            res.writeHead(500, { "Content-Type": "application/json" });
+            res.end(JSON.stringify({ error: "roadmap-pending fallo", stderr: child.stderr?.slice(0, 500) }));
             return;
           }
           res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });

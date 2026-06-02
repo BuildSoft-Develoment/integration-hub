@@ -100,6 +100,7 @@
     "check:all": "npm run check:template && npm run check:project",
     "check:all:trace": "node scripts/check-all-trace.mjs",
     "validate": "node scripts/validate.mjs",
+    "lint:panel": "node --check scripts/_panel/panel.client.js && node --check scripts/_panel/report.client.js",
     "test:stack": "mvn -pl platform-app test",
     "test:smoke": "mvn -q -pl platform-app test -Dtest=*ApiMapperTest",
     "project:clarify": "node scripts/project-clarify.mjs",
