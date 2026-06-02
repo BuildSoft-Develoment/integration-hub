@@ -2976,6 +2976,8 @@ const MEMORY_CLIENT_JS = [
   "  if(el('console-clear')) el('console-clear').addEventListener('click', consoleClear);",
   "  if(el('console-copy')) el('console-copy').addEventListener('click', consoleCopy);",
   "  if(el('console-stop')) el('console-stop').addEventListener('click', stopAction);",
+  "  // v12.140: tema claro/oscuro persistido (localStorage) con fallback a prefers-color-scheme.",
+  "  (function(){ function applyTheme(t){ if(t==='dark') document.documentElement.setAttribute('data-theme','dark'); else document.documentElement.removeAttribute('data-theme'); } var saved=null; try{ saved=localStorage.getItem('aif-theme'); }catch(e){} var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; applyTheme(saved || (sysDark?'dark':'light')); var tb=el('theme-toggle'); if(tb) tb.addEventListener('click', function(){ var dark = document.documentElement.getAttribute('data-theme')==='dark'; var next = dark?'light':'dark'; applyTheme(next); try{ localStorage.setItem('aif-theme', next); }catch(e){} }); })();",
   "  if(el('history-refresh')) el('history-refresh').addEventListener('click', loadHistory);",
   "  if(el('stats-refresh')) el('stats-refresh').addEventListener('click', loadStats);",
   "  if(el('trends-refresh')) el('trends-refresh').addEventListener('click', loadTrends);",
@@ -3012,11 +3014,19 @@ function memoryHtmlShell(dataScript) {
   :root {
     --brand:#1F4E79; --brand-dark:#163A5C; --brand-light:#E8F0F9;
     --bg:#F3F4F6; --surface:#fff; --line:#E5E7EB; --line-soft:#F1F5F9;
-    --text:#1F2937; --muted:#6B7280; --ok:#047857; --warn:#B45309;
+    --text:#1F2937; --ink:#1F2937; --muted:#6B7280;
+    --ok:#047857; --warn:#B45309; --danger:#DC2626; --info:#7C3AED; --accent:#1F4E79;
     --font:'Segoe UI',system-ui,sans-serif; --mono:'Consolas',monospace; --radius:8px;
   }
+  /* v12.140: tema oscuro (toggle persistido + prefers-color-scheme). Solo reasigna tokens. */
+  [data-theme=\"dark\"] {
+    --brand:#3B82F6; --brand-dark:#1E40AF; --brand-light:#1E293B;
+    --bg:#0B1220; --surface:#111827; --line:#243042; --line-soft:#1A2433;
+    --text:#E5E7EB; --ink:#F1F5F9; --muted:#94A3B8;
+    --ok:#34D399; --warn:#FBBF24; --danger:#F87171; --info:#A78BFA; --accent:#60A5FA;
+  }
   * { box-sizing:border-box; margin:0; padding:0; }
-  body { font-family:var(--font); background:var(--bg); color:var(--text); }
+  body { font-family:var(--font); background:var(--bg); color:var(--text); transition:background .2s, color .2s; }
   header { background:var(--brand); color:#fff; padding:18px 24px; }
   header h1 { font-size:18px; font-weight:700; }
   header .meta { font-size:12px; opacity:.85; margin-top:4px; font-family:var(--mono); }
@@ -3030,10 +3040,11 @@ function memoryHtmlShell(dataScript) {
   .searchbar input:focus { border-color:var(--brand); }
   .searchbar button { padding:9px 16px; background:var(--brand); color:#fff; border:none; border-radius:var(--radius); font-size:13px; font-weight:600; cursor:pointer; }
   .searchbar button:hover { background:var(--brand-dark); }
-  .tabs { display:flex; gap:4px; flex-wrap:wrap; border-bottom:1px solid var(--line); margin-bottom:16px; }
-  .tab { padding:8px 14px; font-size:13px; cursor:pointer; border:none; background:transparent; color:var(--muted); border-bottom:2px solid transparent; }
+  .tabs { display:flex; gap:4px; flex-wrap:nowrap; overflow-x:auto; border-bottom:1px solid var(--line); margin-bottom:16px; scrollbar-width:thin; }
+  .tab { padding:8px 14px; font-size:13px; cursor:pointer; border:none; background:transparent; color:var(--muted); border-bottom:2px solid transparent; white-space:nowrap; flex:0 0 auto; }
   .tab:hover { color:var(--text); }
   .tab.active { color:var(--brand); border-bottom-color:var(--brand); font-weight:600; }
+  .tab:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; border-radius:4px; }
   .pane { display:none; }
   .pane.active { display:block; }
   table { width:100%; border-collapse:collapse; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
@@ -3384,6 +3395,7 @@ function memoryHtmlShell(dataScript) {
 </head>
 <body>
 <header>
+  <button id="theme-toggle" title="Cambiar tema claro/oscuro" aria-label="Cambiar tema" style="float:right;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);border-radius:6px;padding:6px 10px;font-size:13px;cursor:pointer">🌓</button>
   <h1>Memoria del agente IA — consulta</h1>
   <div class="meta" id="meta">Cargando…</div>
 </header>
