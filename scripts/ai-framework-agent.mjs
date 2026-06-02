@@ -3003,8 +3003,11 @@ function memoryHtmlShell(dataScript) {
   table { width:100%; border-collapse:collapse; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
   thead { background:var(--line-soft); }
   th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); padding:9px 12px; border-bottom:1px solid var(--line); }
-  td { font-size:13px; padding:9px 12px; border-bottom:1px solid var(--line-soft); vertical-align:top; }
+  td { font-size:13px; padding:9px 12px; border-bottom:1px solid var(--line-soft); vertical-align:top; word-break:break-word; overflow-wrap:anywhere; }
   td:first-child { white-space:nowrap; font-family:var(--mono); font-size:12px; }
+  /* v12.139: trace links con paths/evidence_ref largos -> wrap de celdas + scroll horizontal de respaldo. */
+  #tab-trace table, #tab-trace-by-feature table { table-layout:fixed; }
+  #tab-trace, #tab-trace-by-feature, #tab-gates, #tab-evidence, #tab-docs { overflow-x:auto; }
   tr:last-child td { border-bottom:none; }
   tbody tr:hover td { background:var(--line-soft); }
   .empty { color:var(--muted); font-size:13px; padding:18px; }
