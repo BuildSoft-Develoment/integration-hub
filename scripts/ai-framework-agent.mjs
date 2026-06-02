@@ -1898,6 +1898,9 @@ function memoryHtmlShell(dataScript) {
   .preset-btn .req { color:var(--warn); font-weight:700; }
   /* v12.23: panel Acciones */
   .actions-layout { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+  /* v12.141 fix: columnas con min-width:0 para que la consola en nowrap haga scroll
+     interno y NO ensanche su columna (antes empujaba la barra de botones fuera de vista). */
+  .actions-layout > div { min-width:0; }
   @media (max-width:900px){ .actions-layout { grid-template-columns:1fr; } .stats{ grid-template-columns:repeat(4,1fr);} }
   .action-cat { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:12px 14px; margin-bottom:12px; }
   .action-cat h3 { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.6px; margin-bottom:8px; }
