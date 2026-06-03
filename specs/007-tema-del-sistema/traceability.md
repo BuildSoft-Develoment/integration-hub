@@ -12,11 +12,15 @@ Matriz viva RF -> API -> BD -> Codigo -> Test, detalle del rollup global en
 
 ## Matriz de trazabilidad
 
-| RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia |
-|---|---|---|---|---|---|---|---|---|---|
-| RF-001 | - | - | - | GET /api/system/theme | system_theme_setting | SystemThemeSettingService | SystemThemeSettingServiceTest | Implementado | tdd-evidence.md |
-| RF-002 | - | - | - | PUT /api/system/theme | system_theme_setting | SystemThemeSettingResource | SystemThemeSettingServiceTest | Implementado | tdd-evidence.md |
-| RF-003 | - | - | - | PUT /api/system/theme | system_theme_setting | SystemThemeSettingApiMapper | SystemThemeSettingApiMapperTest | Implementado | tdd-evidence.md |
+| RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia | Frontend | Front-test |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| RF-001 | - | - | - | GET /api/system/theme | system_theme_setting | SystemThemeSettingService | SystemThemeSettingServiceTest | Implementado | tdd-evidence.md | app-theme-action + app-preferences.facade | - |
+| RF-002 | - | - | - | PUT /api/system/theme | system_theme_setting | SystemThemeSettingResource | SystemThemeSettingServiceTest | Implementado | tdd-evidence.md | app-preferences.facade + theme.service | - |
+| RF-003 | - | - | - | PUT /api/system/theme | system_theme_setting | SystemThemeSettingApiMapper | SystemThemeSettingApiMapperTest | Implementado | tdd-evidence.md | system-theme-config.service.ts | - |
+
+> Hueco conocido: el tema del sistema (UI en `shared/ui/app-layout` + `core/services/ui`) NO tiene
+> `.spec.ts` dedicado (Front-test en `-`); candidato a plan de tests frontend. El contrato
+> `ThemeConfiguration` (forma del payload `/api/system/theme`) esta en `spec-tecnica.md`.
 
 ## Gates
 > Fase 2 N/A por reingenieria: `gate-spdd-approved` y `gate-prototype-ready` no aplican.

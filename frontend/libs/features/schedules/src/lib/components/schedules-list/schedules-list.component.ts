@@ -1,3 +1,4 @@
+// @trace RF-003 (programacion: consultar las programaciones vigentes)
 import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';

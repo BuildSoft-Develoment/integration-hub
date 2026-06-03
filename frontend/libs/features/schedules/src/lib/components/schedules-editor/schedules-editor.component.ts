@@ -1,3 +1,4 @@
+// @trace RF-001 (programacion: marcar proceso como programado + fijar frecuencia)
 import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';

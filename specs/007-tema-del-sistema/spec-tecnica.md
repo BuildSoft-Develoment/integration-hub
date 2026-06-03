@@ -11,6 +11,29 @@
 - Servicios: `theme.service.ts`, `system-theme-config.service.ts` (aplican el tema en la consola).
 - Componente: `app-theme-action` (accion de cambio de tema en el layout).
 
+## Contrato del payload `/api/system/theme`
+
+El payload (request de `PUT` y response de `GET`) sigue la interfaz `ThemeConfiguration`
+(`frontend/libs/core/services/.../ui/theme.service.ts`); `SystemThemeConfigService` lo consume
+y `theme.service` lo aplica en el cliente. Es un objeto plano (no JSON dinamico por tipo).
+
+```jsonc
+{
+  "scheme": "light",          // ThemeMode (light/dark/auto)
+  "preset": "horizon",        // 'horizon' | 'atlas' | 'custom'
+  "density": "comfortable",   // 'comfortable' | 'compact'
+  "locale": "es",             // 'es' | 'en'
+  "sidebarMode": "expanded",  // 'expanded' | 'compact'
+  "primary": "#2563eb",
+  "error": "#dc2626",
+  "neutral": "#64748b"
+}
+```
+
+> Fuente del contrato: `ThemeConfiguration` (`theme.service.ts`) + `SystemThemeConfigService`.
+> El backend lo persiste columna a columna en `system_theme_setting` (ver mapeo abajo) via
+> `SystemThemeSettingApiMapper`. Mantener contrato y codigo en sintonia al cambiar campos.
+
 ## Modelo de datos
 
 Tabla `system_theme_setting` (Flyway `V9__system_theme_setting.sql` y `V10__system_theme_setting_locale_sidebar.sql`):

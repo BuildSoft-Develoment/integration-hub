@@ -45,6 +45,8 @@ segun su frecuencia configurada.
 - `next_run_at` y `last_run_at` reflejan el ciclo de disparo
 - las programaciones vigentes son consultables
 - no hay duplicados ante reinicio del servicio
+- (UI) `schedules-editor` permite marcar `scheduled` y fijar la frecuencia; `schedules-list`/
+  `schedules-toolbar` muestran las programaciones vigentes (el disparo automatico es del backend)
 
 ## Gates
 
