@@ -74,6 +74,14 @@ paths:
         '200':
           description: OK
       x-source-feature: "001-catalogo-fuentes"
+  /api/query/source-definitions:
+    get:
+      summary: Lista (query) las fuentes con filtros (q, type, status) y paginacion
+      operationId: querySourceDefinitions
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "001-catalogo-fuentes"
   /api/reader-definitions:
     get:
       summary: Lista los readers configurados
@@ -124,6 +132,14 @@ paths:
         '200':
           description: OK
       x-source-feature: "002-catalogo-readers"
+  /api/query/reader-definitions:
+    get:
+      summary: Lista (query) los readers con filtros (q, type, status) y paginacion
+      operationId: queryReaderDefinitions
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "002-catalogo-readers"
   /api/process-definitions:
     get:
       summary: Lista los procesos definidos
@@ -170,6 +186,29 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/ProcessDefinition"
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/query/process-definitions:
+    get:
+      summary: Lista (query) los procesos con filtros (q, mode, status) y paginacion
+      operationId: queryProcessDefinitions
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "003-diseno-y-ejecucion-procesos"
+  /api/process-executions/{processDefinitionId}:
+    post:
+      summary: Dispara la ejecucion de un proceso definido
+      operationId: triggerProcessExecution
+      requestBody:
+        required: false
+        description: Parametros opcionales de ejecucion; el proceso objetivo se indica en la ruta ({processDefinitionId}).
+        content:
+          application/json:
+            schema:
+              type: object
       responses:
         '200':
           description: OK
@@ -302,10 +341,66 @@ paths:
         '200':
           description: OK
       x-source-feature: "005-catalogo-conexiones"
+  /api/query/connection-definitions:
+    get:
+      summary: Lista (query) las conexiones con filtros (q, type, status) y paginacion
+      operationId: queryConnectionDefinitions
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "005-catalogo-conexiones"
+  /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/schemas:
+    get:
+      summary: Lista esquemas (introspeccion JDBC)
+      operationId: listConnectionSchemas
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "005-catalogo-conexiones"
+  /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/columns:
+    get:
+      summary: Lista columnas de una tabla (introspeccion JDBC)
+      operationId: listConnectionColumns
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "005-catalogo-conexiones"
+  /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/procedure-parameters:
+    get:
+      summary: Lista parametros de un procedimiento (introspeccion JDBC)
+      operationId: listConnectionProcedureParameters
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "005-catalogo-conexiones"
+  /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/functions:
+    get:
+      summary: Lista funciones (introspeccion JDBC)
+      operationId: listConnectionFunctions
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "005-catalogo-conexiones"
+  /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/function-parameters:
+    get:
+      summary: Lista parametros de una funcion (introspeccion JDBC)
+      operationId: listConnectionFunctionParameters
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "005-catalogo-conexiones"
   /api/process-schedules:
     get:
       summary: Lista las programaciones de proceso vigentes
       operationId: listProcessSchedules
+      responses:
+        '200':
+          description: OK
+      x-source-feature: "006-programacion-procesos"
+  /api/query/process-schedules:
+    get:
+      summary: Lista (query) las programaciones con filtros (q, mode, status) y paginacion
+      operationId: queryProcessSchedules
       responses:
         '200':
           description: OK

@@ -4,7 +4,7 @@
 
 <!-- nav-guided:start -->
 ## Navegacion guiada
-- Anterior: [Metricas y backlog evolutivo](../fase-8-operacion/operacion/metricas-y-backlog-evolutivo.md)
+- Anterior: [Auditoria documental fases 0-8 vs codigo](90.37-auditoria-fases-0-8-vs-codigo.md)
 - Siguiente: [Estandar para IA](90.00-estandar-ia.md)
 <!-- nav-guided:end -->
 
@@ -51,6 +51,7 @@ En esta carpeta el breadcrumb estandar es `[Volver a transversal](README.md)` pa
 - [90.09-trazabilidad-sdd-por-stack](90.09-trazabilidad-sdd-por-stack.md)
 - [90.10-entregables-minimos-por-fase](90.10-entregables-minimos-por-fase.md)
 - [90.11-checklist-entregables](90.11-checklist-entregables.md)
+- [90.37-auditoria-fases-0-8-vs-codigo](90.37-auditoria-fases-0-8-vs-codigo.md)
 
 ## Regla de mantenimiento
 

@@ -219,6 +219,15 @@ function main() {
     }
   }
 
+  // v12.143: N/A si NINGUN starter de stack esta presente. Este check compara las matrices
+  // RBAC de los starters del framework (stacks/<stack>/template/...); en un proyecto
+  // instanciado (sin esos starters) no aplica -> pasa limpio en vez de fallar con exit 2.
+  if (matrices.length === 0) {
+    if (args.json) console.log(JSON.stringify({ ok: true, na: true, reason: "sin stacks/<stack>/template (no es el repo del framework)" }, null, 2));
+    else console.log("check-rbac-consistency: N/A (no hay stacks/<stack>/template; este check aplica al repo del framework).");
+    return 0;
+  }
+
   if (errors.length > 0) {
     if (args.json) {
       console.log(JSON.stringify({ ok: false, errors, matrices: summarize(matrices) }, null, 2));

@@ -13,6 +13,8 @@
 ## ADR disponibles
 
 - [ADR-001 Platform Architecture](ADR-001-platform-architecture.md)
+- [ADR-002 Principios de diseno (SOLID)](ADR-002-principios-diseno.md)
+- [ADR-003 RBAC endpoint x rol](ADR-003-rbac-endpoint-rol.md)
 
 ## Regla
 

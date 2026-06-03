@@ -1878,6 +1878,23 @@ function memoryHtmlShell(dataScript) {
   .fview-crumbs .crumb:hover { text-decoration:underline; }
   .fview-crumbs .crumb-sep { color:var(--muted); margin:0 1px; }
   .fview-crumbs .crumb-file { font-weight:700; color:var(--ink); }
+  /* v12.144: visor OpenAPI integrado (sin dependencias) en Proyecto. */
+  .oa-toolbar { display:flex; align-items:center; gap:8px; margin:8px 0; flex-wrap:wrap; }
+  .oa-toolbar .oa-title { font-size:12px; font-weight:700; color:var(--muted); }
+  .oa-toolbar .oa-count { font-size:11px; color:var(--muted); margin-right:auto; }
+  .oa-mode { font-size:11.5px; font-weight:600; padding:4px 12px; border-radius:6px; border:1px solid var(--line); background:var(--surface); color:var(--text); cursor:pointer; }
+  .oa-mode.on { background:var(--brand); color:#fff; border-color:var(--brand); }
+  .oa-summary { display:flex; flex-direction:column; gap:6px; }
+  .oa-section-h { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); margin:10px 0 2px; }
+  .oa-op { border:1px solid var(--line); border-radius:6px; background:var(--surface); overflow:hidden; }
+  .oa-op > summary { display:flex; align-items:center; gap:8px; padding:6px 10px; cursor:pointer; font-size:12.5px; list-style:none; }
+  .oa-op > summary::-webkit-details-marker { display:none; }
+  .oa-op[open] > summary { border-bottom:1px solid var(--line); }
+  .oa-op .oa-path { font-family:var(--mono); }
+  .oa-op .oa-sum { color:var(--muted); font-size:11.5px; margin-left:auto; text-align:right; }
+  .oa-op pre { margin:0; padding:8px 10px; background:var(--line-soft); font-family:var(--mono); font-size:11.5px; white-space:pre; overflow-x:auto; }
+  .oa-m { display:inline-block; min-width:46px; text-align:center; font-size:10px; font-weight:800; padding:2px 6px; border-radius:4px; text-transform:uppercase; color:#fff; }
+  .oa-m-get { background:#16A34A; } .oa-m-post { background:#2563EB; } .oa-m-put { background:#D97706; } .oa-m-patch { background:#7C3AED; } .oa-m-delete { background:#DC2626; } .oa-m-other { background:#6B7280; }
   tr:last-child td { border-bottom:none; }
   tbody tr:hover td { background:var(--line-soft); }
   .empty { color:var(--muted); font-size:13px; padding:18px; }
@@ -3429,6 +3446,27 @@ async function serveMemory(root, db, dbPath, port) {
           res.writeHead(500, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ error: String(e.message || e) }));
           return;
+        }
+      }
+      // v12.144: contenido RAW de un archivo (mismo guard de path traversal). Lo consume el
+      // visor OpenAPI integrado para parsear el spec sin desescapar el HTML del visor de texto.
+      if (url.pathname === "/api/files/raw") {
+        try {
+          const rootDir = process.cwd();
+          const rel = (url.searchParams.get("path") || "").replace(/\\/g, "/").replace(/^\/+/, "");
+          const abs = path.resolve(rootDir, rel);
+          if (abs !== rootDir && !abs.startsWith(rootDir + path.sep)) {
+            res.writeHead(403, { "Content-Type": "text/plain" }); res.end("ruta fuera del proyecto"); return;
+          }
+          if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+            res.writeHead(404, { "Content-Type": "text/plain" }); res.end("archivo no encontrado"); return;
+          }
+          const ct = /\.ya?ml$/i.test(rel) ? "text/yaml; charset=utf-8" : (/\.json$/i.test(rel) ? "application/json; charset=utf-8" : "text/plain; charset=utf-8");
+          res.writeHead(200, { "Content-Type": ct });
+          res.end(fs.readFileSync(abs));
+          return;
+        } catch (e) {
+          res.writeHead(500, { "Content-Type": "text/plain" }); res.end(String(e.message || e)); return;
         }
       }
       // v12.80: panel multiagente — tablero de locks (GET) + claim/release (POST).

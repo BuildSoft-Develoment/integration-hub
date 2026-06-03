@@ -5,7 +5,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [Monitoreo y respuesta operativa](monitoreo-y-respuesta.md)
-- Siguiente: [Documentacion transversal](../../transversal/README.md)
+- Siguiente: [Auditoria documental fases 0-8 vs codigo](../../transversal/90.37-auditoria-fases-0-8-vs-codigo.md)
 <!-- nav-guided:end -->
 
 ## Objetivo

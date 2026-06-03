@@ -68,6 +68,13 @@ paths:
       responses:
         '200':
           description: OK
+  /api/query/reader-definitions:
+    get:
+      summary: Lista (query) los readers con filtros (q, type, status) y paginacion
+      operationId: queryReaderDefinitions
+      responses:
+        '200':
+          description: OK
 ```
 
 ## Schema OpenAPI

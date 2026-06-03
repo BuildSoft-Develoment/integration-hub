@@ -71,7 +71,6 @@ const META_VALIDATORS = new Set([
 const CI_ONLY_VALIDATORS = new Set([
   "check-github-actions.mjs",      // valida workflows .github/, CI-level
   "check-openapi-diff.mjs",        // requiere --base/--head git refs
-  "check-rbac-consistency.mjs",    // stack-specific, solo si hay stacks/<x>/template/
 ]);
 
 if (!existsSync(join(root, "package.json"))) {
