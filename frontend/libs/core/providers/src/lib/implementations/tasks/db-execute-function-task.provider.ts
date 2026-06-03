@@ -1,3 +1,4 @@
+// @trace RF-002 (procesos: contrato configuration_json de tarea tipo DB_EXECUTE_FN)
 import { Injectable } from '@angular/core';
 import { ProcessTaskParameterBindingDraft } from '../../tasks/process-task-binding.models';
 import { I18nService } from '@integration-hub/core/services';

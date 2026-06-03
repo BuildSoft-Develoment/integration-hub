@@ -1,3 +1,4 @@
+// @trace RF-004 (procesos: disparar ejecucion manual del proceso)
 import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';

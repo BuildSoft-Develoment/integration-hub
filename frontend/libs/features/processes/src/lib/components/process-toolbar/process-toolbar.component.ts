@@ -1,3 +1,4 @@
+// @trace RF-003 (procesos: activar/desactivar proceso para habilitar ejecucion)
 import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';

@@ -27,6 +27,46 @@
 - Depende de las features `connections` (metadata JDBC para mapear tablas/rutinas) y `schedules`
   (programacion de ejecuciones).
 
+## Contrato `configuration_json` por tipo de tarea
+
+El `configuration_json` de cada `process_task_definition` es un JSON dinamico cuya forma depende
+del `task_type`. El contrato lo definen los providers del frontend
+(`frontend/libs/core/providers/.../tasks/*.provider.ts`): `toTaskPatch(draft)` arma el JSON y los
+campos de columna (`sourceDefinitionId`/`readerDefinitionId`); `hydrateDraft(task)` hace el inverso.
+Las tareas DB referencian una conexion del catalogo via `connectionRef` dentro del JSON (no hay FK).
+Credenciales/token en `REST_CALL` admiten referencia `${secret:...}` (nunca valor en claro).
+
+```jsonc
+// FILE_READ  (sourceDefinitionId/readerDefinitionId van como columnas de la tarea)
+{ "sourceVariables": { "fecha": "${today}" }, "batchSize": 500,
+  "parallel": true, "parallelMode": "file", "maxConcurrency": 4 }
+
+// DB_WRITE
+{ "connectionRef": "12", "mode": "insert", "targetTable": "ventas.hechos", "jdbcBatchSize": 1000,
+  "mappings": [ { "targetColumn": "monto", "sourceKind": "field", "sourceKey": "total", "key": false } ] }
+
+// DB_EXECUTE_SP
+{ "connectionRef": "12", "procedureName": "ventas.sp_cierre", "timeoutSeconds": 30,
+  "parameters": [ { "name": "p_fecha", "jdbcType": "DATE", "direction": "IN" } ] }
+
+// DB_EXECUTE_FN
+{ "connectionRef": "12", "functionName": "ventas.fn_total", "resultAlias": "total", "timeoutSeconds": 30,
+  "parameters": [ { "name": "p_id", "jdbcType": "BIGINT", "direction": "IN" } ] }
+
+// REST_CALL  (authType: '' | basic | bearer; token/password via ${secret:...})
+{ "mode": "per-record", "method": "POST", "baseUrl": "https://api.demo", "pathTemplate": "/v1/items",
+  "timeoutSeconds": 20, "authType": "bearer", "token": "${secret:rest}", "headers": { "X-Env": "prod" },
+  "bodyTemplate": "{\"id\":\"${id}\"}" }
+
+// NOTIFICATION  (channel webhook)
+{ "channel": "webhook", "url": "https://hooks.demo/x", "message": "ok",
+  "bodyTemplate": "{\"message\":\"${message}\"}", "timeoutSeconds": 15, "headers": {} }
+```
+
+> Fuente del contrato: los 6 `*TaskProvider` (`tasks/*.provider.ts`) + sus `*TaskDraft`. El backend
+> lo consume en los task providers/fast-path de `platform-app`. Mantener contrato y codigo en
+> sintonia al cambiar campos.
+
 ## Modelo de datos
 
 Tablas principales (Flyway `V1__initial_schema.sql` y posteriores):
