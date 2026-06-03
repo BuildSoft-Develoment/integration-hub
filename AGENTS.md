@@ -37,6 +37,7 @@ Este repositorio implementa una plataforma de integracion configurable y usa IA 
    - `likec4/*`
    - `docs/fase-3-arquitectura/adr/*`
 7. Para SDD, usar `docs/fase-4-sdd/04.00-spec-driven-development.md`, `docs/fase-4-sdd/04.01-checklist-spec-driven-development.md` y crear la carpeta oficial de la feature en `specs/`.
+   - **Las specs son el CONTRATO que dirige el codigo, no un inventario de la implementacion** (sentido spec -> codigo, no al reves). `spec-funcional` describe comportamiento observable (incluida la UI); `spec-tecnica` describe el contrato (p.ej. la forma del `configuration_json`/payload por tipo, modelos, endpoints), NO listas de archivos/componentes; `spec-tareas` define objetivos verificables (RF -> resultado + test), no "tocar tal archivo". El enlace inverso codigo->RF vive en `@trace`/`@covers` y en la matriz de `traceability.md` (columnas Codigo/Test/Frontend), nunca en la narrativa de diseno. Aplica tambien en reingenieria: documentar lo ya construido, pero al nivel de contrato (buildable), no como espejo de rutas de archivo.
 8. No inventar decisiones tecnicas sin `ADR` o justificacion explicita.
 9. Respetar la estructura real del codigo:
    - backend en `platform-app/`
