@@ -1,3 +1,4 @@
+// @trace RF-003 (catalogo-readers: contrato configuration_json por formato de reader)
 import { Injectable } from '@angular/core';
 import { ReaderDraft, ReaderFieldDraft, ReaderProvider } from '../../readers/reader-provider.abstract';
 

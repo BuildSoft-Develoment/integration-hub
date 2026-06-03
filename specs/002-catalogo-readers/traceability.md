@@ -20,13 +20,30 @@ Codigo existente -> SDD (spec-tecnica) -> Trazabilidad -> QA (evidencia GREEN re
 
 ## Matriz de trazabilidad
 
-| RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia |
-|---|---|---|---|---|---|---|---|---|---|
-| RF-001 | - | - | - | POST /api/reader-definitions | reader_definition | ReaderDefinitionResource | CsvReaderProviderTest | Implementado | tdd-evidence.md |
-| RF-002 | - | - | - | POST /api/reader-definitions | reader_definition | ReaderCatalogService | ReaderFieldSupportTest | Implementado | tdd-evidence.md |
-| RF-003 | - | - | - | POST /api/reader-definitions | reader_definition | TxtReaderProvider | TxtReaderProviderTest | Implementado | tdd-evidence.md |
-| RF-004 | - | - | - | POST /api/reader-definitions/{readerDefinitionId}/activation/{active} | reader_definition | XlsxReaderProvider | ExcelReaderProviderTest | Implementado | tdd-evidence.md |
-| RF-005 | - | - | - | GET /api/reader-definitions | reader_definition | ReaderDefinitionResource | CsvReaderProviderTest | Implementado | tdd-evidence.md |
+| RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia | Frontend | Front-test |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| RF-001 | - | - | - | POST /api/reader-definitions | reader_definition | ReaderDefinitionResource | CsvReaderProviderTest | Implementado | tdd-evidence.md | reader-editor + reader-type-form/* | reader-catalog.store.spec.ts |
+| RF-002 | - | - | - | POST /api/reader-definitions | reader_definition | ReaderCatalogService | ReaderFieldSupportTest | Implementado | tdd-evidence.md | reader-field-definitions-editor + reader-{csv,txt,excel,json,xml}-form | reader-editor-state.service.spec.ts |
+| RF-003 | - | - | - | POST /api/reader-definitions | reader_definition | TxtReaderProvider | TxtReaderProviderTest | Implementado | tdd-evidence.md | reader.providers.ts (toConfigurationObject) | reader-catalog-command.service.spec.ts |
+| RF-004 | - | - | - | POST /api/reader-definitions/{readerDefinitionId}/activation/{active} | reader_definition | XlsxReaderProvider | ExcelReaderProviderTest | Implementado | tdd-evidence.md | reader-toolbar, reader-list | reader-catalog-query.store.spec.ts |
+| RF-005 | - | - | - | GET /api/reader-definitions | reader_definition | ReaderDefinitionResource | CsvReaderProviderTest | Implementado | tdd-evidence.md | - (insumo Process Designer) | - |
+
+## Trazabilidad UI por formato (RF-001 / RF-002 / RF-003)
+
+`configuration_json` es JSON dinamico por `type` (`TXT`,`CSV`,`XLS`,`XLSX`,`JSON`,`XML`); el
+contrato lo definen los providers `reader.providers.ts` (`toConfigurationObject`/`hydrateDraft`).
+La UI por formato vive en `reader-type-form/`:
+
+| Formato | Form (frontend) | Provider (contrato) |
+|---|---|---|
+| TXT | `reader-txt-form` | `TxtReaderProvider` |
+| CSV | `reader-csv-form` | `CsvReaderProvider` |
+| XLS / XLSX | `reader-excel-form` | `Xls/XlsxReaderProvider` |
+| JSON | `reader-json-form` | `JsonReaderProvider` |
+| XML | `reader-xml-form` | `XmlReaderProvider` |
+
+> Los forms por formato NO tienen `.spec.ts` dedicado (hueco conocido): se ejercitan indirecto
+> via `reader-editor`/stores. El detalle del contrato esta en `spec-tecnica.md`.
 
 ## Gates
 > Fase 2 N/A por reingenieria: `gate-spdd-approved` y `gate-prototype-ready` no aplican.
