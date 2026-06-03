@@ -1,3 +1,4 @@
+// @trace RF-003 (conexiones: contrato configuration_json MONGODB connectionString + secretos ${secret:...})
 import { Injectable } from '@angular/core';
 import { ConnectionDraft, ConnectionProvider } from '../../connections/connection-provider.abstract';
 

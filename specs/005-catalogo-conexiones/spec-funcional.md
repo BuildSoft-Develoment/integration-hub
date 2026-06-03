@@ -47,6 +47,10 @@ destino u origen, e introspeccionar su metadata para mapear tablas y rutinas.
 - `/test` reporta el resultado de conectividad
 - la metadata (esquemas/tablas/columnas y rutinas) queda disponible para el disenador de procesos
 - la conexion activa queda disponible como destino/origen de tareas DB
+- (UI) hay un formulario por familia: `connection-jdbc-form` (ORACLE/POSTGRESQL/SQLSERVER/MYSQL)
+  y `connection-mongodb-form`, cada uno captura solo los campos validos de su familia
+- (UI) los campos de credencial (`password` jdbc / `connectionString` mongodb) admiten secretos
+  `${secret:...}` y nunca muestran/persisten el valor en claro
 
 ## Gates
 
