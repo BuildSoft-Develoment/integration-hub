@@ -46,3 +46,18 @@ evidencia GREEN queda documentada y trazable.
 - Comando GREEN: `mvn -pl platform-app -Dtest=FilesystemSourceProviderTest test`
 - Resultado GREEN: GREEN real — FilesystemSourceProviderTest: Tests run: 4, Failures: 0, Errors: 0, Skipped: 0 (2026-05-30).
 - Verificado por: corrida automatizada mvn 2026-05-30 (pendiente validacion humana).
+
+## RF-001 / T-006
+
+Frontend (Angular): UI de configuracion por tipo de fuente. Componentes anotados
+`@trace RF-001, RF-003` (recogidos por `sync-memory` desde `frontend/`):
+`source-type-form/source-{filesystem,ftp,sftp,rest}-form` (+ `source-type-form-host`,
+`source-type-form.abstract`); orquestan `source-editor`, `source-toolbar`, `source-list`.
+
+- Comando RED: `npx nx test sources`
+- Resultado RED: No recapturable por reingenieria (UI preexistente; capturar RED romperia codigo funcional).
+- Comando GREEN: `npx nx test sources`
+- Resultado GREEN: GREEN preexistente — specs Angular de la feature pasan (`source-editor.readonly.spec.ts`, `source-catalog{,-query}.store.spec.ts`, `source-catalog-command.service.spec.ts`, `source-editor-state.service.spec.ts`).
+- Verificado por: corrida nx (pendiente validacion humana).
+- Hueco conocido: los 4 forms por tipo NO tienen `.spec.ts` dedicado (se ejercitan indirecto
+  via `source-editor`/stores). Candidato a anadir specs por tipo (plan de tests frontend).

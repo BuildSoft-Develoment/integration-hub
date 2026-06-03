@@ -13,8 +13,11 @@
 - API: `source-api.service.ts`.
 - Estado (CQRS): `source-catalog.store.ts`, `source-catalog-query.store.ts`,
   `source-catalog-command.service.ts`, `source-editor-state.service.ts`.
-- Componentes: `source-list`, `source-editor`, `source-type-form` (parametros por tipo),
-  `source-inspector`, `source-toolbar`. Descriptores de provider en `frontend/libs/core/providers/sources`.
+- Componentes: `source-list`, `source-editor`, `source-inspector`, `source-toolbar`.
+- Configuracion por tipo (`source-type-form/`): `source-type-form-host` + `source-type-form.abstract`
+  y un form por tipo de fuente — `source-filesystem-form`, `source-ftp-form`, `source-sftp-form`,
+  `source-rest-form` (anotados `@trace RF-001, RF-003`). Descriptores de provider en
+  `frontend/libs/core/providers/sources`.
 
 ## Modelo de datos
 

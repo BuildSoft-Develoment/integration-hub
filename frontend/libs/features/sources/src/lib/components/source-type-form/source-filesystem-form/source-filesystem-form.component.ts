@@ -1,3 +1,4 @@
+// @trace RF-001, RF-003 (catalogo-fuentes: UI de configuracion para fuente tipo filesystem)
 import { CommonModule } from '@angular/common';
 import { Component } from '@angular/core';
 import { FormsModule } from '@angular/forms';

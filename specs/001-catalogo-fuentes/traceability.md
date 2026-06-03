@@ -20,13 +20,27 @@ Codigo existente -> SDD (spec-tecnica) -> Trazabilidad -> QA (evidencia GREEN re
 
 ## Matriz de trazabilidad
 
-| RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia |
-|---|---|---|---|---|---|---|---|---|---|
-| RF-001 | - | - | - | POST /api/source-definitions | source_definition | SourceCatalogService | SourceCatalogServiceTest | Implementado | tdd-evidence.md |
-| RF-002 | - | - | - | POST /api/source-definitions/{sourceDefinitionId}/activation/{active} | source_definition | SourceDefinitionResource | SourceCatalogServiceTest | Implementado | tdd-evidence.md |
-| RF-003 | - | - | - | POST /api/source-definitions | source_definition | JsonConfigurationMapper | JsonConfigurationMapperTest | Implementado | tdd-evidence.md |
-| RF-004 | - | - | - | POST /api/source-definitions | source_definition | FileVaultSecretValueProvider | FileVaultSecretValueProviderTest | Implementado | tdd-evidence.md |
-| RF-005 | - | - | - | POST /api/source-definitions/test | source_definition | FilesystemSourceProvider | FilesystemSourceProviderTest | Implementado | tdd-evidence.md |
+| RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia | Frontend | Front-test |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| RF-001 | HU-01 | - | - | POST /api/source-definitions | source_definition | SourceCatalogService | SourceCatalogServiceTest | Implementado | tdd-evidence.md | source-editor.component + source-type-form/* | source-editor.readonly.spec.ts |
+| RF-002 | HU-01 | - | - | POST /api/source-definitions/{sourceDefinitionId}/activation/{active} | source_definition | SourceDefinitionResource | SourceCatalogServiceTest | Implementado | tdd-evidence.md | source-toolbar.component, source-list.component | source-catalog-command.service.spec.ts |
+| RF-003 | HU-01 | - | - | POST /api/source-definitions | source_definition | JsonConfigurationMapper | JsonConfigurationMapperTest | Implementado | tdd-evidence.md | source-type-form/source-{filesystem,ftp,sftp,rest}-form | - (sin spec dedicada por tipo) |
+| RF-004 | HU-01 | - | - | POST /api/source-definitions | source_definition | FileVaultSecretValueProvider | FileVaultSecretValueProviderTest | Implementado | tdd-evidence.md | source-type-form (campos `${secret:...}`) | - |
+| RF-005 | HU-01 | - | - | POST /api/source-definitions/test | source_definition | FilesystemSourceProvider | FilesystemSourceProviderTest | Implementado | tdd-evidence.md | - (insumo backend de FILE_READ) | - |
+
+## Trazabilidad UI por tipo de fuente (RF-001 / RF-003)
+
+Cada tipo soportado tiene su componente Angular de configuracion (anotado con `@trace RF-001 RF-003` en el codigo, recogido por `sync-memory`):
+
+| Tipo | Componente Angular | Spec |
+|---|---|---|
+| `filesystem` | `frontend/libs/features/sources/.../source-type-form/source-filesystem-form` | - (indirecto via `source-editor.readonly.spec.ts`) |
+| `ftp` | `.../source-type-form/source-ftp-form` | - |
+| `sftp` | `.../source-type-form/source-sftp-form` | - |
+| `rest` | `.../source-type-form/source-rest-form` | - |
+
+> Hueco de cobertura conocido: los forms por tipo no tienen `.spec.ts` dedicado (se ejercitan
+> indirectamente via `source-editor`/stores). Candidato a anadir specs por tipo (plan de tests frontend).
 
 ## Gates
 > Fase 2 N/A por reingenieria: `gate-spdd-approved` y `gate-prototype-ready` no aplican.
