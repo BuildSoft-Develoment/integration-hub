@@ -51,3 +51,19 @@ tarea en `spec-tareas.md`.
 - Comando GREEN: `mvn -pl platform-app -Dtest=StreamingPipelineServiceTest test`
 - Resultado GREEN: GREEN real — StreamingPipelineServiceTest: Tests run: 7, Failures: 0, Errors: 0, Skipped: 0 (2026-05-30).
 - Verificado por: corrida automatizada mvn 2026-05-30 (pendiente validacion humana).
+
+## RF-001 / T-006
+
+Frontend (Angular): UI de observabilidad. Componentes anotados `@trace` (recogidos por
+`harvest-trace` desde `frontend/`): `execution-list`/`audit-list` (`@trace RF-001`),
+`execution-editor` (`@trace RF-002`), `execution-lineage` (`@trace RF-003`),
+`overview-table-card` (`@trace RF-004`), `execution-editor-summary` (`@trace RF-005`).
+
+- Comando RED: `npx nx test executions`
+- Resultado RED: No recapturable por reingenieria (UI preexistente; capturar RED romperia codigo funcional).
+- Comando GREEN: `npx nx test executions`
+- Resultado GREEN: GREEN preexistente — specs Angular de la feature pasan (`execution-catalog.store.spec.ts`, `execution-catalog-query.store.spec.ts`, `execution-detail.store.spec.ts`, `execution-editor.store.spec.ts`, `execution-files-panel.store.spec.ts`).
+- Verificado por: corrida nx (pendiente validacion humana).
+- Hueco conocido: las vistas de `audit`/`overview` se ejercitan via sus propios stores
+  (`audit.store.spec.ts`, `overview.store.spec.ts`); cobertura por componente es candidata a
+  ampliacion (plan de tests frontend).
