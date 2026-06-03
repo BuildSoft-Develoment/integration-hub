@@ -41,6 +41,8 @@ Permitir que `integration-admin` configure y mantenga fuentes `filesystem`, `ftp
 - se puede crear una fuente por cada tipo soportado
 - la plataforma persiste la definicion
 - la fuente queda disponible para `FILE_READ`
+- la UI ofrece un formulario de configuracion especifico por tipo (`filesystem`, `ftp`, `sftp`, `rest`)
+- los secretos se capturan en la UI como referencia `${secret:...}`, nunca en claro
 
 ## Gates
 

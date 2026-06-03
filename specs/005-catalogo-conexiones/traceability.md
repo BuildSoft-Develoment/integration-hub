@@ -12,13 +12,27 @@ Matriz viva RF -> API -> BD -> Codigo -> Test de la feature, detalle del rollup 
 
 ## Matriz de trazabilidad
 
-| RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia |
-|---|---|---|---|---|---|---|---|---|---|
-| RF-001 | - | - | - | POST /api/connection-definitions | connection_definition | ConnectionCatalogService | ConnectionCatalogServiceTest | Implementado | tdd-evidence.md |
-| RF-002 | - | - | - | POST /api/connection-definitions/test | connection_definition | ConnectionDefinitionResource | ConnectionCatalogServiceTest | Implementado | tdd-evidence.md |
-| RF-003 | - | - | - | POST /api/connection-definitions | connection_definition | ConnectionApiMapper | ConnectionApiMapperTest | Implementado | tdd-evidence.md |
-| RF-004 | - | - | - | GET /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/tables | connection_definition | ConnectionMetadataService | - | Implementado | tdd-evidence.md |
-| RF-005 | - | - | - | GET /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/procedures | connection_definition | ConnectionMetadataService | - | Implementado | tdd-evidence.md |
+| RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia | Frontend | Front-test |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| RF-001 | - | - | - | POST /api/connection-definitions | connection_definition | ConnectionCatalogService | ConnectionCatalogServiceTest | Implementado | tdd-evidence.md | connection-editor + connection-jdbc-form + connection-mongodb-form | connection-catalog.store.spec.ts |
+| RF-002 | - | - | - | POST /api/connection-definitions/test | connection_definition | ConnectionDefinitionResource | ConnectionCatalogServiceTest | Implementado | tdd-evidence.md | connection-toolbar, connection-list | connection-catalog-command.service.spec.ts |
+| RF-003 | - | - | - | POST /api/connection-definitions | connection_definition | ConnectionApiMapper | ConnectionApiMapperTest | Implementado | tdd-evidence.md | connections/*.provider.ts (toConfigurationObject) | connection-editor-state.service.spec.ts |
+| RF-004 | - | - | - | GET /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/tables | connection_definition | ConnectionMetadataService | - | Implementado | tdd-evidence.md | - (insumo DB_WRITE en Procesos 003) | - |
+| RF-005 | - | - | - | GET /api/connection-definitions/{connectionDefinitionId}/jdbc-metadata/procedures | connection_definition | ConnectionMetadataService | - | Implementado | tdd-evidence.md | - (insumo DB_EXECUTE_SP/FN en Procesos 003) | - |
+
+## Trazabilidad UI por motor (RF-001 / RF-003)
+
+`configuration_json` es JSON dinamico por `type`; el contrato lo definen los providers
+`frontend/libs/core/providers/.../connections/*-connection.provider.ts`
+(`toConfigurationObject`/`hydrateDraft`). La UI por familia vive en `connection-type-form/`:
+
+| Motor | Familia | Form (frontend) | Provider (contrato) |
+|---|---|---|---|
+| ORACLE / POSTGRESQL / SQLSERVER / MYSQL | jdbc | `connection-jdbc-form` | `Oracle/Postgresql/Sqlserver/MysqlConnectionProvider` |
+| MONGODB | mongodb | `connection-mongodb-form` | `MongodbConnectionProvider` |
+
+> Los forms por familia NO tienen `.spec.ts` dedicado (hueco conocido): se ejercitan via el editor
+> y los stores. El contrato detallado (jdbc vs mongodb) esta en `spec-tecnica.md`.
 
 ## Gates
 > Fase 2 N/A por reingenieria: `gate-spdd-approved` y `gate-prototype-ready` no aplican.

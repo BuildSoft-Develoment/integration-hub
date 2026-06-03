@@ -311,8 +311,8 @@ ${blocks.join("\n\n")}
 
 export function traceability(c) {
   const apiPrincipal = c.endpoints[0] || `GET /api/${c.entidad}`;
-  const rfRows = c.rfs.map((rf, i) => `| ${rf} | ${c.hus[i % c.hus.length]} | spdd-frontend.md | prototype-html5/index.html | ${apiPrincipal} | ${c.entidad} | - | - | Spec inicial generada | spec-funcional.md |`);
-  const rnfRows = c.rnfs.map((rnf, i) => `| ${rnf} | ${c.hus[i % c.hus.length]} | spdd-frontend.md | prototype-html5/index.html | ${apiPrincipal} | - | - | - | Pendiente prototipo | prototype.md |`);
+  const rfRows = c.rfs.map((rf, i) => `| ${rf} | ${c.hus[i % c.hus.length]} | spdd-frontend.md | prototype-html5/index.html | ${apiPrincipal} | ${c.entidad} | - | - | Spec inicial generada | spec-funcional.md | - | - |`);
+  const rnfRows = c.rnfs.map((rnf, i) => `| ${rnf} | ${c.hus[i % c.hus.length]} | spdd-frontend.md | prototype-html5/index.html | ${apiPrincipal} | - | - | - | Pendiente prototipo | prototype.md | - | - |`);
   return `# Traceability - ${c.titulo}
 
 [README principal](../../README.md) | [Specs](../README.md)
@@ -336,8 +336,13 @@ Product Design -> SPDD -> Prototipo HTML5 -> SDD -> Construccion -> QA
 > automaticamente \`planned\` vs \`implemented\` y \`check-trace-drift\` no reporta
 > falsos positivos.
 
-| RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia |
-|---|---|---|---|---|---|---|---|---|---|
+> v12.145: \`Frontend\` = componente(s) Angular que implementan el RF; \`Front-test\` =
+> su \`.spec.ts\`. Anotar \`@trace RF-XX\` en el componente y \`@covers RF-XX\` en su spec
+> para que \`sync-memory\` los recoja (el harvest ya escanea \`frontend/\`). \`-\` si la
+> feature no tiene UI (servicio puro).
+
+| RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia | Frontend | Front-test |
+|---|---|---|---|---|---|---|---|---|---|---|---|
 ${[...rfRows, ...rnfRows].join("\n")}
 
 ## Gates

@@ -1,3 +1,4 @@
+// @trace RF-002 (procesos: contrato configuration_json de tarea tipo REST_CALL)
 import { Injectable } from '@angular/core';
 import { ProcessTaskBodyFieldBindingDraft } from '../../tasks/process-task-binding.models';
 import { I18nService } from '@integration-hub/core/services';

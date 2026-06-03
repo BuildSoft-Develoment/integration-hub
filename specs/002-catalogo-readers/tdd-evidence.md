@@ -43,3 +43,19 @@ nivel de tarea en `spec-tareas.md`, mientras la evidencia GREEN queda documentad
 - Comando GREEN: `mvn -pl platform-app -Dtest=CsvReaderProviderTest test`
 - Resultado GREEN: GREEN real — CsvReaderProviderTest: Tests run: 5, Failures: 0, Errors: 0, Skipped: 0 (2026-05-30).
 - Verificado por: corrida automatizada mvn 2026-05-30 (pendiente validacion humana).
+
+## RF-001 / T-006
+
+Frontend (Angular): UI de configuracion por formato de reader. Componentes anotados
+`@trace RF-001, RF-002` (recogidos por `sync-memory` desde `frontend/`):
+`reader-type-form/reader-{txt,csv,excel,json,xml}-form` (+ `reader-type-form-host`,
+`reader-field-definitions-editor`); el contrato `configuration_json` lo arma
+`reader.providers.ts` (`@trace RF-003`). Orquestan `reader-editor`, `reader-toolbar`, `reader-list`.
+
+- Comando RED: `npx nx test readers`
+- Resultado RED: No recapturable por reingenieria (UI preexistente; capturar RED romperia codigo funcional).
+- Comando GREEN: `npx nx test readers`
+- Resultado GREEN: GREEN preexistente — specs Angular de la feature pasan (`reader-catalog.store.spec.ts`, `reader-catalog-query.store.spec.ts`, `reader-catalog-command.service.spec.ts`, `reader-editor-state.service.spec.ts`).
+- Verificado por: corrida nx (pendiente validacion humana).
+- Hueco conocido: los forms por formato NO tienen `.spec.ts` dedicado (se ejercitan indirecto
+  via `reader-editor`/stores). Candidato a anadir specs por formato (plan de tests frontend).

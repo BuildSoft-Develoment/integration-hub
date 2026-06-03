@@ -40,6 +40,10 @@ Configurar como interpretar archivos o payloads de entrada segun formato.
 - el catalogo soporta `txt`, `csv`, `xls`, `xlsx`, `json` y `xml`
 - la configuracion queda persistida
 - el `Process Designer` puede usar el reader configurado
+- (UI) cada formato tiene su formulario dedicado en `reader-type-form` que captura solo los
+  campos validos del formato (delimitador, hoja, record element, etc.)
+- (UI) el editor permite definir field-definitions por campo (por posicion en delimitados/excel
+  o por rango `start/end` en `txt` fixed-length), con tipo `TEXT`/`NUMBER`/`DATE`
 
 ## Gates
 

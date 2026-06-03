@@ -42,6 +42,10 @@ Permitir disenar procesos configurables y ejecutarlos de forma manual o programa
 - existe definicion persistida del proceso
 - la ejecucion genera `processExecution`
 - los errores quedan visibles y correlacionados
+- (UI) el disenador visual permite ordenar tareas (flow palette/node) y cada tipo de tarea tiene
+  su formulario dedicado en `process-task-form/` que captura solo sus campos validos
+- (UI) las tareas DB seleccionan una conexion del catalogo y mapean tabla/rutina destino;
+  `REST_CALL` admite secretos via `${secret:...}`
 
 ## Gates
 

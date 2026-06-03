@@ -1,3 +1,4 @@
+// @trace RF-001 (procesos: editor de definicion de proceso con tareas ordenadas)
 import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';

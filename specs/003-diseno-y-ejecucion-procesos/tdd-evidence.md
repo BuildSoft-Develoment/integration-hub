@@ -58,3 +58,19 @@ tarea en `spec-tareas.md`.
 - Comando GREEN: `mvn -pl platform-app -Dtest=FileReadTaskFastPathTest test`
 - Resultado GREEN: GREEN real — FileReadTaskFastPathTest: Tests run: 1, Failures: 0, Errors: 0, Skipped: 0 (2026-05-30).
 - Verificado por: corrida automatizada mvn 2026-05-30 (pendiente validacion humana).
+
+## RF-002 / T-007
+
+Frontend (Angular): UI de configuracion por tipo de tarea + disenador visual de flujo.
+Componentes/providers anotados `@trace` (recogidos por `harvest-trace` desde `frontend/`):
+los 6 `tasks/*.provider.ts` (`@trace RF-002`, contrato `configuration_json` por tipo),
+`process-editor` (`@trace RF-001`), `process-toolbar` (`@trace RF-003`),
+`process-editor-actions` (`@trace RF-004`). La UI por tipo vive en `process-task-form/`.
+
+- Comando RED: `npx nx test processes`
+- Resultado RED: No recapturable por reingenieria (UI preexistente; capturar RED romperia codigo funcional).
+- Comando GREEN: `npx nx test processes`
+- Resultado GREEN: GREEN preexistente — specs Angular de la feature pasan (`process-editor.store.spec.ts`, `process-catalog.store.spec.ts`, `process-flow-sync.service.spec.ts`, `process-flow-api.service.spec.ts`, `process-reference.store.spec.ts`).
+- Verificado por: corrida nx (pendiente validacion humana).
+- Hueco conocido: los forms por tipo de tarea NO tienen `.spec.ts` dedicado (se ejercitan via el
+  editor y los stores). Candidato a anadir specs por tipo (plan de tests frontend).

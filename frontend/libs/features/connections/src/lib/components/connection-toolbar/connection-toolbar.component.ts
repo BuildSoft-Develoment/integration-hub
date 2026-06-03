@@ -1,3 +1,4 @@
+// @trace RF-002 (conexiones: probar conectividad + activar/desactivar)
 import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';

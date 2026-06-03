@@ -17,6 +17,31 @@
 - Componentes: listado/editor de conexiones y selección de tabla/rutina por metadata, consumidos
   por los formularios de tarea DB de la feature `processes`.
 
+## Contrato `configuration_json` por motor
+
+`configuration_json` es un JSON dinamico cuya forma depende del `connection_type` (familia
+`jdbc` o `mongodb`). El contrato lo definen los providers del frontend
+(`frontend/libs/core/providers/.../connections/*-connection.provider.ts`):
+`toConfigurationObject(draft)` arma el JSON; `hydrateDraft(json)` el inverso. El campo `password`
+(jdbc) y `connectionString` (mongodb) admiten referencia `${secret:...}` (nunca valor en claro).
+
+```jsonc
+// familia "jdbc": ORACLE / POSTGRESQL / SQLSERVER / MYSQL
+{ "jdbcUrl": "jdbc:postgresql://host:5432/db", "username": "user", "password": "${secret:pg}",
+  "minSize": 0, "maxSize": 10, "acquisitionTimeoutSeconds": 30, "validationTimeoutSeconds": 5,
+  "reapTimeoutMinutes": 5, "initialSql": "SET ...", "jdbcProperties": { "ssl": "true" } }
+
+// familia "mongodb"
+{ "connectionString": "${secret:mongo}", "database": "ventas",
+  "connectTimeoutMillis": 10000, "readTimeoutMillis": 30000 }
+```
+
+> Fuente del contrato: los 5 `*ConnectionProvider` (`connections/*-connection.provider.ts`) +
+> `ConnectionDraft`. El backend lo consume en `ConnectionCatalogService`/`ConnectionMetadataService`
+> de `platform-app`. La metadata JDBC (RF-004/RF-005) NO vive en `configuration_json`: se
+> introspecciona en vivo y alimenta los forms de tarea DB en Procesos (003). Mantener contrato y
+> codigo en sintonia al cambiar campos.
+
 ## Modelo de datos
 
 Tabla `connection_definition` (Flyway `V3__connection_definition.sql`):
