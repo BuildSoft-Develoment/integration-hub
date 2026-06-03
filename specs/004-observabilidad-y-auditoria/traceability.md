@@ -20,13 +20,13 @@ Codigo existente -> SDD (spec-tecnica) -> Trazabilidad -> QA (evidencia GREEN re
 
 ## Matriz de trazabilidad
 
-| RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia |
-|---|---|---|---|---|---|---|---|---|---|
-| RF-001 | - | - | - | GET /api/query/process-executions | process_execution | ExecutionQueryResource | CatalogAndExecutionResourceIT | Implementado | tdd-evidence.md |
-| RF-002 | - | - | - | GET /api/query/process-executions/{processExecutionId}/tasks | process_task_execution | ExecutionQueryService | CatalogAndExecutionResourceIT | Implementado | tdd-evidence.md |
-| RF-003 | - | - | - | GET /api/query/process-executions/{processExecutionId}/children | process_execution | ExecutionQueryService | CatalogAndExecutionResourceIT | Implementado | tdd-evidence.md |
-| RF-004 | - | - | - | GET /api/query/overview-summary | process_execution | ExecutionQueryResource | CatalogAndExecutionResourceIT | Implementado | tdd-evidence.md |
-| RF-005 | - | - | - | GET /api/query/audit-events | audit_event | AuditService | StreamingPipelineServiceTest | Implementado | tdd-evidence.md |
+| RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia | Frontend | Front-test |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| RF-001 | - | - | - | GET /api/query/process-executions | process_execution | ExecutionQueryResource | CatalogAndExecutionResourceIT | Implementado | tdd-evidence.md | execution-list, execution-toolbar, audit-list, audit-toolbar | execution-catalog.store.spec.ts |
+| RF-002 | - | - | - | GET /api/query/process-executions/{processExecutionId}/tasks | process_task_execution | ExecutionQueryService | CatalogAndExecutionResourceIT | Implementado | tdd-evidence.md | execution-editor + execution-task-list + execution-files-panel | execution-detail.store.spec.ts |
+| RF-003 | - | - | - | GET /api/query/process-executions/{processExecutionId}/children | process_execution | ExecutionQueryService | CatalogAndExecutionResourceIT | Implementado | tdd-evidence.md | execution-lineage | execution-editor.store.spec.ts |
+| RF-004 | - | - | - | GET /api/query/overview-summary | process_execution | ExecutionQueryResource | CatalogAndExecutionResourceIT | Implementado | tdd-evidence.md | overview-metric-card + overview-table-card | overview.store.spec.ts |
+| RF-005 | - | - | - | GET /api/query/audit-events | audit_event | AuditService | StreamingPipelineServiceTest | Implementado | tdd-evidence.md | execution-editor-summary, audit-editor | audit.store.spec.ts |
 
 ## Gates
 > Fase 2 N/A por reingenieria: `gate-spdd-approved` y `gate-prototype-ready` no aplican.

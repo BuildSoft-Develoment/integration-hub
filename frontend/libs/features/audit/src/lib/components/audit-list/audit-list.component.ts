@@ -1,3 +1,4 @@
+// @trace RF-001 (observabilidad: consultar eventos de auditoria por filtros)
 import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';

@@ -1,82 +1,60 @@
-# TDD Evidence - Programacion de procesos
+# Evidencia TDD - Programacion de procesos
 
-> **Que es esto.** Evidencia auditable del ciclo RED-GREEN-REFACTOR por cada T tipo=impl
-> de `spec-tareas.md`. `agent:finish` actualiza este archivo con commits y timestamps
-> reales antes de cerrar el feature. `check:tdd-evidence` (STRICT en `check:project`)
-> exige que cada T en state=done tenga aqui un bloque con RED + GREEN reales (no `pending`).
+Feature reconstruida por reingenieria sobre codigo en produccion. El **GREEN de la capa de
+consulta esta capturado y es real** (corrida `mvn` del 2026-06-03). El **RED no es
+recapturable** (codigo preexistente; capturar un fallo previo romperia codigo funcional,
+fuera del alcance acordado). Por eso el ciclo formal RED-GREEN se mantiene `pending` a
+nivel de tarea en `spec-tareas.md`.
 
-> **Como llenarlo.** Cada bloque corresponde a un T tipo=impl de spec-tareas.md. Sigue el
-> protocolo `tdd` (ver `ai/protocols/tdd.md`):
-> 1. Escribe el test → corre → captura RED log + commit.
-> 2. Escribe codigo minimo → corre → captura GREEN log + commit.
-> 3. Refactor (opcional, agrupable).
-> 4. Actualiza el bloque aqui con `Verified: <YYYY-MM-DD HH:MM>`.
+> Corrida de referencia: `mvn -pl platform-app -Dtest=ProcessScheduleQueryServiceTest,...`
+> (JDK 25, 2026-06-03) -> **Tests run: 13, Failures: 0, Errors: 0, Skipped: 0. BUILD SUCCESS**
+> para las clases de prueba de las features 005/006/007.
+>
+> Nota sobre el scheduler (RF-001 / RF-002 / RF-004): la programacion es un atributo de
+> `process_definition` (columnas `scheduled`/`schedule_every`/`next_run_at`/`last_run_at`, V2)
+> y el disparo lo ejecuta `ProcessSchedulerService` (timer Quarkus con `trigger_source =
+> scheduler`). `ProcessCatalogService` (persistencia de la programacion) y `ProcessSchedulerService`
+> (motor de disparo) NO tienen clase de prueba unitaria dedicada; su comportamiento temporal y
+> de idempotencia ante failover queda pendiente de una corrida QA dedicada.
 
-## Contexto
-- Feature: `006-programacion-procesos`
-- spec-tareas.md: ver para los T-NNN correspondientes
-- Protocolo aplicable: `ai/protocols/tdd.md`
+## RF-001 / T-001
+- Comando RED: `mvn -pl platform-app test`
+- Resultado RED: No recapturable por reingenieria (codigo preexistente).
+- Comando GREEN: `mvn -pl platform-app test`
+- Resultado GREEN: Pendiente — `ProcessCatalogService` (persistencia de la programacion) no tiene prueba unitaria dedicada. GREEN dedicado pendiente de corrida QA.
+- Verificado por: pending (requiere corrida QA dedicada).
 
-## RF-001 / T-002
+## RF-002 / T-002
+- Comando RED: `mvn -pl platform-app test`
+- Resultado RED: No recapturable por reingenieria (codigo preexistente).
+- Comando GREEN: `mvn -pl platform-app test`
+- Resultado GREEN: Pendiente — `ProcessSchedulerService` (motor de disparo programado) no tiene prueba unitaria dedicada del comportamiento temporal. GREEN dedicado pendiente de corrida QA.
+- Verificado por: pending (requiere corrida QA dedicada).
 
-- Test path: (planned) tests/unit/process_definition/process_definition-rf-001.test.ts
-- RED command: (planned) npm test -- process_definition-rf-001
-- RED result: pending
-- RED log: pending
-- GREEN command: (planned) npm test -- process_definition-rf-001
-- GREEN result: pending
-- GREEN log: pending
-- Commit RED: pending
-- Commit GREEN: pending
-- Verified: pending
+## RF-003 / T-003
+- Comando RED: `mvn -pl platform-app -Dtest=ProcessScheduleQueryServiceTest test`
+- Resultado RED: No recapturable por reingenieria (codigo preexistente; capturar RED romperia codigo funcional).
+- Comando GREEN: `mvn -pl platform-app -Dtest=ProcessScheduleQueryServiceTest test`
+- Resultado GREEN: GREEN real — ProcessScheduleQueryServiceTest: Tests run: 2, Failures: 0, Errors: 0, Skipped: 0 (2026-06-03).
+- Verificado por: corrida automatizada mvn 2026-06-03 (pendiente validacion humana).
 
-> Nota: tras correr el ciclo RED-GREEN real (`ai/protocols/tdd.md`), reemplaza
-> "(planned) ..." por el valor real entre backticks y "pending" por el log/timestamp real.
+## RF-004 / T-004
+- Comando RED: `mvn -pl platform-app test`
+- Resultado RED: No recapturable por reingenieria (codigo preexistente).
+- Comando GREEN: `mvn -pl platform-app test`
+- Resultado GREEN: Pendiente — la idempotencia del scheduler ante failover (RF-004) la cubre `ProcessSchedulerService`, sin prueba unitaria dedicada. GREEN dedicado pendiente de corrida QA.
+- Verificado por: pending (requiere corrida QA dedicada).
 
-## RF-002 / T-004
+## RF-003 / T-005
 
-- Test path: (planned) tests/unit/process_definition/process_definition-rf-002.test.ts
-- RED command: (planned) npm test -- process_definition-rf-002
-- RED result: pending
-- RED log: pending
-- GREEN command: (planned) npm test -- process_definition-rf-002
-- GREEN result: pending
-- GREEN log: pending
-- Commit RED: pending
-- Commit GREEN: pending
-- Verified: pending
+Frontend (Angular): UI de programacion de procesos. `schedules-list` + `schedules-toolbar`
+muestran las programaciones (GET /api/process-schedules) y `schedules-editor` edita la
+configuracion de la programacion (atributo de `process_definition`).
 
-> Nota: tras correr el ciclo RED-GREEN real (`ai/protocols/tdd.md`), reemplaza
-> "(planned) ..." por el valor real entre backticks y "pending" por el log/timestamp real.
-
-## RF-003 / T-006
-
-- Test path: (planned) tests/unit/process_definition/process_definition-rf-003.test.ts
-- RED command: (planned) npm test -- process_definition-rf-003
-- RED result: pending
-- RED log: pending
-- GREEN command: (planned) npm test -- process_definition-rf-003
-- GREEN result: pending
-- GREEN log: pending
-- Commit RED: pending
-- Commit GREEN: pending
-- Verified: pending
-
-> Nota: tras correr el ciclo RED-GREEN real (`ai/protocols/tdd.md`), reemplaza
-> "(planned) ..." por el valor real entre backticks y "pending" por el log/timestamp real.
-
-## RF-004 / T-008
-
-- Test path: (planned) tests/unit/process_definition/process_definition-rf-004.test.ts
-- RED command: (planned) npm test -- process_definition-rf-004
-- RED result: pending
-- RED log: pending
-- GREEN command: (planned) npm test -- process_definition-rf-004
-- GREEN result: pending
-- GREEN log: pending
-- Commit RED: pending
-- Commit GREEN: pending
-- Verified: pending
-
-> Nota: tras correr el ciclo RED-GREEN real (`ai/protocols/tdd.md`), reemplaza
-> "(planned) ..." por el valor real entre backticks y "pending" por el log/timestamp real.
+- Comando RED: `npx nx test schedules`
+- Resultado RED: No recapturable por reingenieria (UI preexistente; capturar RED romperia codigo funcional).
+- Comando GREEN: `npx nx test schedules`
+- Resultado GREEN: GREEN preexistente — specs Angular de la feature pasan (`schedules.store.spec.ts`).
+- Verificado por: corrida nx (pendiente validacion humana).
+- Hueco conocido: `schedules-editor`/`schedules-list`/`schedules-toolbar` se ejercitan via el store
+  (`schedules.store.spec.ts`); cobertura por componente es candidata a ampliacion (plan de tests frontend).

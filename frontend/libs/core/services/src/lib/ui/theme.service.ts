@@ -1,3 +1,4 @@
+// @trace RF-002 (tema: aplicar scheme/preset/density/colores/locale/sidebar en el cliente)
 import { DOCUMENT } from '@angular/common';
 import { effect, inject, Injectable, signal } from '@angular/core';
 

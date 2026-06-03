@@ -13,12 +13,12 @@ Matriz viva RF -> API -> BD -> Codigo -> Test, detalle del rollup global en
 
 ## Matriz de trazabilidad
 
-| RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia |
-|---|---|---|---|---|---|---|---|---|---|
-| RF-001 | - | - | - | POST /api/process-definitions | process_definition | ProcessCatalogService | - | Implementado | tdd-evidence.md |
-| RF-002 | - | - | - | - | process_definition | ProcessSchedulerService | - | Implementado | tdd-evidence.md |
-| RF-003 | - | - | - | GET /api/process-schedules | process_definition | ProcessScheduleQueryService | ProcessScheduleQueryServiceTest | Implementado | tdd-evidence.md |
-| RF-004 | - | - | - | - | process_definition | ProcessSchedulerService | - | Implementado | tdd-evidence.md |
+| RF | HU | UX/SPDD | Prototipo | API | BD | Codigo | Test | Estado | Evidencia | Frontend | Front-test |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| RF-001 | - | - | - | POST /api/process-definitions | process_definition | ProcessCatalogService | - | Implementado | tdd-evidence.md | schedules-editor | schedules.store.spec.ts |
+| RF-002 | - | - | - | - | process_definition | ProcessSchedulerService | - | Implementado | tdd-evidence.md | - (insumo backend scheduler) | - |
+| RF-003 | - | - | - | GET /api/process-schedules | process_definition | ProcessScheduleQueryService | ProcessScheduleQueryServiceTest | Implementado | tdd-evidence.md | schedules-list, schedules-toolbar | schedules.store.spec.ts |
+| RF-004 | - | - | - | - | process_definition | ProcessSchedulerService | - | Implementado | tdd-evidence.md | - (backend scheduler) | - |
 
 ## Gates
 > Fase 2 N/A por reingenieria: `gate-spdd-approved` y `gate-prototype-ready` no aplican.

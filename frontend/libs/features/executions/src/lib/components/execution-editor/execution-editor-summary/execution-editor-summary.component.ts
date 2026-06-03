@@ -1,3 +1,4 @@
+// @trace RF-005 (observabilidad: correlacion de evidencia tecnica/funcional por processExecutionId)
 import { CommonModule } from '@angular/common';
 import { Component, inject, input } from '@angular/core';
 

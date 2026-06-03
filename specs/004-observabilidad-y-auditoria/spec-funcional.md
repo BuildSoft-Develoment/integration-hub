@@ -40,6 +40,9 @@ Dar visibilidad operativa y trazabilidad completa sobre procesos, tareas y archi
 - se pueden consultar ejecuciones y auditoria por filtros
 - existen datos por archivo y por tarea
 - overview consolida metricas de salud operativa
+- (UI) hay vistas de listado/filtro (`execution-list`/`audit-list` + toolbars), detalle por tarea y
+  archivo (`execution-editor` + `execution-task-list`/`execution-files-panel`), linaje de reproceso
+  (`execution-lineage`) y resumen operativo (`overview-metric-card`/`overview-table-card`)
 
 ## Gates
 

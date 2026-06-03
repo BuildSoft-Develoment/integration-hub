@@ -41,6 +41,9 @@ densidad, paleta de colores, idioma y modo de barra lateral) como un ajuste unic
 - se puede consultar la configuracion vigente
 - se pueden actualizar tema, idioma y modo de sidebar
 - el cambio persiste y la consola lo refleja
+- (UI) la accion `app-theme-action` y la fachada `app-preferences.facade` permiten cambiar
+  preset/density/locale/sidebarMode; `theme.service` aplica el `ThemeConfiguration` de forma
+  reactiva y `system-theme-config.service` lo persiste via `/api/system/theme`
 
 ## Gates
 

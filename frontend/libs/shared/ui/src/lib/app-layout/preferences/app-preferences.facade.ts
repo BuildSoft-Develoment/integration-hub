@@ -1,3 +1,4 @@
+// @trace RF-002 (tema: actualizar preset/density/locale/sidebarMode desde la UI de preferencias)
 import { Injectable, inject, signal } from '@angular/core';
 import {
   I18nService,
