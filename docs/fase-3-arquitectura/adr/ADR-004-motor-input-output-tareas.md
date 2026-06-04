@@ -128,6 +128,5 @@ tarea consumidora.
 
 ## Referencias
 
-- [Spec 008 - Motor dinamico de inputs/outputs de tareas](../../../specs/008-motor-dinamico-inputs-outputs-tareas/spec-tecnica.md)
-- [Spec 003 - Diseno y ejecucion de procesos](../../../specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md)
+- [Spec 003 - Diseno y ejecucion de procesos (motor dinamico)](../../../specs/003-diseno-y-ejecucion-procesos/spec-tecnica.md)
 - [Modulo orquestacion y ejecucion](../../fase-1-analisis-requerimientos/modulos/modulo-orquestacion-y-ejecucion.md)

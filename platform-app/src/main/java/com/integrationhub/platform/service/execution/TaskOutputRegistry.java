@@ -10,6 +10,12 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Registra los outputs publicados por cada tarea (summary/records/table/errors) para que
+ * tareas posteriores los consuman; soporta `batchSize`/checkpoint del motor. Ver ADR-004.
+ *
+ * @trace RF-010
+ */
 @ApplicationScoped
 public class TaskOutputRegistry {
 

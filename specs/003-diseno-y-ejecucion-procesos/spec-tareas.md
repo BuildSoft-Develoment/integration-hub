@@ -25,6 +25,21 @@ no se ha capturado en `tdd-evidence.md`.
 | T-006 | RF-005 | impl | platform-app/src/main/java/com/integrationhub/platform/service/execution/ProcessExecutionService.java | platform-app/src/test/java/com/integrationhub/platform/service/execution/fastpath/FileReadTaskFastPathTest.java | mvn -pl platform-app -Dtest=FileReadTaskFastPathTest test | FAIL sin la implementacion | mvn -pl platform-app -Dtest=FileReadTaskFastPathTest test | PASS | - | si | pending |
 | T-007 | RF-002 | impl | frontend/libs/features/processes/src/lib/components/process-task-form/process-task-form-host/process-task-form-host.component.ts | frontend/libs/features/processes/src/lib/editor/process-editor.store.spec.ts | npx nx test processes | FAIL sin la UI de configuracion por tipo de tarea | npx nx test processes | PASS | - | si | pending |
 
+## Motor dinamico de inputs/outputs (ADR-004) - tareas WIP
+
+> Evolucion del motor (RF-006..RF-013). Backend `TaskInputResolver`/`TaskOutputRegistry` y
+> frontend `process-task-runtime-panel` en curso; el resto pendiente.
+
+| id | rf | tipo | entregable | depende_de | estado |
+| --- | --- | --- | --- | --- | --- |
+| T-008 | RF-006 | diseno | Definir `taskRef`, `dependsOn`, `input`, `inputs`, `outputs` y `executionMode` | ADR-004 | pending |
+| T-009 | RF-007/RF-008 | backend | Implementar metadata transversal y resolucion de inputs tipados | T-008 | en curso |
+| T-010 | RF-009/RF-010 | backend | Implementar ejecucion `once`, `per-record`, `batch` con checkpoint por lote | T-008 | en curso |
+| T-011 | RF-007/RF-013 | backend | Materializar o paginar outputs masivos sin listas completas en memoria | T-009 | pending |
+| T-012 | RF-011/RF-012 | frontend | Permitir seleccionar output anterior, modo de ejecucion y mappings comunes | T-008 | en curso |
+| T-013 | RF-011 | backend/frontend | Validar grafo, fan-out, fan-in, ciclos y tareas futuras | T-008 | pending |
+| T-014 | RF-013 | qa | Pruebas de volumen, retry, idempotencia y reproceso por lote | T-010/T-011 | pending |
+
 ## Checklist de cierre
 - [ ] Todas las tareas tienen estado (pendiente / en curso / hecho / bloqueado).
 - [ ] Cada tarea critica tiene evidencia TDD (prueba red + green) en `tdd-evidence.md`.

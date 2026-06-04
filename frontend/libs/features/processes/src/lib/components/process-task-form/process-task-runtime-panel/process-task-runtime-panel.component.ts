@@ -13,6 +13,12 @@ import { I18nService } from '@integration-hub/core/services';
 import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
 import { ProcessTaskFormModel } from '../../../models/process.models';
 
+/**
+ * Panel de runtime por tarea: selecciona `executionMode`, tarea/output de origen y
+ * `batchSize` del motor dinamico de inputs/outputs. Ver ADR-004.
+ *
+ * @trace RF-006, RF-009, RF-010
+ */
 @Component({
   selector: 'ih-process-task-runtime-panel',
   standalone: true,

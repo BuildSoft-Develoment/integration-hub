@@ -13,7 +13,6 @@ Carpeta base para features gestionadas bajo `Spec-Driven Development (SDD)`.
 - [005-catalogo-conexiones](005-catalogo-conexiones/spec-funcional.md)
 - [006-programacion-procesos](006-programacion-procesos/spec-funcional.md)
 - [007-tema-del-sistema](007-tema-del-sistema/spec-funcional.md)
-- [008-motor-dinamico-inputs-outputs-tareas](008-motor-dinamico-inputs-outputs-tareas/spec-funcional.md)
 
 ## Regla
 

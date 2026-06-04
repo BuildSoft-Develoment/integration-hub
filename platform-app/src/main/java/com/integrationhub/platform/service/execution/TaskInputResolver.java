@@ -16,6 +16,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
+/**
+ * Resuelve los inputs tipados de una tarea (`input`/`inputs`) desde outputs de tareas
+ * anteriores y metadata transversal, incluyendo fan-in y lectura por lote. Ver ADR-004.
+ *
+ * @trace RF-007, RF-011, RF-012
+ */
 @ApplicationScoped
 public class TaskInputResolver {
 
