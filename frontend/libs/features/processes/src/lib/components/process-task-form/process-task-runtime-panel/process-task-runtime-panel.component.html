@@ -1,0 +1,28 @@
+<section class="runtime-panel">
+  <mat-form-field>
+    <mat-label>{{ i18n.t('ui.executionMode') }}</mat-label>
+    <mat-select [disabled]="readonly()" [ngModel]="draft().executionMode" (ngModelChange)="updateExecutionMode($event)">
+      <mat-option value="once">{{ i18n.t('ui.executionMode.once') }}</mat-option>
+      <mat-option value="per-record">{{ i18n.t('ui.executionMode.perRecord') }}</mat-option>
+      <mat-option value="batch">{{ i18n.t('ui.executionMode.batch') }}</mat-option>
+    </mat-select>
+  </mat-form-field>
+
+  @if (showInput() && taskOptions().length) {
+    <mat-form-field>
+      <mat-label>{{ i18n.t('ui.taskInputSourceTask') }}</mat-label>
+      <mat-select [disabled]="readonly()" [ngModel]="selectedInput()?.sourceTaskRef || ''" (ngModelChange)="updateSourceTask($event)">
+        @for (option of taskOptions(); track option.taskRef) {
+          <mat-option [value]="option.taskRef">{{ option.label }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    @if (showBatchSize()) {
+      <mat-form-field>
+        <mat-label>{{ i18n.t('ui.taskInputBatchSize') }}</mat-label>
+        <input matInput type="number" min="1" [disabled]="readonly()" [ngModel]="selectedInput()?.batchSize || ''" (ngModelChange)="updateBatchSize($event)" />
+      </mat-form-field>
+    }
+  }
+</section>

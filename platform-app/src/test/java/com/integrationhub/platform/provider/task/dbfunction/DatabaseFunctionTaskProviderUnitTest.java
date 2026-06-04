@@ -93,6 +93,33 @@ class DatabaseFunctionTaskProviderUnitTest {
         assertEquals(List.of("setObject:1:ABC123:12"), bindings);
     }
 
+    @Test
+    void resolvesMetadataParameterFromSourceKey() {
+        var recordedSql = new AtomicReference<String>();
+        var bindings = new ArrayList<String>();
+        var firstRow = new AtomicBoolean(true);
+
+        DataSource dataSource = new ProxyDataSource(() -> postgresConnection(recordedSql, bindings, firstRow));
+        var provider = new DatabaseFunctionTaskProvider(
+                dataSource,
+                new ConnectionPoolManager(null, null),
+                fixedDialectInstance()
+        );
+        var context = taskContext();
+        context.attributes().put("metadata", Map.of("_processExecutionId", 301L));
+
+        var result = provider.execute(context, Map.of(
+                "functionName", "public.fn_collect_result",
+                "parameters", List.of(
+                        Map.of("name", "p_idinstancia", "sourceKind", "metadata", "sourceKey", "_processExecutionId", "jdbcType", "BIGINT")
+                )
+        ));
+
+        assertTrue(result.success());
+        assertEquals("select * from public.fn_collect_result(cast(? as bigint))", recordedSql.get());
+        assertEquals(List.of("setObject:1:301:-5"), bindings);
+    }
+
     private static Connection postgresConnection(AtomicReference<String> recordedSql,
                                                  List<String> bindings,
                                                  AtomicBoolean firstRow) {

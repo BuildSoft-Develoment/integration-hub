@@ -8,6 +8,7 @@ import com.integrationhub.platform.service.execution.ProcessExecutionAuditMapper
 import com.integrationhub.platform.service.execution.ProcessExecutionStateService;
 import com.integrationhub.platform.service.execution.ProcessedSourceFileService;
 import com.integrationhub.platform.service.execution.StreamingPipelineService;
+import com.integrationhub.platform.service.execution.TaskOutputRegistry;
 import com.integrationhub.platform.spi.source.SelectedSourceFile;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
@@ -15,6 +16,7 @@ import com.integrationhub.platform.spi.task.TaskResult;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -39,7 +41,8 @@ class FileReadTaskFastPathTest {
                 stateService,
                 auditMapper,
                 processedSourceFileService,
-                taskProviderRegistry
+                taskProviderRegistry,
+                new TaskOutputRegistry(new JsonConfigurationMapper())
         );
 
         var result = fastPath.execute(
@@ -48,7 +51,8 @@ class FileReadTaskFastPathTest {
                 sinkPlan(),
                 Map.of(),
                 List.of(),
-                "MANUAL"
+                "MANUAL",
+                new LinkedHashMap<>()
         );
 
         assertSame(execution, result);
@@ -63,7 +67,7 @@ class FileReadTaskFastPathTest {
                 10L,
                 1,
                 TaskType.FILE_READ,
-                "{}",
+                "{\"taskRef\":\"task-1-file-read\",\"executionMode\":\"batch\"}",
                 100L,
                 "Clientes",
                 "FILESYSTEM",
@@ -79,7 +83,7 @@ class FileReadTaskFastPathTest {
                 20L,
                 2,
                 TaskType.DB_WRITE,
-                "{\"targetTable\":\"public.cliente_target\",\"mode\":\"insert\"}",
+                "{\"taskRef\":\"task-2-db-write\",\"executionMode\":\"batch\",\"input\":{\"source\":\"task-output\",\"sourceTaskRef\":\"task-1-file-read\",\"sourceOutput\":\"records\"},\"targetTable\":\"public.cliente_target\",\"mode\":\"insert\"}",
                 null,
                 null,
                 null,

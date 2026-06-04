@@ -42,6 +42,7 @@ export class ProcessTaskFormHostComponent {
     return this.task().taskType === 'DB_WRITE'
       || this.task().taskType === 'DB_EXECUTE_SP'
       || this.task().taskType === 'DB_EXECUTE_FN'
-      || this.task().taskType === 'REST_CALL';
+      || this.task().taskType === 'REST_CALL'
+      || this.task().taskType === 'NOTIFICATION';
   }
 }

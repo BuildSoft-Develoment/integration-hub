@@ -3,7 +3,6 @@
     <section class="task-modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
       <header class="task-modal-header">
         <div class="task-modal-copy">
-          <p class="section-eyebrow">{{ i18n.t('ui.provider') }}</p>
           <h3>{{ i18n.t('ui.task', { index: index() + 1 }) }}</h3>
           <p class="task-modal-summary">{{ taskTypeLabel(task().taskType) }}</p>
         </div>

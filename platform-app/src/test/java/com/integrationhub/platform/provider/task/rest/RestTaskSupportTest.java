@@ -53,6 +53,22 @@ class RestTaskSupportTest {
         assertTrue(resolved.contains("\"codigo\":\"C002\""));
     }
 
+    @Test
+    void resolvesBraceTemplatesWithMetadataAndTaskOutputs() {
+        TaskContext context = taskContext();
+        context.attributes().put("metadata", Map.of("_taskRef", "rest-final"));
+        context.attributes().put("taskOutputs", Map.of("task-2-db-write.summary.writtenCount", 250));
+        ReadRecord record = new ReadRecord(Map.of("codigo", "C001"));
+
+        Map<String, Object> variables = RestTaskSupport.buildRecordVariables(record, 0, 1, context);
+        String resolved = RestTaskSupport.template(
+                "{\"task\":\"{_taskRef}\",\"written\":${task-2-db-write.summary.writtenCount}}",
+                variables
+        );
+
+        assertEquals("{\"task\":\"rest-final\",\"written\":250}", resolved);
+    }
+
     private TaskContext taskContext() {
         return new TaskContext(99L, 7L);
     }

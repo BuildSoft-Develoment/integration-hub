@@ -1,9 +1,28 @@
-<section class="binding-board" [class.binding-board--scrollable]="scrollRows()" [class.binding-board--compact-scroll]="useCompactScroll()">
-      <div class="binding-board__header ih-section-header">
-        <p class="ih-section-eyebrow">{{ i18n.t(titleKey()) }}</p>
-        <h5>{{ i18n.t(hintKey()) }}</h5>
-      </div>
+<section class="binding-board" [class.binding-board--scrollable]="scrollRows()" [class.binding-board--compact-scroll]="useCompactScroll()" [class.binding-board--with-palette]="showSourcePalette()">
+      @if (!showSourcePalette()) {
+        <div class="binding-board__header ih-section-header">
+          <p class="ih-section-eyebrow">{{ i18n.t(titleKey()) }}</p>
+          <h5>{{ i18n.t(hintKey()) }}</h5>
+        </div>
+      }
 
+      <div class="binding-board__workspace">
+      @if (showSourcePalette()) {
+        <ih-process-db-write-source-palette
+          [groups]="sourceGroups()"
+          [draggingSource]="draggingSource()"
+          [readonly]="readonly()"
+          (sourceDragStart)="draggingSource.set($event)"
+          (sourceDragEnd)="draggingSource.set(null)"
+        />
+      }
+      <div class="binding-board__main">
+      @if (showSourcePalette()) {
+        <div class="binding-board__header ih-section-header">
+          <p class="ih-section-eyebrow">{{ i18n.t(titleKey()) }}</p>
+          <h5>{{ i18n.t(hintKey()) }}</h5>
+        </div>
+      }
       <div class="binding-board__rows ih-thin-scroll" [class.binding-board__rows--scrollable]="scrollRows()">
         @for (entry of entries(); track trackBy(entry, $index); let index = $index) {
           <article class="binding-row" [class.binding-row--routine]="layout() === 'routine-compact'">
@@ -37,19 +56,65 @@
               }
             }
 
-            <mat-form-field>
-              <mat-label>{{ i18n.t('ui.valueSource') }}</mat-label>
-              <mat-select [disabled]="readonly()" [value]="entry.sourceKey || null" (selectionChange)="selectSource(index, $event.value)">
-                <mat-option [value]="null">{{ i18n.t('ui.dbWriteSelectNone') }}</mat-option>
-                @for (group of sourceGroups(); track group.key) {
-                  <mat-optgroup [label]="i18n.t(group.key)">
-                    @for (item of group.items; track item.kind + ':' + item.key) {
-                      <mat-option [value]="item.key">{{ item.label }}</mat-option>
+            <div class="binding-row__value">
+              @if (showSourcePalette()) {
+                <div
+                  class="mapping-select"
+                  [class.mapping-select--filled]="hasSource(entry)"
+                  [class.mapping-select--ready]="!!draggingSource()"
+                  [class.mapping-select--hover]="hoveredIndex() === index"
+                  [class.mapping-select--readonly]="readonly()"
+                  (dragover)="allowDrop($event)"
+                  (dragenter)="handleDragEnter(index)"
+                  (dragleave)="handleDragLeave(index)"
+                  (drop)="handleDrop($event, index)"
+                >
+                  <span class="mapping-select__value">{{ displaySourceLabel(entry) }}</span>
+
+                  <div class="mapping-select__actions">
+                    @if (hasSource(entry) && !readonly()) {
+                      <button type="button" class="mapping-select__icon mapping-select__icon--clear" (click)="selectSource(index, null)">
+                        <span aria-hidden="true">&times;</span>
+                      </button>
                     }
-                  </mat-optgroup>
-                }
-              </mat-select>
-            </mat-form-field>
+                    @if (!readonly()) {
+                      <button type="button" class="mapping-select__icon" [attr.aria-label]="i18n.t('ui.dbWriteOpenPicker')" (click)="valueSelect.open()">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="m6 9 6 6 6-6" />
+                        </svg>
+                      </button>
+                    }
+
+                    <mat-form-field class="mapping-select__field" subscriptSizing="dynamic">
+                      <mat-select #valueSelect [disabled]="readonly()" [value]="null" (selectionChange)="selectSource(index, $event.value)">
+                        <mat-option [value]="null">{{ i18n.t('ui.dbWriteSelectNone') }}</mat-option>
+                        @for (group of sourceGroups(); track group.key) {
+                          <mat-optgroup [label]="i18n.t(group.key)">
+                            @for (item of group.items; track item.kind + ':' + item.key) {
+                              <mat-option [value]="item.key">{{ item.label }}</mat-option>
+                            }
+                          </mat-optgroup>
+                        }
+                      </mat-select>
+                    </mat-form-field>
+                  </div>
+                </div>
+              } @else {
+                <mat-form-field>
+                  <mat-label>{{ i18n.t('ui.valueSource') }}</mat-label>
+                  <mat-select [disabled]="readonly()" [value]="entry.sourceKey || null" (selectionChange)="selectSource(index, $event.value)">
+                    <mat-option [value]="null">{{ i18n.t('ui.dbWriteSelectNone') }}</mat-option>
+                    @for (group of sourceGroups(); track group.key) {
+                      <mat-optgroup [label]="i18n.t(group.key)">
+                        @for (item of group.items; track item.kind + ':' + item.key) {
+                          <mat-option [value]="item.key">{{ item.label }}</mat-option>
+                        }
+                      </mat-optgroup>
+                    }
+                  </mat-select>
+                </mat-form-field>
+              }
+            </div>
 
             <mat-form-field class="binding-row__expression">
               <mat-label>{{ i18n.t(expressionLabelKey()) }}</mat-label>
@@ -63,6 +128,8 @@
             }
           </article>
         }
+      </div>
+      </div>
       </div>
 
       @if (!readonly() && showAddAction()) {

@@ -13,6 +13,9 @@
         gap: 0.95rem;
         min-width: 0;
       }
+      ih-process-task-runtime-panel {
+        grid-column: 1 / -1;
+      }
       ih-process-task-binding-board {
         min-height: 0;
         align-self: start;

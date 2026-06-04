@@ -1,4 +1,23 @@
-export type ProcessTaskBindingKind = 'field' | 'variable' | 'metadata' | 'expression';
+export type ProcessTaskExecutionMode = 'once' | 'per-record' | 'batch';
+
+export type ProcessTaskOutputKind = 'metadata' | 'summary' | 'records' | 'table' | 'errors' | 'out';
+
+export type ProcessTaskBindingKind = 'field' | 'variable' | ProcessTaskOutputKind | 'expression';
+
+export interface ProcessTaskInputDraft {
+  source: 'task-output';
+  sourceTaskRef: string;
+  sourceOutput: ProcessTaskOutputKind;
+  batchSize?: string;
+  connectionRef?: string;
+  table?: string;
+}
+
+export interface ProcessTaskRuntimeDraft {
+  taskRef: string;
+  executionMode: ProcessTaskExecutionMode;
+  input?: ProcessTaskInputDraft;
+}
 
 export interface ProcessTaskBindingOption {
   key: string;

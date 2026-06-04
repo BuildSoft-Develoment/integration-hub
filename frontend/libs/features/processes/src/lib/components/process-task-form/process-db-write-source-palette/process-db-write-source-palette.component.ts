@@ -69,15 +69,20 @@ export class ProcessDbWriteSourcePaletteComponent {
   }
 
   moveGroup(index: number, delta: -1 | 1): void {
-    this.groupOrder.update((current) => {
-      const nextIndex = index + delta;
-      if (nextIndex < 0 || nextIndex >= current.length) {
-        return current;
-      }
-      const next = [...current];
-      [next[index], next[nextIndex]] = [next[nextIndex], next[index]];
-      return next;
-    });
+    // El indice proviene de orderedGroups() (lista renderizada y filtrada). El swap debe
+    // hacerse sobre esas mismas keys visibles, no sobre groupOrder() crudo: si groupOrder
+    // tuviera keys residuales (no presentes en groups()), los indices dejan de alinearse y
+    // el reorden solo funcionaria en el prefijo comun (metadata/summary).
+    const visible = this.orderedGroups().map((group) => group.key);
+    const nextIndex = index + delta;
+    if (nextIndex < 0 || nextIndex >= visible.length) {
+      return;
+    }
+    const reordered = [...visible];
+    [reordered[index], reordered[nextIndex]] = [reordered[nextIndex], reordered[index]];
+    // Preserva, al final, cualquier key de groupOrder que no este visible (defensivo).
+    const residual = this.groupOrder().filter((key) => !reordered.includes(key));
+    this.groupOrder.set([...reordered, ...residual]);
   }
 
   handleDragStart(event: DragEvent, item: DbWriteSourceItem): void {

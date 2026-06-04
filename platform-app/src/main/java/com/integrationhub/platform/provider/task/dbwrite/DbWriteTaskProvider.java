@@ -114,6 +114,7 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
                 sourceFile != null ? sourceFile.size() : null,
                 sourceFile != null ? sourceFile.lastModified() : null
         );
+        TaskOutputSupport.mergeMetadata(runtimeValues, context);
         var taskOutputs = TaskOutputSupport.copyTaskOutputs(context);
         return records.stream().map(record -> {
             var values = new java.util.LinkedHashMap<String, Object>();

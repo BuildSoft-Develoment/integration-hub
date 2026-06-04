@@ -30,7 +30,9 @@ export class ProcessFileReadTaskFormComponent {
 
   readonly patchTask = output<Partial<ProcessTaskFormModel>>();
 
-  readonly draft = computed(() => this.manager.hydrateDraft<FileReadTaskDraft>(this.task()) ?? {
+  readonly draft = computed<FileReadTaskDraft>(() => this.manager.hydrateDraft<FileReadTaskDraft>(this.task()) ?? {
+    taskRef: this.task().clientId,
+    executionMode: 'batch',
     sourceDefinitionId: null,
     readerDefinitionId: null,
     sourceVariablesText: '',

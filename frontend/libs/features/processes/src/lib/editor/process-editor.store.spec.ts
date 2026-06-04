@@ -72,7 +72,7 @@ describe('ProcessEditorStore', () => {
         taskType: 'DB_WRITE',
         sourceDefinitionId: null,
         readerDefinitionId: null,
-        configurationJson: defaultTaskConfig('DB_WRITE'),
+        configurationJson: defaultTaskConfig('DB_WRITE', task.clientId),
       })
     );
   });

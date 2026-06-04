@@ -45,6 +45,8 @@
       } @else if (task().taskType === 'NOTIFICATION') {
         <ih-process-notification-task-form
           [task]="task()"
+          [tasks]="tasks()"
+          [readers]="readers()"
           [readonly]="readonly()"
           (patchTask)="patchTask.emit($event)"
         />

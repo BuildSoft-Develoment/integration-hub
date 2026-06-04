@@ -15,11 +15,12 @@ import { DbRoutineRef } from '../../../models/process-db-routine.models';
 import { DbWriteSchemaRef } from '../../../models/process-db-write.models';
 import { ProcessDbRoutineSelectorComponent } from '../process-db-routine-selector/process-db-routine-selector.component';
 import { ProcessTaskBindingBoardComponent } from '../process-task-binding-board/process-task-binding-board.component';
+import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
 @Component({
   selector: 'ih-process-db-execute-fn-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatAutocompleteModule, MatFormFieldModule, MatInputModule, MatSelectModule, ProcessDbRoutineSelectorComponent, ProcessTaskBindingBoardComponent],
+  imports: [CommonModule, FormsModule, MatAutocompleteModule, MatFormFieldModule, MatInputModule, MatSelectModule, ProcessDbRoutineSelectorComponent, ProcessTaskBindingBoardComponent, ProcessTaskRuntimePanelComponent],
     templateUrl: './process-db-execute-fn-task-form.component.html',
     styleUrl: './process-db-execute-fn-task-form.component.css'
 })
@@ -40,7 +41,9 @@ export class ProcessDbExecuteFnTaskFormComponent {
   readonly routines = signal<DbRoutineRef[]>([]);
   readonly routineQuery = signal('');
 
-  readonly draft = computed(() => this.manager.hydrateDraft<DbExecuteFunctionTaskDraft>(this.task()) ?? {
+  readonly draft = computed<DbExecuteFunctionTaskDraft>(() => this.manager.hydrateDraft<DbExecuteFunctionTaskDraft>(this.task()) ?? {
+    taskRef: this.task().clientId,
+    executionMode: 'once',
     connectionRef: '',
     functionSchema: '',
     functionName: '',
@@ -48,7 +51,7 @@ export class ProcessDbExecuteFnTaskFormComponent {
     timeoutSeconds: '30',
     parameters: [],
   });
-  readonly groupedSources = computed(() => this.bindingContext.groupOptions(this.bindingContext.buildOptions(this.task(), this.tasks(), this.readers())));
+  readonly groupedSources = computed(() => this.bindingContext.groupOptions(this.bindingContext.buildOptions(this.task(), this.tasks(), this.readers(), this.draft().input)));
   readonly selectedConnection = computed(() => this.connections().find((item) => item.name === this.draft().connectionRef) ?? null);
   readonly functionSchema = computed(() => this.draft().functionSchema || this.parseQualifiedName(this.draft().functionName).schema || '');
 

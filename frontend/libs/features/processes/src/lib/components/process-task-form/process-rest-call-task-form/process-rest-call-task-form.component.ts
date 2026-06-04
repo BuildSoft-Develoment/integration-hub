@@ -12,11 +12,12 @@ import { ProcessTaskFormModel, ReaderRef } from '../../../models/process.models'
 import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
 import { ProcessRestPathBuilderComponent } from '../process-rest-path-builder/process-rest-path-builder.component';
 import { ProcessTaskBindingBoardComponent } from '../process-task-binding-board/process-task-binding-board.component';
+import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
 @Component({
   selector: 'ih-process-rest-call-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatTabsModule, ProcessTaskBindingBoardComponent, ProcessRestPathBuilderComponent],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatTabsModule, ProcessTaskBindingBoardComponent, ProcessRestPathBuilderComponent, ProcessTaskRuntimePanelComponent],
     templateUrl: './process-rest-call-task-form.component.html',
     styleUrl: './process-rest-call-task-form.component.css'
 })
@@ -31,7 +32,9 @@ export class ProcessRestCallTaskFormComponent {
   readonly readonly = input(false);
   readonly patchTask = output<Partial<ProcessTaskFormModel>>();
 
-  readonly draft = computed(() => this.manager.hydrateDraft<RestCallTaskDraft>(this.task()) ?? {
+  readonly draft = computed<RestCallTaskDraft>(() => this.manager.hydrateDraft<RestCallTaskDraft>(this.task()) ?? {
+    taskRef: this.task().clientId,
+    executionMode: 'per-record',
     mode: 'per-record',
     method: 'POST',
     baseUrl: '',
@@ -54,7 +57,7 @@ export class ProcessRestCallTaskFormComponent {
     loginBodyTemplate: '',
     tokenPath: '$.access_token',
   });
-  readonly groupedSources = computed(() => this.bindingContext.groupOptions(this.bindingContext.buildOptions(this.task(), this.tasks(), this.readers())));
+  readonly groupedSources = computed(() => this.bindingContext.groupOptions(this.bindingContext.buildOptions(this.task(), this.tasks(), this.readers(), this.draft().input)));
   readonly resolvedUrl = computed(() => this.composeUrl(this.draft().baseUrl, this.pathSegmentEntries(), this.queryParameterEntries()));
   readonly queryEntries = computed(() => this.asBoardEntries(this.queryParameterEntries()));
   readonly headerEntries = computed(() => this.asBoardEntries(this.headerMappingEntries()));
@@ -127,7 +130,8 @@ export class ProcessRestCallTaskFormComponent {
   }
 
   updateDraft(patch: Partial<RestCallTaskDraft>): void {
-    const nextDraft = { ...this.draft(), ...patch };
+    const executionMode = patch.executionMode ?? this.draft().executionMode;
+    const nextDraft = { ...this.draft(), ...patch, mode: executionMode };
     this.patchTask.emit(this.manager.toTaskPatch(this.task().taskType, nextDraft));
   }
 

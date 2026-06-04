@@ -37,7 +37,7 @@ final class StoredProcedureConfigurationSupport {
                 throw new IllegalArgumentException("Each procedure parameter must be an object");
             }
             var name = stringValue(rawMap.get("name"));
-            var expression = stringValue(rawMap.get("value"));
+            var expression = parameterExpression(rawMap);
             var jdbcType = stringValue(rawMap.get("jdbcType"));
             var direction = StoredProcedureRuntimeSupport.parameterDirection(rawMap.get("direction"));
             var required = rawMap.get("required") == null || Boolean.parseBoolean(String.valueOf(rawMap.get("required")));
@@ -61,5 +61,38 @@ final class StoredProcedureConfigurationSupport {
 
     private static String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value);
+    }
+
+    private static String parameterExpression(Map<?, ?> rawMap) {
+        var value = stringValue(rawMap.get("value"));
+        if (!value.isBlank()) {
+            return value.trim();
+        }
+        var expression = stringValue(rawMap.get("expression"));
+        if (!expression.isBlank()) {
+            return expression.trim();
+        }
+        var sourceKey = stringValue(rawMap.get("sourceKey"));
+        if (sourceKey.isBlank()) {
+            return "";
+        }
+        var sourceKind = stringValue(rawMap.get("sourceKind")).toLowerCase();
+        if ("constant".equals(sourceKind) || "const".equals(sourceKind)) {
+            return sourceKey.startsWith("const:") ? sourceKey : "const:" + sourceKey;
+        }
+        var sourceTaskRef = stringValue(rawMap.get("sourceTaskRef"));
+        var sourceOutput = stringValue(rawMap.get("sourceOutput"));
+        if (!sourceTaskRef.isBlank()) {
+            if (sourceOutput.isBlank() && ("summary".equals(sourceKind) || "records".equals(sourceKind)
+                    || "table".equals(sourceKind) || "errors".equals(sourceKind) || "out".equals(sourceKind)
+                    || "metadata".equals(sourceKind))) {
+                sourceOutput = sourceKind;
+            }
+            if (!sourceOutput.isBlank()) {
+                return sourceTaskRef + "." + sourceOutput + "." + sourceKey.trim();
+            }
+            return sourceTaskRef + "." + sourceKey.trim();
+        }
+        return sourceKey.trim();
     }
 }

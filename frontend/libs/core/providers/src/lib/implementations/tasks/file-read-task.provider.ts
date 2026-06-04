@@ -1,10 +1,11 @@
 // @trace RF-002 (procesos: contrato configuration_json de tarea tipo FILE_READ)
 import { Injectable } from '@angular/core';
 import { I18nService } from '@integration-hub/core/services';
+import { ProcessTaskRuntimeDraft } from '../../tasks/process-task-binding.models';
 import { ProcessTaskProvider, ProcessTaskSummaryContext } from '../../tasks/process-task-provider.abstract';
 import { ProcessTaskFormModel } from '../../tasks/process-task.models';
 
-export interface FileReadTaskDraft {
+export interface FileReadTaskDraft extends ProcessTaskRuntimeDraft {
   sourceDefinitionId: number | null;
   readerDefinitionId: number | null;
   sourceVariablesText: string;
@@ -24,6 +25,8 @@ export class FileReadTaskProvider extends ProcessTaskProvider<FileReadTaskDraft>
 
   createDraft(): FileReadTaskDraft {
     return {
+      taskRef: '',
+      executionMode: 'batch',
       sourceDefinitionId: null,
       readerDefinitionId: null,
       sourceVariablesText: '',
@@ -37,6 +40,7 @@ export class FileReadTaskProvider extends ProcessTaskProvider<FileReadTaskDraft>
   hydrateDraft(task: ProcessTaskFormModel): FileReadTaskDraft {
     const config: any = this.parseJson(task.configurationJson);
     return {
+      ...this.hydrateRuntime(task, 'batch'),
       sourceDefinitionId: task.sourceDefinitionId ?? null,
       readerDefinitionId: task.readerDefinitionId ?? null,
       sourceVariablesText: Object.entries(config.sourceVariables || {})
@@ -64,10 +68,10 @@ export class FileReadTaskProvider extends ProcessTaskProvider<FileReadTaskDraft>
         return acc;
       }, {});
     
-    const config: any = {
+    const config: any = this.withRuntime({
       sourceVariables,
       batchSize: Number(draft.batchSize || 500),
-    };
+    }, draft, 'batch');
     if (draft.parallel) {
       config.parallel = true;
       config.parallelMode = draft.parallelMode || 'file';

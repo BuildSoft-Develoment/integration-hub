@@ -1,11 +1,11 @@
 // @trace RF-002 (procesos: contrato configuration_json de tarea tipo DB_EXECUTE_FN)
 import { Injectable } from '@angular/core';
-import { ProcessTaskParameterBindingDraft } from '../../tasks/process-task-binding.models';
+import { ProcessTaskParameterBindingDraft, ProcessTaskRuntimeDraft } from '../../tasks/process-task-binding.models';
 import { I18nService } from '@integration-hub/core/services';
 import { ProcessTaskProvider, ProcessTaskSummaryContext } from '../../tasks/process-task-provider.abstract';
 import { ProcessTaskFormModel } from '../../tasks/process-task.models';
 
-export interface DbExecuteFunctionTaskDraft {
+export interface DbExecuteFunctionTaskDraft extends ProcessTaskRuntimeDraft {
   connectionRef: string;
   functionSchema: string;
   functionName: string;
@@ -25,6 +25,8 @@ export class DbExecuteFunctionTaskProvider extends ProcessTaskProvider<DbExecute
 
   createDraft(): DbExecuteFunctionTaskDraft {
     return {
+      taskRef: '',
+      executionMode: 'once',
       connectionRef: '',
       functionSchema: '',
       functionName: '',
@@ -37,6 +39,7 @@ export class DbExecuteFunctionTaskProvider extends ProcessTaskProvider<DbExecute
   hydrateDraft(task: ProcessTaskFormModel): DbExecuteFunctionTaskDraft {
     const config: any = this.parseJson(task.configurationJson);
     return {
+      ...this.hydrateRuntime(task, 'once'),
       connectionRef: String(config.connectionRef || ''),
       functionSchema: String(config.functionSchema || ''),
       functionName: String(config.functionName || ''),
@@ -78,10 +81,10 @@ export class DbExecuteFunctionTaskProvider extends ProcessTaskProvider<DbExecute
       })
       .filter((parameter) => Boolean(parameter.name));
 
-    const payload: any = {
+    const payload: any = this.withRuntime({
       functionName: draft.functionName || '',
       timeoutSeconds: Number(draft.timeoutSeconds || 30),
-    };
+    }, draft, 'once');
     if (draft.connectionRef) payload.connectionRef = draft.connectionRef;
     if (draft.functionSchema) payload.functionSchema = draft.functionSchema;
     if (draft.resultAlias) payload.resultAlias = draft.resultAlias;

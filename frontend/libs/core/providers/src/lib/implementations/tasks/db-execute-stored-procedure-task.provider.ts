@@ -1,11 +1,11 @@
 // @trace RF-002 (procesos: contrato configuration_json de tarea tipo DB_EXECUTE_SP)
 import { Injectable } from '@angular/core';
-import { ProcessTaskParameterBindingDraft } from '../../tasks/process-task-binding.models';
+import { ProcessTaskParameterBindingDraft, ProcessTaskRuntimeDraft } from '../../tasks/process-task-binding.models';
 import { I18nService } from '@integration-hub/core/services';
 import { ProcessTaskProvider, ProcessTaskSummaryContext } from '../../tasks/process-task-provider.abstract';
 import { ProcessTaskFormModel } from '../../tasks/process-task.models';
 
-export interface DbExecuteStoredProcedureTaskDraft {
+export interface DbExecuteStoredProcedureTaskDraft extends ProcessTaskRuntimeDraft {
   connectionRef: string;
   procedureSchema: string;
   procedureName: string;
@@ -24,6 +24,8 @@ export class DbExecuteStoredProcedureTaskProvider extends ProcessTaskProvider<Db
 
   createDraft(): DbExecuteStoredProcedureTaskDraft {
     return {
+      taskRef: '',
+      executionMode: 'once',
       connectionRef: '',
       procedureSchema: '',
       procedureName: '',
@@ -35,6 +37,7 @@ export class DbExecuteStoredProcedureTaskProvider extends ProcessTaskProvider<Db
   hydrateDraft(task: ProcessTaskFormModel): DbExecuteStoredProcedureTaskDraft {
     const config: any = this.parseJson(task.configurationJson);
     return {
+      ...this.hydrateRuntime(task, 'once'),
       connectionRef: String(config.connectionRef || ''),
       procedureSchema: String(config.procedureSchema || ''),
       procedureName: String(config.procedureName || ''),
@@ -75,10 +78,10 @@ export class DbExecuteStoredProcedureTaskProvider extends ProcessTaskProvider<Db
         return next;
       });
 
-    const payload: any = {
+    const payload: any = this.withRuntime({
       procedureName: draft.procedureName || '',
       timeoutSeconds: Number(draft.timeoutSeconds || 30),
-    };
+    }, draft, 'once');
     if (draft.connectionRef) payload.connectionRef = draft.connectionRef;
     if (draft.procedureSchema) payload.procedureSchema = draft.procedureSchema;
     if (parameters.length) payload.parameters = parameters;

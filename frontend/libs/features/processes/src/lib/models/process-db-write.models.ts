@@ -18,7 +18,7 @@ export interface DbWriteColumnRef {
   scale: number | null;
 }
 
-export type DbWriteSourceKind = 'field' | 'variable' | 'metadata' | 'expression';
+export type DbWriteSourceKind = 'field' | 'variable' | 'metadata' | 'summary' | 'records' | 'table' | 'errors' | 'out' | 'expression';
 
 export interface DbWriteSourceItem {
   key: string;
@@ -39,13 +39,14 @@ export interface DbWriteMappingRow {
 
 export const DB_WRITE_METADATA_ITEMS: readonly DbWriteSourceItem[] = [
   { key: '_processExecutionId', label: '_processExecutionId', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
-  { key: '_executionId', label: '_executionId', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
   { key: '_taskDefinitionId', label: '_taskDefinitionId', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
-  { key: '_recordCount', label: '_recordCount', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
-  { key: '_skippedCount', label: '_skippedCount', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
-  { key: '_sourceFileName', label: '_sourceFileName', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
-  { key: '_sourceFilePath', label: '_sourceFilePath', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
-  { key: '_sourceMediaType', label: '_sourceMediaType', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
-  { key: '_sourceFileSize', label: '_sourceFileSize', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
-  { key: '_sourceLastModified', label: '_sourceLastModified', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
+  { key: '_taskOrder', label: '_taskOrder', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
+  { key: '_taskRef', label: '_taskRef', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
+  { key: '_taskType', label: '_taskType', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
+  { key: '_executionMode', label: '_executionMode', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
+  { key: '_triggerSource', label: '_triggerSource', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
+  { key: '_batchNumber', label: '_batchNumber', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
+  { key: '_batchSize', label: '_batchSize', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
+  { key: '_batchFrom', label: '_batchFrom', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
+  { key: '_batchTo', label: '_batchTo', kind: 'metadata', groupKey: 'ui.dbWriteGroup.metadata' },
 ];

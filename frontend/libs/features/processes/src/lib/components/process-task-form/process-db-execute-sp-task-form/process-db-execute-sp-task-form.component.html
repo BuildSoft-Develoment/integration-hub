@@ -1,4 +1,12 @@
 <div class="task-grid">
+      <ih-process-task-runtime-panel
+        [task]="task()"
+        [tasks]="tasks()"
+        [draft]="draft()"
+        [readonly]="readonly()"
+        (runtimeChange)="updateDraft($event)"
+      />
+
       <mat-form-field>
         <mat-label>{{ i18n.t('ui.connection') }}</mat-label>
         <mat-select [disabled]="readonly()" [ngModel]="draft().connectionRef" (ngModelChange)="handleConnectionChange($event)">
@@ -37,6 +45,7 @@
     <ih-process-task-binding-board
       [entries]="draft().parameters"
       [sourceGroups]="groupedSources()"
+      [showSourcePalette]="true"
       [readonly]="readonly()"
       [showDirection]="true"
       [showAddAction]="false"

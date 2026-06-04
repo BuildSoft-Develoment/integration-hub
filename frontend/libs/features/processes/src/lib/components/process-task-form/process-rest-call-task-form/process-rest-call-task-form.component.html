@@ -1,42 +1,38 @@
 <div class="task-grid">
-      <mat-form-field>
-        <mat-label>{{ i18n.t('ui.modeLabel') }}</mat-label>
-        <mat-select [disabled]="readonly()" [ngModel]="draft().mode" (ngModelChange)="updateDraft({ mode: $event })">
-          <mat-option value="per-record">{{ i18n.t('ui.restMode.perRecord') }}</mat-option>
-          <mat-option value="single-request">{{ i18n.t('ui.restMode.singleRequest') }}</mat-option>
-        </mat-select>
-      </mat-form-field>
-
-      <mat-form-field>
-        <mat-label>{{ i18n.t('ui.method') }}</mat-label>
-        <mat-select [disabled]="readonly()" [ngModel]="draft().method" (ngModelChange)="updateDraft({ method: $event })">
-          @for (method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']; track method) {
-            <mat-option [value]="method">{{ method }}</mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-
-      <mat-form-field>
-        <mat-label>{{ i18n.t('ui.timeoutSeconds') }}</mat-label>
-        <input matInput [disabled]="readonly()" [ngModel]="draft().timeoutSeconds" (ngModelChange)="updateDraft({ timeoutSeconds: $event })" />
-      </mat-form-field>
+      <ih-process-task-runtime-panel
+        [task]="task()"
+        [tasks]="tasks()"
+        [draft]="draft()"
+        [readonly]="readonly()"
+        (runtimeChange)="updateDraft($event)"
+      />
     </div>
 
-    <section class="rest-section ih-form-card">
-      <div class="rest-section__header">
-        <p class="section-eyebrow">{{ i18n.t('ui.restUrlSection') }}</p>
-        <h5>{{ i18n.t('ui.restUrlSectionHint') }}</h5>
+    <section class="rest-section rest-section--endpoint ih-form-card">
+      <div class="rest-endpoint-grid">
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.method') }}</mat-label>
+          <mat-select [disabled]="readonly()" [ngModel]="draft().method" (ngModelChange)="updateDraft({ method: $event })">
+            @for (method of ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']; track method) {
+              <mat-option [value]="method">{{ method }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.restBaseUrl') }}</mat-label>
+          <input matInput [disabled]="readonly()" [ngModel]="draft().baseUrl" (ngModelChange)="updateDraft({ baseUrl: $event })" />
+        </mat-form-field>
+
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.timeoutSeconds') }}</mat-label>
+          <input matInput [disabled]="readonly()" [ngModel]="draft().timeoutSeconds" (ngModelChange)="updateDraft({ timeoutSeconds: $event })" />
+        </mat-form-field>
       </div>
 
-      <mat-form-field class="full-width">
-        <mat-label>{{ i18n.t('ui.restBaseUrl') }}</mat-label>
-        <input matInput [disabled]="readonly()" [ngModel]="draft().baseUrl" (ngModelChange)="updateDraft({ baseUrl: $event })" />
-      </mat-form-field>
-
-      <mat-form-field class="full-width">
-        <mat-label>{{ i18n.t('ui.restResolvedUrl') }}</mat-label>
-        <input matInput [value]="resolvedUrl()" readonly />
-      </mat-form-field>
+      @if (resolvedUrl()) {
+        <small class="rest-resolved-url"><span class="rest-resolved-url__label">{{ i18n.t('ui.restResolvedUrl') }}:</span> {{ resolvedUrl() }}</small>
+      }
     </section>
 
     <mat-tab-group animationDuration="0ms" class="rest-tabs">
@@ -161,13 +157,8 @@
       </mat-tab>
 
       <mat-tab [label]="i18n.t('ui.body')">
-        <div class="rest-tab-content">
-          <section class="rest-section ih-form-card">
-            <div class="rest-section__header">
-              <p class="ih-section-eyebrow">{{ i18n.t('ui.restBodyTemplate') }}</p>
-              <h5>{{ i18n.t('ui.restBodyTemplateHint') }}</h5>
-            </div>
-
+        <div class="rest-tab-content rest-tab-content--fill">
+          <section class="rest-section rest-section--body ih-form-card">
             <div class="rest-body-workspace">
               <div class="rest-body-editor">
                 <mat-form-field class="full-width">

@@ -7,6 +7,7 @@ import com.integrationhub.platform.service.execution.StreamingPipelineService;
 import com.integrationhub.platform.service.execution.ProcessExecutionAuditMapper;
 import com.integrationhub.platform.service.execution.ProcessExecutionStateService;
 import com.integrationhub.platform.service.execution.ProcessedSourceFileService;
+import com.integrationhub.platform.service.execution.TaskOutputRegistry;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -24,17 +25,20 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
     private final ProcessExecutionAuditMapper auditMapper;
     private final ProcessedSourceFileService processedSourceFileService;
     private final TaskProviderRegistry taskProviderRegistry;
+    private final TaskOutputRegistry taskOutputRegistry;
 
     public FileReadTaskFastPath(StreamingPipelineService pipelineService,
                                 ProcessExecutionStateService stateService,
                                 ProcessExecutionAuditMapper auditMapper,
                                 ProcessedSourceFileService processedSourceFileService,
-                                TaskProviderRegistry taskProviderRegistry) {
+                                TaskProviderRegistry taskProviderRegistry,
+                                TaskOutputRegistry taskOutputRegistry) {
         this.pipelineService = pipelineService;
         this.stateService = stateService;
         this.auditMapper = auditMapper;
         this.processedSourceFileService = processedSourceFileService;
         this.taskProviderRegistry = taskProviderRegistry;
+        this.taskOutputRegistry = taskOutputRegistry;
     }
 
     @Override
@@ -42,9 +46,34 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
         if (current == null || next == null) return false;
         if (current.taskType() != TaskType.FILE_READ) return false;
         if (current.readerType() == null || !SUPPORTED_READERS.contains(current.readerType().toUpperCase())) return false;
+        if (!declaresCurrentReadRecordsInput(current, next)) return false;
 
         var provider = taskProviderRegistry.resolve(next.taskType().name());
         return provider instanceof BatchTaskProvider;
+    }
+
+    private boolean declaresCurrentReadRecordsInput(ProcessExecutionStateService.TaskPlan current,
+                                                    ProcessExecutionStateService.TaskPlan next) {
+        var currentConfiguration = taskOutputRegistry.configuration(current.configurationJson());
+        var nextConfiguration = taskOutputRegistry.configuration(next.configurationJson());
+        taskOutputRegistry.taskRef(current, currentConfiguration);
+        var executionMode = taskOutputRegistry.executionMode(nextConfiguration);
+        if (!"batch".equals(executionMode) && !"per-record".equals(executionMode)) {
+            return false;
+        }
+        if (!(nextConfiguration.get("input") instanceof Map<?, ?> rawInput)) {
+            return false;
+        }
+        var source = stringValue(rawInput.get("source"));
+        var sourceTaskRef = stringValue(rawInput.get("sourceTaskRef"));
+        var sourceOutput = stringValue(rawInput.get("sourceOutput"));
+        return "task-output".equalsIgnoreCase(source)
+                && taskOutputRegistry.taskRef(current, currentConfiguration).equals(sourceTaskRef)
+                && ("records".equalsIgnoreCase(sourceOutput) || sourceOutput.isBlank());
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? "" : String.valueOf(value).trim();
     }
 
     @Override
@@ -53,12 +82,17 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
                                     ProcessExecutionStateService.TaskPlan next,
                                     Map<String, String> executionVariables,
                                     List<String> selectedFiles,
-                                    String triggerSource) {
+                                    String triggerSource,
+                                    Map<String, Object> taskOutputs) {
         var readTaskExecutionId = stateService.startTask(processExecutionId, current.taskDefinitionId(), current.taskType().name(), current.taskOrder());
         var sinkTaskExecutionId = stateService.startTask(processExecutionId, next.taskDefinitionId(), next.taskType().name(), next.taskOrder());
 
         try {
             var pipelineResult = pipelineService.run(processExecutionId, current, next, executionVariables, selectedFiles);
+            var currentConfiguration = taskOutputRegistry.configuration(current.configurationJson());
+            var nextConfiguration = taskOutputRegistry.configuration(next.configurationJson());
+            taskOutputRegistry.registerFileRead(taskOutputs, current, currentConfiguration, null, pipelineResult.readResult());
+            taskOutputRegistry.registerTaskResult(taskOutputs, next, nextConfiguration, taskOutputRegistry.pipelineSinkOutputs(next, pipelineResult.processedCount()));
 
             stateService.completeTask(
                     processExecutionId,

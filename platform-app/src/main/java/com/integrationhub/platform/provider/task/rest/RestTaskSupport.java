@@ -54,6 +54,7 @@ final class RestTaskSupport {
         variables.put("processExecutionId", context.processExecutionId());
         variables.put("taskDefinitionId", context.taskDefinitionId());
         TaskOutputSupport.mergeTaskOutputs(variables, context);
+        TaskOutputSupport.mergeMetadata(variables, context);
         return variables;
     }
 
@@ -63,8 +64,8 @@ final class RestTaskSupport {
         variables.put("processExecutionId", context.processExecutionId());
         variables.put("taskDefinitionId", context.taskDefinitionId());
         TaskOutputSupport.mergeTaskOutputs(variables, context);
+        TaskOutputSupport.mergeMetadata(variables, context);
         variables.put("recordsJson", toJson(records.stream().map(ReadRecord::values).toList(), objectMapper));
-        TaskOutputSupport.mergeTaskOutputs(variables, context);
         return variables;
     }
 
@@ -73,6 +74,7 @@ final class RestTaskSupport {
         for (Map.Entry<String, Object> entry : variables.entrySet()) {
             String placeholder = "${" + entry.getKey() + "}";
             resolved = resolved.replace(placeholder, entry.getValue() == null ? "" : String.valueOf(entry.getValue()));
+            resolved = resolved.replace("{" + entry.getKey() + "}", entry.getValue() == null ? "" : String.valueOf(entry.getValue()));
         }
         return resolved;
     }

@@ -1,5 +1,5 @@
-:host { display: grid; gap: 1rem; min-width: 0; min-height: 0; }
-      .binding-board { display: grid; gap: 0.9rem; min-width: 0; }
+:host { display: grid; gap: 1rem; min-width: 0; min-height: 0; height: 100%; }
+      .binding-board { display: grid; gap: 0.9rem; min-width: 0; min-height: 0; }
       .binding-board--scrollable {
         grid-template-rows: auto minmax(0, 1fr) auto;
         min-height: 0;
@@ -73,5 +73,140 @@
           overflow: visible;
           padding-right: 0;
           padding-bottom: 0;
+        }
+      }
+      /* Modo con paleta arrastrable (SP/FN). Por defecto los wrappers son transparentes
+         (display:contents) para no alterar el layout original del board. En modo paleta el
+         board pasa a columna flex y el workspace divide: paleta | columna derecha (titulo + filas). */
+      .binding-board__workspace,
+      .binding-board__main { display: contents; }
+      .binding-board--with-palette {
+        display: flex;
+        flex-direction: column;
+        gap: 0.9rem;
+        height: 100%;
+        min-height: 0;
+        overflow: hidden;
+      }
+      .binding-board--with-palette .binding-board__workspace {
+        display: grid;
+        grid-template-columns: minmax(min(240px, 100%), 0.9fr) minmax(0, 1.4fr);
+        gap: 1rem;
+        align-items: stretch;
+        min-width: 0;
+        min-height: 0;
+        flex: 1;
+        overflow: hidden;
+      }
+      /* Tecnica DB_WRITE: acota cada columna al alto del workspace para que
+         su contenido (paleta de origenes / filas) scrollee internamente. */
+      .binding-board--with-palette .binding-board__workspace > * {
+        min-height: 0;
+        max-height: 100%;
+      }
+      /* La paleta de origenes se acota y scrollea internamente (como en DB_WRITE),
+         en vez de desbordar cuando el board no tiene altura definida (SP/FN). */
+      .binding-board--with-palette ih-process-db-write-source-palette {
+        min-width: 0;
+        min-height: 0;
+      }
+      .binding-board--with-palette .binding-board__main {
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        gap: 0.85rem;
+        min-width: 0;
+        min-height: 0;
+      }
+      .binding-row__value {
+        min-width: 0;
+        align-self: start;
+      }
+      .binding-row--routine .binding-row__value {
+        align-self: center;
+      }
+      /* Drop zone identica a DB_WRITE (.mapping-select) para SP/FN. */
+      .mapping-select {
+        position: relative;
+        min-width: 0;
+        min-height: 3rem;
+        border: 1px dashed var(--ih-border);
+        border-radius: 14px;
+        padding: 0.4rem 0.45rem 0.4rem 0.7rem;
+        background: color-mix(in srgb, var(--ih-surface-alt) 82%, transparent);
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 0.5rem;
+        transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+      }
+      .mapping-select--filled {
+        border-style: solid;
+        border-color: color-mix(in srgb, var(--ih-accent) 45%, var(--ih-border));
+      }
+      .mapping-select--ready {
+        border-color: color-mix(in srgb, var(--ih-accent) 32%, var(--ih-border));
+        background: color-mix(in srgb, var(--ih-accent) 7%, var(--ih-surface-alt));
+      }
+      .mapping-select--hover {
+        border-style: solid;
+        border-color: color-mix(in srgb, var(--ih-accent) 55%, var(--ih-border));
+        background: color-mix(in srgb, var(--ih-accent) 11%, var(--ih-surface-alt));
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--ih-accent) 14%, transparent);
+        transform: translateY(-1px);
+      }
+      .mapping-select__value {
+        min-width: 0;
+        color: var(--ih-text-soft);
+        font-size: 0.86rem;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .mapping-select--filled .mapping-select__value { color: var(--ih-text); }
+      .mapping-select__actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.22rem;
+      }
+      .mapping-select__icon {
+        width: 1.65rem;
+        height: 1.65rem;
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--ih-text-soft);
+        display: inline-grid;
+        place-items: center;
+        cursor: pointer;
+      }
+      .mapping-select__icon:hover {
+        background: color-mix(in srgb, var(--ih-accent) 10%, transparent);
+        color: var(--ih-text);
+      }
+      .mapping-select__icon--clear { color: var(--ih-danger); }
+      .mapping-select__icon--clear:hover {
+        background: color-mix(in srgb, var(--ih-danger) 14%, transparent);
+        color: var(--ih-danger);
+      }
+      .mapping-select__icon svg {
+        width: 0.95rem;
+        height: 0.95rem;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .mapping-select__field {
+        position: absolute;
+        inset: 0;
+        opacity: 0;
+        pointer-events: none;
+      }
+      .mapping-select__field .mat-mdc-form-field-subscript-wrapper { display: none; }
+      @media (max-width: 1080px) {
+        .binding-board--with-palette .binding-board__workspace {
+          grid-template-columns: minmax(0, 1fr);
         }
       }

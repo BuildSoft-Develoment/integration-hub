@@ -29,6 +29,7 @@ public interface ExecutionFastPath {
      * @param executionVariables        The global execution variables.
      * @param selectedFiles             The list of selected file references from the trigger.
      * @param triggerSource             The source of the trigger (for audit).
+     * @param taskOutputs               Shared output registry for subsequent tasks.
      * @return The resulting ProcessExecution state or null if a custom fail-fast happened.
      */
     ProcessExecution execute(Long processExecutionId,
@@ -36,7 +37,8 @@ public interface ExecutionFastPath {
                              ProcessExecutionStateService.TaskPlan next,
                              Map<String, String> executionVariables,
                              List<String> selectedFiles,
-                             String triggerSource);
+                             String triggerSource,
+                             Map<String, Object> taskOutputs);
 
     /**
      * Returns the number of tasks consumed by this fast path.

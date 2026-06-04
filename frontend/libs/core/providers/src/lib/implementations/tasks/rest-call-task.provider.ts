@@ -1,11 +1,11 @@
 // @trace RF-002 (procesos: contrato configuration_json de tarea tipo REST_CALL)
 import { Injectable } from '@angular/core';
-import { ProcessTaskBodyFieldBindingDraft } from '../../tasks/process-task-binding.models';
+import { ProcessTaskBodyFieldBindingDraft, ProcessTaskRuntimeDraft } from '../../tasks/process-task-binding.models';
 import { I18nService } from '@integration-hub/core/services';
 import { ProcessTaskProvider, ProcessTaskSummaryContext } from '../../tasks/process-task-provider.abstract';
 import { ProcessTaskFormModel } from '../../tasks/process-task.models';
 
-export interface RestCallTaskDraft {
+export interface RestCallTaskDraft extends ProcessTaskRuntimeDraft {
   mode: string;
   method: string;
   baseUrl: string;
@@ -40,6 +40,8 @@ export class RestCallTaskProvider extends ProcessTaskProvider<RestCallTaskDraft>
 
   createDraft(): RestCallTaskDraft {
     return {
+      taskRef: '',
+      executionMode: 'per-record',
       mode: 'per-record',
       method: 'POST',
       baseUrl: '',
@@ -73,7 +75,8 @@ export class RestCallTaskProvider extends ProcessTaskProvider<RestCallTaskDraft>
     const queryParameters = this.normalizeBindings(config.queryParameters);
     const headerMappings = this.normalizeBindings(config.headerMappings, config.headers);
     return {
-      mode: String(config.mode || 'per-record'),
+      ...this.hydrateRuntime(task, 'per-record'),
+      mode: String(config.executionMode || config.mode || 'per-record'),
       method: String(config.method || 'POST'),
       baseUrl: String(config.baseUrl || parsedUrl.baseUrl),
       pathTemplate: String(config.pathTemplate || parsedUrl.pathTemplate),
@@ -100,14 +103,15 @@ export class RestCallTaskProvider extends ProcessTaskProvider<RestCallTaskDraft>
   toTaskPatch(draft: RestCallTaskDraft): Partial<ProcessTaskFormModel> {
     const pathTemplate = this.buildPathTemplate(draft.pathParameters);
     const url = this.buildUrl(draft.baseUrl, pathTemplate, draft.queryParameters);
-    const payload: any = {
-      mode: draft.mode || 'per-record',
+    const executionMode = draft.executionMode || (draft.mode === 'single-request' ? 'once' : draft.mode) || 'per-record';
+    const payload: any = this.withRuntime({
+      mode: executionMode,
       method: draft.method || 'POST',
       baseUrl: draft.baseUrl || '',
       pathTemplate,
       url,
       timeoutSeconds: Number(draft.timeoutSeconds || 20),
-    };
+    }, { ...draft, executionMode }, 'per-record');
     if (draft.pathParameters.length) payload.pathParameters = this.serializeBindings(draft.pathParameters);
     if (draft.queryParameters.length) payload.queryParameters = this.serializeBindings(draft.queryParameters);
     if (draft.headerMappings.length) {
@@ -210,7 +214,7 @@ export class RestCallTaskProvider extends ProcessTaskProvider<RestCallTaskDraft>
     if (item.sourceKind === 'variable') {
       return `{${item.sourceKey.trim()}}`;
     }
-    if (item.sourceKind === 'field' || item.sourceKind === 'metadata') {
+    if (item.sourceKind && item.sourceKind !== 'expression') {
       return `{${item.sourceKey.trim()}}`;
     }
     return item.sourceKey.trim();

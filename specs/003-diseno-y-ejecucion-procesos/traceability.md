@@ -60,6 +60,10 @@ arma el JSON; `hydrateDraft` el inverso). La UI por tipo vive en `process-task-f
 ## Decisiones
 - Motor providers + registries para tipos de tarea (DbWrite, StoredProcedure, etc.) (ADR-001).
 - Correlacion operativa por `processExecutionId` (ADR-002).
+- Unificar la peticion HTTP de `REST_CALL` y el canal `webhook` de `NOTIFICATION` en una pieza
+  compartida (front `process-http-request` + back `HttpRequestSupport`), conservando epilogos
+  distintos: REST mapea respuesta a output; webhook audita y valida 2xx. Ver
+  [ADR-005](../../docs/fase-3-arquitectura/adr/ADR-005-unificacion-peticion-http.md) (Propuesto).
 
 ## Preguntas abiertas
 - Confirmar mapeo definitivo RF local `RF-001..RF-005` ↔ requerimientos globales de Fase 1.
