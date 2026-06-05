@@ -46,8 +46,9 @@ dos pasos: antes de invocar `url` se hace una llamada al endpoint de token (`log
 extrae el token de la respuesta con `tokenPath` (JSON-path simple, p.ej. `$.access_token` o
 `$.data.token`) y se inyecta como `Authorization: Bearer` en la peticion al servicio. Si el endpoint
 de token espera `application/x-www-form-urlencoded`, se declara ese `Content-Type` en `loginHeaders`
-y el cuerpo en `loginBodyTemplate`. El token se obtiene en cada ejecucion (cacheo por TTL: mejora
-futura).
+y el cuerpo en `loginBodyTemplate`. El token se **cachea por TTL** (clave = hash de la config de
+login): TTL = `tokenTtlSeconds` (config) › `expires_in` de la respuesta › 300s por defecto, con
+margen de refresco; `tokenTtlSeconds: 0` desactiva la cache (token por ejecucion).
 
 ```jsonc
 // FILE_READ  (sourceDefinitionId/readerDefinitionId van como columnas de la tarea)

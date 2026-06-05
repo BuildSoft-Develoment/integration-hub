@@ -23,8 +23,9 @@ Aceptado (ruta B). Pendiente de validacion humana en el gate de arquitectura.
 > **`login-request`** (auth en dos pasos: pre-fetch de token via `loginUrl`/`loginMethod`/
 > `loginHeaders`/`loginBodyTemplate` + extraccion por `tokenPath` e inyeccion como Bearer) esta
 > implementado en `HttpRequestSupport` y funciona para REST y webhook (test:
-> `HttpRequestSupportLoginTest`). Pendiente: gate humano de contrato + auth; cacheo de token por TTL
-> (mejora futura).
+> `HttpRequestSupportLoginTest`). El token se **cachea por TTL** (clave = hash de la config de login;
+> TTL = `tokenTtlSeconds` › `expires_in` › 300s, con margen de refresco; `0` desactiva la cache).
+> Pendiente: gate humano de contrato + auth.
 
 ## Contexto
 

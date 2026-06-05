@@ -9,10 +9,14 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Construccion compartida de una peticion HTTP saliente para tareas de proceso.
@@ -24,11 +28,25 @@ import java.util.Map;
  *
  * <p>Soporta {@code authType}: {@code none}/{@code basic}/{@code bearer} y {@code login-request}
  * (autenticacion en dos pasos: pide un token a un endpoint de login —p.ej. AWS STS, Google OAuth,
- * Azure AD— y lo inyecta como {@code Authorization: Bearer} en la peticion al servicio destino).</p>
+ * Azure AD— y lo inyecta como {@code Authorization: Bearer} en la peticion al servicio destino).
+ * El token de {@code login-request} se cachea por TTL (ver {@link #resolveLoginToken}).</p>
  */
 public final class HttpRequestSupport {
 
+    /** TTL por defecto del token de login si no hay {@code tokenTtlSeconds} ni {@code expires_in}. */
+    private static final int DEFAULT_TOKEN_TTL_SECONDS = 300;
+    /** Margen para refrescar el token antes de su expiracion real. */
+    private static final long TOKEN_REFRESH_SKEW_SECONDS = 30;
+
+    private static final ConcurrentHashMap<String, CachedToken> TOKEN_CACHE = new ConcurrentHashMap<>();
+
     private HttpRequestSupport() {
+    }
+
+    private record CachedToken(String token, long expiresAtMillis) {
+        boolean isValid(long nowMillis) {
+            return nowMillis < expiresAtMillis;
+        }
     }
 
     /**
@@ -107,15 +125,27 @@ public final class HttpRequestSupport {
     }
 
     /**
-     * Realiza la peticion de login (paso 1) y extrae el token de la respuesta segun {@code tokenPath}.
-     * El {@code Content-Type} del login lo controla {@code loginHeaders} (default JSON); si se usa
-     * {@code application/x-www-form-urlencoded}, el {@code loginBodyTemplate} debe traer el cuerpo
-     * en ese formato.
+     * Devuelve un token de login valido, reutilizando el cacheado si no ha expirado. Si no hay
+     * cache valida, realiza la peticion de login (paso 1), extrae el token con {@code tokenPath} y
+     * lo guarda con un TTL. El {@code Content-Type} del login lo controla {@code loginHeaders}
+     * (default JSON); para {@code application/x-www-form-urlencoded}, el {@code loginBodyTemplate}
+     * debe traer el cuerpo en ese formato.
+     *
+     * <p>TTL (precedencia): {@code tokenTtlSeconds} de la config &gt; {@code expires_in} de la
+     * respuesta &gt; {@link #DEFAULT_TOKEN_TTL_SECONDS}; menos {@link #TOKEN_REFRESH_SKEW_SECONDS}
+     * de margen.</p>
      */
     private static String resolveLoginToken(HttpClient client, ObjectMapper mapper, Map<String, Object> configuration) {
         if (client == null || mapper == null) {
             throw new IllegalStateException("login-request requires an HTTP client and JSON mapper");
         }
+        String cacheKey = loginCacheKey(configuration);
+        long now = System.currentTimeMillis();
+        CachedToken cached = TOKEN_CACHE.get(cacheKey);
+        if (cached != null && cached.isValid(now)) {
+            return cached.token();
+        }
+
         String loginUrl = requireString(configuration, "loginUrl");
         String loginMethod = String.valueOf(configuration.getOrDefault("loginMethod", "POST")).toUpperCase();
         String loginBody = configuration.get("loginBodyTemplate") == null ? "" : String.valueOf(configuration.get("loginBodyTemplate"));
@@ -144,7 +174,16 @@ public final class HttpRequestSupport {
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new IllegalStateException("Login token request returned status " + response.statusCode());
             }
-            return extractToken(mapper, response.body(), tokenPath);
+            JsonNode root = mapper.readTree(response.body() == null ? "" : response.body());
+            String token = navigateToken(root, tokenPath);
+            long ttlSeconds = resolveTtlSeconds(configuration, root);
+            if (ttlSeconds > 0) {
+                long effective = Math.max(1, ttlSeconds - TOKEN_REFRESH_SKEW_SECONDS);
+                TOKEN_CACHE.put(cacheKey, new CachedToken(token, now + effective * 1000));
+            } else {
+                TOKEN_CACHE.remove(cacheKey);
+            }
+            return token;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Login token request interrupted", e);
@@ -159,29 +198,83 @@ public final class HttpRequestSupport {
      */
     static String extractToken(ObjectMapper mapper, String responseBody, String tokenPath) {
         try {
-            JsonNode node = mapper.readTree(responseBody == null ? "" : responseBody);
-            String path = tokenPath == null || tokenPath.isBlank() ? "access_token" : tokenPath.trim();
-            if (path.startsWith("$.")) {
-                path = path.substring(2);
-            } else if (path.startsWith("$")) {
-                path = path.substring(1);
-            }
-            for (String segment : path.split("\\.")) {
-                if (segment.isBlank()) {
-                    continue;
-                }
-                if (node == null) {
-                    break;
-                }
-                node = node.get(segment);
-            }
-            if (node == null || node.isNull() || !node.isValueNode()) {
-                throw new IllegalStateException("Token not found at path '" + tokenPath + "' in login response");
-            }
-            return node.asText();
+            JsonNode root = mapper.readTree(responseBody == null ? "" : responseBody);
+            return navigateToken(root, tokenPath);
         } catch (IOException e) {
             throw new IllegalStateException("Login response is not valid JSON", e);
         }
+    }
+
+    private static String navigateToken(JsonNode root, String tokenPath) {
+        String path = tokenPath == null || tokenPath.isBlank() ? "access_token" : tokenPath.trim();
+        if (path.startsWith("$.")) {
+            path = path.substring(2);
+        } else if (path.startsWith("$")) {
+            path = path.substring(1);
+        }
+        JsonNode node = root;
+        for (String segment : path.split("\\.")) {
+            if (segment.isBlank()) {
+                continue;
+            }
+            if (node == null) {
+                break;
+            }
+            node = node.get(segment);
+        }
+        if (node == null || node.isNull() || !node.isValueNode()) {
+            throw new IllegalStateException("Token not found at path '" + tokenPath + "' in login response");
+        }
+        return node.asText();
+    }
+
+    /** TTL: {@code tokenTtlSeconds} (config) &gt; {@code expires_in} (respuesta) &gt; default. */
+    private static long resolveTtlSeconds(Map<String, Object> configuration, JsonNode loginResponse) {
+        Object configured = configuration.get("tokenTtlSeconds");
+        if (configured != null && !String.valueOf(configured).isBlank()) {
+            try {
+                return Long.parseLong(String.valueOf(configured).trim());
+            } catch (NumberFormatException ignored) {
+                // cae a expires_in / default
+            }
+        }
+        if (loginResponse != null) {
+            JsonNode expiresIn = loginResponse.get("expires_in");
+            if (expiresIn != null && expiresIn.canConvertToLong()) {
+                return expiresIn.asLong();
+            }
+        }
+        return DEFAULT_TOKEN_TTL_SECONDS;
+    }
+
+    private static String loginCacheKey(Map<String, Object> configuration) {
+        TreeMap<String, String> material = new TreeMap<>();
+        for (String key : new String[] { "loginUrl", "loginMethod", "loginBodyTemplate", "tokenPath", "username", "password", "token" }) {
+            Object value = configuration.get(key);
+            if (value != null) {
+                material.put(key, String.valueOf(value));
+            }
+        }
+        material.put("loginHeaders", new TreeMap<>(stringMap(configuration, "loginHeaders")).toString());
+        return sha256Hex(material.toString());
+    }
+
+    private static String sha256Hex(String value) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(digest.length * 2);
+            for (byte b : digest) {
+                hex.append(Character.forDigit((b >> 4) & 0xF, 16)).append(Character.forDigit(b & 0xF, 16));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 not available", e);
+        }
+    }
+
+    /** Limpia la cache de tokens de login. Uso interno / pruebas. */
+    static void clearTokenCache() {
+        TOKEN_CACHE.clear();
     }
 
     private static String requireString(Map<String, Object> configuration, String key) {
