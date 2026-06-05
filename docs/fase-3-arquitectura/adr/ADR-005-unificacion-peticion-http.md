@@ -5,7 +5,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [ADR-004 Motor de tareas con inputs y outputs tipados](ADR-004-motor-input-output-tareas.md)
-- Siguiente: [Indice docs](../../README.md)
+- Siguiente: [ADR-006 Fuentes de almacenamiento cloud (S3, GCS, Azure Blob)](ADR-006-fuentes-almacenamiento-cloud.md)
 <!-- nav-guided:end -->
 
 ## Estado

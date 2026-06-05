@@ -17,6 +17,7 @@
 - [ADR-003 RBAC endpoint x rol](ADR-003-rbac-endpoint-rol.md)
 - [ADR-004 Motor de tareas con inputs y outputs tipados](ADR-004-motor-input-output-tareas.md)
 - [ADR-005 Unificacion de la peticion HTTP (REST_CALL + webhook)](ADR-005-unificacion-peticion-http.md)
+- [ADR-006 Fuentes de almacenamiento cloud (S3, GCS, Azure Blob)](ADR-006-fuentes-almacenamiento-cloud.md)
 
 ## Regla
 
