@@ -74,7 +74,7 @@ public class RestCallTaskProvider implements BatchTaskProvider {
                     context);
             String resolvedUrl = RestTaskSupport.template(urlTemplate, variables);
             String resolvedBody = RestTaskSupport.resolveBody(bodyTemplate, record, objectMapper, variables);
-            HttpRequest request = HttpRequestSupport.build(configuration, method, resolvedUrl, resolvedBody, timeoutSeconds,
+            HttpRequest request = HttpRequestSupport.build(httpClient, objectMapper, configuration, method, resolvedUrl, resolvedBody, timeoutSeconds,
                     headers);
             send(request);
             successfulCalls++;
@@ -88,7 +88,7 @@ public class RestCallTaskProvider implements BatchTaskProvider {
         Map<String, Object> variables = RestTaskSupport.buildBatchVariables(records, context, objectMapper);
         String resolvedUrl = RestTaskSupport.template(urlTemplate, variables);
         String resolvedBody = RestTaskSupport.resolveBatchBody(bodyTemplate, records, objectMapper, variables);
-        HttpRequest request = HttpRequestSupport.build(configuration, method, resolvedUrl, resolvedBody, timeoutSeconds, headers);
+        HttpRequest request = HttpRequestSupport.build(httpClient, objectMapper, configuration, method, resolvedUrl, resolvedBody, timeoutSeconds, headers);
         send(request);
         return TaskResult.success("REST task completed with a single call for " + records.size() + " records");
     }

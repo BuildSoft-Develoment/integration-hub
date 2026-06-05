@@ -40,6 +40,14 @@ Credenciales/token en `REST_CALL` admiten referencia `${secret:...}` (nunca valo
 `authType`+credenciales, `bodyTemplate`) — front `process-http-request` + back `HttpRequestSupport`
 (ADR-005). **Sin fallback**: el webhook ya no usa `headersJson` crudo; los headers van como mapa
 estructurado `headers`.
+`authType` admite `none`/`basic`/`bearer`/`login-request`. **`login-request`** es autenticacion en
+dos pasos: antes de invocar `url` se hace una llamada al endpoint de token (`loginUrl`,
+`loginMethod`, `loginHeaders`, `loginBodyTemplate`) —p.ej. AWS STS, Google OAuth, Azure AD—, se
+extrae el token de la respuesta con `tokenPath` (JSON-path simple, p.ej. `$.access_token` o
+`$.data.token`) y se inyecta como `Authorization: Bearer` en la peticion al servicio. Si el endpoint
+de token espera `application/x-www-form-urlencoded`, se declara ese `Content-Type` en `loginHeaders`
+y el cuerpo en `loginBodyTemplate`. El token se obtiene en cada ejecucion (cacheo por TTL: mejora
+futura).
 
 ```jsonc
 // FILE_READ  (sourceDefinitionId/readerDefinitionId van como columnas de la tarea)
@@ -58,10 +66,17 @@ estructurado `headers`.
 { "connectionRef": "12", "functionName": "ventas.fn_total", "resultAlias": "total", "timeoutSeconds": 30,
   "parameters": [ { "name": "p_id", "jdbcType": "BIGINT", "direction": "IN" } ] }
 
-// REST_CALL  (authType: '' | basic | bearer; token/password via ${secret:...})
+// REST_CALL  (authType: '' | basic | bearer | login-request; token/password via ${secret:...})
 { "mode": "per-record", "method": "POST", "baseUrl": "https://api.demo", "pathTemplate": "/v1/items",
   "timeoutSeconds": 20, "authType": "bearer", "token": "${secret:rest}", "headers": { "X-Env": "prod" },
   "bodyTemplate": "{\"id\":\"${id}\"}" }
+
+// REST_CALL / webhook con login-request (token de dos pasos: AWS STS / OAuth / Azure AD)
+{ "method": "POST", "url": "https://api.demo/v1/items", "authType": "login-request",
+  "loginUrl": "https://auth.demo/oauth/token", "loginMethod": "POST",
+  "loginHeaders": { "Content-Type": "application/x-www-form-urlencoded" },
+  "loginBodyTemplate": "grant_type=client_credentials&client_id=${secret:cid}&client_secret=${secret:csecret}",
+  "tokenPath": "$.access_token", "bodyTemplate": "{\"id\":\"${id}\"}" }
 
 // NOTIFICATION channel log:  { "channel": "log", "message": "Proceso ${processExecutionId} ok" }
 // NOTIFICATION channel email: { "channel": "email", "to": "ops@demo", "subject": "...", "body": "..." }

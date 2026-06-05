@@ -1,5 +1,6 @@
 package com.integrationhub.platform.provider.task.notification;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.provider.task.common.TaskOutputSupport;
 import com.integrationhub.platform.provider.task.http.HttpRequestSupport;
 import com.integrationhub.platform.service.execution.AuditService;
@@ -29,6 +30,9 @@ public class NotificationTaskProvider implements TaskProvider {
 
     @Inject
     AuditService auditService;
+
+    @Inject
+    ObjectMapper objectMapper;
 
     @Override
     public String type() {
@@ -67,7 +71,7 @@ public class NotificationTaskProvider implements TaskProvider {
         int timeoutSeconds = NotificationTaskSupport.optionalInt(configuration, "timeoutSeconds", 15);
         String method = String.valueOf(configuration.getOrDefault("method", "POST"));
 
-        HttpRequest request = HttpRequestSupport.build(configuration, method, url, body, timeoutSeconds, headers);
+        HttpRequest request = HttpRequestSupport.build(httpClient, objectMapper, configuration, method, url, body, timeoutSeconds, headers);
 
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());

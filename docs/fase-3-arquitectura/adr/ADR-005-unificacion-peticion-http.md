@@ -19,8 +19,12 @@ Aceptado (ruta B). Pendiente de validacion humana en el gate de arquitectura.
 > reusable `process-http-request` (endpoint + tabs Query/Auth/Headers/Body con tokens) sobre
 > `HttpRequestDraft` y soporte `http-request-task.support.ts`; lo embeben `process-rest-call-task-form`
 > y el canal `webhook` de `process-notification-task-form` (conservando `message`). **Sin fallback**:
-> el webhook usa headers/query/auth estructurados y dejo de usar `headersJson` crudo. Pendiente: gate
-> humano de contrato + auth.
+> el webhook usa headers/query/auth estructurados y dejo de usar `headersJson` crudo.
+> **`login-request`** (auth en dos pasos: pre-fetch de token via `loginUrl`/`loginMethod`/
+> `loginHeaders`/`loginBodyTemplate` + extraccion por `tokenPath` e inyeccion como Bearer) esta
+> implementado en `HttpRequestSupport` y funciona para REST y webhook (test:
+> `HttpRequestSupportLoginTest`). Pendiente: gate humano de contrato + auth; cacheo de token por TTL
+> (mejora futura).
 
 ## Contexto
 
