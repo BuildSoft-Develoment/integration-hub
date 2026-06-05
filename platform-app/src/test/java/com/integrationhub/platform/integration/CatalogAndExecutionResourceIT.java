@@ -69,7 +69,7 @@ class CatalogAndExecutionResourceIT {
                                     "name", "reader-it",
                                     "readerType", "CSV",
                                     "active", true,
-                                    "configurationJson", "{\"delimiter\":\",\",\"encoding\":\"UTF-8\",\"hasHeader\":true}"
+                                    "configurationJson", "{\"delimiter\":\",\",\"encoding\":\"UTF-8\",\"hasHeader\":true,\"dataStartRowIndex\":1,\"fields\":[{\"name\":\"codigo\",\"position\":1},{\"name\":\"nombre\",\"position\":2}]}"
                             ))
                     .when()
                             .post("/api/reader-definitions")
@@ -93,12 +93,12 @@ class CatalogAndExecutionResourceIT {
                                                     "taskType", "FILE_READ",
                                                     "sourceDefinitionId", sourceId.longValue(),
                                                     "readerDefinitionId", readerId.longValue(),
-                                                    "configurationJson", "{}"
+                                                    "configurationJson", "{\"taskRef\":\"task-1\",\"executionMode\":\"batch\"}"
                                             ),
                                             Map.of(
                                                     "taskOrder", 2,
                                                     "taskType", "DB_WRITE",
-                                                    "configurationJson", "{\"mode\":\"insert\",\"targetTable\":\"staging_record\"}"
+                                                    "configurationJson", "{\"taskRef\":\"task-2\",\"executionMode\":\"batch\",\"input\":{\"source\":\"task-output\",\"sourceTaskRef\":\"task-1\",\"sourceOutput\":\"records\"},\"mode\":\"insert\",\"targetTable\":\"staging_record\"}"
                                             )
                                     )
                             ))
@@ -111,21 +111,25 @@ class CatalogAndExecutionResourceIT {
 
             Number executionId =
                     given()
+                            .contentType(ContentType.JSON)
+                            .body("{}")
                     .when()
                             .post("/api/process-executions/{processDefinitionId}", processId.longValue())
                     .then()
                             .statusCode(200)
-                            .body("status", is("COMPLETED"))
                             .extract()
                             .path("id");
+
+            // La ejecucion es asincrona (se encola en background); esperar a que termine.
+            awaitExecutionCompleted(executionId.longValue());
 
             given()
                     .when()
                             .get("/api/query/process-executions")
                     .then()
                             .statusCode(200)
-                            .body("size()", greaterThanOrEqualTo(1))
-                            .body("[0].processDefinitionId", is(processId.intValue()));
+                            .body("items.size()", greaterThanOrEqualTo(1))
+                            .body("items[0].processDefinitionId", is(processId.intValue()));
 
             given()
                     .when()
@@ -141,7 +145,7 @@ class CatalogAndExecutionResourceIT {
                             .get("/api/query/audit-events")
                     .then()
                             .statusCode(200)
-                            .body("size()", greaterThanOrEqualTo(4));
+                            .body("items.size()", greaterThanOrEqualTo(4));
 
             given()
                     .when()
@@ -184,5 +188,30 @@ class CatalogAndExecutionResourceIT {
             resultSet.next();
             return resultSet.getInt(1);
         }
+    }
+
+    /** Polling del estado de ejecucion (async) hasta COMPLETED, con timeout. */
+    private void awaitExecutionCompleted(long executionId) {
+        long deadline = System.currentTimeMillis() + 30_000L;
+        String status = null;
+        while (System.currentTimeMillis() < deadline) {
+            status = given()
+                    .when()
+                            .get("/api/query/process-executions/{processExecutionId}", executionId)
+                    .then()
+                            .statusCode(200)
+                            .extract()
+                            .path("status");
+            if (status != null && !"QUEUED".equals(status) && !"PENDING".equals(status) && !"RUNNING".equals(status)) {
+                break;
+            }
+            try {
+                Thread.sleep(250L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        assertEquals("COMPLETED", status, "la ejecucion debe terminar en COMPLETED");
     }
 }
