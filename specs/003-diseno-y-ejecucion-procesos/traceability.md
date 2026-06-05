@@ -27,6 +27,14 @@ Codigo existente -> SDD (spec-tecnica) -> Trazabilidad -> QA (evidencia GREEN re
 | RF-003 | - | - | - | POST /api/process-definitions/{processDefinitionId}/activation/{active} | process_definition | ProcessSchedulerService | CatalogAndExecutionResourceIT | Implementado | tdd-evidence.md | process-toolbar, process-list | process-catalog.store.spec.ts |
 | RF-004 | - | - | - | POST /api/process-definitions | process_execution | StreamingPipelineService | StreamingPipelineServiceTest | Implementado | tdd-evidence.md | process-editor-actions (trigger) | process-flow-api.service.spec.ts |
 | RF-005 | - | - | - | GET /api/query/process-executions | process_execution | ProcessExecutionService | FileReadTaskFastPathTest | Implementado | tdd-evidence.md | - (insumo Observabilidad 004) | - |
+| RF-006 | - | - | - | POST /api/process-definitions | process_task_definition.configuration_json (`taskRef`) | ProcessTaskRuntimeService | - | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-runtime-panel | - |
+| RF-007 | - | - | - | POST /api/process-definitions | configuration_json (`input`/`sourceOutput`) | TaskInputResolver | TaskInputResolverTest | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-binding-board | - |
+| RF-008 | - | - | - | POST /api/process-definitions | metadata runtime (transversal) | TaskOutputSupport (mergeMetadata) | - | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-binding-context.service | - |
+| RF-009 | - | - | - | POST /api/process-definitions | configuration_json (`executionMode`) | ProcessTaskRuntimeService | - | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-runtime-panel | - |
+| RF-010 | - | - | - | POST /api/process-definitions | configuration_json (`batchSize`/checkpoint) | TaskOutputRegistry | TaskOutputRegistryTest | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-runtime-panel | - |
+| RF-011 | - | - | - | POST /api/process-definitions | configuration_json (`inputs` fan-in) | TaskInputResolver | TaskInputResolverTest | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-flow-* | - |
+| RF-012 | - | - | - | POST /api/process-definitions | configuration_json (mapping comun) | TaskInputResolver | - | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | process-task-binding-board | - |
+| RF-013 | - | - | - | POST /api/process-definitions | outputs materializados / cursor | StreamingPipelineService | - | En progreso (WIP, ADR-004) | spec-tecnica.md (motor) | - | - |
 
 ## Trazabilidad UI por tipo de tarea (RF-002)
 
@@ -60,6 +68,13 @@ arma el JSON; `hydrateDraft` el inverso). La UI por tipo vive en `process-task-f
 ## Decisiones
 - Motor providers + registries para tipos de tarea (DbWrite, StoredProcedure, etc.) (ADR-001).
 - Correlacion operativa por `processExecutionId` (ADR-002).
+- Motor dinamico de inputs/outputs tipados, `executionMode`, fan-in/out y batch para alto
+  volumen (RF-006..RF-013, WIP); ver
+  [ADR-004](../../docs/fase-3-arquitectura/adr/ADR-004-motor-input-output-tareas.md).
+- Unificar la peticion HTTP de `REST_CALL` y el canal `webhook` de `NOTIFICATION` en una pieza
+  compartida (front `process-http-request` + back `HttpRequestSupport`), conservando epilogos
+  distintos: REST mapea respuesta a output; webhook audita y valida 2xx. Ver
+  [ADR-005](../../docs/fase-3-arquitectura/adr/ADR-005-unificacion-peticion-http.md) (Propuesto).
 
 ## Preguntas abiertas
 - Confirmar mapeo definitivo RF local `RF-001..RF-005` ↔ requerimientos globales de Fase 1.

@@ -1,6 +1,8 @@
 package com.integrationhub.platform.provider.task.notification;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.provider.task.common.TaskOutputSupport;
+import com.integrationhub.platform.provider.task.http.HttpRequestSupport;
 import com.integrationhub.platform.service.execution.AuditService;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.task.TaskContext;
@@ -10,11 +12,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import java.io.IOException;
-import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -30,6 +30,9 @@ public class NotificationTaskProvider implements TaskProvider {
 
     @Inject
     AuditService auditService;
+
+    @Inject
+    ObjectMapper objectMapper;
 
     @Override
     public String type() {
@@ -66,18 +69,12 @@ public class NotificationTaskProvider implements TaskProvider {
         String body = NotificationTaskSupport.template(bodyTemplate, variables);
         Map<String, String> headers = NotificationTaskSupport.stringMap(configuration, "headers");
         int timeoutSeconds = NotificationTaskSupport.optionalInt(configuration, "timeoutSeconds", 15);
+        String method = String.valueOf(configuration.getOrDefault("method", "POST"));
 
-        HttpRequest.Builder builder = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .timeout(Duration.ofSeconds(timeoutSeconds))
-                .POST(HttpRequest.BodyPublishers.ofString(body));
-        headers.forEach(builder::header);
-        if (!headers.containsKey("Content-Type")) {
-            builder.header("Content-Type", "application/json");
-        }
+        HttpRequest request = HttpRequestSupport.build(httpClient, objectMapper, configuration, method, url, body, timeoutSeconds, headers);
 
         try {
-            HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new IllegalStateException("Webhook notification returned status " + response.statusCode());
             }
@@ -109,6 +106,8 @@ public class NotificationTaskProvider implements TaskProvider {
         variables.put("taskDefinitionId", context.taskDefinitionId());
         variables.put("recordCount", readResult == null ? 0 : readResult.recordCount());
         TaskOutputSupport.mergeTaskOutputs(variables, context);
+        TaskOutputSupport.mergeMetadata(variables, context);
+        TaskOutputSupport.mergeCurrentRecord(variables, context);
         configuration.forEach((key, value) -> {
             if (value instanceof String stringValue) {
                 variables.putIfAbsent(key, stringValue);

@@ -65,6 +65,8 @@ public class DatabaseFunctionTaskProvider implements TaskProvider {
                 sourcePayload == null || sourcePayload.file() == null ? null : sourcePayload.file().lastModified()
         );
         TaskOutputSupport.mergeTaskOutputs(runtimeVariables, context);
+        TaskOutputSupport.mergeMetadata(runtimeVariables, context);
+        TaskOutputSupport.mergeCurrentRecord(runtimeVariables, context);
         var resolvedParameters = parameters.stream()
                 .map(parameter -> StoredProcedureRuntimeSupport.resolveParameter(parameter, runtimeVariables))
                 .toList();

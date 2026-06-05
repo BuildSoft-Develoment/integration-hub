@@ -1,19 +1,20 @@
 // @trace RF-002 (procesos: contrato configuration_json de tarea tipo DB_WRITE)
 import { Injectable } from '@angular/core';
 import { I18nService } from '@integration-hub/core/services';
+import { ProcessTaskRuntimeDraft } from '../../tasks/process-task-binding.models';
 import { ProcessTaskProvider, ProcessTaskSummaryContext } from '../../tasks/process-task-provider.abstract';
 import { ProcessTaskFormModel } from '../../tasks/process-task.models';
 
 export interface DbWriteMappingDraft {
   targetColumn: string;
-  sourceKind: 'field' | 'variable' | 'metadata' | 'expression' | null;
+  sourceKind: 'field' | 'variable' | 'metadata' | 'summary' | 'records' | 'table' | 'errors' | 'out' | 'expression' | null;
   sourceKey: string;
   sourceLabel: string;
   expression: string;
   key: boolean;
 }
 
-export interface DbWriteTaskDraft {
+export interface DbWriteTaskDraft extends ProcessTaskRuntimeDraft {
   connectionRef: string;
   mode: string;
   targetSchema: string;
@@ -33,6 +34,8 @@ export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
 
   createDraft(): DbWriteTaskDraft {
     return {
+      taskRef: '',
+      executionMode: 'batch',
       connectionRef: '',
       mode: 'insert',
       targetSchema: '',
@@ -78,6 +81,7 @@ export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
       }
     });
     return {
+      ...this.hydrateRuntime(task, 'batch'),
       connectionRef: String(config.connectionRef || ''),
       mode: String(config.mode || 'insert'),
       targetSchema: schema,
@@ -108,11 +112,11 @@ export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
       }
       return accumulator;
     }, {});
-    const payload: any = {
+    const payload: any = this.withRuntime({
       mode: draft.mode || 'insert',
       targetTable: qualifiedTable,
       jdbcBatchSize: Number(draft.jdbcBatchSize || 1000),
-    };
+    }, draft, 'batch');
     if (draft.connectionRef) payload.connectionRef = draft.connectionRef;
     if (keyColumns.length) payload.keyColumns = keyColumns;
     if (Object.keys(columnMappings).length) payload.columnMappings = columnMappings;
@@ -148,5 +152,3 @@ export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
     };
   }
 }
-
-

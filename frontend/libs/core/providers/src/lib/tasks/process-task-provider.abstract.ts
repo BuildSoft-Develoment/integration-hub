@@ -1,4 +1,10 @@
 import { I18nService } from '@integration-hub/core/services';
+import {
+  ProcessTaskExecutionMode,
+  ProcessTaskInputDraft,
+  ProcessTaskOutputKind,
+  ProcessTaskRuntimeDraft,
+} from './process-task-binding.models';
 import { ConnectionRef, ProcessTaskFormModel, ProcessTaskType, ReaderRef, SourceRef } from './process-task.models';
 
 export interface ProcessTaskSummaryContext {
@@ -42,5 +48,74 @@ export abstract class ProcessTaskProvider<TDraft> {
 
   protected toPrettyJson(payload: Record<string, unknown>): string {
     return JSON.stringify(payload, null, 2);
+  }
+
+  protected hydrateRuntime(task: ProcessTaskFormModel, defaultExecutionMode: ProcessTaskExecutionMode): ProcessTaskRuntimeDraft {
+    const config = this.parseJson(task.configurationJson);
+    return {
+      taskRef: String(config['taskRef'] || task.clientId || `task-${task.taskOrder}`),
+      executionMode: this.normalizeExecutionMode(config['executionMode'], defaultExecutionMode),
+      input: this.normalizeInput(config['input']),
+    };
+  }
+
+  protected withRuntime(payload: Record<string, unknown>, draft: Partial<ProcessTaskRuntimeDraft>, defaultExecutionMode: ProcessTaskExecutionMode): Record<string, unknown> {
+    const taskRef = String(draft.taskRef || '').trim();
+    const executionMode = this.normalizeExecutionMode(draft.executionMode, defaultExecutionMode);
+    const input = this.normalizeInput(draft.input);
+    const next: Record<string, unknown> = {
+      taskRef,
+      executionMode,
+      ...payload,
+    };
+    if (input?.sourceTaskRef) {
+      next['input'] = {
+        source: 'task-output',
+        sourceTaskRef: input.sourceTaskRef,
+        sourceOutput: input.sourceOutput,
+        ...(input.batchSize ? { batchSize: Number(input.batchSize) } : {}),
+        ...(input.connectionRef ? { connectionRef: input.connectionRef } : {}),
+        ...(input.table ? { table: input.table } : {}),
+      };
+    }
+    return next;
+  }
+
+  private normalizeExecutionMode(value: unknown, fallback: ProcessTaskExecutionMode): ProcessTaskExecutionMode {
+    const normalized = String(value || fallback).trim().toLowerCase();
+    return normalized === 'once' || normalized === 'per-record' || normalized === 'batch'
+      ? normalized
+      : fallback;
+  }
+
+  private normalizeInput(value: unknown): ProcessTaskInputDraft | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return undefined;
+    }
+    const raw = value as Record<string, unknown>;
+    const sourceTaskRef = String(raw['sourceTaskRef'] || '').trim();
+    if (!sourceTaskRef) {
+      return undefined;
+    }
+    return {
+      source: 'task-output',
+      sourceTaskRef,
+      sourceOutput: this.normalizeSourceOutput(raw['sourceOutput']),
+      ...(raw['batchSize'] != null && String(raw['batchSize']).trim() ? { batchSize: String(raw['batchSize']) } : {}),
+      ...(raw['connectionRef'] != null && String(raw['connectionRef']).trim() ? { connectionRef: String(raw['connectionRef']) } : {}),
+      ...(raw['table'] != null && String(raw['table']).trim() ? { table: String(raw['table']) } : {}),
+    };
+  }
+
+  private normalizeSourceOutput(value: unknown): ProcessTaskOutputKind {
+    const normalized = String(value || 'records').trim().toLowerCase();
+    return normalized === 'metadata'
+      || normalized === 'summary'
+      || normalized === 'records'
+      || normalized === 'table'
+      || normalized === 'errors'
+      || normalized === 'out'
+      ? normalized
+      : 'records';
   }
 }

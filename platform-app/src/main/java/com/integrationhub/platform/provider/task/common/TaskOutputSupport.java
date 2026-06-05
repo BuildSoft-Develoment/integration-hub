@@ -26,6 +26,37 @@ public final class TaskOutputSupport {
         });
     }
 
+    public static void mergeMetadata(Map<String, Object> target, TaskContext context) {
+        if (target == null || context == null) {
+            return;
+        }
+        var rawMetadata = context.attributes().get("metadata");
+        if (!(rawMetadata instanceof Map<?, ?> metadataMap)) {
+            return;
+        }
+        target.put("metadata", metadataMap);
+        metadataMap.forEach((key, value) -> {
+            if (key != null && !String.valueOf(key).isBlank()) {
+                target.put(String.valueOf(key), value);
+            }
+        });
+    }
+
+    public static void mergeCurrentRecord(Map<String, Object> target, TaskContext context) {
+        if (target == null || context == null) {
+            return;
+        }
+        var rawRecord = context.attributes().get("currentRecord");
+        if (!(rawRecord instanceof Map<?, ?> recordMap)) {
+            return;
+        }
+        recordMap.forEach((key, value) -> {
+            if (key != null && !String.valueOf(key).isBlank()) {
+                target.put(String.valueOf(key), value);
+            }
+        });
+    }
+
     @SuppressWarnings("unchecked")
     public static Map<String, Object> copyTaskOutputs(TaskContext context) {
         var result = new LinkedHashMap<String, Object>();

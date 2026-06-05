@@ -35,6 +35,20 @@ del `task_type`. El contrato lo definen los providers del frontend
 campos de columna (`sourceDefinitionId`/`readerDefinitionId`); `hydrateDraft(task)` hace el inverso.
 Las tareas DB referencian una conexion del catalogo via `connectionRef` dentro del JSON (no hay FK).
 Credenciales/token en `REST_CALL` admiten referencia `${secret:...}` (nunca valor en claro).
+`REST_CALL` y el canal `webhook` de `NOTIFICATION` comparten el mismo bloque de peticion HTTP
+(`method`, `baseUrl`/`pathTemplate`/`url`, `queryParameters`, `headers`/`headerMappings`,
+`authType`+credenciales, `bodyTemplate`) — front `process-http-request` + back `HttpRequestSupport`
+(ADR-005). **Sin fallback**: el webhook ya no usa `headersJson` crudo; los headers van como mapa
+estructurado `headers`.
+`authType` admite `none`/`basic`/`bearer`/`login-request`. **`login-request`** es autenticacion en
+dos pasos: antes de invocar `url` se hace una llamada al endpoint de token (`loginUrl`,
+`loginMethod`, `loginHeaders`, `loginBodyTemplate`) —p.ej. AWS STS, Google OAuth, Azure AD—, se
+extrae el token de la respuesta con `tokenPath` (JSON-path simple, p.ej. `$.access_token` o
+`$.data.token`) y se inyecta como `Authorization: Bearer` en la peticion al servicio. Si el endpoint
+de token espera `application/x-www-form-urlencoded`, se declara ese `Content-Type` en `loginHeaders`
+y el cuerpo en `loginBodyTemplate`. El token se **cachea por TTL** (clave = hash de la config de
+login): TTL = `tokenTtlSeconds` (config) › `expires_in` de la respuesta › 300s por defecto, con
+margen de refresco; `tokenTtlSeconds: 0` desactiva la cache (token por ejecucion).
 
 ```jsonc
 // FILE_READ  (sourceDefinitionId/readerDefinitionId van como columnas de la tarea)
@@ -53,14 +67,24 @@ Credenciales/token en `REST_CALL` admiten referencia `${secret:...}` (nunca valo
 { "connectionRef": "12", "functionName": "ventas.fn_total", "resultAlias": "total", "timeoutSeconds": 30,
   "parameters": [ { "name": "p_id", "jdbcType": "BIGINT", "direction": "IN" } ] }
 
-// REST_CALL  (authType: '' | basic | bearer; token/password via ${secret:...})
+// REST_CALL  (authType: '' | basic | bearer | login-request; token/password via ${secret:...})
 { "mode": "per-record", "method": "POST", "baseUrl": "https://api.demo", "pathTemplate": "/v1/items",
   "timeoutSeconds": 20, "authType": "bearer", "token": "${secret:rest}", "headers": { "X-Env": "prod" },
   "bodyTemplate": "{\"id\":\"${id}\"}" }
 
-// NOTIFICATION  (channel webhook)
-{ "channel": "webhook", "url": "https://hooks.demo/x", "message": "ok",
-  "bodyTemplate": "{\"message\":\"${message}\"}", "timeoutSeconds": 15, "headers": {} }
+// REST_CALL / webhook con login-request (token de dos pasos: AWS STS / OAuth / Azure AD)
+{ "method": "POST", "url": "https://api.demo/v1/items", "authType": "login-request",
+  "loginUrl": "https://auth.demo/oauth/token", "loginMethod": "POST",
+  "loginHeaders": { "Content-Type": "application/x-www-form-urlencoded" },
+  "loginBodyTemplate": "grant_type=client_credentials&client_id=${secret:cid}&client_secret=${secret:csecret}",
+  "tokenPath": "$.access_token", "bodyTemplate": "{\"id\":\"${id}\"}" }
+
+// NOTIFICATION channel log:  { "channel": "log", "message": "Proceso ${processExecutionId} ok" }
+// NOTIFICATION channel email: { "channel": "email", "to": "ops@demo", "subject": "...", "body": "..." }
+// NOTIFICATION channel webhook (mismo bloque HTTP que REST_CALL; sin headersJson crudo)
+{ "channel": "webhook", "method": "POST", "baseUrl": "https://hooks.demo", "pathTemplate": "/x",
+  "url": "https://hooks.demo/x", "message": "ok", "authType": "bearer", "token": "${secret:webhook}",
+  "headers": { "X-Env": "prod" }, "bodyTemplate": "{\"message\":\"${message}\"}", "timeoutSeconds": 15 }
 ```
 
 > Fuente del contrato: los 6 `*TaskProvider` (`tasks/*.provider.ts`) + sus `*TaskDraft`. El backend
@@ -143,6 +167,131 @@ Tabla relacionada `connection_definition` (`V3`, catalogo de conexiones JDBC usa
 Indices: PK en `id`; UNIQUE en `name`.
 
 El linaje de reproceso se complementa con `process_execution` (retry/lineage, `V7`) y `processed_source_file` (`V6`). Las programaciones viven en `process_schedule` (`V2`, feature de schedules).
+
+## Evolucion: motor dinamico de inputs/outputs de tareas (ADR-004, WIP)
+
+> Evoluciona la ejecucion para que cada tarea consuma outputs tipados de cualquier tarea
+> anterior, declare su `executionMode` y publique outputs reutilizables. Cubre RF-006..RF-013.
+> Decision en [ADR-004](../../docs/fase-3-arquitectura/adr/ADR-004-motor-input-output-tareas.md).
+> En curso (WIP): backend `TaskInputResolver`/`TaskOutputRegistry` y frontend
+> `process-task-runtime-panel`. Mientras no exista tabla dedicada, el contrato vive en
+> `configuration_json` de cada tarea.
+
+### Contrato canonico
+
+```json
+{
+  "taskRef": "task-3-sp1",
+  "taskType": "DB_EXECUTE_SP",
+  "dependsOn": ["task-2-db-write"],
+  "executionMode": "batch",
+  "input": {
+    "source": "task-output",
+    "sourceTaskRef": "task-2-db-write",
+    "sourceOutput": "table",
+    "readMode": "records",
+    "batchSize": 5000,
+    "cursor": { "type": "keyset", "orderBy": "id" }
+  },
+  "parameters": [
+    { "name": "p_execution_id", "sourceKind": "metadata", "sourceKey": "_processExecutionId", "jdbcType": "BIGINT" },
+    { "name": "p_batch_number", "sourceKind": "metadata", "sourceKey": "_batchNumber", "jdbcType": "INTEGER" },
+    { "name": "p_cliente_id", "sourceKind": "field", "sourceKey": "cliente_id", "jdbcType": "BIGINT" }
+  ],
+  "outputs": [
+    { "name": "summary", "type": "summary" },
+    { "name": "table", "type": "table", "table": "resultado_sp1" },
+    { "name": "errors", "type": "errors" }
+  ],
+  "retryPolicy": { "maxRetries": 3, "backoffSeconds": 10 }
+}
+```
+
+Para fan-in se usa `inputs` (lista de fuentes):
+
+```json
+{
+  "taskRef": "notification-final",
+  "taskType": "NOTIFICATION",
+  "executionMode": "once",
+  "inputs": [
+    { "source": "task-output", "sourceTaskRef": "task-2-db-write", "sourceOutput": "summary" },
+    { "source": "task-output", "sourceTaskRef": "task-4-sp1", "sourceOutput": "summary" },
+    { "source": "task-output", "sourceTaskRef": "task-6-rest1", "sourceOutput": "errors" }
+  ],
+  "message": "Ejecucion {_processExecutionId}: insertados {task-2-db-write.writtenCount}, errores REST {task-6-rest1.errorCount}"
+}
+```
+
+### Tipos de input
+
+| Tipo | Descripcion | Uso principal |
+| --- | --- | --- |
+| `metadata` | contexto transversal, no output de tarea | bindings tecnicos y parametros comunes |
+| `summary` | agregados de una tarea previa | notificaciones, cierres, SP/FN once |
+| `records` | registros parseados o producidos por tarea previa | DB_WRITE, REST, SP/FN por registro/lote |
+| `table` | output materializado consultable por cursor | alto volumen y tareas DB |
+| `errors` | registros fallidos, rechazados o pendientes | reintentos, REST2, notificaciones |
+
+### Metadata transversal
+
+- Global: `_processExecutionId`, `_processDefinitionId`, `_processName`, `_triggerSource`,
+  `_environment`, `_startedAt`.
+- De tarea: `_taskRef`, `_taskDefinitionId`, `_taskType`.
+- De lote: `_batchNumber`, `_batchSize`, `_batchFrom`, `_batchTo`, `_recordCount`.
+- De fuente/archivo (cuando aplique): `_sourceFileName`, `_sourceFilePath`,
+  `_sourceMediaType`, `_sourceFileSize`, `_sourceLastModified`.
+
+La metadata no es output de tarea: es contexto accesible por cualquier tarea via bindings
+`metadata`.
+
+### Modos de ejecucion
+
+| Modo | Entrada valida | Regla |
+| --- | --- | --- |
+| `once` | metadata, `summary`, agregados de `table`/`errors` | ejecuta una sola vez |
+| `per-record` | `records`, `table`, `errors` | ejecuta por registro; solo si el destino no soporta lotes |
+| `batch` | `records`, `table`, `errors` | ejecuta por bloque; requiere `batchSize` |
+
+Para mas de `1,000,000` registros, `batch` es el default recomendado; `per-record` exige
+justificacion de destino (REST o funciones no set-based).
+
+### Outputs por tipo de tarea
+
+| Tarea | Consume | Produce |
+| --- | --- | --- |
+| `FILE_READ` | metadata transversal para variables de fuente | `records`, `summary`, `errors` |
+| `DB_WRITE` | metadata, `summary`, `records`, `table`, `errors` | `table`/`targetTable`, `summary`, `errors` |
+| `DB_EXECUTE_SP` | metadata, `summary`, `records`, `table`, `errors` | `summary`, `table`/`records` opcional, `errors` |
+| `DB_EXECUTE_FN` | metadata, `summary`, `records`, `table`, `errors` | `summary`, `records`/`table`/`resultAlias`, `errors` |
+| `REST_CALL` | metadata, `summary`, `records`, `table`, `errors` | `summary`, `responses` como `records`/`table`, `errors` |
+| `NOTIFICATION` | metadata, `summary`, `records`, `table`, `errors` | `summary`, estado de notificacion, `errors` |
+
+### Alto volumen
+
+- no pasar listas completas de registros entre tareas.
+- materializar outputs masivos o exponerlos por cursor/paginacion.
+- registrar checkpoint por lote; retry por lote e idempotencia.
+- filtrar outputs materializados por `_processExecutionId` y `taskRef` o equivalente.
+- en REST: throttle, timeout, retry e idempotency key.
+- en SP/FN: preferir ejecucion set-based por lote (`processExecutionId`, `batchNumber`,
+  `fromId`, `toId`) antes que una llamada por registro.
+
+### Componentes esperados
+
+- Backend: `TaskInputResolver` (resuelve `input`/`inputs`), `TaskOutputRegistry` (registra
+  outputs publicados), `TaskBatchCursor` (lee outputs masivos por lote),
+  `TaskBatchCheckpointService` (estado/retry por lote) y validadores de grafo (ciclos, tareas
+  futuras, outputs inexistentes, compatibilidad de modo).
+- Frontend: selector de origen de datos por tarea, selector `executionMode`, editor de
+  `batchSize`/retry/checkpoint (`process-task-runtime-panel`), mapping board comun y
+  visualizacion de `taskRef`/dependencias.
+
+### Migracion obligatoria
+
+Procesos sin `taskRef`, `executionMode` ni `input` explicito para tareas `batch`/`per-record`
+deben migrarse. El motor no resuelve datos desde el reader original como fallback implicito
+para tareas posteriores.
 
 ## Consideraciones tecnicas
 

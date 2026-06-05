@@ -27,6 +27,9 @@ Codigo existente -> SDD (spec-tecnica) -> Trazabilidad -> QA (evidencia GREEN re
 | RF-003 | HU-01 | - | - | POST /api/source-definitions | source_definition | JsonConfigurationMapper | JsonConfigurationMapperTest | Implementado | tdd-evidence.md | source-type-form/source-{filesystem,ftp,sftp,rest}-form | - (sin spec dedicada por tipo) |
 | RF-004 | HU-01 | - | - | POST /api/source-definitions | source_definition | FileVaultSecretValueProvider | FileVaultSecretValueProviderTest | Implementado | tdd-evidence.md | source-type-form (campos `${secret:...}`) | - |
 | RF-005 | HU-01 | - | - | POST /api/source-definitions/test | source_definition | FilesystemSourceProvider | FilesystemSourceProviderTest | Implementado | tdd-evidence.md | - (insumo backend de FILE_READ) | - |
+| RF-006 | HU-01 | - | - | POST /api/source-definitions | source_definition (`s3`/`gcs`/`azure-blob`) | S3SourceProvider (WIP) | - | En progreso (WIP, ADR-006) | spec-tecnica.md (cloud) | source-object-store + source-{s3,gcs,azure-blob}-form (WIP) | - |
+| RF-007 | HU-01 | - | - | POST /api/source-definitions | configuration_json (`authMode`/credenciales) | FileVaultSecretValueProvider + credential providers (WIP) | - | En progreso (WIP, ADR-006) | spec-tecnica.md (cloud) | source-object-store (bloque auth) | - |
+| RF-008 | HU-01 | - | - | POST /api/source-definitions/test | source_definition | SourcePayload (InputStream, WIP) | - | En progreso (WIP, ADR-006) | spec-tecnica.md (cloud) | - (insumo backend de FILE_READ) | - |
 
 ## Trazabilidad UI por tipo de fuente (RF-001 / RF-003)
 
@@ -56,6 +59,9 @@ Cada tipo soportado tiene su componente Angular de configuracion (anotado con `@
 ## Decisiones
 - Secretos referenciados con el contrato `${secret:...}`, nunca persistidos en claro (ADR-002).
 - Patron providers + registries para fuentes (ADR-001).
+- Fuentes de almacenamiento cloud `s3`/`gcs`/`azure-blob` (object stores) con credenciales nativas
+  o `${secret:...}`, descarga por streaming y transporte HTTP lean-native (RF-006..RF-008, WIP); ver
+  [ADR-006](../../docs/fase-3-arquitectura/adr/ADR-006-fuentes-almacenamiento-cloud.md).
 
 ## Preguntas abiertas
 - Confirmar mapeo definitivo RF local `RF-001..RF-005` ↔ requerimientos globales del

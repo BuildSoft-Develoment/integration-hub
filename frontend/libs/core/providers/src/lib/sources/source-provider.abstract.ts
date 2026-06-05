@@ -1,4 +1,4 @@
-export type SourceProviderType = 'FILESYSTEM' | 'FTP' | 'SFTP' | 'REST';
+export type SourceProviderType = 'FILESYSTEM' | 'FTP' | 'SFTP' | 'REST' | 'S3';
 
 export interface SourceDraft {
   type: SourceProviderType;
@@ -29,6 +29,16 @@ export interface SourceDraft {
   fileName?: string;
   headersJson?: string;
   body?: string;
+  // Cloud object stores (S3/GCS/Azure Blob — ADR-006)
+  region?: string;
+  bucket?: string;
+  prefix?: string;
+  authMode?: 'default' | 'access-key' | 'assume-role';
+  accessKeyId?: string;
+  secretAccessKey?: string;
+  roleArn?: string;
+  endpoint?: string;
+  pathStyleAccess?: boolean;
 }
 
 export interface SourceProviderDescriptor {

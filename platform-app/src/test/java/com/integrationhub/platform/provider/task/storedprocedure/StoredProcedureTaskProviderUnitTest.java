@@ -89,6 +89,48 @@ class StoredProcedureTaskProviderUnitTest {
         assertEquals(List.of("setObject:1:ABC123:12", "setNull:2:12", "setNull:3:4"), bindings);
     }
 
+    @Test
+    void resolvesSourceKindSummaryParameterFromTaskOutputs() {
+        var recordedSql = new AtomicReference<String>();
+        var bindings = new ArrayList<String>();
+        var firstRow = new AtomicBoolean(true);
+
+        DataSource dataSource = new ProxyDataSource(() -> postgresConnection(recordedSql, bindings, firstRow));
+        var connectionPoolManager = new ConnectionPoolManager(null, null) {
+            @Override
+            public JdbcConnectionTarget resolveJdbcTarget(String connectionRef) {
+                return new JdbcConnectionTarget(dataSource, ConnectionType.POSTGRESQL);
+            }
+        };
+        var provider = new StoredProcedureTaskProvider(
+                connectionPoolManager,
+                fixedDialectInstance(List.of(new PostgreSqlStoredProcedureDialect()))
+        );
+        var context = new TaskContext(300L, 400L);
+        context.attributes().put("taskOutputs", Map.of("task-2-sp.summary.resultado", "SP_OK"));
+
+        var result = provider.execute(context, Map.of(
+                "connectionRef", "postgres-test",
+                "procedureName", "public.p_procesar",
+                "parameters", List.of(
+                        Map.of(
+                                "name", "p_idinstancia",
+                                "sourceKind", "summary",
+                                "sourceTaskRef", "task-2-sp",
+                                "sourceKey", "resultado",
+                                "jdbcType", "TEXT",
+                                "direction", "IN"
+                        ),
+                        Map.of("name", "resultado", "jdbcType", "TEXT", "direction", "OUT"),
+                        Map.of("name", "filas_actualizadas", "jdbcType", "INT4", "direction", "OUT")
+                )
+        ));
+
+        assertTrue(result.success());
+        assertEquals("call public.p_procesar(cast(? as text), cast(? as text), cast(? as integer))", recordedSql.get());
+        assertEquals(List.of("setObject:1:SP_OK:12", "setNull:2:12", "setNull:3:4"), bindings);
+    }
+
     private static Connection postgresConnection(AtomicReference<String> recordedSql,
                                                  List<String> bindings,
                                                  AtomicBoolean firstRow) {

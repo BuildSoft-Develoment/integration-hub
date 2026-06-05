@@ -8,10 +8,12 @@ import { ProcessFlowSyncService } from '../flow/process-flow-sync.service';
 import { ProcessFormFactoryService } from '../forms/process-form-factory.service';
 import {
   createTaskForm,
+  defaultTaskConfig,
   normalizeTaskOrders,
   ProcessFormModel,
   ProcessRecord,
   ProcessTaskFormModel,
+  ProcessTaskOutputKind,
   ProcessTaskType,
 } from '../models/process.models';
 
@@ -118,7 +120,7 @@ export class ProcessEditorStore {
     this.form.update((current) => {
       const tasks = normalizeTaskOrders([
         ...current.tasks,
-        createTaskForm(taskType, current.tasks.length + 1),
+        this.withSuggestedInput(createTaskForm(taskType, current.tasks.length + 1), current.tasks),
       ]);
       const nextTask = tasks[tasks.length - 1];
       const flowLayout = this.flowApi.addTaskNode(
@@ -148,12 +150,13 @@ export class ProcessEditorStore {
           }
 
           const nextType = (patch.taskType ?? task.taskType) as ProcessTaskType;
+          const previousTasks = current.tasks.filter((item) => item.clientId !== task.clientId);
           return {
             ...task,
             ...patch,
             configurationJson:
               patch.taskType && patch.taskType !== task.taskType
-                ? createTaskForm(nextType, task.taskOrder).configurationJson
+                ? defaultTaskConfig(nextType, task.clientId, this.suggestedInput(nextType, previousTasks))
                 : (patch.configurationJson ?? task.configurationJson),
             sourceDefinitionId:
               nextType === 'FILE_READ'
@@ -181,6 +184,52 @@ export class ProcessEditorStore {
         flowLayout,
       };
     });
+  }
+
+  private withSuggestedInput(task: ProcessTaskFormModel, previousTasks: readonly ProcessTaskFormModel[]): ProcessTaskFormModel {
+    return {
+      ...task,
+      configurationJson: defaultTaskConfig(task.taskType, task.clientId, this.suggestedInput(task.taskType, previousTasks)),
+    };
+  }
+
+  private suggestedInput(taskType: ProcessTaskType, previousTasks: readonly ProcessTaskFormModel[]): { sourceTaskRef: string; sourceOutput: ProcessTaskOutputKind } | undefined {
+    if (taskType === 'FILE_READ') {
+      return undefined;
+    }
+    const orderedPreviousTasks = [...previousTasks].sort((left, right) => left.taskOrder - right.taskOrder);
+    const previousTask = orderedPreviousTasks.length ? orderedPreviousTasks[orderedPreviousTasks.length - 1] : null;
+    if (!previousTask) {
+      return undefined;
+    }
+    return {
+      sourceTaskRef: this.configuredTaskRef(previousTask),
+      sourceOutput: this.defaultSourceOutput(previousTask.taskType),
+    };
+  }
+
+  private defaultSourceOutput(taskType: ProcessTaskType): ProcessTaskOutputKind {
+    switch (taskType) {
+      case 'DB_WRITE':
+        return 'table';
+      case 'DB_EXECUTE_SP':
+      case 'DB_EXECUTE_FN':
+        return 'out';
+      case 'FILE_READ':
+        return 'records';
+      default:
+        return 'summary';
+    }
+  }
+
+  private configuredTaskRef(task: ProcessTaskFormModel): string {
+    try {
+      const parsed = JSON.parse(task.configurationJson || '{}');
+      const configuredRef = String(parsed?.taskRef || '').trim();
+      return configuredRef || task.clientId;
+    } catch {
+      return task.clientId;
+    }
   }
 
   removeTask(clientId: string): void {

@@ -52,7 +52,7 @@ final class DatabaseFunctionConfigurationSupport {
             }
             var parameter = (Map<String, Object>) rawMap;
             var name = String.valueOf(parameter.getOrDefault("name", "")).trim();
-            var expression = String.valueOf(parameter.getOrDefault("value", "")).trim();
+            var expression = parameterExpression(parameter);
             var jdbcType = String.valueOf(parameter.getOrDefault("jdbcType", "VARCHAR")).trim().toUpperCase();
             var direction = StoredProcedureRuntimeSupport.parameterDirection(parameter.get("direction"));
             if (name.isBlank()) {
@@ -68,5 +68,38 @@ final class DatabaseFunctionConfigurationSupport {
             parameters.add(new StoredProcedureRuntimeSupport.ProcedureParameter(name, expression, jdbcType, direction, required));
         }
         return List.copyOf(parameters);
+    }
+
+    private static String parameterExpression(Map<String, Object> parameter) {
+        var value = String.valueOf(parameter.getOrDefault("value", "")).trim();
+        if (!value.isBlank()) {
+            return value;
+        }
+        var expression = String.valueOf(parameter.getOrDefault("expression", "")).trim();
+        if (!expression.isBlank()) {
+            return expression;
+        }
+        var sourceKey = String.valueOf(parameter.getOrDefault("sourceKey", "")).trim();
+        if (sourceKey.isBlank()) {
+            return "";
+        }
+        var sourceKind = String.valueOf(parameter.getOrDefault("sourceKind", "")).trim().toLowerCase();
+        if ("constant".equals(sourceKind) || "const".equals(sourceKind)) {
+            return sourceKey.startsWith("const:") ? sourceKey : "const:" + sourceKey;
+        }
+        var sourceTaskRef = String.valueOf(parameter.getOrDefault("sourceTaskRef", "")).trim();
+        var sourceOutput = String.valueOf(parameter.getOrDefault("sourceOutput", "")).trim();
+        if (!sourceTaskRef.isBlank()) {
+            if (sourceOutput.isBlank() && ("summary".equals(sourceKind) || "records".equals(sourceKind)
+                    || "table".equals(sourceKind) || "errors".equals(sourceKind) || "out".equals(sourceKind)
+                    || "metadata".equals(sourceKind))) {
+                sourceOutput = sourceKind;
+            }
+            if (!sourceOutput.isBlank()) {
+                return sourceTaskRef + "." + sourceOutput + "." + sourceKey;
+            }
+            return sourceTaskRef + "." + sourceKey;
+        }
+        return sourceKey;
     }
 }

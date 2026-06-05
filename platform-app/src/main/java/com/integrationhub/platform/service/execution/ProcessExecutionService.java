@@ -20,6 +20,7 @@ public class ProcessExecutionService {
     private final ProcessTaskRuntimeService processTaskRuntimeService;
     private final ProcessExecutionAuditMapper auditMapper;
     private final Instance<ExecutionFastPath> fastPaths;
+    private final TaskOutputRegistry taskOutputRegistry;
     private final Tracer tracer;
 
     public ProcessExecutionService(
@@ -27,12 +28,14 @@ public class ProcessExecutionService {
             ProcessTaskRuntimeService processTaskRuntimeService,
             ProcessExecutionAuditMapper auditMapper,
             Instance<ExecutionFastPath> fastPaths,
+            TaskOutputRegistry taskOutputRegistry,
             Tracer tracer
     ) {
         this.processExecutionStateService = processExecutionStateService;
         this.processTaskRuntimeService = processTaskRuntimeService;
         this.auditMapper = auditMapper;
         this.fastPaths = fastPaths;
+        this.taskOutputRegistry = taskOutputRegistry;
         this.tracer = tracer;
     }
 
@@ -103,7 +106,7 @@ public class ProcessExecutionService {
                 // 1. Try Optimized Fast Paths (e.g. Pipeline FILE_READ -> BATCH_SINK)
                 var fastPath = resolveFastPath(taskPlan, nextTaskPlan);
                 if (fastPath != null) {
-                    var result = fastPath.execute(processExecutionId, taskPlan, nextTaskPlan, executionVariables, selectedFiles, triggerSource);
+                    var result = fastPath.execute(processExecutionId, taskPlan, nextTaskPlan, executionVariables, selectedFiles, triggerSource, taskOutputs);
                     if (result != null) return result; // Pipeline forced an early exit
                     index += fastPath.consumedTaskCount() - 1;
                     continue;
@@ -118,20 +121,22 @@ public class ProcessExecutionService {
 
                 var taskExecutionId = processExecutionStateService.startTask(processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType().name(), taskPlan.taskOrder());
                 try {
-                    var runResult = processTaskRuntimeService.runTask(processExecutionId, taskPlan, sourcePayload, readResult, executionVariables, taskOutputs, selectedFiles);
+                    var taskConfiguration = taskOutputRegistry.configuration(taskPlan.configurationJson());
+                    var runResult = processTaskRuntimeService.runTask(processExecutionId, taskPlan, sourcePayload, readResult, executionVariables, taskOutputs, selectedFiles, triggerSource);
                     String taskDetails;
                     Object taskPayload;
 
                     if (runResult.fileRead()) {
                         sourcePayload = runResult.sourcePayload();
                         readResult = runResult.readResult();
+                        taskOutputRegistry.registerFileRead(taskOutputs, taskPlan, taskConfiguration, sourcePayload, readResult);
                         taskDetails = auditMapper.buildReadDetails(taskPlan.sourceName(), readResult, List.of());
                         taskPayload = auditMapper.buildReadAuditPayload(taskPlan, readResult, List.of(), List.of(), executionVariables, triggerSource);
                         taskSpan.setAttribute("records.count", readResult.recordCount());
                     } else {
                         taskDetails = auditMapper.buildTaskDetails(taskPlan, runResult.details());
                         if (runResult.outputs() != null && !runResult.outputs().isEmpty()) {
-                            taskOutputs.putAll(runResult.outputs());
+                            taskOutputRegistry.registerTaskResult(taskOutputs, taskPlan, taskConfiguration, runResult.outputs());
                         }
                         taskPayload = Map.of("taskType", taskPlan.taskType().name(), "outputs", runResult.outputs());
                     }

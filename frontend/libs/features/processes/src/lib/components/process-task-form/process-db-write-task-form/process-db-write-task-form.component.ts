@@ -7,20 +7,21 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { DbWriteMappingDraft, DbWriteTaskDraft } from '@integration-hub/core/providers';
-import { I18nService, ProcessTaskManagerService, ReaderManagerService } from '@integration-hub/core/services';
+import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { firstValueFrom } from 'rxjs';
 import { ConnectionRef, ProcessTaskFormModel, ReaderRef } from '../../../models/process.models';
 import { ProcessApiService } from '../../../api/process-api.service';
 import {
-  DB_WRITE_METADATA_ITEMS,
   DbWriteColumnRef,
   DbWriteSchemaRef,
   DbWriteSourceItem,
   DbWriteTableRef,
 } from '../../../models/process-db-write.models';
+import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
 import { ProcessDbWriteMappingBoardComponent } from '../process-db-write-mapping-board/process-db-write-mapping-board.component';
 import { ProcessDbWriteSourcePaletteComponent } from '../process-db-write-source-palette/process-db-write-source-palette.component';
 import { ProcessDbWriteTableSelectorComponent } from '../process-db-write-table-selector/process-db-write-table-selector.component';
+import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
 @Component({
   selector: 'ih-process-db-write-task-form',
@@ -36,6 +37,7 @@ import { ProcessDbWriteTableSelectorComponent } from '../process-db-write-table-
     ProcessDbWriteSourcePaletteComponent,
     ProcessDbWriteMappingBoardComponent,
     ProcessDbWriteTableSelectorComponent,
+    ProcessTaskRuntimePanelComponent,
   ],
     templateUrl: './process-db-write-task-form.component.html',
     styleUrl: './process-db-write-task-form.component.css'
@@ -44,7 +46,7 @@ export class ProcessDbWriteTaskFormComponent {
   readonly i18n = inject(I18nService);
   private readonly api = inject(ProcessApiService);
   private readonly manager = inject(ProcessTaskManagerService);
-  private readonly readerManager = inject(ReaderManagerService);
+  private readonly bindingContext = inject(ProcessTaskBindingContextService);
 
   readonly task = input.required<ProcessTaskFormModel>();
   readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
@@ -60,7 +62,9 @@ export class ProcessDbWriteTaskFormComponent {
   readonly draggingSource = signal<DbWriteSourceItem | null>(null);
   readonly loadingColumns = signal(false);
 
-  readonly draft = computed(() => this.manager.hydrateDraft<DbWriteTaskDraft>(this.task()) ?? {
+  readonly draft = computed<DbWriteTaskDraft>(() => this.manager.hydrateDraft<DbWriteTaskDraft>(this.task()) ?? {
+    taskRef: this.task().clientId,
+    executionMode: 'batch',
     connectionRef: '',
     mode: 'insert',
     targetSchema: '',
@@ -81,37 +85,7 @@ export class ProcessDbWriteTaskFormComponent {
     return Array.from(groups.entries()).map(([key, items]) => ({ key, items }));
   });
   readonly availableSources = computed(() => {
-    const sources: DbWriteSourceItem[] = [];
-    const readTask = this.resolveReadTask();
-    if (readTask) {
-      const reader = this.readers().find((item) => item.id === readTask.readerDefinitionId);
-      if (reader?.readerType && reader.configurationJson) {
-        const readerDraft = this.readerManager.hydrateDraft(reader.readerType as any, reader.configurationJson);
-        const fieldItems = [...(readerDraft.fields ?? []), ...(readerDraft.fixedFields ?? [])]
-          .map((field) => field.name?.trim())
-          .filter((name, index, values) => !!name && values.indexOf(name) === index)
-          .map((name) => ({
-            key: name!,
-            label: name!,
-            kind: 'field' as const,
-            groupKey: 'ui.dbWriteGroup.fields',
-          }));
-        sources.push(...fieldItems);
-      }
-      const sourceVariables = this.parseObject(readTask.configurationJson, 'sourceVariables');
-      Object.keys(sourceVariables)
-        .sort((a, b) => a.localeCompare(b))
-        .forEach((key) => {
-          sources.push({
-            key,
-            label: `{${key}}`,
-            kind: 'variable',
-            groupKey: 'ui.dbWriteGroup.variables',
-          });
-        });
-    }
-    sources.push(...DB_WRITE_METADATA_ITEMS);
-    return sources;
+    return this.bindingContext.buildOptions(this.task(), this.tasks(), this.readers(), this.draft().input) as DbWriteSourceItem[];
   });
 
   private lastConnectionId: number | null = null;
@@ -314,39 +288,17 @@ export class ProcessDbWriteTaskFormComponent {
     };
   }
 
-  private resolveReadTask(): ProcessTaskFormModel | null {
-    const currentOrder = this.task().taskOrder;
-    const candidates = this.tasks()
-      .filter((item) => item.taskType === 'FILE_READ' && item.taskOrder < currentOrder)
-      .sort((a, b) => a.taskOrder - b.taskOrder);
-    const lastCandidate =
-      candidates.length > 0 ? candidates[candidates.length - 1] : null;
-    return (
-      lastCandidate ??
-      this.tasks().find((item) => item.taskType === 'FILE_READ') ??
-      null
-    );
-  }
-
-  private parseObject(configurationJson: string, key: string): Record<string, string> {
-    try {
-      const parsed = JSON.parse(configurationJson || '{}');
-      const value = parsed?.[key];
-      if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        return {};
-      }
-      return Object.entries(value).reduce<Record<string, string>>((accumulator, [entryKey, entryValue]) => {
-        accumulator[String(entryKey)] = String(entryValue);
-        return accumulator;
-      }, {});
-    } catch {
-      return {};
-    }
-  }
-
   updateDraft(patch: Partial<DbWriteTaskDraft>): void {
-    const nextDraft = { ...this.draft(), ...patch };
+    const nextDraft = this.sanitizeDraftInput({ ...this.draft(), ...patch });
     this.patchTask.emit(this.manager.toTaskPatch(this.task().taskType, nextDraft));
+  }
+
+  private sanitizeDraftInput(draft: DbWriteTaskDraft): DbWriteTaskDraft {
+    if (!this.bindingContext.isFileInput(draft.input, this.tasks())) {
+      return draft;
+    }
+    const { batchSize: _batchSize, ...input } = draft.input!;
+    return { ...draft, input };
   }
 }
 

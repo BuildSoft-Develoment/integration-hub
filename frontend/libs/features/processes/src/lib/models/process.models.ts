@@ -1,5 +1,6 @@
 import type {
   ConnectionRef,
+  ProcessTaskOutputKind,
   ProcessTaskFormModel,
   ProcessTaskType,
   ReaderRef,
@@ -7,6 +8,7 @@ import type {
 } from '@integration-hub/core/providers';
 export type {
   ConnectionRef,
+  ProcessTaskOutputKind,
   ProcessTaskFormModel,
   ProcessTaskType,
   ReaderRef,
@@ -68,33 +70,43 @@ export const processTaskTypes: readonly ProcessTaskType[] = [
 
 let nextTaskClientId = 1;
 
-export function defaultTaskConfig(taskType: ProcessTaskType): string {
+interface DefaultTaskInput {
+  sourceTaskRef: string;
+  sourceOutput: ProcessTaskOutputKind;
+}
+
+export function defaultTaskConfig(taskType: ProcessTaskType, taskRef = '', input?: DefaultTaskInput): string {
+  const runtime = taskRef ? { taskRef } : {};
+  const taskInput = input?.sourceTaskRef
+    ? { input: { source: 'task-output', sourceTaskRef: input.sourceTaskRef, sourceOutput: input.sourceOutput } }
+    : {};
   switch (taskType) {
     case 'DB_WRITE':
-      return JSON.stringify({ mode: 'insert', targetTable: 'staging_record', batchSize: 1000 }, null, 2);
+      return JSON.stringify({ ...runtime, executionMode: 'batch', ...taskInput, mode: 'insert', targetTable: 'staging_record', batchSize: 1000 }, null, 2);
     case 'DB_EXECUTE_SP':
-      return JSON.stringify({ procedureName: 'public.sp_procesar', timeoutSeconds: 30, parameters: [] }, null, 2);
+      return JSON.stringify({ ...runtime, executionMode: 'once', ...taskInput, procedureName: 'public.sp_procesar', timeoutSeconds: 30, parameters: [] }, null, 2);
     case 'DB_EXECUTE_FN':
-      return JSON.stringify({ functionName: 'public.fn_obtener_resumen', timeoutSeconds: 30, resultAlias: 'resultado_fn', parameters: [] }, null, 2);
+      return JSON.stringify({ ...runtime, executionMode: 'once', ...taskInput, functionName: 'public.fn_obtener_resumen', timeoutSeconds: 30, resultAlias: 'resultado_fn', parameters: [] }, null, 2);
     case 'REST_CALL':
-      return JSON.stringify({ mode: 'per-record', method: 'POST', url: 'https://api.example.com/resource', timeoutSeconds: 20 }, null, 2);
+      return JSON.stringify({ ...runtime, executionMode: 'per-record', ...taskInput, method: 'POST', url: 'https://api.example.com/resource', timeoutSeconds: 20 }, null, 2);
     case 'NOTIFICATION':
-      return JSON.stringify({ channel: 'log', message: 'Proceso ${processExecutionId} finalizado con ${recordCount} registros' }, null, 2);
+      return JSON.stringify({ ...runtime, executionMode: 'once', ...taskInput, channel: 'log', message: 'Proceso ${processExecutionId} finalizado con ${recordCount} registros' }, null, 2);
     default:
-      return '{}';
+      return JSON.stringify({ ...runtime, executionMode: 'batch' }, null, 2);
   }
 }
 
 export function createTaskForm(taskType: ProcessTaskType = 'FILE_READ', taskOrder = 1): ProcessTaskFormModel {
+  const clientId = `task-${nextTaskClientId++}`;
   return {
-    clientId: `task-${nextTaskClientId++}`,
+    clientId,
     id: null,
     taskOrder,
     taskType,
     active: true,
     sourceDefinitionId: null,
     readerDefinitionId: null,
-    configurationJson: defaultTaskConfig(taskType),
+    configurationJson: defaultTaskConfig(taskType, clientId),
   };
 }
 

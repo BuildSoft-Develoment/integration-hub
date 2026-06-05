@@ -41,7 +41,9 @@ final class NotificationTaskSupport {
     static String template(String template, Map<String, Object> variables) {
         String resolved = template;
         for (Map.Entry<String, Object> entry : variables.entrySet()) {
-            resolved = resolved.replace("${" + entry.getKey() + "}", entry.getValue() == null ? "" : String.valueOf(entry.getValue()));
+            var value = entry.getValue() == null ? "" : String.valueOf(entry.getValue());
+            resolved = resolved.replace("${" + entry.getKey() + "}", value);
+            resolved = resolved.replace("{" + entry.getKey() + "}", value);
         }
         return resolved;
     }
