@@ -72,10 +72,16 @@ export class DbExecuteFunctionTaskProvider extends ProcessTaskProvider<DbExecute
           next.expression = parameter.expression.trim();
           next.sourceKind = 'expression';
         } else if ((parameter.sourceKey || '').trim()) {
+          const sourceKind = parameter.sourceKind || 'field';
           next.value = parameter.sourceKey.trim();
-          next.sourceKind = parameter.sourceKind || 'field';
+          next.sourceKind = sourceKind;
           next.sourceKey = parameter.sourceKey.trim();
           next.sourceLabel = (parameter.sourceLabel || parameter.sourceKey).trim();
+          const sourceTaskRef = (draft.input?.sourceTaskRef || '').trim();
+          if (sourceTaskRef && ['summary', 'table', 'errors', 'out'].includes(sourceKind)) {
+            next.sourceTaskRef = sourceTaskRef;
+            next.sourceOutput = sourceKind;
+          }
         }
         return next;
       })

@@ -70,10 +70,16 @@ export class DbExecuteStoredProcedureTaskProvider extends ProcessTaskProvider<Db
           next.expression = entry.expression.trim();
           next.sourceKind = 'expression';
         } else if ((entry.sourceKey || '').trim()) {
+          const sourceKind = entry.sourceKind || 'field';
           next.value = entry.sourceKey.trim();
-          next.sourceKind = entry.sourceKind || 'field';
+          next.sourceKind = sourceKind;
           next.sourceKey = entry.sourceKey.trim();
           next.sourceLabel = (entry.sourceLabel || entry.sourceKey).trim();
+          const sourceTaskRef = (draft.input?.sourceTaskRef || '').trim();
+          if (sourceTaskRef && ['summary', 'table', 'errors', 'out'].includes(sourceKind)) {
+            next.sourceTaskRef = sourceTaskRef;
+            next.sourceOutput = sourceKind;
+          }
         }
         return next;
       });

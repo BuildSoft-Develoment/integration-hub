@@ -91,7 +91,7 @@
                         @for (group of sourceGroups(); track group.key) {
                           <mat-optgroup [label]="i18n.t(group.key)">
                             @for (item of group.items; track item.kind + ':' + item.key) {
-                              <mat-option [value]="item.key">{{ item.label }}</mat-option>
+                              <mat-option [value]="optionValue(item)">{{ item.label }}</mat-option>
                             }
                           </mat-optgroup>
                         }
@@ -102,12 +102,12 @@
               } @else {
                 <mat-form-field>
                   <mat-label>{{ i18n.t('ui.valueSource') }}</mat-label>
-                  <mat-select [disabled]="readonly()" [value]="entry.sourceKey || null" (selectionChange)="selectSource(index, $event.value)">
+                  <mat-select [disabled]="readonly()" [value]="selectedValue(entry)" (selectionChange)="selectSource(index, $event.value)">
                     <mat-option [value]="null">{{ i18n.t('ui.dbWriteSelectNone') }}</mat-option>
                     @for (group of sourceGroups(); track group.key) {
                       <mat-optgroup [label]="i18n.t(group.key)">
                         @for (item of group.items; track item.kind + ':' + item.key) {
-                          <mat-option [value]="item.key">{{ item.label }}</mat-option>
+                          <mat-option [value]="optionValue(item)">{{ item.label }}</mat-option>
                         }
                       </mat-optgroup>
                     }
