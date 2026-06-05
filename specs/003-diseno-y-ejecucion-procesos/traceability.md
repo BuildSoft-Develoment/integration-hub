@@ -90,6 +90,9 @@ Cerrados en código (motor RF-006..013, ADR-004):
 Cobertura: IT con Testcontainers (Postgres) `MotorTableInputIT` valida los escenarios de BD —
 paginación keyset estable (todas las filas una vez, en orden), modo per-record, `orderBy`
 obligatorio y routing de conexión del productor para `table` (P1.3/P1.4). 4/4 verdes.
+`CatalogAndExecutionResourceIT` (e2e create+execute) migrado al contrato/async del motor. Los `*IT`
+se ejecutan vía `npm run check:it` (failsafe, requiere Docker) y en CI con `mvn verify` (job
+`backend`) — ya no quedan fuera de la red de seguridad como antes (surefire excluye `*IT`).
 
 Pendientes/notas: `orderBy` de keyset debe ser clave única/ordenable (PK) para no omitir valores
 repetidos; el summary del fast path puebla source* solo para un único archivo; faltan unit

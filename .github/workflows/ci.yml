@@ -19,7 +19,7 @@ jobs:
         run: npm run check:all
 
   backend:
-    name: Backend Quarkus (build + test)
+    name: Backend Quarkus (build + test + IT)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +27,8 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      # `verify` corre tests unitarios (surefire) y de integracion *IT (failsafe).
+      # Los *IT usan Testcontainers (Postgres) -> requieren Docker (disponible en ubuntu-latest).
       - name: Maven verify
         working-directory: platform-app
         run: ./mvnw -B verify
