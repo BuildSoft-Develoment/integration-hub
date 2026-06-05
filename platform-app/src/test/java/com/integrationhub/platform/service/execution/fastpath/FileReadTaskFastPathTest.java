@@ -13,6 +13,7 @@ import com.integrationhub.platform.spi.source.SelectedSourceFile;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
+import jakarta.enterprise.inject.Vetoed;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -94,6 +95,7 @@ class FileReadTaskFastPathTest {
         );
     }
 
+    @Vetoed
     private static final class RecordingStateService extends ProcessExecutionStateService {
         private final ProcessExecution execution;
         private final AtomicInteger completedWithErrorsCount = new AtomicInteger();
@@ -132,6 +134,7 @@ class FileReadTaskFastPathTest {
         }
     }
 
+    @Vetoed
     private static final class RecordingProcessedSourceFileService extends ProcessedSourceFileService {
         private final AtomicInteger recordPipelineFilesCount = new AtomicInteger();
 
@@ -149,6 +152,7 @@ class FileReadTaskFastPathTest {
         }
     }
 
+    @Vetoed
     private static final class BatchTaskProviderRegistry extends TaskProviderRegistry {
         private BatchTaskProviderRegistry() {
             super(null);
@@ -173,6 +177,7 @@ class FileReadTaskFastPathTest {
         }
     }
 
+    @Vetoed
     private static final class FailingStreamingPipelineService extends StreamingPipelineService {
         private FailingStreamingPipelineService() {
             super(null, null, null, null, null, null);
