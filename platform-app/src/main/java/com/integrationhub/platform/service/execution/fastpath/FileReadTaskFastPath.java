@@ -91,7 +91,13 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
             var pipelineResult = pipelineService.run(processExecutionId, current, next, executionVariables, selectedFiles);
             var currentConfiguration = taskOutputRegistry.configuration(current.configurationJson());
             var nextConfiguration = taskOutputRegistry.configuration(next.configurationJson());
-            taskOutputRegistry.registerFileRead(taskOutputs, current, currentConfiguration, null, pipelineResult.readResult());
+            // P2.2: pasar la metadata de archivo (si es un unico archivo) para que el summary del
+            // fast path incluya sourceFileName/Path/... igual que el camino normal.
+            var selectedSourceFiles = pipelineResult.selectedFiles();
+            var sourceFile = selectedSourceFiles != null && selectedSourceFiles.size() == 1
+                    ? selectedSourceFiles.get(0)
+                    : null;
+            taskOutputRegistry.registerFileRead(taskOutputs, current, currentConfiguration, sourceFile, pipelineResult.readResult());
             taskOutputRegistry.registerTaskResult(taskOutputs, next, nextConfiguration, taskOutputRegistry.pipelineSinkOutputs(next, pipelineResult.processedCount()));
 
             stateService.completeTask(

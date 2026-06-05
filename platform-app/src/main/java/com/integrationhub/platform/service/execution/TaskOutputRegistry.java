@@ -3,6 +3,7 @@ package com.integrationhub.platform.service.execution;
 import com.integrationhub.platform.domain.TaskType;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.spi.reader.ReadResult;
+import com.integrationhub.platform.spi.source.SelectedSourceFile;
 import com.integrationhub.platform.spi.source.SourcePayload;
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -78,18 +79,29 @@ public class TaskOutputRegistry {
                                  Map<String, Object> configuration,
                                  SourcePayload sourcePayload,
                                  ReadResult readResult) {
+        registerFileRead(taskOutputs, taskPlan, configuration,
+                sourcePayload == null ? null : sourcePayload.file(), readResult);
+    }
+
+    /**
+     * Variante por {@link SelectedSourceFile}: la usa el fast path (que no construye SourcePayload)
+     * para que el `summary` incluya sourceFileName/Path/... igual que el camino normal (P2.2).
+     */
+    public void registerFileRead(Map<String, Object> taskOutputs,
+                                 ProcessExecutionStateService.TaskPlan taskPlan,
+                                 Map<String, Object> configuration,
+                                 SelectedSourceFile sourceFile,
+                                 ReadResult readResult) {
         var summary = new LinkedHashMap<String, Object>();
         summary.put("recordCount", readResult == null ? 0 : readResult.recordCount());
         summary.put("skippedCount", readResult == null ? 0 : readResult.skippedCount());
-        if (sourcePayload != null) {
-            putIfPresent(summary, "sourceFileName", sourcePayload.name());
-            putIfPresent(summary, "sourceFilePath", sourcePayload.location());
-            putIfPresent(summary, "sourceMediaType", sourcePayload.mediaType());
-            if (sourcePayload.file() != null) {
-                putIfPresent(summary, "sourceFileSize", sourcePayload.file().size());
-                Instant lastModified = sourcePayload.file().lastModified();
-                putIfPresent(summary, "sourceLastModified", lastModified == null ? null : lastModified.toString());
-            }
+        if (sourceFile != null) {
+            putIfPresent(summary, "sourceFileName", sourceFile.name());
+            putIfPresent(summary, "sourceFilePath", sourceFile.location());
+            putIfPresent(summary, "sourceMediaType", sourceFile.mediaType());
+            putIfPresent(summary, "sourceFileSize", sourceFile.size());
+            Instant lastModified = sourceFile.lastModified();
+            putIfPresent(summary, "sourceLastModified", lastModified == null ? null : lastModified.toString());
         }
         registerTypedOutput(taskOutputs, taskPlan, configuration, "summary", summary);
         if (readResult != null && readResult.records() != null && !readResult.records().isEmpty()) {
@@ -116,6 +128,12 @@ public class TaskOutputRegistry {
             var targetTable = outputs.get("targetTable");
             if (targetTable != null && !String.valueOf(targetTable).isBlank()) {
                 registerTypedOutput(taskOutputs, taskPlan, configuration, "table", String.valueOf(targetTable));
+                // Conexion del productor: una lectura posterior de <ref>.table debe usar la conexion
+                // donde se escribio la tabla, no la del consumidor (hallazgo P1.3, ADR-004).
+                var connectionRef = configuration.get("connectionRef");
+                if (connectionRef != null && !String.valueOf(connectionRef).isBlank()) {
+                    taskOutputs.put(taskRef(taskPlan, configuration) + ".table.connectionRef", String.valueOf(connectionRef));
+                }
             }
         }
     }

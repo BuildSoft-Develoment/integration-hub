@@ -76,6 +76,22 @@ arma el JSON; `hydrateDraft` el inverso). La UI por tipo vive en `process-task-f
   distintos: REST mapea respuesta a output; webhook audita y valida 2xx. Ver
   [ADR-005](../../docs/fase-3-arquitectura/adr/ADR-005-unificacion-peticion-http.md) (Propuesto).
 
+## Hallazgos del motor (revisión spec 003) — estado
+
+Cerrados en código (motor RF-006..013, ADR-004):
+- P1.1 identidad de binding (valor compuesto `kind::key`, sin colisión entre grupos).
+- P1.2 SP/FN persisten `sourceTaskRef`/`sourceOutput` para outputs agregados (summary/table/errors/out).
+- P1.3 `table` lee de la conexión del **productor** (`<ref>.table.connectionRef`), no del consumidor.
+- P1.4 paginación **keyset por `orderBy`** (estable, sin saltos/duplicados) + límite por dialecto
+  (LIMIT vs FETCH FIRST); `orderBy` obligatorio para lectura `table` en lote.
+- P2.1 lote de lectura/proceso (`input.batchSize`/`batchSize`) separado del lote JDBC (`jdbcBatchSize`).
+- P2.2 el `summary` del fast path FILE_READ→DB_WRITE incluye `sourceFileName`/`...` igual que el camino normal.
+
+Pendientes/notas: `orderBy` de keyset debe ser clave única/ordenable (PK) para no omitir valores
+repetidos; el summary del fast path puebla source* solo para un único archivo; faltan pruebas de
+integración de los escenarios sensibles (fan-in, claves duplicadas, `table` con otra conexión,
+paginación por motor, fast path multi-archivo).
+
 ## Preguntas abiertas
 - Confirmar mapeo definitivo RF local `RF-001..RF-005` ↔ requerimientos globales de Fase 1.
 - GREEN del IT `CatalogAndExecutionResourceIT` pendiente de corrida dedicada (ver tdd-evidence.md).
