@@ -17,6 +17,9 @@ import software.amazon.awssdk.services.s3.S3Configuration;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import software.amazon.awssdk.services.s3.model.S3Object;
+import software.amazon.awssdk.services.sts.StsClient;
+import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
+import software.amazon.awssdk.services.sts.model.AssumeRoleRequest;
 
 import java.net.URI;
 import java.time.Instant;
@@ -138,7 +141,7 @@ public class S3SourceProvider implements SourceProvider {
         S3ClientBuilder builder = S3Client.builder()
                 .region(Region.of(region))
                 .httpClient(UrlConnectionHttpClient.create())
-                .credentialsProvider(credentialsProvider(configuration, authMode));
+                .credentialsProvider(credentialsProvider(configuration, authMode, region));
 
         if (!endpoint.isBlank()) {
             builder.endpointOverride(URI.create(endpoint));
@@ -149,14 +152,33 @@ public class S3SourceProvider implements SourceProvider {
         return builder.build();
     }
 
-    private AwsCredentialsProvider credentialsProvider(Map<String, Object> configuration, String authMode) {
+    private AwsCredentialsProvider credentialsProvider(Map<String, Object> configuration, String authMode, String region) {
         return switch (authMode == null ? "default" : authMode.toLowerCase()) {
             case "access-key" -> StaticCredentialsProvider.create(AwsBasicCredentials.create(
                     SourceConfigurationSupport.requireString(configuration, "accessKeyId"),
                     SourceConfigurationSupport.requireString(configuration, "secretAccessKey")));
-            case "assume-role" -> throw new IllegalArgumentException(
-                    "S3 authMode 'assume-role' aun no soportado en backend; usa 'default' o 'access-key' (ADR-006, pendiente STS)");
+            case "assume-role" -> assumeRoleProvider(configuration, region);
             default -> DefaultCredentialsProvider.create();
         };
+    }
+
+    private AwsCredentialsProvider assumeRoleProvider(Map<String, Object> configuration, String region) {
+        String roleArn = SourceConfigurationSupport.requireString(configuration, "roleArn");
+        String externalId = SourceConfigurationSupport.optionalString(configuration, "externalId", "");
+        StsClient stsClient = StsClient.builder()
+                .region(Region.of(region))
+                .httpClient(UrlConnectionHttpClient.create())
+                .credentialsProvider(DefaultCredentialsProvider.create())
+                .build();
+        AssumeRoleRequest.Builder request = AssumeRoleRequest.builder()
+                .roleArn(roleArn)
+                .roleSessionName(SourceConfigurationSupport.optionalString(configuration, "roleSessionName", "integration-hub"));
+        if (!externalId.isBlank()) {
+            request.externalId(externalId);
+        }
+        return StsAssumeRoleCredentialsProvider.builder()
+                .stsClient(stsClient)
+                .refreshRequest(request.build())
+                .build();
     }
 }

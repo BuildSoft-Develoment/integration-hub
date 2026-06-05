@@ -4,6 +4,8 @@ import { FileSystemSourceProvider } from './implementations/sources/file-system-
 import { FtpSourceProvider } from './implementations/sources/ftp-source.provider';
 import { RestSourceProvider } from './implementations/sources/rest-source.provider';
 import { S3SourceProvider } from './implementations/sources/s3-source.provider';
+import { GcsSourceProvider } from './implementations/sources/gcs-source.provider';
+import { AzureBlobSourceProvider } from './implementations/sources/azure-blob-source.provider';
 import { SftpSourceProvider } from './implementations/sources/sftp-source.provider';
 
 export const SOURCE_PROVIDERS = new InjectionToken<ReadonlyArray<SourceProvider>>(
@@ -16,6 +18,8 @@ const SOURCE_PROVIDER_TYPES: ReadonlyArray<Type<SourceProvider>> = [
   SftpSourceProvider,
   RestSourceProvider,
   S3SourceProvider,
+  GcsSourceProvider,
+  AzureBlobSourceProvider,
 ];
 
 export function provideSourceProviders(): Provider[] {

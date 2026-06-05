@@ -1,4 +1,4 @@
-export type SourceProviderType = 'FILESYSTEM' | 'FTP' | 'SFTP' | 'REST' | 'S3';
+export type SourceProviderType = 'FILESYSTEM' | 'FTP' | 'SFTP' | 'REST' | 'S3' | 'GCS' | 'AZURE_BLOB';
 
 export interface SourceDraft {
   type: SourceProviderType;
@@ -33,12 +33,30 @@ export interface SourceDraft {
   region?: string;
   bucket?: string;
   prefix?: string;
-  authMode?: 'default' | 'access-key' | 'assume-role';
+  authMode?:
+    | 'default'
+    | 'access-key'
+    | 'assume-role'
+    | 'adc'
+    | 'service-account-json'
+    | 'managed-identity'
+    | 'account-key'
+    | 'sas-token'
+    | 'connection-string';
   accessKeyId?: string;
   secretAccessKey?: string;
   roleArn?: string;
   endpoint?: string;
   pathStyleAccess?: boolean;
+  // GCS
+  projectId?: string;
+  serviceAccountJson?: string;
+  // Azure Blob
+  accountName?: string;
+  container?: string;
+  accountKey?: string;
+  sasToken?: string;
+  connectionString?: string;
 }
 
 export interface SourceProviderDescriptor {
