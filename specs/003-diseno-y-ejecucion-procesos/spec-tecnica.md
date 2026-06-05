@@ -35,6 +35,11 @@ del `task_type`. El contrato lo definen los providers del frontend
 campos de columna (`sourceDefinitionId`/`readerDefinitionId`); `hydrateDraft(task)` hace el inverso.
 Las tareas DB referencian una conexion del catalogo via `connectionRef` dentro del JSON (no hay FK).
 Credenciales/token en `REST_CALL` admiten referencia `${secret:...}` (nunca valor en claro).
+`REST_CALL` y el canal `webhook` de `NOTIFICATION` comparten el mismo bloque de peticion HTTP
+(`method`, `baseUrl`/`pathTemplate`/`url`, `queryParameters`, `headers`/`headerMappings`,
+`authType`+credenciales, `bodyTemplate`) — front `process-http-request` + back `HttpRequestSupport`
+(ADR-005). **Sin fallback**: el webhook ya no usa `headersJson` crudo; los headers van como mapa
+estructurado `headers`.
 
 ```jsonc
 // FILE_READ  (sourceDefinitionId/readerDefinitionId van como columnas de la tarea)
@@ -58,9 +63,12 @@ Credenciales/token en `REST_CALL` admiten referencia `${secret:...}` (nunca valo
   "timeoutSeconds": 20, "authType": "bearer", "token": "${secret:rest}", "headers": { "X-Env": "prod" },
   "bodyTemplate": "{\"id\":\"${id}\"}" }
 
-// NOTIFICATION  (channel webhook)
-{ "channel": "webhook", "url": "https://hooks.demo/x", "message": "ok",
-  "bodyTemplate": "{\"message\":\"${message}\"}", "timeoutSeconds": 15, "headers": {} }
+// NOTIFICATION channel log:  { "channel": "log", "message": "Proceso ${processExecutionId} ok" }
+// NOTIFICATION channel email: { "channel": "email", "to": "ops@demo", "subject": "...", "body": "..." }
+// NOTIFICATION channel webhook (mismo bloque HTTP que REST_CALL; sin headersJson crudo)
+{ "channel": "webhook", "method": "POST", "baseUrl": "https://hooks.demo", "pathTemplate": "/x",
+  "url": "https://hooks.demo/x", "message": "ok", "authType": "bearer", "token": "${secret:webhook}",
+  "headers": { "X-Env": "prod" }, "bodyTemplate": "{\"message\":\"${message}\"}", "timeoutSeconds": 15 }
 ```
 
 > Fuente del contrato: los 6 `*TaskProvider` (`tasks/*.provider.ts`) + sus `*TaskDraft`. El backend

@@ -6,6 +6,7 @@ export * from './lib/connections/connection-provider.abstract';
 export * from './lib/connection-provider.token';
 export * from './lib/tasks/process-task.models';
 export * from './lib/tasks/process-task-binding.models';
+export * from './lib/tasks/http-request-task.support';
 export * from './lib/tasks/process-task-provider.abstract';
 export * from './lib/process-task-provider.token';
 export * from './lib/implementations/sources/file-system-source.provider';

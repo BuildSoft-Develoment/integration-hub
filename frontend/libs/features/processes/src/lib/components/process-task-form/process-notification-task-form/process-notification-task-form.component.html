@@ -75,83 +75,51 @@
     }
 
     @if (draft().channel === 'webhook') {
-      <div class="notif-endpoint-grid">
-        <mat-form-field>
-          <mat-label>{{ i18n.t('ui.url') }}</mat-label>
-          <input matInput [disabled]="readonly()" [ngModel]="draft().url" (ngModelChange)="updateDraft({ url: $event })" />
-        </mat-form-field>
-        <mat-form-field>
-          <mat-label>{{ i18n.t('ui.timeoutSeconds') }}</mat-label>
-          <input matInput [disabled]="readonly()" [ngModel]="draft().timeoutSeconds" (ngModelChange)="updateDraft({ timeoutSeconds: $event })" />
-        </mat-form-field>
-      </div>
-
       <mat-form-field class="full-width">
         <mat-label>{{ i18n.t('ui.message') }}</mat-label>
-        <input matInput [disabled]="readonly()" [ngModel]="draft().message" (ngModelChange)="updateDraft({ message: $event })" />
+        <input
+          #webhookMessage
+          matInput
+          [disabled]="readonly()"
+          [ngModel]="draft().message"
+          (ngModelChange)="handleBodyInput('message', webhookMessage, $event)"
+          (click)="handleBodyInteraction('message', webhookMessage)"
+          (keyup)="handleBodyInteraction('message', webhookMessage)"
+          (select)="handleBodyInteraction('message', webhookMessage)"
+          (keydown)="handleBodyKeydown($event, 'message', webhookMessage)"
+          (blur)="handleBodyBlur()"
+        />
       </mat-form-field>
 
-      <mat-form-field class="full-width">
-        <mat-label>{{ i18n.t('ui.headersJson') }}</mat-label>
-        <textarea matInput [disabled]="readonly()" [ngModel]="draft().headersJson" (ngModelChange)="updateDraft({ headersJson: $event })"></textarea>
-      </mat-form-field>
-
-      <div class="notif-body-workspace">
-        <div class="notif-editor">
-          <mat-form-field class="full-width">
-            <mat-label>{{ i18n.t('ui.body') }}</mat-label>
-            <textarea
-              #webhookBody
-              matInput
-              [disabled]="readonly()"
-              [ngModel]="draft().bodyTemplate"
-              (ngModelChange)="handleBodyInput('bodyTemplate', webhookBody, $event)"
-              (click)="handleBodyInteraction('bodyTemplate', webhookBody)"
-              (keyup)="handleBodyInteraction('bodyTemplate', webhookBody)"
-              (select)="handleBodyInteraction('bodyTemplate', webhookBody)"
-              (keydown)="handleBodyKeydown($event, 'bodyTemplate', webhookBody)"
-              (blur)="handleBodyBlur()"
-            ></textarea>
-          </mat-form-field>
-
-          @if (bodyAutocompleteVisible() && activeField() === 'bodyTemplate') {
-            <section class="notif-autocomplete ih-panel-surface">
-              @if (bodyAutocompleteGroups().length) {
-                @for (group of bodyAutocompleteGroups(); track group.key) {
-                  <div class="notif-autocomplete__group">
-                    <header class="notif-autocomplete__title">{{ i18n.t(group.key) }}</header>
-                    <div class="notif-autocomplete__items">
-                      @for (item of group.items; track item.key) {
-                        <button type="button" class="ih-token-chip" [disabled]="readonly()" (mousedown)="insertAutocomplete(item)">{{ item.label }}</button>
-                      }
-                    </div>
-                  </div>
-                }
-              } @else {
-                <div class="notif-autocomplete__empty">{{ i18n.t('ui.restBodyAutocompleteEmpty') }}</div>
-              }
-            </section>
-          }
-        </div>
-        <aside class="notif-tokens ih-soft-panel">
-          <div class="notif-tokens__header">
-            <p class="ih-section-eyebrow">{{ i18n.t('ui.restBodyTokens') }}</p>
-            <h5>{{ i18n.t('ui.restBodyTokensHint') }}</h5>
-          </div>
-          <div class="notif-tokens__groups">
-            @for (group of groupedSources(); track group.key) {
-              <section class="notif-tokens__group">
-                <header class="notif-tokens__title">{{ i18n.t(group.key) }}</header>
-                <div class="notif-tokens__items">
+      @if (bodyAutocompleteVisible() && activeField() === 'message') {
+        <section class="notif-autocomplete ih-panel-surface">
+          @if (bodyAutocompleteGroups().length) {
+            @for (group of bodyAutocompleteGroups(); track group.key) {
+              <div class="notif-autocomplete__group">
+                <header class="notif-autocomplete__title">{{ i18n.t(group.key) }}</header>
+                <div class="notif-autocomplete__items">
                   @for (item of group.items; track item.key) {
-                    <button type="button" class="ih-token-chip" [disabled]="readonly()" (click)="insertTokenAt('bodyTemplate', item.key, webhookBody)">{{ item.label }}</button>
+                    <button type="button" class="ih-token-chip" [disabled]="readonly()" (mousedown)="insertAutocomplete(item)">{{ item.label }}</button>
                   }
                 </div>
-              </section>
+              </div>
             }
-          </div>
-        </aside>
-      </div>
+          } @else {
+            <div class="notif-autocomplete__empty">{{ i18n.t('ui.restBodyAutocompleteEmpty') }}</div>
+          }
+        </section>
+      }
+
+      <ih-process-http-request
+        class="notif-http-request"
+        [httpRequest]="draft()"
+        [task]="task()"
+        [tasks]="tasks()"
+        [readers]="readers()"
+        [runtimeInput]="draft().input"
+        [readonly]="readonly()"
+        (httpRequestChange)="updateDraft($event)"
+      />
     }
 
     @if (draft().channel === 'email') {

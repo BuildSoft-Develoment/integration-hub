@@ -12,13 +12,15 @@
 
 Aceptado (ruta B). Pendiente de validacion humana en el gate de arquitectura.
 
-> **Progreso**: el **backend ya esta implementado** — `HttpRequestSupport`
-> (`provider/task/http/`) consolida el armado de la peticion (metodo/headers/auth/body/timeout) y
-> lo usan `RestCallTaskProvider` y el webhook de `NotificationTaskProvider` (cada uno con su
-> epilogo: output vs auditoria + 2xx). La **extraccion frontend** (`process-http-request`) se
-> ejecutara **despues de estabilizar el WIP del motor 008** (ADR-004), para no reescribir el form
-> REST en paralelo. **Sin fallback**: el webhook migra a headers/query/auth estructurados y deja de
-> usar `headersJson` crudo.
+> **Progreso**: **implementado (front + back)**. Backend: `HttpRequestSupport`
+> (`provider/task/http/`) consolida el armado de la peticion (metodo/headers/auth/body/timeout); lo
+> usan `RestCallTaskProvider` y el webhook de `NotificationTaskProvider` (cada uno con su epilogo:
+> output vs auditoria + 2xx); `sendWebhook` honra el `method` del config. Frontend: componente
+> reusable `process-http-request` (endpoint + tabs Query/Auth/Headers/Body con tokens) sobre
+> `HttpRequestDraft` y soporte `http-request-task.support.ts`; lo embeben `process-rest-call-task-form`
+> y el canal `webhook` de `process-notification-task-form` (conservando `message`). **Sin fallback**:
+> el webhook usa headers/query/auth estructurados y dejo de usar `headersJson` crudo. Pendiente: gate
+> humano de contrato + auth.
 
 ## Contexto
 
@@ -114,10 +116,13 @@ conserva su semantica de epilogo.
 
 1. Cerrar/estabilizar el WIP del motor (ADR-004) para no editar el form REST en paralelo.
 2. **Backend** — *hecho*: `HttpRequestSupport` extraido; `RestCallTaskProvider` y `sendWebhook` lo
-   consumen; epilogos distintos (output vs auditoria); compila + `RestTaskSupportTest` verde.
-   Pendiente menor: que el webhook honre `method` del config (hoy POST fijo, 1 linea).
-3. **Frontend** (tras estabilizar el WIP del motor): extraer `process-http-request`; reusar en REST
-   y en el canal webhook; preservar `message`/log/email. **Sin fallback** de `headersJson` crudo.
+   consumen; epilogos distintos (output vs auditoria); `sendWebhook` honra `method` del config;
+   compila + `RestTaskSupportTest` verde.
+3. **Frontend** — *hecho*: `HttpRequestDraft` + `http-request-task.support.ts` (de/serializacion
+   compartida) + componente `process-http-request` (endpoint + tabs Query/Auth/Headers/Body con
+   tokens/autocomplete); reusado en `process-rest-call-task-form` y en el canal `webhook` de
+   `process-notification-task-form` (preserva `message`/log/email). **Sin fallback** de `headersJson`
+   crudo. Verificado: `nx build web` + `nx test web` + `mvn -pl platform-app compile` verdes.
 4. **Contrato + trazabilidad**: documentar el `configuration_json` HTTP en `spec-tecnica` de 003;
    actualizar `traceability.md`/`@trace`; migracion Flyway si aplica.
 5. **Gate humano**: cambio de contrato + seguridad (auth) + datos → revision y firma humana

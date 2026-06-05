@@ -65,8 +65,9 @@ public class NotificationTaskProvider implements TaskProvider {
         String body = NotificationTaskSupport.template(bodyTemplate, variables);
         Map<String, String> headers = NotificationTaskSupport.stringMap(configuration, "headers");
         int timeoutSeconds = NotificationTaskSupport.optionalInt(configuration, "timeoutSeconds", 15);
+        String method = String.valueOf(configuration.getOrDefault("method", "POST"));
 
-        HttpRequest request = HttpRequestSupport.build(configuration, "POST", url, body, timeoutSeconds, headers);
+        HttpRequest request = HttpRequestSupport.build(configuration, method, url, body, timeoutSeconds, headers);
 
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());

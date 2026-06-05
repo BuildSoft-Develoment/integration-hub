@@ -6,14 +6,15 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { ProcessTaskFormModel, ReaderRef } from '../../../models/process.models';
-import { NotificationTaskDraft, ProcessTaskBindingOption } from '@integration-hub/core/providers';
+import { createHttpRequestDraft, NotificationTaskDraft, ProcessTaskBindingOption } from '@integration-hub/core/providers';
 import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
+import { ProcessHttpRequestComponent } from '../process-http-request/process-http-request.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
 @Component({
   selector: 'ih-process-notification-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, ProcessTaskRuntimePanelComponent],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, ProcessHttpRequestComponent, ProcessTaskRuntimePanelComponent],
   styles: [`
     :host {
       display: flex;
@@ -31,6 +32,12 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
     }
     .full-width { width: 100%; }
     textarea { min-height: 8rem; }
+    .notif-http-request {
+      display: block;
+      width: 100%;
+      min-width: 0;
+      min-height: 0;
+    }
     .notif-endpoint-grid {
       display: grid;
       grid-template-columns: minmax(0, 2.6fr) minmax(110px, 0.6fr);
@@ -112,14 +119,12 @@ export class ProcessNotificationTaskFormComponent {
   readonly patchTask = output<Partial<ProcessTaskFormModel>>();
 
   readonly draft = computed<NotificationTaskDraft>(() => this.manager.hydrateDraft<NotificationTaskDraft>(this.task()) ?? {
+    ...createHttpRequestDraft('POST', '15'),
     taskRef: this.task().clientId,
     executionMode: 'once',
     channel: 'log',
     message: '',
-    url: '',
     bodyTemplate: '{"message":"${message}"}',
-    timeoutSeconds: '15',
-    headersJson: '{}',
     to: '',
     subject: '',
     body: '',

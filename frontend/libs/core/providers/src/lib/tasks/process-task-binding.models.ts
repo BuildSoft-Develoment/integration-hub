@@ -43,3 +43,29 @@ export interface ProcessTaskParameterBindingDraft extends ProcessTaskBindingDraf
 export interface ProcessTaskBodyFieldBindingDraft extends ProcessTaskBindingDraft {
   name: string;
 }
+
+/**
+ * Configuracion comun de una peticion HTTP saliente, reutilizada por la tarea REST_CALL y por
+ * el canal `webhook` de NOTIFICATION (ADR-005). Cubre endpoint (metodo/baseUrl/timeout), path,
+ * query, headers, autenticacion y body con tokens.
+ */
+export interface HttpRequestDraft {
+  method: string;
+  baseUrl: string;
+  pathTemplate: string;
+  url: string;
+  pathParameters: ProcessTaskBodyFieldBindingDraft[];
+  queryParameters: ProcessTaskBodyFieldBindingDraft[];
+  headerMappings: ProcessTaskBodyFieldBindingDraft[];
+  bodyTemplate: string;
+  timeoutSeconds: string;
+  authType: string;
+  username: string;
+  password: string;
+  token: string;
+  loginUrl: string;
+  loginMethod: string;
+  loginHeadersJson: string;
+  loginBodyTemplate: string;
+  tokenPath: string;
+}
