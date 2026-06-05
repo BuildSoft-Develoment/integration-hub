@@ -13,6 +13,7 @@ export * from './lib/implementations/sources/file-system-source.provider';
 export * from './lib/implementations/sources/ftp-source.provider';
 export * from './lib/implementations/sources/sftp-source.provider';
 export * from './lib/implementations/sources/rest-source.provider';
+export * from './lib/implementations/sources/s3-source.provider';
 export * from './lib/implementations/readers/reader.providers';
 export * from './lib/implementations/connections/oracle-connection.provider';
 export * from './lib/implementations/connections/postgresql-connection.provider';

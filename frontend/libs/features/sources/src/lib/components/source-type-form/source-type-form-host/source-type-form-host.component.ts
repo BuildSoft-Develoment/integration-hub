@@ -4,18 +4,20 @@ import { SourceDraft, SourceProviderType } from '@integration-hub/core/providers
 import { SourceFilesystemFormComponent } from '../source-filesystem-form/source-filesystem-form.component';
 import { SourceFtpFormComponent } from '../source-ftp-form/source-ftp-form.component';
 import { SourceRestFormComponent } from '../source-rest-form/source-rest-form.component';
+import { SourceS3FormComponent } from '../source-s3-form/source-s3-form.component';
 import { SourceSftpFormComponent } from '../source-sftp-form/source-sftp-form.component';
 
 @Component({
   selector: 'ih-source-type-form-host',
   standalone: true,
-  imports: [CommonModule, SourceFilesystemFormComponent, SourceFtpFormComponent, SourceSftpFormComponent, SourceRestFormComponent],
+  imports: [CommonModule, SourceFilesystemFormComponent, SourceFtpFormComponent, SourceSftpFormComponent, SourceRestFormComponent, SourceS3FormComponent],
   template: `
     @switch (sourceType()) {
       @case ('FILESYSTEM') { <ih-source-filesystem-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" /> }
       @case ('FTP') { <ih-source-ftp-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" /> }
       @case ('SFTP') { <ih-source-sftp-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" /> }
       @case ('REST') { <ih-source-rest-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" /> }
+      @case ('S3') { <ih-source-s3-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" /> }
     }
   `,
 })
