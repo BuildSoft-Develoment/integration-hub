@@ -153,7 +153,7 @@ public class TaskInputResolver {
         var filters = tableInput.filters();
 
         try (var connection = resolveDataSource(tableInput.connectionRef()).getConnection()) {
-            var fetchFirst = usesFetchFirst(connection);
+            var dialect = paginationDialect(connection);
             var conditions = new ArrayList<String>();
             for (var column : filters.keySet()) {
                 conditions.add(DbTaskSupport.sanitizeIdentifier(column) + " = ?");
@@ -166,7 +166,7 @@ public class TaskInputResolver {
                 sql.append(" where ").append(String.join(" and ", conditions));
             }
             sql.append(" order by ").append(orderByColumn).append(" asc");
-            sql.append(fetchFirst ? " fetch first ? rows only" : " limit ?");
+            sql.append(limitClause(dialect));
 
             try (var statement = connection.prepareStatement(sql.toString())) {
                 var parameterIndex = 1;
@@ -186,14 +186,40 @@ public class TaskInputResolver {
         }
     }
 
-    private boolean usesFetchFirst(Connection connection) {
+    /**
+     * Dialecto de paginacion por motor. SQL Server NO admite `FETCH FIRST ... ROWS ONLY` suelto:
+     * exige `OFFSET 0 ROWS FETCH NEXT ? ROWS ONLY` (con ORDER BY). Oracle 12c+ si admite
+     * `FETCH FIRST ... ROWS ONLY`. El resto (postgresql/mysql/mariadb/h2) usa `LIMIT`.
+     */
+    PaginationDialect paginationDialect(Connection connection) {
         try {
             var product = connection.getMetaData().getDatabaseProductName();
             var normalized = product == null ? "" : product.toLowerCase();
-            return normalized.contains("oracle") || normalized.contains("sql server") || normalized.contains("sqlserver");
+            if (normalized.contains("sql server") || normalized.contains("sqlserver")) {
+                return PaginationDialect.OFFSET_FETCH;
+            }
+            if (normalized.contains("oracle")) {
+                return PaginationDialect.FETCH_FIRST;
+            }
+            return PaginationDialect.LIMIT;
         } catch (SQLException error) {
-            return false; // default a LIMIT (mysql/postgresql/h2/mariadb)
+            return PaginationDialect.LIMIT; // default seguro (mysql/postgresql/h2/mariadb)
         }
+    }
+
+    /** Sufijo de limite parametrizado (`?` = tamano de lote) segun dialecto. */
+    String limitClause(PaginationDialect dialect) {
+        return switch (dialect) {
+            case OFFSET_FETCH -> " offset 0 rows fetch next ? rows only";
+            case FETCH_FIRST -> " fetch first ? rows only";
+            case LIMIT -> " limit ?";
+        };
+    }
+
+    enum PaginationDialect {
+        LIMIT,
+        FETCH_FIRST,
+        OFFSET_FETCH
     }
 
     private Object cursorValue(List<ReadRecord> records, String orderBy) {

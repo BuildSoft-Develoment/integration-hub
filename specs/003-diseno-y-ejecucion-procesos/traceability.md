@@ -80,16 +80,26 @@ arma el JSON; `hydrateDraft` el inverso). La UI por tipo vive en `process-task-f
 
 Cerrados en código (motor RF-006..013, ADR-004):
 - P1.1 identidad de binding (valor compuesto `kind::key`, sin colisión entre grupos).
-- P1.2 SP/FN persisten `sourceTaskRef`/`sourceOutput` para outputs agregados (summary/table/errors/out).
+- P1.2 SP/FN califican a `task.<output>.<campo>` **solo** los outputs AGREGADOS (`summary`/`out`),
+  que existen como clave calificada y evitan colisión en fan-in; los flujos **por registro**
+  (`records`/`table`/`errors`) resuelven por **clave plana** desde el registro actual. (Corrige una
+  sobre-calificación previa que también marcaba `table`/`errors`: esas claves no existen calificadas
+  y la resolución es por registro.)
 - P1.3 `table` lee de la conexión del **productor** (`<ref>.table.connectionRef`), no del consumidor.
-- P1.4 paginación **keyset por `orderBy`** (estable, sin saltos/duplicados) + límite por dialecto
-  (LIMIT vs FETCH FIRST); `orderBy` obligatorio para lectura `table` en lote.
+- P1.4 paginación **keyset por `orderBy`** (estable, sin saltos/duplicados) + límite por **dialecto**:
+  `LIMIT` (postgresql/mysql/mariadb/h2), `FETCH FIRST … ROWS ONLY` (Oracle 12c+) y
+  `OFFSET 0 ROWS FETCH NEXT … ROWS ONLY` (SQL Server — `FETCH FIRST` suelto es inválido en T-SQL).
+  `orderBy` obligatorio para lectura `table` en lote.
 - P2.1 lote de lectura/proceso (`input.batchSize`/`batchSize`) separado del lote JDBC (`jdbcBatchSize`).
 - P2.2 el `summary` del fast path FILE_READ→DB_WRITE incluye `sourceFileName`/`...` igual que el camino normal.
 
 Cobertura: IT con Testcontainers (Postgres) `MotorTableInputIT` valida los escenarios de BD —
 paginación keyset estable (todas las filas una vez, en orden), modo per-record, `orderBy`
 obligatorio y routing de conexión del productor para `table` (P1.3/P1.4). 4/4 verdes.
+Unit tests del contrato calificado: `StoredProcedureConfigurationSupportTest` (agregado→calificado,
+por-registro→plano), `StoredProcedureRuntimeSupportTest` (la clave calificada gana sobre la global
+colisionable; el campo plano resuelve del registro) y `TaskInputResolverTest` (cláusula de límite
+por dialecto, incl. SQL Server `OFFSET … FETCH NEXT`).
 `CatalogAndExecutionResourceIT` (e2e create+execute) migrado al contrato/async del motor. Los `*IT`
 se ejecutan vía `npm run check:it` (failsafe, requiere Docker) y en CI con `mvn verify` (job
 `backend`) — ya no quedan fuera de la red de seguridad como antes (surefire excluye `*IT`).

@@ -30,4 +30,19 @@ class TaskInputResolverTest {
         assertEquals(10L, resolved.readResult().records().getFirst().values().get("cliente_id"));
         assertEquals("Luis", resolved.readResult().records().get(1).values().get("nombre"));
     }
+
+    @Test
+    void buildsDialectSpecificLimitClause() {
+        var resolver = new TaskInputResolver(null, new ConnectionPoolManager(null, null));
+
+        // SQL Server NO admite `FETCH FIRST ... ROWS ONLY` suelto: exige OFFSET ... FETCH NEXT (P2.b).
+        assertEquals(" offset 0 rows fetch next ? rows only",
+                resolver.limitClause(TaskInputResolver.PaginationDialect.OFFSET_FETCH));
+        // Oracle 12c+ si admite FETCH FIRST.
+        assertEquals(" fetch first ? rows only",
+                resolver.limitClause(TaskInputResolver.PaginationDialect.FETCH_FIRST));
+        // postgresql/mysql/mariadb/h2.
+        assertEquals(" limit ?",
+                resolver.limitClause(TaskInputResolver.PaginationDialect.LIMIT));
+    }
 }

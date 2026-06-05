@@ -73,14 +73,20 @@ export class DbExecuteFunctionTaskProvider extends ProcessTaskProvider<DbExecute
           next.sourceKind = 'expression';
         } else if ((parameter.sourceKey || '').trim()) {
           const sourceKind = parameter.sourceKind || 'field';
-          next.value = parameter.sourceKey.trim();
+          const sourceKey = parameter.sourceKey.trim();
           next.sourceKind = sourceKind;
-          next.sourceKey = parameter.sourceKey.trim();
+          next.sourceKey = sourceKey;
           next.sourceLabel = (parameter.sourceLabel || parameter.sourceKey).trim();
           const sourceTaskRef = (draft.input?.sourceTaskRef || '').trim();
-          if (sourceTaskRef && ['summary', 'table', 'errors', 'out'].includes(sourceKind)) {
+          // Solo los outputs AGREGADOS (summary/out) existen como clave calificada
+          // `task.<output>.<campo>` y deben resolverse asi para evitar colision con claves
+          // globales (fan-in). Los flujos por registro (records/table/errors) resuelven por
+          // clave plana desde el registro actual -> se mandan como `value`.
+          if (sourceTaskRef && (sourceKind === 'summary' || sourceKind === 'out')) {
             next.sourceTaskRef = sourceTaskRef;
             next.sourceOutput = sourceKind;
+          } else {
+            next.value = sourceKey;
           }
         }
         return next;
