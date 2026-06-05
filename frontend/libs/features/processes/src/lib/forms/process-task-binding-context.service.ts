@@ -135,6 +135,21 @@ export class ProcessTaskBindingContextService {
     return this.resolveTaskByRef(input.sourceTaskRef, tasks)?.taskType === 'FILE_READ';
   }
 
+  /**
+   * Token a insertar en plantillas (body/headers/path/query/message): califica los outputs
+   * AGREGADOS (summary/table/out) con el taskRef productor -> `taskRef.output.campo`, para
+   * desambiguar fan-in y evitar colision con claves globales del registry. El resto
+   * (records/variable/metadata/errors) se inserta plano: resuelve desde el registro actual o la
+   * metadata transversal. Coherente con la resolucion del backend (RestTaskSupport.template). P1.c.
+   */
+  tokenForOption(option: ProcessTaskBindingOption, sourceTaskRef: string): string {
+    const ref = String(sourceTaskRef || '').trim();
+    if (ref && (option.kind === 'summary' || option.kind === 'table' || option.kind === 'out')) {
+      return `${ref}.${option.kind}.${option.key}`;
+    }
+    return option.key;
+  }
+
   groupOptions(options: readonly ProcessTaskBindingOption[]): ReadonlyArray<{ key: string; items: readonly ProcessTaskBindingOption[] }> {
     const groups = new Map<string, ProcessTaskBindingOption[]>();
     options.forEach((item) => {

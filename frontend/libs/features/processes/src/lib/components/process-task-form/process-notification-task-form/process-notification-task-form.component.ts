@@ -152,6 +152,11 @@ export class ProcessNotificationTaskFormComponent {
     this.patchTask.emit(this.manager.toTaskPatch(this.task().taskType, nextDraft));
   }
 
+  /** Token calificado a insertar para una opción (agregados -> `taskRef.output.campo`). P1.c. */
+  bodyToken(option: ProcessTaskBindingOption): string {
+    return this.bindingContext.tokenForOption(option, String(this.draft().input?.sourceTaskRef || '').trim());
+  }
+
   insertTokenAt(field: 'message' | 'bodyTemplate' | 'body' | 'subject', key: string, textarea: HTMLTextAreaElement | HTMLInputElement): void {
     if (this.readonly()) {
       return;
@@ -221,7 +226,7 @@ export class ProcessNotificationTaskFormComponent {
     const tokenStart = this.bodyAutocompleteTokenStart();
     const selectionEnd = textarea?.selectionEnd ?? current.length;
     const start = tokenStart ?? (textarea?.selectionStart ?? current.length);
-    const token = `{${option.key}}`;
+    const token = `{${this.bodyToken(option)}}`;
     const next = current.slice(0, start) + token + current.slice(selectionEnd);
     const caret = start + token.length;
     this.updateDraft({ [field]: next } as Partial<NotificationTaskDraft>);

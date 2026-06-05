@@ -149,6 +149,16 @@ export class ProcessHttpRequestComponent {
     this.bodySelectionEnd.set(textarea.selectionEnd ?? null);
   }
 
+  /** Token calificado a insertar para una opción (agregados -> `taskRef.output.campo`). P1.c. */
+  bodyToken(option: ProcessTaskBindingOption): string {
+    return this.bindingContext.tokenForOption(option, this.currentSourceTaskRef());
+  }
+
+  private currentSourceTaskRef(): string {
+    const input = this.runtimeInput() ?? this.bindingContext.configuredInput(this.task(), this.tasks());
+    return String(input?.sourceTaskRef || '').trim();
+  }
+
   insertBodyToken(key: string): void {
     if (this.readonly()) {
       return;
@@ -180,10 +190,10 @@ export class ProcessHttpRequestComponent {
     const tokenStart = this.bodyAutocompleteTokenStart();
     const selectionEnd = this.bodySelectionEnd() ?? textarea?.selectionEnd ?? current.length;
     if (tokenStart === null) {
-      this.insertBodyToken(option.key);
+      this.insertBodyToken(this.bodyToken(option));
       return;
     }
-    const token = `{${option.key}}`;
+    const token = `{${this.bodyToken(option)}}`;
     const nextValue = `${current.slice(0, tokenStart)}${token}${current.slice(selectionEnd)}`;
     const nextCaret = tokenStart + token.length;
     this.emit({ bodyTemplate: nextValue });

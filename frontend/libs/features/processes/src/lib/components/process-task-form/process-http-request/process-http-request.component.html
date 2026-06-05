@@ -212,7 +212,7 @@
                         type="button"
                         class="rest-token-chip ih-token-chip"
                         [disabled]="readonly()"
-                        (click)="insertBodyToken(item.key)"
+                        (click)="insertBodyToken(bodyToken(item))"
                       >
                         {{ item.label }}
                       </button>

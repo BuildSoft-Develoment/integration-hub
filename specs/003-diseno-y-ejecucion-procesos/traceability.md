@@ -92,6 +92,20 @@ Cerrados en código (motor RF-006..013, ADR-004):
   `orderBy` obligatorio para lectura `table` en lote.
 - P2.1 lote de lectura/proceso (`input.batchSize`/`batchSize`) separado del lote JDBC (`jdbcBatchSize`).
 - P2.2 el `summary` del fast path FILE_READ→DB_WRITE incluye `sourceFileName`/`...` igual que el camino normal.
+- P1.b DB_WRITE soporta columnas desde outputs **agregados/transversales** (no solo campos del
+  registro): el front persiste la **clave de resolución** en `columnMappings` —calificada
+  `taskRef.output.campo` para summary/out/table, plana para metadata/variable/registro— y el
+  **origen** en `columnSources` (kind/key/taskRef/output) para el round-trip de la UI. El backend
+  ya las resuelve sin cambios: `enrichRecordsWithRuntime` fusiona metadata (`_processExecutionId`,
+  `_sourceFileName`, …) + `taskOutputs` (calificados + planos) en cada registro antes de mapear.
+- P1.c REST_CALL y NOTIFICATION insertan tokens **calificados** `{taskRef.output.campo}` para
+  outputs agregados (summary/table/out) — vía `ProcessTaskBindingContextService.tokenForOption` —
+  desambiguando fan-in; records/variable/metadata siguen planos (resuelven del registro/metadata).
+  El backend (`RestTaskSupport.template`) ya resolvía claves calificadas presentes en las variables.
+- P2.a las claves PLANAS del registry (`processedCount`, …) se documentan como conveniencia
+  "last-writer-wins" (se pisan entre tareas); la forma canónica y sin colisión es la clave
+  CALIFICADA `taskRef.<output>.<campo>`, que ya emiten todas las UIs (P1.a/P1.b/P1.c). No se cambia
+  la semántica de publicación para no regresar el caso "valor de la tarea más reciente".
 
 Cobertura: IT con Testcontainers (Postgres) `MotorTableInputIT` valida los escenarios de BD —
 paginación keyset estable (todas las filas una vez, en orden), modo per-record, `orderBy`
@@ -99,7 +113,10 @@ obligatorio y routing de conexión del productor para `table` (P1.3/P1.4). 4/4 v
 Unit tests del contrato calificado: `StoredProcedureConfigurationSupportTest` (agregado→calificado,
 por-registro→plano), `StoredProcedureRuntimeSupportTest` (la clave calificada gana sobre la global
 colisionable; el campo plano resuelve del registro) y `TaskInputResolverTest` (cláusula de límite
-por dialecto, incl. SQL Server `OFFSET … FETCH NEXT`).
+por dialecto, incl. SQL Server `OFFSET … FETCH NEXT`). `DbWriteTaskProviderTest`
+(`insertsRecordsUsingQualifiedTaskOutputKey`) valida que una columna enlazada a una clave
+calificada `task-1.summary.estado` se persiste con el valor del productor y no con la clave plana
+colisionada.
 `CatalogAndExecutionResourceIT` (e2e create+execute) migrado al contrato/async del motor. Los `*IT`
 se ejecutan vía `npm run check:it` (failsafe, requiere Docker) y en CI con `mvn verify` (job
 `backend`) — ya no quedan fuera de la red de seguridad como antes (surefire excluye `*IT`).

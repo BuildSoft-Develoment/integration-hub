@@ -119,6 +119,11 @@ public class TaskOutputRegistry {
         if (outputs == null || outputs.isEmpty()) {
             return;
         }
+        // P2.a: las claves PLANAS (processedCount, writtenCount, targetTable...) se publican como
+        // conveniencia "last-writer-wins" para tokens sin calificar y compatibilidad. NO son la
+        // fuente canonica: entre tareas encadenadas con el mismo nombre se pisan. La forma
+        // determinista y sin colision es la clave CALIFICADA `taskRef.<output>.<campo>` (abajo),
+        // que las UIs ya emiten para outputs agregados (SP/FN P1.a, REST/Notification P1.c).
         taskOutputs.putAll(outputs);
         registerTypedOutput(taskOutputs, taskPlan, configuration, "summary", outputs);
         if (taskPlan.taskType() == TaskType.DB_EXECUTE_SP || taskPlan.taskType() == TaskType.DB_EXECUTE_FN) {
