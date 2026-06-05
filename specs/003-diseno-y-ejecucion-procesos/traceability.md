@@ -87,10 +87,16 @@ Cerrados en código (motor RF-006..013, ADR-004):
 - P2.1 lote de lectura/proceso (`input.batchSize`/`batchSize`) separado del lote JDBC (`jdbcBatchSize`).
 - P2.2 el `summary` del fast path FILE_READ→DB_WRITE incluye `sourceFileName`/`...` igual que el camino normal.
 
+Cobertura: IT con Testcontainers (Postgres) `MotorTableInputIT` valida los escenarios de BD —
+paginación keyset estable (todas las filas una vez, en orden), modo per-record, `orderBy`
+obligatorio y routing de conexión del productor para `table` (P1.3/P1.4). 4/4 verdes.
+
 Pendientes/notas: `orderBy` de keyset debe ser clave única/ordenable (PK) para no omitir valores
-repetidos; el summary del fast path puebla source* solo para un único archivo; faltan pruebas de
-integración de los escenarios sensibles (fan-in, claves duplicadas, `table` con otra conexión,
-paginación por motor, fast path multi-archivo).
+repetidos; el summary del fast path puebla source* solo para un único archivo; faltan unit
+tests frontend de claves duplicadas (binding-board) y fan-in, e IT de fast path multi-archivo.
+(Conocido, fuera de alcance: `FileReadTaskFastPathTest$BatchTaskProviderRegistry` declara un
+segundo bean `TaskProviderRegistry` que vuelve ambigua la inyección al arrancar la app completa
+con `@QuarkusTest`; debería ser `@Alternative`/`@Mock`.)
 
 ## Preguntas abiertas
 - Confirmar mapeo definitivo RF local `RF-001..RF-005` ↔ requerimientos globales de Fase 1.
