@@ -127,13 +127,16 @@ lint + test + build). Se corrigió un spec podrido (`process-catalog.store.spec.
 asíncrona notifica `processes.queued`, no `processes.executed`).
 
 Unit tests frontend del contrato de binding: `db-task-binding.spec.ts` (SP/FN califican solo
-agregados; DB_WRITE round-trip de columnMappings/columnSources — P1.a/P1.b) y
+agregados; DB_WRITE round-trip de columnMappings/columnSources — P1.a/P1.b),
 `process-task-binding-context.token.spec.ts` (`tokenForOption` califica summary/table/out, deja
-records/variable/metadata planos — P1.c).
+records/variable/metadata planos — P1.c) y `process-task-binding-board.component.spec.ts`
+(desambiguación de claves duplicadas vía valor compuesto `kind::key` — P1.1).
+IT de fast path multi-archivo: `CatalogAndExecutionResourceIT#shouldExecuteFastPathAcrossMultipleSourceFiles`
+(FILESYSTEM `selectionMode:"all"` con 2 archivos → los registros de ambos aterrizan en destino).
 
 Pendientes/notas: `orderBy` de keyset debe ser clave única/ordenable (PK) para no omitir valores
-repetidos; el summary del fast path puebla source* solo para un único archivo; falta test de
-componente del binding-board (selección de claves duplicadas, P1.1) e IT de fast path multi-archivo.
+repetidos; el summary del fast path puebla source* solo para un único archivo (limitación conocida,
+no defecto: la metadata transversal `_*` sí está disponible por registro en multi-archivo).
 (Conocido, fuera de alcance: `FileReadTaskFastPathTest$BatchTaskProviderRegistry` declara un
 segundo bean `TaskProviderRegistry` que vuelve ambigua la inyección al arrancar la app completa
 con `@QuarkusTest`; debería ser `@Alternative`/`@Mock`.)

@@ -165,6 +165,103 @@ class CatalogAndExecutionResourceIT {
     }
 
     @Test
+    @TestSecurity(user = "admin", roles = {"platform-admin"})
+    void shouldExecuteFastPathAcrossMultipleSourceFiles() throws Exception {
+        // Fast path FILE_READ -> DB_WRITE con seleccion multi-archivo (selectionMode "all"):
+        // los registros de TODOS los archivos que matchean el selector deben aterrizar en destino.
+        Path tempDir = Files.createTempDirectory("integration-hub-it-multi-");
+        Files.writeString(tempDir.resolve("clientes_1.csv"), "codigo,nombre\nC001,Ana\nC002,Luis\n");
+        Files.writeString(tempDir.resolve("clientes_2.csv"), "codigo,nombre\nC003,Marta\nC004,Pedro\nC005,Sofia\n");
+
+        try {
+            Number sourceId =
+                    given()
+                            .contentType(ContentType.JSON)
+                            .body(Map.of(
+                                    "name", "source-it-multi",
+                                    "sourceType", "FILESYSTEM",
+                                    "active", true,
+                                    "configurationJson", String.format(
+                                            "{\"path\":\"%s\",\"fileNameTemplate\":\"clientes_{seq}.csv\",\"selectionMode\":\"all\"}",
+                                            tempDir.toString().replace("\\", "\\\\"))
+                            ))
+                    .when()
+                            .post("/api/source-definitions")
+                    .then()
+                            .statusCode(200)
+                            .extract()
+                            .path("id");
+
+            Number readerId =
+                    given()
+                            .contentType(ContentType.JSON)
+                            .body(Map.of(
+                                    "name", "reader-it-multi",
+                                    "readerType", "CSV",
+                                    "active", true,
+                                    "configurationJson", "{\"delimiter\":\",\",\"encoding\":\"UTF-8\",\"hasHeader\":true,\"dataStartRowIndex\":1,\"fields\":[{\"name\":\"codigo\",\"position\":1},{\"name\":\"nombre\",\"position\":2}]}"
+                            ))
+                    .when()
+                            .post("/api/reader-definitions")
+                    .then()
+                            .statusCode(200)
+                            .extract()
+                            .path("id");
+
+            Number processId =
+                    given()
+                            .contentType(ContentType.JSON)
+                            .body(Map.of(
+                                    "name", "process-it-multi",
+                                    "description", "Proceso multi-archivo",
+                                    "active", true,
+                                    "scheduled", false,
+                                    "scheduleEvery", "",
+                                    "tasks", List.of(
+                                            Map.of(
+                                                    "taskOrder", 1,
+                                                    "taskType", "FILE_READ",
+                                                    "sourceDefinitionId", sourceId.longValue(),
+                                                    "readerDefinitionId", readerId.longValue(),
+                                                    "configurationJson", "{\"taskRef\":\"task-1\",\"executionMode\":\"batch\"}"
+                                            ),
+                                            Map.of(
+                                                    "taskOrder", 2,
+                                                    "taskType", "DB_WRITE",
+                                                    "configurationJson", "{\"taskRef\":\"task-2\",\"executionMode\":\"batch\",\"input\":{\"source\":\"task-output\",\"sourceTaskRef\":\"task-1\",\"sourceOutput\":\"records\"},\"mode\":\"insert\",\"targetTable\":\"staging_record\"}"
+                                            )
+                                    )
+                            ))
+                    .when()
+                            .post("/api/process-definitions")
+                    .then()
+                            .statusCode(200)
+                            .extract()
+                            .path("id");
+
+            Number executionId =
+                    given()
+                            .contentType(ContentType.JSON)
+                            .body("{}")
+                    .when()
+                            .post("/api/process-executions/{processDefinitionId}", processId.longValue())
+                    .then()
+                            .statusCode(200)
+                            .extract()
+                            .path("id");
+
+            awaitExecutionCompleted(executionId.longValue());
+
+            // 2 filas de clientes_1.csv + 3 de clientes_2.csv = 5 registros de ambos archivos.
+            assertEquals(5, countRows("staging_record"));
+        } finally {
+            Files.deleteIfExists(tempDir.resolve("clientes_1.csv"));
+            Files.deleteIfExists(tempDir.resolve("clientes_2.csv"));
+            Files.deleteIfExists(tempDir);
+        }
+    }
+
+    @Test
     @TestSecurity(user = "operator", roles = {"operator"})
     void operatorShouldNotCreateSources() {
         given()
