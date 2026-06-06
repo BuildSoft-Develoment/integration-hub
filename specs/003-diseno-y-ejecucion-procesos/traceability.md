@@ -120,10 +120,20 @@ colisionada.
 `CatalogAndExecutionResourceIT` (e2e create+execute) migrado al contrato/async del motor. Los `*IT`
 se ejecutan vía `npm run check:it` (failsafe, requiere Docker) y en CI con `mvn verify` (job
 `backend`) — ya no quedan fuera de la red de seguridad como antes (surefire excluye `*IT`).
+Tests del frontend (Angular): el target `nx test web` estaba mal configurado y solo descubría
+1 spec (de 34); corregido (sourceRoot + `index.html` explícito + `buildTarget`/`tsConfig` en el
+target `test`) → ahora corre 33 archivos / 76 tests, y se ejecuta en CI (job `frontend`:
+lint + test + build). Se corrigió un spec podrido (`process-catalog.store.spec.ts`: la ejecución
+asíncrona notifica `processes.queued`, no `processes.executed`).
+
+Unit tests frontend del contrato de binding: `db-task-binding.spec.ts` (SP/FN califican solo
+agregados; DB_WRITE round-trip de columnMappings/columnSources — P1.a/P1.b) y
+`process-task-binding-context.token.spec.ts` (`tokenForOption` califica summary/table/out, deja
+records/variable/metadata planos — P1.c).
 
 Pendientes/notas: `orderBy` de keyset debe ser clave única/ordenable (PK) para no omitir valores
-repetidos; el summary del fast path puebla source* solo para un único archivo; faltan unit
-tests frontend de claves duplicadas (binding-board) y fan-in, e IT de fast path multi-archivo.
+repetidos; el summary del fast path puebla source* solo para un único archivo; falta test de
+componente del binding-board (selección de claves duplicadas, P1.1) e IT de fast path multi-archivo.
 (Conocido, fuera de alcance: `FileReadTaskFastPathTest$BatchTaskProviderRegistry` declara un
 segundo bean `TaskProviderRegistry` que vuelve ambigua la inyección al arrancar la app completa
 con `@QuarkusTest`; debería ser `@Alternative`/`@Mock`.)

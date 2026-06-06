@@ -166,7 +166,8 @@ describe('ProcessCatalogStore', () => {
     expect(store.selectedProcessId()).toBe(activeProcess.id);
     expect(store.drawerOpen()).toBeTruthy();
     expect(store.selectedProcess()?.id).toBe(activeProcess.id);
-    expect(feedbackCalls).toEqual(['info:processes.executed']);
+    // Ejecucion asincrona: el comando encola y notifica 'processes.queued' (no 'executed').
+    expect(feedbackCalls).toEqual(['info:processes.queued']);
   });
 });
 
