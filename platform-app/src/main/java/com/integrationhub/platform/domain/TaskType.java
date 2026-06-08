@@ -36,9 +36,13 @@ public enum TaskType {
     NOTIFICATION,
 
     // --- Vertical mensajeria de pagos sub-catalogo swift/ (spec 008) ---
-    // Puente temporal hasta M-1a (T-015 spec 003). Sprint 1 MVP.
+    // Puente temporal hasta M-1a (T-015 spec 003).
+    // Sprint 1: BUILD, VALIDATE, ARCHIVE, PAY.
+    // Sprint 2: ROUTE (T-017), RECONCILE (T-014). Mas en sprint 2.2/2.3.
     MT101_BUILD,
     MT101_VALIDATE,
     MT101_ARCHIVE,
-    MT101_PAY
+    MT101_PAY,
+    MT101_ROUTE,
+    MT101_RECONCILE
 }
