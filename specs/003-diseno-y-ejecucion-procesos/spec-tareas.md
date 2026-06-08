@@ -40,6 +40,22 @@ no se ha capturado en `tdd-evidence.md`.
 | T-013 | RF-011 | backend/frontend | Validar grafo, fan-out, fan-in, ciclos y tareas futuras | T-008 | pending |
 | T-014 | RF-013 | qa | Pruebas de volumen, retry, idempotencia y reproceso por lote | T-010/T-011 | pending |
 
+## Motor para verticales (ADR-009)
+
+> Cierre de deuda del motor expuesta por la separacion del spec
+> [008-mensajeria-pagos](../008-mensajeria-pagos/spec-funcional.md) (ADR-009).
+> Estas tareas son **del motor**, no de un dominio: benefician a cualquier
+> vertical futura (pagos, salud HL7, ACH, AML, tax filing).
+
+| id | rf | tipo | entregable | depende_de | estado |
+| --- | --- | --- | --- | --- | --- |
+| T-015 | RF-002 | backend | **M-1a** `TaskTypeRegistry`: convertir el enum `TaskType` en registro abierto via SPI (`@TaskTypeProvider` o discovery por CDI). Las verticales registran sus tipos sin tocar `domain/TaskType.java`. | ADR-009 | pending |
+| T-016 | RF-011/RF-012 | frontend | **M-1b** Descubrimiento de formularios en Nx: `process-form-factory.service.ts` delega a sub-factories registradas por cada feature vertical (`features/payments-swift/`, etc.). Sin editar el factory central al agregar verticales. | ADR-009 | pending |
+| T-017 | RF-009/RF-010 | backend | **M-2** Tareas long-running con suspend/resume cross-restart: el motor persiste estado de tarea (`process_task_execution.suspended_state`), libera el worker y reanuda en otro proceso/restart. Necesario para `MT101_STATUS` mode `poll`, callbacks Open Banking, integraciones batch externas. | ADR-009 | pending |
+| T-018 | RF-007 | backend | **M-3** Outputs multi-nominados: extender `TaskOutputRegistry.registerTypedOutput` para que una tarea publique varios outputs distintos del mismo tipo (`<ref>.header`, `<ref>.envelope`, `<ref>.transactions`). Hoy el dotted-path es implicito; pasa a contrato explicito. | ADR-009 | pending |
+| T-019 | RF-007 | frontend | Selector visual de output nominado en el disenador (lista los `outputs[]` declarados por la tarea productora). Depende de T-018. | T-018 | pending |
+| T-020 | - | doc | Plantilla "vertical catalog" en `docs/fase-3-arquitectura/`: como una nueva vertical (008/009/...) declara sus task types, formularios, dependencias y migraciones sin tocar el motor. | T-015, T-016 | pending |
+
 ## Checklist de cierre
 - [ ] Todas las tareas tienen estado (pendiente / en curso / hecho / bloqueado).
 - [ ] Cada tarea critica tiene evidencia TDD (prueba red + green) en `tdd-evidence.md`.

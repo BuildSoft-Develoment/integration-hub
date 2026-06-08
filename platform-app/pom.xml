@@ -176,6 +176,27 @@
             <artifactId>ojdbc11</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Quarkiverse WireMock 1.6.0 = primera version que targetea Quarkus 3.33
+             (compatible con 3.32.4 que usa este proyecto). La 1.5.0 referenciaba
+             GlobalDevServicesConfig$Enabled (API obsoleta) y rompia @QuarkusTest.
+
+             Recomendacion oficial: quarkus-wiremock + quarkus-wiremock-test juntos.
+             - quarkus-wiremock: extension runtime + dev service.
+             - quarkus-wiremock-test: API JUnit5 (@ConnectWireMock, @InjectWireMock) y
+               compatibilidad con @QuarkusTest (auto-resuelve URL del WireMock dev-service).
+             org.wiremock:wiremock 3.x viene transitivo desde estos artefactos. -->
+        <dependency>
+            <groupId>io.quarkiverse.wiremock</groupId>
+            <artifactId>quarkus-wiremock</artifactId>
+            <version>1.6.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkiverse.wiremock</groupId>
+            <artifactId>quarkus-wiremock-test</artifactId>
+            <version>1.6.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
