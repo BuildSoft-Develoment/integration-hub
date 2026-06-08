@@ -12,3 +12,5 @@ export * from './lib/components/process-task-form/process-mt101-route-task-form/
 export * from './lib/components/process-task-form/process-mt101-reconcile-task-form/process-mt101-reconcile-task-form.component';
 export * from './lib/components/process-task-form/process-mt101-status-task-form/process-mt101-status-task-form.component';
 export * from './lib/components/process-task-form/process-mt101-parse-task-form/process-mt101-parse-task-form.component';
+export * from './lib/components/process-task-form/process-mt101-split-task-form/process-mt101-split-task-form.component';
+export * from './lib/components/process-task-form/process-mt101-repair-task-form/process-mt101-repair-task-form.component';

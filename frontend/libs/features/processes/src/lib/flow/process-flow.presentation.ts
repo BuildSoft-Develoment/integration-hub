@@ -79,6 +79,17 @@ const NODE_PRESENTATION: Record<ProcessTaskType, ProcessFlowNodePresentation> = 
     toneClass: 'task-node--payment-parse',
     iconPath: 'M4 4h16v6H4zM4 14h16v6H4zM8 7h2M8 17h2M14 7h2M14 17h2',
   },
+  // --- Sprint 3 (spec 008) ---
+  MT101_SPLIT: {
+    badge: 'SPLIT',
+    toneClass: 'task-node--payment-split',
+    iconPath: 'M12 4v16M4 8l8 8 8-8M4 16h16',
+  },
+  MT101_REPAIR: {
+    badge: 'REPAIR',
+    toneClass: 'task-node--payment-repair',
+    iconPath: 'M14 3l7 7-11 11H3v-7zM14 3l-3 3 7 7 3-3z',
+  },
 };
 
 export function getProcessFlowNodePresentation(taskType: ProcessTaskType): ProcessFlowNodePresentation {

@@ -30,7 +30,10 @@ export type ProcessTaskType =
   | 'MT101_ROUTE'
   | 'MT101_RECONCILE'
   | 'MT101_STATUS'
-  | 'MT101_PARSE';
+  | 'MT101_PARSE'
+  // Sprint 3 (split + repair):
+  | 'MT101_SPLIT'
+  | 'MT101_REPAIR';
 
 export interface SourceRef {
   id: number;
