@@ -21,10 +21,16 @@ export type ProcessTaskType =
   | 'REST_CALL'
   | 'NOTIFICATION'
   // --- Vertical mensajeria de pagos sub-catalogo swift/ (spec 008) ---
+  // Sprint 1 (outbound MVP):
   | 'MT101_BUILD'
   | 'MT101_VALIDATE'
   | 'MT101_ARCHIVE'
-  | 'MT101_PAY';
+  | 'MT101_PAY'
+  // Sprint 2 (route, reconciliation, status, parse inbound):
+  | 'MT101_ROUTE'
+  | 'MT101_RECONCILE'
+  | 'MT101_STATUS'
+  | 'MT101_PARSE';
 
 export interface SourceRef {
   id: number;

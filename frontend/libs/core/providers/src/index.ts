@@ -35,4 +35,8 @@ export * from './lib/implementations/tasks/mt101-build-task.provider';
 export * from './lib/implementations/tasks/mt101-validate-task.provider';
 export * from './lib/implementations/tasks/mt101-archive-task.provider';
 export * from './lib/implementations/tasks/mt101-pay-task.provider';
+export * from './lib/implementations/tasks/mt101-route-task.provider';
+export * from './lib/implementations/tasks/mt101-reconcile-task.provider';
+export * from './lib/implementations/tasks/mt101-status-task.provider';
+export * from './lib/implementations/tasks/mt101-parse-task.provider';
 export * from './lib/implementations/tasks/payments-swift.providers';

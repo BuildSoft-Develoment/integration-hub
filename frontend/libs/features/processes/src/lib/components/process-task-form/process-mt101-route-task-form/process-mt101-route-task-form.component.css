@@ -1,0 +1,133 @@
+.mt101-route {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1rem;
+}
+
+.mt101-route__header {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+}
+
+.mt101-route__header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.mt101-route__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.mt101-route__section h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted, #475569);
+}
+
+.mt101-route__hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--color-text-muted, #475569);
+}
+
+.mt101-route__rules {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mt101-route__rule {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr auto;
+  gap: 0.5rem;
+  align-items: end;
+  padding: 0.5rem;
+  background: var(--color-surface-muted, #f8fafc);
+  border-radius: 4px;
+}
+
+.mt101-route__rule label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.8rem;
+}
+
+.mt101-route__rule input {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--color-border, #cbd5e1);
+  border-radius: 4px;
+  background: var(--color-surface, #ffffff);
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+.mt101-route__rule-predicate input {
+  font-family: 'Courier New', monospace;
+}
+
+.mt101-route__rule-remove {
+  height: 2rem;
+  width: 2rem;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  color: var(--color-text-muted, #64748b);
+}
+
+.mt101-route__rule-remove:hover:not(:disabled) {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.mt101-route__rule-remove:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.mt101-route__add {
+  align-self: flex-start;
+  padding: 0.4rem 0.8rem;
+  border: 1px dashed var(--color-border, #cbd5e1);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.mt101-route__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem 1rem;
+}
+
+.mt101-route__grid > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.mt101-route__grid input {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border, #cbd5e1);
+  border-radius: 4px;
+  background: var(--color-surface, #ffffff);
+}
+
+input:disabled {
+  background: var(--color-surface-muted, #f1f5f9);
+  opacity: 0.7;
+}

@@ -5,7 +5,11 @@ import { providePaymentsSwiftForms, provideProcessTaskProviders } from '@integra
 import { provideMotorProcessForms } from '../processes.providers';
 import { ProcessMt101ArchiveTaskFormComponent } from '../components/process-task-form/process-mt101-archive-task-form/process-mt101-archive-task-form.component';
 import { ProcessMt101BuildTaskFormComponent } from '../components/process-task-form/process-mt101-build-task-form/process-mt101-build-task-form.component';
+import { ProcessMt101ParseTaskFormComponent } from '../components/process-task-form/process-mt101-parse-task-form/process-mt101-parse-task-form.component';
 import { ProcessMt101PayTaskFormComponent } from '../components/process-task-form/process-mt101-pay-task-form/process-mt101-pay-task-form.component';
+import { ProcessMt101ReconcileTaskFormComponent } from '../components/process-task-form/process-mt101-reconcile-task-form/process-mt101-reconcile-task-form.component';
+import { ProcessMt101RouteTaskFormComponent } from '../components/process-task-form/process-mt101-route-task-form/process-mt101-route-task-form.component';
+import { ProcessMt101StatusTaskFormComponent } from '../components/process-task-form/process-mt101-status-task-form/process-mt101-status-task-form.component';
 import { ProcessMt101ValidateTaskFormComponent } from '../components/process-task-form/process-mt101-validate-task-form/process-mt101-validate-task-form.component';
 import { ProcessTaskManagerService } from '@integration-hub/core/services';
 import { ProcessCatalogStore } from './process-catalog.store';
@@ -40,12 +44,16 @@ import { ProcessToolbarComponent } from '../components/process-toolbar/process-t
     ...provideProcessTaskProviders(),
     // M-1b: registracion de formularios del motor (FILE_READ + 5 DB/HTTP/notif).
     ...provideMotorProcessForms(),
-    // Vertical 008 mensajeria de pagos - sub-catalogo swift/ (4 task types).
+    // Vertical 008 mensajeria de pagos - sub-catalogo swift/ (8 task types tras sprint 2).
     ...providePaymentsSwiftForms({
       mt101Build: ProcessMt101BuildTaskFormComponent,
       mt101Validate: ProcessMt101ValidateTaskFormComponent,
       mt101Archive: ProcessMt101ArchiveTaskFormComponent,
       mt101Pay: ProcessMt101PayTaskFormComponent,
+      mt101Route: ProcessMt101RouteTaskFormComponent,
+      mt101Reconcile: ProcessMt101ReconcileTaskFormComponent,
+      mt101Status: ProcessMt101StatusTaskFormComponent,
+      mt101Parse: ProcessMt101ParseTaskFormComponent,
     }),
   ],
   imports: [CommonModule, MatSidenavModule, ProcessToolbarComponent, ProcessListComponent, ProcessEditorComponent],

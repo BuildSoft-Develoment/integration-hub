@@ -58,6 +58,27 @@ const NODE_PRESENTATION: Record<ProcessTaskType, ProcessFlowNodePresentation> = 
     toneClass: 'task-node--payment-dispatch',
     iconPath: 'M3 10h18M3 14h18M5 7h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM16 14h2',
   },
+  // --- Sprint 2 (spec 008) ---
+  MT101_ROUTE: {
+    badge: 'ROUTE',
+    toneClass: 'task-node--payment-route',
+    iconPath: 'M4 6h8a4 4 0 0 1 0 8H6a4 4 0 0 0 0 8h6m4-16h4l-3-3M16 14h4l-3 3',
+  },
+  MT101_RECONCILE: {
+    badge: 'RECON',
+    toneClass: 'task-node--payment-reconcile',
+    iconPath: 'M4 8h6m0 0L7 5m3 3L7 11m13 5h-6m0 0l3-3m-3 3l3 3',
+  },
+  MT101_STATUS: {
+    badge: 'STATUS',
+    toneClass: 'task-node--payment-status',
+    iconPath: 'M12 8v4l3 2m6-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
+  },
+  MT101_PARSE: {
+    badge: 'PARSE',
+    toneClass: 'task-node--payment-parse',
+    iconPath: 'M4 4h16v6H4zM4 14h16v6H4zM8 7h2M8 17h2M14 7h2M14 17h2',
+  },
 };
 
 export function getProcessFlowNodePresentation(taskType: ProcessTaskType): ProcessFlowNodePresentation {

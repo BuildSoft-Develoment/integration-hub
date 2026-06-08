@@ -8,3 +8,7 @@ export * from './lib/components/process-task-form/process-mt101-build-task-form/
 export * from './lib/components/process-task-form/process-mt101-validate-task-form/process-mt101-validate-task-form.component';
 export * from './lib/components/process-task-form/process-mt101-archive-task-form/process-mt101-archive-task-form.component';
 export * from './lib/components/process-task-form/process-mt101-pay-task-form/process-mt101-pay-task-form.component';
+export * from './lib/components/process-task-form/process-mt101-route-task-form/process-mt101-route-task-form.component';
+export * from './lib/components/process-task-form/process-mt101-reconcile-task-form/process-mt101-reconcile-task-form.component';
+export * from './lib/components/process-task-form/process-mt101-status-task-form/process-mt101-status-task-form.component';
+export * from './lib/components/process-task-form/process-mt101-parse-task-form/process-mt101-parse-task-form.component';

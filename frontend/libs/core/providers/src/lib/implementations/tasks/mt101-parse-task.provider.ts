@@ -1,0 +1,67 @@
+// @trace spec 008-mensajeria-pagos RF-008, T-016
+// @trace ADR-009
+import { Injectable } from '@angular/core';
+import { I18nService } from '@integration-hub/core/services';
+import { ProcessTaskProvider, ProcessTaskSummaryContext } from '../../tasks/process-task-provider.abstract';
+import { ProcessTaskRuntimeDraft } from '../../tasks/process-task-binding.models';
+import { ProcessTaskFormModel } from '../../tasks/process-task.models';
+
+/** Draft del formulario MT101_PARSE. */
+export interface Mt101ParseTaskDraft extends ProcessTaskRuntimeDraft {
+  interpretSequenceAB: boolean;
+  publishMultiOutput: boolean;
+}
+
+/**
+ * Provider del task type {@code MT101_PARSE}.
+ *
+ * <p>Slice 2.3: single-output (records: List&lt;Mt101Message&gt;). Cuando M-3
+ * (T-018 spec 003) entre, este draft habilitara {@code publishMultiOutput=true}
+ * y el backend publicara envelope/header/transactions como outputs separados.</p>
+ */
+@Injectable()
+export class Mt101ParseTaskProvider extends ProcessTaskProvider<Mt101ParseTaskDraft> {
+  readonly descriptor = {
+    type: 'MT101_PARSE' as const,
+    labelKey: 'processTask.MT101_PARSE',
+    descriptionKey: 'processTaskDescription.MT101_PARSE',
+    modalLayout: 'workspace' as const,
+  };
+
+  createDraft(): Mt101ParseTaskDraft {
+    return {
+      taskRef: '',
+      executionMode: 'once',
+      interpretSequenceAB: true,
+      publishMultiOutput: false,
+    };
+  }
+
+  hydrateDraft(task: ProcessTaskFormModel): Mt101ParseTaskDraft {
+    const config: Record<string, any> = this.parseJson(task.configurationJson);
+    const runtime = this.hydrateRuntime(task, 'once');
+    return {
+      ...runtime,
+      interpretSequenceAB: config['interpretSequenceAB'] !== false,
+      publishMultiOutput: !!config['publishMultiOutput'],
+    };
+  }
+
+  toTaskPatch(draft: Mt101ParseTaskDraft): Partial<ProcessTaskFormModel> {
+    const payload: Record<string, unknown> = this.withRuntime(
+      {
+        interpretSequenceAB: draft.interpretSequenceAB,
+        publishMultiOutput: draft.publishMultiOutput,
+      },
+      draft,
+      'once',
+    );
+    return { configurationJson: this.toPrettyJson(payload) };
+  }
+
+  override summarize(task: ProcessTaskFormModel, _ctx: ProcessTaskSummaryContext, i18n: I18nService): string {
+    const config = this.hydrateDraft(task);
+    const multi = config.publishMultiOutput ? 'multi-output' : 'single-output';
+    return [i18n.t(this.descriptor.labelKey), multi].join(' | ');
+  }
+}
