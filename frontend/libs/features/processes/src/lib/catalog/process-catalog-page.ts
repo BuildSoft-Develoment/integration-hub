@@ -1,7 +1,12 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, OnInit } from '@angular/core';
 import { MatSidenavModule } from '@angular/material/sidenav';
-import { provideProcessTaskProviders } from '@integration-hub/core/providers';
+import { providePaymentsSwiftForms, provideProcessTaskProviders } from '@integration-hub/core/providers';
+import { provideMotorProcessForms } from '../processes.providers';
+import { ProcessMt101ArchiveTaskFormComponent } from '../components/process-task-form/process-mt101-archive-task-form/process-mt101-archive-task-form.component';
+import { ProcessMt101BuildTaskFormComponent } from '../components/process-task-form/process-mt101-build-task-form/process-mt101-build-task-form.component';
+import { ProcessMt101PayTaskFormComponent } from '../components/process-task-form/process-mt101-pay-task-form/process-mt101-pay-task-form.component';
+import { ProcessMt101ValidateTaskFormComponent } from '../components/process-task-form/process-mt101-validate-task-form/process-mt101-validate-task-form.component';
 import { ProcessTaskManagerService } from '@integration-hub/core/services';
 import { ProcessCatalogStore } from './process-catalog.store';
 import { ProcessCatalogCommandService } from './process-catalog-command.service';
@@ -31,7 +36,17 @@ import { ProcessToolbarComponent } from '../components/process-toolbar/process-t
     ProcessReferenceStore,
     ProcessTaskManagerService,
     ProcessFlowApiService,
+    // Task providers (serializacion config_json) del motor y verticales.
     ...provideProcessTaskProviders(),
+    // M-1b: registracion de formularios del motor (FILE_READ + 5 DB/HTTP/notif).
+    ...provideMotorProcessForms(),
+    // Vertical 008 mensajeria de pagos - sub-catalogo swift/ (4 task types).
+    ...providePaymentsSwiftForms({
+      mt101Build: ProcessMt101BuildTaskFormComponent,
+      mt101Validate: ProcessMt101ValidateTaskFormComponent,
+      mt101Archive: ProcessMt101ArchiveTaskFormComponent,
+      mt101Pay: ProcessMt101PayTaskFormComponent,
+    }),
   ],
   imports: [CommonModule, MatSidenavModule, ProcessToolbarComponent, ProcessListComponent, ProcessEditorComponent],
   templateUrl: './process-catalog-page.html',

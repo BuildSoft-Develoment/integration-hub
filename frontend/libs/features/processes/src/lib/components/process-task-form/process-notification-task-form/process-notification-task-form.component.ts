@@ -1,12 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, input, output, signal } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { ProcessTaskFormModel, ReaderRef } from '../../../models/process.models';
-import { createHttpRequestDraft, NotificationTaskDraft, ProcessTaskBindingOption } from '@integration-hub/core/providers';
+import { createHttpRequestDraft, NotificationTaskDraft, ProcessTaskBindingOption, ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
 import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
 import { ProcessHttpRequestComponent } from '../process-http-request/process-http-request.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
@@ -111,12 +111,13 @@ export class ProcessNotificationTaskFormComponent {
   readonly i18n = inject(I18nService);
   private readonly manager = inject(ProcessTaskManagerService);
   private readonly bindingContext = inject(ProcessTaskBindingContextService);
+  // M-1b: outputs viajan al host via bridge.
+  private readonly bridge = inject(ProcessTaskFormBridgeService);
 
   readonly task = input.required<ProcessTaskFormModel>();
   readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
   readonly readers = input.required<readonly ReaderRef[]>();
   readonly readonly = input(false);
-  readonly patchTask = output<Partial<ProcessTaskFormModel>>();
 
   readonly draft = computed<NotificationTaskDraft>(() => this.manager.hydrateDraft<NotificationTaskDraft>(this.task()) ?? {
     ...createHttpRequestDraft('POST', '15'),
@@ -149,7 +150,7 @@ export class ProcessNotificationTaskFormComponent {
 
   updateDraft(patch: Partial<NotificationTaskDraft>): void {
     const nextDraft = { ...this.draft(), ...patch };
-    this.patchTask.emit(this.manager.toTaskPatch(this.task().taskType, nextDraft));
+    this.bridge.emit(this.manager.toTaskPatch(this.task().taskType, nextDraft));
   }
 
   /** Token calificado a insertar para una opción (agregados -> `taskRef.output.campo`). P1.c. */

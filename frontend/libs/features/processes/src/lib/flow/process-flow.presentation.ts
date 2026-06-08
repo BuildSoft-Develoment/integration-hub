@@ -37,6 +37,27 @@ const NODE_PRESENTATION: Record<ProcessTaskType, ProcessFlowNodePresentation> = 
     toneClass: 'task-node--notification',
     iconPath: 'M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-5-5.91V4a1 1 0 1 0-2 0v1.09A6 6 0 0 0 6 11v3.2a2 2 0 0 1-.59 1.4L4 17h5m6 0a3 3 0 1 1-6 0m6 0H9',
   },
+  // --- Vertical mensajeria de pagos sub-catalogo swift/ (spec 008, ADR-009) ---
+  MT101_BUILD: {
+    badge: 'BUILD',
+    toneClass: 'task-node--payment',
+    iconPath: 'M4 6h16M4 10h10M4 14h16M4 18h10M18 8l3 3-3 3M18 16l3-3',
+  },
+  MT101_VALIDATE: {
+    badge: 'NVR',
+    toneClass: 'task-node--payment-validate',
+    iconPath: 'M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
+  },
+  MT101_ARCHIVE: {
+    badge: 'ARCHIVE',
+    toneClass: 'task-node--payment-archive',
+    iconPath: 'M5 8h14v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2zm0 0V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3M9 12h6M9 16h6',
+  },
+  MT101_PAY: {
+    badge: 'PAY',
+    toneClass: 'task-node--payment-dispatch',
+    iconPath: 'M3 10h18M3 14h18M5 7h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM16 14h2',
+  },
 };
 
 export function getProcessFlowNodePresentation(taskType: ProcessTaskType): ProcessFlowNodePresentation {

@@ -1,0 +1,235 @@
+// @trace spec 008-mensajeria-pagos RF-004, RF-016, T-009
+// @trace ADR-009
+import { Injectable } from '@angular/core';
+import { I18nService } from '@integration-hub/core/services';
+import { ProcessTaskProvider, ProcessTaskSummaryContext } from '../../tasks/process-task-provider.abstract';
+import { ProcessTaskRuntimeDraft } from '../../tasks/process-task-binding.models';
+import { ProcessTaskFormModel } from '../../tasks/process-task.models';
+
+export type Mt101PayTransport = 'REST' | 'SFTP' | 'MQ';
+export type Mt101PayAuthType = '' | 'bearer' | 'login-request';
+export type Mt101PayConfirmationMode = 'sync' | 'async-callback' | 'async-poll';
+export type Mt101PayBackoffStrategy = 'exponential' | 'constant';
+
+/** Sub-draft del transporte REST. */
+export interface Mt101PayRestDraft {
+  url: string;
+  method: string;
+  authType: Mt101PayAuthType;
+  token: string;
+  loginUrl: string;
+  loginMethod: string;
+  loginBodyTemplate: string;
+  tokenPath: string;
+  contentType: string;
+  timeoutSeconds: number;
+}
+
+/** Politica de reintentos. */
+export interface Mt101PayRetryPolicyDraft {
+  maxRetries: number;
+  backoffStrategy: Mt101PayBackoffStrategy;
+  initialBackoffSeconds: number;
+  maxBackoffSeconds: number;
+  retryOnFamilies: string;
+}
+
+/** JSON-paths para parsear la respuesta del gateway. */
+export interface Mt101PayExpectedResponseDraft {
+  successField: string;
+  referenceField: string;
+  errorMessageField: string;
+}
+
+/** Draft del formulario MT101_PAY. */
+export interface Mt101PayTaskDraft extends ProcessTaskRuntimeDraft {
+  transport: Mt101PayTransport;
+  rest: Mt101PayRestDraft;
+  idempotencyKeyTemplate: string;
+  retryPolicy: Mt101PayRetryPolicyDraft;
+  confirmationMode: Mt101PayConfirmationMode;
+  expectedGatewayResponse: Mt101PayExpectedResponseDraft;
+}
+
+/**
+ * Provider del task type {@code MT101_PAY}.
+ *
+ * <p>Slice 4b cubre transporte REST con todos sus campos. SFTP/MQ requieren los
+ * providers backend correspondientes (slice 2 del sprint 2 del backend); cuando
+ * existan, este provider se extiende sin tocar el motor.</p>
+ */
+@Injectable()
+export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft> {
+  readonly descriptor = {
+    type: 'MT101_PAY' as const,
+    labelKey: 'processTask.MT101_PAY',
+    descriptionKey: 'processTaskDescription.MT101_PAY',
+    modalLayout: 'workspace' as const,
+  };
+
+  createDraft(): Mt101PayTaskDraft {
+    return {
+      taskRef: '',
+      executionMode: 'per-record',
+      transport: 'REST',
+      rest: {
+        url: '',
+        method: 'POST',
+        authType: '',
+        token: '',
+        loginUrl: '',
+        loginMethod: 'POST',
+        loginBodyTemplate: '',
+        tokenPath: '$.access_token',
+        contentType: 'application/json',
+        timeoutSeconds: 60,
+      },
+      idempotencyKeyTemplate: '${sendersReference}',
+      retryPolicy: {
+        maxRetries: 5,
+        backoffStrategy: 'exponential',
+        initialBackoffSeconds: 30,
+        maxBackoffSeconds: 900,
+        retryOnFamilies: 'TIMEOUT,5xx,CONNECTION_REFUSED',
+      },
+      confirmationMode: 'sync',
+      expectedGatewayResponse: {
+        successField: '$.accepted',
+        referenceField: '$.gatewayReference',
+        errorMessageField: '$.error.message',
+      },
+    };
+  }
+
+  hydrateDraft(task: ProcessTaskFormModel): Mt101PayTaskDraft {
+    const config: Record<string, any> = this.parseJson(task.configurationJson);
+    const runtime = this.hydrateRuntime(task, 'per-record');
+    const rest = (config['rest'] || {}) as Record<string, any>;
+    const retry = (config['retryPolicy'] || {}) as Record<string, any>;
+    const expected = (config['expectedGatewayResponse'] || {}) as Record<string, any>;
+    return {
+      ...runtime,
+      transport: this.normalizeTransport(config['transport']),
+      rest: {
+        url: String(rest['url'] || ''),
+        method: String(rest['method'] || 'POST'),
+        authType: this.normalizeAuthType(rest['authType']),
+        token: String(rest['token'] || ''),
+        loginUrl: String(rest['loginUrl'] || ''),
+        loginMethod: String(rest['loginMethod'] || 'POST'),
+        loginBodyTemplate: String(rest['loginBodyTemplate'] || ''),
+        tokenPath: String(rest['tokenPath'] || '$.access_token'),
+        contentType: String(rest['contentType'] || 'application/json'),
+        timeoutSeconds: Number(rest['timeoutSeconds']) || 60,
+      },
+      idempotencyKeyTemplate: String(config['idempotencyKeyTemplate'] ?? '${sendersReference}'),
+      retryPolicy: {
+        maxRetries: Number(retry['maxRetries'] ?? 5),
+        backoffStrategy: this.normalizeBackoffStrategy(retry['backoffStrategy']),
+        initialBackoffSeconds: Number(retry['initialBackoffSeconds'] ?? 30),
+        maxBackoffSeconds: Number(retry['maxBackoffSeconds'] ?? 900),
+        retryOnFamilies: Array.isArray(retry['retryOn'])
+          ? retry['retryOn'].join(',')
+          : String(retry['retryOn'] || 'TIMEOUT,5xx,CONNECTION_REFUSED'),
+      },
+      confirmationMode: this.normalizeConfirmationMode(config['confirmationMode']),
+      expectedGatewayResponse: {
+        successField: String(expected['successField'] || '$.accepted'),
+        referenceField: String(expected['referenceField'] || '$.gatewayReference'),
+        errorMessageField: String(expected['errorMessageField'] || '$.error.message'),
+      },
+    };
+  }
+
+  toTaskPatch(draft: Mt101PayTaskDraft): Partial<ProcessTaskFormModel> {
+    const restPayload = draft.transport === 'REST'
+      ? this.compactObject({
+          url: draft.rest.url,
+          method: draft.rest.method,
+          authType: draft.rest.authType || undefined,
+          token: draft.rest.authType === 'bearer' ? draft.rest.token : undefined,
+          loginUrl: draft.rest.authType === 'login-request' ? draft.rest.loginUrl : undefined,
+          loginMethod: draft.rest.authType === 'login-request' ? draft.rest.loginMethod : undefined,
+          loginBodyTemplate:
+            draft.rest.authType === 'login-request' ? draft.rest.loginBodyTemplate : undefined,
+          tokenPath: draft.rest.authType === 'login-request' ? draft.rest.tokenPath : undefined,
+          contentType: draft.rest.contentType,
+          timeoutSeconds: draft.rest.timeoutSeconds,
+        })
+      : undefined;
+
+    const retryOn = draft.retryPolicy.retryOnFamilies
+      .split(',')
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    const payload: Record<string, unknown> = this.withRuntime(
+      {
+        transport: draft.transport,
+        ...(restPayload ? { rest: restPayload } : {}),
+        idempotencyKeyTemplate: draft.idempotencyKeyTemplate,
+        retryPolicy: {
+          maxRetries: draft.retryPolicy.maxRetries,
+          backoffStrategy: draft.retryPolicy.backoffStrategy,
+          initialBackoffSeconds: draft.retryPolicy.initialBackoffSeconds,
+          maxBackoffSeconds: draft.retryPolicy.maxBackoffSeconds,
+          retryOn,
+        },
+        confirmationMode: draft.confirmationMode,
+        expectedGatewayResponse: this.compactObject({
+          successField: draft.expectedGatewayResponse.successField,
+          referenceField: draft.expectedGatewayResponse.referenceField,
+          errorMessageField: draft.expectedGatewayResponse.errorMessageField,
+        }),
+      },
+      draft,
+      'per-record',
+    );
+    return { configurationJson: this.toPrettyJson(this.compactObject(payload) as Record<string, unknown>) };
+  }
+
+  override summarize(task: ProcessTaskFormModel, _context: ProcessTaskSummaryContext, i18n: I18nService): string {
+    const config = this.hydrateDraft(task);
+    const target = config.transport === 'REST' ? config.rest.url : config.transport;
+    return [i18n.t(this.descriptor.labelKey), `${config.transport} ${target || '?'}`].join(' | ');
+  }
+
+  // --- helpers ---
+
+  private normalizeTransport(value: unknown): Mt101PayTransport {
+    const v = String(value || 'REST').toUpperCase();
+    return v === 'SFTP' || v === 'MQ' ? (v as Mt101PayTransport) : 'REST';
+  }
+
+  private normalizeAuthType(value: unknown): Mt101PayAuthType {
+    const v = String(value || '').toLowerCase();
+    return v === 'bearer' || v === 'login-request' ? (v as Mt101PayAuthType) : '';
+  }
+
+  private normalizeConfirmationMode(value: unknown): Mt101PayConfirmationMode {
+    const v = String(value || 'sync');
+    return v === 'async-callback' || v === 'async-poll' ? (v as Mt101PayConfirmationMode) : 'sync';
+  }
+
+  private normalizeBackoffStrategy(value: unknown): Mt101PayBackoffStrategy {
+    const v = String(value || 'exponential');
+    return v === 'constant' ? 'constant' : 'exponential';
+  }
+
+  private compactObject<T extends Record<string, unknown>>(obj: T): T {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj)) {
+      if (value === undefined || value === null) continue;
+      if (typeof value === 'string' && value === '') continue;
+      if (Array.isArray(value) && value.length === 0) continue;
+      if (typeof value === 'object' && !Array.isArray(value)) {
+        const nested = this.compactObject(value as Record<string, unknown>);
+        if (Object.keys(nested).length === 0) continue;
+        out[key] = nested;
+      } else {
+        out[key] = value;
+      }
+    }
+    return out as T;
+  }
+}

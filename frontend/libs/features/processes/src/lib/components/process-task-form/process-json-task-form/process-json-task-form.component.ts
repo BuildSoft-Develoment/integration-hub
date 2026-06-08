@@ -1,9 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { Component, inject, input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { I18nService } from '@integration-hub/core/services';
+import { ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
 import { ConnectionRef, ProcessTaskFormModel } from '../../../models/process.models';
 
 @Component({
@@ -19,7 +20,7 @@ import { ConnectionRef, ProcessTaskFormModel } from '../../../models/process.mod
 
     <mat-form-field class="full-width">
       <mat-label>{{ i18n.t('ui.taskConfigJson') }}</mat-label>
-      <textarea matInput [disabled]="readonly()" [ngModel]="task().configurationJson" (ngModelChange)="patchTask.emit({ configurationJson: $event })"></textarea>
+      <textarea matInput [disabled]="readonly()" [ngModel]="task().configurationJson" (ngModelChange)="onConfigurationChange($event)"></textarea>
     </mat-form-field>
   `,
   styles: [`
@@ -42,15 +43,19 @@ import { ConnectionRef, ProcessTaskFormModel } from '../../../models/process.mod
 })
 export class ProcessJsonTaskFormComponent {
   readonly i18n = inject(I18nService);
+  // M-1b: outputs viajan al host via bridge (no via @Output()).
+  private readonly bridge = inject(ProcessTaskFormBridgeService);
 
   readonly task = input.required<ProcessTaskFormModel>();
   readonly connections = input.required<readonly ConnectionRef[]>();
   readonly readonly = input(false);
 
-  readonly patchTask = output<Partial<ProcessTaskFormModel>>();
-
   connectionNames(): string {
     return this.connections().map((connection) => `${connection.name} (${connection.connectionType})`).join(', ');
+  }
+
+  onConfigurationChange(value: string): void {
+    this.bridge.emit({ configurationJson: value });
   }
 }
 

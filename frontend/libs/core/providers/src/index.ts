@@ -28,3 +28,11 @@ export * from './lib/implementations/tasks/db-execute-stored-procedure-task.prov
 export * from './lib/implementations/tasks/db-execute-function-task.provider';
 export * from './lib/implementations/tasks/rest-call-task.provider';
 export * from './lib/implementations/tasks/notification-task.provider';
+// --- Vertical mensajeria de pagos (spec 008, ADR-009) ---
+export * from './lib/tasks/process-task-form-registry';
+export * from './lib/tasks/process-task-form-bridge.service';
+export * from './lib/implementations/tasks/mt101-build-task.provider';
+export * from './lib/implementations/tasks/mt101-validate-task.provider';
+export * from './lib/implementations/tasks/mt101-archive-task.provider';
+export * from './lib/implementations/tasks/mt101-pay-task.provider';
+export * from './lib/implementations/tasks/payments-swift.providers';
