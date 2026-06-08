@@ -47,5 +47,6 @@ public enum TaskType {
     MT101_RECONCILE,
     MT101_STATUS,
     MT101_PARSE,
-    MT101_SPLIT
+    MT101_SPLIT,
+    MT101_REPAIR
 }
