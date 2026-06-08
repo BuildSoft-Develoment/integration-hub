@@ -1,0 +1,60 @@
+.mt101-reconcile {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1rem;
+}
+
+.mt101-reconcile__header {
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+}
+
+.mt101-reconcile__header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.mt101-reconcile__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.mt101-reconcile__section h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted, #475569);
+}
+
+.mt101-reconcile__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem 1rem;
+}
+
+.mt101-reconcile__grid > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.mt101-reconcile__grid input,
+.mt101-reconcile__grid select {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border, #cbd5e1);
+  border-radius: 4px;
+  background: var(--color-surface, #ffffff);
+}
+
+input:disabled,
+select:disabled {
+  background: var(--color-surface-muted, #f1f5f9);
+  opacity: 0.7;
+}

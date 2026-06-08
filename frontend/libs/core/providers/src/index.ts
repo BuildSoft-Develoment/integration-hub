@@ -14,6 +14,8 @@ export * from './lib/implementations/sources/ftp-source.provider';
 export * from './lib/implementations/sources/sftp-source.provider';
 export * from './lib/implementations/sources/rest-source.provider';
 export * from './lib/implementations/sources/s3-source.provider';
+export * from './lib/implementations/sources/gcs-source.provider';
+export * from './lib/implementations/sources/azure-blob-source.provider';
 export * from './lib/implementations/readers/reader.providers';
 export * from './lib/implementations/connections/oracle-connection.provider';
 export * from './lib/implementations/connections/postgresql-connection.provider';
@@ -26,3 +28,17 @@ export * from './lib/implementations/tasks/db-execute-stored-procedure-task.prov
 export * from './lib/implementations/tasks/db-execute-function-task.provider';
 export * from './lib/implementations/tasks/rest-call-task.provider';
 export * from './lib/implementations/tasks/notification-task.provider';
+// --- Vertical mensajeria de pagos (spec 008, ADR-009) ---
+export * from './lib/tasks/process-task-form-registry';
+export * from './lib/tasks/process-task-form-bridge.service';
+export * from './lib/implementations/tasks/mt101-build-task.provider';
+export * from './lib/implementations/tasks/mt101-validate-task.provider';
+export * from './lib/implementations/tasks/mt101-archive-task.provider';
+export * from './lib/implementations/tasks/mt101-pay-task.provider';
+export * from './lib/implementations/tasks/mt101-route-task.provider';
+export * from './lib/implementations/tasks/mt101-reconcile-task.provider';
+export * from './lib/implementations/tasks/mt101-status-task.provider';
+export * from './lib/implementations/tasks/mt101-parse-task.provider';
+export * from './lib/implementations/tasks/mt101-split-task.provider';
+export * from './lib/implementations/tasks/mt101-repair-task.provider';
+export * from './lib/implementations/tasks/payments-swift.providers';

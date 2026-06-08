@@ -37,6 +37,59 @@ const NODE_PRESENTATION: Record<ProcessTaskType, ProcessFlowNodePresentation> = 
     toneClass: 'task-node--notification',
     iconPath: 'M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-5-5.91V4a1 1 0 1 0-2 0v1.09A6 6 0 0 0 6 11v3.2a2 2 0 0 1-.59 1.4L4 17h5m6 0a3 3 0 1 1-6 0m6 0H9',
   },
+  // --- Vertical mensajeria de pagos sub-catalogo swift/ (spec 008, ADR-009) ---
+  MT101_BUILD: {
+    badge: 'BUILD',
+    toneClass: 'task-node--payment',
+    iconPath: 'M4 6h16M4 10h10M4 14h16M4 18h10M18 8l3 3-3 3M18 16l3-3',
+  },
+  MT101_VALIDATE: {
+    badge: 'NVR',
+    toneClass: 'task-node--payment-validate',
+    iconPath: 'M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
+  },
+  MT101_ARCHIVE: {
+    badge: 'ARCHIVE',
+    toneClass: 'task-node--payment-archive',
+    iconPath: 'M5 8h14v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2zm0 0V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3M9 12h6M9 16h6',
+  },
+  MT101_PAY: {
+    badge: 'PAY',
+    toneClass: 'task-node--payment-dispatch',
+    iconPath: 'M3 10h18M3 14h18M5 7h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM16 14h2',
+  },
+  // --- Sprint 2 (spec 008) ---
+  MT101_ROUTE: {
+    badge: 'ROUTE',
+    toneClass: 'task-node--payment-route',
+    iconPath: 'M4 6h8a4 4 0 0 1 0 8H6a4 4 0 0 0 0 8h6m4-16h4l-3-3M16 14h4l-3 3',
+  },
+  MT101_RECONCILE: {
+    badge: 'RECON',
+    toneClass: 'task-node--payment-reconcile',
+    iconPath: 'M4 8h6m0 0L7 5m3 3L7 11m13 5h-6m0 0l3-3m-3 3l3 3',
+  },
+  MT101_STATUS: {
+    badge: 'STATUS',
+    toneClass: 'task-node--payment-status',
+    iconPath: 'M12 8v4l3 2m6-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
+  },
+  MT101_PARSE: {
+    badge: 'PARSE',
+    toneClass: 'task-node--payment-parse',
+    iconPath: 'M4 4h16v6H4zM4 14h16v6H4zM8 7h2M8 17h2M14 7h2M14 17h2',
+  },
+  // --- Sprint 3 (spec 008) ---
+  MT101_SPLIT: {
+    badge: 'SPLIT',
+    toneClass: 'task-node--payment-split',
+    iconPath: 'M12 4v16M4 8l8 8 8-8M4 16h16',
+  },
+  MT101_REPAIR: {
+    badge: 'REPAIR',
+    toneClass: 'task-node--payment-repair',
+    iconPath: 'M14 3l7 7-11 11H3v-7zM14 3l-3 3 7 7 3-3z',
+  },
 };
 
 export function getProcessFlowNodePresentation(taskType: ProcessTaskType): ProcessFlowNodePresentation {

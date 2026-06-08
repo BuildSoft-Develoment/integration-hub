@@ -61,8 +61,21 @@ export class ProcessTaskBindingBoardComponent {
     });
   }
 
-  selectSource(index: number, sourceKey: string | null): void {
-    if (!sourceKey) {
+  /** Valor unico por opcion para el <select> (kind + key), evita colisiones entre grupos. */
+  optionValue(item: ProcessTaskBindingOption): string {
+    return `${item.kind}::${item.key}`;
+  }
+
+  /** Valor seleccionado actual de una entrada, en el mismo formato compuesto. */
+  selectedValue(entry: ProcessTaskParameterBindingDraft): string | null {
+    if (!entry.sourceKey || entry.expression) {
+      return null;
+    }
+    return `${entry.sourceKind ?? ''}::${entry.sourceKey}`;
+  }
+
+  selectSource(index: number, value: string | null): void {
+    if (!value) {
       this.patchEntry(index, {
         sourceKind: null,
         sourceKey: '',
@@ -71,12 +84,19 @@ export class ProcessTaskBindingBoardComponent {
       });
       return;
     }
-    const source = this.sourceGroups()
-      .flatMap((group) => group.items)
-      .find((item) => item.key === sourceKey);
+    const separator = value.indexOf('::');
+    const kind = separator >= 0 ? value.slice(0, separator) : '';
+    const key = separator >= 0 ? value.slice(separator + 2) : value;
+    const items = this.sourceGroups().flatMap((group) => group.items);
+    const source = items.find((item) => item.kind === kind && item.key === key)
+      ?? items.find((item) => item.key === key);
     if (!source) {
       return;
     }
+    this.applySource(index, source);
+  }
+
+  private applySource(index: number, source: ProcessTaskBindingOption): void {
     this.patchEntry(index, {
       sourceKind: source.kind,
       sourceKey: source.key,
@@ -144,7 +164,7 @@ export class ProcessTaskBindingBoardComponent {
     if (!source) {
       return;
     }
-    this.selectSource(index, source.key);
+    this.applySource(index, source);
   }
 
   private readFromTransfer(event: DragEvent): ProcessTaskBindingOption | null {

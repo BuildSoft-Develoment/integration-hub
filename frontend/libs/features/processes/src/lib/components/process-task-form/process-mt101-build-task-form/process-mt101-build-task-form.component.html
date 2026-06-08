@@ -1,0 +1,256 @@
+<div class="mt101-build">
+  <header class="mt101-build__header">
+    <h3>{{ i18n.t('processTask.MT101_BUILD') }}</h3>
+    <label>
+      <span>{{ i18n.t('mt101.format') }}</span>
+      <select
+        [ngModel]="draft().format"
+        (ngModelChange)="updateDraft({ format: $event })"
+        [disabled]="readonly()">
+        @for (option of formatOptions; track option) {
+          <option [value]="option">{{ option }}</option>
+        }
+      </select>
+    </label>
+  </header>
+
+  <section class="mt101-build__section">
+    <h4>{{ i18n.t('mt101.section.envelope') }}</h4>
+    <div class="mt101-build__grid">
+      <label>
+        <span>{{ i18n.t('mt101.envelope.senderLt') }}</span>
+        <input
+          type="text"
+          maxlength="12"
+          placeholder="SGOBFRPPAXXX"
+          [ngModel]="draft().envelope.senderLt"
+          (ngModelChange)="updateEnvelope({ senderLt: $event })"
+          [disabled]="readonly()" />
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.envelope.receiverLt') }}</span>
+        <input
+          type="text"
+          maxlength="12"
+          placeholder="BCPLPEPLXXXX"
+          [ngModel]="draft().envelope.receiverLt"
+          (ngModelChange)="updateEnvelope({ receiverLt: $event })"
+          [disabled]="readonly()" />
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.envelope.uetrStrategy') }}</span>
+        <select
+          [ngModel]="draft().envelope.uetrStrategy"
+          (ngModelChange)="updateEnvelope({ uetrStrategy: $event })"
+          [disabled]="readonly()">
+          @for (strategy of uetrStrategies; track strategy.value) {
+            <option [value]="strategy.value">{{ i18n.t(strategy.labelKey) }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.envelope.priority') }}</span>
+        <select
+          [ngModel]="draft().envelope.priority"
+          (ngModelChange)="updateEnvelope({ priority: $event })"
+          [disabled]="readonly()">
+          <option value="N">N</option>
+          <option value="U">U</option>
+          <option value="S">S</option>
+        </select>
+      </label>
+    </div>
+  </section>
+
+  <section class="mt101-build__section">
+    <h4>{{ i18n.t('mt101.section.sequenceA') }}</h4>
+    <div class="mt101-build__grid">
+      <label class="mt101-build__col-2">
+        <span>{{ i18n.t('mt101.sequenceA.sendersReferenceTemplate') }}</span>
+        <input
+          type="text"
+          maxlength="64"
+          [ngModel]="draft().sequenceA.sendersReferenceTemplate"
+          (ngModelChange)="updateSequenceA({ sendersReferenceTemplate: $event })"
+          [disabled]="readonly()" />
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.sequenceA.requestedExecutionDate') }}</span>
+        <input
+          type="text"
+          placeholder="2026-06-09 / ${today+1bd}"
+          [ngModel]="draft().sequenceA.requestedExecutionDate"
+          (ngModelChange)="updateSequenceA({ requestedExecutionDate: $event })"
+          [disabled]="readonly()" />
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.sequenceA.orderingCustomerOption') }}</span>
+        <select
+          [ngModel]="draft().sequenceA.orderingCustomerOption"
+          (ngModelChange)="updateSequenceA({ orderingCustomerOption: $event })"
+          [disabled]="readonly()">
+          @for (option of orderingOptions; track option) {
+            <option [value]="option">{{ option }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.sequenceA.orderingCustomerAccount') }}</span>
+        <input
+          type="text"
+          [ngModel]="draft().sequenceA.orderingCustomerAccount"
+          (ngModelChange)="updateSequenceA({ orderingCustomerAccount: $event })"
+          [disabled]="readonly()" />
+      </label>
+      <label class="mt101-build__col-2">
+        <span>{{ i18n.t('mt101.sequenceA.orderingCustomerNameAddress') }}</span>
+        <textarea
+          rows="3"
+          [ngModel]="draft().sequenceA.orderingCustomerNameAddress"
+          (ngModelChange)="updateSequenceA({ orderingCustomerNameAddress: $event })"
+          [disabled]="readonly()"></textarea>
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.sequenceA.accountServicingOption') }}</span>
+        <select
+          [ngModel]="draft().sequenceA.accountServicingOption"
+          (ngModelChange)="updateSequenceA({ accountServicingOption: $event })"
+          [disabled]="readonly()">
+          @for (option of servicingOptions; track option) {
+            <option [value]="option">{{ option || '—' }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.sequenceA.accountServicingBic') }}</span>
+        <input
+          type="text"
+          [ngModel]="draft().sequenceA.accountServicingBic"
+          (ngModelChange)="updateSequenceA({ accountServicingBic: $event })"
+          [disabled]="readonly()" />
+      </label>
+    </div>
+  </section>
+
+  <section class="mt101-build__section">
+    <h4>{{ i18n.t('mt101.section.transactionMappings') }}</h4>
+    <div class="mt101-build__grid">
+      <label class="mt101-build__col-2">
+        <span>{{ i18n.t('mt101.mappings.transactionReferenceTemplate') }}</span>
+        <input
+          type="text"
+          [ngModel]="draft().transactionMappings.transactionReferenceTemplate"
+          (ngModelChange)="updateMappings({ transactionReferenceTemplate: $event })"
+          [disabled]="readonly()" />
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.mappings.amountCurrencyField') }}</span>
+        <input
+          type="text"
+          placeholder="moneda"
+          [ngModel]="draft().transactionMappings.amountCurrencyField"
+          (ngModelChange)="updateMappings({ amountCurrencyField: $event })"
+          [disabled]="readonly()" />
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.mappings.amountValueField') }}</span>
+        <input
+          type="text"
+          placeholder="monto"
+          [ngModel]="draft().transactionMappings.amountValueField"
+          (ngModelChange)="updateMappings({ amountValueField: $event })"
+          [disabled]="readonly()" />
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.mappings.beneficiaryOption') }}</span>
+        <select
+          [ngModel]="draft().transactionMappings.beneficiaryOption"
+          (ngModelChange)="updateMappings({ beneficiaryOption: $event })"
+          [disabled]="readonly()">
+          @for (option of beneficiaryOptions; track option) {
+            <option [value]="option">{{ option || '—' }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.mappings.beneficiaryAccountField') }}</span>
+        <input
+          type="text"
+          placeholder="cuenta_beneficiario"
+          [ngModel]="draft().transactionMappings.beneficiaryAccountField"
+          (ngModelChange)="updateMappings({ beneficiaryAccountField: $event })"
+          [disabled]="readonly()" />
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.mappings.beneficiaryBicField') }}</span>
+        <input
+          type="text"
+          [ngModel]="draft().transactionMappings.beneficiaryBicField"
+          (ngModelChange)="updateMappings({ beneficiaryBicField: $event })"
+          [disabled]="readonly()" />
+      </label>
+      <label class="mt101-build__col-2">
+        <span>{{ i18n.t('mt101.mappings.beneficiaryNameAddressFields') }}</span>
+        <textarea
+          rows="2"
+          placeholder="nombre&#10;dni"
+          [ngModel]="draft().transactionMappings.beneficiaryNameAddressFields"
+          (ngModelChange)="updateMappings({ beneficiaryNameAddressFields: $event })"
+          [disabled]="readonly()"></textarea>
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.mappings.accountWithBicField') }}</span>
+        <input
+          type="text"
+          placeholder="bic_beneficiario"
+          [ngModel]="draft().transactionMappings.accountWithBicField"
+          (ngModelChange)="updateMappings({ accountWithBicField: $event })"
+          [disabled]="readonly()" />
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.mappings.remittanceInformationField') }}</span>
+        <input
+          type="text"
+          placeholder="concepto"
+          [ngModel]="draft().transactionMappings.remittanceInformationField"
+          (ngModelChange)="updateMappings({ remittanceInformationField: $event })"
+          [disabled]="readonly()" />
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.mappings.detailsOfChargesField') }}</span>
+        <input
+          type="text"
+          placeholder="cargos"
+          [ngModel]="draft().transactionMappings.detailsOfChargesField"
+          (ngModelChange)="updateMappings({ detailsOfChargesField: $event })"
+          [disabled]="readonly()" />
+      </label>
+    </div>
+  </section>
+
+  <section class="mt101-build__section">
+    <h4>{{ i18n.t('mt101.section.split') }}</h4>
+    <div class="mt101-build__grid">
+      <label>
+        <span>{{ i18n.t('mt101.split.strategy') }}</span>
+        <select
+          [ngModel]="draft().splitStrategy"
+          (ngModelChange)="updateDraft({ splitStrategy: $event })"
+          [disabled]="readonly()">
+          @for (strategy of splitStrategies; track strategy) {
+            <option [value]="strategy">{{ strategy }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span>{{ i18n.t('mt101.split.maxTransactions') }}</span>
+        <input
+          type="number"
+          min="1"
+          [ngModel]="draft().maxTransactionsPerMessage"
+          (ngModelChange)="updateDraft({ maxTransactionsPerMessage: $event })"
+          [disabled]="readonly()" />
+      </label>
+    </div>
+  </section>
+</div>

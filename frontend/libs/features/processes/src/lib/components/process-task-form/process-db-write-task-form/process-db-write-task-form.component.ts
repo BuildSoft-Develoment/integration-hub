@@ -1,12 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, effect, inject, input, output, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { DbWriteMappingDraft, DbWriteTaskDraft } from '@integration-hub/core/providers';
+import { DbWriteMappingDraft, DbWriteTaskDraft, ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { firstValueFrom } from 'rxjs';
 import { ConnectionRef, ProcessTaskFormModel, ReaderRef } from '../../../models/process.models';
@@ -47,13 +47,14 @@ export class ProcessDbWriteTaskFormComponent {
   private readonly api = inject(ProcessApiService);
   private readonly manager = inject(ProcessTaskManagerService);
   private readonly bindingContext = inject(ProcessTaskBindingContextService);
+  // M-1b: outputs viajan al host via bridge (no via @Output()).
+  private readonly bridge = inject(ProcessTaskFormBridgeService);
 
   readonly task = input.required<ProcessTaskFormModel>();
   readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
   readonly readers = input.required<readonly ReaderRef[]>();
   readonly connections = input.required<readonly ConnectionRef[]>();
   readonly readonly = input(false);
-  readonly patchTask = output<Partial<ProcessTaskFormModel>>();
 
   readonly schemas = signal<DbWriteSchemaRef[]>([]);
   readonly tables = signal<DbWriteTableRef[]>([]);
@@ -290,7 +291,7 @@ export class ProcessDbWriteTaskFormComponent {
 
   updateDraft(patch: Partial<DbWriteTaskDraft>): void {
     const nextDraft = this.sanitizeDraftInput({ ...this.draft(), ...patch });
-    this.patchTask.emit(this.manager.toTaskPatch(this.task().taskType, nextDraft));
+    this.bridge.emit(this.manager.toTaskPatch(this.task().taskType, nextDraft));
   }
 
   private sanitizeDraftInput(draft: DbWriteTaskDraft): DbWriteTaskDraft {

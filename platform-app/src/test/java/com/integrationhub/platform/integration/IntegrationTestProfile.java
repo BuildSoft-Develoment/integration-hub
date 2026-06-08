@@ -12,7 +12,11 @@ public class IntegrationTestProfile implements QuarkusTestProfile {
                 "quarkus.oidc.enabled", "false",
                 "quarkus.scheduler.enabled", "false",
                 "quarkus.flyway.migrate-at-start", "true",
-                "quarkus.otel.traces.exporter", "none"
+                "quarkus.otel.traces.exporter", "none",
+                // El datasource viene de PostgresTestResource (no dev service). Apagar dev services
+                // evita que las extensiones cloud (s3/gcs/azure-storage-blob) levanten emuladores
+                // (Azurite/LocalStack) en cada @QuarkusTest.
+                "quarkus.devservices.enabled", "false"
         );
     }
 }

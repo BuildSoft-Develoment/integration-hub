@@ -83,8 +83,11 @@ final class StoredProcedureConfigurationSupport {
         var sourceTaskRef = stringValue(rawMap.get("sourceTaskRef"));
         var sourceOutput = stringValue(rawMap.get("sourceOutput"));
         if (!sourceTaskRef.isBlank()) {
-            if (sourceOutput.isBlank() && ("summary".equals(sourceKind) || "records".equals(sourceKind)
-                    || "table".equals(sourceKind) || "errors".equals(sourceKind) || "out".equals(sourceKind)
+            // Solo los outputs AGREGADOS (summary/out/metadata) se publican como claves calificadas
+            // `task.<output>.<campo>` y se resuelven asi (sin colision en fan-in). Los flujos por
+            // registro (records/table/errors) NO tienen esas claves: el campo viene del registro
+            // actual y se resuelve por clave plana, por eso aqui no se infiere sourceOutput.
+            if (sourceOutput.isBlank() && ("summary".equals(sourceKind) || "out".equals(sourceKind)
                     || "metadata".equals(sourceKind))) {
                 sourceOutput = sourceKind;
             }

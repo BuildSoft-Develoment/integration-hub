@@ -27,9 +27,9 @@ Codigo existente -> SDD (spec-tecnica) -> Trazabilidad -> QA (evidencia GREEN re
 | RF-003 | HU-01 | - | - | POST /api/source-definitions | source_definition | JsonConfigurationMapper | JsonConfigurationMapperTest | Implementado | tdd-evidence.md | source-type-form/source-{filesystem,ftp,sftp,rest}-form | - (sin spec dedicada por tipo) |
 | RF-004 | HU-01 | - | - | POST /api/source-definitions | source_definition | FileVaultSecretValueProvider | FileVaultSecretValueProviderTest | Implementado | tdd-evidence.md | source-type-form (campos `${secret:...}`) | - |
 | RF-005 | HU-01 | - | - | POST /api/source-definitions/test | source_definition | FilesystemSourceProvider | FilesystemSourceProviderTest | Implementado | tdd-evidence.md | - (insumo backend de FILE_READ) | - |
-| RF-006 | HU-01 | - | - | POST /api/source-definitions | source_definition (`s3`/`gcs`/`azure-blob`) | S3SourceProvider (WIP) | - | En progreso (WIP, ADR-006) | spec-tecnica.md (cloud) | source-object-store + source-{s3,gcs,azure-blob}-form (WIP) | - |
-| RF-007 | HU-01 | - | - | POST /api/source-definitions | configuration_json (`authMode`/credenciales) | FileVaultSecretValueProvider + credential providers (WIP) | - | En progreso (WIP, ADR-006) | spec-tecnica.md (cloud) | source-object-store (bloque auth) | - |
-| RF-008 | HU-01 | - | - | POST /api/source-definitions/test | source_definition | SourcePayload (InputStream, WIP) | - | En progreso (WIP, ADR-006) | spec-tecnica.md (cloud) | - (insumo backend de FILE_READ) | - |
+| RF-006 | HU-01 | - | - | POST /api/source-definitions | source_definition (`s3`/`gcs`/`azure-blob`) | S3SourceProvider / GcsSourceProvider / AzureBlobSourceProvider | - (integracion pendiente) | front+back (JVM); native/QA/gate pendiente | spec-tecnica.md (cloud) | source-{s3,gcs,azure-blob}-form (hecho) | - |
+| RF-007 | HU-01 | - | - | POST /api/source-definitions | configuration_json (`authMode`) | S3 (default/access-key/assume-role) / GCS (adc/service-account-json) / Azure (account-key/sas/conn-string; managed-identity pendiente) | - | front+back (JVM); native/QA/gate pendiente | spec-tecnica.md (cloud) | source-{s3,gcs,azure-blob}-form (auth) | - |
+| RF-008 | HU-01 | - | - | POST /api/source-definitions/test | source_definition | SourcePayload (StreamSupplier) + S3/GCS/Azure openFile por stream | - | hecho (streaming); native/QA pendiente | spec-tecnica.md (cloud) | - (insumo backend de FILE_READ) | - |
 
 ## Trazabilidad UI por tipo de fuente (RF-001 / RF-003)
 

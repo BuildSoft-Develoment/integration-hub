@@ -1,0 +1,403 @@
+package com.integrationhub.platform.provider.task.payments.swift;
+
+import com.integrationhub.platform.provider.task.payments.spi.PaymentMessageFormatter;
+import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.spi.reader.ReadRecord;
+import com.integrationhub.platform.spi.source.SourcePayload;
+import com.integrationhub.platform.spi.task.BatchTaskProvider;
+import com.integrationhub.platform.spi.task.TaskContext;
+import com.integrationhub.platform.spi.task.TaskResult;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
+
+/**
+ * Task provider {@code MT101_BUILD}: compone uno o varios MT101 a partir de un
+ * header logico (declarado en {@code configuration.envelope} + {@code configuration.sequenceA})
+ * y de N transacciones (records consumidos como {@code BatchTaskProvider}).
+ *
+ * <p>Delega el formateo (JSON/XML/FIN) a las implementaciones de
+ * {@link PaymentMessageFormatter} registradas; selecciona la correcta por
+ * {@code configuration.format} (default {@code "JSON"}).</p>
+ *
+ * <p><b>Outputs publicados</b> (siguen el patron de
+ * {@link com.integrationhub.platform.service.execution.TaskOutputRegistry}):</p>
+ * <ul>
+ *   <li>{@code messageCount}, {@code transactionCount}, {@code format}: claves
+ *       planas (compat).</li>
+ *   <li>{@code totalsByCurrency}: mapa moneda -> total.</li>
+ *   <li>{@code records}: lista de {@link Mt101Message} con {@code rawPayload}
+ *       ya formateado, lista para {@code MT101_ARCHIVE} y {@code MT101_PAY}.</li>
+ * </ul>
+ *
+ * <p>Slice 1 del sprint 1: solo {@code splitBy.strategy = "none"}. Estrategias
+ * {@code debitAccount} y {@code maxTransactions} llegan en slice posterior.</p>
+ *
+ * @trace spec 008-mensajeria-pagos RF-001, T-003
+ * @trace ADR-009, ADR-004
+ */
+@ApplicationScoped
+public class Mt101BuildTaskProvider implements BatchTaskProvider {
+
+    private static final String DEFAULT_FORMAT = "JSON";
+    private static final String DEFAULT_PRIORITY = "N";
+
+    private final Instance<PaymentMessageFormatter> formatters;
+
+    public Mt101BuildTaskProvider(Instance<PaymentMessageFormatter> formatters) {
+        this.formatters = formatters;
+    }
+
+    @Override
+    public String type() {
+        return "MT101_BUILD";
+    }
+
+    @Override
+    public TaskResult executeRecords(TaskContext context,
+                                     Map<String, Object> configuration,
+                                     List<ReadRecord> records,
+                                     SourcePayload sourcePayload) {
+        var format = stringValue(configuration.get("format"), DEFAULT_FORMAT).toUpperCase();
+        var formatter = resolveFormatter(format);
+
+        var envelopeCfg = mapValue(configuration.get("envelope"));
+        var sequenceACfg = mapValue(configuration.get("sequenceA"));
+        var mappingsCfg = mapValue(configuration.get("transactionMappings"));
+
+        if (sequenceACfg.isEmpty()) {
+            throw new IllegalArgumentException("MT101_BUILD requires configuration.sequenceA");
+        }
+        if (mappingsCfg.isEmpty()) {
+            throw new IllegalArgumentException("MT101_BUILD requires configuration.transactionMappings");
+        }
+        if (records == null || records.isEmpty()) {
+            return TaskResult.success("MT101_BUILD skipped because there are no records to compose");
+        }
+
+        var messageIndex = 1;
+        var messageTotal = 1;
+        var sendersReference = resolveSendersReference(sequenceACfg, context, messageIndex);
+
+        var envelope = buildEnvelope(envelopeCfg);
+        var transactions = buildTransactions(records, mappingsCfg, context);
+        var controlTotals = computeControlTotals(transactions);
+        var sequenceA = buildSequenceA(sequenceACfg, sendersReference, messageIndex, messageTotal);
+
+        var message = new Mt101Message(envelope, sequenceA, transactions, controlTotals, null, format);
+        var rawPayload = formatter.format(message);
+        var formatted = message.withRawPayload(rawPayload, format);
+
+        var outputs = new LinkedHashMap<String, Object>();
+        outputs.put("messageCount", 1);
+        outputs.put("transactionCount", transactions.size());
+        outputs.put("format", format);
+        outputs.put("totalsByCurrency", controlTotals.totalsByCurrency());
+        outputs.put("records", List.of(formatted));
+
+        return TaskResult.success(
+                "MT101_BUILD composed 1 message with " + transactions.size() + " transactions in " + format,
+                outputs
+        );
+    }
+
+    private PaymentMessageFormatter resolveFormatter(String format) {
+        return formatters.stream()
+                .filter(f -> f.format().equalsIgnoreCase(format))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Unsupported MT101 format: " + format + ". Available formats: " + availableFormats()));
+    }
+
+    private String availableFormats() {
+        var sb = new StringBuilder();
+        formatters.forEach(f -> {
+            if (sb.length() > 0) {
+                sb.append(", ");
+            }
+            sb.append(f.format());
+        });
+        return sb.toString();
+    }
+
+    private Mt101Message.Envelope buildEnvelope(Map<String, Object> cfg) {
+        if (cfg.isEmpty()) {
+            return null;
+        }
+        return new Mt101Message.Envelope(
+                stringOrNull(cfg.get("senderLt")),
+                stringOrNull(cfg.get("receiverLt")),
+                resolveUetr(cfg),
+                stringValue(cfg.get("priority"), DEFAULT_PRIORITY)
+        );
+    }
+
+    private String resolveUetr(Map<String, Object> envelopeCfg) {
+        var strategy = stringValue(envelopeCfg.get("uetrStrategy"), "perMessage");
+        return switch (strategy) {
+            case "perMessage" -> java.util.UUID.randomUUID().toString();
+            case "fixed" -> stringOrNull(envelopeCfg.get("uetr"));
+            default -> null;
+        };
+    }
+
+    private Mt101Message.SequenceA buildSequenceA(Map<String, Object> cfg,
+                                                  String sendersReference,
+                                                  int messageIndex,
+                                                  int messageTotal) {
+        return new Mt101Message.SequenceA(
+                sendersReference,
+                stringOrNull(cfg.get("customerSpecifiedReference")),
+                messageIndex,
+                messageTotal,
+                resolveDate(cfg.get("requestedExecutionDate")),
+                buildParty(mapValue(cfg.get("instructingParty"))),
+                buildParty(mapValue(cfg.get("orderingCustomer"))),
+                buildParty(mapValue(cfg.get("accountServicingInstitution"))),
+                stringOrNull(cfg.get("authorisation"))
+        );
+    }
+
+    private String resolveSendersReference(Map<String, Object> sequenceACfg,
+                                           TaskContext context,
+                                           int messageIndex) {
+        var template = stringValue(sequenceACfg.get("sendersReferenceTemplate"), "");
+        if (template.isBlank()) {
+            var direct = stringOrNull(sequenceACfg.get("sendersReference"));
+            if (direct != null) {
+                return direct;
+            }
+            throw new IllegalArgumentException(
+                    "MT101_BUILD requires sequenceA.sendersReferenceTemplate or sequenceA.sendersReference");
+        }
+        var resolved = template
+                .replace("${_processExecutionId}", String.valueOf(context.processExecutionId()))
+                .replace("${messageIndex}", String.valueOf(messageIndex));
+        if (resolved.length() > 16) {
+            // :20: solo admite 16x; truncar dejando trazabilidad de proceso.
+            resolved = resolved.substring(0, 16);
+        }
+        return resolved;
+    }
+
+    private LocalDate resolveDate(Object raw) {
+        if (raw == null) {
+            return LocalDate.now();
+        }
+        var value = String.valueOf(raw).trim();
+        if (value.isEmpty() || "${today}".equals(value)) {
+            return LocalDate.now();
+        }
+        if (value.startsWith("${today+") && value.endsWith("bd}")) {
+            // T+N business days (sin calendario nacional aun: T-025 spec 008).
+            var days = Integer.parseInt(value.substring(8, value.length() - 3));
+            return addBusinessDays(LocalDate.now(), days);
+        }
+        return LocalDate.parse(value);
+    }
+
+    private LocalDate addBusinessDays(LocalDate from, int businessDays) {
+        var date = from;
+        var remaining = businessDays;
+        while (remaining > 0) {
+            date = date.plusDays(1);
+            var dow = date.getDayOfWeek().getValue();
+            if (dow < 6) {
+                remaining--;
+            }
+        }
+        return date;
+    }
+
+    private List<Mt101Message.Transaction> buildTransactions(List<ReadRecord> records,
+                                                             Map<String, Object> mappings,
+                                                             TaskContext context) {
+        var result = new ArrayList<Mt101Message.Transaction>(records.size());
+        var amountCfg = mapValue(mappings.get("amount"));
+        var beneficiaryCfg = mapValue(mappings.get("beneficiary"));
+        var accountWithCfg = mapValue(mappings.get("accountWithInstitution"));
+        var orderingCustomerCfg = mapValue(mappings.get("orderingCustomer"));
+        var txRefTemplate = stringValue(mappings.get("transactionReferenceTemplate"),
+                "TX-${_processExecutionId}-${recordNumber}");
+        var remittanceField = stringOrNull(mappings.get("remittanceInformationField"));
+        var chargesField = stringOrNull(mappings.get("detailsOfChargesField"));
+
+        for (int i = 0; i < records.size(); i++) {
+            var record = records.get(i);
+            var values = record == null || record.values() == null ? Map.<String, Object>of() : record.values();
+            var sequenceNumber = i + 1;
+            var transactionReference = renderTransactionReference(txRefTemplate, context, sequenceNumber, values);
+
+            result.add(new Mt101Message.Transaction(
+                    sequenceNumber,
+                    transactionReference,
+                    null,
+                    null,
+                    buildAmount(amountCfg, values),
+                    buildPartyFromMapping(orderingCustomerCfg, values),
+                    null,
+                    null,
+                    buildPartyFromMapping(accountWithCfg, values),
+                    buildPartyFromMapping(beneficiaryCfg, values),
+                    stringFieldValue(values, remittanceField),
+                    null,
+                    null,
+                    stringFieldValue(values, chargesField),
+                    null,
+                    null
+            ));
+        }
+        return result;
+    }
+
+    private String renderTransactionReference(String template,
+                                              TaskContext context,
+                                              int sequenceNumber,
+                                              Map<String, Object> recordValues) {
+        var resolved = template
+                .replace("${_processExecutionId}", String.valueOf(context.processExecutionId()))
+                .replace("${recordNumber}", String.valueOf(sequenceNumber));
+        for (var entry : recordValues.entrySet()) {
+            var placeholder = "${" + entry.getKey() + "}";
+            resolved = resolved.replace(placeholder, entry.getValue() == null ? "" : String.valueOf(entry.getValue()));
+        }
+        if (resolved.length() > 16) {
+            resolved = resolved.substring(0, 16);
+        }
+        return resolved;
+    }
+
+    private Mt101Message.Amount buildAmount(Map<String, Object> cfg, Map<String, Object> values) {
+        if (cfg.isEmpty()) {
+            return null;
+        }
+        var currency = stringFieldValue(values, stringOrNull(cfg.get("currencyField")));
+        var raw = values.get(stringValue(cfg.get("valueField"), ""));
+        var amount = raw == null ? null : new BigDecimal(String.valueOf(raw));
+        return new Mt101Message.Amount(currency, amount);
+    }
+
+    private Mt101Message.Party buildPartyFromMapping(Map<String, Object> cfg, Map<String, Object> values) {
+        if (cfg.isEmpty()) {
+            return null;
+        }
+        var option = stringValue(cfg.get("option"), "");
+        var account = stringFieldValue(values, stringOrNull(cfg.get("accountField")));
+        var bic = stringFieldValue(values, stringOrNull(cfg.get("bicField")));
+        var nameAndAddress = nameAndAddressFromMapping(cfg, values);
+        if (isEmptyParty(option, account, bic, nameAndAddress)) {
+            return null;
+        }
+        return new Mt101Message.Party(option, account, bic, nameAndAddress);
+    }
+
+    private Mt101Message.Party buildParty(Map<String, Object> cfg) {
+        if (cfg.isEmpty()) {
+            return null;
+        }
+        var option = stringValue(cfg.get("option"), "");
+        var account = stringOrNull(cfg.get("account"));
+        var bic = stringOrNull(cfg.get("bic"));
+        var nameAndAddress = nameAndAddressFromConfig(cfg.get("nameAndAddress"));
+        if (isEmptyParty(option, account, bic, nameAndAddress)) {
+            return null;
+        }
+        return new Mt101Message.Party(option, account, bic, nameAndAddress);
+    }
+
+    private List<String> nameAndAddressFromMapping(Map<String, Object> cfg, Map<String, Object> values) {
+        var raw = cfg.get("nameAndAddressFields");
+        if (!(raw instanceof List<?> rawList)) {
+            return List.of();
+        }
+        var lines = new ArrayList<String>();
+        for (var fieldName : rawList) {
+            if (fieldName == null) {
+                continue;
+            }
+            var fieldValue = stringFieldValue(values, String.valueOf(fieldName));
+            if (fieldValue != null && !fieldValue.isBlank()) {
+                lines.add(fieldValue);
+            }
+        }
+        return lines;
+    }
+
+    private List<String> nameAndAddressFromConfig(Object raw) {
+        if (!(raw instanceof List<?> rawList)) {
+            return List.of();
+        }
+        var lines = new ArrayList<String>();
+        for (var line : rawList) {
+            if (line != null && !String.valueOf(line).isBlank()) {
+                lines.add(String.valueOf(line));
+            }
+        }
+        return lines;
+    }
+
+    private boolean isEmptyParty(String option, String account, String bic, List<String> nameAndAddress) {
+        return (option == null || option.isBlank())
+                && (account == null || account.isBlank())
+                && (bic == null || bic.isBlank())
+                && (nameAndAddress == null || nameAndAddress.isEmpty());
+    }
+
+    private Mt101Message.ControlTotals computeControlTotals(List<Mt101Message.Transaction> transactions) {
+        var totals = new TreeMap<String, BigDecimal>();
+        for (var tx : transactions) {
+            if (tx.amount() == null || tx.amount().currency() == null || tx.amount().value() == null) {
+                continue;
+            }
+            totals.merge(tx.amount().currency(), tx.amount().value(), BigDecimal::add);
+        }
+        return new Mt101Message.ControlTotals(transactions.size(), totals);
+    }
+
+    // --- helpers ---
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> mapValue(Object raw) {
+        if (!(raw instanceof Map<?, ?> rawMap)) {
+            return Map.of();
+        }
+        var result = new LinkedHashMap<String, Object>();
+        rawMap.forEach((key, value) -> result.put(String.valueOf(key), value));
+        return result;
+    }
+
+    private String stringValue(Object raw, String defaultValue) {
+        if (raw == null) {
+            return defaultValue;
+        }
+        var value = String.valueOf(raw);
+        return value.isBlank() ? defaultValue : value;
+    }
+
+    private String stringOrNull(Object raw) {
+        if (raw == null) {
+            return null;
+        }
+        var value = String.valueOf(raw).trim();
+        return value.isEmpty() ? null : value;
+    }
+
+    private String stringFieldValue(Map<String, Object> values, String fieldName) {
+        if (fieldName == null || fieldName.isBlank()) {
+            return null;
+        }
+        var raw = values.get(fieldName);
+        if (raw == null) {
+            return null;
+        }
+        var value = String.valueOf(raw).trim();
+        return value.isEmpty() ? null : value;
+    }
+}

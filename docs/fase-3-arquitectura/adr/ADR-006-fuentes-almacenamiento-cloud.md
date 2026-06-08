@@ -138,13 +138,23 @@ se **cachea por hash de config** (region+creds+endpoint) para no recrear pools p
 1. **Fase 1 (este ADR + specs)** — *en curso*: congelar tipos, `authMode`, bloque object-store,
    contrato de streaming en `SourcePayload`, transporte por proveedor. Actualizar `spec-funcional`/
    `spec-tecnica`/`traceability` de 001. Solo documentacion.
-2. **S3 end-to-end**: `SourcePayload` por stream; `S3SourceProvider` (`selectFiles`=ListObjectsV2;
-   `openFile`=GetObject por stream); auth (default/access-key/assume-role); `quarkus-amazon-s3` +
-   `url-connection-client` (excluir Apache); endpoint S3-compatible opcional; extender `/test`;
-   sub-form `source-object-store` + bloque auth S3; provider+draft+(de)serializacion front; alta en
-   el host/union de tipos; `@trace` + traceability + tests + **build native** + `check:all`.
-3. **GCS**: mismo molde (HTTP/JSON transport).
-4. **Azure Blob**: mismo molde (`jdk-httpclient`) **con spike native adelantado**.
+2. **S3 end-to-end** — *en curso*: front (tipo `S3`, `source-s3-form`, provider/draft/(de)serializacion,
+   alta en host/union, i18n) **hecho** y verde (`nx build`/`nx test`); back `S3SourceProvider`
+   (`selectFiles`=ListObjectsV2 paginado + regla nombre/selectionMode; `openFile`=GetObject por stream
+   reutilizando `SourcePayload.StreamSupplier`; auth `default`/`access-key`; cliente
+   `url-connection-client` cacheado por hash; endpoint/path-style para MinIO) **compila** (JVM) con
+   `quarkus-amazon-s3` 3.19.0 (+ BOM, Apache excluido); auth `default`/`access-key`/`assume-role`
+   (STS). **Pendiente**: prueba de integracion (S3/MinIO), **build native** y gate humano.
+   `SourcePayload` ya era streaming (no requirio cambio).
+3. **GCS** — *hecho* (JVM): `GcsSourceProvider` (list por prefix + GetBlob por stream via ReadChannel);
+   auth `adc`/`service-account-json`; `quarkus-google-cloud-storage` 2.22.0 (transporte HTTP/JSON);
+   front (tipo `GCS`, `source-gcs-form`, provider). Pendiente: integracion, native, gate.
+4. **Azure Blob** — *hecho* (JVM): `AzureBlobSourceProvider` (listBlobs por prefix +
+   `openInputStream` por stream); auth `account-key`/`sas-token`/`connection-string`;
+   `quarkus-azure-storage-blob` 1.2.4; front (tipo `AZURE_BLOB`, `source-azure-blob-form`, provider).
+   **Pendiente**: `managed-identity` (requiere `azure-identity`), transporte `jdk-httpclient` +
+   exclusion de Netty (**spike native adelantado** — Azure es el de mayor riesgo native), integracion,
+   gate.
 
 ## Gate
 

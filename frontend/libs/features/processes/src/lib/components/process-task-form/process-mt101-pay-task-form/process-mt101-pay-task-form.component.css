@@ -1,0 +1,127 @@
+.mt101-pay {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1rem;
+}
+
+.mt101-pay__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+}
+
+.mt101-pay__header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.mt101-pay__inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+}
+
+.mt101-pay__inline > span {
+  font-weight: 500;
+}
+
+.mt101-pay__inline > select {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--color-border, #cbd5e1);
+  border-radius: 4px;
+}
+
+.mt101-pay__section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.mt101-pay__section h4 {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #475569);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.mt101-pay__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem 1rem;
+}
+
+.mt101-pay__grid > label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.mt101-pay__grid > label > span {
+  font-weight: 500;
+}
+
+.mt101-pay__grid input,
+.mt101-pay__grid select,
+.mt101-pay__grid textarea {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border, #cbd5e1);
+  border-radius: 4px;
+  background: var(--color-surface, #ffffff);
+  font-size: 0.9rem;
+  font-family: inherit;
+}
+
+.mt101-pay__grid textarea {
+  resize: vertical;
+  min-height: 3rem;
+}
+
+.mt101-pay__full {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.mt101-pay__full > span {
+  font-weight: 500;
+}
+
+.mt101-pay__full > input {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--color-border, #cbd5e1);
+  border-radius: 4px;
+}
+
+.mt101-pay__col-2 {
+  grid-column: span 2;
+}
+
+.mt101-pay__notice {
+  padding: 0.75rem 1rem;
+  background: var(--color-surface-muted, #f1f5f9);
+  border: 1px dashed var(--color-border, #cbd5e1);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: var(--color-text-muted, #475569);
+}
+
+.mt101-pay__grid input:disabled,
+.mt101-pay__grid select:disabled,
+.mt101-pay__grid textarea:disabled,
+.mt101-pay__full > input:disabled {
+  background: var(--color-surface-muted, #f1f5f9);
+  opacity: 0.7;
+  cursor: not-allowed;
+}

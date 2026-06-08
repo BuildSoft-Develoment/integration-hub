@@ -64,7 +64,7 @@
                 <header class="notif-tokens__title">{{ i18n.t(group.key) }}</header>
                 <div class="notif-tokens__items">
                   @for (item of group.items; track item.key) {
-                    <button type="button" class="ih-token-chip" [disabled]="readonly()" (click)="insertTokenAt('message', item.key, logMessage)">{{ item.label }}</button>
+                    <button type="button" class="ih-token-chip" [disabled]="readonly()" (click)="insertTokenAt('message', bodyToken(item), logMessage)">{{ item.label }}</button>
                   }
                 </div>
               </section>
@@ -212,7 +212,7 @@
                 <header class="notif-tokens__title">{{ i18n.t(group.key) }}</header>
                 <div class="notif-tokens__items">
                   @for (item of group.items; track item.key) {
-                    <button type="button" class="ih-token-chip" [disabled]="readonly()" (click)="insertActiveToken(item.key)">{{ item.label }}</button>
+                    <button type="button" class="ih-token-chip" [disabled]="readonly()" (click)="insertActiveToken(bodyToken(item))">{{ item.label }}</button>
                   }
                 </div>
               </section>

@@ -106,6 +106,7 @@
     "lint:panel": "node --check scripts/_panel/panel.client.js && node --check scripts/_panel/report.client.js",
     "test:stack": "mvn -pl platform-app test",
     "test:smoke": "mvn -q -pl platform-app test -Dtest=*ApiMapperTest",
+    "check:it": "mvn -pl platform-app -Dquarkus.devservices.enabled=false test-compile failsafe:integration-test failsafe:verify",
     "project:clarify": "node scripts/project-clarify.mjs",
     "project:analyze": "node scripts/project-analyze.mjs",
     "project:checklist": "node scripts/project-checklist.mjs",

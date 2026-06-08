@@ -54,6 +54,37 @@ class StoredProcedureRuntimeSupportTest {
     }
 
     @Test
+    void qualifiedSummaryKeyWinsOverCollidingGlobalKey() {
+        // Fan-in: dos tareas publican `total` global; la expresion calificada `task-2.summary.total`
+        // debe resolver el valor del productor correcto, no la clave global pisada (P1.a / P2.a).
+        var runtimeVariables = Map.<String, Object>of(
+                "total", 99,                       // clave global colisionada (putAll)
+                "task-1.summary.total", 11,
+                "task-2.summary.total", 42         // productor objetivo
+        );
+
+        var qualified = StoredProcedureRuntimeSupport.resolveParameter(
+                new StoredProcedureRuntimeSupport.ProcedureParameter("p_total", "task-2.summary.total", "INTEGER", StoredProcedureRuntimeSupport.ParameterDirection.IN, true),
+                runtimeVariables
+        );
+
+        assertEquals(42, qualified.value());
+    }
+
+    @Test
+    void plainKeyResolvesFromCurrentRecord() {
+        // Flujo por registro (records/table/errors): el campo viene del registro actual por clave plana.
+        var runtimeVariables = Map.<String, Object>of("id", 7, "cliente", "Ana");
+
+        var resolved = StoredProcedureRuntimeSupport.resolveParameter(
+                new StoredProcedureRuntimeSupport.ProcedureParameter("p_id", "id", "INTEGER", StoredProcedureRuntimeSupport.ParameterDirection.IN, true),
+                runtimeVariables
+        );
+
+        assertEquals(7, resolved.value());
+    }
+
+    @Test
     void parsesDateAliasesIntoSqlDate() {
         var parameter = StoredProcedureRuntimeSupport.resolveParameter(
                 new StoredProcedureRuntimeSupport.ProcedureParameter("p_fecha", "fecha", "DATE", StoredProcedureRuntimeSupport.ParameterDirection.IN, true),

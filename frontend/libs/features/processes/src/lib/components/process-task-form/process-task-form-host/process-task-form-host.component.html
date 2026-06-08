@@ -1,61 +1,9 @@
 <div class="task-form-shell" [class.task-form-shell--workspace]="usesWorkspaceLayout()">
-      @if (task().taskType === 'FILE_READ') {
-        <ih-process-file-read-task-form
-          [task]="task()"
-          [sources]="sources()"
-          [readers]="readers()"
-          [readonly]="readonly()"
-          (patchTask)="patchTask.emit($event)"
-        />
-      } @else if (task().taskType === 'DB_WRITE') {
-        <ih-process-db-write-task-form
-          [task]="task()"
-          [tasks]="tasks()"
-          [readers]="readers()"
-          [connections]="connections()"
-          [readonly]="readonly()"
-          (patchTask)="patchTask.emit($event)"
-        />
-      } @else if (task().taskType === 'DB_EXECUTE_SP') {
-        <ih-process-db-execute-sp-task-form
-          [task]="task()"
-          [tasks]="tasks()"
-          [readers]="readers()"
-          [connections]="connections()"
-          [readonly]="readonly()"
-          (patchTask)="patchTask.emit($event)"
-        />
-      } @else if (task().taskType === 'DB_EXECUTE_FN') {
-        <ih-process-db-execute-fn-task-form
-          [task]="task()"
-          [tasks]="tasks()"
-          [readers]="readers()"
-          [connections]="connections()"
-          [readonly]="readonly()"
-          (patchTask)="patchTask.emit($event)"
-        />
-      } @else if (task().taskType === 'REST_CALL') {
-        <ih-process-rest-call-task-form
-          [task]="task()"
-          [tasks]="tasks()"
-          [readers]="readers()"
-          [readonly]="readonly()"
-          (patchTask)="patchTask.emit($event)"
-        />
-      } @else if (task().taskType === 'NOTIFICATION') {
-        <ih-process-notification-task-form
-          [task]="task()"
-          [tasks]="tasks()"
-          [readers]="readers()"
-          [readonly]="readonly()"
-          (patchTask)="patchTask.emit($event)"
-        />
-      } @else {
-        <ih-process-json-task-form
-          [task]="task()"
-          [connections]="connections()"
-          [readonly]="readonly()"
-          (patchTask)="patchTask.emit($event)"
-        />
-      }
-    </div>
+  @if (registered(); as reg) {
+    <ng-container *ngComponentOutlet="reg.component; inputs: registeredInputs()" />
+  } @else {
+    <p class="task-form-shell__missing">
+      {{ 'processTask.formNotRegistered' | uppercase }}: <code>{{ task().taskType }}</code>
+    </p>
+  }
+</div>

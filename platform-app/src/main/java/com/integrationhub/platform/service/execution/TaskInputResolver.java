@@ -8,6 +8,7 @@ import com.integrationhub.platform.spi.source.SourcePayload;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import javax.sql.DataSource;
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -61,7 +62,10 @@ public class TaskInputResolver {
                     new ReadResult(List.of(), 0),
                     new TableInput(
                             tableName,
-                            firstPresent(input.get("connectionRef"), configuration.get("connectionRef")),
+                            firstPresent(
+                                    input.get("connectionRef"),
+                                    taskOutputs == null ? null : taskOutputs.get(sourceTaskRef + ".table.connectionRef"),
+                                    configuration.get("connectionRef")),
                             intValue(input.get("batchSize"), intValue(configuration.get("batchSize"), DEFAULT_BATCH_SIZE)),
                             stringValue(objectMap(input.get("cursor")).get("orderBy")),
                             filters(input.get("filters"))
@@ -112,58 +116,126 @@ public class TaskInputResolver {
                                      int batchSize,
                                      Function<BatchSlice, com.integrationhub.platform.spi.task.TaskResult> executor,
                                      TaskExecutionAccumulator accumulator) {
-        var offset = 0;
+        // P1.4: paginacion keyset por orderBy (estable, sin saltos/duplicados) y portable por dialecto.
+        // Requiere orderBy (idealmente clave unica/ordenable, p.ej. PK) para no omitir filas con valor repetido.
+        if (tableInput.orderBy() == null || tableInput.orderBy().isBlank()) {
+            throw new IllegalArgumentException(
+                    "La lectura por lotes desde tabla requiere cursor.orderBy (paginacion keyset estable). Tabla: "
+                            + tableInput.tableName());
+        }
+        Object lastKey = null;
         var batchNumber = 0;
+        var processed = 0;
         while (true) {
-            var records = readTableBatch(tableInput, batchSize, offset);
+            var records = readTableBatch(tableInput, batchSize, lastKey);
             if (records.isEmpty()) {
                 if (batchNumber == 0) {
-                    var emptySlice = new BatchSlice(List.of(), 0, 0, 0);
                     accumulator.addRecords(0);
-                    accumulator.add(executor.apply(emptySlice));
+                    accumulator.add(executor.apply(new BatchSlice(List.of(), 0, 0, 0)));
                 }
                 return;
             }
-            var slice = new BatchSlice(records, batchNumber++, offset, offset + records.size());
+            var slice = new BatchSlice(records, batchNumber++, processed, processed + records.size());
             accumulator.addRecords(slice.records().size());
             accumulator.add(executor.apply(slice));
-            offset += records.size();
-            if (records.size() < batchSize) {
+            processed += records.size();
+            var nextKey = cursorValue(records, tableInput.orderBy());
+            if (records.size() < batchSize || nextKey == null) {
                 return;
             }
+            lastKey = nextKey;
         }
     }
 
-    private List<ReadRecord> readTableBatch(TableInput tableInput, int batchSize, int offset) {
+    private List<ReadRecord> readTableBatch(TableInput tableInput, int batchSize, Object lastKey) {
         var tableName = DbTaskSupport.sanitizeQualifiedIdentifier(tableInput.tableName());
-        var sql = new StringBuilder("select * from ").append(tableName);
+        var orderByColumn = DbTaskSupport.sanitizeQualifiedIdentifier(tableInput.orderBy());
         var filters = tableInput.filters();
-        if (!filters.isEmpty()) {
-            sql.append(" where ");
-            sql.append(String.join(" and ", filters.keySet().stream()
-                    .map(DbTaskSupport::sanitizeIdentifier)
-                    .map(column -> column + " = ?")
-                    .toList()));
-        }
-        if (tableInput.orderBy() != null && !tableInput.orderBy().isBlank()) {
-            sql.append(" order by ").append(DbTaskSupport.sanitizeQualifiedIdentifier(tableInput.orderBy()));
-        }
-        sql.append(" limit ? offset ?");
 
-        try (var connection = resolveDataSource(tableInput.connectionRef()).getConnection();
-             var statement = connection.prepareStatement(sql.toString())) {
-            var parameterIndex = 1;
-            for (var value : filters.values()) {
-                statement.setObject(parameterIndex++, value);
+        try (var connection = resolveDataSource(tableInput.connectionRef()).getConnection()) {
+            var dialect = paginationDialect(connection);
+            var conditions = new ArrayList<String>();
+            for (var column : filters.keySet()) {
+                conditions.add(DbTaskSupport.sanitizeIdentifier(column) + " = ?");
             }
-            statement.setInt(parameterIndex++, batchSize);
-            statement.setInt(parameterIndex, offset);
-            try (var resultSet = statement.executeQuery()) {
-                return readRecords(resultSet);
+            if (lastKey != null) {
+                conditions.add(orderByColumn + " > ?");
+            }
+            var sql = new StringBuilder("select * from ").append(tableName);
+            if (!conditions.isEmpty()) {
+                sql.append(" where ").append(String.join(" and ", conditions));
+            }
+            sql.append(" order by ").append(orderByColumn).append(" asc");
+            sql.append(limitClause(dialect));
+
+            try (var statement = connection.prepareStatement(sql.toString())) {
+                var parameterIndex = 1;
+                for (var value : filters.values()) {
+                    statement.setObject(parameterIndex++, value);
+                }
+                if (lastKey != null) {
+                    statement.setObject(parameterIndex++, lastKey);
+                }
+                statement.setInt(parameterIndex, batchSize);
+                try (var resultSet = statement.executeQuery()) {
+                    return readRecords(resultSet);
+                }
             }
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot read task input table " + tableName, error);
         }
+    }
+
+    /**
+     * Dialecto de paginacion por motor. SQL Server NO admite `FETCH FIRST ... ROWS ONLY` suelto:
+     * exige `OFFSET 0 ROWS FETCH NEXT ? ROWS ONLY` (con ORDER BY). Oracle 12c+ si admite
+     * `FETCH FIRST ... ROWS ONLY`. El resto (postgresql/mysql/mariadb/h2) usa `LIMIT`.
+     */
+    PaginationDialect paginationDialect(Connection connection) {
+        try {
+            var product = connection.getMetaData().getDatabaseProductName();
+            var normalized = product == null ? "" : product.toLowerCase();
+            if (normalized.contains("sql server") || normalized.contains("sqlserver")) {
+                return PaginationDialect.OFFSET_FETCH;
+            }
+            if (normalized.contains("oracle")) {
+                return PaginationDialect.FETCH_FIRST;
+            }
+            return PaginationDialect.LIMIT;
+        } catch (SQLException error) {
+            return PaginationDialect.LIMIT; // default seguro (mysql/postgresql/h2/mariadb)
+        }
+    }
+
+    /** Sufijo de limite parametrizado (`?` = tamano de lote) segun dialecto. */
+    String limitClause(PaginationDialect dialect) {
+        return switch (dialect) {
+            case OFFSET_FETCH -> " offset 0 rows fetch next ? rows only";
+            case FETCH_FIRST -> " fetch first ? rows only";
+            case LIMIT -> " limit ?";
+        };
+    }
+
+    enum PaginationDialect {
+        LIMIT,
+        FETCH_FIRST,
+        OFFSET_FETCH
+    }
+
+    private Object cursorValue(List<ReadRecord> records, String orderBy) {
+        var last = records.get(records.size() - 1);
+        var column = orderBy.contains(".") ? orderBy.substring(orderBy.lastIndexOf('.') + 1) : orderBy;
+        var values = last.values();
+        var direct = values.get(column);
+        if (direct != null) {
+            return direct;
+        }
+        for (var entry : values.entrySet()) {
+            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(column)) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     private List<ReadRecord> readRecords(ResultSet resultSet) throws SQLException {

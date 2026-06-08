@@ -28,7 +28,11 @@ public class ProcessExecutionResource {
 
     @POST
     @Path("/{processDefinitionId}")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    // payments-operator (spec 008 RF-019): permitido ejecutar procesos pero NO editar
+    // catalogos. La restriccion de edicion se aplica por @RolesAllowed faltando en los
+    // resources de catalogo (ProcessDefinition, Source, Reader, Connection); aqui basta
+    // sumar el rol a la lista de roles habilitados para POST de ejecucion.
+    @RolesAllowed({"platform-admin", "integration-admin", "operator", "payments-operator"})
     public ProcessExecutionStartResponse execute(@PathParam("processDefinitionId") Long processDefinitionId, ProcessExecutionRequest request) {
         Map<String, String> executionVariables = request == null || request.executionVariables() == null
                 ? Map.of()

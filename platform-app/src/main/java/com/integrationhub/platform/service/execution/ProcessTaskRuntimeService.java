@@ -146,9 +146,11 @@ public class ProcessTaskRuntimeService {
         var input = configuration.get("input") instanceof Map<?, ?> rawInput
                 ? (Map<String, Object>) rawInput
                 : Map.<String, Object>of();
+        // Lote funcional de lectura/proceso: input.batchSize > configuration.batchSize > default.
+        // NO cae a jdbcBatchSize (eso es el lote de INSERT de DB_WRITE, concepto distinto; P2.1).
         return intValue(
                 input.get("batchSize"),
-                intValue(configuration.get("batchSize"), intValue(configuration.get("jdbcBatchSize"), 1000))
+                intValue(configuration.get("batchSize"), 1000)
         );
     }
 

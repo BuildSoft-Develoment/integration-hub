@@ -280,6 +280,36 @@ class DbWriteTaskProviderTest {
         assertEquals("SP_OK", singleValue("select resultado_prev from public.integration_target where id = 30"));
         assertEquals("C910", singleValue("select empresa from public.integration_target where id = 30"));
     }
+    @Test
+    void insertsRecordsUsingQualifiedTaskOutputKey() throws Exception {
+        // P1.b: una columna enlazada a un output AGREGADO de una tarea previa se persiste como
+        // clave CALIFICADA `taskRef.output.campo` y el backend la resuelve (sin colision con
+        // claves globales) desde el registro enriquecido (copyTaskOutputs). El front emite esa
+        // clave para summary/out/table.
+        var context = taskContext();
+        context.attributes().put("taskOutputs", Map.of(
+                "task-1.summary.estado", "PREV_OK",
+                "estado", "GLOBAL_COLISIONADO" // clave plana colisionada: NO debe ganar
+        ));
+        context.attributes().put("readResult", new ReadResult(List.of(
+                new ReadRecord(Map.of("id", 40L, "name", "Calificado", "amount", 5))
+        ), 1));
+
+        var result = provider.execute(context, Map.of(
+                "mode", "insert",
+                "targetTable", "public.integration_target",
+                "columnMappings", Map.of(
+                        "id", "id",
+                        "nombre", "name",
+                        "total", "amount",
+                        "estado", "task-1.summary.estado"
+                )
+        ));
+
+        assertTrue(result.success());
+        assertEquals("PREV_OK", singleValue("select estado from public.integration_target where id = 40"));
+    }
+
     private static TaskContext taskContext() {
         return new TaskContext(100L, 200L);
     }

@@ -19,7 +19,7 @@ jobs:
         run: npm run check:all
 
   backend:
-    name: Backend Quarkus (build + test)
+    name: Backend Quarkus (build + test + IT)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +27,34 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
+      # `verify` corre tests unitarios (surefire) y de integracion *IT (failsafe).
+      # Los *IT usan Testcontainers (Postgres) -> requieren Docker (disponible en ubuntu-latest).
       - name: Maven verify
         working-directory: platform-app
         run: ./mvnw -B verify
+
+  frontend:
+    name: Frontend Angular (lint + test + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install deps
+        working-directory: frontend
+        run: npm ci
+      # `nx test web` descubre y corre los specs de apps/web + libs/** (76 tests).
+      # El builder @angular/build:unit-test globa desde projectSourceRoot, por eso el
+      # target usa sourceRoot "." + index.html explicito en build (ver apps/web/project.json).
+      - name: Lint
+        working-directory: frontend
+        run: npx nx lint web
+      - name: Unit tests
+        working-directory: frontend
+        run: npx nx test web
+      - name: Build
+        working-directory: frontend
+        run: npx nx build web

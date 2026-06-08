@@ -50,14 +50,23 @@ export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
     const { schema, table } = this.splitQualifiedTable(String(config.targetTable || ''));
     const keyColumnValues = Array.isArray(config.keyColumns) ? config.keyColumns.map((value: unknown) => String(value)) : [];
     const keyColumns = new Set<string>(keyColumnValues);
-    const mappedRows = Object.entries(config.columnMappings || {}).map(([targetColumn, sourceKey]) => ({
-      targetColumn,
-      sourceKind: 'field' as const,
-      sourceKey: String(sourceKey),
-      sourceLabel: String(sourceKey),
-      expression: '',
-      key: keyColumns.has(targetColumn),
-    }));
+    const columnSources: Record<string, { kind?: string; key?: string }> = (config.columnSources && typeof config.columnSources === 'object' && !Array.isArray(config.columnSources))
+      ? config.columnSources
+      : {};
+    const mappedRows = Object.entries(config.columnMappings || {}).map(([targetColumn, resolvedKey]) => {
+      // Origen rico (P1.b): si hay columnSources se restaura kind/clave original; si no, es legacy -> field.
+      const origin = columnSources[targetColumn];
+      const kind = (origin?.kind ? String(origin.kind) : 'field') as DbWriteMappingDraft['sourceKind'];
+      const key = origin?.key != null ? String(origin.key) : String(resolvedKey);
+      return {
+        targetColumn,
+        sourceKind: kind,
+        sourceKey: key,
+        sourceLabel: key,
+        expression: '',
+        key: keyColumns.has(targetColumn),
+      };
+    });
     const functionRows = Object.entries(config.columnFunctions || {}).map(([targetColumn, expression]) => ({
       targetColumn,
       sourceKind: 'expression' as const,
@@ -100,12 +109,25 @@ export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
       .filter((row) => row.key && row.sourceKind !== 'expression')
       .map((row) => row.targetColumn)
       .filter(Boolean);
-    const columnMappings = draft.mappings.reduce<Record<string, string>>((accumulator, row) => {
+    // P1.b: para cada columna mapeada persistimos (a) la CLAVE DE RESOLUCION en columnMappings —
+    // calificada `taskRef.output.campo` para outputs agregados (summary/out/table) para que el
+    // backend la resuelva sin colision desde el registro enriquecido (metadata + taskOutputs), y
+    // (b) el ORIGEN en columnSources (kind/clave/taskRef/output) para el round-trip de la UI.
+    const sourceTaskRef = (draft.input?.sourceTaskRef || '').trim();
+    const isAggregate = (kind: DbWriteMappingDraft['sourceKind']): boolean =>
+      kind === 'summary' || kind === 'out' || kind === 'table';
+    const columnMappings: Record<string, string> = {};
+    const columnSources: Record<string, { kind: string; key: string; taskRef?: string; output?: string }> = {};
+    draft.mappings.forEach((row) => {
       if (row.sourceKind && row.sourceKind !== 'expression' && row.sourceKey) {
-        accumulator[row.targetColumn] = row.sourceKey;
+        const kind = row.sourceKind;
+        const qualified = isAggregate(kind) && sourceTaskRef;
+        columnMappings[row.targetColumn] = qualified ? `${sourceTaskRef}.${kind}.${row.sourceKey}` : row.sourceKey;
+        columnSources[row.targetColumn] = qualified
+          ? { kind, key: row.sourceKey, taskRef: sourceTaskRef, output: kind }
+          : { kind, key: row.sourceKey };
       }
-      return accumulator;
-    }, {});
+    });
     const columnFunctions = draft.mappings.reduce<Record<string, string>>((accumulator, row) => {
       if (row.expression?.trim()) {
         accumulator[row.targetColumn] = row.expression.trim();
@@ -120,6 +142,7 @@ export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
     if (draft.connectionRef) payload.connectionRef = draft.connectionRef;
     if (keyColumns.length) payload.keyColumns = keyColumns;
     if (Object.keys(columnMappings).length) payload.columnMappings = columnMappings;
+    if (Object.keys(columnSources).length) payload.columnSources = columnSources;
     if (Object.keys(columnFunctions).length) payload.columnFunctions = columnFunctions;
     return {
       configurationJson: this.toPrettyJson(payload),
