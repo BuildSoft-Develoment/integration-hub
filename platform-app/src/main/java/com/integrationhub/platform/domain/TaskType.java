@@ -45,5 +45,6 @@ public enum TaskType {
     MT101_PAY,
     MT101_ROUTE,
     MT101_RECONCILE,
-    MT101_STATUS
+    MT101_STATUS,
+    MT101_PARSE
 }
