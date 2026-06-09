@@ -1,52 +1,41 @@
 package com.integrationhub.platform.domain;
 
 /**
- * Catalogo de tipos de tarea reconocidos por el motor.
+ * Constantes de tipos de tarea para los <b>tipos base del motor</b> (spec 003).
  *
- * <p><b>Tipos base del motor</b> (spec 003-diseno-y-ejecucion-procesos):
- * {@link #FILE_READ}, {@link #DB_WRITE}, {@link #DB_EXECUTE_SP}, {@link #DB_EXECUTE_FN},
- * {@link #REST_CALL}, {@link #NOTIFICATION}.</p>
+ * <p><b>Cierre de M-1a</b> (T-015 spec 003, ADR-009): este archivo dejo de ser
+ * un enum cerrado y ahora es una clase de constantes {@code String}.</p>
  *
- * <p><b>Tipos de verticales</b> (registrados aqui como puente temporal hasta el cierre
- * de M-1a {@code TaskTypeRegistry}; ver T-015 de spec 003 y ADR-009):</p>
- * <ul>
- *   <li>{@code MT101_*}: vertical mensajeria de pagos sub-catalogo {@code swift/},
- *       spec 008-mensajeria-pagos.</li>
- * </ul>
+ * <p>Las verticales (spec 008 mensajeria de pagos, spec 009 ISO 20022,
+ * futuras: HL7, ACH, AML, etc.) registran sus task types via
+ * {@code TaskProviderRegistry} sin modificar este archivo. El motor consulta
+ * {@link com.integrationhub.platform.service.execution.TaskTypeRegistry} para
+ * obtener el catalogo completo de tipos registrados (motor + verticales).</p>
  *
- * <p><b>Deuda tecnica documentada</b>: este enum es cerrado por restriccion JPA
- * {@code @Enumerated(EnumType.STRING)} en {@code ProcessTaskDefinition.taskType}.
- * El cierre limpio de OCP es la tarea T-015 de spec 003 (M-1a): convertir este
- * enum en un {@code TaskTypeRegistry} con discovery via SPI, manteniendo este
- * archivo solo con los tipos del motor.</p>
- *
- * <p>Mientras tanto, agregar un valor MT101_* aqui no implica que el motor (003)
- * conozca semantica SWIFT: la logica de dominio vive en los
- * {@code TaskProvider} del modulo 008. Este enum solo expone un token de
- * registracion.</p>
+ * <p>El motor ramifica por estos tipos para fast-path (FILE_READ -&gt; sink) y
+ * para la serializacion de outputs especificos (DB_*); las demas tipos van por
+ * el camino generico de {@code TaskProvider}.</p>
  */
-public enum TaskType {
+public final class TaskType {
 
     // --- Tipos base del motor (spec 003) ---
-    FILE_READ,
-    DB_WRITE,
-    DB_EXECUTE_SP,
-    DB_EXECUTE_FN,
-    REST_CALL,
-    NOTIFICATION,
+    public static final String FILE_READ = "FILE_READ";
+    public static final String DB_WRITE = "DB_WRITE";
+    public static final String DB_EXECUTE_SP = "DB_EXECUTE_SP";
+    public static final String DB_EXECUTE_FN = "DB_EXECUTE_FN";
+    public static final String REST_CALL = "REST_CALL";
+    public static final String NOTIFICATION = "NOTIFICATION";
 
-    // --- Vertical mensajeria de pagos sub-catalogo swift/ (spec 008) ---
-    // Puente temporal hasta M-1a (T-015 spec 003).
-    // Sprint 1: BUILD, VALIDATE, ARCHIVE, PAY.
-    // Sprint 2: ROUTE (T-017), RECONCILE (T-014). Mas en sprint 2.2/2.3.
-    MT101_BUILD,
-    MT101_VALIDATE,
-    MT101_ARCHIVE,
-    MT101_PAY,
-    MT101_ROUTE,
-    MT101_RECONCILE,
-    MT101_STATUS,
-    MT101_PARSE,
-    MT101_SPLIT,
-    MT101_REPAIR
+    /**
+     * Conjunto inmutable de los tipos base. Se usa por {@code TaskTypeRegistry}
+     * para validar que toda tarea reconozca al menos los tipos del motor, y
+     * por la UI para distinguirlos visualmente de los aportados por verticales.
+     */
+    public static final java.util.Set<String> BUILTIN = java.util.Set.of(
+            FILE_READ, DB_WRITE, DB_EXECUTE_SP, DB_EXECUTE_FN, REST_CALL, NOTIFICATION
+    );
+
+    private TaskType() {
+        // namespace de constantes; no instanciable.
+    }
 }

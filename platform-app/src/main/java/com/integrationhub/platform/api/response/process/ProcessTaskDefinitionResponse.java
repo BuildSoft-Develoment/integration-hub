@@ -1,11 +1,15 @@
 package com.integrationhub.platform.api.response.process;
 
-import com.integrationhub.platform.domain.TaskType;
-
+/**
+ * Response DTO de una task definition.
+ *
+ * <p>{@code taskType} es {@code String} desde el cierre de M-1a (T-015 spec 003).
+ * Ver ADR-009.</p>
+ */
 public record ProcessTaskDefinitionResponse(
         Long id,
         Integer taskOrder,
-        TaskType taskType,
+        String taskType,
         boolean active,
         String configurationJson,
         DefinitionRefResponse sourceDefinition,

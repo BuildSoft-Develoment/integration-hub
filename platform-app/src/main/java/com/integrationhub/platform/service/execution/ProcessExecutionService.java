@@ -116,10 +116,10 @@ public class ProcessExecutionService {
                 var taskSpan = tracer.spanBuilder("process.task.execute")
                         .setAttribute("task.definition.id", taskPlan.taskDefinitionId())
                         .setAttribute("task.order", taskPlan.taskOrder())
-                        .setAttribute("task.type", taskPlan.taskType().name())
+                        .setAttribute("task.type", taskPlan.taskType())
                         .startSpan();
 
-                var taskExecutionId = processExecutionStateService.startTask(processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType().name(), taskPlan.taskOrder());
+                var taskExecutionId = processExecutionStateService.startTask(processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(), taskPlan.taskOrder());
                 try {
                     var taskConfiguration = taskOutputRegistry.configuration(taskPlan.configurationJson());
                     var runResult = processTaskRuntimeService.runTask(processExecutionId, taskPlan, sourcePayload, readResult, executionVariables, taskOutputs, selectedFiles, triggerSource);
@@ -138,7 +138,7 @@ public class ProcessExecutionService {
                         if (runResult.outputs() != null && !runResult.outputs().isEmpty()) {
                             taskOutputRegistry.registerTaskResult(taskOutputs, taskPlan, taskConfiguration, runResult.outputs());
                         }
-                        taskPayload = Map.of("taskType", taskPlan.taskType().name(), "outputs", runResult.outputs());
+                        taskPayload = Map.of("taskType", taskPlan.taskType(), "outputs", runResult.outputs());
                     }
 
                     processExecutionStateService.completeTask(processExecutionId, taskExecutionId, taskDetails, taskPayload);

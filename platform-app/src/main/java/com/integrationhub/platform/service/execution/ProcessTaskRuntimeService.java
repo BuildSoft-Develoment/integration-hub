@@ -53,11 +53,11 @@ public class ProcessTaskRuntimeService {
         var executionMode = taskOutputRegistry.executionMode(configuration);
         taskOutputRegistry.registerMetadata(taskOutputs, processExecutionId, taskPlan, configuration, triggerSource);
 
-        if (taskPlan.taskType() == TaskType.FILE_READ) {
+        if (TaskType.FILE_READ.equals(taskPlan.taskType())) {
             return runFileReadTask(taskPlan, executionVariables, selectedFileReferences);
         }
 
-        var provider = taskProviderRegistry.resolve(taskPlan.taskType().name());
+        var provider = taskProviderRegistry.resolve(taskPlan.taskType());
         if (requiresRecordInput(executionMode) && !(configuration.get("input") instanceof Map<?, ?>)) {
             throw new IllegalArgumentException("Task " + taskOutputRegistry.taskRef(taskPlan, configuration)
                     + " requires input for executionMode " + executionMode);

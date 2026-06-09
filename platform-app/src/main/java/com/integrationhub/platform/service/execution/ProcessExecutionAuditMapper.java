@@ -69,7 +69,7 @@ public class ProcessExecutionAuditMapper {
                 .toList();
 
         var payload = new java.util.LinkedHashMap<String, Object>();
-        payload.put("taskType", taskPlan.taskType().name());
+        payload.put("taskType", taskPlan.taskType());
         payload.put("triggerSource", triggerSource);
         payload.put("executionVariables", executionVariables);
         payload.put("sourceDefinitionId", taskPlan.sourceDefinitionId());
@@ -92,7 +92,7 @@ public class ProcessExecutionAuditMapper {
     }
 
     public String buildTaskDetails(ProcessExecutionStateService.TaskPlan plan, String customDetails) {
-        return customDetails != null ? customDetails : "Task " + plan.taskType().name() + " (" + plan.taskDefinitionId() + ") completed";
+        return customDetails != null ? customDetails : "Task " + plan.taskType() + " (" + plan.taskDefinitionId() + ") completed";
     }
 
     public Map<String, Object> buildBatchSinkAuditPayload(ProcessExecutionStateService.TaskPlan taskPlan,
@@ -101,7 +101,7 @@ public class ProcessExecutionAuditMapper {
                                                           List<StreamingPipelineService.BatchSummary> fileSummaries) {
         var taskConfiguration = jsonConfigurationMapper.toMap(taskPlan.configurationJson());
         var payload = new java.util.LinkedHashMap<String, Object>();
-        payload.put("taskType", taskPlan.taskType().name());
+        payload.put("taskType", taskPlan.taskType());
         payload.put("processedCount", processedCount);
         payload.put("writtenCount", writtenCount);
         payload.put("mode", String.valueOf(taskConfiguration.getOrDefault("mode", "")));
@@ -173,7 +173,7 @@ public class ProcessExecutionAuditMapper {
                                                         Map<String, String> executionVariables,
                                                         String triggerSource) {
         var payload = new java.util.LinkedHashMap<String, Object>();
-        payload.put("taskType", taskPlan.taskType().name());
+        payload.put("taskType", taskPlan.taskType());
         payload.put("triggerSource", triggerSource);
         payload.put("executionVariables", executionVariables);
         if (taskPlan.sourceDefinitionId() != null) {

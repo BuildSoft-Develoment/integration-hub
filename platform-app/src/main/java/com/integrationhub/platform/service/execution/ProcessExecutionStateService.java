@@ -240,7 +240,7 @@ public class ProcessExecutionStateService {
     public record TaskPlan(
             Long taskDefinitionId,
             Integer taskOrder,
-            com.integrationhub.platform.domain.TaskType taskType,
+            String taskType,
             String configurationJson,
             Long sourceDefinitionId,
             String sourceName,

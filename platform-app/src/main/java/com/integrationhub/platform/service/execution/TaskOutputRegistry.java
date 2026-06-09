@@ -58,7 +58,7 @@ public class TaskOutputRegistry {
         metadata.put("_processExecutionId", processExecutionId);
         metadata.put("_taskDefinitionId", taskPlan.taskDefinitionId());
         metadata.put("_taskOrder", taskPlan.taskOrder());
-        metadata.put("_taskType", taskPlan.taskType().name());
+        metadata.put("_taskType", taskPlan.taskType());
         metadata.put("_taskRef", taskRef(taskPlan, configuration));
         metadata.put("_executionMode", executionMode(configuration));
         metadata.put("_triggerSource", triggerSource == null || triggerSource.isBlank() ? "MANUAL" : triggerSource);
@@ -126,10 +126,10 @@ public class TaskOutputRegistry {
         // que las UIs ya emiten para outputs agregados (SP/FN P1.a, REST/Notification P1.c).
         taskOutputs.putAll(outputs);
         registerTypedOutput(taskOutputs, taskPlan, configuration, "summary", outputs);
-        if (taskPlan.taskType() == TaskType.DB_EXECUTE_SP || taskPlan.taskType() == TaskType.DB_EXECUTE_FN) {
+        if (TaskType.DB_EXECUTE_SP.equals(taskPlan.taskType()) || TaskType.DB_EXECUTE_FN.equals(taskPlan.taskType())) {
             registerTypedOutput(taskOutputs, taskPlan, configuration, "out", outputs);
         }
-        if (taskPlan.taskType() == TaskType.DB_WRITE) {
+        if (TaskType.DB_WRITE.equals(taskPlan.taskType())) {
             var targetTable = outputs.get("targetTable");
             if (targetTable != null && !String.valueOf(targetTable).isBlank()) {
                 registerTypedOutput(taskOutputs, taskPlan, configuration, "table", String.valueOf(targetTable));

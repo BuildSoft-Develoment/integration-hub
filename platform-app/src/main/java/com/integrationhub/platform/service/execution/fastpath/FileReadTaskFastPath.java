@@ -44,11 +44,11 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
     @Override
     public boolean supports(ProcessExecutionStateService.TaskPlan current, ProcessExecutionStateService.TaskPlan next) {
         if (current == null || next == null) return false;
-        if (current.taskType() != TaskType.FILE_READ) return false;
+        if (!TaskType.FILE_READ.equals(current.taskType())) return false;
         if (current.readerType() == null || !SUPPORTED_READERS.contains(current.readerType().toUpperCase())) return false;
         if (!declaresCurrentReadRecordsInput(current, next)) return false;
 
-        var provider = taskProviderRegistry.resolve(next.taskType().name());
+        var provider = taskProviderRegistry.resolve(next.taskType());
         return provider instanceof BatchTaskProvider;
     }
 
@@ -84,8 +84,8 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
                                     List<String> selectedFiles,
                                     String triggerSource,
                                     Map<String, Object> taskOutputs) {
-        var readTaskExecutionId = stateService.startTask(processExecutionId, current.taskDefinitionId(), current.taskType().name(), current.taskOrder());
-        var sinkTaskExecutionId = stateService.startTask(processExecutionId, next.taskDefinitionId(), next.taskType().name(), next.taskOrder());
+        var readTaskExecutionId = stateService.startTask(processExecutionId, current.taskDefinitionId(), current.taskType(), current.taskOrder());
+        var sinkTaskExecutionId = stateService.startTask(processExecutionId, next.taskDefinitionId(), next.taskType(), next.taskOrder());
 
         try {
             var pipelineResult = pipelineService.run(processExecutionId, current, next, executionVariables, selectedFiles);
@@ -143,8 +143,8 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
 
         if (error instanceof StreamingPipelineService.StreamingPipelineException pipelineFailure) {
             var failureDetails = auditMapper.buildPipelineFailureDetails(current.sourceName(), pipelineFailure);
-            var failurePayloadRead = auditMapper.buildPipelineFailurePayload(current, pipelineFailure, executionVariables, triggerSource, current.taskType().name());
-            var failurePayloadSink = auditMapper.buildPipelineFailurePayload(current, pipelineFailure, executionVariables, triggerSource, next.taskType().name());
+            var failurePayloadRead = auditMapper.buildPipelineFailurePayload(current, pipelineFailure, executionVariables, triggerSource, current.taskType());
+            var failurePayloadSink = auditMapper.buildPipelineFailurePayload(current, pipelineFailure, executionVariables, triggerSource, next.taskType());
 
             processedSourceFileService.recordPipelineFiles(
                     processExecutionId,

@@ -107,7 +107,7 @@ public class ProcessCatalogService {
             task.active = true;
             task.configurationJson = taskRequest.configurationJson();
 
-            if (taskRequest.taskType() == TaskType.FILE_READ
+            if (TaskType.FILE_READ.equals(taskRequest.taskType())
                     && (taskRequest.sourceDefinitionId() == null || taskRequest.readerDefinitionId() == null)) {
                 throw new IllegalArgumentException("FILE_READ task requires sourceDefinitionId and readerDefinitionId");
             }
