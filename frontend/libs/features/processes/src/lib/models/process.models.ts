@@ -59,6 +59,18 @@ export interface ProcessFormModel {
   tasks: ProcessTaskFormModel[];
 }
 
+/**
+ * Lista hardcoded de tipos del motor — DEPRECADA tras M-1a (T-015 spec 003).
+ *
+ * La fuente unica ahora es {@code ProcessTaskManagerService.availableProviders()}
+ * que descubre dinamicamente via DI tanto los tipos del motor como los
+ * aportados por verticales (mensajeria de pagos 008, futuras: ISO 20022,
+ * HL7, etc.). El flow palette y los formularios consumen el manager.
+ *
+ * Esta constante se conserva temporalmente para tests legados de
+ * createTaskForm/defaultTaskConfig que no inyectan el manager. Verticales
+ * NO deben agregarse aqui.
+ */
 export const processTaskTypes: readonly ProcessTaskType[] = [
   'FILE_READ',
   'DB_WRITE',
@@ -96,7 +108,11 @@ export function defaultTaskConfig(taskType: ProcessTaskType, taskRef = '', input
   }
 }
 
-export function createTaskForm(taskType: ProcessTaskType = 'FILE_READ', taskOrder = 1): ProcessTaskFormModel {
+export function createTaskForm(
+  taskType: ProcessTaskType = 'FILE_READ',
+  taskOrder = 1,
+  configurationJson?: string,
+): ProcessTaskFormModel {
   const clientId = `task-${nextTaskClientId++}`;
   return {
     clientId,
@@ -106,7 +122,10 @@ export function createTaskForm(taskType: ProcessTaskType = 'FILE_READ', taskOrde
     active: true,
     sourceDefinitionId: null,
     readerDefinitionId: null,
-    configurationJson: defaultTaskConfig(taskType, clientId),
+    // Si el caller (ProcessEditorStore) pasa el config derivado del provider
+    // registrado (M-1a), lo usamos. Si no, caemos al switch para los 6 motor
+    // types o un placeholder {executionMode: 'batch'} para los desconocidos.
+    configurationJson: configurationJson ?? defaultTaskConfig(taskType, clientId),
   };
 }
 

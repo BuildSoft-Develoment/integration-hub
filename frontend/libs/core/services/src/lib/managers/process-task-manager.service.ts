@@ -35,6 +35,31 @@ export class ProcessTaskManagerService {
     return this.resolve(type)?.toTaskPatch(draft) ?? {};
   }
 
+  /**
+   * Devuelve el {@code configurationJson} default para un task type recien
+   * creado, consultando el provider registrado (sin importar si es del motor o
+   * de una vertical). Si no hay provider, retorna {@code undefined} y el caller
+   * cae al placeholder hardcoded de {@code defaultTaskConfig}.
+   *
+   * <p>Cierra el gap M-1a a nivel UX: ahora cuando el usuario agrega un
+   * {@code MT101_BUILD} desde el palette, el config inicial respeta los
+   * defaults del {@code Mt101BuildTaskProvider} (format=JSON, envelope
+   * vacio, sequenceA con sendersReferenceTemplate, etc.).</p>
+   */
+  defaultConfigurationJson(type: ProcessTaskType, taskRef: string): string | undefined {
+    const provider = this.resolve(type);
+    if (!provider) {
+      return undefined;
+    }
+    const draft = provider.createDraft() as Record<string, unknown>;
+    // Sobre-escribe el taskRef del draft con el clientId real de la tarea.
+    if (draft && typeof draft === 'object') {
+      (draft as { taskRef?: string }).taskRef = taskRef;
+    }
+    const patch = provider.toTaskPatch(draft);
+    return typeof patch.configurationJson === 'string' ? patch.configurationJson : undefined;
+  }
+
   summarize(task: ProcessTaskFormModel, context: ProcessTaskSummaryContext): string {
     return this.resolve(task.taskType)?.summarize(task, context, this.i18n) ?? this.label(task.taskType);
   }

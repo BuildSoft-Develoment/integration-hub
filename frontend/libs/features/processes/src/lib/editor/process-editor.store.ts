@@ -1,6 +1,6 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 
-import { AuthAccessService } from '@integration-hub/core/services';
+import { AuthAccessService, ProcessTaskManagerService } from '@integration-hub/core/services';
 
 import { ProcessFlowApiService } from '../api/process-flow-api.service';
 import { ProcessFlowNodePosition } from '../models/process-flow.models';
@@ -25,6 +25,11 @@ export class ProcessEditorStore {
   private readonly formFactory = inject(ProcessFormFactoryService);
   private readonly flowApi = inject(ProcessFlowApiService);
   private readonly flowSync = inject(ProcessFlowSyncService);
+  // M-1a: para que createTaskForm respete los defaults del provider registrado
+  // (motor o vertical), pasamos el config derivado via el manager.
+  // {@code optional: true} para que tests con TestBed sin providers no quiebren;
+  // si no esta disponible, createTaskForm usa el switch hardcoded de fallback.
+  private readonly taskManager = inject(ProcessTaskManagerService, { optional: true });
 
   readonly saving = signal(false);
   readonly executing = signal(false);
@@ -118,9 +123,18 @@ export class ProcessEditorStore {
     position?: ProcessFlowNodePosition
   ): void {
     this.form.update((current) => {
+      // M-1a: el config inicial sale del provider registrado para este
+      // taskType (motor o vertical). Si no hay provider, createTaskForm cae
+      // al switch hardcoded de los 6 motor types o un placeholder.
+      const nextOrder = current.tasks.length + 1;
+      const provisionalRef = `task-${nextOrder}`;
+      const configFromProvider = this.taskManager?.defaultConfigurationJson(taskType, provisionalRef);
       const tasks = normalizeTaskOrders([
         ...current.tasks,
-        this.withSuggestedInput(createTaskForm(taskType, current.tasks.length + 1), current.tasks),
+        this.withSuggestedInput(
+          createTaskForm(taskType, nextOrder, configFromProvider),
+          current.tasks,
+        ),
       ]);
       const nextTask = tasks[tasks.length - 1];
       const flowLayout = this.flowApi.addTaskNode(
