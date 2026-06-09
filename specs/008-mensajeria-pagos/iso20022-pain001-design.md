@@ -1,10 +1,18 @@
-# Diseño placeholder — ISO 20022 (pain.001)
+# Diseño — ISO 20022 (pain.001)
 
-> **Estado**: placeholder técnico (no implementado). Documenta cómo se integrará
-> ISO 20022 `pain.001` a la vertical 008 sin romper compatibilidad con el
-> sub-catálogo `swift/` ya entregado.
+> **Estado**: **bootstrap activo** (formatter implementado + tests). Documenta
+> cómo se integra ISO 20022 `pain.001` a la vertical 008 sin romper
+> compatibilidad con el sub-catálogo `swift/`.
 >
 > Cubre la tarea **T-027** de [spec-tareas.md](spec-tareas.md).
+>
+> **Implementado en `Pain001XmlFormatter`** (commit del slice 4.3):
+> - `provider/task/payments/iso20022/format/Pain001XmlFormatter.java`
+> - 10 tests cubriendo grupo header, payment info, debtor/creditor, ChrgBr,
+>   escapado XML, namespace.
+>
+> Para usarlo: configurar `MT101_BUILD` con `configuration.format = "PAIN001_XML"`.
+> No requiere task type nuevo (confirma la estrategia de un solo modelo).
 
 ## Contexto
 

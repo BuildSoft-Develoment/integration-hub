@@ -101,12 +101,35 @@ public class Mt101ParseTaskProvider implements BatchTaskProvider {
             }
         }
 
+        // Cierre M-3 (T-018 spec 003, ADR-009): publicar outputs multi-nominados
+        // por defecto. El motor (TaskOutputRegistry.registerTypedOutput) ya
+        // soporta esto desde slice 4.1; el bloqueo "publishMultiOutput=false"
+        // era solo del provider como puente.
+        //
+        // Outputs publicados:
+        //   <ref>.records      : List<Mt101Message> tipados (compat con MT101_PAY/ARCHIVE/etc).
+        //   <ref>.envelopes    : List<Envelope> de cada mensaje (M-3).
+        //   <ref>.headers      : List<SequenceA> de cada mensaje (M-3).
+        //   <ref>.transactions : List<Transaction> aplanado de todos los mensajes (M-3).
+        //   <ref>.summary      : agregados {messageCount, transactionCount, totalsByCurrency}.
+        var envelopes = new ArrayList<Mt101Message.Envelope>(messages.size());
+        var headers = new ArrayList<Mt101Message.SequenceA>(messages.size());
+        var transactions = new ArrayList<Mt101Message.Transaction>();
+        for (var message : messages) {
+            if (message.envelope() != null) envelopes.add(message.envelope());
+            if (message.sequenceA() != null) headers.add(message.sequenceA());
+            transactions.addAll(message.transactions());
+        }
+
         var outputs = new LinkedHashMap<String, Object>();
         outputs.put("messageCount", messages.size());
         outputs.put("transactionCount", totalTransactions);
         outputs.put("totalsByCurrency", totalsByCurrency);
         outputs.put("errorCount", errors.size());
         outputs.put("records", messages);
+        outputs.put("envelopes", envelopes);
+        outputs.put("headers", headers);
+        outputs.put("transactions", transactions);
         outputs.put("errors", errors);
 
         var summary = "MT101_PARSE parsed=" + messages.size()
