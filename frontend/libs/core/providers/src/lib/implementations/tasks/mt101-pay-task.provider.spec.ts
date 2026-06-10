@@ -169,4 +169,18 @@ describe('Mt101PayTaskProvider', () => {
     expect(draft.confirmationMode).toBe('sync');
     expect(draft.retryPolicy.backoffStrategy).toBe('exponential');
   });
+
+  it('normalizes MQ to REST until backend transport exists', () => {
+    const provider = new Mt101PayTaskProvider();
+    const draft = provider.hydrateDraft({
+      ...baseTask,
+      configurationJson: JSON.stringify({
+        taskRef: 'p',
+        executionMode: 'per-record',
+        transport: 'MQ',
+      }),
+    });
+
+    expect(draft.transport).toBe('REST');
+  });
 });

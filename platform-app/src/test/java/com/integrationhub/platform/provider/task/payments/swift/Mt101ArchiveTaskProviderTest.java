@@ -157,6 +157,61 @@ class Mt101ArchiveTaskProviderTest {
     }
 
     @Test
+    void archivesSequenceBOrderingCustomerAndExtendedTransactionFields() throws Exception {
+        var tx = new Mt101Message.Transaction(
+                1, "TX-EXT", "FX-1", "INTC",
+                new Mt101Message.Amount("USD", new BigDecimal("10.25")),
+                new Mt101Message.Party("H", "DEBIT-001", null, List.of("SUBSIDIARIA UNO")),
+                new Mt101Message.Party("A", null, "SERVUS33XXX", List.of()),
+                new Mt101Message.Party("A", null, "INTERUS33XXX", List.of()),
+                new Mt101Message.Party("A", null, "ACCTUS33XXX", List.of()),
+                new Mt101Message.Party("", "BENE-001", null, List.of("BENE UNO")),
+                "invoice 1", "REG-1",
+                new Mt101Message.Amount("EUR", new BigDecimal("9.90")),
+                "SHA", "CHARGE-001", new BigDecimal("1.12345678"));
+        var message = new Mt101Message(
+                new Mt101Message.Envelope("SGOBFRPPAXXX", "BCPLPEPLXXXX", null, "N"),
+                new Mt101Message.SequenceA("PROC-EXT", "CREF", 1, 1, LocalDate.of(2026, 6, 9),
+                        new Mt101Message.Party("L", null, null, List.of("MATRIZ")),
+                        null, null, null),
+                List.of(tx),
+                new Mt101Message.ControlTotals(1, Map.of("USD", new BigDecimal("10.25"))),
+                "{\"sendersReference\":\"PROC-EXT\"}",
+                "JSON");
+
+        provider.execute(contextWith(List.of(message), 7L), Map.of(
+                "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")
+        ));
+
+        assertEquals("L", singleString("select instructing_party_kind from mt101_archive").trim());
+        assertEquals("MATRIZ", singleString("select instructing_party_value from mt101_archive"));
+        assertEquals("H", singleString("select ordering_customer_kind from mt101_transaction").trim());
+        assertEquals("DEBIT-001", singleString("select ordering_customer_account from mt101_transaction"));
+        assertEquals("SERVUS33XXX", singleString("select account_servicing_value from mt101_transaction"));
+        assertEquals("INTERUS33XXX", singleString("select intermediary from mt101_transaction"));
+        assertEquals("ACCTUS33XXX", singleString("select account_with_institution from mt101_transaction"));
+        assertEquals("REG-1", singleString("select regulatory_reporting from mt101_transaction"));
+        assertEquals("EUR", singleString("select original_amount_currency from mt101_transaction").trim());
+        assertEquals("CHARGE-001", singleString("select charges_account from mt101_transaction"));
+    }
+
+    @Test
+    void readsMessagesEmbeddedInArchiveRecordsFromPreviousTask() {
+        var message = sampleMessageWithRawPayload("PROC-MAP", "{\"sendersReference\":\"PROC-MAP\"}");
+        var context = new TaskContext(1L, 1L);
+        context.attributes().put("taskOutputs", Map.of(
+                "source.records", List.of(Map.of("archiveId", 88L, "message", message))
+        ));
+
+        var result = provider.execute(context, Map.of(
+                "input", Map.of("sourceTaskRef", "source", "sourceOutput", "records")
+        ));
+
+        assertTrue(result.success(), () -> "expected map embedded message to archive, got: " + result.details());
+        assertEquals(1, result.outputs().get("archivedCount"));
+    }
+
+    @Test
     void storesPlaintextWhenEncryptionNotConfigured() throws Exception {
         var rawPayload = "{\"sendersReference\":\"PROC-PLAIN\"}";
         var message = sampleMessageWithRawPayload("PROC-PLAIN", rawPayload);

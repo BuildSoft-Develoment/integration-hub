@@ -23,7 +23,8 @@ capture en `tdd-evidence.md`.
 
 - **Sprint 1 (MVP outbound MT101)**: T-001 a T-012.
 - **Sprint 2 (status, conciliacion, inbound, routing)**: T-013 a T-022.
-- **Sprint 3 (split, repair, ISO 20022 placeholder)**: T-023 a T-028.
+- **Sprint 3 (split, repair, calendarios, ISO 20022 placeholder)**: T-023 a T-028.
+- **Sprint 4 (hardening MT101 multi-debito/subsidiarias)**: T-029 a T-034.
 
 ## Tabla ejecutable de tareas
 
@@ -54,7 +55,7 @@ capture en `tdd-evidence.md`.
 | T-016 | RF-008 | impl backend | platform-app/src/main/java/com/integrationhub/platform/provider/task/payments/swift/Mt101ParseTaskProvider.java | platform-app/src/test/java/com/integrationhub/platform/provider/task/payments/swift/Mt101ParseTaskProviderTest.java | mvn -pl platform-app -Dtest=Mt101ParseTaskProviderTest test | FAIL sin provider | mvn -pl platform-app -Dtest=Mt101ParseTaskProviderTest test | PASS | spec 003 M-3, T-015 | si | pending |
 | T-017 | RF-007 | impl backend | platform-app/src/main/java/com/integrationhub/platform/provider/task/payments/swift/Mt101RouteTaskProvider.java | platform-app/src/test/java/com/integrationhub/platform/provider/task/payments/swift/Mt101RouteTaskProviderTest.java | mvn -pl platform-app -Dtest=Mt101RouteTaskProviderTest test | FAIL sin provider | mvn -pl platform-app -Dtest=Mt101RouteTaskProviderTest test | PASS | T-016 | si | pending |
 | T-018 | RF-017 | impl backend | platform-app/src/main/java/com/integrationhub/platform/provider/task/payments/transport/SftpPaymentTransport.java | platform-app/src/test/java/com/integrationhub/platform/provider/task/payments/transport/SftpPaymentTransportTest.java | mvn -pl platform-app -Dtest=SftpPaymentTransportTest test | FAIL sin transporte SFTP | mvn -pl platform-app -Dtest=SftpPaymentTransportTest test | PASS | T-009 | si | pending |
-| T-019 | RF-018 | impl backend | platform-app/src/main/java/com/integrationhub/platform/provider/task/payments/transport/MqPaymentTransport.java | platform-app/src/test/java/com/integrationhub/platform/provider/task/payments/transport/MqPaymentTransportTest.java | mvn -pl platform-app -Dtest=MqPaymentTransportTest test | FAIL sin transporte MQ | mvn -pl platform-app -Dtest=MqPaymentTransportTest test | PASS | T-009 | si | pending |
+| T-019 | RF-018 | diseno futuro | contrato MQ de pagos | prueba futura MqPaymentTransportTest | - | MQ no pertenece al contrato ejecutable actual | - | pendiente hasta priorizacion | T-009 | si | blocked |
 | T-020 | RF-014, RF-021 | impl backend | platform-app/src/main/java/com/integrationhub/platform/service/payments/Mt101ArchiveEncryptionService.java | platform-app/src/test/java/com/integrationhub/platform/service/payments/Mt101ArchiveEncryptionServiceTest.java | mvn -pl platform-app -Dtest=Mt101ArchiveEncryptionServiceTest test | FAIL sin cifrado | mvn -pl platform-app -Dtest=Mt101ArchiveEncryptionServiceTest test | PASS | T-008 | si | pending |
 | T-021 | RF-005..RF-008 | impl frontend | frontend/libs/features/payments-swift/src/lib/components/mt101-status-form, mt101-reconcile-form, mt101-parse-form, mt101-route-form + reconciliation-board | frontend/libs/features/payments-swift/src/lib/components/*.spec.ts | npx nx test payments-swift | FAIL sin componentes | npx nx test payments-swift | PASS | T-013..T-017, M-1b | si | pending |
 | T-022 | RF-005..RF-008 | qa | escenarios/payments-swift/mt101-inbound-end-to-end/ + escenarios/payments-swift/mt101-reconciliation/ | tests/it/Mt101InboundEndToEndIT.java + Mt101ReconciliationIT.java | mvn -pl platform-app -Dtest=Mt101*IT verify | FAIL sin fixtures | mvn -pl platform-app -Dtest=Mt101*IT verify | PASS | T-013..T-021 | si | pending |
@@ -82,6 +83,17 @@ Las siguientes tareas del spec 003 son **bloqueantes** para 008:
 Ver el delta de tareas del motor en
 [../003-diseno-y-ejecucion-procesos/spec-tareas.md](../003-diseno-y-ejecucion-procesos/spec-tareas.md)
 seccion "Motor para verticales (ADR-009)".
+
+### Sprint 4 - Hardening MT101 multi-debito/subsidiarias
+
+| id | rf | tipo | objetivo verificable | test | comando_red | expected_red | comando_green | expected_green | depende_de | paralelizable | estado |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| T-029 | RF-001, RF-002 | impl backend | `MT101_BUILD` declara `debitAccountMode` y rechaza colocaciones invalidas de `:50a:` antes de formatear | Mt101BuildTaskProviderTest | mvn -pl platform-app -Dtest=Mt101BuildTaskProviderTest test | FAIL si acepta Sequence A y B a la vez | mvn -pl platform-app -Dtest=Mt101BuildTaskProviderTest test | PASS | T-003 | si | done |
+| T-030 | RF-002 | impl backend | `MT101_VALIDATE` agrega reglas estructurales propietarias para placement, duplicados, fecha, BIC y charset basico | Mt101ValidateTaskProviderTest | mvn -pl platform-app -Dtest=Mt101ValidateTaskProviderTest test | FAIL si no detecta placement invalido | mvn -pl platform-app -Dtest=Mt101ValidateTaskProviderTest test | PASS | T-007 | si | done |
+| T-031 | RF-003, RF-013 | impl backend | `MT101_ARCHIVE` persiste datos completos de Sequence A/B relevantes para multi-debito y subsidiarias | Mt101ArchiveTaskProviderTest | mvn -pl platform-app -Dtest=Mt101ArchiveTaskProviderTest test | FAIL si pierde ordering customer por transaccion | mvn -pl platform-app -Dtest=Mt101ArchiveTaskProviderTest test | PASS | T-008 | si | done |
+| T-032 | RF-001, RF-004, RF-009, RF-010 | impl backend | tareas MT101 consumen mensajes directos o records `{message}` de tareas previas mediante contrato comun | Mt101ValidateTaskProviderTest, Mt101ArchiveTaskProviderTest, Mt101PayTaskProviderTest | mvn -pl platform-app -Dtest=Mt101*TaskProviderTest test | FAIL si `ARCHIVE -> PAY/VALIDATE` no resuelve mensajes | mvn -pl platform-app -Dtest=Mt101*TaskProviderTest test | PASS | T-007..T-010 | si | done |
+| T-033 | RF-001, RF-004 | impl frontend | `MT101_BUILD` guia `singleDebit/multipleDebit/subsidiary` y `MT101_PAY` solo ofrece transportes backend soportados | mt101-build-task.provider.spec.ts, mt101-pay-task.provider.spec.ts | npx nx test core-providers | FAIL si UI permite MQ o mapping contradictorio | npx nx test core-providers | PASS | T-011 | si | done |
+| T-034 | RF-001, RF-004, RF-017 | impl backend | fast-path no captura `MT101_BUILD` y SFTP nace con host key checking estricto | FileReadTaskFastPathTest, SftpPaymentTransportTest | mvn -pl platform-app -Dtest=FileReadTaskFastPathTest,SftpPaymentTransportTest test | FAIL si fast-path pierde outputs o SFTP acepta default inseguro | mvn -pl platform-app -Dtest=FileReadTaskFastPathTest,SftpPaymentTransportTest test | PASS | T-003, T-018 | si | done |
 
 ## Checklist de cierre
 - [ ] Todas las tareas tienen estado (pendiente / en curso / hecho / bloqueado).

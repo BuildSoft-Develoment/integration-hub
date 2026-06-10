@@ -33,6 +33,8 @@ public final class Mt101StructuralRules {
 
     private static final int MAX_REFERENCE_LENGTH = 16;
     private static final Pattern CURRENCY_PATTERN = Pattern.compile("^[A-Z]{3}$");
+    private static final Pattern BIC_PATTERN = Pattern.compile("^[A-Z0-9]{8}([A-Z0-9]{3})?$");
+    private static final Pattern SWIFT_X_TEXT = Pattern.compile("^[A-Za-z0-9 /\\-?:().,'+\\r\\n]*$");
     private static final Set<String> VALID_CHARGES = Set.of("OUR", "BEN", "SHA");
 
     private Mt101StructuralRules() {
@@ -245,5 +247,213 @@ public final class Mt101StructuralRules {
             }
             return issues;
         }
+    }
+
+    /** {@code STRUCT.ORDERING_CUSTOMER_PLACEMENT}: :50a: va en A o en B, nunca en ambos. */
+    @ApplicationScoped
+    public static class OrderingCustomerPlacementRule extends StructuralPredicate {
+        public OrderingCustomerPlacementRule() {
+            super("STRUCT.ORDERING_CUSTOMER_PLACEMENT", ValidationIssue.Severity.ERROR);
+        }
+
+        @Override
+        public List<ValidationIssue> evaluate(Mt101Message message) {
+            if (message == null || message.transactions() == null) {
+                return List.of();
+            }
+            var sequenceAHasOrdering = message.sequenceA() != null
+                    && hasPartyValue(message.sequenceA().orderingCustomer());
+            var transactionsWithOrdering = message.transactions().stream()
+                    .filter(tx -> hasPartyValue(tx.orderingCustomer()))
+                    .count();
+            if (sequenceAHasOrdering && transactionsWithOrdering > 0) {
+                return List.of(ValidationIssue.messageLevel(code(), ruleSet(), severity(),
+                        "orderingCustomer (:50a:) cannot be present in Sequence A and Sequence B at the same time"));
+            }
+            if (!sequenceAHasOrdering && transactionsWithOrdering != message.transactions().size()) {
+                return List.of(ValidationIssue.messageLevel(code(), ruleSet(), severity(),
+                        "orderingCustomer (:50a:) must be present once in Sequence A or in every Sequence B transaction"));
+            }
+            return List.of();
+        }
+    }
+
+    /** {@code STRUCT.ACCOUNT_SERVICING_PLACEMENT}: :52a: va en A o B, nunca mezclado parcialmente. */
+    @ApplicationScoped
+    public static class AccountServicingPlacementRule extends StructuralPredicate {
+        public AccountServicingPlacementRule() {
+            super("STRUCT.ACCOUNT_SERVICING_PLACEMENT", ValidationIssue.Severity.ERROR);
+        }
+
+        @Override
+        public List<ValidationIssue> evaluate(Mt101Message message) {
+            if (message == null || message.transactions() == null) {
+                return List.of();
+            }
+            var sequenceAHasServicing = message.sequenceA() != null
+                    && hasPartyValue(message.sequenceA().accountServicingInstitution());
+            var txWithServicing = message.transactions().stream()
+                    .filter(tx -> hasPartyValue(tx.accountServicingInstitution()))
+                    .count();
+            if (sequenceAHasServicing && txWithServicing > 0) {
+                return List.of(ValidationIssue.messageLevel(code(), ruleSet(), severity(),
+                        "accountServicingInstitution (:52a:) cannot be present in Sequence A and Sequence B at the same time"));
+            }
+            return List.of();
+        }
+    }
+
+    /** {@code STRUCT.TX_REF_UNIQUE}: :21: debe ser unico dentro del mensaje. */
+    @ApplicationScoped
+    public static class TransactionReferenceUniqueRule extends StructuralPredicate {
+        public TransactionReferenceUniqueRule() {
+            super("STRUCT.TX_REF_UNIQUE", ValidationIssue.Severity.ERROR);
+        }
+
+        @Override
+        public List<ValidationIssue> evaluate(Mt101Message message) {
+            if (message == null || message.transactions() == null) {
+                return List.of();
+            }
+            var seen = new java.util.HashSet<String>();
+            var issues = new ArrayList<ValidationIssue>();
+            for (var tx : message.transactions()) {
+                var ref = tx.transactionReference();
+                if (ref != null && !ref.isBlank() && !seen.add(ref)) {
+                    issues.add(ValidationIssue.transactionLevel(code(), ruleSet(), severity(),
+                            ref, "duplicate transactionReference inside MT101 message: " + ref));
+                }
+            }
+            return issues;
+        }
+    }
+
+    /** {@code STRUCT.REQUESTED_DATE_REQUIRED}: Sequence A debe declarar :30:. */
+    @ApplicationScoped
+    public static class RequestedDateRequiredRule extends StructuralPredicate {
+        public RequestedDateRequiredRule() {
+            super("STRUCT.REQUESTED_DATE_REQUIRED", ValidationIssue.Severity.ERROR);
+        }
+
+        @Override
+        public List<ValidationIssue> evaluate(Mt101Message message) {
+            if (message == null || message.sequenceA() == null
+                    || message.sequenceA().requestedExecutionDate() == null) {
+                return List.of(ValidationIssue.messageLevel(code(), ruleSet(), severity(),
+                        "requestedExecutionDate (:30:) is required"));
+            }
+            return List.of();
+        }
+    }
+
+    /** {@code STRUCT.BIC_FORMAT}: BICs declarados deben tener 8 u 11 caracteres alfanumericos. */
+    @ApplicationScoped
+    public static class BicFormatRule extends StructuralPredicate {
+        public BicFormatRule() {
+            super("STRUCT.BIC_FORMAT", ValidationIssue.Severity.ERROR);
+        }
+
+        @Override
+        public List<ValidationIssue> evaluate(Mt101Message message) {
+            if (message == null) {
+                return List.of();
+            }
+            var issues = new ArrayList<ValidationIssue>();
+            if (message.sequenceA() != null) {
+                validateBic(issues, null, "sequenceA.orderingCustomer.bic", message.sequenceA().orderingCustomer());
+                validateBic(issues, null, "sequenceA.accountServicingInstitution.bic",
+                        message.sequenceA().accountServicingInstitution());
+            }
+            for (var tx : message.transactions()) {
+                validateBic(issues, tx.transactionReference(), "transactions.orderingCustomer.bic", tx.orderingCustomer());
+                validateBic(issues, tx.transactionReference(), "transactions.accountServicingInstitution.bic",
+                        tx.accountServicingInstitution());
+                validateBic(issues, tx.transactionReference(), "transactions.intermediary.bic", tx.intermediary());
+                validateBic(issues, tx.transactionReference(), "transactions.accountWithInstitution.bic",
+                        tx.accountWithInstitution());
+                validateBic(issues, tx.transactionReference(), "transactions.beneficiary.bic", tx.beneficiary());
+            }
+            return issues;
+        }
+
+        private void validateBic(List<ValidationIssue> issues,
+                                 String txRef,
+                                 String field,
+                                 Mt101Message.Party party) {
+            if (party == null || party.bic() == null || party.bic().isBlank()) {
+                return;
+            }
+            if (!BIC_PATTERN.matcher(party.bic()).matches()) {
+                issues.add(txRef == null
+                        ? ValidationIssue.messageLevel(code(), ruleSet(), severity(),
+                                field + " must be 8 or 11 uppercase alphanumeric characters: " + party.bic())
+                        : ValidationIssue.transactionLevel(code(), ruleSet(), severity(), txRef,
+                                field + " must be 8 or 11 uppercase alphanumeric characters: " + party.bic()));
+            }
+        }
+    }
+
+    /** {@code STRUCT.SWIFT_X_TEXT}: textos emitidos en FIN deben usar charset SWIFT-X basico. */
+    @ApplicationScoped
+    public static class SwiftXTextRule extends StructuralPredicate {
+        public SwiftXTextRule() {
+            super("STRUCT.SWIFT_X_TEXT", ValidationIssue.Severity.ERROR);
+        }
+
+        @Override
+        public List<ValidationIssue> evaluate(Mt101Message message) {
+            if (message == null) {
+                return List.of();
+            }
+            var issues = new ArrayList<ValidationIssue>();
+            if (message.sequenceA() != null) {
+                validateParty(issues, null, "sequenceA.instructingParty", message.sequenceA().instructingParty());
+                validateParty(issues, null, "sequenceA.orderingCustomer", message.sequenceA().orderingCustomer());
+                validateParty(issues, null, "sequenceA.accountServicingInstitution",
+                        message.sequenceA().accountServicingInstitution());
+            }
+            for (var tx : message.transactions()) {
+                validateParty(issues, tx.transactionReference(), "transactions.orderingCustomer", tx.orderingCustomer());
+                validateParty(issues, tx.transactionReference(), "transactions.beneficiary", tx.beneficiary());
+                validateText(issues, tx.transactionReference(), "transactions.remittanceInformation",
+                        tx.remittanceInformation());
+                validateText(issues, tx.transactionReference(), "transactions.regulatoryReporting",
+                        tx.regulatoryReporting());
+            }
+            return issues;
+        }
+
+        private void validateParty(List<ValidationIssue> issues,
+                                   String txRef,
+                                   String field,
+                                   Mt101Message.Party party) {
+            if (party == null) {
+                return;
+            }
+            validateText(issues, txRef, field + ".account", party.account());
+            validateText(issues, txRef, field + ".bic", party.bic());
+            if (party.nameAndAddress() != null) {
+                for (var line : party.nameAndAddress()) {
+                    validateText(issues, txRef, field + ".nameAndAddress", line);
+                }
+            }
+        }
+
+        private void validateText(List<ValidationIssue> issues, String txRef, String field, String value) {
+            if (value == null || SWIFT_X_TEXT.matcher(value).matches()) {
+                return;
+            }
+            var message = field + " contains characters outside the platform SWIFT-X subset";
+            issues.add(txRef == null
+                    ? ValidationIssue.messageLevel(code(), ruleSet(), severity(), message)
+                    : ValidationIssue.transactionLevel(code(), ruleSet(), severity(), txRef, message));
+        }
+    }
+
+    private static boolean hasPartyValue(Mt101Message.Party party) {
+        return party != null
+                && ((party.account() != null && !party.account().isBlank())
+                    || (party.bic() != null && !party.bic().isBlank())
+                    || (party.nameAndAddress() != null && !party.nameAndAddress().isEmpty()));
     }
 }

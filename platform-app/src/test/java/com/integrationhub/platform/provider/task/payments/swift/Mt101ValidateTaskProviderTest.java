@@ -42,7 +42,13 @@ class Mt101ValidateTaskProviderTest {
                 new Mt101StructuralRules.CurrencyFormatRule(),
                 new Mt101StructuralRules.ChargesValueRule(),
                 new Mt101StructuralRules.TransactionReferenceLengthRule(),
-                new Mt101StructuralRules.BeneficiaryRequiredRule()
+                new Mt101StructuralRules.BeneficiaryRequiredRule(),
+                new Mt101StructuralRules.OrderingCustomerPlacementRule(),
+                new Mt101StructuralRules.AccountServicingPlacementRule(),
+                new Mt101StructuralRules.TransactionReferenceUniqueRule(),
+                new Mt101StructuralRules.RequestedDateRequiredRule(),
+                new Mt101StructuralRules.BicFormatRule(),
+                new Mt101StructuralRules.SwiftXTextRule()
         );
         var ruleProvider = new SingleRuleProvider((rs, std, app) -> {
             return structuralPredicates.stream()
@@ -214,6 +220,44 @@ class Mt101ValidateTaskProviderTest {
         // Heuristica slice 2: si hay >=1 blocking issue, todos los mensajes cuentan como invalidos.
         // Aceptable mientras el mapping mensaje<->issue no este explicito (slice 3+).
         assertEquals(2, result.outputs().get("invalidCount"));
+    }
+
+    @Test
+    void readsMessagesEmbeddedInArchiveRecords() {
+        var context = new TaskContext(1L, 1L);
+        context.attributes().put("taskOutputs", Map.of(
+                "archive-mt101.records", List.of(Map.of("archiveId", 99L, "message", validMessage()))
+        ));
+
+        var result = provider.execute(context, Map.of(
+                "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records")
+        ));
+
+        assertTrue(result.success(), () -> "expected archived message to validate, got: " + result.details());
+        assertEquals(1, result.outputs().get("validCount"));
+    }
+
+    @Test
+    void failsWhenOrderingCustomerIsInSequenceAAndSequenceB() {
+        var ok = validMessage();
+        var tx = ok.transactions().get(0);
+        var mixedTx = new Mt101Message.Transaction(
+                tx.sequenceNumber(), tx.transactionReference(), tx.fxDealReference(), tx.instructionCode(),
+                tx.amount(), new Mt101Message.Party("H", "002", null, List.of("SUB ACME")),
+                tx.accountServicingInstitution(), tx.intermediary(), tx.accountWithInstitution(),
+                tx.beneficiary(), tx.remittanceInformation(), tx.regulatoryReporting(), tx.originalAmount(),
+                tx.detailsOfCharges(), tx.chargesAccount(), tx.exchangeRate());
+        var message = new Mt101Message(ok.envelope(), ok.sequenceA(), List.of(mixedTx),
+                ok.controlTotals(), null, null);
+
+        var result = provider.execute(contextWithMessage(message), Map.of(
+                "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")
+        ));
+
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
+        var issues = (List<ValidationIssue>) result.outputs().get("errors");
+        assertTrue(issues.stream().anyMatch(i -> "STRUCT.ORDERING_CUSTOMER_PLACEMENT".equals(i.code())));
     }
 
     // --- helpers ---

@@ -81,6 +81,18 @@
     <section class="mt101-build__section">
       <h4>{{ i18n.t('mt101.section.sequenceA') }}</h4>
       <div class="mt101-build__grid">
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101.debitAccountMode') }}</mat-label>
+          <mat-select
+            [ngModel]="draft().debitAccountMode"
+            (ngModelChange)="updateDraft({ debitAccountMode: $event })"
+            [disabled]="readonly()">
+            @for (mode of debitAccountModes; track mode) {
+              <mat-option [value]="mode">{{ i18n.t('mt101.debitAccountMode.' + mode) }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
         <mat-form-field class="mt101-build__col-2" subscriptSizing="dynamic">
           <mat-label>{{ i18n.t('mt101.sequenceA.sendersReferenceTemplate') }}</mat-label>
           <input
@@ -108,7 +120,7 @@
           <mat-select
             [ngModel]="draft().sequenceA.orderingCustomerOption"
             (ngModelChange)="updateSequenceA({ orderingCustomerOption: $event })"
-            [disabled]="readonly()">
+            [disabled]="readonly() || !usesSequenceADebit()">
             @for (option of orderingOptions; track option) {
               <mat-option [value]="option">{{ option }}</mat-option>
             }
@@ -122,7 +134,7 @@
             type="text"
             [ngModel]="draft().sequenceA.orderingCustomerAccount"
             (ngModelChange)="updateSequenceA({ orderingCustomerAccount: $event })"
-            [disabled]="readonly()" />
+            [disabled]="readonly() || !usesSequenceADebit()" />
         </mat-form-field>
 
         <mat-form-field class="mt101-build__col-2" subscriptSizing="dynamic">
@@ -132,7 +144,7 @@
             rows="2"
             [ngModel]="draft().sequenceA.orderingCustomerNameAddress"
             (ngModelChange)="updateSequenceA({ orderingCustomerNameAddress: $event })"
-            [disabled]="readonly()"></textarea>
+            [disabled]="readonly() || !usesSequenceADebit()"></textarea>
         </mat-form-field>
 
         <mat-form-field subscriptSizing="dynamic">
@@ -189,7 +201,7 @@
           <mat-select
             [ngModel]="draft().transactionMappings.orderingCustomerOption"
             (ngModelChange)="updateMappings({ orderingCustomerOption: $event })"
-            [disabled]="readonly()">
+            [disabled]="readonly() || !usesTransactionDebit()">
             @for (option of transactionOrderingOptions; track option) {
               <mat-option [value]="option">{{ option || '-' }}</mat-option>
             }
@@ -240,7 +252,7 @@
       />
 
       <ih-process-mt101-field-mapping-board
-        [targets]="mappingTargets"
+        [targets]="mappingTargets()"
         [mappings]="draft().transactionMappings"
         [sourceGroups]="sourceGroups()"
         [readonly]="readonly()"

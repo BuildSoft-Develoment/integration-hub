@@ -48,6 +48,10 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
         if (current.readerType() == null || !SUPPORTED_READERS.contains(current.readerType().toUpperCase())) return false;
         if (!declaresCurrentReadRecordsInput(current, next)) return false;
 
+        if ("MT101_BUILD".equalsIgnoreCase(next.taskType())) {
+            return false;
+        }
+
         var provider = taskProviderRegistry.resolve(next.taskType());
         return provider instanceof BatchTaskProvider;
     }

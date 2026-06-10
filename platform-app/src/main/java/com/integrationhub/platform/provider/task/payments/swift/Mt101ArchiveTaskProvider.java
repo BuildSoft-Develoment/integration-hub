@@ -59,7 +59,7 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
 
     @Override
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
-        var messages = readMessages(context, configuration);
+        var messages = Mt101MessageInputResolver.readMessages(context, configuration, type());
         if (messages.isEmpty()) {
             return TaskResult.success("MT101_ARCHIVE skipped because there are no messages to archive");
         }
@@ -161,10 +161,10 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
                                int retentionDays) throws SQLException {
         var sql = "insert into mt101_archive "
                 + "(envelope_id, senders_reference, customer_specified_reference, message_index, message_total, "
-                + " requested_execution_date, ordering_customer_kind, ordering_customer_account, "
-                + " ordering_customer_name_addr, account_servicing_kind, account_servicing_value, "
-                + " status, format, retention_until) "
-                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + " requested_execution_date, instructing_party_kind, instructing_party_value, "
+                + " ordering_customer_kind, ordering_customer_account, ordering_customer_name_addr, "
+                + " account_servicing_kind, account_servicing_value, status, format, retention_until) "
+                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             var sequenceA = message.sequenceA();
             statement.setLong(1, envelopeId);
@@ -178,18 +178,20 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
                 statement.setInt(5, sequenceA.messageTotal());
             }
             statement.setObject(6, sequenceA == null ? null : sequenceA.requestedExecutionDate(), Types.DATE);
+            var instructingParty = sequenceA == null ? null : sequenceA.instructingParty();
+            statement.setString(7, instructingParty == null ? null : instructingParty.option());
+            statement.setString(8, partyValue(instructingParty));
             var orderingCustomer = sequenceA == null ? null : sequenceA.orderingCustomer();
-            statement.setString(7, orderingCustomer == null ? null : orderingCustomer.option());
-            statement.setString(8, orderingCustomer == null ? null : orderingCustomer.account());
-            statement.setString(9, orderingCustomer == null ? null
+            statement.setString(9, orderingCustomer == null ? null : orderingCustomer.option());
+            statement.setString(10, orderingCustomer == null ? null : orderingCustomer.account());
+            statement.setString(11, orderingCustomer == null ? null
                     : String.join("\n", orderingCustomer.nameAndAddress()));
             var accountServicing = sequenceA == null ? null : sequenceA.accountServicingInstitution();
-            statement.setString(10, accountServicing == null ? null : accountServicing.option());
-            statement.setString(11, accountServicing == null ? null
-                    : (accountServicing.bic() != null ? accountServicing.bic() : accountServicing.account()));
-            statement.setString(12, "COMPOSED");
-            statement.setString(13, message.format());
-            statement.setObject(14, LocalDate.now().plusDays(retentionDays), Types.DATE);
+            statement.setString(12, accountServicing == null ? null : accountServicing.option());
+            statement.setString(13, partyValue(accountServicing));
+            statement.setString(14, "COMPOSED");
+            statement.setString(15, message.format());
+            statement.setObject(16, LocalDate.now().plusDays(retentionDays), Types.DATE);
             statement.executeUpdate();
             try (var keys = statement.getGeneratedKeys()) {
                 if (keys.next()) {
@@ -205,30 +207,56 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
             return;
         }
         var sql = "insert into mt101_transaction "
-                + "(archive_id, sequence_number, transaction_reference, amount_currency, amount_value, "
-                + " beneficiary_kind, beneficiary_account, beneficiary_name_addr, account_with_institution, "
-                + " remittance_information, details_of_charges) "
-                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + "(archive_id, sequence_number, transaction_reference, fx_deal_reference, instruction_code, "
+                + " amount_currency, amount_value, ordering_customer_kind, ordering_customer_account, "
+                + " ordering_customer_name_addr, account_servicing_kind, account_servicing_value, intermediary, "
+                + " account_with_institution, beneficiary_kind, beneficiary_account, beneficiary_name_addr, "
+                + " remittance_information, regulatory_reporting, original_amount_currency, original_amount_value, "
+                + " details_of_charges, charges_account, exchange_rate) "
+                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             for (var tx : message.transactions()) {
                 statement.setLong(1, archiveId);
                 statement.setInt(2, tx.sequenceNumber());
                 statement.setString(3, tx.transactionReference());
-                statement.setString(4, tx.amount() == null ? null : tx.amount().currency());
+                statement.setString(4, tx.fxDealReference());
+                statement.setString(5, tx.instructionCode());
+                statement.setString(6, tx.amount() == null ? null : tx.amount().currency());
                 if (tx.amount() == null || tx.amount().value() == null) {
-                    statement.setNull(5, Types.NUMERIC);
+                    statement.setNull(7, Types.NUMERIC);
                 } else {
-                    statement.setBigDecimal(5, tx.amount().value());
+                    statement.setBigDecimal(7, tx.amount().value());
                 }
+                var orderingCustomer = tx.orderingCustomer();
+                statement.setString(8, orderingCustomer == null ? null : orderingCustomer.option());
+                statement.setString(9, orderingCustomer == null ? null : orderingCustomer.account());
+                statement.setString(10, orderingCustomer == null ? null
+                        : String.join("\n", orderingCustomer.nameAndAddress()));
+                var accountServicing = tx.accountServicingInstitution();
+                statement.setString(11, accountServicing == null ? null : accountServicing.option());
+                statement.setString(12, partyValue(accountServicing));
+                statement.setString(13, partyValue(tx.intermediary()));
+                statement.setString(14, partyValue(tx.accountWithInstitution()));
                 var beneficiary = tx.beneficiary();
-                statement.setString(6, beneficiary == null ? null : beneficiary.option());
-                statement.setString(7, beneficiary == null ? null : beneficiary.account());
-                statement.setString(8, beneficiary == null ? null
+                statement.setString(15, beneficiary == null ? null : beneficiary.option());
+                statement.setString(16, beneficiary == null ? null : beneficiary.account());
+                statement.setString(17, beneficiary == null ? null
                         : String.join("\n", beneficiary.nameAndAddress()));
-                var accountWith = tx.accountWithInstitution();
-                statement.setString(9, accountWith == null ? null : accountWith.bic());
-                statement.setString(10, tx.remittanceInformation());
-                statement.setString(11, tx.detailsOfCharges());
+                statement.setString(18, tx.remittanceInformation());
+                statement.setString(19, tx.regulatoryReporting());
+                statement.setString(20, tx.originalAmount() == null ? null : tx.originalAmount().currency());
+                if (tx.originalAmount() == null || tx.originalAmount().value() == null) {
+                    statement.setNull(21, Types.NUMERIC);
+                } else {
+                    statement.setBigDecimal(21, tx.originalAmount().value());
+                }
+                statement.setString(22, tx.detailsOfCharges());
+                statement.setString(23, tx.chargesAccount());
+                if (tx.exchangeRate() == null) {
+                    statement.setNull(24, Types.NUMERIC);
+                } else {
+                    statement.setBigDecimal(24, tx.exchangeRate());
+                }
                 statement.addBatch();
             }
             statement.executeBatch();
@@ -273,39 +301,20 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private List<Mt101Message> readMessages(TaskContext context, Map<String, Object> configuration) {
-        var rawTaskOutputs = context.attributes().get("taskOutputs");
-        if (!(rawTaskOutputs instanceof Map<?, ?> taskOutputs) || taskOutputs.isEmpty()) {
-            return List.of();
+    private String partyValue(Mt101Message.Party party) {
+        if (party == null) {
+            return null;
         }
-        if (!(configuration.get("input") instanceof Map<?, ?> rawInput)) {
-            throw new IllegalArgumentException("MT101_ARCHIVE requires configuration.input");
+        if (party.bic() != null && !party.bic().isBlank()) {
+            return party.bic();
         }
-        var sourceTaskRef = stringValue(((Map<String, Object>) rawInput).get("sourceTaskRef"), "");
-        if (sourceTaskRef.isBlank()) {
-            throw new IllegalArgumentException("MT101_ARCHIVE input.sourceTaskRef is required");
+        if (party.account() != null && !party.account().isBlank()) {
+            return party.account();
         }
-        var sourceOutput = stringValue(((Map<String, Object>) rawInput).get("sourceOutput"), "records");
-        var key = sourceTaskRef + "." + sourceOutput;
-        var raw = taskOutputs.get(key);
-        if (raw == null) {
-            return List.of();
+        if (party.nameAndAddress() != null && !party.nameAndAddress().isEmpty()) {
+            return String.join("\n", party.nameAndAddress());
         }
-        if (!(raw instanceof List<?> rawList)) {
-            throw new IllegalArgumentException(
-                    "Expected " + key + " to be List<Mt101Message> but got " + raw.getClass().getName());
-        }
-        var result = new ArrayList<Mt101Message>(rawList.size());
-        for (var item : rawList) {
-            if (item instanceof Mt101Message msg) {
-                result.add(msg);
-            } else if (item != null) {
-                throw new IllegalArgumentException(
-                        "Expected Mt101Message items at " + key + " but got " + item.getClass().getName());
-            }
-        }
-        return result;
+        return null;
     }
 
     private String stringValue(Object raw, String defaultValue) {

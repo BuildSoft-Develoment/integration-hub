@@ -252,12 +252,12 @@ class Mt101BuildTaskProviderTest {
     }
 
     @Test
-    void truncatesSendersReferenceToSixteenChars() {
+    void rejectsSendersReferenceLongerThanSixteenChars() {
         var context = new TaskContext(99999999L, 1L);
         context.attributes().put("readResult", new ReadResult(
                 List.of(new ReadRecord(Map.of("dni", "1", "moneda", "PEN", "monto", "1"))), 1));
 
-        var result = provider.execute(context, Map.of(
+        var error = assertThrows(IllegalArgumentException.class, () -> provider.execute(context, Map.of(
                 "sequenceA", Map.of(
                         "sendersReferenceTemplate", "PROCESS-${_processExecutionId}-${messageIndex}-EXTRA",
                         "orderingCustomer", Map.of("option", "H", "account", "001")
@@ -266,11 +266,50 @@ class Mt101BuildTaskProviderTest {
                         "amount", Map.of("currencyField", "moneda", "valueField", "monto"),
                         "beneficiary", Map.of("option", "", "accountField", "cuenta_beneficiario")
                 )
+        )));
+
+        assertTrue(error.getMessage().contains("sendersReference exceeds 16"));
+    }
+
+    @Test
+    void buildsMultipleDebitModeWithOrderingCustomerPerTransaction() {
+        var context = new TaskContext(42L, 1L);
+        context.attributes().put("readResult", new ReadResult(List.of(
+                new ReadRecord(Map.of(
+                        "cuenta_ordenante", "001-AAA",
+                        "nombre_ordenante", "SUB UNO",
+                        "moneda", "PEN",
+                        "monto", "1,25",
+                        "cuenta_beneficiario", "B1",
+                        "cargos", "OUR"
+                ))
+        ), 1));
+
+        var result = provider.execute(context, Map.of(
+                "debitAccountMode", "multipleDebit",
+                "sequenceA", Map.of(
+                        "sendersReferenceTemplate", "PROC-${_processExecutionId}",
+                        "requestedExecutionDate", "2026-06-09"
+                ),
+                "transactionMappings", Map.of(
+                        "amount", Map.of("currencyField", "moneda", "valueField", "monto"),
+                        "orderingCustomer", Map.of(
+                                "option", "H",
+                                "accountField", "cuenta_ordenante",
+                                "nameAndAddressFields", List.of("nombre_ordenante")
+                        ),
+                        "beneficiary", Map.of("option", "", "accountField", "cuenta_beneficiario"),
+                        "detailsOfChargesField", "cargos"
+                )
         ));
 
+        assertTrue(result.success(), () -> "expected success, got: " + result.details());
         @SuppressWarnings("unchecked")
         var records = (List<Mt101Message>) result.outputs().get("records");
-        assertEquals(16, records.get(0).sequenceA().sendersReference().length());
+        var message = records.get(0);
+        assertNull(message.sequenceA().orderingCustomer());
+        assertEquals("001-AAA", message.transactions().get(0).orderingCustomer().account());
+        assertEquals(new BigDecimal("1.25"), message.transactions().get(0).amount().value());
     }
 
     @Test

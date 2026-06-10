@@ -71,6 +71,11 @@ export class ProcessMt101BuildTaskFormComponent {
     { value: 'none', labelKey: 'mt101.uetr.none' },
   ];
   readonly orderingOptions = ['F', 'G', 'H'] as const;
+  readonly debitAccountModes: ReadonlyArray<'singleDebit' | 'multipleDebit' | 'subsidiary'> = [
+    'singleDebit',
+    'multipleDebit',
+    'subsidiary',
+  ];
   readonly buildExecutionModes: readonly ProcessTaskExecutionMode[] = ['once'];
   readonly servicingOptions: ReadonlyArray<'A' | 'C' | ''> = ['', 'A', 'C'];
   readonly transactionOrderingOptions: ReadonlyArray<'' | 'F' | 'G' | 'H'> = ['', 'F', 'G', 'H'];
@@ -86,7 +91,9 @@ export class ProcessMt101BuildTaskFormComponent {
   );
 
   readonly sourceGroups = computed(() => this.bindingContext.groupOptions(this.sourceOptions()));
-  readonly mappingTargets: readonly Mt101BuildMappingTarget[] = [
+  readonly usesSequenceADebit = computed(() => this.draft().debitAccountMode === 'singleDebit');
+  readonly usesTransactionDebit = computed(() => this.draft().debitAccountMode !== 'singleDebit');
+  private readonly allMappingTargets: readonly Mt101BuildMappingTarget[] = [
     { field: 'amountCurrencyField', labelKey: 'mt101.mappings.amountCurrencyField', path: 'amount.currency', required: true },
     { field: 'amountValueField', labelKey: 'mt101.mappings.amountValueField', path: 'amount.value', required: true },
     { field: 'orderingCustomerAccountField', labelKey: 'mt101.mappings.orderingCustomerAccountField', path: 'orderingCustomer.account' },
@@ -111,6 +118,11 @@ export class ProcessMt101BuildTaskFormComponent {
     { field: 'remittanceInformationField', labelKey: 'mt101.mappings.remittanceInformationField', path: 'remittanceInformation' },
     { field: 'detailsOfChargesField', labelKey: 'mt101.mappings.detailsOfChargesField', path: 'detailsOfCharges' },
   ];
+  readonly mappingTargets = computed(() =>
+    this.usesTransactionDebit()
+      ? this.allMappingTargets
+      : this.allMappingTargets.filter((target) => !target.field.startsWith('orderingCustomer')),
+  );
 
   /**
    * Emite el draft completo cada vez que cambia. El parent NO escucha esto via
@@ -166,7 +178,7 @@ export class ProcessMt101BuildTaskFormComponent {
   }
 
   private isMultiMapping(field: Mt101BuildMappingField): boolean {
-    return this.mappingTargets.some((target) => target.field === field && target.multi);
+    return this.allMappingTargets.some((target) => target.field === field && target.multi);
   }
 
   private splitMappingValues(value: string): string[] {
@@ -188,6 +200,7 @@ export class ProcessMt101BuildTaskFormComponent {
       taskRef: this.task().clientId,
       executionMode: 'once',
       format: 'JSON',
+      debitAccountMode: 'singleDebit',
       envelope: { senderLt: '', receiverLt: '', uetrStrategy: 'perMessage', priority: 'N' },
       sequenceA: {
         sendersReferenceTemplate: 'PROC-${_processExecutionId}',

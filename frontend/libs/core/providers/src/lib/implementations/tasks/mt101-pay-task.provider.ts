@@ -6,7 +6,7 @@ import { ProcessTaskProvider, ProcessTaskSummaryContext } from '../../tasks/proc
 import { ProcessTaskRuntimeDraft } from '../../tasks/process-task-binding.models';
 import { ProcessTaskFormModel } from '../../tasks/process-task.models';
 
-export type Mt101PayTransport = 'REST' | 'SFTP' | 'MQ';
+export type Mt101PayTransport = 'REST' | 'SFTP';
 export type Mt101PayAuthType = '' | 'bearer' | 'login-request';
 export type Mt101PayConfirmationMode = 'sync' | 'async-callback' | 'async-poll';
 export type Mt101PayBackoffStrategy = 'exponential' | 'constant';
@@ -56,9 +56,8 @@ export interface Mt101PayTaskDraft extends ProcessTaskRuntimeDraft {
 /**
  * Provider del task type {@code MT101_PAY}.
  *
- * <p>Slice 4b cubre transporte REST con todos sus campos. SFTP/MQ requieren los
- * providers backend correspondientes (slice 2 del sprint 2 del backend); cuando
- * existan, este provider se extiende sin tocar el motor.</p>
+ * <p>Slice actual cubre REST y SFTP. MQ no se expone en UI hasta que exista el
+ * provider backend correspondiente.</p>
  */
 @Injectable()
 export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft> {
@@ -208,7 +207,7 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
 
   private normalizeTransport(value: unknown): Mt101PayTransport {
     const v = String(value || 'REST').toUpperCase();
-    return v === 'SFTP' || v === 'MQ' ? (v as Mt101PayTransport) : 'REST';
+    return v === 'SFTP' ? 'SFTP' : 'REST';
   }
 
   private normalizeAuthType(value: unknown): Mt101PayAuthType {

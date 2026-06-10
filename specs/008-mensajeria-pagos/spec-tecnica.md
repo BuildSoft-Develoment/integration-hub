@@ -12,25 +12,22 @@
   - `iso20022/` y `openbanking/`: vacios al inicio, espacios reservados.
 - SPI de formateadores: `PaymentMessageFormatter` con implementaciones
   `JsonMt101Formatter`, `XmlMt101Formatter`, `FinMt101Formatter`.
-- SPI de transportes: `PaymentMessageTransport` con implementaciones
-  `RestPaymentTransport`, `SftpPaymentTransport`, `MqPaymentTransport`.
+- SPI de transportes: `PaymentMessageTransport` con implementaciones ejecutables
+  `RestPaymentTransport` y `SftpPaymentTransport`. `MqPaymentTransport` queda
+  fuera del contrato actual hasta implementar su provider.
 - SPI de reglas: `ValidationRuleProvider` con catalogo cargable.
 - Reader `swift-mt` en `provider/reader/SwiftMtReaderProvider` (registrado en el
   catalogo 002, pero su codigo vive en el modulo de pagos para ownership).
 - Servicios: `PaymentsCatalogService`, `Mt101ArchiveService`,
   `Mt101ReconciliationService`.
 
-### Frontend (`frontend/libs/features/payments-swift`, Angular/Nx)
+### Frontend (Angular/Nx)
 
-- Feature lazy-loaded `features/payments-swift/` con componentes por task type:
-  `mt101-build-form`, `mt101-validate-form`, `mt101-archive-form`,
-  `mt101-pay-form`, `mt101-status-form`, `mt101-reconcile-form`,
-  `mt101-route-form`, `mt101-parse-form`, `mt101-split-form`, `mt101-repair-form`.
-- Registro de formularios via el mecanismo de descubrimiento Nx descrito en spec
-  003 (gap M-1b).
-- Stores CQRS: `payments-catalog-query.store.ts`,
-  `payments-catalog-command.service.ts`, `payments-archive.store.ts`.
-- Tablero de conciliacion: `mt101-reconciliation-board`.
+- Formularios por task type registrados via el mecanismo de descubrimiento de
+  spec 003.
+- `MT101_BUILD` debe exponer una paleta de fuentes compatible con `FILE_READ`,
+  metadata, variables y outputs previos, y un tablero de mapping por campos SWIFT.
+- `MT101_PAY` solo debe ofrecer transportes soportados por backend.
 
 ## Contrato `configuration_json` por task type
 
@@ -44,13 +41,14 @@
   "input": {
     "source": "task-output",
     "sourceTaskRef": "<ref previa>",
-    "sourceOutput": "table",
+    "sourceOutput": "records",
     "batchSize": 5000,
     "cursor": { "orderBy": "id" },
     "filters": { "status": "PENDING" }
   },
   "configuration": {
     "format": "JSON",                     // JSON | XML | FIN
+    "debitAccountMode": "singleDebit",    // singleDebit | multipleDebit | subsidiary
     "envelope": {
       "senderLt": "SGOBFRPPAXXX",
       "receiverLt": "BCPLPEPLXXXX",
@@ -88,11 +86,20 @@
       "strategy": "none",                  // none | debitAccount | maxTransactions
       "maxTransactionsPerMessage": 999,
       "rebuildIndexTotal": true
-    },
-    "publishTo": "records"                 // records | table:<connRef>:<tabla>
+    }
   }
 }
 ```
+
+Reglas del modo debito:
+
+- `singleDebit`: `sequenceA.orderingCustomer` es obligatorio y
+  `transactionMappings.orderingCustomer` no debe emitirse.
+- `multipleDebit`: `sequenceA.orderingCustomer` no debe emitirse y cada
+  transaccion debe construir `orderingCustomer`.
+- `subsidiary`: igual que `multipleDebit`; el mapping representa la cuenta o
+  identidad de la subsidiaria que origina el pago.
+- `MT101_BUILD` falla si `:20:` o `:21:` exceden 16 caracteres.
 
 Los valores `*Field` y `nameAndAddressFields` de `transactionMappings` aceptan:
 campos del record de entrada (`records`/`table`), variables de ejecucion,
@@ -109,6 +116,10 @@ Outputs publicados:
   `transactions[]`, `rawPayload`, `uetr`, `sendersReference`.
 - `build-mt101.controlTotals`: totales por moneda.
 - `build-mt101.errors`: vacio (la validacion vive en `MT101_VALIDATE`).
+
+El fast-path de streaming `FILE_READ -> sink` no debe capturar `MT101_BUILD`,
+porque esta tarea produce outputs materiales (`records` con mensajes) que tareas
+posteriores consumen.
 
 ### MT101_VALIDATE
 
@@ -171,7 +182,7 @@ Outputs:
   "executionMode": "per-record",
   "input": { "source": "task-output", "sourceTaskRef": "archive-mt101", "sourceOutput": "records" },
   "configuration": {
-    "transport": "REST",                   // REST | SFTP | MQ
+    "transport": "REST",                   // REST | SFTP
     "rest": {
       "url": "${env:GATEWAY_MT101_URL}",
       "method": "POST",
@@ -183,15 +194,15 @@ Outputs:
       "timeoutSeconds": 60
     },
     "sftp": {
-      "connectionRef": "21",
+      "host": "sftp.banco.local",
+      "port": 22,
+      "username": "${secret:sftp_user}",
+      "password": "${secret:sftp_pass}",
       "dropPathTemplate": "/in/mt101/${sendersReference}.xml",
       "tmpExtension": ".part",
-      "fileMode": "0600"
-    },
-    "mq": {
-      "connectionRef": "22",
-      "queue": "BANK.MT101.IN",
-      "messageType": "TEXT"
+      "strictHostKeyChecking": true,
+      "knownHostsPath": "/etc/ssh/ssh_known_hosts",
+      "timeoutMillis": 15000
     },
     "idempotencyKeyTemplate": "${sendersReference}",
     "retryPolicy": {

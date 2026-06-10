@@ -38,7 +38,7 @@ export class ProcessMt101PayTaskFormComponent {
     () => this.manager.hydrateDraft<Mt101PayTaskDraft>(this.task()) ?? this.defaultDraft(),
   );
 
-  readonly transports: ReadonlyArray<Mt101PayTransport> = ['REST', 'SFTP', 'MQ'];
+  readonly transports: ReadonlyArray<Mt101PayTransport> = ['REST', 'SFTP'];
   readonly authTypes: ReadonlyArray<Mt101PayAuthType> = ['', 'bearer', 'login-request'];
   readonly confirmationModes: ReadonlyArray<Mt101PayConfirmationMode> = ['sync', 'async-callback', 'async-poll'];
   readonly backoffStrategies: ReadonlyArray<Mt101PayBackoffStrategy> = ['exponential', 'constant'];

@@ -42,6 +42,7 @@ import java.util.Properties;
  *   dropPathTemplate: "/in/mt101/${sendersReference}.xml",
  *   tmpExtension: ".part",
  *   strictHostKeyChecking: true,
+ *   knownHostsPath: "/etc/ssh/ssh_known_hosts",
  *   timeoutMillis: 15000
  * }
  * </pre>
@@ -75,7 +76,8 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
         var privateKeyPath = stringOrNull(sftpCfg.get("privateKeyPath"));
         var passphrase = stringOrNull(sftpCfg.get("passphrase"));
         var timeoutMillis = intValue(sftpCfg.get("timeoutMillis"), DEFAULT_TIMEOUT_MILLIS);
-        var strictHostKeyChecking = boolValue(sftpCfg.get("strictHostKeyChecking"), false);
+        var strictHostKeyChecking = boolValue(sftpCfg.get("strictHostKeyChecking"), true);
+        var knownHostsPath = stringOrNull(sftpCfg.get("knownHostsPath"));
         var dropPathTemplate = stringRequired(sftpCfg.get("dropPathTemplate"), "sftp.dropPathTemplate");
         var tmpExtension = stringValue(sftpCfg.get("tmpExtension"), DEFAULT_TMP_EXTENSION);
         var dropPath = resolveTemplate(dropPathTemplate, message);
@@ -86,6 +88,9 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
         ChannelSftp channel = null;
         try {
             var jsch = new JSch();
+            if (knownHostsPath != null) {
+                jsch.setKnownHosts(knownHostsPath);
+            }
             if (privateKeyPath != null) {
                 if (passphrase != null) {
                     jsch.addIdentity(privateKeyPath, passphrase);
