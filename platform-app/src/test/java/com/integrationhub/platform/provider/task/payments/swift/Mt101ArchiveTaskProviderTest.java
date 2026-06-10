@@ -1,6 +1,10 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.service.JsonConfigurationMapper;
+import com.integrationhub.platform.service.secret.SecretResolver;
+import com.integrationhub.platform.service.secret.SecretValueProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +22,7 @@ import java.sql.Statement;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -212,6 +217,69 @@ class Mt101ArchiveTaskProviderTest {
         var records = (List<Map<String, Object>>) result.outputs().get("records");
         assertEquals(expectedHash, records.get(0).get("hash"));
         assertEquals(expectedHash, singleString("select payload_hash from swift_message_envelope"));
+    }
+
+    @Test
+    void resolvesSecretReferenceThroughJsonConfigurationMapperAndEncrypts() throws Exception {
+        // @covers spec 008-mensajeria-pagos RF-014 (cifrado por columna del raw_payload
+        // usando clave resuelta vía ${secret:...} antes de invocar al provider).
+        var mapper = new JsonConfigurationMapper(new ObjectMapper(),
+                new SecretResolver(List.of(new SecretValueProvider() {
+                    @Override
+                    public boolean supports(String source) {
+                        return "secret".equalsIgnoreCase(source);
+                    }
+
+                    @Override
+                    public Optional<String> resolve(String reference) {
+                        return "archive_key".equals(reference)
+                                ? Optional.of("vault-resolved-key-2026")
+                                : Optional.empty();
+                    }
+                })));
+
+        var configurationJson = "{"
+                + "\"input\":{\"sourceTaskRef\":\"build-mt101\",\"sourceOutput\":\"records\"},"
+                + "\"encryptColumn\":\"raw_payload\","
+                + "\"encryptionSecretRef\":\"${secret:archive_key}\""
+                + "}";
+
+        var configuration = mapper.toMap(configurationJson);
+        assertEquals("vault-resolved-key-2026", configuration.get("encryptionSecretRef"),
+                "JsonConfigurationMapper must expand ${secret:...} before the provider is invoked");
+
+        var rawPayload = "{\"sendersReference\":\"PROC-SEC\"}";
+        var message = sampleMessageWithRawPayload("PROC-SEC", rawPayload);
+        var context = contextWith(List.of(message), 99L);
+
+        var result = provider.execute(context, configuration);
+
+        @SuppressWarnings("unchecked")
+        var records = (List<Map<String, Object>>) result.outputs().get("records");
+        assertEquals(true, records.get(0).get("encrypted"));
+
+        var stored = singleString("select raw_payload from swift_message_envelope");
+        assertTrue(stored.startsWith("AES-GCM-256:"));
+        assertFalse(stored.contains("PROC-SEC"));
+    }
+
+    @Test
+    void rejectsUnresolvedSecretPlaceholderInEncryptionSecretRef() throws Exception {
+        // @covers spec 008-mensajeria-pagos RF-014 (invariante de seguridad: el provider
+        // se niega a cifrar con un placeholder ${secret:...} sin resolver).
+        var message = sampleMessageWithRawPayload("PROC-GUARD", "{\"k\":\"v\"}");
+        var context = contextWith(List.of(message), 5L);
+
+        var error = assertThrows(IllegalStateException.class, () -> provider.execute(context, Map.of(
+                "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records"),
+                "encryptColumn", "raw_payload",
+                "encryptionSecretRef", "${secret:archive_key}"
+        )));
+
+        assertTrue(error.getMessage().contains("encryptionSecretRef llegó sin resolver"),
+                () -> "mensaje inesperado: " + error.getMessage());
+        assertEquals(0, countRows("swift_message_envelope"),
+                "no debe persistir nada cuando el placeholder no se resolvió");
     }
 
     @Test

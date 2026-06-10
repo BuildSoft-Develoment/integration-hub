@@ -22,6 +22,8 @@ public class ProcessExecutionService {
     private final Instance<ExecutionFastPath> fastPaths;
     private final TaskOutputRegistry taskOutputRegistry;
     private final Tracer tracer;
+    private final SuspensionTokenGenerator suspensionTokenGenerator;
+    private final SuspendedStateMarshaller suspendedStateMarshaller;
 
     public ProcessExecutionService(
             ProcessExecutionStateService processExecutionStateService,
@@ -29,7 +31,9 @@ public class ProcessExecutionService {
             ProcessExecutionAuditMapper auditMapper,
             Instance<ExecutionFastPath> fastPaths,
             TaskOutputRegistry taskOutputRegistry,
-            Tracer tracer
+            Tracer tracer,
+            SuspensionTokenGenerator suspensionTokenGenerator,
+            SuspendedStateMarshaller suspendedStateMarshaller
     ) {
         this.processExecutionStateService = processExecutionStateService;
         this.processTaskRuntimeService = processTaskRuntimeService;
@@ -37,6 +41,8 @@ public class ProcessExecutionService {
         this.fastPaths = fastPaths;
         this.taskOutputRegistry = taskOutputRegistry;
         this.tracer = tracer;
+        this.suspensionTokenGenerator = suspensionTokenGenerator;
+        this.suspendedStateMarshaller = suspendedStateMarshaller;
     }
 
     public com.integrationhub.platform.entity.ProcessExecution execute(Long processDefinitionId) {
@@ -125,6 +131,31 @@ public class ProcessExecutionService {
                     var runResult = processTaskRuntimeService.runTask(processExecutionId, taskPlan, sourcePayload, readResult, executionVariables, taskOutputs, selectedFiles, triggerSource);
                     String taskDetails;
                     Object taskPayload;
+
+                    // M-2: el provider pidio suspender (callback externo, polling, approval).
+                    // Persistimos el state + token, salimos del loop sin marcar fail.
+                    // El proceso queda SUSPENDED hasta que llegue POST /api/process-executions/resume/{token}
+                    // o un scheduler periodico re-invoque al provider.
+                    if (runResult.suspended()) {
+                        var token = suspensionTokenGenerator.generate();
+                        var stateJson = suspendedStateMarshaller.marshal(runResult.suspendedState());
+                        var details = auditMapper.buildTaskDetails(taskPlan, runResult.details());
+                        var payload = Map.of(
+                                "taskType", taskPlan.taskType(),
+                                "resumeToken", token,
+                                "suspendedState", runResult.suspendedState());
+                        processExecutionStateService.suspendTask(
+                                processExecutionId,
+                                taskExecutionId,
+                                stateJson,
+                                token,
+                                null,
+                                details,
+                                payload);
+                        taskSpan.setAttribute("task.suspended", true);
+                        taskSpan.setAttribute("task.resume.token", token);
+                        return processExecutionStateService.getExecution(processExecutionId);
+                    }
 
                     if (runResult.fileRead()) {
                         sourcePayload = runResult.sourcePayload();

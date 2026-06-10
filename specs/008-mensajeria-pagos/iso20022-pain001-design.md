@@ -118,15 +118,52 @@ La extensión del `MT101_PAY` `rest.contentType` actual ya cubre este caso.
 
 ### 5. Inbound: reader y parser
 
-Para mensajes ISO 20022 entrantes (banco → core):
-- Reader `iso20022-xml` en catálogo 002: parsea el XML usando JAXB/Jackson XML
-  a un Map estructurado (similar al shape que produce `swift-mt`).
-- `MT101_PARSE` (renombrar a `PAYMENT_PARSE` futuro) interpreta el shape a
-  `Mt101Message`.
+**Estado: implementado** (junio 2026). Tres componentes simétricos al outbound:
 
-Para la primera iteración: si solo hay outbound `pain.001`, no se requiere
-inbound. La conciliación de confirmaciones MX (`pacs.002`, `camt.054`) entra
-en otro placeholder cuando aplique.
+- **`Pain001XmlReaderProvider`** (`provider/reader/`, registrado en catálogo
+  002 con `READER_TYPE = "PAIN001_XML"`). Parsea el XML usando JAXP nativo del
+  JDK (sin nuevas dependencias) con XXE deshabilitado (`disallow-doctype-decl`,
+  entidades externas off, `FEATURE_SECURE_PROCESSING`). Emite **un `ReadRecord`
+  por mensaje** con shape estructurado: `messageId`, `creationDateTime`,
+  `numberOfTransactions`, `controlSum`, `initiatingPartyName`,
+  `paymentInformation` (`paymentInfoId`, `paymentMethod`,
+  `requestedExecutionDate`, `debtorName/Account/AgentBic`, `transactions[]`).
+
+- **`Pain001ToMt101Mapper`** (`provider/task/payments/iso20022/mapper/`). Mapper
+  puro shape XML → `Mt101Message`. Cargos inversos (simetría exacta con
+  `Pain001XmlFormatter.translateCharges`):
+  `DEBT→OUR`, `CRED→BEN`, `SHAR→SHA`, `SLEV`/desconocidos→`SHA`.
+  Agrega `controlTotals` por moneda durante el mapping; numera transacciones
+  desde 1.
+
+- **`Pain001ParseTaskProvider`** (task type `PAIN001_PARSE`). Análogo a
+  `MT101_PARSE` pero consumiendo el shape pain.001. Soporta dos formas de input
+  (reader directo via `readResult` o embebido via `configuration.input.sourceTaskRef`).
+  Publica outputs multi-nominados M-3: `records`, `envelopes`, `headers`,
+  `transactions`, `summary`, `errors`. Errores per-record se capturan sin
+  abortar el batch.
+
+**Pipeline reusado sin cambios**: la salida `records` es `List<Mt101Message>`
+con `format = "PAIN001_XML"`, consumible por `MT101_VALIDATE`, `MT101_ARCHIVE`,
+`MT101_PAY`, `MT101_STATUS`, `MT101_ROUTE`, `MT101_SPLIT` y `MT101_REPAIR` sin
+modificaciones. El nombre `MT101_*` permanece por compatibilidad — su renombrado
+a `PAYMENT_*` queda como decisión arquitectónica ligada a M-1a.
+
+**Cobertura de tests**:
+- `Pain001XmlReaderProviderTest` (7 tests): GrpHdr+PmtInf+1 tx, múltiples txs
+  preservando orden, campos opcionales omitidos, XXE rechazado, XML mal formado,
+  documento sin `CstmrCdtTrfInitn`.
+- `Pain001ToMt101MapperTest` (10 tests): mapping completo, charge codes
+  inversos, `ChrgBr` ausente, agregación de `controlTotals`, numeración
+  secuencial, fallback `paymentInfoId`, validación de `amount`/`date`, shape
+  null/sin `paymentInformation`.
+- `Pain001ParseTaskProviderTest` (6 tests): mapeo desde reader, fallback a
+  `taskOutputs`, conversión de `Map` a `ReadRecord`, captura de errores
+  per-record, skip si batch vacío.
+
+**Conciliación de confirmaciones MX** (`pacs.002`, `camt.054`) sigue siendo un
+placeholder separado — se activa cuando aparezca el caso de uso (al igual que
+en SWIFT FIN, donde `MT101_STATUS` ya cubre el equivalente).
 
 ## Trabajo concreto futuro (cuando se priorice)
 
@@ -136,7 +173,7 @@ en otro placeholder cuando aplique.
 | `ValidationPredicate` XSD-based       | M (2d)   | Pain001Formatter |
 | Testcases golden para `pain.001.001.09` | M (3d) | XSDs + ejemplos |
 | Renombrar enum a `PAYMENT_*`          | L (5d)   | M-1a backend  |
-| Reader `iso20022-xml` para inbound    | M (3d)   | caso de uso confirmado |
+| ~~Reader `iso20022-xml` para inbound~~ | ~~M (3d)~~ | **DONE** (junio 2026) |
 | Schema validation contra CBPR+ rules  | L (5d+)  | guía bancaria |
 
 ## Open questions

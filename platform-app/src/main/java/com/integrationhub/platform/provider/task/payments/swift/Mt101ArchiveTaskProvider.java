@@ -255,6 +255,12 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
         if (encryptColumn == null || keyMaterial == null) {
             return null;
         }
+        if (keyMaterial.startsWith("${")) {
+            throw new IllegalStateException(
+                    "encryptionSecretRef llegó sin resolver: '" + keyMaterial
+                            + "'. La configuración debe pasar por JsonConfigurationMapper.toMap() "
+                            + "para expandir ${secret:...} antes de invocar al provider.");
+        }
         return new AesGcmPayloadEncryptor(keyMaterial);
     }
 

@@ -19,4 +19,16 @@ public class ProcessTaskDefinitionRepository implements PanacheRepository<Proces
     public long deactivateByProcessDefinition(ProcessDefinition processDefinition) {
         return update("active = false where processDefinition = ?1 and active = true", processDefinition);
     }
+
+    /**
+     * Cuenta tareas activas con order &gt; el dado. Usado por el resume de M-2
+     * para decidir si el proceso queda COMPLETED (sin mas tareas) o RUNNING
+     * (con tareas downstream pendientes que necesitan re-drive).
+     *
+     * @trace spec 003 T-017 (M-2 suspension engine), ADR-009
+     */
+    public long countDownstreamTasks(ProcessDefinition processDefinition, int taskOrder) {
+        return count("processDefinition = ?1 and active = true and taskOrder > ?2",
+                processDefinition, taskOrder);
+    }
 }
