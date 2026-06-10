@@ -3,6 +3,14 @@
     <h3>{{ i18n.t('processTask.MT101_REPAIR') }}</h3>
   </header>
 
+  <ih-process-task-runtime-panel
+    [task]="task()"
+    [tasks]="tasks()"
+    [draft]="draft()"
+    [readonly]="readonly()"
+    (runtimeChange)="updateDraft($event)"
+  />
+
   <p class="mt101-repair__description">{{ i18n.t('mt101Repair.description') }}</p>
 
   <section class="mt101-repair__section">

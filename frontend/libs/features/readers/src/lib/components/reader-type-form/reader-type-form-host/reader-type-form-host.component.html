@@ -14,6 +14,9 @@
       @case ('XML') {
         <ih-reader-xml-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" />
       }
+      @case ('SWIFT_MT') {
+        <ih-reader-swift-mt-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" />
+      }
       @default {
         <ih-reader-json-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" />
       }

@@ -11,11 +11,12 @@ import {
 } from '@integration-hub/core/providers';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { ConnectionRef, ProcessTaskFormModel } from '../../../models/process.models';
+import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
 @Component({
   selector: 'ih-process-mt101-validate-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ProcessTaskRuntimePanelComponent],
   templateUrl: './process-mt101-validate-task-form.component.html',
   styleUrl: './process-mt101-validate-task-form.component.css',
 })
@@ -26,6 +27,7 @@ export class ProcessMt101ValidateTaskFormComponent {
   private readonly bridge = inject(ProcessTaskFormBridgeService);
 
   readonly task = input.required<ProcessTaskFormModel>();
+  readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
   readonly connections = input.required<readonly ConnectionRef[]>();
   readonly readonly = input(false);
 

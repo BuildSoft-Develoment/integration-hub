@@ -315,3 +315,38 @@ export class XmlReaderProvider extends ReaderProvider {
     };
   }
 }
+
+@Injectable()
+export class SwiftMtReaderProvider extends ReaderProvider {
+  readonly descriptor = {
+    type: 'SWIFT_MT',
+    label: 'SWIFT MT/FIN',
+    description: 'Lectura de mensajes SWIFT FIN crudos con blocks 1-5.',
+    category: 'Payments',
+    capabilities: ['swift-fin', 'mt101', 'block-parser'],
+  } as const;
+
+  override createDraft(): ReaderDraft {
+    return {
+      type: 'SWIFT_MT',
+      encoding: 'UTF-8',
+      rejectNonSwiftXChars: false,
+    };
+  }
+
+  protected override hydrateDraftFromObject(configuration: Record<string, unknown>): ReaderDraft {
+    const draft = this.createDraft();
+    return {
+      ...draft,
+      encoding: String(configuration['encoding'] || draft.encoding),
+      rejectNonSwiftXChars: Boolean(configuration['rejectNonSwiftXChars']),
+    };
+  }
+
+  protected override toConfigurationObject(draft: ReaderDraft): Record<string, unknown> {
+    return {
+      encoding: draft.encoding || 'UTF-8',
+      rejectNonSwiftXChars: Boolean(draft.rejectNonSwiftXChars),
+    };
+  }
+}

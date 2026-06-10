@@ -8,16 +8,25 @@ import {
 } from '@integration-hub/core/providers';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { ProcessTaskFormModel } from '../../../models/process.models';
+import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
 @Component({
   selector: 'ih-process-mt101-parse-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, ProcessTaskRuntimePanelComponent],
   template: `
     <div class="mt101-parse">
       <header class="mt101-parse__header">
         <h3>{{ i18n.t('processTask.MT101_PARSE') }}</h3>
       </header>
+
+      <ih-process-task-runtime-panel
+        [task]="task()"
+        [tasks]="tasks()"
+        [draft]="draft()"
+        [readonly]="readonly()"
+        (runtimeChange)="updateDraft($event)"
+      />
 
       <p class="mt101-parse__description">{{ i18n.t('mt101Parse.description') }}</p>
 
@@ -67,6 +76,7 @@ export class ProcessMt101ParseTaskFormComponent {
   private readonly bridge = inject(ProcessTaskFormBridgeService);
 
   readonly task = input.required<ProcessTaskFormModel>();
+  readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101ParseTaskDraft>(

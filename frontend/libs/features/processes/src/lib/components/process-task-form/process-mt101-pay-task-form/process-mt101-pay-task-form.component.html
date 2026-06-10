@@ -14,6 +14,14 @@
     </label>
   </header>
 
+  <ih-process-task-runtime-panel
+    [task]="task()"
+    [tasks]="tasks()"
+    [draft]="draft()"
+    [readonly]="readonly()"
+    (runtimeChange)="updateDraft($event)"
+  />
+
   @if (draft().transport === 'REST') {
     <section class="mt101-pay__section">
       <h4>{{ i18n.t('mt101Pay.section.rest') }}</h4>
@@ -62,9 +70,18 @@
             (ngModelChange)="updateRest({ authType: $event })"
             [disabled]="readonly()">
             @for (a of authTypes; track a) {
-              <option [value]="a">{{ a || '—' }}</option>
+              <option [value]="a">{{ a || '-' }}</option>
             }
           </select>
+        </label>
+        <label class="mt101-pay__col-2">
+          <span>{{ i18n.t('mt101Pay.rest.extraHeaders') }}</span>
+          <textarea
+            rows="3"
+            placeholder="{ &quot;X-Origin&quot;: &quot;integration-hub&quot; }"
+            [ngModel]="draft().rest.extraHeadersJson"
+            (ngModelChange)="updateRest({ extraHeadersJson: $event })"
+            [disabled]="readonly()"></textarea>
         </label>
       </div>
 
@@ -109,6 +126,15 @@
               [ngModel]="draft().rest.tokenPath"
               (ngModelChange)="updateRest({ tokenPath: $event })"
               [disabled]="readonly()" />
+          </label>
+          <label class="mt101-pay__col-2">
+            <span>{{ i18n.t('mt101Pay.rest.loginHeaders') }}</span>
+            <textarea
+              rows="3"
+              placeholder="{ &quot;Content-Type&quot;: &quot;application/x-www-form-urlencoded&quot; }"
+              [ngModel]="draft().rest.loginHeadersJson"
+              (ngModelChange)="updateRest({ loginHeadersJson: $event })"
+              [disabled]="readonly()"></textarea>
           </label>
           <label class="mt101-pay__col-2">
             <span>{{ i18n.t('mt101Pay.rest.loginBodyTemplate') }}</span>

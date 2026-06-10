@@ -11,6 +11,7 @@ import com.integrationhub.platform.repository.ProcessDefinitionRepository;
 import com.integrationhub.platform.repository.ProcessTaskDefinitionRepository;
 import com.integrationhub.platform.repository.ReaderDefinitionRepository;
 import com.integrationhub.platform.repository.SourceDefinitionRepository;
+import com.integrationhub.platform.service.execution.TaskTypeRegistry;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 
@@ -27,19 +28,22 @@ public class ProcessCatalogService {
     private final SourceDefinitionRepository sourceDefinitionRepository;
     private final ReaderDefinitionRepository readerDefinitionRepository;
     private final ProcessDefinitionApiMapper processDefinitionApiMapper;
+    private final TaskTypeRegistry taskTypeRegistry;
 
     public ProcessCatalogService(
             ProcessDefinitionRepository processDefinitionRepository,
             ProcessTaskDefinitionRepository processTaskDefinitionRepository,
             SourceDefinitionRepository sourceDefinitionRepository,
             ReaderDefinitionRepository readerDefinitionRepository,
-            ProcessDefinitionApiMapper processDefinitionApiMapper
+            ProcessDefinitionApiMapper processDefinitionApiMapper,
+            TaskTypeRegistry taskTypeRegistry
     ) {
         this.processDefinitionRepository = processDefinitionRepository;
         this.processTaskDefinitionRepository = processTaskDefinitionRepository;
         this.sourceDefinitionRepository = sourceDefinitionRepository;
         this.readerDefinitionRepository = readerDefinitionRepository;
         this.processDefinitionApiMapper = processDefinitionApiMapper;
+        this.taskTypeRegistry = taskTypeRegistry;
     }
 
     @Transactional
@@ -100,14 +104,18 @@ public class ProcessCatalogService {
     private List<ProcessTaskDefinition> replaceTasks(ProcessDefinition definition, List<ProcessTaskRequest> taskRequests) {
         var tasks = new ArrayList<ProcessTaskDefinition>();
         for (var taskRequest : taskRequests) {
+            var requestedType = blankToNull(taskRequest.taskType());
+            if (requestedType == null || !taskTypeRegistry.isRegistered(requestedType)) {
+                throw new IllegalArgumentException("Unsupported taskType: " + taskRequest.taskType());
+            }
             var task = new ProcessTaskDefinition();
             task.processDefinition = definition;
             task.taskOrder = taskRequest.taskOrder();
-            task.taskType = taskRequest.taskType();
+            task.taskType = requestedType;
             task.active = true;
             task.configurationJson = taskRequest.configurationJson();
 
-            if (TaskType.FILE_READ.equals(taskRequest.taskType())
+            if (TaskType.FILE_READ.equalsIgnoreCase(requestedType)
                     && (taskRequest.sourceDefinitionId() == null || taskRequest.readerDefinitionId() == null)) {
                 throw new IllegalArgumentException("FILE_READ task requires sourceDefinitionId and readerDefinitionId");
             }
@@ -128,4 +136,3 @@ public class ProcessCatalogService {
         return value == null || value.isBlank() ? null : value;
     }
 }
-

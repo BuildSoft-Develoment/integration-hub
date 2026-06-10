@@ -48,12 +48,15 @@ public class TaskTypeRegistry {
         if (taskType == null || taskType.isBlank()) {
             return false;
         }
-        return TaskType.BUILTIN.contains(taskType)
-                || taskProviderRegistry.availableTaskTypes().contains(taskType);
+        var normalized = taskType.trim();
+        return TaskType.BUILTIN.stream().anyMatch(type -> type.equalsIgnoreCase(normalized))
+                || taskProviderRegistry.availableTaskTypes().stream()
+                .anyMatch(type -> type.equalsIgnoreCase(normalized));
     }
 
     /** Verifica si un task type es del motor (subset estable). */
     public boolean isBuiltin(String taskType) {
-        return taskType != null && TaskType.BUILTIN.contains(taskType);
+        return taskType != null && TaskType.BUILTIN.stream()
+                .anyMatch(type -> type.equalsIgnoreCase(taskType.trim()));
     }
 }

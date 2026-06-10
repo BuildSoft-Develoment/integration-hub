@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { ReaderManagerService, SourceManagerService } from '@integration-hub/core/services';
-import { ProcessTaskBindingOption } from '@integration-hub/core/providers';
+import { ProcessTaskBindingOption, ProcessTaskFormModel, SourceRef } from '@integration-hub/core/providers';
 import { ProcessTaskBindingContextService } from './process-task-binding-context.service';
 
 /**
@@ -10,13 +10,15 @@ import { ProcessTaskBindingContextService } from './process-task-binding-context
  */
 describe('ProcessTaskBindingContextService.tokenForOption (P1.c)', () => {
   let service: ProcessTaskBindingContextService;
+  let sourceDraft: Record<string, unknown>;
 
   beforeEach(() => {
+    sourceDraft = {};
     TestBed.configureTestingModule({
       providers: [
         ProcessTaskBindingContextService,
         { provide: ReaderManagerService, useValue: {} },
-        { provide: SourceManagerService, useValue: {} },
+        { provide: SourceManagerService, useValue: { hydrateDraft: () => sourceDraft } },
       ],
     });
     service = TestBed.inject(ProcessTaskBindingContextService);
@@ -45,4 +47,37 @@ describe('ProcessTaskBindingContextService.tokenForOption (P1.c)', () => {
   it('falls back to the plain key when there is no source taskRef', () => {
     expect(service.tokenForOption(option('summary', 'processedCount'), '')).toBe('processedCount');
   });
+
+  it('treats MT101 tasks as record producers by default', () => {
+    const task = taskForm('MT101_ARCHIVE');
+
+    expect(service.availableOutputsForTask(task)).toContain('records');
+    expect(service.defaultOutputForTask(task)).toBe('records');
+  });
+
+  it('infers SWIFT_MT reader from source metadata and filename', () => {
+    const source: SourceRef = {
+      id: 1,
+      name: 'swift-inbound',
+      sourceType: 'FILESYSTEM',
+      configurationJson: '{}',
+    };
+
+    sourceDraft = { mediaType: 'application/x-swift', fileNameTemplate: 'inbound-*.mt101' };
+
+    expect(service.inferCompatibleReaders(source)).toContain('SWIFT_MT');
+  });
 });
+
+function taskForm(taskType: ProcessTaskFormModel['taskType']): ProcessTaskFormModel {
+  return {
+    clientId: taskType.toLowerCase(),
+    id: null,
+    taskOrder: 1,
+    taskType,
+    active: true,
+    sourceDefinitionId: null,
+    readerDefinitionId: null,
+    configurationJson: JSON.stringify({ taskRef: taskType.toLowerCase() }),
+  };
+}

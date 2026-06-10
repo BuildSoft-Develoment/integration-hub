@@ -25,6 +25,8 @@ describe('Mt101PayTaskProvider', () => {
     expect(draft.executionMode).toBe('per-record');
     expect(draft.transport).toBe('REST');
     expect(draft.rest.method).toBe('POST');
+    expect(draft.rest.extraHeadersJson).toBe('');
+    expect(draft.rest.loginHeadersJson).toBe('');
     expect(draft.idempotencyKeyTemplate).toBe('${sendersReference}');
     expect(draft.retryPolicy.maxRetries).toBe(5);
     expect(draft.confirmationMode).toBe('sync');
@@ -61,14 +63,18 @@ describe('Mt101PayTaskProvider', () => {
         url: 'https://gateway.banco.local/v1/swift/mt101',
         authType: 'login-request',
         loginUrl: 'https://auth.banco.local/oauth/token',
+        loginHeadersJson: '{ "X-Api-Key": "key-123" }',
         loginBodyTemplate: 'grant_type=client_credentials&client_id=${secret:cid}',
         tokenPath: '$.access_token',
+        extraHeadersJson: '{ "X-Origin": "integration-hub" }',
       },
     };
     const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
     expect(config.rest.loginUrl).toBe('https://auth.banco.local/oauth/token');
+    expect(config.rest.loginHeaders).toEqual({ 'X-Api-Key': 'key-123' });
     expect(config.rest.loginBodyTemplate).toContain('grant_type=client_credentials');
     expect(config.rest.tokenPath).toBe('$.access_token');
+    expect(config.rest.extraHeaders).toEqual({ 'X-Origin': 'integration-hub' });
     expect(config.rest.token).toBeUndefined();
   });
 
@@ -100,8 +106,10 @@ describe('Mt101PayTaskProvider', () => {
         token: '${secret:t}',
         loginUrl: '',
         loginMethod: 'POST',
+        loginHeadersJson: '',
         loginBodyTemplate: '',
         tokenPath: '$.access_token',
+        extraHeadersJson: '{\n  "X-Origin": "integration-hub"\n}',
         contentType: 'application/json',
         timeoutSeconds: 30,
       },

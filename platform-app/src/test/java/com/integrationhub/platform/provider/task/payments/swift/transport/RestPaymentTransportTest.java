@@ -90,6 +90,59 @@ class RestPaymentTransportTest {
     }
 
     @Test
+    void sendsBearerAuthorizationHeader(WireMockRuntimeInfo wm) {
+        stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200).withBody("{\"accepted\":true}")));
+
+        var configuration = new LinkedHashMap<String, Object>();
+        configuration.put("transport", "REST");
+        configuration.put("rest", Map.of(
+                "url", wm.getHttpBaseUrl() + "/v1/swift/mt101",
+                "authType", "bearer",
+                "token", "token-123"
+        ));
+        configuration.put("retryPolicy", Map.of("maxRetries", 0));
+
+        var result = transport.send(sampleMessage("PROC-BEARER", "u"), configuration);
+
+        assertTrue(result.accepted());
+        verify(postRequestedFor(urlEqualTo("/v1/swift/mt101"))
+                .withHeader("Authorization", equalTo("Bearer token-123")));
+    }
+
+    @Test
+    void performsLoginRequestAndUsesReturnedBearerToken(WireMockRuntimeInfo wm) {
+        stubFor(any(urlEqualTo("/oauth/token")).willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "application/json")
+                .withBody("{\"data\":{\"token\":\"login-token\"}}")));
+        stubFor(any(urlEqualTo("/v1/swift/mt101")).willReturn(aResponse()
+                .withStatus(200)
+                .withBody("{\"accepted\":true}")));
+
+        var configuration = new LinkedHashMap<String, Object>();
+        configuration.put("transport", "REST");
+        configuration.put("rest", Map.of(
+                "url", wm.getHttpBaseUrl() + "/v1/swift/mt101",
+                "authType", "login-request",
+                "loginUrl", wm.getHttpBaseUrl() + "/oauth/token",
+                "loginMethod", "POST",
+                "loginHeaders", Map.of("X-Api-Key", "key-123"),
+                "loginBodyTemplate", "grant_type=client_credentials",
+                "tokenPath", "$.data.token"
+        ));
+        configuration.put("retryPolicy", Map.of("maxRetries", 0));
+
+        var result = transport.send(sampleMessage("PROC-LOGIN", "u"), configuration);
+
+        assertTrue(result.accepted());
+        verify(postRequestedFor(urlEqualTo("/oauth/token"))
+                .withHeader("X-Api-Key", equalTo("key-123"))
+                .withRequestBody(equalTo("grant_type=client_credentials")));
+        verify(postRequestedFor(urlEqualTo("/v1/swift/mt101"))
+                .withHeader("Authorization", equalTo("Bearer login-token")));
+    }
+
+    @Test
     void retriesOnFiveXxUntilSuccess(WireMockRuntimeInfo wm) {
         stubFor(any(anyUrl())
                 .inScenario("retry-5xx")

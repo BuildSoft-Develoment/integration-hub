@@ -128,11 +128,10 @@ export class ProcessEditorStore {
       // al switch hardcoded de los 6 motor types o un placeholder.
       const nextOrder = current.tasks.length + 1;
       const provisionalRef = `task-${nextOrder}`;
-      const configFromProvider = this.taskManager?.defaultConfigurationJson(taskType, provisionalRef);
       const tasks = normalizeTaskOrders([
         ...current.tasks,
         this.withSuggestedInput(
-          createTaskForm(taskType, nextOrder, configFromProvider),
+          createTaskForm(taskType, nextOrder, this.defaultConfigurationJson(taskType, provisionalRef)),
           current.tasks,
         ),
       ]);
@@ -170,7 +169,12 @@ export class ProcessEditorStore {
             ...patch,
             configurationJson:
               patch.taskType && patch.taskType !== task.taskType
-                ? defaultTaskConfig(nextType, task.clientId, this.suggestedInput(nextType, previousTasks))
+                ? this.withSuggestedInput({
+                    ...task,
+                    ...patch,
+                    taskType: nextType,
+                    configurationJson: this.defaultConfigurationJson(nextType, task.clientId),
+                  }, previousTasks).configurationJson
                 : (patch.configurationJson ?? task.configurationJson),
             sourceDefinitionId:
               nextType === 'FILE_READ'
@@ -201,10 +205,38 @@ export class ProcessEditorStore {
   }
 
   private withSuggestedInput(task: ProcessTaskFormModel, previousTasks: readonly ProcessTaskFormModel[]): ProcessTaskFormModel {
+    const suggested = this.suggestedInput(task.taskType, previousTasks);
+    if (!suggested) {
+      return task;
+    }
+    try {
+      const parsed = JSON.parse(task.configurationJson || '{}');
+      if (parsed?.input?.sourceTaskRef) {
+        return task;
+      }
+      return {
+        ...task,
+        configurationJson: JSON.stringify({
+          ...parsed,
+          input: {
+            source: 'task-output',
+            sourceTaskRef: suggested.sourceTaskRef,
+            sourceOutput: suggested.sourceOutput,
+          },
+        }, null, 2),
+      };
+    } catch {
+      // Fallback conservador para configs invalidas: mantiene el comportamiento previo.
+    }
     return {
       ...task,
-      configurationJson: defaultTaskConfig(task.taskType, task.clientId, this.suggestedInput(task.taskType, previousTasks)),
+      configurationJson: defaultTaskConfig(task.taskType, task.clientId, suggested),
     };
+  }
+
+  private defaultConfigurationJson(taskType: ProcessTaskType, taskRef: string): string {
+    return this.taskManager?.defaultConfigurationJson(taskType, taskRef)
+      ?? defaultTaskConfig(taskType, taskRef);
   }
 
   private suggestedInput(taskType: ProcessTaskType, previousTasks: readonly ProcessTaskFormModel[]): { sourceTaskRef: string; sourceOutput: ProcessTaskOutputKind } | undefined {
@@ -230,6 +262,15 @@ export class ProcessEditorStore {
       case 'DB_EXECUTE_FN':
         return 'out';
       case 'FILE_READ':
+      case 'MT101_BUILD':
+      case 'MT101_PARSE':
+      case 'MT101_SPLIT':
+      case 'MT101_REPAIR':
+      case 'MT101_ARCHIVE':
+      case 'MT101_PAY':
+      case 'MT101_ROUTE':
+      case 'MT101_RECONCILE':
+      case 'MT101_STATUS':
         return 'records';
       default:
         return 'summary';

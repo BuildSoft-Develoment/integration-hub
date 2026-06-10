@@ -3,6 +3,14 @@
     <h3>{{ i18n.t('processTask.MT101_ARCHIVE') }}</h3>
   </header>
 
+  <ih-process-task-runtime-panel
+    [task]="task()"
+    [tasks]="tasks()"
+    [draft]="draft()"
+    [readonly]="readonly()"
+    (runtimeChange)="updateDraft($event)"
+  />
+
   <section class="mt101-archive__section">
     <h4>{{ i18n.t('mt101Archive.section.destination') }}</h4>
     <div class="mt101-archive__grid">
@@ -12,7 +20,7 @@
           [ngModel]="draft().connectionRef"
           (ngModelChange)="updateDraft({ connectionRef: $event })"
           [disabled]="readonly()">
-          <option value="">—</option>
+          <option value="">-</option>
           @for (c of connections(); track c.id) {
             <option [value]="c.id">{{ c.name }} ({{ c.connectionType }})</option>
           }

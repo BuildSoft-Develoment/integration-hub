@@ -140,6 +140,7 @@ class Mt101ArchiveTaskProviderTest {
         assertEquals(1, records.size());
         assertNotNull(records.get(0).get("archiveId"));
         assertNotNull(records.get(0).get("envelopeId"));
+        assertEquals(message, records.get(0).get("message"));
         assertEquals(64, ((String) records.get(0).get("hash")).length(), "SHA-256 hex es 64 chars");
         assertEquals(false, records.get(0).get("encrypted"));
 

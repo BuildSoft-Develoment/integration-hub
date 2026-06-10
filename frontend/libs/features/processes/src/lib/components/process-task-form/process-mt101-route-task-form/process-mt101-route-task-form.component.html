@@ -3,6 +3,14 @@
     <h3>{{ i18n.t('processTask.MT101_ROUTE') }}</h3>
   </header>
 
+  <ih-process-task-runtime-panel
+    [task]="task()"
+    [tasks]="tasks()"
+    [draft]="draft()"
+    [readonly]="readonly()"
+    (runtimeChange)="updateDraft($event)"
+  />
+
   <section class="mt101-route__section">
     <h4>{{ i18n.t('mt101Route.section.rules') }}</h4>
     <p class="mt101-route__hint">{{ i18n.t('mt101Route.predicateHint') }}</p>

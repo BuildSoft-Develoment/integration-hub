@@ -14,6 +14,14 @@
     </label>
   </header>
 
+  <ih-process-task-runtime-panel
+    [task]="task()"
+    [tasks]="tasks()"
+    [draft]="draft()"
+    [readonly]="readonly()"
+    (runtimeChange)="updateDraft($event)"
+  />
+
   <section class="mt101-build__section">
     <h4>{{ i18n.t('mt101.section.envelope') }}</h4>
     <div class="mt101-build__grid">
@@ -117,7 +125,7 @@
           (ngModelChange)="updateSequenceA({ accountServicingOption: $event })"
           [disabled]="readonly()">
           @for (option of servicingOptions; track option) {
-            <option [value]="option">{{ option || '—' }}</option>
+            <option [value]="option">{{ option || '-' }}</option>
           }
         </select>
       </label>
@@ -144,87 +152,36 @@
           [disabled]="readonly()" />
       </label>
       <label>
-        <span>{{ i18n.t('mt101.mappings.amountCurrencyField') }}</span>
-        <input
-          type="text"
-          placeholder="moneda"
-          [ngModel]="draft().transactionMappings.amountCurrencyField"
-          (ngModelChange)="updateMappings({ amountCurrencyField: $event })"
-          [disabled]="readonly()" />
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101.mappings.amountValueField') }}</span>
-        <input
-          type="text"
-          placeholder="monto"
-          [ngModel]="draft().transactionMappings.amountValueField"
-          (ngModelChange)="updateMappings({ amountValueField: $event })"
-          [disabled]="readonly()" />
-      </label>
-      <label>
         <span>{{ i18n.t('mt101.mappings.beneficiaryOption') }}</span>
         <select
           [ngModel]="draft().transactionMappings.beneficiaryOption"
           (ngModelChange)="updateMappings({ beneficiaryOption: $event })"
           [disabled]="readonly()">
           @for (option of beneficiaryOptions; track option) {
-            <option [value]="option">{{ option || '—' }}</option>
+            <option [value]="option">{{ option || '-' }}</option>
           }
         </select>
       </label>
-      <label>
-        <span>{{ i18n.t('mt101.mappings.beneficiaryAccountField') }}</span>
-        <input
-          type="text"
-          placeholder="cuenta_beneficiario"
-          [ngModel]="draft().transactionMappings.beneficiaryAccountField"
-          (ngModelChange)="updateMappings({ beneficiaryAccountField: $event })"
-          [disabled]="readonly()" />
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101.mappings.beneficiaryBicField') }}</span>
-        <input
-          type="text"
-          [ngModel]="draft().transactionMappings.beneficiaryBicField"
-          (ngModelChange)="updateMappings({ beneficiaryBicField: $event })"
-          [disabled]="readonly()" />
-      </label>
-      <label class="mt101-build__col-2">
-        <span>{{ i18n.t('mt101.mappings.beneficiaryNameAddressFields') }}</span>
-        <textarea
-          rows="2"
-          placeholder="nombre&#10;dni"
-          [ngModel]="draft().transactionMappings.beneficiaryNameAddressFields"
-          (ngModelChange)="updateMappings({ beneficiaryNameAddressFields: $event })"
-          [disabled]="readonly()"></textarea>
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101.mappings.accountWithBicField') }}</span>
-        <input
-          type="text"
-          placeholder="bic_beneficiario"
-          [ngModel]="draft().transactionMappings.accountWithBicField"
-          (ngModelChange)="updateMappings({ accountWithBicField: $event })"
-          [disabled]="readonly()" />
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101.mappings.remittanceInformationField') }}</span>
-        <input
-          type="text"
-          placeholder="concepto"
-          [ngModel]="draft().transactionMappings.remittanceInformationField"
-          (ngModelChange)="updateMappings({ remittanceInformationField: $event })"
-          [disabled]="readonly()" />
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101.mappings.detailsOfChargesField') }}</span>
-        <input
-          type="text"
-          placeholder="cargos"
-          [ngModel]="draft().transactionMappings.detailsOfChargesField"
-          (ngModelChange)="updateMappings({ detailsOfChargesField: $event })"
-          [disabled]="readonly()" />
-      </label>
+    </div>
+
+    <div class="mt101-build__mapping-workspace">
+      <ih-process-db-write-source-palette
+        [groups]="sourceGroups()"
+        [draggingSource]="draggingSource()"
+        [readonly]="readonly()"
+        (sourceDragStart)="draggingSource.set($event)"
+        (sourceDragEnd)="draggingSource.set(null)"
+      />
+
+      <ih-process-mt101-field-mapping-board
+        [targets]="mappingTargets"
+        [mappings]="draft().transactionMappings"
+        [sourceGroups]="sourceGroups()"
+        [readonly]="readonly()"
+        [draggingSource]="draggingSource()"
+        (sourceDrop)="assignMapping($event.field, $event.source)"
+        (clear)="clearMapping($event)"
+      />
     </div>
   </section>
 

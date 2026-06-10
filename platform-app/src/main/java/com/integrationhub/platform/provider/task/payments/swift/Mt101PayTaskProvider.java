@@ -155,6 +155,8 @@ public class Mt101PayTaskProvider implements TaskProvider {
         for (var item : rawList) {
             if (item instanceof Mt101Message msg) {
                 result.add(msg);
+            } else if (item instanceof Map<?, ?> map && map.get("message") instanceof Mt101Message msg) {
+                result.add(msg);
             } else if (item != null) {
                 throw new IllegalArgumentException(
                         "Expected items at " + key + " to be Mt101Message but got " + item.getClass().getName());

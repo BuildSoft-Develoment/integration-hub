@@ -19,8 +19,10 @@ export interface Mt101PayRestDraft {
   token: string;
   loginUrl: string;
   loginMethod: string;
+  loginHeadersJson: string;
   loginBodyTemplate: string;
   tokenPath: string;
+  extraHeadersJson: string;
   contentType: string;
   timeoutSeconds: number;
 }
@@ -79,8 +81,10 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
         token: '',
         loginUrl: '',
         loginMethod: 'POST',
+        loginHeadersJson: '',
         loginBodyTemplate: '',
         tokenPath: '$.access_token',
+        extraHeadersJson: '',
         contentType: 'application/json',
         timeoutSeconds: 60,
       },
@@ -117,8 +121,10 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
         token: String(rest['token'] || ''),
         loginUrl: String(rest['loginUrl'] || ''),
         loginMethod: String(rest['loginMethod'] || 'POST'),
+        loginHeadersJson: this.stringifyObject(rest['loginHeaders']),
         loginBodyTemplate: String(rest['loginBodyTemplate'] || ''),
         tokenPath: String(rest['tokenPath'] || '$.access_token'),
+        extraHeadersJson: this.stringifyObject(rest['extraHeaders']),
         contentType: String(rest['contentType'] || 'application/json'),
         timeoutSeconds: Number(rest['timeoutSeconds']) || 60,
       },
@@ -150,9 +156,13 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
           token: draft.rest.authType === 'bearer' ? draft.rest.token : undefined,
           loginUrl: draft.rest.authType === 'login-request' ? draft.rest.loginUrl : undefined,
           loginMethod: draft.rest.authType === 'login-request' ? draft.rest.loginMethod : undefined,
+          loginHeaders: draft.rest.authType === 'login-request'
+            ? this.parseObjectText(draft.rest.loginHeadersJson)
+            : undefined,
           loginBodyTemplate:
             draft.rest.authType === 'login-request' ? draft.rest.loginBodyTemplate : undefined,
           tokenPath: draft.rest.authType === 'login-request' ? draft.rest.tokenPath : undefined,
+          extraHeaders: this.parseObjectText(draft.rest.extraHeadersJson),
           contentType: draft.rest.contentType,
           timeoutSeconds: draft.rest.timeoutSeconds,
         })
@@ -231,5 +241,30 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
       }
     }
     return out as T;
+  }
+
+  private stringifyObject(value: unknown): string {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return '';
+    }
+    return JSON.stringify(value, null, 2);
+  }
+
+  private parseObjectText(value: string): Record<string, string> | undefined {
+    if (!value || !value.trim()) {
+      return undefined;
+    }
+    try {
+      const parsed = JSON.parse(value);
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return undefined;
+      }
+      return Object.entries(parsed).reduce<Record<string, string>>((accumulator, [key, entryValue]) => {
+        accumulator[key] = String(entryValue ?? '');
+        return accumulator;
+      }, {});
+    } catch {
+      return undefined;
+    }
   }
 }

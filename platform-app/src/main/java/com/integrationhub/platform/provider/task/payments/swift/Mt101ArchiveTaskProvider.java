@@ -96,6 +96,7 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
                             : message.sequenceA().sendersReference());
                     entry.put("hash", hash);
                     entry.put("encrypted", encryptor != null);
+                    entry.put("message", message);
                     archived.add(entry);
                 }
                 connection.commit();

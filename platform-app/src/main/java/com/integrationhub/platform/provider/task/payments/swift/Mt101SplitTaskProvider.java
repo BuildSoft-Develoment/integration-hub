@@ -1,10 +1,13 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.provider.task.payments.spi.PaymentMessageFormatter;
 import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -45,6 +48,21 @@ public class Mt101SplitTaskProvider implements TaskProvider {
     private static final int DEFAULT_MAX_TRANSACTIONS = 100;
     private static final int DEFAULT_MAX_BYTES = 10000;
     private static final String DEFAULT_REFERENCE_TEMPLATE = "${sendersReference}-${fragmentIndex}";
+
+    private final Iterable<PaymentMessageFormatter> formatters;
+
+    public Mt101SplitTaskProvider() {
+        this.formatters = List.of();
+    }
+
+    @Inject
+    public Mt101SplitTaskProvider(Instance<PaymentMessageFormatter> formatters) {
+        this.formatters = formatters;
+    }
+
+    Mt101SplitTaskProvider(Iterable<PaymentMessageFormatter> formatters) {
+        this.formatters = formatters == null ? List.of() : formatters;
+    }
 
     @Override
     public String type() {
@@ -153,9 +171,22 @@ public class Mt101SplitTaskProvider implements TaskProvider {
                 originalSeqA.accountServicingInstitution(),
                 originalSeqA.authorisation());
         var controlTotals = computeControlTotals(transactions);
-        // Fragmento sin rawPayload (debe reformatearse en BUILD si se requiere);
-        // ARCHIVE/PAY operan sobre Mt101Message tipado.
-        return new Mt101Message(original.envelope(), newSeqA, transactions, controlTotals, null, original.format());
+        var fragment = new Mt101Message(original.envelope(), newSeqA, transactions, controlTotals,
+                null, original.format());
+        return reformat(fragment);
+    }
+
+    private Mt101Message reformat(Mt101Message message) {
+        var format = message.format();
+        if (format == null || format.isBlank()) {
+            return message;
+        }
+        for (var formatter : formatters) {
+            if (formatter.format().equalsIgnoreCase(format)) {
+                return message.withRawPayload(formatter.format(message), formatter.format());
+            }
+        }
+        return message;
     }
 
     private String renderReference(String template, Mt101Message.SequenceA seqA, int fragmentIndex) {

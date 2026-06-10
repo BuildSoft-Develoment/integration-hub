@@ -1,14 +1,23 @@
 // @trace spec 008-mensajeria-pagos RF-001, T-011 (UI MT101_BUILD)
 // @trace ADR-009
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, input } from '@angular/core';
+import { Component, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   Mt101BuildTaskDraft,
+  ProcessTaskBindingOption,
   ProcessTaskFormBridgeService,
 } from '@integration-hub/core/providers';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
-import { ProcessTaskFormModel } from '../../../models/process.models';
+import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
+import { ProcessTaskFormModel, ReaderRef } from '../../../models/process.models';
+import { ProcessDbWriteSourcePaletteComponent } from '../process-db-write-source-palette/process-db-write-source-palette.component';
+import {
+  Mt101BuildMappingField,
+  Mt101BuildMappingTarget,
+  ProcessMt101FieldMappingBoardComponent,
+} from '../process-mt101-field-mapping-board/process-mt101-field-mapping-board.component';
+import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
 /**
  * Formulario de configuracion para tareas {@code MT101_BUILD}.
@@ -21,7 +30,13 @@ import { ProcessTaskFormModel } from '../../../models/process.models';
 @Component({
   selector: 'ih-process-mt101-build-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [
+    CommonModule,
+    FormsModule,
+    ProcessDbWriteSourcePaletteComponent,
+    ProcessMt101FieldMappingBoardComponent,
+    ProcessTaskRuntimePanelComponent,
+  ],
   templateUrl: './process-mt101-build-task-form.component.html',
   styleUrl: './process-mt101-build-task-form.component.css',
 })
@@ -29,9 +44,13 @@ export class ProcessMt101BuildTaskFormComponent {
   readonly i18n = inject(I18nService);
   private readonly manager = inject(ProcessTaskManagerService);
   private readonly bridge = inject(ProcessTaskFormBridgeService);
+  private readonly bindingContext = inject(ProcessTaskBindingContextService);
 
   readonly task = input.required<ProcessTaskFormModel>();
+  readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
+  readonly readers = input.required<readonly ReaderRef[]>();
   readonly readonly = input(false);
+  readonly draggingSource = signal<ProcessTaskBindingOption | null>(null);
 
   readonly draft = computed<Mt101BuildTaskDraft>(
     () =>
@@ -51,6 +70,29 @@ export class ProcessMt101BuildTaskFormComponent {
     'none',
     'debitAccount',
     'maxTransactions',
+  ];
+
+  readonly sourceOptions = computed(() =>
+    this.bindingContext
+      .buildOptions(this.task(), this.tasks(), this.readers(), this.draft().input)
+      .filter((option) => option.kind === 'records' || option.kind === 'variable'),
+  );
+
+  readonly sourceGroups = computed(() => this.bindingContext.groupOptions(this.sourceOptions()));
+  readonly mappingTargets: readonly Mt101BuildMappingTarget[] = [
+    { field: 'amountCurrencyField', labelKey: 'mt101.mappings.amountCurrencyField', path: 'amount.currency' },
+    { field: 'amountValueField', labelKey: 'mt101.mappings.amountValueField', path: 'amount.value' },
+    { field: 'beneficiaryAccountField', labelKey: 'mt101.mappings.beneficiaryAccountField', path: 'beneficiary.account' },
+    { field: 'beneficiaryBicField', labelKey: 'mt101.mappings.beneficiaryBicField', path: 'beneficiary.bic' },
+    {
+      field: 'beneficiaryNameAddressFields',
+      labelKey: 'mt101.mappings.beneficiaryNameAddressFields',
+      path: 'beneficiary.nameAndAddress',
+      hint: 'Puede contener varios campos separados por salto de linea.',
+    },
+    { field: 'accountWithBicField', labelKey: 'mt101.mappings.accountWithBicField', path: 'accountWithInstitution.bic' },
+    { field: 'remittanceInformationField', labelKey: 'mt101.mappings.remittanceInformationField', path: 'remittanceInformation' },
+    { field: 'detailsOfChargesField', labelKey: 'mt101.mappings.detailsOfChargesField', path: 'detailsOfCharges' },
   ];
 
   /**
@@ -75,6 +117,14 @@ export class ProcessMt101BuildTaskFormComponent {
     this.updateDraft({
       transactionMappings: { ...this.draft().transactionMappings, ...patch },
     });
+  }
+
+  assignMapping(field: Mt101BuildMappingField, source: ProcessTaskBindingOption): void {
+    this.updateMappings({ [field]: source.key } as Partial<Mt101BuildTaskDraft['transactionMappings']>);
+  }
+
+  clearMapping(field: Mt101BuildMappingField): void {
+    this.updateMappings({ [field]: '' } as Partial<Mt101BuildTaskDraft['transactionMappings']>);
   }
 
   private defaultDraft(): Mt101BuildTaskDraft {

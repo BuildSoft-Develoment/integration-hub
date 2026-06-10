@@ -1,10 +1,13 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.provider.task.payments.spi.PaymentMessageFormatter;
 import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -65,6 +68,21 @@ public class Mt101RepairTaskProvider implements TaskProvider {
      */
     private static final Pattern SWIFT_X = Pattern.compile("[A-Za-z0-9 /\\-?:().,'+\\r\\n]");
 
+    private final Iterable<PaymentMessageFormatter> formatters;
+
+    public Mt101RepairTaskProvider() {
+        this.formatters = List.of();
+    }
+
+    @Inject
+    public Mt101RepairTaskProvider(Instance<PaymentMessageFormatter> formatters) {
+        this.formatters = formatters;
+    }
+
+    Mt101RepairTaskProvider(Iterable<PaymentMessageFormatter> formatters) {
+        this.formatters = formatters == null ? List.of() : formatters;
+    }
+
     @Override
     public String type() {
         return "MT101_REPAIR";
@@ -97,7 +115,7 @@ public class Mt101RepairTaskProvider implements TaskProvider {
             // global; la atribucion por accion la calculamos aproximada arriba.
             totalChanges += counter[0];
             var withReference = renameReference(withRepairs, newReferenceTemplate, repairAttempt);
-            repaired.add(withReference);
+            repaired.add(reformat(withReference));
         }
 
         var outputs = new LinkedHashMap<String, Object>();
@@ -213,6 +231,19 @@ public class Mt101RepairTaskProvider implements TaskProvider {
                 oldSeqA.accountServicingInstitution(), oldSeqA.authorisation());
         return new Mt101Message(message.envelope(), newSeqA, message.transactions(),
                 message.controlTotals(), message.rawPayload(), message.format());
+    }
+
+    private Mt101Message reformat(Mt101Message message) {
+        var format = message.format();
+        if (format == null || format.isBlank()) {
+            return message;
+        }
+        for (var formatter : formatters) {
+            if (formatter.format().equalsIgnoreCase(format)) {
+                return message.withRawPayload(formatter.format(message), formatter.format());
+            }
+        }
+        return message;
     }
 
     private List<RepairRule> parseRepairs(Object raw) {

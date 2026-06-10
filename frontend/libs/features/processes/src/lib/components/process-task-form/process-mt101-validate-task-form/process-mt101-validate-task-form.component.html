@@ -3,6 +3,14 @@
     <h3>{{ i18n.t('processTask.MT101_VALIDATE') }}</h3>
   </header>
 
+  <ih-process-task-runtime-panel
+    [task]="task()"
+    [tasks]="tasks()"
+    [draft]="draft()"
+    [readonly]="readonly()"
+    (runtimeChange)="updateDraft($event)"
+  />
+
   <section class="mt101-validate__section">
     <h4>{{ i18n.t('mt101Validate.section.rules') }}</h4>
     <div class="mt101-validate__grid">
@@ -73,7 +81,7 @@
           [ngModel]="draft().publishIssuesConnectionRef"
           (ngModelChange)="updateDraft({ publishIssuesConnectionRef: $event })"
           [disabled]="readonly()">
-          <option value="">—</option>
+          <option value="">-</option>
           @for (c of connections(); track c.id) {
             <option [value]="c.id">{{ c.name }} ({{ c.connectionType }})</option>
           }
