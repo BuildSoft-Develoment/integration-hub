@@ -2,6 +2,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import {
   Mt101ParseTaskDraft,
   ProcessTaskFormBridgeService,
@@ -13,9 +14,9 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
 @Component({
   selector: 'ih-process-mt101-parse-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, ProcessTaskRuntimePanelComponent],
+  imports: [CommonModule, FormsModule, MatCheckboxModule, ProcessTaskRuntimePanelComponent],
   template: `
-    <div class="mt101-parse">
+    <div class="mt101-parse ih-thin-scroll">
       <header class="mt101-parse__header">
         <h3>{{ i18n.t('processTask.MT101_PARSE') }}</h3>
       </header>
@@ -31,25 +32,19 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
       <p class="mt101-parse__description">{{ i18n.t('mt101Parse.description') }}</p>
 
       <section class="mt101-parse__section">
-        <label class="mt101-parse__toggle">
-          <input
-            type="checkbox"
-            [ngModel]="draft().interpretSequenceAB"
-            (ngModelChange)="updateDraft({ interpretSequenceAB: $event })"
-            [disabled]="readonly()" />
-          <span>{{ i18n.t('mt101Parse.interpretSequenceAB') }}</span>
-        </label>
+        <mat-checkbox
+          [ngModel]="draft().interpretSequenceAB"
+          (ngModelChange)="updateDraft({ interpretSequenceAB: $event })"
+          [disabled]="readonly()">
+          {{ i18n.t('mt101Parse.interpretSequenceAB') }}
+        </mat-checkbox>
         <p class="mt101-parse__hint">{{ i18n.t('mt101Parse.interpretSequenceABHint') }}</p>
       </section>
 
       <section class="mt101-parse__section">
-        <label class="mt101-parse__toggle" [class.mt101-parse__toggle--disabled]="true">
-          <input
-            type="checkbox"
-            [ngModel]="draft().publishMultiOutput"
-            [disabled]="true" />
-          <span>{{ i18n.t('mt101Parse.publishMultiOutput') }}</span>
-        </label>
+        <mat-checkbox [ngModel]="draft().publishMultiOutput" [disabled]="true">
+          {{ i18n.t('mt101Parse.publishMultiOutput') }}
+        </mat-checkbox>
         <p class="mt101-parse__hint mt101-parse__hint--warn">
           {{ i18n.t('mt101Parse.publishMultiOutputBlocked') }}
         </p>
@@ -58,14 +53,32 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
   `,
   styles: [
     `
-      .mt101-parse { display: flex; flex-direction: column; gap: 1rem; padding: 1rem; }
-      .mt101-parse__header { padding-bottom: 0.5rem; border-bottom: 1px solid var(--color-border, #e2e8f0); }
+      :host { display: block; height: 100%; min-height: 0; overflow: hidden; }
+      .mt101-parse {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        height: 100%;
+        min-height: 0;
+        overflow: auto;
+        padding: 0 0.25rem 0.25rem 0;
+      }
+      .mt101-parse__header {
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--ih-border-subtle, var(--color-border, #e2e8f0));
+      }
       .mt101-parse__header h3 { margin: 0; font-size: 1.05rem; font-weight: 600; }
-      .mt101-parse__description { margin: 0; font-size: 0.85rem; color: var(--color-text-muted, #475569); }
+      .mt101-parse__description {
+        margin: 0;
+        color: var(--ih-text-soft, var(--color-text-muted, #475569));
+        font-size: 0.85rem;
+      }
       .mt101-parse__section { display: flex; flex-direction: column; gap: 0.3rem; }
-      .mt101-parse__toggle { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; }
-      .mt101-parse__toggle--disabled { opacity: 0.5; cursor: not-allowed; }
-      .mt101-parse__hint { margin: 0; font-size: 0.8rem; color: var(--color-text-muted, #475569); }
+      .mt101-parse__hint {
+        margin: 0;
+        color: var(--ih-text-soft, var(--color-text-muted, #475569));
+        font-size: 0.8rem;
+      }
       .mt101-parse__hint--warn { color: #b45309; }
     `,
   ],

@@ -70,6 +70,11 @@
     "transactionMappings": {
       "transactionReferenceTemplate": "TX-${_processExecutionId}-${recordNumber}-${dni}",
       "amount": { "currencyField": "moneda", "valueField": "monto" },
+      "orderingCustomer": {
+        "option": "H",                     // "" | "F" | "G" | "H"
+        "accountField": "cuenta_ordenante",
+        "nameAndAddressFields": ["nombre_ordenante", "dni_ordenante"]
+      },
       "beneficiary": {
         "option": "",                      // "" | "A" | "F"
         "accountField": "cuenta_beneficiario",
@@ -88,6 +93,14 @@
   }
 }
 ```
+
+Los valores `*Field` y `nameAndAddressFields` de `transactionMappings` aceptan:
+campos del record de entrada (`records`/`table`), variables de ejecucion,
+metadata transversal (`_processExecutionId`, `_sourceFileName`, etc.) y salidas
+previas calificadas para outputs agregados (`<taskRef>.summary.<campo>`,
+`<taskRef>.out.<campo>`). Esto permite que `MT101_BUILD` use la misma semantica
+de fuentes configurables que `DB_WRITE`: el usuario elige columnas o datos
+disponibles en la paleta y el runtime los resuelve antes de construir el mensaje.
 
 Outputs publicados:
 

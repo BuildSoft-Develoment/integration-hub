@@ -3,6 +3,10 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import {
   Mt101ArchiveHashAlgorithm,
   Mt101ArchiveTaskDraft,
@@ -15,7 +19,7 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
 @Component({
   selector: 'ih-process-mt101-archive-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, ProcessTaskRuntimePanelComponent],
+  imports: [CommonModule, FormsModule, MatCheckboxModule, MatFormFieldModule, MatInputModule, MatSelectModule, ProcessTaskRuntimePanelComponent],
   templateUrl: './process-mt101-archive-task-form.component.html',
   styleUrl: './process-mt101-archive-task-form.component.css',
 })

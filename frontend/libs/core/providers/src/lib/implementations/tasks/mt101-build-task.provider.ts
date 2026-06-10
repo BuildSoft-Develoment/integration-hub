@@ -30,6 +30,10 @@ export interface Mt101TransactionMappingsDraft {
   transactionReferenceTemplate: string;
   amountCurrencyField: string;
   amountValueField: string;
+  orderingCustomerOption: '' | 'F' | 'G' | 'H';
+  orderingCustomerAccountField: string;
+  orderingCustomerBicField: string;
+  orderingCustomerNameAddressFields: string;
   beneficiaryOption: '' | 'A' | 'F';
   beneficiaryAccountField: string;
   beneficiaryBicField: string;
@@ -86,6 +90,10 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
         transactionReferenceTemplate: 'TX-${_processExecutionId}-${recordNumber}',
         amountCurrencyField: '',
         amountValueField: '',
+        orderingCustomerOption: '',
+        orderingCustomerAccountField: '',
+        orderingCustomerBicField: '',
+        orderingCustomerNameAddressFields: '',
         beneficiaryOption: '',
         beneficiaryAccountField: '',
         beneficiaryBicField: '',
@@ -108,6 +116,7 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
     const accountServicing = (sequenceA['accountServicingInstitution'] || {}) as Record<string, any>;
     const mappings = (config['transactionMappings'] || {}) as Record<string, any>;
     const amount = (mappings['amount'] || {}) as Record<string, any>;
+    const transactionOrderingCustomer = (mappings['orderingCustomer'] || {}) as Record<string, any>;
     const beneficiary = (mappings['beneficiary'] || {}) as Record<string, any>;
     const accountWith = (mappings['accountWithInstitution'] || {}) as Record<string, any>;
     const split = (config['splitBy'] || {}) as Record<string, any>;
@@ -135,6 +144,10 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
         transactionReferenceTemplate: String(mappings['transactionReferenceTemplate'] || ''),
         amountCurrencyField: String(amount['currencyField'] || ''),
         amountValueField: String(amount['valueField'] || ''),
+        orderingCustomerOption: this.normalizeOptionalOrderingOption(transactionOrderingCustomer['option']),
+        orderingCustomerAccountField: String(transactionOrderingCustomer['accountField'] || ''),
+        orderingCustomerBicField: String(transactionOrderingCustomer['bicField'] || ''),
+        orderingCustomerNameAddressFields: this.joinLines(transactionOrderingCustomer['nameAndAddressFields']),
         beneficiaryOption: this.normalizeBeneficiaryOption(beneficiary['option']),
         beneficiaryAccountField: String(beneficiary['accountField'] || ''),
         beneficiaryBicField: String(beneficiary['bicField'] || ''),
@@ -178,6 +191,12 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
           amount: this.compactObject({
             currencyField: draft.transactionMappings.amountCurrencyField,
             valueField: draft.transactionMappings.amountValueField,
+          }),
+          orderingCustomer: this.compactObject({
+            option: draft.transactionMappings.orderingCustomerOption,
+            accountField: draft.transactionMappings.orderingCustomerAccountField,
+            bicField: draft.transactionMappings.orderingCustomerBicField,
+            nameAndAddressFields: this.splitLines(draft.transactionMappings.orderingCustomerNameAddressFields),
           }),
           beneficiary: this.compactObject({
             option: draft.transactionMappings.beneficiaryOption,
@@ -229,6 +248,11 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
   private normalizeOrderingOption(value: unknown): 'F' | 'G' | 'H' {
     const v = String(value || 'H').toUpperCase();
     return v === 'F' || v === 'G' ? v : 'H';
+  }
+
+  private normalizeOptionalOrderingOption(value: unknown): '' | 'F' | 'G' | 'H' {
+    const v = String(value || '').toUpperCase();
+    return v === 'F' || v === 'G' || v === 'H' ? v : '';
   }
 
   private normalizeServicingOption(value: unknown): 'A' | 'C' | '' {

@@ -1,4 +1,4 @@
-<div class="mt101-validate">
+<div class="mt101-validate ih-thin-scroll">
   <header class="mt101-validate__header">
     <h3>{{ i18n.t('processTask.MT101_VALIDATE') }}</h3>
   </header>
@@ -14,87 +14,94 @@
   <section class="mt101-validate__section">
     <h4>{{ i18n.t('mt101Validate.section.rules') }}</h4>
     <div class="mt101-validate__grid">
-      <label>
-        <span>{{ i18n.t('mt101Validate.ruleSet') }}</span>
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Validate.ruleSet') }}</mat-label>
         <input
+          matInput
           type="text"
           [ngModel]="draft().ruleSet"
           (ngModelChange)="updateDraft({ ruleSet: $event })"
           [disabled]="readonly()" />
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101Validate.standard') }}</span>
-        <select
+      </mat-form-field>
+
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Validate.standard') }}</mat-label>
+        <mat-select
           [ngModel]="draft().standard"
           (ngModelChange)="updateDraft({ standard: $event })"
           [disabled]="readonly()">
           @for (s of standards; track s) {
-            <option [value]="s">{{ s }}</option>
+            <mat-option [value]="s">{{ s }}</mat-option>
           }
-        </select>
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101Validate.appliesTo') }}</span>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Validate.appliesTo') }}</mat-label>
         <input
+          matInput
           type="text"
           [ngModel]="draft().appliesTo"
           (ngModelChange)="updateDraft({ appliesTo: $event })"
           [disabled]="readonly()" />
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101Validate.businessCalendar') }}</span>
-        <select
+      </mat-form-field>
+
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Validate.businessCalendar') }}</mat-label>
+        <mat-select
           [ngModel]="draft().businessCalendar"
           (ngModelChange)="updateDraft({ businessCalendar: $event })"
           [disabled]="readonly()">
           @for (c of calendars; track c) {
-            <option [value]="c">{{ c }}</option>
+            <mat-option [value]="c">{{ c }}</mat-option>
           }
-        </select>
-      </label>
+        </mat-select>
+      </mat-form-field>
     </div>
   </section>
 
   <section class="mt101-validate__section">
     <h4>{{ i18n.t('mt101Validate.section.policy') }}</h4>
     <div class="mt101-validate__grid">
-      <label>
-        <span>{{ i18n.t('mt101Validate.failOn') }}</span>
-        <select
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Validate.failOn') }}</mat-label>
+        <mat-select
           [ngModel]="draft().failOn"
           (ngModelChange)="updateDraft({ failOn: $event })"
           [disabled]="readonly()">
           @for (s of severities; track s) {
-            <option [value]="s">{{ s }}</option>
+            <mat-option [value]="s">{{ s }}</mat-option>
           }
-        </select>
-      </label>
+        </mat-select>
+      </mat-form-field>
     </div>
   </section>
 
   <section class="mt101-validate__section">
     <h4>{{ i18n.t('mt101Validate.section.publishIssues') }}</h4>
     <div class="mt101-validate__grid">
-      <label>
-        <span>{{ i18n.t('mt101Validate.publishIssuesConnection') }}</span>
-        <select
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Validate.publishIssuesConnection') }}</mat-label>
+        <mat-select
           [ngModel]="draft().publishIssuesConnectionRef"
           (ngModelChange)="updateDraft({ publishIssuesConnectionRef: $event })"
           [disabled]="readonly()">
-          <option value="">-</option>
+          <mat-option value="">-</mat-option>
           @for (c of connections(); track c.id) {
-            <option [value]="c.id">{{ c.name }} ({{ c.connectionType }})</option>
+            <mat-option [value]="c.id">{{ c.name }} ({{ c.connectionType }})</mat-option>
           }
-        </select>
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101Validate.publishIssuesTable') }}</span>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Validate.publishIssuesTable') }}</mat-label>
         <input
+          matInput
           type="text"
           [ngModel]="draft().publishIssuesTable"
           (ngModelChange)="updateDraft({ publishIssuesTable: $event })"
           [disabled]="readonly()" />
-      </label>
+      </mat-form-field>
     </div>
   </section>
 </div>

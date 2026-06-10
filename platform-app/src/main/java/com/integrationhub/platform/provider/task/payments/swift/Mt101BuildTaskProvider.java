@@ -1,8 +1,11 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.provider.task.common.StoredProcedureRuntimeSupport;
+import com.integrationhub.platform.provider.task.common.TaskOutputSupport;
 import com.integrationhub.platform.provider.task.payments.spi.PaymentMessageFormatter;
 import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
 import com.integrationhub.platform.spi.reader.ReadRecord;
+import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.source.SourcePayload;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
@@ -82,12 +85,13 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
             return TaskResult.success("MT101_BUILD skipped because there are no records to compose");
         }
 
+        var effectiveRecords = enrichRecordsWithRuntime(context, records, sourcePayload);
         var messageIndex = 1;
         var messageTotal = 1;
         var sendersReference = resolveSendersReference(sequenceACfg, context, messageIndex);
 
         var envelope = buildEnvelope(envelopeCfg);
-        var transactions = buildTransactions(records, mappingsCfg, context);
+        var transactions = buildTransactions(effectiveRecords, mappingsCfg, context);
         var controlTotals = computeControlTotals(transactions);
         var sequenceA = buildSequenceA(sequenceACfg, sendersReference, messageIndex, messageTotal);
 
@@ -106,6 +110,45 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
                 "MT101_BUILD composed 1 message with " + transactions.size() + " transactions in " + format,
                 outputs
         );
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<ReadRecord> enrichRecordsWithRuntime(TaskContext context,
+                                                      List<ReadRecord> records,
+                                                      SourcePayload sourcePayload) {
+        if (records == null || records.isEmpty()) {
+            return List.of();
+        }
+        var executionVariables = context != null && context.attributes().get("executionVariables") instanceof Map<?, ?> rawExecutionVariables
+                ? (Map<String, Object>) rawExecutionVariables
+                : Map.<String, Object>of();
+        var readResult = context != null && context.attributes().get("readResult") instanceof ReadResult read
+                ? read
+                : null;
+        var sourceFile = sourcePayload != null ? sourcePayload.file() : null;
+        var runtimeValues = StoredProcedureRuntimeSupport.buildRuntimeVariables(
+                executionVariables,
+                context != null ? context.processExecutionId() : null,
+                context != null ? context.taskDefinitionId() : null,
+                readResult != null ? readResult.recordCount() : records.size(),
+                readResult != null ? readResult.skippedCount() : 0,
+                sourcePayload != null ? sourcePayload.name() : null,
+                sourcePayload != null ? sourcePayload.location() : null,
+                sourcePayload != null ? sourcePayload.mediaType() : null,
+                sourceFile != null ? sourceFile.size() : null,
+                sourceFile != null ? sourceFile.lastModified() : null
+        );
+        TaskOutputSupport.mergeMetadata(runtimeValues, context);
+        var taskOutputs = TaskOutputSupport.copyTaskOutputs(context);
+        return records.stream().map(record -> {
+            var values = new LinkedHashMap<String, Object>();
+            if (record != null && record.values() != null) {
+                values.putAll(record.values());
+            }
+            runtimeValues.forEach(values::putIfAbsent);
+            taskOutputs.forEach(values::putIfAbsent);
+            return new ReadRecord(values);
+        }).toList();
     }
 
     private PaymentMessageFormatter resolveFormatter(String format) {

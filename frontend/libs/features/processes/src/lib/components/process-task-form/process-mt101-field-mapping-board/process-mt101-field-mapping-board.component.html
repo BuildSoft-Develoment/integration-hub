@@ -1,7 +1,7 @@
 <section class="mapping-board">
   <div class="mapping-board__header ih-section-header">
     <p class="ih-section-eyebrow">{{ i18n.t('mt101.section.transactionMappings') }}</p>
-    <h5>{{ i18n.t('ui.dbWriteTargetColumnsHint') }}</h5>
+    <h5>{{ i18n.t('mt101.mappingBoardHint') }}</h5>
   </div>
 
   <div class="mapping-board__rows ih-thin-scroll">
@@ -10,8 +10,14 @@
         <div class="mapping-row__target">
           <strong>{{ i18n.t(target.labelKey) }}</strong>
           <small>{{ target.path }}</small>
+          @if (target.required) {
+            <small>{{ i18n.t('mt101.mappingRequired') }}</small>
+          }
           @if (target.hint) {
             <small>{{ target.hint }}</small>
+          }
+          @if (target.hintKey) {
+            <small>{{ i18n.t(target.hintKey) }}</small>
           }
         </div>
 
@@ -62,6 +68,46 @@
             </mat-select>
           </mat-form-field>
         </div>
+
+        @if (target.multi && selectedValues(target.field).length) {
+          <div class="mapping-row__chips">
+            @for (value of selectedValues(target.field); track value + ':' + $index; let index = $index) {
+              <span class="mapping-chip">
+                <span>{{ value }}</span>
+                @if (!readonly()) {
+                  <button
+                    type="button"
+                    [attr.aria-label]="i18n.t('mt101.mappingRemoveValue')"
+                    (click)="removeSelectedValue(target.field, index)"
+                  >
+                    x
+                  </button>
+                }
+              </span>
+            }
+          </div>
+        }
+
+        <mat-form-field class="mapping-row__manual" subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t(target.multi ? 'mt101.mappingManualMultiValue' : 'mt101.mappingManualValue') }}</mat-label>
+          @if (target.multi) {
+            <textarea
+              matInput
+              rows="3"
+              [disabled]="readonly()"
+              [value]="valueFor(target.field)"
+              (input)="handleManualChange(target.field, $any($event.target).value)"
+            ></textarea>
+          } @else {
+            <input
+              matInput
+              type="text"
+              [disabled]="readonly()"
+              [value]="valueFor(target.field)"
+              (input)="handleManualChange(target.field, $any($event.target).value)"
+            />
+          }
+        </mat-form-field>
       </article>
     }
   </div>

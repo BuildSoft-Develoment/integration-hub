@@ -2,6 +2,9 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import {
   Mt101RouteRuleDraft,
   Mt101RouteTaskDraft,
@@ -14,7 +17,14 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
 @Component({
   selector: 'ih-process-mt101-route-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, ProcessTaskRuntimePanelComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    MatButtonModule,
+    MatFormFieldModule,
+    MatInputModule,
+    ProcessTaskRuntimePanelComponent,
+  ],
   templateUrl: './process-mt101-route-task-form.component.html',
   styleUrl: './process-mt101-route-task-form.component.css',
 })

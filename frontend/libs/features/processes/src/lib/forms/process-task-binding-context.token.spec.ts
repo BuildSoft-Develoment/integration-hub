@@ -55,6 +55,48 @@ describe('ProcessTaskBindingContextService.tokenForOption (P1.c)', () => {
     expect(service.defaultOutputForTask(task)).toBe('records');
   });
 
+  it('exposes table columns when MT101_BUILD consumes a DB_WRITE table output', () => {
+    const dbWrite: ProcessTaskFormModel = {
+      ...taskForm('DB_WRITE'),
+      clientId: 'db-write',
+      taskOrder: 1,
+      configurationJson: JSON.stringify({
+        taskRef: 'persist-payments',
+        targetTable: 'payments_outbox',
+        columnMappings: {
+          moneda: 'moneda',
+          monto: 'monto',
+          cuenta_beneficiario: 'cuenta',
+        },
+      }),
+    };
+    const build: ProcessTaskFormModel = {
+      ...taskForm('MT101_BUILD'),
+      clientId: 'build-mt101',
+      taskOrder: 2,
+      configurationJson: JSON.stringify({
+        taskRef: 'build-mt101',
+        input: {
+          source: 'task-output',
+          sourceTaskRef: 'persist-payments',
+          sourceOutput: 'table',
+        },
+      }),
+    };
+
+    const options = service.buildOptions(build, [dbWrite, build], [], undefined);
+
+    expect(options).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'metadata', key: '_processExecutionId' }),
+        expect.objectContaining({ kind: 'summary', key: 'processedCount' }),
+        expect.objectContaining({ kind: 'table', key: 'moneda' }),
+        expect.objectContaining({ kind: 'table', key: 'monto' }),
+        expect.objectContaining({ kind: 'table', key: 'cuenta_beneficiario' }),
+      ]),
+    );
+  });
+
   it('infers SWIFT_MT reader from source metadata and filename', () => {
     const source: SourceRef = {
       id: 1,

@@ -18,6 +18,8 @@ export class ProcessDbWriteSourcePaletteComponent {
   readonly groups = input.required<ReadonlyArray<{ key: string; items: readonly DbWriteSourceItem[] }>>();
   readonly draggingSource = input<DbWriteSourceItem | null>(null);
   readonly readonly = input(false);
+  readonly titleKey = input('ui.dbWriteAvailableSources');
+  readonly hintKey = input('ui.dbWriteAvailableSourcesHint');
 
   readonly sourceDragStart = output<DbWriteSourceItem>();
   readonly sourceDragEnd = output<void>();

@@ -34,7 +34,8 @@
 }
 
 .mapping-row__target,
-.mapping-select {
+.mapping-select,
+.mapping-row__manual {
   min-width: 0;
 }
 
@@ -142,6 +143,63 @@
   display: none;
 }
 
+.mapping-row__chips {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.mapping-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--ih-accent) 35%, var(--ih-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ih-accent) 8%, var(--ih-surface));
+  color: var(--ih-text);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.mapping-chip span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mapping-chip button {
+  width: 1rem;
+  height: 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ih-danger);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  font: inherit;
+  line-height: 1;
+}
+
+.mapping-chip button:hover {
+  background: color-mix(in srgb, var(--ih-danger) 12%, transparent);
+}
+
+.mapping-row__manual {
+  grid-column: 2;
+  width: 100%;
+}
+
+.mapping-row__manual textarea {
+  resize: vertical;
+  min-height: 4.75rem;
+}
+
 @media (max-width: 1080px) {
   .mapping-board {
     height: auto;
@@ -155,5 +213,10 @@
 
   .mapping-row {
     grid-template-columns: 1fr;
+  }
+
+  .mapping-row__chips,
+  .mapping-row__manual {
+    grid-column: auto;
   }
 }

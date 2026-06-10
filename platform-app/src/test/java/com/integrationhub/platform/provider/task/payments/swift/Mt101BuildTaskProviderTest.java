@@ -150,6 +150,53 @@ class Mt101BuildTaskProviderTest {
     }
 
     @Test
+    void resolvesMappingsFromRuntimeMetadataVariablesAndTaskOutputs() {
+        var context = new TaskContext(42L, 7L);
+        context.attributes().put("executionVariables", Map.of(
+                "currency", "PEN",
+                "charges", "SHA"
+        ));
+        context.attributes().put("metadata", Map.of("tenantCode", "ACME"));
+        context.attributes().put("taskOutputs", Map.of("source.summary.batchName", "payroll-june"));
+        context.attributes().put("readResult", new ReadResult(List.of(
+                new ReadRecord(Map.of(
+                        "monto", "10.00",
+                        "cuenta_beneficiario", "001-10200200"
+                ))
+        ), 1));
+
+        var result = provider.execute(context, Map.<String, Object>of(
+                "format", "JSON",
+                "sequenceA", Map.of(
+                        "sendersReferenceTemplate", "PROC-${_processExecutionId}",
+                        "requestedExecutionDate", "2026-06-09",
+                        "orderingCustomer", Map.of("option", "H", "account", "001")
+                ),
+                "transactionMappings", Map.of(
+                        "transactionReferenceTemplate", "TX-${tenantCode}-${recordNumber}",
+                        "amount", Map.of("currencyField", "currency", "valueField", "monto"),
+                        "beneficiary", Map.of(
+                                "option", "",
+                                "accountField", "cuenta_beneficiario",
+                                "nameAndAddressFields", List.of("source.summary.batchName")
+                        ),
+                        "remittanceInformationField", "_processExecutionId",
+                        "detailsOfChargesField", "charges"
+                )
+        ));
+
+        @SuppressWarnings("unchecked")
+        var records = (List<Mt101Message>) result.outputs().get("records");
+        var transaction = records.get(0).transactions().get(0);
+        assertEquals("TX-ACME-1", transaction.transactionReference());
+        assertEquals("PEN", transaction.amount().currency());
+        assertEquals(new BigDecimal("10.00"), transaction.amount().value());
+        assertEquals(List.of("payroll-june"), transaction.beneficiary().nameAndAddress());
+        assertEquals("42", transaction.remittanceInformation());
+        assertEquals("SHA", transaction.detailsOfCharges());
+    }
+
+    @Test
     void skipsBuildWhenNoRecords() {
         var context = new TaskContext(1L, 1L);
         context.attributes().put("readResult", new ReadResult(List.of(), 0));

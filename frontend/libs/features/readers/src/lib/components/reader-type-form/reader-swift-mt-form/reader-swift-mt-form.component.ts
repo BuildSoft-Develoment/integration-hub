@@ -16,7 +16,7 @@ import { ReaderTypeFormBaseComponent } from '../reader-type-form.abstract';
   imports: [CommonModule, FormsModule, MatCheckboxModule, MatFormFieldModule, MatInputModule],
   template: `
     <div class="form-grid">
-      <mat-form-field>
+      <mat-form-field subscriptSizing="dynamic">
         <mat-label>{{ i18n.t('ui.encoding') }}</mat-label>
         <input
           matInput
@@ -37,7 +37,13 @@ import { ReaderTypeFormBaseComponent } from '../reader-type-form.abstract';
   `,
   styles: [
     `
-      .form-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:0.8rem; }
+      .form-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 0.8rem;
+        min-width: 0;
+      }
+      .form-grid mat-form-field { min-width: 0; }
       .checkbox-wrap { display:flex; align-items:center; min-height:52px; }
       @container (max-width: 900px){ .form-grid { grid-template-columns: 1fr; } }
     `,

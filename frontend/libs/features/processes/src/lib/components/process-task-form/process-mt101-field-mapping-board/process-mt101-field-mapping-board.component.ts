@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, input, output, signal } from '@angular/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import {
   Mt101BuildTaskDraft,
@@ -15,12 +16,15 @@ export interface Mt101BuildMappingTarget {
   readonly labelKey: string;
   readonly path: string;
   readonly hint?: string;
+  readonly hintKey?: string;
+  readonly multi?: boolean;
+  readonly required?: boolean;
 }
 
 @Component({
   selector: 'ih-process-mt101-field-mapping-board',
   standalone: true,
-  imports: [CommonModule, MatFormFieldModule, MatSelectModule],
+  imports: [CommonModule, MatFormFieldModule, MatInputModule, MatSelectModule],
   templateUrl: './process-mt101-field-mapping-board.component.html',
   styleUrl: './process-mt101-field-mapping-board.component.css',
 })
@@ -34,6 +38,7 @@ export class ProcessMt101FieldMappingBoardComponent {
   readonly draggingSource = input<ProcessTaskBindingOption | null>(null);
 
   readonly sourceDrop = output<{ field: Mt101BuildMappingField; source: ProcessTaskBindingOption }>();
+  readonly valueChange = output<{ field: Mt101BuildMappingField; value: string }>();
   readonly clear = output<Mt101BuildMappingField>();
 
   readonly hoveredField = signal<Mt101BuildMappingField | null>(null);
@@ -54,10 +59,23 @@ export class ProcessMt101FieldMappingBoardComponent {
     return this.draggingSource() ? this.i18n.t('ui.dbWriteDropReady') : this.i18n.t('ui.dbWriteDropAction');
   }
 
+  selectedValues(field: Mt101BuildMappingField): string[] {
+    return this.splitValues(this.valueFor(field));
+  }
+
   handleSourcePicked(field: Mt101BuildMappingField, source: ProcessTaskBindingOption | null): void {
     if (source) {
       this.sourceDrop.emit({ field, source });
     }
+  }
+
+  handleManualChange(field: Mt101BuildMappingField, value: string): void {
+    this.valueChange.emit({ field, value });
+  }
+
+  removeSelectedValue(field: Mt101BuildMappingField, index: number): void {
+    const next = this.selectedValues(field).filter((_, currentIndex) => currentIndex !== index);
+    this.valueChange.emit({ field, value: next.join('\n') });
   }
 
   allowDrop(event: DragEvent): void {
@@ -106,5 +124,12 @@ export class ProcessMt101FieldMappingBoardComponent {
     } catch {
       return null;
     }
+  }
+
+  private splitValues(value: string): string[] {
+    return value
+      .split('\n')
+      .map((item) => item.trim())
+      .filter(Boolean);
   }
 }

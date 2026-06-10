@@ -35,6 +35,7 @@ export class ProcessTaskRuntimePanelComponent {
   readonly draft = input.required<ProcessTaskRuntimeDraft>();
   readonly readonly = input(false);
   readonly showInput = input(true);
+  readonly executionModes = input<readonly ProcessTaskExecutionMode[]>(['once', 'per-record', 'batch']);
   readonly runtimeChange = output<Partial<ProcessTaskRuntimeDraft>>();
 
   readonly taskOptions = computed(() => this.bindingContext.previousTaskOptions(this.task(), this.tasks()));
@@ -44,6 +45,10 @@ export class ProcessTaskRuntimePanelComponent {
   updateExecutionMode(executionMode: ProcessTaskExecutionMode): void {
     const input = this.sanitizeInput(this.selectedInput());
     this.runtimeChange.emit(input ? { executionMode, input } : { executionMode });
+  }
+
+  executionModeLabel(executionMode: ProcessTaskExecutionMode): string {
+    return this.i18n.t(`ui.executionMode.${executionMode === 'per-record' ? 'perRecord' : executionMode}`);
   }
 
   updateSourceTask(sourceTaskRef: string): void {

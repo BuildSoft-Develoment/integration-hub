@@ -3,8 +3,12 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import {
   Mt101BuildTaskDraft,
+  ProcessTaskExecutionMode,
   ProcessTaskBindingOption,
   ProcessTaskFormBridgeService,
 } from '@integration-hub/core/providers';
@@ -33,6 +37,9 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
   imports: [
     CommonModule,
     FormsModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
     ProcessDbWriteSourcePaletteComponent,
     ProcessMt101FieldMappingBoardComponent,
     ProcessTaskRuntimePanelComponent,
@@ -64,7 +71,9 @@ export class ProcessMt101BuildTaskFormComponent {
     { value: 'none', labelKey: 'mt101.uetr.none' },
   ];
   readonly orderingOptions = ['F', 'G', 'H'] as const;
+  readonly buildExecutionModes: readonly ProcessTaskExecutionMode[] = ['once'];
   readonly servicingOptions: ReadonlyArray<'A' | 'C' | ''> = ['', 'A', 'C'];
+  readonly transactionOrderingOptions: ReadonlyArray<'' | 'F' | 'G' | 'H'> = ['', 'F', 'G', 'H'];
   readonly beneficiaryOptions: ReadonlyArray<'' | 'A' | 'F'> = ['', 'A', 'F'];
   readonly splitStrategies: ReadonlyArray<'none' | 'debitAccount' | 'maxTransactions'> = [
     'none',
@@ -73,22 +82,30 @@ export class ProcessMt101BuildTaskFormComponent {
   ];
 
   readonly sourceOptions = computed(() =>
-    this.bindingContext
-      .buildOptions(this.task(), this.tasks(), this.readers(), this.draft().input)
-      .filter((option) => option.kind === 'records' || option.kind === 'variable'),
+    this.bindingContext.buildOptions(this.task(), this.tasks(), this.readers(), this.draft().input),
   );
 
   readonly sourceGroups = computed(() => this.bindingContext.groupOptions(this.sourceOptions()));
   readonly mappingTargets: readonly Mt101BuildMappingTarget[] = [
-    { field: 'amountCurrencyField', labelKey: 'mt101.mappings.amountCurrencyField', path: 'amount.currency' },
-    { field: 'amountValueField', labelKey: 'mt101.mappings.amountValueField', path: 'amount.value' },
+    { field: 'amountCurrencyField', labelKey: 'mt101.mappings.amountCurrencyField', path: 'amount.currency', required: true },
+    { field: 'amountValueField', labelKey: 'mt101.mappings.amountValueField', path: 'amount.value', required: true },
+    { field: 'orderingCustomerAccountField', labelKey: 'mt101.mappings.orderingCustomerAccountField', path: 'orderingCustomer.account' },
+    { field: 'orderingCustomerBicField', labelKey: 'mt101.mappings.orderingCustomerBicField', path: 'orderingCustomer.bic' },
+    {
+      field: 'orderingCustomerNameAddressFields',
+      labelKey: 'mt101.mappings.orderingCustomerNameAddressFields',
+      path: 'orderingCustomer.nameAndAddress',
+      hintKey: 'mt101.mappingMultiHint',
+      multi: true,
+    },
     { field: 'beneficiaryAccountField', labelKey: 'mt101.mappings.beneficiaryAccountField', path: 'beneficiary.account' },
     { field: 'beneficiaryBicField', labelKey: 'mt101.mappings.beneficiaryBicField', path: 'beneficiary.bic' },
     {
       field: 'beneficiaryNameAddressFields',
       labelKey: 'mt101.mappings.beneficiaryNameAddressFields',
       path: 'beneficiary.nameAndAddress',
-      hint: 'Puede contener varios campos separados por salto de linea.',
+      hintKey: 'mt101.mappingMultiHint',
+      multi: true,
     },
     { field: 'accountWithBicField', labelKey: 'mt101.mappings.accountWithBicField', path: 'accountWithInstitution.bic' },
     { field: 'remittanceInformationField', labelKey: 'mt101.mappings.remittanceInformationField', path: 'remittanceInformation' },
@@ -120,11 +137,50 @@ export class ProcessMt101BuildTaskFormComponent {
   }
 
   assignMapping(field: Mt101BuildMappingField, source: ProcessTaskBindingOption): void {
-    this.updateMappings({ [field]: source.key } as Partial<Mt101BuildTaskDraft['transactionMappings']>);
+    const mappingKey = this.mappingKeyForSource(source);
+    if (this.isMultiMapping(field)) {
+      this.appendMappingValue(field, mappingKey);
+      return;
+    }
+    this.setMappingValue(field, mappingKey);
+  }
+
+  setMappingValue(field: Mt101BuildMappingField, value: string): void {
+    this.updateMappings({ [field]: value } as Partial<Mt101BuildTaskDraft['transactionMappings']>);
   }
 
   clearMapping(field: Mt101BuildMappingField): void {
-    this.updateMappings({ [field]: '' } as Partial<Mt101BuildTaskDraft['transactionMappings']>);
+    this.setMappingValue(field, '');
+  }
+
+  private appendMappingValue(field: Mt101BuildMappingField, value: string): void {
+    const normalized = String(value || '').trim();
+    if (!normalized) {
+      return;
+    }
+    const current = this.splitMappingValues(String(this.draft().transactionMappings[field] || ''));
+    if (current.includes(normalized)) {
+      return;
+    }
+    this.setMappingValue(field, [...current, normalized].join('\n'));
+  }
+
+  private isMultiMapping(field: Mt101BuildMappingField): boolean {
+    return this.mappingTargets.some((target) => target.field === field && target.multi);
+  }
+
+  private splitMappingValues(value: string): string[] {
+    return value
+      .split('\n')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  private mappingKeyForSource(source: ProcessTaskBindingOption): string {
+    if (source.kind === 'summary' || source.kind === 'out') {
+      return this.bindingContext.tokenForOption(source, this.draft().input?.sourceTaskRef || '');
+    }
+    return source.key;
   }
 
   private defaultDraft(): Mt101BuildTaskDraft {
@@ -146,6 +202,10 @@ export class ProcessMt101BuildTaskFormComponent {
         transactionReferenceTemplate: 'TX-${_processExecutionId}-${recordNumber}',
         amountCurrencyField: '',
         amountValueField: '',
+        orderingCustomerOption: '',
+        orderingCustomerAccountField: '',
+        orderingCustomerBicField: '',
+        orderingCustomerNameAddressFields: '',
         beneficiaryOption: '',
         beneficiaryAccountField: '',
         beneficiaryBicField: '',

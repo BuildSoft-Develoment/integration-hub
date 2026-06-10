@@ -63,6 +63,9 @@ describe('Mt101BuildTaskProvider', () => {
           ...provider.createDraft().transactionMappings,
           amountCurrencyField: 'moneda',
           amountValueField: 'monto',
+          orderingCustomerOption: 'H',
+          orderingCustomerAccountField: 'cuenta_ordenante',
+          orderingCustomerNameAddressFields: 'nombre_ordenante\nciudad_ordenante',
           beneficiaryAccountField: 'cuenta_beneficiario',
           accountWithBicField: 'bic_beneficiario',
           remittanceInformationField: 'concepto',
@@ -91,6 +94,11 @@ describe('Mt101BuildTaskProvider', () => {
         bic: 'BCPLPEPLXXX',
       });
       expect(config.transactionMappings.amount).toEqual({ currencyField: 'moneda', valueField: 'monto' });
+      expect(config.transactionMappings.orderingCustomer).toEqual({
+        option: 'H',
+        accountField: 'cuenta_ordenante',
+        nameAndAddressFields: ['nombre_ordenante', 'ciudad_ordenante'],
+      });
       expect(config.transactionMappings.beneficiary).toEqual({
         accountField: 'cuenta_beneficiario',
       });
@@ -137,6 +145,10 @@ describe('Mt101BuildTaskProvider', () => {
           transactionReferenceTemplate: 'TX-${dni}',
           amountCurrencyField: 'moneda',
           amountValueField: 'monto',
+          orderingCustomerOption: 'F',
+          orderingCustomerAccountField: 'cuenta_ordenante',
+          orderingCustomerBicField: 'bic_ord',
+          orderingCustomerNameAddressFields: 'nombre_ordenante\ndni_ordenante',
           beneficiaryOption: 'F',
           beneficiaryAccountField: 'cuenta',
           beneficiaryBicField: 'bic_ben',
