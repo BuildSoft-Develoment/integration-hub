@@ -71,7 +71,7 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
   createDraft(): Mt101PayTaskDraft {
     return {
       taskRef: '',
-      executionMode: 'per-record',
+      executionMode: 'once',
       transport: 'REST',
       rest: {
         url: '',
@@ -84,7 +84,7 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
         loginBodyTemplate: '',
         tokenPath: '$.access_token',
         extraHeadersJson: '',
-        contentType: 'application/json',
+        contentType: 'auto',
         timeoutSeconds: 60,
       },
       idempotencyKeyTemplate: '${sendersReference}',
@@ -106,7 +106,7 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
 
   hydrateDraft(task: ProcessTaskFormModel): Mt101PayTaskDraft {
     const config: Record<string, any> = this.parseJson(task.configurationJson);
-    const runtime = this.hydrateRuntime(task, 'per-record');
+    const runtime = this.hydrateRuntime(task, 'once');
     const rest = (config['rest'] || {}) as Record<string, any>;
     const retry = (config['retryPolicy'] || {}) as Record<string, any>;
     const expected = (config['expectedGatewayResponse'] || {}) as Record<string, any>;
@@ -124,7 +124,7 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
         loginBodyTemplate: String(rest['loginBodyTemplate'] || ''),
         tokenPath: String(rest['tokenPath'] || '$.access_token'),
         extraHeadersJson: this.stringifyObject(rest['extraHeaders']),
-        contentType: String(rest['contentType'] || 'application/json'),
+        contentType: String(rest['contentType'] || 'auto'),
         timeoutSeconds: Number(rest['timeoutSeconds']) || 60,
       },
       idempotencyKeyTemplate: String(config['idempotencyKeyTemplate'] ?? '${sendersReference}'),
@@ -192,7 +192,7 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
         }),
       },
       draft,
-      'per-record',
+      'once',
     );
     return { configurationJson: this.toPrettyJson(this.compactObject(payload) as Record<string, unknown>) };
   }

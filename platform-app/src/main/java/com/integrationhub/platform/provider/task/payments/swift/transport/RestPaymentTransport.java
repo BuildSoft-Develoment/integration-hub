@@ -76,7 +76,7 @@ public class RestPaymentTransport implements PaymentMessageTransport {
         }
         var url = resolveTemplate(urlTemplate, message);
         var method = stringValue(restCfg.get("method"), "POST").toUpperCase();
-        var contentType = stringValue(restCfg.get("contentType"), "application/json");
+        var contentType = resolveContentType(restCfg.get("contentType"), message);
         var timeoutSeconds = intValue(restCfg.get("timeoutSeconds"), DEFAULT_TIMEOUT_SECONDS);
         // Idempotency-Key: si la clave NO esta en config, usamos el default ${sendersReference}.
         // Si la clave SI esta pero vacia, el caller pidio explicitamente "no emitir header".
@@ -104,6 +104,27 @@ public class RestPaymentTransport implements PaymentMessageTransport {
         headers.putAll(extraHeaders);
 
         return attemptWithRetry(method, url, headers, message.rawPayload(), timeoutSeconds, retry, expected);
+    }
+
+    /**
+     * Content-Type explicito en config manda. Si esta vacio o es {@code auto},
+     * se deriva del formato del mensaje: un FIN enviado como
+     * {@code application/json} suele ser rechazado o malinterpretado por el
+     * gateway bancario.
+     */
+    private String resolveContentType(Object configured, Mt101Message message) {
+        var value = stringValue(configured, "");
+        if (!value.isBlank() && !"auto".equalsIgnoreCase(value)) {
+            return value;
+        }
+        var format = message == null || message.format() == null ? "" : message.format().toUpperCase();
+        if (format.startsWith("FIN")) {
+            return "text/plain; charset=utf-8";
+        }
+        if (format.startsWith("XML") || format.startsWith("PAIN001")) {
+            return "application/xml";
+        }
+        return "application/json";
     }
 
     private String resolveAuthorizationHeader(Map<String, Object> restCfg, int timeoutSeconds) {

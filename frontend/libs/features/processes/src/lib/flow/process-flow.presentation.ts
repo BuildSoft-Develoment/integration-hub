@@ -43,6 +43,11 @@ const NODE_PRESENTATION: Record<ProcessTaskType, ProcessFlowNodePresentation> = 
     toneClass: 'task-node--payment',
     iconPath: 'M4 6h16M4 10h10M4 14h16M4 18h10M18 8l3 3-3 3M18 16l3-3',
   },
+  MT101_BUILD_FROM_TABLE: {
+    badge: 'BUILD DB',
+    toneClass: 'task-node--payment',
+    iconPath: 'M4 6h16M4 10h10M4 14h16M4 18h10M18 8l3 3-3 3M18 16l3-3',
+  },
   MT101_VALIDATE: {
     badge: 'NVR',
     toneClass: 'task-node--payment-validate',

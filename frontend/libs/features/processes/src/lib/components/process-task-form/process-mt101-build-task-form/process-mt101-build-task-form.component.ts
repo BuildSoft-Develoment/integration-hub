@@ -71,6 +71,7 @@ export class ProcessMt101BuildTaskFormComponent {
     { value: 'none', labelKey: 'mt101.uetr.none' },
   ];
   readonly orderingOptions = ['F', 'G', 'H'] as const;
+  readonly instructingOptions = ['', 'L'] as const;
   readonly debitAccountModes: ReadonlyArray<'singleDebit' | 'multipleDebit' | 'subsidiary'> = [
     'singleDebit',
     'multipleDebit',
@@ -105,6 +106,8 @@ export class ProcessMt101BuildTaskFormComponent {
       hintKey: 'mt101.mappingMultiHint',
       multi: true,
     },
+    { field: 'accountServicingAccountField', labelKey: 'mt101.mappings.accountServicingAccountField', path: 'accountServicingInstitution.account' },
+    { field: 'accountServicingBicField', labelKey: 'mt101.mappings.accountServicingBicField', path: 'accountServicingInstitution.bic' },
     { field: 'beneficiaryAccountField', labelKey: 'mt101.mappings.beneficiaryAccountField', path: 'beneficiary.account' },
     { field: 'beneficiaryBicField', labelKey: 'mt101.mappings.beneficiaryBicField', path: 'beneficiary.bic' },
     {
@@ -205,6 +208,8 @@ export class ProcessMt101BuildTaskFormComponent {
       sequenceA: {
         sendersReferenceTemplate: 'PROC-${_processExecutionId}',
         requestedExecutionDate: '${today+1bd}',
+        instructingPartyOption: '',
+        instructingPartyIdentifier: '',
         orderingCustomerOption: 'H',
         orderingCustomerAccount: '',
         orderingCustomerNameAddress: '',
@@ -219,6 +224,9 @@ export class ProcessMt101BuildTaskFormComponent {
         orderingCustomerAccountField: '',
         orderingCustomerBicField: '',
         orderingCustomerNameAddressFields: '',
+        accountServicingOption: '',
+        accountServicingAccountField: '',
+        accountServicingBicField: '',
         beneficiaryOption: '',
         beneficiaryAccountField: '',
         beneficiaryBicField: '',

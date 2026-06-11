@@ -102,7 +102,10 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
                     ? selectedSourceFiles.get(0)
                     : null;
             taskOutputRegistry.registerFileRead(taskOutputs, current, currentConfiguration, sourceFile, pipelineResult.readResult());
-            taskOutputRegistry.registerTaskResult(taskOutputs, next, nextConfiguration, taskOutputRegistry.pipelineSinkOutputs(next, pipelineResult.processedCount()));
+            var sinkOutputs = taskOutputRegistry.pipelineSinkOutputs(next, pipelineResult.processedCount());
+            sinkOutputs.put("processExecutionId", processExecutionId);
+            sinkOutputs.put("taskDefinitionId", next.taskDefinitionId());
+            taskOutputRegistry.registerTaskResult(taskOutputs, next, nextConfiguration, sinkOutputs);
 
             stateService.completeTask(
                     processExecutionId,

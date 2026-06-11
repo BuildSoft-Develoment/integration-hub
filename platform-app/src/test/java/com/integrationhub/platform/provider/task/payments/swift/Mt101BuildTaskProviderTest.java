@@ -313,6 +313,75 @@ class Mt101BuildTaskProviderTest {
     }
 
     @Test
+    void usesFragmentRuntimeIndexesAndMapsTransactionServicingInstitution() {
+        var context = new TaskContext(42L, 1L);
+        context.attributes().put("mt101MessageIndex", 3);
+        context.attributes().put("mt101MessageTotal", 10);
+        context.attributes().put("mt101RecordOffset", 200);
+        context.attributes().put("readResult", new ReadResult(List.of(
+                new ReadRecord(Map.of(
+                        "moneda", "PEN",
+                        "monto", "1.00",
+                        "cuenta_beneficiario", "B1",
+                        "bic_servicing", "BCPLPEPLXXX",
+                        "cargos", "OUR"
+                ))
+        ), 1));
+
+        var result = provider.execute(context, Map.of(
+                "sequenceA", Map.of(
+                        "sendersReferenceTemplate", "P${messageIndex}",
+                        "requestedExecutionDate", "2026-06-09",
+                        "orderingCustomer", Map.of("option", "H", "account", "001")
+                ),
+                "transactionMappings", Map.of(
+                        "transactionReferenceTemplate", "TX-${recordNumber}",
+                        "amount", Map.of("currencyField", "moneda", "valueField", "monto"),
+                        "beneficiary", Map.of("option", "", "accountField", "cuenta_beneficiario"),
+                        "accountServicingInstitution", Map.of("option", "A", "bicField", "bic_servicing"),
+                        "detailsOfChargesField", "cargos"
+                )
+        ));
+
+        @SuppressWarnings("unchecked")
+        var records = (List<Mt101Message>) result.outputs().get("records");
+        var message = records.get(0);
+        assertEquals("P3", message.sequenceA().sendersReference());
+        assertEquals(3, message.sequenceA().messageIndex());
+        assertEquals(10, message.sequenceA().messageTotal());
+        assertEquals(201, message.transactions().get(0).sequenceNumber());
+        assertEquals("TX-201", message.transactions().get(0).transactionReference());
+        assertEquals("BCPLPEPLXXX", message.transactions().get(0).accountServicingInstitution().bic());
+    }
+
+    @Test
+    void rejectsSingleDebitWhenOrderingCustomerHasOnlyOptionNoValue() {
+        var context = new TaskContext(1L, 1L);
+        context.attributes().put("readResult", new ReadResult(List.of(
+                new ReadRecord(Map.of(
+                        "moneda", "PEN",
+                        "monto", "1.00",
+                        "cuenta_beneficiario", "B1",
+                        "cargos", "OUR"
+                ))
+        ), 1));
+
+        var error = assertThrows(IllegalArgumentException.class, () -> provider.execute(context, Map.of(
+                "sequenceA", Map.of(
+                        "sendersReferenceTemplate", "PROC-${_processExecutionId}",
+                        "orderingCustomer", Map.of("option", "H")
+                ),
+                "transactionMappings", Map.of(
+                        "amount", Map.of("currencyField", "moneda", "valueField", "monto"),
+                        "beneficiary", Map.of("option", "", "accountField", "cuenta_beneficiario"),
+                        "detailsOfChargesField", "cargos"
+                )
+        )));
+
+        assertTrue(error.getMessage().contains("singleDebit requires sequenceA.orderingCustomer"));
+    }
+
+    @Test
     void leavesUetrNullForUnknownStrategy() {
         var context = new TaskContext(1L, 1L);
         context.attributes().put("readResult", new ReadResult(

@@ -87,12 +87,13 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         }
 
         var effectiveRecords = enrichRecordsWithRuntime(context, records, sourcePayload);
-        var messageIndex = 1;
-        var messageTotal = 1;
+        var messageIndex = intAttribute(context, "mt101MessageIndex", 1);
+        var messageTotal = intAttribute(context, "mt101MessageTotal", 1);
+        var recordOffset = intAttribute(context, "mt101RecordOffset", 0);
         var sendersReference = resolveSendersReference(sequenceACfg, context, messageIndex);
 
         var envelope = buildEnvelope(envelopeCfg);
-        var transactions = buildTransactions(effectiveRecords, mappingsCfg, context);
+        var transactions = buildTransactions(effectiveRecords, mappingsCfg, context, recordOffset);
         var controlTotals = computeControlTotals(transactions);
         var sequenceA = buildSequenceA(sequenceACfg, sendersReference, messageIndex, messageTotal);
         validateDebitAccountMode(debitAccountMode, sequenceA, transactions);
@@ -262,12 +263,14 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
 
     private List<Mt101Message.Transaction> buildTransactions(List<ReadRecord> records,
                                                              Map<String, Object> mappings,
-                                                             TaskContext context) {
+                                                             TaskContext context,
+                                                             int recordOffset) {
         var result = new ArrayList<Mt101Message.Transaction>(records.size());
         var amountCfg = mapValue(mappings.get("amount"));
         var beneficiaryCfg = mapValue(mappings.get("beneficiary"));
         var accountWithCfg = mapValue(mappings.get("accountWithInstitution"));
         var orderingCustomerCfg = mapValue(mappings.get("orderingCustomer"));
+        var accountServicingCfg = mapValue(mappings.get("accountServicingInstitution"));
         var txRefTemplate = stringValue(mappings.get("transactionReferenceTemplate"),
                 "TX-${_processExecutionId}-${recordNumber}");
         var remittanceField = stringOrNull(mappings.get("remittanceInformationField"));
@@ -276,7 +279,7 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         for (int i = 0; i < records.size(); i++) {
             var record = records.get(i);
             var values = record == null || record.values() == null ? Map.<String, Object>of() : record.values();
-            var sequenceNumber = i + 1;
+            var sequenceNumber = recordOffset + i + 1;
             var transactionReference = renderTransactionReference(txRefTemplate, context, sequenceNumber, values);
 
             result.add(new Mt101Message.Transaction(
@@ -286,7 +289,7 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
                     null,
                     buildAmount(amountCfg, values),
                     buildPartyFromMapping(orderingCustomerCfg, values),
-                    null,
+                    buildPartyFromMapping(accountServicingCfg, values),
                     null,
                     buildPartyFromMapping(accountWithCfg, values),
                     buildPartyFromMapping(beneficiaryCfg, values),
@@ -369,9 +372,9 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
                                           Mt101Message.SequenceA sequenceA,
                                           List<Mt101Message.Transaction> transactions) {
         var normalized = mode == null ? "singleDebit" : mode.trim();
-        var hasSequenceADebit = sequenceA != null && sequenceA.orderingCustomer() != null;
+        var hasSequenceADebit = sequenceA != null && hasPartyValue(sequenceA.orderingCustomer());
         var transactionsWithDebit = transactions.stream()
-                .filter(tx -> tx.orderingCustomer() != null)
+                .filter(tx -> hasPartyValue(tx.orderingCustomer()))
                 .count();
         switch (normalized) {
             case "singleDebit" -> {
@@ -458,10 +461,17 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
     }
 
     private boolean isEmptyParty(String option, String account, String bic, List<String> nameAndAddress) {
-        return (option == null || option.isBlank())
-                && (account == null || account.isBlank())
+        return (account == null || account.isBlank())
                 && (bic == null || bic.isBlank())
                 && (nameAndAddress == null || nameAndAddress.isEmpty());
+    }
+
+    private boolean hasPartyValue(Mt101Message.Party party) {
+        return party != null && !isEmptyParty(
+                party.option(),
+                party.account(),
+                party.bic(),
+                party.nameAndAddress());
     }
 
     private Mt101Message.ControlTotals computeControlTotals(List<Mt101Message.Transaction> transactions) {
@@ -513,5 +523,16 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         }
         var value = String.valueOf(raw).trim();
         return value.isEmpty() ? null : value;
+    }
+
+    private int intAttribute(TaskContext context, String key, int defaultValue) {
+        if (context == null || !context.attributes().containsKey(key)) {
+            return defaultValue;
+        }
+        var raw = context.attributes().get(key);
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return defaultValue;
+        }
+        return Integer.parseInt(String.valueOf(raw));
     }
 }

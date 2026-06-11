@@ -48,7 +48,9 @@ class Mt101ValidateTaskProviderTest {
                 new Mt101StructuralRules.TransactionReferenceUniqueRule(),
                 new Mt101StructuralRules.RequestedDateRequiredRule(),
                 new Mt101StructuralRules.BicFormatRule(),
-                new Mt101StructuralRules.SwiftXTextRule()
+                new Mt101StructuralRules.SwiftXTextRule(),
+                new Mt101StructuralRules.MessageIndexTotalFormatRule(),
+                new Mt101StructuralRules.EnvelopeLtFormatRule()
         );
         var ruleProvider = new SingleRuleProvider((rs, std, app) -> {
             return structuralPredicates.stream()
@@ -208,6 +210,55 @@ class Mt101ValidateTaskProviderTest {
     }
 
     @Test
+    void invalidMessageIndexTotalFailsWith28dFormat() {
+        // index 3 de total 2 es imposible: rompe el reensamblado del receptor.
+        var base = validMessage();
+        var broken = new Mt101Message(
+                base.envelope(),
+                new Mt101Message.SequenceA("PROC-1", null, 3, 2, LocalDate.of(2026, 6, 9),
+                        null,
+                        new Mt101Message.Party("H", "001", null, List.of("ACME")),
+                        null, null),
+                base.transactions(), base.controlTotals(), null, null);
+        var result = provider.execute(contextWithMessage(broken), Map.of(
+                "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")
+        ));
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
+        var issues = (List<ValidationIssue>) result.outputs().get("errors");
+        assertTrue(issues.stream().anyMatch(i -> "STRUCT.FIELD_28D_FORMAT".equals(i.code())),
+                () -> "issues: " + issues);
+    }
+
+    @Test
+    void invalidEnvelopeLtFailsWithLtFormat() {
+        var base = validMessage();
+        var broken = new Mt101Message(
+                new Mt101Message.Envelope("SHORT", "BCPLPEPLXXXX", null, "N"),
+                base.sequenceA(), base.transactions(), base.controlTotals(), null, null);
+        var result = provider.execute(contextWithMessage(broken), Map.of(
+                "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")
+        ));
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
+        var issues = (List<ValidationIssue>) result.outputs().get("errors");
+        assertTrue(issues.stream().anyMatch(i -> "STRUCT.ENVELOPE_LT_FORMAT".equals(i.code())),
+                () -> "issues: " + issues);
+    }
+
+    @Test
+    void validTwelveCharLtPassesLtFormat() {
+        var base = validMessage();
+        var withEnvelope = new Mt101Message(
+                new Mt101Message.Envelope("SGOBFRPPAXXX", "BCPLPEPLXXXX", null, "N"),
+                base.sequenceA(), base.transactions(), base.controlTotals(), null, null);
+        var result = provider.execute(contextWithMessage(withEnvelope), Map.of(
+                "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")
+        ));
+        assertTrue(result.success(), () -> "expected success, got: " + result.details());
+    }
+
+    @Test
     void reportsCorrectInvalidCountForMultipleMessages() {
         var context = new TaskContext(1L, 1L);
         context.attributes().put("taskOutputs", Map.of(
@@ -217,9 +268,11 @@ class Mt101ValidateTaskProviderTest {
                 "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")
         ));
         assertFalse(result.success());
-        // Heuristica slice 2: si hay >=1 blocking issue, todos los mensajes cuentan como invalidos.
-        // Aceptable mientras el mapping mensaje<->issue no este explicito (slice 3+).
-        assertEquals(2, result.outputs().get("invalidCount"));
+        // Mapping mensaje<->issue explicito: cada mensaje se evalua individualmente,
+        // asi que solo el mensaje con monto negativo cuenta como invalido. Necesario
+        // para el gate de fragmentos (un fragmento invalido no contamina al resto).
+        assertEquals(1, result.outputs().get("invalidCount"));
+        assertEquals(1, result.outputs().get("validCount"));
     }
 
     @Test

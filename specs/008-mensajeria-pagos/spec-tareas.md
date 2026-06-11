@@ -12,7 +12,8 @@ capture en `tdd-evidence.md`.
 - Spec tecnica: `spec-tecnica.md`
 - Entidades BD: `swift_message_envelope`, `mt101_archive`, `mt101_transaction`,
   `mt101_validation_issue`, `mt101_confirmation`,
-  `mt101_reconciliation_exception`, `payment_validation_rule`
+  `mt101_reconciliation_exception`, `payment_validation_rule`,
+  `mt101_build_fragment`
 - Sub-catalogo activo: `swift/` (MT101 sprint 1)
 - Dependencias bloqueantes del motor: M-1a (`TaskTypeRegistry`), M-1b
   (frontend discovery), M-2 (long-running), M-3 (multi-output) declaradas en
@@ -25,6 +26,7 @@ capture en `tdd-evidence.md`.
 - **Sprint 2 (status, conciliacion, inbound, routing)**: T-013 a T-022.
 - **Sprint 3 (split, repair, calendarios, ISO 20022 placeholder)**: T-023 a T-028.
 - **Sprint 4 (hardening MT101 multi-debito/subsidiarias)**: T-029 a T-034.
+- **Sprint 5 (alto volumen y reproceso MT101)**: T-035 a T-041.
 
 ## Tabla ejecutable de tareas
 
@@ -94,6 +96,18 @@ seccion "Motor para verticales (ADR-009)".
 | T-032 | RF-001, RF-004, RF-009, RF-010 | impl backend | tareas MT101 consumen mensajes directos o records `{message}` de tareas previas mediante contrato comun | Mt101ValidateTaskProviderTest, Mt101ArchiveTaskProviderTest, Mt101PayTaskProviderTest | mvn -pl platform-app -Dtest=Mt101*TaskProviderTest test | FAIL si `ARCHIVE -> PAY/VALIDATE` no resuelve mensajes | mvn -pl platform-app -Dtest=Mt101*TaskProviderTest test | PASS | T-007..T-010 | si | done |
 | T-033 | RF-001, RF-004 | impl frontend | `MT101_BUILD` guia `singleDebit/multipleDebit/subsidiary` y `MT101_PAY` solo ofrece transportes backend soportados | mt101-build-task.provider.spec.ts, mt101-pay-task.provider.spec.ts | npx nx test core-providers | FAIL si UI permite MQ o mapping contradictorio | npx nx test core-providers | PASS | T-011 | si | done |
 | T-034 | RF-001, RF-004, RF-017 | impl backend | fast-path no captura `MT101_BUILD` y SFTP nace con host key checking estricto | FileReadTaskFastPathTest, SftpPaymentTransportTest | mvn -pl platform-app -Dtest=FileReadTaskFastPathTest,SftpPaymentTransportTest test | FAIL si fast-path pierde outputs o SFTP acepta default inseguro | mvn -pl platform-app -Dtest=FileReadTaskFastPathTest,SftpPaymentTransportTest test | PASS | T-003, T-018 | si | done |
+
+### Sprint 5 - Alto volumen y reproceso MT101
+
+| id | rf | tipo | objetivo verificable | test | comando_red | expected_red | comando_green | expected_green | depende_de | paralelizable | estado |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| T-035 | RF-013, RF-022 | impl BD | existe almacenamiento de fragmentos MT101 con indices por lote, estado y ejecucion para reproceso | V14__mt101_massive_fragments.sql | mvn -pl platform-app -DskipTests compile | FAIL sin tabla `mt101_build_fragment` o codigos largos | mvn -pl platform-app -DskipTests compile | PASS | T-001 | si | done |
+| T-036 | RF-001, RF-022 | impl backend | `MT101_BUILD_FROM_TABLE` lee staging paginado y genera fragmentos sin cargar todo el archivo en memoria | Mt101BuildFromTableTaskProviderTest | mvn -pl platform-app -Dtest=Mt101BuildFromTableTaskProviderTest test | FAIL si no crea multiples fragmentos desde staging | mvn -pl platform-app -Dtest=Mt101BuildFromTableTaskProviderTest test | PASS | T-003, T-035, spec 003 DB_WRITE | si | done |
+| T-037 | RF-002, RF-003, RF-004, RF-022 | impl backend | `VALIDATE`, `ARCHIVE` y `PAY` consumen referencias persistidas de fragmentos y actualizan estado operacional | Mt101ValidateTaskProviderTest, Mt101ArchiveTaskProviderTest, Mt101PayTaskProviderTest | mvn -pl platform-app -Dtest=Mt101ValidateTaskProviderTest,Mt101ArchiveTaskProviderTest,Mt101PayTaskProviderTest test | FAIL si no resuelve `{fragmentSetId}` | mvn -pl platform-app -Dtest=Mt101ValidateTaskProviderTest,Mt101ArchiveTaskProviderTest,Mt101PayTaskProviderTest test | PASS | T-007..T-009, T-035 | si | done |
+| T-038 | RF-001, RF-022 | impl backend | `FILE_READ -> DB_WRITE` publica linaje de ejecucion/tarea para que el build masivo filtre su staging | FileReadTaskFastPathTest | mvn -pl platform-app -Dtest=FileReadTaskFastPathTest test | FAIL si DB_WRITE no expone `processExecutionId` y `taskDefinitionId` | mvn -pl platform-app -Dtest=FileReadTaskFastPathTest test | PASS | spec 003 DB_WRITE | si | done |
+| T-039 | RF-002, RF-011 | impl backend | validaciones estructurales cubren limite FIN 10KB, longitudes 50/52/57/59, 70, 77B, 32B y 71A con codigos largos | Mt101ValidateTaskProviderTest | mvn -pl platform-app -Dtest=Mt101ValidateTaskProviderTest test | FAIL si acepta payload FIN fuera de limite o campos invalidos | mvn -pl platform-app -Dtest=Mt101ValidateTaskProviderTest test | PASS | T-030, T-035 | si | done |
+| T-040 | RF-001, RF-022 | impl frontend | la UI registra `MT101_BUILD_FROM_TABLE` y reutiliza el mapping tipo DB_WRITE con fuente, metadata, variables y columnas previas | mt101-build-from-table-task.provider.spec.ts, mt101-build-task.provider.spec.ts | npx nx test web --skip-nx-cache | FAIL si el tipo no existe o no serializa limites de fragmento | npx nx test web --skip-nx-cache | PASS | T-033 | si | done |
+| T-041 | RF-003, RF-004, RF-022 | impl frontend/backend | `MT101_ARCHIVE` y `MT101_PAY` se configuran como `once` para procesar el lote/referencia de fragmentos completo | mt101-archive-task.provider.spec.ts, mt101-pay-task.provider.spec.ts | npx nx test web --skip-nx-cache | FAIL si la UI conserva `batch` o `per-record` | npx nx test web --skip-nx-cache | PASS | T-037 | si | done |
 
 ## Checklist de cierre
 - [ ] Todas las tareas tienen estado (pendiente / en curso / hecho / bloqueado).

@@ -5,7 +5,8 @@
 ### Backend (`platform-app`)
 
 - Providers de task types (sub-paquete `provider/task/payments/`):
-  - `swift/Mt101BuildTaskProvider`, `Mt101ValidateTaskProvider`,
+  - `swift/Mt101BuildTaskProvider`, `Mt101BuildFromTableTaskProvider`,
+    `Mt101FragmentStore`, `Mt101ValidateTaskProvider`,
     `Mt101ArchiveTaskProvider`, `Mt101PayTaskProvider`, `Mt101StatusTaskProvider`,
     `Mt101ReconcileTaskProvider`, `Mt101RouteTaskProvider`, `Mt101ParseTaskProvider`,
     `Mt101SplitTaskProvider`, `Mt101RepairTaskProvider`.
@@ -27,6 +28,9 @@
   spec 003.
 - `MT101_BUILD` debe exponer una paleta de fuentes compatible con `FILE_READ`,
   metadata, variables y outputs previos, y un tablero de mapping por campos SWIFT.
+- `MT101_BUILD_FROM_TABLE` reutiliza el formulario de `MT101_BUILD`, pero orientado
+  al flujo `FILE_READ -> DB_WRITE(staging) -> build`, con controles de tamano de
+  fragmento y salida persistida.
 - `MT101_PAY` solo debe ofrecer transportes soportados por backend.
 
 ## Contrato `configuration_json` por task type
@@ -121,6 +125,78 @@ El fast-path de streaming `FILE_READ -> sink` no debe capturar `MT101_BUILD`,
 porque esta tarea produce outputs materiales (`records` con mensajes) que tareas
 posteriores consumen.
 
+### MT101_BUILD_FROM_TABLE
+
+```jsonc
+{
+  "taskRef": "build-mt101-massive",
+  "taskType": "MT101_BUILD_FROM_TABLE",
+  "executionMode": "once",
+  "input": {
+    "source": "task-output",
+    "sourceTaskRef": "db-write-staging"
+  },
+  "source": {
+    "table": "staging_record",
+    "payloadColumn": "payload_json",
+    "idColumn": "id",
+    "processExecutionId": "${db-write-staging.processExecutionId}",
+    "taskDefinitionId": "${db-write-staging.taskDefinitionId}",
+    "connectionRef": "${db-write-staging.table.connectionRef}"
+  },
+  "maxTransactionsPerMessage": 100,
+  "maxBytesPerMessage": 10000,
+  "fragmentSetIdTemplate": "MT101-${_processExecutionId}-${_taskDefinitionId}",
+  "replaceExisting": true,
+  "format": "FIN",
+  "debitAccountMode": "multipleDebit",
+  "sequenceA": {
+    "sendersReferenceTemplate": "P${_processExecutionId}${messageIndex}",
+    "requestedExecutionDate": "${today+1bd}",
+    "accountServicingInstitution": { "option": "A", "bic": "BCPLPEPLXXX" }
+  },
+  "transactionMappings": {
+    "transactionReferenceTemplate": "TX-${recordNumber}",
+    "amount": { "currencyField": "moneda", "valueField": "monto" },
+    "orderingCustomer": {
+      "option": "H",
+      "accountField": "cuenta",
+      "nameAndAddressFields": ["nombre"]
+    },
+    "beneficiary": {
+      "option": "",
+      "accountField": "cuenta_beneficiario",
+      "nameAndAddressFields": ["nombre_beneficiario"]
+    },
+    "accountWithInstitution": { "option": "A", "bicField": "bic" },
+    "remittanceInformationField": "concepto"
+  }
+}
+```
+
+Contrato operativo:
+
+- `MT101_BUILD_FROM_TABLE` lee `staging_record.payload_json` por paginas ordenadas
+  por `id`; no carga el archivo completo ni el set completo de mensajes en memoria.
+- Cada pagina produce un MT101 y se persiste en `mt101_build_fragment` con
+  `fragmentSetId`, rango de filas origen, hash, `raw_payload`, `message_json` y
+  estado inicial `BUILT`.
+- Si `replaceExisting=true`, un reproceso con el mismo `fragmentSetId` reemplaza
+  los fragmentos previos antes de reconstruirlos. Si es `false`, el constraint por
+  `fragmentSetId + fragmentIndex` impide sobrescrituras accidentales.
+- Las tareas posteriores consumen la salida `fragments` como referencia persistida:
+  `{table: "mt101_build_fragment", fragmentSetId, fragmentCount, connectionRef?}`.
+- La ruta recomendada para archivos mayores a 1,000,000 registros es
+  `FILE_READ -> DB_WRITE(staging_record) -> MT101_BUILD_FROM_TABLE ->
+  MT101_VALIDATE -> MT101_ARCHIVE -> MT101_PAY -> NOTIFICATION`.
+
+Outputs:
+
+- `build-mt101-massive.fragmentSetId`: identificador reprocesable del lote.
+- `build-mt101-massive.fragmentCount`: cantidad de mensajes MT101 generados.
+- `build-mt101-massive.transactionCount`: cantidad de filas de staging procesadas.
+- `build-mt101-massive.fragments`: referencia persistida consumible por tareas MT101.
+
 ### MT101_VALIDATE
 
 ```jsonc
@@ -154,8 +230,8 @@ via SPI `ValidationRuleProvider`.
 {
   "taskRef": "archive-mt101",
   "taskType": "MT101_ARCHIVE",
-  "executionMode": "batch",
-  "input": { "source": "task-output", "sourceTaskRef": "build-mt101", "sourceOutput": "records", "batchSize": 100 },
+  "executionMode": "once",
+  "input": { "source": "task-output", "sourceTaskRef": "build-mt101", "sourceOutput": "records" },
   "configuration": {
     "connectionRef": "12",
     "table": "mt101_archive",
@@ -179,7 +255,7 @@ Outputs:
 {
   "taskRef": "pay-mt101",
   "taskType": "MT101_PAY",
-  "executionMode": "per-record",
+  "executionMode": "once",
   "input": { "source": "task-output", "sourceTaskRef": "archive-mt101", "sourceOutput": "records" },
   "configuration": {
     "transport": "REST",                   // REST | SFTP
@@ -438,7 +514,7 @@ INDEX `(amount_currency)`.
 | `id` | bigserial | PK |
 | `archive_id` | bigint | FK NULL (puede ser pre-archive) |
 | `transaction_id` | bigint | FK NULL |
-| `rule_code` | varchar(20) | del catalogo NVR cargado |
+| `rule_code` | varchar(80) | del catalogo NVR cargado |
 | `rule_set` | varchar(50) | identificador del set de reglas |
 | `severity` | char(1) | E/W/I |
 | `message` | text | |
@@ -474,7 +550,7 @@ INDEX `(amount_currency)`.
 |---|---|---|
 | `id` | bigserial | PK |
 | `rule_set` | varchar(50) | identificador del set (`swift-fin-uat-2024-q4`, etc.) |
-| `code` | varchar(20) | codigo de regla |
+| `code` | varchar(80) | codigo de regla |
 | `standard` | varchar(20) | SWIFT/ISO20022/OPENBANKING |
 | `applies_to` | varchar(50) | MT101/MT103/PAIN001/... |
 | `severity` | char(1) | E/W/I |
@@ -483,6 +559,36 @@ INDEX `(amount_currency)`.
 | `active` | boolean | default true |
 
 UNIQUE `(rule_set, code, applies_to)`.
+
+### Tabla `mt101_build_fragment`
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | bigserial | PK |
+| `fragment_set_id` | varchar(80) | lote reprocesable generado por `MT101_BUILD_FROM_TABLE` |
+| `process_execution_id` | bigint | FK NULL -> `process_execution.id` |
+| `task_definition_id` | bigint | tarea que genero el fragmento |
+| `source_table` | varchar(255) | tabla staging origen |
+| `source_row_from` | bigint | primera fila origen incluida |
+| `source_row_to` | bigint | ultima fila origen incluida |
+| `fragment_index` | integer | indice 1..N del mensaje |
+| `fragment_total` | integer | total N del lote |
+| `senders_reference` | varchar(16) | `:20:` |
+| `payload_hash` | char(64) | SHA-256 del `raw_payload` |
+| `raw_payload` | text | FIN/XML/JSON generado |
+| `message_json` | text | representacion canonica para validar, archivar y pagar |
+| `status` | varchar(20) | BUILT/ARCHIVED/SENT/REJECTED |
+| `error_message` | text | ultimo error operacional del fragmento |
+| `created_at` | timestamp | |
+| `updated_at` | timestamp | |
+
+Indices: UNIQUE `(fragment_set_id, fragment_index)`, UNIQUE
+`(fragment_set_id, senders_reference)`, INDEX `(fragment_set_id, status)`,
+INDEX `(process_execution_id, task_definition_id)`.
+
+El estado de fragmento es operacional. El archivo bancario oficial sigue siendo
+`mt101_archive`; `mt101_build_fragment` habilita volumen alto, reintentos y
+reconstruccion controlada antes y despues de archivo/pago.
 
 ## Variables de entorno y secretos
 

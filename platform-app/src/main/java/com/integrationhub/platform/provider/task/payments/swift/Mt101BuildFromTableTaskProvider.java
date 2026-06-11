@@ -1,0 +1,489 @@
+package com.integrationhub.platform.provider.task.payments.swift;
+
+import com.integrationhub.platform.provider.task.dbwrite.DbTaskSupport;
+import com.integrationhub.platform.service.JsonConfigurationMapper;
+import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.reader.ReadRecord;
+import com.integrationhub.platform.spi.task.TaskContext;
+import com.integrationhub.platform.spi.task.TaskProvider;
+import com.integrationhub.platform.spi.task.TaskResult;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Construye MT101 desde una tabla staging sin cargar todo el archivo en memoria.
+ *
+ * <p>Ruta recomendada para alto volumen:
+ * {@code FILE_READ -> DB_WRITE(staging_record) -> MT101_BUILD_FROM_TABLE -> MT101_VALIDATE -> MT101_ARCHIVE -> MT101_PAY}.</p>
+ *
+ * <p><b>Fragmentacion en dos fases</b> (P2, escala 1M registros):</p>
+ * <ol>
+ *   <li><b>Planificacion</b>: keyset-scan ({@code id > lastId}) en paginas de
+ *       {@code maxTransactionsPerMessage}; cada pagina se construye en memoria para
+ *       medir bytes reales del payload. Si excede {@code maxBytesPerMessage}, la
+ *       pagina se bisecta recursivamente hasta que cada sub-fragmento quepa. La
+ *       medicion usa {@code messageTotal=99999} (ancho maximo de {@code :28D:}),
+ *       asi el payload final con el total real nunca supera lo medido.</li>
+ *   <li><b>Materializacion</b>: con el total definitivo conocido, cada fragmento se
+ *       reconstruye con su {@code :28D:} index/total correcto y se persiste en
+ *       {@code mt101_build_fragment}.</li>
+ * </ol>
+ *
+ * <p>El costo es construir cada fragmento dos veces (operacion en memoria), a
+ * cambio de nunca generar un MT101 que exceda el limite FIN de 10 KB ni abortar
+ * por configuracion conservadora de {@code maxTransactionsPerMessage}.</p>
+ */
+@ApplicationScoped
+public class Mt101BuildFromTableTaskProvider implements TaskProvider {
+
+    private static final String DEFAULT_TABLE = "staging_record";
+    private static final String DEFAULT_PAYLOAD_COLUMN = "payload_json";
+    private static final String DEFAULT_ID_COLUMN = "id";
+    private static final int DEFAULT_MAX_TRANSACTIONS = 100;
+    private static final int DEFAULT_MAX_BYTES = 10000;
+    /** Total provisional para medir bytes: ancho maximo 5n de {@code :28D:}. */
+    private static final int MEASUREMENT_TOTAL = 99999;
+
+    private final DataSource defaultDataSource;
+    private final ConnectionPoolManager connectionPoolManager;
+    private final JsonConfigurationMapper jsonConfigurationMapper;
+    private final Mt101BuildTaskProvider buildTaskProvider;
+    private final Mt101FragmentStore fragmentStore;
+
+    @Inject
+    public Mt101BuildFromTableTaskProvider(DataSource defaultDataSource,
+                                           ConnectionPoolManager connectionPoolManager,
+                                           JsonConfigurationMapper jsonConfigurationMapper,
+                                           Mt101BuildTaskProvider buildTaskProvider,
+                                           Mt101FragmentStore fragmentStore) {
+        this.defaultDataSource = defaultDataSource;
+        this.connectionPoolManager = connectionPoolManager;
+        this.jsonConfigurationMapper = jsonConfigurationMapper;
+        this.buildTaskProvider = buildTaskProvider;
+        this.fragmentStore = fragmentStore;
+    }
+
+    @Override
+    public String type() {
+        return "MT101_BUILD_FROM_TABLE";
+    }
+
+    @Override
+    public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
+        var source = resolveSource(context, configuration);
+        var maxTransactions = intValue(configuration.get("maxTransactionsPerMessage"), DEFAULT_MAX_TRANSACTIONS);
+        var maxBytes = intValue(configuration.get("maxBytesPerMessage"), DEFAULT_MAX_BYTES);
+        if (maxTransactions < 1) {
+            throw new IllegalArgumentException("MT101_BUILD_FROM_TABLE maxTransactionsPerMessage must be >= 1");
+        }
+        if (maxBytes < 1) {
+            throw new IllegalArgumentException("MT101_BUILD_FROM_TABLE maxBytesPerMessage must be >= 1");
+        }
+
+        var totalRows = countRows(source);
+        if (totalRows == 0) {
+            return TaskResult.success("MT101_BUILD_FROM_TABLE skipped because source table has no rows");
+        }
+
+        var fragmentSetId = resolveFragmentSetId(context, configuration);
+        if (boolValue(configuration.get("replaceExisting"), true)) {
+            fragmentStore.replaceFragmentSet(source.connectionRef(), fragmentSetId);
+        }
+
+        // Fase 1: planificar limites de fragmento por bytes reales (keyset scan).
+        var plan = new ArrayList<FragmentPlan>();
+        var lastId = 0L;
+        var logicalOffset = 0L;
+        while (true) {
+            var rows = readRowsAfter(source, lastId, maxTransactions);
+            if (rows.isEmpty()) {
+                break;
+            }
+            lastId = rows.get(rows.size() - 1).id();
+            planChunk(context, configuration, rows, maxBytes, logicalOffset, plan);
+            logicalOffset += rows.size();
+        }
+        if (plan.isEmpty()) {
+            return TaskResult.success("MT101_BUILD_FROM_TABLE skipped because source table has no rows");
+        }
+
+        validateReferenceTemplate(configuration, plan.size());
+
+        // Fase 2: materializar cada fragmento con :28D: index/total definitivo.
+        var totalFragments = plan.size();
+        var totalBytes = 0L;
+        for (int index = 1; index <= totalFragments; index++) {
+            var boundary = plan.get(index - 1);
+            var rows = readRowsBetween(source, boundary.firstId(), boundary.lastId());
+            var message = buildFragment(context, configuration, rows, index, totalFragments, boundary.logicalOffset());
+            var payloadBytes = payloadBytes(message);
+            if (payloadBytes > maxBytes) {
+                // No deberia ocurrir: la medicion de fase 1 usa el total mas ancho posible.
+                throw new IllegalStateException("MT101 fragment " + index + " exceeds maxBytesPerMessage="
+                        + maxBytes + " with " + payloadBytes + " bytes after final build");
+            }
+            totalBytes += payloadBytes;
+            fragmentStore.insertFragment(
+                    source.connectionRef(),
+                    fragmentSetId,
+                    context.processExecutionId(),
+                    context.taskDefinitionId(),
+                    source.table(),
+                    boundary.firstId(),
+                    boundary.lastId(),
+                    index,
+                    totalFragments,
+                    message);
+        }
+
+        var fragments = fragmentStore.source(source.connectionRef(), fragmentSetId, totalFragments);
+        var outputs = new LinkedHashMap<String, Object>();
+        outputs.put("fragmentSetId", fragmentSetId);
+        outputs.put("fragmentCount", totalFragments);
+        outputs.put("transactionCount", totalRows);
+        outputs.put("totalBytes", totalBytes);
+        outputs.put("format", stringValue(configuration.get("format"), "JSON").toUpperCase());
+        outputs.put("fragments", fragments);
+
+        return TaskResult.success("MT101_BUILD_FROM_TABLE built " + totalFragments
+                + " fragments for " + totalRows + " rows", outputs);
+    }
+
+    /**
+     * Empaqueta un chunk de filas en uno o mas limites de fragmento. Si el payload
+     * construido excede {@code maxBytes}, bisecta recursivamente. Un solo registro
+     * que exceda el limite es un error de datos (transaccion imposible de enviar).
+     */
+    private void planChunk(TaskContext context,
+                           Map<String, Object> configuration,
+                           List<RowRecord> rows,
+                           int maxBytes,
+                           long logicalOffset,
+                           List<FragmentPlan> plan) {
+        var provisionalIndex = plan.size() + 1;
+        var message = buildFragment(context, configuration, rows, provisionalIndex, MEASUREMENT_TOTAL, logicalOffset);
+        var payloadBytes = payloadBytes(message);
+        if (payloadBytes <= maxBytes) {
+            plan.add(new FragmentPlan(rows.get(0).id(), rows.get(rows.size() - 1).id(), rows.size(), logicalOffset));
+            return;
+        }
+        if (rows.size() == 1) {
+            throw new IllegalArgumentException("MT101_BUILD_FROM_TABLE: single transaction (staging id "
+                    + rows.get(0).id() + ") produces a " + payloadBytes
+                    + "-byte message exceeding maxBytesPerMessage=" + maxBytes
+                    + "; the source row cannot be sent as MT101");
+        }
+        var mid = rows.size() / 2;
+        planChunk(context, configuration, rows.subList(0, mid), maxBytes, logicalOffset, plan);
+        planChunk(context, configuration, rows.subList(mid, rows.size()), maxBytes, logicalOffset + mid, plan);
+    }
+
+    private com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message buildFragment(
+            TaskContext context,
+            Map<String, Object> configuration,
+            List<RowRecord> rows,
+            int messageIndex,
+            int messageTotal,
+            long logicalOffset) {
+        var records = new ArrayList<ReadRecord>(rows.size());
+        for (var row : rows) {
+            records.add(row.record());
+        }
+        var fragmentContext = fragmentContext(context, messageIndex, messageTotal, logicalOffset);
+        var result = buildTaskProvider.executeRecords(fragmentContext, configuration, records, null);
+        if (!result.success()) {
+            throw new IllegalStateException("MT101_BUILD_FROM_TABLE fragment " + messageIndex
+                    + " build failed: " + result.details());
+        }
+        var messages = messagesFromBuild(result);
+        if (messages.size() != 1) {
+            throw new IllegalStateException("MT101_BUILD_FROM_TABLE expects one MT101 message per fragment");
+        }
+        return messages.getFirst();
+    }
+
+    private int payloadBytes(com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message message) {
+        return message.rawPayload() == null ? 0
+                : message.rawPayload().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+    }
+
+    /**
+     * Gate config-time: con mas de un fragmento, {@code :20:} debe variar por
+     * fragmento o el indice unico {@code (fragment_set_id, senders_reference)}
+     * fallaria en runtime con un error SQL criptico. Mejor fallar aqui con
+     * instruccion accionable.
+     */
+    private void validateReferenceTemplate(Map<String, Object> configuration, int totalFragments) {
+        if (totalFragments <= 1) {
+            return;
+        }
+        var sequenceA = mapValue(configuration.get("sequenceA"));
+        var template = stringValue(sequenceA.get("sendersReferenceTemplate"), "");
+        if (template.isBlank() || !template.contains("${messageIndex}")) {
+            throw new IllegalArgumentException("MT101_BUILD_FROM_TABLE produced " + totalFragments
+                    + " fragments but sequenceA.sendersReferenceTemplate "
+                    + (template.isBlank() ? "is not set" : "('" + template + "') does not contain ${messageIndex}")
+                    + "; every fragment would share the same :20: senders reference. "
+                    + "Use a template like 'P${messageIndex}' to keep references unique per fragment.");
+        }
+    }
+
+    private SourceTable resolveSource(TaskContext context, Map<String, Object> configuration) {
+        var input = mapValue(configuration.get("input"));
+        var sourceTaskRef = stringValue(input.get("sourceTaskRef"), "");
+        var taskOutputs = taskOutputs(context);
+
+        var sourceCfg = mapValue(configuration.get("source"));
+        var table = stringValue(sourceCfg.get("table"), "");
+        if (table.isBlank() && !sourceTaskRef.isBlank()) {
+            table = stringValue(taskOutputs.get(sourceTaskRef + ".table"), DEFAULT_TABLE);
+        }
+        if (table.isBlank()) {
+            table = DEFAULT_TABLE;
+        }
+
+        var connectionRef = firstNonBlank(
+                input.get("connectionRef"),
+                sourceCfg.get("connectionRef"),
+                sourceTaskRef.isBlank() ? null : taskOutputs.get(sourceTaskRef + ".table.connectionRef"),
+                configuration.get("connectionRef"));
+
+        var processExecutionId = longValue(firstNonBlank(
+                sourceCfg.get("processExecutionId"),
+                sourceTaskRef.isBlank() ? null : taskOutputs.get(sourceTaskRef + ".processExecutionId"),
+                sourceTaskRef.isBlank() ? null : taskOutputs.get(sourceTaskRef + ".metadata._processExecutionId"),
+                context.processExecutionId()));
+        var taskDefinitionId = longValue(firstNonBlank(
+                sourceCfg.get("taskDefinitionId"),
+                sourceTaskRef.isBlank() ? null : taskOutputs.get(sourceTaskRef + ".taskDefinitionId"),
+                sourceTaskRef.isBlank() ? null : taskOutputs.get(sourceTaskRef + ".metadata._taskDefinitionId")));
+
+        var payloadColumn = stringValue(sourceCfg.get("payloadColumn"), DEFAULT_PAYLOAD_COLUMN);
+        var idColumn = stringValue(sourceCfg.get("idColumn"), DEFAULT_ID_COLUMN);
+        return new SourceTable(
+                resolveDataSource(connectionRef),
+                connectionRef,
+                DbTaskSupport.sanitizeQualifiedIdentifier(table),
+                DbTaskSupport.sanitizeIdentifier(payloadColumn),
+                DbTaskSupport.sanitizeIdentifier(idColumn),
+                processExecutionId,
+                taskDefinitionId);
+    }
+
+    private long countRows(SourceTable source) {
+        var sql = "select count(*) from " + source.table() + whereClause(source);
+        try (var connection = source.dataSource().getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            bindWhere(statement, source);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getLong(1) : 0L;
+            }
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot count MT101 source rows from " + source.table(), error);
+        }
+    }
+
+    /**
+     * Pagina por keyset ({@code id > lastId}): costo estable por pagina aunque el
+     * archivo tenga 1M filas, a diferencia de {@code LIMIT/OFFSET} que degrada
+     * O(offset) por pagina. Requiere {@code ix_staging_record_execution_task_id}
+     * (V15) para staging_record.
+     */
+    private List<RowRecord> readRowsAfter(SourceTable source, long afterId, int limit) {
+        var where = whereClause(source);
+        var sql = "select " + source.idColumn() + ", " + source.payloadColumn() + " from " + source.table()
+                + (where.isEmpty() ? " where " : where + " and ")
+                + source.idColumn() + " > ?"
+                + " order by " + source.idColumn()
+                + " limit ?";
+        try (var connection = source.dataSource().getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = bindWhere(statement, source);
+            statement.setLong(parameter++, afterId);
+            statement.setInt(parameter, limit);
+            return readRows(statement);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot read MT101 source rows from " + source.table(), error);
+        }
+    }
+
+    /** Relee el rango exacto de un limite planificado en fase 1 (ids inclusivos). */
+    private List<RowRecord> readRowsBetween(SourceTable source, long firstId, long lastId) {
+        var where = whereClause(source);
+        var sql = "select " + source.idColumn() + ", " + source.payloadColumn() + " from " + source.table()
+                + (where.isEmpty() ? " where " : where + " and ")
+                + source.idColumn() + " >= ? and " + source.idColumn() + " <= ?"
+                + " order by " + source.idColumn();
+        try (var connection = source.dataSource().getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = bindWhere(statement, source);
+            statement.setLong(parameter++, firstId);
+            statement.setLong(parameter, lastId);
+            return readRows(statement);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot read MT101 source rows from " + source.table(), error);
+        }
+    }
+
+    private List<RowRecord> readRows(PreparedStatement statement) throws SQLException {
+        var rows = new ArrayList<RowRecord>();
+        try (var rs = statement.executeQuery()) {
+            while (rs.next()) {
+                rows.add(new RowRecord(rs.getLong(1), new ReadRecord(jsonConfigurationMapper.toMap(rs.getString(2)))));
+            }
+        }
+        return rows;
+    }
+
+    private String whereClause(SourceTable source) {
+        if (source.processExecutionId() == null && source.taskDefinitionId() == null) {
+            return "";
+        }
+        var clauses = new ArrayList<String>();
+        if (source.processExecutionId() != null) {
+            clauses.add("process_execution_id = ?");
+        }
+        if (source.taskDefinitionId() != null) {
+            clauses.add("task_definition_id = ?");
+        }
+        return " where " + String.join(" and ", clauses);
+    }
+
+    private int bindWhere(PreparedStatement statement, SourceTable source) throws SQLException {
+        var parameter = 1;
+        if (source.processExecutionId() != null) {
+            statement.setLong(parameter++, source.processExecutionId());
+        }
+        if (source.taskDefinitionId() != null) {
+            statement.setLong(parameter++, source.taskDefinitionId());
+        }
+        return parameter;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message> messagesFromBuild(TaskResult result) {
+        var raw = result.outputs().get("records");
+        if (!(raw instanceof List<?> rawList)) {
+            return List.of();
+        }
+        return (List<com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message>) rawList;
+    }
+
+    private TaskContext fragmentContext(TaskContext original, int messageIndex, int messageTotal, long offset) {
+        var context = new TaskContext(original.processExecutionId(), original.taskDefinitionId());
+        context.attributes().putAll(original.attributes());
+        context.attributes().put("mt101MessageIndex", messageIndex);
+        context.attributes().put("mt101MessageTotal", messageTotal);
+        context.attributes().put("mt101RecordOffset", offset);
+        return context;
+    }
+
+    private String resolveFragmentSetId(TaskContext context, Map<String, Object> configuration) {
+        var template = stringValue(configuration.get("fragmentSetIdTemplate"), "MT101-${_processExecutionId}-${_taskDefinitionId}");
+        var resolved = template
+                .replace("${_processExecutionId}", String.valueOf(context.processExecutionId()))
+                .replace("${_taskDefinitionId}", String.valueOf(context.taskDefinitionId()));
+        if (resolved.length() > 80) {
+            throw new IllegalArgumentException("MT101_BUILD_FROM_TABLE fragmentSetId exceeds 80 characters: " + resolved);
+        }
+        return resolved;
+    }
+
+    private DataSource resolveDataSource(String connectionRef) {
+        if (connectionRef == null || connectionRef.isBlank() || connectionPoolManager == null) {
+            return defaultDataSource;
+        }
+        return connectionPoolManager.resolveJdbcDataSource(connectionRef);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> taskOutputs(TaskContext context) {
+        if (context.attributes().get("taskOutputs") instanceof Map<?, ?> rawMap) {
+            var result = new LinkedHashMap<String, Object>();
+            rawMap.forEach((key, value) -> result.put(String.valueOf(key), value));
+            return result;
+        }
+        return Map.of();
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> mapValue(Object raw) {
+        if (!(raw instanceof Map<?, ?> rawMap)) {
+            return Map.of();
+        }
+        var result = new LinkedHashMap<String, Object>();
+        rawMap.forEach((key, value) -> result.put(String.valueOf(key), value));
+        return result;
+    }
+
+    private String firstNonBlank(Object... values) {
+        for (var value : values) {
+            var normalized = stringValue(value, "");
+            if (!normalized.isBlank()) {
+                return normalized;
+            }
+        }
+        return "";
+    }
+
+    private String stringValue(Object raw, String defaultValue) {
+        if (raw == null) {
+            return defaultValue;
+        }
+        var value = String.valueOf(raw).trim();
+        return value.isEmpty() ? defaultValue : value;
+    }
+
+    private int intValue(Object raw, int defaultValue) {
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return defaultValue;
+        }
+        return Integer.parseInt(String.valueOf(raw));
+    }
+
+    private Long longValue(Object raw) {
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return null;
+        }
+        return Long.parseLong(String.valueOf(raw));
+    }
+
+    private boolean boolValue(Object raw, boolean defaultValue) {
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return defaultValue;
+        }
+        return Boolean.parseBoolean(String.valueOf(raw));
+    }
+
+    private record SourceTable(
+            DataSource dataSource,
+            String connectionRef,
+            String table,
+            String payloadColumn,
+            String idColumn,
+            Long processExecutionId,
+            Long taskDefinitionId
+    ) {
+    }
+
+    /** Fila staging: id (cursor keyset) + payload ya parseado. */
+    private record RowRecord(long id, ReadRecord record) {
+    }
+
+    /**
+     * Limite de fragmento planificado en fase 1: rango de ids staging (inclusivo),
+     * cantidad de transacciones y offset logico acumulado (continuidad de
+     * {@code ${recordNumber}} entre fragmentos).
+     */
+    private record FragmentPlan(long firstId, long lastId, int txCount, long logicalOffset) {
+    }
+}

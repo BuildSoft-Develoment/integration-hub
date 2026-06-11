@@ -8,6 +8,7 @@ import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
@@ -45,11 +46,20 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
 
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
+    private final Mt101FragmentStore fragmentStore;
+
+    @Inject
+    public Mt101ArchiveTaskProvider(DataSource defaultDataSource,
+                                    ConnectionPoolManager connectionPoolManager,
+                                    Mt101FragmentStore fragmentStore) {
+        this.defaultDataSource = defaultDataSource;
+        this.connectionPoolManager = connectionPoolManager;
+        this.fragmentStore = fragmentStore;
+    }
 
     public Mt101ArchiveTaskProvider(DataSource defaultDataSource,
                                     ConnectionPoolManager connectionPoolManager) {
-        this.defaultDataSource = defaultDataSource;
-        this.connectionPoolManager = connectionPoolManager;
+        this(defaultDataSource, connectionPoolManager, null);
     }
 
     @Override
@@ -57,21 +67,68 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
         return "MT101_ARCHIVE";
     }
 
+    /**
+     * Gate de estados (P1): por defecto ARCHIVE consume fragmentos {@code BUILT}
+     * o {@code VALIDATED}. Re-archivar {@code REJECTED}/{@code SENT} requiere
+     * fijar {@code fragmentSource.statuses} explicitamente.
+     */
+    private static final java.util.List<String> FRAGMENT_READ_STATUSES = java.util.List.of("BUILT", "VALIDATED");
+
     @Override
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
-        var messages = Mt101MessageInputResolver.readMessages(context, configuration, type());
-        if (messages.isEmpty()) {
-            return TaskResult.success("MT101_ARCHIVE skipped because there are no messages to archive");
-        }
+        var fragmentSource = Mt101MessageInputResolver.fragmentSource(context, configuration, type());
 
         var connectionRef = stringValue(configuration.get("connectionRef"), null);
         var dataSource = resolveDataSource(connectionRef);
         var encryptor = resolveEncryptor(configuration);
         var retentionDays = intValue(configuration.get("retentionDays"), DEFAULT_RETENTION_DAYS);
 
-        var archived = new ArrayList<Map<String, Object>>(messages.size());
-        var totalBytes = 0L;
+        var accumulator = new ArchiveAccumulator();
+        if (!fragmentSource.isEmpty() && fragmentStore != null) {
+            // Flujo masivo: una transaccion por pagina (un fragmento fallido
+            // revierte solo su pagina) y entradas SIN el Mt101Message embebido:
+            // PAY lee del fragment store, no de los outputs, y retener 10k+
+            // mensajes en outputs anula la ganancia de memoria de la paginacion.
+            var pageSize = intValue(configuration.get("pageSize"), Mt101FragmentStore.DEFAULT_PAGE_SIZE);
+            fragmentStore.forEachPage(fragmentSource, FRAGMENT_READ_STATUSES, pageSize, page -> {
+                archiveBatch(dataSource, encryptor, retentionDays, context, page, false, accumulator);
+                for (var message : page) {
+                    markFragment(fragmentSource, message, "ARCHIVED", null);
+                }
+            });
+        } else {
+            var messages = Mt101MessageInputResolver.readMessages(context, configuration, type(), fragmentStore);
+            if (!messages.isEmpty()) {
+                archiveBatch(dataSource, encryptor, retentionDays, context, messages, true, accumulator);
+            }
+        }
 
+        if (accumulator.archived.isEmpty()) {
+            return TaskResult.success("MT101_ARCHIVE skipped because there are no messages to archive");
+        }
+
+        var outputs = new LinkedHashMap<String, Object>();
+        outputs.put("archivedCount", accumulator.archived.size());
+        outputs.put("totalBytes", accumulator.totalBytes);
+        outputs.put("targetTable", DEFAULT_TABLE);
+        outputs.put("records", accumulator.archived);
+        if (!fragmentSource.isEmpty()) {
+            outputs.put("fragments", fragmentSource);
+        }
+
+        return TaskResult.success(
+                "MT101_ARCHIVE archived " + accumulator.archived.size()
+                        + " messages (" + accumulator.totalBytes + " bytes)",
+                outputs);
+    }
+
+    private void archiveBatch(DataSource dataSource,
+                              PayloadEncryptor encryptor,
+                              int retentionDays,
+                              TaskContext context,
+                              java.util.List<Mt101Message> messages,
+                              boolean includeMessageInEntry,
+                              ArchiveAccumulator accumulator) {
         try (Connection connection = dataSource.getConnection()) {
             var previousAutoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
@@ -81,7 +138,7 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
                     if (raw == null) {
                         throw new IllegalStateException("Mt101Message.rawPayload is required for archiving");
                     }
-                    totalBytes += raw.getBytes(StandardCharsets.UTF_8).length;
+                    accumulator.totalBytes += raw.getBytes(StandardCharsets.UTF_8).length;
                     var stored = encryptor != null ? encryptor.encrypt(raw) : raw;
                     var hash = sha256Hex(raw);
 
@@ -96,8 +153,10 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
                             : message.sequenceA().sendersReference());
                     entry.put("hash", hash);
                     entry.put("encrypted", encryptor != null);
-                    entry.put("message", message);
-                    archived.add(entry);
+                    if (includeMessageInEntry) {
+                        entry.put("message", message);
+                    }
+                    accumulator.archived.add(entry);
                 }
                 connection.commit();
             } catch (SQLException | RuntimeException error) {
@@ -109,16 +168,12 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot archive MT101 messages", error);
         }
+    }
 
-        var outputs = new LinkedHashMap<String, Object>();
-        outputs.put("archivedCount", archived.size());
-        outputs.put("totalBytes", totalBytes);
-        outputs.put("targetTable", DEFAULT_TABLE);
-        outputs.put("records", archived);
-
-        return TaskResult.success(
-                "MT101_ARCHIVE archived " + archived.size() + " messages (" + totalBytes + " bytes)",
-                outputs);
+    /** Acumula resultados de archivo sin retener los mensajes en memoria. */
+    private static final class ArchiveAccumulator {
+        final ArrayList<Map<String, Object>> archived = new ArrayList<>();
+        long totalBytes;
     }
 
     private long insertEnvelope(Connection connection,
@@ -330,5 +385,15 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
             return defaultValue;
         }
         return Integer.parseInt(String.valueOf(raw));
+    }
+
+    private void markFragment(Map<String, Object> fragmentSource,
+                              Mt101Message message,
+                              String status,
+                              String errorMessage) {
+        if (fragmentStore == null || fragmentSource == null || fragmentSource.isEmpty() || message.sequenceA() == null) {
+            return;
+        }
+        fragmentStore.markStatus(fragmentSource, message.sequenceA().sendersReference(), status, errorMessage);
     }
 }

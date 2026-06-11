@@ -32,6 +32,7 @@ export * from './lib/implementations/tasks/notification-task.provider';
 export * from './lib/tasks/process-task-form-registry';
 export * from './lib/tasks/process-task-form-bridge.service';
 export * from './lib/implementations/tasks/mt101-build-task.provider';
+export * from './lib/implementations/tasks/mt101-build-from-table-task.provider';
 export * from './lib/implementations/tasks/mt101-validate-task.provider';
 export * from './lib/implementations/tasks/mt101-archive-task.provider';
 export * from './lib/implementations/tasks/mt101-pay-task.provider';

@@ -32,7 +32,10 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
 ## Flujo principal (outbound MT101, sprint 1)
 
 1. Disenar proceso con la cadena `FILE_READ -> MT101_BUILD -> MT101_VALIDATE ->
-   MT101_ARCHIVE -> MT101_PAY -> MT101_STATUS -> NOTIFICATION`.
+   MT101_ARCHIVE -> MT101_PAY -> MT101_STATUS -> NOTIFICATION` para archivos
+   pequenos/medianos, o `FILE_READ -> DB_WRITE(staging) -> MT101_BUILD_FROM_TABLE
+   -> MT101_VALIDATE -> MT101_ARCHIVE -> MT101_PAY -> NOTIFICATION` para cargas
+   masivas.
 2. Configurar header MT101 (envelope, sequence A) y mappings de transacciones
    (sequence B) sobre los campos del reader.
 3. Ejecutar manual o programado.
@@ -63,6 +66,10 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
 - RF-004 task type `MT101_PAY` despacha el mensaje al banco por el transporte
   configurado (`REST`, `SFTP`) con idempotencia por `sendersReference` y politica
   de retry. `MQ` queda como extension futura hasta que exista provider backend.
+- RF-022 task type `MT101_BUILD_FROM_TABLE` construye MT101 desde una tabla de
+  staging paginada, persiste fragmentos por `fragmentSetId` y permite procesar
+  archivos de mas de 1,000,000 registros sin cargar todos los records ni todos
+  los mensajes en memoria.
 
 ### Catalogo de task types (fase 2-3)
 
@@ -90,8 +97,10 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
 ### Modelo de dominio
 
 - RF-013 tablas `mt101_archive`, `mt101_confirmation`,
-  `mt101_validation_issue`, `mt101_reconciliation_exception` con sus indices y
-  constraints (UNIQUE por `sender_lt + senders_reference + year` para idempotencia).
+  `mt101_validation_issue`, `mt101_reconciliation_exception`,
+  `mt101_build_fragment` con sus indices y constraints (UNIQUE por
+  `sender_lt + senders_reference + year` para idempotencia de archivo, UNIQUE por
+  `fragmentSetId + fragmentIndex` para reproceso de fragmentos).
 - RF-014 columna `raw_payload` cifrable a nivel de columna via `${secret:...}`.
 - RF-015 lineage por UETR (campo `{121:}` del block 3) cuando el mensaje lo trae,
   ademas del `processExecutionId` del motor.
@@ -118,6 +127,9 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
 
 - Una transaccion del archivo de entrada genera exactamente una entrada en
   Sequence B del MT101 resultante.
+- Para cargas masivas, una transaccion del archivo de entrada se conserva primero
+  como fila de staging y luego se agrupa en fragmentos MT101 configurados por
+  `maxTransactionsPerMessage` y `maxBytesPerMessage`.
 - El campo `:50a:` Ordering Customer va en Sequence A xor en cada Sequence B,
   nunca en ambas (regla del estandar; implementada como una de las reglas del
   catalogo NVR).
@@ -132,6 +144,10 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
   un mensaje con la misma clave se rechaza al insertarse en `mt101_archive`.
 - `MT101_PAY` con transporte `REST` debe enviar header `Idempotency-Key` igual
   al `senders_reference`.
+- `MT101_VALIDATE`, `MT101_ARCHIVE` y `MT101_PAY` pueden consumir `records` en
+  memoria o una referencia persistida `{fragmentSetId, table}` producida por
+  `MT101_BUILD_FROM_TABLE`; al avanzar, actualizan el estado del fragmento
+  (`BUILT`, `ARCHIVED`, `SENT`, `REJECTED`) para habilitar reproceso operativo.
 - El reader `swift-mt` (catalogo 002) **no interpreta** Sequence A/B ni aplica NVR;
   esa responsabilidad es de `MT101_PARSE` (catalogo 008).
 - Solo perfiles `payments-operator` y superiores ejecutan procesos del catalogo 008
@@ -144,6 +160,9 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
 - El motor (spec 003) consume estos task types via SPI sin conocer su semantica.
 - Un proceso `FILE_READ -> MT101_BUILD -> MT101_VALIDATE -> MT101_ARCHIVE ->
   MT101_PAY -> NOTIFICATION` ejecuta end-to-end con un archivo de prueba.
+- Un proceso `FILE_READ -> DB_WRITE -> MT101_BUILD_FROM_TABLE -> MT101_VALIDATE
+  -> MT101_ARCHIVE -> MT101_PAY -> NOTIFICATION` procesa una carga masiva por
+  paginas y deja fragmentos persistidos reprocesables por `fragmentSetId`.
 - El catalogo de reglas SWIFT/NVR carga desde una fuente parametrizable; el spec
   no enumera codigos.
 - (UI) cada task type tiene formulario dedicado registrado en el mecanismo de

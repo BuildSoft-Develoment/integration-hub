@@ -23,6 +23,7 @@ export type ProcessTaskType =
   // --- Vertical mensajeria de pagos sub-catalogo swift/ (spec 008) ---
   // Sprint 1 (outbound MVP):
   | 'MT101_BUILD'
+  | 'MT101_BUILD_FROM_TABLE'
   | 'MT101_VALIDATE'
   | 'MT101_ARCHIVE'
   | 'MT101_PAY'

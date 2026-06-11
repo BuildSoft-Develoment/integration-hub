@@ -6,6 +6,7 @@ import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Messa
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -32,9 +33,13 @@ public final class Mt101StructuralRules {
     public static final String APPLIES_TO = "MT101";
 
     private static final int MAX_REFERENCE_LENGTH = 16;
+    private static final int MAX_FIN_PAYLOAD_BYTES = 10000;
+    private static final int MAX_ACCOUNT_LENGTH = 34;
+    private static final int MAX_LINE_LENGTH = 35;
     private static final Pattern CURRENCY_PATTERN = Pattern.compile("^[A-Z]{3}$");
     private static final Pattern BIC_PATTERN = Pattern.compile("^[A-Z0-9]{8}([A-Z0-9]{3})?$");
     private static final Pattern SWIFT_X_TEXT = Pattern.compile("^[A-Za-z0-9 /\\-?:().,'+\\r\\n]*$");
+    private static final Pattern DETAILS_OF_CHARGES_PATTERN = Pattern.compile("^[A-Z]{3}$");
     private static final Set<String> VALID_CHARGES = Set.of("OUR", "BEN", "SHA");
 
     private Mt101StructuralRules() {
@@ -447,6 +452,285 @@ public final class Mt101StructuralRules {
             issues.add(txRef == null
                     ? ValidationIssue.messageLevel(code(), ruleSet(), severity(), message)
                     : ValidationIssue.transactionLevel(code(), ruleSet(), severity(), txRef, message));
+        }
+    }
+
+    /** {@code STRUCT.MESSAGE_MAX_LENGTH_10000}: payload FIN no debe exceder 10 KB. */
+    @ApplicationScoped
+    public static class MessageMaxLengthRule extends StructuralPredicate {
+        public MessageMaxLengthRule() {
+            super("STRUCT.MESSAGE_MAX_LENGTH_10000", ValidationIssue.Severity.ERROR);
+        }
+
+        @Override
+        public List<ValidationIssue> evaluate(Mt101Message message) {
+            if (message == null || message.rawPayload() == null) {
+                return List.of();
+            }
+            var bytes = message.rawPayload().getBytes(StandardCharsets.UTF_8).length;
+            if (bytes > MAX_FIN_PAYLOAD_BYTES) {
+                return List.of(ValidationIssue.messageLevel(code(), ruleSet(), severity(),
+                        "rawPayload exceeds " + MAX_FIN_PAYLOAD_BYTES + " bytes: " + bytes));
+            }
+            return List.of();
+        }
+    }
+
+    /** {@code STRUCT.FIELD_50_52_57_59_LENGTH}: cuentas max 34x y lineas max 35x. */
+    @ApplicationScoped
+    public static class PartyLengthRule extends StructuralPredicate {
+        public PartyLengthRule() {
+            super("STRUCT.FIELD_50_52_57_59_LENGTH", ValidationIssue.Severity.ERROR);
+        }
+
+        @Override
+        public List<ValidationIssue> evaluate(Mt101Message message) {
+            if (message == null) {
+                return List.of();
+            }
+            var issues = new ArrayList<ValidationIssue>();
+            if (message.sequenceA() != null) {
+                validateParty(issues, null, "sequenceA.instructingParty", message.sequenceA().instructingParty());
+                validateParty(issues, null, "sequenceA.orderingCustomer", message.sequenceA().orderingCustomer());
+                validateParty(issues, null, "sequenceA.accountServicingInstitution",
+                        message.sequenceA().accountServicingInstitution());
+            }
+            for (var tx : message.transactions()) {
+                validateParty(issues, tx.transactionReference(), "transactions.orderingCustomer", tx.orderingCustomer());
+                validateParty(issues, tx.transactionReference(), "transactions.accountServicingInstitution",
+                        tx.accountServicingInstitution());
+                validateParty(issues, tx.transactionReference(), "transactions.intermediary", tx.intermediary());
+                validateParty(issues, tx.transactionReference(), "transactions.accountWithInstitution",
+                        tx.accountWithInstitution());
+                validateParty(issues, tx.transactionReference(), "transactions.beneficiary", tx.beneficiary());
+            }
+            return issues;
+        }
+
+        private void validateParty(List<ValidationIssue> issues,
+                                   String txRef,
+                                   String field,
+                                   Mt101Message.Party party) {
+            if (party == null) {
+                return;
+            }
+            if (party.account() != null && party.account().length() > MAX_ACCOUNT_LENGTH) {
+                add(issues, txRef, field + ".account exceeds 34 characters: " + party.account().length());
+            }
+            if (party.nameAndAddress() != null) {
+                for (var line : party.nameAndAddress()) {
+                    if (line != null && line.length() > MAX_LINE_LENGTH) {
+                        add(issues, txRef, field + ".nameAndAddress line exceeds 35 characters: " + line.length());
+                    }
+                }
+            }
+        }
+
+        private void add(List<ValidationIssue> issues, String txRef, String message) {
+            issues.add(txRef == null
+                    ? ValidationIssue.messageLevel(code(), ruleSet(), severity(), message)
+                    : ValidationIssue.transactionLevel(code(), ruleSet(), severity(), txRef, message));
+        }
+    }
+
+    /** {@code STRUCT.FIELD_70_4X35}: remittance information max 4 lineas de 35. */
+    @ApplicationScoped
+    public static class RemittanceInformationLengthRule extends StructuralPredicate {
+        public RemittanceInformationLengthRule() {
+            super("STRUCT.FIELD_70_4X35", ValidationIssue.Severity.ERROR);
+        }
+
+        @Override
+        public List<ValidationIssue> evaluate(Mt101Message message) {
+            if (message == null) {
+                return List.of();
+            }
+            var issues = new ArrayList<ValidationIssue>();
+            for (var tx : message.transactions()) {
+                validateMultiline(issues, tx.transactionReference(), tx.remittanceInformation(), 4, ":70:");
+            }
+            return issues;
+        }
+
+        private void validateMultiline(List<ValidationIssue> issues,
+                                       String txRef,
+                                       String value,
+                                       int maxLines,
+                                       String tag) {
+            if (value == null) {
+                return;
+            }
+            var lines = value.split("\\r?\\n", -1);
+            if (lines.length > maxLines) {
+                issues.add(ValidationIssue.transactionLevel(code(), ruleSet(), severity(), txRef,
+                        tag + " exceeds " + maxLines + " lines"));
+            }
+            for (var line : lines) {
+                if (line.length() > MAX_LINE_LENGTH) {
+                    issues.add(ValidationIssue.transactionLevel(code(), ruleSet(), severity(), txRef,
+                            tag + " line exceeds 35 characters: " + line.length()));
+                }
+            }
+        }
+    }
+
+    /** {@code STRUCT.FIELD_77B_3X35}: regulatory reporting max 3 lineas de 35. */
+    @ApplicationScoped
+    public static class RegulatoryReportingLengthRule extends StructuralPredicate {
+        public RegulatoryReportingLengthRule() {
+            super("STRUCT.FIELD_77B_3X35", ValidationIssue.Severity.ERROR);
+        }
+
+        @Override
+        public List<ValidationIssue> evaluate(Mt101Message message) {
+            if (message == null) {
+                return List.of();
+            }
+            var issues = new ArrayList<ValidationIssue>();
+            for (var tx : message.transactions()) {
+                if (tx.regulatoryReporting() == null) {
+                    continue;
+                }
+                var lines = tx.regulatoryReporting().split("\\r?\\n", -1);
+                if (lines.length > 3) {
+                    issues.add(ValidationIssue.transactionLevel(code(), ruleSet(), severity(),
+                            tx.transactionReference(), ":77B: exceeds 3 lines"));
+                }
+                for (var line : lines) {
+                    if (line.length() > MAX_LINE_LENGTH) {
+                        issues.add(ValidationIssue.transactionLevel(code(), ruleSet(), severity(),
+                                tx.transactionReference(), ":77B: line exceeds 35 characters: " + line.length()));
+                    }
+                }
+            }
+            return issues;
+        }
+    }
+
+    /** {@code STRUCT.FIELD_32B_FORMAT}: importe :32B: max 15 digitos significativos. */
+    @ApplicationScoped
+    public static class AmountFormatRule extends StructuralPredicate {
+        public AmountFormatRule() {
+            super("STRUCT.FIELD_32B_FORMAT", ValidationIssue.Severity.ERROR);
+        }
+
+        @Override
+        public List<ValidationIssue> evaluate(Mt101Message message) {
+            if (message == null) {
+                return List.of();
+            }
+            var issues = new ArrayList<ValidationIssue>();
+            for (var tx : message.transactions()) {
+                var amount = tx.amount();
+                if (amount == null || amount.value() == null) {
+                    continue;
+                }
+                var normalized = amount.value().abs().stripTrailingZeros().toPlainString().replace(".", "");
+                if (normalized.length() > 15) {
+                    issues.add(ValidationIssue.transactionLevel(code(), ruleSet(), severity(),
+                            tx.transactionReference(), ":32B: amount exceeds 15 digits"));
+                }
+            }
+            return issues;
+        }
+    }
+
+    /** {@code STRUCT.FIELD_71A_FORMAT}: charges code debe ser 3 letras. */
+    @ApplicationScoped
+    public static class DetailsOfChargesFormatRule extends StructuralPredicate {
+        public DetailsOfChargesFormatRule() {
+            super("STRUCT.FIELD_71A_FORMAT", ValidationIssue.Severity.ERROR);
+        }
+
+        @Override
+        public List<ValidationIssue> evaluate(Mt101Message message) {
+            if (message == null) {
+                return List.of();
+            }
+            var issues = new ArrayList<ValidationIssue>();
+            for (var tx : message.transactions()) {
+                if (tx.detailsOfCharges() == null
+                        || !DETAILS_OF_CHARGES_PATTERN.matcher(tx.detailsOfCharges()).matches()) {
+                    issues.add(ValidationIssue.transactionLevel(code(), ruleSet(), severity(),
+                            tx.transactionReference(), ":71A: must be 3 uppercase letters"));
+                }
+            }
+            return issues;
+        }
+    }
+
+    /**
+     * {@code STRUCT.FIELD_28D_FORMAT}: {@code :28D:} (message index/total) debe ser
+     * {@code 5n/5n} con index &gt;= 1, total &gt;= 1 e index &lt;= total. Critico para
+     * fragmentacion masiva: un set con totals inconsistentes rompe el reensamblado
+     * del lado receptor.
+     */
+    @ApplicationScoped
+    public static class MessageIndexTotalFormatRule extends StructuralPredicate {
+        private static final int MAX_28D_VALUE = 99999;
+
+        public MessageIndexTotalFormatRule() {
+            super("STRUCT.FIELD_28D_FORMAT", ValidationIssue.Severity.ERROR);
+        }
+
+        @Override
+        public List<ValidationIssue> evaluate(Mt101Message message) {
+            if (message == null || message.sequenceA() == null) {
+                return List.of();
+            }
+            var index = message.sequenceA().messageIndex();
+            var total = message.sequenceA().messageTotal();
+            if (index < 1 || total < 1) {
+                return List.of(ValidationIssue.messageLevel(code(), ruleSet(), severity(),
+                        ":28D: index/total must both be >= 1, got " + index + "/" + total));
+            }
+            if (index > total) {
+                return List.of(ValidationIssue.messageLevel(code(), ruleSet(), severity(),
+                        ":28D: index must not exceed total, got " + index + "/" + total));
+            }
+            if (index > MAX_28D_VALUE || total > MAX_28D_VALUE) {
+                return List.of(ValidationIssue.messageLevel(code(), ruleSet(), severity(),
+                        ":28D: index/total exceed 5n format (max " + MAX_28D_VALUE + "), got "
+                                + index + "/" + total));
+            }
+            return List.of();
+        }
+    }
+
+    /**
+     * {@code STRUCT.ENVELOPE_LT_FORMAT}: sender/receiver LT de blocks 1/2 deben ser
+     * 12 caracteres alfanumericos (BIC8 + terminal + branch). Gate de validacion:
+     * el formatter FIN ({@code safeLt}) rellena/trunca por compatibilidad, pero un
+     * LT invalido nunca debe llegar a {@code MT101_PAY} sin que esta regla lo marque.
+     */
+    @ApplicationScoped
+    public static class EnvelopeLtFormatRule extends StructuralPredicate {
+        private static final Pattern LT_PATTERN = Pattern.compile("^[A-Z0-9]{12}$");
+
+        public EnvelopeLtFormatRule() {
+            super("STRUCT.ENVELOPE_LT_FORMAT", ValidationIssue.Severity.ERROR);
+        }
+
+        @Override
+        public List<ValidationIssue> evaluate(Mt101Message message) {
+            if (message == null || message.envelope() == null) {
+                return List.of();
+            }
+            var issues = new ArrayList<ValidationIssue>();
+            checkLt(issues, "senderLt", message.envelope().senderLt());
+            checkLt(issues, "receiverLt", message.envelope().receiverLt());
+            return issues;
+        }
+
+        private void checkLt(List<ValidationIssue> issues, String field, String lt) {
+            if (lt == null || lt.isBlank()) {
+                return;
+            }
+            if (!LT_PATTERN.matcher(lt).matches()) {
+                issues.add(ValidationIssue.messageLevel(code(), ruleSet(), severity(),
+                        "envelope." + field + " must be 12 alphanumeric characters (block 1/2 LT), got '"
+                                + lt + "'"));
+            }
         }
     }
 

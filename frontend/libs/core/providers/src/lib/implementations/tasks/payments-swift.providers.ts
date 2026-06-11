@@ -8,6 +8,7 @@ import {
   provideProcessTaskForms,
 } from '../../tasks/process-task-form-registry';
 import { Mt101ArchiveTaskProvider } from './mt101-archive-task.provider';
+import { Mt101BuildFromTableTaskProvider } from './mt101-build-from-table-task.provider';
 import { Mt101BuildTaskProvider } from './mt101-build-task.provider';
 import { Mt101ParseTaskProvider } from './mt101-parse-task.provider';
 import { Mt101PayTaskProvider } from './mt101-pay-task.provider';
@@ -45,6 +46,7 @@ export interface PaymentsSwiftFormComponents {
 export function providePaymentsSwiftForms(components: PaymentsSwiftFormComponents): Provider[] {
   const taskProviderClasses = [
     Mt101BuildTaskProvider,
+    Mt101BuildFromTableTaskProvider,
     Mt101ValidateTaskProvider,
     Mt101ArchiveTaskProvider,
     Mt101PayTaskProvider,
@@ -68,6 +70,7 @@ export function providePaymentsSwiftForms(components: PaymentsSwiftFormComponent
     // Componentes de formulario (UI) - todos con layout workspace.
     ...provideProcessTaskForms(
       { type: 'MT101_BUILD',     component: components.mt101Build,     layout: 'workspace' },
+      { type: 'MT101_BUILD_FROM_TABLE', component: components.mt101Build, layout: 'workspace' },
       { type: 'MT101_VALIDATE',  component: components.mt101Validate,  layout: 'workspace' },
       { type: 'MT101_ARCHIVE',   component: components.mt101Archive,   layout: 'workspace' },
       { type: 'MT101_PAY',       component: components.mt101Pay,       layout: 'workspace' },

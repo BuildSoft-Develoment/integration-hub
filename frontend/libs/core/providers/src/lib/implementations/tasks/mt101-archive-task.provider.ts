@@ -34,7 +34,7 @@ export class Mt101ArchiveTaskProvider extends ProcessTaskProvider<Mt101ArchiveTa
   createDraft(): Mt101ArchiveTaskDraft {
     return {
       taskRef: '',
-      executionMode: 'batch',
+      executionMode: 'once',
       connectionRef: '',
       table: 'mt101_archive',
       hashAlgorithm: 'SHA-256',
@@ -47,12 +47,12 @@ export class Mt101ArchiveTaskProvider extends ProcessTaskProvider<Mt101ArchiveTa
 
   hydrateDraft(task: ProcessTaskFormModel): Mt101ArchiveTaskDraft {
     const config: Record<string, any> = this.parseJson(task.configurationJson);
-    const runtime = this.hydrateRuntime(task, 'batch');
+    const runtime = this.hydrateRuntime(task, 'once');
     const hasEncryptColumn = !!String(config['encryptColumn'] || '').trim();
     const hasSecretRef = !!String(config['encryptionSecretRef'] || '').trim();
     return {
       ...runtime,
-      executionMode: 'batch',
+      executionMode: 'once',
       connectionRef: String(config['connectionRef'] || ''),
       table: String(config['table'] || 'mt101_archive'),
       hashAlgorithm: this.normalizeHashAlgorithm(config['hashAlgorithm']),
@@ -78,7 +78,7 @@ export class Mt101ArchiveTaskProvider extends ProcessTaskProvider<Mt101ArchiveTa
         retentionDays: draft.retentionDays,
       },
       draft,
-      'batch',
+      'once',
     );
     return { configurationJson: this.toPrettyJson(payload) };
   }

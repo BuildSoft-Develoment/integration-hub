@@ -9,6 +9,7 @@ import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -20,11 +21,17 @@ import java.util.TreeMap;
 /**
  * Task provider {@code MT101_VALIDATE}: aplica los predicados activos del
  * {@code ruleSet} configurado sobre cada {@link Mt101Message} producido por la tarea
- * anterior (tipicamente {@code MT101_BUILD}).
+ * anterior (tipicamente {@code MT101_BUILD} o {@code MT101_BUILD_FROM_TABLE}).
  *
  * <p>{@code executionMode} esperado: {@code once}. Bypassa el
  * {@code TaskInputResolver} (que solo sabe convertir {@code ReadRecord}/{@code Map})
  * leyendo {@code Mt101Message} directo del mapa {@code taskOutputs}.</p>
+ *
+ * <p><b>Flujo masivo (fragment source)</b>: lee fragmentos {@code BUILT} por
+ * paginas (memoria O(pageSize)) y marca cada fragmento {@code VALIDATED} o
+ * {@code REJECTED} individualmente. Esto habilita el gate de estados: un
+ * fragmento invalido no contamina al resto y {@code MT101_PAY} (que por defecto
+ * solo lee {@code ARCHIVED}) nunca despacha mensajes sin validar.</p>
  *
  * <p><b>Outputs publicados</b>:</p>
  * <ul>
@@ -48,11 +55,21 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
     private static final String DEFAULT_STANDARD = "SWIFT";
     private static final String DEFAULT_APPLIES_TO = "MT101";
     private static final String DEFAULT_FAIL_ON = "ERROR";
+    /** Estado de fragmentos que VALIDATE consume por defecto (gate de entrada). */
+    private static final List<String> FRAGMENT_READ_STATUSES = List.of("BUILT");
 
     private final Instance<ValidationRuleProvider> ruleProviders;
+    private final Mt101FragmentStore fragmentStore;
+
+    @Inject
+    public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
+                                     Mt101FragmentStore fragmentStore) {
+        this.ruleProviders = ruleProviders;
+        this.fragmentStore = fragmentStore;
+    }
 
     public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders) {
-        this.ruleProviders = ruleProviders;
+        this(ruleProviders, null);
     }
 
     @Override
@@ -62,37 +79,99 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
 
     @Override
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
-        var messages = Mt101MessageInputResolver.readMessages(context, configuration, type());
-        if (messages.isEmpty()) {
-            return TaskResult.success("MT101_VALIDATE skipped because there are no messages to validate");
-        }
-
         var ruleSet = stringValue(configuration.get("ruleSet"), DEFAULT_RULE_SET);
         var standard = stringValue(configuration.get("standard"), DEFAULT_STANDARD);
         var appliesTo = stringValue(configuration.get("appliesTo"), DEFAULT_APPLIES_TO);
         var failOn = severityValue(configuration.get("failOn"), ValidationIssue.Severity.ERROR);
-
         var predicates = resolveRules(ruleSet, standard, appliesTo);
-        var issues = applyPredicates(predicates, messages);
-        var bySeverity = countBySeverity(issues);
 
-        var invalidMessageCount = countInvalidMessages(messages, issues, failOn);
-        var validMessageCount = messages.size() - invalidMessageCount;
+        var accumulator = new ValidationAccumulator();
+        var fragmentSource = Mt101MessageInputResolver.fragmentSource(context, configuration, type());
+
+        if (!fragmentSource.isEmpty() && fragmentStore != null) {
+            var pageSize = intValue(configuration.get("pageSize"), Mt101FragmentStore.DEFAULT_PAGE_SIZE);
+            fragmentStore.forEachPage(fragmentSource, FRAGMENT_READ_STATUSES, pageSize, page -> {
+                for (var message : page) {
+                    var messageIssues = evaluateMessage(predicates, message);
+                    var blocking = accumulator.add(messageIssues, failOn);
+                    markFragment(fragmentSource, message, blocking, messageIssues);
+                }
+            });
+            // Propaga el fragment source para que ARCHIVE/PAY sigan leyendo del store.
+            context.attributes().put("mt101FragmentSource", fragmentSource);
+        } else {
+            var messages = Mt101MessageInputResolver.readMessages(context, configuration, type(), fragmentStore);
+            for (var message : messages) {
+                accumulator.add(evaluateMessage(predicates, message), failOn);
+            }
+        }
+
+        if (accumulator.totalMessages == 0) {
+            return TaskResult.success("MT101_VALIDATE skipped because there are no messages to validate");
+        }
 
         var outputs = new LinkedHashMap<String, Object>();
-        outputs.put("validCount", validMessageCount);
-        outputs.put("invalidCount", invalidMessageCount);
+        outputs.put("validCount", accumulator.totalMessages - accumulator.invalidMessages);
+        outputs.put("invalidCount", accumulator.invalidMessages);
         outputs.put("ruleSet", ruleSet);
-        outputs.put("issuesBySeverity", bySeverity);
-        outputs.put("errors", issues);
+        outputs.put("issuesBySeverity", accumulator.bySeverity());
+        outputs.put("errors", accumulator.issues);
+        if (!fragmentSource.isEmpty()) {
+            outputs.put("fragments", fragmentSource);
+        }
 
         var summary = "MT101_VALIDATE ruleSet=" + ruleSet
-                + " messages=" + messages.size()
-                + " invalid=" + invalidMessageCount
-                + " issues=" + issues.size();
+                + " messages=" + accumulator.totalMessages
+                + " invalid=" + accumulator.invalidMessages
+                + " issues=" + accumulator.issues.size();
 
-        var hasFailure = issues.stream().anyMatch(issue -> issue.severity().reaches(failOn));
-        return hasFailure ? TaskResult.failure(summary, outputs) : TaskResult.success(summary, outputs);
+        return accumulator.invalidMessages > 0
+                ? TaskResult.failure(summary, outputs)
+                : TaskResult.success(summary, outputs);
+    }
+
+    private List<ValidationIssue> evaluateMessage(List<ValidationPredicate> predicates, Mt101Message message) {
+        var issues = new ArrayList<ValidationIssue>();
+        for (var predicate : predicates) {
+            var found = predicate.evaluate(message);
+            if (found != null && !found.isEmpty()) {
+                issues.addAll(found);
+            }
+        }
+        return issues;
+    }
+
+    private void markFragment(Map<String, Object> fragmentSource,
+                              Mt101Message message,
+                              boolean blocking,
+                              List<ValidationIssue> issues) {
+        if (fragmentStore == null || message.sequenceA() == null
+                || message.sequenceA().sendersReference() == null) {
+            return;
+        }
+        if (blocking) {
+            fragmentStore.markStatus(fragmentSource, message.sequenceA().sendersReference(),
+                    "REJECTED", summarizeIssues(issues));
+        } else {
+            fragmentStore.markStatus(fragmentSource, message.sequenceA().sendersReference(),
+                    "VALIDATED", null);
+        }
+    }
+
+    private String summarizeIssues(List<ValidationIssue> issues) {
+        var sb = new StringBuilder();
+        for (var issue : issues) {
+            if (sb.length() > 0) {
+                sb.append("; ");
+            }
+            sb.append(issue.code()).append(": ").append(issue.message());
+            if (sb.length() > 500) {
+                sb.setLength(500);
+                sb.append("...");
+                break;
+            }
+        }
+        return sb.toString();
     }
 
     private List<ValidationPredicate> resolveRules(String ruleSet, String standard, String appliesTo) {
@@ -108,49 +187,32 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
         return aggregated;
     }
 
-    private List<ValidationIssue> applyPredicates(List<ValidationPredicate> predicates,
-                                                  List<Mt101Message> messages) {
-        var issues = new ArrayList<ValidationIssue>();
-        for (var message : messages) {
-            for (var predicate : predicates) {
-                var found = predicate.evaluate(message);
-                if (found != null && !found.isEmpty()) {
-                    issues.addAll(found);
-                }
+    /** Acumula resultados por mensaje sin retener los mensajes en memoria. */
+    private static final class ValidationAccumulator {
+        int totalMessages;
+        int invalidMessages;
+        final List<ValidationIssue> issues = new ArrayList<>();
+
+        boolean add(List<ValidationIssue> messageIssues, ValidationIssue.Severity failOn) {
+            totalMessages++;
+            issues.addAll(messageIssues);
+            var blocking = messageIssues.stream().anyMatch(issue -> issue.severity().reaches(failOn));
+            if (blocking) {
+                invalidMessages++;
             }
+            return blocking;
         }
-        return issues;
-    }
 
-    private Map<String, Integer> countBySeverity(List<ValidationIssue> issues) {
-        var counts = new TreeMap<String, Integer>();
-        counts.put(ValidationIssue.Severity.ERROR.name(), 0);
-        counts.put(ValidationIssue.Severity.WARNING.name(), 0);
-        counts.put(ValidationIssue.Severity.INFO.name(), 0);
-        for (var issue : issues) {
-            counts.merge(issue.severity().name(), 1, Integer::sum);
+        Map<String, Integer> bySeverity() {
+            var counts = new TreeMap<String, Integer>();
+            counts.put(ValidationIssue.Severity.ERROR.name(), 0);
+            counts.put(ValidationIssue.Severity.WARNING.name(), 0);
+            counts.put(ValidationIssue.Severity.INFO.name(), 0);
+            for (var issue : issues) {
+                counts.merge(issue.severity().name(), 1, Integer::sum);
+            }
+            return counts;
         }
-        return counts;
-    }
-
-    /**
-     * Cuenta cuantos mensajes tienen al menos un issue que alcanza el umbral
-     * {@code failOn}. Un mensaje invalido lo es por tener al menos un issue, no por
-     * "cuantos" issues; evita contar dos veces.
-     */
-    private int countInvalidMessages(List<Mt101Message> messages,
-                                     List<ValidationIssue> issues,
-                                     ValidationIssue.Severity failOn) {
-        if (issues.isEmpty()) {
-            return 0;
-        }
-        // Sin un mapping explicito message->issue, usamos la referencia de mensaje
-        // (sendersReference) y la de transaccion. Para slice 2 con un solo mensaje
-        // por ejecucion, el caso comun es 0 o 1; cubrimos N usando heuristica de
-        // "al menos un issue blocking sobre el conjunto" (false-positive seguro:
-        // todos los mensajes se consideran invalidos si hay un solo issue blocking).
-        var anyBlocking = issues.stream().anyMatch(issue -> issue.severity().reaches(failOn));
-        return anyBlocking ? messages.size() : 0;
     }
 
     private String stringValue(Object raw, String defaultValue) {
@@ -159,6 +221,13 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
         }
         var value = String.valueOf(raw).trim();
         return value.isEmpty() ? defaultValue : value;
+    }
+
+    private int intValue(Object raw, int defaultValue) {
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return defaultValue;
+        }
+        return Integer.parseInt(String.valueOf(raw));
     }
 
     private ValidationIssue.Severity severityValue(Object raw, ValidationIssue.Severity defaultValue) {

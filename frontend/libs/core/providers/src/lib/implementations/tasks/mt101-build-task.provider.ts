@@ -2,7 +2,7 @@
 // @trace ADR-009
 import { Injectable } from '@angular/core';
 import { I18nService } from '@integration-hub/core/services';
-import { ProcessTaskProvider, ProcessTaskSummaryContext } from '../../tasks/process-task-provider.abstract';
+import { ProcessTaskProvider, ProcessTaskProviderDescriptor, ProcessTaskSummaryContext } from '../../tasks/process-task-provider.abstract';
 import { ProcessTaskRuntimeDraft } from '../../tasks/process-task-binding.models';
 import { ProcessTaskFormModel } from '../../tasks/process-task.models';
 
@@ -18,6 +18,8 @@ export interface Mt101EnvelopeDraft {
 export interface Mt101SequenceADraft {
   sendersReferenceTemplate: string;
   requestedExecutionDate: string;
+  instructingPartyOption: 'L' | '';
+  instructingPartyIdentifier: string;
   orderingCustomerOption: 'F' | 'G' | 'H';
   orderingCustomerAccount: string;
   orderingCustomerNameAddress: string;
@@ -34,6 +36,9 @@ export interface Mt101TransactionMappingsDraft {
   orderingCustomerAccountField: string;
   orderingCustomerBicField: string;
   orderingCustomerNameAddressFields: string;
+  accountServicingOption: '' | 'A' | 'C';
+  accountServicingAccountField: string;
+  accountServicingBicField: string;
   beneficiaryOption: '' | 'A' | 'F';
   beneficiaryAccountField: string;
   beneficiaryBicField: string;
@@ -60,7 +65,7 @@ export interface Mt101BuildTaskDraft extends ProcessTaskRuntimeDraft {
  */
 @Injectable()
 export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDraft> {
-  readonly descriptor = {
+  readonly descriptor: ProcessTaskProviderDescriptor = {
     type: 'MT101_BUILD' as const,
     labelKey: 'processTask.MT101_BUILD',
     descriptionKey: 'processTaskDescription.MT101_BUILD',
@@ -82,6 +87,8 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
       sequenceA: {
         sendersReferenceTemplate: 'PROC-${_processExecutionId}',
         requestedExecutionDate: '${today+1bd}',
+        instructingPartyOption: '',
+        instructingPartyIdentifier: '',
         orderingCustomerOption: 'H',
         orderingCustomerAccount: '',
         orderingCustomerNameAddress: '',
@@ -96,6 +103,9 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
         orderingCustomerAccountField: '',
         orderingCustomerBicField: '',
         orderingCustomerNameAddressFields: '',
+        accountServicingOption: '',
+        accountServicingAccountField: '',
+        accountServicingBicField: '',
         beneficiaryOption: '',
         beneficiaryAccountField: '',
         beneficiaryBicField: '',
@@ -114,11 +124,13 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
     const runtime = this.hydrateRuntime(task, 'once');
     const envelope = (config['envelope'] || {}) as Record<string, any>;
     const sequenceA = (config['sequenceA'] || {}) as Record<string, any>;
+    const instructingParty = (sequenceA['instructingParty'] || {}) as Record<string, any>;
     const orderingCustomer = (sequenceA['orderingCustomer'] || {}) as Record<string, any>;
     const accountServicing = (sequenceA['accountServicingInstitution'] || {}) as Record<string, any>;
     const mappings = (config['transactionMappings'] || {}) as Record<string, any>;
     const amount = (mappings['amount'] || {}) as Record<string, any>;
     const transactionOrderingCustomer = (mappings['orderingCustomer'] || {}) as Record<string, any>;
+    const transactionAccountServicing = (mappings['accountServicingInstitution'] || {}) as Record<string, any>;
     const beneficiary = (mappings['beneficiary'] || {}) as Record<string, any>;
     const accountWith = (mappings['accountWithInstitution'] || {}) as Record<string, any>;
     const split = (config['splitBy'] || {}) as Record<string, any>;
@@ -137,6 +149,8 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
       sequenceA: {
         sendersReferenceTemplate: String(sequenceA['sendersReferenceTemplate'] || sequenceA['sendersReference'] || ''),
         requestedExecutionDate: String(sequenceA['requestedExecutionDate'] || ''),
+        instructingPartyOption: this.normalizeInstructingOption(instructingParty['option']),
+        instructingPartyIdentifier: this.joinLines(instructingParty['nameAndAddress']),
         orderingCustomerOption: this.normalizeOrderingOption(orderingCustomer['option']),
         orderingCustomerAccount: String(orderingCustomer['account'] || ''),
         orderingCustomerNameAddress: this.joinLines(orderingCustomer['nameAndAddress']),
@@ -151,6 +165,9 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
         orderingCustomerAccountField: String(transactionOrderingCustomer['accountField'] || ''),
         orderingCustomerBicField: String(transactionOrderingCustomer['bicField'] || ''),
         orderingCustomerNameAddressFields: this.joinLines(transactionOrderingCustomer['nameAndAddressFields']),
+        accountServicingOption: this.normalizeServicingOption(transactionAccountServicing['option']),
+        accountServicingAccountField: String(transactionAccountServicing['accountField'] || ''),
+        accountServicingBicField: String(transactionAccountServicing['bicField'] || ''),
         beneficiaryOption: this.normalizeBeneficiaryOption(beneficiary['option']),
         beneficiaryAccountField: String(beneficiary['accountField'] || ''),
         beneficiaryBicField: String(beneficiary['bicField'] || ''),
@@ -178,12 +195,19 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
         sequenceA: {
           sendersReferenceTemplate: draft.sequenceA.sendersReferenceTemplate,
           requestedExecutionDate: draft.sequenceA.requestedExecutionDate,
-          orderingCustomer: draft.debitAccountMode === 'singleDebit'
+          instructingParty: draft.debitAccountMode === 'subsidiary'
             ? this.compactObject({
-                option: draft.sequenceA.orderingCustomerOption,
-                account: draft.sequenceA.orderingCustomerAccount,
-                nameAndAddress: this.splitLines(draft.sequenceA.orderingCustomerNameAddress),
+                option: draft.sequenceA.instructingPartyOption || 'L',
+                nameAndAddress: this.splitLines(draft.sequenceA.instructingPartyIdentifier),
               })
+            : undefined,
+          orderingCustomer: draft.debitAccountMode === 'singleDebit'
+            ? this.partyConfig(
+                draft.sequenceA.orderingCustomerOption,
+                draft.sequenceA.orderingCustomerAccount,
+                '',
+                draft.sequenceA.orderingCustomerNameAddress,
+              )
             : undefined,
           accountServicingInstitution: draft.sequenceA.accountServicingOption
             ? this.compactObject({
@@ -206,6 +230,13 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
                 bicField: draft.transactionMappings.orderingCustomerBicField,
                 nameAndAddressFields: this.splitLines(draft.transactionMappings.orderingCustomerNameAddressFields),
               }),
+          accountServicingInstitution: draft.transactionMappings.accountServicingOption
+            ? this.compactObject({
+                option: draft.transactionMappings.accountServicingOption,
+                accountField: draft.transactionMappings.accountServicingAccountField,
+                bicField: draft.transactionMappings.accountServicingBicField,
+              })
+            : undefined,
           beneficiary: this.compactObject({
             option: draft.transactionMappings.beneficiaryOption,
             accountField: draft.transactionMappings.beneficiaryAccountField,
@@ -279,6 +310,11 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
     return v === 'F' || v === 'G' ? v : 'H';
   }
 
+  private normalizeInstructingOption(value: unknown): 'L' | '' {
+    const v = String(value || '').toUpperCase();
+    return v === 'L' ? 'L' : '';
+  }
+
   private normalizeOptionalOrderingOption(value: unknown): '' | 'F' | 'G' | 'H' {
     const v = String(value || '').toUpperCase();
     return v === 'F' || v === 'G' || v === 'H' ? v : '';
@@ -311,6 +347,17 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
       .split('\n')
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
+  }
+
+  private partyConfig(option: string, account: string, bic: string, nameAndAddress: string): Record<string, unknown> | undefined {
+    const payload = this.compactObject({
+      option,
+      account,
+      bic,
+      nameAndAddress: this.splitLines(nameAndAddress),
+    });
+    const hasValue = Boolean(payload['account'] || payload['bic'] || payload['nameAndAddress']);
+    return hasValue ? payload : undefined;
   }
 
   /** Quita claves con valores vacios/undefined/array vacio para no inflar el JSON. */

@@ -11,9 +11,11 @@ import java.util.Map;
  * Resuelve mensajes MT101 publicados por tareas previas.
  *
  * <p>Las tareas de la vertical SWIFT pueden recibir directamente
- * {@code List<Mt101Message>} desde {@code MT101_BUILD}/{@code MT101_SPLIT}, o
+ * {@code List<Mt101Message>} desde {@code MT101_BUILD}/{@code MT101_SPLIT},
  * records de archivo como {@code Map} que embeben el mensaje en la clave
- * {@code message}. Esta clase mantiene ese contrato uniforme.</p>
+ * {@code message}, o una fuente persistida de fragmentos
+ * {@code {fragmentSetId, connectionRef}} publicada por {@code MT101_BUILD_FROM_TABLE}.
+ * Esta clase mantiene ese contrato uniforme.</p>
  */
 final class Mt101MessageInputResolver {
 
@@ -25,9 +27,66 @@ final class Mt101MessageInputResolver {
     static List<Mt101Message> readMessages(TaskContext context,
                                            Map<String, Object> configuration,
                                            String taskType) {
+        return readMessages(context, configuration, taskType, null);
+    }
+
+    @SuppressWarnings("unchecked")
+    static List<Mt101Message> readMessages(TaskContext context,
+                                           Map<String, Object> configuration,
+                                           String taskType,
+                                           Mt101FragmentStore fragmentStore) {
+        var raw = rawSource(context, configuration, taskType);
+        if (raw == null) {
+            return List.of();
+        }
+        if (raw instanceof Map<?, ?> rawMap && rawMap.containsKey("fragmentSetId")) {
+            if (fragmentStore == null) {
+                throw new IllegalArgumentException(taskType + " cannot read MT101 fragment source without fragment store");
+            }
+            var source = new java.util.LinkedHashMap<String, Object>();
+            rawMap.forEach((key, value) -> source.put(String.valueOf(key), value));
+            context.attributes().put("mt101FragmentSource", source);
+            return fragmentStore.readMessages(source);
+        }
+        if (!(raw instanceof List<?> rawList)) {
+            throw new IllegalArgumentException(
+                    "Expected MT101 input to be List<Mt101Message> or fragment source but got "
+                            + raw.getClass().getName());
+        }
+        var result = new ArrayList<Mt101Message>(rawList.size());
+        for (var item : rawList) {
+            if (item instanceof Mt101Message msg) {
+                result.add(msg);
+            } else if (item instanceof Map<?, ?> map && map.get("message") instanceof Mt101Message msg) {
+                result.add(msg);
+            } else if (item != null) {
+                throw new IllegalArgumentException(
+                        "Expected Mt101Message items but got " + item.getClass().getName());
+            }
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    static Map<String, Object> fragmentSource(TaskContext context,
+                                              Map<String, Object> configuration,
+                                              String taskType) {
+        var raw = rawSource(context, configuration, taskType);
+        if (!(raw instanceof Map<?, ?> rawMap) || !rawMap.containsKey("fragmentSetId")) {
+            return Map.of();
+        }
+        var source = new java.util.LinkedHashMap<String, Object>();
+        rawMap.forEach((key, value) -> source.put(String.valueOf(key), value));
+        return source;
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Object rawSource(TaskContext context,
+                                    Map<String, Object> configuration,
+                                    String taskType) {
         var rawTaskOutputs = context.attributes().get("taskOutputs");
         if (!(rawTaskOutputs instanceof Map<?, ?> taskOutputs) || taskOutputs.isEmpty()) {
-            return List.of();
+            return null;
         }
         if (!(configuration.get("input") instanceof Map<?, ?> rawInput)) {
             throw new IllegalArgumentException(taskType + " requires configuration.input");
@@ -38,26 +97,7 @@ final class Mt101MessageInputResolver {
         }
         var sourceOutput = stringValue(((Map<String, Object>) rawInput).get("sourceOutput"), "records");
         var key = sourceTaskRef + "." + sourceOutput;
-        var raw = taskOutputs.get(key);
-        if (raw == null) {
-            return List.of();
-        }
-        if (!(raw instanceof List<?> rawList)) {
-            throw new IllegalArgumentException(
-                    "Expected " + key + " to be List<Mt101Message> but got " + raw.getClass().getName());
-        }
-        var result = new ArrayList<Mt101Message>(rawList.size());
-        for (var item : rawList) {
-            if (item instanceof Mt101Message msg) {
-                result.add(msg);
-            } else if (item instanceof Map<?, ?> map && map.get("message") instanceof Mt101Message msg) {
-                result.add(msg);
-            } else if (item != null) {
-                throw new IllegalArgumentException(
-                        "Expected Mt101Message items at " + key + " but got " + item.getClass().getName());
-            }
-        }
-        return result;
+        return taskOutputs.get(key);
     }
 
     private static String stringValue(Object raw, String defaultValue) {
