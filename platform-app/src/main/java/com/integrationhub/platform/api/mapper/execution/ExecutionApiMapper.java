@@ -48,7 +48,7 @@ public class ExecutionApiMapper {
                 taskExecution.processExecution.id,
                 taskExecution.taskDefinition.id,
                 taskExecution.taskDefinition.taskOrder,
-                taskExecution.taskDefinition.taskType.name(),
+                taskExecution.taskDefinition.taskType,
                 taskExecution.status.name(),
                 taskExecution.executedAt,
                 taskExecution.startedAt,
@@ -63,7 +63,7 @@ public class ExecutionApiMapper {
         var processExecutionId = auditEvent.processExecution != null ? auditEvent.processExecution.id : null;
         var taskDefinitionId = auditEvent.taskDefinition != null ? auditEvent.taskDefinition.id : null;
         var taskType = auditEvent.taskDefinition != null && auditEvent.taskDefinition.taskType != null
-                ? auditEvent.taskDefinition.taskType.name()
+                ? auditEvent.taskDefinition.taskType
                 : null;
         var processDefinitionId = auditEvent.processExecution != null && auditEvent.processExecution.processDefinition != null
                 ? auditEvent.processExecution.processDefinition.id

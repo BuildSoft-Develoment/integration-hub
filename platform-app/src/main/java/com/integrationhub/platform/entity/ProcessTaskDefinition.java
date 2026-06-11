@@ -1,11 +1,8 @@
 package com.integrationhub.platform.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.integrationhub.platform.domain.TaskType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -30,9 +27,15 @@ public class ProcessTaskDefinition {
     @Column(name = "task_order", nullable = false)
     public Integer taskOrder;
 
-    @Enumerated(EnumType.STRING)
+    /**
+     * Tipo de tarea como {@code String} libre. Cierre M-1a (T-015 spec 003,
+     * ADR-009): antes era {@code @Enumerated(EnumType.STRING)} sobre el enum
+     * {@code TaskType}, lo que forzaba a editar el dominio para anadir tipos.
+     * Ahora es String validado contra {@code TaskTypeRegistry} (motor + tipos
+     * aportados por verticales via {@code TaskProvider}).
+     */
     @Column(name = "task_type", nullable = false, length = 50)
-    public TaskType taskType;
+    public String taskType;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "source_definition_id")

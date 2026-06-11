@@ -1,7 +1,15 @@
-<div class="mt101-repair">
+<div class="mt101-repair ih-thin-scroll">
   <header class="mt101-repair__header">
     <h3>{{ i18n.t('processTask.MT101_REPAIR') }}</h3>
   </header>
+
+  <ih-process-task-runtime-panel
+    [task]="task()"
+    [tasks]="tasks()"
+    [draft]="draft()"
+    [readonly]="readonly()"
+    (runtimeChange)="updateDraft($event)"
+  />
 
   <p class="mt101-repair__description">{{ i18n.t('mt101Repair.description') }}</p>
 
@@ -11,49 +19,56 @@
       @for (repair of draft().repairs; let i = $index; track i) {
         <li class="mt101-repair__item">
           <div class="mt101-repair__row">
-            <label>
-              <span>{{ i18n.t('mt101Repair.action') }}</span>
-              <select
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Repair.action') }}</mat-label>
+              <mat-select
                 [ngModel]="repair.action"
                 (ngModelChange)="updateRepair(i, { action: $event })"
                 [disabled]="readonly()">
                 @for (a of actions; track a) {
-                  <option [value]="a">{{ a }}</option>
+                  <mat-option [value]="a">{{ a }}</mat-option>
                 }
-              </select>
-            </label>
+              </mat-select>
+            </mat-form-field>
+
             @if (repair.action === 'truncateField') {
-              <label>
-                <span>{{ i18n.t('mt101Repair.maxLength') }}</span>
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('mt101Repair.maxLength') }}</mat-label>
                 <input
+                  matInput
                   type="number"
                   min="1"
                   [ngModel]="repair.maxLength"
                   (ngModelChange)="updateRepair(i, { maxLength: $event })"
                   [disabled]="readonly()" />
-              </label>
+              </mat-form-field>
             }
+
             <button
+              mat-icon-button
               type="button"
               class="mt101-repair__remove"
+              [attr.aria-label]="i18n.t('ui.remove')"
               (click)="removeRepair(i)"
               [disabled]="readonly() || draft().repairs.length === 1">
-              ✕
+              x
             </button>
           </div>
-          <label class="mt101-repair__full">
-            <span>{{ i18n.t('mt101Repair.targetFields') }}</span>
+
+          <mat-form-field class="mt101-repair__full" subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('mt101Repair.targetFields') }}</mat-label>
             <textarea
+              matInput
               rows="3"
               placeholder="transactions.remittanceInformation&#10;transactions.beneficiary.nameAndAddress"
               [ngModel]="repair.targetFields"
               (ngModelChange)="updateRepair(i, { targetFields: $event })"
               [disabled]="readonly()"></textarea>
-          </label>
+          </mat-form-field>
         </li>
       }
     </ul>
-    <button type="button" class="mt101-repair__add" (click)="addRepair()" [disabled]="readonly()">
+    <button mat-stroked-button type="button" class="mt101-repair__add" (click)="addRepair()" [disabled]="readonly()">
       + {{ i18n.t('mt101Repair.addRepair') }}
     </button>
   </section>
@@ -61,24 +76,27 @@
   <section class="mt101-repair__section">
     <h4>{{ i18n.t('mt101Repair.section.tracking') }}</h4>
     <div class="mt101-repair__grid">
-      <label class="mt101-repair__col-2">
-        <span>{{ i18n.t('mt101Repair.newReferenceTemplate') }}</span>
+      <mat-form-field class="mt101-repair__col-2" subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Repair.newReferenceTemplate') }}</mat-label>
         <input
+          matInput
           type="text"
           placeholder="${sendersReference}-R${repairAttempt}"
           [ngModel]="draft().newReferenceTemplate"
           (ngModelChange)="updateDraft({ newReferenceTemplate: $event })"
           [disabled]="readonly()" />
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101Repair.repairAttempt') }}</span>
+      </mat-form-field>
+
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Repair.repairAttempt') }}</mat-label>
         <input
+          matInput
           type="number"
           min="1"
           [ngModel]="draft().repairAttempt"
           (ngModelChange)="updateDraft({ repairAttempt: $event })"
           [disabled]="readonly()" />
-      </label>
+      </mat-form-field>
     </div>
   </section>
 </div>

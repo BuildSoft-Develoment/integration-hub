@@ -22,6 +22,8 @@ public class ProcessExecutionService {
     private final Instance<ExecutionFastPath> fastPaths;
     private final TaskOutputRegistry taskOutputRegistry;
     private final Tracer tracer;
+    private final SuspensionTokenGenerator suspensionTokenGenerator;
+    private final SuspendedStateMarshaller suspendedStateMarshaller;
 
     public ProcessExecutionService(
             ProcessExecutionStateService processExecutionStateService,
@@ -29,7 +31,9 @@ public class ProcessExecutionService {
             ProcessExecutionAuditMapper auditMapper,
             Instance<ExecutionFastPath> fastPaths,
             TaskOutputRegistry taskOutputRegistry,
-            Tracer tracer
+            Tracer tracer,
+            SuspensionTokenGenerator suspensionTokenGenerator,
+            SuspendedStateMarshaller suspendedStateMarshaller
     ) {
         this.processExecutionStateService = processExecutionStateService;
         this.processTaskRuntimeService = processTaskRuntimeService;
@@ -37,6 +41,8 @@ public class ProcessExecutionService {
         this.fastPaths = fastPaths;
         this.taskOutputRegistry = taskOutputRegistry;
         this.tracer = tracer;
+        this.suspensionTokenGenerator = suspensionTokenGenerator;
+        this.suspendedStateMarshaller = suspendedStateMarshaller;
     }
 
     public com.integrationhub.platform.entity.ProcessExecution execute(Long processDefinitionId) {
@@ -116,15 +122,40 @@ public class ProcessExecutionService {
                 var taskSpan = tracer.spanBuilder("process.task.execute")
                         .setAttribute("task.definition.id", taskPlan.taskDefinitionId())
                         .setAttribute("task.order", taskPlan.taskOrder())
-                        .setAttribute("task.type", taskPlan.taskType().name())
+                        .setAttribute("task.type", taskPlan.taskType())
                         .startSpan();
 
-                var taskExecutionId = processExecutionStateService.startTask(processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType().name(), taskPlan.taskOrder());
+                var taskExecutionId = processExecutionStateService.startTask(processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(), taskPlan.taskOrder());
                 try {
                     var taskConfiguration = taskOutputRegistry.configuration(taskPlan.configurationJson());
                     var runResult = processTaskRuntimeService.runTask(processExecutionId, taskPlan, sourcePayload, readResult, executionVariables, taskOutputs, selectedFiles, triggerSource);
                     String taskDetails;
                     Object taskPayload;
+
+                    // M-2: el provider pidio suspender (callback externo, polling, approval).
+                    // Persistimos el state + token, salimos del loop sin marcar fail.
+                    // El proceso queda SUSPENDED hasta que llegue POST /api/process-executions/resume/{token}
+                    // o un scheduler periodico re-invoque al provider.
+                    if (runResult.suspended()) {
+                        var token = suspensionTokenGenerator.generate();
+                        var stateJson = suspendedStateMarshaller.marshal(runResult.suspendedState());
+                        var details = auditMapper.buildTaskDetails(taskPlan, runResult.details());
+                        var payload = Map.of(
+                                "taskType", taskPlan.taskType(),
+                                "resumeToken", token,
+                                "suspendedState", runResult.suspendedState());
+                        processExecutionStateService.suspendTask(
+                                processExecutionId,
+                                taskExecutionId,
+                                stateJson,
+                                token,
+                                null,
+                                details,
+                                payload);
+                        taskSpan.setAttribute("task.suspended", true);
+                        taskSpan.setAttribute("task.resume.token", token);
+                        return processExecutionStateService.getExecution(processExecutionId);
+                    }
 
                     if (runResult.fileRead()) {
                         sourcePayload = runResult.sourcePayload();
@@ -138,7 +169,7 @@ public class ProcessExecutionService {
                         if (runResult.outputs() != null && !runResult.outputs().isEmpty()) {
                             taskOutputRegistry.registerTaskResult(taskOutputs, taskPlan, taskConfiguration, runResult.outputs());
                         }
-                        taskPayload = Map.of("taskType", taskPlan.taskType().name(), "outputs", runResult.outputs());
+                        taskPayload = Map.of("taskType", taskPlan.taskType(), "outputs", runResult.outputs());
                     }
 
                     processExecutionStateService.completeTask(processExecutionId, taskExecutionId, taskDetails, taskPayload);

@@ -155,6 +155,59 @@ public class ProcessExecutionStateService {
         auditService.record(execution, taskExecution.taskDefinition, "TASK_COMPLETED_WITH_ERRORS", "COMPLETED_WITH_ERRORS", details, payload);
     }
 
+    /**
+     * Suspende una tarea (y su proceso contenedor) hasta que llegue un resume.
+     * Persiste el state JSON-serializado y un token opaco para callbacks.
+     *
+     * @trace spec 003 T-017 (M-2 suspension engine), ADR-009
+     */
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public void suspendTask(Long processExecutionId,
+                            Long taskExecutionId,
+                            String suspendedStateJson,
+                            String resumeToken,
+                            LocalDateTime expiresAt,
+                            String details,
+                            Object auditPayload) {
+        var execution = processExecutionRepository.findById(processExecutionId);
+        var taskExecution = processTaskExecutionRepository.findById(taskExecutionId);
+        taskExecution.status = ExecutionStatus.SUSPENDED;
+        taskExecution.suspendedState = suspendedStateJson;
+        taskExecution.resumeToken = resumeToken;
+        taskExecution.suspendedAt = LocalDateTime.now();
+        taskExecution.suspendExpiresAt = expiresAt;
+        taskExecution.details = details;
+        execution.status = ExecutionStatus.SUSPENDED;
+        auditService.record(execution, taskExecution.taskDefinition,
+                "TASK_SUSPENDED", "SUSPENDED", details, auditPayload);
+    }
+
+    /**
+     * Marca una tarea previamente suspendida como reanudada (timestamp +
+     * incremento de contador). El status pasa a RUNNING; el caller decide si
+     * transicionar a COMPLETED/FAILED segun el {@code TaskResult} del resume.
+     */
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public void markResumed(Long taskExecutionId) {
+        var taskExecution = processTaskExecutionRepository.findById(taskExecutionId);
+        taskExecution.resumedAt = LocalDateTime.now();
+        taskExecution.resumeCount = taskExecution.resumeCount + 1;
+        taskExecution.status = ExecutionStatus.RUNNING;
+        var execution = taskExecution.processExecution;
+        if (execution != null && execution.status == ExecutionStatus.SUSPENDED) {
+            execution.status = ExecutionStatus.RUNNING;
+        }
+    }
+
+    /**
+     * Lookup de una suspension activa por token (callback externo).
+     * Devuelve {@code null} si no existe, ya fue reanudado o el token es vacio.
+     */
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public ProcessTaskExecution findActiveSuspension(String resumeToken) {
+        return processTaskExecutionRepository.findActiveByResumeToken(resumeToken);
+    }
+
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     public void completeProcess(Long processExecutionId, String details) {
         var execution = processExecutionRepository.findById(processExecutionId);
@@ -240,7 +293,7 @@ public class ProcessExecutionStateService {
     public record TaskPlan(
             Long taskDefinitionId,
             Integer taskOrder,
-            com.integrationhub.platform.domain.TaskType taskType,
+            String taskType,
             String configurationJson,
             Long sourceDefinitionId,
             String sourceName,

@@ -30,6 +30,10 @@ export interface Mt101TransactionMappingsDraft {
   transactionReferenceTemplate: string;
   amountCurrencyField: string;
   amountValueField: string;
+  orderingCustomerOption: '' | 'F' | 'G' | 'H';
+  orderingCustomerAccountField: string;
+  orderingCustomerBicField: string;
+  orderingCustomerNameAddressFields: string;
   beneficiaryOption: '' | 'A' | 'F';
   beneficiaryAccountField: string;
   beneficiaryBicField: string;
@@ -42,6 +46,7 @@ export interface Mt101TransactionMappingsDraft {
 /** Draft completo del formulario MT101_BUILD. */
 export interface Mt101BuildTaskDraft extends ProcessTaskRuntimeDraft {
   format: 'JSON' | 'XML' | 'FIN';
+  debitAccountMode: 'singleDebit' | 'multipleDebit' | 'subsidiary';
   envelope: Mt101EnvelopeDraft;
   sequenceA: Mt101SequenceADraft;
   transactionMappings: Mt101TransactionMappingsDraft;
@@ -67,6 +72,7 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
       taskRef: '',
       executionMode: 'once',
       format: 'JSON',
+      debitAccountMode: 'singleDebit',
       envelope: {
         senderLt: '',
         receiverLt: '',
@@ -86,6 +92,10 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
         transactionReferenceTemplate: 'TX-${_processExecutionId}-${recordNumber}',
         amountCurrencyField: '',
         amountValueField: '',
+        orderingCustomerOption: '',
+        orderingCustomerAccountField: '',
+        orderingCustomerBicField: '',
+        orderingCustomerNameAddressFields: '',
         beneficiaryOption: '',
         beneficiaryAccountField: '',
         beneficiaryBicField: '',
@@ -108,6 +118,7 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
     const accountServicing = (sequenceA['accountServicingInstitution'] || {}) as Record<string, any>;
     const mappings = (config['transactionMappings'] || {}) as Record<string, any>;
     const amount = (mappings['amount'] || {}) as Record<string, any>;
+    const transactionOrderingCustomer = (mappings['orderingCustomer'] || {}) as Record<string, any>;
     const beneficiary = (mappings['beneficiary'] || {}) as Record<string, any>;
     const accountWith = (mappings['accountWithInstitution'] || {}) as Record<string, any>;
     const split = (config['splitBy'] || {}) as Record<string, any>;
@@ -116,6 +127,7 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
       ...runtime,
       executionMode: 'once',
       format: this.normalizeFormat(config['format']),
+      debitAccountMode: this.normalizeDebitAccountMode(config['debitAccountMode'], orderingCustomer, transactionOrderingCustomer),
       envelope: {
         senderLt: String(envelope['senderLt'] || ''),
         receiverLt: String(envelope['receiverLt'] || ''),
@@ -135,6 +147,10 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
         transactionReferenceTemplate: String(mappings['transactionReferenceTemplate'] || ''),
         amountCurrencyField: String(amount['currencyField'] || ''),
         amountValueField: String(amount['valueField'] || ''),
+        orderingCustomerOption: this.normalizeOptionalOrderingOption(transactionOrderingCustomer['option']),
+        orderingCustomerAccountField: String(transactionOrderingCustomer['accountField'] || ''),
+        orderingCustomerBicField: String(transactionOrderingCustomer['bicField'] || ''),
+        orderingCustomerNameAddressFields: this.joinLines(transactionOrderingCustomer['nameAndAddressFields']),
         beneficiaryOption: this.normalizeBeneficiaryOption(beneficiary['option']),
         beneficiaryAccountField: String(beneficiary['accountField'] || ''),
         beneficiaryBicField: String(beneficiary['bicField'] || ''),
@@ -152,6 +168,7 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
     const payload: Record<string, unknown> = this.withRuntime(
       {
         format: draft.format,
+        debitAccountMode: draft.debitAccountMode,
         envelope: {
           senderLt: draft.envelope.senderLt,
           receiverLt: draft.envelope.receiverLt,
@@ -161,11 +178,13 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
         sequenceA: {
           sendersReferenceTemplate: draft.sequenceA.sendersReferenceTemplate,
           requestedExecutionDate: draft.sequenceA.requestedExecutionDate,
-          orderingCustomer: this.compactObject({
-            option: draft.sequenceA.orderingCustomerOption,
-            account: draft.sequenceA.orderingCustomerAccount,
-            nameAndAddress: this.splitLines(draft.sequenceA.orderingCustomerNameAddress),
-          }),
+          orderingCustomer: draft.debitAccountMode === 'singleDebit'
+            ? this.compactObject({
+                option: draft.sequenceA.orderingCustomerOption,
+                account: draft.sequenceA.orderingCustomerAccount,
+                nameAndAddress: this.splitLines(draft.sequenceA.orderingCustomerNameAddress),
+              })
+            : undefined,
           accountServicingInstitution: draft.sequenceA.accountServicingOption
             ? this.compactObject({
                 option: draft.sequenceA.accountServicingOption,
@@ -179,6 +198,14 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
             currencyField: draft.transactionMappings.amountCurrencyField,
             valueField: draft.transactionMappings.amountValueField,
           }),
+          orderingCustomer: draft.debitAccountMode === 'singleDebit'
+            ? undefined
+            : this.compactObject({
+                option: draft.transactionMappings.orderingCustomerOption || 'H',
+                accountField: draft.transactionMappings.orderingCustomerAccountField,
+                bicField: draft.transactionMappings.orderingCustomerBicField,
+                nameAndAddressFields: this.splitLines(draft.transactionMappings.orderingCustomerNameAddressFields),
+              }),
           beneficiary: this.compactObject({
             option: draft.transactionMappings.beneficiaryOption,
             accountField: draft.transactionMappings.beneficiaryAccountField,
@@ -216,6 +243,27 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
     return v === 'XML' || v === 'FIN' ? v : 'JSON';
   }
 
+  private normalizeDebitAccountMode(
+    value: unknown,
+    sequenceAOrdering: Record<string, any>,
+    transactionOrdering: Record<string, any>,
+  ): 'singleDebit' | 'multipleDebit' | 'subsidiary' {
+    const v = String(value || '');
+    if (v === 'multipleDebit' || v === 'subsidiary') {
+      return v;
+    }
+    if (v === 'singleDebit') {
+      return 'singleDebit';
+    }
+    const hasSequenceA = Boolean(sequenceAOrdering['account'] || sequenceAOrdering['bic'] || sequenceAOrdering['nameAndAddress']);
+    const hasTransaction = Boolean(
+      transactionOrdering['accountField'] ||
+        transactionOrdering['bicField'] ||
+        transactionOrdering['nameAndAddressFields'],
+    );
+    return !hasSequenceA && hasTransaction ? 'multipleDebit' : 'singleDebit';
+  }
+
   private normalizeUetrStrategy(value: unknown): 'perMessage' | 'fixed' | 'none' {
     const v = String(value || 'perMessage');
     return v === 'fixed' || v === 'none' ? v : 'perMessage';
@@ -229,6 +277,11 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
   private normalizeOrderingOption(value: unknown): 'F' | 'G' | 'H' {
     const v = String(value || 'H').toUpperCase();
     return v === 'F' || v === 'G' ? v : 'H';
+  }
+
+  private normalizeOptionalOrderingOption(value: unknown): '' | 'F' | 'G' | 'H' {
+    const v = String(value || '').toUpperCase();
+    return v === 'F' || v === 'G' || v === 'H' ? v : '';
   }
 
   private normalizeServicingOption(value: unknown): 'A' | 'C' | '' {

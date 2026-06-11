@@ -1,0 +1,222 @@
+:host {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+}
+
+.mapping-board {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.9rem;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.mapping-board__rows {
+  display: grid;
+  gap: 0.85rem;
+  align-content: start;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 0.25rem 0.5rem 0;
+}
+
+.mapping-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.95fr) minmax(0, 1.2fr);
+  gap: 0.75rem;
+  align-items: start;
+  padding: 0.85rem;
+  border: 1px solid var(--ih-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--ih-surface) 97%, transparent);
+}
+
+.mapping-row__target,
+.mapping-select,
+.mapping-row__manual {
+  min-width: 0;
+}
+
+.mapping-row__target {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.mapping-row__target small {
+  color: var(--ih-text-soft);
+  overflow-wrap: anywhere;
+}
+
+.mapping-select {
+  position: relative;
+  min-height: 3rem;
+  border: 1px dashed var(--ih-border);
+  border-radius: 14px;
+  padding: 0.4rem 0.45rem 0.4rem 0.7rem;
+  background: color-mix(in srgb, var(--ih-surface-alt) 82%, transparent);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.mapping-select--filled {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--ih-accent) 45%, var(--ih-border));
+}
+
+.mapping-select--ready {
+  border-color: color-mix(in srgb, var(--ih-accent) 32%, var(--ih-border));
+  background: color-mix(in srgb, var(--ih-accent) 7%, var(--ih-surface-alt));
+}
+
+.mapping-select--hover {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--ih-accent) 55%, var(--ih-border));
+  background: color-mix(in srgb, var(--ih-accent) 11%, var(--ih-surface-alt));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ih-accent) 14%, transparent);
+  transform: translateY(-1px);
+}
+
+.mapping-select__value {
+  min-width: 0;
+  color: var(--ih-text-soft);
+  font-size: 0.86rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mapping-select--filled .mapping-select__value {
+  color: var(--ih-text);
+}
+
+.mapping-select__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+}
+
+.mapping-select__icon {
+  width: 1.65rem;
+  height: 1.65rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ih-text-soft);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.mapping-select__icon:hover {
+  background: color-mix(in srgb, var(--ih-accent) 10%, transparent);
+  color: var(--ih-text);
+}
+
+.mapping-select__icon--clear {
+  color: var(--ih-danger);
+}
+
+.mapping-select__icon svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mapping-select__field {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mapping-select__field .mat-mdc-form-field-subscript-wrapper {
+  display: none;
+}
+
+.mapping-row__chips {
+  grid-column: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.mapping-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  max-width: 100%;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid color-mix(in srgb, var(--ih-accent) 35%, var(--ih-border));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ih-accent) 8%, var(--ih-surface));
+  color: var(--ih-text);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.mapping-chip span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mapping-chip button {
+  width: 1rem;
+  height: 1rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ih-danger);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  font: inherit;
+  line-height: 1;
+}
+
+.mapping-chip button:hover {
+  background: color-mix(in srgb, var(--ih-danger) 12%, transparent);
+}
+
+.mapping-row__manual {
+  grid-column: 2;
+  width: 100%;
+}
+
+.mapping-row__manual textarea {
+  resize: vertical;
+  min-height: 4.75rem;
+}
+
+@media (max-width: 1080px) {
+  .mapping-board {
+    height: auto;
+  }
+
+  .mapping-board__rows {
+    overflow: visible;
+    max-height: none;
+    padding: 0;
+  }
+
+  .mapping-row {
+    grid-template-columns: 1fr;
+  }
+
+  .mapping-row__chips,
+  .mapping-row__manual {
+    grid-column: auto;
+  }
+}

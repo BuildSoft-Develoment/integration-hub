@@ -1,84 +1,98 @@
-<div class="mt101-archive">
+<div class="mt101-archive ih-thin-scroll">
   <header class="mt101-archive__header">
     <h3>{{ i18n.t('processTask.MT101_ARCHIVE') }}</h3>
   </header>
 
+  <ih-process-task-runtime-panel
+    [task]="task()"
+    [tasks]="tasks()"
+    [draft]="draft()"
+    [readonly]="readonly()"
+    (runtimeChange)="updateDraft($event)"
+  />
+
   <section class="mt101-archive__section">
     <h4>{{ i18n.t('mt101Archive.section.destination') }}</h4>
     <div class="mt101-archive__grid">
-      <label>
-        <span>{{ i18n.t('mt101Archive.connection') }}</span>
-        <select
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Archive.connection') }}</mat-label>
+        <mat-select
           [ngModel]="draft().connectionRef"
           (ngModelChange)="updateDraft({ connectionRef: $event })"
           [disabled]="readonly()">
-          <option value="">—</option>
+          <mat-option value="">-</mat-option>
           @for (c of connections(); track c.id) {
-            <option [value]="c.id">{{ c.name }} ({{ c.connectionType }})</option>
+            <mat-option [value]="c.id">{{ c.name }} ({{ c.connectionType }})</mat-option>
           }
-        </select>
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101Archive.table') }}</span>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Archive.table') }}</mat-label>
         <input
+          matInput
           type="text"
           [ngModel]="draft().table"
           (ngModelChange)="updateDraft({ table: $event })"
           [disabled]="readonly()" />
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101Archive.hashAlgorithm') }}</span>
-        <select
+      </mat-form-field>
+
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Archive.hashAlgorithm') }}</mat-label>
+        <mat-select
           [ngModel]="draft().hashAlgorithm"
           (ngModelChange)="updateDraft({ hashAlgorithm: $event })"
           [disabled]="readonly()">
           @for (h of hashAlgorithms; track h) {
-            <option [value]="h">{{ h }}</option>
+            <mat-option [value]="h">{{ h }}</mat-option>
           }
-        </select>
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101Archive.retentionDays') }}</span>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Archive.retentionDays') }}</mat-label>
         <input
+          matInput
           type="number"
           min="1"
           [ngModel]="draft().retentionDays"
           (ngModelChange)="updateDraft({ retentionDays: $event })"
           [disabled]="readonly()" />
-      </label>
+      </mat-form-field>
     </div>
   </section>
 
   <section class="mt101-archive__section">
     <h4>{{ i18n.t('mt101Archive.section.encryption') }}</h4>
-    <label class="mt101-archive__toggle">
-      <input
-        type="checkbox"
-        [ngModel]="draft().encryptionEnabled"
-        (ngModelChange)="updateDraft({ encryptionEnabled: $event })"
-        [disabled]="readonly()" />
-      <span>{{ i18n.t('mt101Archive.encryptionEnabled') }}</span>
-    </label>
+    <mat-checkbox
+      [ngModel]="draft().encryptionEnabled"
+      (ngModelChange)="updateDraft({ encryptionEnabled: $event })"
+      [disabled]="readonly()">
+      {{ i18n.t('mt101Archive.encryptionEnabled') }}
+    </mat-checkbox>
 
     @if (draft().encryptionEnabled) {
       <div class="mt101-archive__grid">
-        <label>
-          <span>{{ i18n.t('mt101Archive.encryptColumn') }}</span>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101Archive.encryptColumn') }}</mat-label>
           <input
+            matInput
             type="text"
             [ngModel]="draft().encryptColumn"
             (ngModelChange)="updateDraft({ encryptColumn: $event })"
             [disabled]="readonly()" />
-        </label>
-        <label>
-          <span>{{ i18n.t('mt101Archive.encryptionSecretRef') }}</span>
+        </mat-form-field>
+
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101Archive.encryptionSecretRef') }}</mat-label>
           <input
+            matInput
             type="text"
             placeholder="${secret:archive_key}"
             [ngModel]="draft().encryptionSecretRef"
             (ngModelChange)="updateDraft({ encryptionSecretRef: $event })"
             [disabled]="readonly()" />
-        </label>
+        </mat-form-field>
       </div>
     }
   </section>

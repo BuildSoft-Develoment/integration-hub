@@ -6,6 +6,6 @@ public enum ReaderType {
     XLS,
     XLSX,
     JSON,
-    XML
+    XML,
+    SWIFT_MT
 }
-

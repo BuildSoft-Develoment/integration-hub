@@ -1,10 +1,13 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.provider.task.payments.spi.PaymentMessageFormatter;
 import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -46,6 +49,21 @@ public class Mt101SplitTaskProvider implements TaskProvider {
     private static final int DEFAULT_MAX_BYTES = 10000;
     private static final String DEFAULT_REFERENCE_TEMPLATE = "${sendersReference}-${fragmentIndex}";
 
+    private final Iterable<PaymentMessageFormatter> formatters;
+
+    public Mt101SplitTaskProvider() {
+        this.formatters = List.of();
+    }
+
+    @Inject
+    public Mt101SplitTaskProvider(Instance<PaymentMessageFormatter> formatters) {
+        this.formatters = formatters;
+    }
+
+    Mt101SplitTaskProvider(Iterable<PaymentMessageFormatter> formatters) {
+        this.formatters = formatters == null ? List.of() : formatters;
+    }
+
     @Override
     public String type() {
         return "MT101_SPLIT";
@@ -53,7 +71,7 @@ public class Mt101SplitTaskProvider implements TaskProvider {
 
     @Override
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
-        var messages = readMessages(context, configuration);
+        var messages = Mt101MessageInputResolver.readMessages(context, configuration, type());
         if (messages.isEmpty()) {
             return TaskResult.success("MT101_SPLIT skipped because there are no messages to split");
         }
@@ -153,9 +171,22 @@ public class Mt101SplitTaskProvider implements TaskProvider {
                 originalSeqA.accountServicingInstitution(),
                 originalSeqA.authorisation());
         var controlTotals = computeControlTotals(transactions);
-        // Fragmento sin rawPayload (debe reformatearse en BUILD si se requiere);
-        // ARCHIVE/PAY operan sobre Mt101Message tipado.
-        return new Mt101Message(original.envelope(), newSeqA, transactions, controlTotals, null, original.format());
+        var fragment = new Mt101Message(original.envelope(), newSeqA, transactions, controlTotals,
+                null, original.format());
+        return reformat(fragment);
+    }
+
+    private Mt101Message reformat(Mt101Message message) {
+        var format = message.format();
+        if (format == null || format.isBlank()) {
+            return message;
+        }
+        for (var formatter : formatters) {
+            if (formatter.format().equalsIgnoreCase(format)) {
+                return message.withRawPayload(formatter.format(message), formatter.format());
+            }
+        }
+        return message;
     }
 
     private String renderReference(String template, Mt101Message.SequenceA seqA, int fragmentIndex) {
@@ -168,7 +199,7 @@ public class Mt101SplitTaskProvider implements TaskProvider {
                 .replace("${fragmentIndex}", String.valueOf(fragmentIndex));
         // :20: solo admite 16x.
         if (rendered.length() > 16) {
-            rendered = rendered.substring(0, 16);
+            throw new IllegalArgumentException("MT101_SPLIT fragment reference exceeds 16 characters: " + rendered);
         }
         return rendered;
     }
@@ -180,39 +211,6 @@ public class Mt101SplitTaskProvider implements TaskProvider {
             totals.merge(tx.amount().currency(), tx.amount().value(), BigDecimal::add);
         }
         return new Mt101Message.ControlTotals(transactions.size(), totals);
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<Mt101Message> readMessages(TaskContext context, Map<String, Object> configuration) {
-        var rawTaskOutputs = context.attributes().get("taskOutputs");
-        if (!(rawTaskOutputs instanceof Map<?, ?> taskOutputs) || taskOutputs.isEmpty()) {
-            return List.of();
-        }
-        if (!(configuration.get("input") instanceof Map<?, ?> rawInput)) {
-            throw new IllegalArgumentException("MT101_SPLIT requires configuration.input");
-        }
-        var sourceTaskRef = stringValue(((Map<String, Object>) rawInput).get("sourceTaskRef"), "");
-        if (sourceTaskRef.isBlank()) {
-            throw new IllegalArgumentException("MT101_SPLIT input.sourceTaskRef is required");
-        }
-        var sourceOutput = stringValue(((Map<String, Object>) rawInput).get("sourceOutput"), "records");
-        var key = sourceTaskRef + "." + sourceOutput;
-        var raw = taskOutputs.get(key);
-        if (raw == null) return List.of();
-        if (!(raw instanceof List<?> rawList)) {
-            throw new IllegalArgumentException(
-                    "Expected " + key + " to be List<Mt101Message> but got " + raw.getClass().getName());
-        }
-        var result = new ArrayList<Mt101Message>(rawList.size());
-        for (var item : rawList) {
-            if (item instanceof Mt101Message msg) {
-                result.add(msg);
-            } else if (item != null) {
-                throw new IllegalArgumentException(
-                        "Expected Mt101Message items at " + key + " but got " + item.getClass().getName());
-            }
-        }
-        return result;
     }
 
     private String stringValue(Object raw, String defaultValue) {

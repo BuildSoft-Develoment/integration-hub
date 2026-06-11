@@ -12,6 +12,7 @@ import com.integrationhub.platform.repository.ProcessDefinitionRepository;
 import com.integrationhub.platform.repository.ProcessTaskDefinitionRepository;
 import com.integrationhub.platform.repository.ReaderDefinitionRepository;
 import com.integrationhub.platform.repository.SourceDefinitionRepository;
+import com.integrationhub.platform.service.execution.TaskTypeRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -35,15 +36,18 @@ class ProcessCatalogServiceTest {
     private final SourceDefinitionRepository sourceDefinitionRepository = mock(SourceDefinitionRepository.class);
     private final ReaderDefinitionRepository readerDefinitionRepository = mock(ReaderDefinitionRepository.class);
     private final ProcessDefinitionApiMapper apiMapper = new ProcessDefinitionApiMapper();
+    private final TaskTypeRegistry taskTypeRegistry = mock(TaskTypeRegistry.class);
 
     private final ProcessCatalogService service = new ProcessCatalogService(
             processDefinitionRepository,
             processTaskDefinitionRepository,
             sourceDefinitionRepository,
             readerDefinitionRepository,
-            apiMapper);
+            apiMapper,
+            taskTypeRegistry);
 
     private ProcessDefinitionRequest request(boolean scheduled, String scheduleEvery, List<ProcessTaskRequest> tasks) {
+        tasks.forEach(task -> when(taskTypeRegistry.isRegistered(task.taskType())).thenReturn(true));
         return new ProcessDefinitionRequest("carga", "desc", true, scheduled, scheduleEvery, "{}", tasks);
     }
 
@@ -85,6 +89,18 @@ class ProcessCatalogServiceTest {
                 () -> service.create(request(false, null, List.of(badTask))));
 
         assertTrue(error.getMessage().contains("FILE_READ"));
+    }
+
+    @Test
+    void createUnknownTaskTypeIsRejected() {
+        var badTask = new ProcessTaskRequest(1, "UNKNOWN_TASK", null, null, "{}");
+        when(taskTypeRegistry.isRegistered("UNKNOWN_TASK")).thenReturn(false);
+
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> service.create(new ProcessDefinitionRequest("carga", "desc", true,
+                        false, null, "{}", List.of(badTask))));
+
+        assertTrue(error.getMessage().contains("UNKNOWN_TASK"));
     }
 
     @Test

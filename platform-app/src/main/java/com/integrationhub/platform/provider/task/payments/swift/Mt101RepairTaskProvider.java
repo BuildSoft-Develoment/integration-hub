@@ -1,10 +1,13 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.provider.task.payments.spi.PaymentMessageFormatter;
 import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -65,6 +68,21 @@ public class Mt101RepairTaskProvider implements TaskProvider {
      */
     private static final Pattern SWIFT_X = Pattern.compile("[A-Za-z0-9 /\\-?:().,'+\\r\\n]");
 
+    private final Iterable<PaymentMessageFormatter> formatters;
+
+    public Mt101RepairTaskProvider() {
+        this.formatters = List.of();
+    }
+
+    @Inject
+    public Mt101RepairTaskProvider(Instance<PaymentMessageFormatter> formatters) {
+        this.formatters = formatters;
+    }
+
+    Mt101RepairTaskProvider(Iterable<PaymentMessageFormatter> formatters) {
+        this.formatters = formatters == null ? List.of() : formatters;
+    }
+
     @Override
     public String type() {
         return "MT101_REPAIR";
@@ -72,7 +90,7 @@ public class Mt101RepairTaskProvider implements TaskProvider {
 
     @Override
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
-        var messages = readMessages(context, configuration);
+        var messages = Mt101MessageInputResolver.readMessages(context, configuration, type());
         if (messages.isEmpty()) {
             return TaskResult.success("MT101_REPAIR skipped because there are no messages to repair");
         }
@@ -97,7 +115,7 @@ public class Mt101RepairTaskProvider implements TaskProvider {
             // global; la atribucion por accion la calculamos aproximada arriba.
             totalChanges += counter[0];
             var withReference = renameReference(withRepairs, newReferenceTemplate, repairAttempt);
-            repaired.add(withReference);
+            repaired.add(reformat(withReference));
         }
 
         var outputs = new LinkedHashMap<String, Object>();
@@ -204,7 +222,8 @@ public class Mt101RepairTaskProvider implements TaskProvider {
                 .replace("${sendersReference}", original == null ? "" : original)
                 .replace("${repairAttempt}", String.valueOf(repairAttempt));
         if (newReference.length() > 16) {
-            newReference = newReference.substring(0, 16);
+            throw new IllegalArgumentException("MT101_REPAIR newReferenceTemplate resolves to more than 16 characters: "
+                    + newReference);
         }
         var oldSeqA = message.sequenceA();
         var newSeqA = new Mt101Message.SequenceA(newReference, oldSeqA.customerSpecifiedReference(),
@@ -213,6 +232,19 @@ public class Mt101RepairTaskProvider implements TaskProvider {
                 oldSeqA.accountServicingInstitution(), oldSeqA.authorisation());
         return new Mt101Message(message.envelope(), newSeqA, message.transactions(),
                 message.controlTotals(), message.rawPayload(), message.format());
+    }
+
+    private Mt101Message reformat(Mt101Message message) {
+        var format = message.format();
+        if (format == null || format.isBlank()) {
+            return message;
+        }
+        for (var formatter : formatters) {
+            if (formatter.format().equalsIgnoreCase(format)) {
+                return message.withRawPayload(formatter.format(message), formatter.format());
+            }
+        }
+        return message;
     }
 
     private List<RepairRule> parseRepairs(Object raw) {
@@ -263,39 +295,6 @@ public class Mt101RepairTaskProvider implements TaskProvider {
             }
         }
         return sb.toString();
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<Mt101Message> readMessages(TaskContext context, Map<String, Object> configuration) {
-        var rawTaskOutputs = context.attributes().get("taskOutputs");
-        if (!(rawTaskOutputs instanceof Map<?, ?> taskOutputs) || taskOutputs.isEmpty()) {
-            return List.of();
-        }
-        if (!(configuration.get("input") instanceof Map<?, ?> rawInput)) {
-            throw new IllegalArgumentException("MT101_REPAIR requires configuration.input");
-        }
-        var sourceTaskRef = stringValue(((Map<String, Object>) rawInput).get("sourceTaskRef"), "");
-        if (sourceTaskRef.isBlank()) {
-            throw new IllegalArgumentException("MT101_REPAIR input.sourceTaskRef is required");
-        }
-        var sourceOutput = stringValue(((Map<String, Object>) rawInput).get("sourceOutput"), "records");
-        var key = sourceTaskRef + "." + sourceOutput;
-        var raw = taskOutputs.get(key);
-        if (raw == null) return List.of();
-        if (!(raw instanceof List<?> rawList)) {
-            throw new IllegalArgumentException(
-                    "Expected " + key + " to be List<Mt101Message> but got " + raw.getClass().getName());
-        }
-        var result = new ArrayList<Mt101Message>(rawList.size());
-        for (var item : rawList) {
-            if (item instanceof Mt101Message msg) {
-                result.add(msg);
-            } else if (item != null) {
-                throw new IllegalArgumentException(
-                        "Expected Mt101Message items but got " + item.getClass().getName());
-            }
-        }
-        return result;
     }
 
     private String stringValue(Object raw, String defaultValue) {

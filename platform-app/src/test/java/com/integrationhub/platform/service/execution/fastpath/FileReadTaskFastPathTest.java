@@ -23,7 +23,9 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // @covers RF-005 (reingenieria: prueba que cubre el/los RF en produccion)
 class FileReadTaskFastPathTest {
@@ -63,6 +65,21 @@ class FileReadTaskFastPathTest {
         assertEquals(1, processedSourceFileService.recordPipelineFilesCount.get());
     }
 
+    @Test
+    void doesNotSupportMt101BuildBecauseItProducesMaterialOutputs() {
+        var fastPath = new FileReadTaskFastPath(
+                new FailingStreamingPipelineService(),
+                new RecordingStateService(new ProcessExecution()),
+                new ProcessExecutionAuditMapper(new JsonConfigurationMapper()),
+                new RecordingProcessedSourceFileService(),
+                new BatchTaskProviderRegistry(),
+                new TaskOutputRegistry(new JsonConfigurationMapper())
+        );
+
+        assertFalse(fastPath.supports(fileReadPlan("fail"), mt101BuildPlan()));
+        assertTrue(fastPath.supports(fileReadPlan("fail"), sinkPlan()));
+    }
+
     private ProcessExecutionStateService.TaskPlan fileReadPlan(String fileErrorPolicy) {
         return new ProcessExecutionStateService.TaskPlan(
                 10L,
@@ -85,6 +102,22 @@ class FileReadTaskFastPathTest {
                 2,
                 TaskType.DB_WRITE,
                 "{\"taskRef\":\"task-2-db-write\",\"executionMode\":\"batch\",\"input\":{\"source\":\"task-output\",\"sourceTaskRef\":\"task-1-file-read\",\"sourceOutput\":\"records\"},\"targetTable\":\"public.cliente_target\",\"mode\":\"insert\"}",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+    }
+
+    private ProcessExecutionStateService.TaskPlan mt101BuildPlan() {
+        return new ProcessExecutionStateService.TaskPlan(
+                20L,
+                2,
+                "MT101_BUILD",
+                "{\"taskRef\":\"build-mt101\",\"executionMode\":\"batch\",\"input\":{\"source\":\"task-output\",\"sourceTaskRef\":\"task-1-file-read\",\"sourceOutput\":\"records\"},\"sequenceA\":{},\"transactionMappings\":{}}",
                 null,
                 null,
                 null,

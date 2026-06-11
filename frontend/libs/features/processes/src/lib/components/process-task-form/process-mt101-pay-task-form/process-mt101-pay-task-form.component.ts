@@ -3,6 +3,9 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import {
   Mt101PayAuthType,
   Mt101PayBackoffStrategy,
@@ -13,11 +16,12 @@ import {
 } from '@integration-hub/core/providers';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { ProcessTaskFormModel } from '../../../models/process.models';
+import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
 @Component({
   selector: 'ih-process-mt101-pay-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, ProcessTaskRuntimePanelComponent],
   templateUrl: './process-mt101-pay-task-form.component.html',
   styleUrl: './process-mt101-pay-task-form.component.css',
 })
@@ -27,13 +31,14 @@ export class ProcessMt101PayTaskFormComponent {
   private readonly bridge = inject(ProcessTaskFormBridgeService);
 
   readonly task = input.required<ProcessTaskFormModel>();
+  readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101PayTaskDraft>(
     () => this.manager.hydrateDraft<Mt101PayTaskDraft>(this.task()) ?? this.defaultDraft(),
   );
 
-  readonly transports: ReadonlyArray<Mt101PayTransport> = ['REST', 'SFTP', 'MQ'];
+  readonly transports: ReadonlyArray<Mt101PayTransport> = ['REST', 'SFTP'];
   readonly authTypes: ReadonlyArray<Mt101PayAuthType> = ['', 'bearer', 'login-request'];
   readonly confirmationModes: ReadonlyArray<Mt101PayConfirmationMode> = ['sync', 'async-callback', 'async-poll'];
   readonly backoffStrategies: ReadonlyArray<Mt101PayBackoffStrategy> = ['exponential', 'constant'];
@@ -68,8 +73,10 @@ export class ProcessMt101PayTaskFormComponent {
         token: '',
         loginUrl: '',
         loginMethod: 'POST',
+        loginHeadersJson: '',
         loginBodyTemplate: '',
         tokenPath: '$.access_token',
+        extraHeadersJson: '',
         contentType: 'application/json',
         timeoutSeconds: 60,
       },

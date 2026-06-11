@@ -88,7 +88,7 @@ public class RestPaymentTransport implements PaymentMessageTransport {
             idempotencyTemplate = "${sendersReference}";
         }
         var idempotencyKey = resolveTemplate(idempotencyTemplate, message);
-        var extraHeaders = stringMap(restCfg.get("extraHeaders"));
+        var extraHeaders = configuredHeaders(restCfg.get("extraHeaders"), restCfg.get("extraHeadersJson"));
         var retry = retryPolicy(configuration.get("retryPolicy"));
         var expected = mapValue(configuration.get("expectedGatewayResponse"));
 
@@ -97,9 +97,78 @@ public class RestPaymentTransport implements PaymentMessageTransport {
         if (!idempotencyKey.isBlank()) {
             headers.put("Idempotency-Key", idempotencyKey);
         }
+        var authorization = resolveAuthorizationHeader(restCfg, timeoutSeconds);
+        if (!authorization.isBlank()) {
+            headers.put("Authorization", authorization);
+        }
         headers.putAll(extraHeaders);
 
         return attemptWithRetry(method, url, headers, message.rawPayload(), timeoutSeconds, retry, expected);
+    }
+
+    private String resolveAuthorizationHeader(Map<String, Object> restCfg, int timeoutSeconds) {
+        var authType = stringValue(restCfg.get("authType"), "").toLowerCase();
+        if (authType.isBlank()) {
+            return "";
+        }
+        if ("bearer".equals(authType)) {
+            var token = stringValue(restCfg.get("token"), "");
+            return token.isBlank() ? "" : "Bearer " + token;
+        }
+        if (!"login-request".equals(authType)) {
+            throw new IllegalArgumentException("Unsupported MT101_PAY REST authType: " + authType);
+        }
+
+        var loginUrl = stringValue(restCfg.get("loginUrl"), "");
+        if (loginUrl.isBlank()) {
+            throw new IllegalArgumentException("MT101_PAY REST authType=login-request requires rest.loginUrl");
+        }
+        var loginMethod = stringValue(restCfg.get("loginMethod"), "POST").toUpperCase();
+        var loginBody = stringValue(restCfg.get("loginBodyTemplate"), "");
+        var tokenPath = stringValue(restCfg.get("tokenPath"), "$.access_token");
+        var loginHeaders = configuredHeaders(restCfg.get("loginHeaders"), restCfg.get("loginHeadersJson"));
+        var token = requestLoginToken(loginMethod, loginUrl, loginHeaders, loginBody, timeoutSeconds, tokenPath);
+        return token.isBlank() ? "" : "Bearer " + token;
+    }
+
+    private String requestLoginToken(String method,
+                                     String url,
+                                     Map<String, String> headers,
+                                     String body,
+                                     int timeoutSeconds,
+                                     String tokenPath) {
+        try {
+            var builder = HttpRequest.newBuilder()
+                    .uri(URI.create(url))
+                    .timeout(Duration.ofSeconds(timeoutSeconds));
+            if (!hasHeader(headers, "Content-Type")) {
+                builder.header("Content-Type", "application/x-www-form-urlencoded");
+            }
+            headers.forEach(builder::header);
+            var request = builder
+                    .method(method, body.isBlank()
+                            ? HttpRequest.BodyPublishers.noBody()
+                            : HttpRequest.BodyPublishers.ofString(body))
+                    .build();
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IllegalStateException("login-request failed with HTTP " + response.statusCode());
+            }
+            var token = extractJsonPath(response.body(), tokenPath);
+            if (token == null || token.isBlank()) {
+                throw new IllegalStateException("login-request response did not contain token at " + tokenPath);
+            }
+            return token;
+        } catch (IOException error) {
+            throw new IllegalStateException("login-request IO error: " + error.getMessage(), error);
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("login-request interrupted: " + error.getMessage(), error);
+        }
+    }
+
+    private boolean hasHeader(Map<String, String> headers, String headerName) {
+        return headers.keySet().stream().anyMatch(key -> key.equalsIgnoreCase(headerName));
     }
 
     private TransportResult attemptWithRetry(String method,
@@ -198,6 +267,18 @@ public class RestPaymentTransport implements PaymentMessageTransport {
         }
     }
 
+    private String extractJsonPath(String body, String path) {
+        if (body == null || body.isBlank() || path == null || !path.startsWith("$.")) {
+            return null;
+        }
+        try {
+            var node = objectMapper.readTree(body);
+            return navigate(node, path.substring(2));
+        } catch (IOException error) {
+            return null;
+        }
+    }
+
     private String navigate(JsonNode node, String path) {
         if (node == null || node.isMissingNode() || node.isNull()) {
             return null;
@@ -259,6 +340,27 @@ public class RestPaymentTransport implements PaymentMessageTransport {
         var result = new LinkedHashMap<String, String>();
         rawMap.forEach((key, value) -> result.put(String.valueOf(key), value == null ? "" : String.valueOf(value)));
         return result;
+    }
+
+    private Map<String, String> configuredHeaders(Object rawHeaders, Object rawHeadersJson) {
+        var direct = stringMap(rawHeaders);
+        if (!direct.isEmpty()) {
+            return direct;
+        }
+        if (!(rawHeadersJson instanceof String text) || text.isBlank()) {
+            return Map.of();
+        }
+        try {
+            var node = objectMapper.readTree(text);
+            if (!node.isObject()) {
+                return Map.of();
+            }
+            var result = new LinkedHashMap<String, String>();
+            node.fields().forEachRemaining(entry -> result.put(entry.getKey(), entry.getValue().asText()));
+            return result;
+        } catch (IOException error) {
+            throw new IllegalArgumentException("Invalid JSON in MT101_PAY REST headersJson", error);
+        }
     }
 
     private String stringValue(Object raw, String defaultValue) {

@@ -4,13 +4,14 @@ import { ReaderDraft, ReaderProviderType } from '@integration-hub/core/providers
 import { ReaderCsvFormComponent } from '../reader-csv-form/reader-csv-form.component';
 import { ReaderExcelFormComponent } from '../reader-excel-form/reader-excel-form.component';
 import { ReaderJsonFormComponent } from '../reader-json-form/reader-json-form.component';
+import { ReaderSwiftMtFormComponent } from '../reader-swift-mt-form/reader-swift-mt-form.component';
 import { ReaderTxtFormComponent } from '../reader-txt-form/reader-txt-form.component';
 import { ReaderXmlFormComponent } from '../reader-xml-form/reader-xml-form.component';
 
 @Component({
   selector: 'ih-reader-type-form-host',
   standalone: true,
-  imports: [CommonModule, ReaderTxtFormComponent, ReaderCsvFormComponent, ReaderExcelFormComponent, ReaderXmlFormComponent, ReaderJsonFormComponent],
+  imports: [CommonModule, ReaderTxtFormComponent, ReaderCsvFormComponent, ReaderExcelFormComponent, ReaderXmlFormComponent, ReaderJsonFormComponent, ReaderSwiftMtFormComponent],
     templateUrl: './reader-type-form-host.component.html'
 })
 export class ReaderTypeFormHostComponent {

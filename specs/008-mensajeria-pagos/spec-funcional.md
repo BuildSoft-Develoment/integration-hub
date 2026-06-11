@@ -31,7 +31,7 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
 
 ## Flujo principal (outbound MT101, sprint 1)
 
-1. Disenar proceso con la cadena `FILE_READ -> MT101_VALIDATE -> MT101_BUILD ->
+1. Disenar proceso con la cadena `FILE_READ -> MT101_BUILD -> MT101_VALIDATE ->
    MT101_ARCHIVE -> MT101_PAY -> MT101_STATUS -> NOTIFICATION`.
 2. Configurar header MT101 (envelope, sequence A) y mappings de transacciones
    (sequence B) sobre los campos del reader.
@@ -61,8 +61,8 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
 - RF-003 task type `MT101_ARCHIVE` persiste el `raw_payload` inmutable con hash
   SHA-256, timestamp y politica de retencion configurable.
 - RF-004 task type `MT101_PAY` despacha el mensaje al banco por el transporte
-  configurado (`REST`, `SFTP`, `MQ`) con idempotencia por `sendersReference` y
-  politica de retry.
+  configurado (`REST`, `SFTP`) con idempotencia por `sendersReference` y politica
+  de retry. `MQ` queda como extension futura hasta que exista provider backend.
 
 ### Catalogo de task types (fase 2-3)
 
@@ -102,8 +102,8 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
   soporta `authType: login-request` para OAuth/STS, `Idempotency-Key` por mensaje.
 - RF-017 transporte `SFTP`: usa una conexion del catalogo 005, upload con
   extension temporal y rename atomico, `fileMode` configurable.
-- RF-018 transporte `MQ`: usa una conexion del catalogo 005, queue configurable,
-  tipo de mensaje `TEXT` o `BYTES`.
+- RF-018 transporte `MQ`: extension futura; no forma parte del contrato ejecutable
+  actual.
 
 ### Seguridad y compliance
 
@@ -121,6 +121,11 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
 - El campo `:50a:` Ordering Customer va en Sequence A xor en cada Sequence B,
   nunca en ambas (regla del estandar; implementada como una de las reglas del
   catalogo NVR).
+- `MT101_BUILD` declara `debitAccountMode`: `singleDebit` coloca `:50a:` en
+  Sequence A; `multipleDebit` y `subsidiary` obligan a mapear `:50a:` por cada
+  transaccion en Sequence B.
+- Las referencias `:20:` y `:21:` no se truncan silenciosamente; si exceden 16
+  caracteres, la tarea falla o se corrige explicitamente con `MT101_REPAIR`.
 - Un mensaje rechazado por `MT101_VALIDATE` con `severity=ERROR` no se persiste
   en `mt101_archive` ni se despacha; queda en `mt101_validation_issue`.
 - La idempotencia se basa en `(sender_lt, senders_reference, year_of_execution)`;
@@ -137,13 +142,12 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
 - Existen task providers registrables `MT101_VALIDATE`, `MT101_BUILD`,
   `MT101_ARCHIVE`, `MT101_PAY` (sprint 1) y los restantes en sus sprints.
 - El motor (spec 003) consume estos task types via SPI sin conocer su semantica.
-- Un proceso `FILE_READ -> MT101_VALIDATE -> MT101_BUILD -> MT101_ARCHIVE ->
+- Un proceso `FILE_READ -> MT101_BUILD -> MT101_VALIDATE -> MT101_ARCHIVE ->
   MT101_PAY -> NOTIFICATION` ejecuta end-to-end con un archivo de prueba.
 - El catalogo de reglas SWIFT/NVR carga desde una fuente parametrizable; el spec
   no enumera codigos.
-- (UI) cada task type tiene su formulario dedicado en `features/payments-swift/`,
-  registrado en el motor sin tocar `process-form-factory` (depende de M-1b en
-  spec 003).
+- (UI) cada task type tiene formulario dedicado registrado en el mecanismo de
+  discovery de tareas del motor, sin que spec 003 conozca semantica SWIFT.
 - (Seguridad) los `${secret:...}` cubren credenciales del gateway, SFTP y la
   clave de cifrado de `raw_payload`.
 - (Compliance) `mt101_archive` cumple retencion configurable y emite el hash

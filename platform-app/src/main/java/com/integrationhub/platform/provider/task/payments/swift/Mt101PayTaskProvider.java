@@ -48,7 +48,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
 
     @Override
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
-        var messages = readMessages(context, configuration);
+        var messages = Mt101MessageInputResolver.readMessages(context, configuration, type());
         if (messages.isEmpty()) {
             return TaskResult.success("MT101_PAY skipped because there are no messages to dispatch");
         }
@@ -126,41 +126,6 @@ public class Mt101PayTaskProvider implements TaskProvider {
         });
         throw new IllegalArgumentException("Unsupported MT101_PAY transport: " + transportId
                 + ". Available: " + available);
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<Mt101Message> readMessages(TaskContext context, Map<String, Object> configuration) {
-        var rawTaskOutputs = context.attributes().get("taskOutputs");
-        if (!(rawTaskOutputs instanceof Map<?, ?> taskOutputs) || taskOutputs.isEmpty()) {
-            return List.of();
-        }
-        if (!(configuration.get("input") instanceof Map<?, ?> rawInput)) {
-            throw new IllegalArgumentException("MT101_PAY requires configuration.input");
-        }
-        var sourceTaskRef = stringValue(((Map<String, Object>) rawInput).get("sourceTaskRef"), "");
-        if (sourceTaskRef.isBlank()) {
-            throw new IllegalArgumentException("MT101_PAY input.sourceTaskRef is required");
-        }
-        var sourceOutput = stringValue(((Map<String, Object>) rawInput).get("sourceOutput"), "records");
-        var key = sourceTaskRef + "." + sourceOutput;
-        var raw = taskOutputs.get(key);
-        if (raw == null) {
-            return List.of();
-        }
-        if (!(raw instanceof List<?> rawList)) {
-            throw new IllegalArgumentException(
-                    "Expected " + key + " to be a List<Mt101Message> but got " + raw.getClass().getName());
-        }
-        var result = new ArrayList<Mt101Message>(rawList.size());
-        for (var item : rawList) {
-            if (item instanceof Mt101Message msg) {
-                result.add(msg);
-            } else if (item != null) {
-                throw new IllegalArgumentException(
-                        "Expected items at " + key + " to be Mt101Message but got " + item.getClass().getName());
-            }
-        }
-        return result;
     }
 
     private String stringValue(Object raw, String defaultValue) {

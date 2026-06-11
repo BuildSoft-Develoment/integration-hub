@@ -194,9 +194,9 @@ class Mt101OutboundEndToEndIT {
         assertEquals(1, countRows("swift_message_envelope"));
         assertEquals(3, countRows("mt101_transaction"));
 
-        // 5. PAY: el archive publica build-mt101 reciclando los Mt101Message ya
-        //    formateados para que PAY los consuma sin volver a renderizar.
-        taskOutputs.put("archive-mt101.records", built);
+        // 5. PAY consume el output real de ARCHIVE: cada entrada incluye ids
+        //    persistidos y el mensaje embebido que sera enviado al gateway.
+        taskOutputs.put("archive-mt101.records", archiveResult.outputs().get("records"));
         var payContext = newContext(100L, 4L, taskOutputs);
         TaskResult payResult = payProvider.execute(payContext, payConfiguration(wm.getHttpBaseUrl()));
         assertTrue(payResult.success(), () -> "PAY: " + payResult.details());

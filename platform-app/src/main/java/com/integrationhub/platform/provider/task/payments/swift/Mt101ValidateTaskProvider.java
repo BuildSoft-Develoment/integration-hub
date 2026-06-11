@@ -62,7 +62,7 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
 
     @Override
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
-        var messages = readMessagesFromTaskOutputs(context, configuration);
+        var messages = Mt101MessageInputResolver.readMessages(context, configuration, type());
         if (messages.isEmpty()) {
             return TaskResult.success("MT101_VALIDATE skipped because there are no messages to validate");
         }
@@ -93,42 +93,6 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
 
         var hasFailure = issues.stream().anyMatch(issue -> issue.severity().reaches(failOn));
         return hasFailure ? TaskResult.failure(summary, outputs) : TaskResult.success(summary, outputs);
-    }
-
-    @SuppressWarnings("unchecked")
-    private List<Mt101Message> readMessagesFromTaskOutputs(TaskContext context, Map<String, Object> configuration) {
-        var rawTaskOutputs = context.attributes().get("taskOutputs");
-        if (!(rawTaskOutputs instanceof Map<?, ?> taskOutputs) || taskOutputs.isEmpty()) {
-            return List.of();
-        }
-        var inputCfg = configuration.get("input");
-        if (!(inputCfg instanceof Map<?, ?> rawInput)) {
-            throw new IllegalArgumentException("MT101_VALIDATE requires configuration.input pointing to MT101_BUILD output");
-        }
-        var sourceTaskRef = stringValue(((Map<String, Object>) rawInput).get("sourceTaskRef"), "");
-        if (sourceTaskRef.isBlank()) {
-            throw new IllegalArgumentException("MT101_VALIDATE input.sourceTaskRef is required");
-        }
-        var sourceOutput = stringValue(((Map<String, Object>) rawInput).get("sourceOutput"), "records");
-        var key = sourceTaskRef + "." + sourceOutput;
-        var raw = taskOutputs.get(key);
-        if (raw == null) {
-            return List.of();
-        }
-        if (!(raw instanceof List<?> rawList)) {
-            throw new IllegalArgumentException(
-                    "Expected " + key + " to be a List<Mt101Message> but got " + raw.getClass().getName());
-        }
-        var messages = new ArrayList<Mt101Message>(rawList.size());
-        for (var item : rawList) {
-            if (item instanceof Mt101Message message) {
-                messages.add(message);
-            } else if (item != null) {
-                throw new IllegalArgumentException(
-                        "Expected items at " + key + " to be Mt101Message but got " + item.getClass().getName());
-            }
-        }
-        return messages;
     }
 
     private List<ValidationPredicate> resolveRules(String ruleSet, String standard, String appliesTo) {

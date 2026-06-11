@@ -36,7 +36,7 @@ class ProcessDefinitionApiMapperTest {
         return definition;
     }
 
-    private ProcessTaskDefinition task(Long id, int order, TaskType type, boolean active) {
+    private ProcessTaskDefinition task(Long id, int order, String type, boolean active) {
         var task = new ProcessTaskDefinition();
         task.id = id;
         task.taskOrder = order;

@@ -53,11 +53,11 @@ public class ProcessTaskRuntimeService {
         var executionMode = taskOutputRegistry.executionMode(configuration);
         taskOutputRegistry.registerMetadata(taskOutputs, processExecutionId, taskPlan, configuration, triggerSource);
 
-        if (taskPlan.taskType() == TaskType.FILE_READ) {
+        if (TaskType.FILE_READ.equals(taskPlan.taskType())) {
             return runFileReadTask(taskPlan, executionVariables, selectedFileReferences);
         }
 
-        var provider = taskProviderRegistry.resolve(taskPlan.taskType().name());
+        var provider = taskProviderRegistry.resolve(taskPlan.taskType());
         if (requiresRecordInput(executionMode) && !(configuration.get("input") instanceof Map<?, ?>)) {
             throw new IllegalArgumentException("Task " + taskOutputRegistry.taskRef(taskPlan, configuration)
                     + " requires input for executionMode " + executionMode);
@@ -108,6 +108,9 @@ public class ProcessTaskRuntimeService {
             taskContext.attributes().put("currentRecord", resolvedInput.readResult().records().getFirst().values());
         }
         var result = provider.execute(taskContext, configuration);
+        if (result.suspended()) {
+            return TaskRunResult.suspended(result.details(), result.suspendedState());
+        }
         return TaskRunResult.generic(result.details(), sourcePayload, readResult, result.outputs());
     }
 
@@ -207,14 +210,30 @@ public class ProcessTaskRuntimeService {
             SourcePayload sourcePayload,
             ReadResult readResult,
             Map<String, Object> outputs,
-            boolean fileRead
+            boolean fileRead,
+            boolean suspended,
+            Map<String, Object> suspendedState
     ) {
         static TaskRunResult fileRead(SourcePayload sourcePayload, ReadResult readResult) {
-            return new TaskRunResult(null, sourcePayload, readResult, Map.of(), true);
+            return new TaskRunResult(null, sourcePayload, readResult, Map.of(), true, false, Map.of());
         }
 
         static TaskRunResult generic(String details, SourcePayload sourcePayload, ReadResult readResult, Map<String, Object> outputs) {
-            return new TaskRunResult(details, sourcePayload, readResult, outputs == null ? Map.of() : new LinkedHashMap<>(outputs), false);
+            return new TaskRunResult(details, sourcePayload, readResult,
+                    outputs == null ? Map.of() : new LinkedHashMap<>(outputs),
+                    false, false, Map.of());
+        }
+
+        /**
+         * Resultado de una tarea {@link com.integrationhub.platform.spi.task.SuspendableTaskProvider}
+         * que retorno {@link com.integrationhub.platform.spi.task.TaskResult#suspended}.
+         * El engine genera el token y persiste el state JSON-serializado.
+         *
+         * @trace spec 003 T-017 (M-2 suspension engine), ADR-009
+         */
+        static TaskRunResult suspended(String details, Map<String, Object> suspendedState) {
+            return new TaskRunResult(details, null, null, Map.of(), false, true,
+                    suspendedState == null ? Map.of() : new LinkedHashMap<>(suspendedState));
         }
     }
 }

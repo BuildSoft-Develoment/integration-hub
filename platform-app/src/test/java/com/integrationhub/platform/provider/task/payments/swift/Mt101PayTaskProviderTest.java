@@ -58,6 +58,30 @@ class Mt101PayTaskProviderTest {
     }
 
     @Test
+    void dispatchesMessagesEmbeddedInArchiveRecords() {
+        var transport = new StubTransport("REST", List.of(
+                TransportResult.accepted("GW-ARCHIVE", 1, 25L)
+        ));
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
+        var message = sampleMessage("PROC-ARCH");
+        var context = contextWith(List.of(Map.of(
+                "archiveId", 10L,
+                "envelopeId", 20L,
+                "message", message
+        )));
+
+        var result = provider.execute(context, Map.of(
+                "transport", "REST",
+                "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records"),
+                "rest", Map.of("url", "https://test.example/mt101")
+        ));
+
+        assertTrue(result.success());
+        assertEquals(1, result.outputs().get("sentCount"));
+        assertEquals(1, transport.callsReceived());
+    }
+
+    @Test
     void reportsFailureWhenAnyMessageRejected() {
         var transport = new StubTransport("REST", List.of(
                 TransportResult.accepted("GW-OK", 1, 50L),
@@ -152,7 +176,7 @@ class Mt101PayTaskProviderTest {
 
     // --- helpers ---
 
-    private TaskContext contextWith(List<Mt101Message> messages) {
+    private TaskContext contextWith(List<?> messages) {
         var context = new TaskContext(1L, 1L);
         context.attributes().put("taskOutputs", Map.of("archive-mt101.records", messages));
         return context;

@@ -1,4 +1,4 @@
-export type ReaderProviderType = 'TXT' | 'CSV' | 'XLS' | 'XLSX' | 'JSON' | 'XML';
+export type ReaderProviderType = 'TXT' | 'CSV' | 'XLS' | 'XLSX' | 'JSON' | 'XML' | 'SWIFT_MT';
 
 export type ReaderFieldVariant = 'position' | 'range';
 
@@ -28,6 +28,7 @@ export interface ReaderDraft {
   recordElement?: string;
   includeAttributes?: boolean;
   fieldMappingsText?: string;
+  rejectNonSwiftXChars?: boolean;
 }
 
 export interface ReaderProviderDescriptor {

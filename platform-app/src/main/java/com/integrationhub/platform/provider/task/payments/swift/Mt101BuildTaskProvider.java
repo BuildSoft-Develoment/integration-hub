@@ -1,8 +1,11 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.provider.task.common.StoredProcedureRuntimeSupport;
+import com.integrationhub.platform.provider.task.common.TaskOutputSupport;
 import com.integrationhub.platform.provider.task.payments.spi.PaymentMessageFormatter;
 import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
 import com.integrationhub.platform.spi.reader.ReadRecord;
+import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.source.SourcePayload;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
@@ -71,6 +74,7 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         var envelopeCfg = mapValue(configuration.get("envelope"));
         var sequenceACfg = mapValue(configuration.get("sequenceA"));
         var mappingsCfg = mapValue(configuration.get("transactionMappings"));
+        var debitAccountMode = resolveDebitAccountMode(configuration, sequenceACfg, mappingsCfg);
 
         if (sequenceACfg.isEmpty()) {
             throw new IllegalArgumentException("MT101_BUILD requires configuration.sequenceA");
@@ -82,14 +86,16 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
             return TaskResult.success("MT101_BUILD skipped because there are no records to compose");
         }
 
+        var effectiveRecords = enrichRecordsWithRuntime(context, records, sourcePayload);
         var messageIndex = 1;
         var messageTotal = 1;
         var sendersReference = resolveSendersReference(sequenceACfg, context, messageIndex);
 
         var envelope = buildEnvelope(envelopeCfg);
-        var transactions = buildTransactions(records, mappingsCfg, context);
+        var transactions = buildTransactions(effectiveRecords, mappingsCfg, context);
         var controlTotals = computeControlTotals(transactions);
         var sequenceA = buildSequenceA(sequenceACfg, sendersReference, messageIndex, messageTotal);
+        validateDebitAccountMode(debitAccountMode, sequenceA, transactions);
 
         var message = new Mt101Message(envelope, sequenceA, transactions, controlTotals, null, format);
         var rawPayload = formatter.format(message);
@@ -106,6 +112,45 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
                 "MT101_BUILD composed 1 message with " + transactions.size() + " transactions in " + format,
                 outputs
         );
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<ReadRecord> enrichRecordsWithRuntime(TaskContext context,
+                                                      List<ReadRecord> records,
+                                                      SourcePayload sourcePayload) {
+        if (records == null || records.isEmpty()) {
+            return List.of();
+        }
+        var executionVariables = context != null && context.attributes().get("executionVariables") instanceof Map<?, ?> rawExecutionVariables
+                ? (Map<String, Object>) rawExecutionVariables
+                : Map.<String, Object>of();
+        var readResult = context != null && context.attributes().get("readResult") instanceof ReadResult read
+                ? read
+                : null;
+        var sourceFile = sourcePayload != null ? sourcePayload.file() : null;
+        var runtimeValues = StoredProcedureRuntimeSupport.buildRuntimeVariables(
+                executionVariables,
+                context != null ? context.processExecutionId() : null,
+                context != null ? context.taskDefinitionId() : null,
+                readResult != null ? readResult.recordCount() : records.size(),
+                readResult != null ? readResult.skippedCount() : 0,
+                sourcePayload != null ? sourcePayload.name() : null,
+                sourcePayload != null ? sourcePayload.location() : null,
+                sourcePayload != null ? sourcePayload.mediaType() : null,
+                sourceFile != null ? sourceFile.size() : null,
+                sourceFile != null ? sourceFile.lastModified() : null
+        );
+        TaskOutputSupport.mergeMetadata(runtimeValues, context);
+        var taskOutputs = TaskOutputSupport.copyTaskOutputs(context);
+        return records.stream().map(record -> {
+            var values = new LinkedHashMap<String, Object>();
+            if (record != null && record.values() != null) {
+                values.putAll(record.values());
+            }
+            runtimeValues.forEach(values::putIfAbsent);
+            taskOutputs.forEach(values::putIfAbsent);
+            return new ReadRecord(values);
+        }).toList();
     }
 
     private PaymentMessageFormatter resolveFormatter(String format) {
@@ -181,8 +226,7 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
                 .replace("${_processExecutionId}", String.valueOf(context.processExecutionId()))
                 .replace("${messageIndex}", String.valueOf(messageIndex));
         if (resolved.length() > 16) {
-            // :20: solo admite 16x; truncar dejando trazabilidad de proceso.
-            resolved = resolved.substring(0, 16);
+            throw new IllegalArgumentException("MT101_BUILD sendersReference exceeds 16 characters: " + resolved);
         }
         return resolved;
     }
@@ -269,7 +313,7 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
             resolved = resolved.replace(placeholder, entry.getValue() == null ? "" : String.valueOf(entry.getValue()));
         }
         if (resolved.length() > 16) {
-            resolved = resolved.substring(0, 16);
+            throw new IllegalArgumentException("MT101_BUILD transactionReference exceeds 16 characters: " + resolved);
         }
         return resolved;
     }
@@ -280,8 +324,78 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         }
         var currency = stringFieldValue(values, stringOrNull(cfg.get("currencyField")));
         var raw = values.get(stringValue(cfg.get("valueField"), ""));
-        var amount = raw == null ? null : new BigDecimal(String.valueOf(raw));
+        var amount = raw == null ? null : parseAmount(raw);
         return new Mt101Message.Amount(currency, amount);
+    }
+
+    private BigDecimal parseAmount(Object raw) {
+        var value = String.valueOf(raw).trim();
+        if (value.isBlank()) {
+            return null;
+        }
+        var normalized = value.replace(" ", "");
+        if (normalized.contains(",") && normalized.contains(".")) {
+            normalized = normalized.lastIndexOf(',') > normalized.lastIndexOf('.')
+                    ? normalized.replace(".", "").replace(',', '.')
+                    : normalized.replace(",", "");
+        } else if (normalized.contains(",")) {
+            normalized = normalized.replace(',', '.');
+        }
+        return new BigDecimal(normalized);
+    }
+
+    private String resolveDebitAccountMode(Map<String, Object> configuration,
+                                           Map<String, Object> sequenceACfg,
+                                           Map<String, Object> mappingsCfg) {
+        var configured = stringValue(configuration.get("debitAccountMode"), "");
+        if (!configured.isBlank()) {
+            return configured;
+        }
+        var sequenceAOrdering = mapValue(sequenceACfg.get("orderingCustomer"));
+        var txOrdering = mapValue(mappingsCfg.get("orderingCustomer"));
+        var hasSequenceADebit = !isEmptyParty(
+                stringValue(sequenceAOrdering.get("option"), ""),
+                stringOrNull(sequenceAOrdering.get("account")),
+                stringOrNull(sequenceAOrdering.get("bic")),
+                nameAndAddressFromConfig(sequenceAOrdering.get("nameAndAddress")));
+        var hasTransactionDebit = !txOrdering.isEmpty();
+        if (hasSequenceADebit && hasTransactionDebit) {
+            return "mixed";
+        }
+        return hasTransactionDebit ? "multipleDebit" : "singleDebit";
+    }
+
+    private void validateDebitAccountMode(String mode,
+                                          Mt101Message.SequenceA sequenceA,
+                                          List<Mt101Message.Transaction> transactions) {
+        var normalized = mode == null ? "singleDebit" : mode.trim();
+        var hasSequenceADebit = sequenceA != null && sequenceA.orderingCustomer() != null;
+        var transactionsWithDebit = transactions.stream()
+                .filter(tx -> tx.orderingCustomer() != null)
+                .count();
+        switch (normalized) {
+            case "singleDebit" -> {
+                if (!hasSequenceADebit) {
+                    throw new IllegalArgumentException("MT101_BUILD debitAccountMode=singleDebit requires sequenceA.orderingCustomer");
+                }
+                if (transactionsWithDebit > 0) {
+                    throw new IllegalArgumentException("MT101_BUILD debitAccountMode=singleDebit cannot use transactionMappings.orderingCustomer");
+                }
+            }
+            case "multipleDebit", "subsidiary" -> {
+                if (hasSequenceADebit) {
+                    throw new IllegalArgumentException("MT101_BUILD debitAccountMode=" + normalized
+                            + " requires orderingCustomer only in transactionMappings");
+                }
+                if (transactionsWithDebit != transactions.size()) {
+                    throw new IllegalArgumentException("MT101_BUILD debitAccountMode=" + normalized
+                            + " requires orderingCustomer in every transaction");
+                }
+            }
+            case "mixed" -> throw new IllegalArgumentException(
+                    "MT101_BUILD cannot place orderingCustomer in Sequence A and Sequence B at the same time");
+            default -> throw new IllegalArgumentException("Unsupported MT101_BUILD debitAccountMode: " + mode);
+        }
     }
 
     private Mt101Message.Party buildPartyFromMapping(Map<String, Object> cfg, Map<String, Object> values) {

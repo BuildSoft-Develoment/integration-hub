@@ -60,6 +60,18 @@ export class ProcessTaskBindingContextService {
       case 'DB_EXECUTE_SP':
       case 'DB_EXECUTE_FN':
         return ['metadata', 'summary', 'out', 'errors'];
+      case 'MT101_BUILD':
+      case 'MT101_PARSE':
+      case 'MT101_SPLIT':
+      case 'MT101_REPAIR':
+      case 'MT101_ARCHIVE':
+      case 'MT101_PAY':
+      case 'MT101_ROUTE':
+      case 'MT101_RECONCILE':
+      case 'MT101_STATUS':
+        return ['metadata', 'summary', 'records', 'errors'];
+      case 'MT101_VALIDATE':
+        return ['metadata', 'summary', 'errors'];
       case 'REST_CALL':
       case 'NOTIFICATION':
         return ['metadata', 'summary', 'errors'];
@@ -79,6 +91,15 @@ export class ProcessTaskBindingContextService {
       case 'DB_EXECUTE_FN':
         return 'out';
       case 'FILE_READ':
+      case 'MT101_BUILD':
+      case 'MT101_PARSE':
+      case 'MT101_SPLIT':
+      case 'MT101_REPAIR':
+      case 'MT101_ARCHIVE':
+      case 'MT101_PAY':
+      case 'MT101_ROUTE':
+      case 'MT101_RECONCILE':
+      case 'MT101_STATUS':
         return 'records';
       default:
         return 'summary';
@@ -207,6 +228,7 @@ export class ProcessTaskBindingContextService {
     if (!mediaType) {
       return [];
     }
+    if (mediaType.includes('swift') || mediaType.includes('x-fin') || mediaType.includes('fin')) return ['SWIFT_MT'];
     if (mediaType.includes('csv')) return ['CSV'];
     if (mediaType.includes('json')) return ['JSON'];
     if (mediaType.includes('xml')) return ['XML'];
@@ -220,6 +242,7 @@ export class ProcessTaskBindingContextService {
     if (!pattern) {
       return [];
     }
+    if (pattern.includes('.mt101') || pattern.includes('.swift') || pattern.includes('.fin')) return ['SWIFT_MT'];
     if (pattern.includes('.csv')) return ['CSV'];
     if (pattern.includes('.xlsx')) return ['XLSX'];
     if (pattern.includes('.xls')) return ['XLS'];
@@ -233,7 +256,13 @@ export class ProcessTaskBindingContextService {
     const config = this.parseJson(sourceTask.configurationJson);
     switch (sourceOutput) {
       case 'records':
-        return sourceTask.taskType === 'FILE_READ' ? this.readerFieldOptions(sourceTask, readers) : [];
+        if (sourceTask.taskType === 'FILE_READ') {
+          return this.readerFieldOptions(sourceTask, readers);
+        }
+        if (this.isMt101Task(sourceTask.taskType)) {
+          return this.mt101RecordOptions(sourceTask.taskType);
+        }
+        return [];
       case 'table':
         return this.tableColumnOptions(config);
       case 'out':
@@ -311,6 +340,16 @@ export class ProcessTaskBindingContextService {
       DB_EXECUTE_FN: ['batchCount'],
       REST_CALL: ['processedCount', 'batchCount'],
       NOTIFICATION: ['batchCount'],
+      MT101_BUILD: ['builtCount', 'messageCount', 'transactionCount'],
+      MT101_VALIDATE: ['validCount', 'invalidCount', 'issueCount'],
+      MT101_ARCHIVE: ['archivedCount', 'targetTable'],
+      MT101_PAY: ['sentCount', 'acceptedCount', 'rejectedCount', 'retriedCount', 'transport'],
+      MT101_ROUTE: ['routedCount', 'manualReviewCount'],
+      MT101_RECONCILE: ['matchedCount', 'unmatchedCount', 'mismatchCount'],
+      MT101_STATUS: ['updatedCount', 'pendingCount'],
+      MT101_PARSE: ['parsedCount', 'messageCount', 'transactionCount'],
+      MT101_SPLIT: ['inputMessageCount', 'splitMessageCount', 'passthroughCount', 'outputFragmentCount'],
+      MT101_REPAIR: ['inputMessageCount', 'repairedMessageCount', 'totalChanges', 'repairAttempt'],
     };
     return (byType[task.taskType] ?? ['batchCount']).map((name) => ({
       key: name,
@@ -345,6 +384,27 @@ export class ProcessTaskBindingContextService {
       || normalized === 'out'
       ? normalized
       : 'records';
+  }
+
+  private isMt101Task(taskType: string): boolean {
+    return taskType.startsWith('MT101_');
+  }
+
+  private mt101RecordOptions(taskType: string): ProcessTaskBindingOption[] {
+    const common = ['sendersReference', 'messageIndex', 'messageTotal', 'format'];
+    const byType: Record<string, string[]> = {
+      MT101_ARCHIVE: ['archiveId', 'envelopeId', 'hash', 'encrypted', ...common],
+      MT101_PAY: ['sendersReference', 'status', 'gatewayReference', 'attempts', 'durationMs', 'lastError'],
+      MT101_ROUTE: ['sendersReference', 'route', 'status', 'reason'],
+      MT101_RECONCILE: ['sendersReference', 'status', 'matchedReference', 'mismatchReason'],
+      MT101_STATUS: ['sendersReference', 'status', 'gatewayReference', 'lastUpdatedAt'],
+    };
+    return (byType[taskType] ?? common).map((name) => ({
+      key: name,
+      label: name,
+      kind: 'records' as const,
+      groupKey: 'ui.dbWriteGroup.records',
+    }));
   }
 
   taskRef(task: ProcessTaskFormModel, config: Record<string, unknown>): string {

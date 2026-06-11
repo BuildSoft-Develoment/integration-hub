@@ -28,6 +28,7 @@ describe('Mt101BuildTaskProvider', () => {
       const draft = new Mt101BuildTaskProvider().createDraft();
       expect(draft.executionMode).toBe('once');
       expect(draft.format).toBe('JSON');
+      expect(draft.debitAccountMode).toBe('singleDebit');
       expect(draft.envelope.uetrStrategy).toBe('perMessage');
       expect(draft.envelope.priority).toBe('N');
       expect(draft.sequenceA.orderingCustomerOption).toBe('H');
@@ -63,6 +64,9 @@ describe('Mt101BuildTaskProvider', () => {
           ...provider.createDraft().transactionMappings,
           amountCurrencyField: 'moneda',
           amountValueField: 'monto',
+          orderingCustomerOption: 'H',
+          orderingCustomerAccountField: 'cuenta_ordenante',
+          orderingCustomerNameAddressFields: 'nombre_ordenante\nciudad_ordenante',
           beneficiaryAccountField: 'cuenta_beneficiario',
           accountWithBicField: 'bic_beneficiario',
           remittanceInformationField: 'concepto',
@@ -75,6 +79,7 @@ describe('Mt101BuildTaskProvider', () => {
       expect(config.taskRef).toBe('build-mt101');
       expect(config.executionMode).toBe('once');
       expect(config.format).toBe('XML');
+      expect(config.debitAccountMode).toBe('singleDebit');
       expect(config.envelope).toEqual({
         senderLt: 'SGOBFRPPAXXX',
         receiverLt: 'BCPLPEPLXXXX',
@@ -91,6 +96,7 @@ describe('Mt101BuildTaskProvider', () => {
         bic: 'BCPLPEPLXXX',
       });
       expect(config.transactionMappings.amount).toEqual({ currencyField: 'moneda', valueField: 'monto' });
+      expect(config.transactionMappings.orderingCustomer).toBeUndefined();
       expect(config.transactionMappings.beneficiary).toEqual({
         accountField: 'cuenta_beneficiario',
       });
@@ -100,6 +106,37 @@ describe('Mt101BuildTaskProvider', () => {
       });
       expect(config.splitBy.strategy).toBe('none');
       expect(config.splitBy.rebuildIndexTotal).toBe(true);
+    });
+
+    it('serializes transaction ordering customer only for multiple debit mode', () => {
+      const provider = new Mt101BuildTaskProvider();
+      const draft: Mt101BuildTaskDraft = {
+        ...provider.createDraft(),
+        taskRef: 'build-mt101',
+        debitAccountMode: 'multipleDebit',
+        sequenceA: {
+          ...provider.createDraft().sequenceA,
+          orderingCustomerAccount: 'SHOULD-NOT-BE-SERIALIZED',
+        },
+        transactionMappings: {
+          ...provider.createDraft().transactionMappings,
+          amountCurrencyField: 'moneda',
+          amountValueField: 'monto',
+          orderingCustomerOption: 'H',
+          orderingCustomerAccountField: 'cuenta_ordenante',
+          orderingCustomerNameAddressFields: 'nombre_ordenante',
+          beneficiaryAccountField: 'cuenta_beneficiario',
+        },
+      };
+
+      const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+      expect(config.debitAccountMode).toBe('multipleDebit');
+      expect(config.sequenceA.orderingCustomer).toBeUndefined();
+      expect(config.transactionMappings.orderingCustomer).toEqual({
+        option: 'H',
+        accountField: 'cuenta_ordenante',
+        nameAndAddressFields: ['nombre_ordenante'],
+      });
     });
 
     it('omits accountServicingInstitution when no option chosen', () => {
@@ -117,6 +154,7 @@ describe('Mt101BuildTaskProvider', () => {
       const initialDraft: Mt101BuildTaskDraft = {
         ...provider.createDraft(),
         taskRef: 'build-mt101',
+        debitAccountMode: 'multipleDebit',
         format: 'FIN',
         envelope: {
           senderLt: 'AAAA',
@@ -127,9 +165,9 @@ describe('Mt101BuildTaskProvider', () => {
         sequenceA: {
           sendersReferenceTemplate: 'PROC-X',
           requestedExecutionDate: '2026-06-09',
-          orderingCustomerOption: 'F',
-          orderingCustomerAccount: 'ACC-1',
-          orderingCustomerNameAddress: 'NAME\nADDR',
+          orderingCustomerOption: 'H',
+          orderingCustomerAccount: '',
+          orderingCustomerNameAddress: '',
           accountServicingOption: 'C',
           accountServicingBic: 'BCBC',
         },
@@ -137,6 +175,10 @@ describe('Mt101BuildTaskProvider', () => {
           transactionReferenceTemplate: 'TX-${dni}',
           amountCurrencyField: 'moneda',
           amountValueField: 'monto',
+          orderingCustomerOption: 'F',
+          orderingCustomerAccountField: 'cuenta_ordenante',
+          orderingCustomerBicField: 'bic_ord',
+          orderingCustomerNameAddressFields: 'nombre_ordenante\ndni_ordenante',
           beneficiaryOption: 'F',
           beneficiaryAccountField: 'cuenta',
           beneficiaryBicField: 'bic_ben',
@@ -157,6 +199,7 @@ describe('Mt101BuildTaskProvider', () => {
 
       const rehydrated = provider.hydrateDraft(taskAfterPersist);
       expect(rehydrated.taskRef).toBe('build-mt101');
+      expect(rehydrated.debitAccountMode).toBe('multipleDebit');
       expect(rehydrated.format).toBe('FIN');
       expect(rehydrated.envelope).toEqual(initialDraft.envelope);
       expect(rehydrated.sequenceA).toEqual(initialDraft.sequenceA);

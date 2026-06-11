@@ -3,6 +3,7 @@ import { ReaderProvider } from './readers/reader-provider.abstract';
 import {
   CsvReaderProvider,
   JsonReaderProvider,
+  SwiftMtReaderProvider,
   TxtReaderProvider,
   XlsReaderProvider,
   XlsxReaderProvider,
@@ -20,6 +21,7 @@ const READER_PROVIDER_TYPES: ReadonlyArray<Type<ReaderProvider>> = [
   XlsxReaderProvider,
   JsonReaderProvider,
   XmlReaderProvider,
+  SwiftMtReaderProvider,
 ];
 
 export function provideReaderProviders(): Provider[] {

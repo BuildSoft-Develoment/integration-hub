@@ -56,11 +56,11 @@ public class StreamingPipelineService {
                                List<String> selectedFileReferences) {
         
         // This service currently handles FILE_READ as the streaming source
-        if (sourcePlan.taskType() != TaskType.FILE_READ) {
+        if (!TaskType.FILE_READ.equals(sourcePlan.taskType())) {
             throw new IllegalArgumentException("Streaming pipeline requires a FILE_READ task as source for now");
         }
 
-        var provider = taskProviderRegistry.resolve(sinkTaskPlan.taskType().name());
+        var provider = taskProviderRegistry.resolve(sinkTaskPlan.taskType());
         if (!(provider instanceof BatchTaskProvider sinkTaskProvider)) {
             throw new IllegalArgumentException("Pipeline sink task " + sinkTaskPlan.taskType() + " must implement BatchTaskProvider");
         }

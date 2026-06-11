@@ -45,6 +45,35 @@ public class ProcessTaskExecution {
 
     @Column(columnDefinition = "text")
     public String details;
+
+    // --- M-2 suspension fields (V13) ---
+    //
+    // suspendedState: JSON serializado del estado que el provider necesita para
+    // reanudar (e.g. {nextPollAt, attemptNumber, externalRef}). El engine lo
+    // rehidrata como Map<String,Object> al invocar SuspendableTaskProvider.resume.
+    @Column(name = "suspended_state", columnDefinition = "text")
+    public String suspendedState;
+
+    // resumeToken: opaco generado por SecureRandom; identificador estable que
+    // el callback externo presenta en POST /api/process-executions/resume/{token}.
+    @Column(name = "resume_token", length = 64, unique = true)
+    public String resumeToken;
+
+    @Column(name = "suspended_at")
+    public LocalDateTime suspendedAt;
+
+    // suspendExpiresAt: NULL => sin expiracion (callback puro). Si esta seteado,
+    // un scheduler puede invocar resume automaticamente cuando llegue el momento.
+    @Column(name = "suspend_expires_at")
+    public LocalDateTime suspendExpiresAt;
+
+    @Column(name = "resumed_at")
+    public LocalDateTime resumedAt;
+
+    // resumeCount: cuantas veces se reanudo (un provider puede re-suspenderse).
+    // Util para metricas y para topes de retry.
+    @Column(name = "resume_count", nullable = false)
+    public int resumeCount = 0;
 }
 
 

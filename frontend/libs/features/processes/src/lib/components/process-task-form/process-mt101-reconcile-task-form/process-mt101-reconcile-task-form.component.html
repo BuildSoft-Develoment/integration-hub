@@ -1,98 +1,117 @@
-<div class="mt101-reconcile">
+<div class="mt101-reconcile ih-thin-scroll">
   <header class="mt101-reconcile__header">
     <h3>{{ i18n.t('processTask.MT101_RECONCILE') }}</h3>
   </header>
 
+  <ih-process-task-runtime-panel
+    [task]="task()"
+    [tasks]="tasks()"
+    [draft]="draft()"
+    [readonly]="readonly()"
+    (runtimeChange)="updateDraft($event)"
+  />
+
   <section class="mt101-reconcile__section">
     <h4>{{ i18n.t('mt101Reconcile.section.source') }}</h4>
     <div class="mt101-reconcile__grid">
-      <label>
-        <span>{{ i18n.t('mt101Reconcile.connection') }}</span>
-        <select
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Reconcile.connection') }}</mat-label>
+        <mat-select
           [ngModel]="draft().connectionRef"
           (ngModelChange)="updateDraft({ connectionRef: $event })"
           [disabled]="readonly()">
-          <option value="">—</option>
+          <mat-option value="">-</mat-option>
           @for (c of connections(); track c.id) {
-            <option [value]="c.id">{{ c.name }} ({{ c.connectionType }})</option>
+            <mat-option [value]="c.id">{{ c.name }} ({{ c.connectionType }})</mat-option>
           }
-        </select>
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101Reconcile.sentTable') }}</span>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Reconcile.sentTable') }}</mat-label>
         <input
+          matInput
           type="text"
           [ngModel]="draft().sentTable"
           (ngModelChange)="updateDraft({ sentTable: $event })"
           [disabled]="readonly()" />
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101Reconcile.confirmationTable') }}</span>
+      </mat-form-field>
+
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Reconcile.confirmationTable') }}</mat-label>
         <input
+          matInput
           type="text"
           [ngModel]="draft().confirmationTable"
           (ngModelChange)="updateDraft({ confirmationTable: $event })"
           [disabled]="readonly()" />
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101Reconcile.matchKeys') }}</span>
+      </mat-form-field>
+
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Reconcile.matchKeys') }}</mat-label>
         <input
+          matInput
           type="text"
           placeholder="senders_reference,uetr"
           [ngModel]="draft().matchKeys"
           (ngModelChange)="updateDraft({ matchKeys: $event })"
           [disabled]="readonly()" />
-      </label>
+      </mat-form-field>
     </div>
   </section>
 
   <section class="mt101-reconcile__section">
     <h4>{{ i18n.t('mt101Reconcile.section.window') }}</h4>
     <div class="mt101-reconcile__grid">
-      <label>
-        <span>{{ i18n.t('mt101Reconcile.asOfDate') }}</span>
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Reconcile.asOfDate') }}</mat-label>
         <input
+          matInput
           type="text"
           placeholder="2026-06-09 / ${today}"
           [ngModel]="draft().asOfDate"
           (ngModelChange)="updateDraft({ asOfDate: $event })"
           [disabled]="readonly()" />
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101Reconcile.lookbackDays') }}</span>
+      </mat-form-field>
+
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Reconcile.lookbackDays') }}</mat-label>
         <input
+          matInput
           type="number"
           min="0"
           [ngModel]="draft().lookbackDays"
           (ngModelChange)="updateDraft({ lookbackDays: $event })"
           [disabled]="readonly()" />
-      </label>
+      </mat-form-field>
     </div>
   </section>
 
   <section class="mt101-reconcile__section">
     <h4>{{ i18n.t('mt101Reconcile.section.exceptions') }}</h4>
     <div class="mt101-reconcile__grid">
-      <label>
-        <span>{{ i18n.t('mt101Reconcile.exceptionConnection') }}</span>
-        <select
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Reconcile.exceptionConnection') }}</mat-label>
+        <mat-select
           [ngModel]="draft().exceptionConnectionRef"
           (ngModelChange)="updateDraft({ exceptionConnectionRef: $event })"
           [disabled]="readonly()">
-          <option value="">—</option>
+          <mat-option value="">-</mat-option>
           @for (c of connections(); track c.id) {
-            <option [value]="c.id">{{ c.name }} ({{ c.connectionType }})</option>
+            <mat-option [value]="c.id">{{ c.name }} ({{ c.connectionType }})</mat-option>
           }
-        </select>
-      </label>
-      <label>
-        <span>{{ i18n.t('mt101Reconcile.exceptionTable') }}</span>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('mt101Reconcile.exceptionTable') }}</mat-label>
         <input
+          matInput
           type="text"
           [ngModel]="draft().exceptionTable"
           (ngModelChange)="updateDraft({ exceptionTable: $event })"
           [disabled]="readonly()" />
-      </label>
+      </mat-form-field>
     </div>
   </section>
 </div>

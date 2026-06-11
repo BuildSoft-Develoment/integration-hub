@@ -2,6 +2,10 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import {
   Mt101RepairAction,
   Mt101RepairRuleDraft,
@@ -10,11 +14,20 @@ import {
 } from '@integration-hub/core/providers';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { ProcessTaskFormModel } from '../../../models/process.models';
+import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
 @Component({
   selector: 'ih-process-mt101-repair-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [
+    CommonModule,
+    FormsModule,
+    MatButtonModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+    ProcessTaskRuntimePanelComponent,
+  ],
   templateUrl: './process-mt101-repair-task-form.component.html',
   styleUrl: './process-mt101-repair-task-form.component.css',
 })
@@ -24,6 +37,7 @@ export class ProcessMt101RepairTaskFormComponent {
   private readonly bridge = inject(ProcessTaskFormBridgeService);
 
   readonly task = input.required<ProcessTaskFormModel>();
+  readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101RepairTaskDraft>(
