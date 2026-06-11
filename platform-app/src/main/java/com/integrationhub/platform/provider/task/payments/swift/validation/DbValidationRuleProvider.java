@@ -67,25 +67,35 @@ public class DbValidationRuleProvider implements ValidationRuleProvider {
     public List<ValidationPredicate> findRules(String ruleSet, String standard, String appliesTo) {
         var predicates = new ArrayList<ValidationPredicate>();
         var sql = "select rule_set, code, standard, applies_to, severity, predicate_kind, predicate_body "
-                + "from payment_validation_rule where active = true";
+                + "from payment_validation_rule where active = true"
+                + (isWildcard(ruleSet) ? "" : " and lower(rule_set) = lower(?)")
+                + (isWildcard(standard) ? "" : " and lower(standard) = lower(?)")
+                + (isWildcard(appliesTo) ? "" : " and lower(applies_to) = lower(?)")
+                + " order by rule_set, code";
         try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql);
-             var rs = statement.executeQuery()) {
-            while (rs.next()) {
-                var spec = new DbValidationPredicateFactory.RuleSpec(
-                        rs.getString("rule_set"),
-                        rs.getString("code"),
-                        rs.getString("standard"),
-                        rs.getString("applies_to"),
-                        severity(rs.getString("severity")),
-                        rs.getString("predicate_kind"),
-                        rs.getString("predicate_body"));
-                if (!matches(ruleSet, spec.ruleSet())
-                        || !matches(standard, spec.standard())
-                        || !matches(appliesTo, spec.appliesTo())) {
-                    continue;
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            if (!isWildcard(ruleSet)) {
+                statement.setString(parameter++, ruleSet);
+            }
+            if (!isWildcard(standard)) {
+                statement.setString(parameter++, standard);
+            }
+            if (!isWildcard(appliesTo)) {
+                statement.setString(parameter++, appliesTo);
+            }
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    var spec = new DbValidationPredicateFactory.RuleSpec(
+                            rs.getString("rule_set"),
+                            rs.getString("code"),
+                            rs.getString("standard"),
+                            rs.getString("applies_to"),
+                            severity(rs.getString("severity")),
+                            rs.getString("predicate_kind"),
+                            rs.getString("predicate_body"));
+                    predicates.add(DbValidationPredicateFactory.fromSpec(spec, objectMapper, jexlEngine));
                 }
-                predicates.add(DbValidationPredicateFactory.fromSpec(spec, objectMapper, jexlEngine));
             }
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot load validation rules from payment_validation_rule", error);
@@ -104,10 +114,7 @@ public class DbValidationRuleProvider implements ValidationRuleProvider {
         };
     }
 
-    private boolean matches(String requested, String candidate) {
-        if (requested == null || requested.isBlank() || "*".equals(requested)) {
-            return true;
-        }
-        return requested.equalsIgnoreCase(candidate);
+    private boolean isWildcard(String requested) {
+        return requested == null || requested.isBlank() || "*".equals(requested);
     }
 }

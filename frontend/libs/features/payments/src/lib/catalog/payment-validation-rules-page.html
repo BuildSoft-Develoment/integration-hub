@@ -1,0 +1,194 @@
+<section class="payment-rules-page">
+  <header class="payment-rules-toolbar">
+    <div>
+      <h2 class="ih-section-title">{{ i18n.t('paymentRules.title') }}</h2>
+      <p class="ih-muted">{{ i18n.t('paymentRules.subtitle') }}</p>
+    </div>
+    <div class="toolbar-actions">
+      <button mat-stroked-button type="button" (click)="exportCurrentRuleSet()">
+        <mat-icon>download</mat-icon>
+        {{ i18n.t('paymentRules.export') }}
+      </button>
+      <button mat-flat-button type="button" (click)="newRule()">
+        <mat-icon>add</mat-icon>
+        {{ i18n.t('paymentRules.create') }}
+      </button>
+    </div>
+  </header>
+
+  <section class="filters">
+    <mat-form-field appearance="outline">
+      <mat-label>{{ i18n.t('paymentRules.ruleSet') }}</mat-label>
+      <input matInput [ngModel]="ruleSetFilter()" (ngModelChange)="ruleSetFilter.set($event); load(true)" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>{{ i18n.t('paymentRules.search') }}</mat-label>
+      <input matInput [ngModel]="search()" (ngModelChange)="search.set($event); load(true)" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>{{ i18n.t('paymentRules.standard') }}</mat-label>
+      <input matInput [ngModel]="standardFilter()" (ngModelChange)="standardFilter.set($event); load(true)" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>{{ i18n.t('paymentRules.appliesTo') }}</mat-label>
+      <input matInput [ngModel]="appliesToFilter()" (ngModelChange)="appliesToFilter.set($event); load(true)" />
+    </mat-form-field>
+    <mat-form-field appearance="outline">
+      <mat-label>{{ i18n.t('common.status') }}</mat-label>
+      <mat-select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event); load(true)">
+        <mat-option value="ALL">{{ i18n.t('sources.allStatuses') }}</mat-option>
+        <mat-option value="active">{{ i18n.t('status.active') }}</mat-option>
+        <mat-option value="inactive">{{ i18n.t('status.inactive') }}</mat-option>
+      </mat-select>
+    </mat-form-field>
+  </section>
+
+  @if (loading()) {
+    <mat-progress-bar mode="indeterminate" />
+  }
+
+  <section class="rules-workspace">
+    <article class="rules-table-shell">
+      <table mat-table [dataSource]="rules()" class="rules-table">
+        <ng-container matColumnDef="ruleSet">
+          <th mat-header-cell *matHeaderCellDef>{{ i18n.t('paymentRules.ruleSet') }}</th>
+          <td mat-cell *matCellDef="let rule">{{ rule.ruleSet }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="code">
+          <th mat-header-cell *matHeaderCellDef>{{ i18n.t('paymentRules.code') }}</th>
+          <td mat-cell *matCellDef="let rule">
+            <strong>{{ rule.code }}</strong>
+            <span class="muted-row">{{ rule.standard }} / {{ rule.appliesTo }}</span>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="predicateKind">
+          <th mat-header-cell *matHeaderCellDef>{{ i18n.t('paymentRules.predicateKind') }}</th>
+          <td mat-cell *matCellDef="let rule">{{ rule.predicateKind }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="severity">
+          <th mat-header-cell *matHeaderCellDef>{{ i18n.t('paymentRules.severity') }}</th>
+          <td mat-cell *matCellDef="let rule">{{ rule.severity }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="status">
+          <th mat-header-cell *matHeaderCellDef>{{ i18n.t('common.status') }}</th>
+          <td mat-cell *matCellDef="let rule">
+            {{ rule.active ? i18n.t('status.active') : i18n.t('status.inactive') }}
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="actions">
+          <th mat-header-cell *matHeaderCellDef>{{ i18n.t('common.actions') }}</th>
+          <td mat-cell *matCellDef="let rule">
+            <button mat-icon-button type="button" [matTooltip]="i18n.t('common.edit')" (click)="edit(rule)">
+              <mat-icon>edit</mat-icon>
+            </button>
+            <button
+              mat-icon-button
+              type="button"
+              [matTooltip]="rule.active ? i18n.t('common.disable') : i18n.t('common.enable')"
+              (click)="toggle(rule)"
+            >
+              <mat-icon>{{ rule.active ? 'toggle_on' : 'toggle_off' }}</mat-icon>
+            </button>
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns" (dblclick)="edit(row)"></tr>
+      </table>
+      @if (!loading() && rules().length === 0) {
+        <div class="ih-catalog-empty-state ih-muted">{{ i18n.t('paymentRules.noData') }}</div>
+      }
+      <mat-paginator
+        [length]="totalLength()"
+        [pageIndex]="pageIndex()"
+        [pageSize]="pageSize()"
+        [pageSizeOptions]="[10, 25, 50]"
+        (page)="onPage($event)"
+      />
+    </article>
+
+    <aside class="rule-editor">
+      <h3>{{ editing() ? i18n.t('paymentRules.edit') : i18n.t('paymentRules.create') }}</h3>
+      <div class="editor-grid">
+        <mat-form-field appearance="outline">
+          <mat-label>{{ i18n.t('paymentRules.ruleSet') }}</mat-label>
+          <input matInput [ngModel]="draft().ruleSet" (ngModelChange)="patchDraft({ ruleSet: $event })" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>{{ i18n.t('paymentRules.code') }}</mat-label>
+          <input matInput [ngModel]="draft().code" (ngModelChange)="patchDraft({ code: $event })" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>{{ i18n.t('paymentRules.standard') }}</mat-label>
+          <input matInput [ngModel]="draft().standard" (ngModelChange)="patchDraft({ standard: $event })" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>{{ i18n.t('paymentRules.appliesTo') }}</mat-label>
+          <input matInput [ngModel]="draft().appliesTo" (ngModelChange)="patchDraft({ appliesTo: $event })" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>{{ i18n.t('paymentRules.severity') }}</mat-label>
+          <mat-select [ngModel]="draft().severity" (ngModelChange)="patchDraft({ severity: $event })">
+            @for (severity of severities; track severity) {
+              <mat-option [value]="severity">{{ severity }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>{{ i18n.t('paymentRules.predicateKind') }}</mat-label>
+          <mat-select [ngModel]="draft().predicateKind" (ngModelChange)="patchDraft({ predicateKind: $event })">
+            @for (kind of predicateKinds; track kind) {
+              <mat-option [value]="kind">{{ kind }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      <mat-form-field appearance="outline" class="json-field">
+        <mat-label>{{ i18n.t('paymentRules.predicateBody') }}</mat-label>
+        <textarea
+          matInput
+          rows="10"
+          [ngModel]="draft().predicateBody"
+          (ngModelChange)="patchDraft({ predicateBody: $event })"
+        ></textarea>
+      </mat-form-field>
+
+      <div class="editor-actions">
+        <mat-slide-toggle [ngModel]="draft().active" (ngModelChange)="patchDraft({ active: $event })">
+          {{ i18n.t('common.active') }}
+        </mat-slide-toggle>
+        <button mat-flat-button type="button" (click)="save()">
+          <mat-icon>save</mat-icon>
+          {{ i18n.t('common.saveChanges') }}
+        </button>
+      </div>
+
+      <section class="bulk-panel">
+        <h3>{{ i18n.t('paymentRules.importExport') }}</h3>
+        <mat-checkbox [ngModel]="replacingImport()" (ngModelChange)="replacingImport.set($event)">
+          {{ i18n.t('paymentRules.replaceExisting') }}
+        </mat-checkbox>
+        <mat-form-field appearance="outline" class="json-field">
+          <mat-label>{{ i18n.t('paymentRules.importJson') }}</mat-label>
+          <textarea matInput rows="7" [ngModel]="importJson()" (ngModelChange)="importJson.set($event)"></textarea>
+        </mat-form-field>
+        <button mat-stroked-button type="button" (click)="importRules()">
+          <mat-icon>upload</mat-icon>
+          {{ i18n.t('paymentRules.import') }}
+        </button>
+        @if (exportJson()) {
+          <mat-form-field appearance="outline" class="json-field">
+            <mat-label>{{ i18n.t('paymentRules.exportJson') }}</mat-label>
+            <textarea matInput rows="7" [ngModel]="exportJson()" readonly></textarea>
+          </mat-form-field>
+        }
+      </section>
+    </aside>
+  </section>
+</section>

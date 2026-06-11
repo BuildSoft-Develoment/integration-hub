@@ -34,6 +34,12 @@ export const APP_NAVIGATION_DEFINITIONS: readonly AppNavigationItem[] = [
     requiredCapability: APP_SECTION_CAPABILITIES.processes,
   },
   {
+    id: 'paymentRules',
+    route: '/payment-rules',
+    labelKey: 'nav.paymentRules',
+    requiredCapability: APP_SECTION_CAPABILITIES.paymentRules,
+  },
+  {
     id: 'executions',
     route: '/executions',
     labelKey: 'nav.executions',

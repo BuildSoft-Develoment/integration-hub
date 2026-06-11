@@ -4,6 +4,7 @@ import com.integrationhub.platform.provider.task.payments.spi.ValidationIssue;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationPredicate;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationRuleProvider;
 import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -11,8 +12,12 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -55,17 +60,30 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
     private static final String DEFAULT_STANDARD = "SWIFT";
     private static final String DEFAULT_APPLIES_TO = "MT101";
     private static final String DEFAULT_FAIL_ON = "ERROR";
+    private static final String DEFAULT_ISSUE_TABLE = "mt101_validation_issue";
+    private static final int DEFAULT_MAX_ISSUES_IN_OUTPUT = 1000;
     /** Estado de fragmentos que VALIDATE consume por defecto (gate de entrada). */
     private static final List<String> FRAGMENT_READ_STATUSES = List.of("BUILT");
 
     private final Instance<ValidationRuleProvider> ruleProviders;
     private final Mt101FragmentStore fragmentStore;
+    private final DataSource defaultDataSource;
+    private final ConnectionPoolManager connectionPoolManager;
 
     @Inject
     public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
-                                     Mt101FragmentStore fragmentStore) {
+                                     Mt101FragmentStore fragmentStore,
+                                     DataSource defaultDataSource,
+                                     ConnectionPoolManager connectionPoolManager) {
         this.ruleProviders = ruleProviders;
         this.fragmentStore = fragmentStore;
+        this.defaultDataSource = defaultDataSource;
+        this.connectionPoolManager = connectionPoolManager;
+    }
+
+    public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
+                                     Mt101FragmentStore fragmentStore) {
+        this(ruleProviders, fragmentStore, null, null);
     }
 
     public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders) {
@@ -83,9 +101,11 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
         var standard = stringValue(configuration.get("standard"), DEFAULT_STANDARD);
         var appliesTo = stringValue(configuration.get("appliesTo"), DEFAULT_APPLIES_TO);
         var failOn = severityValue(configuration.get("failOn"), ValidationIssue.Severity.ERROR);
+        var issueSink = IssueSink.from(configuration.get("publishIssuesTo"));
+        var maxIssuesInOutput = intValue(configuration.get("maxIssuesInOutput"), DEFAULT_MAX_ISSUES_IN_OUTPUT);
         var predicates = resolveRules(ruleSet, standard, appliesTo);
 
-        var accumulator = new ValidationAccumulator();
+        var accumulator = new ValidationAccumulator(maxIssuesInOutput);
         var fragmentSource = Mt101MessageInputResolver.fragmentSource(context, configuration, type());
 
         if (!fragmentSource.isEmpty() && fragmentStore != null) {
@@ -95,9 +115,13 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
                 // pagina en vez de 1 UPDATE por fragmento).
                 var validatedRefs = new ArrayList<String>(page.size());
                 var rejectedByRef = new LinkedHashMap<String, String>();
+                var pageIssues = issueSink.enabled() ? new ArrayList<ValidationIssue>() : null;
                 for (var message : page) {
                     var messageIssues = evaluateMessage(predicates, message);
                     var blocking = accumulator.add(messageIssues, failOn);
+                    if (pageIssues != null) {
+                        pageIssues.addAll(messageIssues);
+                    }
                     var reference = message.sequenceA() == null ? null
                             : message.sequenceA().sendersReference();
                     if (reference == null) {
@@ -109,6 +133,7 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
                         validatedRefs.add(reference);
                     }
                 }
+                persistIssues(issueSink, pageIssues);
                 fragmentStore.markStatusBatch(fragmentSource, validatedRefs, "VALIDATED");
                 fragmentStore.markStatusBatch(fragmentSource, rejectedByRef, "REJECTED");
             });
@@ -117,7 +142,9 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
         } else {
             var messages = Mt101MessageInputResolver.readMessages(context, configuration, type(), fragmentStore);
             for (var message : messages) {
-                accumulator.add(evaluateMessage(predicates, message), failOn);
+                var messageIssues = evaluateMessage(predicates, message);
+                accumulator.add(messageIssues, failOn);
+                persistIssues(issueSink, messageIssues);
             }
         }
 
@@ -130,6 +157,8 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
         outputs.put("invalidCount", accumulator.invalidMessages);
         outputs.put("ruleSet", ruleSet);
         outputs.put("issuesBySeverity", accumulator.bySeverity());
+        outputs.put("issueCount", accumulator.issueCount);
+        outputs.put("issuesTruncated", accumulator.issuesTruncated());
         outputs.put("errors", accumulator.issues);
         if (!fragmentSource.isEmpty()) {
             outputs.put("fragments", fragmentSource);
@@ -138,7 +167,7 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
         var summary = "MT101_VALIDATE ruleSet=" + ruleSet
                 + " messages=" + accumulator.totalMessages
                 + " invalid=" + accumulator.invalidMessages
-                + " issues=" + accumulator.issues.size();
+                + " issues=" + accumulator.issueCount;
 
         return accumulator.invalidMessages > 0
                 ? TaskResult.failure(summary, outputs)
@@ -185,15 +214,82 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
         return aggregated;
     }
 
+    private void persistIssues(IssueSink issueSink, List<ValidationIssue> issues) {
+        if (!issueSink.enabled() || issues == null || issues.isEmpty()) {
+            return;
+        }
+        var dataSource = resolveDataSource(issueSink.connectionRef());
+        if (dataSource == null) {
+            return;
+        }
+        var sql = "insert into " + issueSink.table()
+                + " (archive_id, transaction_id, rule_code, rule_set, severity, message) "
+                + "values (null, null, ?, ?, ?, ?)";
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            for (var issue : issues) {
+                statement.setString(1, stringValue(issue.code(), "UNKNOWN"));
+                statement.setString(2, stringValue(issue.ruleSet(), "unknown"));
+                statement.setString(3, severityCode(issue.severity()));
+                statement.setString(4, issueMessage(issue));
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot persist MT101 validation issues", error);
+        }
+    }
+
+    private DataSource resolveDataSource(String connectionRef) {
+        if (connectionRef == null || connectionRef.isBlank() || connectionPoolManager == null) {
+            return defaultDataSource;
+        }
+        return connectionPoolManager.resolveJdbcDataSource(connectionRef);
+    }
+
+    private String severityCode(ValidationIssue.Severity severity) {
+        if (severity == ValidationIssue.Severity.WARNING) {
+            return "W";
+        }
+        if (severity == ValidationIssue.Severity.INFO) {
+            return "I";
+        }
+        return "E";
+    }
+
+    private String issueMessage(ValidationIssue issue) {
+        if (issue.transactionReference() == null || issue.transactionReference().isBlank()) {
+            return issue.message();
+        }
+        return "[transactionReference=" + issue.transactionReference() + "] " + issue.message();
+    }
+
     /** Acumula resultados por mensaje sin retener los mensajes en memoria. */
     private static final class ValidationAccumulator {
         int totalMessages;
         int invalidMessages;
+        int issueCount;
+        private final int maxIssuesInOutput;
         final List<ValidationIssue> issues = new ArrayList<>();
+        final EnumMap<ValidationIssue.Severity, Integer> bySeverity =
+                new EnumMap<>(ValidationIssue.Severity.class);
+
+        ValidationAccumulator(int maxIssuesInOutput) {
+            this.maxIssuesInOutput = Math.max(maxIssuesInOutput, 0);
+            bySeverity.put(ValidationIssue.Severity.ERROR, 0);
+            bySeverity.put(ValidationIssue.Severity.WARNING, 0);
+            bySeverity.put(ValidationIssue.Severity.INFO, 0);
+        }
 
         boolean add(List<ValidationIssue> messageIssues, ValidationIssue.Severity failOn) {
             totalMessages++;
-            issues.addAll(messageIssues);
+            issueCount += messageIssues.size();
+            for (var issue : messageIssues) {
+                bySeverity.merge(issue.severity(), 1, Integer::sum);
+                if (issues.size() < maxIssuesInOutput) {
+                    issues.add(issue);
+                }
+            }
             var blocking = messageIssues.stream().anyMatch(issue -> issue.severity().reaches(failOn));
             if (blocking) {
                 invalidMessages++;
@@ -201,19 +297,55 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
             return blocking;
         }
 
+        boolean issuesTruncated() {
+            return issueCount > issues.size();
+        }
+
         Map<String, Integer> bySeverity() {
             var counts = new TreeMap<String, Integer>();
-            counts.put(ValidationIssue.Severity.ERROR.name(), 0);
-            counts.put(ValidationIssue.Severity.WARNING.name(), 0);
-            counts.put(ValidationIssue.Severity.INFO.name(), 0);
-            for (var issue : issues) {
-                counts.merge(issue.severity().name(), 1, Integer::sum);
-            }
+            bySeverity.forEach((severity, count) -> counts.put(severity.name(), count));
             return counts;
         }
     }
 
-    private String stringValue(Object raw, String defaultValue) {
+    private record IssueSink(boolean enabled, String connectionRef, String table) {
+        static IssueSink disabled() {
+            return new IssueSink(false, null, DEFAULT_ISSUE_TABLE);
+        }
+
+        static IssueSink from(Object raw) {
+            if (raw == null || String.valueOf(raw).isBlank()) {
+                return disabled();
+            }
+            if (raw instanceof Map<?, ?> map) {
+                var table = stringValue(map.get("table"), DEFAULT_ISSUE_TABLE);
+                return enabled(stringValue(map.get("connectionRef"), null), table);
+            }
+            var value = String.valueOf(raw).trim();
+            if ("false".equalsIgnoreCase(value) || "none".equalsIgnoreCase(value)) {
+                return disabled();
+            }
+            if (value.startsWith("table:")) {
+                var parts = value.substring("table:".length()).split(":", 2);
+                if (parts.length == 2) {
+                    return enabled(parts[0], parts[1]);
+                }
+                return enabled(null, parts[0]);
+            }
+            return enabled(null, value);
+        }
+
+        private static IssueSink enabled(String connectionRef, String table) {
+            var normalizedTable = stringValue(table, DEFAULT_ISSUE_TABLE);
+            if (!DEFAULT_ISSUE_TABLE.equals(normalizedTable)) {
+                throw new IllegalArgumentException("MT101_VALIDATE only supports publishing issues to "
+                        + DEFAULT_ISSUE_TABLE);
+            }
+            return new IssueSink(true, connectionRef, normalizedTable);
+        }
+    }
+
+    private static String stringValue(Object raw, String defaultValue) {
         if (raw == null) {
             return defaultValue;
         }

@@ -6,6 +6,7 @@ export type AppSectionKey =
   | 'connections'
   | 'readers'
   | 'processes'
+  | 'paymentRules'
   | 'executions'
   | 'schedules'
   | 'audit';
@@ -21,6 +22,7 @@ export const APP_SECTION_CAPABILITIES: Record<
   connections: 'admin',
   readers: 'admin',
   processes: 'admin',
+  paymentRules: 'admin',
   executions: 'operate',
   schedules: 'audit',
   audit: 'audit',

@@ -49,6 +49,14 @@ export const appRoutes: Route[] = [
       ),
   },
   {
+    path: 'payment-rules',
+    canActivate: [appSectionGuard('paymentRules')],
+    loadChildren: () =>
+      import('@integration-hub/features/payments').then(
+        (module) => module.paymentValidationRulesRoutes
+      ),
+  },
+  {
     path: 'executions',
     canActivate: [appSectionGuard('executions')],
     loadChildren: () =>

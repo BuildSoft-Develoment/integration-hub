@@ -28,6 +28,8 @@ filas de la tabla `payment_validation_rule` (V12) con `rule_set = 'bank:XXX'`.
 | `DbValidationRuleProvider` | Lee `payment_validation_rule` y sintetiza predicados. Convive con `CdiValidationRuleProvider` (reglas estructurales); el `ruleSet` los separa. Sin caché: editar una regla aplica en la siguiente ejecución. |
 | `DbValidationPredicateFactory` | Un `ValidationPredicate` por fila según `predicate_kind`. |
 | `Mt101MessagePathResolver` | Navega paths declarativos sobre `Mt101Message` por reflexión (agregar un campo al modelo lo hace navegable sin código nuevo). |
+| `PaymentValidationRuleResource` | API REST `/api/payment-validation-rules` para listar, crear, editar, activar/desactivar, importar y exportar perfiles. Edicion restringida a `platform-admin`/`integration-admin`; lectura permitida a `auditor`. |
+| Frontend `payment-rules` | Pantalla admin para gestionar perfiles, importar/exportar JSON y promover ruleSets entre ambientes. |
 
 ## Uso en el pipeline
 
@@ -42,6 +44,52 @@ filas de la tabla `payment_validation_rule` (V12) con `rule_set = 'bank:XXX'`.
 En flujo masivo (fragment source), cada `MT101_VALIDATE` marca los fragmentos
 `VALIDATED`/`REJECTED` individualmente; el gate de `MT101_PAY` (solo `ARCHIVED`)
 garantiza que ningún mensaje fuera de perfil llegue al banco.
+
+Para persistir incidencias sin retenerlas completas en memoria, `MT101_VALIDATE`
+acepta:
+
+```json
+{
+  "publishIssuesTo": "table:mt101_validation_issue",
+  "maxIssuesInOutput": 1000
+}
+```
+
+`publishIssuesTo` tambien acepta forma objeto:
+`{"connectionRef":"pagos-prod","table":"mt101_validation_issue"}`. La tarea
+persiste todos los issues y solo deja una muestra configurable en el output
+`errors`, junto con contadores completos (`issueCount`, `issuesBySeverity`).
+
+## API de catalogo
+
+```http
+GET  /api/payment-validation-rules?ruleSet=bank:BCP&q=AMOUNT&status=active
+POST /api/payment-validation-rules
+PUT  /api/payment-validation-rules/{ruleId}
+POST /api/payment-validation-rules/{ruleId}/activation/{active}
+GET  /api/payment-validation-rules/export?ruleSet=bank:BCP
+POST /api/payment-validation-rules/import
+```
+
+Payload de import:
+
+```json
+{
+  "ruleSet": "bank:BCP",
+  "replaceExisting": true,
+  "rules": [
+    {
+      "code": "BCP.CURRENCY",
+      "standard": "SWIFT",
+      "appliesTo": "MT101",
+      "severity": "E",
+      "predicateKind": "CURRENCY_ALLOWED",
+      "predicateBody": "{\"allowed\":[\"PEN\",\"USD\"]}",
+      "active": true
+    }
+  ]
+}
+```
 
 ## Formato de `predicate_body` por `predicate_kind`
 
@@ -96,7 +144,6 @@ del catálogo de procesos, no requiere motor nuevo.
 
 ## Pendiente
 
-- Pantalla de catálogo + endpoint REST (`/api/payment-validation-rules`) con
-  edición restringida a `platform-admin`/`integration-admin`
-  (`payments-operator` ejecuta, no edita — RF-019).
-- Endpoint de import/export para promoción entre ambientes.
+- Cargar perfiles reales de cada banco desde sus guias H2H licenciadas en el
+  repositorio privado/configuracion del cliente, no en este template.
+- Completar evidencia formal QA con golden files por banco certificado.

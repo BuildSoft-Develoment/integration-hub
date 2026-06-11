@@ -93,6 +93,9 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
   `code`, `severity`, `appliesTo` y predicado.
 - RF-012 catalogo de schemas ISO 20022 cargable desde XSD oficiales (evolutivo,
   fase 2+).
+- RF-023 el catalogo de reglas de pago expone API y pantalla admin para listar,
+  crear, editar, activar/desactivar, importar y exportar perfiles por banco,
+  manteniendo las reglas reales como datos del ambiente.
 
 ### Modelo de dominio
 
@@ -140,6 +143,9 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
   caracteres, la tarea falla o se corrige explicitamente con `MT101_REPAIR`.
 - Un mensaje rechazado por `MT101_VALIDATE` con `severity=ERROR` no se persiste
   en `mt101_archive` ni se despacha; queda en `mt101_validation_issue`.
+- `MT101_VALIDATE` no debe publicar todos los issues de cargas masivas en el
+  output; publica contadores completos y una muestra configurable, y persiste
+  todos los issues cuando `publishIssuesTo` esta configurado.
 - La idempotencia se basa en `(sender_lt, senders_reference, year_of_execution)`;
   un mensaje con la misma clave se rechaza al insertarse en `mt101_archive`.
 - `MT101_PAY` con transporte `REST` debe enviar header `Idempotency-Key` igual
@@ -165,6 +171,8 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
   paginas y deja fragmentos persistidos reprocesables por `fragmentSetId`.
 - El catalogo de reglas SWIFT/NVR carga desde una fuente parametrizable; el spec
   no enumera codigos.
+- El catalogo de perfiles bancarios permite promocionar reglas por import/export
+  entre dev, homologacion y produccion, sin deploy de codigo.
 - (UI) cada task type tiene formulario dedicado registrado en el mecanismo de
   discovery de tareas del motor, sin que spec 003 conozca semantica SWIFT.
 - (Seguridad) los `${secret:...}` cubren credenciales del gateway, SFTP y la

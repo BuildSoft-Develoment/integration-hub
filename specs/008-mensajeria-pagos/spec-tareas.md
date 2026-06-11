@@ -27,6 +27,7 @@ capture en `tdd-evidence.md`.
 - **Sprint 3 (split, repair, calendarios, ISO 20022 placeholder)**: T-023 a T-028.
 - **Sprint 4 (hardening MT101 multi-debito/subsidiarias)**: T-029 a T-034.
 - **Sprint 5 (alto volumen y reproceso MT101)**: T-035 a T-041.
+- **Sprint 6 (perfiles bancarios operables)**: T-042 a T-046.
 
 ## Tabla ejecutable de tareas
 
@@ -108,6 +109,16 @@ seccion "Motor para verticales (ADR-009)".
 | T-039 | RF-002, RF-011 | impl backend | validaciones estructurales cubren limite FIN 10KB, longitudes 50/52/57/59, 70, 77B, 32B y 71A con codigos largos | Mt101ValidateTaskProviderTest | mvn -pl platform-app -Dtest=Mt101ValidateTaskProviderTest test | FAIL si acepta payload FIN fuera de limite o campos invalidos | mvn -pl platform-app -Dtest=Mt101ValidateTaskProviderTest test | PASS | T-030, T-035 | si | done |
 | T-040 | RF-001, RF-022 | impl frontend | la UI registra `MT101_BUILD_FROM_TABLE` y reutiliza el mapping tipo DB_WRITE con fuente, metadata, variables y columnas previas | mt101-build-from-table-task.provider.spec.ts, mt101-build-task.provider.spec.ts | npx nx test web --skip-nx-cache | FAIL si el tipo no existe o no serializa limites de fragmento | npx nx test web --skip-nx-cache | PASS | T-033 | si | done |
 | T-041 | RF-003, RF-004, RF-022 | impl frontend/backend | `MT101_ARCHIVE` y `MT101_PAY` se configuran como `once` para procesar el lote/referencia de fragmentos completo | mt101-archive-task.provider.spec.ts, mt101-pay-task.provider.spec.ts | npx nx test web --skip-nx-cache | FAIL si la UI conserva `batch` o `per-record` | npx nx test web --skip-nx-cache | PASS | T-037 | si | done |
+
+### Sprint 6 - Perfiles bancarios operables
+
+| id | rf | tipo | objetivo verificable | test | comando_red | expected_red | comando_green | expected_green | depende_de | paralelizable | estado |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| T-042 | RF-011, RF-023 | impl backend | existe API `/api/payment-validation-rules` para CRUD, activar/desactivar, import y export de ruleSets | testCompile + pruebas servicio/API | mvn -pl platform-app test-compile | FAIL sin recurso/DTO/service | mvn -pl platform-app test-compile | PASS | T-002, T-035 | si | done |
+| T-043 | RF-011 | impl backend | `DbValidationRuleProvider` filtra en SQL por `ruleSet`, `standard`, `appliesTo` y solo carga reglas activas | DbValidationRuleProviderTest | mvn -pl platform-app -Dtest=DbValidationRuleProviderTest test | FAIL si mezcla bank:OTHER o reglas inactivas | mvn -pl platform-app -Dtest=DbValidationRuleProviderTest test | PASS | T-042 | si | done |
+| T-044 | RF-002, RF-022 | impl backend | `MT101_VALIDATE` persiste issues opcionalmente y limita `errors` en outputs para cargas masivas | Mt101ValidateTaskProviderIssueHandlingTest | mvn -pl platform-app -Dtest=Mt101ValidateTaskProviderIssueHandlingTest test | FAIL si retiene todos los issues o no inserta en tabla | mvn -pl platform-app -Dtest=Mt101ValidateTaskProviderIssueHandlingTest test | PASS | T-037, T-042 | si | done |
+| T-045 | RF-023 | impl frontend | existe pantalla admin `payment-rules` para gestionar perfiles, activar/desactivar e importar/exportar JSON | nx build web | npm run build | FAIL sin ruta/compilacion Angular | npm run build | PASS | T-042 | si | done |
+| T-046 | RF-011, RF-023 | qa/config | perfiles reales se cargan por ambiente desde guia H2H licenciada y se validan con golden files | evidencia QA por banco | - | pendiente de guia bancaria real | - | pendiente de cliente/banco | T-042..T-045 | no | pending |
 
 ## Checklist de cierre
 - [ ] Todas las tareas tienen estado (pendiente / en curso / hecho / bloqueado).

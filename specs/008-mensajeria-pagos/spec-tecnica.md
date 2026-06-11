@@ -210,19 +210,26 @@ Outputs:
     "ruleSet": "swift-fin-uat-2024-q4",    // identificador del set
     "businessCalendar": "PE",
     "failOn": "ERROR",
-    "publishIssuesTo": "table:12:mt101_validation_issue"
+    "publishIssuesTo": "table:mt101_validation_issue",
+    "maxIssuesInOutput": 1000
   }
 }
 ```
 
 Outputs:
 
-- `validate-mt101.summary`: `{validCount, invalidCount, issuesBySeverity, ruleSet}`.
-- `validate-mt101.errors`: lista de issues `{ruleCode, severity, transactionRef, message}`.
-- `validate-mt101.table`: nombre tabla de issues persistidos.
+- `validate-mt101.summary`: `{validCount, invalidCount, issueCount, issuesBySeverity, ruleSet}`.
+- `validate-mt101.errors`: muestra acotada de issues `{ruleCode, severity, transactionRef, message}`.
+- `validate-mt101.issuesTruncated`: `true` cuando `errors` es una muestra y no el total.
+- `validate-mt101.fragments`: referencia persistida cuando consume `mt101_build_fragment`.
 
 Las reglas concretas NO se enumeran en este spec (ver RF-011). El catalogo se carga
 via SPI `ValidationRuleProvider`.
+
+`publishIssuesTo` soporta `table:mt101_validation_issue`,
+`table:<connectionRef>:mt101_validation_issue` y objeto
+`{"connectionRef":"<ref>","table":"mt101_validation_issue"}`. La tabla soportada
+queda restringida a `mt101_validation_issue` para evitar SQL dinamico arbitrario.
 
 ### MT101_ARCHIVE
 
@@ -554,11 +561,29 @@ INDEX `(amount_currency)`.
 | `standard` | varchar(20) | SWIFT/ISO20022/OPENBANKING |
 | `applies_to` | varchar(50) | MT101/MT103/PAIN001/... |
 | `severity` | char(1) | E/W/I |
-| `predicate_kind` | varchar(20) | SQL/JS/JAVA_CLASS |
+| `predicate_kind` | varchar(20) | FIELD_REQUIRED/FIELD_FORBIDDEN/OPTION_ALLOWED/MAX_LENGTH/CURRENCY_ALLOWED/AMOUNT_MAX/CHARGES_ALLOWED/JEXL |
 | `predicate_body` | text | |
 | `active` | boolean | default true |
 
 UNIQUE `(rule_set, code, applies_to)`.
+
+### API `payment_validation_rule`
+
+Contrato REST del catalogo:
+
+- `GET /api/payment-validation-rules`: pagina reglas con filtros `ruleSet`, `q`,
+  `standard`, `appliesTo`, `status`, `page`, `size`.
+- `POST /api/payment-validation-rules`: crea una regla.
+- `PUT /api/payment-validation-rules/{ruleId}`: reemplaza una regla.
+- `POST /api/payment-validation-rules/{ruleId}/activation/{active}`: activa o
+  desactiva sin borrar historico.
+- `GET /api/payment-validation-rules/export?ruleSet=<id>`: exporta reglas de un
+  set para promocion entre ambientes.
+- `POST /api/payment-validation-rules/import`: importa reglas, con
+  `replaceExisting` opcional para onboarding/certificacion.
+
+Roles: lectura para `platform-admin`, `integration-admin`, `auditor`; escritura
+solo para `platform-admin` e `integration-admin`.
 
 ### Tabla `mt101_build_fragment`
 
@@ -624,9 +649,9 @@ Metricas:
 - `MT101_PARSE` con multi-output depende del gap M-3 del motor; hasta que exista,
   publica un solo `summary` con campos anidados (`summary.envelope`,
   `summary.header`, `summary.transactions`).
-- El frontend `features/payments-swift/` depende del gap M-1b del motor; hasta que
-  exista, se registran los formularios editando `process-form-factory.service.ts`
-  directamente (deuda temporal).
+- Los formularios MT101 ya se registran sobre el mecanismo existente del motor.
+  El catalogo de perfiles bancarios vive en `features/payments` y no en spec 003:
+  es configuracion propia de la vertical SWIFT/pagos.
 
 ## Pruebas tecnicas sugeridas
 
