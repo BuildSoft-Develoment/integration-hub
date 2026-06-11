@@ -91,11 +91,26 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
         if (!fragmentSource.isEmpty() && fragmentStore != null) {
             var pageSize = intValue(configuration.get("pageSize"), Mt101FragmentStore.DEFAULT_PAGE_SIZE);
             fragmentStore.forEachPage(fragmentSource, FRAGMENT_READ_STATUSES, pageSize, page -> {
+                // Marcado por lote al cierre de cada pagina (1-2 round-trips por
+                // pagina en vez de 1 UPDATE por fragmento).
+                var validatedRefs = new ArrayList<String>(page.size());
+                var rejectedByRef = new LinkedHashMap<String, String>();
                 for (var message : page) {
                     var messageIssues = evaluateMessage(predicates, message);
                     var blocking = accumulator.add(messageIssues, failOn);
-                    markFragment(fragmentSource, message, blocking, messageIssues);
+                    var reference = message.sequenceA() == null ? null
+                            : message.sequenceA().sendersReference();
+                    if (reference == null) {
+                        continue;
+                    }
+                    if (blocking) {
+                        rejectedByRef.put(reference, summarizeIssues(messageIssues));
+                    } else {
+                        validatedRefs.add(reference);
+                    }
                 }
+                fragmentStore.markStatusBatch(fragmentSource, validatedRefs, "VALIDATED");
+                fragmentStore.markStatusBatch(fragmentSource, rejectedByRef, "REJECTED");
             });
             // Propaga el fragment source para que ARCHIVE/PAY sigan leyendo del store.
             context.attributes().put("mt101FragmentSource", fragmentSource);
@@ -139,23 +154,6 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
             }
         }
         return issues;
-    }
-
-    private void markFragment(Map<String, Object> fragmentSource,
-                              Mt101Message message,
-                              boolean blocking,
-                              List<ValidationIssue> issues) {
-        if (fragmentStore == null || message.sequenceA() == null
-                || message.sequenceA().sendersReference() == null) {
-            return;
-        }
-        if (blocking) {
-            fragmentStore.markStatus(fragmentSource, message.sequenceA().sendersReference(),
-                    "REJECTED", summarizeIssues(issues));
-        } else {
-            fragmentStore.markStatus(fragmentSource, message.sequenceA().sendersReference(),
-                    "VALIDATED", null);
-        }
     }
 
     private String summarizeIssues(List<ValidationIssue> issues) {

@@ -71,9 +71,19 @@ public class Mt101FragmentStore {
                                int fragmentIndex,
                                int fragmentTotal,
                                Mt101Message message) {
-        var rawPayload = message.rawPayload();
-        if (rawPayload == null || rawPayload.isBlank()) {
-            throw new IllegalArgumentException("MT101 fragment requires rawPayload");
+        insertFragments(connectionRef, List.of(new FragmentInsert(
+                fragmentSetId, processExecutionId, taskDefinitionId, sourceTable,
+                rowFrom, rowTo, fragmentIndex, fragmentTotal, message)));
+    }
+
+    /**
+     * Inserta un lote de fragmentos con una sola conexion y {@code addBatch}.
+     * Para sets de 10k+ fragmentos (1M registros) esto reduce los round-trips a
+     * BD ~100x frente a una conexion + INSERT por fragmento.
+     */
+    public void insertFragments(String connectionRef, List<FragmentInsert> fragments) {
+        if (fragments == null || fragments.isEmpty()) {
+            return;
         }
         var sql = "insert into mt101_build_fragment "
                 + "(fragment_set_id, process_execution_id, task_definition_id, source_table, source_row_from, source_row_to, "
@@ -81,26 +91,49 @@ public class Mt101FragmentStore {
                 + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (var connection = resolveDataSource(connectionRef).getConnection();
              var statement = connection.prepareStatement(sql)) {
-            statement.setString(1, fragmentSetId);
-            if (processExecutionId == null) statement.setNull(2, Types.BIGINT);
-            else statement.setLong(2, processExecutionId);
-            if (taskDefinitionId == null) statement.setNull(3, Types.BIGINT);
-            else statement.setLong(3, taskDefinitionId);
-            statement.setString(4, sourceTable);
-            statement.setLong(5, rowFrom);
-            statement.setLong(6, rowTo);
-            statement.setInt(7, fragmentIndex);
-            statement.setInt(8, fragmentTotal);
-            statement.setString(9, message.sequenceA() == null ? null : message.sequenceA().sendersReference());
-            statement.setString(10, sha256Hex(rawPayload));
-            statement.setString(11, rawPayload);
-            statement.setString(12, toJson(message));
-            statement.setString(13, "BUILT");
-            statement.executeUpdate();
+            for (var fragment : fragments) {
+                var message = fragment.message();
+                var rawPayload = message.rawPayload();
+                if (rawPayload == null || rawPayload.isBlank()) {
+                    throw new IllegalArgumentException("MT101 fragment " + fragment.fragmentIndex()
+                            + " requires rawPayload");
+                }
+                statement.setString(1, fragment.fragmentSetId());
+                if (fragment.processExecutionId() == null) statement.setNull(2, Types.BIGINT);
+                else statement.setLong(2, fragment.processExecutionId());
+                if (fragment.taskDefinitionId() == null) statement.setNull(3, Types.BIGINT);
+                else statement.setLong(3, fragment.taskDefinitionId());
+                statement.setString(4, fragment.sourceTable());
+                statement.setLong(5, fragment.rowFrom());
+                statement.setLong(6, fragment.rowTo());
+                statement.setInt(7, fragment.fragmentIndex());
+                statement.setInt(8, fragment.fragmentTotal());
+                statement.setString(9, message.sequenceA() == null ? null : message.sequenceA().sendersReference());
+                statement.setString(10, sha256Hex(rawPayload));
+                statement.setString(11, rawPayload);
+                statement.setString(12, toJson(message));
+                statement.setString(13, "BUILT");
+                statement.addBatch();
+            }
+            statement.executeBatch();
         } catch (SQLException error) {
-            throw new IllegalStateException("Cannot persist MT101 fragment " + fragmentIndex
-                    + " for set " + fragmentSetId, error);
+            throw new IllegalStateException("Cannot persist MT101 fragment batch ("
+                    + fragments.size() + " fragments) for set " + fragments.get(0).fragmentSetId(), error);
         }
+    }
+
+    /** Parametros de insercion de un fragmento (para lotes de fase 2). */
+    public record FragmentInsert(
+            String fragmentSetId,
+            Long processExecutionId,
+            Long taskDefinitionId,
+            String sourceTable,
+            long rowFrom,
+            long rowTo,
+            int fragmentIndex,
+            int fragmentTotal,
+            Mt101Message message
+    ) {
     }
 
     /**
@@ -185,7 +218,39 @@ public class Mt101FragmentStore {
                            String sendersReference,
                            String status,
                            String errorMessage) {
-        if (fragmentSource == null || fragmentSource.isEmpty() || sendersReference == null || sendersReference.isBlank()) {
+        if (sendersReference == null || sendersReference.isBlank()) {
+            return;
+        }
+        var errorByRef = new LinkedHashMap<String, String>();
+        errorByRef.put(sendersReference, errorMessage);
+        markStatusBatch(fragmentSource, errorByRef, status);
+    }
+
+    /** Marca un lote de fragmentos con el mismo status, sin mensaje de error. */
+    public void markStatusBatch(Map<String, Object> fragmentSource,
+                                java.util.Collection<String> sendersReferences,
+                                String status) {
+        if (sendersReferences == null || sendersReferences.isEmpty()) {
+            return;
+        }
+        var errorByRef = new LinkedHashMap<String, String>();
+        for (var reference : sendersReferences) {
+            errorByRef.put(reference, null);
+        }
+        markStatusBatch(fragmentSource, errorByRef, status);
+    }
+
+    /**
+     * Marca un lote de fragmentos con el mismo status y error individual por
+     * referencia (e.g. REJECTED con el detalle de issues de cada fragmento).
+     * Una conexion + {@code addBatch} por lote: con paginas de 200 esto reduce
+     * los round-trips de marcado ~200x frente a un UPDATE por fragmento.
+     */
+    public void markStatusBatch(Map<String, Object> fragmentSource,
+                                Map<String, String> errorBySendersReference,
+                                String status) {
+        if (fragmentSource == null || fragmentSource.isEmpty()
+                || errorBySendersReference == null || errorBySendersReference.isEmpty()) {
             return;
         }
         var fragmentSetId = stringValue(fragmentSource.get("fragmentSetId"));
@@ -197,13 +262,20 @@ public class Mt101FragmentStore {
                 + "where fragment_set_id = ? and senders_reference = ?";
         try (var connection = resolveDataSource(connectionRef).getConnection();
              var statement = connection.prepareStatement(sql)) {
-            statement.setString(1, status);
-            statement.setString(2, errorMessage);
-            statement.setString(3, fragmentSetId);
-            statement.setString(4, sendersReference);
-            statement.executeUpdate();
+            for (var entry : errorBySendersReference.entrySet()) {
+                if (entry.getKey() == null || entry.getKey().isBlank()) {
+                    continue;
+                }
+                statement.setString(1, status);
+                statement.setString(2, entry.getValue());
+                statement.setString(3, fragmentSetId);
+                statement.setString(4, entry.getKey());
+                statement.addBatch();
+            }
+            statement.executeBatch();
         } catch (SQLException error) {
-            throw new IllegalStateException("Cannot update MT101 fragment status for " + sendersReference, error);
+            throw new IllegalStateException("Cannot update MT101 fragment status batch ("
+                    + errorBySendersReference.size() + " fragments) for set " + fragmentSetId, error);
         }
     }
 

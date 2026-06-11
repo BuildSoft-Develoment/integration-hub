@@ -92,9 +92,15 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
             var pageSize = intValue(configuration.get("pageSize"), Mt101FragmentStore.DEFAULT_PAGE_SIZE);
             fragmentStore.forEachPage(fragmentSource, FRAGMENT_READ_STATUSES, pageSize, page -> {
                 archiveBatch(dataSource, encryptor, retentionDays, context, page, false, accumulator);
+                // Marcado por lote: 1 round-trip por pagina en vez de 1 UPDATE
+                // por fragmento.
+                var archivedRefs = new ArrayList<String>(page.size());
                 for (var message : page) {
-                    markFragment(fragmentSource, message, "ARCHIVED", null);
+                    if (message.sequenceA() != null && message.sequenceA().sendersReference() != null) {
+                        archivedRefs.add(message.sequenceA().sendersReference());
+                    }
                 }
+                fragmentStore.markStatusBatch(fragmentSource, archivedRefs, "ARCHIVED");
             });
         } else {
             var messages = Mt101MessageInputResolver.readMessages(context, configuration, type(), fragmentStore);
@@ -385,15 +391,5 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
             return defaultValue;
         }
         return Integer.parseInt(String.valueOf(raw));
-    }
-
-    private void markFragment(Map<String, Object> fragmentSource,
-                              Mt101Message message,
-                              String status,
-                              String errorMessage) {
-        if (fragmentStore == null || fragmentSource == null || fragmentSource.isEmpty() || message.sequenceA() == null) {
-            return;
-        }
-        fragmentStore.markStatus(fragmentSource, message.sequenceA().sendersReference(), status, errorMessage);
     }
 }

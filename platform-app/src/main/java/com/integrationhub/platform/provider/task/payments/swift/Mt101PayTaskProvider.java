@@ -72,14 +72,32 @@ public class Mt101PayTaskProvider implements TaskProvider {
         if (!fragmentSource.isEmpty() && fragmentStore != null) {
             var pageSize = intValue(configuration.get("pageSize"), Mt101FragmentStore.DEFAULT_PAGE_SIZE);
             fragmentStore.forEachPage(fragmentSource, FRAGMENT_READ_STATUSES, pageSize, page -> {
+                // Marcado por lote al cierre de cada pagina. Trade-off: si el
+                // proceso muere a mitad de pagina, hasta pageSize fragmentos
+                // quedan SENT-en-banco pero ARCHIVED-en-BD; el Idempotency-Key
+                // del transporte REST hace seguro el re-envio.
+                var sentRefs = new ArrayList<String>(page.size());
+                var rejectedByRef = new LinkedHashMap<String, String>();
                 for (var message : page) {
-                    dispatch(transport, configuration, fragmentSource, message, accumulator);
+                    var accepted = dispatch(transport, configuration, message, accumulator);
+                    var reference = message.sequenceA() == null ? null
+                            : message.sequenceA().sendersReference();
+                    if (reference == null) {
+                        continue;
+                    }
+                    if (accepted) {
+                        sentRefs.add(reference);
+                    } else {
+                        rejectedByRef.put(reference, accumulator.lastErrorOf(reference));
+                    }
                 }
+                fragmentStore.markStatusBatch(fragmentSource, sentRefs, "SENT");
+                fragmentStore.markStatusBatch(fragmentSource, rejectedByRef, "REJECTED");
             });
         } else {
             var messages = Mt101MessageInputResolver.readMessages(context, configuration, type(), fragmentStore);
             for (var message : messages) {
-                dispatch(transport, configuration, fragmentSource, message, accumulator);
+                dispatch(transport, configuration, message, accumulator);
             }
         }
 
@@ -107,11 +125,11 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 : TaskResult.success(summary, outputs);
     }
 
-    private void dispatch(PaymentMessageTransport transport,
-                          Map<String, Object> configuration,
-                          Map<String, Object> fragmentSource,
-                          Mt101Message message,
-                          DispatchAccumulator accumulator) {
+    /** Despacha un mensaje y acumula el resultado. Devuelve si fue aceptado. */
+    private boolean dispatch(PaymentMessageTransport transport,
+                             Map<String, Object> configuration,
+                             Mt101Message message,
+                             DispatchAccumulator accumulator) {
         TransportResult result;
         try {
             result = transport.send(message, configuration);
@@ -135,25 +153,32 @@ public class Mt101PayTaskProvider implements TaskProvider {
         accumulator.totalDurationMs += result.durationMs();
         if (result.accepted()) {
             accumulator.acceptedCount++;
-            markFragment(fragmentSource, message, "SENT", null);
         } else {
             accumulator.rejectedCount++;
             accumulator.errors.add(entry);
-            markFragment(fragmentSource, message, "REJECTED", result.lastError());
+            if (ref != null) {
+                accumulator.lastErrorByRef.put(ref, result.lastError());
+            }
         }
         if (result.attempts() > 1) {
             accumulator.retriedCount++;
         }
+        return result.accepted();
     }
 
     /** Acumula resultados de despacho sin retener los mensajes en memoria. */
     private static final class DispatchAccumulator {
         final List<Map<String, Object>> sent = new ArrayList<>();
         final List<Map<String, Object>> errors = new ArrayList<>();
+        final Map<String, String> lastErrorByRef = new LinkedHashMap<>();
         int acceptedCount;
         int rejectedCount;
         int retriedCount;
         long totalDurationMs;
+
+        String lastErrorOf(String sendersReference) {
+            return lastErrorByRef.get(sendersReference);
+        }
     }
 
     private PaymentMessageTransport resolveTransport(String transportId) {
@@ -184,15 +209,5 @@ public class Mt101PayTaskProvider implements TaskProvider {
             return defaultValue;
         }
         return Integer.parseInt(String.valueOf(raw));
-    }
-
-    private void markFragment(Map<String, Object> fragmentSource,
-                              Mt101Message message,
-                              String status,
-                              String errorMessage) {
-        if (fragmentStore == null || fragmentSource == null || fragmentSource.isEmpty() || message.sequenceA() == null) {
-            return;
-        }
-        fragmentStore.markStatus(fragmentSource, message.sequenceA().sendersReference(), status, errorMessage);
     }
 }

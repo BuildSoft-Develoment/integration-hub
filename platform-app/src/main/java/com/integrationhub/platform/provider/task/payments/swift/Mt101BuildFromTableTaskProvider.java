@@ -52,6 +52,8 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     private static final int DEFAULT_MAX_BYTES = 10000;
     /** Total provisional para medir bytes: ancho maximo 5n de {@code :28D:}. */
     private static final int MEASUREMENT_TOTAL = 99999;
+    /** Fragmentos por executeBatch al persistir en fase 2. */
+    private static final int INSERT_BATCH_SIZE = 100;
 
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
@@ -100,17 +102,23 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
         }
 
         // Fase 1: planificar limites de fragmento por bytes reales (keyset scan).
+        // Una sola conexion para todo el scan: con 1M filas son ~10k paginas y
+        // abrir conexion por pagina seria churn puro.
         var plan = new ArrayList<FragmentPlan>();
-        var lastId = 0L;
-        var logicalOffset = 0L;
-        while (true) {
-            var rows = readRowsAfter(source, lastId, maxTransactions);
-            if (rows.isEmpty()) {
-                break;
+        try (var scanConnection = source.dataSource().getConnection()) {
+            var lastId = 0L;
+            var logicalOffset = 0L;
+            while (true) {
+                var rows = readRowsAfter(scanConnection, source, lastId, maxTransactions);
+                if (rows.isEmpty()) {
+                    break;
+                }
+                lastId = rows.get(rows.size() - 1).id();
+                planChunk(context, configuration, rows, maxBytes, logicalOffset, plan);
+                logicalOffset += rows.size();
             }
-            lastId = rows.get(rows.size() - 1).id();
-            planChunk(context, configuration, rows, maxBytes, logicalOffset, plan);
-            logicalOffset += rows.size();
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot scan MT101 source rows from " + source.table(), error);
         }
         if (plan.isEmpty()) {
             return TaskResult.success("MT101_BUILD_FROM_TABLE skipped because source table has no rows");
@@ -119,31 +127,42 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
         validateReferenceTemplate(configuration, plan.size());
 
         // Fase 2: materializar cada fragmento con :28D: index/total definitivo.
+        // Lecturas con una conexion compartida; inserts buffered en lotes via
+        // insertFragments (addBatch) para reducir round-trips ~100x.
         var totalFragments = plan.size();
         var totalBytes = 0L;
-        for (int index = 1; index <= totalFragments; index++) {
-            var boundary = plan.get(index - 1);
-            var rows = readRowsBetween(source, boundary.firstId(), boundary.lastId());
-            var message = buildFragment(context, configuration, rows, index, totalFragments, boundary.logicalOffset());
-            var payloadBytes = payloadBytes(message);
-            if (payloadBytes > maxBytes) {
-                // No deberia ocurrir: la medicion de fase 1 usa el total mas ancho posible.
-                throw new IllegalStateException("MT101 fragment " + index + " exceeds maxBytesPerMessage="
-                        + maxBytes + " with " + payloadBytes + " bytes after final build");
+        var insertBuffer = new ArrayList<Mt101FragmentStore.FragmentInsert>(INSERT_BATCH_SIZE);
+        try (var readConnection = source.dataSource().getConnection()) {
+            for (int index = 1; index <= totalFragments; index++) {
+                var boundary = plan.get(index - 1);
+                var rows = readRowsBetween(readConnection, source, boundary.firstId(), boundary.lastId());
+                var message = buildFragment(context, configuration, rows, index, totalFragments, boundary.logicalOffset());
+                var payloadBytes = payloadBytes(message);
+                if (payloadBytes > maxBytes) {
+                    // No deberia ocurrir: la medicion de fase 1 usa el total mas ancho posible.
+                    throw new IllegalStateException("MT101 fragment " + index + " exceeds maxBytesPerMessage="
+                            + maxBytes + " with " + payloadBytes + " bytes after final build");
+                }
+                totalBytes += payloadBytes;
+                insertBuffer.add(new Mt101FragmentStore.FragmentInsert(
+                        fragmentSetId,
+                        context.processExecutionId(),
+                        context.taskDefinitionId(),
+                        source.table(),
+                        boundary.firstId(),
+                        boundary.lastId(),
+                        index,
+                        totalFragments,
+                        message));
+                if (insertBuffer.size() >= INSERT_BATCH_SIZE) {
+                    fragmentStore.insertFragments(source.connectionRef(), new ArrayList<>(insertBuffer));
+                    insertBuffer.clear();
+                }
             }
-            totalBytes += payloadBytes;
-            fragmentStore.insertFragment(
-                    source.connectionRef(),
-                    fragmentSetId,
-                    context.processExecutionId(),
-                    context.taskDefinitionId(),
-                    source.table(),
-                    boundary.firstId(),
-                    boundary.lastId(),
-                    index,
-                    totalFragments,
-                    message);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot materialize MT101 fragments from " + source.table(), error);
         }
+        fragmentStore.insertFragments(source.connectionRef(), insertBuffer);
 
         var fragments = fragmentStore.source(source.connectionRef(), fragmentSetId, totalFragments);
         var outputs = new LinkedHashMap<String, Object>();
@@ -298,39 +317,33 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
      * O(offset) por pagina. Requiere {@code ix_staging_record_execution_task_id}
      * (V15) para staging_record.
      */
-    private List<RowRecord> readRowsAfter(SourceTable source, long afterId, int limit) {
+    private List<RowRecord> readRowsAfter(Connection connection, SourceTable source, long afterId, int limit) throws SQLException {
         var where = whereClause(source);
         var sql = "select " + source.idColumn() + ", " + source.payloadColumn() + " from " + source.table()
                 + (where.isEmpty() ? " where " : where + " and ")
                 + source.idColumn() + " > ?"
                 + " order by " + source.idColumn()
                 + " limit ?";
-        try (var connection = source.dataSource().getConnection();
-             var statement = connection.prepareStatement(sql)) {
+        try (var statement = connection.prepareStatement(sql)) {
             var parameter = bindWhere(statement, source);
             statement.setLong(parameter++, afterId);
             statement.setInt(parameter, limit);
             return readRows(statement);
-        } catch (SQLException error) {
-            throw new IllegalStateException("Cannot read MT101 source rows from " + source.table(), error);
         }
     }
 
     /** Relee el rango exacto de un limite planificado en fase 1 (ids inclusivos). */
-    private List<RowRecord> readRowsBetween(SourceTable source, long firstId, long lastId) {
+    private List<RowRecord> readRowsBetween(Connection connection, SourceTable source, long firstId, long lastId) throws SQLException {
         var where = whereClause(source);
         var sql = "select " + source.idColumn() + ", " + source.payloadColumn() + " from " + source.table()
                 + (where.isEmpty() ? " where " : where + " and ")
                 + source.idColumn() + " >= ? and " + source.idColumn() + " <= ?"
                 + " order by " + source.idColumn();
-        try (var connection = source.dataSource().getConnection();
-             var statement = connection.prepareStatement(sql)) {
+        try (var statement = connection.prepareStatement(sql)) {
             var parameter = bindWhere(statement, source);
             statement.setLong(parameter++, firstId);
             statement.setLong(parameter, lastId);
             return readRows(statement);
-        } catch (SQLException error) {
-            throw new IllegalStateException("Cannot read MT101 source rows from " + source.table(), error);
         }
     }
 

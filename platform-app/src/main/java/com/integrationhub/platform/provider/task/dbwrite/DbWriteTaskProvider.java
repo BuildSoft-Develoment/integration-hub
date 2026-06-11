@@ -151,25 +151,43 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
                                   List<ReadRecord> records,
                                   int batchSize) {
         var sql = "insert into staging_record (process_execution_id, task_definition_id, source_name, record_index, payload_json) values (?, ?, ?, ?, ?)";
+        // record_index global por ejecucion de la tarea (no por batch): el motor
+        // invoca este metodo una vez por cada batch del streaming fast-path, asi
+        // que un indice local repetiria 0..N-1 en cada llamada y la auditoria
+        // perderia la posicion real del registro dentro del archivo.
+        var globalIndex = stagingIndexCounter(context);
         try (Connection connection = targetDataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
-            var index = 0;
+            var written = 0;
             for (var record : records) {
                 statement.setLong(1, context.processExecutionId());
                 statement.setLong(2, context.taskDefinitionId());
                 statement.setString(3, sourcePayload != null ? sourcePayload.name() : null);
-                statement.setInt(4, index);
+                statement.setLong(4, globalIndex.getAndIncrement());
                 statement.setString(5, jsonConfigurationMapper.toJson(record.values()));
                 statement.addBatch();
-                index++;
-                if (index % batchSize == 0) {
+                written++;
+                if (written % batchSize == 0) {
                     statement.executeBatch();
                 }
             }
             statement.executeBatch();
-            return index;
+            return written;
         } catch (SQLException e) {
             throw new IllegalStateException("Cannot batch insert staging records", e);
+        }
+    }
+
+    /**
+     * Contador compartido en el TaskContext: el fast-path reusa el mismo contexto
+     * para todos los batches (y archivos en paralelo) del sink, asi que el
+     * AtomicLong da continuidad y es thread-safe entre workers.
+     */
+    private java.util.concurrent.atomic.AtomicLong stagingIndexCounter(TaskContext context) {
+        synchronized (context.attributes()) {
+            return (java.util.concurrent.atomic.AtomicLong) context.attributes()
+                    .computeIfAbsent("_stagingRecordIndex",
+                            key -> new java.util.concurrent.atomic.AtomicLong(0));
         }
     }
 
