@@ -1,0 +1,51 @@
+{
+  "ruleSet": "bank:SIM-FLEXIBLE",
+  "replaceExisting": true,
+  "rules": [
+    {
+      "code": "SIMFLEX.DATE_REQUIRED",
+      "standard": "SWIFT",
+      "appliesTo": "MT101",
+      "severity": "E",
+      "predicateKind": "FIELD_REQUIRED",
+      "predicateBody": "{\"path\": \"sequenceA.requestedExecutionDate\"}",
+      "active": true
+    },
+    {
+      "code": "SIMFLEX.CURRENCY",
+      "standard": "SWIFT",
+      "appliesTo": "MT101",
+      "severity": "E",
+      "predicateKind": "CURRENCY_ALLOWED",
+      "predicateBody": "{\"allowed\": [\"PEN\", \"USD\", \"EUR\"]}",
+      "active": true
+    },
+    {
+      "code": "SIMFLEX.AMOUNT_CAP_PEN",
+      "standard": "SWIFT",
+      "appliesTo": "MT101",
+      "severity": "W",
+      "predicateKind": "AMOUNT_MAX",
+      "predicateBody": "{\"max\": \"500000.00\", \"currency\": \"PEN\"}",
+      "active": true
+    },
+    {
+      "code": "SIMFLEX.CHARGES",
+      "standard": "SWIFT",
+      "appliesTo": "MT101",
+      "severity": "E",
+      "predicateKind": "CHARGES_ALLOWED",
+      "predicateBody": "{\"allowed\": [\"SHA\", \"OUR\"]}",
+      "active": true
+    },
+    {
+      "code": "SIMFLEX.REMITTANCE_LEN",
+      "standard": "SWIFT",
+      "appliesTo": "MT101",
+      "severity": "W",
+      "predicateKind": "MAX_LENGTH",
+      "predicateBody": "{\"path\": \"transactions[].remittanceInformation\", \"max\": 140}",
+      "active": true
+    }
+  ]
+}

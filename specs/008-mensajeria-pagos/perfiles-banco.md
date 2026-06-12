@@ -142,8 +142,24 @@ cut-off) y de **acuse** (formato del ACK) ya son configuración por tarea de
 `MT101_PAY`/`MT101_STATUS` — un "perfil" ahí es una plantilla de configuración
 del catálogo de procesos, no requiere motor nuevo.
 
+## Homologación simulada (pre-producción)
+
+Para asegurar el pase a producción sin esperar las guías reales, el repo
+incluye perfiles **ficticios** en
+[`qa/fase-6-qa/perfiles-simulados/`](../../qa/fase-6-qa/perfiles-simulados/README.md)
+(`bank:SIM-ESTRICTO`, `bank:SIM-FLEXIBLE`) listos para importar por la vía
+real (`POST /api/payment-validation-rules/import`).
+
+`BankProfileHomologationIT` automatiza el ciclo completo: import vía API →
+golden conforme pasa → cada regla detecta su violación con el código esperado
+→ en flujo masivo el gate marca `VALIDATED`/`REJECTED` por fragmento con el
+motivo auditado en `error_message`. Es la plantilla a replicar como golden
+files cuando llegue la guía real de cada banco: se reemplaza el JSON simulado
+por las filas traducidas de la guía y se ajustan los goldens.
+
 ## Pendiente
 
 - Cargar perfiles reales de cada banco desde sus guias H2H licenciadas en el
-  repositorio privado/configuracion del cliente, no en este template.
-- Completar evidencia formal QA con golden files por banco certificado.
+  repositorio privado/configuracion del cliente, no en este template
+  (la mecanica ya esta validada con los perfiles simulados).
+- Certificacion formal con cada banco en homologacion.

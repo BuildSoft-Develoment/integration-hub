@@ -1,0 +1,78 @@
+{
+  "ruleSet": "bank:SIM-ESTRICTO",
+  "replaceExisting": true,
+  "rules": [
+    {
+      "code": "SIM.DATE_REQUIRED",
+      "standard": "SWIFT",
+      "appliesTo": "MT101",
+      "severity": "E",
+      "predicateKind": "FIELD_REQUIRED",
+      "predicateBody": "{\"path\": \"sequenceA.requestedExecutionDate\"}",
+      "active": true
+    },
+    {
+      "code": "SIM.NO_REGULATORY",
+      "standard": "SWIFT",
+      "appliesTo": "MT101",
+      "severity": "E",
+      "predicateKind": "FIELD_FORBIDDEN",
+      "predicateBody": "{\"path\": \"transactions[].regulatoryReporting\"}",
+      "active": true
+    },
+    {
+      "code": "SIM.BENE_OPTION",
+      "standard": "SWIFT",
+      "appliesTo": "MT101",
+      "severity": "E",
+      "predicateKind": "OPTION_ALLOWED",
+      "predicateBody": "{\"path\": \"transactions[].beneficiary.option\", \"allowed\": [\"\", \"F\"]}",
+      "active": true
+    },
+    {
+      "code": "SIM.REMITTANCE_LEN",
+      "standard": "SWIFT",
+      "appliesTo": "MT101",
+      "severity": "W",
+      "predicateKind": "MAX_LENGTH",
+      "predicateBody": "{\"path\": \"transactions[].remittanceInformation\", \"max\": 70}",
+      "active": true
+    },
+    {
+      "code": "SIM.CURRENCY",
+      "standard": "SWIFT",
+      "appliesTo": "MT101",
+      "severity": "E",
+      "predicateKind": "CURRENCY_ALLOWED",
+      "predicateBody": "{\"allowed\": [\"PEN\"]}",
+      "active": true
+    },
+    {
+      "code": "SIM.AMOUNT_CAP",
+      "standard": "SWIFT",
+      "appliesTo": "MT101",
+      "severity": "E",
+      "predicateKind": "AMOUNT_MAX",
+      "predicateBody": "{\"max\": \"50000.00\", \"currency\": \"PEN\"}",
+      "active": true
+    },
+    {
+      "code": "SIM.CHARGES_SHA",
+      "standard": "SWIFT",
+      "appliesTo": "MT101",
+      "severity": "E",
+      "predicateKind": "CHARGES_ALLOWED",
+      "predicateBody": "{\"allowed\": [\"SHA\"]}",
+      "active": true
+    },
+    {
+      "code": "SIM.MAX_TXS",
+      "standard": "SWIFT",
+      "appliesTo": "MT101",
+      "severity": "E",
+      "predicateKind": "JEXL",
+      "predicateBody": "{\"expression\": \"message.transactions().size() <= 50\"}",
+      "active": true
+    }
+  ]
+}
