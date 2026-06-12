@@ -377,6 +377,7 @@ public class TaskInputResolver {
     public static final class TaskExecutionAccumulator {
         private int batchCount;
         private int recordCount;
+        private boolean success = true;
         private String details = "Task completed";
         private final Map<String, Object> outputs = new LinkedHashMap<>();
 
@@ -389,11 +390,18 @@ public class TaskInputResolver {
         void add(com.integrationhub.platform.spi.task.TaskResult result) {
             batchCount++;
             if (result != null) {
+                // Un batch fallido marca la tarea completa: el engine decide si
+                // aborta el proceso o continua segun continueOnFailure.
+                success = success && result.success();
                 details = result.details();
                 if (result.outputs() != null) {
                     mergeOutputs(result.outputs());
                 }
             }
+        }
+
+        public boolean success() {
+            return success;
         }
 
         void addRecords(int count) {

@@ -126,11 +126,34 @@ class SftpPaymentTransportTest {
                 "password", "y",
                 "dropPathTemplate", "/x",
                 "timeoutMillis", 500));
+        configuration.put("retryPolicy", Map.of("maxRetries", 0));
         var result = transport.send(sampleMessage("BAD"), configuration);
         assertFalse(result.accepted());
         assertNotNull(result.lastError());
         assertTrue(result.lastError().toLowerCase().contains("sftp")
                 || result.lastError().toLowerCase().contains("jschexception"));
+    }
+
+    @Test
+    void retriesUploadAccordingToRetryPolicy() {
+        // Puerto cerrado: cada intento falla rapido; con maxRetries=2 el
+        // transporte debe reportar 3 intentos (paridad con el retry de REST).
+        var configuration = new LinkedHashMap<String, Object>();
+        configuration.put("sftp", Map.of(
+                "host", "127.0.0.1",
+                "port", 1,
+                "username", "x",
+                "password", "y",
+                "dropPathTemplate", "/x",
+                "timeoutMillis", 300));
+        configuration.put("retryPolicy", Map.of(
+                "maxRetries", 2,
+                "backoffStrategy", "constant",
+                "initialBackoffSeconds", 0));
+        var result = transport.send(sampleMessage("RETRY"), configuration);
+        assertFalse(result.accepted());
+        assertEquals(3, result.attempts(), "maxRetries=2 => 3 intentos en total");
+        assertNotNull(result.lastError());
     }
 
     @Test

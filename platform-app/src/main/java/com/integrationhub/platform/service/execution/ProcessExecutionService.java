@@ -211,9 +211,33 @@ public class ProcessExecutionService {
                     } else {
                         taskDetails = auditMapper.buildTaskDetails(taskPlan, runResult.details());
                         if (runResult.outputs() != null && !runResult.outputs().isEmpty()) {
+                            // Los outputs se registran incluso en failure: contienen los
+                            // errors que una NOTIFICATION downstream (con continueOnFailure)
+                            // necesita para alertar.
                             taskOutputRegistry.registerTaskResult(taskOutputs, taskPlan, taskConfiguration, runResult.outputs());
                         }
                         taskPayload = Map.of("taskType", taskPlan.taskType(), "outputs", runResult.outputs());
+                    }
+
+                    // TaskResult.failure() es un fallo de negocio (validacion con errores,
+                    // pagos rechazados): por defecto detiene el proceso. En pagos, una
+                    // validacion fallida nunca debe quedar como tarea "completada".
+                    // configuration.continueOnFailure=true es la politica explicita para
+                    // flujos que siguen con los elementos validos (e.g. masivo donde el
+                    // gate de fragmentos VALIDATED/REJECTED ya aisla los invalidos).
+                    if (!runResult.suspended() && !runResult.fileRead() && !runResult.success()) {
+                        if (boolValue(taskConfiguration.get("continueOnFailure"), false)) {
+                            processExecutionStateService.completeTaskWithErrors(
+                                    processExecutionId, taskExecutionId, taskDetails, taskPayload);
+                            taskSpan.setAttribute("task.completed.with.errors", true);
+                            continue;
+                        }
+                        processExecutionStateService.failTask(processExecutionId, taskExecutionId, taskDetails,
+                                auditMapper.buildTaskFailurePayload(taskPlan, executionVariables, triggerSource));
+                        processExecutionStateService.failProcess(processExecutionId,
+                                "Task " + taskPlan.taskType() + " failed: " + runResult.details());
+                        taskSpan.setStatus(StatusCode.ERROR, runResult.details());
+                        return processExecutionStateService.getExecution(processExecutionId);
                     }
 
                     processExecutionStateService.completeTask(processExecutionId, taskExecutionId, taskDetails, taskPayload);
@@ -239,6 +263,13 @@ public class ProcessExecutionService {
         } finally {
             processSpan.end();
         }
+    }
+
+    private boolean boolValue(Object raw, boolean defaultValue) {
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return defaultValue;
+        }
+        return Boolean.parseBoolean(String.valueOf(raw));
     }
 
     private ExecutionFastPath resolveFastPath(ProcessExecutionStateService.TaskPlan current,

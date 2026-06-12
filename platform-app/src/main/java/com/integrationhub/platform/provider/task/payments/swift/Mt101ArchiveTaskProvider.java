@@ -69,11 +69,15 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
     }
 
     /**
-     * Gate de estados (P1): por defecto ARCHIVE consume fragmentos {@code BUILT}
-     * o {@code VALIDATED}. Re-archivar {@code REJECTED}/{@code SENT} requiere
-     * fijar {@code fragmentSource.statuses} explicitamente.
+     * Gate de estados: por defecto ARCHIVE consume SOLO fragmentos
+     * {@code VALIDATED}. Un pipeline mal configurado que salte
+     * {@code MT101_VALIDATE} no debe poder archivar (y por tanto enviar)
+     * mensajes sin validar — flujo seguro: BUILT -> VALIDATED -> ARCHIVED ->
+     * SENT. Archivar {@code BUILT} directo requiere fijar
+     * {@code fragmentSource.statuses} explicitamente (decision consciente,
+     * no accidente de configuracion).
      */
-    private static final java.util.List<String> FRAGMENT_READ_STATUSES = java.util.List.of("BUILT", "VALIDATED");
+    private static final java.util.List<String> FRAGMENT_READ_STATUSES = java.util.List.of("VALIDATED");
 
     @Override
     @Transactional(Transactional.TxType.NOT_SUPPORTED)

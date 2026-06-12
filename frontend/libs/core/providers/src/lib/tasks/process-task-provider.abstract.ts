@@ -115,6 +115,7 @@ export abstract class ProcessTaskProvider<TDraft> {
       || normalized === 'table'
       || normalized === 'errors'
       || normalized === 'out'
+      || normalized === 'fragments'
       ? normalized
       : 'records';
   }

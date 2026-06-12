@@ -27,8 +27,13 @@ import java.util.Properties;
  *       completos; nunca lee un upload en progreso.</li>
  * </ol>
  *
- * <p>Sin retry interno: si una subida falla parcialmente, {@code MT101_PAY} maneja
- * el retry segun {@code retryPolicy}.</p>
+ * <p><b>Retry</b>: reintenta la subida completa (conexion + put + rename) segun
+ * {@code configuration.retryPolicy} — mismo shape que el transporte REST
+ * ({@code maxRetries}, {@code backoffStrategy} constant/exponential,
+ * {@code initialBackoffSeconds}, {@code maxBackoffSeconds}). El patron
+ * upload-with-rename hace el retry seguro: un {@code .part} huerfano de un
+ * intento fallido se sobreescribe en el siguiente y el banco nunca ve el
+ * archivo final hasta el rename.</p>
  *
  * <p><b>Configuracion (sub-bloque {@code sftp})</b>:</p>
  * <pre>
@@ -44,7 +49,9 @@ import java.util.Properties;
  *   strictHostKeyChecking: true,
  *   knownHostsPath: "/etc/ssh/ssh_known_hosts",
  *   timeoutMillis: 15000
- * }
+ * },
+ * retryPolicy: { maxRetries: 5, backoffStrategy: "exponential",
+ *                initialBackoffSeconds: 30, maxBackoffSeconds: 900 }
  * </pre>
  *
  * @trace spec 008-mensajeria-pagos RF-004, RF-017, T-018
@@ -57,6 +64,9 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
     private static final String DEFAULT_TMP_EXTENSION = ".part";
     private static final int DEFAULT_TIMEOUT_MILLIS = 15000;
     private static final int DEFAULT_PORT = 22;
+    private static final int DEFAULT_MAX_RETRIES = 5;
+    private static final long DEFAULT_INITIAL_BACKOFF_SECONDS = 30L;
+    private static final long DEFAULT_MAX_BACKOFF_SECONDS = 900L;
 
     @Override
     public String transport() {
@@ -65,6 +75,25 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
 
     @Override
     public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
+        var retry = retryPolicy(configuration.get("retryPolicy"));
+        var startedAt = System.currentTimeMillis();
+        String lastError = null;
+        for (int attempt = 1; attempt <= retry.maxRetries() + 1; attempt++) {
+            var result = attemptUpload(message, configuration);
+            if (result.accepted()) {
+                return TransportResult.accepted(result.gatewayReference(), attempt,
+                        System.currentTimeMillis() - startedAt);
+            }
+            lastError = result.lastError();
+            if (attempt <= retry.maxRetries()) {
+                sleepBackoff(retry, attempt);
+            }
+        }
+        return TransportResult.rejected(retry.maxRetries() + 1,
+                System.currentTimeMillis() - startedAt, lastError);
+    }
+
+    private TransportResult attemptUpload(Mt101Message message, Map<String, Object> configuration) {
         var sftpCfg = mapValue(configuration.get("sftp"));
         if (sftpCfg.isEmpty()) {
             throw new IllegalArgumentException("MT101_PAY transport=SFTP requires configuration.sftp");
@@ -145,6 +174,41 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
         return template
                 .replace("${sendersReference}", sendersReference == null ? "" : sendersReference)
                 .replace("${uetr}", uetr == null ? "" : uetr);
+    }
+
+    private RetryPolicy retryPolicy(Object raw) {
+        var cfg = mapValue(raw);
+        return new RetryPolicy(
+                intValue(cfg.get("maxRetries"), DEFAULT_MAX_RETRIES),
+                stringValue(cfg.get("backoffStrategy"), "exponential"),
+                longValue(cfg.get("initialBackoffSeconds"), DEFAULT_INITIAL_BACKOFF_SECONDS),
+                longValue(cfg.get("maxBackoffSeconds"), DEFAULT_MAX_BACKOFF_SECONDS));
+    }
+
+    private void sleepBackoff(RetryPolicy retry, int attempt) {
+        try {
+            Thread.sleep(retry.backoffSeconds(attempt) * 1000L);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    record RetryPolicy(int maxRetries, String backoffStrategy,
+                       long initialBackoffSeconds, long maxBackoffSeconds) {
+        long backoffSeconds(int attempt) {
+            if ("constant".equalsIgnoreCase(backoffStrategy)) {
+                return Math.min(initialBackoffSeconds, maxBackoffSeconds);
+            }
+            var exponential = initialBackoffSeconds * (1L << Math.min(attempt - 1, 20));
+            return Math.min(exponential, maxBackoffSeconds);
+        }
+    }
+
+    private long longValue(Object raw, long defaultValue) {
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return defaultValue;
+        }
+        return Long.parseLong(String.valueOf(raw));
     }
 
     @SuppressWarnings("unchecked")

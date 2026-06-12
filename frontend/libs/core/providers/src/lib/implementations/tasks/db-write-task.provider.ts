@@ -7,7 +7,7 @@ import { ProcessTaskFormModel } from '../../tasks/process-task.models';
 
 export interface DbWriteMappingDraft {
   targetColumn: string;
-  sourceKind: 'field' | 'variable' | 'metadata' | 'summary' | 'records' | 'table' | 'errors' | 'out' | 'expression' | null;
+  sourceKind: 'field' | 'variable' | 'metadata' | 'summary' | 'records' | 'table' | 'errors' | 'out' | 'fragments' | 'expression' | null;
   sourceKey: string;
   sourceLabel: string;
   expression: string;
