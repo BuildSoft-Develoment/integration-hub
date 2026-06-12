@@ -122,7 +122,8 @@ public class ProcessExecutionResumeService {
                     auditTaskPlan(taskDefinition),
                     result.details());
             stateService.suspendTask(
-                    processExecutionId, taskExecutionId, stateJson, newToken, null,
+                    processExecutionId, taskExecutionId, stateJson, newToken,
+                    SuspensionExpiry.expiresAt(result.suspendedState()),
                     details,
                     Map.of("taskType", taskDefinition.taskType,
                             "resumeToken", newToken,

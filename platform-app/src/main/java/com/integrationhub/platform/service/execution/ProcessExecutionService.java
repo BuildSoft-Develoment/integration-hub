@@ -149,7 +149,7 @@ public class ProcessExecutionService {
                                 taskExecutionId,
                                 stateJson,
                                 token,
-                                null,
+                                SuspensionExpiry.expiresAt(runResult.suspendedState()),
                                 details,
                                 payload);
                         taskSpan.setAttribute("task.suspended", true);

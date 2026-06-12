@@ -136,15 +136,177 @@ class Mt101StatusTaskProviderTest {
     }
 
     @Test
-    void rejectsPollMode(WireMockRuntimeInfo wm) {
+    void rejectsUnknownMode(WireMockRuntimeInfo wm) {
         var records = List.<Map<String, Object>>of(Map.of("gatewayReference", "X"));
         var error = assertThrows(IllegalArgumentException.class,
                 () -> provider.execute(contextWith("pay-mt101.records", records), Map.of(
-                        "mode", "poll",
+                        "mode", "webhook",
                         "input", Map.of("sourceTaskRef", "pay-mt101", "sourceOutput", "records"),
                         "query", Map.of("url", wm.getHttpBaseUrl() + "/x"))));
-        assertTrue(error.getMessage().contains("M-2"),
-                "modo poll debe rechazar referenciando dependencia M-2");
+        assertTrue(error.getMessage().contains("webhook"),
+                () -> "mensaje inesperado: " + error.getMessage());
+    }
+
+    // ------------------------------------------------------------------
+    // mode=callback (M-2 suspend/resume)
+    // ------------------------------------------------------------------
+
+    @Test
+    void callbackModeSuspendsWithPendingState() {
+        var records = List.<Map<String, Object>>of(
+                Map.of("sendersReference", "P1", "gatewayReference", "GW-1", "archiveId", 10L),
+                Map.of("sendersReference", "P2", "gatewayReference", "GW-2", "archiveId", 11L));
+
+        var result = provider.execute(contextWith("pay-mt101.records", records), Map.of(
+                "mode", "callback",
+                "input", Map.of("sourceTaskRef", "pay-mt101", "sourceOutput", "records")));
+
+        assertTrue(result.suspended(), "callback debe suspender esperando el push del banco");
+        assertEquals("callback", result.suspendedState().get("mode"));
+        @SuppressWarnings("unchecked")
+        var pending = (List<Map<String, Object>>) result.suspendedState().get("pending");
+        assertEquals(2, pending.size());
+        assertEquals("P1", pending.get(0).get("sendersReference"));
+    }
+
+    @Test
+    void callbackResumeWithAllConfirmationsCompletesAndPersists() throws Exception {
+        var state = Map.<String, Object>of(
+                "mode", "callback",
+                "pending", List.of(
+                        Map.of("sendersReference", "P1", "gatewayReference", "GW-1", "archiveId", 10L),
+                        Map.of("sendersReference", "P2", "gatewayReference", "GW-2", "archiveId", 11L)),
+                // El resume service mergea el body del POST como externalEvent.
+                "externalEvent", Map.of("confirmations", List.of(
+                        Map.of("sendersReference", "P1", "status", "ACCP", "raw", "{\"k\":1}"),
+                        Map.of("gatewayReference", "GW-2", "status", "RJCT"))));
+
+        var result = provider.resume(new TaskContext(1L, 1L), Map.of(), state);
+
+        assertTrue(result.success(), () -> "expected success, got: " + result.details());
+        assertFalse(result.suspended());
+        assertEquals(2, result.outputs().get("confirmedCount"));
+        assertEquals(0, result.outputs().get("pendingCount"));
+        assertEquals(2, countRows("mt101_confirmation"));
+        assertEquals(2, countRowsWithType("CALLBACK"));
+        assertEquals(1, countRowsWithStatus("ACCP"));
+        assertEquals(1, countRowsWithStatus("RJCT"));
+    }
+
+    @Test
+    void callbackResumePartialReSuspendsWithRemainingPending() throws Exception {
+        var state = Map.<String, Object>of(
+                "mode", "callback",
+                "pending", List.of(
+                        Map.of("sendersReference", "P1", "gatewayReference", "GW-1", "archiveId", 10L),
+                        Map.of("sendersReference", "P2", "gatewayReference", "GW-2", "archiveId", 11L)),
+                "externalEvent", Map.of("confirmations", List.of(
+                        Map.of("sendersReference", "P1", "status", "ACCP"))));
+
+        var result = provider.resume(new TaskContext(1L, 1L), Map.of(), state);
+
+        assertTrue(result.suspended(), "con pendientes restantes debe re-suspender");
+        @SuppressWarnings("unchecked")
+        var pending = (List<Map<String, Object>>) result.suspendedState().get("pending");
+        assertEquals(1, pending.size());
+        assertEquals("P2", pending.get(0).get("sendersReference"));
+        assertEquals(1, countRows("mt101_confirmation"), "la confirmacion parcial debe persistirse");
+    }
+
+    @Test
+    void callbackResumeWithEmptyEventKeepsWaiting() throws Exception {
+        var state = Map.<String, Object>of(
+                "mode", "callback",
+                "pending", List.of(Map.of("sendersReference", "P1", "archiveId", 10L)),
+                "externalEvent", Map.of("ping", true));
+
+        var result = provider.resume(new TaskContext(1L, 1L), Map.of(), state);
+
+        assertTrue(result.suspended(), "callback sin confirmations debe seguir esperando");
+        assertEquals(0, countRows("mt101_confirmation"));
+    }
+
+    // ------------------------------------------------------------------
+    // mode=poll (M-2 suspend/resume)
+    // ------------------------------------------------------------------
+
+    @Test
+    void pollModeSuspendsWhileNotFinalAndCompletesOnResume(WireMockRuntimeInfo wm) throws Exception {
+        stubFor(get(urlPathMatching("/v1/swift/status/.*"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withBody("{\"status\":\"PENDING\"}")));
+
+        var records = List.<Map<String, Object>>of(
+                Map.of("sendersReference", "P1", "gatewayReference", "GW-1", "archiveId", 10L));
+        var configuration = Map.<String, Object>of(
+                "mode", "poll",
+                "input", Map.of("sourceTaskRef", "pay-mt101", "sourceOutput", "records"),
+                "query", Map.of("url", wm.getHttpBaseUrl() + "/v1/swift/status/${gatewayReference}"),
+                "poll", Map.of("maxAttempts", 5));
+
+        var first = provider.execute(contextWith("pay-mt101.records", records), configuration);
+        assertTrue(first.suspended(), "status PENDING (no final) debe suspender");
+        assertEquals("poll", first.suspendedState().get("mode"));
+        assertEquals(1, first.suspendedState().get("attempt"));
+        assertEquals(0, countRows("mt101_confirmation"),
+                "estados intermedios no se persisten como confirmacion");
+
+        // El gateway ahora responde final: el resume (scheduler/manual) completa.
+        reset();
+        stubFor(get(urlPathMatching("/v1/swift/status/.*"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withBody("{\"status\":\"ACCEPTED\",\"gatewayReference\":\"GW-1\"}")));
+
+        var second = provider.resume(new TaskContext(1L, 1L), configuration, first.suspendedState());
+        assertTrue(second.success(), () -> "expected success, got: " + second.details());
+        assertFalse(second.suspended());
+        assertEquals(1, second.outputs().get("confirmedCount"));
+        assertEquals(2, second.outputs().get("attempt"));
+        assertEquals(1, countRows("mt101_confirmation"));
+        assertEquals(1, countRowsWithType("POLL"));
+    }
+
+    @Test
+    void pollModeFailsWhenMaxAttemptsExhausted(WireMockRuntimeInfo wm) {
+        stubFor(get(urlMatching(".*"))
+                .willReturn(aResponse().withStatus(200).withBody("{\"status\":\"PENDING\"}")));
+
+        var configuration = Map.<String, Object>of(
+                "mode", "poll",
+                "input", Map.of("sourceTaskRef", "pay-mt101", "sourceOutput", "records"),
+                "query", Map.of("url", wm.getHttpBaseUrl() + "/x/${gatewayReference}"),
+                "poll", Map.of("maxAttempts", 2));
+
+        var records = List.<Map<String, Object>>of(
+                Map.of("sendersReference", "P1", "gatewayReference", "GW-1", "archiveId", 10L));
+        var first = provider.execute(contextWith("pay-mt101.records", records), configuration);
+        assertTrue(first.suspended());
+
+        var second = provider.resume(new TaskContext(1L, 1L), configuration, first.suspendedState());
+        assertFalse(second.success(), "agotar maxAttempts debe reportar failure");
+        assertFalse(second.suspended());
+        assertEquals(1, second.outputs().get("pendingCount"));
+        assertTrue(second.details().contains("exhausted"),
+                () -> "detalle inesperado: " + second.details());
+    }
+
+    @Test
+    void pollModeRespectsCustomFinalStatuses(WireMockRuntimeInfo wm) throws Exception {
+        stubFor(get(urlMatching(".*"))
+                .willReturn(aResponse().withStatus(200).withBody("{\"status\":\"SETTLED\"}")));
+
+        var records = List.<Map<String, Object>>of(
+                Map.of("sendersReference", "P1", "gatewayReference", "GW-1", "archiveId", 10L));
+        var result = provider.execute(contextWith("pay-mt101.records", records), Map.of(
+                "mode", "poll",
+                "input", Map.of("sourceTaskRef", "pay-mt101", "sourceOutput", "records"),
+                "query", Map.of("url", wm.getHttpBaseUrl() + "/x/${gatewayReference}"),
+                "poll", Map.of("finalStatuses", List.of("SETTLED"))));
+
+        assertTrue(result.success(), () -> "SETTLED configurado como final debe completar: " + result.details());
+        assertEquals(1, countRows("mt101_confirmation"));
     }
 
     @Test
@@ -224,6 +386,17 @@ class Mt101StatusTaskProviderTest {
         try (Connection c = dataSource.getConnection();
              var stmt = c.prepareStatement("select count(*) from mt101_confirmation where confirmed_status = ?")) {
             stmt.setString(1, status);
+            try (var rs = stmt.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    private int countRowsWithType(String confirmationType) throws SQLException {
+        try (Connection c = dataSource.getConnection();
+             var stmt = c.prepareStatement("select count(*) from mt101_confirmation where confirmation_type = ?")) {
+            stmt.setString(1, confirmationType);
             try (var rs = stmt.executeQuery()) {
                 rs.next();
                 return rs.getInt(1);

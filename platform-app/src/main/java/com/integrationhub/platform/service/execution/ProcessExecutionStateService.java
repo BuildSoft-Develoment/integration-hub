@@ -176,6 +176,10 @@ public class ProcessExecutionStateService {
         taskExecution.resumeToken = resumeToken;
         taskExecution.suspendedAt = LocalDateTime.now();
         taskExecution.suspendExpiresAt = expiresAt;
+        // Re-suspension (provider volvio a suspender tras un resume): sin limpiar
+        // resumedAt, el nuevo token seria inubicable porque findActiveByResumeToken
+        // filtra por resumedAt is null. resume_count conserva el historial.
+        taskExecution.resumedAt = null;
         taskExecution.details = details;
         execution.status = ExecutionStatus.SUSPENDED;
         auditService.record(execution, taskExecution.taskDefinition,

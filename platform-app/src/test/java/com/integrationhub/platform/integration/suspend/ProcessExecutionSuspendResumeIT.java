@@ -121,12 +121,39 @@ class ProcessExecutionSuspendResumeIT {
                 "el segundo resume debe fallar (token ya consumido)");
     }
 
+    @Test
+    @TestSecurity(user = "admin", roles = {"platform-admin"})
+    void reSuspendedTokenRemainsResumable() throws Exception {
+        // Regresion: al re-suspender, resumed_at debe limpiarse o el nuevo token
+        // queda inubicable (findActiveByResumeToken filtra resumedAt is null).
+        var processDefinitionId = insertProcessWithTask(SuspendTwiceTaskProvider.TASK_TYPE, "suspend-twice-it");
+        processExecutionService.execute(processDefinitionId, Map.of(), "MANUAL");
+
+        var firstToken = readSingleString(
+                "select resume_token from process_task_execution order by id desc limit 1");
+        var first = resumeService.resume(firstToken, Map.of());
+        assertEquals(ProcessExecutionResumeService.Outcome.RE_SUSPENDED, first.outcome());
+        assertNotNull(first.nextResumeToken(), "re-suspension debe emitir token nuevo");
+
+        var second = resumeService.resume(first.nextResumeToken(), Map.of());
+        assertEquals(ProcessExecutionResumeService.Outcome.COMPLETED, second.outcome(),
+                "el token re-emitido debe ser ubicable y completar el ciclo");
+        assertEquals("2",
+                readSingleString("select resume_count from process_task_execution order by id desc limit 1"));
+        assertEquals("COMPLETED",
+                readSingleString("select status from process_execution order by id desc limit 1"));
+    }
+
     private Long insertProcessWithSuspendableTask() throws Exception {
+        return insertProcessWithTask(SuspendThenCompleteTaskProvider.TASK_TYPE, "suspend-it");
+    }
+
+    private Long insertProcessWithTask(String taskType, String processName) throws Exception {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.executeUpdate(
                     "insert into process_definition (name, description, active, scheduled) "
-                            + "values ('suspend-it', 'm-2 suspend test', true, false)");
+                            + "values ('" + processName + "', 'm-2 suspend test', true, false)");
             try (var rs = statement.executeQuery(
                     "select id from process_definition order by id desc limit 1")) {
                 rs.next();
@@ -134,8 +161,7 @@ class ProcessExecutionSuspendResumeIT {
                 statement.executeUpdate(
                         "insert into process_task_definition "
                                 + "(process_definition_id, task_order, task_type, active, configuration_json) "
-                                + "values (" + processDefinitionId + ", 1, '"
-                                + SuspendThenCompleteTaskProvider.TASK_TYPE
+                                + "values (" + processDefinitionId + ", 1, '" + taskType
                                 + "', true, '{\"taskRef\":\"task-1\",\"executionMode\":\"once\"}')");
                 return processDefinitionId;
             }
