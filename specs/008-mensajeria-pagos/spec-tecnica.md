@@ -311,34 +311,57 @@ Outputs:
 - `pay-mt101.records`: por mensaje `{sendersReference, uetr, status, gatewayReference, attempts, lastError}`.
 - `pay-mt101.errors`: mensajes fallidos definitivamente.
 
-### MT101_STATUS (fase 2)
+### MT101_STATUS
+
+Primer consumidor productivo del SPI M-2 (`SuspendableTaskProvider`). Tres modos:
 
 ```jsonc
 {
   "taskRef": "status-mt101",
   "taskType": "MT101_STATUS",
   "executionMode": "once",
-  "input": { "source": "task-output", "sourceTaskRef": "pay-mt101", "sourceOutput": "records" },
   "configuration": {
-    "mode": "poll",                        // poll | callback
-    "poll": {
+    "mode": "poll",                        // query | callback | poll
+    "input": { "sourceTaskRef": "pay-mt101", "sourceOutput": "records" },
+    "query": {
       "url": "https://gateway-pagos.banco.local/v1/swift/status/${gatewayReference}",
-      "intervalSeconds": 60,
-      "maxAttempts": 1440,
-      "successStatuses": ["CONFIRMED", "SETTLED"],
-      "failureStatuses": ["REJECTED", "RETURNED"]
+      "method": "GET",
+      "timeoutSeconds": 30
     },
-    "callback": {
-      "endpointPath": "/api/payments/swift/status-callback",
-      "matchByHeader": "X-Senders-Reference",
-      "timeoutHours": 72
+    "expectedGatewayResponse": {
+      "statusField": "$.status",
+      "referenceField": "$.gatewayReference"
     },
-    "publishTo": "table:12:mt101_confirmation"
+    "poll": {
+      "intervalSeconds": 300,              // vencimiento de la suspension (auto-despertar)
+      "maxAttempts": 10,
+      "finalStatuses": ["ACCEPTED", "REJECTED"]
+    },
+    "callback": { "completeOnPartial": false },
+    "connectionRef": "12",
+    "confirmationTable": "mt101_confirmation"
   }
 }
 ```
 
-Requiere gap M-2 del motor (tareas long-running).
+- **`query`**: single-shot, sin suspension (tipico bajo scheduler de spec 006).
+- **`callback`**: la tarea se suspende; el gateway invoca
+  `POST /api/process-executions/resume/{token}` con body
+  `{"confirmations":[{"sendersReference":"...","status":"ACCP","gatewayReference":"...","raw":"..."}]}`.
+  El resume persiste a `mt101_confirmation` (type `CALLBACK`) y re-suspende con
+  token nuevo si quedan pendientes. Con HMAC habilitado
+  (`integrationhub.resume.hmac.enabled`), el caller firma el body crudo en el
+  header `X-Signature` (HMAC-SHA256 hex, prefijo `sha256=` opcional).
+- **`poll`**: primera consulta en execute; lo no-final queda suspendido con
+  vencimiento `poll.intervalSeconds`; el `SuspensionExpiryScheduler` (property
+  `integrationhub.suspension.expiry-check-every`, default 60s) re-invoca el
+  resume al vencer. Solo estados de `finalStatuses` se persisten (type `POLL`);
+  failure al agotar `maxAttempts`.
+
+**Continuacion M-2.1**: si hay tareas con `taskOrder` mayor despues de
+`MT101_STATUS`, al completar el resume el engine rehidrata el contexto del
+pipeline (capturado al suspender en `suspended_continuation`, V16) y las
+ejecuta automaticamente — sin re-drive manual.
 
 ### MT101_RECONCILE (fase 2)
 
@@ -644,8 +667,9 @@ Metricas:
   se especificaran cuando entren al roadmap.
 - El reader `swift-mt` se registra en el catalogo 002 (RF-005 spec 002) pero su
   codigo vive bajo ownership del modulo de pagos.
-- `MT101_STATUS` mode `poll` depende del gap M-2 del motor (tareas long-running);
-  hasta que exista, se usa `MT101_STATUS` mode `callback` o un scheduler externo.
+- `MT101_STATUS` modes `poll` y `callback` corren sobre el SPI M-2 del motor
+  (suspend/resume con token de un solo uso, auto-despertar por
+  `SuspensionExpiryScheduler` y continuacion downstream M-2.1).
 - `MT101_PARSE` con multi-output depende del gap M-3 del motor; hasta que exista,
   publica un solo `summary` con campos anidados (`summary.envelope`,
   `summary.header`, `summary.transactions`).
