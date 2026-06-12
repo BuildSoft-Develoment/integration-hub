@@ -17,17 +17,16 @@ import java.util.Map;
  * Reanuda una tarea suspendida (M-2). Punto de entrada del callback externo
  * o del scheduler periodico.
  *
- * <p><b>Limitacion de scope (foundation)</b>: tras un resume exitoso solo se
- * marca la tarea como completada y, si era la <i>ultima</i> del proceso, se
- * marca el proceso como COMPLETED. Si quedan tareas downstream, el proceso
- * permanece en {@code RUNNING} y requiere re-drive manual (la continuacion
- * automatica del pipeline desde un punto intermedio es trabajo futuro:
- * implica rehidratar {@code taskOutputs} persistido).</p>
+ * <p><b>Continuacion downstream (M-2.1)</b>: tras un resume exitoso con tareas
+ * pendientes despues de la suspendida, rehidrata el envelope capturado al
+ * suspender ({@code taskOutputs} + variables + trigger), registra los outputs
+ * del resume bajo el taskRef de la tarea y continua el pipeline desde
+ * {@code taskOrder+1} — fuera de la transaccion del resume, con la misma
+ * semantica del loop normal (incluida suspension anidada). Si el envelope no
+ * existe (suspensiones pre-V16) o no fue serializable, degrada a
+ * {@code COMPLETED_NEEDS_REDRIVE}.</p>
  *
- * <p>El typical use case de la vertical 008 (suspension en {@code MT101_STATUS}
- * que suele ser la ultima tarea del pipeline) queda cubierto al 100%.</p>
- *
- * @trace spec 003 T-017 (M-2 suspension engine), ADR-009
+ * @trace spec 003 T-017 (M-2 / M-2.1), ADR-009
  * @trace spec 008-mensajeria-pagos RF-019
  */
 @ApplicationScoped
@@ -41,6 +40,9 @@ public class ProcessExecutionResumeService {
     private final SuspendedStateMarshaller stateMarshaller;
     private final SuspensionTokenGenerator tokenGenerator;
     private final ProcessExecutionAuditMapper auditMapper;
+    private final SuspensionContinuation suspensionContinuation;
+    private final TaskOutputRegistry taskOutputRegistry;
+    private final ProcessExecutionService processExecutionService;
 
     public ProcessExecutionResumeService(
             ProcessExecutionStateService stateService,
@@ -50,7 +52,10 @@ public class ProcessExecutionResumeService {
             JsonConfigurationMapper configurationMapper,
             SuspendedStateMarshaller stateMarshaller,
             SuspensionTokenGenerator tokenGenerator,
-            ProcessExecutionAuditMapper auditMapper) {
+            ProcessExecutionAuditMapper auditMapper,
+            SuspensionContinuation suspensionContinuation,
+            TaskOutputRegistry taskOutputRegistry,
+            ProcessExecutionService processExecutionService) {
         this.stateService = stateService;
         this.taskExecutionRepository = taskExecutionRepository;
         this.taskDefinitionRepository = taskDefinitionRepository;
@@ -59,10 +64,51 @@ public class ProcessExecutionResumeService {
         this.stateMarshaller = stateMarshaller;
         this.tokenGenerator = tokenGenerator;
         this.auditMapper = auditMapper;
+        this.suspensionContinuation = suspensionContinuation;
+        this.taskOutputRegistry = taskOutputRegistry;
+        this.processExecutionService = processExecutionService;
+    }
+
+    /**
+     * Orquestador sin transaccion propia: la fase de resume corre en
+     * {@link #resumeTransactional}; la continuacion del pipeline (que puede
+     * ejecutar HTTP/SFTP/BD largos) corre fuera de esa transaccion.
+     */
+    public ResumeOutcome resume(String token, Map<String, Object> externalEvent) {
+        var completion = resumeTransactional(token, externalEvent);
+        if (completion.continuation() == null) {
+            return completion.outcome();
+        }
+        var continuation = completion.continuation();
+        try {
+            var execution = processExecutionService.continueAfterResume(
+                    continuation.processExecutionId(),
+                    continuation.processDefinitionId(),
+                    continuation.afterTaskOrder(),
+                    continuation.taskOutputs(),
+                    continuation.executionVariables(),
+                    continuation.triggerSource());
+            return switch (execution.status) {
+                case COMPLETED -> new ResumeOutcome(Outcome.COMPLETED, null, true,
+                        completion.outcome().details() + "; downstream tasks completed");
+                case SUSPENDED -> new ResumeOutcome(Outcome.RE_SUSPENDED,
+                        taskExecutionRepository.findActiveResumeToken(continuation.processExecutionId()),
+                        false,
+                        completion.outcome().details() + "; a downstream task suspended");
+                default -> new ResumeOutcome(Outcome.FAILED, null, false,
+                        "Downstream continuation ended with status " + execution.status);
+            };
+        } catch (RuntimeException error) {
+            // executeTasks ya marco la tarea/proceso como FAILED; aqui solo
+            // traducimos el resultado para el caller.
+            var message = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
+            return new ResumeOutcome(Outcome.FAILED, null, false,
+                    "Downstream continuation failed: " + message);
+        }
     }
 
     @Transactional
-    public ResumeOutcome resume(String token, Map<String, Object> externalEvent) {
+    ResumeCompletion resumeTransactional(String token, Map<String, Object> externalEvent) {
         // Repo directo (no via stateService.findActiveSuspension) para que la entity
         // quede attached a la sesion del @Transactional de este metodo. Asi las
         // relaciones lazy (taskDefinition.processDefinition) se resuelven sin
@@ -124,11 +170,15 @@ public class ProcessExecutionResumeService {
             stateService.suspendTask(
                     processExecutionId, taskExecutionId, stateJson, newToken,
                     SuspensionExpiry.expiresAt(result.suspendedState()),
+                    // El envelope previo sigue valido: los outputs de una tarea
+                    // re-suspendida aun no son finales.
+                    taskExecution.suspendedContinuation,
                     details,
                     Map.of("taskType", taskDefinition.taskType,
                             "resumeToken", newToken,
                             "rePhase", "re-suspended"));
-            return new ResumeOutcome(Outcome.RE_SUSPENDED, newToken, false, result.details());
+            return ResumeCompletion.terminal(
+                    new ResumeOutcome(Outcome.RE_SUSPENDED, newToken, false, result.details()));
         }
 
         if (!result.success()) {
@@ -138,7 +188,8 @@ public class ProcessExecutionResumeService {
             if (processExecutionId != null) {
                 stateService.failProcess(processExecutionId, "Resume returned failure: " + result.details());
             }
-            return new ResumeOutcome(Outcome.FAILED, null, false, result.details());
+            return ResumeCompletion.terminal(
+                    new ResumeOutcome(Outcome.FAILED, null, false, result.details()));
         }
 
         var details = auditMapper.buildTaskDetails(auditTaskPlan(taskDefinition), result.details());
@@ -150,15 +201,37 @@ public class ProcessExecutionResumeService {
         var downstreamCount = processDefinition == null
                 ? 0
                 : taskDefinitionRepository.countDownstreamTasks(processDefinition, taskDefinition.taskOrder);
-        var processCompleted = downstreamCount == 0;
-        if (processCompleted && processExecutionId != null) {
-            stateService.completeProcess(processExecutionId, "Process completed after resume");
+        if (downstreamCount == 0) {
+            if (processExecutionId != null) {
+                stateService.completeProcess(processExecutionId, "Process completed after resume");
+            }
+            return ResumeCompletion.terminal(
+                    new ResumeOutcome(Outcome.COMPLETED, null, true, result.details()));
         }
-        return new ResumeOutcome(
-                processCompleted ? Outcome.COMPLETED : Outcome.COMPLETED_NEEDS_REDRIVE,
-                null,
-                processCompleted,
-                result.details());
+
+        // M-2.1: hay tareas downstream. Rehidratamos el envelope capturado al
+        // suspender y registramos los outputs del resume bajo el taskRef de la
+        // tarea, para continuar el pipeline fuera de esta transaccion.
+        var envelope = suspensionContinuation.unmarshal(taskExecution.suspendedContinuation);
+        if (envelope == null || processExecutionId == null || processDefinition == null
+                || taskDefinition.taskOrder == null) {
+            return ResumeCompletion.terminal(
+                    new ResumeOutcome(Outcome.COMPLETED_NEEDS_REDRIVE, null, false, result.details()));
+        }
+        var taskOutputs = envelope.taskOutputs();
+        if (result.outputs() != null && !result.outputs().isEmpty()) {
+            taskOutputRegistry.registerTaskResult(taskOutputs, auditTaskPlan(taskDefinition),
+                    configuration, result.outputs());
+        }
+        return new ResumeCompletion(
+                new ResumeOutcome(Outcome.COMPLETED, null, false, result.details()),
+                new ContinuationRequest(
+                        processExecutionId,
+                        processDefinition.id,
+                        taskDefinition.taskOrder,
+                        taskOutputs,
+                        envelope.executionVariables(),
+                        envelope.triggerSource()));
     }
 
     private ProcessExecutionStateService.TaskPlan auditTaskPlan(
@@ -186,6 +259,22 @@ public class ProcessExecutionResumeService {
                                  String nextResumeToken,
                                  boolean processCompleted,
                                  String details) {
+    }
+
+    /** Resultado de la fase transaccional: outcome + continuacion pendiente (o null). */
+    record ResumeCompletion(ResumeOutcome outcome, ContinuationRequest continuation) {
+        static ResumeCompletion terminal(ResumeOutcome outcome) {
+            return new ResumeCompletion(outcome, null);
+        }
+    }
+
+    /** Datos planos (sin entities) para continuar el pipeline fuera de la transaccion. */
+    record ContinuationRequest(Long processExecutionId,
+                               Long processDefinitionId,
+                               int afterTaskOrder,
+                               java.util.LinkedHashMap<String, Object> taskOutputs,
+                               Map<String, String> executionVariables,
+                               String triggerSource) {
     }
 
     public static class SuspensionNotFoundException extends RuntimeException {

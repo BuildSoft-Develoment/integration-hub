@@ -169,6 +169,19 @@ public class ProcessExecutionStateService {
                             LocalDateTime expiresAt,
                             String details,
                             Object auditPayload) {
+        suspendTask(processExecutionId, taskExecutionId, suspendedStateJson, resumeToken,
+                expiresAt, null, details, auditPayload);
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public void suspendTask(Long processExecutionId,
+                            Long taskExecutionId,
+                            String suspendedStateJson,
+                            String resumeToken,
+                            LocalDateTime expiresAt,
+                            String continuationJson,
+                            String details,
+                            Object auditPayload) {
         var execution = processExecutionRepository.findById(processExecutionId);
         var taskExecution = processTaskExecutionRepository.findById(taskExecutionId);
         taskExecution.status = ExecutionStatus.SUSPENDED;
@@ -176,6 +189,7 @@ public class ProcessExecutionStateService {
         taskExecution.resumeToken = resumeToken;
         taskExecution.suspendedAt = LocalDateTime.now();
         taskExecution.suspendExpiresAt = expiresAt;
+        taskExecution.suspendedContinuation = continuationJson;
         // Re-suspension (provider volvio a suspender tras un resume): sin limpiar
         // resumedAt, el nuevo token seria inubicable porque findActiveByResumeToken
         // filtra por resumedAt is null. resume_count conserva el historial.

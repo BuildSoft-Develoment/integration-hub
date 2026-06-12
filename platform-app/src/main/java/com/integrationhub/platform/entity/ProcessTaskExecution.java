@@ -74,6 +74,12 @@ public class ProcessTaskExecution {
     // Util para metricas y para topes de retry.
     @Column(name = "resume_count", nullable = false)
     public int resumeCount = 0;
+
+    // suspendedContinuation (M-2.1): envelope JSON {taskOutputs,
+    // executionVariables, triggerSource} capturado al suspender, para que el
+    // resume pueda continuar las tareas downstream del pipeline.
+    @Column(name = "suspended_continuation", columnDefinition = "text")
+    public String suspendedContinuation;
 }
 
 

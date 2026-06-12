@@ -1,8 +1,13 @@
 package com.integrationhub.platform.api.resource.process;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.service.execution.ProcessExecutionResumeService;
+import com.integrationhub.platform.service.execution.ResumeCallbackSignatureVerifier;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -21,8 +26,15 @@ import java.util.Map;
  * del pago (MT900/MT910, pacs.002, camt.054). El body se entrega al provider
  * como {@code externalEvent} dentro del estado de resume.</p>
  *
- * <p>Tambien lo invoca un scheduler periodico interno cuando expira un
+ * <p>Tambien lo invoca {@code SuspensionExpiryScheduler} cuando vence
  * {@code suspend_expires_at} (modo polling, sin push externo).</p>
+ *
+ * <p><b>Seguridad</b>: ademas de los roles, con
+ * {@code integrationhub.resume.hmac.enabled=true} el caller debe firmar el body
+ * crudo con HMAC-SHA256 (header {@code X-Signature}, secreto compartido via
+ * {@code integrationhub.resume.hmac.secret}). Firma ausente/invalida = 401.
+ * El token es de un solo uso, asi que el replay de un request capturado
+ * produce 404.</p>
  *
  * @trace spec 003 T-017 (M-2 suspension engine), ADR-009
  * @trace spec 008-mensajeria-pagos RF-019
@@ -32,21 +44,44 @@ import java.util.Map;
 @Consumes(MediaType.APPLICATION_JSON)
 public class ProcessExecutionResumeResource {
 
-    private final ProcessExecutionResumeService resumeService;
+    private static final TypeReference<Map<String, Object>> EVENT_TYPE = new TypeReference<>() {
+    };
 
-    public ProcessExecutionResumeResource(ProcessExecutionResumeService resumeService) {
+    private final ProcessExecutionResumeService resumeService;
+    private final ResumeCallbackSignatureVerifier signatureVerifier;
+    private final ObjectMapper objectMapper;
+
+    public ProcessExecutionResumeResource(ProcessExecutionResumeService resumeService,
+                                          ResumeCallbackSignatureVerifier signatureVerifier,
+                                          ObjectMapper objectMapper) {
         this.resumeService = resumeService;
+        this.signatureVerifier = signatureVerifier;
+        this.objectMapper = objectMapper;
     }
 
     @POST
     @Path("/{token}")
-    // El callback puede llegar de:
-    // - Sistemas bancarios externos: deberian ir por un Resource separado con HMAC verification
-    //   (out of scope para esta foundation). Para uso interno autenticado, los roles abajo
-    //   son suficientes.
-    // - Scheduler periodico interno: usa el rol 'platform-admin' configurado en el job.
     @RolesAllowed({"platform-admin", "integration-admin", "operator", "payments-operator"})
-    public Response resume(@PathParam("token") String token, Map<String, Object> externalEvent) {
+    public Response resume(@PathParam("token") String token,
+                           @HeaderParam("X-Signature") String signature,
+                           String rawBody) {
+        // El body se recibe crudo (String) para que el HMAC se calcule sobre los
+        // bytes exactos que firmo el emisor, no sobre una re-serializacion.
+        if (signatureVerifier.enabled() && !signatureVerifier.verify(rawBody, signature)) {
+            return Response.status(Response.Status.UNAUTHORIZED)
+                    .entity(Map.of("error", "invalid or missing X-Signature"))
+                    .build();
+        }
+        Map<String, Object> externalEvent;
+        try {
+            externalEvent = rawBody == null || rawBody.isBlank()
+                    ? Map.of()
+                    : objectMapper.readValue(rawBody, EVENT_TYPE);
+        } catch (JsonProcessingException invalidJson) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(Map.of("error", "request body is not valid JSON"))
+                    .build();
+        }
         try {
             var outcome = resumeService.resume(token, externalEvent);
             var body = new LinkedHashMap<String, Object>();
@@ -55,12 +90,6 @@ public class ProcessExecutionResumeResource {
             body.put("details", outcome.details());
             if (outcome.nextResumeToken() != null) {
                 body.put("nextResumeToken", outcome.nextResumeToken());
-            }
-            if (outcome.outcome() == ProcessExecutionResumeService.Outcome.COMPLETED_NEEDS_REDRIVE) {
-                body.put("note",
-                        "Task completed but downstream tasks were not auto-executed. "
-                                + "Manual re-drive of the process is required (full pipeline "
-                                + "continuation from a suspended midpoint is scheduled for a future slice).");
             }
             return Response.ok(body).build();
         } catch (ProcessExecutionResumeService.SuspensionNotFoundException notFound) {
