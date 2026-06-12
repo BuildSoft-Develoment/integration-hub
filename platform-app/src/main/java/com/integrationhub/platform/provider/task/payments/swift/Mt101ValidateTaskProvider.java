@@ -11,6 +11,7 @@ import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -96,6 +97,7 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
     }
 
     @Override
+    @Transactional(Transactional.TxType.NOT_SUPPORTED)
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
         var ruleSet = stringValue(configuration.get("ruleSet"), DEFAULT_RULE_SET);
         var standard = stringValue(configuration.get("standard"), DEFAULT_STANDARD);

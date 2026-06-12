@@ -9,6 +9,7 @@ import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 
 import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
@@ -75,6 +76,7 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
     private static final java.util.List<String> FRAGMENT_READ_STATUSES = java.util.List.of("BUILT", "VALIDATED");
 
     @Override
+    @Transactional(Transactional.TxType.NOT_SUPPORTED)
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
         var fragmentSource = Mt101MessageInputResolver.fragmentSource(context, configuration, type());
 
@@ -166,7 +168,11 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
                 }
                 connection.commit();
             } catch (SQLException | RuntimeException error) {
-                connection.rollback();
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackError) {
+                    error.addSuppressed(rollbackError);
+                }
                 throw error;
             } finally {
                 connection.setAutoCommit(previousAutoCommit);

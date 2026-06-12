@@ -9,6 +9,7 @@ import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -63,6 +64,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
     }
 
     @Override
+    @Transactional(Transactional.TxType.NOT_SUPPORTED)
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
         var transportId = stringValue(configuration.get("transport"), DEFAULT_TRANSPORT).toUpperCase();
         var transport = resolveTransport(transportId);

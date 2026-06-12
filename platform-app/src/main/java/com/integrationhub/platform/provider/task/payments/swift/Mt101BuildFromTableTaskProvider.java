@@ -9,6 +9,7 @@ import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -80,6 +81,7 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     }
 
     @Override
+    @Transactional(Transactional.TxType.NOT_SUPPORTED)
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
         var source = resolveSource(context, configuration);
         var maxTransactions = intValue(configuration.get("maxTransactionsPerMessage"), DEFAULT_MAX_TRANSACTIONS);

@@ -39,7 +39,7 @@ public class ProcessTaskRuntimeService {
         this.taskInputResolver = taskInputResolver;
     }
 
-    @Transactional
+    @Transactional(Transactional.TxType.NOT_SUPPORTED)
     public TaskRunResult runTask(Long processExecutionId,
                                  ProcessExecutionStateService.TaskPlan taskPlan,
                                  SourcePayload sourcePayload,
