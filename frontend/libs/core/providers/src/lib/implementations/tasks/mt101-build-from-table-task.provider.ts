@@ -12,10 +12,18 @@ export class Mt101BuildFromTableTaskProvider extends Mt101BuildTaskProvider {
   };
 
   override createDraft(): Mt101BuildTaskDraft {
+    const draft = super.createDraft();
     return {
-      ...super.createDraft(),
+      ...draft,
       executionMode: 'once',
       maxTransactionsPerMessage: 100,
+      sequenceA: {
+        ...draft.sequenceA,
+        // El default heredado (PROC-${_processExecutionId}) produce el mismo :20:
+        // en todos los fragmentos y el backend lo rechaza cuando hay mas de uno.
+        // ${messageIndex} garantiza unicidad por fragmento (max 16 chars: "P" + 5n).
+        sendersReferenceTemplate: 'P${messageIndex}',
+      },
     };
   }
 

@@ -39,7 +39,8 @@ import java.util.Map;
  *   "connectionRef": "12",
  *   "sentTable": "mt101_archive",
  *   "confirmationTable": "mt101_confirmation",
- *   "matchKeys": ["senders_reference"],
+ *   "matchKeys": ["senders_reference"],      // misma columna en ambas tablas
+ *   "matchKeys": ["id=archive_id"],          // columna archivo = columna confirmacion
  *   "asOfDate": "${today}",
  *   "lookbackDays": 5,
  *   "publishExceptionsTo": "table:12:mt101_reconciliation_exception"
@@ -155,7 +156,7 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
     private int collectUnmatchedConfirm(Connection connection, String sentTable, String confirmationTable,
                                         List<String> matchKeys, LocalDate from, LocalDate to,
                                         List<Map<String, Object>> exceptions) throws SQLException {
-        var joinClause = buildJoinClause("c", "s", matchKeys);
+        var joinClause = buildJoinClause("s", "c", matchKeys);
         var sql = "select c.id from " + confirmationTable + " c"
                 + " left join " + sentTable + " s on " + joinClause
                 + " where c.received_at::date between ? and ?"
@@ -234,10 +235,20 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
     private String buildJoinClause(String leftAlias, String rightAlias, List<String> keys) {
         var clauses = new ArrayList<String>(keys.size());
         for (var key : keys) {
-            var col = sanitize(key);
-            clauses.add(leftAlias + "." + col + " = " + rightAlias + "." + col);
+            var spec = parseJoinSpec(key);
+            clauses.add(leftAlias + "." + spec.leftColumn() + " = " + rightAlias + "." + spec.rightColumn());
         }
         return String.join(" and ", clauses);
+    }
+
+    private JoinSpec parseJoinSpec(String rawKey) {
+        var key = rawKey == null ? "" : rawKey.trim();
+        if (key.contains("=")) {
+            var parts = key.split("=", 2);
+            return new JoinSpec(sanitize(parts[0].trim()), sanitize(parts[1].trim()));
+        }
+        var column = sanitize(key);
+        return new JoinSpec(column, column);
     }
 
     private DataSource resolveDataSource(String connectionRef) {
@@ -309,5 +320,8 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
             return defaultValue;
         }
         return Integer.parseInt(String.valueOf(raw));
+    }
+
+    private record JoinSpec(String leftColumn, String rightColumn) {
     }
 }

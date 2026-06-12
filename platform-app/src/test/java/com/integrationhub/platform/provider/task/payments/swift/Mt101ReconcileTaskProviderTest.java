@@ -114,6 +114,22 @@ class Mt101ReconcileTaskProviderTest {
         assertEquals(0, countRows("mt101_reconciliation_exception"));
     }
 
+    @Test
+    void supportsDifferentColumnMatchForProductionArchiveConfirmationSchema() throws Exception {
+        var today = LocalDate.of(2026, 6, 9);
+        var archiveId = insertArchive("OK-ID", today);
+        insertConfirmationForArchive(archiveId, today);
+
+        var result = provider.execute(new TaskContext(1L, 1L), Map.of(
+                "asOfDate", today.toString(),
+                "lookbackDays", 0,
+                "matchKeys", List.of("id=archive_id")));
+
+        assertEquals(1, result.outputs().get("matchedCount"));
+        assertEquals(0, result.outputs().get("unmatchedSentCount"));
+        assertEquals(0, result.outputs().get("unmatchedConfirmCount"));
+    }
+
     // --- helpers ---
 
     private DataSource dataSource() {
@@ -136,6 +152,7 @@ class Mt101ReconcileTaskProviderTest {
                     " created_at timestamp not null default current_timestamp)");
             statement.executeUpdate("create table mt101_confirmation (" +
                     " id bigserial primary key," +
+                    " archive_id bigint," +
                     " senders_reference varchar(16) not null," +
                     " received_at timestamp not null default current_timestamp)");
             statement.executeUpdate("create table mt101_reconciliation_exception (" +
@@ -148,12 +165,15 @@ class Mt101ReconcileTaskProviderTest {
         }
     }
 
-    private void insertArchive(String ref, LocalDate createdAt) throws SQLException {
+    private long insertArchive(String ref, LocalDate createdAt) throws SQLException {
         try (Connection c = dataSource.getConnection();
-             var stmt = c.prepareStatement("insert into mt101_archive (senders_reference, created_at) values (?, ?)")) {
+             var stmt = c.prepareStatement("insert into mt101_archive (senders_reference, created_at) values (?, ?) returning id")) {
             stmt.setString(1, ref);
             stmt.setObject(2, createdAt.atStartOfDay());
-            stmt.executeUpdate();
+            try (var rs = stmt.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
         }
     }
 
@@ -162,6 +182,17 @@ class Mt101ReconcileTaskProviderTest {
              var stmt = c.prepareStatement("insert into mt101_confirmation (senders_reference, received_at) values (?, ?)")) {
             stmt.setString(1, ref);
             stmt.setObject(2, receivedAt.atStartOfDay());
+            stmt.executeUpdate();
+        }
+    }
+
+    private void insertConfirmationForArchive(long archiveId, LocalDate receivedAt) throws SQLException {
+        try (Connection c = dataSource.getConnection();
+             var stmt = c.prepareStatement(
+                     "insert into mt101_confirmation (archive_id, senders_reference, received_at) values (?, ?, ?)")) {
+            stmt.setLong(1, archiveId);
+            stmt.setString(2, "UNUSED");
+            stmt.setObject(3, receivedAt.atStartOfDay());
             stmt.executeUpdate();
         }
     }

@@ -17,4 +17,17 @@ describe('Mt101BuildFromTableTaskProvider', () => {
     expect(config.maxBytesPerMessage).toBe(10000);
     expect(config.replaceExisting).toBe(true);
   });
+
+  it('defaults sendersReferenceTemplate with ${messageIndex} so fragments get unique :20:', () => {
+    // El default heredado del build (PROC-${_processExecutionId}) seria
+    // rechazado por el backend al producir mas de un fragmento.
+    const provider = new Mt101BuildFromTableTaskProvider();
+    const draft = provider.createDraft();
+    expect(draft.sequenceA.sendersReferenceTemplate).toBe('P${messageIndex}');
+
+    const config = JSON.parse(
+      provider.toTaskPatch({ ...draft, taskRef: 'build-massive' }).configurationJson as string,
+    );
+    expect(config.sequenceA.sendersReferenceTemplate).toBe('P${messageIndex}');
+  });
 });
