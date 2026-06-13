@@ -61,13 +61,19 @@ public class RestSourceProvider implements SourceProvider {
         };
 
         try {
-            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            // Streaming directo a archivo temporal (BodyHandlers.ofFile, no
+            // ofByteArray): una respuesta de varios GB no se materializa en heap.
+            var tempFile = TempFileSourcePayload.createTempFile(selectedFile.name());
+            HttpResponse<java.nio.file.Path> response = httpClient.send(request,
+                    HttpResponse.BodyHandlers.ofFile(tempFile));
             int status = response.statusCode();
             if (status < 200 || status >= 300) {
+                java.nio.file.Files.deleteIfExists(tempFile);
                 throw new IllegalStateException("REST source returned status " + status);
             }
             String responseMediaType = response.headers().firstValue("Content-Type").orElse(mediaType != null ? mediaType : "application/octet-stream");
-            return SourcePayload.fromBytes(selectedFile.name(), response.body(), responseMediaType);
+            return TempFileSourcePayload.of(selectedFile.name(), selectedFile.location(),
+                    responseMediaType, tempFile);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("REST source request was interrupted", e);

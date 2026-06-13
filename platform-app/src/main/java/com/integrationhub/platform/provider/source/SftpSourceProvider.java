@@ -12,7 +12,6 @@ import com.jcraft.jsch.SftpException;
 import io.quarkus.arc.properties.UnlessBuildProperty;
 import jakarta.enterprise.context.ApplicationScoped;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -100,7 +99,6 @@ public class SftpSourceProvider implements SourceProvider {
 
         Session session = null;
         ChannelSftp channel = null;
-        ByteArrayOutputStream outputStream = null;
         try {
             JSch jsch = new JSch();
             if (privateKeyPath != null) {
@@ -124,18 +122,17 @@ public class SftpSourceProvider implements SourceProvider {
             channel = (ChannelSftp) session.openChannel("sftp");
             channel.connect(timeoutMillis);
 
-            outputStream = new ByteArrayOutputStream();
-            channel.get(selectedFile.location(), outputStream);
-            return SourcePayload.fromBytes(selectedFile.name(), outputStream.toByteArray(), selectedFile.mediaType());
-        } catch (JSchException | SftpException e) {
+            // Streaming a archivo temporal (no byte[]): un CSV de varios GB por
+            // SFTP no presiona el heap; el reader lo lee por lotes desde disco.
+            var tempFile = TempFileSourcePayload.createTempFile(selectedFile.name());
+            try (var fileOut = java.nio.file.Files.newOutputStream(tempFile)) {
+                channel.get(selectedFile.location(), fileOut);
+            }
+            return TempFileSourcePayload.of(selectedFile.name(), selectedFile.location(),
+                    selectedFile.mediaType(), tempFile);
+        } catch (JSchException | SftpException | IOException e) {
             throw new IllegalStateException("Cannot read file from SFTP source", e);
         } finally {
-            if (outputStream != null) {
-                try {
-                    outputStream.close();
-                } catch (IOException ignored) {
-                }
-            }
             if (channel != null && channel.isConnected()) {
                 channel.disconnect();
             }

@@ -58,6 +58,36 @@ class Mt101PayTaskProviderTest {
     }
 
     @Test
+    void capsRecordsSampleButKeepsExactCounts() {
+        // H6: con maxRecordsInOutput=2 y 5 mensajes, el sample queda en 2 pero
+        // los conteos (sentCount/acceptedCount) son exactos y recordsSampled=true.
+        var transport = new StubTransport("REST", List.of(
+                TransportResult.accepted("GW-1", 1, 10L),
+                TransportResult.accepted("GW-2", 1, 10L),
+                TransportResult.accepted("GW-3", 1, 10L),
+                TransportResult.accepted("GW-4", 1, 10L),
+                TransportResult.accepted("GW-5", 1, 10L)
+        ));
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
+        var context = contextWith(List.of(
+                sampleMessage("P1"), sampleMessage("P2"), sampleMessage("P3"),
+                sampleMessage("P4"), sampleMessage("P5")));
+
+        var result = provider.execute(context, Map.of(
+                "transport", "REST",
+                "maxRecordsInOutput", 2,
+                "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records"),
+                "rest", Map.of("url", "https://test.example/mt101")));
+
+        assertEquals(5, result.outputs().get("sentCount"), "conteo exacto");
+        assertEquals(5, result.outputs().get("acceptedCount"));
+        assertEquals(Boolean.TRUE, result.outputs().get("recordsSampled"));
+        @SuppressWarnings("unchecked")
+        var records = (List<Map<String, Object>>) result.outputs().get("records");
+        assertEquals(2, records.size(), "el sample respeta maxRecordsInOutput");
+    }
+
+    @Test
     void dispatchesMessagesEmbeddedInArchiveRecords() {
         var transport = new StubTransport("REST", List.of(
                 TransportResult.accepted("GW-ARCHIVE", 1, 25L)

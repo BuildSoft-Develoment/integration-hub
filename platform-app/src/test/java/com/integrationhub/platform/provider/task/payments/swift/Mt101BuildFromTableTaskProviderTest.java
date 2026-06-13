@@ -192,6 +192,19 @@ class Mt101BuildFromTableTaskProviderTest {
     }
 
     @Test
+    void failsFastWhenFragmentCountExceeds28dLimit() {
+        // 99999 cabe; 100000 excede el :28D: 5n. El guard se prueba en aislado
+        // porque materializar 100k fragmentos reales seria inviable en un test.
+        provider.guardFragmentCount(99999); // no lanza
+        var error = org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> provider.guardFragmentCount(100_000));
+        assertTrue(error.getMessage().contains("exceeding the :28D: limit"),
+                () -> "mensaje inesperado: " + error.getMessage());
+        assertTrue(error.getMessage().contains("maxTransactionsPerMessage"),
+                "el mensaje debe ser accionable");
+    }
+
+    @Test
     void payGateOnlyReadsArchivedFragmentsByDefault() throws Exception {
         // Construye 2 fragmentos BUILT; sin pasar por VALIDATE+ARCHIVE, el default
         // de PAY (["ARCHIVED"]) no debe leer ninguno. Marcando uno como ARCHIVED,

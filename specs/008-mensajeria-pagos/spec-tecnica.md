@@ -190,6 +190,38 @@ Contrato operativo:
   `FILE_READ -> DB_WRITE(staging_record) -> MT101_BUILD_FROM_TABLE ->
   MT101_VALIDATE -> MT101_ARCHIVE -> MT101_PAY -> NOTIFICATION`.
 
+**Cadena de bindings en modo masivo (fragments → fragments)**: en el flujo
+masivo el `fragment source` se pasa de tarea en tarea por REFERENCIA (no carga
+los mensajes en los outputs). El binding debe ser homogeneo:
+
+```
+MT101_BUILD_FROM_TABLE.output = fragments
+MT101_VALIDATE.input  = <build>.fragments   ;  marca VALIDATED/REJECTED por fragmento
+MT101_ARCHIVE.input   = <build>.fragments   ;  consume VALIDATED -> ARCHIVED
+MT101_PAY.input       = <build>.fragments   ;  consume ARCHIVED  -> SENT
+```
+
+El frontend ya defaultea `MT101_BUILD_FROM_TABLE` a output `fragments` y expone
+`fragments` como output de `MT101_VALIDATE`/`MT101_ARCHIVE`, de modo que el
+auto-binding de la UI encadena `fragments` sin elegir `records`/`summary` por
+error. Cada etapa lee SOLO los estados que su gate permite
+(`VALIDATE←BUILT`, `ARCHIVE←VALIDATED`, `PAY←ARCHIVED`), garantizando
+`BUILT → VALIDATED → ARCHIVED → SENT`.
+
+**Estado durable y muestreo de outputs**:
+- `mt101_archive.status` se sincroniza a lo largo del pipeline (`ARCHIVED` →
+  `SENT`/`REJECTED` por PAY → `CONFIRMED`/`REJECTED` por STATUS → `RECONCILED`
+  por RECONCILE), no queda en `COMPOSED`.
+- `MT101_ARCHIVE`/`MT101_PAY` publican una MUESTRA acotada en `records`/`errors`
+  (`maxRecordsInOutput`, default 1000) con `recordsSampled` cuando hay recorte;
+  los conteos (`archivedCount`/`sentCount`/...) son siempre exactos. El detalle
+  completo se consulta en `mt101_build_fragment`/`mt101_archive`.
+- `:20:` por defecto es `${batchCode}${messageIndex}` (batchCode = base36 del
+  processExecutionId): unico por ejecucion Y por fragmento, evitando colision
+  con el indice de idempotencia `(senders_reference, requested_execution_date)`.
+- `MT101_BUILD_FROM_TABLE` falla temprano si el set excederia 99999 fragmentos
+  (limite 5n de `:28D:`).
+
 Outputs:
 
 - `build-mt101-massive.fragmentSetId`: identificador reprocesable del lote.

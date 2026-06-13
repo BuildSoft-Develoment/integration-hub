@@ -83,6 +83,9 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     private static final int DEFAULT_POLL_INTERVAL_SECONDS = 300;
     private static final List<String> DEFAULT_FINAL_STATUSES = List.of("ACCEPTED", "REJECTED");
 
+    private static final List<String> DEFAULT_ACCEPTED_STATUSES =
+            List.of("ACCEPTED", "CONFIRMED", "SETTLED", "ACSC", "ACCP");
+
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
     private final DataSource defaultDataSource;
@@ -472,9 +475,56 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                 insert.addBatch();
             }
             insert.executeBatch();
+            // H5: avanza el estado durable en mt101_archive (CONFIRMED/REJECTED)
+            // por archive_id. Mismo connection que la insercion de confirmacion.
+            syncArchiveStatus(connection, configuration, rows);
         } catch (SQLException error) {
             throw new IllegalStateException("MT101_STATUS DB error: " + error.getMessage(), error);
         }
+    }
+
+    private void syncArchiveStatus(Connection connection, Map<String, Object> configuration,
+                                   List<ConfirmationRow> rows) {
+        if (!boolValue(configuration.get("archiveStatusSync"), true)) {
+            return;
+        }
+        var table = sanitize(stringValue(configuration.get("archiveStatusTable"), "mt101_archive"));
+        var accepted = acceptedStatuses(configuration.get("acceptedStatuses"));
+        var sql = "update " + table + " set status = ?, updated_at = current_timestamp where id = ?";
+        try (PreparedStatement update = connection.prepareStatement(sql)) {
+            var any = false;
+            for (var row : rows) {
+                if (row.archiveId() == null) {
+                    continue;
+                }
+                var confirmed = row.confirmedStatus() != null
+                        && accepted.contains(row.confirmedStatus().toUpperCase(Locale.ROOT));
+                update.setString(1, confirmed ? "CONFIRMED" : "REJECTED");
+                update.setLong(2, row.archiveId());
+                update.addBatch();
+                any = true;
+            }
+            if (any) {
+                update.executeBatch();
+            }
+        } catch (SQLException error) {
+            // 42P01 = tabla inexistente: flujo sin archivo (no hay nada que
+            // sincronizar). Cualquier otro error de BD si se propaga.
+            if (!"42P01".equals(error.getSQLState())) {
+                throw new IllegalStateException("MT101_STATUS archive sync error: " + error.getMessage(), error);
+            }
+        }
+    }
+
+    private List<String> acceptedStatuses(Object raw) {
+        if (!(raw instanceof List<?> rawList) || rawList.isEmpty()) {
+            return DEFAULT_ACCEPTED_STATUSES;
+        }
+        var result = new ArrayList<String>(rawList.size());
+        for (var item : rawList) {
+            result.add(String.valueOf(item).toUpperCase(Locale.ROOT));
+        }
+        return result;
     }
 
     private Map<String, Object> callbackConfig(Map<String, Object> configuration) {

@@ -23,6 +23,18 @@ curl -X POST https://<ambiente>/api/payment-validation-rules/import \
   -d @bank-sim-estricto.json
 ```
 
+Para bases locales/dev donde se requiere dejar filas visibles directamente en
+`public.payment_validation_rule`, usar el seed idempotente:
+
+```bash
+psql -h localhost -p 5432 -U postgres -d bdtrama \
+  -f qa/fase-6-qa/perfiles-simulados/payment-validation-rule-seed.sql
+```
+
+El resultado esperado son 13 reglas activas: 8 para `bank:SIM-ESTRICTO` y 5
+para `bank:SIM-FLEXIBLE`. Si la tabla no existe, primero debe levantarse la app
+o aplicar migraciones hasta V14.
+
 Y configurar el proceso de prueba con la segunda pasada de validación:
 
 ```jsonc

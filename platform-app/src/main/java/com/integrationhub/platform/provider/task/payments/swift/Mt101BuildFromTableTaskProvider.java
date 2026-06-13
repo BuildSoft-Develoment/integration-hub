@@ -53,6 +53,8 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     private static final int DEFAULT_MAX_BYTES = 10000;
     /** Total provisional para medir bytes: ancho maximo 5n de {@code :28D:}. */
     private static final int MEASUREMENT_TOTAL = 99999;
+    /** Maximo de fragmentos por set: limite 5n de {@code :28D:} message total. */
+    private static final int MAX_FRAGMENTS_PER_SET = 99999;
     /** Fragmentos por executeBatch al persistir en fase 2. */
     private static final int INSERT_BATCH_SIZE = 100;
 
@@ -125,6 +127,12 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
         if (plan.isEmpty()) {
             return TaskResult.success("MT101_BUILD_FROM_TABLE skipped because source table has no rows");
         }
+
+        // Fail-fast: :28D: (message index/total) es 5n, max 99999. Un set mas
+        // grande generaria fragmentos con total invalido. Mejor detenerlo aqui
+        // con instruccion accionable que dejar que MT101_VALIDATE lo marque
+        // fragmento por fragmento despues de materializar 100k+ filas.
+        guardFragmentCount(plan.size());
 
         validateReferenceTemplate(configuration, plan.size());
 
@@ -243,6 +251,16 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
      * fallaria en runtime con un error SQL criptico. Mejor fallar aqui con
      * instruccion accionable.
      */
+    /** Detiene la construccion si el set excede el limite 5n de {@code :28D:}. */
+    void guardFragmentCount(int totalFragments) {
+        if (totalFragments > MAX_FRAGMENTS_PER_SET) {
+            throw new IllegalArgumentException("MT101_BUILD_FROM_TABLE would produce " + totalFragments
+                    + " fragments, exceeding the :28D: limit of " + MAX_FRAGMENTS_PER_SET
+                    + " messages per set. Increase maxTransactionsPerMessage or split the source "
+                    + "into multiple fragment sets (e.g. partition the staging rows by batch).");
+        }
+    }
+
     private void validateReferenceTemplate(Map<String, Object> configuration, int totalFragments) {
         if (totalFragments <= 1) {
             return;

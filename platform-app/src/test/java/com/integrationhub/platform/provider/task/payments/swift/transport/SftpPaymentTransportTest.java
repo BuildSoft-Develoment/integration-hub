@@ -79,6 +79,41 @@ class SftpPaymentTransportTest {
     }
 
     @Test
+    void skipsReuploadWhenRemoteFileSameSize() throws Exception {
+        // Idempotencia: primer envio sube; segundo envio (mismo payload) detecta
+        // el archivo remoto con el mismo tamano y lo trata como aceptado sin
+        // re-subir (default SKIP_IF_SAME_HASH). Simula crash-post-rename + retry.
+        var message = sampleMessage("PROC-IDEM");
+        var configuration = configurationFor("/upload/idem-${sendersReference}.json");
+
+        var first = transport.send(message, configuration);
+        assertTrue(first.accepted());
+        var firstContent = readFile("/upload/idem-PROC-IDEM.json");
+
+        var second = transport.send(message, configuration);
+        assertTrue(second.accepted(), "re-envio idempotente debe aceptarse");
+        // El archivo no cambio (mismo contenido, no se re-subio uno corrupto).
+        assertEquals(firstContent, readFile("/upload/idem-PROC-IDEM.json"));
+    }
+
+    @Test
+    void failPolicyRejectsWhenRemoteFileExists() throws Exception {
+        var message = sampleMessage("PROC-FAIL");
+        var configuration = configurationFor("/upload/fail-${sendersReference}.json");
+        transport.send(message, configuration); // primer envio crea el archivo
+
+        @SuppressWarnings("unchecked")
+        var sftpCfg = (Map<String, Object>) configuration.get("sftp");
+        ((LinkedHashMap<String, Object>) sftpCfg).put("remoteDuplicatePolicy", "FAIL");
+        configuration.put("retryPolicy", Map.of("maxRetries", 0));
+
+        var result = transport.send(message, configuration);
+        assertFalse(result.accepted(), "FAIL debe rechazar si el remoto ya existe");
+        assertTrue(result.lastError().contains("already exists"),
+                () -> "mensaje inesperado: " + result.lastError());
+    }
+
+    @Test
     void appliesCustomTmpExtension() throws Exception {
         var message = sampleMessage("PROC-TMP");
         var cfg = configurationFor("/upload/${sendersReference}.fin");

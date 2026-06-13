@@ -78,6 +78,23 @@ class Mt101ReconcileTaskProviderTest {
 
         // Persistencia: ambas excepciones quedaron en la tabla.
         assertEquals(2, countRows("mt101_reconciliation_exception"));
+
+        // H5: las filas conciliadas (PROC-1, PROC-2) quedan RECONCILED; la no
+        // conciliada (PROC-3, SENT_WITHOUT_CONFIRM) conserva su estado previo.
+        assertEquals("RECONCILED", archiveStatus("PROC-1"));
+        assertEquals("RECONCILED", archiveStatus("PROC-2"));
+        assertEquals("ARCHIVED", archiveStatus("PROC-3"));
+    }
+
+    private String archiveStatus(String sendersReference) throws SQLException {
+        try (Connection c = dataSource.getConnection();
+             var stmt = c.prepareStatement("select status from mt101_archive where senders_reference = ?")) {
+            stmt.setString(1, sendersReference);
+            try (var rs = stmt.executeQuery()) {
+                rs.next();
+                return rs.getString(1);
+            }
+        }
     }
 
     @Test
@@ -149,7 +166,9 @@ class Mt101ReconcileTaskProviderTest {
             statement.executeUpdate("create table mt101_archive (" +
                     " id bigserial primary key," +
                     " senders_reference varchar(16) not null," +
-                    " created_at timestamp not null default current_timestamp)");
+                    " status varchar(20) not null default 'ARCHIVED'," +
+                    " created_at timestamp not null default current_timestamp," +
+                    " updated_at timestamp not null default current_timestamp)");
             statement.executeUpdate("create table mt101_confirmation (" +
                     " id bigserial primary key," +
                     " archive_id bigint," +

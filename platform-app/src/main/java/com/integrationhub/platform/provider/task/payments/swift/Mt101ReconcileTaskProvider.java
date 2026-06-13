@@ -101,6 +101,19 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
             // Para slice 2.1 lo omitimos (slice 2.2 lo cubre cuando exista columna confirmed_amount).
             matchedCount = countMatched(connection, sentTable, confirmationTable, matchKeys,
                     fromDate, asOfDate);
+            // H5: marca RECONCILED las filas conciliadas en la tabla de archivo
+            // (cierre del estado de negocio). Desactivable con archiveStatusSync=false.
+            if (boolValue(configuration.get("archiveStatusSync"), true)) {
+                try {
+                    markReconciled(connection, sentTable, confirmationTable, matchKeys, fromDate, asOfDate);
+                } catch (SQLException reconcileError) {
+                    // 42703 = columna inexistente (sentTable sin status/updated_at,
+                    // e.g. tabla custom): la conciliacion-reporte sigue valida.
+                    if (!"42703".equals(reconcileError.getSQLState())) {
+                        throw reconcileError;
+                    }
+                }
+            }
             // Persistencia opcional de las excepciones.
             if (exceptionTable != null && !exceptions.isEmpty()) {
                 persistExceptions(connection, exceptionTable, asOfDate, exceptions);
@@ -177,6 +190,30 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
                 return count;
             }
         }
+    }
+
+    /** Marca {@code RECONCILED} las filas del archivo con confirmacion en la ventana. */
+    private void markReconciled(Connection connection, String sentTable, String confirmationTable,
+                                List<String> matchKeys, LocalDate from, LocalDate to) throws SQLException {
+        var joinClause = buildJoinClause("s", "c", matchKeys);
+        // Solo si la tabla tiene columna updated_at (V17); si no, omite el touch.
+        var sql = "update " + sentTable + " s set status = 'RECONCILED', updated_at = current_timestamp"
+                + " from " + confirmationTable + " c"
+                + " where " + joinClause
+                + " and s.created_at::date between ? and ?"
+                + " and s.status <> 'RECONCILED'";
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, from);
+            statement.setObject(2, to);
+            statement.executeUpdate();
+        }
+    }
+
+    private boolean boolValue(Object raw, boolean defaultValue) {
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return defaultValue;
+        }
+        return Boolean.parseBoolean(String.valueOf(raw));
     }
 
     private int countMatched(Connection connection, String sentTable, String confirmationTable,

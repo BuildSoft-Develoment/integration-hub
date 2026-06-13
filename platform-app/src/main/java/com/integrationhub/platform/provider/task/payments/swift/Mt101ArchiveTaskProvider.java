@@ -44,6 +44,8 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
 
     private static final String DEFAULT_TABLE = "mt101_archive";
     private static final int DEFAULT_RETENTION_DAYS = 3650;
+    /** Muestra de records en el output; archivedCount es siempre exacto. */
+    private static final int DEFAULT_MAX_RECORDS_IN_OUTPUT = 1000;
 
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
@@ -89,7 +91,8 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
         var encryptor = resolveEncryptor(configuration);
         var retentionDays = intValue(configuration.get("retentionDays"), DEFAULT_RETENTION_DAYS);
 
-        var accumulator = new ArchiveAccumulator();
+        var accumulator = new ArchiveAccumulator(
+                intValue(configuration.get("maxRecordsInOutput"), DEFAULT_MAX_RECORDS_IN_OUTPUT));
         if (!fragmentSource.isEmpty() && fragmentStore != null) {
             // Flujo masivo: una transaccion por pagina (un fragmento fallido
             // revierte solo su pagina) y entradas SIN el Mt101Message embebido:
@@ -115,21 +118,24 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
             }
         }
 
-        if (accumulator.archived.isEmpty()) {
+        if (accumulator.archivedCount == 0) {
             return TaskResult.success("MT101_ARCHIVE skipped because there are no messages to archive");
         }
 
         var outputs = new LinkedHashMap<String, Object>();
-        outputs.put("archivedCount", accumulator.archived.size());
+        outputs.put("archivedCount", accumulator.archivedCount);
         outputs.put("totalBytes", accumulator.totalBytes);
         outputs.put("targetTable", DEFAULT_TABLE);
+        // records es una MUESTRA acotada (maxRecordsInOutput); el detalle completo
+        // esta en mt101_archive / mt101_build_fragment.
         outputs.put("records", accumulator.archived);
+        outputs.put("recordsSampled", accumulator.archivedCount > accumulator.archived.size());
         if (!fragmentSource.isEmpty()) {
             outputs.put("fragments", fragmentSource);
         }
 
         return TaskResult.success(
-                "MT101_ARCHIVE archived " + accumulator.archived.size()
+                "MT101_ARCHIVE archived " + accumulator.archivedCount
                         + " messages (" + accumulator.totalBytes + " bytes)",
                 outputs);
     }
@@ -168,7 +174,7 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
                     if (includeMessageInEntry) {
                         entry.put("message", message);
                     }
-                    accumulator.archived.add(entry);
+                    accumulator.add(entry);
                 }
                 connection.commit();
             } catch (SQLException | RuntimeException error) {
@@ -186,10 +192,23 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
         }
     }
 
-    /** Acumula resultados de archivo sin retener los mensajes en memoria. */
+    /** Acumula archivo con sample acotado (memoria O(maxRecords)); conteo exacto. */
     private static final class ArchiveAccumulator {
         final ArrayList<Map<String, Object>> archived = new ArrayList<>();
+        final int maxRecordsInOutput;
+        int archivedCount;
         long totalBytes;
+
+        ArchiveAccumulator(int maxRecordsInOutput) {
+            this.maxRecordsInOutput = Math.max(maxRecordsInOutput, 0);
+        }
+
+        void add(Map<String, Object> entry) {
+            archivedCount++;
+            if (archived.size() < maxRecordsInOutput) {
+                archived.add(entry);
+            }
+        }
     }
 
     private long insertEnvelope(Connection connection,
@@ -260,7 +279,9 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
             var accountServicing = sequenceA == null ? null : sequenceA.accountServicingInstitution();
             statement.setString(12, accountServicing == null ? null : accountServicing.option());
             statement.setString(13, partyValue(accountServicing));
-            statement.setString(14, "COMPOSED");
+            // El mensaje queda archivado (hash + retencion persistidos): ARCHIVED,
+            // no COMPOSED. PAY/STATUS/RECONCILE avanzan el estado desde aqui.
+            statement.setString(14, "ARCHIVED");
             statement.setString(15, message.format());
             statement.setObject(16, LocalDate.now().plusDays(retentionDays), Types.DATE);
             statement.executeUpdate();

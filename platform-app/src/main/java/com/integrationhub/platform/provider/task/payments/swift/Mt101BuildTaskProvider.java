@@ -225,11 +225,29 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         }
         var resolved = template
                 .replace("${_processExecutionId}", String.valueOf(context.processExecutionId()))
+                .replace("${batchCode}", batchCode(context))
                 .replace("${messageIndex}", String.valueOf(messageIndex));
         if (resolved.length() > 16) {
             throw new IllegalArgumentException("MT101_BUILD sendersReference exceeds 16 characters: " + resolved);
         }
         return resolved;
+    }
+
+    /**
+     * Codigo de lote unico por ejecucion: base36 del {@code processExecutionId}
+     * en mayusculas (charset SWIFT-X valido, ~4-7 chars). Garantiza que dos
+     * ejecuciones distintas con la misma {@code requested_execution_date} no
+     * colisionen en el indice de idempotencia
+     * {@code (senders_reference, requested_execution_date)}: cada lote produce
+     * referencias {@code <batchCode><index>} distintas, mientras que un re-run
+     * de la MISMA ejecucion reproduce el mismo codigo (idempotencia real).
+     */
+    private String batchCode(TaskContext context) {
+        var executionId = context.processExecutionId();
+        if (executionId == null) {
+            return "0";
+        }
+        return Long.toString(executionId, 36).toUpperCase(java.util.Locale.ROOT);
     }
 
     private LocalDate resolveDate(Object raw) {

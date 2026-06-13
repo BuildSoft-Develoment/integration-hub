@@ -19,10 +19,12 @@ export class Mt101BuildFromTableTaskProvider extends Mt101BuildTaskProvider {
       maxTransactionsPerMessage: 100,
       sequenceA: {
         ...draft.sequenceA,
-        // El default heredado (PROC-${_processExecutionId}) produce el mismo :20:
-        // en todos los fragmentos y el backend lo rechaza cuando hay mas de uno.
-        // ${messageIndex} garantiza unicidad por fragmento (max 16 chars: "P" + 5n).
-        sendersReferenceTemplate: 'P${messageIndex}',
+        // ${batchCode} (base36 del processExecutionId) hace la referencia unica
+        // por EJECUCION; ${messageIndex} la hace unica por fragmento. Asi dos
+        // lotes el mismo dia con la misma fecha no chocan en el indice de
+        // idempotencia (senders_reference, requested_execution_date). Cabe en
+        // 16 chars: batchCode ~4-7 + messageIndex 1-5.
+        sendersReferenceTemplate: '${batchCode}${messageIndex}',
       },
     };
   }

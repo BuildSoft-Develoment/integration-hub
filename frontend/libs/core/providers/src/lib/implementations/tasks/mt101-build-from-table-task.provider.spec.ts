@@ -18,16 +18,16 @@ describe('Mt101BuildFromTableTaskProvider', () => {
     expect(config.replaceExisting).toBe(true);
   });
 
-  it('defaults sendersReferenceTemplate with ${messageIndex} so fragments get unique :20:', () => {
-    // El default heredado del build (PROC-${_processExecutionId}) seria
-    // rechazado por el backend al producir mas de un fragmento.
+  it('defaults sendersReferenceTemplate with ${batchCode}${messageIndex} for cross-execution uniqueness', () => {
+    // ${batchCode} unico por ejecucion + ${messageIndex} unico por fragmento:
+    // evita choque en el indice de idempotencia entre lotes del mismo dia.
     const provider = new Mt101BuildFromTableTaskProvider();
     const draft = provider.createDraft();
-    expect(draft.sequenceA.sendersReferenceTemplate).toBe('P${messageIndex}');
+    expect(draft.sequenceA.sendersReferenceTemplate).toBe('${batchCode}${messageIndex}');
 
     const config = JSON.parse(
       provider.toTaskPatch({ ...draft, taskRef: 'build-massive' }).configurationJson as string,
     );
-    expect(config.sequenceA.sendersReferenceTemplate).toBe('P${messageIndex}');
+    expect(config.sequenceA.sendersReferenceTemplate).toBe('${batchCode}${messageIndex}');
   });
 });

@@ -252,6 +252,39 @@ class Mt101BuildTaskProviderTest {
     }
 
     @Test
+    void resolvesBatchCodeUniquePerExecution() {
+        // ${batchCode} = base36(processExecutionId) en mayusculas: charset SWIFT-X,
+        // unico por ejecucion. Dos ejecuciones distintas dan referencias distintas
+        // aun con el mismo messageIndex -> no chocan en el indice de idempotencia.
+        var first = buildSenders(1_000_000L);
+        var second = buildSenders(1_000_001L);
+        var expectedFirst = Long.toString(1_000_000L, 36).toUpperCase() + "1";
+        assertEquals(expectedFirst, first, "batchCode = base36(execId) en mayusculas + messageIndex");
+        org.junit.jupiter.api.Assertions.assertNotEquals(first, second,
+                "ejecuciones distintas deben dar referencias distintas");
+        assertTrue(first.matches("[0-9A-Z]+"), "solo charset SWIFT-X");
+    }
+
+    private String buildSenders(long executionId) {
+        var context = new TaskContext(executionId, 7L);
+        context.attributes().put("readResult", new ReadResult(
+                List.of(new ReadRecord(Map.of("moneda", "PEN", "monto", "1", "cuenta_beneficiario", "B"))), 1));
+        var result = provider.execute(context, Map.of(
+                "sequenceA", Map.of(
+                        "sendersReferenceTemplate", "${batchCode}${messageIndex}",
+                        "orderingCustomer", Map.of("option", "H", "account", "001")
+                ),
+                "transactionMappings", Map.of(
+                        "amount", Map.of("currencyField", "moneda", "valueField", "monto"),
+                        "beneficiary", Map.of("option", "", "accountField", "cuenta_beneficiario")
+                )
+        ));
+        @SuppressWarnings("unchecked")
+        var records = (List<com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message>) result.outputs().get("records");
+        return records.get(0).sequenceA().sendersReference();
+    }
+
+    @Test
     void rejectsSendersReferenceLongerThanSixteenChars() {
         var context = new TaskContext(99999999L, 1L);
         context.attributes().put("readResult", new ReadResult(

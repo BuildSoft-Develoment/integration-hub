@@ -62,6 +62,7 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
 
     public static final String TRANSPORT_ID = "SFTP";
     private static final String DEFAULT_TMP_EXTENSION = ".part";
+    private static final String DEFAULT_DUPLICATE_POLICY = "SKIP_IF_SAME_HASH";
     private static final int DEFAULT_TIMEOUT_MILLIS = 15000;
     private static final int DEFAULT_PORT = 22;
     private static final int DEFAULT_MAX_RETRIES = 5;
@@ -109,6 +110,8 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
         var knownHostsPath = stringOrNull(sftpCfg.get("knownHostsPath"));
         var dropPathTemplate = stringRequired(sftpCfg.get("dropPathTemplate"), "sftp.dropPathTemplate");
         var tmpExtension = stringValue(sftpCfg.get("tmpExtension"), DEFAULT_TMP_EXTENSION);
+        var duplicatePolicy = stringValue(sftpCfg.get("remoteDuplicatePolicy"), DEFAULT_DUPLICATE_POLICY)
+                .toUpperCase(java.util.Locale.ROOT);
         var dropPath = resolveTemplate(dropPathTemplate, message);
         var tmpPath = dropPath + tmpExtension;
 
@@ -139,16 +142,57 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
             channel = (ChannelSftp) session.openChannel("sftp");
             channel.connect(timeoutMillis);
 
-            // Upload with temporary extension.
             var rawPayload = message.rawPayload();
             if (rawPayload == null) {
                 throw new IllegalStateException("Mt101Message.rawPayload is required for SFTP send");
             }
             var bytes = rawPayload.getBytes(StandardCharsets.UTF_8);
+
+            // Idempotencia remota (H4): si el archivo final ya existe en el banco
+            // (e.g. crash post-rename/pre-SENT y luego retry), la politica decide.
+            var existing = statRemote(channel, dropPath);
+            if (existing != null) {
+                var durationMs = System.currentTimeMillis() - startedAt;
+                switch (duplicatePolicy) {
+                    case "SKIP_IF_SAME_HASH" -> {
+                        if (existing.getSize() == bytes.length) {
+                            // Mismo tamano: asumimos mismo contenido (el banco ya lo tiene).
+                            // Tratamos como aceptado idempotente, no re-subimos.
+                            return TransportResult.accepted(dropPath, 1, durationMs);
+                        }
+                        return TransportResult.rejected(1, durationMs,
+                                "SFTP remote file " + dropPath + " exists with different size ("
+                                        + existing.getSize() + " vs " + bytes.length + "); manual review required");
+                    }
+                    case "FAIL" -> {
+                        return TransportResult.rejected(1, durationMs,
+                                "SFTP remote file already exists: " + dropPath
+                                        + " (remoteDuplicatePolicy=FAIL)");
+                    }
+                    case "RENAME_WITH_SUFFIX" -> {
+                        dropPath = dropPath + "." + System.currentTimeMillis();
+                    }
+                    case "OVERWRITE" -> {
+                        // continua: el put/rename sobrescribe.
+                    }
+                    default -> throw new IllegalArgumentException(
+                            "Unknown sftp.remoteDuplicatePolicy: " + duplicatePolicy
+                                    + " (expected SKIP_IF_SAME_HASH, FAIL, OVERWRITE, RENAME_WITH_SUFFIX)");
+                }
+            }
+
+            // Upload with temporary extension, then atomic rename.
             try (var input = new ByteArrayInputStream(bytes)) {
                 channel.put(input, tmpPath, ChannelSftp.OVERWRITE);
             }
-            // Atomic rename (the bank only ever sees the final path).
+            // rm del destino si OVERWRITE y existia (rename no pisa en algunos servidores).
+            if (existing != null && "OVERWRITE".equals(duplicatePolicy)) {
+                try {
+                    channel.rm(dropPath);
+                } catch (SftpException ignored) {
+                    // el rename siguiente fallara y se reportara; no enmascaramos.
+                }
+            }
             channel.rename(tmpPath, dropPath);
 
             var durationMs = System.currentTimeMillis() - startedAt;
@@ -165,6 +209,15 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
             if (session != null && session.isConnected()) {
                 session.disconnect();
             }
+        }
+    }
+
+    /** {@code stat} del archivo remoto; {@code null} si no existe. */
+    private com.jcraft.jsch.SftpATTRS statRemote(ChannelSftp channel, String path) {
+        try {
+            return channel.stat(path);
+        } catch (SftpException notFound) {
+            return null;
         }
     }
 
