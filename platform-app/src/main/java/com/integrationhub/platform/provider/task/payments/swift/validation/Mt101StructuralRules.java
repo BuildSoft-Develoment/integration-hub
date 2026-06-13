@@ -2,7 +2,7 @@ package com.integrationhub.platform.provider.task.payments.swift.validation;
 
 import com.integrationhub.platform.spi.payments.ValidationIssue;
 import com.integrationhub.platform.spi.payments.ValidationPredicate;
-import com.integrationhub.platform.provider.task.payments.model.Mt101Message;
+import com.integrationhub.platform.spi.payments.Mt101Message;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.math.BigDecimal;

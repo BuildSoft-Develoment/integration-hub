@@ -1,6 +1,5 @@
 package com.integrationhub.platform.spi.payments;
 
-import com.integrationhub.platform.provider.task.payments.model.Mt101Message;
 
 import java.util.Map;
 

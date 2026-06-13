@@ -3,7 +3,7 @@ package com.integrationhub.platform.provider.task.payments.swift;
 import com.integrationhub.platform.spi.payments.ValidationIssue;
 import com.integrationhub.platform.spi.payments.ValidationPredicate;
 import com.integrationhub.platform.spi.payments.ValidationRuleProvider;
-import com.integrationhub.platform.provider.task.payments.model.Mt101Message;
+import com.integrationhub.platform.spi.payments.Mt101Message;
 import com.integrationhub.platform.provider.task.payments.swift.validation.Mt101StructuralRules;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;

@@ -1,7 +1,7 @@
 package com.integrationhub.platform.provider.task.payments.iso20022;
 
 import com.integrationhub.platform.provider.task.payments.iso20022.mapper.Pain001ToMt101Mapper;
-import com.integrationhub.platform.provider.task.payments.model.Mt101Message;
+import com.integrationhub.platform.spi.payments.Mt101Message;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.source.SourcePayload;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;

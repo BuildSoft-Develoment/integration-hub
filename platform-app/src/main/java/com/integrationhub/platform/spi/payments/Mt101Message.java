@@ -1,4 +1,4 @@
-package com.integrationhub.platform.provider.task.payments.model;
+package com.integrationhub.platform.spi.payments;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

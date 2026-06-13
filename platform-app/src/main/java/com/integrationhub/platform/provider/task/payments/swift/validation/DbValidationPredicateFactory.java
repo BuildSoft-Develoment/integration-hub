@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.spi.payments.ValidationIssue;
 import com.integrationhub.platform.spi.payments.ValidationPredicate;
-import com.integrationhub.platform.provider.task.payments.model.Mt101Message;
+import com.integrationhub.platform.spi.payments.Mt101Message;
 import org.apache.commons.jexl3.JexlEngine;
 import org.apache.commons.jexl3.MapContext;
 

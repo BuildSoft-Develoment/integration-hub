@@ -10,7 +10,7 @@ import com.integrationhub.platform.spi.payments.ValidationRuleProvider;
 import com.integrationhub.platform.provider.task.payments.swift.format.FinMt101Formatter;
 import com.integrationhub.platform.provider.task.payments.swift.format.JsonMt101Formatter;
 import com.integrationhub.platform.provider.task.payments.swift.format.XmlMt101Formatter;
-import com.integrationhub.platform.provider.task.payments.model.Mt101Message;
+import com.integrationhub.platform.spi.payments.Mt101Message;
 import com.integrationhub.platform.provider.task.payments.swift.transport.RestPaymentTransport;
 import com.integrationhub.platform.provider.task.payments.swift.validation.Mt101StructuralRules;
 import com.integrationhub.platform.spi.reader.ReadRecord;
