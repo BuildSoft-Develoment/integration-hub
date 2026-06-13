@@ -90,6 +90,8 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 // quedan SENT-en-banco pero ARCHIVED-en-BD; el Idempotency-Key
                 // del transporte REST hace seguro el re-envio.
                 var sentRefs = new ArrayList<String>(page.size());
+                var sentTargets = new ArrayList<Mt101ArchiveStatusUpdater.StatusTarget>(page.size());
+                var rejectedTargets = new ArrayList<Mt101ArchiveStatusUpdater.StatusTarget>();
                 // Mapa de errores acotado a la pagina (no a la ejecucion completa).
                 var rejectedByRef = new LinkedHashMap<String, String>();
                 for (var message : page) {
@@ -101,8 +103,10 @@ public class Mt101PayTaskProvider implements TaskProvider {
                     }
                     if (lastError == null) {
                         sentRefs.add(reference);
+                        sentTargets.add(archiveTarget(message));
                     } else {
                         rejectedByRef.put(reference, lastError);
+                        rejectedTargets.add(archiveTarget(message));
                     }
                 }
                 fragmentStore.markStatusBatch(fragmentSource, sentRefs, "SENT");
@@ -110,8 +114,8 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 // H5: avanza el estado durable en mt101_archive (la tabla de
                 // auditoria, no solo el fragmento) si la sincronizacion no se
                 // desactivo explicitamente.
-                syncArchive(configuration, fragmentSource, sentRefs, "SENT");
-                syncArchive(configuration, fragmentSource, rejectedByRef.keySet(), "REJECTED");
+                syncArchive(configuration, fragmentSource, sentTargets, "SENT");
+                syncArchive(configuration, fragmentSource, rejectedTargets, "REJECTED");
             });
         } else {
             var messages = Mt101MessageInputResolver.readMessages(context, configuration, type(), fragmentStore);
@@ -222,16 +226,25 @@ public class Mt101PayTaskProvider implements TaskProvider {
 
     private void syncArchive(Map<String, Object> configuration,
                              Map<String, Object> fragmentSource,
-                             java.util.Collection<String> references,
+                             java.util.Collection<Mt101ArchiveStatusUpdater.StatusTarget> targets,
                              String status) {
-        if (archiveStatusUpdater == null || references.isEmpty()
+        if (archiveStatusUpdater == null || targets.isEmpty()
                 || !boolValue(configuration.get("archiveStatusSync"), true)) {
             return;
         }
         var connectionRef = stringValue(fragmentSource.get("connectionRef"), null);
         var table = stringValue(configuration.get("archiveStatusTable"),
                 Mt101ArchiveStatusUpdater.DEFAULT_TABLE);
-        archiveStatusUpdater.updateStatus(connectionRef, table, references, status);
+        archiveStatusUpdater.updateStatusTargets(connectionRef, table, targets, status);
+    }
+
+    private Mt101ArchiveStatusUpdater.StatusTarget archiveTarget(Mt101Message message) {
+        var sequenceA = message.sequenceA();
+        var envelope = message.envelope();
+        return new Mt101ArchiveStatusUpdater.StatusTarget(
+                sequenceA == null ? null : sequenceA.sendersReference(),
+                sequenceA == null ? null : sequenceA.requestedExecutionDate(),
+                envelope == null ? null : envelope.senderLt());
     }
 
     private boolean boolValue(Object raw, boolean defaultValue) {

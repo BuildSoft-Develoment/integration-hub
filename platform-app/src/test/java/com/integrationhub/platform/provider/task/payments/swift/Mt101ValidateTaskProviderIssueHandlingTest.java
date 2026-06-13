@@ -1,5 +1,7 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationIssue;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationPredicate;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationRuleProvider;
@@ -48,6 +50,25 @@ class Mt101ValidateTaskProviderIssueHandlingTest {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("drop table if exists mt101_validation_issue");
+            statement.executeUpdate("drop table if exists mt101_build_fragment");
+            statement.executeUpdate("create table mt101_build_fragment ("
+                    + "id bigserial primary key,"
+                    + "fragment_set_id varchar(80) not null,"
+                    + "process_execution_id bigint,"
+                    + "task_definition_id bigint,"
+                    + "source_table varchar(255),"
+                    + "source_row_from bigint,"
+                    + "source_row_to bigint,"
+                    + "fragment_index integer not null,"
+                    + "fragment_total integer not null,"
+                    + "senders_reference varchar(16) not null,"
+                    + "payload_hash char(64) not null,"
+                    + "raw_payload text not null,"
+                    + "message_json text not null,"
+                    + "status varchar(20) not null default 'BUILT',"
+                    + "error_message text,"
+                    + "created_at timestamp not null default current_timestamp,"
+                    + "updated_at timestamp not null default current_timestamp)");
             statement.executeUpdate("create table mt101_validation_issue ("
                     + "id bigserial primary key,"
                     + "archive_id bigint,"
@@ -56,6 +77,9 @@ class Mt101ValidateTaskProviderIssueHandlingTest {
                     + "rule_set varchar(50) not null,"
                     + "severity char(1) not null,"
                     + "message text,"
+                    + "fragment_set_id varchar(80),"
+                    + "senders_reference varchar(16),"
+                    + "fragment_index integer,"
                     + "detected_at timestamp not null default current_timestamp)");
         }
     }
@@ -123,12 +147,57 @@ class Mt101ValidateTaskProviderIssueHandlingTest {
         }
     }
 
+    @Test
+    void persistsFragmentLineageWhenValidatingMassiveFlow() throws Exception {
+        var fragmentStore = new Mt101FragmentStore(dataSource, null,
+                new ObjectMapper().registerModule(new JavaTimeModule()));
+        var provider = provider(dataSource, fragmentStore);
+        var message = validMessage("TX-FRAG").withRawPayload("{\"sample\":true}", "JSON");
+        fragmentStore.insertFragment(null, "SET-ISSUES", 1L, 10L,
+                "staging_record", 1L, 1L, 1, 1, message);
+
+        var context = new TaskContext(1L, 10L);
+        context.attributes().put("taskOutputs", Map.of(
+                "build-mt101.fragments", fragmentStore.source(null, "SET-ISSUES", 1)
+        ));
+
+        var result = provider.execute(context, Map.of(
+                "publishIssuesTo", "table:mt101_validation_issue",
+                "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "fragments"),
+                "pageSize", 1
+        ));
+
+        assertFalse(result.success());
+        assertEquals(2, result.outputs().get("issueCount"));
+
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement();
+             var rs = statement.executeQuery("select count(*) from mt101_validation_issue "
+                     + "where fragment_set_id = 'SET-ISSUES' "
+                     + "and senders_reference = 'PROC-1' "
+                     + "and fragment_index = 1")) {
+            assertTrue(rs.next());
+            assertEquals(2, rs.getInt(1));
+        }
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement();
+             var rs = statement.executeQuery("select status from mt101_build_fragment "
+                     + "where fragment_set_id = 'SET-ISSUES' and senders_reference = 'PROC-1'")) {
+            assertTrue(rs.next());
+            assertEquals("REJECTED", rs.getString(1));
+        }
+    }
+
     private Mt101ValidateTaskProvider provider(DataSource sinkDataSource) {
+        return provider(sinkDataSource, null);
+    }
+
+    private Mt101ValidateTaskProvider provider(DataSource sinkDataSource, Mt101FragmentStore fragmentStore) {
         var ruleProvider = new SingleRuleProvider((ruleSet, standard, appliesTo) -> List.of(
                 new FixedIssuePredicate("BANK.TEST.REQUIRED"),
                 new FixedIssuePredicate("BANK.TEST.LIMIT")
         ));
-        return new Mt101ValidateTaskProvider(new InstanceOfOne<>(ruleProvider), null, sinkDataSource, null);
+        return new Mt101ValidateTaskProvider(new InstanceOfOne<>(ruleProvider), fragmentStore, sinkDataSource, null);
     }
 
     private Mt101Message validMessage(String transactionReference) {

@@ -218,7 +218,7 @@ error. Cada etapa lee SOLO los estados que su gate permite
   completo se consulta en `mt101_build_fragment`/`mt101_archive`.
 - `:20:` por defecto es `${batchCode}${messageIndex}` (batchCode = base36 del
   processExecutionId): unico por ejecucion Y por fragmento, evitando colision
-  con el indice de idempotencia `(senders_reference, requested_execution_date)`.
+  con el indice de idempotencia `(sender_lt, senders_reference, year_of_execution)`.
 - `MT101_BUILD_FROM_TABLE` falla temprano si el set excederia 99999 fragmentos
   (limite 5n de `:28D:`).
 
@@ -315,6 +315,7 @@ Outputs:
       "password": "${secret:sftp_pass}",
       "dropPathTemplate": "/in/mt101/${sendersReference}.xml",
       "tmpExtension": ".part",
+      "remoteDuplicatePolicy": "SKIP_IF_SAME_HASH",
       "strictHostKeyChecking": true,
       "knownHostsPath": "/etc/ssh/ssh_known_hosts",
       "timeoutMillis": 15000
@@ -524,6 +525,7 @@ INDEX `(message_type, parsed_at)`.
 |---|---|---|
 | `id` | bigserial | PK |
 | `envelope_id` | bigint | FK -> swift_message_envelope.id |
+| `sender_lt` | char(12) | copia operacional del LT emisor para idempotencia |
 | `senders_reference` | varchar(16) | `:20:` |
 | `customer_specified_reference` | varchar(16) | `:21R:` |
 | `message_index` | integer | `:28D:` numerador |
@@ -541,7 +543,7 @@ INDEX `(message_type, parsed_at)`.
 | `created_at` | timestamp | |
 | `retention_until` | date | derivado de `retentionDays` |
 
-Indices: PK; UNIQUE `(sender_lt_via_envelope, senders_reference, year_of_execution)`
+Indices: PK; UNIQUE `(sender_lt, senders_reference, year_of_execution)`
 para idempotencia operacional; INDEX `(status, created_at)`.
 
 ### Tabla `mt101_transaction`
@@ -580,6 +582,9 @@ INDEX `(amount_currency)`.
 | `rule_set` | varchar(50) | identificador del set de reglas |
 | `severity` | char(1) | E/W/I |
 | `message` | text | |
+| `fragment_set_id` | varchar(80) | lote masivo origen, si aplica |
+| `senders_reference` | varchar(16) | `:20:` del fragmento/mensaje |
+| `fragment_index` | integer | indice `:28D:` del fragmento, si aplica |
 | `detected_at` | timestamp | |
 
 ### Tabla `mt101_confirmation`

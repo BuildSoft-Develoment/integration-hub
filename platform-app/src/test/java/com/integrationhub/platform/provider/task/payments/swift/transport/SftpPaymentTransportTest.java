@@ -12,8 +12,10 @@ import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -94,6 +96,23 @@ class SftpPaymentTransportTest {
         assertTrue(second.accepted(), "re-envio idempotente debe aceptarse");
         // El archivo no cambio (mismo contenido, no se re-subio uno corrupto).
         assertEquals(firstContent, readFile("/upload/idem-PROC-IDEM.json"));
+    }
+
+    @Test
+    void rejectsReuploadWhenRemoteFileSameSizeButDifferentHash() throws Exception {
+        var message = sampleMessage("PROC-HASH");
+        var configuration = configurationFor("/upload/hash-${sendersReference}.json");
+        configuration.put("retryPolicy", Map.of("maxRetries", 0));
+        var remoteContent = sameLengthDifferent(message.rawPayload());
+        writeFile("/upload/hash-PROC-HASH.json", remoteContent);
+
+        var result = transport.send(message, configuration);
+
+        assertFalse(result.accepted(), "mismo tamano con hash distinto debe rechazarse");
+        assertTrue(result.lastError().contains("different hash"),
+                () -> "mensaje inesperado: " + result.lastError());
+        assertEquals(remoteContent, readFile("/upload/hash-PROC-HASH.json"),
+                "el archivo remoto no debe sobrescribirse bajo SKIP_IF_SAME_HASH");
     }
 
     @Test
@@ -250,5 +269,34 @@ class SftpPaymentTransportTest {
             if (channel != null && channel.isConnected()) channel.disconnect();
             if (session != null && session.isConnected()) session.disconnect();
         }
+    }
+
+    private void writeFile(String path, String content) throws Exception {
+        Session session = null;
+        ChannelSftp channel = null;
+        try {
+            var jsch = new JSch();
+            session = jsch.getSession(SFTP_USER, SFTP.getHost(), SFTP.getMappedPort(22));
+            session.setPassword(SFTP_PASSWORD);
+            var props = new Properties();
+            props.put("StrictHostKeyChecking", "no");
+            session.setConfig(props);
+            session.connect(5000);
+            channel = (ChannelSftp) session.openChannel("sftp");
+            channel.connect(5000);
+            try (var input = new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8))) {
+                channel.put(input, path, ChannelSftp.OVERWRITE);
+            }
+        } finally {
+            if (channel != null && channel.isConnected()) channel.disconnect();
+            if (session != null && session.isConnected()) session.disconnect();
+        }
+    }
+
+    private String sameLengthDifferent(String rawPayload) {
+        var chars = rawPayload.toCharArray();
+        var index = Math.max(chars.length - 2, 0);
+        chars[index] = chars[index] == '0' ? '1' : '0';
+        return new String(chars);
     }
 }

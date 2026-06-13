@@ -11,7 +11,11 @@ import com.jcraft.jsch.SftpException;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.io.ByteArrayInputStream;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -155,14 +159,22 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
                 var durationMs = System.currentTimeMillis() - startedAt;
                 switch (duplicatePolicy) {
                     case "SKIP_IF_SAME_HASH" -> {
-                        if (existing.getSize() == bytes.length) {
-                            // Mismo tamano: asumimos mismo contenido (el banco ya lo tiene).
-                            // Tratamos como aceptado idempotente, no re-subimos.
-                            return TransportResult.accepted(dropPath, 1, durationMs);
+                        if (existing.getSize() != bytes.length) {
+                            return TransportResult.rejected(1, durationMs,
+                                    "SFTP remote file " + dropPath + " exists with different size ("
+                                            + existing.getSize() + " vs " + bytes.length
+                                            + "); manual review required");
+                        }
+                        try (var remoteInput = channel.get(dropPath)) {
+                            if (sha256Hex(remoteInput).equals(sha256Hex(bytes))) {
+                                // Mismo contenido: el banco ya tiene el archivo final.
+                                // Tratamos como aceptado idempotente, no re-subimos.
+                                return TransportResult.accepted(dropPath, 1, durationMs);
+                            }
                         }
                         return TransportResult.rejected(1, durationMs,
-                                "SFTP remote file " + dropPath + " exists with different size ("
-                                        + existing.getSize() + " vs " + bytes.length + "); manual review required");
+                                "SFTP remote file " + dropPath
+                                        + " exists with different hash; manual review required");
                     }
                     case "FAIL" -> {
                         return TransportResult.rejected(1, durationMs,
@@ -218,6 +230,29 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
             return channel.stat(path);
         } catch (SftpException notFound) {
             return null;
+        }
+    }
+
+    private String sha256Hex(byte[] bytes) {
+        var digest = sha256();
+        return HexFormat.of().formatHex(digest.digest(bytes));
+    }
+
+    private String sha256Hex(InputStream input) throws java.io.IOException {
+        var digest = sha256();
+        var buffer = new byte[8192];
+        int read;
+        while ((read = input.read(buffer)) >= 0) {
+            digest.update(buffer, 0, read);
+        }
+        return HexFormat.of().formatHex(digest.digest());
+    }
+
+    private MessageDigest sha256() {
+        try {
+            return MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 digest is not available", error);
         }
     }
 

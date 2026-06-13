@@ -250,40 +250,42 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
                                String storedPayload,
                                int retentionDays) throws SQLException {
         var sql = "insert into mt101_archive "
-                + "(envelope_id, senders_reference, customer_specified_reference, message_index, message_total, "
+                + "(envelope_id, sender_lt, senders_reference, customer_specified_reference, message_index, message_total, "
                 + " requested_execution_date, instructing_party_kind, instructing_party_value, "
                 + " ordering_customer_kind, ordering_customer_account, ordering_customer_name_addr, "
                 + " account_servicing_kind, account_servicing_value, status, format, retention_until) "
-                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             var sequenceA = message.sequenceA();
+            var envelope = message.envelope();
             statement.setLong(1, envelopeId);
-            statement.setString(2, sequenceA == null ? null : sequenceA.sendersReference());
-            statement.setString(3, sequenceA == null ? null : sequenceA.customerSpecifiedReference());
+            statement.setString(2, envelope == null ? null : envelope.senderLt());
+            statement.setString(3, sequenceA == null ? null : sequenceA.sendersReference());
+            statement.setString(4, sequenceA == null ? null : sequenceA.customerSpecifiedReference());
             if (sequenceA == null) {
-                statement.setNull(4, Types.INTEGER);
                 statement.setNull(5, Types.INTEGER);
+                statement.setNull(6, Types.INTEGER);
             } else {
-                statement.setInt(4, sequenceA.messageIndex());
-                statement.setInt(5, sequenceA.messageTotal());
+                statement.setInt(5, sequenceA.messageIndex());
+                statement.setInt(6, sequenceA.messageTotal());
             }
-            statement.setObject(6, sequenceA == null ? null : sequenceA.requestedExecutionDate(), Types.DATE);
+            statement.setObject(7, sequenceA == null ? null : sequenceA.requestedExecutionDate(), Types.DATE);
             var instructingParty = sequenceA == null ? null : sequenceA.instructingParty();
-            statement.setString(7, instructingParty == null ? null : instructingParty.option());
-            statement.setString(8, partyValue(instructingParty));
+            statement.setString(8, instructingParty == null ? null : instructingParty.option());
+            statement.setString(9, partyValue(instructingParty));
             var orderingCustomer = sequenceA == null ? null : sequenceA.orderingCustomer();
-            statement.setString(9, orderingCustomer == null ? null : orderingCustomer.option());
-            statement.setString(10, orderingCustomer == null ? null : orderingCustomer.account());
-            statement.setString(11, orderingCustomer == null ? null
+            statement.setString(10, orderingCustomer == null ? null : orderingCustomer.option());
+            statement.setString(11, orderingCustomer == null ? null : orderingCustomer.account());
+            statement.setString(12, orderingCustomer == null ? null
                     : String.join("\n", orderingCustomer.nameAndAddress()));
             var accountServicing = sequenceA == null ? null : sequenceA.accountServicingInstitution();
-            statement.setString(12, accountServicing == null ? null : accountServicing.option());
-            statement.setString(13, partyValue(accountServicing));
+            statement.setString(13, accountServicing == null ? null : accountServicing.option());
+            statement.setString(14, partyValue(accountServicing));
             // El mensaje queda archivado (hash + retencion persistidos): ARCHIVED,
             // no COMPOSED. PAY/STATUS/RECONCILE avanzan el estado desde aqui.
-            statement.setString(14, "ARCHIVED");
-            statement.setString(15, message.format());
-            statement.setObject(16, LocalDate.now().plusDays(retentionDays), Types.DATE);
+            statement.setString(15, "ARCHIVED");
+            statement.setString(16, message.format());
+            statement.setObject(17, LocalDate.now().plusDays(retentionDays), Types.DATE);
             statement.executeUpdate();
             try (var keys = statement.getGeneratedKeys()) {
                 if (keys.next()) {

@@ -339,6 +339,7 @@ class Mt101OutboundEndToEndIT {
                     "create table mt101_archive (" +
                     " id bigserial primary key," +
                     " envelope_id bigint references swift_message_envelope(id)," +
+                    " sender_lt char(12)," +
                     " senders_reference varchar(16) not null," +
                     " customer_specified_reference varchar(16)," +
                     " message_index integer, message_total integer," +

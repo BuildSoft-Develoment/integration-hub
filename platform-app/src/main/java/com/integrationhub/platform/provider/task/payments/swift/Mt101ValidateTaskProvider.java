@@ -117,12 +117,14 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
                 // pagina en vez de 1 UPDATE por fragmento).
                 var validatedRefs = new ArrayList<String>(page.size());
                 var rejectedByRef = new LinkedHashMap<String, String>();
-                var pageIssues = issueSink.enabled() ? new ArrayList<ValidationIssue>() : null;
+                var pageIssues = issueSink.enabled() ? new ArrayList<IssueRow>() : null;
                 for (var message : page) {
                     var messageIssues = evaluateMessage(predicates, message);
                     var blocking = accumulator.add(messageIssues, failOn);
                     if (pageIssues != null) {
-                        pageIssues.addAll(messageIssues);
+                        for (var issue : messageIssues) {
+                            pageIssues.add(issueRow(fragmentSource, message, issue));
+                        }
                     }
                     var reference = message.sequenceA() == null ? null
                             : message.sequenceA().sendersReference();
@@ -135,7 +137,7 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
                         validatedRefs.add(reference);
                     }
                 }
-                persistIssues(issueSink, pageIssues);
+                persistIssueRows(issueSink, pageIssues);
                 fragmentStore.markStatusBatch(fragmentSource, validatedRefs, "VALIDATED");
                 fragmentStore.markStatusBatch(fragmentSource, rejectedByRef, "REJECTED");
             });
@@ -217,6 +219,28 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
     }
 
     private void persistIssues(IssueSink issueSink, List<ValidationIssue> issues) {
+        if (issues == null || issues.isEmpty()) {
+            return;
+        }
+        var issueRows = new ArrayList<IssueRow>(issues.size());
+        for (var issue : issues) {
+            issueRows.add(new IssueRow(issue, null, null, null));
+        }
+        persistIssueRows(issueSink, issueRows);
+    }
+
+    private IssueRow issueRow(Map<String, Object> fragmentSource,
+                              Mt101Message message,
+                              ValidationIssue issue) {
+        var sequenceA = message.sequenceA();
+        return new IssueRow(
+                issue,
+                stringValue(fragmentSource.get("fragmentSetId"), null),
+                sequenceA == null ? null : sequenceA.sendersReference(),
+                sequenceA == null ? null : sequenceA.messageIndex());
+    }
+
+    private void persistIssueRows(IssueSink issueSink, List<IssueRow> issues) {
         if (!issueSink.enabled() || issues == null || issues.isEmpty()) {
             return;
         }
@@ -225,21 +249,36 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
             return;
         }
         var sql = "insert into " + issueSink.table()
-                + " (archive_id, transaction_id, rule_code, rule_set, severity, message) "
-                + "values (null, null, ?, ?, ?, ?)";
+                + " (archive_id, transaction_id, rule_code, rule_set, severity, message, "
+                + "fragment_set_id, senders_reference, fragment_index) "
+                + "values (null, null, ?, ?, ?, ?, ?, ?, ?)";
         try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
-            for (var issue : issues) {
+            for (var row : issues) {
+                var issue = row.issue();
                 statement.setString(1, stringValue(issue.code(), "UNKNOWN"));
                 statement.setString(2, stringValue(issue.ruleSet(), "unknown"));
                 statement.setString(3, severityCode(issue.severity()));
                 statement.setString(4, issueMessage(issue));
+                statement.setString(5, row.fragmentSetId());
+                statement.setString(6, row.sendersReference());
+                if (row.fragmentIndex() == null) {
+                    statement.setNull(7, java.sql.Types.INTEGER);
+                } else {
+                    statement.setInt(7, row.fragmentIndex());
+                }
                 statement.addBatch();
             }
             statement.executeBatch();
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot persist MT101 validation issues", error);
         }
+    }
+
+    private record IssueRow(ValidationIssue issue,
+                            String fragmentSetId,
+                            String sendersReference,
+                            Integer fragmentIndex) {
     }
 
     private DataSource resolveDataSource(String connectionRef) {

@@ -6,12 +6,16 @@ import jakarta.inject.Inject;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.Date;
 import java.sql.SQLException;
 import java.util.Collection;
 
 /**
  * Avanza el estado de negocio durable en {@code mt101_archive} a lo largo del
- * pipeline, por {@code senders_reference}:
+ * pipeline. Cuando el consumidor conoce el MT101 completo, actualiza por clave
+ * operacional ({@code sender_lt + senders_reference + requested_execution_date});
+ * mantiene el modo legacy por {@code senders_reference} para consumidores que
+ * solo tienen confirmaciones simples:
  *
  * <pre>
  *   MT101_ARCHIVE  -> ARCHIVED   (insert directo, no via este updater)
@@ -87,6 +91,52 @@ public class Mt101ArchiveStatusUpdater {
         }
     }
 
+    /**
+     * Actualiza estado por clave operacional cuando la tarea conoce el contexto
+     * del MT101. Evita que un {@code :20:} repetido en otro lote/dia reciba el
+     * mismo estado por accidente.
+     */
+    public void updateStatusTargets(String connectionRef,
+                                    String table,
+                                    Collection<StatusTarget> targets,
+                                    String status) {
+        if (targets == null || targets.isEmpty()) {
+            return;
+        }
+        var dataSource = resolveDataSource(connectionRef);
+        if (dataSource == null) {
+            return;
+        }
+        var safeTable = sanitize(table == null || table.isBlank() ? DEFAULT_TABLE : table);
+        var sql = "update " + safeTable
+                + " set status = ?, updated_at = current_timestamp"
+                + " where senders_reference = ?"
+                + " and (cast(? as date) is null or requested_execution_date = ?)"
+                + " and (cast(? as varchar) is null or sender_lt = ?)";
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            for (var target : targets) {
+                if (target == null || target.sendersReference() == null
+                        || target.sendersReference().isBlank()) {
+                    continue;
+                }
+                statement.setString(1, status);
+                statement.setString(2, target.sendersReference());
+                var requestedExecutionDate = target.requestedExecutionDate() == null
+                        ? null
+                        : Date.valueOf(target.requestedExecutionDate());
+                statement.setDate(3, requestedExecutionDate);
+                statement.setDate(4, requestedExecutionDate);
+                statement.setString(5, target.senderLt());
+                statement.setString(6, target.senderLt());
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot sync mt101_archive status to " + status, error);
+        }
+    }
+
     private DataSource resolveDataSource(String connectionRef) {
         if (connectionRef == null || connectionRef.isBlank() || connectionPoolManager == null) {
             return defaultDataSource;
@@ -99,5 +149,10 @@ public class Mt101ArchiveStatusUpdater {
             throw new IllegalArgumentException("Unsafe archive table identifier: " + identifier);
         }
         return identifier;
+    }
+
+    public record StatusTarget(String sendersReference,
+                               java.time.LocalDate requestedExecutionDate,
+                               String senderLt) {
     }
 }

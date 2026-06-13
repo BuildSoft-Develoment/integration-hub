@@ -2,7 +2,7 @@
 
 ## Contexto
 
-- Fecha de evidencia: 2026-06-12.
+- Fecha de evidencia: 2026-06-12 y hardening adicional 2026-06-13.
 - Feature: `specs/008-mensajeria-pagos`.
 - Alcance: flujo SWIFT MT101 outbound, inbound base, alto volumen, reproceso funcional y formularios de configuracion MT101/SWIFT.
 - Dependencias: motor de procesos de `003-diseno-y-ejecucion-procesos`, readers de `002-catalogo-readers`, observabilidad/auditoria de `004-observabilidad-y-auditoria`.
@@ -66,8 +66,10 @@ La ejecucion web `#5884` reporto `unmatchedSent=60000` porque el ambiente local 
 | Backend volumen | Incluido en `Mt101MassivePipelinePerfIT` | PASS | 20,000 registros de staging generaron 800 fragmentos. La prueba midio heap y tiempo de build, validacion y archivo. |
 | Backend hardening | `mvn -q -pl platform-app test "-Dtest=Mt101AllTasksProcessE2EIT,Mt101OutboundEndToEndIT,Mt101SplitRepairIT,Mt101MassivePipelinePerfIT,BankProfileHomologationIT,PaymentValidationRuleResourceIT,DbValidationRuleProviderTest,Mt101ArchiveTaskProviderTest,Mt101BuildFromTableTaskProviderTest,Mt101BuildTaskProviderTest,Mt101ParseTaskProviderTest,Mt101PayFragmentReprocessTest,Mt101PayTaskProviderTest,Mt101ReconcileTaskProviderTest,Mt101RepairTaskProviderTest,Mt101RouteTaskProviderTest,Mt101SplitTaskProviderTest,Mt101StatusTaskProviderTest,Mt101ValidateTaskProviderTest,Mt101ValidateTaskProviderIssueHandlingTest,RestPaymentTransportTest,SftpPaymentTransportTest,SwiftMtReaderProviderTest" "-DargLine=-Xmx768m"` | PASS | Agrega perfiles bancarios simulados, API de reglas, REST 4xx/5xx/idempotencia, SFTP con rename, validacion negativa extendida y reproceso explicito de fragmentos `REJECTED`. |
 | Validacion negativa MT101 | `Mt101ValidateTaskProviderTest` | PASS | 24 tests. Cubre BIC invalido, payload FIN mayor a 10 KB, cuenta >34, `:70:` >4x35, `:77B:` >3x35, `:32B:` >15 digitos, `:71A:` invalido y referencia `:21:` duplicada. |
+| Perfiles bancarios simulados | `mvn -q -pl platform-app test "-Dtest=BankProfileHomologationIT,PaymentValidationRuleResourceIT,DbValidationRuleProviderTest" "-DargLine=-Xmx768m"` | PASS | Verifica catalogo `payment_validation_rule`, import/API y homologacion con perfil simulado. |
 | Reproceso tecnico | `Mt101PayFragmentReprocessTest` | PASS | 2 tests. PAY envia solo `ARCHIVED` por defecto y permite reprocesar explicitamente solo fragmentos `REJECTED` sin regenerar el lote. |
 | Frontend | `cmd.exe /c "cd frontend && npx nx test web --skip-nx-cache"` | PASS | 50 archivos de prueba y 167 tests pasaron. Queda advertencia de flakiness reportada por Nx. |
+| Hardening SOLID MT101 | `mvn -q -pl platform-app test "-Dtest=Mt101AllTasksProcessE2EIT,Mt101OutboundEndToEndIT,Mt101SplitRepairIT,Mt101ArchiveTaskProviderTest,Mt101BuildFromTableTaskProviderTest,Mt101BuildTaskProviderTest,Mt101ParseTaskProviderTest,Mt101PayFragmentReprocessTest,Mt101PayTaskProviderTest,Mt101ReconcileTaskProviderTest,Mt101RepairTaskProviderTest,Mt101RouteTaskProviderTest,Mt101SplitTaskProviderTest,Mt101StatusTaskProviderTest,Mt101ValidateTaskProviderTest,Mt101ValidateTaskProviderIssueHandlingTest,RestPaymentTransportTest,SftpPaymentTransportTest,SwiftMtReaderProviderTest" "-DargLine=-Xmx768m"` | PASS | Verifica Flyway V18, idempotencia operacional `sender_lt + :20: + anio`, linaje de issues NVR por fragmento y SFTP `SKIP_IF_SAME_HASH` con SHA-256 real. |
 
 ## Matriz por tarea
 
@@ -94,7 +96,7 @@ La ejecucion web `#5884` reporto `unmatchedSent=60000` porque el ambiente local 
 | Categoria | Casos pendientes |
 | --- | --- |
 | Validacion negativa MT101 | Cubierto: FIN mayor a 10 KB, conflicto `:50H:` A/B, `:70:` mayor a 4x35, `:77B:` mayor a 3x35, BIC invalido, monto invalido, `:32B:` mayor a 15 digitos, `:71A:` invalido y `:21:` duplicado. Pendiente: reglas propietarias reales por banco y golden files licenciados. |
-| Transporte | Cubierto: REST 4xx/5xx, retries, idempotencia, SFTP `.part -> rename`, extension temporal y fallo SSH. Pendiente: gateway bancario real, timeout real de red y rechazo semantico certificado. |
+| Transporte | Cubierto: REST 4xx/5xx, retries, idempotencia, SFTP `.part -> rename`, extension temporal, fallo SSH y duplicado remoto con hash SHA-256 distinto. Pendiente: gateway bancario real, timeout real de red y rechazo semantico certificado. |
 | Reconciliacion | Enviado sin confirmacion, confirmacion sin enviado, monto distinto, referencia distinta, rechazo confirmado y confirmacion duplicada. |
 | Perfiles bancarios | Carga de perfiles reales `bank:*` desde guias H2H licenciadas; perfiles objetivo: BCP, BBVA, Interbank, Santander, Citi y Scotiabank segun prioridad del cliente. |
 | Reproceso | Cubierto tecnico: reproceso por `fragmentSource.statuses=["REJECTED"]` sin regenerar el lote. Pendiente: escenario web/operativo con seleccion de lote o fragmento desde UI. |
