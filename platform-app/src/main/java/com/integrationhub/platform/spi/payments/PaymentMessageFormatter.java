@@ -1,6 +1,6 @@
-package com.integrationhub.platform.provider.task.payments.spi;
+package com.integrationhub.platform.spi.payments;
 
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.provider.task.payments.model.Mt101Message;
 
 /**
  * SPI para formatear un mensaje MT101 en cualquier representacion publicable

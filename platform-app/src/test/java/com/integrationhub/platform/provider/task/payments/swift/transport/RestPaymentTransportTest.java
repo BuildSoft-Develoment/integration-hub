@@ -3,7 +3,7 @@ package com.integrationhub.platform.provider.task.payments.swift.transport;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.provider.task.payments.model.Mt101Message;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

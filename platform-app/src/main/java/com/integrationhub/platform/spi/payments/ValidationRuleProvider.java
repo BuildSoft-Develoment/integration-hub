@@ -1,4 +1,4 @@
-package com.integrationhub.platform.provider.task.payments.spi;
+package com.integrationhub.platform.spi.payments;
 
 import java.util.List;
 

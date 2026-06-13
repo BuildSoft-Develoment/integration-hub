@@ -2,7 +2,7 @@ package com.integrationhub.platform.provider.task.payments.swift;
 
 import com.integrationhub.platform.provider.task.payments.swift.archive.AesGcmPayloadEncryptor;
 import com.integrationhub.platform.provider.task.payments.swift.archive.PayloadEncryptor;
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.provider.task.payments.model.Mt101Message;
 import com.integrationhub.platform.repository.payments.swift.Mt101ArchiveRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.task.TaskContext;

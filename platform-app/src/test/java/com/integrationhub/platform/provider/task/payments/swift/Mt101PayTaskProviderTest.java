@@ -1,8 +1,8 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
-import com.integrationhub.platform.provider.task.payments.spi.PaymentMessageTransport;
-import com.integrationhub.platform.provider.task.payments.spi.TransportResult;
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.spi.payments.PaymentMessageTransport;
+import com.integrationhub.platform.spi.payments.TransportResult;
+import com.integrationhub.platform.provider.task.payments.model.Mt101Message;
 import com.integrationhub.platform.spi.task.TaskContext;
 import jakarta.enterprise.inject.Instance;
 import org.junit.jupiter.api.Test;

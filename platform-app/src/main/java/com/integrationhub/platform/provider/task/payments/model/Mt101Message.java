@@ -1,4 +1,4 @@
-package com.integrationhub.platform.provider.task.payments.swift.model;
+package com.integrationhub.platform.provider.task.payments.model;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

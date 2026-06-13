@@ -1,9 +1,9 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.provider.task.payments.spi.PaymentMessageFormatter;
+import com.integrationhub.platform.spi.payments.PaymentMessageFormatter;
 import com.integrationhub.platform.provider.task.payments.swift.format.JsonMt101Formatter;
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.provider.task.payments.model.Mt101Message;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.task.TaskContext;
@@ -280,7 +280,7 @@ class Mt101BuildTaskProviderTest {
                 )
         ));
         @SuppressWarnings("unchecked")
-        var records = (List<com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message>) result.outputs().get("records");
+        var records = (List<com.integrationhub.platform.provider.task.payments.model.Mt101Message>) result.outputs().get("records");
         return records.get(0).sequenceA().sendersReference();
     }
 
