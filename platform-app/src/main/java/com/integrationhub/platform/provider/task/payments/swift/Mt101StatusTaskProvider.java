@@ -85,6 +85,10 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
 
     private static final List<String> DEFAULT_ACCEPTED_STATUSES =
             List.of("ACCEPTED", "CONFIRMED", "SETTLED", "ACSC", "ACCP");
+    /** Muestra de records/errors en el output; los conteos son siempre exactos. */
+    private static final int DEFAULT_MAX_RECORDS_IN_OUTPUT = 1000;
+    /** Flush de confirmaciones a BD cada N para no retener todos los rawBody. */
+    private static final int PERSIST_BATCH_SIZE = 500;
 
     private final ObjectMapper objectMapper;
     private final HttpClient httpClient;
@@ -383,24 +387,33 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         var statusPath = stringValue(expected.get("statusField"), DEFAULT_STATUS_PATH);
         var referencePath = stringValue(expected.get("referenceField"), DEFAULT_REFERENCE_PATH);
 
-        var confirmations = new ArrayList<Map<String, Object>>(records.size());
-        var rows = new ArrayList<ConfirmationRow>(records.size());
-        var byStatus = new TreeMap<String, Integer>();
+        var maxRecordsInOutput = intValue(configuration.get("maxRecordsInOutput"), DEFAULT_MAX_RECORDS_IN_OUTPUT);
+        // Muestras acotadas para el output; conteos exactos.
+        var confirmations = new ArrayList<Map<String, Object>>();
         var errors = new ArrayList<Map<String, Object>>();
+        var byStatus = new TreeMap<String, Integer>();
+        // Buffer de filas a persistir, flush por lotes para no retener todos los
+        // rawBody (KB c/u) en memoria.
+        var pendingRows = new ArrayList<ConfirmationRow>(PERSIST_BATCH_SIZE);
         int queriedCount = 0;
+        int confirmedCount = 0;
+        int errorCount = 0;
 
         for (var record : records) {
             queriedCount++;
             var url = resolveTemplate(urlTemplate, record);
             var queryResult = queryGateway(httpMethod, url, timeoutSeconds);
             if (queryResult.error() != null) {
-                var entry = new LinkedHashMap<String, Object>();
-                entry.put("sendersReference", record.get("sendersReference"));
-                entry.put("gatewayReference", record.get("gatewayReference"));
-                entry.put("status", "ERROR");
-                entry.put("error", queryResult.error());
-                errors.add(entry);
+                errorCount++;
                 byStatus.merge("ERROR", 1, Integer::sum);
+                if (errors.size() < maxRecordsInOutput) {
+                    var entry = new LinkedHashMap<String, Object>();
+                    entry.put("sendersReference", record.get("sendersReference"));
+                    entry.put("gatewayReference", record.get("gatewayReference"));
+                    entry.put("status", "ERROR");
+                    entry.put("error", queryResult.error());
+                    errors.add(entry);
+                }
                 continue;
             }
             var rawBody = queryResult.body();
@@ -409,31 +422,37 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
             if (gatewayReference == null) {
                 gatewayReference = String.valueOf(record.getOrDefault("gatewayReference", ""));
             }
-            rows.add(new ConfirmationRow(readArchiveId(record), "STATUS_API",
+            pendingRows.add(new ConfirmationRow(readArchiveId(record), "STATUS_API",
                     gatewayReference, confirmedStatus, rawBody));
-
-            var entry = new LinkedHashMap<String, Object>();
-            entry.put("sendersReference", record.get("sendersReference"));
-            entry.put("gatewayReference", gatewayReference);
-            entry.put("status", confirmedStatus);
-            confirmations.add(entry);
+            if (pendingRows.size() >= PERSIST_BATCH_SIZE) {
+                persistConfirmations(configuration, pendingRows);
+                pendingRows.clear();
+            }
+            confirmedCount++;
             byStatus.merge(confirmedStatus == null ? "UNKNOWN" : confirmedStatus, 1, Integer::sum);
+            if (confirmations.size() < maxRecordsInOutput) {
+                var entry = new LinkedHashMap<String, Object>();
+                entry.put("sendersReference", record.get("sendersReference"));
+                entry.put("gatewayReference", gatewayReference);
+                entry.put("status", confirmedStatus);
+                confirmations.add(entry);
+            }
         }
-
-        persistConfirmations(configuration, rows);
+        persistConfirmations(configuration, pendingRows);
 
         var outputs = new LinkedHashMap<String, Object>();
         outputs.put("queriedCount", queriedCount);
-        outputs.put("confirmedCount", confirmations.size());
-        outputs.put("errorCount", errors.size());
+        outputs.put("confirmedCount", confirmedCount);
+        outputs.put("errorCount", errorCount);
         outputs.put("countByStatus", byStatus);
         outputs.put("records", confirmations);
         outputs.put("errors", errors);
+        outputs.put("recordsSampled", confirmedCount > confirmations.size() || errorCount > errors.size());
 
         var summary = "MT101_STATUS queried=" + queriedCount
-                + " confirmed=" + confirmations.size()
-                + " errors=" + errors.size();
-        return errors.isEmpty()
+                + " confirmed=" + confirmedCount
+                + " errors=" + errorCount;
+        return errorCount == 0
                 ? TaskResult.success(summary, outputs)
                 : TaskResult.failure(summary, outputs);
     }

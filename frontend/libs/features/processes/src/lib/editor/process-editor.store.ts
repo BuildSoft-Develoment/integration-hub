@@ -151,6 +151,59 @@ export class ProcessEditorStore {
     });
   }
 
+  /**
+   * Plantilla "MT101 masivo desde archivo": scaffolda la cadena completa con
+   * los bindings de fragments PRE-CABLEADOS, evitando que el auto-binding elija
+   * records/summary cuando corresponde fragments (hallazgo H2). Todas las tareas
+   * MT101 downstream consumen `<build>.fragments` (la referencia al set
+   * persistido); cada etapa filtra por su gate de estado.
+   */
+  applyMassiveMt101Template(): void {
+    const buildRef = 'build-mt101-masivo';
+    const fragmentsInput = {
+      source: 'task-output' as const,
+      sourceTaskRef: buildRef,
+      sourceOutput: 'fragments' as const,
+    };
+    const specs: Array<{ taskType: ProcessTaskType; ref: string; overrides: Record<string, unknown> }> = [
+      { taskType: 'FILE_READ', ref: 'leer-archivo', overrides: { executionMode: 'batch' } },
+      { taskType: 'DB_WRITE', ref: 'staging', overrides: {
+          executionMode: 'batch',
+          mode: 'insert',
+          targetTable: 'staging_record',
+          input: { source: 'task-output', sourceTaskRef: 'leer-archivo', sourceOutput: 'records' },
+        } },
+      { taskType: 'MT101_BUILD_FROM_TABLE', ref: buildRef, overrides: {
+          executionMode: 'once',
+          input: { source: 'task-output', sourceTaskRef: 'staging', sourceOutput: 'table' },
+        } },
+      { taskType: 'MT101_VALIDATE', ref: 'validar', overrides: { executionMode: 'once', input: fragmentsInput } },
+      { taskType: 'MT101_ARCHIVE', ref: 'archivar', overrides: { executionMode: 'once', input: fragmentsInput } },
+      { taskType: 'MT101_PAY', ref: 'pagar', overrides: { executionMode: 'once', input: fragmentsInput } },
+    ];
+
+    const tasks = normalizeTaskOrders(specs.map((spec, index) => {
+      const base = this.defaultConfigurationJson(spec.taskType, spec.ref);
+      let config: Record<string, unknown>;
+      try {
+        config = JSON.parse(base || '{}');
+      } catch {
+        config = {};
+      }
+      config = { ...config, taskRef: spec.ref, ...spec.overrides };
+      return createTaskForm(spec.taskType, index + 1, JSON.stringify(config, null, 2));
+    }));
+    // Reusa applyFlowState: sincroniza el layout creando nodos para las nuevas
+    // tareas. Parte de un layout vacio (mismo viewport/version actual) para
+    // reemplazar el contenido del editor con la cadena masiva completa.
+    const emptyLayout = {
+      ...this.form().flowLayout,
+      nodes: [],
+      edges: [],
+    };
+    this.applyFlowState(emptyLayout, tasks);
+  }
+
   updateTask(
     clientId: string,
     patch: Partial<ProcessTaskFormModel>

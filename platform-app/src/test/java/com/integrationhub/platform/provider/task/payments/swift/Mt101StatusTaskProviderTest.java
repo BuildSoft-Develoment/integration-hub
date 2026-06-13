@@ -67,6 +67,35 @@ class Mt101StatusTaskProviderTest {
     }
 
     @Test
+    void capsRecordsSampleButKeepsExactCountsAndPersistsAll(WireMockRuntimeInfo wm) throws Exception {
+        // H6: con maxRecordsInOutput=2 y 5 registros, el output muestra 2 pero
+        // confirmedCount=5 (exacto), recordsSampled=true, y las 5 confirmaciones
+        // se persisten (el flush por lotes no pierde filas).
+        stubFor(get(urlPathMatching("/v1/swift/status/.*"))
+                .willReturn(aResponse().withStatus(200)
+                        .withBody("{\"status\":\"CONFIRMED\",\"gatewayReference\":\"GW\"}")));
+
+        var records = new java.util.ArrayList<Map<String, Object>>();
+        for (int i = 1; i <= 5; i++) {
+            records.add(Map.of("sendersReference", "P" + i, "gatewayReference", "G" + i, "archiveId", (long) i));
+        }
+
+        var result = provider.execute(contextWith("pay-mt101.records", records), Map.of(
+                "mode", "query",
+                "maxRecordsInOutput", 2,
+                "input", Map.of("sourceTaskRef", "pay-mt101", "sourceOutput", "records"),
+                "query", Map.of("url", wm.getHttpBaseUrl() + "/v1/swift/status/${gatewayReference}")));
+
+        assertEquals(5, result.outputs().get("queriedCount"));
+        assertEquals(5, result.outputs().get("confirmedCount"), "conteo exacto");
+        assertEquals(Boolean.TRUE, result.outputs().get("recordsSampled"));
+        @SuppressWarnings("unchecked")
+        var sample = (List<Map<String, Object>>) result.outputs().get("records");
+        assertEquals(2, sample.size(), "el sample respeta maxRecordsInOutput");
+        assertEquals(5, countRows("mt101_confirmation"), "todas las confirmaciones se persisten");
+    }
+
+    @Test
     void queriesGatewayPerRecordAndPersistsConfirmations(WireMockRuntimeInfo wm) throws Exception {
         stubFor(get(urlPathMatching("/v1/swift/status/.*"))
                 .willReturn(aResponse()

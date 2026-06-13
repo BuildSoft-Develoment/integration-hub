@@ -479,6 +479,7 @@ export const es = {
   'flow.redo': 'Rehacer',
   'processTask.MT101_BUILD': 'Construir MT101',
   'processTask.MT101_BUILD_FROM_TABLE': 'Construir MT101 desde staging',
+  'process.template.massiveMt101': 'MT101 masivo desde archivo',
   'processTask.MT101_VALIDATE': 'Validar MT101',
   'processTask.MT101_ARCHIVE': 'Archivar MT101',
   'processTask.MT101_PAY': 'Pagar MT101',

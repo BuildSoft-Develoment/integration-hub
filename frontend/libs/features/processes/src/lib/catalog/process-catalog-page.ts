@@ -143,6 +143,10 @@ export class ProcessCatalogPageComponent implements OnInit {
     this.store.addTaskAt(event.taskType, event.position);
   }
 
+  applyMassiveTemplate(): void {
+    this.store.applyMassiveMt101Template();
+  }
+
   patchTask(event: {
     clientId: string;
     patch: Partial<ProcessTaskFormModel>;

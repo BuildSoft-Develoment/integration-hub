@@ -105,6 +105,10 @@ export class ProcessCatalogStore {
     this.editor.addTaskAt(taskType, position);
   }
 
+  applyMassiveMt101Template(): void {
+    this.editor.applyMassiveMt101Template();
+  }
+
   updateTask(clientId: string, patch: Partial<ProcessTaskFormModel>): void {
     this.editor.updateTask(clientId, patch);
   }

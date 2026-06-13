@@ -459,6 +459,7 @@ export const en = {
   'flow.redo': 'Redo',
   'processTask.MT101_BUILD': 'Build MT101',
   'processTask.MT101_BUILD_FROM_TABLE': 'Build MT101 from staging',
+  'process.template.massiveMt101': 'MT101 massive from file',
   'processTask.MT101_VALIDATE': 'Validate MT101',
   'processTask.MT101_ARCHIVE': 'Archive MT101',
   'processTask.MT101_PAY': 'Pay MT101',
