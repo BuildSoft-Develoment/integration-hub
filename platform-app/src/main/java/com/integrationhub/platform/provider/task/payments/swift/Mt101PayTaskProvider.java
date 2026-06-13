@@ -118,10 +118,19 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 syncArchive(configuration, fragmentSource, rejectedTargets, "REJECTED");
             });
         } else {
-            var messages = Mt101MessageInputResolver.readMessages(context, configuration, type(), fragmentStore);
-            for (var message : messages) {
-                dispatch(transport, configuration, message, accumulator);
+            var inputs = Mt101MessageInputResolver.readResolvedMessages(context, configuration, type(), fragmentStore);
+            var sentArchiveIds = new LinkedHashMap<String, List<Long>>();
+            var rejectedArchiveIds = new LinkedHashMap<String, List<Long>>();
+            for (var input : inputs) {
+                var lastError = dispatch(transport, configuration, input, accumulator);
+                if (lastError == null) {
+                    collectArchiveId(configuration, input, sentArchiveIds);
+                } else {
+                    collectArchiveId(configuration, input, rejectedArchiveIds);
+                }
             }
+            syncArchiveIds(configuration, sentArchiveIds, "SENT");
+            syncArchiveIds(configuration, rejectedArchiveIds, "REJECTED");
         }
 
         if (accumulator.totalCount() == 0) {
@@ -156,6 +165,16 @@ public class Mt101PayTaskProvider implements TaskProvider {
                             Map<String, Object> configuration,
                             Mt101Message message,
                             DispatchAccumulator accumulator) {
+        return dispatch(transport, configuration,
+                new Mt101MessageInputResolver.ResolvedMessage(message, null, null, null),
+                accumulator);
+    }
+
+    private String dispatch(PaymentMessageTransport transport,
+                            Map<String, Object> configuration,
+                            Mt101MessageInputResolver.ResolvedMessage input,
+                            DispatchAccumulator accumulator) {
+        var message = input.message();
         TransportResult result;
         try {
             result = transport.send(message, configuration);
@@ -167,6 +186,12 @@ public class Mt101PayTaskProvider implements TaskProvider {
         var uetr = message.envelope() != null ? message.envelope().uetr() : null;
         var entry = new LinkedHashMap<String, Object>();
         entry.put("sendersReference", ref);
+        if (input.archiveId() != null) {
+            entry.put("archiveId", input.archiveId());
+        }
+        if (input.envelopeId() != null) {
+            entry.put("envelopeId", input.envelopeId());
+        }
         entry.put("uetr", uetr);
         entry.put("status", result.accepted() ? "ACCEPTED" : "REJECTED");
         entry.put("gatewayReference", result.gatewayReference());
@@ -236,6 +261,32 @@ public class Mt101PayTaskProvider implements TaskProvider {
         var table = stringValue(configuration.get("archiveStatusTable"),
                 Mt101ArchiveStatusUpdater.DEFAULT_TABLE);
         archiveStatusUpdater.updateStatusTargets(connectionRef, table, targets, status);
+    }
+
+    private void collectArchiveId(Map<String, Object> configuration,
+                                  Mt101MessageInputResolver.ResolvedMessage input,
+                                  Map<String, List<Long>> archiveIdsByConnection) {
+        if (input.archiveId() == null) {
+            return;
+        }
+        var connectionRef = stringValue(input.connectionRef(),
+                stringValue(configuration.get("archiveStatusConnectionRef"),
+                        stringValue(configuration.get("connectionRef"), null)));
+        archiveIdsByConnection.computeIfAbsent(connectionRef, ignored -> new ArrayList<>())
+                .add(input.archiveId());
+    }
+
+    private void syncArchiveIds(Map<String, Object> configuration,
+                                Map<String, List<Long>> archiveIdsByConnection,
+                                String status) {
+        if (archiveStatusUpdater == null || archiveIdsByConnection.isEmpty()
+                || !boolValue(configuration.get("archiveStatusSync"), true)) {
+            return;
+        }
+        var table = stringValue(configuration.get("archiveStatusTable"),
+                Mt101ArchiveStatusUpdater.DEFAULT_TABLE);
+        archiveIdsByConnection.forEach((connectionRef, archiveIds) ->
+                archiveStatusUpdater.updateStatusByArchiveIds(connectionRef, table, archiveIds, status));
     }
 
     private Mt101ArchiveStatusUpdater.StatusTarget archiveTarget(Mt101Message message) {

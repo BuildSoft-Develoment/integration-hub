@@ -127,7 +127,8 @@ class Mt101OutboundEndToEndIT {
         // PAY con RestPaymentTransport apuntando a WireMock.
         var transports = List.<PaymentMessageTransport>of(
                 new RestPaymentTransport(new ObjectMapper()));
-        payProvider = new Mt101PayTaskProvider(new ListInstance<>(transports));
+        payProvider = new Mt101PayTaskProvider(
+                new ListInstance<>(transports), null, new Mt101ArchiveStatusUpdater(dataSource));
     }
 
     @AfterAll
@@ -203,6 +204,8 @@ class Mt101OutboundEndToEndIT {
         assertEquals(1, payResult.outputs().get("sentCount"));
         assertEquals(1, payResult.outputs().get("acceptedCount"));
         assertEquals(0, payResult.outputs().get("rejectedCount"));
+        assertEquals(1, countRowsWhere("mt101_archive", "status = 'SENT'"),
+                "PAY debe sincronizar mt101_archive.status en flujo no fragmentado");
 
         // 6. Verifica que el gateway recibio el POST con la senders_reference como
         //    idempotency key.
@@ -374,9 +377,13 @@ class Mt101OutboundEndToEndIT {
     }
 
     private int countRows(String table) throws SQLException {
+        return countRowsWhere(table, "true");
+    }
+
+    private int countRowsWhere(String table, String whereClause) throws SQLException {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement();
-             var rs = statement.executeQuery("select count(*) from " + table)) {
+             var rs = statement.executeQuery("select count(*) from " + table + " where " + whereClause)) {
             rs.next();
             return rs.getInt(1);
         }

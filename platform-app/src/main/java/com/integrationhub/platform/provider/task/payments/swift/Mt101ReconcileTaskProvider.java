@@ -1,16 +1,16 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.repository.Mt101ReconciliationRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -60,11 +60,31 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
 
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
+    private final Mt101ArchiveStatusUpdater archiveStatusUpdater;
+    private final Mt101ReconciliationRepository reconciliationRepository;
+
+    @Inject
+    public Mt101ReconcileTaskProvider(DataSource defaultDataSource,
+                                      ConnectionPoolManager connectionPoolManager,
+                                      Mt101ArchiveStatusUpdater archiveStatusUpdater,
+                                      Mt101ReconciliationRepository reconciliationRepository) {
+        this.defaultDataSource = defaultDataSource;
+        this.connectionPoolManager = connectionPoolManager;
+        this.archiveStatusUpdater = archiveStatusUpdater;
+        this.reconciliationRepository = reconciliationRepository;
+    }
+
+    public Mt101ReconcileTaskProvider(DataSource defaultDataSource,
+                                      ConnectionPoolManager connectionPoolManager,
+                                      Mt101ArchiveStatusUpdater archiveStatusUpdater) {
+        this(defaultDataSource, connectionPoolManager, archiveStatusUpdater,
+                new Mt101ReconciliationRepository());
+    }
 
     public Mt101ReconcileTaskProvider(DataSource defaultDataSource,
                                       ConnectionPoolManager connectionPoolManager) {
-        this.defaultDataSource = defaultDataSource;
-        this.connectionPoolManager = connectionPoolManager;
+        this(defaultDataSource, connectionPoolManager,
+                new Mt101ArchiveStatusUpdater(defaultDataSource, connectionPoolManager));
     }
 
     @Override
@@ -91,21 +111,18 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
         int amountMismatchCount = 0;
 
         try (Connection connection = dataSource.getConnection()) {
-            // SENT_WITHOUT_CONFIRM: archive sin confirmacion en la ventana.
-            unmatchedSentCount = collectUnmatchedSent(connection, sentTable, confirmationTable,
-                    matchKeys, fromDate, asOfDate, exceptions);
-            // CONFIRM_WITHOUT_SENT: confirmacion sin archive emisor en la ventana.
-            unmatchedConfirmCount = collectUnmatchedConfirm(connection, sentTable, confirmationTable,
-                    matchKeys, fromDate, asOfDate, exceptions);
-            // AMOUNT_MISMATCH si la tabla de confirmation expone un monto confirmado.
-            // Para slice 2.1 lo omitimos (slice 2.2 lo cubre cuando exista columna confirmed_amount).
-            matchedCount = countMatched(connection, sentTable, confirmationTable, matchKeys,
-                    fromDate, asOfDate);
+            var result = reconciliationRepository.reconcile(connection, sentTable, confirmationTable,
+                    parseRepositoryJoinSpecs(matchKeys), fromDate, asOfDate, exceptionTable, asOfDate);
+            matchedCount = result.matchedCount();
+            unmatchedSentCount = result.unmatchedSentCount();
+            unmatchedConfirmCount = result.unmatchedConfirmCount();
+            exceptions.addAll(result.exceptions());
             // H5: marca RECONCILED las filas conciliadas en la tabla de archivo
             // (cierre del estado de negocio). Desactivable con archiveStatusSync=false.
             if (boolValue(configuration.get("archiveStatusSync"), true)) {
                 try {
-                    markReconciled(connection, sentTable, confirmationTable, matchKeys, fromDate, asOfDate);
+                    archiveStatusUpdater.markReconciled(connection, sentTable, confirmationTable,
+                            parseJoinSpecs(matchKeys), fromDate, asOfDate);
                 } catch (SQLException reconcileError) {
                     // 42703 = columna inexistente (sentTable sin status/updated_at,
                     // e.g. tabla custom): la conciliacion-reporte sigue valida.
@@ -113,10 +130,6 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
                         throw reconcileError;
                     }
                 }
-            }
-            // Persistencia opcional de las excepciones.
-            if (exceptionTable != null && !exceptions.isEmpty()) {
-                persistExceptions(connection, exceptionTable, asOfDate, exceptions);
             }
         } catch (SQLException error) {
             throw new IllegalStateException("MT101_RECONCILE failed: " + error.getMessage(), error);
@@ -139,76 +152,6 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
         return TaskResult.success(summary, outputs);
     }
 
-    private int collectUnmatchedSent(Connection connection, String sentTable, String confirmationTable,
-                                     List<String> matchKeys, LocalDate from, LocalDate to,
-                                     List<Map<String, Object>> exceptions) throws SQLException {
-        var joinClause = buildJoinClause("s", "c", matchKeys);
-        var sql = "select s.id, s.senders_reference from " + sentTable + " s"
-                + " left join " + confirmationTable + " c on " + joinClause
-                + " where s.created_at::date between ? and ?"
-                + " and c.id is null";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, from);
-            statement.setObject(2, to);
-            try (var rs = statement.executeQuery()) {
-                int count = 0;
-                while (rs.next()) {
-                    var entry = new LinkedHashMap<String, Object>();
-                    entry.put("exceptionType", "SENT_WITHOUT_CONFIRM");
-                    entry.put("archiveId", rs.getLong("id"));
-                    entry.put("confirmationId", null);
-                    entry.put("sendersReference", rs.getString("senders_reference"));
-                    exceptions.add(entry);
-                    count++;
-                }
-                return count;
-            }
-        }
-    }
-
-    private int collectUnmatchedConfirm(Connection connection, String sentTable, String confirmationTable,
-                                        List<String> matchKeys, LocalDate from, LocalDate to,
-                                        List<Map<String, Object>> exceptions) throws SQLException {
-        var joinClause = buildJoinClause("s", "c", matchKeys);
-        var sql = "select c.id from " + confirmationTable + " c"
-                + " left join " + sentTable + " s on " + joinClause
-                + " where c.received_at::date between ? and ?"
-                + " and s.id is null";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, from);
-            statement.setObject(2, to);
-            try (var rs = statement.executeQuery()) {
-                int count = 0;
-                while (rs.next()) {
-                    var entry = new LinkedHashMap<String, Object>();
-                    entry.put("exceptionType", "CONFIRM_WITHOUT_SENT");
-                    entry.put("archiveId", null);
-                    entry.put("confirmationId", rs.getLong("id"));
-                    exceptions.add(entry);
-                    count++;
-                }
-                return count;
-            }
-        }
-    }
-
-    /** Marca {@code RECONCILED} las filas del archivo con confirmacion en la ventana. */
-    private void markReconciled(Connection connection, String sentTable, String confirmationTable,
-                                List<String> matchKeys, LocalDate from, LocalDate to) throws SQLException {
-        var joinClause = buildJoinClause("s", "c", matchKeys);
-        // Solo si la tabla tiene columna updated_at (V17); si no, omite el touch.
-        var sql = "update " + sentTable + " s set status = 'RECONCILED', updated_at = current_timestamp"
-                + " from " + confirmationTable + " c"
-                + " where " + joinClause
-                + " and s.created_at::date between ? and ?"
-                + " and s.status <> 'RECONCILED'";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, from);
-            statement.setObject(2, to);
-            statement.executeUpdate();
-        }
-    }
-
     private boolean boolValue(Object raw, boolean defaultValue) {
         if (raw == null || String.valueOf(raw).isBlank()) {
             return defaultValue;
@@ -216,76 +159,31 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
         return Boolean.parseBoolean(String.valueOf(raw));
     }
 
-    private int countMatched(Connection connection, String sentTable, String confirmationTable,
-                             List<String> matchKeys, LocalDate from, LocalDate to) throws SQLException {
-        var joinClause = buildJoinClause("s", "c", matchKeys);
-        var sql = "select count(*) from " + sentTable + " s"
-                + " inner join " + confirmationTable + " c on " + joinClause
-                + " where s.created_at::date between ? and ?";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, from);
-            statement.setObject(2, to);
-            try (var rs = statement.executeQuery()) {
-                rs.next();
-                return rs.getInt(1);
-            }
+    private List<Mt101ArchiveStatusUpdater.JoinSpec> parseJoinSpecs(List<String> rawKeys) {
+        var result = new ArrayList<Mt101ArchiveStatusUpdater.JoinSpec>(rawKeys.size());
+        for (var rawKey : rawKeys) {
+            result.add(parseJoinSpec(rawKey));
         }
+        return result;
     }
 
-    private void persistExceptions(Connection connection, String table, LocalDate asOfDate,
-                                   List<Map<String, Object>> exceptions) throws SQLException {
-        var sql = "insert into " + table
-                + " (as_of_date, archive_id, confirmation_id, exception_type, details)"
-                + " values (?, ?, ?, ?, ?)";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            for (var ex : exceptions) {
-                statement.setObject(1, asOfDate);
-                if (ex.get("archiveId") == null) {
-                    statement.setNull(2, Types.BIGINT);
-                } else {
-                    statement.setLong(2, ((Number) ex.get("archiveId")).longValue());
-                }
-                if (ex.get("confirmationId") == null) {
-                    statement.setNull(3, Types.BIGINT);
-                } else {
-                    statement.setLong(3, ((Number) ex.get("confirmationId")).longValue());
-                }
-                statement.setString(4, (String) ex.get("exceptionType"));
-                statement.setString(5, summarizeDetails(ex));
-                statement.addBatch();
-            }
-            statement.executeBatch();
-        }
-    }
-
-    private String summarizeDetails(Map<String, Object> exception) {
-        var sb = new StringBuilder();
-        exception.forEach((k, v) -> {
-            if ("exceptionType".equals(k)) return;
-            if (v == null) return;
-            if (sb.length() > 0) sb.append("; ");
-            sb.append(k).append('=').append(v);
-        });
-        return sb.toString();
-    }
-
-    private String buildJoinClause(String leftAlias, String rightAlias, List<String> keys) {
-        var clauses = new ArrayList<String>(keys.size());
-        for (var key : keys) {
-            var spec = parseJoinSpec(key);
-            clauses.add(leftAlias + "." + spec.leftColumn() + " = " + rightAlias + "." + spec.rightColumn());
-        }
-        return String.join(" and ", clauses);
-    }
-
-    private JoinSpec parseJoinSpec(String rawKey) {
+    private Mt101ArchiveStatusUpdater.JoinSpec parseJoinSpec(String rawKey) {
         var key = rawKey == null ? "" : rawKey.trim();
         if (key.contains("=")) {
             var parts = key.split("=", 2);
-            return new JoinSpec(sanitize(parts[0].trim()), sanitize(parts[1].trim()));
+            return new Mt101ArchiveStatusUpdater.JoinSpec(sanitize(parts[0].trim()), sanitize(parts[1].trim()));
         }
         var column = sanitize(key);
-        return new JoinSpec(column, column);
+        return new Mt101ArchiveStatusUpdater.JoinSpec(column, column);
+    }
+
+    private List<Mt101ReconciliationRepository.JoinSpec> parseRepositoryJoinSpecs(List<String> rawKeys) {
+        var result = new ArrayList<Mt101ReconciliationRepository.JoinSpec>(rawKeys.size());
+        for (var rawKey : rawKeys) {
+            var spec = parseJoinSpec(rawKey);
+            result.add(new Mt101ReconciliationRepository.JoinSpec(spec.leftColumn(), spec.rightColumn()));
+        }
+        return result;
     }
 
     private DataSource resolveDataSource(String connectionRef) {
@@ -357,8 +255,5 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
             return defaultValue;
         }
         return Integer.parseInt(String.valueOf(raw));
-    }
-
-    private record JoinSpec(String leftColumn, String rightColumn) {
     }
 }

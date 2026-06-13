@@ -4,6 +4,7 @@ import com.integrationhub.platform.provider.task.payments.spi.ValidationIssue;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationPredicate;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationRuleProvider;
 import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.repository.Mt101ValidationIssueRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
@@ -14,7 +15,6 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -70,16 +70,27 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
     private final Mt101FragmentStore fragmentStore;
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
+    private final Mt101ValidationIssueRepository issueRepository;
 
     @Inject
     public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
                                      Mt101FragmentStore fragmentStore,
                                      DataSource defaultDataSource,
-                                     ConnectionPoolManager connectionPoolManager) {
+                                     ConnectionPoolManager connectionPoolManager,
+                                     Mt101ValidationIssueRepository issueRepository) {
         this.ruleProviders = ruleProviders;
         this.fragmentStore = fragmentStore;
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
+        this.issueRepository = issueRepository;
+    }
+
+    public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
+                                     Mt101FragmentStore fragmentStore,
+                                     DataSource defaultDataSource,
+                                     ConnectionPoolManager connectionPoolManager) {
+        this(ruleProviders, fragmentStore, defaultDataSource, connectionPoolManager,
+                new Mt101ValidationIssueRepository());
     }
 
     public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
@@ -248,28 +259,20 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
         if (dataSource == null) {
             return;
         }
-        var sql = "insert into " + issueSink.table()
-                + " (archive_id, transaction_id, rule_code, rule_set, severity, message, "
-                + "fragment_set_id, senders_reference, fragment_index) "
-                + "values (null, null, ?, ?, ?, ?, ?, ?, ?)";
-        try (Connection connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
-            for (var row : issues) {
-                var issue = row.issue();
-                statement.setString(1, stringValue(issue.code(), "UNKNOWN"));
-                statement.setString(2, stringValue(issue.ruleSet(), "unknown"));
-                statement.setString(3, severityCode(issue.severity()));
-                statement.setString(4, issueMessage(issue));
-                statement.setString(5, row.fragmentSetId());
-                statement.setString(6, row.sendersReference());
-                if (row.fragmentIndex() == null) {
-                    statement.setNull(7, java.sql.Types.INTEGER);
-                } else {
-                    statement.setInt(7, row.fragmentIndex());
-                }
-                statement.addBatch();
-            }
-            statement.executeBatch();
+        var rows = new ArrayList<Mt101ValidationIssueRepository.IssueRow>(issues.size());
+        for (var row : issues) {
+            var issue = row.issue();
+            rows.add(new Mt101ValidationIssueRepository.IssueRow(
+                    stringValue(issue.code(), "UNKNOWN"),
+                    stringValue(issue.ruleSet(), "unknown"),
+                    severityCode(issue.severity()),
+                    issueMessage(issue),
+                    row.fragmentSetId(),
+                    row.sendersReference(),
+                    row.fragmentIndex()));
+        }
+        try {
+            issueRepository.insertIssues(dataSource, issueSink.table(), rows);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot persist MT101 validation issues", error);
         }

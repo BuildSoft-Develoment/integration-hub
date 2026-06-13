@@ -57,8 +57,23 @@ describe('ProcessEditorStore', () => {
     // DB_WRITE consume los records del FILE_READ hacia staging_record.
     expect(configOf(1).input).toMatchObject({ sourceTaskRef: 'leer-archivo', sourceOutput: 'records' });
     expect(configOf(1).targetTable).toBe('staging_record');
+    expect(configOf(1).jdbcBatchSize).toBe(5000);
     // BUILD_FROM_TABLE lee la tabla staging.
     expect(configOf(2).input).toMatchObject({ sourceTaskRef: 'staging', sourceOutput: 'table' });
+    expect(configOf(2)).toMatchObject({
+      fragmentSetIdTemplate: 'MT101-${_processExecutionId}',
+      replaceExisting: true,
+      maxTransactionsPerMessage: 100,
+      maxBytesPerMessage: 10000,
+      maxRecordsInOutput: 1000,
+    });
+    expect(configOf(3)).toMatchObject({
+      pageSize: 200,
+      publishIssuesTo: 'table:mt101_validation_issue',
+      maxIssuesInOutput: 1000,
+    });
+    expect(configOf(4)).toMatchObject({ pageSize: 200, maxRecordsInOutput: 1000 });
+    expect(configOf(5)).toMatchObject({ pageSize: 200, maxRecordsInOutput: 1000 });
     // VALIDATE / ARCHIVE / PAY encadenan fragments del build (no records/summary).
     for (const i of [3, 4, 5]) {
       expect(configOf(i).input).toMatchObject({

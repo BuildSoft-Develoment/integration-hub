@@ -1,38 +1,33 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.repository.Mt101ArchiveStatusRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
-import java.sql.Date;
 import java.sql.SQLException;
+import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 /**
- * Avanza el estado de negocio durable en {@code mt101_archive} a lo largo del
- * pipeline. Cuando el consumidor conoce el MT101 completo, actualiza por clave
- * operacional ({@code sender_lt + senders_reference + requested_execution_date});
- * mantiene el modo legacy por {@code senders_reference} para consumidores que
- * solo tienen confirmaciones simples:
+ * Servicio de dominio para avanzar el estado durable en {@code mt101_archive}.
+ * Los providers orquestan; el SQL vive en {@link Mt101ArchiveStatusRepository}.
  *
  * <pre>
- *   MT101_ARCHIVE  -> ARCHIVED   (insert directo, no via este updater)
+ *   MT101_ARCHIVE  -> ARCHIVED   (insert directo)
  *   MT101_PAY      -> SENT / REJECTED
  *   MT101_STATUS   -> CONFIRMED / REJECTED
  *   MT101_RECONCILE-> RECONCILED / UNMATCHED
  * </pre>
  *
  * <p>Antes, {@code mt101_archive.status} quedaba en {@code COMPOSED} para
- * siempre aunque el fragmento ya estuviera SENT: la tabla durable de auditoria
- * mentia. El lifecycle de {@code mt101_build_fragment} (flujo masivo) ya estaba
- * sincronizado; este updater cierra el mismo gap en la tabla de archivo.</p>
- *
- * <p>Marcado por lote (un {@code addBatch} por pagina) y tolerante: si la tabla
- * de archivo no esta configurada/accesible para una ejecucion (e.g. flujo
- * sin archivo), no hace nada. La sincronizacion se desactiva con
- * {@code archiveStatusSync=false}.</p>
+ * siempre aunque el fragmento ya estuviera SENT. El lifecycle de
+ * {@code mt101_build_fragment} (flujo masivo) ya estaba sincronizado; este
+ * servicio cierra el mismo gap en la tabla de archivo.</p>
  *
  * @trace spec 008-mensajeria-pagos RF-017
  * @trace ADR-009
@@ -44,12 +39,20 @@ public class Mt101ArchiveStatusUpdater {
 
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
+    private final Mt101ArchiveStatusRepository repository;
 
     @Inject
     public Mt101ArchiveStatusUpdater(DataSource defaultDataSource,
-                                     ConnectionPoolManager connectionPoolManager) {
+                                     ConnectionPoolManager connectionPoolManager,
+                                     Mt101ArchiveStatusRepository repository) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
+        this.repository = repository;
+    }
+
+    public Mt101ArchiveStatusUpdater(DataSource defaultDataSource,
+                                     ConnectionPoolManager connectionPoolManager) {
+        this(defaultDataSource, connectionPoolManager, new Mt101ArchiveStatusRepository());
     }
 
     /** Constructor de test con datasource directo. */
@@ -57,10 +60,6 @@ public class Mt101ArchiveStatusUpdater {
         this(defaultDataSource, null);
     }
 
-    /**
-     * Actualiza {@code status} para un lote de referencias. No-op si la lista
-     * esta vacia o el datasource no resuelve.
-     */
     public void updateStatus(String connectionRef,
                              String table,
                              Collection<String> sendersReferences,
@@ -72,30 +71,13 @@ public class Mt101ArchiveStatusUpdater {
         if (dataSource == null) {
             return;
         }
-        var safeTable = sanitize(table == null || table.isBlank() ? DEFAULT_TABLE : table);
-        var sql = "update " + safeTable
-                + " set status = ?, updated_at = current_timestamp where senders_reference = ?";
-        try (Connection connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
-            for (var reference : sendersReferences) {
-                if (reference == null || reference.isBlank()) {
-                    continue;
-                }
-                statement.setString(1, status);
-                statement.setString(2, reference);
-                statement.addBatch();
-            }
-            statement.executeBatch();
+        try {
+            repository.updateStatusBySendersReferences(dataSource, tableName(table), sendersReferences, status);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot sync mt101_archive status to " + status, error);
         }
     }
 
-    /**
-     * Actualiza estado por clave operacional cuando la tarea conoce el contexto
-     * del MT101. Evita que un {@code :20:} repetido en otro lote/dia reciba el
-     * mismo estado por accidente.
-     */
     public void updateStatusTargets(String connectionRef,
                                     String table,
                                     Collection<StatusTarget> targets,
@@ -107,34 +89,52 @@ public class Mt101ArchiveStatusUpdater {
         if (dataSource == null) {
             return;
         }
-        var safeTable = sanitize(table == null || table.isBlank() ? DEFAULT_TABLE : table);
-        var sql = "update " + safeTable
-                + " set status = ?, updated_at = current_timestamp"
-                + " where senders_reference = ?"
-                + " and (cast(? as date) is null or requested_execution_date = ?)"
-                + " and (cast(? as varchar) is null or sender_lt = ?)";
-        try (Connection connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
-            for (var target : targets) {
-                if (target == null || target.sendersReference() == null
-                        || target.sendersReference().isBlank()) {
-                    continue;
-                }
-                statement.setString(1, status);
-                statement.setString(2, target.sendersReference());
-                var requestedExecutionDate = target.requestedExecutionDate() == null
-                        ? null
-                        : Date.valueOf(target.requestedExecutionDate());
-                statement.setDate(3, requestedExecutionDate);
-                statement.setDate(4, requestedExecutionDate);
-                statement.setString(5, target.senderLt());
-                statement.setString(6, target.senderLt());
-                statement.addBatch();
-            }
-            statement.executeBatch();
+        try {
+            repository.updateStatusTargets(dataSource, tableName(table), repositoryTargets(targets), status);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot sync mt101_archive status to " + status, error);
         }
+    }
+
+    public void updateStatusByArchiveIds(String connectionRef,
+                                         String table,
+                                         Collection<Long> archiveIds,
+                                         String status) {
+        if (archiveIds == null || archiveIds.isEmpty()) {
+            return;
+        }
+        var dataSource = resolveDataSource(connectionRef);
+        if (dataSource == null) {
+            return;
+        }
+        try (Connection connection = dataSource.getConnection()) {
+            updateStatusByArchiveIds(connection, table, archiveIds, status);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot sync mt101_archive status to " + status, error);
+        }
+    }
+
+    public void updateStatusByArchiveIds(Connection connection,
+                                         String table,
+                                         Collection<Long> archiveIds,
+                                         String status) throws SQLException {
+        repository.updateStatusByArchiveIds(connection, tableName(table), archiveIds, status);
+    }
+
+    public void updateArchiveStatus(Connection connection,
+                                    String table,
+                                    Collection<ArchiveStatusUpdate> updates) throws SQLException {
+        repository.updateArchiveStatus(connection, tableName(table), repositoryUpdates(updates));
+    }
+
+    public void markReconciled(Connection connection,
+                               String sentTable,
+                               String confirmationTable,
+                               List<JoinSpec> matchKeys,
+                               LocalDate from,
+                               LocalDate to) throws SQLException {
+        repository.markReconciled(connection, tableName(sentTable), requiredTable(confirmationTable),
+                repositoryJoinSpecs(matchKeys), from, to);
     }
 
     private DataSource resolveDataSource(String connectionRef) {
@@ -144,15 +144,71 @@ public class Mt101ArchiveStatusUpdater {
         return connectionPoolManager.resolveJdbcDataSource(connectionRef);
     }
 
-    private String sanitize(String identifier) {
-        if (!identifier.matches("[a-zA-Z_][a-zA-Z0-9_]*(\\.[a-zA-Z_][a-zA-Z0-9_]*)?")) {
-            throw new IllegalArgumentException("Unsafe archive table identifier: " + identifier);
+    private String tableName(String table) {
+        return table == null || table.isBlank() ? DEFAULT_TABLE : table;
+    }
+
+    private String requiredTable(String table) {
+        if (table == null || table.isBlank()) {
+            throw new IllegalArgumentException("Archive table identifier cannot be blank");
         }
-        return identifier;
+        return table;
+    }
+
+    private List<Mt101ArchiveStatusRepository.StatusTarget> repositoryTargets(
+            Collection<StatusTarget> targets) {
+        var result = new ArrayList<Mt101ArchiveStatusRepository.StatusTarget>(targets.size());
+        for (var target : targets) {
+            if (target == null) {
+                continue;
+            }
+            result.add(new Mt101ArchiveStatusRepository.StatusTarget(
+                    target.sendersReference(),
+                    target.requestedExecutionDate(),
+                    target.senderLt()));
+        }
+        return result;
+    }
+
+    private List<Mt101ArchiveStatusRepository.ArchiveStatusUpdate> repositoryUpdates(
+            Collection<ArchiveStatusUpdate> updates) {
+        if (updates == null || updates.isEmpty()) {
+            return List.of();
+        }
+        var result = new ArrayList<Mt101ArchiveStatusRepository.ArchiveStatusUpdate>(updates.size());
+        for (var update : updates) {
+            if (update == null) {
+                continue;
+            }
+            result.add(new Mt101ArchiveStatusRepository.ArchiveStatusUpdate(update.archiveId(), update.status()));
+        }
+        return result;
+    }
+
+    private List<Mt101ArchiveStatusRepository.JoinSpec> repositoryJoinSpecs(List<JoinSpec> matchKeys) {
+        if (matchKeys == null || matchKeys.isEmpty()) {
+            return List.of();
+        }
+        var result = new ArrayList<Mt101ArchiveStatusRepository.JoinSpec>(matchKeys.size());
+        for (var matchKey : matchKeys) {
+            if (matchKey == null) {
+                continue;
+            }
+            result.add(new Mt101ArchiveStatusRepository.JoinSpec(
+                    matchKey.leftColumn(),
+                    matchKey.rightColumn()));
+        }
+        return result;
     }
 
     public record StatusTarget(String sendersReference,
-                               java.time.LocalDate requestedExecutionDate,
+                               LocalDate requestedExecutionDate,
                                String senderLt) {
+    }
+
+    public record ArchiveStatusUpdate(Long archiveId, String status) {
+    }
+
+    public record JoinSpec(String leftColumn, String rightColumn) {
     }
 }

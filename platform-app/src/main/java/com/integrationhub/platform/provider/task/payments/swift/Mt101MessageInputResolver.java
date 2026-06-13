@@ -35,6 +35,17 @@ final class Mt101MessageInputResolver {
                                            Map<String, Object> configuration,
                                            String taskType,
                                            Mt101FragmentStore fragmentStore) {
+        return readResolvedMessages(context, configuration, taskType, fragmentStore)
+                .stream()
+                .map(ResolvedMessage::message)
+                .toList();
+    }
+
+    @SuppressWarnings("unchecked")
+    static List<ResolvedMessage> readResolvedMessages(TaskContext context,
+                                                      Map<String, Object> configuration,
+                                                      String taskType,
+                                                      Mt101FragmentStore fragmentStore) {
         var raw = rawSource(context, configuration, taskType);
         if (raw == null) {
             return List.of();
@@ -46,19 +57,26 @@ final class Mt101MessageInputResolver {
             var source = new java.util.LinkedHashMap<String, Object>();
             rawMap.forEach((key, value) -> source.put(String.valueOf(key), value));
             context.attributes().put("mt101FragmentSource", source);
-            return fragmentStore.readMessages(source);
+            return fragmentStore.readMessages(source)
+                    .stream()
+                    .map(message -> new ResolvedMessage(message, null, null, null))
+                    .toList();
         }
         if (!(raw instanceof List<?> rawList)) {
             throw new IllegalArgumentException(
                     "Expected MT101 input to be List<Mt101Message> or fragment source but got "
                             + raw.getClass().getName());
         }
-        var result = new ArrayList<Mt101Message>(rawList.size());
+        var result = new ArrayList<ResolvedMessage>(rawList.size());
         for (var item : rawList) {
             if (item instanceof Mt101Message msg) {
-                result.add(msg);
+                result.add(new ResolvedMessage(msg, null, null, null));
             } else if (item instanceof Map<?, ?> map && map.get("message") instanceof Mt101Message msg) {
-                result.add(msg);
+                result.add(new ResolvedMessage(
+                        msg,
+                        longValue(map.get("archiveId")),
+                        longValue(map.get("envelopeId")),
+                        stringValue(map.get("connectionRef"), null)));
             } else if (item != null) {
                 throw new IllegalArgumentException(
                         "Expected Mt101Message items but got " + item.getClass().getName());
@@ -106,5 +124,18 @@ final class Mt101MessageInputResolver {
         }
         var value = String.valueOf(raw).trim();
         return value.isEmpty() ? defaultValue : value;
+    }
+
+    private static Long longValue(Object raw) {
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return null;
+        }
+        if (raw instanceof Number number) {
+            return number.longValue();
+        }
+        return Long.parseLong(String.valueOf(raw));
+    }
+
+    record ResolvedMessage(Mt101Message message, Long archiveId, Long envelopeId, String connectionRef) {
     }
 }

@@ -171,15 +171,37 @@ export class ProcessEditorStore {
           executionMode: 'batch',
           mode: 'insert',
           targetTable: 'staging_record',
+          jdbcBatchSize: 5000,
           input: { source: 'task-output', sourceTaskRef: 'leer-archivo', sourceOutput: 'records' },
         } },
       { taskType: 'MT101_BUILD_FROM_TABLE', ref: buildRef, overrides: {
           executionMode: 'once',
           input: { source: 'task-output', sourceTaskRef: 'staging', sourceOutput: 'table' },
+          fragmentSetIdTemplate: 'MT101-${_processExecutionId}',
+          replaceExisting: true,
+          maxTransactionsPerMessage: 100,
+          maxBytesPerMessage: 10000,
+          maxRecordsInOutput: 1000,
         } },
-      { taskType: 'MT101_VALIDATE', ref: 'validar', overrides: { executionMode: 'once', input: fragmentsInput } },
-      { taskType: 'MT101_ARCHIVE', ref: 'archivar', overrides: { executionMode: 'once', input: fragmentsInput } },
-      { taskType: 'MT101_PAY', ref: 'pagar', overrides: { executionMode: 'once', input: fragmentsInput } },
+      { taskType: 'MT101_VALIDATE', ref: 'validar', overrides: {
+          executionMode: 'once',
+          input: fragmentsInput,
+          pageSize: 200,
+          publishIssuesTo: 'table:mt101_validation_issue',
+          maxIssuesInOutput: 1000,
+        } },
+      { taskType: 'MT101_ARCHIVE', ref: 'archivar', overrides: {
+          executionMode: 'once',
+          input: fragmentsInput,
+          pageSize: 200,
+          maxRecordsInOutput: 1000,
+        } },
+      { taskType: 'MT101_PAY', ref: 'pagar', overrides: {
+          executionMode: 'once',
+          input: fragmentsInput,
+          pageSize: 200,
+          maxRecordsInOutput: 1000,
+        } },
     ];
 
     const tasks = normalizeTaskOrders(specs.map((spec, index) => {

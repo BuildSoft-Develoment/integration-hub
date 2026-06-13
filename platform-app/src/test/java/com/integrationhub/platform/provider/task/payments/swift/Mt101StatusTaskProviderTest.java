@@ -97,6 +97,8 @@ class Mt101StatusTaskProviderTest {
 
     @Test
     void queriesGatewayPerRecordAndPersistsConfirmations(WireMockRuntimeInfo wm) throws Exception {
+        insertArchive(100L);
+        insertArchive(101L);
         stubFor(get(urlPathMatching("/v1/swift/status/.*"))
                 .willReturn(aResponse()
                         .withStatus(200)
@@ -131,6 +133,7 @@ class Mt101StatusTaskProviderTest {
 
         assertEquals(2, countRows("mt101_confirmation"));
         assertEquals(2, countRowsWithStatus("CONFIRMED"));
+        assertEquals(2, countArchiveRowsWithStatus("CONFIRMED"));
     }
 
     @Test
@@ -390,7 +393,12 @@ class Mt101StatusTaskProviderTest {
     private void prepareSchema() throws SQLException {
         try (Connection c = dataSource.getConnection();
              Statement stmt = c.createStatement()) {
+            stmt.executeUpdate("drop table if exists mt101_archive");
             stmt.executeUpdate("drop table if exists mt101_confirmation");
+            stmt.executeUpdate("create table mt101_archive (" +
+                    " id bigint primary key," +
+                    " status varchar(20) not null default 'ARCHIVED'," +
+                    " updated_at timestamp not null default current_timestamp)");
             stmt.executeUpdate("create table mt101_confirmation (" +
                     " id bigserial primary key," +
                     " archive_id bigint," +
@@ -399,6 +407,14 @@ class Mt101StatusTaskProviderTest {
                     " confirmed_status varchar(20)," +
                     " raw_payload text," +
                     " received_at timestamp not null default current_timestamp)");
+        }
+    }
+
+    private void insertArchive(long id) throws SQLException {
+        try (Connection c = dataSource.getConnection();
+             var stmt = c.prepareStatement("insert into mt101_archive (id, status) values (?, 'SENT')")) {
+            stmt.setLong(1, id);
+            stmt.executeUpdate();
         }
     }
 
@@ -414,6 +430,17 @@ class Mt101StatusTaskProviderTest {
     private int countRowsWithStatus(String status) throws SQLException {
         try (Connection c = dataSource.getConnection();
              var stmt = c.prepareStatement("select count(*) from mt101_confirmation where confirmed_status = ?")) {
+            stmt.setString(1, status);
+            try (var rs = stmt.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    private int countArchiveRowsWithStatus(String status) throws SQLException {
+        try (Connection c = dataSource.getConnection();
+             var stmt = c.prepareStatement("select count(*) from mt101_archive where status = ?")) {
             stmt.setString(1, status);
             try (var rs = stmt.executeQuery()) {
                 rs.next();

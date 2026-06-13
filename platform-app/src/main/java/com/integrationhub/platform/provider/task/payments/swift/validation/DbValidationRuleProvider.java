@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationIssue;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationPredicate;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationRuleProvider;
+import com.integrationhub.platform.repository.PaymentValidationRuleReader;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -11,8 +12,6 @@ import org.apache.commons.jexl3.JexlBuilder;
 import org.apache.commons.jexl3.JexlEngine;
 import org.apache.commons.jexl3.introspection.JexlPermissions;
 
-import javax.sql.DataSource;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -44,13 +43,13 @@ import java.util.List;
 @Priority(100)
 public class DbValidationRuleProvider implements ValidationRuleProvider {
 
-    private final DataSource dataSource;
+    private final PaymentValidationRuleReader ruleReader;
     private final ObjectMapper objectMapper;
     private final JexlEngine jexlEngine;
 
     @Inject
-    public DbValidationRuleProvider(DataSource dataSource, ObjectMapper objectMapper) {
-        this.dataSource = dataSource;
+    public DbValidationRuleProvider(PaymentValidationRuleReader ruleReader, ObjectMapper objectMapper) {
+        this.ruleReader = ruleReader;
         this.objectMapper = objectMapper;
         // RESTRICTED (default JEXL 3.3+) bloquea la introspeccion sobre el modelo
         // Mt101Message y java.util, dejando size()/accessors en null silencioso.
@@ -66,39 +65,16 @@ public class DbValidationRuleProvider implements ValidationRuleProvider {
     @Override
     public List<ValidationPredicate> findRules(String ruleSet, String standard, String appliesTo) {
         var predicates = new ArrayList<ValidationPredicate>();
-        var sql = "select rule_set, code, standard, applies_to, severity, predicate_kind, predicate_body "
-                + "from payment_validation_rule where active = true"
-                + (isWildcard(ruleSet) ? "" : " and lower(rule_set) = lower(?)")
-                + (isWildcard(standard) ? "" : " and lower(standard) = lower(?)")
-                + (isWildcard(appliesTo) ? "" : " and lower(applies_to) = lower(?)")
-                + " order by rule_set, code";
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
-            var parameter = 1;
-            if (!isWildcard(ruleSet)) {
-                statement.setString(parameter++, ruleSet);
-            }
-            if (!isWildcard(standard)) {
-                statement.setString(parameter++, standard);
-            }
-            if (!isWildcard(appliesTo)) {
-                statement.setString(parameter++, appliesTo);
-            }
-            try (var rs = statement.executeQuery()) {
-                while (rs.next()) {
-                    var spec = new DbValidationPredicateFactory.RuleSpec(
-                            rs.getString("rule_set"),
-                            rs.getString("code"),
-                            rs.getString("standard"),
-                            rs.getString("applies_to"),
-                            severity(rs.getString("severity")),
-                            rs.getString("predicate_kind"),
-                            rs.getString("predicate_body"));
-                    predicates.add(DbValidationPredicateFactory.fromSpec(spec, objectMapper, jexlEngine));
-                }
-            }
-        } catch (SQLException error) {
-            throw new IllegalStateException("Cannot load validation rules from payment_validation_rule", error);
+        for (var rule : ruleReader.listActiveRules(ruleSet, standard, appliesTo)) {
+            var spec = new DbValidationPredicateFactory.RuleSpec(
+                    rule.ruleSet(),
+                    rule.code(),
+                    rule.standard(),
+                    rule.appliesTo(),
+                    severity(rule.severity()),
+                    rule.predicateKind(),
+                    rule.predicateBody());
+            predicates.add(DbValidationPredicateFactory.fromSpec(spec, objectMapper, jexlEngine));
         }
         return predicates;
     }
@@ -114,7 +90,4 @@ public class DbValidationRuleProvider implements ValidationRuleProvider {
         };
     }
 
-    private boolean isWildcard(String requested) {
-        return requested == null || requested.isBlank() || "*".equals(requested);
-    }
 }

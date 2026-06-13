@@ -3,6 +3,7 @@ package com.integrationhub.platform.provider.task.payments.swift;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.repository.Mt101FragmentRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -11,10 +12,7 @@ import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -29,14 +27,23 @@ public class Mt101FragmentStore {
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
     private final ObjectMapper objectMapper;
+    private final Mt101FragmentRepository fragmentRepository;
 
     @Inject
     public Mt101FragmentStore(DataSource defaultDataSource,
                               ConnectionPoolManager connectionPoolManager,
-                              ObjectMapper objectMapper) {
+                              ObjectMapper objectMapper,
+                              Mt101FragmentRepository fragmentRepository) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.objectMapper = objectMapper;
+        this.fragmentRepository = fragmentRepository;
+    }
+
+    public Mt101FragmentStore(DataSource defaultDataSource,
+                              ConnectionPoolManager connectionPoolManager,
+                              ObjectMapper objectMapper) {
+        this(defaultDataSource, connectionPoolManager, objectMapper, new Mt101FragmentRepository());
     }
 
     public Map<String, Object> source(String connectionRef, String fragmentSetId, int fragmentCount) {
@@ -51,11 +58,8 @@ public class Mt101FragmentStore {
     }
 
     public void replaceFragmentSet(String connectionRef, String fragmentSetId) {
-        try (var connection = resolveDataSource(connectionRef).getConnection();
-             var statement = connection.prepareStatement(
-                     "delete from mt101_build_fragment where fragment_set_id = ?")) {
-            statement.setString(1, fragmentSetId);
-            statement.executeUpdate();
+        try {
+            fragmentRepository.deleteFragmentSet(resolveDataSource(connectionRef), fragmentSetId);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot reset MT101 fragment set " + fragmentSetId, error);
         }
@@ -85,12 +89,8 @@ public class Mt101FragmentStore {
         if (fragments == null || fragments.isEmpty()) {
             return;
         }
-        var sql = "insert into mt101_build_fragment "
-                + "(fragment_set_id, process_execution_id, task_definition_id, source_table, source_row_from, source_row_to, "
-                + " fragment_index, fragment_total, senders_reference, payload_hash, raw_payload, message_json, status) "
-                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        try (var connection = resolveDataSource(connectionRef).getConnection();
-             var statement = connection.prepareStatement(sql)) {
+        try {
+            var rows = new ArrayList<Mt101FragmentRepository.FragmentRow>(fragments.size());
             for (var fragment : fragments) {
                 var message = fragment.message();
                 var rawPayload = message.rawPayload();
@@ -98,24 +98,21 @@ public class Mt101FragmentStore {
                     throw new IllegalArgumentException("MT101 fragment " + fragment.fragmentIndex()
                             + " requires rawPayload");
                 }
-                statement.setString(1, fragment.fragmentSetId());
-                if (fragment.processExecutionId() == null) statement.setNull(2, Types.BIGINT);
-                else statement.setLong(2, fragment.processExecutionId());
-                if (fragment.taskDefinitionId() == null) statement.setNull(3, Types.BIGINT);
-                else statement.setLong(3, fragment.taskDefinitionId());
-                statement.setString(4, fragment.sourceTable());
-                statement.setLong(5, fragment.rowFrom());
-                statement.setLong(6, fragment.rowTo());
-                statement.setInt(7, fragment.fragmentIndex());
-                statement.setInt(8, fragment.fragmentTotal());
-                statement.setString(9, message.sequenceA() == null ? null : message.sequenceA().sendersReference());
-                statement.setString(10, sha256Hex(rawPayload));
-                statement.setString(11, rawPayload);
-                statement.setString(12, toJson(message));
-                statement.setString(13, "BUILT");
-                statement.addBatch();
+                rows.add(new Mt101FragmentRepository.FragmentRow(
+                        fragment.fragmentSetId(),
+                        fragment.processExecutionId(),
+                        fragment.taskDefinitionId(),
+                        fragment.sourceTable(),
+                        fragment.rowFrom(),
+                        fragment.rowTo(),
+                        fragment.fragmentIndex(),
+                        fragment.fragmentTotal(),
+                        message.sequenceA() == null ? null : message.sequenceA().sendersReference(),
+                        sha256Hex(rawPayload),
+                        rawPayload,
+                        toJson(message)));
             }
-            statement.executeBatch();
+            fragmentRepository.insertFragments(resolveDataSource(connectionRef), rows);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot persist MT101 fragment batch ("
                     + fragments.size() + " fragments) for set " + fragments.get(0).fragmentSetId(), error);
@@ -178,28 +175,19 @@ public class Mt101FragmentStore {
         var connectionRef = stringValue(fragmentSource.get("connectionRef"));
         var statuses = statuses(fragmentSource.get("statuses"), defaultStatuses);
         var effectivePageSize = Math.max(pageSize, 1);
-        var sql = "select fragment_index, message_json from mt101_build_fragment where fragment_set_id = ?"
-                + (statuses.isEmpty() ? "" : " and status in (" + placeholders(statuses.size()) + ")")
-                + " and fragment_index > ?"
-                + " order by fragment_index asc limit ?";
         var afterIndex = 0;
-        try (var connection = resolveDataSource(connectionRef).getConnection()) {
+        try {
             while (true) {
-                var page = new ArrayList<Mt101Message>(effectivePageSize);
-                try (var statement = connection.prepareStatement(sql)) {
-                    var parameter = 1;
-                    statement.setString(parameter++, fragmentSetId);
-                    for (var status : statuses) {
-                        statement.setString(parameter++, status);
-                    }
-                    statement.setInt(parameter++, afterIndex);
-                    statement.setInt(parameter, effectivePageSize);
-                    try (var rs = statement.executeQuery()) {
-                        while (rs.next()) {
-                            afterIndex = rs.getInt(1);
-                            page.add(fromJson(rs.getString(2)));
-                        }
-                    }
+                var rows = fragmentRepository.readPage(
+                        resolveDataSource(connectionRef),
+                        fragmentSetId,
+                        statuses,
+                        afterIndex,
+                        effectivePageSize);
+                var page = new ArrayList<Mt101Message>(rows.size());
+                for (var row : rows) {
+                    afterIndex = row.fragmentIndex();
+                    page.add(fromJson(row.messageJson()));
                 }
                 if (page.isEmpty()) {
                     return;
@@ -258,21 +246,9 @@ public class Mt101FragmentStore {
             return;
         }
         var connectionRef = stringValue(fragmentSource.get("connectionRef"));
-        var sql = "update mt101_build_fragment set status = ?, error_message = ?, updated_at = current_timestamp "
-                + "where fragment_set_id = ? and senders_reference = ?";
-        try (var connection = resolveDataSource(connectionRef).getConnection();
-             var statement = connection.prepareStatement(sql)) {
-            for (var entry : errorBySendersReference.entrySet()) {
-                if (entry.getKey() == null || entry.getKey().isBlank()) {
-                    continue;
-                }
-                statement.setString(1, status);
-                statement.setString(2, entry.getValue());
-                statement.setString(3, fragmentSetId);
-                statement.setString(4, entry.getKey());
-                statement.addBatch();
-            }
-            statement.executeBatch();
+        try {
+            fragmentRepository.updateStatusBatch(resolveDataSource(connectionRef),
+                    fragmentSetId, errorBySendersReference, status);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot update MT101 fragment status batch ("
                     + errorBySendersReference.size() + " fragments) for set " + fragmentSetId, error);
@@ -323,10 +299,6 @@ public class Mt101FragmentStore {
             }
         }
         return result;
-    }
-
-    private String placeholders(int count) {
-        return String.join(", ", java.util.Collections.nCopies(count, "?"));
     }
 
     private String stringValue(Object raw) {

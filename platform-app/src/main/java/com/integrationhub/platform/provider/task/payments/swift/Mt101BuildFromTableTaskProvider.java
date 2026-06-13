@@ -1,6 +1,7 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
 import com.integrationhub.platform.provider.task.dbwrite.DbTaskSupport;
+import com.integrationhub.platform.repository.Mt101StagingRecordRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.reader.ReadRecord;
@@ -13,7 +14,6 @@ import jakarta.transaction.Transactional;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -63,18 +63,30 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     private final JsonConfigurationMapper jsonConfigurationMapper;
     private final Mt101BuildTaskProvider buildTaskProvider;
     private final Mt101FragmentStore fragmentStore;
+    private final Mt101StagingRecordRepository stagingRepository;
 
     @Inject
     public Mt101BuildFromTableTaskProvider(DataSource defaultDataSource,
                                            ConnectionPoolManager connectionPoolManager,
                                            JsonConfigurationMapper jsonConfigurationMapper,
                                            Mt101BuildTaskProvider buildTaskProvider,
-                                           Mt101FragmentStore fragmentStore) {
+                                           Mt101FragmentStore fragmentStore,
+                                           Mt101StagingRecordRepository stagingRepository) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.jsonConfigurationMapper = jsonConfigurationMapper;
         this.buildTaskProvider = buildTaskProvider;
         this.fragmentStore = fragmentStore;
+        this.stagingRepository = stagingRepository;
+    }
+
+    public Mt101BuildFromTableTaskProvider(DataSource defaultDataSource,
+                                           ConnectionPoolManager connectionPoolManager,
+                                           JsonConfigurationMapper jsonConfigurationMapper,
+                                           Mt101BuildTaskProvider buildTaskProvider,
+                                           Mt101FragmentStore fragmentStore) {
+        this(defaultDataSource, connectionPoolManager, jsonConfigurationMapper, buildTaskProvider,
+                fragmentStore, new Mt101StagingRecordRepository());
     }
 
     @Override
@@ -319,13 +331,8 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     }
 
     private long countRows(SourceTable source) {
-        var sql = "select count(*) from " + source.table() + whereClause(source);
-        try (var connection = source.dataSource().getConnection();
-             var statement = connection.prepareStatement(sql)) {
-            bindWhere(statement, source);
-            try (var rs = statement.executeQuery()) {
-                return rs.next() ? rs.getLong(1) : 0L;
-            }
+        try {
+            return stagingRepository.countRows(source.dataSource(), sourceQuery(source));
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot count MT101 source rows from " + source.table(), error);
         }
@@ -338,68 +345,29 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
      * (V15) para staging_record.
      */
     private List<RowRecord> readRowsAfter(Connection connection, SourceTable source, long afterId, int limit) throws SQLException {
-        var where = whereClause(source);
-        var sql = "select " + source.idColumn() + ", " + source.payloadColumn() + " from " + source.table()
-                + (where.isEmpty() ? " where " : where + " and ")
-                + source.idColumn() + " > ?"
-                + " order by " + source.idColumn()
-                + " limit ?";
-        try (var statement = connection.prepareStatement(sql)) {
-            var parameter = bindWhere(statement, source);
-            statement.setLong(parameter++, afterId);
-            statement.setInt(parameter, limit);
-            return readRows(statement);
-        }
+        return rowsFromJson(stagingRepository.readRowsAfter(connection, sourceQuery(source), afterId, limit));
     }
 
     /** Relee el rango exacto de un limite planificado en fase 1 (ids inclusivos). */
     private List<RowRecord> readRowsBetween(Connection connection, SourceTable source, long firstId, long lastId) throws SQLException {
-        var where = whereClause(source);
-        var sql = "select " + source.idColumn() + ", " + source.payloadColumn() + " from " + source.table()
-                + (where.isEmpty() ? " where " : where + " and ")
-                + source.idColumn() + " >= ? and " + source.idColumn() + " <= ?"
-                + " order by " + source.idColumn();
-        try (var statement = connection.prepareStatement(sql)) {
-            var parameter = bindWhere(statement, source);
-            statement.setLong(parameter++, firstId);
-            statement.setLong(parameter, lastId);
-            return readRows(statement);
-        }
+        return rowsFromJson(stagingRepository.readRowsBetween(connection, sourceQuery(source), firstId, lastId));
     }
 
-    private List<RowRecord> readRows(PreparedStatement statement) throws SQLException {
-        var rows = new ArrayList<RowRecord>();
-        try (var rs = statement.executeQuery()) {
-            while (rs.next()) {
-                rows.add(new RowRecord(rs.getLong(1), new ReadRecord(jsonConfigurationMapper.toMap(rs.getString(2)))));
-            }
+    private List<RowRecord> rowsFromJson(List<Mt101StagingRecordRepository.RowJson> sourceRows) {
+        var rows = new ArrayList<RowRecord>(sourceRows.size());
+        for (var row : sourceRows) {
+            rows.add(new RowRecord(row.id(), new ReadRecord(jsonConfigurationMapper.toMap(row.payloadJson()))));
         }
         return rows;
     }
 
-    private String whereClause(SourceTable source) {
-        if (source.processExecutionId() == null && source.taskDefinitionId() == null) {
-            return "";
-        }
-        var clauses = new ArrayList<String>();
-        if (source.processExecutionId() != null) {
-            clauses.add("process_execution_id = ?");
-        }
-        if (source.taskDefinitionId() != null) {
-            clauses.add("task_definition_id = ?");
-        }
-        return " where " + String.join(" and ", clauses);
-    }
-
-    private int bindWhere(PreparedStatement statement, SourceTable source) throws SQLException {
-        var parameter = 1;
-        if (source.processExecutionId() != null) {
-            statement.setLong(parameter++, source.processExecutionId());
-        }
-        if (source.taskDefinitionId() != null) {
-            statement.setLong(parameter++, source.taskDefinitionId());
-        }
-        return parameter;
+    private Mt101StagingRecordRepository.SourceQuery sourceQuery(SourceTable source) {
+        return new Mt101StagingRecordRepository.SourceQuery(
+                source.table(),
+                source.payloadColumn(),
+                source.idColumn(),
+                source.processExecutionId(),
+                source.taskDefinitionId());
     }
 
     @SuppressWarnings("unchecked")

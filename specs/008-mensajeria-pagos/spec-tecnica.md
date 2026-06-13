@@ -189,6 +189,14 @@ Contrato operativo:
 - La ruta recomendada para archivos mayores a 1,000,000 registros es
   `FILE_READ -> DB_WRITE(staging_record) -> MT101_BUILD_FROM_TABLE ->
   MT101_VALIDATE -> MT101_ARCHIVE -> MT101_PAY -> NOTIFICATION`.
+- La plantilla UI `MT101 masivo desde archivo` debe crear esa ruta base y dejar
+  defaults seguros para volumen/reproceso: `DB_WRITE.jdbcBatchSize=5000`,
+  `fragmentSetIdTemplate=MT101-${_processExecutionId}`, `replaceExisting=true`,
+  `maxTransactionsPerMessage=100`, `maxBytesPerMessage=10000`, `pageSize=200`
+  en tareas downstream y muestras acotadas (`maxRecordsInOutput`/
+  `maxIssuesInOutput`). `MT101_STATUS` y `MT101_RECONCILE` no forman parte de
+  la plantilla base porque suelen correr como seguimiento programado/callback
+  despues del pago.
 
 **Cadena de bindings en modo masivo (fragments → fragments)**: en el flujo
 masivo el `fragment source` se pasa de tarea en tarea por REFERENCIA (no carga
@@ -212,6 +220,15 @@ error. Cada etapa lee SOLO los estados que su gate permite
 - `mt101_archive.status` se sincroniza a lo largo del pipeline (`ARCHIVED` →
   `SENT`/`REJECTED` por PAY → `CONFIRMED`/`REJECTED` por STATUS → `RECONCILED`
   por RECONCILE), no queda en `COMPOSED`.
+- En flujo no fragmentado, `MT101_ARCHIVE.records` publica `archiveId`,
+  `envelopeId`, `connectionRef` y el `message`; `MT101_PAY` conserva esos ids
+  en su output y sincroniza `mt101_archive.status` por `archiveId`, no solo por
+  `:20:`.
+- La sincronizacion durable se separa por capas: PAY, STATUS y RECONCILE llaman
+  a `Mt101ArchiveStatusUpdater` como servicio de dominio, y el SQL de lifecycle
+  vive en `Mt101ArchiveStatusRepository`. El repository soporta tablas migradas
+  con `updated_at` y hace fallback a `status` cuando una tabla legacy/custom no
+  tiene esa columna.
 - `MT101_ARCHIVE`/`MT101_PAY` publican una MUESTRA acotada en `records`/`errors`
   (`maxRecordsInOutput`, default 1000) con `recordsSampled` cuando hay recorte;
   los conteos (`archivedCount`/`sentCount`/...) son siempre exactos. El detalle
@@ -341,7 +358,7 @@ Outputs:
 Outputs:
 
 - `pay-mt101.summary`: `{sentCount, acceptedCount, rejectedCount, retriedCount, totalDurationMs}`.
-- `pay-mt101.records`: por mensaje `{sendersReference, uetr, status, gatewayReference, attempts, lastError}`.
+- `pay-mt101.records`: por mensaje `{sendersReference, archiveId?, envelopeId?, uetr, status, gatewayReference, attempts, lastError}`.
 - `pay-mt101.errors`: mensajes fallidos definitivamente.
 
 ### MT101_STATUS

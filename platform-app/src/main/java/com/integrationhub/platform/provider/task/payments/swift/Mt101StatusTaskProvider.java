@@ -2,6 +2,7 @@ package com.integrationhub.platform.provider.task.payments.swift;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.integrationhub.platform.repository.Mt101ConfirmationRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.task.SuspendableTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
@@ -16,9 +17,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Types;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -94,12 +93,17 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     private final HttpClient httpClient;
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
+    private final Mt101ArchiveStatusUpdater archiveStatusUpdater;
+    private final Mt101ConfirmationRepository confirmationRepository;
 
     @Inject
     public Mt101StatusTaskProvider(ObjectMapper objectMapper,
                                    DataSource defaultDataSource,
-                                   ConnectionPoolManager connectionPoolManager) {
-        this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager);
+                                   ConnectionPoolManager connectionPoolManager,
+                                   Mt101ArchiveStatusUpdater archiveStatusUpdater,
+                                   Mt101ConfirmationRepository confirmationRepository) {
+        this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager,
+                archiveStatusUpdater, confirmationRepository);
     }
 
     /** Constructor de test: permite inyectar un HttpClient custom. */
@@ -107,10 +111,32 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             HttpClient httpClient,
                             DataSource defaultDataSource,
                             ConnectionPoolManager connectionPoolManager) {
+        this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
+                new Mt101ArchiveStatusUpdater(defaultDataSource, connectionPoolManager),
+                new Mt101ConfirmationRepository());
+    }
+
+    Mt101StatusTaskProvider(ObjectMapper objectMapper,
+                            HttpClient httpClient,
+                            DataSource defaultDataSource,
+                            ConnectionPoolManager connectionPoolManager,
+                            Mt101ArchiveStatusUpdater archiveStatusUpdater) {
+        this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
+                archiveStatusUpdater, new Mt101ConfirmationRepository());
+    }
+
+    Mt101StatusTaskProvider(ObjectMapper objectMapper,
+                            HttpClient httpClient,
+                            DataSource defaultDataSource,
+                            ConnectionPoolManager connectionPoolManager,
+                            Mt101ArchiveStatusUpdater archiveStatusUpdater,
+                            Mt101ConfirmationRepository confirmationRepository) {
         this.objectMapper = objectMapper;
         this.httpClient = httpClient;
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
+        this.archiveStatusUpdater = archiveStatusUpdater;
+        this.confirmationRepository = confirmationRepository;
     }
 
     @Override
@@ -476,24 +502,17 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         var connectionRef = stringOrNull(configuration.get("connectionRef"));
         var confirmationTable = sanitize(stringValue(configuration.get("confirmationTable"),
                 DEFAULT_CONFIRMATION_TABLE));
-        var sql = "insert into " + confirmationTable
-                + " (archive_id, confirmation_type, gateway_reference, confirmed_status, raw_payload)"
-                + " values (?, ?, ?, ?, ?)";
-        try (Connection connection = resolveDataSource(connectionRef).getConnection();
-             PreparedStatement insert = connection.prepareStatement(sql)) {
+        try (Connection connection = resolveDataSource(connectionRef).getConnection()) {
+            var repositoryRows = new ArrayList<Mt101ConfirmationRepository.ConfirmationRow>(rows.size());
             for (var row : rows) {
-                if (row.archiveId() == null) {
-                    insert.setNull(1, Types.BIGINT);
-                } else {
-                    insert.setLong(1, row.archiveId());
-                }
-                insert.setString(2, row.confirmationType());
-                insert.setString(3, row.gatewayReference());
-                insert.setString(4, row.confirmedStatus());
-                insert.setString(5, row.rawPayload());
-                insert.addBatch();
+                repositoryRows.add(new Mt101ConfirmationRepository.ConfirmationRow(
+                        row.archiveId(),
+                        row.confirmationType(),
+                        row.gatewayReference(),
+                        row.confirmedStatus(),
+                        row.rawPayload()));
             }
-            insert.executeBatch();
+            confirmationRepository.insertConfirmations(connection, confirmationTable, repositoryRows);
             // H5: avanza el estado durable en mt101_archive (CONFIRMED/REJECTED)
             // por archive_id. Mismo connection que la insercion de confirmacion.
             syncArchiveStatus(connection, configuration, rows);
@@ -509,27 +528,22 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         }
         var table = sanitize(stringValue(configuration.get("archiveStatusTable"), "mt101_archive"));
         var accepted = acceptedStatuses(configuration.get("acceptedStatuses"));
-        var sql = "update " + table + " set status = ?, updated_at = current_timestamp where id = ?";
-        try (PreparedStatement update = connection.prepareStatement(sql)) {
-            var any = false;
-            for (var row : rows) {
-                if (row.archiveId() == null) {
-                    continue;
-                }
-                var confirmed = row.confirmedStatus() != null
-                        && accepted.contains(row.confirmedStatus().toUpperCase(Locale.ROOT));
-                update.setString(1, confirmed ? "CONFIRMED" : "REJECTED");
-                update.setLong(2, row.archiveId());
-                update.addBatch();
-                any = true;
+        var updates = new ArrayList<Mt101ArchiveStatusUpdater.ArchiveStatusUpdate>(rows.size());
+        for (var row : rows) {
+            if (row.archiveId() == null) {
+                continue;
             }
-            if (any) {
-                update.executeBatch();
-            }
+            var confirmed = row.confirmedStatus() != null
+                    && accepted.contains(row.confirmedStatus().toUpperCase(Locale.ROOT));
+            updates.add(new Mt101ArchiveStatusUpdater.ArchiveStatusUpdate(
+                    row.archiveId(), confirmed ? "CONFIRMED" : "REJECTED"));
+        }
+        try {
+            archiveStatusUpdater.updateArchiveStatus(connection, table, updates);
         } catch (SQLException error) {
-            // 42P01 = tabla inexistente: flujo sin archivo (no hay nada que
-            // sincronizar). Cualquier otro error de BD si se propaga.
-            if (!"42P01".equals(error.getSQLState())) {
+            // 42P01 = tabla inexistente; 42703 = columna inexistente: flujo sin
+            // archivo o tabla custom (no hay nada durable que sincronizar).
+            if (!"42P01".equals(error.getSQLState()) && !"42703".equals(error.getSQLState())) {
                 throw new IllegalStateException("MT101_STATUS archive sync error: " + error.getMessage(), error);
             }
         }

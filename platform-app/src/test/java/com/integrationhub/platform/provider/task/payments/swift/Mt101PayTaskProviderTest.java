@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -92,11 +93,13 @@ class Mt101PayTaskProviderTest {
         var transport = new StubTransport("REST", List.of(
                 TransportResult.accepted("GW-ARCHIVE", 1, 25L)
         ));
-        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
+        var archiveStatusUpdater = new RecordingArchiveStatusUpdater();
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), null, archiveStatusUpdater);
         var message = sampleMessage("PROC-ARCH");
         var context = contextWith(List.of(Map.of(
                 "archiveId", 10L,
                 "envelopeId", 20L,
+                "connectionRef", "payments-db",
                 "message", message
         )));
 
@@ -109,6 +112,15 @@ class Mt101PayTaskProviderTest {
         assertTrue(result.success());
         assertEquals(1, result.outputs().get("sentCount"));
         assertEquals(1, transport.callsReceived());
+        @SuppressWarnings("unchecked")
+        var records = (List<Map<String, Object>>) result.outputs().get("records");
+        assertEquals(10L, records.get(0).get("archiveId"));
+        assertEquals(20L, records.get(0).get("envelopeId"));
+        assertEquals(1, archiveStatusUpdater.calls.size());
+        assertEquals("payments-db", archiveStatusUpdater.calls.get(0).connectionRef());
+        assertEquals("mt101_archive", archiveStatusUpdater.calls.get(0).table());
+        assertEquals("SENT", archiveStatusUpdater.calls.get(0).status());
+        assertEquals(List.of(10L), archiveStatusUpdater.calls.get(0).archiveIds());
     }
 
     @Test
@@ -253,6 +265,25 @@ class Mt101PayTaskProviderTest {
         int callsReceived() {
             return received.size();
         }
+    }
+
+    private static final class RecordingArchiveStatusUpdater extends Mt101ArchiveStatusUpdater {
+        private final List<Call> calls = new ArrayList<>();
+
+        private RecordingArchiveStatusUpdater() {
+            super((javax.sql.DataSource) null);
+        }
+
+        @Override
+        public void updateStatusByArchiveIds(String connectionRef,
+                                             String table,
+                                             Collection<Long> archiveIds,
+                                             String status) {
+            calls.add(new Call(connectionRef, table, List.copyOf(archiveIds), status));
+        }
+    }
+
+    private record Call(String connectionRef, String table, List<Long> archiveIds, String status) {
     }
 
     private static final class InstanceOfOne<T> implements Instance<T> {

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationIssue;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationPredicate;
 import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.repository.PaymentValidationRuleReader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;
@@ -14,8 +15,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import javax.sql.DataSource;
 import java.math.BigDecimal;
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -43,7 +46,7 @@ class DbValidationRuleProviderTest {
     @BeforeEach
     void setUp() throws Exception {
         dataSource = dataSource();
-        provider = new DbValidationRuleProvider(dataSource, new ObjectMapper());
+        provider = new DbValidationRuleProvider(this::loadActiveRules, new ObjectMapper());
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("drop table if exists payment_validation_rule");
@@ -236,6 +239,50 @@ class DbValidationRuleProviderTest {
                 + "(rule_set, code, standard, applies_to, severity, predicate_kind, predicate_body, active) values "
                 + "('bank:TEST', '" + code + "', 'SWIFT', 'MT101', '" + severity + "', '" + kind + "', '"
                 + body.replace("'", "''") + "', true)");
+    }
+
+    private List<PaymentValidationRuleReader.RuleRow> loadActiveRules(String ruleSet,
+                                                                      String standard,
+                                                                      String appliesTo) {
+        var rules = new ArrayList<PaymentValidationRuleReader.RuleRow>();
+        var sql = "select rule_set, code, standard, applies_to, severity, predicate_kind, predicate_body "
+                + "from payment_validation_rule where active = true"
+                + (isWildcard(ruleSet) ? "" : " and lower(rule_set) = lower(?)")
+                + (isWildcard(standard) ? "" : " and lower(standard) = lower(?)")
+                + (isWildcard(appliesTo) ? "" : " and lower(applies_to) = lower(?)")
+                + " order by rule_set, code";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            if (!isWildcard(ruleSet)) {
+                statement.setString(parameter++, ruleSet);
+            }
+            if (!isWildcard(standard)) {
+                statement.setString(parameter++, standard);
+            }
+            if (!isWildcard(appliesTo)) {
+                statement.setString(parameter++, appliesTo);
+            }
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    rules.add(new PaymentValidationRuleReader.RuleRow(
+                            rs.getString("rule_set"),
+                            rs.getString("code"),
+                            rs.getString("standard"),
+                            rs.getString("applies_to"),
+                            rs.getString("severity"),
+                            rs.getString("predicate_kind"),
+                            rs.getString("predicate_body")));
+                }
+            }
+            return rules;
+        } catch (SQLException error) {
+            throw new IllegalStateException(error);
+        }
+    }
+
+    private boolean isWildcard(String requested) {
+        return requested == null || requested.isBlank() || "*".equals(requested);
     }
 
     private DataSource dataSource() {
