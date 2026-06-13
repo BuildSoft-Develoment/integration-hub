@@ -1,4 +1,4 @@
-package com.integrationhub.platform.repository;
+package com.integrationhub.platform.repository.payments.swift;
 
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -30,14 +30,7 @@ public class Mt101ArchiveStatusRepository {
         }
         var safeTable = sanitize(table);
         try (Connection connection = dataSource.getConnection()) {
-            updateStatusTargets(connection, safeTable, targets, status, true);
-        } catch (SQLException error) {
-            if (!hasSqlState(error, "42703")) {
-                throw error;
-            }
-            try (Connection connection = dataSource.getConnection()) {
-                updateStatusTargets(connection, safeTable, targets, status, false);
-            }
+            executeStatusTargetUpdate(connection, safeTable, targets, status);
         }
     }
 
@@ -62,14 +55,7 @@ public class Mt101ArchiveStatusRepository {
             return;
         }
         var safeTable = sanitize(table);
-        try {
-            updateArchiveStatus(connection, safeTable, updates, true);
-        } catch (SQLException error) {
-            if (!hasSqlState(error, "42703")) {
-                throw error;
-            }
-            updateArchiveStatus(connection, safeTable, updates, false);
-        }
+        executeArchiveStatusUpdate(connection, safeTable, updates);
     }
 
     public void markReconciled(Connection connection,
@@ -84,23 +70,15 @@ public class Mt101ArchiveStatusRepository {
         var safeSentTable = sanitize(sentTable);
         var safeConfirmationTable = sanitize(confirmationTable);
         var joinClause = buildJoinClause("s", "c", matchKeys);
-        try {
-            executeReconcileUpdate(connection, safeSentTable, safeConfirmationTable, joinClause, from, to, true);
-        } catch (SQLException error) {
-            if (!hasSqlState(error, "42703")) {
-                throw error;
-            }
-            executeReconcileUpdate(connection, safeSentTable, safeConfirmationTable, joinClause, from, to, false);
-        }
+        executeReconcileUpdate(connection, safeSentTable, safeConfirmationTable, joinClause, from, to);
     }
 
-    private void updateStatusTargets(Connection connection,
-                                     String safeTable,
-                                     Collection<StatusTarget> targets,
-                                     String status,
-                                     boolean touchUpdatedAt) throws SQLException {
+    private void executeStatusTargetUpdate(Connection connection,
+                                           String safeTable,
+                                           Collection<StatusTarget> targets,
+                                           String status) throws SQLException {
         var sql = "update " + safeTable
-                + " set status = ?" + (touchUpdatedAt ? ", updated_at = current_timestamp" : "")
+                + " set status = ?, updated_at = current_timestamp"
                 + " where senders_reference = ?"
                 + " and (cast(? as date) is null or requested_execution_date = ?)"
                 + " and (cast(? as varchar) is null or sender_lt = ?)";
@@ -125,12 +103,11 @@ public class Mt101ArchiveStatusRepository {
         }
     }
 
-    private void updateArchiveStatus(Connection connection,
-                                     String safeTable,
-                                     Collection<ArchiveStatusUpdate> updates,
-                                     boolean touchUpdatedAt) throws SQLException {
+    private void executeArchiveStatusUpdate(Connection connection,
+                                            String safeTable,
+                                            Collection<ArchiveStatusUpdate> updates) throws SQLException {
         var sql = "update " + safeTable
-                + " set status = ?" + (touchUpdatedAt ? ", updated_at = current_timestamp" : "")
+                + " set status = ?, updated_at = current_timestamp"
                 + " where id = ?";
         try (var statement = connection.prepareStatement(sql)) {
             var any = false;
@@ -155,10 +132,9 @@ public class Mt101ArchiveStatusRepository {
                                         String safeConfirmationTable,
                                         String joinClause,
                                         LocalDate from,
-                                        LocalDate to,
-                                        boolean touchUpdatedAt) throws SQLException {
+                                        LocalDate to) throws SQLException {
         var sql = "update " + safeSentTable + " s set status = 'RECONCILED'"
-                + (touchUpdatedAt ? ", updated_at = current_timestamp" : "")
+                + ", updated_at = current_timestamp"
                 + " from " + safeConfirmationTable + " c"
                 + " where " + joinClause
                 + " and s.created_at::date between ? and ?"
@@ -187,22 +163,6 @@ public class Mt101ArchiveStatusRepository {
             throw new IllegalArgumentException("Unsafe archive table identifier: " + identifier);
         }
         return identifier;
-    }
-
-    private boolean hasSqlState(SQLException error, String state) {
-        for (var current = error; current != null; current = current.getNextException()) {
-            if (state.equals(current.getSQLState())) {
-                return true;
-            }
-            var cause = current.getCause();
-            while (cause != null) {
-                if (cause instanceof SQLException sqlCause && state.equals(sqlCause.getSQLState())) {
-                    return true;
-                }
-                cause = cause.getCause();
-            }
-        }
-        return false;
     }
 
     public record StatusTarget(String sendersReference,

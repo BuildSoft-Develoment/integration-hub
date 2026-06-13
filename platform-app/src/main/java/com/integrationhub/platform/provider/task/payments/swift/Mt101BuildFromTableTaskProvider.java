@@ -1,7 +1,7 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
 import com.integrationhub.platform.provider.task.dbwrite.DbTaskSupport;
-import com.integrationhub.platform.repository.Mt101StagingRecordRepository;
+import com.integrationhub.platform.repository.payments.swift.Mt101StagingRecordRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.reader.ReadRecord;

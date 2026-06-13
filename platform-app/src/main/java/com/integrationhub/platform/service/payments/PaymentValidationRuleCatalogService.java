@@ -5,7 +5,7 @@ import com.integrationhub.platform.api.request.payments.PaymentValidationRuleImp
 import com.integrationhub.platform.api.request.payments.PaymentValidationRuleRequest;
 import com.integrationhub.platform.api.response.common.PageResponse;
 import com.integrationhub.platform.entity.PaymentValidationRule;
-import com.integrationhub.platform.repository.PaymentValidationRuleRepository;
+import com.integrationhub.platform.repository.payments.validation.PaymentValidationRuleRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 

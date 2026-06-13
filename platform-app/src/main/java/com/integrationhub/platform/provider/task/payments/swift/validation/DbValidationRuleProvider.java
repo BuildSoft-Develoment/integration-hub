@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationIssue;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationPredicate;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationRuleProvider;
-import com.integrationhub.platform.repository.PaymentValidationRuleReader;
+import com.integrationhub.platform.repository.payments.validation.PaymentValidationRuleReader;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;

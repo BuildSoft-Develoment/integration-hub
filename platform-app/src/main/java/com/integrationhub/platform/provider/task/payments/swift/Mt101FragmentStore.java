@@ -3,7 +3,7 @@ package com.integrationhub.platform.provider.task.payments.swift;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
-import com.integrationhub.platform.repository.Mt101FragmentRepository;
+import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;

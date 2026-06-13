@@ -1,4 +1,4 @@
-package com.integrationhub.platform.repository;
+package com.integrationhub.platform.repository.payments.swift;
 
 import jakarta.enterprise.context.ApplicationScoped;
 

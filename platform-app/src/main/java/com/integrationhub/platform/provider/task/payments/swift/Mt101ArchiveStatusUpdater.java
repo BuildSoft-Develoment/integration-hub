@@ -1,6 +1,6 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
-import com.integrationhub.platform.repository.Mt101ArchiveStatusRepository;
+import com.integrationhub.platform.repository.payments.swift.Mt101ArchiveStatusRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;

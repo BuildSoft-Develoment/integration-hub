@@ -1,4 +1,4 @@
-package com.integrationhub.platform.repository;
+package com.integrationhub.platform.repository.payments.swift;
 
 import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
 import jakarta.enterprise.context.ApplicationScoped;

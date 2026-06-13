@@ -1,7 +1,7 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.repository.Mt101ConfirmationRepository;
+import com.integrationhub.platform.repository.payments.swift.Mt101ConfirmationRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.task.SuspendableTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;

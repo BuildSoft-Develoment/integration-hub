@@ -4,7 +4,7 @@ import com.integrationhub.platform.provider.task.payments.spi.ValidationIssue;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationPredicate;
 import com.integrationhub.platform.provider.task.payments.spi.ValidationRuleProvider;
 import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
-import com.integrationhub.platform.repository.Mt101ValidationIssueRepository;
+import com.integrationhub.platform.repository.payments.swift.Mt101ValidationIssueRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
