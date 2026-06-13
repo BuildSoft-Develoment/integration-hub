@@ -1,6 +1,5 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.repository.Mt101ConfirmationRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
@@ -11,14 +10,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import javax.sql.DataSource;
-import java.io.IOException;
-import java.net.URI;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -90,11 +84,11 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     private static final int PERSIST_BATCH_SIZE = 500;
 
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient;
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
     private final Mt101ArchiveStatusUpdater archiveStatusUpdater;
     private final Mt101ConfirmationRepository confirmationRepository;
+    private final Mt101StatusGateway gateway;
 
     @Inject
     public Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -132,11 +126,11 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             Mt101ArchiveStatusUpdater archiveStatusUpdater,
                             Mt101ConfirmationRepository confirmationRepository) {
         this.objectMapper = objectMapper;
-        this.httpClient = httpClient;
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.archiveStatusUpdater = archiveStatusUpdater;
         this.confirmationRepository = confirmationRepository;
+        this.gateway = new Mt101StatusGateway(httpClient, objectMapper);
     }
 
     @Override
@@ -313,7 +307,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
 
         for (var record : pending) {
             var url = resolveTemplate(urlTemplate, record);
-            var queryResult = queryGateway(httpMethod, url, timeoutSeconds);
+            var queryResult = gateway.query(httpMethod, url, timeoutSeconds);
             if (queryResult.error() != null) {
                 stillPending.add(record);
                 var entry = new LinkedHashMap<String, Object>();
@@ -323,7 +317,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                 errors.add(entry);
                 continue;
             }
-            var status = extractField(queryResult.body(), statusPath);
+            var status = gateway.extractField(queryResult.body(), statusPath);
             if (status != null && finalStatuses.contains(status.toUpperCase(Locale.ROOT))) {
                 confirmed.add(new ConfirmationRow(readArchiveId(record), "POLL",
                         stringOrNull(record.get("gatewayReference")), status, queryResult.body()));
@@ -428,7 +422,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         for (var record : records) {
             queriedCount++;
             var url = resolveTemplate(urlTemplate, record);
-            var queryResult = queryGateway(httpMethod, url, timeoutSeconds);
+            var queryResult = gateway.query(httpMethod, url, timeoutSeconds);
             if (queryResult.error() != null) {
                 errorCount++;
                 byStatus.merge("ERROR", 1, Integer::sum);
@@ -443,8 +437,8 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                 continue;
             }
             var rawBody = queryResult.body();
-            var confirmedStatus = extractField(rawBody, statusPath);
-            var gatewayReference = extractField(rawBody, referencePath);
+            var confirmedStatus = gateway.extractField(rawBody, statusPath);
+            var gatewayReference = gateway.extractField(rawBody, referencePath);
             if (gatewayReference == null) {
                 gatewayReference = String.valueOf(record.getOrDefault("gatewayReference", ""));
             }
@@ -565,53 +559,8 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     }
 
     // ------------------------------------------------------------------
-    // HTTP + helpers (sin cambios respecto al modo query original)
+    // Helpers de orquestacion (HTTP/JSON viven en Mt101StatusGateway)
     // ------------------------------------------------------------------
-
-    private QueryResult queryGateway(String method, String url, int timeoutSeconds) {
-        try {
-            var request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .timeout(Duration.ofSeconds(timeoutSeconds))
-                    .method(method, HttpRequest.BodyPublishers.noBody())
-                    .build();
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            var status = response.statusCode();
-            if (status >= 200 && status < 300) {
-                return new QueryResult(response.body(), null);
-            }
-            return new QueryResult(response.body(),
-                    "HTTP " + status + ": " + truncate(response.body(), 200));
-        } catch (IOException error) {
-            return new QueryResult(null, "IO error: " + error.getMessage());
-        } catch (InterruptedException error) {
-            Thread.currentThread().interrupt();
-            return new QueryResult(null, "interrupted: " + error.getMessage());
-        }
-    }
-
-    private String extractField(String body, String jsonPath) {
-        if (body == null || body.isBlank() || jsonPath == null || !jsonPath.startsWith("$.")) {
-            return null;
-        }
-        try {
-            var node = objectMapper.readTree(body);
-            return navigate(node, jsonPath.substring(2));
-        } catch (IOException error) {
-            return null;
-        }
-    }
-
-    private String navigate(JsonNode node, String path) {
-        if (node == null || node.isMissingNode() || node.isNull()) {
-            return null;
-        }
-        var dot = path.indexOf('.');
-        var head = dot < 0 ? path : path.substring(0, dot);
-        var tail = dot < 0 ? null : path.substring(dot + 1);
-        var next = node.path(head);
-        return tail == null ? (next.isValueNode() ? next.asText() : null) : navigate(next, tail);
-    }
 
     private String resolveTemplate(String template, Map<String, Object> record) {
         var resolved = template;
@@ -679,11 +628,6 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         return connectionPoolManager.resolveJdbcDataSource(connectionRef);
     }
 
-    private String truncate(String value, int max) {
-        if (value == null || value.length() <= max) return value;
-        return value.substring(0, max) + "...";
-    }
-
     @SuppressWarnings("unchecked")
     private Map<String, Object> mapValue(Object raw) {
         if (!(raw instanceof Map<?, ?> rawMap)) {
@@ -740,9 +684,5 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
             throw new IllegalArgumentException("Unsafe identifier: " + identifier);
         }
         return identifier;
-    }
-
-    /** Resultado interno de la consulta HTTP al gateway. */
-    private record QueryResult(String body, String error) {
     }
 }

@@ -60,24 +60,6 @@ public class Mt101ArchiveStatusUpdater {
         this(defaultDataSource, null);
     }
 
-    public void updateStatus(String connectionRef,
-                             String table,
-                             Collection<String> sendersReferences,
-                             String status) {
-        if (sendersReferences == null || sendersReferences.isEmpty()) {
-            return;
-        }
-        var dataSource = resolveDataSource(connectionRef);
-        if (dataSource == null) {
-            return;
-        }
-        try {
-            repository.updateStatusBySendersReferences(dataSource, tableName(table), sendersReferences, status);
-        } catch (SQLException error) {
-            throw new IllegalStateException("Cannot sync mt101_archive status to " + status, error);
-        }
-    }
-
     public void updateStatusTargets(String connectionRef,
                                     String table,
                                     Collection<StatusTarget> targets,
@@ -108,17 +90,10 @@ public class Mt101ArchiveStatusUpdater {
             return;
         }
         try (Connection connection = dataSource.getConnection()) {
-            updateStatusByArchiveIds(connection, table, archiveIds, status);
+            repository.updateStatusByArchiveIds(connection, tableName(table), archiveIds, status);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot sync mt101_archive status to " + status, error);
         }
-    }
-
-    public void updateStatusByArchiveIds(Connection connection,
-                                         String table,
-                                         Collection<Long> archiveIds,
-                                         String status) throws SQLException {
-        repository.updateStatusByArchiveIds(connection, tableName(table), archiveIds, status);
     }
 
     public void updateArchiveStatus(Connection connection,

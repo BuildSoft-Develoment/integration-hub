@@ -21,26 +21,6 @@ import java.util.List;
 @ApplicationScoped
 public class Mt101ArchiveStatusRepository {
 
-    public void updateStatusBySendersReferences(DataSource dataSource,
-                                                String table,
-                                                Collection<String> sendersReferences,
-                                                String status) throws SQLException {
-        if (sendersReferences == null || sendersReferences.isEmpty()) {
-            return;
-        }
-        var safeTable = sanitize(table);
-        try (Connection connection = dataSource.getConnection()) {
-            updateStatusBySendersReferences(connection, safeTable, sendersReferences, status, true);
-        } catch (SQLException error) {
-            if (!hasSqlState(error, "42703")) {
-                throw error;
-            }
-            try (Connection connection = dataSource.getConnection()) {
-                updateStatusBySendersReferences(connection, safeTable, sendersReferences, status, false);
-            }
-        }
-    }
-
     public void updateStatusTargets(DataSource dataSource,
                                     String table,
                                     Collection<StatusTarget> targets,
@@ -111,27 +91,6 @@ public class Mt101ArchiveStatusRepository {
                 throw error;
             }
             executeReconcileUpdate(connection, safeSentTable, safeConfirmationTable, joinClause, from, to, false);
-        }
-    }
-
-    private void updateStatusBySendersReferences(Connection connection,
-                                                 String safeTable,
-                                                 Collection<String> sendersReferences,
-                                                 String status,
-                                                 boolean touchUpdatedAt) throws SQLException {
-        var sql = "update " + safeTable
-                + " set status = ?" + (touchUpdatedAt ? ", updated_at = current_timestamp" : "")
-                + " where senders_reference = ?";
-        try (var statement = connection.prepareStatement(sql)) {
-            for (var reference : sendersReferences) {
-                if (reference == null || reference.isBlank()) {
-                    continue;
-                }
-                statement.setString(1, status);
-                statement.setString(2, reference);
-                statement.addBatch();
-            }
-            statement.executeBatch();
         }
     }
 
