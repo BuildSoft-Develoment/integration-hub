@@ -95,6 +95,31 @@ services:
       kafka:
         condition: service_started
 
+  # Brokers MQ alternativos (enchufables via el SPI). Levantan para cuando se
+  # cambie audit.broker.type a RABBITMQ / REDIS / JMS; con Kafka por defecto, son opcionales.
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: integration-hub-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  redis:
+    image: redis:7-alpine
+    container_name: integration-hub-redis
+    ports:
+      - "6379:6379"
+
+  artemis:
+    image: apache/activemq-artemis:2.33.0
+    container_name: integration-hub-artemis
+    ports:
+      - "61616:61616"
+      - "8161:8161"
+    environment:
+      ARTEMIS_USER: artemis
+      ARTEMIS_PASSWORD: artemis
+
   # Consumidor de auditoria: deployable independiente (escala/falla aparte del
   # hot-path de pagos). Lee del MQ y registra en audit_event. Requiere
   # `mvn -pl audit-consumer package` previo (layout fast-jar).
