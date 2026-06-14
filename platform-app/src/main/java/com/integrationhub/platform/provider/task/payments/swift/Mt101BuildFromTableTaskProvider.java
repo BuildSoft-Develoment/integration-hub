@@ -228,7 +228,7 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
         planChunk(context, configuration, rows.subList(mid, rows.size()), maxBytes, logicalOffset + mid, plan);
     }
 
-    private com.integrationhub.platform.spi.payments.Mt101Message buildFragment(
+    private com.integrationhub.platform.spi.task.payments.Mt101Message buildFragment(
             TaskContext context,
             Map<String, Object> configuration,
             List<RowRecord> rows,
@@ -252,7 +252,7 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
         return messages.getFirst();
     }
 
-    private int payloadBytes(com.integrationhub.platform.spi.payments.Mt101Message message) {
+    private int payloadBytes(com.integrationhub.platform.spi.task.payments.Mt101Message message) {
         return message.rawPayload() == null ? 0
                 : message.rawPayload().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
     }
@@ -371,12 +371,12 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     }
 
     @SuppressWarnings("unchecked")
-    private List<com.integrationhub.platform.spi.payments.Mt101Message> messagesFromBuild(TaskResult result) {
+    private List<com.integrationhub.platform.spi.task.payments.Mt101Message> messagesFromBuild(TaskResult result) {
         var raw = result.outputs().get("records");
         if (!(raw instanceof List<?> rawList)) {
             return List.of();
         }
-        return (List<com.integrationhub.platform.spi.payments.Mt101Message>) rawList;
+        return (List<com.integrationhub.platform.spi.task.payments.Mt101Message>) rawList;
     }
 
     private TaskContext fragmentContext(TaskContext original, int messageIndex, int messageTotal, long offset) {

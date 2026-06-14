@@ -1,6 +1,6 @@
 package com.integrationhub.platform.provider.task.payments.swift.transport;
 
-import com.integrationhub.platform.spi.payments.Mt101Message;
+import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
@@ -33,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Usa Testcontainers con la imagen {@code atmoz/sftp} para tener un servidor SFTP
  * real en un contenedor efimero. Verifica que el transporte sube el archivo via
- * upload-with-rename y produce {@link com.integrationhub.platform.spi.payments.TransportResult}
+ * upload-with-rename y produce {@link com.integrationhub.platform.spi.task.payments.TransportResult}
  * exitoso.</p>
  */
 @Testcontainers

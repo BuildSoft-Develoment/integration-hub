@@ -2,9 +2,9 @@ package com.integrationhub.platform.provider.task.payments.swift.transport;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.spi.payments.PaymentMessageTransport;
-import com.integrationhub.platform.spi.payments.TransportResult;
-import com.integrationhub.platform.spi.payments.Mt101Message;
+import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
+import com.integrationhub.platform.spi.task.payments.TransportResult;
+import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 

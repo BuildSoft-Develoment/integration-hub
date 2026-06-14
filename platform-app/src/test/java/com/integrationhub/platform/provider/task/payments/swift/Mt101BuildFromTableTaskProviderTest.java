@@ -3,7 +3,7 @@ package com.integrationhub.platform.provider.task.payments.swift;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.integrationhub.platform.spi.payments.PaymentMessageFormatter;
+import com.integrationhub.platform.spi.task.payments.PaymentMessageFormatter;
 import com.integrationhub.platform.provider.task.payments.swift.format.JsonMt101Formatter;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.spi.task.TaskContext;
@@ -220,7 +220,7 @@ class Mt101BuildFromTableTaskProviderTest {
         @SuppressWarnings("unchecked")
         var fragmentSource = (Map<String, Object>) result.outputs().get("fragments");
 
-        var archivedOnly = new java.util.ArrayList<com.integrationhub.platform.spi.payments.Mt101Message>();
+        var archivedOnly = new java.util.ArrayList<com.integrationhub.platform.spi.task.payments.Mt101Message>();
         fragmentStore.forEachPage(fragmentSource, List.of("ARCHIVED"), 50, archivedOnly::addAll);
         assertEquals(0, archivedOnly.size(), "fragmentos BUILT no deben ser elegibles para PAY");
 
@@ -247,7 +247,7 @@ class Mt101BuildFromTableTaskProviderTest {
         @SuppressWarnings("unchecked")
         var fragmentSource = (Map<String, Object>) result.outputs().get("fragments");
         var pages = new java.util.ArrayList<Integer>();
-        var all = new java.util.ArrayList<com.integrationhub.platform.spi.payments.Mt101Message>();
+        var all = new java.util.ArrayList<com.integrationhub.platform.spi.task.payments.Mt101Message>();
         fragmentStore.forEachPage(fragmentSource, List.of("BUILT"), 2, page -> {
             pages.add(page.size());
             all.addAll(page);

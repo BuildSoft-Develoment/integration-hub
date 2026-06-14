@@ -1,7 +1,7 @@
 package com.integrationhub.platform.provider.task.payments.swift.validation;
 
-import com.integrationhub.platform.spi.payments.ValidationPredicate;
-import com.integrationhub.platform.spi.payments.ValidationRuleProvider;
+import com.integrationhub.platform.spi.task.payments.ValidationPredicate;
+import com.integrationhub.platform.spi.task.payments.ValidationRuleProvider;
 import jakarta.annotation.Priority;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;

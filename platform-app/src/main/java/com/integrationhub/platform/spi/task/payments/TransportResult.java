@@ -1,4 +1,4 @@
-package com.integrationhub.platform.spi.payments;
+package com.integrationhub.platform.spi.task.payments;
 
 /**
  * Resultado del despacho de un mensaje al gateway via {@link PaymentMessageTransport}.
