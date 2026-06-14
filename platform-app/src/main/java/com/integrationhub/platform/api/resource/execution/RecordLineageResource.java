@@ -56,6 +56,7 @@ public class RecordLineageResource {
                 event.processExecutionId,
                 event.taskDefinitionId,
                 event.message,
+                event.payloadJson,
                 event.eventTs);
     }
 }

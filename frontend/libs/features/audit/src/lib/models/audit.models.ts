@@ -20,6 +20,7 @@ export interface RecordLineageEntry {
   processExecutionId: number | null;
   taskDefinitionId: number | null;
   message: string | null;
+  payloadJson: string | null;
   eventTs: string | null;
 }
 

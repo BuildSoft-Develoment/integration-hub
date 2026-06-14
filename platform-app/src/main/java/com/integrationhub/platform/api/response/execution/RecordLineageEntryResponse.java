@@ -14,5 +14,6 @@ public record RecordLineageEntryResponse(
         Long processExecutionId,
         Long taskDefinitionId,
         String message,
+        String payloadJson,
         LocalDateTime eventTs) {
 }

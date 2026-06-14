@@ -107,8 +107,23 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                 fragmentStore, new Mt101StagingRecordRepository(), null);
     }
 
-    /** Trama RECORD de construccion por fragmento (traceId=ejecucion, recordId=:20:). */
-    private AuditEnvelope recordEnvelope(TaskContext context, String reference) {
+    /**
+     * Trama RECORD de construccion por fragmento (traceId=ejecucion, recordId=:20:).
+     * Lleva en attributes el rango de record_index de las filas staging que componen
+     * el fragmento -> drill-down N filas (INGESTED) -> 1 fragmento (BUILT): los
+     * eventos INGESTED con record_index en [recordIndexFrom, recordIndexTo] alimentaron
+     * este :20:.
+     */
+    private AuditEnvelope recordEnvelope(TaskContext context, String reference,
+                                        long logicalOffset, int rowCount, long firstStagingId, long lastStagingId) {
+        // El rango va en payloadJson (lo persiste el store frio) para el drill-down
+        // N filas (INGESTED) -> 1 fragmento (BUILT): record_index en [from, to].
+        var composition = new java.util.LinkedHashMap<String, Object>();
+        composition.put("recordIndexFrom", logicalOffset);
+        composition.put("recordIndexTo", logicalOffset + Math.max(rowCount - 1, 0));
+        composition.put("rowCount", rowCount);
+        composition.put("stagingFirstId", firstStagingId);
+        composition.put("stagingLastId", lastStagingId);
         return new AuditEnvelope(
                 UUID.randomUUID().toString(),
                 context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
@@ -119,7 +134,7 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                 context.processExecutionId(),
                 context.taskDefinitionId(),
                 null,
-                null,
+                jsonConfigurationMapper.toJson(composition),
                 Map.of(),
                 Instant.now(),
                 AuditEnvelope.CURRENT_SCHEMA_VERSION);
@@ -219,8 +234,9 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                         index,
                         totalFragments,
                         message));
-                auditBuffer.add(recordEnvelope(context, message.sequenceA() == null
-                        ? null : message.sequenceA().sendersReference()));
+                auditBuffer.add(recordEnvelope(context,
+                        message.sequenceA() == null ? null : message.sequenceA().sendersReference(),
+                        boundary.logicalOffset(), rows.size(), boundary.firstId(), boundary.lastId()));
                 if (insertBuffer.size() >= INSERT_BATCH_SIZE) {
                     fragmentStore.insertFragments(source.connectionRef(), new ArrayList<>(insertBuffer));
                     insertBuffer.clear();
