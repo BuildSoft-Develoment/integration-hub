@@ -21,6 +21,18 @@ export interface RecordLineageEntry {
   taskDefinitionId: number | null;
   message: string | null;
   payloadJson: string | null;
+  standard: string | null;
+  messageType: string | null;
+  sourceFileName: string | null;
+  sourceFileHash: string | null;
+  recordNumber: number | null;
+  businessKey: string | null;
+  businessKeyHash: string | null;
+  paymentReference: string | null;
+  transactionReference: string | null;
+  uetr: string | null;
+  archiveId: number | null;
+  gatewayReference: string | null;
   eventTs: string | null;
 }
 

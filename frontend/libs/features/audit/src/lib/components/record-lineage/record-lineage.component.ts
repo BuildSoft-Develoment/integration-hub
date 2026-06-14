@@ -16,24 +16,63 @@ import { RecordLineageEntry } from '../../models/audit.models';
   imports: [CommonModule, FormsModule],
   styles: [`
     .lineage { display:flex; flex-direction:column; gap:1rem; }
-    .lineage__search { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
-    .lineage__search input { padding:.45rem .6rem; min-width:16rem; }
-    .lineage__timeline { display:flex; flex-direction:column; gap:.25rem; }
-    .lineage__entry { display:grid; grid-template-columns:11rem 9rem 1fr 12rem; gap:.75rem;
-      padding:.5rem .75rem; border-left:3px solid var(--ih-accent, #4c6ef5); background:var(--ih-surface, #1b1f27); }
-    .lineage__stage { font-weight:600; }
+    .lineage__search { display:grid; grid-template-columns:repeat(auto-fit, minmax(14rem, 1fr)); gap:.75rem; align-items:end; }
+    .lineage__field { display:flex; flex-direction:column; gap:.25rem; }
+    .lineage__field label { font-size:.75rem; color:var(--ih-text-soft); }
+    .lineage__field input,.lineage__field select { min-height:2.35rem; padding:.45rem .6rem; border:1px solid var(--ih-border, #354052); background:var(--ih-surface, #10141b); color:inherit; }
+    .lineage__actions { display:flex; gap:.5rem; flex-wrap:wrap; }
+    .lineage__actions button { min-height:2.35rem; padding:.45rem .8rem; }
+    .lineage__timeline { display:flex; flex-direction:column; gap:.35rem; }
+    .lineage__entry { display:grid; grid-template-columns:minmax(9rem, 13rem) minmax(7rem, 9rem) minmax(12rem, 1fr) minmax(10rem, 13rem); gap:.75rem;
+      padding:.65rem .75rem; border-left:3px solid var(--ih-accent, #4c6ef5); background:var(--ih-surface, #1b1f27); align-items:start; }
+    .lineage__stage { font-weight:600; overflow-wrap:anywhere; }
     .lineage__status--REJECTED { color:#e03131; }
-    .lineage__status--SENT,.lineage__status--ARCHIVED,.lineage__status--VALIDATED { color:#2f9e44; }
+    .lineage__status--SENT,.lineage__status--ARCHIVED,.lineage__status--VALIDATED,.lineage__status--CONFIRMED,.lineage__status--RECONCILED { color:#2f9e44; }
+    .lineage__keys { display:flex; flex-direction:column; gap:.15rem; font-size:.82rem; overflow-wrap:anywhere; }
+    .lineage__key { color:var(--ih-text-soft); }
     .lineage__empty,.lineage__error { color:var(--ih-text-soft); padding:.75rem; }
     .lineage__error { color:#e03131; }
+    @media (max-width: 760px) {
+      .lineage__entry { grid-template-columns:1fr; }
+    }
   `],
   template: `
     <section class="lineage">
       <div class="lineage__search">
-        <input [(ngModel)]="recordId" placeholder="recordId (:20:)" (keyup.enter)="searchByRecord()" />
-        <button (click)="searchByRecord()">Buscar registro</button>
-        <input [(ngModel)]="traceId" placeholder="traceId (exec-<id>)" (keyup.enter)="searchByTrace()" />
-        <button (click)="searchByTrace()">Buscar ejecucion</button>
+        <div class="lineage__field">
+          <label>recordId</label>
+          <input [(ngModel)]="recordId" placeholder="archivo:linea o :20:" (keyup.enter)="searchByRecord()" />
+        </div>
+        <div class="lineage__field">
+          <label>traceId</label>
+          <input [(ngModel)]="traceId" placeholder="exec-123" (keyup.enter)="searchByTrace()" />
+        </div>
+        <div class="lineage__field">
+          <label>clave</label>
+          <select [(ngModel)]="key">
+            @for (option of keyOptions; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </div>
+        <div class="lineage__field">
+          <label>valor</label>
+          <input [(ngModel)]="value" placeholder=":20:, :21:, UETR, hash..." (keyup.enter)="searchByKey()" />
+        </div>
+        <div class="lineage__field">
+          <label>hash archivo</label>
+          <input [(ngModel)]="sourceFileHash" placeholder="SHA-256" (keyup.enter)="searchBySourceRow()" />
+        </div>
+        <div class="lineage__field">
+          <label>fila</label>
+          <input [(ngModel)]="recordNumber" placeholder="1002" (keyup.enter)="searchBySourceRow()" />
+        </div>
+        <div class="lineage__actions">
+          <button (click)="searchByRecord()">Registro</button>
+          <button (click)="searchByTrace()">Ejecucion</button>
+          <button (click)="searchByKey()">Clave</button>
+          <button (click)="searchBySourceRow()">Archivo/fila</button>
+        </div>
       </div>
 
       @if (loading()) {
@@ -48,7 +87,17 @@ import { RecordLineageEntry } from '../../models/audit.models';
             <div class="lineage__entry">
               <span class="lineage__stage">{{ entry.stage }}</span>
               <span class="lineage__status lineage__status--{{ entry.status }}">{{ entry.status }}</span>
-              <span>{{ entry.message || entry.recordId || entry.traceId }}</span>
+              <span class="lineage__keys">
+                <span>{{ entry.message || entry.paymentReference || entry.recordId || entry.traceId }}</span>
+                @if (entry.paymentReference) { <span class="lineage__key">:20: {{ entry.paymentReference }}</span> }
+                @if (entry.transactionReference) { <span class="lineage__key">:21: {{ entry.transactionReference }}</span> }
+                @if (entry.uetr) { <span class="lineage__key">UETR {{ entry.uetr }}</span> }
+                @if (entry.archiveId) { <span class="lineage__key">archive {{ entry.archiveId }}</span> }
+                @if (entry.gatewayReference) { <span class="lineage__key">gateway {{ entry.gatewayReference }}</span> }
+                @if (entry.sourceFileName || entry.recordNumber !== null) {
+                  <span class="lineage__key">{{ entry.sourceFileName || entry.sourceFileHash }} #{{ entry.recordNumber }}</span>
+                }
+              </span>
               <span>{{ entry.eventTs }}</span>
             </div>
           }
@@ -62,6 +111,19 @@ export class RecordLineageComponent {
 
   recordId = '';
   traceId = '';
+  key = 'paymentReference';
+  value = '';
+  sourceFileHash = '';
+  recordNumber = '';
+
+  readonly keyOptions = [
+    { value: 'paymentReference', label: ':20:' },
+    { value: 'transactionReference', label: ':21:' },
+    { value: 'uetr', label: 'UETR' },
+    { value: 'archiveId', label: 'Archive ID' },
+    { value: 'gatewayReference', label: 'Gateway' },
+    { value: 'businessKeyHash', label: 'Hash negocio' },
+  ];
 
   readonly entries = signal<RecordLineageEntry[]>([]);
   readonly loading = signal(false);
@@ -81,7 +143,21 @@ export class RecordLineageComponent {
     this.fetch({ traceId: this.traceId });
   }
 
-  private fetch(query: { recordId?: string; traceId?: string }): void {
+  searchByKey(): void {
+    if (!this.key.trim() || !this.value.trim()) {
+      return;
+    }
+    this.fetch({ key: this.key, value: this.value });
+  }
+
+  searchBySourceRow(): void {
+    if (!this.sourceFileHash.trim() || !this.recordNumber.trim()) {
+      return;
+    }
+    this.fetch({ sourceFileHash: this.sourceFileHash, recordNumber: this.recordNumber });
+  }
+
+  private fetch(query: { recordId?: string; traceId?: string; key?: string; value?: string; sourceFileHash?: string; recordNumber?: string }): void {
     this.loading.set(true);
     this.error.set(null);
     this.api.recordLineage(query).subscribe({

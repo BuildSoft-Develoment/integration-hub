@@ -2,6 +2,7 @@ package com.integrationhub.platform.provider.task.payments.swift;
 
 import com.integrationhub.platform.spi.task.payments.PaymentMessageFormatter;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -50,18 +51,28 @@ public class Mt101SplitTaskProvider implements TaskProvider {
     private static final String DEFAULT_REFERENCE_TEMPLATE = "${sendersReference}-${fragmentIndex}";
 
     private final Iterable<PaymentMessageFormatter> formatters;
+    private final RecordAuditEmitter recordAuditEmitter;
 
     public Mt101SplitTaskProvider() {
         this.formatters = List.of();
+        this.recordAuditEmitter = null;
     }
 
     @Inject
+    public Mt101SplitTaskProvider(Instance<PaymentMessageFormatter> formatters,
+                                  RecordAuditEmitter recordAuditEmitter) {
+        this.formatters = formatters;
+        this.recordAuditEmitter = recordAuditEmitter;
+    }
+
     public Mt101SplitTaskProvider(Instance<PaymentMessageFormatter> formatters) {
         this.formatters = formatters;
+        this.recordAuditEmitter = null;
     }
 
     Mt101SplitTaskProvider(Iterable<PaymentMessageFormatter> formatters) {
         this.formatters = formatters == null ? List.of() : formatters;
+        this.recordAuditEmitter = null;
     }
 
     @Override
@@ -102,6 +113,11 @@ public class Mt101SplitTaskProvider implements TaskProvider {
         outputs.put("passthroughCount", passthroughCount);
         outputs.put("outputFragmentCount", fragments.size());
         outputs.put("records", fragments);
+
+        emitRecordAudit(fragments.stream()
+                .map(fragment -> Mt101Audit.messageEvent(context, fragment, "PAYMENT_MESSAGE_SPLIT", "SPLIT", null,
+                        Map.of("splitSourceCount", String.valueOf(messages.size()))))
+                .toList());
 
         var summary = "MT101_SPLIT input=" + messages.size()
                 + " split=" + splitCount
@@ -227,5 +243,11 @@ public class Mt101SplitTaskProvider implements TaskProvider {
     private boolean boolValue(Object raw, boolean defaultValue) {
         if (raw == null) return defaultValue;
         return Boolean.parseBoolean(String.valueOf(raw));
+    }
+
+    private void emitRecordAudit(List<com.integrationhub.platform.audit.AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && envelopes != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
+        }
     }
 }

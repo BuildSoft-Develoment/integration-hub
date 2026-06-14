@@ -15,5 +15,17 @@ public record RecordLineageEntryResponse(
         Long taskDefinitionId,
         String message,
         String payloadJson,
+        String standard,
+        String messageType,
+        String sourceFileName,
+        String sourceFileHash,
+        Long recordNumber,
+        String businessKey,
+        String businessKeyHash,
+        String paymentReference,
+        String transactionReference,
+        String uetr,
+        Long archiveId,
+        String gatewayReference,
         LocalDateTime eventTs) {
 }

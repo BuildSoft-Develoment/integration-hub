@@ -28,11 +28,19 @@ Dar visibilidad operativa y trazabilidad completa sobre procesos, tareas y archi
 - RF-003 navegar a overview y a ejecuciones relacionadas (hijas/reproceso).
 - RF-004 exponer un resumen operativo agregado en `GET /api/query/overview-summary`.
 - RF-005 correlacionar evidencia tecnica y funcional por `processExecutionId`.
+- RF-006 publicar auditoria de forma asincrona mediante broker obligatorio
+  (`Kafka` por defecto, abierto a JMS/RabbitMQ/Redis).
+- RF-007 consultar trazabilidad E2E por registro usando claves de archivo, fila,
+  hash de negocio y referencias de pago (`:20:`, `:21:`, UETR, archive/gateway).
 
 ## Reglas de negocio
 
-- la correlacion base es `processExecutionId`
+- la correlacion base de proceso es `processExecutionId`
+- la correlacion de registro usa `traceId`, `recordId` y claves operativas
+  indexadas; datos sensibles deben consultarse por hash
 - la evidencia debe incluir auditoria persistida, trazas y estado por tarea
+- `platform-app` no persiste el read-model final de auditoria; publica eventos y
+  `audit-consumer` los materializa
 - el usuario `auditor` consulta pero no modifica catalogos ni procesos
 
 ## Criterios de aceptacion
@@ -40,6 +48,9 @@ Dar visibilidad operativa y trazabilidad completa sobre procesos, tareas y archi
 - se pueden consultar ejecuciones y auditoria por filtros
 - existen datos por archivo y por tarea
 - overview consolida metricas de salud operativa
+- los eventos de auditoria viajan por MQ y los poison messages quedan en DLQ
+- la vista de trazabilidad permite buscar por ejecucion, registro, archivo/fila y
+  referencias SWIFT/payment
 - (UI) hay vistas de listado/filtro (`execution-list`/`audit-list` + toolbars), detalle por tarea y
   archivo (`execution-editor` + `execution-task-list`/`execution-files-panel`), linaje de reproceso
   (`execution-lineage`) y resumen operativo (`overview-metric-card`/`overview-table-card`)

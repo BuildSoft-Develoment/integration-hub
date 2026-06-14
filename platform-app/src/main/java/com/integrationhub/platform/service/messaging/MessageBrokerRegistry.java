@@ -11,9 +11,8 @@ import java.util.Optional;
  * SourceProviderRegistry/TaskProviderRegistry). Permite enchufar Kafka/JMS/
  * RabbitMQ/Redis sin tocar a los productores.
  *
- * <p>La resolucion es {@link Optional}: en fases tempranas (o si no hay broker
- * configurado) el relay simplemente no drena y las tramas quedan PENDING en el
- * spool durable, sin perdida.</p>
+ * <p>La resolucion productiva es fail-fast: si {@code audit.relay.enabled=true},
+ * el broker configurado debe existir. No hay fallback silencioso a DB/in-memory.</p>
  */
 @ApplicationScoped
 public class MessageBrokerRegistry {

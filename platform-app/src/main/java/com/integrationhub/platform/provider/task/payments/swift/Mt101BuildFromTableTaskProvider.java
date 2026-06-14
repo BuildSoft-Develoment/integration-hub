@@ -136,6 +136,18 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                 null,
                 jsonConfigurationMapper.toJson(composition),
                 Map.of(),
+                "SWIFT",
+                "MT101",
+                null,
+                null,
+                logicalOffset,
+                null,
+                null,
+                reference,
+                null,
+                null,
+                null,
+                null,
                 Instant.now(),
                 AuditEnvelope.CURRENT_SCHEMA_VERSION);
     }

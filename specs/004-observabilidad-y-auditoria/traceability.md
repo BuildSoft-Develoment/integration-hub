@@ -27,6 +27,8 @@ Codigo existente -> SDD (spec-tecnica) -> Trazabilidad -> QA (evidencia GREEN re
 | RF-003 | - | - | - | GET /api/query/process-executions/{processExecutionId}/children | process_execution | ExecutionQueryService | CatalogAndExecutionResourceIT | Implementado | tdd-evidence.md | execution-lineage | execution-editor.store.spec.ts |
 | RF-004 | - | - | - | GET /api/query/overview-summary | process_execution | ExecutionQueryResource | CatalogAndExecutionResourceIT | Implementado | tdd-evidence.md | overview-metric-card + overview-table-card | overview.store.spec.ts |
 | RF-005 | - | - | - | GET /api/query/audit-events | audit_event | AuditService | StreamingPipelineServiceTest | Implementado | tdd-evidence.md | execution-editor-summary, audit-editor | audit.store.spec.ts |
+| RF-006 | - | - | - | MQ audit-events | audit_spool, audit_event, audit_dead_letter_event | MessageBrokerRegistry, OutboxRelay, AuditEventHandler | KafkaPublishIT, AuditEventConsumerTest | Implementado | tdd-evidence.md | audit-list | audit.store.spec.ts |
+| RF-007 | - | - | - | GET /api/query/record-lineage | audit_record_event | RecordLineageResource, PostgresColdStore | PostgresColdStoreTest | Implementado | tdd-evidence.md | record-lineage | audit-api.service.ts |
 
 ## Gates
 > Fase 2 N/A por reingenieria: `gate-spdd-approved` y `gate-prototype-ready` no aplican.
@@ -41,6 +43,7 @@ Codigo existente -> SDD (spec-tecnica) -> Trazabilidad -> QA (evidencia GREEN re
 
 ## Decisiones
 - Correlacion de auditoria, trazas y ejecucion por `processExecutionId` (ADR-002).
+- Auditoria asincrona multi-broker y lineage por registro (ADR-010).
 
 ## Preguntas abiertas
 - Confirmar mapeo definitivo RF local `RF-001..RF-005` ↔ requerimientos globales de Fase 1.

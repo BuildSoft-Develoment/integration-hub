@@ -1,8 +1,11 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.repository.payments.swift.Mt101ConfirmationRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.SuspendableTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -19,6 +22,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
+import java.time.Instant;
+import java.util.UUID;
 
 /**
  * Task provider {@code MT101_STATUS}: consulta/recibe el estado de mensajes
@@ -89,15 +94,26 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     private final Mt101ArchiveStatusUpdater archiveStatusUpdater;
     private final Mt101ConfirmationRepository confirmationRepository;
     private final Mt101StatusGateway gateway;
+    private final RecordAuditEmitter recordAuditEmitter;
 
     @Inject
     public Mt101StatusTaskProvider(ObjectMapper objectMapper,
                                    DataSource defaultDataSource,
                                    ConnectionPoolManager connectionPoolManager,
                                    Mt101ArchiveStatusUpdater archiveStatusUpdater,
+                                   Mt101ConfirmationRepository confirmationRepository,
+                                   RecordAuditEmitter recordAuditEmitter) {
+        this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager,
+                archiveStatusUpdater, confirmationRepository, recordAuditEmitter);
+    }
+
+    public Mt101StatusTaskProvider(ObjectMapper objectMapper,
+                                   DataSource defaultDataSource,
+                                   ConnectionPoolManager connectionPoolManager,
+                                   Mt101ArchiveStatusUpdater archiveStatusUpdater,
                                    Mt101ConfirmationRepository confirmationRepository) {
         this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager,
-                archiveStatusUpdater, confirmationRepository);
+                archiveStatusUpdater, confirmationRepository, null);
     }
 
     /** Constructor de test: permite inyectar un HttpClient custom. */
@@ -107,7 +123,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             ConnectionPoolManager connectionPoolManager) {
         this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
                 new Mt101ArchiveStatusUpdater(defaultDataSource, connectionPoolManager),
-                new Mt101ConfirmationRepository());
+                new Mt101ConfirmationRepository(), null);
     }
 
     Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -116,7 +132,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             ConnectionPoolManager connectionPoolManager,
                             Mt101ArchiveStatusUpdater archiveStatusUpdater) {
         this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
-                archiveStatusUpdater, new Mt101ConfirmationRepository());
+                archiveStatusUpdater, new Mt101ConfirmationRepository(), null);
     }
 
     Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -125,12 +141,24 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             ConnectionPoolManager connectionPoolManager,
                             Mt101ArchiveStatusUpdater archiveStatusUpdater,
                             Mt101ConfirmationRepository confirmationRepository) {
+        this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
+                archiveStatusUpdater, confirmationRepository, null);
+    }
+
+    Mt101StatusTaskProvider(ObjectMapper objectMapper,
+                            HttpClient httpClient,
+                            DataSource defaultDataSource,
+                            ConnectionPoolManager connectionPoolManager,
+                            Mt101ArchiveStatusUpdater archiveStatusUpdater,
+                            Mt101ConfirmationRepository confirmationRepository,
+                            RecordAuditEmitter recordAuditEmitter) {
         this.objectMapper = objectMapper;
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.archiveStatusUpdater = archiveStatusUpdater;
         this.confirmationRepository = confirmationRepository;
         this.gateway = new Mt101StatusGateway(httpClient, objectMapper);
+        this.recordAuditEmitter = recordAuditEmitter;
     }
 
     @Override
@@ -144,7 +172,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         return switch (mode) {
             case "query" -> executeQuery(context, configuration);
             case "callback" -> suspendForCallback(context, configuration);
-            case "poll" -> pollRound(configuration, readRecords(context, configuration), 0);
+            case "poll" -> pollRound(context, configuration, readRecords(context, configuration), 0);
             default -> throw new IllegalArgumentException(
                     "Unsupported MT101_STATUS mode '" + mode + "'; expected query, callback or poll");
         };
@@ -156,8 +184,8 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                              Map<String, Object> suspendedState) {
         var mode = stringValue(suspendedState.get("mode"), "").toLowerCase(Locale.ROOT);
         return switch (mode) {
-            case "callback" -> resumeCallback(configuration, suspendedState);
-            case "poll" -> pollRound(configuration, pendingFromState(suspendedState),
+            case "callback" -> resumeCallback(context, configuration, suspendedState);
+            case "poll" -> pollRound(context, configuration, pendingFromState(suspendedState),
                     intValue(suspendedState.get("attempt"), 0));
             default -> throw new IllegalStateException(
                     "MT101_STATUS cannot resume: suspendedState.mode is '" + mode + "'");
@@ -180,7 +208,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                 "MT101_STATUS waiting for gateway callback (" + records.size() + " pending)", state);
     }
 
-    private TaskResult resumeCallback(Map<String, Object> configuration, Map<String, Object> suspendedState) {
+    private TaskResult resumeCallback(TaskContext context, Map<String, Object> configuration, Map<String, Object> suspendedState) {
         var pending = pendingFromState(suspendedState);
         var confirmations = callbackConfirmations(suspendedState);
         if (confirmations.isEmpty()) {
@@ -220,7 +248,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
             byStatus.merge(status, 1, Integer::sum);
         }
 
-        persistConfirmations(configuration, matched);
+        persistConfirmations(context, configuration, matched, matchedEntries);
 
         var outputs = new LinkedHashMap<String, Object>();
         outputs.put("confirmedCount", matchedEntries.size());
@@ -283,7 +311,8 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     // mode=poll
     // ------------------------------------------------------------------
 
-    private TaskResult pollRound(Map<String, Object> configuration,
+    private TaskResult pollRound(TaskContext context,
+                                 Map<String, Object> configuration,
                                  List<Map<String, Object>> pending,
                                  int previousAttempts) {
         if (pending.isEmpty()) {
@@ -332,7 +361,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
             }
         }
 
-        persistConfirmations(configuration, confirmed);
+        persistConfirmations(context, configuration, confirmed, confirmedEntries);
 
         var attempt = previousAttempts + 1;
         var outputs = new LinkedHashMap<String, Object>();
@@ -415,6 +444,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         // Buffer de filas a persistir, flush por lotes para no retener todos los
         // rawBody (KB c/u) en memoria.
         var pendingRows = new ArrayList<ConfirmationRow>(PERSIST_BATCH_SIZE);
+        var pendingAuditEntries = new ArrayList<Map<String, Object>>(PERSIST_BATCH_SIZE);
         int queriedCount = 0;
         int confirmedCount = 0;
         int errorCount = 0;
@@ -444,9 +474,16 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
             }
             pendingRows.add(new ConfirmationRow(readArchiveId(record), "STATUS_API",
                     gatewayReference, confirmedStatus, rawBody));
+            var auditEntry = new LinkedHashMap<String, Object>();
+            auditEntry.put("sendersReference", record.get("sendersReference"));
+            auditEntry.put("gatewayReference", gatewayReference);
+            auditEntry.put("status", confirmedStatus);
+            auditEntry.put("archiveId", record.get("archiveId"));
+            pendingAuditEntries.add(auditEntry);
             if (pendingRows.size() >= PERSIST_BATCH_SIZE) {
-                persistConfirmations(configuration, pendingRows);
+                persistConfirmations(context, configuration, pendingRows, pendingAuditEntries);
                 pendingRows.clear();
+                pendingAuditEntries.clear();
             }
             confirmedCount++;
             byStatus.merge(confirmedStatus == null ? "UNKNOWN" : confirmedStatus, 1, Integer::sum);
@@ -458,7 +495,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                 confirmations.add(entry);
             }
         }
-        persistConfirmations(configuration, pendingRows);
+        persistConfirmations(context, configuration, pendingRows, pendingAuditEntries);
 
         var outputs = new LinkedHashMap<String, Object>();
         outputs.put("queriedCount", queriedCount);
@@ -489,7 +526,10 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                                    String rawPayload) {
     }
 
-    private void persistConfirmations(Map<String, Object> configuration, List<ConfirmationRow> rows) {
+    private void persistConfirmations(TaskContext context,
+                                      Map<String, Object> configuration,
+                                      List<ConfirmationRow> rows,
+                                      List<Map<String, Object>> auditEntries) {
         if (rows.isEmpty()) {
             return;
         }
@@ -510,8 +550,57 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
             // H5: avanza el estado durable en mt101_archive (CONFIRMED/REJECTED)
             // por archive_id. Mismo connection que la insercion de confirmacion.
             syncArchiveStatus(connection, configuration, rows);
+            emitRecordAudit(statusEnvelopes(context, rows, auditEntries,
+                    acceptedStatuses(configuration.get("acceptedStatuses"))));
         } catch (SQLException error) {
             throw new IllegalStateException("MT101_STATUS DB error: " + error.getMessage(), error);
+        }
+    }
+
+    private List<AuditEnvelope> statusEnvelopes(TaskContext context,
+                                                List<ConfirmationRow> rows,
+                                                List<Map<String, Object>> auditEntries,
+                                                List<String> acceptedStatuses) {
+        var result = new ArrayList<AuditEnvelope>(rows.size());
+        for (int i = 0; i < rows.size(); i++) {
+            var row = rows.get(i);
+            var entry = auditEntries != null && i < auditEntries.size() ? auditEntries.get(i) : Map.<String, Object>of();
+            var sendersReference = stringOrNull(entry.get("sendersReference"));
+            var status = row.confirmedStatus() == null ? "UNKNOWN" : row.confirmedStatus();
+            var accepted = acceptedStatuses.contains(status.toUpperCase(Locale.ROOT));
+            result.add(new AuditEnvelope(
+                    UUID.randomUUID().toString(),
+                    context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
+                    sendersReference,
+                    AuditLevel.RECORD,
+                    "PAYMENT_STATUS_CONFIRMED",
+                    accepted ? "CONFIRMED" : "REJECTED",
+                    context.processExecutionId(),
+                    context.taskDefinitionId(),
+                    status,
+                    null,
+                    Map.of("confirmationType", row.confirmationType()),
+                    "SWIFT",
+                    "MT101",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    sendersReference,
+                    null,
+                    null,
+                    row.archiveId(),
+                    row.gatewayReference(),
+                    Instant.now(),
+                    AuditEnvelope.CURRENT_SCHEMA_VERSION));
+        }
+        return result;
+    }
+
+    private void emitRecordAudit(List<AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && envelopes != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
         }
     }
 

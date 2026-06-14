@@ -218,6 +218,18 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
                 sourceName,
                 null,
                 Map.of(),
+                null,
+                null,
+                sourceName,
+                null,
+                index,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 Instant.now(),
                 AuditEnvelope.CURRENT_SCHEMA_VERSION);
     }

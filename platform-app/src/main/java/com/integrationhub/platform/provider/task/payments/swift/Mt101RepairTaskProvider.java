@@ -2,6 +2,7 @@ package com.integrationhub.platform.provider.task.payments.swift;
 
 import com.integrationhub.platform.spi.task.payments.PaymentMessageFormatter;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -69,18 +70,28 @@ public class Mt101RepairTaskProvider implements TaskProvider {
     private static final Pattern SWIFT_X = Pattern.compile("[A-Za-z0-9 /\\-?:().,'+\\r\\n]");
 
     private final Iterable<PaymentMessageFormatter> formatters;
+    private final RecordAuditEmitter recordAuditEmitter;
 
     public Mt101RepairTaskProvider() {
         this.formatters = List.of();
+        this.recordAuditEmitter = null;
     }
 
     @Inject
+    public Mt101RepairTaskProvider(Instance<PaymentMessageFormatter> formatters,
+                                   RecordAuditEmitter recordAuditEmitter) {
+        this.formatters = formatters;
+        this.recordAuditEmitter = recordAuditEmitter;
+    }
+
     public Mt101RepairTaskProvider(Instance<PaymentMessageFormatter> formatters) {
         this.formatters = formatters;
+        this.recordAuditEmitter = null;
     }
 
     Mt101RepairTaskProvider(Iterable<PaymentMessageFormatter> formatters) {
         this.formatters = formatters == null ? List.of() : formatters;
+        this.recordAuditEmitter = null;
     }
 
     @Override
@@ -124,6 +135,13 @@ public class Mt101RepairTaskProvider implements TaskProvider {
         outputs.put("totalChanges", totalChanges);
         outputs.put("repairAttempt", repairAttempt);
         outputs.put("records", repaired);
+
+        var totalChangesForAudit = totalChanges;
+        emitRecordAudit(repaired.stream()
+                .map(message -> Mt101Audit.messageEvent(context, message, "PAYMENT_MESSAGE_REPAIRED", "REPAIRED", null,
+                        Map.of("repairAttempt", String.valueOf(repairAttempt),
+                                "totalChanges", String.valueOf(totalChangesForAudit))))
+                .toList());
 
         var summary = "MT101_REPAIR processed=" + messages.size()
                 + " changes=" + totalChanges
@@ -332,5 +350,11 @@ public class Mt101RepairTaskProvider implements TaskProvider {
     @FunctionalInterface
     private interface ValueTransform {
         String transform(String value);
+    }
+
+    private void emitRecordAudit(List<com.integrationhub.platform.audit.AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && envelopes != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
+        }
     }
 }

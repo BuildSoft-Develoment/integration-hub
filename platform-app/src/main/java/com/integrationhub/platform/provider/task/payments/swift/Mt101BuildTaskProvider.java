@@ -1,7 +1,10 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.provider.task.common.StoredProcedureRuntimeSupport;
 import com.integrationhub.platform.provider.task.common.TaskOutputSupport;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.payments.PaymentMessageFormatter;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.integrationhub.platform.spi.reader.ReadRecord;
@@ -12,14 +15,17 @@ import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.UUID;
 
 /**
  * Task provider {@code MT101_BUILD}: compone uno o varios MT101 a partir de un
@@ -53,9 +59,18 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
     private static final String DEFAULT_PRIORITY = "N";
 
     private final Instance<PaymentMessageFormatter> formatters;
+    private final RecordAuditEmitter recordAuditEmitter;
+
+    @Inject
+    public Mt101BuildTaskProvider(Instance<PaymentMessageFormatter> formatters,
+                                  RecordAuditEmitter recordAuditEmitter) {
+        this.formatters = formatters;
+        this.recordAuditEmitter = recordAuditEmitter;
+    }
 
     public Mt101BuildTaskProvider(Instance<PaymentMessageFormatter> formatters) {
         this.formatters = formatters;
+        this.recordAuditEmitter = null;
     }
 
     @Override
@@ -109,10 +124,60 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         outputs.put("totalsByCurrency", controlTotals.totalsByCurrency());
         outputs.put("records", List.of(formatted));
 
+        emitRecordAudit(List.of(recordEnvelope(context, formatted, sourcePayload, recordOffset, transactions.size())));
+
         return TaskResult.success(
                 "MT101_BUILD composed 1 message with " + transactions.size() + " transactions in " + format,
                 outputs
         );
+    }
+
+    private AuditEnvelope recordEnvelope(TaskContext context,
+                                         Mt101Message message,
+                                         SourcePayload sourcePayload,
+                                         long recordOffset,
+                                         int transactionCount) {
+        var reference = message.sequenceA() == null ? null : message.sequenceA().sendersReference();
+        var firstTxRef = message.transactions().size() == 1
+                ? message.transactions().get(0).transactionReference()
+                : null;
+        var attrs = new LinkedHashMap<String, String>();
+        attrs.put("transactionCount", String.valueOf(transactionCount));
+        if (message.format() != null) {
+            attrs.put("format", message.format());
+        }
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
+                reference,
+                AuditLevel.RECORD,
+                "PAYMENT_MESSAGE_BUILT",
+                "BUILT",
+                context.processExecutionId(),
+                context.taskDefinitionId(),
+                null,
+                null,
+                attrs,
+                "SWIFT",
+                "MT101",
+                sourcePayload == null ? null : sourcePayload.name(),
+                null,
+                recordOffset,
+                null,
+                null,
+                reference,
+                firstTxRef,
+                message.envelope() == null ? null : message.envelope().uetr(),
+                null,
+                null,
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
+    }
+
+    private void emitRecordAudit(List<AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && envelopes != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
+        }
     }
 
     @SuppressWarnings("unchecked")

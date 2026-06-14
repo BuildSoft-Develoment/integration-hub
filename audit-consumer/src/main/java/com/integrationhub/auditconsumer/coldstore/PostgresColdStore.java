@@ -17,8 +17,11 @@ public final class PostgresColdStore implements ColdStore {
 
     private static final String INSERT = """
             insert into audit_record_event
-                (event_id, trace_id, record_id, stage, status, process_execution_id, task_definition_id, message, payload_json, event_ts)
-            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (event_id, trace_id, record_id, stage, status, process_execution_id, task_definition_id,
+                 message, payload_json, standard, message_type, source_file_name, source_file_hash,
+                 record_number, business_key, business_key_hash, payment_reference, transaction_reference,
+                 uetr, archive_id, gateway_reference, event_ts)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             on conflict (event_id) do nothing
             """;
 
@@ -41,7 +44,19 @@ public final class PostgresColdStore implements ColdStore {
             setNullableLong(statement, 7, envelope.taskDefinitionId());
             statement.setString(8, envelope.message());
             statement.setString(9, envelope.payloadJson());
-            statement.setTimestamp(10, envelope.timestamp() == null
+            statement.setString(10, envelope.standard());
+            statement.setString(11, envelope.messageType());
+            statement.setString(12, envelope.sourceFileName());
+            statement.setString(13, envelope.sourceFileHash());
+            setNullableLong(statement, 14, envelope.recordNumber());
+            statement.setString(15, envelope.businessKey());
+            statement.setString(16, envelope.businessKeyHash());
+            statement.setString(17, envelope.paymentReference());
+            statement.setString(18, envelope.transactionReference());
+            statement.setString(19, envelope.uetr());
+            setNullableLong(statement, 20, envelope.archiveId());
+            statement.setString(21, envelope.gatewayReference());
+            statement.setTimestamp(22, envelope.timestamp() == null
                     ? new Timestamp(System.currentTimeMillis())
                     : Timestamp.from(envelope.timestamp()));
             statement.executeUpdate();

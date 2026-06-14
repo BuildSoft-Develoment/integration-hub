@@ -57,6 +57,18 @@ class PostgresColdStoreTest {
                         task_definition_id bigint,
                         message text,
                         payload_json text,
+                        standard varchar(20),
+                        message_type varchar(30),
+                        source_file_name varchar(255),
+                        source_file_hash char(64),
+                        record_number bigint,
+                        business_key varchar(120),
+                        business_key_hash char(64),
+                        payment_reference varchar(40),
+                        transaction_reference varchar(40),
+                        uetr varchar(36),
+                        archive_id bigint,
+                        gateway_reference varchar(120),
                         event_ts timestamp not null,
                         ingested_at timestamp not null default current_timestamp
                     )""");

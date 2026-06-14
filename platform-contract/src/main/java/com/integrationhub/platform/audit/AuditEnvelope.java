@@ -23,6 +23,18 @@ import java.util.Map;
  * @param message       texto legible opcional
  * @param payloadJson   detalle serializado (JSON) opcional
  * @param attributes    metadatos planos opcionales (nunca null)
+ * @param standard      estandar funcional: SWIFT, ISO20022, OPENBANKING...
+ * @param messageType   tipo de mensaje: MT101, pain.001...
+ * @param sourceFileName nombre del archivo origen, si aplica
+ * @param sourceFileHash hash estable del archivo origen, si aplica
+ * @param recordNumber  numero de fila/linea origen, si aplica
+ * @param businessKey   clave funcional en claro solo si no es sensible
+ * @param businessKeyHash hash de DNI/cuenta/clave sensible para busqueda segura
+ * @param paymentReference referencia de mensaje de pago, p.ej. MT101 :20:
+ * @param transactionReference referencia de transaccion, p.ej. MT101 :21:
+ * @param uetr          UETR cuando el estandar lo provee
+ * @param archiveId     identificador interno de archivo/persistencia de pago
+ * @param gatewayReference referencia devuelta por gateway/banco
  * @param timestamp     instante del evento
  * @param schemaVersion version del esquema de la trama (evolucion independiente de consumidores)
  */
@@ -38,10 +50,40 @@ public record AuditEnvelope(
         String message,
         String payloadJson,
         Map<String, String> attributes,
+        String standard,
+        String messageType,
+        String sourceFileName,
+        String sourceFileHash,
+        Long recordNumber,
+        String businessKey,
+        String businessKeyHash,
+        String paymentReference,
+        String transactionReference,
+        String uetr,
+        Long archiveId,
+        String gatewayReference,
         Instant timestamp,
         int schemaVersion) {
 
-    public static final int CURRENT_SCHEMA_VERSION = 1;
+    public static final int CURRENT_SCHEMA_VERSION = 2;
+
+    public AuditEnvelope(String eventId,
+                         String traceId,
+                         String recordId,
+                         AuditLevel level,
+                         String stage,
+                         String status,
+                         Long processExecutionId,
+                         Long taskDefinitionId,
+                         String message,
+                         String payloadJson,
+                         Map<String, String> attributes,
+                         Instant timestamp,
+                         int schemaVersion) {
+        this(eventId, traceId, recordId, level, stage, status, processExecutionId, taskDefinitionId,
+                message, payloadJson, attributes, null, null, null, null, null, null, null,
+                null, null, null, null, null, timestamp, schemaVersion);
+    }
 
     public AuditEnvelope {
         if (eventId == null || eventId.isBlank()) {

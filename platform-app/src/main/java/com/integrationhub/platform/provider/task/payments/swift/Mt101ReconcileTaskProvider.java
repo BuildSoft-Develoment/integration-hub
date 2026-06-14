@@ -1,7 +1,10 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.repository.payments.swift.Mt101ReconciliationRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -11,11 +14,13 @@ import jakarta.inject.Inject;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Task provider {@code MT101_RECONCILE}: cruza la tabla de mensajes enviados
@@ -62,16 +67,26 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
     private final ConnectionPoolManager connectionPoolManager;
     private final Mt101ArchiveStatusUpdater archiveStatusUpdater;
     private final Mt101ReconciliationRepository reconciliationRepository;
+    private final RecordAuditEmitter recordAuditEmitter;
 
     @Inject
     public Mt101ReconcileTaskProvider(DataSource defaultDataSource,
                                       ConnectionPoolManager connectionPoolManager,
                                       Mt101ArchiveStatusUpdater archiveStatusUpdater,
-                                      Mt101ReconciliationRepository reconciliationRepository) {
+                                      Mt101ReconciliationRepository reconciliationRepository,
+                                      RecordAuditEmitter recordAuditEmitter) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.archiveStatusUpdater = archiveStatusUpdater;
         this.reconciliationRepository = reconciliationRepository;
+        this.recordAuditEmitter = recordAuditEmitter;
+    }
+
+    public Mt101ReconcileTaskProvider(DataSource defaultDataSource,
+                                      ConnectionPoolManager connectionPoolManager,
+                                      Mt101ArchiveStatusUpdater archiveStatusUpdater,
+                                      Mt101ReconciliationRepository reconciliationRepository) {
+        this(defaultDataSource, connectionPoolManager, archiveStatusUpdater, reconciliationRepository, null);
     }
 
     public Mt101ReconcileTaskProvider(DataSource defaultDataSource,
@@ -143,6 +158,8 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
         outputs.put("asOfDate", asOfDate.toString());
         outputs.put("lookbackDays", lookbackDays);
         outputs.put("records", exceptions);
+
+        emitRecordAudit(exceptions.stream().map(exception -> reconciliationEnvelope(context, exception)).toList());
 
         var summary = "MT101_RECONCILE asOf=" + asOfDate
                 + " matched=" + matchedCount
@@ -255,5 +272,43 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
             return defaultValue;
         }
         return Integer.parseInt(String.valueOf(raw));
+    }
+
+    private AuditEnvelope reconciliationEnvelope(TaskContext context, Map<String, Object> exception) {
+        var reference = exception.get("sendersReference") == null ? null : String.valueOf(exception.get("sendersReference"));
+        var archiveId = exception.get("archiveId") instanceof Number number ? number.longValue() : null;
+        var type = String.valueOf(exception.getOrDefault("exceptionType", "RECONCILIATION_EXCEPTION"));
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
+                reference,
+                AuditLevel.RECORD,
+                "PAYMENT_RECONCILIATION_EXCEPTION",
+                "UNMATCHED",
+                context.processExecutionId(),
+                context.taskDefinitionId(),
+                type,
+                null,
+                Map.of("exceptionType", type),
+                "SWIFT",
+                "MT101",
+                null,
+                null,
+                null,
+                null,
+                null,
+                reference,
+                null,
+                null,
+                archiveId,
+                null,
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
+    }
+
+    private void emitRecordAudit(List<AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && envelopes != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
+        }
     }
 }

@@ -1,5 +1,8 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.audit.AuditLevel;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.integrationhub.platform.spi.task.TaskContext;
@@ -17,6 +20,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.time.Instant;
+import java.util.UUID;
 
 /**
  * Task provider {@code MT101_ROUTE}: clasifica records de la tarea anterior segun
@@ -52,13 +57,24 @@ public class Mt101RouteTaskProvider implements TaskProvider {
 
     private final ObjectMapper objectMapper;
     private final JexlEngine jexlEngine;
+    private final RecordAuditEmitter recordAuditEmitter;
 
     @Inject
-    public Mt101RouteTaskProvider(ObjectMapper objectMapper) {
+    public Mt101RouteTaskProvider(ObjectMapper objectMapper, RecordAuditEmitter recordAuditEmitter) {
         this.objectMapper = objectMapper;
+        this.recordAuditEmitter = recordAuditEmitter;
         this.jexlEngine = new JexlBuilder()
                 .strict(false)   // null-tolerant
                 .silent(true)    // no NPE en propiedades inexistentes
+                .create();
+    }
+
+    public Mt101RouteTaskProvider(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+        this.recordAuditEmitter = null;
+        this.jexlEngine = new JexlBuilder()
+                .strict(false)
+                .silent(true)
                 .create();
     }
 
@@ -101,6 +117,9 @@ public class Mt101RouteTaskProvider implements TaskProvider {
             routed.add(enriched);
             countByRoute.merge(route, 1, Integer::sum);
         }
+        emitRecordAudit(routed.stream()
+                .map(record -> routeEnvelope(context, record, String.valueOf(record.getOrDefault(fieldName, defaultRoute))))
+                .toList());
 
         var outputs = new LinkedHashMap<String, Object>();
         outputs.put("routedCount", routed.size());
@@ -223,5 +242,59 @@ public class Mt101RouteTaskProvider implements TaskProvider {
 
     /** Regla compilada: nombre + expresion JEXL + ruta destino. */
     private record Rule(String name, JexlExpression expression, String routeTo) {
+    }
+
+    private AuditEnvelope routeEnvelope(TaskContext context, Map<String, Object> record, String route) {
+        var reference = nestedString(record, "sequenceA", "sendersReference");
+        if (reference == null) {
+            reference = stringValue(record.get("sendersReference"), null);
+        }
+        var txRef = nestedString(record, "transactions", "transactionReference");
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
+                reference,
+                AuditLevel.RECORD,
+                "PAYMENT_MESSAGE_ROUTED",
+                "ROUTED",
+                context.processExecutionId(),
+                context.taskDefinitionId(),
+                route,
+                null,
+                Map.of("route", route),
+                "SWIFT",
+                "MT101",
+                null,
+                null,
+                null,
+                null,
+                null,
+                reference,
+                txRef,
+                nestedString(record, "envelope", "uetr"),
+                null,
+                null,
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
+    }
+
+    @SuppressWarnings("unchecked")
+    private String nestedString(Map<String, Object> record, String parent, String child) {
+        var rawParent = record.get(parent);
+        if (rawParent instanceof Map<?, ?> map) {
+            var value = ((Map<String, Object>) map).get(child);
+            return value == null ? null : String.valueOf(value);
+        }
+        if (rawParent instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof Map<?, ?> map) {
+            var value = ((Map<String, Object>) map).get(child);
+            return value == null ? null : String.valueOf(value);
+        }
+        return null;
+    }
+
+    private void emitRecordAudit(List<AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && envelopes != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
+        }
     }
 }

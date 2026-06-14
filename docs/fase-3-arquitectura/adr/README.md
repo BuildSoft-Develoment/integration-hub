@@ -19,6 +19,7 @@
 - [ADR-005 Unificacion de la peticion HTTP (REST_CALL + webhook)](ADR-005-unificacion-peticion-http.md)
 - [ADR-006 Fuentes de almacenamiento cloud (S3, GCS, Azure Blob)](ADR-006-fuentes-almacenamiento-cloud.md)
 - [ADR-009 Vertical de mensajeria de pagos](ADR-009-vertical-mensajeria-pagos.md)
+- [ADR-010 Auditoria asincrona multi-broker y lineage por registro](ADR-010-auditoria-asincrona-multi-broker-lineage-registro.md)
 
 ## Regla
 

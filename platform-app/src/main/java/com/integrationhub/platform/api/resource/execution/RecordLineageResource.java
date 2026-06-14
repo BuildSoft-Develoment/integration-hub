@@ -34,6 +34,10 @@ public class RecordLineageResource {
     @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
     public List<RecordLineageEntryResponse> lineage(@QueryParam("recordId") String recordId,
                                                     @QueryParam("traceId") String traceId,
+                                                    @QueryParam("key") String key,
+                                                    @QueryParam("value") String value,
+                                                    @QueryParam("sourceFileHash") String sourceFileHash,
+                                                    @QueryParam("recordNumber") Long recordNumber,
                                                     @QueryParam("limit") @DefaultValue("1000") int limit) {
         var capped = Math.min(Math.max(limit, 1), MAX_ENTRIES);
         List<AuditRecordEvent> events;
@@ -41,8 +45,16 @@ public class RecordLineageResource {
             events = repository.timelineByRecordId(recordId, capped);
         } else if (traceId != null && !traceId.isBlank()) {
             events = repository.timelineByTraceId(traceId, capped);
+        } else if (sourceFileHash != null && !sourceFileHash.isBlank() && recordNumber != null) {
+            events = repository.timelineBySourceRow(sourceFileHash, recordNumber, capped);
+        } else if (key != null && !key.isBlank() && value != null && !value.isBlank()) {
+            try {
+                events = repository.timelineByOperationalKey(key, value, capped);
+            } catch (IllegalArgumentException error) {
+                throw new BadRequestException(error.getMessage(), error);
+            }
         } else {
-            throw new BadRequestException("record-lineage requires recordId or traceId");
+            throw new BadRequestException("record-lineage requires recordId, traceId, sourceFileHash+recordNumber or key+value");
         }
         return events.stream().map(this::toResponse).toList();
     }
@@ -57,6 +69,18 @@ public class RecordLineageResource {
                 event.taskDefinitionId,
                 event.message,
                 event.payloadJson,
+                event.standard,
+                event.messageType,
+                event.sourceFileName,
+                event.sourceFileHash,
+                event.recordNumber,
+                event.businessKey,
+                event.businessKeyHash,
+                event.paymentReference,
+                event.transactionReference,
+                event.uetr,
+                event.archiveId,
+                event.gatewayReference,
                 event.eventTs);
     }
 }

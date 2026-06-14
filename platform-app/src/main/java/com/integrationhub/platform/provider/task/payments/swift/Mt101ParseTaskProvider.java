@@ -4,10 +4,12 @@ import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.source.SourcePayload;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -60,6 +62,16 @@ public class Mt101ParseTaskProvider implements BatchTaskProvider {
     // {@code CCYNNNN} (sin separador). El segundo grupo captura el numero crudo;
     // {@link #parseAmount} reemplaza la coma por punto para BigDecimal.
     private static final Pattern AMOUNT_PATTERN = Pattern.compile("^([A-Z]{3})([0-9]+,?[0-9]*)$");
+    private final RecordAuditEmitter recordAuditEmitter;
+
+    public Mt101ParseTaskProvider() {
+        this.recordAuditEmitter = null;
+    }
+
+    @Inject
+    public Mt101ParseTaskProvider(RecordAuditEmitter recordAuditEmitter) {
+        this.recordAuditEmitter = recordAuditEmitter;
+    }
 
     @Override
     public String type() {
@@ -120,6 +132,9 @@ public class Mt101ParseTaskProvider implements BatchTaskProvider {
             if (message.sequenceA() != null) headers.add(message.sequenceA());
             transactions.addAll(message.transactions());
         }
+        emitRecordAudit(messages.stream()
+                .map(message -> Mt101Audit.messageEvent(context, message, "PAYMENT_MESSAGE_PARSED", "PARSED", null, Map.of()))
+                .toList());
 
         var outputs = new LinkedHashMap<String, Object>();
         outputs.put("messageCount", messages.size());
@@ -365,5 +380,11 @@ public class Mt101ParseTaskProvider implements BatchTaskProvider {
         if (raw == null) return null;
         var value = String.valueOf(raw);
         return value.isEmpty() ? null : value;
+    }
+
+    private void emitRecordAudit(List<com.integrationhub.platform.audit.AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && envelopes != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
+        }
     }
 }

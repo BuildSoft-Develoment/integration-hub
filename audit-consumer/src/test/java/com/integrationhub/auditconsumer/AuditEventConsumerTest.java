@@ -40,33 +40,47 @@ class AuditEventConsumerTest {
         @Override public void write(AuditEnvelope envelope) { persisted.incrementAndGet(); }
     }
 
+    private static final class RecordingDeadLetterWriter extends AuditDeadLetterWriter {
+        final AtomicInteger persisted = new AtomicInteger();
+        RecordingDeadLetterWriter() { super(null); }
+        @Override public void write(String eventId, String brokerType, String topic, String payload, String errorMessage) {
+            persisted.incrementAndGet();
+        }
+    }
+
     @Test
     void persistsProcessLevel() throws Exception {
         var writer = new RecordingWriter();
         var coldStore = new RecordingColdStore();
-        var consumer = new AuditEventConsumer(mapper, writer, coldStore);
+        var deadLetter = new RecordingDeadLetterWriter();
+        var consumer = new AuditEventConsumer(new AuditEventHandler(mapper, writer, coldStore, deadLetter));
         consumer.consume(mapper.writeValueAsString(envelope(AuditLevel.PROCESS)));
         assertEquals(1, writer.persisted.get());
         assertEquals(0, coldStore.persisted.get());
+        assertEquals(0, deadLetter.persisted.get());
     }
 
     @Test
     void routesRecordLevelToColdStore() throws Exception {
         var writer = new RecordingWriter();
         var coldStore = new RecordingColdStore();
-        var consumer = new AuditEventConsumer(mapper, writer, coldStore);
+        var deadLetter = new RecordingDeadLetterWriter();
+        var consumer = new AuditEventConsumer(new AuditEventHandler(mapper, writer, coldStore, deadLetter));
         consumer.consume(mapper.writeValueAsString(envelope(AuditLevel.RECORD)));
         assertEquals(0, writer.persisted.get());
         assertEquals(1, coldStore.persisted.get());
+        assertEquals(0, deadLetter.persisted.get());
     }
 
     @Test
-    void discardsPoisonWithoutFailing() {
+    void deadLettersPoisonWithoutFailing() {
         var writer = new RecordingWriter();
         var coldStore = new RecordingColdStore();
-        var consumer = new AuditEventConsumer(mapper, writer, coldStore);
+        var deadLetter = new RecordingDeadLetterWriter();
+        var consumer = new AuditEventConsumer(new AuditEventHandler(mapper, writer, coldStore, deadLetter));
         consumer.consume("{not valid json");
         assertEquals(0, writer.persisted.get());
         assertEquals(0, coldStore.persisted.get());
+        assertEquals(1, deadLetter.persisted.get());
     }
 }

@@ -48,6 +48,42 @@ public class AuditRecordEvent {
     @Column(name = "payload_json", columnDefinition = "text")
     public String payloadJson;
 
+    @Column(length = 20)
+    public String standard;
+
+    @Column(name = "message_type", length = 30)
+    public String messageType;
+
+    @Column(name = "source_file_name")
+    public String sourceFileName;
+
+    @Column(name = "source_file_hash", length = 64)
+    public String sourceFileHash;
+
+    @Column(name = "record_number")
+    public Long recordNumber;
+
+    @Column(name = "business_key", length = 120)
+    public String businessKey;
+
+    @Column(name = "business_key_hash", length = 64)
+    public String businessKeyHash;
+
+    @Column(name = "payment_reference", length = 40)
+    public String paymentReference;
+
+    @Column(name = "transaction_reference", length = 40)
+    public String transactionReference;
+
+    @Column(length = 36)
+    public String uetr;
+
+    @Column(name = "archive_id")
+    public Long archiveId;
+
+    @Column(name = "gateway_reference", length = 120)
+    public String gatewayReference;
+
     @Column(name = "event_ts", nullable = false)
     public LocalDateTime eventTs;
 

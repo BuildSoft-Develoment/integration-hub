@@ -719,6 +719,29 @@ Metricas:
   `mt101_pay_latency_seconds{transport}` (histograma),
   `mt101_archive_bytes_total`.
 
+### Auditoria E2E por registro/pago
+
+Las tareas SWIFT/MT101 publican eventos `RECORD` hacia el contrato de auditoria
+asincrona de ADR-010:
+
+- `DB_WRITE` / staging: `RECORD_INGESTED` con archivo/fila cuando existe.
+- `MT101_BUILD` / `MT101_BUILD_FROM_TABLE`: `PAYMENT_MESSAGE_BUILT` /
+  `RECORD_BUILT`, con `paymentReference` (`:20:`), rango de filas y conteos.
+- `MT101_PARSE`: `PAYMENT_MESSAGE_PARSED`.
+- `MT101_SPLIT`: `PAYMENT_MESSAGE_SPLIT`.
+- `MT101_ROUTE`: `PAYMENT_MESSAGE_ROUTED`.
+- `MT101_REPAIR`: `PAYMENT_MESSAGE_REPAIRED`.
+- `MT101_VALIDATE`: `RECORD_VALIDATED` o `RECORD_REJECTED`.
+- `MT101_ARCHIVE`: `RECORD_ARCHIVED`.
+- `MT101_PAY`: `RECORD_SENT` o `RECORD_REJECTED`.
+- `MT101_STATUS`: `PAYMENT_STATUS_CONFIRMED`.
+- `MT101_RECONCILE`: `PAYMENT_RECONCILIATION_EXCEPTION`.
+
+El read-model de consulta es `audit_record_event`, indexado por `traceId`,
+`recordId`, `sourceFileHash+recordNumber`, `paymentReference`, `transactionReference`,
+`uetr`, `archiveId`, `gatewayReference` y `businessKeyHash`. La UI consume
+`GET /api/query/record-lineage`; no se conecta al broker.
+
 ## Consideraciones tecnicas
 
 - El sub-catalogo `iso20022/` y `openbanking/` quedan reservados; sus task types

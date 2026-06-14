@@ -105,6 +105,18 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
                 null,
                 null,
                 Map.of(),
+                "SWIFT",
+                "MT101",
+                null,
+                null,
+                null,
+                null,
+                null,
+                reference,
+                null,
+                null,
+                null,
+                null,
                 Instant.now(),
                 AuditEnvelope.CURRENT_SCHEMA_VERSION);
     }
