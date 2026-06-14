@@ -8,6 +8,8 @@ import com.integrationhub.platform.audit.AuditLevel;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -33,6 +35,7 @@ class AuditEventConsumerTest {
         final AtomicInteger persisted = new AtomicInteger();
         RecordingWriter() { super(null); }
         @Override public void insertProcessEvent(AuditEnvelope envelope) { persisted.incrementAndGet(); }
+        @Override public void insertProcessEvents(Collection<AuditEnvelope> envelopes) { persisted.addAndGet(envelopes.size()); }
     }
 
     private static final class RecordingColdStore implements com.integrationhub.auditconsumer.coldstore.ColdStore {
@@ -54,7 +57,7 @@ class AuditEventConsumerTest {
         var coldStore = new RecordingColdStore();
         var deadLetter = new RecordingDeadLetterWriter();
         var consumer = new AuditEventConsumer(new AuditEventHandler(mapper, writer, coldStore, deadLetter));
-        consumer.consume(mapper.writeValueAsString(envelope(AuditLevel.PROCESS)));
+        consumer.consume(List.of(mapper.writeValueAsString(envelope(AuditLevel.PROCESS))));
         assertEquals(1, writer.persisted.get());
         assertEquals(0, coldStore.persisted.get());
         assertEquals(0, deadLetter.persisted.get());
@@ -66,7 +69,7 @@ class AuditEventConsumerTest {
         var coldStore = new RecordingColdStore();
         var deadLetter = new RecordingDeadLetterWriter();
         var consumer = new AuditEventConsumer(new AuditEventHandler(mapper, writer, coldStore, deadLetter));
-        consumer.consume(mapper.writeValueAsString(envelope(AuditLevel.RECORD)));
+        consumer.consume(List.of(mapper.writeValueAsString(envelope(AuditLevel.RECORD))));
         assertEquals(0, writer.persisted.get());
         assertEquals(1, coldStore.persisted.get());
         assertEquals(0, deadLetter.persisted.get());
@@ -78,9 +81,25 @@ class AuditEventConsumerTest {
         var coldStore = new RecordingColdStore();
         var deadLetter = new RecordingDeadLetterWriter();
         var consumer = new AuditEventConsumer(new AuditEventHandler(mapper, writer, coldStore, deadLetter));
-        consumer.consume("{not valid json");
+        consumer.consume(List.of("{not valid json"));
         assertEquals(0, writer.persisted.get());
         assertEquals(0, coldStore.persisted.get());
+        assertEquals(1, deadLetter.persisted.get());
+    }
+
+    @Test
+    void batchRoutesValidEventsAndDeadLettersPoison() throws Exception {
+        var writer = new RecordingWriter();
+        var coldStore = new RecordingColdStore();
+        var deadLetter = new RecordingDeadLetterWriter();
+        var handler = new AuditEventHandler(mapper, writer, coldStore, deadLetter);
+        handler.handleBatch(List.of(
+                mapper.writeValueAsString(envelope(AuditLevel.PROCESS)),
+                "{not valid json",
+                mapper.writeValueAsString(envelope(AuditLevel.RECORD))
+        ), "KAFKA", "audit-events");
+        assertEquals(1, writer.persisted.get());
+        assertEquals(1, coldStore.persisted.get());
         assertEquals(1, deadLetter.persisted.get());
     }
 }

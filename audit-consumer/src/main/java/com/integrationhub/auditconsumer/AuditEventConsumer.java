@@ -2,8 +2,11 @@ package com.integrationhub.auditconsumer;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import io.smallrye.reactive.messaging.annotations.Blocking;
 import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
+
+import java.util.List;
 
 /**
  * Consume las tramas de auditoria del MQ y las registra:
@@ -33,8 +36,12 @@ public class AuditEventConsumer {
         this(handler, "audit-events");
     }
 
+    // Consumo en LOTE (mp.messaging.incoming.audit-in.batch=true): SmallRye entrega
+    // varios records por poll y el handler hace un solo writeBatch -> menos presion de
+    // pool/round-trips a 1M+. El ack del lote es atomico; un poison se aisla a DLQ.
     @Incoming("audit-in")
-    public void consume(String payload) {
-        handler.handle(payload, "KAFKA", topic);
+    @Blocking("audit-worker-pool")
+    public void consume(List<String> payloads) {
+        handler.handleBatch(payloads, "KAFKA", topic);
     }
 }
