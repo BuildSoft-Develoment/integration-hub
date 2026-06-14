@@ -35,27 +35,39 @@ class AuditEventConsumerTest {
         @Override public void insertProcessEvent(AuditEnvelope envelope) { persisted.incrementAndGet(); }
     }
 
-    @Test
-    void persistsProcessLevel() throws Exception {
-        var writer = new RecordingWriter();
-        var consumer = new AuditEventConsumer(mapper, writer);
-        consumer.consume(mapper.writeValueAsString(envelope(AuditLevel.PROCESS)));
-        assertEquals(1, writer.persisted.get());
+    private static final class RecordingRecordWriter extends AuditRecordWriter {
+        final AtomicInteger persisted = new AtomicInteger();
+        RecordingRecordWriter() { super(null); }
+        @Override public void insertRecordEvent(AuditEnvelope envelope) { persisted.incrementAndGet(); }
     }
 
     @Test
-    void skipsRecordLevel() throws Exception {
+    void persistsProcessLevel() throws Exception {
         var writer = new RecordingWriter();
-        var consumer = new AuditEventConsumer(mapper, writer);
+        var recordWriter = new RecordingRecordWriter();
+        var consumer = new AuditEventConsumer(mapper, writer, recordWriter);
+        consumer.consume(mapper.writeValueAsString(envelope(AuditLevel.PROCESS)));
+        assertEquals(1, writer.persisted.get());
+        assertEquals(0, recordWriter.persisted.get());
+    }
+
+    @Test
+    void routesRecordLevelToColdStore() throws Exception {
+        var writer = new RecordingWriter();
+        var recordWriter = new RecordingRecordWriter();
+        var consumer = new AuditEventConsumer(mapper, writer, recordWriter);
         consumer.consume(mapper.writeValueAsString(envelope(AuditLevel.RECORD)));
         assertEquals(0, writer.persisted.get());
+        assertEquals(1, recordWriter.persisted.get());
     }
 
     @Test
     void discardsPoisonWithoutFailing() {
         var writer = new RecordingWriter();
-        var consumer = new AuditEventConsumer(mapper, writer);
+        var recordWriter = new RecordingRecordWriter();
+        var consumer = new AuditEventConsumer(mapper, writer, recordWriter);
         consumer.consume("{not valid json");
         assertEquals(0, writer.persisted.get());
+        assertEquals(0, recordWriter.persisted.get());
     }
 }

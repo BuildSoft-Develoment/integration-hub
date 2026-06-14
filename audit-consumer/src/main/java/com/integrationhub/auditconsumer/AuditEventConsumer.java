@@ -25,11 +25,13 @@ public class AuditEventConsumer {
 
     private final ObjectMapper objectMapper;
     private final AuditEventWriter writer;
+    private final AuditRecordWriter recordWriter;
 
     @Inject
-    public AuditEventConsumer(ObjectMapper objectMapper, AuditEventWriter writer) {
+    public AuditEventConsumer(ObjectMapper objectMapper, AuditEventWriter writer, AuditRecordWriter recordWriter) {
         this.objectMapper = objectMapper;
         this.writer = writer;
+        this.recordWriter = recordWriter;
     }
 
     @Incoming("audit-in")
@@ -43,9 +45,8 @@ public class AuditEventConsumer {
         }
 
         if (envelope.level() == AuditLevel.RECORD) {
-            // Fase 4: store frio (ClickHouse/Elastic/lake) para trazabilidad E2E por registro.
-            LOG.debugf("Audit consumer: RECORD event %s trace=%s record=%s (cold store pendiente)",
-                    envelope.eventId(), envelope.traceId(), envelope.recordId());
+            // Store frio: trazabilidad E2E por registro (audit_record_event).
+            recordWriter.insertRecordEvent(envelope);
             return;
         }
         writer.insertProcessEvent(envelope);
