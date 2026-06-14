@@ -12,6 +12,17 @@ export interface AuditProcessedFileRecord {
   errorMessage: string | null;
 }
 
+export interface RecordLineageEntry {
+  recordId: string | null;
+  traceId: string | null;
+  stage: string;
+  status: string | null;
+  processExecutionId: number | null;
+  taskDefinitionId: number | null;
+  message: string | null;
+  eventTs: string | null;
+}
+
 export interface AuditRecord {
   id: number;
   processExecutionId: number | null;

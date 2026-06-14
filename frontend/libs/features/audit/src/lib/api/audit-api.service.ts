@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { AuditRecord } from '../models/audit.models';
+import { AuditRecord, RecordLineageEntry } from '../models/audit.models';
 
 export interface AuditPageResponse {
   total: number;
@@ -37,5 +37,17 @@ export class AuditApiService {
     }
 
     return this.http.get<AuditPageResponse>('/api/query/audit-events', { params: httpParams });
+  }
+
+  /** Trazabilidad E2E a nivel de registro: linea de tiempo por :20: (recordId) o por ejecucion (traceId). */
+  recordLineage(query: { recordId?: string; traceId?: string; limit?: number }): Observable<RecordLineageEntry[]> {
+    let httpParams = new HttpParams().set('limit', String(query.limit ?? 1000));
+    if (query.recordId?.trim()) {
+      httpParams = httpParams.set('recordId', query.recordId.trim());
+    }
+    if (query.traceId?.trim()) {
+      httpParams = httpParams.set('traceId', query.traceId.trim());
+    }
+    return this.http.get<RecordLineageEntry[]>('/api/query/record-lineage', { params: httpParams });
   }
 }

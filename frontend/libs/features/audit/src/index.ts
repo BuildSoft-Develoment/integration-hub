@@ -1,1 +1,4 @@
 export * from './lib/catalog/audit.routes';
+export * from './lib/components/record-lineage/record-lineage.component';
+export * from './lib/api/audit-api.service';
+export * from './lib/models/audit.models';
