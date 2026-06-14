@@ -1,4 +1,4 @@
-package com.integrationhub.auditconsumer;
+package com.integrationhub.auditconsumer.coldstore;
 
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
@@ -20,10 +20,10 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
- * Persistencia idempotente en el store frio audit_record_event.
+ * Persistencia idempotente del store frio Postgres (audit_record_event).
  */
 @Testcontainers
-class AuditRecordWriterTest {
+class PostgresColdStoreTest {
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
@@ -32,7 +32,7 @@ class AuditRecordWriterTest {
             .withPassword("postgres");
 
     private DataSource dataSource;
-    private AuditRecordWriter writer;
+    private PostgresColdStore coldStore;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -41,7 +41,7 @@ class AuditRecordWriterTest {
         pg.setUser(POSTGRES.getUsername());
         pg.setPassword(POSTGRES.getPassword());
         dataSource = pg;
-        writer = new AuditRecordWriter(dataSource);
+        coldStore = new PostgresColdStore(dataSource);
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.execute("drop table if exists audit_record_event");
@@ -72,8 +72,8 @@ class AuditRecordWriterTest {
     @Test
     void persistsAndDeduplicates() throws Exception {
         var id = UUID.randomUUID().toString();
-        writer.insertRecordEvent(record(id));
-        writer.insertRecordEvent(record(id));
+        coldStore.write(record(id));
+        coldStore.write(record(id));
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement();
              var rs = statement.executeQuery("select count(*) from audit_record_event where record_id = 'PROC-1'")) {

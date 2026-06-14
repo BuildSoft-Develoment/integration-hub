@@ -35,39 +35,38 @@ class AuditEventConsumerTest {
         @Override public void insertProcessEvent(AuditEnvelope envelope) { persisted.incrementAndGet(); }
     }
 
-    private static final class RecordingRecordWriter extends AuditRecordWriter {
+    private static final class RecordingColdStore implements com.integrationhub.auditconsumer.coldstore.ColdStore {
         final AtomicInteger persisted = new AtomicInteger();
-        RecordingRecordWriter() { super(null); }
-        @Override public void insertRecordEvent(AuditEnvelope envelope) { persisted.incrementAndGet(); }
+        @Override public void write(AuditEnvelope envelope) { persisted.incrementAndGet(); }
     }
 
     @Test
     void persistsProcessLevel() throws Exception {
         var writer = new RecordingWriter();
-        var recordWriter = new RecordingRecordWriter();
-        var consumer = new AuditEventConsumer(mapper, writer, recordWriter);
+        var coldStore = new RecordingColdStore();
+        var consumer = new AuditEventConsumer(mapper, writer, coldStore);
         consumer.consume(mapper.writeValueAsString(envelope(AuditLevel.PROCESS)));
         assertEquals(1, writer.persisted.get());
-        assertEquals(0, recordWriter.persisted.get());
+        assertEquals(0, coldStore.persisted.get());
     }
 
     @Test
     void routesRecordLevelToColdStore() throws Exception {
         var writer = new RecordingWriter();
-        var recordWriter = new RecordingRecordWriter();
-        var consumer = new AuditEventConsumer(mapper, writer, recordWriter);
+        var coldStore = new RecordingColdStore();
+        var consumer = new AuditEventConsumer(mapper, writer, coldStore);
         consumer.consume(mapper.writeValueAsString(envelope(AuditLevel.RECORD)));
         assertEquals(0, writer.persisted.get());
-        assertEquals(1, recordWriter.persisted.get());
+        assertEquals(1, coldStore.persisted.get());
     }
 
     @Test
     void discardsPoisonWithoutFailing() {
         var writer = new RecordingWriter();
-        var recordWriter = new RecordingRecordWriter();
-        var consumer = new AuditEventConsumer(mapper, writer, recordWriter);
+        var coldStore = new RecordingColdStore();
+        var consumer = new AuditEventConsumer(mapper, writer, coldStore);
         consumer.consume("{not valid json");
         assertEquals(0, writer.persisted.get());
-        assertEquals(0, recordWriter.persisted.get());
+        assertEquals(0, coldStore.persisted.get());
     }
 }

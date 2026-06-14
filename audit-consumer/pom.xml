@@ -49,6 +49,14 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-smallrye-health</artifactId>
         </dependency>
+        <!-- Store frio alternativo: ClickHouse (columnar) via JDBC, conexion lazy.
+             Solo se usa si audit.cold-store.type=CLICKHOUSE. -->
+        <dependency>
+            <groupId>com.clickhouse</groupId>
+            <artifactId>clickhouse-jdbc</artifactId>
+            <version>0.6.5</version>
+            <classifier>all</classifier>
+        </dependency>
 
         <dependency>
             <groupId>io.quarkus</groupId>

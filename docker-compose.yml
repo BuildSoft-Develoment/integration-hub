@@ -120,6 +120,19 @@ services:
       ARTEMIS_USER: artemis
       ARTEMIS_PASSWORD: artemis
 
+  # Store frio columnar opcional para nivel-registro a millones. Se usa cuando
+  # audit.cold-store.type=CLICKHOUSE en audit-consumer.
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: integration-hub-clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+
   # Consumidor de auditoria: deployable independiente (escala/falla aparte del
   # hot-path de pagos). Lee del MQ y registra en audit_event. Requiere
   # `mvn -pl audit-consumer package` previo (layout fast-jar).

@@ -1,42 +1,49 @@
-package com.integrationhub.auditconsumer;
+package com.integrationhub.auditconsumer.coldstore;
 
 import com.integrationhub.platform.audit.AuditEnvelope;
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 
-import javax.sql.DataSource;
 import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.util.Properties;
 
 /**
- * Escribe la trama RECORD en el store frio {@code audit_record_event} (append-only)
- * para trazabilidad E2E por registro. Idempotente ({@code ON CONFLICT(event_id)}).
+ * Store frio sobre ClickHouse para trazabilidad E2E a millones (columnar,
+ * append-only). Conexion lazy via JDBC; se activa con
+ * {@code audit.cold-store.type=CLICKHOUSE}.
  *
- * <p>JDBC directo: hoy aterriza en Postgres dedicado; este writer es el punto unico
- * a sustituir por ClickHouse/Elastic/lake sin tocar al consumidor.</p>
+ * <p>La dedup la da el {@code ReplacingMergeTree} por {@code event_id} del lado de
+ * ClickHouse (la entrega del MQ es at-least-once).</p>
  */
-@ApplicationScoped
-public class AuditRecordWriter {
+public final class ClickHouseColdStore implements ColdStore {
 
     private static final String INSERT = """
             insert into audit_record_event
                 (event_id, trace_id, record_id, stage, status, process_execution_id, task_definition_id, message, payload_json, event_ts)
             values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            on conflict (event_id) do nothing
             """;
 
-    private final DataSource dataSource;
+    private final String url;
+    private final String username;
+    private final String password;
 
-    @Inject
-    public AuditRecordWriter(DataSource dataSource) {
-        this.dataSource = dataSource;
+    public ClickHouseColdStore(String url, String username, String password) {
+        this.url = url;
+        this.username = username;
+        this.password = password;
     }
 
-    public void insertRecordEvent(AuditEnvelope envelope) {
-        try (Connection connection = dataSource.getConnection();
+    @Override
+    public void write(AuditEnvelope envelope) {
+        var props = new Properties();
+        if (username != null && !username.isBlank()) {
+            props.setProperty("user", username);
+            props.setProperty("password", password == null ? "" : password);
+        }
+        try (Connection connection = DriverManager.getConnection(url, props);
              PreparedStatement statement = connection.prepareStatement(INSERT)) {
             statement.setString(1, envelope.eventId());
             statement.setString(2, envelope.traceId());
@@ -52,7 +59,8 @@ public class AuditRecordWriter {
                     : Timestamp.from(envelope.timestamp()));
             statement.executeUpdate();
         } catch (SQLException error) {
-            throw new IllegalStateException("Cannot persist audit_record_event for " + envelope.eventId(), error);
+            throw new IllegalStateException("Cannot persist audit_record_event to ClickHouse for "
+                    + envelope.eventId(), error);
         }
     }
 

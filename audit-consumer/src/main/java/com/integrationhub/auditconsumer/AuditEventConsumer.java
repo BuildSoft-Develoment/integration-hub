@@ -1,6 +1,7 @@
 package com.integrationhub.auditconsumer;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.integrationhub.auditconsumer.coldstore.ColdStore;
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -25,13 +26,13 @@ public class AuditEventConsumer {
 
     private final ObjectMapper objectMapper;
     private final AuditEventWriter writer;
-    private final AuditRecordWriter recordWriter;
+    private final ColdStore coldStore;
 
     @Inject
-    public AuditEventConsumer(ObjectMapper objectMapper, AuditEventWriter writer, AuditRecordWriter recordWriter) {
+    public AuditEventConsumer(ObjectMapper objectMapper, AuditEventWriter writer, ColdStore coldStore) {
         this.objectMapper = objectMapper;
         this.writer = writer;
-        this.recordWriter = recordWriter;
+        this.coldStore = coldStore;
     }
 
     @Incoming("audit-in")
@@ -45,8 +46,8 @@ public class AuditEventConsumer {
         }
 
         if (envelope.level() == AuditLevel.RECORD) {
-            // Store frio: trazabilidad E2E por registro (audit_record_event).
-            recordWriter.insertRecordEvent(envelope);
+            // Store frio (Postgres/ClickHouse segun config): trazabilidad E2E por registro.
+            coldStore.write(envelope);
             return;
         }
         writer.insertProcessEvent(envelope);
