@@ -44,7 +44,7 @@ class ProcessExecutionFailurePropagationIT {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.execute(
-                    "TRUNCATE TABLE audit_event, staging_record, process_task_execution, "
+                    "TRUNCATE TABLE audit_spool, audit_event, staging_record, process_task_execution, "
                             + "process_execution, process_task_definition, process_definition, "
                             + "source_definition, reader_definition RESTART IDENTITY CASCADE");
         }

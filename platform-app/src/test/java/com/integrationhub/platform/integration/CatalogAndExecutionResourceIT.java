@@ -22,6 +22,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @QuarkusTest
 @TestProfile(IntegrationTestProfile.class)
@@ -35,7 +36,7 @@ class CatalogAndExecutionResourceIT {
     void cleanDatabase() throws Exception {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE audit_event, staging_record, process_task_execution, process_execution, process_task_definition, process_definition, source_definition, reader_definition RESTART IDENTITY CASCADE");
+            statement.execute("TRUNCATE TABLE audit_spool, audit_event, staging_record, process_task_execution, process_execution, process_task_definition, process_definition, source_definition, reader_definition RESTART IDENTITY CASCADE");
         }
     }
 
@@ -140,12 +141,17 @@ class CatalogAndExecutionResourceIT {
                             .body("[0].status", is("COMPLETED"))
                             .body("[1].status", is("COMPLETED"));
 
+            // Auditoria asincrona: platform-app es el PRODUCTOR. Su responsabilidad es
+            // dejar la trama en el spool durable (audit_spool); poblar audit_event es del
+            // audit-consumer (deployable aparte), no de este proceso. La API /audit-events
+            // sigue respondiendo 200 leyendo audit_event (vacio en test sin consumidor).
             given()
                     .when()
                             .get("/api/query/audit-events")
                     .then()
-                            .statusCode(200)
-                            .body("items.size()", greaterThanOrEqualTo(4));
+                            .statusCode(200);
+            assertTrue(countRows("audit_spool") >= 4,
+                    "el productor debe haber encolado >=4 tramas de auditoria en el spool");
 
             given()
                     .when()

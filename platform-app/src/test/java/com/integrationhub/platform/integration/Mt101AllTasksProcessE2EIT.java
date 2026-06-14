@@ -59,6 +59,7 @@ class Mt101AllTasksProcessE2EIT {
              Statement statement = connection.createStatement()) {
             statement.execute("""
                     TRUNCATE TABLE
+                      audit_spool,
                       audit_event,
                       mt101_reconciliation_exception,
                       mt101_validation_issue,
