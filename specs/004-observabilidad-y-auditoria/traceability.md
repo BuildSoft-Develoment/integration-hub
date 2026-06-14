@@ -29,6 +29,8 @@ Codigo existente -> SDD (spec-tecnica) -> Trazabilidad -> QA (evidencia GREEN re
 | RF-005 | - | - | - | GET /api/query/audit-events | audit_event | AuditService | StreamingPipelineServiceTest | Implementado | tdd-evidence.md | execution-editor-summary, audit-editor | audit.store.spec.ts |
 | RF-006 | - | - | - | MQ audit-events | audit_spool, audit_event, audit_dead_letter_event | MessageBrokerRegistry, OutboxRelay, AuditEventHandler | KafkaPublishIT, AuditEventConsumerTest | Implementado | tdd-evidence.md | audit-list | audit.store.spec.ts |
 | RF-007 | - | - | - | GET /api/query/record-lineage | audit_record_event | RecordLineageResource, PostgresColdStore | PostgresColdStoreTest | Implementado | tdd-evidence.md | record-lineage | audit-api.service.ts |
+| RF-008 | - | - | - | GET/POST/DELETE /api/query/audit-spool/* | audit_spool | AuditSpoolResource, AuditSpoolOperationsService, AuditSpoolRepository | compilacion platform-app + audit-consumer | Implementado | tdd-evidence.md | audit-spool | web build |
+| RF-009 | - | - | - | GET /api/query/mt101-fragments/source-row | mt101_build_fragment | Mt101FragmentLookupResource, Mt101FragmentLookupService, Mt101FragmentRepository | compilacion platform-app | Implementado | tdd-evidence.md | mt101-fragment-lookup | web build |
 
 ## Gates
 > Fase 2 N/A por reingenieria: `gate-spdd-approved` y `gate-prototype-ready` no aplican.

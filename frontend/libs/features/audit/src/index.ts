@@ -1,4 +1,6 @@
 export * from './lib/catalog/audit.routes';
+export * from './lib/components/audit-spool/audit-spool.component';
+export * from './lib/components/mt101-fragment-lookup/mt101-fragment-lookup.component';
 export * from './lib/components/record-lineage/record-lineage.component';
 export * from './lib/api/audit-api.service';
 export * from './lib/models/audit.models';

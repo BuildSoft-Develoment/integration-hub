@@ -10,6 +10,7 @@ import jakarta.jms.TextMessage;
 import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import java.util.ArrayList;
 import java.util.Optional;
 
 /**
@@ -56,22 +57,30 @@ public class JmsAuditEventConsumer {
         try (Session session = connection().createSession(false, Session.CLIENT_ACKNOWLEDGE)) {
             var queue = session.createQueue(topic);
             try (var consumer = session.createConsumer(queue)) {
+                var messages = new ArrayList<jakarta.jms.Message>(batchSize);
+                var payloads = new ArrayList<String>(batchSize);
                 for (int i = 0; i < batchSize; i++) {
                     var message = consumer.receive(100);
                     if (message == null) {
-                        return;
+                        break;
                     }
-                    try {
-                        if (!(message instanceof TextMessage textMessage)) {
-                            throw new IllegalArgumentException("Unsupported JMS audit message type: "
-                                    + message.getClass().getName());
-                        }
-                        handler.handle(textMessage.getText(), "JMS", topic);
-                        message.acknowledge();
-                    } catch (RuntimeException error) {
+                    if (!(message instanceof TextMessage textMessage)) {
                         session.recover();
-                        throw error;
+                        throw new IllegalArgumentException("Unsupported JMS audit message type: "
+                                + message.getClass().getName());
                     }
+                    messages.add(message);
+                    payloads.add(textMessage.getText());
+                }
+                if (payloads.isEmpty()) {
+                    return;
+                }
+                try {
+                    handler.handleBatch(payloads, "JMS", topic);
+                    messages.get(messages.size() - 1).acknowledge();
+                } catch (RuntimeException error) {
+                    session.recover();
+                    throw error;
                 }
             }
         } catch (Exception error) {

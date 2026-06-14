@@ -36,6 +36,52 @@ export interface RecordLineageEntry {
   eventTs: string | null;
 }
 
+export interface AuditSpoolSummary {
+  pending: number;
+  inFlight: number;
+  sent: number;
+  dead: number;
+  oldestPendingCreatedAt: string | null;
+}
+
+export interface AuditSpoolEntry {
+  id: number;
+  eventId: string | null;
+  traceId: string | null;
+  topic: string | null;
+  partitionKey: string | null;
+  spoolStatus: string | null;
+  attempts: number;
+  lastError: string | null;
+  createdAt: string | null;
+  sentAt: string | null;
+  lockedBy: string | null;
+  lockedAt: string | null;
+  nextAttemptAt: string | null;
+  deadAt: string | null;
+  deadReason: string | null;
+}
+
+export interface AuditSpoolCleanupResult {
+  deleted: number;
+}
+
+export interface Mt101FragmentLink {
+  fragmentSetId: string | null;
+  processExecutionId: number | null;
+  taskDefinitionId: number | null;
+  sourceTable: string | null;
+  sourceRowFrom: number;
+  sourceRowTo: number;
+  fragmentIndex: number;
+  fragmentTotal: number;
+  sendersReference: string | null;
+  status: string | null;
+  errorMessage: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 export interface AuditRecord {
   id: number;
   processExecutionId: number | null;

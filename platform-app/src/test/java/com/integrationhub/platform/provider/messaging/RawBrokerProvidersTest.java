@@ -6,6 +6,8 @@ import com.integrationhub.platform.provider.messaging.redis.RedisMessageBrokerPr
 import com.integrationhub.platform.spi.messaging.OutboundMessage;
 import org.junit.jupiter.api.Test;
 
+import java.util.Optional;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
@@ -35,7 +37,7 @@ class RawBrokerProvidersTest {
 
     @Test
     void jmsExposesTypeAndFailsGracefully() {
-        var provider = new JmsMessageBrokerProvider("tcp://localhost:61617", "", "");
+        var provider = new JmsMessageBrokerProvider("tcp://localhost:61617", Optional.empty(), Optional.empty());
         assertEquals("JMS", provider.type());
         assertFalse(provider.publisher().publish(MSG).accepted());
     }

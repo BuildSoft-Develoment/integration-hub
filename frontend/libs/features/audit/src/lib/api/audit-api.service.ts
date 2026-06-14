@@ -1,7 +1,14 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { AuditRecord, RecordLineageEntry } from '../models/audit.models';
+import {
+  AuditRecord,
+  AuditSpoolCleanupResult,
+  AuditSpoolEntry,
+  AuditSpoolSummary,
+  Mt101FragmentLink,
+  RecordLineageEntry,
+} from '../models/audit.models';
 
 export interface AuditPageResponse {
   total: number;
@@ -65,5 +72,53 @@ export class AuditApiService {
         .set('recordNumber', String(query.recordNumber).trim());
     }
     return this.http.get<RecordLineageEntry[]>('/api/query/record-lineage', { params: httpParams });
+  }
+
+  auditSpoolSummary(): Observable<AuditSpoolSummary> {
+    return this.http.get<AuditSpoolSummary>('/api/query/audit-spool/summary');
+  }
+
+  auditSpoolDead(limit = 100): Observable<AuditSpoolEntry[]> {
+    return this.http.get<AuditSpoolEntry[]>('/api/query/audit-spool/dead', {
+      params: new HttpParams().set('limit', String(limit)),
+    });
+  }
+
+  retryAuditSpool(id: number): Observable<void> {
+    return this.http.post<void>(`/api/query/audit-spool/${id}/retry`, {});
+  }
+
+  cleanupAuditSpoolSent(retentionDays = 7, limit = 10000): Observable<AuditSpoolCleanupResult> {
+    return this.http.delete<AuditSpoolCleanupResult>('/api/query/audit-spool/sent', {
+      params: new HttpParams()
+        .set('retentionDays', String(retentionDays))
+        .set('limit', String(limit)),
+    });
+  }
+
+  mt101FragmentLinks(query: {
+    connectionRef?: string;
+    recordNumber: number | string;
+    sourceTable?: string;
+    processExecutionId?: number | string;
+    fragmentSetId?: string;
+    limit?: number;
+  }): Observable<Mt101FragmentLink[]> {
+    let httpParams = new HttpParams()
+      .set('recordNumber', String(query.recordNumber))
+      .set('limit', String(query.limit ?? 20));
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    if (query.sourceTable?.trim()) {
+      httpParams = httpParams.set('sourceTable', query.sourceTable.trim());
+    }
+    if (query.processExecutionId !== undefined && String(query.processExecutionId).trim()) {
+      httpParams = httpParams.set('processExecutionId', String(query.processExecutionId).trim());
+    }
+    if (query.fragmentSetId?.trim()) {
+      httpParams = httpParams.set('fragmentSetId', query.fragmentSetId.trim());
+    }
+    return this.http.get<Mt101FragmentLink[]>('/api/query/mt101-fragments/source-row', { params: httpParams });
   }
 }

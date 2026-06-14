@@ -9,6 +9,8 @@ export const es = {
   'nav.schedules': 'Schedules',
   'nav.audit': 'Auditoria',
   'nav.recordLineage': 'Trazabilidad de registro',
+  'nav.auditSpool': 'Spool auditoria',
+  'nav.mt101Fragments': 'Fragmentos MT101',
   'layout.login': 'Ingresar',
   'layout.logout': 'Salir',
   'layout.roles': 'Roles',

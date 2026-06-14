@@ -32,6 +32,10 @@ Dar visibilidad operativa y trazabilidad completa sobre procesos, tareas y archi
   (`Kafka` por defecto, abierto a JMS/RabbitMQ/Redis).
 - RF-007 consultar trazabilidad E2E por registro usando claves de archivo, fila,
   hash de negocio y referencias de pago (`:20:`, `:21:`, UETR, archive/gateway).
+- RF-008 operar el spool de auditoria asincrona: ver backlog, eventos en
+  `DEAD`, reprocesar eventos fallidos y limpiar eventos `SENT` por retencion.
+- RF-009 ubicar el fragmento MT101 generado a partir de una fila origen de
+  archivo/staging para diagnostico E2E de pagos masivos.
 
 ## Reglas de negocio
 
@@ -42,6 +46,10 @@ Dar visibilidad operativa y trazabilidad completa sobre procesos, tareas y archi
 - `platform-app` no persiste el read-model final de auditoria; publica eventos y
   `audit-consumer` los materializa
 - el usuario `auditor` consulta pero no modifica catalogos ni procesos
+- `platform-admin` e `integration-admin` pueden reprocesar eventos `DEAD` y
+  limpiar `SENT`; `operator`/`auditor` solo consultan
+- la consulta de fragmentos MT101 por fila origen debe usar indices por
+  `source_table`, rango de filas y ejecucion cuando aplique
 
 ## Criterios de aceptacion
 
@@ -51,6 +59,10 @@ Dar visibilidad operativa y trazabilidad completa sobre procesos, tareas y archi
 - los eventos de auditoria viajan por MQ y los poison messages quedan en DLQ
 - la vista de trazabilidad permite buscar por ejecucion, registro, archivo/fila y
   referencias SWIFT/payment
+- el spool muestra resumen operativo y permite reprocesar filas `DEAD` sin
+  editar datos manualmente
+- desde una fila origen se puede identificar `fragmentSetId`, `:20:`, rango,
+  indice/total y estado del MT101 generado
 - (UI) hay vistas de listado/filtro (`execution-list`/`audit-list` + toolbars), detalle por tarea y
   archivo (`execution-editor` + `execution-task-list`/`execution-files-panel`), linaje de reproceso
   (`execution-lineage`) y resumen operativo (`overview-metric-card`/`overview-table-card`)

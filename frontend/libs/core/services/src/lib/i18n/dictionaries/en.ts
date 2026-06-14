@@ -8,6 +8,8 @@ export const en = {
   'nav.schedules': 'Schedules',
   'nav.audit': 'Audit',
   'nav.recordLineage': 'Record lineage',
+  'nav.auditSpool': 'Audit spool',
+  'nav.mt101Fragments': 'MT101 fragments',
   'layout.login': 'Login',
   'layout.logout': 'Logout',
   'layout.roles': 'Roles',

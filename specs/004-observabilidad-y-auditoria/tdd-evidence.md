@@ -95,3 +95,57 @@ Trazabilidad E2E por registro con claves operativas.
 - Comando GREEN frontend: `cmd.exe /c npx nx test web --skip-nx-cache`
 - Resultado GREEN frontend: GREEN real (2026-06-14), 50 archivos de test y 169 tests pasando.
 - Verificado por: Maven + Nx/Vitest.
+
+## RF-006 / T-009
+
+Spool asincronico endurecido, relay con lifecycle `PENDING -> IN_FLIGHT ->
+SENT|DEAD`, particion estable y consumer batch.
+
+- Comando RED: `mvn -pl platform-app,audit-consumer -DskipTests compile`
+- Resultado RED: No recapturable sin revertir codigo funcional; antes del cambio
+  no existian `IN_FLIGHT`/`DEAD`, lease, backoff ni `AuditSpoolWriter` fuera de
+  la transaccion de negocio.
+- Comando GREEN compilacion: `mvn -q -pl platform-contract,platform-app,audit-consumer -DskipTests compile`
+- Resultado GREEN compilacion: PASS real (2026-06-14).
+- Comando GREEN consumer: `mvn -q -pl audit-consumer -am test`
+- Resultado GREEN consumer: PASS real (2026-06-14), incluye `AuditEventConsumerTest`,
+  `AuditEventWriterTest` y `PostgresColdStoreTest`; se agrego cobertura batch
+  con mezcla `PROCESS`/`RECORD`/poison.
+- Comando GREEN broker SPI: `mvn -q -pl platform-app -am "-Dtest=RawBrokerProvidersTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+- Resultado GREEN broker SPI: PASS real (2026-06-14).
+- Verificado por: Maven + Testcontainers PostgreSQL.
+
+## RF-008 / T-010
+
+Operacion del spool desde API/UI.
+
+- Comando RED: `cmd.exe /c npx nx build web --configuration=development --skip-nx-cache`
+- Resultado RED: RED real durante implementacion (2026-06-14), templates inline de
+  `audit-spool`/`mt101-fragment-lookup` cerrados con sintaxis incorrecta.
+- Comando GREEN build: `cmd.exe /c npx nx build web --configuration=development --skip-nx-cache`
+- Resultado GREEN build: PASS real (2026-06-14).
+- Comando GREEN frontend: `cmd.exe /c npx nx test web --skip-nx-cache`
+- Resultado GREEN frontend: PASS real (2026-06-14), 50 archivos de test y 169 tests.
+- Verificacion browser: intento de abrir `http://localhost:8080/audit/spool`
+  devolvio `ERR_CONNECTION_REFUSED`; no habia runtime local levantado en 8080.
+
+## RF-009 / T-011
+
+Lookup MT101 por fila origen.
+
+- Comando RED: `mvn -pl platform-app -DskipTests compile`
+- Resultado RED: No recapturable sin revertir codigo funcional; antes no existia
+  endpoint `mt101-fragments/source-row`, servicio de lookup ni indices por rango
+  de fila.
+- Comando GREEN backend: `mvn -q -pl platform-contract,platform-app,audit-consumer -DskipTests compile`
+- Resultado GREEN backend: PASS real (2026-06-14).
+- Comando GREEN frontend: `cmd.exe /c npx nx build web --configuration=development --skip-nx-cache`
+- Resultado GREEN frontend: PASS real (2026-06-14).
+- Verificado por: compilacion backend + build frontend.
+
+## Spec 008 / MT101_PAY accepted()
+
+- Comando GREEN: `mvn -q -pl platform-app -am "-Dtest=Mt101PayTaskProviderTest,Mt101PayFragmentReprocessTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+- Resultado GREEN: PASS real (2026-06-14). Se agrego caso donde
+  `TransportResult.accepted=false` y `lastError=null`; la tarea cuenta rechazo,
+  `sentCount=0` y marca `REJECTED`.

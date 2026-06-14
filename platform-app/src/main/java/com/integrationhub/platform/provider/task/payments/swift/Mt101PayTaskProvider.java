@@ -110,20 +110,20 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 var rejectedByRef = new LinkedHashMap<String, String>();
                 var pageAudit = new ArrayList<AuditEnvelope>(page.size());
                 for (var message : page) {
-                    var lastError = dispatch(transport, configuration, message, accumulator);
+                    var result = dispatch(transport, configuration, message, accumulator);
                     var reference = message.sequenceA() == null ? null
                             : message.sequenceA().sendersReference();
                     if (reference == null) {
                         continue;
                     }
-                    if (lastError == null) {
+                    if (result.accepted()) {
                         sentRefs.add(reference);
                         sentTargets.add(archiveTarget(message));
                     } else {
-                        rejectedByRef.put(reference, lastError);
+                        rejectedByRef.put(reference, result.lastError());
                         rejectedTargets.add(archiveTarget(message));
                     }
-                    pageAudit.add(recordEnvelope(context, reference, lastError == null, lastError));
+                    pageAudit.add(recordEnvelope(context, reference, result.accepted(), result.lastError()));
                 }
                 // Trazabilidad E2E por registro: una trama RECORD por fragmento,
                 // emitida en lote por pagina (un solo JDBC batch), fuera de la TX.
@@ -142,15 +142,15 @@ public class Mt101PayTaskProvider implements TaskProvider {
             var rejectedArchiveIds = new LinkedHashMap<String, List<Long>>();
             var audit = new ArrayList<AuditEnvelope>(inputs.size());
             for (var input : inputs) {
-                var lastError = dispatch(transport, configuration, input, accumulator);
+                var result = dispatch(transport, configuration, input, accumulator);
                 var reference = input.message() != null && input.message().sequenceA() != null
                         ? input.message().sequenceA().sendersReference() : null;
-                if (lastError == null) {
+                if (result.accepted()) {
                     collectArchiveId(configuration, input, sentArchiveIds);
                 } else {
                     collectArchiveId(configuration, input, rejectedArchiveIds);
                 }
-                audit.add(recordEnvelope(context, reference, lastError == null, lastError));
+                audit.add(recordEnvelope(context, reference, result.accepted(), result.lastError()));
             }
             emitRecordAudit(audit);
             syncArchiveIds(configuration, sentArchiveIds, "SENT");
@@ -223,20 +223,20 @@ public class Mt101PayTaskProvider implements TaskProvider {
         }
     }
 
-    /** Despacha un mensaje y acumula el resultado. Devuelve lastError, o null si aceptado. */
-    private String dispatch(PaymentMessageTransport transport,
-                            Map<String, Object> configuration,
-                            Mt101Message message,
-                            DispatchAccumulator accumulator) {
+    /** Despacha un mensaje y acumula el resultado. */
+    private TransportResult dispatch(PaymentMessageTransport transport,
+                                     Map<String, Object> configuration,
+                                     Mt101Message message,
+                                     DispatchAccumulator accumulator) {
         return dispatch(transport, configuration,
                 new Mt101MessageInputResolver.ResolvedMessage(message, null, null, null),
                 accumulator);
     }
 
-    private String dispatch(PaymentMessageTransport transport,
-                            Map<String, Object> configuration,
-                            Mt101MessageInputResolver.ResolvedMessage input,
-                            DispatchAccumulator accumulator) {
+    private TransportResult dispatch(PaymentMessageTransport transport,
+                                     Map<String, Object> configuration,
+                                     Mt101MessageInputResolver.ResolvedMessage input,
+                                     DispatchAccumulator accumulator) {
         var message = input.message();
         TransportResult result;
         try {
@@ -278,7 +278,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
         if (result.attempts() > 1) {
             accumulator.retriedCount++;
         }
-        return result.lastError();
+        return result;
     }
 
     /** Acumula resultados de despacho con sample acotado (memoria O(maxRecords)). */

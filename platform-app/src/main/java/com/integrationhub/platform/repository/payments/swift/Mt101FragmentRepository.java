@@ -3,9 +3,9 @@ package com.integrationhub.platform.repository.payments.swift;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -112,6 +112,66 @@ public class Mt101FragmentRepository {
         }
     }
 
+    public List<FragmentLookupRow> findBySourceRow(DataSource dataSource,
+                                                   Long recordNumber,
+                                                   String sourceTable,
+                                                   Long processExecutionId,
+                                                   String fragmentSetId,
+                                                   int limit) throws SQLException {
+        var sql = new StringBuilder("""
+                select fragment_set_id, process_execution_id, task_definition_id, source_table,
+                       source_row_from, source_row_to, fragment_index, fragment_total,
+                       senders_reference, status, error_message, created_at, updated_at
+                  from mt101_build_fragment
+                 where source_row_from <= ?
+                   and source_row_to >= ?
+                """);
+        var parameters = new ArrayList<Object>();
+        parameters.add(recordNumber);
+        parameters.add(recordNumber);
+        if (sourceTable != null && !sourceTable.isBlank()) {
+            sql.append(" and source_table = ?");
+            parameters.add(sourceTable);
+        }
+        if (processExecutionId != null) {
+            sql.append(" and process_execution_id = ?");
+            parameters.add(processExecutionId);
+        }
+        if (fragmentSetId != null && !fragmentSetId.isBlank()) {
+            sql.append(" and fragment_set_id = ?");
+            parameters.add(fragmentSetId);
+        }
+        sql.append(" order by created_at desc, fragment_index asc limit ?");
+        parameters.add(Math.max(limit, 1));
+
+        var result = new ArrayList<FragmentLookupRow>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql.toString())) {
+            for (int i = 0; i < parameters.size(); i++) {
+                statement.setObject(i + 1, parameters.get(i));
+            }
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new FragmentLookupRow(
+                            rs.getString("fragment_set_id"),
+                            nullableLong(rs, "process_execution_id"),
+                            nullableLong(rs, "task_definition_id"),
+                            rs.getString("source_table"),
+                            rs.getLong("source_row_from"),
+                            rs.getLong("source_row_to"),
+                            rs.getInt("fragment_index"),
+                            rs.getInt("fragment_total"),
+                            rs.getString("senders_reference"),
+                            rs.getString("status"),
+                            rs.getString("error_message"),
+                            timestamp(rs, "created_at"),
+                            timestamp(rs, "updated_at")));
+                }
+            }
+        }
+        return result;
+    }
+
     public Map<String, String> nullErrors(Collection<String> sendersReferences) {
         var result = new LinkedHashMap<String, String>();
         if (sendersReferences == null) {
@@ -144,5 +204,32 @@ public class Mt101FragmentRepository {
     }
 
     public record MessageJsonRow(int fragmentIndex, String messageJson) {
+    }
+
+    public record FragmentLookupRow(
+            String fragmentSetId,
+            Long processExecutionId,
+            Long taskDefinitionId,
+            String sourceTable,
+            long sourceRowFrom,
+            long sourceRowTo,
+            int fragmentIndex,
+            int fragmentTotal,
+            String sendersReference,
+            String status,
+            String errorMessage,
+            LocalDateTime createdAt,
+            LocalDateTime updatedAt
+    ) {
+    }
+
+    private Long nullableLong(java.sql.ResultSet rs, String column) throws SQLException {
+        var value = rs.getLong(column);
+        return rs.wasNull() ? null : value;
+    }
+
+    private LocalDateTime timestamp(java.sql.ResultSet rs, String column) throws SQLException {
+        var value = rs.getTimestamp(column);
+        return value == null ? null : value.toLocalDateTime();
     }
 }

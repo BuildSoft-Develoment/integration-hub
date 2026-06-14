@@ -4,7 +4,7 @@
 
 ## Estado
 
-Propuesto.
+Aceptado e implementado en P0/P1.
 
 ## Contexto
 
@@ -34,6 +34,18 @@ publicado por `platform-app` y consumido por `audit-consumer`.
 - JMS/Artemis, RabbitMQ y Redis Streams son conectores enchufables por SPI.
 - No hay fallback silencioso: si el relay esta habilitado, el broker configurado
   debe existir. En runtime real no se degrada a DB directa ni in-memory.
+- `platform-app` usa un spool/outbox durable (`audit_spool`) escrito en una
+  transaccion independiente (`REQUIRES_NEW`) para desacoplar auditoria del
+  hot-path de negocio. Un fallo al registrar auditoria no rompe el proceso salvo
+  que `audit.fail-business-on-error=true`.
+- El relay reclama mensajes con lease (`PENDING` -> `IN_FLIGHT`), backoff,
+  reintentos acotados y estado terminal `DEAD`. Los eventos `DEAD` son
+  reprocesables desde API/UI y los `SENT` se limpian por retencion.
+- La clave de particion es estable y orientada al orden operativo: `PROCESS`
+  particiona por `traceId`; `RECORD` por `recordId` o referencias equivalentes
+  (`paymentReference`, `transactionReference`, `businessKeyHash`).
+- El consumidor persiste por lotes: `PROCESS` en `audit_event`, `RECORD` en
+  cold-store, poison messages en DLQ, y Kafka corre en worker pool bloqueante.
 
 ## Identidad de trazabilidad
 
@@ -70,6 +82,21 @@ audit-consumer (Quarkus independiente)
 
 El frontend nunca se conecta directo al broker; consulta read-models via
 `platform-app`.
+
+## Operacion
+
+`platform-app` expone endpoints de observabilidad para operar la cola asincrona:
+
+- `GET /api/query/audit-spool/summary`: conteos `PENDING`, `IN_FLIGHT`, `SENT`,
+  `DEAD` y pendiente mas antiguo.
+- `GET /api/query/audit-spool/dead`: eventos en `DEAD` con error/lock/attempts.
+- `POST /api/query/audit-spool/{id}/retry`: vuelve `DEAD` a `PENDING`.
+- `DELETE /api/query/audit-spool/sent`: limpieza por retencion.
+
+Para MT101 masivo, `GET /api/query/mt101-fragments/source-row` permite partir
+de una fila origen y ubicar el fragmento SWIFT generado (`fragmentSetId`,
+`:20:`, rango de filas, estado). Esta consulta permite diagnostico E2E sin
+parsear payloads ni entrar al broker.
 
 ## Consecuencias
 

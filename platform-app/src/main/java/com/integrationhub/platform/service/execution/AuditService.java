@@ -4,18 +4,15 @@ package com.integrationhub.platform.service.execution;
 
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
-import com.integrationhub.platform.entity.AuditSpool;
 import com.integrationhub.platform.entity.ProcessExecution;
 import com.integrationhub.platform.entity.ProcessTaskDefinition;
-import com.integrationhub.platform.repository.AuditSpoolRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
+import org.jboss.logging.Logger;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.UUID;
 
@@ -33,21 +30,22 @@ import java.util.UUID;
 @ApplicationScoped
 public class AuditService implements RecordAuditEmitter {
 
-    private final JsonConfigurationMapper jsonConfigurationMapper;
-    private final AuditSpoolRepository auditSpoolRepository;
-    private final String topic;
+    private static final Logger LOG = Logger.getLogger(AuditService.class);
 
+    private final JsonConfigurationMapper jsonConfigurationMapper;
+    private final AuditSpoolWriter auditSpoolWriter;
     private final boolean recordLevelEnabled;
+    private final boolean failBusinessOnError;
 
     @Inject
     public AuditService(JsonConfigurationMapper jsonConfigurationMapper,
-                        AuditSpoolRepository auditSpoolRepository,
-                        @ConfigProperty(name = "audit.topic", defaultValue = "audit-events") String topic,
-                        @ConfigProperty(name = "audit.record-level.enabled", defaultValue = "true") boolean recordLevelEnabled) {
+                        AuditSpoolWriter auditSpoolWriter,
+                        @ConfigProperty(name = "audit.record-level.enabled", defaultValue = "true") boolean recordLevelEnabled,
+                        @ConfigProperty(name = "audit.fail-business-on-error", defaultValue = "false") boolean failBusinessOnError) {
         this.jsonConfigurationMapper = jsonConfigurationMapper;
-        this.auditSpoolRepository = auditSpoolRepository;
-        this.topic = topic;
+        this.auditSpoolWriter = auditSpoolWriter;
         this.recordLevelEnabled = recordLevelEnabled;
+        this.failBusinessOnError = failBusinessOnError;
     }
 
     public void record(ProcessExecution execution, ProcessTaskDefinition taskDefinition,
@@ -75,21 +73,12 @@ public class AuditService implements RecordAuditEmitter {
                 AuditEnvelope.CURRENT_SCHEMA_VERSION));
     }
 
-    /**
-     * Persiste la trama en el spool durable, en su PROPIA transaccion. No participa
-     * de la TX de negocio: si el caller hace rollback, la auditoria sobrevive; si la
-     * auditoria fallara, no tumba el negocio.
-     */
-    @Transactional(Transactional.TxType.REQUIRES_NEW)
     public void emit(AuditEnvelope envelope) {
-        var row = new AuditSpool();
-        row.eventId = envelope.eventId();
-        row.traceId = envelope.traceId();
-        row.topic = topic;
-        row.partitionKey = envelope.traceId();
-        row.payload = jsonConfigurationMapper.toJson(envelope);
-        row.spoolStatus = AuditSpool.PENDING;
-        auditSpoolRepository.persist(row);
+        try {
+            auditSpoolWriter.write(envelope);
+        } catch (RuntimeException error) {
+            handleAuditFailure("single event " + envelope.eventId(), error);
+        }
     }
 
     /**
@@ -98,26 +87,25 @@ public class AuditService implements RecordAuditEmitter {
      * acumula por pagina y delega aqui el insert batcheado.
      */
     @Override
-    @Transactional(Transactional.TxType.REQUIRES_NEW)
     public void emitRecords(Collection<AuditEnvelope> envelopes) {
         if (!recordLevelEnabled || envelopes == null || envelopes.isEmpty()) {
             return;
         }
-        var rows = new ArrayList<AuditSpool>(envelopes.size());
-        for (var envelope : envelopes) {
-            var row = new AuditSpool();
-            row.eventId = envelope.eventId();
-            row.traceId = envelope.traceId();
-            row.topic = topic;
-            row.partitionKey = envelope.traceId();
-            row.payload = jsonConfigurationMapper.toJson(envelope);
-            row.spoolStatus = AuditSpool.PENDING;
-            rows.add(row);
+        try {
+            auditSpoolWriter.writeBatch(envelopes);
+        } catch (RuntimeException error) {
+            handleAuditFailure(envelopes.size() + " record events", error);
         }
-        auditSpoolRepository.persistBatch(rows);
     }
 
     private String traceIdFor(Long processExecutionId) {
         return processExecutionId == null ? null : "exec-" + processExecutionId;
+    }
+
+    private void handleAuditFailure(String scope, RuntimeException error) {
+        if (failBusinessOnError) {
+            throw error;
+        }
+        LOG.warnf(error, "Audit emission failed for %s; business flow continues", scope);
     }
 }

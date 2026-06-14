@@ -10,6 +10,8 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.sql.Types;
+import java.util.Collection;
+import java.util.List;
 
 /**
  * Registra la trama de auditoria en el read-model {@code audit_event} (Postgres),
@@ -37,23 +39,37 @@ public class AuditEventWriter {
     }
 
     public void insertProcessEvent(AuditEnvelope envelope) {
+        insertProcessEvents(List.of(envelope));
+    }
+
+    public void insertProcessEvents(Collection<AuditEnvelope> envelopes) {
+        if (envelopes == null || envelopes.isEmpty()) {
+            return;
+        }
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(INSERT)) {
-            statement.setString(1, envelope.eventId());
-            setNullableLong(statement, 2, envelope.processExecutionId());
-            setNullableLong(statement, 3, envelope.taskDefinitionId());
-            statement.setString(4, envelope.stage());
-            statement.setString(5, envelope.status() == null ? "" : envelope.status());
-            statement.setString(6, envelope.message());
-            statement.setString(7, envelope.payloadJson());
-            statement.setTimestamp(8, envelope.timestamp() == null
-                    ? new Timestamp(System.currentTimeMillis())
-                    : Timestamp.from(envelope.timestamp()));
-            statement.executeUpdate();
+            for (var envelope : envelopes) {
+                bind(statement, envelope);
+                statement.addBatch();
+            }
+            statement.executeBatch();
         } catch (SQLException error) {
             // Propaga -> el consumidor hace nack y el MQ reintrega (at-least-once).
-            throw new IllegalStateException("Cannot persist audit_event for " + envelope.eventId(), error);
+            throw new IllegalStateException("Cannot persist audit_event batch (" + envelopes.size() + ")", error);
         }
+    }
+
+    private void bind(PreparedStatement statement, AuditEnvelope envelope) throws SQLException {
+        statement.setString(1, envelope.eventId());
+        setNullableLong(statement, 2, envelope.processExecutionId());
+        setNullableLong(statement, 3, envelope.taskDefinitionId());
+        statement.setString(4, envelope.stage());
+        statement.setString(5, envelope.status() == null ? "" : envelope.status());
+        statement.setString(6, envelope.message());
+        statement.setString(7, envelope.payloadJson());
+        statement.setTimestamp(8, envelope.timestamp() == null
+                ? new Timestamp(System.currentTimeMillis())
+                : Timestamp.from(envelope.timestamp()));
     }
 
     private void setNullableLong(PreparedStatement statement, int index, Long value) throws SQLException {

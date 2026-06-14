@@ -10,6 +10,7 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 
 /**
  * Consumer RabbitMQ opcional del contrato de auditoria. Se activa solo cuando
@@ -56,18 +57,29 @@ public class RabbitMqAuditEventConsumer {
         }
         try (Channel channel = connection().createChannel()) {
             channel.queueDeclare(topic, true, false, false, null);
+            var deliveries = new ArrayList<com.rabbitmq.client.GetResponse>(batchSize);
+            var payloads = new ArrayList<String>(batchSize);
             for (int i = 0; i < batchSize; i++) {
                 var delivery = channel.basicGet(topic, false);
                 if (delivery == null) {
-                    return;
+                    break;
                 }
-                try {
-                    handler.handle(new String(delivery.getBody(), StandardCharsets.UTF_8), "RABBITMQ", topic);
+                deliveries.add(delivery);
+                payloads.add(new String(delivery.getBody(), StandardCharsets.UTF_8));
+            }
+            if (payloads.isEmpty()) {
+                return;
+            }
+            try {
+                handler.handleBatch(payloads, "RABBITMQ", topic);
+                for (var delivery : deliveries) {
                     channel.basicAck(delivery.getEnvelope().getDeliveryTag(), false);
-                } catch (RuntimeException error) {
-                    channel.basicNack(delivery.getEnvelope().getDeliveryTag(), false, true);
-                    throw error;
                 }
+            } catch (RuntimeException error) {
+                for (var delivery : deliveries) {
+                    channel.basicNack(delivery.getEnvelope().getDeliveryTag(), false, true);
+                }
+                throw error;
             }
         } catch (Exception error) {
             throw new IllegalStateException("RabbitMQ audit consumer failed", error);

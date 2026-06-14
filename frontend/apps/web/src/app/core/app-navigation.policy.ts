@@ -63,4 +63,16 @@ export const APP_NAVIGATION_DEFINITIONS: readonly AppNavigationItem[] = [
     labelKey: 'nav.recordLineage',
     requiredCapability: APP_SECTION_CAPABILITIES.audit,
   },
+  {
+    id: 'auditSpool',
+    route: '/audit/spool',
+    labelKey: 'nav.auditSpool',
+    requiredCapability: APP_SECTION_CAPABILITIES.audit,
+  },
+  {
+    id: 'mt101Fragments',
+    route: '/audit/mt101-fragments',
+    labelKey: 'nav.mt101Fragments',
+    requiredCapability: APP_SECTION_CAPABILITIES.audit,
+  },
 ];

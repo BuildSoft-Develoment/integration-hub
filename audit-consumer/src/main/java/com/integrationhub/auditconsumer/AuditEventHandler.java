@@ -8,6 +8,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.regex.Pattern;
 
 /**
@@ -38,21 +41,43 @@ public class AuditEventHandler {
     }
 
     public void handle(String payload, String brokerType, String topic) {
-        AuditEnvelope envelope;
+        handleBatch(List.of(payload), brokerType, topic);
+    }
+
+    public void handleBatch(Collection<String> payloads, String brokerType, String topic) {
+        if (payloads == null || payloads.isEmpty()) {
+            return;
+        }
+        var processEvents = new ArrayList<AuditEnvelope>();
+        var recordEvents = new ArrayList<AuditEnvelope>();
+        for (var payload : payloads) {
+            routePayload(payload, brokerType, topic, processEvents, recordEvents);
+        }
+        if (!recordEvents.isEmpty()) {
+            coldStore.writeBatch(recordEvents);
+        }
+        if (!processEvents.isEmpty()) {
+            writer.insertProcessEvents(processEvents);
+        }
+    }
+
+    private void routePayload(String payload,
+                              String brokerType,
+                              String topic,
+                              List<AuditEnvelope> processEvents,
+                              List<AuditEnvelope> recordEvents) {
         try {
-            envelope = objectMapper.readValue(payload, AuditEnvelope.class);
+            var envelope = objectMapper.readValue(payload, AuditEnvelope.class);
+            if (envelope.level() == AuditLevel.RECORD) {
+                recordEvents.add(envelope);
+            } else {
+                processEvents.add(envelope);
+            }
         } catch (Exception parseError) {
             var eventId = extractEventId(payload);
             deadLetterWriter.write(eventId, brokerType, topic, payload, parseError.getMessage());
             LOG.warnf(parseError, "Audit consumer: dead-lettered unparseable envelope from %s/%s", brokerType, topic);
-            return;
         }
-
-        if (envelope.level() == AuditLevel.RECORD) {
-            coldStore.write(envelope);
-            return;
-        }
-        writer.insertProcessEvent(envelope);
     }
 
     private String extractEventId(String payload) {

@@ -14,6 +14,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -79,6 +80,18 @@ class AuditEventWriterTest {
         writer.insertProcessEvent(process(eventId));
         writer.insertProcessEvent(process(eventId)); // reentrega at-least-once
         assertEquals(1, count());
+    }
+
+    @Test
+    void persistsProcessEventsInBatch() throws Exception {
+        var repeated = UUID.randomUUID().toString();
+        writer.insertProcessEvents(List.of(
+                process(UUID.randomUUID().toString()),
+                process(UUID.randomUUID().toString()),
+                process(repeated),
+                process(repeated)
+        ));
+        assertEquals(3, count());
     }
 
     private int count() throws SQLException {

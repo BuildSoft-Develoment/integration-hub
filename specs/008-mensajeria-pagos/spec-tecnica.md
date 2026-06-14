@@ -365,6 +365,13 @@ Outputs:
 - `pay-mt101.records`: por mensaje `{sendersReference, archiveId?, envelopeId?, uetr, status, gatewayReference, attempts, lastError}`.
 - `pay-mt101.errors`: mensajes fallidos definitivamente.
 
+Regla de aceptacion del transporte:
+
+- `MT101_PAY` considera enviado solo cuando `TransportResult.accepted()` es
+  `true`. La ausencia de `lastError` no equivale a aceptacion. Si el transporte
+  responde `accepted=false`, el fragmento/archivo se marca `REJECTED` aunque no
+  exista mensaje de error legible.
+
 ### MT101_STATUS
 
 Primer consumidor productivo del SPI M-2 (`SuspendableTaskProvider`). Tres modos:
@@ -741,6 +748,15 @@ El read-model de consulta es `audit_record_event`, indexado por `traceId`,
 `recordId`, `sourceFileHash+recordNumber`, `paymentReference`, `transactionReference`,
 `uetr`, `archiveId`, `gatewayReference` y `businessKeyHash`. La UI consume
 `GET /api/query/record-lineage`; no se conecta al broker.
+
+Para flujo masivo desde staging, la UI de observabilidad tambien consume
+`GET /api/query/mt101-fragments/source-row`. El endpoint recibe `recordNumber`
+y opcionalmente `sourceTable`, `processExecutionId`, `fragmentSetId` y
+`connectionRef`; devuelve `fragmentSetId`, rango de filas, `fragmentIndex`,
+`fragmentTotal`, `sendersReference` (`:20:`), estado y error. La tabla
+`mt101_build_fragment` debe tener indices por `source_table`/rango de filas y
+por `process_execution_id` para soportar diagnostico sobre lotes de millones de
+registros.
 
 ## Consideraciones tecnicas
 

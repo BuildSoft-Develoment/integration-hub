@@ -10,6 +10,7 @@ import redis.clients.jedis.JedisPoolConfig;
 import redis.clients.jedis.StreamEntryID;
 import redis.clients.jedis.params.XReadParams;
 
+import java.util.ArrayList;
 import java.util.Map;
 
 /**
@@ -56,15 +57,21 @@ public class RedisAuditEventConsumer {
             if (entries == null || entries.isEmpty()) {
                 return;
             }
+            var payloads = new ArrayList<String>(batchSize);
+            var newestId = lastId;
             for (var stream : entries) {
                 for (var entry : stream.getValue()) {
                     var payload = entry.getFields().get("payload");
                     if (payload != null) {
-                        handler.handle(payload, "REDIS", topic);
+                        payloads.add(payload);
                     }
-                    lastId = entry.getID();
+                    newestId = entry.getID();
                 }
             }
+            if (!payloads.isEmpty()) {
+                handler.handleBatch(payloads, "REDIS", topic);
+            }
+            lastId = newestId;
         } catch (RuntimeException error) {
             throw new IllegalStateException("Redis audit consumer failed", error);
         }

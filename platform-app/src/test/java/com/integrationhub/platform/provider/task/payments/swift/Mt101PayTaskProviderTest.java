@@ -181,6 +181,28 @@ class Mt101PayTaskProviderTest {
     }
 
     @Test
+    void treatsNotAcceptedWithoutErrorAsRejected() {
+        var transport = new StubTransport("REST", List.of(
+                new TransportResult(false, null, 1, 25L, null)
+        ));
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
+        var context = contextWith(List.of(sampleMessage("PROC-NACK")));
+
+        var result = provider.execute(context, Map.of(
+                "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records")
+        ));
+
+        assertFalse(result.success());
+        assertEquals(1, result.outputs().get("dispatchCount"));
+        assertEquals(0, result.outputs().get("sentCount"));
+        assertEquals(0, result.outputs().get("acceptedCount"));
+        assertEquals(1, result.outputs().get("rejectedCount"));
+        @SuppressWarnings("unchecked")
+        var records = (List<Map<String, Object>>) result.outputs().get("records");
+        assertEquals("REJECTED", records.get(0).get("status"));
+    }
+
+    @Test
     void capturesTransportExceptionAsRejection() {
         var transport = new StubTransport("REST", null) {
             @Override
