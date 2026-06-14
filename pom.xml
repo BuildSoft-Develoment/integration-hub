@@ -11,6 +11,7 @@
     <modules>
         <module>platform-contract</module>
         <module>platform-app</module>
+        <module>audit-consumer</module>
     </modules>
 
     <properties>

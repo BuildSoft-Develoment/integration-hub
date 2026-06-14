@@ -21,6 +21,11 @@ public class AuditEvent {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     public Long id;
 
+    // Identidad de la trama de auditoria: lo escribe el audit-consumer y permite
+    // deduplicar la entrega at-least-once del MQ.
+    @Column(name = "event_id", length = 64)
+    public String eventId;
+
     @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "process_execution_id")

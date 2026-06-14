@@ -1,0 +1,16 @@
+# Imagen JVM del audit-consumer (deployable independiente). Requiere `mvn -pl audit-consumer package`
+# previo (layout fast-jar en target/quarkus-app). Se construye desde docker-compose.
+FROM eclipse-temurin:25-jre
+
+ENV LANGUAGE='en_US:en'
+
+WORKDIR /work
+COPY --chmod=444 target/quarkus-app/lib/ /work/lib/
+COPY --chmod=444 target/quarkus-app/*.jar /work/
+COPY --chmod=444 target/quarkus-app/app/ /work/app/
+COPY --chmod=444 target/quarkus-app/quarkus/ /work/quarkus/
+
+EXPOSE 8082
+USER 185
+
+ENTRYPOINT ["java", "-jar", "/work/quarkus-run.jar"]
