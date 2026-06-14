@@ -15,6 +15,8 @@ import jakarta.transaction.Transactional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.UUID;
 
 /**
@@ -29,7 +31,7 @@ import java.util.UUID;
  * @trace spec auditoria-asincrona-mq
  */
 @ApplicationScoped
-public class AuditService {
+public class AuditService implements RecordAuditEmitter {
 
     private final JsonConfigurationMapper jsonConfigurationMapper;
     private final AuditSpoolRepository auditSpoolRepository;
@@ -84,6 +86,31 @@ public class AuditService {
         row.payload = jsonConfigurationMapper.toJson(envelope);
         row.spoolStatus = AuditSpool.PENDING;
         auditSpoolRepository.persist(row);
+    }
+
+    /**
+     * Emite auditoria a nivel de registro en lote (un solo JDBC batch al spool),
+     * fuera de la TX de negocio. Pensado para el flujo masivo (1M+): el provider
+     * acumula por pagina y delega aqui el insert batcheado.
+     */
+    @Override
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public void emitRecords(Collection<AuditEnvelope> envelopes) {
+        if (envelopes == null || envelopes.isEmpty()) {
+            return;
+        }
+        var rows = new ArrayList<AuditSpool>(envelopes.size());
+        for (var envelope : envelopes) {
+            var row = new AuditSpool();
+            row.eventId = envelope.eventId();
+            row.traceId = envelope.traceId();
+            row.topic = topic;
+            row.partitionKey = envelope.traceId();
+            row.payload = jsonConfigurationMapper.toJson(envelope);
+            row.spoolStatus = AuditSpool.PENDING;
+            rows.add(row);
+        }
+        auditSpoolRepository.persistBatch(rows);
     }
 
     private String traceIdFor(Long processExecutionId) {

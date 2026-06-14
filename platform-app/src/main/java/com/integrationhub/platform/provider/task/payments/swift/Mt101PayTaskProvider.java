@@ -1,5 +1,8 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.audit.AuditLevel;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
 import com.integrationhub.platform.spi.task.payments.TransportResult;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
@@ -11,10 +14,12 @@ import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Task provider {@code MT101_PAY}: itera la lista de {@link Mt101Message} consumida
@@ -49,23 +54,32 @@ public class Mt101PayTaskProvider implements TaskProvider {
     private final Instance<PaymentMessageTransport> transports;
     private final Mt101FragmentStore fragmentStore;
     private final Mt101ArchiveStatusUpdater archiveStatusUpdater;
+    private final RecordAuditEmitter recordAuditEmitter;
 
     @Inject
     public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports,
                                 Mt101FragmentStore fragmentStore,
-                                Mt101ArchiveStatusUpdater archiveStatusUpdater) {
+                                Mt101ArchiveStatusUpdater archiveStatusUpdater,
+                                RecordAuditEmitter recordAuditEmitter) {
         this.transports = transports;
         this.fragmentStore = fragmentStore;
         this.archiveStatusUpdater = archiveStatusUpdater;
+        this.recordAuditEmitter = recordAuditEmitter;
+    }
+
+    public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports,
+                                Mt101FragmentStore fragmentStore,
+                                Mt101ArchiveStatusUpdater archiveStatusUpdater) {
+        this(transports, fragmentStore, archiveStatusUpdater, null);
     }
 
     public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports,
                                 Mt101FragmentStore fragmentStore) {
-        this(transports, fragmentStore, null);
+        this(transports, fragmentStore, null, null);
     }
 
     public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports) {
-        this(transports, null, null);
+        this(transports, null, null, null);
     }
 
     @Override
@@ -94,6 +108,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 var rejectedTargets = new ArrayList<Mt101ArchiveStatusUpdater.StatusTarget>();
                 // Mapa de errores acotado a la pagina (no a la ejecucion completa).
                 var rejectedByRef = new LinkedHashMap<String, String>();
+                var pageAudit = new ArrayList<AuditEnvelope>(page.size());
                 for (var message : page) {
                     var lastError = dispatch(transport, configuration, message, accumulator);
                     var reference = message.sequenceA() == null ? null
@@ -108,7 +123,11 @@ public class Mt101PayTaskProvider implements TaskProvider {
                         rejectedByRef.put(reference, lastError);
                         rejectedTargets.add(archiveTarget(message));
                     }
+                    pageAudit.add(recordEnvelope(context, reference, lastError == null, lastError));
                 }
+                // Trazabilidad E2E por registro: una trama RECORD por fragmento,
+                // emitida en lote por pagina (un solo JDBC batch), fuera de la TX.
+                emitRecordAudit(pageAudit);
                 fragmentStore.markStatusBatch(fragmentSource, sentRefs, "SENT");
                 fragmentStore.markStatusBatch(fragmentSource, rejectedByRef, "REJECTED");
                 // H5: avanza el estado durable en mt101_archive (la tabla de
@@ -121,14 +140,19 @@ public class Mt101PayTaskProvider implements TaskProvider {
             var inputs = Mt101MessageInputResolver.readResolvedMessages(context, configuration, type(), fragmentStore);
             var sentArchiveIds = new LinkedHashMap<String, List<Long>>();
             var rejectedArchiveIds = new LinkedHashMap<String, List<Long>>();
+            var audit = new ArrayList<AuditEnvelope>(inputs.size());
             for (var input : inputs) {
                 var lastError = dispatch(transport, configuration, input, accumulator);
+                var reference = input.message() != null && input.message().sequenceA() != null
+                        ? input.message().sequenceA().sendersReference() : null;
                 if (lastError == null) {
                     collectArchiveId(configuration, input, sentArchiveIds);
                 } else {
                     collectArchiveId(configuration, input, rejectedArchiveIds);
                 }
+                audit.add(recordEnvelope(context, reference, lastError == null, lastError));
             }
+            emitRecordAudit(audit);
             syncArchiveIds(configuration, sentArchiveIds, "SENT");
             syncArchiveIds(configuration, rejectedArchiveIds, "REJECTED");
         }
@@ -160,6 +184,31 @@ public class Mt101PayTaskProvider implements TaskProvider {
         return accumulator.rejectedCount > 0
                 ? TaskResult.failure(summary, outputs)
                 : TaskResult.success(summary, outputs);
+    }
+
+    /** Construye la trama RECORD de despacho para un fragmento (traceId=ejecucion, recordId=:20:). */
+    private AuditEnvelope recordEnvelope(TaskContext context, String reference, boolean accepted, String error) {
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
+                reference,
+                AuditLevel.RECORD,
+                accepted ? "RECORD_SENT" : "RECORD_REJECTED",
+                accepted ? "SENT" : "REJECTED",
+                context.processExecutionId(),
+                context.taskDefinitionId(),
+                error,
+                null,
+                Map.of(),
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
+    }
+
+    /** Emite el lote de tramas RECORD si hay un emisor inyectado (no en tests unitarios). */
+    private void emitRecordAudit(List<AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
+        }
     }
 
     /** Despacha un mensaje y acumula el resultado. Devuelve lastError, o null si aceptado. */

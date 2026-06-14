@@ -1,5 +1,8 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.audit.AuditLevel;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
 import com.integrationhub.platform.spi.task.payments.TransportResult;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
@@ -57,6 +60,32 @@ class Mt101PayTaskProviderTest {
         assertEquals("GW-1", records.get(0).get("gatewayReference"));
         assertEquals("PROC-1", records.get(0).get("sendersReference"));
         assertEquals("GW-2", records.get(1).get("gatewayReference"));
+    }
+
+    @Test
+    void emitsRecordLevelAuditPerDispatch() {
+        // Fase 3: trazabilidad E2E por registro -> una trama RECORD por fragmento
+        // despachado (recordId = :20:), emitida en lote fuera de la TX de negocio.
+        var transport = new StubTransport("REST", List.of(
+                TransportResult.accepted("GW-1", 1, 100L),
+                TransportResult.accepted("GW-2", 1, 100L)
+        ));
+        var captured = new ArrayList<AuditEnvelope>();
+        RecordAuditEmitter emitter = captured::addAll;
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), null, null, emitter);
+        var context = contextWith(List.of(sampleMessage("PROC-1"), sampleMessage("PROC-2")));
+
+        provider.execute(context, Map.of(
+                "transport", "REST",
+                "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records"),
+                "rest", Map.of("url", "https://test.example/mt101")
+        ));
+
+        assertEquals(2, captured.size());
+        assertEquals(AuditLevel.RECORD, captured.get(0).level());
+        assertEquals("RECORD_SENT", captured.get(0).stage());
+        assertEquals("PROC-1", captured.get(0).recordId());
+        assertEquals("PROC-2", captured.get(1).recordId());
     }
 
     @Test
