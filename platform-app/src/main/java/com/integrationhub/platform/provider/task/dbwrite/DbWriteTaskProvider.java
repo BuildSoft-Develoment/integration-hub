@@ -2,10 +2,13 @@ package com.integrationhub.platform.provider.task.dbwrite;
 
 // @trace RF-002 (reingenieria: clase que implementa el/los RF en produccion)
 
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.provider.task.common.StoredProcedureRuntimeSupport;
 import com.integrationhub.platform.provider.task.common.TaskOutputSupport;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.source.SourcePayload;
@@ -14,13 +17,17 @@ import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @ApplicationScoped
 public class DbWriteTaskProvider implements BatchTaskProvider {
@@ -30,13 +37,23 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
     private final DataSource dataSource;
     private final JsonConfigurationMapper jsonConfigurationMapper;
     private final ConnectionPoolManager connectionPoolManager;
+    private final RecordAuditEmitter recordAuditEmitter;
+
+    @Inject
+    public DbWriteTaskProvider(DataSource dataSource,
+                               JsonConfigurationMapper jsonConfigurationMapper,
+                               ConnectionPoolManager connectionPoolManager,
+                               RecordAuditEmitter recordAuditEmitter) {
+        this.dataSource = dataSource;
+        this.jsonConfigurationMapper = jsonConfigurationMapper;
+        this.connectionPoolManager = connectionPoolManager;
+        this.recordAuditEmitter = recordAuditEmitter;
+    }
 
     public DbWriteTaskProvider(DataSource dataSource,
                                JsonConfigurationMapper jsonConfigurationMapper,
                                ConnectionPoolManager connectionPoolManager) {
-        this.dataSource = dataSource;
-        this.jsonConfigurationMapper = jsonConfigurationMapper;
-        this.connectionPoolManager = connectionPoolManager;
+        this(dataSource, jsonConfigurationMapper, connectionPoolManager, null);
     }
 
     @Override
@@ -156,25 +173,58 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
         // que un indice local repetiria 0..N-1 en cada llamada y la auditoria
         // perderia la posicion real del registro dentro del archivo.
         var globalIndex = stagingIndexCounter(context);
+        var sourceName = sourcePayload != null ? sourcePayload.name() : null;
+        var auditBuffer = new ArrayList<AuditEnvelope>(batchSize);
         try (Connection connection = targetDataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             var written = 0;
             for (var record : records) {
+                var index = globalIndex.getAndIncrement();
                 statement.setLong(1, context.processExecutionId());
                 statement.setLong(2, context.taskDefinitionId());
-                statement.setString(3, sourcePayload != null ? sourcePayload.name() : null);
-                statement.setLong(4, globalIndex.getAndIncrement());
+                statement.setString(3, sourceName);
+                statement.setLong(4, index);
                 statement.setString(5, jsonConfigurationMapper.toJson(record.values()));
                 statement.addBatch();
+                // INGESTED: primer punto donde una fila origen (xls/csv/txt/...) se vuelve
+                // un registro trazable. recordId = archivo:indice; traceId = ejecucion.
+                auditBuffer.add(ingestedEnvelope(context, sourceName, index));
                 written++;
                 if (written % batchSize == 0) {
                     statement.executeBatch();
+                    emitRecordAudit(auditBuffer);
+                    auditBuffer.clear();
                 }
             }
             statement.executeBatch();
+            emitRecordAudit(auditBuffer);
             return written;
         } catch (SQLException e) {
             throw new IllegalStateException("Cannot batch insert staging records", e);
+        }
+    }
+
+    private AuditEnvelope ingestedEnvelope(TaskContext context, String sourceName, long index) {
+        var recordId = (sourceName == null ? "" : sourceName + ":") + index;
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
+                recordId,
+                AuditLevel.RECORD,
+                "RECORD_INGESTED",
+                "INGESTED",
+                context.processExecutionId(),
+                context.taskDefinitionId(),
+                sourceName,
+                null,
+                Map.of(),
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
+    }
+
+    private void emitRecordAudit(List<AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
         }
     }
 
