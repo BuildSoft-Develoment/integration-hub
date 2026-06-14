@@ -13,6 +13,8 @@ import jakarta.jms.TextMessage;
 import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import java.util.Optional;
+
 /**
  * Conector JMS (Artemis) del SPI de mensajeria. Cliente raw con conexion lazy:
  * solo conecta si {@code audit.broker.type=JMS}. Envia a una cola homonima del
@@ -29,14 +31,16 @@ public class JmsMessageBrokerProvider implements MessageBrokerProvider {
 
     private volatile Connection connection;
 
+    // Optional<String>: SmallRye Config trata un String vacio como "ausente" y rompe el
+    // boot si se usa defaultValue="". Con Optional, credenciales ausentes = anonimo.
     @Inject
     public JmsMessageBrokerProvider(
             @ConfigProperty(name = "jms.url", defaultValue = "tcp://localhost:61616") String url,
-            @ConfigProperty(name = "jms.username", defaultValue = "") String username,
-            @ConfigProperty(name = "jms.password", defaultValue = "") String password) {
+            @ConfigProperty(name = "jms.username") Optional<String> username,
+            @ConfigProperty(name = "jms.password") Optional<String> password) {
         this.url = url;
-        this.username = username;
-        this.password = password;
+        this.username = username.filter(value -> !value.isBlank()).orElse(null);
+        this.password = password.orElse(null);
     }
 
     @Override

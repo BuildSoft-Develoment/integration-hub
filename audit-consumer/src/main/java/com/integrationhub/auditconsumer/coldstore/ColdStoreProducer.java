@@ -5,6 +5,7 @@ import jakarta.enterprise.inject.Produces;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import javax.sql.DataSource;
+import java.util.Optional;
 
 /**
  * Selecciona el backend del store frio por {@code audit.cold-store.type}
@@ -21,9 +22,10 @@ public class ColdStoreProducer {
             @ConfigProperty(name = "audit.cold-store.type", defaultValue = "POSTGRES") String type,
             @ConfigProperty(name = "clickhouse.url", defaultValue = "jdbc:clickhouse://localhost:8123/default") String clickhouseUrl,
             @ConfigProperty(name = "clickhouse.username", defaultValue = "default") String clickhouseUser,
-            @ConfigProperty(name = "clickhouse.password", defaultValue = "") String clickhousePassword) {
+            // Optional: SmallRye rechaza convertir un String vacio (defaultValue="") y rompe el boot.
+            @ConfigProperty(name = "clickhouse.password") Optional<String> clickhousePassword) {
         if ("CLICKHOUSE".equalsIgnoreCase(type)) {
-            return new ClickHouseColdStore(clickhouseUrl, clickhouseUser, clickhousePassword);
+            return new ClickHouseColdStore(clickhouseUrl, clickhouseUser, clickhousePassword.orElse(""));
         }
         return new PostgresColdStore(dataSource);
     }

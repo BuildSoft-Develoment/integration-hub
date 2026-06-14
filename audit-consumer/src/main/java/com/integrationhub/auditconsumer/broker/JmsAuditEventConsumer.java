@@ -10,6 +10,8 @@ import jakarta.jms.TextMessage;
 import org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import java.util.Optional;
+
 /**
  * Consumer JMS/Artemis opcional del contrato de auditoria. Usa cola persistente
  * homonima al topic logico.
@@ -34,15 +36,16 @@ public class JmsAuditEventConsumer {
             @ConfigProperty(name = "audit.topic", defaultValue = "audit-events") String topic,
             @ConfigProperty(name = "audit.consumer.batch-size", defaultValue = "200") int batchSize,
             @ConfigProperty(name = "jms.url", defaultValue = "tcp://localhost:61616") String url,
-            @ConfigProperty(name = "jms.username", defaultValue = "") String username,
-            @ConfigProperty(name = "jms.password", defaultValue = "") String password) {
+            // Optional: SmallRye rechaza convertir un String vacio (defaultValue="") y rompe el boot.
+            @ConfigProperty(name = "jms.username") Optional<String> username,
+            @ConfigProperty(name = "jms.password") Optional<String> password) {
         this.handler = handler;
         this.brokerType = brokerType;
         this.topic = topic;
         this.batchSize = batchSize;
         this.url = url;
-        this.username = username;
-        this.password = password;
+        this.username = username.filter(value -> !value.isBlank()).orElse(null);
+        this.password = password.orElse(null);
     }
 
     @Scheduled(every = "{audit.consumer.poll.every}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
