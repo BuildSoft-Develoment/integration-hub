@@ -1,9 +1,12 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.provider.task.dbwrite.DbTaskSupport;
 import com.integrationhub.platform.repository.payments.swift.Mt101StagingRecordRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
@@ -15,10 +18,12 @@ import jakarta.transaction.Transactional;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Construye MT101 desde una tabla staging sin cargar todo el archivo en memoria.
@@ -64,6 +69,7 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     private final Mt101BuildTaskProvider buildTaskProvider;
     private final Mt101FragmentStore fragmentStore;
     private final Mt101StagingRecordRepository stagingRepository;
+    private final RecordAuditEmitter recordAuditEmitter;
 
     @Inject
     public Mt101BuildFromTableTaskProvider(DataSource defaultDataSource,
@@ -71,13 +77,25 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                                            JsonConfigurationMapper jsonConfigurationMapper,
                                            Mt101BuildTaskProvider buildTaskProvider,
                                            Mt101FragmentStore fragmentStore,
-                                           Mt101StagingRecordRepository stagingRepository) {
+                                           Mt101StagingRecordRepository stagingRepository,
+                                           RecordAuditEmitter recordAuditEmitter) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.jsonConfigurationMapper = jsonConfigurationMapper;
         this.buildTaskProvider = buildTaskProvider;
         this.fragmentStore = fragmentStore;
         this.stagingRepository = stagingRepository;
+        this.recordAuditEmitter = recordAuditEmitter;
+    }
+
+    public Mt101BuildFromTableTaskProvider(DataSource defaultDataSource,
+                                           ConnectionPoolManager connectionPoolManager,
+                                           JsonConfigurationMapper jsonConfigurationMapper,
+                                           Mt101BuildTaskProvider buildTaskProvider,
+                                           Mt101FragmentStore fragmentStore,
+                                           Mt101StagingRecordRepository stagingRepository) {
+        this(defaultDataSource, connectionPoolManager, jsonConfigurationMapper, buildTaskProvider,
+                fragmentStore, stagingRepository, null);
     }
 
     public Mt101BuildFromTableTaskProvider(DataSource defaultDataSource,
@@ -86,7 +104,31 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                                            Mt101BuildTaskProvider buildTaskProvider,
                                            Mt101FragmentStore fragmentStore) {
         this(defaultDataSource, connectionPoolManager, jsonConfigurationMapper, buildTaskProvider,
-                fragmentStore, new Mt101StagingRecordRepository());
+                fragmentStore, new Mt101StagingRecordRepository(), null);
+    }
+
+    /** Trama RECORD de construccion por fragmento (traceId=ejecucion, recordId=:20:). */
+    private AuditEnvelope recordEnvelope(TaskContext context, String reference) {
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
+                reference,
+                AuditLevel.RECORD,
+                "RECORD_BUILT",
+                "BUILT",
+                context.processExecutionId(),
+                context.taskDefinitionId(),
+                null,
+                null,
+                Map.of(),
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
+    }
+
+    private void emitRecordAudit(List<AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
+        }
     }
 
     @Override
@@ -154,6 +196,7 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
         var totalFragments = plan.size();
         var totalBytes = 0L;
         var insertBuffer = new ArrayList<Mt101FragmentStore.FragmentInsert>(INSERT_BATCH_SIZE);
+        var auditBuffer = new ArrayList<AuditEnvelope>(INSERT_BATCH_SIZE);
         try (var readConnection = source.dataSource().getConnection()) {
             for (int index = 1; index <= totalFragments; index++) {
                 var boundary = plan.get(index - 1);
@@ -176,15 +219,20 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                         index,
                         totalFragments,
                         message));
+                auditBuffer.add(recordEnvelope(context, message.sequenceA() == null
+                        ? null : message.sequenceA().sendersReference()));
                 if (insertBuffer.size() >= INSERT_BATCH_SIZE) {
                     fragmentStore.insertFragments(source.connectionRef(), new ArrayList<>(insertBuffer));
                     insertBuffer.clear();
+                    emitRecordAudit(auditBuffer);
+                    auditBuffer.clear();
                 }
             }
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot materialize MT101 fragments from " + source.table(), error);
         }
         fragmentStore.insertFragments(source.connectionRef(), insertBuffer);
+        emitRecordAudit(auditBuffer);
 
         var fragments = fragmentStore.source(source.connectionRef(), fragmentSetId, totalFragments);
         var outputs = new LinkedHashMap<String, Object>();
