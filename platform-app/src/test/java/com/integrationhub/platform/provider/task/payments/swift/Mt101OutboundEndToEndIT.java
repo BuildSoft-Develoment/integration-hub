@@ -354,6 +354,7 @@ class Mt101OutboundEndToEndIT {
                     " status varchar(20) not null default 'PENDING'," +
                     " format char(4)," +
                     " created_at timestamp not null default current_timestamp," +
+                    " updated_at timestamp not null default current_timestamp," +
                     " retention_until date)");
             statement.executeUpdate(
                     "create table mt101_transaction (" +

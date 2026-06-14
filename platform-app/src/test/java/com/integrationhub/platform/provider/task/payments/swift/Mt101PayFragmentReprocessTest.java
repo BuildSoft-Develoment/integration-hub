@@ -76,7 +76,8 @@ class Mt101PayFragmentReprocessTest {
         var result = provider.execute(contextWith(fragmentSource), payConfig(1));
 
         assertFalse(result.success(), "un rechazo de banco debe hacer fallar la tarea PAY");
-        assertEquals(2, result.outputs().get("sentCount"));
+        assertEquals(2, result.outputs().get("dispatchCount"));
+        assertEquals(1, result.outputs().get("sentCount"));
         assertEquals(1, result.outputs().get("acceptedCount"));
         assertEquals(1, result.outputs().get("rejectedCount"));
         assertEquals(List.of("F1", "F3"), transport.receivedReferences(),
@@ -105,6 +106,7 @@ class Mt101PayFragmentReprocessTest {
         var result = provider.execute(contextWith(retrySource), payConfig(50));
 
         assertTrue(result.success(), () -> "expected retry to pass: " + result.details());
+        assertEquals(1, result.outputs().get("dispatchCount"));
         assertEquals(1, result.outputs().get("sentCount"));
         assertEquals(List.of("F2"), transport.receivedReferences(),
                 "reproceso explicito debe tomar solo fragmentos REJECTED");

@@ -360,7 +360,7 @@ export class ProcessTaskBindingContextService {
       MT101_BUILD: ['builtCount', 'messageCount', 'transactionCount'],
       MT101_VALIDATE: ['validCount', 'invalidCount', 'issueCount'],
       MT101_ARCHIVE: ['archivedCount', 'targetTable'],
-      MT101_PAY: ['sentCount', 'acceptedCount', 'rejectedCount', 'retriedCount', 'transport'],
+      MT101_PAY: ['dispatchCount', 'sentCount', 'acceptedCount', 'rejectedCount', 'retriedCount', 'transport'],
       MT101_ROUTE: ['routedCount', 'manualReviewCount'],
       MT101_RECONCILE: ['matchedCount', 'unmatchedCount', 'mismatchCount'],
       MT101_STATUS: ['updatedCount', 'pendingCount'],

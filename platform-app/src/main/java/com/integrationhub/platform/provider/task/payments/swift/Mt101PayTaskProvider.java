@@ -26,7 +26,7 @@ import java.util.Map;
  * por archivo es lo comun). En slice 4+, cuando el motor exponga {@code per-record}
  * sobre objetos no-{@code ReadRecord}, el motor mismo iterara.</p>
  *
- * <p><b>Outputs</b>: {@code summary} (sentCount/acceptedCount/rejectedCount/retriedCount),
+ * <p><b>Outputs</b>: {@code summary} (dispatchCount/sentCount/acceptedCount/rejectedCount/retriedCount),
  * {@code records} (status por mensaje) y {@code errors} (mensajes rechazados con causa).</p>
  *
  * @trace spec 008-mensajeria-pagos RF-004, T-009
@@ -138,7 +138,8 @@ public class Mt101PayTaskProvider implements TaskProvider {
         }
 
         var outputs = new LinkedHashMap<String, Object>();
-        outputs.put("sentCount", accumulator.totalCount());
+        outputs.put("dispatchCount", accumulator.totalCount());
+        outputs.put("sentCount", accumulator.acceptedCount);
         outputs.put("acceptedCount", accumulator.acceptedCount);
         outputs.put("rejectedCount", accumulator.rejectedCount);
         outputs.put("retriedCount", accumulator.retriedCount);
@@ -151,7 +152,8 @@ public class Mt101PayTaskProvider implements TaskProvider {
         outputs.put("recordsSampled", accumulator.totalCount() > accumulator.sent.size());
 
         var summary = "MT101_PAY via " + transportId
-                + " sent=" + accumulator.totalCount()
+                + " dispatch=" + accumulator.totalCount()
+                + " sent=" + accumulator.acceptedCount
                 + " accepted=" + accumulator.acceptedCount
                 + " rejected=" + accumulator.rejectedCount
                 + " retried=" + accumulator.retriedCount;

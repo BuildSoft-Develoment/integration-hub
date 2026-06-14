@@ -43,6 +43,7 @@ class Mt101PayTaskProviderTest {
         ));
 
         assertTrue(result.success());
+        assertEquals(2, result.outputs().get("dispatchCount"));
         assertEquals(2, result.outputs().get("sentCount"));
         assertEquals(2, result.outputs().get("acceptedCount"));
         assertEquals(0, result.outputs().get("rejectedCount"));
@@ -80,7 +81,8 @@ class Mt101PayTaskProviderTest {
                 "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records"),
                 "rest", Map.of("url", "https://test.example/mt101")));
 
-        assertEquals(5, result.outputs().get("sentCount"), "conteo exacto");
+        assertEquals(5, result.outputs().get("dispatchCount"), "conteo exacto");
+        assertEquals(5, result.outputs().get("sentCount"), "enviados aceptados");
         assertEquals(5, result.outputs().get("acceptedCount"));
         assertEquals(Boolean.TRUE, result.outputs().get("recordsSampled"));
         @SuppressWarnings("unchecked")
@@ -137,6 +139,8 @@ class Mt101PayTaskProviderTest {
         ));
 
         assertFalse(result.success());
+        assertEquals(2, result.outputs().get("dispatchCount"));
+        assertEquals(1, result.outputs().get("sentCount"));
         assertEquals(1, result.outputs().get("acceptedCount"));
         assertEquals(1, result.outputs().get("rejectedCount"));
 

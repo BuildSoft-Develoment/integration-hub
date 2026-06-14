@@ -93,16 +93,15 @@ public class FtpSourceProvider implements SourceProvider {
 
             // Streaming a archivo temporal (no byte[]) para no presionar el heap
             // con archivos grandes; el reader lo lee por lotes desde disco.
-            var tempFile = TempFileSourcePayload.createTempFile(selectedFile.name());
-            try (var fileOut = java.nio.file.Files.newOutputStream(tempFile)) {
-                boolean retrieved = ftpClient.retrieveFile(selectedFile.location(), fileOut);
-                if (!retrieved) {
-                    java.nio.file.Files.deleteIfExists(tempFile);
-                    throw new IllegalStateException("Cannot retrieve FTP file: " + selectedFile.location());
+            return TempFileSourcePayload.fromDownloadedTemp(selectedFile.name(), selectedFile.location(), tempFile -> {
+                try (var fileOut = java.nio.file.Files.newOutputStream(tempFile)) {
+                    boolean retrieved = ftpClient.retrieveFile(selectedFile.location(), fileOut);
+                    if (!retrieved) {
+                        throw new IOException("Cannot retrieve FTP file: " + selectedFile.location());
+                    }
                 }
-            }
-            return TempFileSourcePayload.of(selectedFile.name(), selectedFile.location(),
-                    selectedFile.mediaType(), tempFile);
+                return selectedFile.mediaType();
+            });
         } catch (IOException e) {
             throw new IllegalStateException("Cannot read file from FTP source", e);
         } finally {

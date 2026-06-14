@@ -14,6 +14,7 @@ export interface SourceDraft {
   privateKeyPath?: string;
   passphrase?: string;
   strictHostKeyChecking?: boolean;
+  knownHostsPath?: string;
   passiveMode?: boolean;
   timeoutMillis?: string;
   timeoutSeconds?: string;

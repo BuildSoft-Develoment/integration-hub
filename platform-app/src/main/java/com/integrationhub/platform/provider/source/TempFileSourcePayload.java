@@ -45,6 +45,26 @@ public final class TempFileSourcePayload {
         return new SourcePayload(file, () -> selfDeletingStream(path));
     }
 
+    /**
+     * Crea un archivo temporal, deja que el caller lo llene en streaming y lo
+     * elimina si la descarga falla antes de devolver el {@link SourcePayload}.
+     */
+    public static SourcePayload fromDownloadedTemp(String name,
+                                                   String location,
+                                                   TempFileDownloader downloader) throws IOException {
+        var path = createTempFile(name);
+        try {
+            var mediaType = downloader.download(path);
+            return of(name, location, mediaType, path);
+        } catch (Exception error) {
+            Files.deleteIfExists(path);
+            if (error instanceof IOException ioError) {
+                throw ioError;
+            }
+            throw new IOException("Cannot download source payload to temporary file", error);
+        }
+    }
+
     private static InputStream selfDeletingStream(Path path) throws IOException {
         return new FilterInputStream(Files.newInputStream(path)) {
             @Override
@@ -56,5 +76,10 @@ public final class TempFileSourcePayload {
                 }
             }
         };
+    }
+
+    @FunctionalInterface
+    public interface TempFileDownloader {
+        String download(Path path) throws Exception;
     }
 }

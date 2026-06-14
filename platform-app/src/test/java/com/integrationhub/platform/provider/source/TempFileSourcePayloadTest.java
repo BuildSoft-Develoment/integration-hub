@@ -5,10 +5,12 @@ import org.junit.jupiter.api.Test;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -55,5 +57,21 @@ class TempFileSourcePayloadTest {
         } finally {
             Files.deleteIfExists(temp);
         }
+    }
+
+    @Test
+    void deletesTempFileWhenDownloadFailsBeforePayloadIsReturned() {
+        var created = new AtomicReference<Path>();
+
+        assertThrows(java.io.IOException.class, () -> TempFileSourcePayload.fromDownloadedTemp(
+                "fallido.csv",
+                "sftp://host/fallido.csv",
+                temp -> {
+                    created.set(temp);
+                    Files.writeString(temp, "partial");
+                    throw new java.io.IOException("download failed");
+                }));
+
+        assertFalse(Files.exists(created.get()), "el temporal parcial se elimina si falla la descarga");
     }
 }

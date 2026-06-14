@@ -226,12 +226,14 @@ error. Cada etapa lee SOLO los estados que su gate permite
   `:20:`.
 - La sincronizacion durable se separa por capas: PAY, STATUS y RECONCILE llaman
   a `Mt101ArchiveStatusUpdater` como servicio de dominio, y el SQL de lifecycle
-  vive en `Mt101ArchiveStatusRepository`. El repository soporta tablas migradas
-  con `updated_at` y hace fallback a `status` cuando una tabla legacy/custom no
-  tiene esa columna.
+  vive en `Mt101ArchiveStatusRepository`. Sin fallback: toda tabla MT101 usada
+  para lifecycle debe cumplir el contrato migrado (`status`, `updated_at`);
+  si falta `updated_at`, la tarea falla rapido y debe corregirse la tabla.
 - `MT101_ARCHIVE`/`MT101_PAY` publican una MUESTRA acotada en `records`/`errors`
   (`maxRecordsInOutput`, default 1000) con `recordsSampled` cuando hay recorte;
-  los conteos (`archivedCount`/`sentCount`/...) son siempre exactos. El detalle
+  los conteos (`archivedCount`/`dispatchCount`/`sentCount`/...) son siempre
+  exactos. En `MT101_PAY`, `dispatchCount` representa mensajes procesados por el
+  transporte y `sentCount` representa mensajes aceptados por el canal. El detalle
   completo se consulta en `mt101_build_fragment`/`mt101_archive`.
 - `:20:` por defecto es `${batchCode}${messageIndex}` (batchCode = base36 del
   processExecutionId): unico por ejecucion Y por fragmento, evitando colision
@@ -357,7 +359,9 @@ Outputs:
 
 Outputs:
 
-- `pay-mt101.summary`: `{sentCount, acceptedCount, rejectedCount, retriedCount, totalDurationMs}`.
+- `pay-mt101.summary`: `{dispatchCount, sentCount, acceptedCount, rejectedCount, retriedCount, totalDurationMs}`.
+  `dispatchCount` es el total procesado por el transporte; `sentCount` equivale
+  a mensajes aceptados por el canal/gateway (`acceptedCount`).
 - `pay-mt101.records`: por mensaje `{sendersReference, archiveId?, envelopeId?, uetr, status, gatewayReference, attempts, lastError}`.
 - `pay-mt101.errors`: mensajes fallidos definitivamente.
 

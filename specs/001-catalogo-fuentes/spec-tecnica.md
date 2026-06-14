@@ -41,7 +41,8 @@ Bloque comun de seleccion de archivo (aplica a `filesystem`/`ftp`/`sftp`, opcion
 // type "sftp"  (port default 22)
 { "host": "192.168.1.100", "port": 22, "username": "user", "password": "${secret:sftp}",
   "remotePath": "/in", "privateKeyPath": "/keys/id_rsa", "passphrase": "${secret:pass}",
-  "strictHostKeyChecking": false, "timeoutMillis": 15000, "mediaType": "text/csv" }
+  "strictHostKeyChecking": true, "knownHostsPath": "/etc/ssh/ssh_known_hosts",
+  "timeoutMillis": 15000, "mediaType": "text/csv" }
 
 // type "rest"  (method default GET; authType: '' | basic | bearer)
 { "url": "https://api.demo/files", "method": "GET", "authType": "bearer", "token": "${secret:token}",

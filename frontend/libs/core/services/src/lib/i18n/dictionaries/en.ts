@@ -272,6 +272,7 @@ export const en = {
   'ui.privateKeyPath': 'Private key path',
   'ui.passphrase': 'Passphrase',
   'ui.strictHostKeyChecking': 'Strict host key checking',
+  'ui.knownHostsPath': 'Known hosts path',
   'ui.url': 'URL',
   'ui.method': 'Method',
   'ui.authType': 'Auth type',

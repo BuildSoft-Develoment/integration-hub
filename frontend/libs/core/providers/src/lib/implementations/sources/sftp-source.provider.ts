@@ -29,7 +29,8 @@ export class SftpSourceProvider extends SourceProvider {
       privateKeyPath: '',
       passphrase: '',
       timeoutMillis: '15000',
-      strictHostKeyChecking: false,
+      strictHostKeyChecking: true,
+      knownHostsPath: '',
       mediaType: '',
     };
   }
@@ -51,7 +52,8 @@ export class SftpSourceProvider extends SourceProvider {
       privateKeyPath: String(configuration['privateKeyPath'] ?? ''),
       passphrase: String(configuration['passphrase'] ?? ''),
       timeoutMillis: String(configuration['timeoutMillis'] ?? defaults.timeoutMillis ?? '15000'),
-      strictHostKeyChecking: Boolean(configuration['strictHostKeyChecking'] ?? defaults.strictHostKeyChecking),
+      strictHostKeyChecking: this.readBoolean(configuration['strictHostKeyChecking'], true),
+      knownHostsPath: String(configuration['knownHostsPath'] ?? ''),
       mediaType: String(configuration['mediaType'] ?? ''),
     };
   }
@@ -71,7 +73,21 @@ export class SftpSourceProvider extends SourceProvider {
       ...(draft.passphrase ? { passphrase: draft.passphrase } : {}),
       timeoutMillis: Number(draft.timeoutMillis || 15000),
       strictHostKeyChecking: Boolean(draft.strictHostKeyChecking),
+      ...(draft.knownHostsPath ? { knownHostsPath: draft.knownHostsPath } : {}),
       ...(draft.mediaType ? { mediaType: draft.mediaType } : {}),
     };
+  }
+
+  private readBoolean(value: unknown, defaultValue: boolean): boolean {
+    if (value === undefined || value === null || value === '') {
+      return defaultValue;
+    }
+    if (typeof value === 'boolean') {
+      return value;
+    }
+    if (typeof value === 'string') {
+      return value.toLowerCase() === 'true';
+    }
+    return Boolean(value);
   }
 }
