@@ -7,6 +7,7 @@ export const en = {
   'nav.connections': 'Connections',
   'nav.schedules': 'Schedules',
   'nav.audit': 'Audit',
+  'nav.recordLineage': 'Record lineage',
   'layout.login': 'Login',
   'layout.logout': 'Logout',
   'layout.roles': 'Roles',

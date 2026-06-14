@@ -8,6 +8,7 @@ export const es = {
   'nav.connections': 'Conexiones',
   'nav.schedules': 'Schedules',
   'nav.audit': 'Auditoria',
+  'nav.recordLineage': 'Trazabilidad de registro',
   'layout.login': 'Ingresar',
   'layout.logout': 'Salir',
   'layout.roles': 'Roles',

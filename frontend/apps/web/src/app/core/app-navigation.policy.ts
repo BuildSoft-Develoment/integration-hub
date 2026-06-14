@@ -57,4 +57,10 @@ export const APP_NAVIGATION_DEFINITIONS: readonly AppNavigationItem[] = [
     labelKey: 'nav.audit',
     requiredCapability: APP_SECTION_CAPABILITIES.audit,
   },
+  {
+    id: 'recordLineage',
+    route: '/audit/record-lineage',
+    labelKey: 'nav.recordLineage',
+    requiredCapability: APP_SECTION_CAPABILITIES.audit,
+  },
 ];
