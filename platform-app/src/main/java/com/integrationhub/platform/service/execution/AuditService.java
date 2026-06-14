@@ -37,13 +37,17 @@ public class AuditService implements RecordAuditEmitter {
     private final AuditSpoolRepository auditSpoolRepository;
     private final String topic;
 
+    private final boolean recordLevelEnabled;
+
     @Inject
     public AuditService(JsonConfigurationMapper jsonConfigurationMapper,
                         AuditSpoolRepository auditSpoolRepository,
-                        @ConfigProperty(name = "audit.topic", defaultValue = "audit-events") String topic) {
+                        @ConfigProperty(name = "audit.topic", defaultValue = "audit-events") String topic,
+                        @ConfigProperty(name = "audit.record-level.enabled", defaultValue = "true") boolean recordLevelEnabled) {
         this.jsonConfigurationMapper = jsonConfigurationMapper;
         this.auditSpoolRepository = auditSpoolRepository;
         this.topic = topic;
+        this.recordLevelEnabled = recordLevelEnabled;
     }
 
     public void record(ProcessExecution execution, ProcessTaskDefinition taskDefinition,
@@ -96,7 +100,7 @@ public class AuditService implements RecordAuditEmitter {
     @Override
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     public void emitRecords(Collection<AuditEnvelope> envelopes) {
-        if (envelopes == null || envelopes.isEmpty()) {
+        if (!recordLevelEnabled || envelopes == null || envelopes.isEmpty()) {
             return;
         }
         var rows = new ArrayList<AuditSpool>(envelopes.size());

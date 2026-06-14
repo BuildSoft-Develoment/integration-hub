@@ -16,7 +16,10 @@ public class IntegrationTestProfile implements QuarkusTestProfile {
                 // El datasource viene de PostgresTestResource (no dev service). Apagar dev services
                 // evita que las extensiones cloud (s3/gcs/azure-storage-blob) levanten emuladores
                 // (Azurite/LocalStack) en cada @QuarkusTest.
-                "quarkus.devservices.enabled", "false"
+                "quarkus.devservices.enabled", "false",
+                // La auditoria a nivel de registro a 1M genera ~1M tramas: se apaga en
+                // los IT (su volumen lo cubren tests unitarios) para no inflar el spool.
+                "audit.record-level.enabled", "false"
         );
     }
 }

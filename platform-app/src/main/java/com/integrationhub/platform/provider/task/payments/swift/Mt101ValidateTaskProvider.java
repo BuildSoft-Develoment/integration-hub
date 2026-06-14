@@ -4,8 +4,11 @@ import com.integrationhub.platform.spi.task.payments.ValidationIssue;
 import com.integrationhub.platform.spi.task.payments.ValidationPredicate;
 import com.integrationhub.platform.spi.task.payments.ValidationRuleProvider;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.repository.payments.swift.Mt101ValidationIssueRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -16,6 +19,7 @@ import jakarta.transaction.Transactional;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -23,6 +27,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.UUID;
 
 /**
  * Task provider {@code MT101_VALIDATE}: aplica los predicados activos del
@@ -71,18 +76,29 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
     private final Mt101ValidationIssueRepository issueRepository;
+    private final RecordAuditEmitter recordAuditEmitter;
 
     @Inject
     public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
                                      Mt101FragmentStore fragmentStore,
                                      DataSource defaultDataSource,
                                      ConnectionPoolManager connectionPoolManager,
-                                     Mt101ValidationIssueRepository issueRepository) {
+                                     Mt101ValidationIssueRepository issueRepository,
+                                     RecordAuditEmitter recordAuditEmitter) {
         this.ruleProviders = ruleProviders;
         this.fragmentStore = fragmentStore;
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.issueRepository = issueRepository;
+        this.recordAuditEmitter = recordAuditEmitter;
+    }
+
+    public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
+                                     Mt101FragmentStore fragmentStore,
+                                     DataSource defaultDataSource,
+                                     ConnectionPoolManager connectionPoolManager,
+                                     Mt101ValidationIssueRepository issueRepository) {
+        this(ruleProviders, fragmentStore, defaultDataSource, connectionPoolManager, issueRepository, null);
     }
 
     public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
@@ -90,7 +106,7 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
                                      DataSource defaultDataSource,
                                      ConnectionPoolManager connectionPoolManager) {
         this(ruleProviders, fragmentStore, defaultDataSource, connectionPoolManager,
-                new Mt101ValidationIssueRepository());
+                new Mt101ValidationIssueRepository(), null);
     }
 
     public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
@@ -105,6 +121,30 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
     @Override
     public String type() {
         return "MT101_VALIDATE";
+    }
+
+    /** Trama RECORD de validacion por fragmento (traceId=ejecucion, recordId=:20:). */
+    private AuditEnvelope recordEnvelope(TaskContext context, String reference, boolean valid, String error) {
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
+                reference,
+                AuditLevel.RECORD,
+                valid ? "RECORD_VALIDATED" : "RECORD_REJECTED",
+                valid ? "VALIDATED" : "REJECTED",
+                context.processExecutionId(),
+                context.taskDefinitionId(),
+                error,
+                null,
+                Map.of(),
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
+    }
+
+    private void emitRecordAudit(List<AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
+        }
     }
 
     @Override
@@ -129,6 +169,7 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
                 var validatedRefs = new ArrayList<String>(page.size());
                 var rejectedByRef = new LinkedHashMap<String, String>();
                 var pageIssues = issueSink.enabled() ? new ArrayList<IssueRow>() : null;
+                var pageAudit = new ArrayList<AuditEnvelope>(page.size());
                 for (var message : page) {
                     var messageIssues = evaluateMessage(predicates, message);
                     var blocking = accumulator.add(messageIssues, failOn);
@@ -144,11 +185,14 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
                     }
                     if (blocking) {
                         rejectedByRef.put(reference, summarizeIssues(messageIssues));
+                        pageAudit.add(recordEnvelope(context, reference, false, summarizeIssues(messageIssues)));
                     } else {
                         validatedRefs.add(reference);
+                        pageAudit.add(recordEnvelope(context, reference, true, null));
                     }
                 }
                 persistIssueRows(issueSink, pageIssues);
+                emitRecordAudit(pageAudit);
                 fragmentStore.markStatusBatch(fragmentSource, validatedRefs, "VALIDATED");
                 fragmentStore.markStatusBatch(fragmentSource, rejectedByRef, "REJECTED");
             });

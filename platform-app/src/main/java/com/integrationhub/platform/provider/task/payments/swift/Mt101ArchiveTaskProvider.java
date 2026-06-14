@@ -1,10 +1,13 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.provider.task.payments.swift.archive.AesGcmPayloadEncryptor;
 import com.integrationhub.platform.provider.task.payments.swift.archive.PayloadEncryptor;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.integrationhub.platform.repository.payments.swift.Mt101ArchiveRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -18,11 +21,13 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Task provider {@code MT101_ARCHIVE}: persiste cada {@link Mt101Message} de la
@@ -48,22 +53,32 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
     private final ConnectionPoolManager connectionPoolManager;
     private final Mt101FragmentStore fragmentStore;
     private final Mt101ArchiveRepository archiveRepository;
+    private final RecordAuditEmitter recordAuditEmitter;
 
     @Inject
     public Mt101ArchiveTaskProvider(DataSource defaultDataSource,
                                     ConnectionPoolManager connectionPoolManager,
                                     Mt101FragmentStore fragmentStore,
-                                    Mt101ArchiveRepository archiveRepository) {
+                                    Mt101ArchiveRepository archiveRepository,
+                                    RecordAuditEmitter recordAuditEmitter) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.fragmentStore = fragmentStore;
         this.archiveRepository = archiveRepository;
+        this.recordAuditEmitter = recordAuditEmitter;
+    }
+
+    public Mt101ArchiveTaskProvider(DataSource defaultDataSource,
+                                    ConnectionPoolManager connectionPoolManager,
+                                    Mt101FragmentStore fragmentStore,
+                                    Mt101ArchiveRepository archiveRepository) {
+        this(defaultDataSource, connectionPoolManager, fragmentStore, archiveRepository, null);
     }
 
     public Mt101ArchiveTaskProvider(DataSource defaultDataSource,
                                     ConnectionPoolManager connectionPoolManager,
                                     Mt101FragmentStore fragmentStore) {
-        this(defaultDataSource, connectionPoolManager, fragmentStore, new Mt101ArchiveRepository());
+        this(defaultDataSource, connectionPoolManager, fragmentStore, new Mt101ArchiveRepository(), null);
     }
 
     public Mt101ArchiveTaskProvider(DataSource defaultDataSource,
@@ -74,6 +89,30 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
     @Override
     public String type() {
         return "MT101_ARCHIVE";
+    }
+
+    /** Trama RECORD de archivado por fragmento (traceId=ejecucion, recordId=:20:). */
+    private AuditEnvelope recordEnvelope(TaskContext context, String reference) {
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
+                reference,
+                AuditLevel.RECORD,
+                "RECORD_ARCHIVED",
+                "ARCHIVED",
+                context.processExecutionId(),
+                context.taskDefinitionId(),
+                null,
+                null,
+                Map.of(),
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
+    }
+
+    private void emitRecordAudit(List<AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
+        }
     }
 
     /**
@@ -111,18 +150,29 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
                 // Marcado por lote: 1 round-trip por pagina en vez de 1 UPDATE
                 // por fragmento.
                 var archivedRefs = new ArrayList<String>(page.size());
+                var pageAudit = new ArrayList<AuditEnvelope>(page.size());
                 for (var message : page) {
                     if (message.sequenceA() != null && message.sequenceA().sendersReference() != null) {
-                        archivedRefs.add(message.sequenceA().sendersReference());
+                        var reference = message.sequenceA().sendersReference();
+                        archivedRefs.add(reference);
+                        pageAudit.add(recordEnvelope(context, reference));
                     }
                 }
                 fragmentStore.markStatusBatch(fragmentSource, archivedRefs, "ARCHIVED");
+                emitRecordAudit(pageAudit);
             });
         } else {
             var messages = Mt101MessageInputResolver.readMessages(context, configuration, type(), fragmentStore);
             if (!messages.isEmpty()) {
                 archiveBatch(dataSource, encryptor, retentionDays, context, connectionRef,
                         messages, true, accumulator);
+                var audit = new ArrayList<AuditEnvelope>(messages.size());
+                for (var message : messages) {
+                    if (message.sequenceA() != null && message.sequenceA().sendersReference() != null) {
+                        audit.add(recordEnvelope(context, message.sequenceA().sendersReference()));
+                    }
+                }
+                emitRecordAudit(audit);
             }
         }
 
