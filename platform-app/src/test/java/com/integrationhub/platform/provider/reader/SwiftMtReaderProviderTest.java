@@ -183,4 +183,47 @@ class SwiftMtReaderProviderTest {
         assertTrue(beneficiary.contains("1/JUAN PEREZ LOPEZ"));
         assertTrue(beneficiary.contains("3/LIMA PE"));
     }
+
+    @Test
+    void readsMultipleConcatenatedMessagesPerFileInBatches() {
+        // Tres mensajes MT101 concatenados en un mismo archivo FIN (cada uno {1:..}).
+        var sb = new StringBuilder();
+        for (int m = 1; m <= 3; m++) {
+            sb.append("{1:F01SGOBFRPPAXXX0000000000}")
+              .append("{2:I101BCPLPEPLXXXXN}")
+              .append("{4:\r\n")
+              .append(":20:R-").append(m).append("\r\n")
+              .append(":28D:1/1\r\n")
+              .append(":30:260101\r\n")
+              .append(":21:T").append(m).append("A\r\n")
+              .append(":32B:PEN10,\r\n")
+              .append(":59:/000").append(m).append("\r\nBENEF ").append(m).append("\r\n")
+              .append(":71A:OUR\r\n")
+              .append(":21:T").append(m).append("B\r\n")
+              .append(":32B:PEN20,\r\n")
+              .append(":59:/111").append(m).append("\r\nBENEF2 ").append(m).append("\r\n")
+              .append(":71A:SHA\r\n")
+              .append("-}{5:{CHK:0}}");
+        }
+
+        var captured = new ArrayList<ReadBatch>();
+        // batchSize=2 -> 2 lotes (2 + 1) para 3 mensajes.
+        var result = reader.readInBatches(SourcePayload.fromBytes("multi-msg.fin",
+                sb.toString().getBytes(StandardCharsets.UTF_8), "application/x-swift"),
+                Map.of(), 2, captured::add);
+
+        assertEquals(3, result.recordCount(), "un record por mensaje SWIFT del archivo");
+        var allRecords = captured.stream().flatMap(b -> b.records().stream()).toList();
+        assertEquals(3, allRecords.size());
+        assertEquals(2, captured.size(), "batchSize=2 debe producir 2 lotes (2 + 1)");
+        for (int m = 1; m <= 3; m++) {
+            var record = allRecords.get(m - 1);
+            @SuppressWarnings("unchecked")
+            var seqA = (Map<String, String>) record.values().get("sequenceA");
+            @SuppressWarnings("unchecked")
+            var seqB = (List<Map<String, String>>) record.values().get("sequenceB");
+            assertEquals("R-" + m, seqA.get("20"));
+            assertEquals(2, seqB.size(), "cada mensaje tiene 2 transacciones");
+        }
+    }
 }
