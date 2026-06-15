@@ -62,7 +62,7 @@ public class SwiftInboundMessageRepository {
                                          List<String> statuses,
                                          long afterId,
                                          int pageSize) throws SQLException {
-        var sql = "select id, message_json from swift_inbound_message where inbound_set_id = ?"
+        var sql = "select id, message_json, routed_as from swift_inbound_message where inbound_set_id = ?"
                 + (statuses == null || statuses.isEmpty() ? "" : " and status in (" + placeholders(statuses.size()) + ")")
                 + " and id > ?"
                 + " order by id asc limit ?";
@@ -80,7 +80,7 @@ public class SwiftInboundMessageRepository {
             statement.setInt(parameter, pageSize);
             try (var rs = statement.executeQuery()) {
                 while (rs.next()) {
-                    page.add(new MessageJsonRow(rs.getLong(1), rs.getString(2)));
+                    page.add(new MessageJsonRow(rs.getLong(1), rs.getString(2), rs.getString(3)));
                 }
             }
         }
@@ -157,6 +157,6 @@ public class SwiftInboundMessageRepository {
     ) {
     }
 
-    public record MessageJsonRow(long id, String messageJson) {
+    public record MessageJsonRow(long id, String messageJson, String routedAs) {
     }
 }

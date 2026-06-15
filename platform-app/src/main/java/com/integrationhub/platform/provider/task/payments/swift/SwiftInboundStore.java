@@ -33,6 +33,7 @@ public class SwiftInboundStore {
     public static final int DEFAULT_PAGE_SIZE = 200;
     public static final List<String> READ_PARSED = List.of("PARSED");
     public static final List<String> READ_VALIDATED = List.of("VALIDATED");
+    public static final List<String> READ_ROUTED = List.of("ROUTED");
 
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
@@ -136,7 +137,7 @@ public class SwiftInboundStore {
                 var page = new ArrayList<InboundMessage>(rows.size());
                 for (var row : rows) {
                     afterId = row.id();
-                    page.add(new InboundMessage(row.id(), fromJson(row.messageJson())));
+                    page.add(new InboundMessage(row.id(), fromJson(row.messageJson()), row.routedAs()));
                 }
                 if (page.isEmpty()) {
                     return;
@@ -243,7 +244,7 @@ public class SwiftInboundStore {
     ) {
     }
 
-    /** Un mensaje leido del store, con su id para marcado por lote. */
-    public record InboundMessage(long id, Mt101Message message) {
+    /** Un mensaje leido del store, con su id (marcado por lote) y routed_as (sink final). */
+    public record InboundMessage(long id, Mt101Message message, String routedAs) {
     }
 }
