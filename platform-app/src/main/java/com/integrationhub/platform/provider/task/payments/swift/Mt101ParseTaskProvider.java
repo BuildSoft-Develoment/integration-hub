@@ -275,7 +275,10 @@ public class Mt101ParseTaskProvider implements BatchTaskProvider {
         // Convencion: option A/C/D tienen BIC en la siguiente linea (no en raw text);
         // option F/G/H/H tienen name+address. Heuristica: si option ∈ {A,C,D}, primer
         // line restante es BIC; sino, son lineas de nombre y direccion.
-        var isBicOption = option != null && "ACD".contains(option);
+        // Solo las opciones A/C/D llevan BIC en la primera linea. La opcion "" (:59: sin
+        // letra) es cuenta + nombre/direccion: NO debe poblar bic. Cuidado: "ACD".contains("")
+        // devuelve true en Java, asi que hay que excluir la cadena vacia explicitamente.
+        var isBicOption = option != null && !option.isEmpty() && "ACD".contains(option);
         if (isBicOption && !lines.isEmpty()) {
             bic = lines.remove(0).trim();
         }

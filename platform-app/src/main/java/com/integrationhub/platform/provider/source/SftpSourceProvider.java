@@ -21,7 +21,7 @@ import java.util.Map;
 import java.util.Properties;
 
 @ApplicationScoped
-@UnlessBuildProperty(name = "integrationhub.native.disable.sftp", stringValue = "true")
+@UnlessBuildProperty(name = "integrationhub.native.disable.sftp", stringValue = "true", enableIfMissing = true)
 public class SftpSourceProvider implements SourceProvider {
 
     @Override

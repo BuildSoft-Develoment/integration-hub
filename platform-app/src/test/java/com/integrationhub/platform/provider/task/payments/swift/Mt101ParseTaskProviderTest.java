@@ -72,6 +72,12 @@ class Mt101ParseTaskProviderTest {
         assertEquals("OUR", tx1.detailsOfCharges());
         assertNotNull(tx1.beneficiary());
         assertEquals("0072-987654321", tx1.beneficiary().account());
+        // :59 (sin opcion) = cuenta + nombre, sin BIC. Regresion: "ACD".contains("") es true
+        // en Java, por lo que la heuristica de BIC tomaba el nombre como bic. El nombre debe
+        // ir a nameAndAddress y el bic quedar nulo.
+        assertEquals("", tx1.beneficiary().option());
+        assertNull(tx1.beneficiary().bic(), ":59 sin opcion no debe poblar bic");
+        assertEquals(List.of("JUAN PEREZ"), tx1.beneficiary().nameAndAddress());
 
         var tx2 = message.transactions().get(1);
         assertEquals("TX-002", tx2.transactionReference());
