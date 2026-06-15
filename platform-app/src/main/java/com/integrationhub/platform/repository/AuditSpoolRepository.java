@@ -143,4 +143,30 @@ public class AuditSpoolRepository implements PanacheRepository<AuditSpool> {
                 .setParameter(3, Math.max(limit, 1))
                 .executeUpdate();
     }
+
+    /** Total de poison en el DLQ (audit_dead_letter_event), para resumen/metricas. */
+    public long countDeadLetterEvents() {
+        return ((Number) getEntityManager()
+                .createNativeQuery("select count(*) from audit_dead_letter_event")
+                .getSingleResult()).longValue();
+    }
+
+    /** Retencion del DLQ: borra poison mas viejo que el corte (los DEAD del relay se conservan aparte). */
+    public long cleanupDeadLettersOlderThan(LocalDateTime cutoff, int limit) {
+        var sql = """
+                delete from audit_dead_letter_event
+                 where id in (
+                       select id
+                         from audit_dead_letter_event
+                        where created_at < ?1
+                        order by created_at asc
+                        limit ?2
+                 )
+                """;
+        return getEntityManager()
+                .createNativeQuery(sql)
+                .setParameter(1, Timestamp.valueOf(cutoff))
+                .setParameter(2, Math.max(limit, 1))
+                .executeUpdate();
+    }
 }

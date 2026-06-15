@@ -43,6 +43,17 @@ public class AuditSpoolOperationsService {
         return repository.cleanupSentOlderThan(LocalDateTime.now().minusDays(days), cappedLimit);
     }
 
+    public long deadLetterCount() {
+        return repository.countDeadLetterEvents();
+    }
+
+    @Transactional
+    public long cleanupDeadLetters(int retentionDays, int limit) {
+        var days = Math.max(retentionDays, 1);
+        var cappedLimit = Math.min(Math.max(limit, 1), 100_000);
+        return repository.cleanupDeadLettersOlderThan(LocalDateTime.now().minusDays(days), cappedLimit);
+    }
+
     public record Summary(long pending,
                           long inFlight,
                           long sent,

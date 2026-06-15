@@ -24,17 +24,20 @@ public class AuditSpoolMaintenanceScheduler {
     private final boolean enabled;
     private final int retentionDays;
     private final int batchLimit;
+    private final int deadLetterRetentionDays;
 
     @Inject
     public AuditSpoolMaintenanceScheduler(
             AuditSpoolOperationsService operationsService,
             @ConfigProperty(name = "audit.spool.cleanup.enabled", defaultValue = "true") boolean enabled,
             @ConfigProperty(name = "audit.spool.cleanup.retention-days", defaultValue = "7") int retentionDays,
-            @ConfigProperty(name = "audit.spool.cleanup.batch", defaultValue = "10000") int batchLimit) {
+            @ConfigProperty(name = "audit.spool.cleanup.batch", defaultValue = "10000") int batchLimit,
+            @ConfigProperty(name = "audit.dead-letter.cleanup.retention-days", defaultValue = "30") int deadLetterRetentionDays) {
         this.operationsService = operationsService;
         this.enabled = enabled;
         this.retentionDays = retentionDays;
         this.batchLimit = batchLimit;
+        this.deadLetterRetentionDays = deadLetterRetentionDays;
     }
 
     @Scheduled(every = "{audit.spool.cleanup.every}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
@@ -42,9 +45,16 @@ public class AuditSpoolMaintenanceScheduler {
         if (!enabled) {
             return;
         }
-        var deleted = operationsService.cleanupSent(retentionDays, batchLimit);
-        if (deleted > 0) {
-            LOG.infof("Audit spool retention: purged %d SENT rows older than %d days", deleted, retentionDays);
+        var purgedSent = operationsService.cleanupSent(retentionDays, batchLimit);
+        if (purgedSent > 0) {
+            LOG.infof("Audit spool retention: purged %d SENT rows older than %d days", purgedSent, retentionDays);
+        }
+        // DLQ con retencion mas larga (es evidencia operativa de poison): se purga lo ya
+        // muy viejo para evitar crecimiento ilimitado.
+        var purgedDlq = operationsService.cleanupDeadLetters(deadLetterRetentionDays, batchLimit);
+        if (purgedDlq > 0) {
+            LOG.infof("Audit DLQ retention: purged %d dead-letter rows older than %d days",
+                    purgedDlq, deadLetterRetentionDays);
         }
     }
 }

@@ -63,6 +63,14 @@ public class AuditSpoolResource {
         return new CleanupResponse(service.cleanupSent(retentionDays, limit));
     }
 
+    @DELETE
+    @Path("/dead-letters")
+    @RolesAllowed({"platform-admin", "integration-admin"})
+    public CleanupResponse cleanupDeadLetters(@QueryParam("retentionDays") @DefaultValue("30") int retentionDays,
+                                              @QueryParam("limit") @DefaultValue("10000") int limit) {
+        return new CleanupResponse(service.cleanupDeadLetters(retentionDays, limit));
+    }
+
     private AuditSpoolEntryResponse toResponse(AuditSpool row) {
         return new AuditSpoolEntryResponse(
                 row.id,
