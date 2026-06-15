@@ -20,6 +20,7 @@
 - [ADR-006 Fuentes de almacenamiento cloud (S3, GCS, Azure Blob)](ADR-006-fuentes-almacenamiento-cloud.md)
 - [ADR-009 Vertical de mensajeria de pagos](ADR-009-vertical-mensajeria-pagos.md)
 - [ADR-010 Auditoria asincrona multi-broker y lineage por registro](ADR-010-auditoria-asincrona-multi-broker-lineage-registro.md)
+- [ADR-011 Patron repository para el acceso a datos](ADR-011-patron-repository-acceso-datos.md)
 
 ## Regla
 
