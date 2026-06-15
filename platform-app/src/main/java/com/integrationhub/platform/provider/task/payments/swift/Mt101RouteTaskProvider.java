@@ -58,11 +58,15 @@ public class Mt101RouteTaskProvider implements TaskProvider {
     private final ObjectMapper objectMapper;
     private final JexlEngine jexlEngine;
     private final RecordAuditEmitter recordAuditEmitter;
+    private final SwiftInboundStore inboundStore;
 
     @Inject
-    public Mt101RouteTaskProvider(ObjectMapper objectMapper, RecordAuditEmitter recordAuditEmitter) {
+    public Mt101RouteTaskProvider(ObjectMapper objectMapper,
+                                  RecordAuditEmitter recordAuditEmitter,
+                                  SwiftInboundStore inboundStore) {
         this.objectMapper = objectMapper;
         this.recordAuditEmitter = recordAuditEmitter;
+        this.inboundStore = inboundStore;
         this.jexlEngine = new JexlBuilder()
                 .strict(false)   // null-tolerant
                 .silent(true)    // no NPE en propiedades inexistentes
@@ -72,6 +76,7 @@ public class Mt101RouteTaskProvider implements TaskProvider {
     public Mt101RouteTaskProvider(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
         this.recordAuditEmitter = null;
+        this.inboundStore = null;
         this.jexlEngine = new JexlBuilder()
                 .strict(false)
                 .silent(true)
@@ -85,6 +90,13 @@ public class Mt101RouteTaskProvider implements TaskProvider {
 
     @Override
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
+        // Fuente inbound paginada (MT101_PARSE_FROM_TABLE): clasifica leyendo el store
+        // en paginas y marca routed_as, sin materializar todos los mensajes en memoria.
+        var inboundSource = Mt101MessageInputResolver.inboundSource(context, configuration, type());
+        if (!inboundSource.isEmpty() && inboundStore != null) {
+            return routeFromInboundStore(context, configuration, inboundSource);
+        }
+
         var records = readRecords(context, configuration);
         if (records.isEmpty()) {
             return TaskResult.success("MT101_ROUTE skipped because there are no records to route");
@@ -134,6 +146,60 @@ public class Mt101RouteTaskProvider implements TaskProvider {
         return errors.isEmpty()
                 ? TaskResult.success(summary, outputs)
                 : TaskResult.failure(summary, outputs);
+    }
+
+    /** Rama inbound streaming: clasifica VALIDATED del store por paginas y marca routed_as. */
+    private TaskResult routeFromInboundStore(TaskContext context, Map<String, Object> configuration,
+                                             Map<String, Object> inboundSource) {
+        var rules = parseRules(configuration.get("rules"));
+        if (rules.isEmpty()) {
+            throw new IllegalArgumentException("MT101_ROUTE requires configuration.rules (non-empty array)");
+        }
+        var defaultRoute = stringValue(configuration.get("defaultRoute"), "UNROUTED");
+        var fieldName = stringValue(configuration.get("routeField"), DEFAULT_FIELD_NAME);
+        var pageSize = intValue(configuration.get("pageSize"), 500);
+        var countByRoute = new TreeMap<String, Integer>();
+        var stats = new long[]{0L, 0L}; // [0]=routed, [1]=errors
+
+        inboundStore.forEachPage(inboundSource, SwiftInboundStore.READ_VALIDATED, pageSize, page -> {
+            var idsByRoute = new LinkedHashMap<String, List<Long>>();
+            var pageAudit = new ArrayList<AuditEnvelope>(page.size());
+            for (var item : page) {
+                var asMap = toMap(item.message());
+                String route;
+                try {
+                    route = evaluate(rules, asMap, defaultRoute);
+                } catch (RuntimeException error) {
+                    stats[1]++;
+                    continue;
+                }
+                idsByRoute.computeIfAbsent(route, key -> new ArrayList<>()).add(item.id());
+                countByRoute.merge(route, 1, Integer::sum);
+                stats[0]++;
+                var enriched = new LinkedHashMap<String, Object>(asMap);
+                enriched.put(fieldName, route);
+                pageAudit.add(routeEnvelope(context, enriched, route));
+            }
+            idsByRoute.forEach((route, ids) -> inboundStore.markStatusBatch(inboundSource, ids, "ROUTED", route));
+            emitRecordAudit(pageAudit);
+        });
+
+        var outputs = new LinkedHashMap<String, Object>();
+        outputs.put("routedCount", stats[0]);
+        outputs.put("errorCount", stats[1]);
+        outputs.put("countByRoute", countByRoute);
+        outputs.put("inboundSource", inboundSource);
+        var summary = "MT101_ROUTE routed=" + stats[0]
+                + " errors=" + stats[1]
+                + " distribution=" + countByRoute;
+        return TaskResult.success(summary, outputs);
+    }
+
+    private int intValue(Object raw, int defaultValue) {
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return defaultValue;
+        }
+        return Integer.parseInt(String.valueOf(raw).trim());
     }
 
     private String evaluate(List<Rule> rules, Map<String, Object> recordMap, String defaultRoute) {

@@ -18,7 +18,9 @@ import java.util.Set;
 @ApplicationScoped
 public class FileReadTaskFastPath implements ExecutionFastPath {
 
-    private static final Set<String> SUPPORTED_READERS = Set.of("TXT", "CSV", "XLS", "XLSX");
+    // SWIFT_MT emite mensajes por lotes via consumer (multi-mensaje): el fast path lo
+    // streamea a DB_WRITE sin materializar todos los mensajes -> staging inbound a escala.
+    private static final Set<String> SUPPORTED_READERS = Set.of("TXT", "CSV", "XLS", "XLSX", "SWIFT_MT");
 
     private final StreamingPipelineService pipelineService;
     private final ProcessExecutionStateService stateService;

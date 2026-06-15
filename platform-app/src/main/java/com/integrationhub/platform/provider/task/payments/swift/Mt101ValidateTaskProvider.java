@@ -77,6 +77,7 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
     private final ConnectionPoolManager connectionPoolManager;
     private final Mt101ValidationIssueRepository issueRepository;
     private final RecordAuditEmitter recordAuditEmitter;
+    private final SwiftInboundStore inboundStore;
 
     @Inject
     public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
@@ -84,13 +85,15 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
                                      DataSource defaultDataSource,
                                      ConnectionPoolManager connectionPoolManager,
                                      Mt101ValidationIssueRepository issueRepository,
-                                     RecordAuditEmitter recordAuditEmitter) {
+                                     RecordAuditEmitter recordAuditEmitter,
+                                     SwiftInboundStore inboundStore) {
         this.ruleProviders = ruleProviders;
         this.fragmentStore = fragmentStore;
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.issueRepository = issueRepository;
         this.recordAuditEmitter = recordAuditEmitter;
+        this.inboundStore = inboundStore;
     }
 
     public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
@@ -98,7 +101,7 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
                                      DataSource defaultDataSource,
                                      ConnectionPoolManager connectionPoolManager,
                                      Mt101ValidationIssueRepository issueRepository) {
-        this(ruleProviders, fragmentStore, defaultDataSource, connectionPoolManager, issueRepository, null);
+        this(ruleProviders, fragmentStore, defaultDataSource, connectionPoolManager, issueRepository, null, null);
     }
 
     public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
@@ -106,7 +109,7 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
                                      DataSource defaultDataSource,
                                      ConnectionPoolManager connectionPoolManager) {
         this(ruleProviders, fragmentStore, defaultDataSource, connectionPoolManager,
-                new Mt101ValidationIssueRepository(), null);
+                new Mt101ValidationIssueRepository(), null, null);
     }
 
     public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
@@ -172,8 +175,42 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
 
         var accumulator = new ValidationAccumulator(maxIssuesInOutput);
         var fragmentSource = Mt101MessageInputResolver.fragmentSource(context, configuration, type());
+        var inboundSource = Mt101MessageInputResolver.inboundSource(context, configuration, type());
 
-        if (!fragmentSource.isEmpty() && fragmentStore != null) {
+        if (!inboundSource.isEmpty() && inboundStore != null) {
+            // Flujo inbound a escala: lee PARSED del store por paginas y marca
+            // VALIDATED/REJECTED por id (memoria O(pageSize)). Espeja la rama fragment.
+            var pageSize = intValue(configuration.get("pageSize"), SwiftInboundStore.DEFAULT_PAGE_SIZE);
+            inboundStore.forEachPage(inboundSource, SwiftInboundStore.READ_PARSED, pageSize, page -> {
+                var validatedIds = new ArrayList<Long>(page.size());
+                var rejectedById = new LinkedHashMap<Long, String>();
+                var pageIssues = issueSink.enabled() ? new ArrayList<IssueRow>() : null;
+                var pageAudit = new ArrayList<AuditEnvelope>(page.size());
+                for (var item : page) {
+                    var message = item.message();
+                    var messageIssues = evaluateMessage(predicates, message);
+                    var blocking = accumulator.add(messageIssues, failOn);
+                    if (pageIssues != null) {
+                        for (var issue : messageIssues) {
+                            pageIssues.add(inboundIssueRow(inboundSource, message, issue));
+                        }
+                    }
+                    var reference = message.sequenceA() == null ? null : message.sequenceA().sendersReference();
+                    if (blocking) {
+                        rejectedById.put(item.id(), summarizeIssues(messageIssues));
+                        pageAudit.add(recordEnvelope(context, reference, false, summarizeIssues(messageIssues)));
+                    } else {
+                        validatedIds.add(item.id());
+                        pageAudit.add(recordEnvelope(context, reference, true, null));
+                    }
+                }
+                persistIssueRows(issueSink, pageIssues);
+                emitRecordAudit(pageAudit);
+                inboundStore.markStatusBatch(inboundSource, validatedIds, "VALIDATED", null);
+                inboundStore.markStatusBatch(inboundSource, rejectedById, "REJECTED", null);
+            });
+            context.attributes().put("mt101InboundSource", inboundSource);
+        } else if (!fragmentSource.isEmpty() && fragmentStore != null) {
             var pageSize = intValue(configuration.get("pageSize"), Mt101FragmentStore.DEFAULT_PAGE_SIZE);
             fragmentStore.forEachPage(fragmentSource, FRAGMENT_READ_STATUSES, pageSize, page -> {
                 // Marcado por lote al cierre de cada pagina (1-2 round-trips por
@@ -303,6 +340,17 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
         return new IssueRow(
                 issue,
                 stringValue(fragmentSource.get("fragmentSetId"), null),
+                sequenceA == null ? null : sequenceA.sendersReference(),
+                sequenceA == null ? null : sequenceA.messageIndex());
+    }
+
+    private IssueRow inboundIssueRow(Map<String, Object> inboundSource,
+                                     Mt101Message message,
+                                     ValidationIssue issue) {
+        var sequenceA = message.sequenceA();
+        return new IssueRow(
+                issue,
+                stringValue(inboundSource.get("inboundSetId"), null),
                 sequenceA == null ? null : sequenceA.sendersReference(),
                 sequenceA == null ? null : sequenceA.messageIndex());
     }

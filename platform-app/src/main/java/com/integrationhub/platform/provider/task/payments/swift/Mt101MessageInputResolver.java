@@ -98,6 +98,23 @@ final class Mt101MessageInputResolver {
         return source;
     }
 
+    /**
+     * Descriptor de fuente inbound paginada (publicado por {@code MT101_PARSE_FROM_TABLE}
+     * como {@code {inboundSetId, table, connectionRef}}). Vacio si el input no es inbound.
+     */
+    @SuppressWarnings("unchecked")
+    static Map<String, Object> inboundSource(TaskContext context,
+                                             Map<String, Object> configuration,
+                                             String taskType) {
+        var raw = rawSource(context, configuration, taskType);
+        if (!(raw instanceof Map<?, ?> rawMap) || !rawMap.containsKey("inboundSetId")) {
+            return Map.of();
+        }
+        var source = new java.util.LinkedHashMap<String, Object>();
+        rawMap.forEach((key, value) -> source.put(String.valueOf(key), value));
+        return source;
+    }
+
     @SuppressWarnings("unchecked")
     private static Object rawSource(TaskContext context,
                                     Map<String, Object> configuration,
