@@ -50,7 +50,7 @@ class PostgresColdStoreTest {
                         id bigserial primary key,
                         event_id varchar(64) not null,
                         trace_id varchar(120),
-                        record_id varchar(64),
+                        record_id varchar(512),
                         stage varchar(80) not null,
                         status varchar(30),
                         process_execution_id bigint,

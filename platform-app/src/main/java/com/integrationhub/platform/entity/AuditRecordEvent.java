@@ -27,7 +27,7 @@ public class AuditRecordEvent {
     @Column(name = "trace_id", length = 120)
     public String traceId;
 
-    @Column(name = "record_id", length = 64)
+    @Column(name = "record_id", length = 512)
     public String recordId;
 
     @Column(nullable = false, length = 80)
