@@ -2,7 +2,7 @@
 // @trace ADR-009
 import { Injectable } from '@angular/core';
 import { I18nService } from '@integration-hub/core/services';
-import { ProcessTaskProvider, ProcessTaskSummaryContext } from '../../tasks/process-task-provider.abstract';
+import { ProcessTaskProvider, ProcessTaskProviderDescriptor, ProcessTaskSummaryContext } from '../../tasks/process-task-provider.abstract';
 import { ProcessTaskRuntimeDraft } from '../../tasks/process-task-binding.models';
 import { ProcessTaskFormModel } from '../../tasks/process-task.models';
 
@@ -21,7 +21,7 @@ export interface Mt101ParseTaskDraft extends ProcessTaskRuntimeDraft {
  */
 @Injectable()
 export class Mt101ParseTaskProvider extends ProcessTaskProvider<Mt101ParseTaskDraft> {
-  readonly descriptor = {
+  readonly descriptor: ProcessTaskProviderDescriptor = {
     type: 'MT101_PARSE' as const,
     labelKey: 'processTask.MT101_PARSE',
     descriptionKey: 'processTaskDescription.MT101_PARSE',

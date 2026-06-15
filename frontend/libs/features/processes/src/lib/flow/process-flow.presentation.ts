@@ -95,6 +95,17 @@ const NODE_PRESENTATION: Record<ProcessTaskType, ProcessFlowNodePresentation> = 
     toneClass: 'task-node--payment-repair',
     iconPath: 'M14 3l7 7-11 11H3v-7zM14 3l-3 3 7 7 3-3z',
   },
+  // --- Inbound a escala (table-backed) ---
+  MT101_PARSE_FROM_TABLE: {
+    badge: 'PARSE',
+    toneClass: 'task-node--payment-parse',
+    iconPath: 'M4 4h16v6H4zM4 14h16v6H4zM8 7h2M8 17h2M14 7h2M14 17h2',
+  },
+  MT101_INBOUND_DELIVER: {
+    badge: 'DELIVER',
+    toneClass: 'task-node--payment-dispatch',
+    iconPath: 'M3 10h18M3 14h18M5 7h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM16 14h2',
+  },
 };
 
 export function getProcessFlowNodePresentation(taskType: ProcessTaskType): ProcessFlowNodePresentation {

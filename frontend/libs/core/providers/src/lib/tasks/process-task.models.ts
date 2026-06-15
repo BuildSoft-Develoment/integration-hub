@@ -34,7 +34,10 @@ export type ProcessTaskType =
   | 'MT101_PARSE'
   // Sprint 3 (split + repair):
   | 'MT101_SPLIT'
-  | 'MT101_REPAIR';
+  | 'MT101_REPAIR'
+  // Inbound a escala (table-backed): parse desde staging + entrega final.
+  | 'MT101_PARSE_FROM_TABLE'
+  | 'MT101_INBOUND_DELIVER';
 
 export interface SourceRef {
   id: number;
