@@ -6,6 +6,7 @@ import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.provider.task.common.StoredProcedureRuntimeSupport;
 import com.integrationhub.platform.provider.task.common.TaskOutputSupport;
+import com.integrationhub.platform.repository.DbWriteRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
@@ -20,9 +21,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,22 +36,32 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
     private final JsonConfigurationMapper jsonConfigurationMapper;
     private final ConnectionPoolManager connectionPoolManager;
     private final RecordAuditEmitter recordAuditEmitter;
+    private final DbWriteRepository dbWriteRepository;
 
     @Inject
     public DbWriteTaskProvider(DataSource dataSource,
                                JsonConfigurationMapper jsonConfigurationMapper,
                                ConnectionPoolManager connectionPoolManager,
-                               RecordAuditEmitter recordAuditEmitter) {
+                               RecordAuditEmitter recordAuditEmitter,
+                               DbWriteRepository dbWriteRepository) {
         this.dataSource = dataSource;
         this.jsonConfigurationMapper = jsonConfigurationMapper;
         this.connectionPoolManager = connectionPoolManager;
         this.recordAuditEmitter = recordAuditEmitter;
+        this.dbWriteRepository = dbWriteRepository;
+    }
+
+    public DbWriteTaskProvider(DataSource dataSource,
+                               JsonConfigurationMapper jsonConfigurationMapper,
+                               ConnectionPoolManager connectionPoolManager,
+                               RecordAuditEmitter recordAuditEmitter) {
+        this(dataSource, jsonConfigurationMapper, connectionPoolManager, recordAuditEmitter, new DbWriteRepository());
     }
 
     public DbWriteTaskProvider(DataSource dataSource,
                                JsonConfigurationMapper jsonConfigurationMapper,
                                ConnectionPoolManager connectionPoolManager) {
-        this(dataSource, jsonConfigurationMapper, connectionPoolManager, null);
+        this(dataSource, jsonConfigurationMapper, connectionPoolManager, null, new DbWriteRepository());
     }
 
     @Override
@@ -92,10 +100,14 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
         }
 
         var keyColumns = DbTaskSupport.keyColumns(configuration);
+        var batchSize = DbTaskSupport.jdbcBatchSize(configuration);
         var affected = switch (mode) {
-            case "insert", "jdbc-batch" -> insertDynamic(targetDataSource, targetTable, effectiveRecords, assignments, DbTaskSupport.jdbcBatchSize(configuration));
-            case "update", "batch-update" -> updateDynamic(targetDataSource, targetTable, effectiveRecords, assignments, keyColumns, DbTaskSupport.jdbcBatchSize(configuration));
-            case "upsert" -> upsertDynamic(targetDataSource, targetTable, effectiveRecords, assignments, keyColumns, DbTaskSupport.jdbcBatchSize(configuration));
+            case "insert", "jdbc-batch" ->
+                    dbWriteRepository.insertDynamic(targetDataSource, targetTable, effectiveRecords, assignments, batchSize);
+            case "update", "batch-update" ->
+                    dbWriteRepository.updateDynamic(targetDataSource, targetTable, effectiveRecords, assignments, keyColumns, batchSize);
+            case "upsert" ->
+                    dbWriteRepository.upsertDynamic(targetDataSource, targetTable, effectiveRecords, assignments, keyColumns, batchSize);
             default -> throw new IllegalArgumentException("Unsupported DB_WRITE mode: " + mode);
         };
         return TaskResult.success(
@@ -167,41 +179,28 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
                                   SourcePayload sourcePayload,
                                   List<ReadRecord> records,
                                   int batchSize) {
-        var sql = "insert into staging_record (process_execution_id, task_definition_id, source_name, record_index, payload_json) values (?, ?, ?, ?, ?)";
-        // record_index global por ejecucion de la tarea (no por batch): el motor
-        // invoca este metodo una vez por cada batch del streaming fast-path, asi
-        // que un indice local repetiria 0..N-1 en cada llamada y la auditoria
-        // perderia la posicion real del registro dentro del archivo.
+        // El provider resuelve indice global + payload + auditoria (su responsabilidad);
+        // el JDBC batcheado vive en DbWriteRepository. record_index global por ejecucion
+        // (no por batch): el motor invoca este metodo una vez por cada batch del fast-path,
+        // asi que un indice local repetiria 0..N-1 y la auditoria perderia la posicion real.
         var globalIndex = stagingIndexCounter(context);
         var sourceName = sourcePayload != null ? sourcePayload.name() : null;
-        var auditBuffer = new ArrayList<AuditEnvelope>(batchSize);
-        try (Connection connection = targetDataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            var written = 0;
-            for (var record : records) {
-                var index = globalIndex.getAndIncrement();
-                statement.setLong(1, context.processExecutionId());
-                statement.setLong(2, context.taskDefinitionId());
-                statement.setString(3, sourceName);
-                statement.setLong(4, index);
-                statement.setString(5, jsonConfigurationMapper.toJson(record.values()));
-                statement.addBatch();
-                // INGESTED: primer punto donde una fila origen (xls/csv/txt/...) se vuelve
-                // un registro trazable. recordId = archivo:indice; traceId = ejecucion.
-                auditBuffer.add(ingestedEnvelope(context, sourceName, index));
-                written++;
-                if (written % batchSize == 0) {
-                    statement.executeBatch();
-                    emitRecordAudit(auditBuffer);
-                    auditBuffer.clear();
-                }
-            }
-            statement.executeBatch();
-            emitRecordAudit(auditBuffer);
-            return written;
-        } catch (SQLException e) {
-            throw new IllegalStateException("Cannot batch insert staging records", e);
+        var rows = new ArrayList<DbWriteRepository.StagingRow>(records.size());
+        var audit = new ArrayList<AuditEnvelope>(records.size());
+        for (var record : records) {
+            var index = globalIndex.getAndIncrement();
+            rows.add(new DbWriteRepository.StagingRow(
+                    context.processExecutionId(),
+                    context.taskDefinitionId(),
+                    sourceName,
+                    index,
+                    jsonConfigurationMapper.toJson(record.values())));
+            // INGESTED: primer punto donde una fila origen (xls/csv/txt/...) se vuelve trazable.
+            audit.add(ingestedEnvelope(context, sourceName, index));
         }
+        var written = dbWriteRepository.insertStagingBatch(targetDataSource, rows, batchSize);
+        emitRecordAudit(audit);
+        return written;
     }
 
     private AuditEnvelope ingestedEnvelope(TaskContext context, String sourceName, long index) {
@@ -250,137 +249,6 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
             return (java.util.concurrent.atomic.AtomicLong) context.attributes()
                     .computeIfAbsent("_stagingRecordIndex",
                             key -> new java.util.concurrent.atomic.AtomicLong(0));
-        }
-    }
-
-    private int insertDynamic(DataSource targetDataSource, String targetTable, List<ReadRecord> records,
-                              List<DbTaskSupport.ColumnAssignment> assignments, int batchSize) {
-        var columns = DbTaskSupport.insertColumns(assignments);
-        var valuesClause = String.join(", ", assignments.stream().map(this::insertExpression).toList());
-        var sql = "insert into " + targetTable + " (" + String.join(", ", columns) + ") values (" + valuesClause + ")";
-        try (Connection connection = targetDataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            var count = 0;
-            for (var record : records) {
-                bindInsertValues(statement, record, assignments);
-                statement.addBatch();
-                count++;
-                if (count % batchSize == 0) {
-                    statement.executeBatch();
-                }
-            }
-            statement.executeBatch();
-            return count;
-        } catch (SQLException e) {
-            throw new IllegalStateException("Cannot insert records into " + targetTable, e);
-        }
-    }
-
-    private int updateDynamic(DataSource targetDataSource, String targetTable, List<ReadRecord> records,
-                              List<DbTaskSupport.ColumnAssignment> assignments, List<String> keyColumns, int batchSize) {
-        if (keyColumns.isEmpty()) {
-            throw new IllegalArgumentException("DB_WRITE update mode requires keyColumns");
-        }
-        var updateAssignments = DbTaskSupport.updateAssignments(assignments, keyColumns);
-        if (updateAssignments.isEmpty()) {
-            throw new IllegalArgumentException("DB_WRITE update mode requires non-key columns to update");
-        }
-        var assignmentsByColumn = DbTaskSupport.assignmentIndex(assignments);
-        validateKeyColumns(assignmentsByColumn, keyColumns);
-        var setClause = String.join(", ", updateAssignments.stream().map(assignment -> assignment.column() + " = " + insertExpression(assignment)).toList());
-        var whereClause = String.join(" and ", keyColumns.stream().map(column -> column + " = ?").toList());
-        var sql = "update " + targetTable + " set " + setClause + " where " + whereClause;
-        try (Connection connection = targetDataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            var count = 0;
-            for (var record : records) {
-                bindUpdateValues(statement, record, updateAssignments, keyColumns, assignmentsByColumn);
-                statement.addBatch();
-                count++;
-                if (count % batchSize == 0) {
-                    statement.executeBatch();
-                }
-            }
-            statement.executeBatch();
-            return count;
-        } catch (SQLException e) {
-            throw new IllegalStateException("Cannot update records in " + targetTable, e);
-        }
-    }
-
-    private int upsertDynamic(DataSource targetDataSource, String targetTable, List<ReadRecord> records,
-                              List<DbTaskSupport.ColumnAssignment> assignments, List<String> keyColumns, int batchSize) {
-        if (keyColumns.isEmpty()) {
-            throw new IllegalArgumentException("DB_WRITE upsert mode requires keyColumns");
-        }
-        var assignmentsByColumn = DbTaskSupport.assignmentIndex(assignments);
-        validateKeyColumns(assignmentsByColumn, keyColumns);
-        var insertColumns = DbTaskSupport.insertColumns(assignments);
-        var updateAssignments = DbTaskSupport.updateAssignments(assignments, keyColumns);
-        var valuesClause = String.join(", ", assignments.stream().map(this::insertExpression).toList());
-        var conflictClause = String.join(", ", keyColumns);
-        var updateClause = updateAssignments.isEmpty()
-                ? " do nothing"
-                : " do update set " + String.join(", ", updateAssignments.stream().map(assignment -> assignment.column() + " = excluded." + assignment.column()).toList());
-        var sql = "insert into " + targetTable + " (" + String.join(", ", insertColumns) + ") values (" + valuesClause + ") on conflict (" + conflictClause + ")" + updateClause;
-        try (Connection connection = targetDataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            var count = 0;
-            for (var record : records) {
-                bindInsertValues(statement, record, assignments);
-                statement.addBatch();
-                count++;
-                if (count % batchSize == 0) {
-                    statement.executeBatch();
-                }
-            }
-            statement.executeBatch();
-            return count;
-        } catch (SQLException e) {
-            throw new IllegalStateException("Cannot upsert records in " + targetTable, e);
-        }
-    }
-
-    private String insertExpression(DbTaskSupport.ColumnAssignment assignment) {
-        return assignment.isDbFunction() ? assignment.dbFunction() : "?";
-    }
-
-    private void bindInsertValues(PreparedStatement statement, ReadRecord record, List<DbTaskSupport.ColumnAssignment> assignments) throws SQLException {
-        var parameterIndex = 1;
-        for (var assignment : assignments) {
-            if (assignment.isDbFunction()) {
-                continue;
-            }
-            statement.setObject(parameterIndex++, DbTaskSupport.value(record, assignment.sourceField()));
-        }
-    }
-
-    private void bindUpdateValues(PreparedStatement statement, ReadRecord record,
-                                  List<DbTaskSupport.ColumnAssignment> updateAssignments,
-                                  List<String> keyColumns,
-                                  Map<String, DbTaskSupport.ColumnAssignment> assignmentsByColumn) throws SQLException {
-        var parameterIndex = 1;
-        for (var assignment : updateAssignments) {
-            if (assignment.isDbFunction()) {
-                continue;
-            }
-            statement.setObject(parameterIndex++, DbTaskSupport.value(record, assignment.sourceField()));
-        }
-        for (var keyColumn : keyColumns) {
-            var keyAssignment = assignmentsByColumn.get(keyColumn);
-            if (keyAssignment == null || keyAssignment.isDbFunction() || keyAssignment.sourceField() == null) {
-                throw new IllegalArgumentException("Missing source mapping for key column: " + keyColumn);
-            }
-            statement.setObject(parameterIndex++, DbTaskSupport.value(record, keyAssignment.sourceField()));
-        }
-    }
-
-    private void validateKeyColumns(Map<String, DbTaskSupport.ColumnAssignment> assignmentsByColumn, List<String> keyColumns) {
-        for (var keyColumn : keyColumns) {
-            var assignment = assignmentsByColumn.get(keyColumn);
-            if (assignment == null || assignment.isDbFunction() || assignment.sourceField() == null) {
-                throw new IllegalArgumentException("Key columns must map to reader fields: " + keyColumn);
-            }
         }
     }
 }
