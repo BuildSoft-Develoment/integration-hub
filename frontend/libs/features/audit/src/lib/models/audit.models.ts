@@ -133,6 +133,16 @@ export interface Mt101RowTimelineEntry {
   detail: string;
 }
 
+export interface Mt101LoteHeader {
+  fragmentSetId: string;
+  processExecutionId: number | null;
+  sourceFileName: string | null;
+  sourceFileHash: string | null;
+  rowCount: number;
+  totalFragments: number;
+  byStatus: Record<string, number>;
+}
+
 export interface AuditRecord {
   id: number;
   processExecutionId: number | null;

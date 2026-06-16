@@ -4,7 +4,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuditApiService } from '../../api/audit-api.service';
-import { Mt101FailedRecord, Mt101FragmentSetSummary, Mt101RowTimelineEntry } from '../../models/audit.models';
+import { Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101RowTimelineEntry } from '../../models/audit.models';
 
 @Component({
   selector: 'ih-mt101-quarantine',
@@ -12,6 +12,10 @@ import { Mt101FailedRecord, Mt101FragmentSetSummary, Mt101RowTimelineEntry } fro
   imports: [CommonModule, FormsModule, RouterLink],
   styles: [`
     .q { display:flex; flex-direction:column; gap:1rem; }
+    .q__lote { display:flex; flex-direction:column; gap:.4rem; }
+    .q__lote-title { font-size:1.15rem; font-weight:600; display:flex; align-items:center; gap:.4rem; }
+    .q__lote-chips { display:flex; gap:.4rem; flex-wrap:wrap; }
+    .q__chip { font-size:.78rem; color:var(--ih-text-soft); background:var(--ih-surface-alt, #1b1f27); border:1px solid var(--ih-border, #354052); padding:2px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:.3rem; }
     .q__search { display:grid; grid-template-columns:repeat(auto-fit, minmax(12rem, 1fr)); gap:.75rem; align-items:end; }
     .q__field { display:flex; flex-direction:column; gap:.25rem; }
     .q__field label { font-size:.75rem; color:var(--ih-text-soft); }
@@ -57,15 +61,33 @@ import { Mt101FailedRecord, Mt101FragmentSetSummary, Mt101RowTimelineEntry } fro
   `],
   template: `
     <section class="q">
-      <div>
-        <h2 class="ih-section-title">Cuarentena MT101 por fila</h2>
-        <p class="ih-muted">Ubica la fila exacta del archivo que fallo validacion, corrigela en staging y reprocesa SOLO esa fila (rebuild selectivo) sin regenerar el lote.</p>
-      </div>
+      @if (lote(); as l) {
+        <div class="q__lote">
+          <div class="q__lote-title"><i class="ti ti-list-tree"></i> Trazabilidad · lote {{ l.fragmentSetId }}</div>
+          <div class="q__lote-chips">
+            @if (l.sourceFileName) { <span class="q__chip"><i class="ti ti-file"></i> {{ l.sourceFileName }}</span> }
+            @if (l.sourceFileHash) { <span class="q__chip q__mono">hash {{ l.sourceFileHash | slice:0:10 }}…</span> }
+            @if (l.processExecutionId !== null) { <span class="q__chip">exec-{{ l.processExecutionId }}</span> }
+            <span class="q__chip">{{ l.rowCount }} filas</span>
+            <span class="q__chip">{{ l.totalFragments }} fragmentos</span>
+          </div>
+          <p class="ih-muted">Del lote → a la fila exacta que falló → a su traza completa → a la acción.</p>
+        </div>
+      } @else {
+        <div>
+          <h2 class="ih-section-title">Trazabilidad del lote · cuarentena</h2>
+          <p class="ih-muted">Ubica la fila exacta del archivo que falló, corrígela en staging y reprocesa SOLO esa fila (rebuild selectivo) sin regenerar el lote.</p>
+        </div>
+      }
 
       <div class="q__search">
         <div class="q__field">
+          <label>Ejecución</label>
+          <input type="number" min="1" [(ngModel)]="processExecutionId" placeholder="123" (keyup.enter)="loadLote()" />
+        </div>
+        <div class="q__field">
           <label>Fragment set</label>
-          <input [(ngModel)]="fragmentSetId" placeholder="E2E-123" (keyup.enter)="list()" />
+          <input [(ngModel)]="fragmentSetId" placeholder="E2E-123" (keyup.enter)="loadLote()" />
         </div>
         <div class="q__field">
           <label>Conexion</label>
@@ -76,6 +98,7 @@ import { Mt101FailedRecord, Mt101FragmentSetSummary, Mt101RowTimelineEntry } fro
           <input [(ngModel)]="correctiveSetId" placeholder="E2E-123-FIX" />
         </div>
         <div class="q__actions">
+          <button type="button" class="q__primary" (click)="loadLote()" [disabled]="loading() || (!fragmentSetId.trim() && !processExecutionId.trim())">Cargar lote</button>
           <button type="button" (click)="buildQuarantine()" [disabled]="loading() || !fragmentSetId.trim()">Construir cuarentena</button>
           <button type="button" (click)="list()" [disabled]="loading() || !fragmentSetId.trim()">Listar</button>
           <button type="button" class="q__primary" (click)="rebuild()" [disabled]="loading() || !fragmentSetId.trim() || !correctiveSetId.trim()">Reprocesar filas corregidas</button>
@@ -181,15 +204,49 @@ export class Mt101QuarantineComponent {
   fragmentSetId = '';
   connectionRef = '';
   correctiveSetId = '';
+  processExecutionId = '';
 
   constructor() {
-    // Llega prellenado desde el lookup de fragmentos (?fragmentSetId=...) -> auto-lista.
-    const presetSet = this.route.snapshot.queryParamMap.get('fragmentSetId');
+    // Entrada unificada: desde la ejecución (?processExecutionId=) o desde el lookup
+    // (?fragmentSetId=). Resuelve la cabecera del lote y auto-lista, sin teclear IDs.
+    const qp = this.route.snapshot.queryParamMap;
+    const presetSet = qp.get('fragmentSetId');
+    const presetExec = qp.get('processExecutionId');
     if (presetSet) {
       this.fragmentSetId = presetSet;
-      this.correctiveSetId = `${presetSet}-FIX`;
-      this.list();
     }
+    if (presetExec) {
+      this.processExecutionId = presetExec;
+    }
+    if (presetSet || presetExec) {
+      this.loadLote();
+    }
+  }
+
+  loadLote(): void {
+    if (!this.fragmentSetId.trim() && !this.processExecutionId.trim()) {
+      return;
+    }
+    this.loading.set(true);
+    this.error.set(null);
+    this.api.mt101Lote({
+      fragmentSetId: this.fragmentSetId,
+      processExecutionId: this.processExecutionId,
+      connectionRef: this.connectionRef,
+    }).subscribe({
+      next: (header) => {
+        this.lote.set(header);
+        if (header?.fragmentSetId) {
+          this.fragmentSetId = header.fragmentSetId;
+          this.correctiveSetId = `${header.fragmentSetId}-FIX`;
+        }
+        this.list();
+      },
+      error: () => {
+        this.error.set('No se pudo resolver el lote.');
+        this.loading.set(false);
+      },
+    });
   }
 
   readonly rows = signal<Mt101FailedRecord[]>([]);
@@ -197,6 +254,7 @@ export class Mt101QuarantineComponent {
   readonly error = signal<string | null>(null);
   readonly message = signal<string | null>(null);
   readonly summary = signal<Mt101FragmentSetSummary | null>(null);
+  readonly lote = signal<Mt101LoteHeader | null>(null);
   readonly selectedRow = signal<number | null>(null);
   readonly timeline = signal<Mt101RowTimelineEntry[]>([]);
   readonly timelineLoading = signal(false);

@@ -2,6 +2,7 @@ package com.integrationhub.platform.api.resource.execution;
 
 import com.integrationhub.platform.api.response.execution.Mt101FailedRecordResponse;
 import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRepository;
+import com.integrationhub.platform.service.payments.swift.Mt101LoteService;
 import com.integrationhub.platform.service.payments.swift.Mt101QuarantineService;
 import com.integrationhub.platform.service.payments.swift.Mt101RebuildService;
 import jakarta.annotation.security.RolesAllowed;
@@ -28,10 +29,31 @@ public class Mt101QuarantineResource {
 
     private final Mt101QuarantineService service;
     private final Mt101RebuildService rebuildService;
+    private final Mt101LoteService loteService;
 
-    public Mt101QuarantineResource(Mt101QuarantineService service, Mt101RebuildService rebuildService) {
+    public Mt101QuarantineResource(Mt101QuarantineService service,
+                                   Mt101RebuildService rebuildService,
+                                   Mt101LoteService loteService) {
         this.service = service;
         this.rebuildService = rebuildService;
+        this.loteService = loteService;
+    }
+
+    /**
+     * Cabecera del lote (archivo + hash + ejecución + conteos) por fragmentSetId o
+     * processExecutionId — entrada de la vista unificada desde la ejecución.
+     */
+    @GET
+    @Path("/lote")
+    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    public Mt101LoteService.LoteHeader lote(@QueryParam("connectionRef") String connectionRef,
+                                            @QueryParam("fragmentSetId") String fragmentSetId,
+                                            @QueryParam("processExecutionId") Long processExecutionId) {
+        try {
+            return loteService.header(connectionRef, fragmentSetId, processExecutionId);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
     }
 
     /** Encola las filas fallidas de un set resolviendo cada :21: a su fila exacta. Mutación. */

@@ -9,6 +9,7 @@ import {
   Mt101FailedRecord,
   Mt101FragmentLink,
   Mt101FragmentSetSummary,
+  Mt101LoteHeader,
   Mt101QuarantineBuildResult,
   Mt101RebuildResult,
   Mt101ReprocessResult,
@@ -139,6 +140,21 @@ export class AuditApiService {
       httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }
     return this.http.get<Mt101FragmentSetSummary>('/api/query/mt101-fragments/summary', { params: httpParams });
+  }
+
+  /** Cabecera del lote (archivo + hash + ejecución + conteos) por set o por ejecución. */
+  mt101Lote(query: { connectionRef?: string; fragmentSetId?: string; processExecutionId?: number | string }): Observable<Mt101LoteHeader> {
+    let httpParams = new HttpParams();
+    if (query.fragmentSetId?.trim()) {
+      httpParams = httpParams.set('fragmentSetId', query.fragmentSetId.trim());
+    }
+    if (query.processExecutionId !== undefined && String(query.processExecutionId).trim()) {
+      httpParams = httpParams.set('processExecutionId', String(query.processExecutionId).trim());
+    }
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.get<Mt101LoteHeader>('/api/query/mt101-quarantine/lote', { params: httpParams });
   }
 
   /** Línea de tiempo E2E operacional (instantánea) de una fila del archivo. */

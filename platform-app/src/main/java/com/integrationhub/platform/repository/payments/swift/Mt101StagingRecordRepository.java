@@ -173,4 +173,22 @@ public class Mt101StagingRecordRepository {
 
     public record RowJson(long id, String payloadJson, Long recordIndex, String sourceFileHash) {
     }
+
+    /** Nombre del archivo origen + total de filas de una ejecucion (cabecera del lote). */
+    public SourceInfo sourceInfo(DataSource dataSource, long processExecutionId) throws SQLException {
+        var sql = "select max(source_name) as name, count(*) as total from staging_record where process_execution_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, processExecutionId);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return new SourceInfo(null, 0);
+                }
+                return new SourceInfo(rs.getString("name"), rs.getLong("total"));
+            }
+        }
+    }
+
+    public record SourceInfo(String sourceName, long rowCount) {
+    }
 }

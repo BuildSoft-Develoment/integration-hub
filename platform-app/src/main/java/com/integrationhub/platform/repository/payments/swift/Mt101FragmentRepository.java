@@ -331,6 +331,36 @@ public class Mt101FragmentRepository {
     public record SetMetadata(Long processExecutionId, Long taskDefinitionId, String sourceTable) {
     }
 
+    /**
+     * Resuelve la identidad del lote por fragmentSetId o por processExecutionId (lo
+     * que el operador conoce tras correr el proceso). Devuelve null si no hay set.
+     */
+    public LoteRef loteRef(DataSource dataSource, String fragmentSetId, Long processExecutionId) throws SQLException {
+        var bySet = fragmentSetId != null && !fragmentSetId.isBlank();
+        var sql = "select fragment_set_id, process_execution_id, source_table, source_file_hash "
+                + "from mt101_build_fragment where "
+                + (bySet ? "fragment_set_id = ?" : "process_execution_id = ?")
+                + " order by fragment_index asc limit 1";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            if (bySet) {
+                statement.setString(1, fragmentSetId.trim());
+            } else {
+                statement.setLong(1, processExecutionId);
+            }
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return new LoteRef(rs.getString("fragment_set_id"), nullableLong(rs, "process_execution_id"),
+                        rs.getString("source_table"), rs.getString("source_file_hash"));
+            }
+        }
+    }
+
+    public record LoteRef(String fragmentSetId, Long processExecutionId, String sourceTable, String sourceFileHash) {
+    }
+
     /** Conteo de fragmentos por estado de un set (resumen del lote para la UI). */
     public List<StatusCount> statusCountsBySet(DataSource dataSource, String fragmentSetId) throws SQLException {
         var sql = "select status, count(*) as total from mt101_build_fragment "
