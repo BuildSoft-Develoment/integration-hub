@@ -4,7 +4,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuditApiService } from '../../api/audit-api.service';
-import { Mt101FailedRecord, Mt101FragmentSetSummary } from '../../models/audit.models';
+import { Mt101FailedRecord, Mt101FragmentSetSummary, RecordLineageEntry } from '../../models/audit.models';
 
 @Component({
   selector: 'ih-mt101-quarantine',
@@ -27,8 +27,18 @@ import { Mt101FailedRecord, Mt101FragmentSetSummary } from '../../models/audit.m
     td { font-size:.86rem; }
     .q__mono { font-family:ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap:anywhere; }
     .q__row { font-weight:600; color:#e8590c; }
-    .q__link { color:var(--ih-accent, #4c6ef5); text-decoration:none; white-space:nowrap; }
+    .q__link { color:var(--ih-accent, #4c6ef5); text-decoration:none; white-space:nowrap; margin-left:.4rem; }
     .q__link:hover { text-decoration:underline; }
+    .q__tl-btn { min-height:auto; padding:2px 8px; font-size:.78rem; }
+    .q__tl-row td { background:var(--ih-surface-alt, #1b1f27); padding:.5rem .75rem; }
+    .q__timeline { display:flex; flex-direction:column; gap:5px; }
+    .q__tl-title { font-size:.78rem; color:var(--ih-text-soft); margin-bottom:.25rem; }
+    .q__tl-entry { display:grid; grid-template-columns:minmax(9rem,12rem) 7rem 1fr minmax(8rem,11rem); gap:.6rem; align-items:center;
+      padding:.4rem .6rem; border-left:3px solid var(--ih-border, #354052); background:var(--ih-surface, #10141b); }
+    .q__tl-entry--REJECTED { border-left-color:#e03131; }
+    .q__tl-entry--SENT,.q__tl-entry--ARCHIVED,.q__tl-entry--VALIDATED,.q__tl-entry--INGESTED,.q__tl-entry--BUILT { border-left-color:#2f9e44; }
+    .q__tl-stage { font-weight:600; overflow-wrap:anywhere; }
+    .q__tl-ts { color:var(--ih-text-soft); font-size:.8rem; }
     .q__cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(7rem, 1fr)); gap:.6rem; }
     .q__card { background:var(--ih-surface-alt, #1b1f27); border:1px solid var(--ih-border, #354052); border-radius:8px; padding:.6rem .7rem; display:flex; flex-direction:column; gap:.15rem; }
     .q__card small { font-size:.72rem; color:var(--ih-text-soft); }
@@ -124,10 +134,36 @@ import { Mt101FailedRecord, Mt101FragmentSetSummary } from '../../models/audit.m
                   <td class="q__status--{{ row.status }}">{{ row.status }}</td>
                   <td>
                     @if (row.sourceFileHash && row.sourceRecordNumber !== null) {
-                      <a class="q__link" [routerLink]="['/audit/record-lineage']" [queryParams]="{ sourceFileHash: row.sourceFileHash, recordNumber: row.sourceRecordNumber }">Ver timeline</a>
+                      <button type="button" class="q__tl-btn" (click)="toggleTimeline(row)">
+                        {{ selectedRow() === row.sourceRecordNumber ? 'Ocultar' : 'Timeline' }}
+                      </button>
+                      <a class="q__link" [routerLink]="['/audit/record-lineage']" [queryParams]="{ sourceFileHash: row.sourceFileHash, recordNumber: row.sourceRecordNumber }" title="Abrir vista completa"><i class="ti ti-external-link"></i></a>
                     }
                   </td>
                 </tr>
+                @if (selectedRow() === row.sourceRecordNumber) {
+                  <tr class="q__tl-row">
+                    <td colspan="9">
+                      @if (timelineLoading()) {
+                        <span class="q__empty">Cargando línea de tiempo...</span>
+                      } @else if (timeline().length === 0) {
+                        <span class="q__empty">Sin eventos en el cold store para esta fila (auditoría asíncrona; reintenta en unos segundos).</span>
+                      } @else {
+                        <div class="q__timeline">
+                          <div class="q__tl-title">Línea de tiempo E2E · fila {{ row.sourceRecordNumber }}</div>
+                          @for (e of timeline(); track $index) {
+                            <div class="q__tl-entry q__tl-entry--{{ e.status }}">
+                              <span class="q__tl-stage">{{ e.stage }}</span>
+                              <span class="q__status--{{ e.status }}">{{ e.status }}</span>
+                              <span>{{ e.message || e.paymentReference || e.transactionReference || '—' }}</span>
+                              <span class="q__tl-ts">{{ e.eventTs }}</span>
+                            </div>
+                          }
+                        </div>
+                      }
+                    </td>
+                  </tr>
+                }
               }
             </tbody>
           </table>
@@ -159,7 +195,33 @@ export class Mt101QuarantineComponent {
   readonly error = signal<string | null>(null);
   readonly message = signal<string | null>(null);
   readonly summary = signal<Mt101FragmentSetSummary | null>(null);
+  readonly selectedRow = signal<number | null>(null);
+  readonly timeline = signal<RecordLineageEntry[]>([]);
+  readonly timelineLoading = signal(false);
   readonly pendingCount = computed(() => this.rows().filter((r) => r.status === 'QUARANTINED').length);
+
+  toggleTimeline(row: Mt101FailedRecord): void {
+    if (this.selectedRow() === row.sourceRecordNumber) {
+      this.selectedRow.set(null);
+      return;
+    }
+    if (!row.sourceFileHash || row.sourceRecordNumber === null) {
+      return;
+    }
+    this.selectedRow.set(row.sourceRecordNumber);
+    this.timeline.set([]);
+    this.timelineLoading.set(true);
+    this.api.recordLineage({
+      sourceFileHash: row.sourceFileHash,
+      recordNumber: String(row.sourceRecordNumber),
+    }).subscribe({
+      next: (entries) => {
+        this.timeline.set(entries);
+        this.timelineLoading.set(false);
+      },
+      error: () => this.timelineLoading.set(false),
+    });
+  }
   readonly statusEntries = computed(() => {
     const s = this.summary();
     return s ? Object.entries(s.byStatus).map(([status, count]) => ({ status, count })) : [];
