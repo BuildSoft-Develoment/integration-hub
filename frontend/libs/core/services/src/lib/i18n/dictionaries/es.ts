@@ -11,6 +11,7 @@ export const es = {
   'nav.recordLineage': 'Trazabilidad de registro',
   'nav.auditSpool': 'Spool auditoria',
   'nav.mt101Fragments': 'Fragmentos MT101',
+  'nav.mt101Quarantine': 'Cuarentena MT101',
   'layout.login': 'Ingresar',
   'layout.logout': 'Salir',
   'layout.roles': 'Roles',

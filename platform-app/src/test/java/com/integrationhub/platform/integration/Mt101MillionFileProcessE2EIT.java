@@ -74,6 +74,7 @@ class Mt101MillionFileProcessE2EIT {
                     TRUNCATE TABLE
                       audit_spool,
                       audit_event,
+                      mt101_failed_record,
                       mt101_validation_issue,
                       mt101_confirmation,
                       mt101_transaction,
@@ -134,6 +135,138 @@ class Mt101MillionFileProcessE2EIT {
 
             assertAllTasksCompleted(executionId.longValue(), 6);
             assertNoOversizedFragments();
+        }
+    }
+
+    private static final int NEG_ROWS = Integer.getInteger("e2e.negativeRows", 200);
+    private static final int BAD_ROW = Integer.getInteger("e2e.badRow", 137);
+
+    /**
+     * Caso negativo a escala: una sola fila invalida en un lote grande. Verifica que
+     * el operador puede ubicar la <b>fila exacta</b> que fallo y reprocesar solo esa
+     * fila (cuarentena -> rebuild) sin tocar el resto. Parametrizable a 1M via
+     * {@code -De2e.negativeRows=1000000 -De2e.badRow=847192}.
+     */
+    @Test
+    @TestSecurity(user = "admin", roles = {"platform-admin"})
+    void locatesAndReprocessesExactFailedRowInLargeBatch() throws Exception {
+        writeCsvWithBadRow(DEFAULT_INPUT_FILE, NEG_ROWS, BAD_ROW);
+
+        try (var gateway = LocalSwiftGateway.start()) {
+            var sourceId = createSource(DEFAULT_INPUT_FILE);
+            var readerId = createReader();
+            var processId = createSwiftProcess(sourceId, readerId, gateway.url());
+
+            Number executionId = given()
+                    .contentType(ContentType.JSON).body("{}")
+                    .when().post("/api/process-executions/{processDefinitionId}", processId.longValue())
+                    .then().statusCode(200).extract().path("id");
+            awaitExecutionTerminal(executionId.longValue());
+
+            var fragmentSetId = "E2E-" + executionId.longValue();
+
+            // 1) Todas las filas llegaron a staging; la fila mala produjo 1 issue por :21:.
+            assertEquals(NEG_ROWS, countRows("staging_record"), "todas las filas se cargan en staging");
+            assertEquals(1, countRowsWhere("mt101_validation_issue",
+                    "rule_code = 'STRUCT.CHARGES_VALUE' and transaction_reference is not null"),
+                    "la fila invalida produce exactamente un issue de transaccion");
+
+            // 2) Cuarentena: resuelve el :21: fallido a su fila EXACTA del archivo.
+            int quarantined = given()
+                    .queryParam("fragmentSetId", fragmentSetId)
+                    .when().post("/api/query/mt101-quarantine/build")
+                    .then().statusCode(200).extract().path("quarantined");
+            assertEquals(1, quarantined, "se encola exactamente la fila fallida");
+
+            var failedRow = given()
+                    .queryParam("fragmentSetId", fragmentSetId)
+                    .when().get("/api/query/mt101-quarantine")
+                    .then().statusCode(200).extract().jsonPath();
+            assertEquals(BAD_ROW, failedRow.getInt("[0].sourceRecordNumber"),
+                    "el operador ve la fila exacta del archivo que fallo");
+            assertEquals("STRUCT.CHARGES_VALUE", failedRow.getString("[0].ruleCode"));
+
+            // 3) Lookup fila -> fragmento por la fila exacta devuelve el :20: correcto.
+            var lookup = given()
+                    .queryParam("recordNumber", BAD_ROW)
+                    .queryParam("fragmentSetId", fragmentSetId)
+                    .when().get("/api/query/mt101-fragments/source-row")
+                    .then().statusCode(200).extract().jsonPath();
+            assertTrue(lookup.getLong("[0].sourceRecordFrom") <= BAD_ROW
+                    && lookup.getLong("[0].sourceRecordTo") >= BAD_ROW,
+                    "el fragmento devuelto cubre la fila exacta");
+
+            // 4) Reproceso quirurgico: corregir la fila en staging y rebuild SOLO esa fila.
+            correctStagingRow(BAD_ROW);
+            var rebuild = given()
+                    .queryParam("fragmentSetId", fragmentSetId)
+                    .queryParam("correctiveSetId", fragmentSetId + "-FIX")
+                    .when().post("/api/query/mt101-quarantine/rebuild")
+                    .then().statusCode(200).extract().jsonPath();
+            assertEquals(1, rebuild.getInt("rebuiltRows"), "se reconstruye solo la fila corregida");
+            assertEquals(1, rebuild.getInt("supersededFragments"), "el fragmento original queda superseded");
+
+            assertEquals(1, countRowsWhere("mt101_build_fragment",
+                    "fragment_set_id = '" + fragmentSetId + "-FIX'"),
+                    "el set correctivo contiene solo el fragmento de la fila corregida");
+            assertEquals(1, countRowsWhere("mt101_build_fragment",
+                    "fragment_set_id = '" + fragmentSetId + "' and status = 'SUPERSEDED'"),
+                    "el fragmento original de la fila fallida queda SUPERSEDED");
+        }
+    }
+
+    private void correctStagingRow(int recordNumber) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            // El issue era cargos invalido; lo corregimos a OUR en el payload de staging.
+            statement.executeUpdate("update staging_record set payload_json = "
+                    + "regexp_replace(payload_json, '\"cargos\":\"BAD\"', '\"cargos\":\"OUR\"') "
+                    + "where record_index = " + (recordNumber - 1));
+        }
+    }
+
+    private void awaitExecutionTerminal(long executionId) {
+        long deadline = System.currentTimeMillis() + TIMEOUT_SECONDS * 1_000L;
+        String status = null;
+        while (System.currentTimeMillis() < deadline) {
+            status = given().when()
+                    .get("/api/query/process-executions/{processExecutionId}", executionId)
+                    .then().statusCode(200).extract().path("status");
+            if (status != null && !"QUEUED".equals(status) && !"PENDING".equals(status)
+                    && !"RUNNING".equals(status)) {
+                return;
+            }
+            try {
+                Thread.sleep(1_000L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    private void writeCsvWithBadRow(Path file, int rows, int badRow) throws Exception {
+        Files.createDirectories(file.getParent());
+        try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
+            writer.write("dni,nombre,cuenta,moneda,monto,bic,concepto,cargos");
+            writer.newLine();
+            for (int i = 1; i <= rows; i++) {
+                writer.write(String.valueOf(10_000_000 + i));
+                writer.write(",BENEFICIARIO ");
+                writer.write(String.valueOf(i));
+                writer.write(",001");
+                writer.write(String.format("%010d", i));
+                writer.write(',');
+                writer.write("PEN");
+                writer.write(',');
+                writer.write(String.valueOf(100 + (i % 900)));
+                writer.write(".50,BCPLPEPLXXX,FACTURA ");
+                writer.write(String.valueOf(i));
+                writer.write(',');
+                // detailsOfCharges invalido SOLO en la fila objetivo -> STRUCT.CHARGES_VALUE.
+                writer.write(i == badRow ? "BAD" : "OUR");
+                writer.newLine();
+            }
         }
     }
 

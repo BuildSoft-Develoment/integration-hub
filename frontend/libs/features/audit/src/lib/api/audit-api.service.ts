@@ -6,7 +6,11 @@ import {
   AuditSpoolCleanupResult,
   AuditSpoolEntry,
   AuditSpoolSummary,
+  Mt101FailedRecord,
   Mt101FragmentLink,
+  Mt101QuarantineBuildResult,
+  Mt101RebuildResult,
+  Mt101ReprocessResult,
   RecordLineageEntry,
 } from '../models/audit.models';
 
@@ -99,6 +103,7 @@ export class AuditApiService {
   mt101FragmentLinks(query: {
     connectionRef?: string;
     recordNumber: number | string;
+    sourceFileHash?: string;
     sourceTable?: string;
     processExecutionId?: number | string;
     fragmentSetId?: string;
@@ -110,6 +115,9 @@ export class AuditApiService {
     if (query.connectionRef?.trim()) {
       httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }
+    if (query.sourceFileHash?.trim()) {
+      httpParams = httpParams.set('sourceFileHash', query.sourceFileHash.trim());
+    }
     if (query.sourceTable?.trim()) {
       httpParams = httpParams.set('sourceTable', query.sourceTable.trim());
     }
@@ -120,5 +128,105 @@ export class AuditApiService {
       httpParams = httpParams.set('fragmentSetId', query.fragmentSetId.trim());
     }
     return this.http.get<Mt101FragmentLink[]>('/api/query/mt101-fragments/source-row', { params: httpParams });
+  }
+
+  /** Revalida/reenvia en bloque por transicion de estado (REJECTED -> BUILT, SENT -> ARCHIVED). */
+  mt101ReprocessByStatus(query: {
+    connectionRef?: string;
+    fragmentSetId: string;
+    fromStatus: string;
+    toStatus: string;
+  }): Observable<Mt101ReprocessResult> {
+    let httpParams = new HttpParams()
+      .set('fragmentSetId', query.fragmentSetId)
+      .set('fromStatus', query.fromStatus)
+      .set('toStatus', query.toStatus);
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.post<Mt101ReprocessResult>('/api/query/mt101-fragments/reprocess/status', {}, {
+      params: httpParams,
+    });
+  }
+
+  /** Reprocesa solo los fragmentos que contienen las filas [recordFrom, recordTo] del archivo. */
+  mt101ReprocessBySourceRows(query: {
+    connectionRef?: string;
+    fragmentSetId: string;
+    recordFrom: number | string;
+    recordTo?: number | string;
+    sourceFileHash?: string;
+    toStatus?: string;
+  }): Observable<Mt101FragmentLink[]> {
+    let httpParams = new HttpParams()
+      .set('fragmentSetId', query.fragmentSetId)
+      .set('recordFrom', String(query.recordFrom))
+      .set('toStatus', query.toStatus ?? 'BUILT');
+    if (query.recordTo !== undefined && String(query.recordTo).trim()) {
+      httpParams = httpParams.set('recordTo', String(query.recordTo).trim());
+    }
+    if (query.sourceFileHash?.trim()) {
+      httpParams = httpParams.set('sourceFileHash', query.sourceFileHash.trim());
+    }
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.post<Mt101FragmentLink[]>('/api/query/mt101-fragments/reprocess/source-rows', {}, {
+      params: httpParams,
+    });
+  }
+
+  /** Lista las filas en cuarentena de un set (la fila exacta que fallo, regla, :20:/:21:). */
+  mt101FailedRecords(query: {
+    connectionRef?: string;
+    fragmentSetId: string;
+    status?: string;
+    limit?: number;
+  }): Observable<Mt101FailedRecord[]> {
+    let httpParams = new HttpParams()
+      .set('fragmentSetId', query.fragmentSetId)
+      .set('limit', String(query.limit ?? 500));
+    if (query.status?.trim()) {
+      httpParams = httpParams.set('status', query.status.trim());
+    }
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.get<Mt101FailedRecord[]>('/api/query/mt101-quarantine', { params: httpParams });
+  }
+
+  /** Construye la cuarentena resolviendo cada :21: fallido a su fila exacta del archivo. */
+  mt101BuildQuarantine(query: {
+    connectionRef?: string;
+    fragmentSetId: string;
+    issueTable?: string;
+  }): Observable<Mt101QuarantineBuildResult> {
+    let httpParams = new HttpParams().set('fragmentSetId', query.fragmentSetId);
+    if (query.issueTable?.trim()) {
+      httpParams = httpParams.set('issueTable', query.issueTable.trim());
+    }
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.post<Mt101QuarantineBuildResult>('/api/query/mt101-quarantine/build', {}, {
+      params: httpParams,
+    });
+  }
+
+  /** Reconstruye SOLO las filas en cuarentena en un set correctivo (supersede originales). */
+  mt101RebuildQuarantine(query: {
+    connectionRef?: string;
+    fragmentSetId: string;
+    correctiveSetId: string;
+  }): Observable<Mt101RebuildResult> {
+    let httpParams = new HttpParams()
+      .set('fragmentSetId', query.fragmentSetId)
+      .set('correctiveSetId', query.correctiveSetId);
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.post<Mt101RebuildResult>('/api/query/mt101-quarantine/rebuild', {}, {
+      params: httpParams,
+    });
   }
 }

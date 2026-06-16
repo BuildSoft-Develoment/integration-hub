@@ -75,9 +75,12 @@ public class Mt101FragmentStore {
                                int fragmentIndex,
                                int fragmentTotal,
                                Mt101Message message) {
+        // Conveniencia (tests/flujos simples): rowFrom/rowTo se interpretan como
+        // id de staging y como numero de fila a la vez. El flujo masivo usa el
+        // constructor completo de FragmentInsert con ambas claves separadas.
         insertFragments(connectionRef, List.of(new FragmentInsert(
                 fragmentSetId, processExecutionId, taskDefinitionId, sourceTable,
-                rowFrom, rowTo, fragmentIndex, fragmentTotal, message)));
+                rowFrom, rowTo, rowFrom, rowTo, null, Map.of(), fragmentIndex, fragmentTotal, message)));
     }
 
     /**
@@ -103,8 +106,12 @@ public class Mt101FragmentStore {
                         fragment.processExecutionId(),
                         fragment.taskDefinitionId(),
                         fragment.sourceTable(),
-                        fragment.rowFrom(),
-                        fragment.rowTo(),
+                        fragment.stagingIdFrom(),
+                        fragment.stagingIdTo(),
+                        fragment.sourceRecordFrom(),
+                        fragment.sourceRecordTo(),
+                        fragment.sourceFileHash(),
+                        sourceRecordsJson(fragment.sourceRecords()),
                         fragment.fragmentIndex(),
                         fragment.fragmentTotal(),
                         message.sequenceA() == null ? null : message.sequenceA().sendersReference(),
@@ -119,14 +126,22 @@ public class Mt101FragmentStore {
         }
     }
 
-    /** Parametros de insercion de un fragmento (para lotes de fase 2). */
+    /**
+     * Parametros de insercion de un fragmento (para lotes de fase 2). Separa la
+     * clave tecnica ({@code stagingId*}) de la clave de soporte/UI ({@code sourceRecord*},
+     * fila 1-based del archivo) + hash del archivo origen.
+     */
     public record FragmentInsert(
             String fragmentSetId,
             Long processExecutionId,
             Long taskDefinitionId,
             String sourceTable,
-            long rowFrom,
-            long rowTo,
+            long stagingIdFrom,
+            long stagingIdTo,
+            long sourceRecordFrom,
+            long sourceRecordTo,
+            String sourceFileHash,
+            Map<String, Long> sourceRecords,
             int fragmentIndex,
             int fragmentTotal,
             Mt101Message message
@@ -267,6 +282,18 @@ public class Mt101FragmentStore {
             return objectMapper.writeValueAsString(message);
         } catch (JsonProcessingException error) {
             throw new IllegalArgumentException("Cannot serialize MT101 fragment", error);
+        }
+    }
+
+    /** Serializa el mapeo {@code :21: -> fila del archivo} como objeto JSON. */
+    private String sourceRecordsJson(Map<String, Long> sourceRecords) {
+        if (sourceRecords == null || sourceRecords.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(sourceRecords);
+        } catch (JsonProcessingException error) {
+            throw new IllegalArgumentException("Cannot serialize MT101 fragment source records", error);
         }
     }
 

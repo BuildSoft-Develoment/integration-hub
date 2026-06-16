@@ -10,6 +10,7 @@ export const en = {
   'nav.recordLineage': 'Record lineage',
   'nav.auditSpool': 'Audit spool',
   'nav.mt101Fragments': 'MT101 fragments',
+  'nav.mt101Quarantine': 'MT101 quarantine',
   'layout.login': 'Login',
   'layout.logout': 'Logout',
   'layout.roles': 'Roles',

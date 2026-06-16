@@ -370,10 +370,11 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
                     stringValue(issue.code(), "UNKNOWN"),
                     stringValue(issue.ruleSet(), "unknown"),
                     severityCode(issue.severity()),
-                    issueMessage(issue),
+                    issue.message(),
                     row.fragmentSetId(),
                     row.sendersReference(),
-                    row.fragmentIndex()));
+                    row.fragmentIndex(),
+                    stringValue(issue.transactionReference(), null)));
         }
         try {
             issueRepository.insertIssues(dataSource, issueSink.table(), rows);
@@ -403,13 +404,6 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
             return "I";
         }
         return "E";
-    }
-
-    private String issueMessage(ValidationIssue issue) {
-        if (issue.transactionReference() == null || issue.transactionReference().isBlank()) {
-            return issue.message();
-        }
-        return "[transactionReference=" + issue.transactionReference() + "] " + issue.message();
     }
 
     /** Acumula resultados por mensaje sin retener los mensajes en memoria. */

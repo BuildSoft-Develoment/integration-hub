@@ -77,7 +77,26 @@ class FileReadTaskFastPathTest {
         );
 
         assertFalse(fastPath.supports(fileReadPlan("fail"), mt101BuildPlan()));
+        // MT101_PARSE publica un output `records` consumido downstream (p.ej. MT101_ROUTE);
+        // el fast path no lo materializa, por eso no debe fusionarlo.
+        assertFalse(fastPath.supports(fileReadPlan("fail"), mt101ParsePlan()));
         assertTrue(fastPath.supports(fileReadPlan("fail"), sinkPlan()));
+    }
+
+    private ProcessExecutionStateService.TaskPlan mt101ParsePlan() {
+        return new ProcessExecutionStateService.TaskPlan(
+                20L,
+                2,
+                "MT101_PARSE",
+                "{\"taskRef\":\"parse-mt101\",\"executionMode\":\"batch\",\"input\":{\"source\":\"task-output\",\"sourceTaskRef\":\"task-1-file-read\",\"sourceOutput\":\"records\"}}",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
     }
 
     private ProcessExecutionStateService.TaskPlan fileReadPlan(String fileErrorPolicy) {

@@ -115,15 +115,16 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
      * este :20:.
      */
     private AuditEnvelope recordEnvelope(TaskContext context, String reference,
-                                        long logicalOffset, int rowCount, long firstStagingId, long lastStagingId) {
+                                        FragmentPlan boundary, int rowCount) {
         // El rango va en payloadJson (lo persiste el store frio) para el drill-down
-        // N filas (INGESTED) -> 1 fragmento (BUILT): record_index en [from, to].
+        // N filas (INGESTED) -> 1 fragmento (BUILT): fila del archivo en [from, to]
+        // (1-based, igual que lo que ve el operador), mas los ids tecnicos de staging.
         var composition = new java.util.LinkedHashMap<String, Object>();
-        composition.put("recordIndexFrom", logicalOffset);
-        composition.put("recordIndexTo", logicalOffset + Math.max(rowCount - 1, 0));
+        composition.put("sourceRecordFrom", boundary.sourceRecordFrom());
+        composition.put("sourceRecordTo", boundary.sourceRecordTo());
         composition.put("rowCount", rowCount);
-        composition.put("stagingFirstId", firstStagingId);
-        composition.put("stagingLastId", lastStagingId);
+        composition.put("stagingFirstId", boundary.firstId());
+        composition.put("stagingLastId", boundary.lastId());
         return new AuditEnvelope(
                 UUID.randomUUID().toString(),
                 context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
@@ -139,8 +140,8 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                 "SWIFT",
                 "MT101",
                 null,
-                null,
-                logicalOffset,
+                boundary.sourceFileHash(),
+                boundary.sourceRecordFrom(),
                 null,
                 null,
                 reference,
@@ -236,6 +237,19 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                             + maxBytes + " with " + payloadBytes + " bytes after final build");
                 }
                 totalBytes += payloadBytes;
+                // Mapeo :21: -> fila del archivo (1-based) por fragmento: rows[i] arma
+                // transaction[i], asi cada referencia de transaccion conoce su fila exacta
+                // para la cuarentena. Sin fallback: 1 fila staging = 1 transaccion.
+                var transactions = message.transactions();
+                if (transactions.size() != rows.size()) {
+                    throw new IllegalStateException("MT101 fragment " + index + " produced "
+                            + transactions.size() + " transactions from " + rows.size()
+                            + " source rows; cannot map :21: to the exact file row");
+                }
+                var sourceRecords = new LinkedHashMap<String, Long>();
+                for (int i = 0; i < rows.size(); i++) {
+                    sourceRecords.put(transactions.get(i).transactionReference(), sourceRecordNumber(rows.get(i)));
+                }
                 insertBuffer.add(new Mt101FragmentStore.FragmentInsert(
                         fragmentSetId,
                         context.processExecutionId(),
@@ -243,12 +257,16 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                         source.table(),
                         boundary.firstId(),
                         boundary.lastId(),
+                        boundary.sourceRecordFrom(),
+                        boundary.sourceRecordTo(),
+                        boundary.sourceFileHash(),
+                        sourceRecords,
                         index,
                         totalFragments,
                         message));
                 auditBuffer.add(recordEnvelope(context,
                         message.sequenceA() == null ? null : message.sequenceA().sendersReference(),
-                        boundary.logicalOffset(), rows.size(), boundary.firstId(), boundary.lastId()));
+                        boundary, rows.size()));
                 if (insertBuffer.size() >= INSERT_BATCH_SIZE) {
                     fragmentStore.insertFragments(source.connectionRef(), new ArrayList<>(insertBuffer));
                     insertBuffer.clear();
@@ -290,7 +308,14 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
         var message = buildFragment(context, configuration, rows, provisionalIndex, MEASUREMENT_TOTAL, logicalOffset);
         var payloadBytes = payloadBytes(message);
         if (payloadBytes <= maxBytes) {
-            plan.add(new FragmentPlan(rows.get(0).id(), rows.get(rows.size() - 1).id(), rows.size(), logicalOffset));
+            plan.add(new FragmentPlan(
+                    rows.get(0).id(),
+                    rows.get(rows.size() - 1).id(),
+                    sourceRecordNumber(rows.get(0)),
+                    sourceRecordNumber(rows.get(rows.size() - 1)),
+                    rows.get(0).sourceFileHash(),
+                    rows.size(),
+                    logicalOffset));
             return;
         }
         if (rows.size() == 1) {
@@ -302,6 +327,20 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
         var mid = rows.size() / 2;
         planChunk(context, configuration, rows.subList(0, mid), maxBytes, logicalOffset, plan);
         planChunk(context, configuration, rows.subList(mid, rows.size()), maxBytes, logicalOffset + mid, plan);
+    }
+
+    /**
+     * Numero de fila <b>1-based</b> visible al operador, derivado del {@code record_index}
+     * real persistido en staging (robusto aunque los ids no sean contiguos). Sin
+     * fallback: si la fila no trae {@code record_index} es un error de integridad, no
+     * se inventa un numero de fila a partir del offset logico.
+     */
+    private long sourceRecordNumber(RowRecord row) {
+        if (row.recordIndex() == null) {
+            throw new IllegalStateException("MT101_BUILD_FROM_TABLE requires staging_record.record_index "
+                    + "to trace the source row; staging id " + row.id() + " has a null record_index");
+        }
+        return row.recordIndex() + 1;
     }
 
     private com.integrationhub.platform.spi.task.payments.Mt101Message buildFragment(
@@ -403,7 +442,25 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                 DbTaskSupport.sanitizeIdentifier(payloadColumn),
                 DbTaskSupport.sanitizeIdentifier(idColumn),
                 processExecutionId,
-                taskDefinitionId);
+                taskDefinitionId,
+                recordIndexFilter(sourceCfg.get("recordIndexIn")));
+    }
+
+    /**
+     * Filtro opcional {@code source.recordIndexIn}: limita la construccion a esas
+     * filas de staging (rebuild selectivo desde cuarentena). Vacio = todas las filas.
+     */
+    private List<Long> recordIndexFilter(Object raw) {
+        if (!(raw instanceof List<?> rawList) || rawList.isEmpty()) {
+            return List.of();
+        }
+        var result = new ArrayList<Long>(rawList.size());
+        for (var item : rawList) {
+            if (item != null && !String.valueOf(item).isBlank()) {
+                result.add(Long.parseLong(String.valueOf(item).trim()));
+            }
+        }
+        return result;
     }
 
     private long countRows(SourceTable source) {
@@ -432,18 +489,26 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     private List<RowRecord> rowsFromJson(List<Mt101StagingRecordRepository.RowJson> sourceRows) {
         var rows = new ArrayList<RowRecord>(sourceRows.size());
         for (var row : sourceRows) {
-            rows.add(new RowRecord(row.id(), new ReadRecord(jsonConfigurationMapper.toMap(row.payloadJson()))));
+            rows.add(new RowRecord(row.id(), row.recordIndex(), row.sourceFileHash(),
+                    new ReadRecord(jsonConfigurationMapper.toMap(row.payloadJson()))));
         }
         return rows;
     }
 
     private Mt101StagingRecordRepository.SourceQuery sourceQuery(SourceTable source) {
+        // Sin fallback: MT101_BUILD_FROM_TABLE exige las columnas de trazabilidad de
+        // fila (record_index + source_file_hash, V1/V31). La tabla origen debe tener
+        // forma staging_record para que cada fragmento conserve la fila exacta del
+        // archivo; no se degrada al offset logico.
         return new Mt101StagingRecordRepository.SourceQuery(
                 source.table(),
                 source.payloadColumn(),
                 source.idColumn(),
                 source.processExecutionId(),
-                source.taskDefinitionId());
+                source.taskDefinitionId(),
+                "record_index",
+                "source_file_hash",
+                source.recordIndexIn());
     }
 
     @SuppressWarnings("unchecked")
@@ -548,19 +613,26 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
             String payloadColumn,
             String idColumn,
             Long processExecutionId,
-            Long taskDefinitionId
+            Long taskDefinitionId,
+            List<Long> recordIndexIn
     ) {
     }
 
-    /** Fila staging: id (cursor keyset) + payload ya parseado. */
-    private record RowRecord(long id, ReadRecord record) {
+    /**
+     * Fila staging: id (cursor keyset) + record_index (fila 0-based del archivo,
+     * nullable para tablas arbitrarias) + hash del archivo + payload ya parseado.
+     */
+    private record RowRecord(long id, Long recordIndex, String sourceFileHash, ReadRecord record) {
     }
 
     /**
-     * Limite de fragmento planificado en fase 1: rango de ids staging (inclusivo),
-     * cantidad de transacciones y offset logico acumulado (continuidad de
-     * {@code ${recordNumber}} entre fragmentos).
+     * Limite de fragmento planificado en fase 1: rango de ids staging (clave tecnica,
+     * inclusivo), rango de fila del archivo <b>1-based</b> (clave de soporte/UI),
+     * hash del archivo origen, cantidad de transacciones y offset logico acumulado
+     * (continuidad de {@code ${recordNumber}} entre fragmentos).
      */
-    private record FragmentPlan(long firstId, long lastId, int txCount, long logicalOffset) {
+    private record FragmentPlan(long firstId, long lastId,
+                                long sourceRecordFrom, long sourceRecordTo, String sourceFileHash,
+                                int txCount, long logicalOffset) {
     }
 }

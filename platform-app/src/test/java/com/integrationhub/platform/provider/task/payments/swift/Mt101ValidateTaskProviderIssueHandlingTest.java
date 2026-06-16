@@ -59,6 +59,12 @@ class Mt101ValidateTaskProviderIssueHandlingTest {
                     + "source_table varchar(255),"
                     + "source_row_from bigint,"
                     + "source_row_to bigint,"
+                    + "staging_id_from bigint,"
+                    + "staging_id_to bigint,"
+                    + "source_record_from bigint,"
+                    + "source_record_to bigint,"
+                    + "source_file_hash varchar(64),"
+                    + "source_records_json text,"
                     + "fragment_index integer not null,"
                     + "fragment_total integer not null,"
                     + "senders_reference varchar(16) not null,"
@@ -80,6 +86,7 @@ class Mt101ValidateTaskProviderIssueHandlingTest {
                     + "fragment_set_id varchar(80),"
                     + "senders_reference varchar(16),"
                     + "fragment_index integer,"
+                    + "transaction_reference varchar(35),"
                     + "detected_at timestamp not null default current_timestamp)");
         }
     }
@@ -135,13 +142,14 @@ class Mt101ValidateTaskProviderIssueHandlingTest {
         }
         try (Connection connection = dataSource.getConnection();
              var statement = connection.createStatement();
-             var rs = statement.executeQuery("select rule_code, rule_set, severity, message "
+             var rs = statement.executeQuery("select rule_code, rule_set, severity, message, transaction_reference "
                      + "from mt101_validation_issue order by rule_code")) {
             assertTrue(rs.next());
             assertEquals("BANK.TEST.LIMIT", rs.getString("rule_code"));
             assertEquals("bank:TEST", rs.getString("rule_set"));
             assertEquals("E", rs.getString("severity"));
-            assertTrue(rs.getString("message").contains("transactionReference=TX-1"));
+            // El :21: ahora es columna consultable, no texto embebido en message.
+            assertEquals("TX-1", rs.getString("transaction_reference"));
             assertTrue(rs.next());
             assertEquals("BANK.TEST.REQUIRED", rs.getString("rule_code"));
         }

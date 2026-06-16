@@ -210,13 +210,17 @@ class Mt101MassivePipelinePerfIT {
             statement.executeUpdate("drop table if exists staging_record");
             statement.executeUpdate("create table staging_record ("
                     + "id bigserial primary key, process_execution_id bigint, task_definition_id bigint,"
-                    + "source_name varchar(255), record_index bigint, payload_json text not null)");
+                    + "source_name varchar(255), source_file_hash varchar(64), record_index bigint, payload_json text not null)");
             statement.executeUpdate("create index ix_staging_perf on staging_record"
                     + "(process_execution_id, task_definition_id, id)");
             statement.executeUpdate("create table mt101_build_fragment ("
                     + "id bigserial primary key, fragment_set_id varchar(80) not null,"
                     + "process_execution_id bigint, task_definition_id bigint, source_table varchar(255),"
-                    + "source_row_from bigint, source_row_to bigint, fragment_index integer not null,"
+                    + "source_row_from bigint, source_row_to bigint,"
+                    + "staging_id_from bigint, staging_id_to bigint,"
+                    + "source_record_from bigint, source_record_to bigint, source_file_hash varchar(64),"
+                    + "source_records_json text,"
+                    + "fragment_index integer not null,"
                     + "fragment_total integer not null, senders_reference varchar(16) not null,"
                     + "payload_hash char(64) not null, raw_payload text not null, message_json text not null,"
                     + "status varchar(20) not null default 'BUILT', error_message text,"

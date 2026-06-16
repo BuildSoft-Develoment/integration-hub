@@ -18,8 +18,8 @@ public class Mt101ValidationIssueRepository {
         var safeTable = sanitize(table);
         var sql = "insert into " + safeTable
                 + " (archive_id, transaction_id, rule_code, rule_set, severity, message, "
-                + "fragment_set_id, senders_reference, fragment_index) "
-                + "values (null, null, ?, ?, ?, ?, ?, ?, ?)";
+                + "fragment_set_id, senders_reference, fragment_index, transaction_reference) "
+                + "values (null, null, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
             for (var row : issues) {
@@ -34,10 +34,43 @@ public class Mt101ValidationIssueRepository {
                 } else {
                     statement.setInt(7, row.fragmentIndex());
                 }
+                statement.setString(8, row.transactionReference());
                 statement.addBatch();
             }
             statement.executeBatch();
         }
+    }
+
+    /** Lee los issues persistidos de un set (para construir la cuarentena por fila). */
+    public List<IssueRecord> findBySet(DataSource dataSource, String table, String fragmentSetId) throws SQLException {
+        var safeTable = sanitize(table);
+        var sql = "select rule_code, rule_set, severity, message, senders_reference, transaction_reference "
+                + "from " + safeTable + " where fragment_set_id = ?";
+        var result = new java.util.ArrayList<IssueRecord>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, fragmentSetId);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new IssueRecord(
+                            rs.getString("rule_code"),
+                            rs.getString("rule_set"),
+                            rs.getString("severity"),
+                            rs.getString("message"),
+                            rs.getString("senders_reference"),
+                            rs.getString("transaction_reference")));
+                }
+            }
+        }
+        return result;
+    }
+
+    public record IssueRecord(String ruleCode,
+                              String ruleSet,
+                              String severity,
+                              String message,
+                              String sendersReference,
+                              String transactionReference) {
     }
 
     private String sanitize(String identifier) {
@@ -56,6 +89,7 @@ public class Mt101ValidationIssueRepository {
                            String message,
                            String fragmentSetId,
                            String sendersReference,
-                           Integer fragmentIndex) {
+                           Integer fragmentIndex,
+                           String transactionReference) {
     }
 }

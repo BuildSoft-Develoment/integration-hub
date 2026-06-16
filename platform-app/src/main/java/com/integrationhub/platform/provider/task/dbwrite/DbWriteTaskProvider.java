@@ -10,6 +10,7 @@ import com.integrationhub.platform.repository.DbWriteRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.service.source.SourceFingerprintService;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.source.SourcePayload;
@@ -37,18 +38,30 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
     private final ConnectionPoolManager connectionPoolManager;
     private final RecordAuditEmitter recordAuditEmitter;
     private final DbWriteRepository dbWriteRepository;
+    private final SourceFingerprintService sourceFingerprintService;
 
     @Inject
     public DbWriteTaskProvider(DataSource dataSource,
                                JsonConfigurationMapper jsonConfigurationMapper,
                                ConnectionPoolManager connectionPoolManager,
                                RecordAuditEmitter recordAuditEmitter,
-                               DbWriteRepository dbWriteRepository) {
+                               DbWriteRepository dbWriteRepository,
+                               SourceFingerprintService sourceFingerprintService) {
         this.dataSource = dataSource;
         this.jsonConfigurationMapper = jsonConfigurationMapper;
         this.connectionPoolManager = connectionPoolManager;
         this.recordAuditEmitter = recordAuditEmitter;
         this.dbWriteRepository = dbWriteRepository;
+        this.sourceFingerprintService = sourceFingerprintService;
+    }
+
+    public DbWriteTaskProvider(DataSource dataSource,
+                               JsonConfigurationMapper jsonConfigurationMapper,
+                               ConnectionPoolManager connectionPoolManager,
+                               RecordAuditEmitter recordAuditEmitter,
+                               DbWriteRepository dbWriteRepository) {
+        this(dataSource, jsonConfigurationMapper, connectionPoolManager, recordAuditEmitter,
+                dbWriteRepository, new SourceFingerprintService());
     }
 
     public DbWriteTaskProvider(DataSource dataSource,
@@ -185,6 +198,7 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
         // asi que un indice local repetiria 0..N-1 y la auditoria perderia la posicion real.
         var globalIndex = stagingIndexCounter(context);
         var sourceName = sourcePayload != null ? sourcePayload.name() : null;
+        var sourceFileHash = sourceFileHash(context, sourcePayload);
         var rows = new ArrayList<DbWriteRepository.StagingRow>(records.size());
         var audit = new ArrayList<AuditEnvelope>(records.size());
         for (var record : records) {
@@ -193,18 +207,26 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
                     context.processExecutionId(),
                     context.taskDefinitionId(),
                     sourceName,
+                    sourceFileHash,
                     index,
                     jsonConfigurationMapper.toJson(record.values())));
             // INGESTED: primer punto donde una fila origen (xls/csv/txt/...) se vuelve trazable.
-            audit.add(ingestedEnvelope(context, sourceName, index));
+            audit.add(ingestedEnvelope(context, sourceName, sourceFileHash, index));
         }
         var written = dbWriteRepository.insertStagingBatch(targetDataSource, rows, batchSize);
         emitRecordAudit(audit);
         return written;
     }
 
-    private AuditEnvelope ingestedEnvelope(TaskContext context, String sourceName, long index) {
-        var recordId = (sourceName == null ? "" : sourceName + ":") + index;
+    /**
+     * Emite el evento INGESTED con la identidad estable de fila: numero de fila
+     * <b>1-based</b> (el operador busca "fila 1" = primera fila de datos, no fila 0)
+     * y hash del archivo origen para ubicar el archivo exacto. El {@code record_index}
+     * interno sigue siendo 0-based; aqui se convierte solo para presentacion.
+     */
+    private AuditEnvelope ingestedEnvelope(TaskContext context, String sourceName, String sourceFileHash, long index) {
+        var recordNumber = index + 1;
+        var recordId = (sourceName == null ? "" : sourceName + ":") + recordNumber;
         return new AuditEnvelope(
                 UUID.randomUUID().toString(),
                 context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
@@ -220,8 +242,8 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
                 null,
                 null,
                 sourceName,
-                null,
-                index,
+                sourceFileHash,
+                recordNumber,
                 null,
                 null,
                 null,
@@ -231,6 +253,31 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
                 null,
                 Instant.now(),
                 AuditEnvelope.CURRENT_SCHEMA_VERSION);
+    }
+
+    /**
+     * Hash del archivo origen calculado una sola vez por fuente y cacheado en el
+     * {@code TaskContext}: el fast-path invoca este task una vez por batch, asi que
+     * sin cache se releeria el archivo en cada batch. El streaming del hash es O(bytes)
+     * pero solo se paga una vez por archivo (csv/txt/excel/fin/...).
+     */
+    private String sourceFileHash(TaskContext context, SourcePayload sourcePayload) {
+        // Sin archivo origen no hay hash que computar (DB_WRITE a staging desde una
+        // fuente que no es un archivo); con archivo, el hash es obligatorio y se
+        // computa una sola vez por fuente.
+        if (sourcePayload == null) {
+            return null;
+        }
+        var cacheKey = "_sourceFileHash:" + sourcePayload.name();
+        synchronized (context.attributes()) {
+            var cached = context.attributes().get(cacheKey);
+            if (cached instanceof String hash) {
+                return hash;
+            }
+            var hash = sourceFingerprintService.fileHash(sourcePayload);
+            context.attributes().put(cacheKey, hash);
+            return hash;
+        }
     }
 
     private void emitRecordAudit(List<AuditEnvelope> envelopes) {

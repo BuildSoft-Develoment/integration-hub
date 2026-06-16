@@ -71,8 +71,11 @@ export interface Mt101FragmentLink {
   processExecutionId: number | null;
   taskDefinitionId: number | null;
   sourceTable: string | null;
-  sourceRowFrom: number;
-  sourceRowTo: number;
+  stagingIdFrom: number;
+  stagingIdTo: number;
+  sourceRecordFrom: number | null;
+  sourceRecordTo: number | null;
+  sourceFileHash: string | null;
   fragmentIndex: number;
   fragmentTotal: number;
   sendersReference: string | null;
@@ -80,6 +83,42 @@ export interface Mt101FragmentLink {
   errorMessage: string | null;
   createdAt: string | null;
   updatedAt: string | null;
+}
+
+export interface Mt101ReprocessResult {
+  fragmentSetId: string;
+  fromStatus: string;
+  toStatus: string;
+  affected: number;
+}
+
+export interface Mt101FailedRecord {
+  id: number;
+  fragmentSetId: string;
+  sendersReference: string | null;
+  transactionReference: string | null;
+  sourceFileHash: string | null;
+  sourceRecordNumber: number | null;
+  ruleCode: string | null;
+  ruleSet: string | null;
+  severity: string | null;
+  message: string | null;
+  status: string;
+  createdAt: string | null;
+  resolvedAt: string | null;
+}
+
+export interface Mt101QuarantineBuildResult {
+  fragmentSetId: string;
+  quarantined: number;
+}
+
+export interface Mt101RebuildResult {
+  correctiveSetId: string;
+  fragmentCount: number;
+  rebuiltRows: number;
+  supersededFragments: number;
+  resolvedQuarantine: number;
 }
 
 export interface AuditRecord {

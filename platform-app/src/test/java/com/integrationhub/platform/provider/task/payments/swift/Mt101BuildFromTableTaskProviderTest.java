@@ -62,6 +62,8 @@ class Mt101BuildFromTableTaskProviderTest {
                     + "id bigserial primary key,"
                     + "process_execution_id bigint,"
                     + "task_definition_id bigint,"
+                    + "record_index integer,"
+                    + "source_file_hash varchar(64),"
                     + "payload_json text not null)");
             statement.executeUpdate("create table mt101_build_fragment ("
                     + "id bigserial primary key,"
@@ -71,6 +73,12 @@ class Mt101BuildFromTableTaskProviderTest {
                     + "source_table varchar(255),"
                     + "source_row_from bigint,"
                     + "source_row_to bigint,"
+                    + "staging_id_from bigint,"
+                    + "staging_id_to bigint,"
+                    + "source_record_from bigint,"
+                    + "source_record_to bigint,"
+                    + "source_file_hash varchar(64),"
+                    + "source_records_json text,"
                     + "fragment_index integer not null,"
                     + "fragment_total integer not null,"
                     + "senders_reference varchar(16) not null,"
@@ -257,6 +265,85 @@ class Mt101BuildFromTableTaskProviderTest {
                 "el orden por fragment_index debe preservarse entre paginas");
     }
 
+    @Test
+    void lookupBySourceRowUsesFileRowNotStagingId() throws Exception {
+        // Reproduce produccion: los ids de staging son autoincrementales globales
+        // (arrancan altos), distintos del numero de fila del archivo. El lookup debe
+        // resolver por fila del archivo (1-based), no por id de staging.
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("delete from staging_record");
+            statement.executeUpdate("alter sequence staging_record_id_seq restart with 8500000");
+            insertRow(statement, "BEN1", "10.00", 1);   // fila 1, staging id 8500000
+            insertRow(statement, "BEN2", "20.00", 2);   // fila 2, staging id 8500001
+            insertRow(statement, "BEN3", "30.00", 3);   // fila 3, staging id 8500002
+        }
+
+        var context = new TaskContext(100L, 77L);
+        context.attributes().put("taskOutputs", Map.of(
+                "stage.table", "staging_record",
+                "stage.processExecutionId", 100L,
+                "stage.taskDefinitionId", 20L));
+        var result = provider.execute(context, baseConfiguration(77L, Map.of(
+                "maxTransactionsPerMessage", 2,
+                "maxBytesPerMessage", 10000)));
+        assertTrue(result.success(), result.details());
+
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            // El primer fragmento cubre filas 1-2; sus ids de staging son millones.
+            try (var rs = statement.executeQuery("select staging_id_from, staging_id_to, "
+                    + "source_record_from, source_record_to, source_file_hash "
+                    + "from mt101_build_fragment order by fragment_index limit 1")) {
+                assertTrue(rs.next());
+                assertTrue(rs.getLong("staging_id_from") >= 8500000L, "id tecnico de staging es alto");
+                assertEquals(1L, rs.getLong("source_record_from"), "fila del archivo es 1-based");
+                assertEquals(2L, rs.getLong("source_record_to"));
+                assertEquals("testhash", rs.getString("source_file_hash"));
+            }
+            // Buscar la fila 1 del archivo SI encuentra el fragmento (clave nueva)...
+            try (var rs = statement.executeQuery("select count(*) from mt101_build_fragment "
+                    + "where source_record_from <= 1 and source_record_to >= 1")) {
+                assertTrue(rs.next());
+                assertEquals(1, rs.getInt(1), "el lookup por fila del archivo encuentra el fragmento");
+            }
+            // ...mientras que el lookup viejo por id de staging (que valia source_row_from)
+            // NO encontraria la fila 1: prueba de que el bug original esta corregido.
+            try (var rs = statement.executeQuery("select count(*) from mt101_build_fragment "
+                    + "where source_row_from <= 1 and source_row_to >= 1")) {
+                assertTrue(rs.next());
+                assertEquals(0, rs.getInt(1), "el id de staging nunca coincide con la fila 1");
+            }
+        }
+    }
+
+    @Test
+    void buildsOnlyFilteredRecordIndexes() throws Exception {
+        // Rebuild selectivo: construir SOLO las filas record_index 0 y 2 (BEN1, BEN3),
+        // saltando BEN2. Cierra el ciclo "reprocesar solo lo necesario".
+        var context = new TaskContext(100L, 88L);
+        context.attributes().put("taskOutputs", Map.of(
+                "stage.table", "staging_record",
+                "stage.processExecutionId", 100L,
+                "stage.taskDefinitionId", 20L));
+        var result = provider.execute(context, baseConfiguration(88L, Map.of(
+                "maxTransactionsPerMessage", 10,
+                "maxBytesPerMessage", 10000,
+                "source", Map.of("recordIndexIn", List.of(0, 2)))));
+        assertTrue(result.success(), result.details());
+        assertEquals(2L, result.outputs().get("transactionCount"), "solo se construyen 2 de 3 filas");
+
+        @SuppressWarnings("unchecked")
+        var fragmentSource = (Map<String, Object>) result.outputs().get("fragments");
+        var messages = fragmentStore.readMessages(fragmentSource);
+        var accounts = messages.stream()
+                .flatMap(m -> m.transactions().stream())
+                .map(t -> t.beneficiary().account())
+                .sorted()
+                .toList();
+        assertEquals(List.of("BEN1", "BEN3"), accounts, "BEN2 (record_index 1) queda fuera");
+    }
+
     private Map<String, Object> baseConfiguration(long taskDefinitionId, Map<String, Object> overrides) {
         var configuration = new java.util.LinkedHashMap<String, Object>();
         configuration.put("taskRef", "build-massive-" + taskDefinitionId);
@@ -298,8 +385,9 @@ class Mt101BuildFromTableTaskProviderTest {
     }
 
     private void insertRow(Statement statement, String account, String amount, int index) throws Exception {
-        statement.executeUpdate("insert into staging_record(process_execution_id, task_definition_id, payload_json) values "
-                + "(100, 20, '{\"moneda\":\"PEN\",\"monto\":\"" + amount
+        // record_index 0-based (como en produccion); el numero de fila visible es index.
+        statement.executeUpdate("insert into staging_record(process_execution_id, task_definition_id, record_index, source_file_hash, payload_json) values "
+                + "(100, 20, " + (index - 1) + ", 'testhash', '{\"moneda\":\"PEN\",\"monto\":\"" + amount
                 + "\",\"cuenta_beneficiario\":\"" + account + "\",\"cargos\":\"OUR\",\"idx\":\"" + index + "\"}')");
     }
 

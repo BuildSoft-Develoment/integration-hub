@@ -38,7 +38,7 @@ public class Mt101StagingRecordRepository {
                                        long afterId,
                                        int limit) throws SQLException {
         var where = whereClause(source);
-        var sql = "select " + source.idColumn() + ", " + source.payloadColumn() + " from " + source.table()
+        var sql = "select " + projection(source) + " from " + source.table()
                 + (where.isEmpty() ? " where " : where + " and ")
                 + source.idColumn() + " > ?"
                 + " order by " + source.idColumn()
@@ -47,7 +47,7 @@ public class Mt101StagingRecordRepository {
             var parameter = bindWhere(statement, source);
             statement.setLong(parameter++, afterId);
             statement.setInt(parameter, limit);
-            return readRows(statement);
+            return readRows(statement, source);
         }
     }
 
@@ -56,7 +56,7 @@ public class Mt101StagingRecordRepository {
                                          long firstId,
                                          long lastId) throws SQLException {
         var where = whereClause(source);
-        var sql = "select " + source.idColumn() + ", " + source.payloadColumn() + " from " + source.table()
+        var sql = "select " + projection(source) + " from " + source.table()
                 + (where.isEmpty() ? " where " : where + " and ")
                 + source.idColumn() + " >= ? and " + source.idColumn() + " <= ?"
                 + " order by " + source.idColumn();
@@ -64,24 +64,44 @@ public class Mt101StagingRecordRepository {
             var parameter = bindWhere(statement, source);
             statement.setLong(parameter++, firstId);
             statement.setLong(parameter, lastId);
-            return readRows(statement);
+            return readRows(statement, source);
         }
     }
 
-    private List<RowJson> readRows(PreparedStatement statement) throws SQLException {
+    /**
+     * Proyeccion id + payload, mas record_index y source_file_hash cuando la fuente
+     * los declara (ruta staging_record). Para tablas origen arbitrarias esas columnas
+     * no existen y la proyeccion se queda en id + payload.
+     */
+    private String projection(SourceQuery source) {
+        var columns = new StringBuilder(source.idColumn()).append(", ").append(source.payloadColumn());
+        if (source.recordIndexColumn() != null) {
+            columns.append(", ").append(source.recordIndexColumn());
+        }
+        if (source.sourceFileHashColumn() != null) {
+            columns.append(", ").append(source.sourceFileHashColumn());
+        }
+        return columns.toString();
+    }
+
+    private List<RowJson> readRows(PreparedStatement statement, SourceQuery source) throws SQLException {
         var rows = new ArrayList<RowJson>();
         try (var rs = statement.executeQuery()) {
             while (rs.next()) {
-                rows.add(new RowJson(rs.getLong(1), rs.getString(2)));
+                var column = 3;
+                Long recordIndex = null;
+                if (source.recordIndexColumn() != null) {
+                    var value = rs.getLong(column++);
+                    recordIndex = rs.wasNull() ? null : value;
+                }
+                String sourceFileHash = source.sourceFileHashColumn() != null ? rs.getString(column) : null;
+                rows.add(new RowJson(rs.getLong(1), rs.getString(2), recordIndex, sourceFileHash));
             }
         }
         return rows;
     }
 
     private String whereClause(SourceQuery source) {
-        if (source.processExecutionId() == null && source.taskDefinitionId() == null) {
-            return "";
-        }
         var clauses = new ArrayList<String>();
         if (source.processExecutionId() != null) {
             clauses.add("process_execution_id = ?");
@@ -89,7 +109,20 @@ public class Mt101StagingRecordRepository {
         if (source.taskDefinitionId() != null) {
             clauses.add("task_definition_id = ?");
         }
+        if (hasRecordIndexFilter(source)) {
+            // Rebuild selectivo: construir SOLO las filas corregidas (cuarentena).
+            clauses.add(source.recordIndexColumn() + " in ("
+                    + String.join(", ", java.util.Collections.nCopies(source.recordIndexIn().size(), "?")) + ")");
+        }
+        if (clauses.isEmpty()) {
+            return "";
+        }
         return " where " + String.join(" and ", clauses);
+    }
+
+    private boolean hasRecordIndexFilter(SourceQuery source) {
+        return source.recordIndexColumn() != null
+                && source.recordIndexIn() != null && !source.recordIndexIn().isEmpty();
     }
 
     private int bindWhere(PreparedStatement statement, SourceQuery source) throws SQLException {
@@ -99,6 +132,11 @@ public class Mt101StagingRecordRepository {
         }
         if (source.taskDefinitionId() != null) {
             statement.setLong(parameter++, source.taskDefinitionId());
+        }
+        if (hasRecordIndexFilter(source)) {
+            for (var recordIndex : source.recordIndexIn()) {
+                statement.setLong(parameter++, recordIndex);
+            }
         }
         return parameter;
     }
@@ -113,10 +151,26 @@ public class Mt101StagingRecordRepository {
             String payloadColumn,
             String idColumn,
             Long processExecutionId,
-            Long taskDefinitionId
+            Long taskDefinitionId,
+            String recordIndexColumn,
+            String sourceFileHashColumn,
+            java.util.List<Long> recordIndexIn
     ) {
+        /** Variante con columnas de trazabilidad pero sin filtro de filas. */
+        public SourceQuery(String table, String payloadColumn, String idColumn,
+                           Long processExecutionId, Long taskDefinitionId,
+                           String recordIndexColumn, String sourceFileHashColumn) {
+            this(table, payloadColumn, idColumn, processExecutionId, taskDefinitionId,
+                    recordIndexColumn, sourceFileHashColumn, java.util.List.of());
+        }
+
+        /** Variante sin columnas de trazabilidad de fila (tablas origen arbitrarias). */
+        public SourceQuery(String table, String payloadColumn, String idColumn,
+                           Long processExecutionId, Long taskDefinitionId) {
+            this(table, payloadColumn, idColumn, processExecutionId, taskDefinitionId, null, null, java.util.List.of());
+        }
     }
 
-    public record RowJson(long id, String payloadJson) {
+    public record RowJson(long id, String payloadJson, Long recordIndex, String sourceFileHash) {
     }
 }

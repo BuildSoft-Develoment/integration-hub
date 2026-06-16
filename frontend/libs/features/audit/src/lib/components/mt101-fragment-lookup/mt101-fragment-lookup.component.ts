@@ -2,13 +2,14 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { AuditApiService } from '../../api/audit-api.service';
 import { Mt101FragmentLink } from '../../models/audit.models';
 
 @Component({
   selector: 'ih-mt101-fragment-lookup',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   styles: [`
     .lookup { display:flex; flex-direction:column; gap:1rem; }
     .lookup__search { display:grid; grid-template-columns:repeat(auto-fit, minmax(12rem, 1fr)); gap:.75rem; align-items:end; }
@@ -81,6 +82,7 @@ import { Mt101FragmentLink } from '../../models/audit.models';
                 <th>Estado</th>
                 <th>Error</th>
                 <th>Actualizado</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -89,13 +91,19 @@ import { Mt101FragmentLink } from '../../models/audit.models';
                   <td class="lookup__mono">{{ row.fragmentSetId || '-' }}</td>
                   <td>
                     <div>{{ row.sourceTable || '-' }}</div>
-                    <div>{{ row.sourceRowFrom }} - {{ row.sourceRowTo }}</div>
+                    <div>Fila {{ row.sourceRecordFrom ?? '?' }} - {{ row.sourceRecordTo ?? '?' }}</div>
+                    <div class="lookup__mono">staging {{ row.stagingIdFrom }} - {{ row.stagingIdTo }}</div>
                   </td>
                   <td>{{ row.fragmentIndex }} / {{ row.fragmentTotal }}</td>
                   <td class="lookup__mono">{{ row.sendersReference || '-' }}</td>
                   <td class="lookup__status--{{ row.status }}">{{ row.status || '-' }}</td>
                   <td>{{ row.errorMessage || '-' }}</td>
                   <td>{{ row.updatedAt || row.createdAt || '-' }}</td>
+                  <td>
+                    @if (row.fragmentSetId) {
+                      <a [routerLink]="['/audit/mt101-quarantine']" [queryParams]="{ fragmentSetId: row.fragmentSetId }">Cuarentena</a>
+                    }
+                  </td>
                 </tr>
               }
             </tbody>

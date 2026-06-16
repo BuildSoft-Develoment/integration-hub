@@ -21,13 +21,14 @@ import java.util.Map;
 public class DbWriteRepository {
 
     private static final String STAGING_INSERT =
-            "insert into staging_record (process_execution_id, task_definition_id, source_name, record_index, payload_json)"
-                    + " values (?, ?, ?, ?, ?)";
+            "insert into staging_record (process_execution_id, task_definition_id, source_name, source_file_hash, record_index, payload_json)"
+                    + " values (?, ?, ?, ?, ?, ?)";
 
     /** Fila de staging ya resuelta por el provider (indice global + payload serializado). */
     public record StagingRow(Long processExecutionId,
                              Long taskDefinitionId,
                              String sourceName,
+                             String sourceFileHash,
                              long recordIndex,
                              String payloadJson) {
     }
@@ -43,8 +44,9 @@ public class DbWriteRepository {
                 statement.setObject(1, row.processExecutionId());
                 statement.setObject(2, row.taskDefinitionId());
                 statement.setString(3, row.sourceName());
-                statement.setLong(4, row.recordIndex());
-                statement.setString(5, row.payloadJson());
+                statement.setString(4, row.sourceFileHash());
+                statement.setLong(5, row.recordIndex());
+                statement.setString(6, row.payloadJson());
                 statement.addBatch();
                 if (++written % batchSize == 0) {
                     statement.executeBatch();

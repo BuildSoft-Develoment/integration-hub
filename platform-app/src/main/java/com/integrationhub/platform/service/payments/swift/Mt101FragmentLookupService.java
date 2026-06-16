@@ -26,6 +26,7 @@ public class Mt101FragmentLookupService {
 
     public List<Mt101FragmentRepository.FragmentLookupRow> findBySourceRow(String connectionRef,
                                                                            Long recordNumber,
+                                                                           String sourceFileHash,
                                                                            String sourceTable,
                                                                            Long processExecutionId,
                                                                            String fragmentSetId,
@@ -35,7 +36,7 @@ public class Mt101FragmentLookupService {
         }
         try {
             return repository.findBySourceRow(resolveDataSource(connectionRef),
-                    recordNumber, blankToNull(sourceTable), processExecutionId,
+                    recordNumber, blankToNull(sourceFileHash), blankToNull(sourceTable), processExecutionId,
                     blankToNull(fragmentSetId), Math.min(Math.max(limit, 1), 100));
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot resolve MT101 fragment for source row " + recordNumber, error);

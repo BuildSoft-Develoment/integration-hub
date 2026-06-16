@@ -29,12 +29,13 @@ public class Mt101FragmentLookupResource {
     @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
     public List<Mt101FragmentLinkResponse> bySourceRow(@QueryParam("connectionRef") String connectionRef,
                                                        @QueryParam("recordNumber") Long recordNumber,
+                                                       @QueryParam("sourceFileHash") String sourceFileHash,
                                                        @QueryParam("sourceTable") String sourceTable,
                                                        @QueryParam("processExecutionId") Long processExecutionId,
                                                        @QueryParam("fragmentSetId") String fragmentSetId,
                                                        @QueryParam("limit") @DefaultValue("20") int limit) {
         try {
-            return service.findBySourceRow(connectionRef, recordNumber, sourceTable,
+            return service.findBySourceRow(connectionRef, recordNumber, sourceFileHash, sourceTable,
                             processExecutionId, fragmentSetId, limit)
                     .stream()
                     .map(this::toResponse)
@@ -50,8 +51,11 @@ public class Mt101FragmentLookupResource {
                 row.processExecutionId(),
                 row.taskDefinitionId(),
                 row.sourceTable(),
-                row.sourceRowFrom(),
-                row.sourceRowTo(),
+                row.stagingIdFrom(),
+                row.stagingIdTo(),
+                row.sourceRecordFrom(),
+                row.sourceRecordTo(),
+                row.sourceFileHash(),
                 row.fragmentIndex(),
                 row.fragmentTotal(),
                 row.sendersReference(),
