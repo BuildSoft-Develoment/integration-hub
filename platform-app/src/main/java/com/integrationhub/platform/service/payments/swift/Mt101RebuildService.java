@@ -25,10 +25,6 @@ import java.util.Map;
 public class Mt101RebuildService {
 
     private static final int MAX_QUARANTINE = 5000;
-    /** Claves del config original que dan forma al MT101 (se conservan en el correctivo). */
-    private static final List<String> SHAPE_KEYS = List.of(
-            "sequenceA", "transactionMappings", "format",
-            "maxTransactionsPerMessage", "maxBytesPerMessage");
 
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
@@ -116,12 +112,12 @@ public class Mt101RebuildService {
                                                  String connectionRef,
                                                  String correctiveSetId,
                                                  List<Long> recordNumbers) {
-        var config = new LinkedHashMap<String, Object>();
-        for (var key : SHAPE_KEYS) {
-            if (original.get(key) != null) {
-                config.put(key, original.get(key));
-            }
-        }
+        // Copia integra del config original (envelope, sequenceA, transactionMappings,
+        // format, limites...) y solo overridea el scoping. Asi el set correctivo produce
+        // MT101 identicos a los originales salvo por las filas reconstruidas.
+        var config = new LinkedHashMap<>(original);
+        // Standalone (sin taskOutputs del motor): se resuelve por `source`, no por input.
+        config.remove("input");
         // fragmentSetId literal (sin placeholders) -> el build lo usa tal cual.
         config.put("fragmentSetIdTemplate", correctiveSetId);
         config.put("replaceExisting", true);
@@ -131,18 +127,27 @@ public class Mt101RebuildService {
         for (var recordNumber : recordNumbers) {
             recordIndexIn.add(recordNumber - 1);
         }
-        var source = new LinkedHashMap<String, Object>();
+        var source = original.get("source") instanceof Map<?, ?> originalSource
+                ? new LinkedHashMap<String, Object>(asStringKeyed(originalSource))
+                : new LinkedHashMap<String, Object>();
         source.put("table", metadata.sourceTable());
         // Solo process_execution_id + record_index IN: las filas de staging llevan el
         // task_definition_id del DB_WRITE (no el del BUILD que guarda el fragmento), y
         // record_index es unico por ejecucion, asi que esto pinpointea las filas corregidas.
         source.put("processExecutionId", metadata.processExecutionId());
+        source.remove("taskDefinitionId");
         if (connectionRef != null && !connectionRef.isBlank()) {
             source.put("connectionRef", connectionRef);
         }
         source.put("recordIndexIn", recordIndexIn);
         config.put("source", source);
         return config;
+    }
+
+    private Map<String, Object> asStringKeyed(Map<?, ?> raw) {
+        var result = new LinkedHashMap<String, Object>();
+        raw.forEach((key, value) -> result.put(String.valueOf(key), value));
+        return result;
     }
 
     private String require(String value, String field) {
