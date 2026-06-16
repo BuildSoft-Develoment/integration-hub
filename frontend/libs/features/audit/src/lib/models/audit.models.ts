@@ -121,6 +121,12 @@ export interface Mt101RebuildResult {
   resolvedQuarantine: number;
 }
 
+export interface Mt101FragmentSetSummary {
+  fragmentSetId: string;
+  total: number;
+  byStatus: Record<string, number>;
+}
+
 export interface AuditRecord {
   id: number;
   processExecutionId: number | null;

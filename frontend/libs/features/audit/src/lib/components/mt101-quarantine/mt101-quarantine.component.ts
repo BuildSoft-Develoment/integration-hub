@@ -4,7 +4,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuditApiService } from '../../api/audit-api.service';
-import { Mt101FailedRecord } from '../../models/audit.models';
+import { Mt101FailedRecord, Mt101FragmentSetSummary } from '../../models/audit.models';
 
 @Component({
   selector: 'ih-mt101-quarantine',
@@ -29,6 +29,13 @@ import { Mt101FailedRecord } from '../../models/audit.models';
     .q__row { font-weight:600; color:#e8590c; }
     .q__link { color:var(--ih-accent, #4c6ef5); text-decoration:none; white-space:nowrap; }
     .q__link:hover { text-decoration:underline; }
+    .q__cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(7rem, 1fr)); gap:.6rem; }
+    .q__card { background:var(--ih-surface-alt, #1b1f27); border:1px solid var(--ih-border, #354052); border-radius:8px; padding:.6rem .7rem; display:flex; flex-direction:column; gap:.15rem; }
+    .q__card small { font-size:.72rem; color:var(--ih-text-soft); }
+    .q__card strong { font-size:1.35rem; font-weight:600; }
+    .q__card--REJECTED strong,.q__card--QUARANTINED strong { color:#e8590c; }
+    .q__card--SUPERSEDED strong { color:var(--ih-text-soft); }
+    .q__card--SENT strong,.q__card--ARCHIVED strong,.q__card--VALIDATED strong { color:#2f9e44; }
     .q__empty,.q__error,.q__ok { padding:.75rem; }
     .q__empty { color:var(--ih-text-soft); }
     .q__error { color:#e03131; }
@@ -64,6 +71,16 @@ import { Mt101FailedRecord } from '../../models/audit.models';
         </div>
       </div>
 
+      @if (summary(); as s) {
+        <div class="q__cards">
+          <div class="q__card"><small>Fragmentos</small><strong>{{ s.total }}</strong></div>
+          @for (entry of statusEntries(); track entry.status) {
+            <div class="q__card q__card--{{ entry.status }}"><small>{{ entry.status }}</small><strong>{{ entry.count }}</strong></div>
+          }
+          <div class="q__card q__card--QUARANTINED"><small>En cuarentena</small><strong>{{ pendingCount() }}</strong></div>
+        </div>
+      }
+
       @if (message()) {
         <p class="q__ok">{{ message() }}</p>
       }
@@ -72,7 +89,11 @@ import { Mt101FailedRecord } from '../../models/audit.models';
       } @else if (error()) {
         <p class="q__error">{{ error() }}</p>
       } @else if (rows().length === 0) {
-        <p class="q__empty">Sin filas en cuarentena. Ingresa el fragment set y pulsa "Construir cuarentena".</p>
+        <p class="q__empty">
+          Sin filas en cuarentena para este set.
+          @if (!fragmentSetId.trim()) { Ingresa el fragment set (lo ves en el lookup de fragmentos o en la trazabilidad de la ejecución) y pulsa "Construir cuarentena". }
+          @else { El lote no tiene filas rechazadas, o aún no construiste la cuarentena. }
+        </p>
       } @else {
         <p class="ih-muted">{{ pendingCount() }} fila(s) en cuarentena pendientes de reproceso.</p>
         <div class="q__table">
@@ -137,12 +158,31 @@ export class Mt101QuarantineComponent {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly message = signal<string | null>(null);
+  readonly summary = signal<Mt101FragmentSetSummary | null>(null);
   readonly pendingCount = computed(() => this.rows().filter((r) => r.status === 'QUARANTINED').length);
+  readonly statusEntries = computed(() => {
+    const s = this.summary();
+    return s ? Object.entries(s.byStatus).map(([status, count]) => ({ status, count })) : [];
+  });
+
+  private loadSummary(): void {
+    if (!this.fragmentSetId.trim()) {
+      return;
+    }
+    this.api.mt101FragmentSetSummary({
+      fragmentSetId: this.fragmentSetId,
+      connectionRef: this.connectionRef,
+    }).subscribe({
+      next: (s) => this.summary.set(s),
+      error: () => this.summary.set(null),
+    });
+  }
 
   list(): void {
     if (!this.fragmentSetId.trim()) {
       return;
     }
+    this.loadSummary();
     this.loading.set(true);
     this.error.set(null);
     this.api.mt101FailedRecords({

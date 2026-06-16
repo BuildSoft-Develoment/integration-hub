@@ -108,6 +108,21 @@ class Mt101ReprocessServiceTest {
     }
 
     @Test
+    void statusCountsSummarizeTheLot() throws Exception {
+        insertFragment("P1", 1, 50);
+        insertFragment("P2", 51, 100);
+        insertFragment("P3", 101, 150);
+        setStatus("P2", "REJECTED", "regla X");
+
+        var counts = new Mt101FragmentRepository().statusCountsBySet(dataSource, "SET");
+        var byStatus = new java.util.HashMap<String, Long>();
+        counts.forEach(c -> byStatus.put(c.status(), c.count()));
+
+        assertEquals(2L, byStatus.get("BUILT"));
+        assertEquals(1L, byStatus.get("REJECTED"));
+    }
+
+    @Test
     void rejectsDisallowedTransition() {
         var error = assertThrows(IllegalArgumentException.class,
                 () -> service.resetByStatus(null, "SET", "BUILT", "SENT"));

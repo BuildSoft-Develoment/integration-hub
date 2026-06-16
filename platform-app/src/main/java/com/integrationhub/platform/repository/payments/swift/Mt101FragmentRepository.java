@@ -331,6 +331,26 @@ public class Mt101FragmentRepository {
     public record SetMetadata(Long processExecutionId, Long taskDefinitionId, String sourceTable) {
     }
 
+    /** Conteo de fragmentos por estado de un set (resumen del lote para la UI). */
+    public List<StatusCount> statusCountsBySet(DataSource dataSource, String fragmentSetId) throws SQLException {
+        var sql = "select status, count(*) as total from mt101_build_fragment "
+                + "where fragment_set_id = ? group by status order by status";
+        var result = new ArrayList<StatusCount>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, fragmentSetId);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new StatusCount(rs.getString("status"), rs.getLong("total")));
+                }
+            }
+        }
+        return result;
+    }
+
+    public record StatusCount(String status, long count) {
+    }
+
     /**
      * Marca como SUPERSEDED los fragmentos del set indicados por {@code :20:},
      * apuntando al set correctivo que los reemplaza. Devuelve cuantos cambiaron.

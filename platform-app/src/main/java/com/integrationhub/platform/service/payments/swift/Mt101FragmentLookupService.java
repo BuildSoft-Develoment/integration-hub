@@ -43,6 +43,18 @@ public class Mt101FragmentLookupService {
         }
     }
 
+    /** Resumen del lote: conteo de fragmentos por estado + total. */
+    public List<Mt101FragmentRepository.StatusCount> statusCounts(String connectionRef, String fragmentSetId) {
+        if (fragmentSetId == null || fragmentSetId.isBlank()) {
+            throw new IllegalArgumentException("fragmentSetId is required");
+        }
+        try {
+            return repository.statusCountsBySet(resolveDataSource(connectionRef), fragmentSetId.trim());
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot summarize MT101 fragment set " + fragmentSetId, error);
+        }
+    }
+
     private DataSource resolveDataSource(String connectionRef) {
         if (connectionRef == null || connectionRef.isBlank()) {
             return defaultDataSource;

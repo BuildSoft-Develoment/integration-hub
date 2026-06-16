@@ -8,6 +8,7 @@ import {
   AuditSpoolSummary,
   Mt101FailedRecord,
   Mt101FragmentLink,
+  Mt101FragmentSetSummary,
   Mt101QuarantineBuildResult,
   Mt101RebuildResult,
   Mt101ReprocessResult,
@@ -128,6 +129,15 @@ export class AuditApiService {
       httpParams = httpParams.set('fragmentSetId', query.fragmentSetId.trim());
     }
     return this.http.get<Mt101FragmentLink[]>('/api/query/mt101-fragments/source-row', { params: httpParams });
+  }
+
+  /** Resumen del lote: total de fragmentos + conteo por estado. */
+  mt101FragmentSetSummary(query: { connectionRef?: string; fragmentSetId: string }): Observable<Mt101FragmentSetSummary> {
+    let httpParams = new HttpParams().set('fragmentSetId', query.fragmentSetId);
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.get<Mt101FragmentSetSummary>('/api/query/mt101-fragments/summary', { params: httpParams });
   }
 
   /** Revalida/reenvia en bloque por transicion de estado (REJECTED -> BUILT, SENT -> ARCHIVED). */

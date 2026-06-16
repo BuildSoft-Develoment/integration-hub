@@ -13,6 +13,7 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 
 import java.util.List;
+import java.util.Map;
 
 @Path("/api/query/mt101-fragments")
 @Produces(MediaType.APPLICATION_JSON)
@@ -40,6 +41,27 @@ public class Mt101FragmentLookupResource {
                     .stream()
                     .map(this::toResponse)
                     .toList();
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /** Resumen del lote: total de fragmentos + conteo por estado (para el panel de cuarentena). */
+    @GET
+    @Path("/summary")
+    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    public Map<String, Object> summary(@QueryParam("connectionRef") String connectionRef,
+                                       @QueryParam("fragmentSetId") String fragmentSetId) {
+        try {
+            var counts = service.statusCounts(connectionRef, fragmentSetId);
+            var byStatus = new java.util.LinkedHashMap<String, Long>();
+            long total = 0;
+            for (var entry : counts) {
+                byStatus.put(entry.status(), entry.count());
+                total += entry.count();
+            }
+            return Map.of("fragmentSetId", fragmentSetId == null ? "" : fragmentSetId,
+                    "total", total, "byStatus", byStatus);
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }
