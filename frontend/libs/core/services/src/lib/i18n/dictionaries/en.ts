@@ -683,6 +683,7 @@ export const en = {
   'executions.searchMode.processName': 'Process name',
   'executions.noData': 'No executions match the current filters.',
   'executions.detail': 'Execution detail',
+  'executions.viewTraceability': 'View record traceability',
   'executions.emptySelection': 'Select an execution to inspect its details.',
   'executions.loadingDetail': 'Loading execution details...',
   'executions.tasksTitle': 'Executed tasks',

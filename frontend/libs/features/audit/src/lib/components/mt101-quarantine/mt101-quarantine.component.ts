@@ -2,14 +2,14 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuditApiService } from '../../api/audit-api.service';
 import { Mt101FailedRecord } from '../../models/audit.models';
 
 @Component({
   selector: 'ih-mt101-quarantine',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   styles: [`
     .q { display:flex; flex-direction:column; gap:1rem; }
     .q__search { display:grid; grid-template-columns:repeat(auto-fit, minmax(12rem, 1fr)); gap:.75rem; align-items:end; }
@@ -27,6 +27,8 @@ import { Mt101FailedRecord } from '../../models/audit.models';
     td { font-size:.86rem; }
     .q__mono { font-family:ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap:anywhere; }
     .q__row { font-weight:600; color:#e8590c; }
+    .q__link { color:var(--ih-accent, #4c6ef5); text-decoration:none; white-space:nowrap; }
+    .q__link:hover { text-decoration:underline; }
     .q__empty,.q__error,.q__ok { padding:.75rem; }
     .q__empty { color:var(--ih-text-soft); }
     .q__error { color:#e03131; }
@@ -85,6 +87,7 @@ import { Mt101FailedRecord } from '../../models/audit.models';
                 <th>Mensaje</th>
                 <th>Hash archivo</th>
                 <th>Estado</th>
+                <th>Traza</th>
               </tr>
             </thead>
             <tbody>
@@ -98,6 +101,11 @@ import { Mt101FailedRecord } from '../../models/audit.models';
                   <td>{{ row.message || '—' }}</td>
                   <td class="q__mono">{{ (row.sourceFileHash | slice:0:12) || '—' }}</td>
                   <td class="q__status--{{ row.status }}">{{ row.status }}</td>
+                  <td>
+                    @if (row.sourceFileHash && row.sourceRecordNumber !== null) {
+                      <a class="q__link" [routerLink]="['/audit/record-lineage']" [queryParams]="{ sourceFileHash: row.sourceFileHash, recordNumber: row.sourceRecordNumber }">Ver timeline</a>
+                    }
+                  </td>
                 </tr>
               }
             </tbody>

@@ -703,6 +703,7 @@ export const es = {
   'executions.searchMode.processName': 'Nombre proceso',
   'executions.noData': 'No hay ejecuciones para mostrar con los filtros actuales.',
   'executions.detail': 'Detalle de ejecucion',
+  'executions.viewTraceability': 'Ver trazabilidad del registro',
   'executions.emptySelection': 'Selecciona una ejecucion para ver el detalle.',
   'executions.loadingDetail': 'Cargando detalle de la ejecucion...',
   'executions.tasksTitle': 'Tareas ejecutadas',

@@ -2,7 +2,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuditApiService } from '../../api/audit-api.service';
 import { Mt101FragmentLink } from '../../models/audit.models';
 
@@ -115,6 +115,7 @@ import { Mt101FragmentLink } from '../../models/audit.models';
 })
 export class Mt101FragmentLookupComponent {
   private readonly api = inject(AuditApiService);
+  private readonly route = inject(ActivatedRoute);
 
   recordNumber = '';
   sourceTable = '';
@@ -125,6 +126,19 @@ export class Mt101FragmentLookupComponent {
   readonly rows = signal<Mt101FragmentLink[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
+
+  constructor() {
+    // Drill-in desde el lineage (?recordNumber=) u otra vista -> auto-busca.
+    const qp = this.route.snapshot.queryParamMap;
+    const recordNumber = qp.get('recordNumber');
+    this.fragmentSetId = qp.get('fragmentSetId') ?? '';
+    this.sourceTable = qp.get('sourceTable') ?? '';
+    this.processExecutionId = qp.get('processExecutionId') ?? '';
+    if (recordNumber) {
+      this.recordNumber = recordNumber;
+      this.search();
+    }
+  }
 
   search(): void {
     if (!String(this.recordNumber).trim()) {

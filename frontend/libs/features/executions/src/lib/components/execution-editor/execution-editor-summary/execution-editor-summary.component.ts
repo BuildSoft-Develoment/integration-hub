@@ -1,6 +1,7 @@
 // @trace RF-005 (observabilidad: correlacion de evidencia tecnica/funcional por processExecutionId)
 import { CommonModule } from '@angular/common';
 import { Component, inject, input } from '@angular/core';
+import { RouterLink } from '@angular/router';
 
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
 
@@ -15,7 +16,7 @@ import {
 @Component({
   selector: 'ih-execution-editor-summary',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterLink],
   styles: [`
     .tab-body { display: grid; gap: 1rem; padding-top: 1rem; }
     .form-section { display: grid; gap: 0.9rem; padding: 0.95rem; border: 1px solid var(--ih-border); border-radius: 18px; background: color-mix(in srgb, var(--ih-surface-alt) 93%, transparent); min-width: 0; }
@@ -29,6 +30,8 @@ import {
     .summary-pill--warning { background: color-mix(in srgb, #f59e0b 18%, transparent); color: #9a6700; }
     .summary-pill--info { background: color-mix(in srgb, #2563eb 14%, transparent); color: #1d4ed8; }
     .section-copy { margin: 0; line-height: 1.55; }
+    .traceability-link { display: inline-flex; align-items: center; gap: 0.35rem; width: fit-content; font-size: 0.82rem; font-weight: 700; color: var(--ih-accent, #4c6ef5); text-decoration: none; }
+    .traceability-link:hover { text-decoration: underline; }
     pre { margin: 0; padding: 0.85rem; border-radius: 14px; overflow: auto; background: color-mix(in srgb, var(--ih-surface) 92%, #0f172a 8%); }
     @media (max-width: 900px) { .detail-grid { grid-template-columns: 1fr; } }
   `],

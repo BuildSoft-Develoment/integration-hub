@@ -2,6 +2,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuditApiService } from '../../api/audit-api.service';
 import { RecordLineageEntry } from '../../models/audit.models';
 
@@ -13,7 +14,7 @@ import { RecordLineageEntry } from '../../models/audit.models';
 @Component({
   selector: 'ih-record-lineage',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, RouterLink],
   styles: [`
     .lineage { display:flex; flex-direction:column; gap:1rem; }
     .lineage__search { display:grid; grid-template-columns:repeat(auto-fit, minmax(14rem, 1fr)); gap:.75rem; align-items:end; }
@@ -30,6 +31,8 @@ import { RecordLineageEntry } from '../../models/audit.models';
     .lineage__status--SENT,.lineage__status--ARCHIVED,.lineage__status--VALIDATED,.lineage__status--CONFIRMED,.lineage__status--RECONCILED { color:#2f9e44; }
     .lineage__keys { display:flex; flex-direction:column; gap:.15rem; font-size:.82rem; overflow-wrap:anywhere; }
     .lineage__key { color:var(--ih-text-soft); }
+    .lineage__link { font-size:.78rem; color:var(--ih-accent, #4c6ef5); text-decoration:none; width:fit-content; }
+    .lineage__link:hover { text-decoration:underline; }
     .lineage__empty,.lineage__error { color:var(--ih-text-soft); padding:.75rem; }
     .lineage__error { color:#e03131; }
     @media (max-width: 760px) {
@@ -97,6 +100,9 @@ import { RecordLineageEntry } from '../../models/audit.models';
                 @if (entry.sourceFileName || entry.recordNumber !== null) {
                   <span class="lineage__key">{{ entry.sourceFileName || entry.sourceFileHash }} #{{ entry.recordNumber }}</span>
                 }
+                @if (entry.recordNumber !== null) {
+                  <a class="lineage__link" [routerLink]="['/audit/mt101-fragments']" [queryParams]="{ recordNumber: entry.recordNumber }">Ver fragmento</a>
+                }
               </span>
               <span>{{ entry.eventTs }}</span>
             </div>
@@ -108,6 +114,7 @@ import { RecordLineageEntry } from '../../models/audit.models';
 })
 export class RecordLineageComponent {
   private readonly api = inject(AuditApiService);
+  private readonly route = inject(ActivatedRoute);
 
   recordId = '';
   traceId = '';
@@ -115,6 +122,32 @@ export class RecordLineageComponent {
   value = '';
   sourceFileHash = '';
   recordNumber = '';
+
+  constructor() {
+    // Drill-in desde cuarentena / ejecuciones: pre-rellena y auto-busca sin teclear IDs.
+    const qp = this.route.snapshot.queryParamMap;
+    const recordId = qp.get('recordId');
+    const traceId = qp.get('traceId');
+    const hash = qp.get('sourceFileHash');
+    const recordNumber = qp.get('recordNumber');
+    const key = qp.get('key');
+    const value = qp.get('value');
+    if (recordId) {
+      this.recordId = recordId;
+      this.searchByRecord();
+    } else if (traceId) {
+      this.traceId = traceId;
+      this.searchByTrace();
+    } else if (hash && recordNumber) {
+      this.sourceFileHash = hash;
+      this.recordNumber = recordNumber;
+      this.searchBySourceRow();
+    } else if (key && value) {
+      this.key = key;
+      this.value = value;
+      this.searchByKey();
+    }
+  }
 
   readonly keyOptions = [
     { value: 'paymentReference', label: ':20:' },
