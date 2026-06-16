@@ -1,5 +1,7 @@
 package com.integrationhub.auditconsumer.coldstore;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +20,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Persistencia idempotente del store frio Postgres (audit_record_event).
@@ -92,5 +95,70 @@ class PostgresColdStoreTest {
             rs.next();
             assertEquals(1, rs.getInt(1));
         }
+    }
+
+    /**
+     * Round-trip del lado consumidor (cierra el gap del visor de lineage por fila):
+     * un RECORD_VALIDATION_ISSUE -tal como lo emite Mt101QuarantineService- sobrevive
+     * el salto por el broker (serialize/deserialize con el mismo contrato) y queda
+     * en audit_record_event consultable por (source_file_hash, record_number) -- la
+     * misma clave que usa RecordLineageResource.timelineBySourceRow.
+     */
+    @Test
+    void recordValidationIssueIsQueryableBySourceRow() throws Exception {
+        var mapper = new ObjectMapper().registerModule(new JavaTimeModule());
+        var emitted = validationIssueEnvelope("3af91aa0", 847192L, "LFLS123", "T847192");
+
+        // Salto por el broker: el productor serializa, el consumidor deserializa.
+        var onTheWire = mapper.writeValueAsString(emitted);
+        var received = mapper.readValue(onTheWire, AuditEnvelope.class);
+        coldStore.write(received);
+
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "select stage, status, payment_reference, transaction_reference, message "
+                             + "from audit_record_event where source_file_hash = ? and record_number = ? "
+                             + "order by event_ts asc, id asc")) {
+            statement.setString(1, "3af91aa0");
+            statement.setLong(2, 847192L);
+            try (var rs = statement.executeQuery()) {
+                assertTrue(rs.next(), "el lineage por fila debe encontrar el issue");
+                assertEquals("RECORD_VALIDATION_ISSUE", rs.getString("stage"));
+                assertEquals("REJECTED", rs.getString("status"));
+                assertEquals("LFLS123", rs.getString("payment_reference"), ":20:");
+                assertEquals("T847192", rs.getString("transaction_reference"), ":21:");
+                assertTrue(rs.getString("message").contains("STRUCT.FIELD_70"));
+            }
+        }
+    }
+
+    private AuditEnvelope validationIssueEnvelope(String sourceFileHash, long recordNumber,
+                                                  String sendersReference, String transactionReference) {
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                "exec-7",
+                sendersReference,
+                AuditLevel.RECORD,
+                "RECORD_VALIDATION_ISSUE",
+                "REJECTED",
+                7L,
+                null,
+                "STRUCT.FIELD_70: Remittance excede 4x35",
+                null,
+                Map.of(),
+                "SWIFT",
+                "MT101",
+                null,
+                sourceFileHash,
+                recordNumber,
+                null,
+                null,
+                sendersReference,
+                transactionReference,
+                null,
+                null,
+                null,
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
     }
 }
