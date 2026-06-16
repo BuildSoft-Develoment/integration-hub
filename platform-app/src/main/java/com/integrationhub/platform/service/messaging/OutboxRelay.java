@@ -2,6 +2,7 @@ package com.integrationhub.platform.service.messaging;
 
 import com.integrationhub.platform.entity.AuditSpool;
 import com.integrationhub.platform.spi.messaging.OutboundMessage;
+import com.integrationhub.platform.spi.messaging.PublishResult;
 import io.quarkus.runtime.StartupEvent;
 import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.event.Observes;
@@ -13,6 +14,8 @@ import org.jboss.logging.Logger;
 import java.net.InetAddress;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -82,19 +85,31 @@ public class OutboxRelay {
             if (claimed.isEmpty()) {
                 return;
             }
+            // Publicacion en lote: Kafka pipelinea los envios (una latencia de ack por
+            // ventana, no por mensaje) -> el outbox drena a miles/s en vez de decenas/s.
+            var messages = new ArrayList<OutboundMessage>(claimed.size());
             for (var row : claimed) {
-                try {
-                    var result = publisher.publish(new OutboundMessage(
-                            row.topic, row.partitionKey, row.payload, Map.of()));
-                    if (result.accepted()) {
-                        relayStore.markSent(row.id);
-                    } else {
-                        retryOrDead(row, result.error());
-                        LOG.warnf("Audit relay: broker rejected event %s: %s", row.eventId, result.error());
-                    }
-                } catch (RuntimeException e) {
+                messages.add(new OutboundMessage(row.topic, row.partitionKey, row.payload, Map.of()));
+            }
+            List<PublishResult> results;
+            try {
+                results = publisher.publishBatch(messages);
+            } catch (RuntimeException e) {
+                // Fallo del lote completo: cada fila reintenta en el siguiente tick.
+                for (var row : claimed) {
                     retryOrDead(row, e.getMessage());
-                    LOG.warnf(e, "Audit relay: error publishing event %s", row.eventId);
+                }
+                LOG.warnf(e, "Audit relay: error publishing batch of %d events", claimed.size());
+                continue;
+            }
+            for (int i = 0; i < claimed.size(); i++) {
+                var row = claimed.get(i);
+                var result = i < results.size() ? results.get(i) : PublishResult.failed("missing publish result");
+                if (result.accepted()) {
+                    relayStore.markSent(row.id);
+                } else {
+                    retryOrDead(row, result.error());
+                    LOG.warnf("Audit relay: broker rejected event %s: %s", row.eventId, result.error());
                 }
             }
         }
