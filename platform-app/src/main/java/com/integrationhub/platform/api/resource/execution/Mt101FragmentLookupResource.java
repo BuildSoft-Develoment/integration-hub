@@ -3,6 +3,7 @@ package com.integrationhub.platform.api.resource.execution;
 import com.integrationhub.platform.api.response.execution.Mt101FragmentLinkResponse;
 import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
 import com.integrationhub.platform.service.payments.swift.Mt101FragmentLookupService;
+import com.integrationhub.platform.service.payments.swift.Mt101RowTimelineService;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.DefaultValue;
@@ -20,9 +21,12 @@ import java.util.Map;
 public class Mt101FragmentLookupResource {
 
     private final Mt101FragmentLookupService service;
+    private final Mt101RowTimelineService rowTimelineService;
 
-    public Mt101FragmentLookupResource(Mt101FragmentLookupService service) {
+    public Mt101FragmentLookupResource(Mt101FragmentLookupService service,
+                                       Mt101RowTimelineService rowTimelineService) {
         this.service = service;
+        this.rowTimelineService = rowTimelineService;
     }
 
     @GET
@@ -62,6 +66,26 @@ public class Mt101FragmentLookupResource {
             }
             return Map.of("fragmentSetId", fragmentSetId == null ? "" : fragmentSetId,
                     "total", total, "byStatus", byStatus);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /**
+     * Línea de tiempo E2E <b>operacional</b> de una fila (instantánea, desde staging /
+     * fragmento / cuarentena), independiente del store frío asíncrono.
+     */
+    @GET
+    @Path("/row-timeline")
+    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    public List<Mt101RowTimelineService.Milestone> rowTimeline(@QueryParam("connectionRef") String connectionRef,
+                                                               @QueryParam("fragmentSetId") String fragmentSetId,
+                                                               @QueryParam("recordNumber") Long recordNumber) {
+        if (recordNumber == null) {
+            throw new BadRequestException("recordNumber is required");
+        }
+        try {
+            return rowTimelineService.rowTimeline(connectionRef, fragmentSetId, recordNumber);
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }

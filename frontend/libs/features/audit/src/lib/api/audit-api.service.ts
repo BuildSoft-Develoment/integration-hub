@@ -12,6 +12,7 @@ import {
   Mt101QuarantineBuildResult,
   Mt101RebuildResult,
   Mt101ReprocessResult,
+  Mt101RowTimelineEntry,
   RecordLineageEntry,
 } from '../models/audit.models';
 
@@ -138,6 +139,17 @@ export class AuditApiService {
       httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }
     return this.http.get<Mt101FragmentSetSummary>('/api/query/mt101-fragments/summary', { params: httpParams });
+  }
+
+  /** Línea de tiempo E2E operacional (instantánea) de una fila del archivo. */
+  mt101RowTimeline(query: { connectionRef?: string; fragmentSetId: string; recordNumber: number }): Observable<Mt101RowTimelineEntry[]> {
+    let httpParams = new HttpParams()
+      .set('fragmentSetId', query.fragmentSetId)
+      .set('recordNumber', String(query.recordNumber));
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.get<Mt101RowTimelineEntry[]>('/api/query/mt101-fragments/row-timeline', { params: httpParams });
   }
 
   /** Revalida/reenvia en bloque por transicion de estado (REJECTED -> BUILT, SENT -> ARCHIVED). */

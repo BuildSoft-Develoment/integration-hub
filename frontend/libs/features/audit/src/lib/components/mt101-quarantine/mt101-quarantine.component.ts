@@ -4,7 +4,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuditApiService } from '../../api/audit-api.service';
-import { Mt101FailedRecord, Mt101FragmentSetSummary, RecordLineageEntry } from '../../models/audit.models';
+import { Mt101FailedRecord, Mt101FragmentSetSummary, Mt101RowTimelineEntry } from '../../models/audit.models';
 
 @Component({
   selector: 'ih-mt101-quarantine',
@@ -33,7 +33,8 @@ import { Mt101FailedRecord, Mt101FragmentSetSummary, RecordLineageEntry } from '
     .q__tl-row td { background:var(--ih-surface-alt, #1b1f27); padding:.5rem .75rem; }
     .q__timeline { display:flex; flex-direction:column; gap:5px; }
     .q__tl-title { font-size:.78rem; color:var(--ih-text-soft); margin-bottom:.25rem; }
-    .q__tl-entry { display:grid; grid-template-columns:minmax(9rem,12rem) 7rem 1fr minmax(8rem,11rem); gap:.6rem; align-items:center;
+    .q__tl-note { font-size:.72rem; color:var(--ih-text-soft); }
+    .q__tl-entry { display:grid; grid-template-columns:minmax(9rem,13rem) 7rem 1fr; gap:.6rem; align-items:center;
       padding:.4rem .6rem; border-left:3px solid var(--ih-border, #354052); background:var(--ih-surface, #10141b); }
     .q__tl-entry--REJECTED { border-left-color:#e03131; }
     .q__tl-entry--SENT,.q__tl-entry--ARCHIVED,.q__tl-entry--VALIDATED,.q__tl-entry--INGESTED,.q__tl-entry--BUILT { border-left-color:#2f9e44; }
@@ -133,11 +134,13 @@ import { Mt101FailedRecord, Mt101FragmentSetSummary, RecordLineageEntry } from '
                   <td class="q__mono">{{ (row.sourceFileHash | slice:0:12) || '—' }}</td>
                   <td class="q__status--{{ row.status }}">{{ row.status }}</td>
                   <td>
-                    @if (row.sourceFileHash && row.sourceRecordNumber !== null) {
+                    @if (row.sourceRecordNumber !== null) {
                       <button type="button" class="q__tl-btn" (click)="toggleTimeline(row)">
                         {{ selectedRow() === row.sourceRecordNumber ? 'Ocultar' : 'Timeline' }}
                       </button>
-                      <a class="q__link" [routerLink]="['/audit/record-lineage']" [queryParams]="{ sourceFileHash: row.sourceFileHash, recordNumber: row.sourceRecordNumber }" title="Abrir vista completa"><i class="ti ti-external-link"></i></a>
+                      @if (row.sourceFileHash) {
+                        <a class="q__link" [routerLink]="['/audit/record-lineage']" [queryParams]="{ sourceFileHash: row.sourceFileHash, recordNumber: row.sourceRecordNumber }" title="Vista completa con timestamps (cold store)"><i class="ti ti-external-link"></i></a>
+                      }
                     }
                   </td>
                 </tr>
@@ -147,16 +150,15 @@ import { Mt101FailedRecord, Mt101FragmentSetSummary, RecordLineageEntry } from '
                       @if (timelineLoading()) {
                         <span class="q__empty">Cargando línea de tiempo...</span>
                       } @else if (timeline().length === 0) {
-                        <span class="q__empty">Sin eventos en el cold store para esta fila (auditoría asíncrona; reintenta en unos segundos).</span>
+                        <span class="q__empty">Sin fragmento para esta fila en el set.</span>
                       } @else {
                         <div class="q__timeline">
-                          <div class="q__tl-title">Línea de tiempo E2E · fila {{ row.sourceRecordNumber }}</div>
+                          <div class="q__tl-title">Línea de tiempo E2E · fila {{ row.sourceRecordNumber }} <span class="q__tl-note">(operacional, instantáneo)</span></div>
                           @for (e of timeline(); track $index) {
                             <div class="q__tl-entry q__tl-entry--{{ e.status }}">
                               <span class="q__tl-stage">{{ e.stage }}</span>
                               <span class="q__status--{{ e.status }}">{{ e.status }}</span>
-                              <span>{{ e.message || e.paymentReference || e.transactionReference || '—' }}</span>
-                              <span class="q__tl-ts">{{ e.eventTs }}</span>
+                              <span>{{ e.detail }}</span>
                             </div>
                           }
                         </div>
@@ -196,7 +198,7 @@ export class Mt101QuarantineComponent {
   readonly message = signal<string | null>(null);
   readonly summary = signal<Mt101FragmentSetSummary | null>(null);
   readonly selectedRow = signal<number | null>(null);
-  readonly timeline = signal<RecordLineageEntry[]>([]);
+  readonly timeline = signal<Mt101RowTimelineEntry[]>([]);
   readonly timelineLoading = signal(false);
   readonly pendingCount = computed(() => this.rows().filter((r) => r.status === 'QUARANTINED').length);
 
@@ -205,15 +207,17 @@ export class Mt101QuarantineComponent {
       this.selectedRow.set(null);
       return;
     }
-    if (!row.sourceFileHash || row.sourceRecordNumber === null) {
+    if (row.sourceRecordNumber === null) {
       return;
     }
     this.selectedRow.set(row.sourceRecordNumber);
     this.timeline.set([]);
     this.timelineLoading.set(true);
-    this.api.recordLineage({
-      sourceFileHash: row.sourceFileHash,
-      recordNumber: String(row.sourceRecordNumber),
+    // Timeline operacional: instantáneo desde staging/fragmento/cuarentena (no cold store).
+    this.api.mt101RowTimeline({
+      fragmentSetId: this.fragmentSetId,
+      recordNumber: row.sourceRecordNumber,
+      connectionRef: this.connectionRef,
     }).subscribe({
       next: (entries) => {
         this.timeline.set(entries);

@@ -127,6 +127,12 @@ export interface Mt101FragmentSetSummary {
   byStatus: Record<string, number>;
 }
 
+export interface Mt101RowTimelineEntry {
+  stage: string;
+  status: string;
+  detail: string;
+}
+
 export interface AuditRecord {
   id: number;
   processExecutionId: number | null;
