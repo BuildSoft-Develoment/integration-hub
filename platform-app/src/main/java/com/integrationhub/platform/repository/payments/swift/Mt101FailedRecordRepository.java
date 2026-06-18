@@ -93,6 +93,19 @@ public class Mt101FailedRecordRepository {
         return result;
     }
 
+    /** Cuenta filas de un set en un estado (guarda contra rebuild parcial silencioso). */
+    public long countByStatus(DataSource dataSource, String fragmentSetId, String status) throws SQLException {
+        var sql = "select count(*) from mt101_failed_record where fragment_set_id = ? and status = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, fragmentSetId);
+            statement.setString(2, status);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getLong(1) : 0L;
+            }
+        }
+    }
+
     /** Marca como resueltas (REBUILT/DISCARDED) las filas en cuarentena de un set. */
     public int updateStatusBySet(DataSource dataSource,
                                  String fragmentSetId,

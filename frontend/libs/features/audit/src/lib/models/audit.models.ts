@@ -131,6 +131,7 @@ export interface Mt101RowTimelineEntry {
   stage: string;
   status: string;
   detail: string;
+  eventTs: string | null;
 }
 
 export interface Mt101LoteHeader {

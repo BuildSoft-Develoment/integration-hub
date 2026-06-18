@@ -191,4 +191,28 @@ public class Mt101StagingRecordRepository {
 
     public record SourceInfo(String sourceName, long rowCount) {
     }
+
+    /**
+     * Fila de staging exacta por (ejecucion, record_index). Resuelve el staging_id
+     * real (no por formula stagingIdFrom+offset, que asume ids contiguos) y su
+     * created_at (timestamp del hito INGESTED). Null si la fila ya no esta.
+     */
+    public StagingRowInfo findStagingRow(DataSource dataSource, long processExecutionId, long recordIndex) throws SQLException {
+        var sql = "select id, created_at from staging_record where process_execution_id = ? and record_index = ? limit 1";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, processExecutionId);
+            statement.setLong(2, recordIndex);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                var ts = rs.getTimestamp("created_at");
+                return new StagingRowInfo(rs.getLong("id"), ts == null ? null : ts.toLocalDateTime());
+            }
+        }
+    }
+
+    public record StagingRowInfo(long id, java.time.LocalDateTime createdAt) {
+    }
 }

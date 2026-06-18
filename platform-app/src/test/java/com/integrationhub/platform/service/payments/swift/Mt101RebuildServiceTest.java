@@ -79,34 +79,34 @@ class Mt101RebuildServiceTest {
     }
 
     @Test
-    void rebuildsOnlyQuarantinedRowsAndSupersedesOriginals() throws Exception {
-        // Set original con fragmento P1 (fila 2); fila 2 en cuarentena (corregida).
+    void rebuildsAllRowsOfAffectedFragmentNotJustFailed() throws Exception {
+        // Fragmento P1 cubre filas 1-50 (50 transacciones); SOLO la fila 25 fallo.
         fragmentStore.insertFragment(null, "SET", 100L, 20L, "staging_record",
-                2, 2, 1, 1, sampleMessage("P1"));
-        insertQuarantine("P1", "TX-1", 2L, "STRUCT.X");
+                1, 50, 1, 1, sampleMessage("P1"));
+        insertQuarantine("P1", "TX-25", 25L, "STRUCT.X");
 
         var result = service.rebuildFromQuarantine(null, "SET", "SET-FIX");
 
         assertEquals("SET-FIX", result.correctiveSetId());
-        assertEquals(1, result.fragmentCount());
-        assertEquals(1, result.rebuiltRows());
+        // P0: reconstruye las 50 filas del fragmento afectado, no solo la fila 25.
+        assertEquals(50, result.rebuiltRows(), "rebuild de TODO el fragmento, no solo la fila fallida");
         assertEquals(1, result.supersededFragments());
         assertEquals(1, result.resolvedQuarantine());
 
-        // El build correctivo se invoco scoped a record_index 1 (fila 2, 1-based).
         var config = capturedConfig.get();
         assertEquals("SET-FIX", config.get("fragmentSetIdTemplate"));
         assertEquals(true, config.get("replaceExisting"));
         @SuppressWarnings("unchecked")
         var source = (Map<String, Object>) config.get("source");
-        assertEquals(List.of(1L), source.get("recordIndexIn"), "record_index 0-based de la fila 2");
-        assertEquals("staging_record", source.get("table"));
+        @SuppressWarnings("unchecked")
+        var recordIndexIn = (List<Long>) source.get("recordIndexIn");
+        assertEquals(50, recordIndexIn.size(), "las 50 filas del fragmento (record_index 0-based)");
+        assertTrue(recordIndexIn.contains(0L) && recordIndexIn.contains(24L) && recordIndexIn.contains(49L),
+                "incluye la primera (0), la fallida (24) y la ultima (49)");
         assertTrue(config.containsKey("sequenceA"), "conserva el config original del build");
 
-        // El fragmento original quedo SUPERSEDED apuntando al set correctivo.
         assertEquals("SUPERSEDED", fragmentStatus("SET", "P1"));
         assertEquals("SET-FIX", supersededBy("SET", "P1"));
-        // La cuarentena quedo resuelta.
         assertEquals("REBUILT", quarantineStatus("SET"));
     }
 

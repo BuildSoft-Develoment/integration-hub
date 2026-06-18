@@ -16,6 +16,7 @@ import java.sql.Statement;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -40,26 +41,45 @@ class Mt101RowTimelineServiceTest {
     void setUp() throws Exception {
         dataSource = dataSource();
         service = new Mt101RowTimelineService(dataSource, null,
-                new Mt101FragmentRepository(), new Mt101FailedRecordRepository());
+                new Mt101FragmentRepository(), new Mt101FailedRecordRepository(),
+                new com.integrationhub.platform.repository.payments.swift.Mt101StagingRecordRepository());
         prepareSchema();
     }
 
     @Test
     void buildsOperationalTimelineForFailedRow() throws Exception {
-        // Fragmento P1 cubre filas 1-50 (staging 1000-1049), rechazado; fila 25 en cuarentena.
+        // Fragmento P1 cubre filas 1-50, rechazado; fila 25 en cuarentena.
         insertFragment("P1", 1000, 1049, 1, 50, 1, 2, "REJECTED", "STRUCT.X: bad charges");
         insertQuarantine("P1", "T25", 25, "STRUCT.X", "bad charges");
+        // #6: staging_id real resuelto por query (record_index = 25-1 = 24), no por formula.
+        var realStagingId = insertStaging(24);
 
         var tl = service.rowTimeline(null, "SET", 25);
 
         assertEquals(4, tl.size());
         assertEquals("RECORD_INGESTED", tl.get(0).stage());
-        assertTrue(tl.get(0).detail().contains("staging id 1024"), "id exacto = 1000 + (25-1)");
+        assertTrue(tl.get(0).detail().contains("staging id " + realStagingId),
+                "usa el id real de staging, no la suma stagingIdFrom+offset");
+        assertNotNull(tl.get(0).eventTs(), "INGESTED lleva timestamp (staging.created_at)");
         assertEquals("RECORD_BUILT", tl.get(1).stage());
         assertTrue(tl.get(1).detail().contains(":20: P1") && tl.get(1).detail().contains("1/2"));
+        assertNotNull(tl.get(1).eventTs(), "BUILT lleva timestamp (fragment.created_at)");
         assertEquals("RECORD_VALIDATION_ISSUE", tl.get(2).stage());
         assertTrue(tl.get(2).detail().contains("STRUCT.X") && tl.get(2).detail().contains(":21: T25"));
         assertEquals("RECORD_REJECTED", tl.get(3).stage());
+    }
+
+    private long insertStaging(long recordIndex) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var st = connection.prepareStatement(
+                     "insert into staging_record (process_execution_id, task_definition_id, record_index, payload_json) "
+                             + "values (1, 9, ?, '{}') returning id")) {
+            st.setLong(1, recordIndex);
+            try (var rs = st.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
+        }
     }
 
     @Test
@@ -106,6 +126,11 @@ class Mt101RowTimelineServiceTest {
     private void prepareSchema() throws SQLException {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
+            statement.executeUpdate("drop table if exists staging_record");
+            statement.executeUpdate("create table staging_record ("
+                    + "id bigserial primary key, process_execution_id bigint, task_definition_id bigint,"
+                    + "record_index bigint, source_name varchar(255), source_file_hash varchar(64),"
+                    + "payload_json text, created_at timestamp not null default current_timestamp)");
             statement.executeUpdate("drop table if exists mt101_failed_record");
             statement.executeUpdate("drop table if exists mt101_build_fragment");
             statement.executeUpdate("create table mt101_build_fragment ("

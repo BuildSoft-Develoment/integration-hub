@@ -61,18 +61,20 @@ public class Mt101RebuildService {
         }
         var dataSource = resolveDataSource(connectionRef);
         try {
-            var failed = failedRecordRepository.findBySet(dataSource, set, "QUARANTINED", MAX_QUARANTINE);
-            var recordNumbers = failed.stream()
-                    .map(Mt101FailedRecordRepository.FailedRecord::sourceRecordNumber)
-                    .filter(n -> n != null)
-                    .distinct()
-                    .sorted()
-                    .toList();
-            if (recordNumbers.isEmpty()) {
-                // Sin fallback: si no hay filas con numero de fila exacto, no se hace
-                // un rebuild vacio silencioso.
-                throw new IllegalArgumentException("no quarantined rows with an exact source row to rebuild in set " + set);
+            // P0: guard contra rebuild parcial. Si hay mas filas en cuarentena que el
+            // limite, no procesamos solo una pagina y marcamos TODAS como REBUILT
+            // (ocultaria filas sin reprocesar). Fail-fast con instruccion accionable.
+            var quarantinedCount = failedRecordRepository.countByStatus(dataSource, set, "QUARANTINED");
+            if (quarantinedCount == 0) {
+                throw new IllegalArgumentException("no quarantined rows to rebuild in set " + set);
             }
+            if (quarantinedCount > MAX_QUARANTINE) {
+                throw new IllegalArgumentException(quarantinedCount + " quarantined rows exceed the rebuild limit ("
+                        + MAX_QUARANTINE + "); reprocess in pages or raise the limit before rebuilding set " + set);
+            }
+
+            var failed = failedRecordRepository.findBySet(dataSource, set, "QUARANTINED", MAX_QUARANTINE);
+            // :20: de los fragmentos afectados (un fragmento = un MT101 atomico).
             var references = new ArrayList<String>();
             for (var row : failed) {
                 if (row.sendersReference() != null && !row.sendersReference().isBlank()
@@ -80,15 +82,26 @@ public class Mt101RebuildService {
                     references.add(row.sendersReference());
                 }
             }
+            if (references.isEmpty()) {
+                throw new IllegalArgumentException("quarantined rows have no :20: to resolve affected fragments in set " + set);
+            }
 
             var metadata = fragmentRepository.findSetMetadata(dataSource, set);
             if (metadata == null || metadata.taskDefinitionId() == null) {
                 throw new IllegalArgumentException("cannot resolve build metadata for fragment set " + set);
             }
 
+            // P0: reconstruir TODAS las filas de los fragmentos afectados, no solo las
+            // fallidas. Un MT101 no se envia parcial -> reconstruir solo la fila mala y
+            // superseder el fragmento dejaria sin enviar las transacciones validas hermanas.
+            var recordIndexIn = affectedRecordIndexes(dataSource, set, references);
+            if (recordIndexIn.isEmpty()) {
+                throw new IllegalArgumentException("cannot resolve the source rows of affected fragments in set " + set);
+            }
+
             var config = correctiveConfig(
                     buildConfigSource.buildConfig(metadata.taskDefinitionId()),
-                    metadata, connectionRef, corrective, recordNumbers);
+                    metadata, connectionRef, corrective, recordIndexIn);
 
             var context = new TaskContext(metadata.processExecutionId(), metadata.taskDefinitionId());
             var result = buildProvider.execute(context, config);
@@ -99,19 +112,39 @@ public class Mt101RebuildService {
             var fragmentCount = result.outputs().get("fragmentCount") instanceof Number n ? n.intValue() : 0;
 
             var superseded = fragmentRepository.markSupersededByReferences(dataSource, set, references, corrective);
+            // Seguro: el guard garantiza que TODAS las QUARANTINED estan dentro del lote
+            // reconstruido, asi que marcarlas REBUILT no oculta filas sin procesar.
             var resolved = failedRecordRepository.updateStatusBySet(dataSource, set, "QUARANTINED", "REBUILT");
 
-            return new RebuildResult(corrective, fragmentCount, recordNumbers.size(), superseded, resolved);
+            return new RebuildResult(corrective, fragmentCount, recordIndexIn.size(), superseded, resolved);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot rebuild MT101 quarantine for set " + set, error);
         }
+    }
+
+    /**
+     * record_index (0-based) de TODAS las filas de los fragmentos afectados ({@code :20:}),
+     * para reconstruir el fragmento completo. Ordenado y sin duplicados.
+     */
+    private List<Long> affectedRecordIndexes(DataSource dataSource, String fragmentSetId,
+                                             List<String> references) throws SQLException {
+        var indexes = new java.util.TreeSet<Long>();
+        for (var range : fragmentRepository.sourceRecordRangesByReferences(dataSource, fragmentSetId, references)) {
+            if (range.from() == null || range.to() == null) {
+                continue;
+            }
+            for (long recordNumber = range.from(); recordNumber <= range.to(); recordNumber++) {
+                indexes.add(recordNumber - 1);
+            }
+        }
+        return new ArrayList<>(indexes);
     }
 
     private Map<String, Object> correctiveConfig(Map<String, Object> original,
                                                  Mt101FragmentRepository.SetMetadata metadata,
                                                  String connectionRef,
                                                  String correctiveSetId,
-                                                 List<Long> recordNumbers) {
+                                                 List<Long> recordIndexIn) {
         // Copia integra del config original (envelope, sequenceA, transactionMappings,
         // format, limites...) y solo overridea el scoping. Asi el set correctivo produce
         // MT101 identicos a los originales salvo por las filas reconstruidas.
@@ -122,11 +155,6 @@ public class Mt101RebuildService {
         config.put("fragmentSetIdTemplate", correctiveSetId);
         config.put("replaceExisting", true);
 
-        // record_index es 0-based; el numero de fila de cuarentena es 1-based.
-        var recordIndexIn = new ArrayList<Long>(recordNumbers.size());
-        for (var recordNumber : recordNumbers) {
-            recordIndexIn.add(recordNumber - 1);
-        }
         var source = original.get("source") instanceof Map<?, ?> originalSource
                 ? new LinkedHashMap<String, Object>(asStringKeyed(originalSource))
                 : new LinkedHashMap<String, Object>();

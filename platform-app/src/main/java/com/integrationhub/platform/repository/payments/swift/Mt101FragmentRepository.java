@@ -382,6 +382,39 @@ public class Mt101FragmentRepository {
     }
 
     /**
+     * Rangos de fila del archivo ({@code source_record_from/to}) de los fragmentos
+     * indicados por {@code :20:}. El rebuild correctivo reconstruye TODAS las filas de
+     * los fragmentos afectados (un MT101 no se envia parcial), no solo las fallidas.
+     */
+    public List<RecordRange> sourceRecordRangesByReferences(DataSource dataSource,
+                                                            String fragmentSetId,
+                                                            Collection<String> sendersReferences) throws SQLException {
+        if (sendersReferences == null || sendersReferences.isEmpty()) {
+            return List.of();
+        }
+        var sql = "select source_record_from, source_record_to from mt101_build_fragment "
+                + "where fragment_set_id = ? and senders_reference in (" + placeholders(sendersReferences.size()) + ")";
+        var result = new ArrayList<RecordRange>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            statement.setString(parameter++, fragmentSetId);
+            for (var reference : sendersReferences) {
+                statement.setString(parameter++, reference);
+            }
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new RecordRange(nullableLong(rs, "source_record_from"), nullableLong(rs, "source_record_to")));
+                }
+            }
+        }
+        return result;
+    }
+
+    public record RecordRange(Long from, Long to) {
+    }
+
+    /**
      * Marca como SUPERSEDED los fragmentos del set indicados por {@code :20:},
      * apuntando al set correctivo que los reemplaza. Devuelve cuantos cambiaron.
      */

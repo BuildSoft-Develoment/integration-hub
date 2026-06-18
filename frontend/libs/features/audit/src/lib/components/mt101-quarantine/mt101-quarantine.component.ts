@@ -38,7 +38,7 @@ import { Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101RowTi
     .q__timeline { display:flex; flex-direction:column; gap:5px; }
     .q__tl-title { font-size:.78rem; color:var(--ih-text-soft); margin-bottom:.25rem; }
     .q__tl-note { font-size:.72rem; color:var(--ih-text-soft); }
-    .q__tl-entry { display:grid; grid-template-columns:minmax(9rem,13rem) 7rem 1fr; gap:.6rem; align-items:center;
+    .q__tl-entry { display:grid; grid-template-columns:minmax(8rem,12rem) 6.5rem 1fr minmax(8rem,11rem); gap:.6rem; align-items:center;
       padding:.4rem .6rem; border-left:3px solid var(--ih-border, #354052); background:var(--ih-surface, #10141b); }
     .q__tl-entry--REJECTED { border-left-color:#e03131; }
     .q__tl-entry--SENT,.q__tl-entry--ARCHIVED,.q__tl-entry--VALIDATED,.q__tl-entry--INGESTED,.q__tl-entry--BUILT { border-left-color:#2f9e44; }
@@ -182,6 +182,7 @@ import { Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101RowTi
                               <span class="q__tl-stage">{{ e.stage }}</span>
                               <span class="q__status--{{ e.status }}">{{ e.status }}</span>
                               <span>{{ e.detail }}</span>
+                              <span class="q__tl-ts">{{ e.eventTs || '—' }}</span>
                             </div>
                           }
                         </div>

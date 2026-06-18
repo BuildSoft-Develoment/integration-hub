@@ -268,7 +268,12 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
         if (sourcePayload == null) {
             return null;
         }
-        var cacheKey = "_sourceFileHash:" + sourcePayload.name();
+        // Clave por location+size+lastModified (no solo name): dos archivos con el
+        // mismo nombre desde rutas distintas no comparten cache ni hash.
+        var file = sourcePayload.file();
+        var cacheKey = "_sourceFileHash:" + sourcePayload.location()
+                + ":" + (file == null ? "" : file.size())
+                + ":" + (file == null || file.lastModified() == null ? "" : file.lastModified());
         synchronized (context.attributes()) {
             var cached = context.attributes().get(cacheKey);
             if (cached instanceof String hash) {

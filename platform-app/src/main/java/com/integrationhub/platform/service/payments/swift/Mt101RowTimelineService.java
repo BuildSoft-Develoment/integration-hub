@@ -2,6 +2,7 @@ package com.integrationhub.platform.service.payments.swift;
 
 import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRepository;
 import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
+import com.integrationhub.platform.repository.payments.swift.Mt101StagingRecordRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -24,15 +25,18 @@ public class Mt101RowTimelineService {
     private final ConnectionPoolManager connectionPoolManager;
     private final Mt101FragmentRepository fragmentRepository;
     private final Mt101FailedRecordRepository failedRecordRepository;
+    private final Mt101StagingRecordRepository stagingRepository;
 
     public Mt101RowTimelineService(DataSource defaultDataSource,
                                    ConnectionPoolManager connectionPoolManager,
                                    Mt101FragmentRepository fragmentRepository,
-                                   Mt101FailedRecordRepository failedRecordRepository) {
+                                   Mt101FailedRecordRepository failedRecordRepository,
+                                   Mt101StagingRecordRepository stagingRepository) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.fragmentRepository = fragmentRepository;
         this.failedRecordRepository = failedRecordRepository;
+        this.stagingRepository = stagingRepository;
     }
 
     public List<Milestone> rowTimeline(String connectionRef, String fragmentSetId, long recordNumber) {
@@ -52,18 +56,23 @@ public class Mt101RowTimelineService {
             var fragment = fragments.get(0);
             var milestones = new ArrayList<Milestone>();
 
-            // INGESTED: la fila origen entro a staging. id tecnico exacto = stagingIdFrom
-            // + offset dentro del fragmento (filas contiguas por keyset).
-            var stagingId = fragment.sourceRecordFrom() == null
-                    ? fragment.stagingIdFrom()
-                    : fragment.stagingIdFrom() + (recordNumber - fragment.sourceRecordFrom());
+            // INGESTED: la fila origen entro a staging. id tecnico EXACTO resuelto por
+            // query (no por formula stagingIdFrom+offset, que asume ids contiguos) +
+            // timestamp del INGESTED.
+            var staging = fragment.processExecutionId() == null ? null
+                    : stagingRepository.findStagingRow(dataSource, fragment.processExecutionId(), recordNumber - 1);
+            var stagingId = staging != null ? staging.id()
+                    : (fragment.sourceRecordFrom() == null ? fragment.stagingIdFrom()
+                            : fragment.stagingIdFrom() + (recordNumber - fragment.sourceRecordFrom()));
             milestones.add(new Milestone("RECORD_INGESTED", "INGESTED",
-                    "fila " + recordNumber + " · staging id " + stagingId));
+                    "fila " + recordNumber + " · staging id " + stagingId,
+                    staging == null ? null : staging.createdAt()));
 
             // BUILT: la fila se fragmento en un MT101.
             milestones.add(new Milestone("RECORD_BUILT", "BUILT",
                     ":20: " + nullSafe(fragment.sendersReference())
-                            + " · fragmento " + fragment.fragmentIndex() + "/" + fragment.fragmentTotal()));
+                            + " · fragmento " + fragment.fragmentIndex() + "/" + fragment.fragmentTotal(),
+                    fragment.createdAt()));
 
             // VALIDATION_ISSUE: regla(s) que fallaron exactamente en esta fila.
             for (var failed : failedRecordRepository.findBySet(dataSource, set, null, 5000)) {
@@ -71,7 +80,8 @@ public class Mt101RowTimelineService {
                     milestones.add(new Milestone("RECORD_VALIDATION_ISSUE", "REJECTED",
                             nullSafe(failed.ruleCode())
                                     + (failed.message() == null || failed.message().isBlank() ? "" : ": " + failed.message())
-                                    + (failed.transactionReference() == null ? "" : " · :21: " + failed.transactionReference())));
+                                    + (failed.transactionReference() == null ? "" : " · :21: " + failed.transactionReference()),
+                            failed.createdAt()));
                 }
             }
 
@@ -80,7 +90,8 @@ public class Mt101RowTimelineService {
                 milestones.add(new Milestone("RECORD_" + fragment.status().toUpperCase(), fragment.status().toUpperCase(),
                         ":20: " + nullSafe(fragment.sendersReference())
                                 + (fragment.errorMessage() == null || fragment.errorMessage().isBlank()
-                                        ? "" : " · " + fragment.errorMessage())));
+                                        ? "" : " · " + fragment.errorMessage()),
+                        fragment.updatedAt()));
             }
             return milestones;
         } catch (SQLException error) {
@@ -99,6 +110,6 @@ public class Mt101RowTimelineService {
         return value == null ? "—" : value;
     }
 
-    public record Milestone(String stage, String status, String detail) {
+    public record Milestone(String stage, String status, String detail, java.time.LocalDateTime eventTs) {
     }
 }
