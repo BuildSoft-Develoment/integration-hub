@@ -126,5 +126,33 @@ corregidos**, más 3 mejoras P1. El reproceso quirúrgico ahora es seguro:
 > y el rebuild correctivo reconstruye **el/los fragmentos afectados completos** —
 > sin perder ninguna transacción válida — superseding los originales.
 
-Queda como decisión de diseño la política multiarchivo y el flujo de edición de
-datos desde UI/API.
+Queda como decisión de diseño la política multiarchivo.
+
+---
+
+## Doble check (2ª pasada) — regresión cazada + P0 #4 cerrado
+
+El doble check encontró que **el propio fix P0-1 había roto una aserción del E2E
+negativo**: el test seguía afirmando el comportamiento VIEJO y buggy
+(`assertEquals(1, rebuiltRows, "se reconstruye solo la fila corregida")`). Tras el
+fix, `rebuiltRows = 50` (fragmento completo). **Corregido**: el E2E ahora afirma que
+el rebuild reconstruye todas las filas del fragmento afectado y que el set correctivo
+las cubre todas (`sum(source_record_to - source_record_from + 1)`) — cerrando la
+**prueba crítica #14**. Verificado verde (rebuiltRows=50).
+
+**P0 #4 (corrección de datos) — antes recomendación, ahora implementado:**
+`PATCH /api/query/mt101-quarantine/staging-row` (`Mt101StagingCorrectionService`)
+corrige `staging_record.payload_json` por fila, audita `STAGING_ROW_CORRECTED`; la UI
+de cuarentena tiene botón "Corregir" con editor inline. Cierra el "no tocar BD a mano".
+
+### Estado final de los P0
+
+| P0 del análisis | Estado |
+|---|---|
+| #1 rebuild de fragmentos afectados completos | **CERRADO** (unit + E2E) |
+| #2 fail-fast (no marcar REBUILT lo no procesado) | **CERRADO** |
+| #3 staging_id real por query | **CERRADO** |
+| #4 corregir payload en staging vía API/UI | **CERRADO** |
+
+Único pendiente real: **multiarchivo (#8)** — decisión de diseño. Para 1-archivo-de-1M,
+todo cerrado.
