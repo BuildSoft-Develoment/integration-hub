@@ -44,6 +44,9 @@ import { Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101RowTi
     .q__tl-entry--SENT,.q__tl-entry--ARCHIVED,.q__tl-entry--VALIDATED,.q__tl-entry--INGESTED,.q__tl-entry--BUILT { border-left-color:#2f9e44; }
     .q__tl-stage { font-weight:600; overflow-wrap:anywhere; }
     .q__tl-ts { color:var(--ih-text-soft); font-size:.8rem; }
+    .q__correct { display:flex; flex-direction:column; gap:.4rem; }
+    .q__correct label { font-size:.78rem; color:var(--ih-text-soft); }
+    .q__correct textarea { width:100%; font-family:ui-monospace, SFMono-Regular, Consolas, monospace; font-size:.82rem; padding:.5rem; border:1px solid var(--ih-border, #354052); background:var(--ih-surface, #10141b); color:inherit; }
     .q__cards { display:grid; grid-template-columns:repeat(auto-fit, minmax(7rem, 1fr)); gap:.6rem; }
     .q__card { background:var(--ih-surface-alt, #1b1f27); border:1px solid var(--ih-border, #354052); border-radius:8px; padding:.6rem .7rem; display:flex; flex-direction:column; gap:.15rem; }
     .q__card small { font-size:.72rem; color:var(--ih-text-soft); }
@@ -161,12 +164,27 @@ import { Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101RowTi
                       <button type="button" class="q__tl-btn" (click)="toggleTimeline(row)">
                         {{ selectedRow() === row.sourceRecordNumber ? 'Ocultar' : 'Timeline' }}
                       </button>
+                      <button type="button" class="q__tl-btn" (click)="toggleCorrect(row)">Corregir</button>
                       @if (row.sourceFileHash) {
                         <a class="q__link" [routerLink]="['/audit/record-lineage']" [queryParams]="{ sourceFileHash: row.sourceFileHash, recordNumber: row.sourceRecordNumber }" title="Vista completa con timestamps (cold store)"><i class="ti ti-external-link"></i></a>
                       }
                     }
                   </td>
                 </tr>
+                @if (correctingRow() === row.sourceRecordNumber) {
+                  <tr class="q__tl-row">
+                    <td colspan="9">
+                      <div class="q__correct">
+                        <label>Payload corregido (JSON) para la fila {{ row.sourceRecordNumber }}</label>
+                        <textarea [(ngModel)]="correctionPayload" rows="3" placeholder='{"cargos":"OUR", ...}'></textarea>
+                        <div class="q__actions">
+                          <button type="button" class="q__primary" (click)="saveCorrection(row)" [disabled]="loading() || !correctionPayload.trim()">Guardar corrección</button>
+                          <button type="button" (click)="toggleCorrect(row)">Cancelar</button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                }
                 @if (selectedRow() === row.sourceRecordNumber) {
                   <tr class="q__tl-row">
                     <td colspan="9">
@@ -259,6 +277,41 @@ export class Mt101QuarantineComponent {
   readonly selectedRow = signal<number | null>(null);
   readonly timeline = signal<Mt101RowTimelineEntry[]>([]);
   readonly timelineLoading = signal(false);
+  readonly correctingRow = signal<number | null>(null);
+  correctionPayload = '';
+
+  toggleCorrect(row: Mt101FailedRecord): void {
+    if (this.correctingRow() === row.sourceRecordNumber) {
+      this.correctingRow.set(null);
+      return;
+    }
+    this.correctionPayload = '';
+    this.correctingRow.set(row.sourceRecordNumber);
+  }
+
+  saveCorrection(row: Mt101FailedRecord): void {
+    if (row.sourceRecordNumber === null || !this.correctionPayload.trim()) {
+      return;
+    }
+    this.loading.set(true);
+    this.error.set(null);
+    this.api.mt101CorrectStagingRow({
+      fragmentSetId: this.fragmentSetId,
+      recordNumber: row.sourceRecordNumber,
+      payload: this.correctionPayload,
+      connectionRef: this.connectionRef,
+    }).subscribe({
+      next: () => {
+        this.message.set(`Fila ${row.sourceRecordNumber} corregida en staging. Ya puedes reprocesar.`);
+        this.correctingRow.set(null);
+        this.loading.set(false);
+      },
+      error: () => {
+        this.error.set('No se pudo corregir la fila en staging.');
+        this.loading.set(false);
+      },
+    });
+  }
   readonly pendingCount = computed(() => this.rows().filter((r) => r.status === 'QUARANTINED').length);
 
   toggleTimeline(row: Mt101FailedRecord): void {

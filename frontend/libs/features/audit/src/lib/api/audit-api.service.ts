@@ -251,6 +251,26 @@ export class AuditApiService {
     });
   }
 
+  /** Corrige el payload de una fila fallida en staging (paso previo al rebuild). */
+  mt101CorrectStagingRow(query: {
+    connectionRef?: string;
+    fragmentSetId: string;
+    recordNumber: number;
+    payload: string;
+  }): Observable<{ fragmentSetId: string; recordNumber: number; updated: number }> {
+    let httpParams = new HttpParams()
+      .set('fragmentSetId', query.fragmentSetId)
+      .set('recordNumber', String(query.recordNumber));
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.patch<{ fragmentSetId: string; recordNumber: number; updated: number }>(
+      '/api/query/mt101-quarantine/staging-row', query.payload, {
+        params: httpParams,
+        headers: { 'Content-Type': 'application/json' },
+      });
+  }
+
   /** Reconstruye SOLO las filas en cuarentena en un set correctivo (supersede originales). */
   mt101RebuildQuarantine(query: {
     connectionRef?: string;

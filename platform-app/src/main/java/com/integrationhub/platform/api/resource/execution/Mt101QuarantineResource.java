@@ -5,10 +5,13 @@ import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRe
 import com.integrationhub.platform.service.payments.swift.Mt101LoteService;
 import com.integrationhub.platform.service.payments.swift.Mt101QuarantineService;
 import com.integrationhub.platform.service.payments.swift.Mt101RebuildService;
+import com.integrationhub.platform.service.payments.swift.Mt101StagingCorrectionService;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -30,13 +33,38 @@ public class Mt101QuarantineResource {
     private final Mt101QuarantineService service;
     private final Mt101RebuildService rebuildService;
     private final Mt101LoteService loteService;
+    private final Mt101StagingCorrectionService correctionService;
 
     public Mt101QuarantineResource(Mt101QuarantineService service,
                                    Mt101RebuildService rebuildService,
-                                   Mt101LoteService loteService) {
+                                   Mt101LoteService loteService,
+                                   Mt101StagingCorrectionService correctionService) {
         this.service = service;
         this.rebuildService = rebuildService;
         this.loteService = loteService;
+        this.correctionService = correctionService;
+    }
+
+    /**
+     * Corrige el payload de una fila fallida en staging (paso previo al rebuild),
+     * sin tocar la BD a mano. Body = payload JSON corregido. Mutación.
+     */
+    @PATCH
+    @Path("/staging-row")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    public Mt101StagingCorrectionService.CorrectionResult correctRow(@QueryParam("connectionRef") String connectionRef,
+                                                                     @QueryParam("fragmentSetId") String fragmentSetId,
+                                                                     @QueryParam("recordNumber") Long recordNumber,
+                                                                     String payloadJson) {
+        if (recordNumber == null) {
+            throw new BadRequestException("recordNumber is required");
+        }
+        try {
+            return correctionService.correctRow(connectionRef, fragmentSetId, recordNumber, payloadJson);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
     }
 
     /**

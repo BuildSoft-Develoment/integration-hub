@@ -215,4 +215,20 @@ public class Mt101StagingRecordRepository {
 
     public record StagingRowInfo(long id, java.time.LocalDateTime createdAt) {
     }
+
+    /**
+     * Corrige el payload de una fila de staging por (ejecucion, record_index), para
+     * que el operador arregle la fila fallida desde la API/UI sin tocar la BD a mano.
+     * Devuelve filas afectadas (0 si no existe).
+     */
+    public int updatePayload(DataSource dataSource, long processExecutionId, long recordIndex, String payloadJson) throws SQLException {
+        var sql = "update staging_record set payload_json = ? where process_execution_id = ? and record_index = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, payloadJson);
+            statement.setLong(2, processExecutionId);
+            statement.setLong(3, recordIndex);
+            return statement.executeUpdate();
+        }
+    }
 }
