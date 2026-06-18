@@ -200,7 +200,7 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                     break;
                 }
                 lastId = rows.get(rows.size() - 1).id();
-                planChunk(context, configuration, rows, maxBytes, logicalOffset, plan);
+                planByFile(context, configuration, rows, maxBytes, logicalOffset, plan);
                 logicalOffset += rows.size();
             }
         } catch (SQLException error) {
@@ -291,6 +291,30 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
 
         return TaskResult.success("MT101_BUILD_FROM_TABLE built " + totalFragments
                 + " fragments for " + totalRows + " rows", outputs);
+    }
+
+    /**
+     * Multiarchivo: nunca mezcla archivos en un fragmento. Parte la pagina en tramos
+     * contiguos del mismo {@code source_file_hash} (las filas de un archivo son
+     * contiguas por id) y planifica cada tramo por separado -> cada fragmento pertenece
+     * a un solo archivo y su {@code source_file_hash} es correcto para todas sus
+     * transacciones. Para un solo archivo es un no-op (un tramo = toda la pagina).
+     */
+    private void planByFile(TaskContext context,
+                            Map<String, Object> configuration,
+                            List<RowRecord> rows,
+                            int maxBytes,
+                            long logicalOffset,
+                            List<FragmentPlan> plan) {
+        var runStart = 0;
+        for (int i = 1; i <= rows.size(); i++) {
+            var boundary = i == rows.size()
+                    || !java.util.Objects.equals(rows.get(i).sourceFileHash(), rows.get(i - 1).sourceFileHash());
+            if (boundary) {
+                planChunk(context, configuration, rows.subList(runStart, i), maxBytes, logicalOffset + runStart, plan);
+                runStart = i;
+            }
+        }
     }
 
     /**

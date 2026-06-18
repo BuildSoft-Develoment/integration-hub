@@ -344,6 +344,47 @@ class Mt101BuildFromTableTaskProviderTest {
         assertEquals(List.of("BEN1", "BEN3"), accounts, "BEN2 (record_index 1) queda fuera");
     }
 
+    @Test
+    void neverMixesFilesInOneFragment() throws Exception {
+        // #8 multiarchivo: dos archivos en la misma ejecucion (hashes distintos), contiguos.
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("delete from staging_record");
+            insertHashed(statement, "A1", "10.00", 0, "hashAAAA");
+            insertHashed(statement, "A2", "20.00", 1, "hashAAAA");
+            insertHashed(statement, "B1", "30.00", 2, "hashBBBB");
+            insertHashed(statement, "B2", "40.00", 3, "hashBBBB");
+        }
+        var context = new TaskContext(100L, 91L);
+        context.attributes().put("taskOutputs", Map.of(
+                "stage.table", "staging_record",
+                "stage.processExecutionId", 100L,
+                "stage.taskDefinitionId", 20L));
+        // maxTransactionsPerMessage=10: sin el split por archivo, las 4 filas caerian en 1 fragmento.
+        var result = provider.execute(context, baseConfiguration(91L, Map.of(
+                "maxTransactionsPerMessage", 10, "maxBytesPerMessage", 10000)));
+        assertTrue(result.success(), result.details());
+        assertEquals(2, result.outputs().get("fragmentCount"), "un fragmento por archivo, no mezclados");
+
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             var rs = statement.executeQuery("select source_file_hash, count(*) from mt101_build_fragment "
+                     + "group by source_file_hash order by source_file_hash")) {
+            var hashes = new java.util.ArrayList<String>();
+            while (rs.next()) {
+                hashes.add(rs.getString(1));
+                assertEquals(1, rs.getInt(2), "un fragmento por hash de archivo");
+            }
+            assertEquals(List.of("hashAAAA", "hashBBBB"), hashes, "cada fragmento lleva el hash de su archivo");
+        }
+    }
+
+    private void insertHashed(Statement statement, String account, String amount, int recordIndex, String hash) throws Exception {
+        statement.executeUpdate("insert into staging_record(process_execution_id, task_definition_id, record_index, source_file_hash, payload_json) values "
+                + "(100, 20, " + recordIndex + ", '" + hash + "', '{\"moneda\":\"PEN\",\"monto\":\"" + amount
+                + "\",\"cuenta_beneficiario\":\"" + account + "\",\"cargos\":\"OUR\"}')");
+    }
+
     private Map<String, Object> baseConfiguration(long taskDefinitionId, Map<String, Object> overrides) {
         var configuration = new java.util.LinkedHashMap<String, Object>();
         configuration.put("taskRef", "build-massive-" + taskDefinitionId);

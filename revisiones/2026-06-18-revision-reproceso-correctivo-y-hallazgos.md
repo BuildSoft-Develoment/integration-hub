@@ -154,5 +154,19 @@ de cuarentena tiene botón "Corregir" con editor inline. Cierra el "no tocar BD 
 | #3 staging_id real por query | **CERRADO** |
 | #4 corregir payload en staging vía API/UI | **CERRADO** |
 
-Único pendiente real: **multiarchivo (#8)** — decisión de diseño. Para 1-archivo-de-1M,
-todo cerrado.
+### Multiarchivo (#8) — cerrado el núcleo de correctitud
+
+El riesgo real de multiarchivo era que **un fragmento mezclara filas de dos archivos**
+→ el `source_file_hash` único del fragmento quedaría mal para algunas filas, rompiendo
+toda la trazabilidad. **Corregido:** `Mt101BuildFromTableTaskProvider.planByFile` parte
+cada página en tramos del mismo `source_file_hash` antes de fragmentar → **un fragmento
+= un archivo**, su hash es correcto para todas sus transacciones. Cubierto por
+`Mt101BuildFromTableTaskProviderTest.neverMixesFilesInOneFragment` (2 archivos con
+`maxTransactionsPerMessage=10` → 2 fragmentos, cada uno con su hash).
+
+Con esto la cuarentena/lookup/timeline (que usan el hash del fragmento) son correctos
+en multiarchivo. Queda como mejora de UX (no de correctitud) la **numeración de fila
+por-archivo** (hoy `recordNumber` es global por ejecución, siempre emparejado con el
+hash correcto, así que la fila queda identificada sin ambigüedad por `(hash, recordNumber)`).
+
+**Todos los P0 y el multiarchivo cerrados.** Suite completa verde (430 tests).
