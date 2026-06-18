@@ -192,26 +192,31 @@ class Mt101MillionFileProcessE2EIT {
                     .queryParam("fragmentSetId", fragmentSetId)
                     .when().get("/api/query/mt101-fragments/source-row")
                     .then().statusCode(200).extract().jsonPath();
-            assertTrue(lookup.getLong("[0].sourceRecordFrom") <= BAD_ROW
-                    && lookup.getLong("[0].sourceRecordTo") >= BAD_ROW,
-                    "el fragmento devuelto cubre la fila exacta");
+            var fragFrom = lookup.getLong("[0].sourceRecordFrom");
+            var fragTo = lookup.getLong("[0].sourceRecordTo");
+            assertTrue(fragFrom <= BAD_ROW && fragTo >= BAD_ROW, "el fragmento devuelto cubre la fila exacta");
+            var affectedRows = fragTo - fragFrom + 1;
 
-            // 4) Reproceso quirurgico: corregir la fila en staging y rebuild SOLO esa fila.
+            // 4) Reproceso quirurgico: corregir la fila y rebuild del FRAGMENTO COMPLETO afectado.
             correctStagingRow(BAD_ROW);
             var rebuild = given()
                     .queryParam("fragmentSetId", fragmentSetId)
                     .queryParam("correctiveSetId", fragmentSetId + "-FIX")
                     .when().post("/api/query/mt101-quarantine/rebuild")
                     .then().statusCode(200).extract().jsonPath();
-            assertEquals(1, rebuild.getInt("rebuiltRows"), "se reconstruye solo la fila corregida");
+            // P0-1: reconstruye TODAS las filas del fragmento afectado, no solo la fila fallida.
+            assertEquals(affectedRows, rebuild.getLong("rebuiltRows"),
+                    "reconstruye todas las transacciones del fragmento, no solo la fila " + BAD_ROW);
             assertEquals(1, rebuild.getInt("supersededFragments"), "el fragmento original queda superseded");
-
-            assertEquals(1, countRowsWhere("mt101_build_fragment",
-                    "fragment_set_id = '" + fragmentSetId + "-FIX'"),
-                    "el set correctivo contiene solo el fragmento de la fila corregida");
             assertEquals(1, countRowsWhere("mt101_build_fragment",
                     "fragment_set_id = '" + fragmentSetId + "' and status = 'SUPERSEDED'"),
                     "el fragmento original de la fila fallida queda SUPERSEDED");
+
+            // Critico (#14): el set correctivo conserva TODAS las transacciones del fragmento
+            // afectado -> no se pierde ninguna transaccion valida hermana de la 847192/8472.
+            assertEquals(affectedRows, queryLong("select coalesce(sum(source_record_to - source_record_from + 1), 0) "
+                            + "from mt101_build_fragment where fragment_set_id = '" + fragmentSetId + "-FIX'"),
+                    "el correctivo cubre todas las filas del fragmento afectado, sin perder transacciones");
         }
     }
 
