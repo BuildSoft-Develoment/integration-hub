@@ -7,6 +7,7 @@ import java.sql.Connection;
 import java.sql.Date;
 import java.sql.SQLException;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -71,6 +72,94 @@ public class Mt101ArchiveStatusRepository {
         var safeConfirmationTable = sanitize(confirmationTable);
         var joinClause = buildJoinClause("s", "c", matchKeys);
         executeReconcileUpdate(connection, safeSentTable, safeConfirmationTable, joinClause, from, to);
+    }
+
+    public ArchiveStatus findLatestBySendersReference(DataSource dataSource,
+                                                      String table,
+                                                      String sendersReference,
+                                                      Long processExecutionId) throws SQLException {
+        if (sendersReference == null || sendersReference.isBlank()) {
+            return null;
+        }
+        var safeTable = sanitize(table);
+        // Scope por ejecucion: un :20: original (p.ej. P3) puede repetirse entre ejecuciones;
+        // sin este filtro la consulta podia traer el archive de otra ejecucion distinta.
+        var scoped = processExecutionId != null;
+        var sql = "select id, senders_reference, status, created_at, updated_at from " + safeTable
+                + " where senders_reference = ?"
+                + (scoped ? " and process_execution_id = ?" : "")
+                + " order by updated_at desc, created_at desc, id desc limit 1";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, sendersReference);
+            if (scoped) {
+                statement.setLong(2, processExecutionId);
+            }
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return new ArchiveStatus(
+                        rs.getLong("id"),
+                        rs.getString("senders_reference"),
+                        rs.getString("status"),
+                        timestamp(rs, "created_at"),
+                        timestamp(rs, "updated_at"));
+            }
+        }
+    }
+
+    public List<ConfirmationStatus> confirmationsByArchiveId(DataSource dataSource,
+                                                             String table,
+                                                             long archiveId,
+                                                             int limit) throws SQLException {
+        var safeTable = sanitize(table);
+        var sql = "select id, confirmation_type, gateway_reference, confirmed_status, received_at "
+                + "from " + safeTable + " where archive_id = ? order by received_at asc, id asc limit ?";
+        var result = new ArrayList<ConfirmationStatus>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, archiveId);
+            statement.setInt(2, Math.max(limit, 1));
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new ConfirmationStatus(
+                            rs.getLong("id"),
+                            rs.getString("confirmation_type"),
+                            rs.getString("gateway_reference"),
+                            rs.getString("confirmed_status"),
+                            timestamp(rs, "received_at")));
+                }
+            }
+        }
+        return result;
+    }
+
+    public List<ReconciliationExceptionStatus> reconciliationExceptionsByArchiveId(DataSource dataSource,
+                                                                                   String table,
+                                                                                   long archiveId,
+                                                                                   int limit) throws SQLException {
+        var safeTable = sanitize(table);
+        var sql = "select id, as_of_date, exception_type, details, resolved_at "
+                + "from " + safeTable + " where archive_id = ? order by as_of_date asc, id asc limit ?";
+        var result = new ArrayList<ReconciliationExceptionStatus>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, archiveId);
+            statement.setInt(2, Math.max(limit, 1));
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    var asOf = rs.getDate("as_of_date");
+                    result.add(new ReconciliationExceptionStatus(
+                            rs.getLong("id"),
+                            asOf == null ? null : asOf.toLocalDate(),
+                            rs.getString("exception_type"),
+                            rs.getString("details"),
+                            timestamp(rs, "resolved_at")));
+                }
+            }
+        }
+        return result;
     }
 
     private void executeStatusTargetUpdate(Connection connection,
@@ -174,5 +263,31 @@ public class Mt101ArchiveStatusRepository {
     }
 
     public record JoinSpec(String leftColumn, String rightColumn) {
+    }
+
+    public record ArchiveStatus(long archiveId,
+                                String sendersReference,
+                                String status,
+                                LocalDateTime createdAt,
+                                LocalDateTime updatedAt) {
+    }
+
+    public record ConfirmationStatus(long confirmationId,
+                                     String confirmationType,
+                                     String gatewayReference,
+                                     String confirmedStatus,
+                                     LocalDateTime receivedAt) {
+    }
+
+    public record ReconciliationExceptionStatus(long exceptionId,
+                                                LocalDate asOfDate,
+                                                String exceptionType,
+                                                String details,
+                                                LocalDateTime resolvedAt) {
+    }
+
+    private LocalDateTime timestamp(java.sql.ResultSet rs, String column) throws SQLException {
+        var value = rs.getTimestamp(column);
+        return value == null ? null : value.toLocalDateTime();
     }
 }

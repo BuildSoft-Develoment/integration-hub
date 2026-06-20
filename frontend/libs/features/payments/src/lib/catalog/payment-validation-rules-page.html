@@ -6,11 +6,11 @@
     </div>
     <div class="toolbar-actions">
       <button mat-stroked-button type="button" (click)="exportCurrentRuleSet()">
-        <mat-icon>download</mat-icon>
+        <ih-icon name="download" />
         {{ i18n.t('paymentRules.export') }}
       </button>
       <button mat-flat-button type="button" (click)="newRule()">
-        <mat-icon>add</mat-icon>
+        <ih-icon name="plus" />
         {{ i18n.t('paymentRules.create') }}
       </button>
     </div>
@@ -84,7 +84,7 @@
           <th mat-header-cell *matHeaderCellDef>{{ i18n.t('common.actions') }}</th>
           <td mat-cell *matCellDef="let rule">
             <button mat-icon-button type="button" [matTooltip]="i18n.t('common.edit')" (click)="edit(rule)">
-              <mat-icon>edit</mat-icon>
+              <ih-icon name="edit" />
             </button>
             <button
               mat-icon-button
@@ -92,7 +92,7 @@
               [matTooltip]="rule.active ? i18n.t('common.disable') : i18n.t('common.enable')"
               (click)="toggle(rule)"
             >
-              <mat-icon>{{ rule.active ? 'toggle_on' : 'toggle_off' }}</mat-icon>
+              <ih-icon [name]="rule.active ? 'toggle-on' : 'toggle-off'" [size]="20" />
             </button>
           </td>
         </ng-container>
@@ -164,7 +164,7 @@
           {{ i18n.t('common.active') }}
         </mat-slide-toggle>
         <button mat-flat-button type="button" (click)="save()">
-          <mat-icon>save</mat-icon>
+          <ih-icon name="save" />
           {{ i18n.t('common.saveChanges') }}
         </button>
       </div>
@@ -179,7 +179,7 @@
           <textarea matInput rows="7" [ngModel]="importJson()" (ngModelChange)="importJson.set($event)"></textarea>
         </mat-form-field>
         <button mat-stroked-button type="button" (click)="importRules()">
-          <mat-icon>upload</mat-icon>
+          <ih-icon name="upload" />
           {{ i18n.t('paymentRules.import') }}
         </button>
         @if (exportJson()) {

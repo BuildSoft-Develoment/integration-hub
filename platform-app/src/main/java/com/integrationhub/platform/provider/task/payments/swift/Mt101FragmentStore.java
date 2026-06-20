@@ -80,7 +80,7 @@ public class Mt101FragmentStore {
         // constructor completo de FragmentInsert con ambas claves separadas.
         insertFragments(connectionRef, List.of(new FragmentInsert(
                 fragmentSetId, processExecutionId, taskDefinitionId, sourceTable,
-                rowFrom, rowTo, rowFrom, rowTo, null, Map.of(), fragmentIndex, fragmentTotal, message)));
+                rowFrom, rowTo, rowFrom, rowTo, null, Map.of(), Map.of(), fragmentIndex, fragmentTotal, message)));
     }
 
     /**
@@ -112,6 +112,8 @@ public class Mt101FragmentStore {
                         fragment.sourceRecordTo(),
                         fragment.sourceFileHash(),
                         sourceRecordsJson(fragment.sourceRecords()),
+                        fragment.sourceRecords(),
+                        fragment.stagingIdsBySourceRecord(),
                         fragment.fragmentIndex(),
                         fragment.fragmentTotal(),
                         message.sequenceA() == null ? null : message.sequenceA().sendersReference(),
@@ -142,6 +144,7 @@ public class Mt101FragmentStore {
             long sourceRecordTo,
             String sourceFileHash,
             Map<String, Long> sourceRecords,
+            Map<Long, Long> stagingIdsBySourceRecord,
             int fragmentIndex,
             int fragmentTotal,
             Mt101Message message
@@ -150,8 +153,8 @@ public class Mt101FragmentStore {
 
     /**
      * Estados que un consumidor generico puede leer por defecto. Excluye
-     * {@code REJECTED} y {@code SENT}: re-procesar fragmentos rechazados o ya
-     * enviados requiere pedirlo explicitamente via {@code fragmentSource.statuses}.
+     * {@code REJECTED} y {@code SENT}: los rechazados se reanudan por flujo
+     * explicito; los enviados quedan para consulta/conciliacion.
      */
     public static final List<String> READ_DEFAULT_STATUSES = List.of("BUILT", "VALIDATED", "ARCHIVED");
     /** Pagina por defecto al iterar fragmentos sin cargar el set completo. */

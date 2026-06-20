@@ -1,0 +1,90 @@
+<section class="lookup audit-page">
+      <ih-breadcrumb [items]="breadcrumbItems()" [backLabel]="i18n.t('audit.common.back')" />
+      <div>
+        <h2 class="ih-section-title">{{ i18n.t('audit.lookup.title') }}</h2>
+        <p class="ih-muted">{{ i18n.t('audit.lookup.subtitle') }}</p>
+      </div>
+
+      <div class="lookup__search">
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.lookup.fieldRow') }}</mat-label>
+          <input matInput type="number" min="1" [(ngModel)]="recordNumber" placeholder="1002" (keyup.enter)="search()" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.lookup.fieldHash') }}</mat-label>
+          <input matInput [(ngModel)]="sourceFileHash" placeholder="SHA-256" (keyup.enter)="search()" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.lookup.fieldTable') }}</mat-label>
+          <input matInput [(ngModel)]="sourceTable" placeholder="stg_payments_batch" (keyup.enter)="search()" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.lookup.fieldExecution') }}</mat-label>
+          <input matInput type="number" min="1" [(ngModel)]="processExecutionId" placeholder="123" (keyup.enter)="search()" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.lookup.fieldSet') }}</mat-label>
+          <input matInput [(ngModel)]="fragmentSetId" placeholder="exec-123-task-7" (keyup.enter)="search()" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.common.connection') }}</mat-label>
+          <input matInput [(ngModel)]="connectionRef" placeholder="default" (keyup.enter)="search()" />
+        </mat-form-field>
+        <div class="lookup__actions">
+          <button mat-flat-button color="primary" type="button" (click)="search()" [disabled]="loading()">{{ i18n.t('audit.common.search') }}</button>
+          <button mat-stroked-button type="button" (click)="clear()" [disabled]="loading()">{{ i18n.t('audit.common.clear') }}</button>
+        </div>
+      </div>
+
+      @if (loading()) {
+        <p class="lookup__empty" role="status">{{ i18n.t('audit.lookup.loading') }}</p>
+      } @else if (error()) {
+        <p class="lookup__error" role="alert">{{ error() }}</p>
+      } @else if (rows().length === 0) {
+        <p class="lookup__empty">{{ i18n.t('audit.lookup.empty') }}</p>
+      } @else {
+        <div class="lookup__table">
+          <table class="ih-dense-table">
+            <caption class="ih-visually-hidden">{{ i18n.t('audit.lookup.caption') }}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{{ i18n.t('audit.lookup.col.set') }}</th>
+                <th scope="col">{{ i18n.t('audit.lookup.col.range') }}</th>
+                <th scope="col">{{ i18n.t('audit.lookup.col.fragment') }}</th>
+                <th scope="col">:20:</th>
+                <th scope="col">{{ i18n.t('audit.lookup.col.status') }}</th>
+                <th scope="col">{{ i18n.t('audit.lookup.col.error') }}</th>
+                <th scope="col">{{ i18n.t('audit.lookup.col.updated') }}</th>
+                <th scope="col"><span class="ih-visually-hidden">{{ i18n.t('audit.common.actions') }}</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rows(); track $index) {
+                <tr>
+                  <td class="lookup__mono" [title]="row.fragmentSetId || ''">{{ row.fragmentSetId || '-' }}</td>
+                  <td>
+                    <div>{{ row.sourceTable || '-' }}</div>
+                    <div>Fila {{ row.sourceRecordFrom ?? '?' }} - {{ row.sourceRecordTo ?? '?' }}</div>
+                    <div class="lookup__mono">staging {{ row.stagingIdFrom }} - {{ row.stagingIdTo }}</div>
+                  </td>
+                  <td>{{ row.fragmentIndex }} / {{ row.fragmentTotal }}</td>
+                  <td class="lookup__mono">{{ row.sendersReference || '-' }}</td>
+                  <td class="lookup__status--{{ row.status }}">{{ row.status || '-' }}</td>
+                  <td>{{ row.errorMessage || '-' }}</td>
+                  <td>
+                    @if (row.updatedAt || row.createdAt; as ts) {
+                      <time [attr.datetime]="ts" [title]="ts | ihTime:'absolute'">{{ ts | ihTime }}</time>
+                    } @else { - }
+                  </td>
+                  <td>
+                    @if (row.fragmentSetId) {
+                      <a mat-button [routerLink]="['/audit/mt101-quarantine']" [queryParams]="{ fragmentSetId: row.fragmentSetId }">{{ i18n.t('audit.lookup.goQuarantine') }}</a>
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>

@@ -68,6 +68,7 @@ class Mt101ReprocessServiceTest {
         assertEquals(1, affected, "solo el fragmento REJECTED transiciona");
         assertEquals("BUILT", status("P2"));
         assertEquals(null, errorMessage("P2"), "el error se limpia al revalidar");
+        assertEquals(1L, auditCount("STATUS_RESET"));
     }
 
     @Test
@@ -81,13 +82,14 @@ class Mt101ReprocessServiceTest {
         setStatus("P3", "ARCHIVED", null);
 
         // La fila 70 cae solo en P2 (51-100) -> revalidar solo ese fragmento.
-        var affected = service.reprocessSourceRows(null, "SET", 70, 70, null, "BUILT");
+        var affected = service.reprocessSourceRows(null, "SET", 70, 70, "hashA", "BUILT");
 
         assertEquals(1, affected.size());
         assertEquals("P2", affected.get(0).sendersReference());
         assertEquals("BUILT", status("P2"), "el fragmento de la fila 70 vuelve a BUILT");
         assertEquals("ARCHIVED", status("P1"), "los demas no se tocan");
         assertEquals("ARCHIVED", status("P3"));
+        assertEquals(1L, auditCount("SOURCE_ROW_REPROCESS"));
     }
 
     @Test
@@ -95,9 +97,11 @@ class Mt101ReprocessServiceTest {
         insertFragment("P1", 1, 50);
         insertFragment("P2", 51, 100);
         insertFragment("P3", 101, 150);
+        setStatus("P1", "ARCHIVED", null);
+        setStatus("P2", "ARCHIVED", null);
 
         // El rango 40-60 solapa P1 y P2, no P3.
-        var affected = service.reprocessSourceRows(null, "SET", 40, 60, null, "VALIDATED");
+        var affected = service.reprocessSourceRows(null, "SET", 40, 60, "hashA", "VALIDATED");
 
         assertEquals(2, affected.size());
         assertTrue(affected.stream().anyMatch(f -> "P1".equals(f.sendersReference())));
@@ -130,17 +134,45 @@ class Mt101ReprocessServiceTest {
     }
 
     @Test
+    void rejectsSentToArchivedResetWithoutBankingReversalPolicy() {
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> service.resetByStatus(null, "SET", "SENT", "ARCHIVED"));
+        assertTrue(error.getMessage().contains("not allowed"));
+    }
+
+    @Test
+    void rejectsReprocessOfAlreadySentSourceRows() throws Exception {
+        // P0.1: un pago ya enviado NO se puede reprocesar como un rebuild tecnico.
+        insertFragment("P1", 1, 50);
+        setStatus("P1", "SENT", null);
+
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> service.reprocessSourceRows(null, "SET", 10, 10, "hashA", "BUILT"));
+
+        assertTrue(error.getMessage().contains("already sent/confirmed/reconciled"));
+        assertEquals("SENT", status("P1"), "el fragmento enviado NO se toca");
+    }
+
+    @Test
     void failsLoudlyWhenNoFragmentCoversRequestedRows() {
         insertFragment("P1", 1, 50);
         // La fila 9999 no esta en ningun fragmento: sin fallback, debe fallar.
         var error = assertThrows(IllegalArgumentException.class,
-                () -> service.reprocessSourceRows(null, "SET", 9999, 9999, null, "BUILT"));
+                () -> service.reprocessSourceRows(null, "SET", 9999, 9999, "hashA", "BUILT"));
         assertTrue(error.getMessage().contains("no MT101 fragments cover source rows"));
     }
 
     private void insertFragment(String reference, int rowFrom, int rowTo) {
-        fragmentStore.insertFragment(null, "SET", 1L, 10L, "staging_record",
-                rowFrom, rowTo, rowFrom, 3, sampleMessage(reference));
+        var sourceRecords = new java.util.LinkedHashMap<String, Long>();
+        var stagingIds = new java.util.LinkedHashMap<Long, Long>();
+        for (long row = rowFrom; row <= rowTo; row++) {
+            sourceRecords.put("TX-" + row, row);
+            stagingIds.put(row, 10_000L + row);
+        }
+        fragmentStore.insertFragments(null, List.of(new Mt101FragmentStore.FragmentInsert(
+                "SET", 1L, 10L, "staging_record",
+                rowFrom, rowTo, rowFrom, rowTo, "hashA", sourceRecords, stagingIds,
+                rowFrom == 1 ? 1 : rowFrom == 51 ? 2 : 3, 3, sampleMessage(reference))));
     }
 
     private void setStatus(String reference, String status, String error) throws SQLException {
@@ -173,6 +205,18 @@ class Mt101ReprocessServiceTest {
         }
     }
 
+    private long auditCount(String action) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "select count(*) from mt101_reprocess_audit where action = ?")) {
+            statement.setString(1, action);
+            try (var rs = statement.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
+        }
+    }
+
     private Mt101Message sampleMessage(String reference) {
         return new Mt101Message(
                 new Mt101Message.Envelope("SGOBFRPPAXXX", "BCPLPEPLXXXX", "uetr-" + reference, "N"),
@@ -192,6 +236,8 @@ class Mt101ReprocessServiceTest {
     private void prepareSchema() throws SQLException {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
+            statement.executeUpdate("drop table if exists mt101_fragment_record");
+            statement.executeUpdate("drop table if exists mt101_reprocess_audit");
             statement.executeUpdate("drop table if exists mt101_build_fragment");
             statement.executeUpdate("create table mt101_build_fragment ("
                     + "id bigserial primary key,"
@@ -219,6 +265,19 @@ class Mt101ReprocessServiceTest {
                     + "updated_at timestamp not null default current_timestamp)");
             statement.executeUpdate("create unique index ux_test_fragment_ref on mt101_build_fragment"
                     + "(fragment_set_id, senders_reference)");
+            statement.executeUpdate("create table mt101_fragment_record ("
+                    + "id bigserial primary key, fragment_id bigint references mt101_build_fragment(id) on delete cascade,"
+                    + "fragment_set_id varchar(80) not null, source_file_hash varchar(64),"
+                    + "source_record_number bigint not null, staging_id bigint,"
+                    + "original_senders_reference varchar(16), original_transaction_reference varchar(35),"
+                    + "current_senders_reference varchar(16), current_transaction_reference varchar(35))");
+            statement.executeUpdate("create table mt101_reprocess_audit ("
+                    + "id bigserial primary key, action varchar(40) not null,"
+                    + "fragment_set_id varchar(80) not null, source_file_hash varchar(64),"
+                    + "record_from bigint, record_to bigint,"
+                    + "from_status varchar(30), to_status varchar(30), affected integer not null default 0,"
+                    + "actor varchar(120), reason text, ticket_ref varchar(120),"
+                    + "created_at timestamp not null default current_timestamp)");
         }
     }
 

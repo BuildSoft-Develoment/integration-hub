@@ -1,26 +1,17 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, input } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
+import { RouterLink } from '@angular/router';
 import { I18nService } from '@integration-hub/core/services';
+import { IconComponent } from '@integration-hub/shared/ui';
+import { OverviewAlertLevel } from '../../models/overview.models';
 
 @Component({
   selector: 'ih-overview-metric-card',
   standalone: true,
-  imports: [CommonModule],
-  template: `
-    <article class="metric-card">
-      <p class="metric-label">{{ i18n.t(titleKey()) }}</p>
-      <strong class="metric-value">{{ value() }}</strong>
-      @if (detail() !== null) {
-        <p class="metric-detail ih-muted">{{ i18n.t('overview.metric.activeDetail', { count: detail()! }) }}</p>
-      }
-    </article>
-  `,
-  styles: [`
-    .metric-card { display:grid; gap:0.35rem; padding:1rem; border:1px solid var(--ih-border); border-radius:18px; background:color-mix(in srgb, var(--ih-surface-alt) 94%, transparent); min-width:0; }
-    .metric-label { margin:0; color:var(--ih-text-soft); font-size:0.75rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; }
-    .metric-value { font-size:2rem; font-weight:800; letter-spacing:-0.05em; }
-    .metric-detail { margin:0; font-size:0.88rem; }
-  `],
+  imports: [CommonModule, RouterLink, MatButtonModule, IconComponent],
+  templateUrl: './overview-metric-card.component.html',
+  styleUrl: './overview-metric-card.component.css',
 })
 export class OverviewMetricCardComponent {
   readonly i18n = inject(I18nService);
@@ -28,4 +19,7 @@ export class OverviewMetricCardComponent {
   readonly titleKey = input.required<string>();
   readonly value = input.required<number>();
   readonly detail = input<number | null>(null);
+  readonly alertLevel = input<OverviewAlertLevel | null>(null);
+  readonly actionLink = input<string[] | null>(null);
+  readonly actionLabelKey = input<string | null>(null);
 }

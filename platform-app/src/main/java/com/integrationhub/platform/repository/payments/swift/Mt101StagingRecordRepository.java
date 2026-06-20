@@ -24,7 +24,7 @@ public class Mt101StagingRecordRepository {
     }
 
     public long countRows(Connection connection, SourceQuery source) throws SQLException {
-        var sql = "select count(*) from " + source.table() + whereClause(source);
+        var sql = "select count(*) from " + source.table() + " src" + whereClause(source);
         try (var statement = connection.prepareStatement(sql)) {
             bindWhere(statement, source);
             try (var rs = statement.executeQuery()) {
@@ -38,10 +38,10 @@ public class Mt101StagingRecordRepository {
                                        long afterId,
                                        int limit) throws SQLException {
         var where = whereClause(source);
-        var sql = "select " + projection(source) + " from " + source.table()
+        var sql = "select " + projection(source) + " from " + source.table() + " src"
                 + (where.isEmpty() ? " where " : where + " and ")
-                + source.idColumn() + " > ?"
-                + " order by " + source.idColumn()
+                + column(source.idColumn()) + " > ?"
+                + " order by " + column(source.idColumn())
                 + " limit ?";
         try (var statement = connection.prepareStatement(sql)) {
             var parameter = bindWhere(statement, source);
@@ -56,10 +56,10 @@ public class Mt101StagingRecordRepository {
                                          long firstId,
                                          long lastId) throws SQLException {
         var where = whereClause(source);
-        var sql = "select " + projection(source) + " from " + source.table()
+        var sql = "select " + projection(source) + " from " + source.table() + " src"
                 + (where.isEmpty() ? " where " : where + " and ")
-                + source.idColumn() + " >= ? and " + source.idColumn() + " <= ?"
-                + " order by " + source.idColumn();
+                + column(source.idColumn()) + " >= ? and " + column(source.idColumn()) + " <= ?"
+                + " order by " + column(source.idColumn());
         try (var statement = connection.prepareStatement(sql)) {
             var parameter = bindWhere(statement, source);
             statement.setLong(parameter++, firstId);
@@ -74,12 +74,12 @@ public class Mt101StagingRecordRepository {
      * no existen y la proyeccion se queda en id + payload.
      */
     private String projection(SourceQuery source) {
-        var columns = new StringBuilder(source.idColumn()).append(", ").append(source.payloadColumn());
+        var columns = new StringBuilder(column(source.idColumn())).append(", ").append(column(source.payloadColumn()));
         if (source.recordIndexColumn() != null) {
-            columns.append(", ").append(source.recordIndexColumn());
+            columns.append(", ").append(column(source.recordIndexColumn()));
         }
         if (source.sourceFileHashColumn() != null) {
-            columns.append(", ").append(source.sourceFileHashColumn());
+            columns.append(", ").append(column(source.sourceFileHashColumn()));
         }
         return columns.toString();
     }
@@ -104,15 +104,38 @@ public class Mt101StagingRecordRepository {
     private String whereClause(SourceQuery source) {
         var clauses = new ArrayList<String>();
         if (source.processExecutionId() != null) {
-            clauses.add("process_execution_id = ?");
+            clauses.add(column("process_execution_id") + " = ?");
         }
         if (source.taskDefinitionId() != null) {
-            clauses.add("task_definition_id = ?");
+            clauses.add(column("task_definition_id") + " = ?");
+        }
+        if (hasRebuildRunFilter(source)) {
+            var selection = "exists (select 1 from mt101_rebuild_selection sel "
+                    + "where sel.rebuild_run_id = ? "
+                    + "and sel.record_index = " + column(source.recordIndexColumn());
+            if (source.sourceFileHashColumn() != null) {
+                selection += " and (sel.source_file_hash is null or sel.source_file_hash = "
+                        + column(source.sourceFileHashColumn()) + ")";
+            }
+            selection += ")";
+            clauses.add(selection);
         }
         if (hasRecordIndexFilter(source)) {
             // Rebuild selectivo: construir SOLO las filas corregidas (cuarentena).
-            clauses.add(source.recordIndexColumn() + " in ("
-                    + String.join(", ", java.util.Collections.nCopies(source.recordIndexIn().size(), "?")) + ")");
+            var values = compactRecordIndexValues(source.recordIndexIn());
+            var ranges = compactRecordIndexRanges(values);
+            if (values.isEmpty()) {
+                clauses.add("1 = 0");
+            } else if (useRecordIndexRanges(values.size(), ranges)) {
+                var rangeClauses = new ArrayList<String>(ranges.size());
+                for (int i = 0; i < ranges.size(); i++) {
+                    rangeClauses.add(column(source.recordIndexColumn()) + " between ? and ?");
+                }
+                clauses.add("(" + String.join(" or ", rangeClauses) + ")");
+            } else {
+                clauses.add(column(source.recordIndexColumn()) + " in ("
+                        + String.join(", ", java.util.Collections.nCopies(values.size(), "?")) + ")");
+            }
         }
         if (clauses.isEmpty()) {
             return "";
@@ -125,6 +148,11 @@ public class Mt101StagingRecordRepository {
                 && source.recordIndexIn() != null && !source.recordIndexIn().isEmpty();
     }
 
+    private boolean hasRebuildRunFilter(SourceQuery source) {
+        return source.recordIndexColumn() != null
+                && source.rebuildRunId() != null && !source.rebuildRunId().isBlank();
+    }
+
     private int bindWhere(PreparedStatement statement, SourceQuery source) throws SQLException {
         var parameter = 1;
         if (source.processExecutionId() != null) {
@@ -133,12 +161,71 @@ public class Mt101StagingRecordRepository {
         if (source.taskDefinitionId() != null) {
             statement.setLong(parameter++, source.taskDefinitionId());
         }
+        if (hasRebuildRunFilter(source)) {
+            statement.setString(parameter++, source.rebuildRunId().trim());
+        }
         if (hasRecordIndexFilter(source)) {
-            for (var recordIndex : source.recordIndexIn()) {
-                statement.setLong(parameter++, recordIndex);
+            var values = compactRecordIndexValues(source.recordIndexIn());
+            var ranges = compactRecordIndexRanges(values);
+            if (values.isEmpty()) {
+                return parameter;
+            }
+            if (useRecordIndexRanges(values.size(), ranges)) {
+                for (var range : ranges) {
+                    statement.setLong(parameter++, range.from());
+                    statement.setLong(parameter++, range.to());
+                }
+            } else {
+                for (var recordIndex : values) {
+                    statement.setLong(parameter++, recordIndex);
+                }
             }
         }
         return parameter;
+    }
+
+    private String column(String name) {
+        return "src." + name;
+    }
+
+    private boolean useRecordIndexRanges(int valueCount, List<RecordIndexRange> ranges) {
+        return !ranges.isEmpty() && ranges.size() * 2 < valueCount;
+    }
+
+    private List<Long> compactRecordIndexValues(List<Long> recordIndexes) {
+        var sorted = new java.util.TreeSet<Long>();
+        for (var recordIndex : recordIndexes) {
+            if (recordIndex != null) {
+                sorted.add(recordIndex);
+            }
+        }
+        return new ArrayList<>(sorted);
+    }
+
+    private List<RecordIndexRange> compactRecordIndexRanges(List<Long> recordIndexes) {
+        if (recordIndexes.isEmpty()) {
+            return List.of();
+        }
+        var ranges = new ArrayList<RecordIndexRange>();
+        Long from = null;
+        Long to = null;
+        for (var recordIndex : recordIndexes) {
+            if (from == null) {
+                from = recordIndex;
+                to = recordIndex;
+            } else if (recordIndex == to + 1) {
+                to = recordIndex;
+            } else {
+                ranges.add(new RecordIndexRange(from, to));
+                from = recordIndex;
+                to = recordIndex;
+            }
+        }
+        ranges.add(new RecordIndexRange(from, to));
+        return ranges;
+    }
+
+    private record RecordIndexRange(long from, long to) {
     }
 
     @FunctionalInterface
@@ -154,20 +241,30 @@ public class Mt101StagingRecordRepository {
             Long taskDefinitionId,
             String recordIndexColumn,
             String sourceFileHashColumn,
-            java.util.List<Long> recordIndexIn
+            java.util.List<Long> recordIndexIn,
+            String rebuildRunId
     ) {
         /** Variante con columnas de trazabilidad pero sin filtro de filas. */
         public SourceQuery(String table, String payloadColumn, String idColumn,
                            Long processExecutionId, Long taskDefinitionId,
                            String recordIndexColumn, String sourceFileHashColumn) {
             this(table, payloadColumn, idColumn, processExecutionId, taskDefinitionId,
-                    recordIndexColumn, sourceFileHashColumn, java.util.List.of());
+                    recordIndexColumn, sourceFileHashColumn, java.util.List.of(), null);
         }
 
         /** Variante sin columnas de trazabilidad de fila (tablas origen arbitrarias). */
         public SourceQuery(String table, String payloadColumn, String idColumn,
                            Long processExecutionId, Long taskDefinitionId) {
-            this(table, payloadColumn, idColumn, processExecutionId, taskDefinitionId, null, null, java.util.List.of());
+            this(table, payloadColumn, idColumn, processExecutionId, taskDefinitionId, null, null,
+                    java.util.List.of(), null);
+        }
+
+        public SourceQuery(String table, String payloadColumn, String idColumn,
+                           Long processExecutionId, Long taskDefinitionId,
+                           String recordIndexColumn, String sourceFileHashColumn,
+                           java.util.List<Long> recordIndexIn) {
+            this(table, payloadColumn, idColumn, processExecutionId, taskDefinitionId,
+                    recordIndexColumn, sourceFileHashColumn, recordIndexIn, null);
         }
     }
 
@@ -197,12 +294,18 @@ public class Mt101StagingRecordRepository {
      * real (no por formula stagingIdFrom+offset, que asume ids contiguos) y su
      * created_at (timestamp del hito INGESTED). Null si la fila ya no esta.
      */
-    public StagingRowInfo findStagingRow(DataSource dataSource, long processExecutionId, long recordIndex) throws SQLException {
-        var sql = "select id, created_at from staging_record where process_execution_id = ? and record_index = ? limit 1";
+    public StagingRowInfo findStagingRow(DataSource dataSource,
+                                         long processExecutionId,
+                                         long recordIndex,
+                                         String sourceFileHash) throws SQLException {
+        var hash = requireSourceFileHash(sourceFileHash);
+        var sql = "select id, created_at from staging_record "
+                + "where process_execution_id = ? and record_index = ? and source_file_hash = ? limit 1";
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
             statement.setLong(1, processExecutionId);
             statement.setLong(2, recordIndex);
+            statement.setString(3, hash);
             try (var rs = statement.executeQuery()) {
                 if (!rs.next()) {
                     return null;
@@ -216,19 +319,79 @@ public class Mt101StagingRecordRepository {
     public record StagingRowInfo(long id, java.time.LocalDateTime createdAt) {
     }
 
+    public StagingPayload findStagingPayload(DataSource dataSource,
+                                             long processExecutionId,
+                                             long recordIndex,
+                                             String sourceFileHash) throws SQLException {
+        try (var connection = dataSource.getConnection()) {
+            return findStagingPayload(connection, processExecutionId, recordIndex, sourceFileHash);
+        }
+    }
+
+    public StagingPayload findStagingPayload(Connection connection,
+                                             long processExecutionId,
+                                             long recordIndex,
+                                             String sourceFileHash) throws SQLException {
+        var hash = requireSourceFileHash(sourceFileHash);
+        var sql = "select id, payload_json, version from staging_record "
+                + "where process_execution_id = ? and record_index = ? and source_file_hash = ? limit 1";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, processExecutionId);
+            statement.setLong(2, recordIndex);
+            statement.setString(3, hash);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return new StagingPayload(rs.getLong("id"), rs.getString("payload_json"), rs.getLong("version"));
+            }
+        }
+    }
+
+    public record StagingPayload(long id, String payloadJson, long version) {
+    }
+
     /**
-     * Corrige el payload de una fila de staging por (ejecucion, record_index), para
-     * que el operador arregle la fila fallida desde la API/UI sin tocar la BD a mano.
-     * Devuelve filas afectadas (0 si no existe).
+     * Corrige el payload de una fila de staging con locking optimista: solo aplica si
+     * {@code version} coincide e incrementa la version. Devuelve 0 si la fila no existe
+     * o la version esta obsoleta (conflicto). Unico camino de update (sin variante
+     * sin-lock).
      */
-    public int updatePayload(DataSource dataSource, long processExecutionId, long recordIndex, String payloadJson) throws SQLException {
-        var sql = "update staging_record set payload_json = ? where process_execution_id = ? and record_index = ?";
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
-            statement.setString(1, payloadJson);
-            statement.setLong(2, processExecutionId);
-            statement.setLong(3, recordIndex);
+    public int updatePayload(DataSource dataSource,
+                             long processExecutionId,
+                             long recordIndex,
+                             String sourceFileHash,
+                             String payloadJson,
+                             long expectedVersion) throws SQLException {
+        try (var connection = dataSource.getConnection()) {
+            return updatePayload(connection, processExecutionId, recordIndex, sourceFileHash, payloadJson, expectedVersion);
+        }
+    }
+
+    public int updatePayload(Connection connection,
+                             long processExecutionId,
+                             long recordIndex,
+                             String sourceFileHash,
+                             String payloadJson,
+                             long expectedVersion) throws SQLException {
+        var hash = requireSourceFileHash(sourceFileHash);
+        var sql = "update staging_record set payload_json = ?, version = version + 1"
+                + " where process_execution_id = ? and record_index = ? and source_file_hash = ? and version = ?";
+        try (var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            statement.setString(parameter++, payloadJson);
+            statement.setLong(parameter++, processExecutionId);
+            statement.setLong(parameter++, recordIndex);
+            statement.setString(parameter++, hash);
+            statement.setLong(parameter, expectedVersion);
             return statement.executeUpdate();
         }
+    }
+
+    private String requireSourceFileHash(String sourceFileHash) {
+        if (sourceFileHash == null || sourceFileHash.isBlank()) {
+            throw new IllegalArgumentException("sourceFileHash is required for staging row access");
+        }
+        return sourceFileHash.trim();
     }
 }

@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { RouterLink } from '@angular/router';
 import { I18nService } from '@integration-hub/core/services';
 
 import { AuditPresentationService } from '../../utils/audit-presentation.service';
@@ -9,7 +10,7 @@ import { AuditRecord } from '../../models/audit.models';
 @Component({
   selector: 'ih-audit-editor',
   standalone: true,
-  imports: [CommonModule, MatButtonModule],
+  imports: [CommonModule, MatButtonModule, RouterLink],
     templateUrl: './audit-editor.component.html',
     styleUrl: './audit-editor.component.css'
 })

@@ -4,6 +4,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.sql.Types;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -41,7 +42,14 @@ public class Mt101FailedRecordRepository {
                 statement.setString(7, row.ruleSet());
                 statement.setString(8, row.severity());
                 statement.setString(9, row.message());
-                inserted += statement.executeUpdate();
+                statement.addBatch();
+            }
+            for (var count : statement.executeBatch()) {
+                if (count > 0) {
+                    inserted += count;
+                } else if (count == Statement.SUCCESS_NO_INFO) {
+                    inserted++;
+                }
             }
         }
         return inserted;
@@ -93,6 +101,170 @@ public class Mt101FailedRecordRepository {
         return result;
     }
 
+    public List<FailedRecord> findBySetPage(DataSource dataSource,
+                                            String fragmentSetId,
+                                            String status,
+                                            long afterId,
+                                            int limit) throws SQLException {
+        return findBySetPage(dataSource, fragmentSetId, status, null, null, null, null, null, afterId, limit);
+    }
+
+    public List<FailedRecord> findBySetPage(DataSource dataSource,
+                                            String fragmentSetId,
+                                            String status,
+                                            String sourceFileHash,
+                                            Long sourceRecordNumber,
+                                            String ruleCode,
+                                            String sendersReference,
+                                            String transactionReference,
+                                            long afterId,
+                                            int limit) throws SQLException {
+        var sql = new StringBuilder("""
+                select id, fragment_set_id, senders_reference, transaction_reference, source_file_hash,
+                       source_record_number, rule_code, rule_set, severity, message, status, created_at, resolved_at
+                  from mt101_failed_record
+                 where fragment_set_id = ?
+                   and id > ?
+                """);
+        if (status != null && !status.isBlank()) {
+            sql.append(" and status = ?");
+        }
+        if (sourceFileHash != null && !sourceFileHash.isBlank()) {
+            sql.append(" and source_file_hash = ?");
+        }
+        if (sourceRecordNumber != null) {
+            sql.append(" and source_record_number = ?");
+        }
+        if (ruleCode != null && !ruleCode.isBlank()) {
+            sql.append(" and rule_code = ?");
+        }
+        if (sendersReference != null && !sendersReference.isBlank()) {
+            sql.append(" and senders_reference = ?");
+        }
+        if (transactionReference != null && !transactionReference.isBlank()) {
+            sql.append(" and transaction_reference = ?");
+        }
+        sql.append(" order by id asc limit ?");
+
+        var result = new ArrayList<FailedRecord>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql.toString())) {
+            var parameter = 1;
+            statement.setString(parameter++, fragmentSetId);
+            statement.setLong(parameter++, Math.max(afterId, 0L));
+            if (status != null && !status.isBlank()) {
+                statement.setString(parameter++, status);
+            }
+            if (sourceFileHash != null && !sourceFileHash.isBlank()) {
+                statement.setString(parameter++, sourceFileHash.trim());
+            }
+            if (sourceRecordNumber != null) {
+                statement.setLong(parameter++, sourceRecordNumber);
+            }
+            if (ruleCode != null && !ruleCode.isBlank()) {
+                statement.setString(parameter++, ruleCode.trim());
+            }
+            if (sendersReference != null && !sendersReference.isBlank()) {
+                statement.setString(parameter++, sendersReference.trim());
+            }
+            if (transactionReference != null && !transactionReference.isBlank()) {
+                statement.setString(parameter++, transactionReference.trim());
+            }
+            statement.setInt(parameter, Math.max(limit, 1));
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new FailedRecord(
+                            rs.getLong("id"),
+                            rs.getString("fragment_set_id"),
+                            rs.getString("senders_reference"),
+                            rs.getString("transaction_reference"),
+                            rs.getString("source_file_hash"),
+                            nullableLong(rs, "source_record_number"),
+                            rs.getString("rule_code"),
+                            rs.getString("rule_set"),
+                            rs.getString("severity"),
+                            rs.getString("message"),
+                            rs.getString("status"),
+                            timestamp(rs, "created_at"),
+                            timestamp(rs, "resolved_at")));
+                }
+            }
+        }
+        return result;
+    }
+
+    public List<String> distinctSendersReferencesByStatus(DataSource dataSource,
+                                                          String fragmentSetId,
+                                                          String status) throws SQLException {
+        var sql = "select distinct senders_reference from mt101_failed_record "
+                + "where fragment_set_id = ? and status = ? and senders_reference is not null "
+                + "order by senders_reference";
+        var result = new ArrayList<String>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, fragmentSetId);
+            statement.setString(2, status);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(rs.getString(1));
+                }
+            }
+        }
+        return result;
+    }
+
+    public List<FailedRecord> findBySourceRow(DataSource dataSource,
+                                              String fragmentSetId,
+                                              String sourceFileHash,
+                                              long sourceRecordNumber,
+                                              String status,
+                                              int limit) throws SQLException {
+        var sql = new StringBuilder("""
+                select id, fragment_set_id, senders_reference, transaction_reference, source_file_hash,
+                       source_record_number, rule_code, rule_set, severity, message, status, created_at, resolved_at
+                  from mt101_failed_record
+                 where fragment_set_id = ?
+                   and source_file_hash = ?
+                   and source_record_number = ?
+                """);
+        if (status != null && !status.isBlank()) {
+            sql.append(" and status = ?");
+        }
+        sql.append(" order by id asc limit ?");
+
+        var result = new ArrayList<FailedRecord>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql.toString())) {
+            var parameter = 1;
+            statement.setString(parameter++, fragmentSetId);
+            statement.setString(parameter++, sourceFileHash);
+            statement.setLong(parameter++, sourceRecordNumber);
+            if (status != null && !status.isBlank()) {
+                statement.setString(parameter++, status);
+            }
+            statement.setInt(parameter, Math.max(limit, 1));
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new FailedRecord(
+                            rs.getLong("id"),
+                            rs.getString("fragment_set_id"),
+                            rs.getString("senders_reference"),
+                            rs.getString("transaction_reference"),
+                            rs.getString("source_file_hash"),
+                            nullableLong(rs, "source_record_number"),
+                            rs.getString("rule_code"),
+                            rs.getString("rule_set"),
+                            rs.getString("severity"),
+                            rs.getString("message"),
+                            rs.getString("status"),
+                            timestamp(rs, "created_at"),
+                            timestamp(rs, "resolved_at")));
+                }
+            }
+        }
+        return result;
+    }
+
     /** Cuenta filas de un set en un estado (guarda contra rebuild parcial silencioso). */
     public long countByStatus(DataSource dataSource, String fragmentSetId, String status) throws SQLException {
         var sql = "select count(*) from mt101_failed_record where fragment_set_id = ? and status = ?";
@@ -106,18 +278,34 @@ public class Mt101FailedRecordRepository {
         }
     }
 
-    /** Marca como resueltas (REBUILT/DISCARDED) las filas en cuarentena de un set. */
-    public int updateStatusBySet(DataSource dataSource,
+    /**
+     * Resuelve la cuarentena SOLO de las filas cubiertas por la seleccion del run
+     * ({@code rebuild_run_id}), no por todo el set. Asi una fila nueva en cuarentena
+     * insertada durante el run, o un run parcial, no se marca con el estado correctivo equivocado (P0.4).
+     */
+    public int updateStatusByRun(DataSource dataSource,
                                  String fragmentSetId,
+                                 String rebuildRunId,
                                  String fromStatus,
                                  String toStatus) throws SQLException {
-        var sql = "update mt101_failed_record set status = ?, resolved_at = current_timestamp "
-                + "where fragment_set_id = ? and status = ?";
+        var terminal = "RESOLVED".equalsIgnoreCase(toStatus) || "DISCARDED".equalsIgnoreCase(toStatus);
+        var sql = "update mt101_failed_record set status = ?, "
+                + "resolved_at = case when ? then current_timestamp else resolved_at end "
+                + "where fragment_set_id = ? and status = ? "
+                + "and exists (select 1 from mt101_rebuild_selection sel "
+                + "where sel.rebuild_run_id = ? "
+                + "and sel.fragment_set_id = mt101_failed_record.fragment_set_id "
+                + "and sel.source_file_hash is not null "
+                + "and mt101_failed_record.source_file_hash = sel.source_file_hash "
+                + "and mt101_failed_record.source_record_number = sel.source_record_number "
+                + "and mt101_failed_record.senders_reference = sel.original_senders_reference)";
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
             statement.setString(1, toStatus);
-            statement.setString(2, fragmentSetId);
-            statement.setString(3, fromStatus);
+            statement.setBoolean(2, terminal);
+            statement.setString(3, fragmentSetId);
+            statement.setString(4, fromStatus);
+            statement.setString(5, rebuildRunId);
             return statement.executeUpdate();
         }
     }

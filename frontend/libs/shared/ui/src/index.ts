@@ -2,6 +2,8 @@ export * from './lib/app-layout/app-layout.component';
 export * from './lib/app-layout/navigation/app-navigation.models';
 export * from './lib/app-layout/navigation/app-navigation.token';
 export * from './lib/app-layout/preferences/app-preferences.facade';
+export * from './lib/breadcrumb/breadcrumb.component';
+export * from './lib/icon/icon.component';
 export * from './lib/info-tile/info-tile.component';
 export * from './lib/managed-editor/form-actions/managed-editor-form-actions.component';
 export * from './lib/managed-editor/header/managed-editor-header.component';
@@ -11,4 +13,5 @@ export * from './lib/managed-editor/readonly-actions/managed-editor-readonly-act
 export * from './lib/managed-editor/section/managed-editor-section.component';
 export * from './lib/managed-editor/shell/managed-editor-shell.component';
 export * from './lib/managed-editor/test-result/managed-editor-test-result.component';
+export * from './lib/pipes/relative-time.pipe';
 export * from './lib/ui-message-snackbar/ui-message-snackbar.component';

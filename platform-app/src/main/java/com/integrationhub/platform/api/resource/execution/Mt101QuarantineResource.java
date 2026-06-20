@@ -8,15 +8,20 @@ import com.integrationhub.platform.service.payments.swift.Mt101RebuildService;
 import com.integrationhub.platform.service.payments.swift.Mt101StagingCorrectionService;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.BadRequestException;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.SecurityContext;
 
 import java.util.List;
 import java.util.Map;
@@ -47,7 +52,7 @@ public class Mt101QuarantineResource {
 
     /**
      * Corrige el payload de una fila fallida en staging (paso previo al rebuild),
-     * sin tocar la BD a mano. Body = payload JSON corregido. Mutación.
+     * sin tocar la BD a mano. Body = JSON Merge Patch sobre el payload. Mutacion.
      */
     @PATCH
     @Path("/staging-row")
@@ -55,21 +60,52 @@ public class Mt101QuarantineResource {
     @RolesAllowed({"platform-admin", "integration-admin", "operator"})
     public Mt101StagingCorrectionService.CorrectionResult correctRow(@QueryParam("connectionRef") String connectionRef,
                                                                      @QueryParam("fragmentSetId") String fragmentSetId,
+                                                                     @QueryParam("sourceFileHash") String sourceFileHash,
                                                                      @QueryParam("recordNumber") Long recordNumber,
-                                                                     String payloadJson) {
+                                                                     @QueryParam("reason") String reason,
+                                                                     @QueryParam("ticketRef") String ticketRef,
+                                                                     @HeaderParam("If-Match") String ifMatch,
+                                                                     String payloadJson,
+                                                                     @Context SecurityContext securityContext) {
         if (recordNumber == null) {
             throw new BadRequestException("recordNumber is required");
         }
         try {
-            return correctionService.correctRow(connectionRef, fragmentSetId, recordNumber, payloadJson);
+            return correctionService.correctRow(connectionRef, fragmentSetId, sourceFileHash, recordNumber, payloadJson,
+                    actor(securityContext), parseIfMatch(ifMatch), reason, ticketRef);
+        } catch (Mt101StagingCorrectionService.StaleStagingRowException conflict) {
+            // Locking optimista: otro operador corrigio la fila desde que la cargaste.
+            throw new ClientErrorException(conflict.getMessage(), Response.Status.CONFLICT);
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }
     }
 
     /**
-     * Cabecera del lote (archivo + hash + ejecución + conteos) por fragmentSetId o
-     * processExecutionId — entrada de la vista unificada desde la ejecución.
+     * Payload actual + version (ETag) de una fila en cuarentena, para cargar antes de
+     * corregir y reenviar la version en If-Match (locking optimista).
+     */
+    @GET
+    @Path("/staging-row")
+    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    public Response stagingRow(@QueryParam("connectionRef") String connectionRef,
+                               @QueryParam("fragmentSetId") String fragmentSetId,
+                               @QueryParam("sourceFileHash") String sourceFileHash,
+                               @QueryParam("recordNumber") Long recordNumber) {
+        if (recordNumber == null) {
+            throw new BadRequestException("recordNumber is required");
+        }
+        try {
+            var view = correctionService.readRow(connectionRef, fragmentSetId, sourceFileHash, recordNumber);
+            return Response.ok(view).header("ETag", "\"" + view.version() + "\"").build();
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /**
+     * Cabecera del lote (archivo + hash + ejecucion + conteos) por fragmentSetId o
+     * processExecutionId; entrada de la vista unificada desde la ejecucion.
      */
     @GET
     @Path("/lote")
@@ -84,7 +120,7 @@ public class Mt101QuarantineResource {
         }
     }
 
-    /** Encola las filas fallidas de un set resolviendo cada :21: a su fila exacta. Mutación. */
+    /** Encola las filas fallidas de un set resolviendo cada :21: a su fila exacta. Mutacion. */
     @POST
     @Path("/build")
     @RolesAllowed({"platform-admin", "integration-admin", "operator"})
@@ -105,9 +141,17 @@ public class Mt101QuarantineResource {
     public List<Mt101FailedRecordResponse> list(@QueryParam("connectionRef") String connectionRef,
                                                 @QueryParam("fragmentSetId") String fragmentSetId,
                                                 @QueryParam("status") String status,
+                                                @QueryParam("sourceFileHash") String sourceFileHash,
+                                                @QueryParam("sourceRecordNumber") Long sourceRecordNumber,
+                                                @QueryParam("ruleCode") String ruleCode,
+                                                @QueryParam("sendersReference") String sendersReference,
+                                                @QueryParam("transactionReference") String transactionReference,
+                                                @QueryParam("afterId") @DefaultValue("0") long afterId,
                                                 @QueryParam("limit") @DefaultValue("500") int limit) {
         try {
-            return service.list(connectionRef, fragmentSetId, status, limit).stream()
+            rebuildService.synchronizeLifecycle(connectionRef, fragmentSetId);
+            return service.list(connectionRef, fragmentSetId, status, sourceFileHash, sourceRecordNumber,
+                            ruleCode, sendersReference, transactionReference, afterId, limit).stream()
                     .map(this::toResponse)
                     .toList();
         } catch (IllegalArgumentException error) {
@@ -115,21 +159,77 @@ public class Mt101QuarantineResource {
         }
     }
 
-    /**
-     * Cierra el ciclo: re-construye SOLO las filas en cuarentena (corregidas en staging)
-     * en {@code correctiveSetId} y supersede los fragmentos originales. Mutación.
-     */
     @POST
-    @Path("/rebuild")
+    @Path("/rebuild-runs/request")
     @RolesAllowed({"platform-admin", "integration-admin", "operator"})
-    public Mt101RebuildService.RebuildResult rebuild(@QueryParam("connectionRef") String connectionRef,
-                                                     @QueryParam("fragmentSetId") String fragmentSetId,
-                                                     @QueryParam("correctiveSetId") String correctiveSetId) {
+    public Mt101RebuildService.RebuildRunSummary requestRebuild(@QueryParam("connectionRef") String connectionRef,
+                                                                @QueryParam("fragmentSetId") String fragmentSetId,
+                                                                @QueryParam("correctiveSetId") String correctiveSetId,
+                                                                @QueryParam("reason") String reason,
+                                                                @Context SecurityContext securityContext) {
         try {
-            return rebuildService.rebuildFromQuarantine(connectionRef, fragmentSetId, correctiveSetId);
+            return rebuildService.requestRebuildFromQuarantine(
+                    connectionRef, fragmentSetId, correctiveSetId, actor(securityContext), reason);
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }
+    }
+
+    @POST
+    @Path("/rebuild-runs/approve")
+    @RolesAllowed({"platform-admin", "integration-admin"})
+    public Mt101RebuildService.RebuildRunSummary approveRebuild(@QueryParam("connectionRef") String connectionRef,
+                                                                @QueryParam("rebuildRunId") String rebuildRunId,
+                                                                @QueryParam("reason") String reason,
+                                                                @Context SecurityContext securityContext) {
+        try {
+            return rebuildService.approveRebuildRun(connectionRef, rebuildRunId, actor(securityContext), reason);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    @POST
+    @Path("/rebuild-runs/execute")
+    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    public Mt101RebuildService.RebuildResult executeRebuild(@QueryParam("connectionRef") String connectionRef,
+                                                            @QueryParam("rebuildRunId") String rebuildRunId,
+                                                            @Context SecurityContext securityContext) {
+        try {
+            return rebuildService.executeApprovedRebuildRun(connectionRef, rebuildRunId, actor(securityContext));
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /** Parsea el header If-Match (ETag) a la version esperada; null si no viene. */
+    private static Long parseIfMatch(String ifMatch) {
+        if (ifMatch == null || ifMatch.isBlank()) {
+            return null;
+        }
+        var token = ifMatch.trim();
+        if (token.startsWith("W/")) {
+            token = token.substring(2).trim();
+        }
+        if (token.length() >= 2 && token.startsWith("\"") && token.endsWith("\"")) {
+            token = token.substring(1, token.length() - 1);
+        }
+        try {
+            return Long.parseLong(token.trim());
+        } catch (NumberFormatException error) {
+            throw new BadRequestException("If-Match must be a numeric version (ETag)");
+        }
+    }
+
+    /** Actor para auditoria/gobernanza: usuario autenticado del token OIDC, nunca del query. */
+    private static String actor(SecurityContext securityContext) {
+        if (securityContext != null && securityContext.getUserPrincipal() != null) {
+            var name = securityContext.getUserPrincipal().getName();
+            if (name != null && !name.isBlank()) {
+                return name;
+            }
+        }
+        return "unknown";
     }
 
     private Mt101FailedRecordResponse toResponse(Mt101FailedRecordRepository.FailedRecord row) {

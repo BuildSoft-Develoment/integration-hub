@@ -1,7 +1,7 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { OverviewApiService } from '../api/overview-api.service';
-import { OverviewSummaryRecord } from '../models/overview.models';
+import { OverviewMetric, OverviewSummaryRecord } from '../models/overview.models';
 import { OverviewTableRow } from '../models/overview-row.model';
 
 @Injectable()
@@ -11,20 +11,58 @@ export class OverviewStore {
   readonly loading = signal(false);
   readonly summary = signal<OverviewSummaryRecord | null>(null);
 
-  readonly metrics = computed(() => {
+  readonly metrics = computed<OverviewMetric[]>(() => {
     const summary = this.summary();
     if (!summary) {
       return [];
     }
 
+    const plain = (key: string, titleKey: string, value: number, detail: number | null): OverviewMetric => ({
+      key,
+      titleKey,
+      value,
+      detail,
+      alertLevel: null,
+      actionLink: null,
+      actionLabelKey: null,
+    });
+
+    const failedExec = summary.failedExecutions;
+    const failedFiles = summary.failedProcessedFiles;
+    const pendingFiles = summary.pendingProcessedFiles;
+
     return [
-      { key: 'sources', titleKey: 'overview.metric.sources', value: summary.sources.total, detail: summary.sources.active },
-      { key: 'readers', titleKey: 'overview.metric.readers', value: summary.readers.total, detail: summary.readers.active },
-      { key: 'processes', titleKey: 'overview.metric.processes', value: summary.processes.total, detail: summary.processes.active },
-      { key: 'running', titleKey: 'overview.metric.running', value: summary.runningExecutions, detail: summary.failedExecutions },
-      { key: 'retry', titleKey: 'overview.metric.retries', value: summary.retryExecutions, detail: summary.completedWithErrorsExecutions },
-      { key: 'files', titleKey: 'overview.metric.fileHealth', value: summary.failedProcessedFiles, detail: summary.pendingProcessedFiles },
-      { key: 'scheduled', titleKey: 'overview.metric.scheduled', value: summary.scheduledProcesses, detail: null },
+      plain('sources', 'overview.metric.sources', summary.sources.total, summary.sources.active),
+      plain('readers', 'overview.metric.readers', summary.readers.total, summary.readers.active),
+      plain('processes', 'overview.metric.processes', summary.processes.total, summary.processes.active),
+      {
+        key: 'running',
+        titleKey: 'overview.metric.running',
+        value: summary.runningExecutions,
+        detail: failedExec,
+        alertLevel: failedExec > 0 ? 'error' : null,
+        actionLink: failedExec > 0 ? ['/executions'] : null,
+        actionLabelKey: failedExec > 0 ? 'overview.action.viewExecutions' : null,
+      },
+      {
+        key: 'retry',
+        titleKey: 'overview.metric.retries',
+        value: summary.retryExecutions,
+        detail: summary.completedWithErrorsExecutions,
+        alertLevel: summary.retryExecutions > 0 ? 'warn' : null,
+        actionLink: null,
+        actionLabelKey: null,
+      },
+      {
+        key: 'files',
+        titleKey: 'overview.metric.fileHealth',
+        value: failedFiles,
+        detail: pendingFiles,
+        alertLevel: failedFiles > 0 ? 'error' : pendingFiles > 0 ? 'warn' : null,
+        actionLink: failedFiles > 0 ? ['/audit'] : null,
+        actionLabelKey: failedFiles > 0 ? 'overview.action.viewAudit' : null,
+      },
+      plain('scheduled', 'overview.metric.scheduled', summary.scheduledProcesses, null),
     ];
   });
 

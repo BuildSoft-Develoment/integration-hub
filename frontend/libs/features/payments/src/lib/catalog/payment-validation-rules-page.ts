@@ -4,7 +4,6 @@ import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
@@ -13,6 +12,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { I18nService } from '@integration-hub/core/services';
+import { IconComponent } from '@integration-hub/shared/ui';
 import { firstValueFrom } from 'rxjs';
 
 import { PaymentValidationRuleApiService } from '../api/payment-validation-rule-api.service';
@@ -34,7 +34,6 @@ import {
     MatButtonModule,
     MatCheckboxModule,
     MatFormFieldModule,
-    MatIconModule,
     MatInputModule,
     MatPaginatorModule,
     MatProgressBarModule,
@@ -42,6 +41,7 @@ import {
     MatSlideToggleModule,
     MatTableModule,
     MatTooltipModule,
+    IconComponent,
   ],
   templateUrl: './payment-validation-rules-page.html',
   styleUrl: './payment-validation-rules-page.css',

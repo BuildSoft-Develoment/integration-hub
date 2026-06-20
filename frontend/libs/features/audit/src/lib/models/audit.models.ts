@@ -114,11 +114,22 @@ export interface Mt101QuarantineBuildResult {
 }
 
 export interface Mt101RebuildResult {
+  rebuildRunId?: string;
   correctiveSetId: string;
   fragmentCount: number;
   rebuiltRows: number;
   supersededFragments: number;
   resolvedQuarantine: number;
+}
+
+/** Estado de un rebuild run gobernado: REQUESTED -> APPROVED -> BUILT -> VALIDATED/ARCHIVED/SENT/CONFIRMED/RECONCILED. */
+export interface Mt101RebuildRunSummary {
+  rebuildRunId: string;
+  originalFragmentSetId: string;
+  correctiveSetId: string;
+  status: string;
+  selectedRows: number;
+  affectedFragments: number;
 }
 
 export interface Mt101FragmentSetSummary {

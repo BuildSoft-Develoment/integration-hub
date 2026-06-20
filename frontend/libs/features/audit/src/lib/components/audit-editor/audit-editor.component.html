@@ -2,6 +2,9 @@
       <div class="panel-body ih-drawer-editor__body">
         <div class="panel-topbar">
           <button mat-stroked-button type="button" (click)="close.emit()">{{ i18n.t('common.close') }}</button>
+          @if (event()?.processExecutionId != null) {
+            <a mat-flat-button color="primary" [routerLink]="['/audit/record-lineage']" [queryParams]="{ traceId: 'exec-' + event()!.processExecutionId }">{{ i18n.t('audit.viewLineage') }}</a>
+          }
         </div>
 
         @if (event()) {

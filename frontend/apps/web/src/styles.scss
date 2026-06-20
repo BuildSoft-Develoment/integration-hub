@@ -6,6 +6,7 @@
   @include mat.core-theme($theme);
   @include mat.autocomplete-theme($theme);
   @include mat.button-theme($theme);
+  @include mat.button-toggle-theme($theme);
   @include mat.card-theme($theme);
   @include mat.checkbox-theme($theme);
   @include mat.chips-theme($theme);
@@ -30,6 +31,7 @@
   @include mat.core-color($theme);
   @include mat.autocomplete-color($theme);
   @include mat.button-color($theme);
+  @include mat.button-toggle-color($theme);
   @include mat.card-color($theme);
   @include mat.checkbox-color($theme);
   @include mat.chips-color($theme);
@@ -105,6 +107,16 @@ $ih-dark-theme: mat.define-theme((
   --ih-theme-neutral: #8b8d98;
   --ih-error: var(--ih-theme-error);
   --ih-neutral: var(--ih-theme-neutral);
+  /* Tokens semanticos de estado: un solo lugar para los colores de dominio.
+     Reusan la identidad visual existente (no introducen colores nuevos). */
+  --ih-status-error: var(--ih-error);
+  --ih-status-success: #2f9e44;
+  --ih-status-warning: #e8590c;
+  --ih-status-info: var(--ih-accent-strong);
+  --ih-status-neutral: var(--ih-text-soft);
+  --ih-status-error-bg: color-mix(in srgb, var(--ih-status-error) 14%, transparent);
+  --ih-status-warning-bg: color-mix(in srgb, var(--ih-status-warning) 12%, transparent);
+  --ih-status-success-bg: color-mix(in srgb, var(--ih-status-success) 12%, transparent);
   --mat-sys-primary: var(--ih-accent);
   --mat-sys-secondary: var(--ih-accent-strong);
   --mat-sys-error: var(--ih-error);
@@ -216,6 +228,43 @@ select {
 
 .mat-mdc-row:hover {
   background: color-mix(in srgb, var(--ih-accent) 7%, transparent);
+}
+
+.mat-button-toggle-group {
+  border: 1px solid var(--ih-border-strong);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--ih-surface-alt);
+  --mat-standard-button-toggle-text-color: var(--ih-text-soft);
+  --mat-standard-button-toggle-background-color: transparent;
+  --mat-standard-button-toggle-state-layer-color: color-mix(in srgb, var(--ih-accent) 14%, transparent);
+  --mat-standard-button-toggle-selected-state-text-color: var(--ih-accent-strong);
+  --mat-standard-button-toggle-selected-state-background-color: color-mix(in srgb, var(--ih-accent) 16%, transparent);
+  --mat-standard-button-toggle-divider-color: var(--ih-border);
+}
+
+.mat-button-toggle {
+  color: var(--ih-text-soft);
+  background: transparent;
+}
+
+.mat-button-toggle .mat-button-toggle-label-content {
+  line-height: 2.2rem;
+  padding: 0 1rem;
+}
+
+.mat-button-toggle:hover .mat-button-toggle-label-content,
+.mat-button-toggle.cdk-keyboard-focused .mat-button-toggle-label-content {
+  color: var(--ih-accent-strong);
+}
+
+.mat-button-toggle-checked {
+  background: color-mix(in srgb, var(--ih-accent) 16%, transparent);
+}
+
+.mat-button-toggle-checked .mat-button-toggle-label-content {
+  color: var(--ih-accent-strong);
+  font-weight: 600;
 }
 
 .mat-mdc-list-item,
@@ -345,6 +394,39 @@ select {
 
 .ih-muted {
   color: var(--ih-text-soft);
+}
+
+/* Texto solo para lectores de pantalla (WCAG 2.2 AA): captions, contexto de iconos. */
+.ih-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Tablas densas: zebra + hover sobre tablas semanticas no-Material (audit). */
+.ih-dense-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--ih-surface-alt) 55%, transparent);
+}
+
+.ih-dense-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--ih-accent) 6%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .ih-panel-surface {

@@ -1,0 +1,110 @@
+<section class="spool audit-page">
+      <ih-breadcrumb [items]="breadcrumbItems()" [backLabel]="i18n.t('audit.common.back')" />
+      <div class="spool__toolbar">
+        <div>
+          <h2 class="ih-section-title">{{ i18n.t('audit.spool.title') }}</h2>
+          <p class="ih-muted">{{ i18n.t('audit.spool.subtitle') }}</p>
+        </div>
+        <div class="spool__actions">
+          <mat-checkbox [ngModel]="autoRefresh" (ngModelChange)="setAutoRefresh($event)">{{ i18n.t('audit.spool.autoRefresh') }}</mat-checkbox>
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('audit.spool.refreshInterval') }}</mat-label>
+            <mat-select [ngModel]="refreshMs" (ngModelChange)="setRefreshMs($event)" [disabled]="!autoRefresh">
+              <mat-option [value]="30000">30s</mat-option>
+              <mat-option [value]="60000">1 min</mat-option>
+              <mat-option [value]="300000">5 min</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <button mat-flat-button color="primary" type="button" (click)="load()" [disabled]="loading()">{{ i18n.t('audit.common.refresh') }}</button>
+        </div>
+      </div>
+
+      @if (health(); as h) {
+        <div class="spool__health spool__health--{{ h }}" role="status">
+          <span class="spool__health-dot"></span>{{ healthLabel() }}
+        </div>
+      }
+
+      @if (summary()) {
+        <div class="spool__summary">
+          <div class="spool__metric"><small>PENDING</small><strong>{{ summary()!.pending }}</strong></div>
+          <div class="spool__metric"><small>IN_FLIGHT</small><strong>{{ summary()!.inFlight }}</strong></div>
+          <div class="spool__metric"><small>SENT</small><strong>{{ summary()!.sent }}</strong></div>
+          <div class="spool__metric" [class.spool__metric--alert]="summary()!.dead > 0"><small>DEAD</small><strong>{{ summary()!.dead }}</strong></div>
+          <div class="spool__metric"><small>{{ i18n.t('audit.spool.oldest') }}</small><span>{{ summary()!.oldestPendingCreatedAt || '-' }}</span></div>
+        </div>
+      }
+
+      <div class="spool__toolbar">
+        <div class="spool__filters">
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('audit.spool.deadLimit') }}</mat-label>
+            <input matInput type="number" min="1" max="1000" [(ngModel)]="deadLimit" />
+          </mat-form-field>
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('audit.spool.retentionDays') }}</mat-label>
+            <input matInput type="number" min="1" [(ngModel)]="retentionDays" />
+          </mat-form-field>
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('audit.spool.cleanupLimit') }}</mat-label>
+            <input matInput type="number" min="1" [(ngModel)]="cleanupLimit" />
+          </mat-form-field>
+        </div>
+        <div class="spool__actions">
+          <button mat-stroked-button type="button" (click)="loadDead()" [disabled]="loading()">{{ i18n.t('audit.spool.viewDead') }}</button>
+          <button mat-stroked-button type="button" [class.spool__danger--armed]="armed() === 'cleanup'" (click)="confirmCleanup()" [disabled]="loading()">
+            {{ armed() === 'cleanup' ? i18n.t('audit.spool.cleanupConfirm') : i18n.t('audit.spool.cleanup') }}
+          </button>
+        </div>
+      </div>
+
+      @if (message()) { <p class="spool__ok" role="status">{{ message() }}</p> }
+      @if (error()) { <p class="spool__error" role="alert">{{ error() }}</p> }
+
+      @if (loading()) {
+        <p class="spool__empty" role="status">{{ i18n.t('audit.spool.loading') }}</p>
+      } @else if (deadRows().length === 0) {
+        <p class="spool__empty">{{ i18n.t('audit.spool.empty') }}</p>
+      } @else {
+        <div class="spool__table">
+          <table class="ih-dense-table">
+            <caption class="ih-visually-hidden">{{ i18n.t('audit.spool.caption') }}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{{ i18n.t('audit.spool.col.id') }}</th>
+                <th scope="col">{{ i18n.t('audit.spool.col.event') }}</th>
+                <th scope="col">{{ i18n.t('audit.spool.col.trace') }}</th>
+                <th scope="col">{{ i18n.t('audit.spool.col.topic') }}</th>
+                <th scope="col">{{ i18n.t('audit.spool.col.attempts') }}</th>
+                <th scope="col">{{ i18n.t('audit.spool.col.error') }}</th>
+                <th scope="col">{{ i18n.t('audit.spool.col.deadAt') }}</th>
+                <th scope="col"><span class="ih-visually-hidden">{{ i18n.t('audit.common.actions') }}</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of deadRows(); track row.id) {
+                <tr>
+                  <td>{{ row.id }}</td>
+                  <td class="spool__mono" [title]="row.eventId || ''">{{ row.eventId || '-' }}</td>
+                  <td class="spool__mono" [title]="row.traceId || ''">{{ row.traceId || '-' }}</td>
+                  <td>
+                    <div>{{ row.topic || '-' }}</div>
+                    <div class="spool__mono" [title]="row.partitionKey || ''">{{ row.partitionKey || '-' }}</div>
+                  </td>
+                  <td>{{ row.attempts }}</td>
+                  <td>{{ row.deadReason || row.lastError || '-' }}</td>
+                  <td>
+                    @if (row.deadAt) {
+                      <time [attr.datetime]="row.deadAt" [title]="row.deadAt | ihTime:'absolute'">{{ row.deadAt | ihTime }}</time>
+                    } @else { - }
+                  </td>
+                  <td>
+                    <button mat-stroked-button type="button" [class.spool__danger--armed]="armed() === 'retry:' + row.id" (click)="confirmRetry(row)" [disabled]="loading()" [attr.aria-label]="i18n.t('audit.spool.retryAria', { id: row.id })">{{ armed() === 'retry:' + row.id ? i18n.t('audit.common.confirmShort') : i18n.t('audit.spool.retry') }}</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>

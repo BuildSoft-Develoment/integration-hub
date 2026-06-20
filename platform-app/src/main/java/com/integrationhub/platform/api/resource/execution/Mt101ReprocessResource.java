@@ -11,14 +11,16 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.SecurityContext;
 
 import java.util.List;
 
 /**
  * Reproceso quirurgico de fragmentos MT101. Mutación: excluye el rol auditor
- * (solo lectura). Permite revalidar/reenviar por estado o reprocesar solo las
- * filas afectadas de un lote masivo.
+ * (solo lectura). Permite revalidar por estado o reprocesar solo las filas
+ * afectadas de un lote masivo.
  */
 @Path("/api/query/mt101-fragments/reprocess")
 @Produces(MediaType.APPLICATION_JSON)
@@ -32,8 +34,7 @@ public class Mt101ReprocessResource {
 
     /**
      * Transiciona en bloque los fragmentos de un set: p.ej. {@code fromStatus=REJECTED}
-     * {@code toStatus=BUILT} para revalidar tras corregir reglas, o
-     * {@code fromStatus=SENT} {@code toStatus=ARCHIVED} para reenviar.
+     * {@code toStatus=BUILT} para revalidar tras corregir reglas.
      */
     @POST
     @Path("/status")
@@ -41,9 +42,13 @@ public class Mt101ReprocessResource {
     public Mt101ReprocessResponse byStatus(@QueryParam("connectionRef") String connectionRef,
                                            @QueryParam("fragmentSetId") String fragmentSetId,
                                            @QueryParam("fromStatus") String fromStatus,
-                                           @QueryParam("toStatus") String toStatus) {
+                                           @QueryParam("toStatus") String toStatus,
+                                           @QueryParam("reason") String reason,
+                                           @QueryParam("ticketRef") String ticketRef,
+                                           @Context SecurityContext securityContext) {
         try {
-            var affected = service.resetByStatus(connectionRef, fragmentSetId, fromStatus, toStatus);
+            var affected = service.resetByStatus(connectionRef, fragmentSetId, fromStatus, toStatus,
+                    actor(securityContext), reason, ticketRef);
             return new Mt101ReprocessResponse(fragmentSetId, fromStatus, toStatus, affected);
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
@@ -63,19 +68,36 @@ public class Mt101ReprocessResource {
                                                         @QueryParam("recordFrom") Long recordFrom,
                                                         @QueryParam("recordTo") Long recordTo,
                                                         @QueryParam("sourceFileHash") String sourceFileHash,
-                                                        @QueryParam("toStatus") @DefaultValue("BUILT") String toStatus) {
+                                                        @QueryParam("toStatus") @DefaultValue("BUILT") String toStatus,
+                                                        @QueryParam("reason") String reason,
+                                                        @QueryParam("ticketRef") String ticketRef,
+                                                        @Context SecurityContext securityContext) {
         if (recordFrom == null) {
             throw new BadRequestException("recordFrom is required");
         }
+        if (sourceFileHash == null || sourceFileHash.isBlank()) {
+            throw new BadRequestException("sourceFileHash is required");
+        }
         var to = recordTo == null ? recordFrom : recordTo;
         try {
-            return service.reprocessSourceRows(connectionRef, fragmentSetId, recordFrom, to, sourceFileHash, toStatus)
+            return service.reprocessSourceRows(connectionRef, fragmentSetId, recordFrom, to, sourceFileHash, toStatus,
+                            actor(securityContext), reason, ticketRef)
                     .stream()
                     .map(this::toResponse)
                     .toList();
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }
+    }
+
+    private static String actor(SecurityContext securityContext) {
+        if (securityContext != null && securityContext.getUserPrincipal() != null) {
+            var name = securityContext.getUserPrincipal().getName();
+            if (name != null && !name.isBlank()) {
+                return name;
+            }
+        }
+        return "unknown";
     }
 
     private Mt101FragmentLinkResponse toResponse(Mt101FragmentRepository.FragmentLookupRow row) {

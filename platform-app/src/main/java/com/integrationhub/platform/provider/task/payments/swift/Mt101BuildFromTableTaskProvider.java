@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -247,8 +248,18 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                             + " source rows; cannot map :21: to the exact file row");
                 }
                 var sourceRecords = new LinkedHashMap<String, Long>();
+                var stagingIdsBySourceRecord = new LinkedHashMap<Long, Long>();
                 for (int i = 0; i < rows.size(); i++) {
-                    sourceRecords.put(transactions.get(i).transactionReference(), sourceRecordNumber(rows.get(i)));
+                    var transactionReference = transactions.get(i).transactionReference();
+                    var sourceRecordNumber = sourceRecordNumber(rows.get(i));
+                    var previous = sourceRecords.putIfAbsent(transactionReference, sourceRecordNumber);
+                    if (previous != null) {
+                        throw new IllegalArgumentException("MT101_BUILD_FROM_TABLE generated duplicate :21: "
+                                + transactionReference + " in fragment " + index
+                                + " from source rows " + previous + " and " + sourceRecordNumber
+                                + "; transactionMappings.transactionReferenceTemplate must be unique per transaction");
+                    }
+                    stagingIdsBySourceRecord.putIfAbsent(sourceRecordNumber, rows.get(i).id());
                 }
                 insertBuffer.add(new Mt101FragmentStore.FragmentInsert(
                         fragmentSetId,
@@ -261,6 +272,7 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                         boundary.sourceRecordTo(),
                         boundary.sourceFileHash(),
                         sourceRecords,
+                        stagingIdsBySourceRecord,
                         index,
                         totalFragments,
                         message));
@@ -294,11 +306,11 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     }
 
     /**
-     * Multiarchivo: nunca mezcla archivos en un fragmento. Parte la pagina en tramos
-     * contiguos del mismo {@code source_file_hash} (las filas de un archivo son
-     * contiguas por id) y planifica cada tramo por separado -> cada fragmento pertenece
-     * a un solo archivo y su {@code source_file_hash} es correcto para todas sus
-     * transacciones. Para un solo archivo es un no-op (un tramo = toda la pagina).
+     * Multiarchivo/rebuild selectivo: nunca mezcla archivos ni filas discontinuas en
+     * un fragmento. Parte la pagina en tramos contiguos del mismo
+     * {@code source_file_hash}; si {@code recordIndexIn} trae huecos, cada tramo
+     * mantiene un rango {@code source_record_from/to} verdadero y no aparenta cubrir
+     * filas no reconstruidas.
      */
     private void planByFile(TaskContext context,
                             Map<String, Object> configuration,
@@ -309,12 +321,20 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
         var runStart = 0;
         for (int i = 1; i <= rows.size(); i++) {
             var boundary = i == rows.size()
-                    || !java.util.Objects.equals(rows.get(i).sourceFileHash(), rows.get(i - 1).sourceFileHash());
+                    || !Objects.equals(rows.get(i).sourceFileHash(), rows.get(i - 1).sourceFileHash())
+                    || !contiguousSourceRecords(rows.get(i - 1), rows.get(i));
             if (boundary) {
                 planChunk(context, configuration, rows.subList(runStart, i), maxBytes, logicalOffset + runStart, plan);
                 runStart = i;
             }
         }
+    }
+
+    private boolean contiguousSourceRecords(RowRecord previous, RowRecord current) {
+        if (previous.recordIndex() == null || current.recordIndex() == null) {
+            return false;
+        }
+        return current.recordIndex().longValue() == previous.recordIndex().longValue() + 1;
     }
 
     /**
@@ -467,7 +487,8 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                 DbTaskSupport.sanitizeIdentifier(idColumn),
                 processExecutionId,
                 taskDefinitionId,
-                recordIndexFilter(sourceCfg.get("recordIndexIn")));
+                recordIndexFilter(sourceCfg.get("recordIndexIn")),
+                stringValue(sourceCfg.get("rebuildRunId"), ""));
     }
 
     /**
@@ -513,8 +534,15 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     private List<RowRecord> rowsFromJson(List<Mt101StagingRecordRepository.RowJson> sourceRows) {
         var rows = new ArrayList<RowRecord>(sourceRows.size());
         for (var row : sourceRows) {
+            var values = new LinkedHashMap<>(jsonConfigurationMapper.toMap(row.payloadJson()));
+            values.putIfAbsent("_stagingId", row.id());
+            values.putIfAbsent("_sourceFileHash", row.sourceFileHash());
+            if (row.recordIndex() != null) {
+                values.putIfAbsent("_sourceRecordIndex", row.recordIndex());
+                values.putIfAbsent("_sourceRecordNumber", row.recordIndex() + 1);
+            }
             rows.add(new RowRecord(row.id(), row.recordIndex(), row.sourceFileHash(),
-                    new ReadRecord(jsonConfigurationMapper.toMap(row.payloadJson()))));
+                    new ReadRecord(values)));
         }
         return rows;
     }
@@ -532,7 +560,8 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                 source.taskDefinitionId(),
                 "record_index",
                 "source_file_hash",
-                source.recordIndexIn());
+                source.recordIndexIn(),
+                source.rebuildRunId());
     }
 
     @SuppressWarnings("unchecked")
@@ -638,7 +667,8 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
             String idColumn,
             Long processExecutionId,
             Long taskDefinitionId,
-            List<Long> recordIndexIn
+            List<Long> recordIndexIn,
+            String rebuildRunId
     ) {
     }
 

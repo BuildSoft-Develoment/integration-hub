@@ -25,6 +25,7 @@ import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Testcontainers
@@ -56,6 +57,8 @@ class Mt101BuildFromTableTaskProviderTest {
                 fragmentStore);
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
+            statement.executeUpdate("drop table if exists mt101_fragment_record");
+            statement.executeUpdate("drop table if exists mt101_rebuild_selection");
             statement.executeUpdate("drop table if exists mt101_build_fragment");
             statement.executeUpdate("drop table if exists staging_record");
             statement.executeUpdate("create table staging_record ("
@@ -89,6 +92,35 @@ class Mt101BuildFromTableTaskProviderTest {
                     + "error_message text,"
                     + "created_at timestamp not null default current_timestamp,"
                     + "updated_at timestamp not null default current_timestamp)");
+            statement.executeUpdate("create table mt101_fragment_record ("
+                    + "id bigserial primary key,"
+                    + "fragment_id bigint references mt101_build_fragment(id) on delete cascade,"
+                    + "fragment_set_id varchar(80) not null,"
+                    + "original_fragment_set_id varchar(80),"
+                    + "source_file_hash varchar(64),"
+                    + "source_record_number bigint not null,"
+                    + "staging_id bigint,"
+                    + "original_senders_reference varchar(16),"
+                    + "original_transaction_reference varchar(35),"
+                    + "current_senders_reference varchar(16),"
+                    + "current_transaction_reference varchar(35),"
+                    + "rebuild_run_id varchar(80),"
+                    + "status varchar(30) not null default 'BUILT',"
+                    + "created_at timestamp not null default current_timestamp)");
+            statement.executeUpdate("create unique index ux_mt101_fragment_record_current on mt101_fragment_record "
+                    + "(fragment_set_id, coalesce(source_file_hash, ''), source_record_number)");
+            statement.executeUpdate("create table mt101_rebuild_selection ("
+                    + "id bigserial primary key,"
+                    + "rebuild_run_id varchar(80) not null,"
+                    + "fragment_set_id varchar(80) not null,"
+                    + "source_file_hash varchar(64),"
+                    + "source_record_number bigint not null,"
+                    + "record_index bigint not null,"
+                    + "staging_id bigint,"
+                    + "original_senders_reference varchar(16),"
+                    + "original_transaction_reference varchar(35),"
+                    + "status varchar(30) not null default 'SELECTED',"
+                    + "created_at timestamp not null default current_timestamp)");
             insertRow(statement, "BEN1", "10.00", 1);
             insertRow(statement, "BEN2", "20.00", 2);
             insertRow(statement, "BEN3", "30.00", 3);
@@ -135,6 +167,12 @@ class Mt101BuildFromTableTaskProviderTest {
         assertEquals(2, messages.get(0).sequenceA().messageTotal());
         assertEquals(2, messages.get(0).transactions().size());
         assertEquals("TX-3", messages.get(1).transactions().get(0).transactionReference());
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             var rs = statement.executeQuery("select count(*) from mt101_fragment_record")) {
+            assertTrue(rs.next());
+            assertEquals(3, rs.getInt(1), "cada transaccion queda trazada en mt101_fragment_record");
+        }
     }
 
     @Test
@@ -196,6 +234,24 @@ class Mt101BuildFromTableTaskProviderTest {
         var error = org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> provider.execute(context, configuration));
         assertTrue(error.getMessage().contains("${messageIndex}"),
+                () -> "mensaje inesperado: " + error.getMessage());
+    }
+
+    @Test
+    void rejectsDuplicateTransactionReferencesInsideFragment() {
+        var context = new TaskContext(100L, 35L);
+        context.attributes().put("taskOutputs", Map.of(
+                "stage.table", "staging_record",
+                "stage.processExecutionId", 100L,
+                "stage.taskDefinitionId", 20L));
+
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> provider.execute(context, baseConfiguration(35L, Map.of(
+                        "maxTransactionsPerMessage", 3,
+                        "maxBytesPerMessage", 10000,
+                        "transactionMappings", transactionMappings("DUP")))));
+
+        assertTrue(error.getMessage().contains("duplicate :21:"),
                 () -> "mensaje inesperado: " + error.getMessage());
     }
 
@@ -329,9 +385,12 @@ class Mt101BuildFromTableTaskProviderTest {
         var result = provider.execute(context, baseConfiguration(88L, Map.of(
                 "maxTransactionsPerMessage", 10,
                 "maxBytesPerMessage", 10000,
-                "source", Map.of("recordIndexIn", List.of(0, 2)))));
+                "source", Map.of("recordIndexIn", List.of(0, 2)),
+                "transactionMappings", transactionMappings("TX-${_sourceRecordNumber}"))));
         assertTrue(result.success(), result.details());
         assertEquals(2L, result.outputs().get("transactionCount"), "solo se construyen 2 de 3 filas");
+        assertEquals(2, result.outputs().get("fragmentCount"),
+                "filas no contiguas no deben fingir un rango source_record continuo");
 
         @SuppressWarnings("unchecked")
         var fragmentSource = (Map<String, Object>) result.outputs().get("fragments");
@@ -342,6 +401,50 @@ class Mt101BuildFromTableTaskProviderTest {
                 .sorted()
                 .toList();
         assertEquals(List.of("BEN1", "BEN3"), accounts, "BEN2 (record_index 1) queda fuera");
+        var references = messages.stream()
+                .flatMap(m -> m.transactions().stream())
+                .map(t -> t.transactionReference())
+                .sorted()
+                .toList();
+        assertEquals(List.of("TX-1", "TX-3"), references,
+                "el build filtrado puede usar la fila fuente estable en templates correctivos");
+    }
+
+    @Test
+    void buildsOnlyRowsSelectedByRebuildRun() throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement("insert into mt101_rebuild_selection "
+                     + "(rebuild_run_id, fragment_set_id, source_file_hash, source_record_number, record_index) "
+                     + "values ('RUN-1', 'SET-OLD', 'testhash', ?, ?)")) {
+            statement.setLong(1, 1L);
+            statement.setLong(2, 0L);
+            statement.addBatch();
+            statement.setLong(1, 3L);
+            statement.setLong(2, 2L);
+            statement.addBatch();
+            statement.executeBatch();
+        }
+        var context = new TaskContext(100L, 89L);
+        context.attributes().put("taskOutputs", Map.of(
+                "stage.table", "staging_record",
+                "stage.processExecutionId", 100L,
+                "stage.taskDefinitionId", 20L));
+        var result = provider.execute(context, baseConfiguration(89L, Map.of(
+                "maxTransactionsPerMessage", 10,
+                "maxBytesPerMessage", 10000,
+                "source", Map.of("rebuildRunId", "RUN-1"),
+                "transactionMappings", transactionMappings("TX-${_sourceRecordNumber}"))));
+        assertTrue(result.success(), result.details());
+        assertEquals(2L, result.outputs().get("transactionCount"));
+
+        @SuppressWarnings("unchecked")
+        var fragmentSource = (Map<String, Object>) result.outputs().get("fragments");
+        var references = fragmentStore.readMessages(fragmentSource).stream()
+                .flatMap(m -> m.transactions().stream())
+                .map(t -> t.transactionReference())
+                .sorted()
+                .toList();
+        assertEquals(List.of("TX-1", "TX-3"), references);
     }
 
     @Test
@@ -395,13 +498,17 @@ class Mt101BuildFromTableTaskProviderTest {
                 "sendersReferenceTemplate", "P${messageIndex}",
                 "requestedExecutionDate", "2026-06-09",
                 "orderingCustomer", Map.of("option", "H", "account", "001")));
-        configuration.put("transactionMappings", Map.of(
-                "transactionReferenceTemplate", "TX-${recordNumber}",
-                "amount", Map.of("currencyField", "moneda", "valueField", "monto"),
-                "beneficiary", Map.of("option", "", "accountField", "cuenta_beneficiario"),
-                "detailsOfChargesField", "cargos"));
+        configuration.put("transactionMappings", transactionMappings("TX-${recordNumber}"));
         configuration.putAll(overrides);
         return configuration;
+    }
+
+    private Map<String, Object> transactionMappings(String transactionReferenceTemplate) {
+        return Map.of(
+                "transactionReferenceTemplate", transactionReferenceTemplate,
+                "amount", Map.of("currencyField", "moneda", "valueField", "monto"),
+                "beneficiary", Map.of("option", "", "accountField", "cuenta_beneficiario"),
+                "detailsOfChargesField", "cargos");
     }
 
     /** Mide los bytes del fragmento mas grande con N txs por mensaje (calibracion). */

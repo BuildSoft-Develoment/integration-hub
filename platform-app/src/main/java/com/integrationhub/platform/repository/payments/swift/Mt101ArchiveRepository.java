@@ -21,7 +21,7 @@ public class Mt101ArchiveRepository {
                                                      String hash,
                                                      int retentionDays) throws SQLException {
         var envelopeId = insertEnvelope(connection, message, hash, processExecutionId, storedPayload);
-        var archiveId = insertArchive(connection, message, envelopeId, storedPayload, retentionDays);
+        var archiveId = insertArchive(connection, message, envelopeId, processExecutionId, storedPayload, retentionDays);
         insertTransactions(connection, archiveId, message);
         return new ArchiveInsertResult(archiveId, envelopeId);
     }
@@ -62,14 +62,15 @@ public class Mt101ArchiveRepository {
     private long insertArchive(Connection connection,
                                Mt101Message message,
                                long envelopeId,
+                               Long processExecutionId,
                                String storedPayload,
                                int retentionDays) throws SQLException {
         var sql = "insert into mt101_archive "
                 + "(envelope_id, sender_lt, senders_reference, customer_specified_reference, message_index, message_total, "
                 + " requested_execution_date, instructing_party_kind, instructing_party_value, "
                 + " ordering_customer_kind, ordering_customer_account, ordering_customer_name_addr, "
-                + " account_servicing_kind, account_servicing_value, status, format, retention_until) "
-                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + " account_servicing_kind, account_servicing_value, status, format, retention_until, process_execution_id) "
+                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             var sequenceA = message.sequenceA();
             var envelope = message.envelope();
@@ -99,6 +100,11 @@ public class Mt101ArchiveRepository {
             statement.setString(15, "ARCHIVED");
             statement.setString(16, message.format());
             statement.setObject(17, LocalDate.now().plusDays(retentionDays), Types.DATE);
+            if (processExecutionId == null) {
+                statement.setNull(18, Types.BIGINT);
+            } else {
+                statement.setLong(18, processExecutionId);
+            }
             statement.executeUpdate();
             try (var keys = statement.getGeneratedKeys()) {
                 if (keys.next()) {

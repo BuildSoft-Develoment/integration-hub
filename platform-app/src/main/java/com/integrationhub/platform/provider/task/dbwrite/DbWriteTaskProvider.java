@@ -193,16 +193,16 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
                                   List<ReadRecord> records,
                                   int batchSize) {
         // El provider resuelve indice global + payload + auditoria (su responsabilidad);
-        // el JDBC batcheado vive en DbWriteRepository. record_index global por ejecucion
-        // (no por batch): el motor invoca este metodo una vez por cada batch del fast-path,
-        // asi que un indice local repetiria 0..N-1 y la auditoria perderia la posicion real.
-        var globalIndex = stagingIndexCounter(context);
         var sourceName = sourcePayload != null ? sourcePayload.name() : null;
         var sourceFileHash = sourceFileHash(context, sourcePayload);
+        // record_index es por archivo/hash, no global de la ejecucion. Esa es la fila
+        // visible que el operador usa junto a source_file_hash: archivo B fila 1 debe
+        // seguir siendo 1 aunque antes se haya procesado archivo A con 1M filas.
+        var fileIndex = stagingIndexCounter(context, sourceFileHash, sourcePayload);
         var rows = new ArrayList<DbWriteRepository.StagingRow>(records.size());
         var audit = new ArrayList<AuditEnvelope>(records.size());
         for (var record : records) {
-            var index = globalIndex.getAndIncrement();
+            var index = fileIndex.getAndIncrement();
             rows.add(new DbWriteRepository.StagingRow(
                     context.processExecutionId(),
                     context.taskDefinitionId(),
@@ -292,15 +292,23 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
     }
 
     /**
-     * Contador compartido en el TaskContext: el fast-path reusa el mismo contexto
-     * para todos los batches (y archivos en paralelo) del sink, asi que el
-     * AtomicLong da continuidad y es thread-safe entre workers.
+     * Contador compartido en el TaskContext por archivo: el fast-path reusa el mismo
+     * contexto para batches de un mismo archivo, y puede intercalar archivos distintos.
+     * La clave incluye hash/location para evitar mezclar posiciones visibles.
      */
-    private java.util.concurrent.atomic.AtomicLong stagingIndexCounter(TaskContext context) {
+    private java.util.concurrent.atomic.AtomicLong stagingIndexCounter(TaskContext context,
+                                                                       String sourceFileHash,
+                                                                       SourcePayload sourcePayload) {
+        var key = "_stagingRecordIndex:" + (sourceFileHash == null || sourceFileHash.isBlank()
+                ? "no-file"
+                : sourceFileHash.trim());
+        if (sourcePayload != null && sourcePayload.location() != null) {
+            key += ":" + sourcePayload.location();
+        }
         synchronized (context.attributes()) {
             return (java.util.concurrent.atomic.AtomicLong) context.attributes()
-                    .computeIfAbsent("_stagingRecordIndex",
-                            key -> new java.util.concurrent.atomic.AtomicLong(0));
+                    .computeIfAbsent(key,
+                            ignored -> new java.util.concurrent.atomic.AtomicLong(0));
         }
     }
 }

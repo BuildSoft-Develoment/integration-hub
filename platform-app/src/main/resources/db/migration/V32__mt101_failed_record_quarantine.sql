@@ -21,7 +21,7 @@ create table if not exists mt101_failed_record (
     rule_set varchar(50),
     severity char(1),
     message text,
-    status varchar(20) not null default 'QUARANTINED',  -- QUARANTINED, REBUILT, DISCARDED
+    status varchar(20) not null default 'QUARANTINED',  -- ampliado a varchar(40) en V38 para lifecycle correctivo
     created_at timestamp not null default current_timestamp,
     resolved_at timestamp
 );

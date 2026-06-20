@@ -2,6 +2,7 @@ package com.integrationhub.platform.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpServer;
+import com.integrationhub.platform.service.payments.swift.Mt101RebuildService;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
@@ -25,6 +26,7 @@ import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -65,6 +67,9 @@ class Mt101MillionFileProcessE2EIT {
 
     @Inject
     ObjectMapper objectMapper;
+
+    @Inject
+    Mt101RebuildService rebuildService;
 
     @BeforeEach
     void cleanDatabase() throws Exception {
@@ -184,11 +189,13 @@ class Mt101MillionFileProcessE2EIT {
                     .then().statusCode(200).extract().jsonPath();
             assertEquals(BAD_ROW, failedRow.getInt("[0].sourceRecordNumber"),
                     "el operador ve la fila exacta del archivo que fallo");
+            var sourceFileHash = failedRow.getString("[0].sourceFileHash");
             assertEquals("STRUCT.CHARGES_VALUE", failedRow.getString("[0].ruleCode"));
 
             // 3) Lookup fila -> fragmento por la fila exacta devuelve el :20: correcto.
             var lookup = given()
                     .queryParam("recordNumber", BAD_ROW)
+                    .queryParam("sourceFileHash", sourceFileHash)
                     .queryParam("fragmentSetId", fragmentSetId)
                     .when().get("/api/query/mt101-fragments/source-row")
                     .then().statusCode(200).extract().jsonPath();
@@ -199,15 +206,17 @@ class Mt101MillionFileProcessE2EIT {
 
             // 4) Reproceso quirurgico: corregir la fila y rebuild del FRAGMENTO COMPLETO afectado.
             correctStagingRow(BAD_ROW);
-            var rebuild = given()
+            String rebuildRunId = given()
                     .queryParam("fragmentSetId", fragmentSetId)
                     .queryParam("correctiveSetId", fragmentSetId + "-FIX")
-                    .when().post("/api/query/mt101-quarantine/rebuild")
-                    .then().statusCode(200).extract().jsonPath();
+                    .when().post("/api/query/mt101-quarantine/rebuild-runs/request")
+                    .then().statusCode(200).extract().path("rebuildRunId");
+            rebuildService.approveRebuildRun(null, rebuildRunId, "integration-approver");
+            var rebuild = rebuildService.executeApprovedRebuildRun(null, rebuildRunId, "integration-executor");
             // P0-1: reconstruye TODAS las filas del fragmento afectado, no solo la fila fallida.
-            assertEquals(affectedRows, rebuild.getLong("rebuiltRows"),
+            assertEquals(affectedRows, rebuild.rebuiltRows(),
                     "reconstruye todas las transacciones del fragmento, no solo la fila " + BAD_ROW);
-            assertEquals(1, rebuild.getInt("supersededFragments"), "el fragmento original queda superseded");
+            assertEquals(1, rebuild.supersededFragments(), "el fragmento original queda superseded");
             assertEquals(1, countRowsWhere("mt101_build_fragment",
                     "fragment_set_id = '" + fragmentSetId + "' and status = 'SUPERSEDED'"),
                     "el fragmento original de la fila fallida queda SUPERSEDED");
@@ -217,6 +226,164 @@ class Mt101MillionFileProcessE2EIT {
             assertEquals(affectedRows, queryLong("select coalesce(sum(source_record_to - source_record_from + 1), 0) "
                             + "from mt101_build_fragment where fragment_set_id = '" + fragmentSetId + "-FIX'"),
                     "el correctivo cubre todas las filas del fragmento afectado, sin perder transacciones");
+        }
+    }
+
+    private static final int NC_ROWS = Integer.getInteger("e2e.ncRows", 200);
+    private static final int BAD_A = Integer.getInteger("e2e.badRowA", 50);
+    private static final int BAD_B = Integer.getInteger("e2e.badRowB", 150);
+
+    /**
+     * Caso negativo mas exigente: <b>dos</b> filas invalidas en <b>fragmentos distintos</b>
+     * (no contiguos) dentro de un mismo lote. Verifica de punta a punta y por la API REST:
+     * <ul>
+     *   <li>el operador ubica las dos filas exactas que fallaron;</li>
+     *   <li>corrige cada una con {@code If-Match} (locking optimista) y un reintento con
+     *       version vieja recibe 409;</li>
+     *   <li>el rebuild gobernado (solicita A / aprueba B / ejecuta C) reconstruye SOLO los
+     *       dos fragmentos afectados, los originales quedan SUPERSEDED, y el correctivo
+     *       conserva TODAS las transacciones de ambos fragmentos (no se pierde ninguna).</li>
+     * </ul>
+     */
+    @Test
+    @TestSecurity(user = "admin", roles = {"platform-admin"})
+    void reprocessesNonContiguousFailuresViaRestWithOptimisticLock() throws Exception {
+        writeCsvWithBadRows(DEFAULT_INPUT_FILE, NC_ROWS, Set.of(BAD_A, BAD_B));
+
+        try (var gateway = LocalSwiftGateway.start()) {
+            var sourceId = createSource(DEFAULT_INPUT_FILE);
+            var readerId = createReader();
+            var processId = createSwiftProcess(sourceId, readerId, gateway.url());
+
+            Number executionId = given()
+                    .contentType(ContentType.JSON).body("{}")
+                    .when().post("/api/process-executions/{processDefinitionId}", processId.longValue())
+                    .then().statusCode(200).extract().path("id");
+            awaitExecutionTerminal(executionId.longValue());
+
+            var fragmentSetId = "E2E-" + executionId.longValue();
+
+            assertEquals(NC_ROWS, countRows("staging_record"), "todas las filas se cargan en staging");
+            assertEquals(2, countRowsWhere("mt101_validation_issue",
+                    "rule_code = 'STRUCT.CHARGES_VALUE' and transaction_reference is not null"),
+                    "las dos filas invalidas producen exactamente dos issues");
+
+            int quarantined = given().queryParam("fragmentSetId", fragmentSetId)
+                    .when().post("/api/query/mt101-quarantine/build")
+                    .then().statusCode(200).extract().path("quarantined");
+            assertEquals(2, quarantined, "se encolan exactamente las dos filas fallidas");
+
+            var rows = given().queryParam("fragmentSetId", fragmentSetId)
+                    .when().get("/api/query/mt101-quarantine")
+                    .then().statusCode(200).extract().jsonPath();
+            assertEquals(Set.of(BAD_A, BAD_B),
+                    new java.util.TreeSet<>(rows.getList("sourceRecordNumber", Integer.class)),
+                    "el operador ve las dos filas exactas del archivo que fallaron");
+            var sourceFileHash = rows.getString("[0].sourceFileHash");
+
+            // Cada fila cae en un fragmento MT101 distinto -> reproceso NO contiguo.
+            var fragA = lookupFragment(fragmentSetId, sourceFileHash, BAD_A);
+            var fragB = lookupFragment(fragmentSetId, sourceFileHash, BAD_B);
+            assertTrue(fragA[1] < fragB[0], "las dos fallas estan en fragmentos no contiguos");
+            long affected = (fragA[1] - fragA[0] + 1) + (fragB[1] - fragB[0] + 1);
+
+            // Correccion por fila exacta via REST con If-Match; reintento con version vieja -> 409.
+            long staleVersionA = correctRowViaRest(fragmentSetId, sourceFileHash, BAD_A);
+            correctRowViaRest(fragmentSetId, sourceFileHash, BAD_B);
+            given().contentType(ContentType.JSON)
+                    .header("If-Match", "\"" + staleVersionA + "\"")
+                    .queryParam("fragmentSetId", fragmentSetId)
+                    .queryParam("sourceFileHash", sourceFileHash)
+                    .queryParam("recordNumber", BAD_A)
+                    .body("{}")
+                    .when().patch("/api/query/mt101-quarantine/staging-row")
+                    .then().statusCode(409);
+
+            // Rebuild gobernado maker-checker: solicita (A) / aprueba otro (B) / ejecuta (C).
+            String rebuildRunId = given()
+                    .queryParam("fragmentSetId", fragmentSetId)
+                    .queryParam("correctiveSetId", fragmentSetId + "-FIX")
+                    .when().post("/api/query/mt101-quarantine/rebuild-runs/request")
+                    .then().statusCode(200).extract().path("rebuildRunId");
+            rebuildService.approveRebuildRun(null, rebuildRunId, "integration-approver");
+            var rebuild = rebuildService.executeApprovedRebuildRun(null, rebuildRunId, "integration-executor");
+
+            assertEquals(2, rebuild.supersededFragments(), "los dos fragmentos originales quedan superseded");
+            assertEquals(affected, rebuild.rebuiltRows(),
+                    "reconstruye TODAS las filas de los dos fragmentos afectados, no solo las dos malas");
+            assertEquals(2, countRowsWhere("mt101_build_fragment",
+                    "fragment_set_id = '" + fragmentSetId + "' and status = 'SUPERSEDED'"),
+                    "exactamente los dos fragmentos con fila fallida quedan SUPERSEDED");
+            assertEquals(affected, queryLong("select coalesce(sum(source_record_to - source_record_from + 1), 0) "
+                            + "from mt101_build_fragment where fragment_set_id = '" + fragmentSetId + "-FIX'"),
+                    "el correctivo cubre ambos fragmentos completos, sin perder ninguna transaccion valida");
+        }
+    }
+
+    /** Lookup fila -> fragmento por la fila exacta; devuelve [from, to] del fragmento que la cubre. */
+    private long[] lookupFragment(String fragmentSetId, String sourceFileHash, long recordNumber) {
+        var lookup = given()
+                .queryParam("recordNumber", recordNumber)
+                .queryParam("sourceFileHash", sourceFileHash)
+                .queryParam("fragmentSetId", fragmentSetId)
+                .when().get("/api/query/mt101-fragments/source-row")
+                .then().statusCode(200).extract().jsonPath();
+        long from = lookup.getLong("[0].sourceRecordFrom");
+        long to = lookup.getLong("[0].sourceRecordTo");
+        assertTrue(from <= recordNumber && to >= recordNumber, "el fragmento devuelto cubre la fila " + recordNumber);
+        return new long[]{from, to};
+    }
+
+    /**
+     * Carga la fila (GET, devuelve version/ETag), corrige cargos BAD->OUR y la guarda con
+     * {@code If-Match} (locking optimista). Devuelve la version vieja para probar el conflicto.
+     */
+    private long correctRowViaRest(String fragmentSetId, String sourceFileHash, long recordNumber) {
+        var view = given()
+                .queryParam("fragmentSetId", fragmentSetId)
+                .queryParam("sourceFileHash", sourceFileHash)
+                .queryParam("recordNumber", recordNumber)
+                .when().get("/api/query/mt101-quarantine/staging-row")
+                .then().statusCode(200).extract().jsonPath();
+        long version = view.getLong("version");
+        String corrected = view.getString("payloadJson").replace("\"cargos\":\"BAD\"", "\"cargos\":\"OUR\"");
+        long newVersion = given()
+                .contentType(ContentType.JSON)
+                .header("If-Match", "\"" + version + "\"")
+                .queryParam("fragmentSetId", fragmentSetId)
+                .queryParam("sourceFileHash", sourceFileHash)
+                .queryParam("recordNumber", recordNumber)
+                .queryParam("reason", "corrige detailsOfCharges invalido")
+                .queryParam("ticketRef", "OPS-" + recordNumber)
+                .body(corrected)
+                .when().patch("/api/query/mt101-quarantine/staging-row")
+                .then().statusCode(200).extract().jsonPath().getLong("version");
+        assertTrue(newVersion > version, "la correccion incrementa la version (ETag) para el locking optimista");
+        return version;
+    }
+
+    private void writeCsvWithBadRows(Path file, int rows, Set<Integer> badRows) throws Exception {
+        Files.createDirectories(file.getParent());
+        try (BufferedWriter writer = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
+            writer.write("dni,nombre,cuenta,moneda,monto,bic,concepto,cargos");
+            writer.newLine();
+            for (int i = 1; i <= rows; i++) {
+                writer.write(String.valueOf(10_000_000 + i));
+                writer.write(",BENEFICIARIO ");
+                writer.write(String.valueOf(i));
+                writer.write(",001");
+                writer.write(String.format("%010d", i));
+                writer.write(',');
+                writer.write("PEN");
+                writer.write(',');
+                writer.write(String.valueOf(100 + (i % 900)));
+                writer.write(".50,BCPLPEPLXXX,FACTURA ");
+                writer.write(String.valueOf(i));
+                writer.write(',');
+                // detailsOfCharges invalido SOLO en las filas objetivo -> STRUCT.CHARGES_VALUE.
+                writer.write(badRows.contains(i) ? "BAD" : "OUR");
+                writer.newLine();
+            }
         }
     }
 

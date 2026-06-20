@@ -1,0 +1,233 @@
+<section class="q audit-page">
+      <ih-breadcrumb [items]="breadcrumbItems()" [backLabel]="i18n.t('audit.common.back')" />
+      @if (lote(); as l) {
+        <div class="q__lote">
+          <div class="q__lote-title"><ih-icon name="list" /> {{ i18n.t('audit.quarantine.titleLote', { set: l.fragmentSetId }) }}</div>
+          <div class="q__lote-chips">
+            @if (l.sourceFileName) { <span class="q__chip"><ih-icon name="file" /> {{ l.sourceFileName }}</span> }
+            @if (l.sourceFileHash) {
+              <span class="q__chip q__mono" [title]="l.sourceFileHash">hash {{ l.sourceFileHash | slice:0:10 }}…
+                <button type="button" class="q__copy" [cdkCopyToClipboard]="l.sourceFileHash" (cdkCopyToClipboardCopied)="markCopied('lote-hash')" [attr.aria-label]="i18n.t('audit.common.copyHash')"><ih-icon [name]="copied() === 'lote-hash' ? 'check' : 'copy'" [size]="13" /> {{ copied() === 'lote-hash' ? i18n.t('audit.common.copied') : i18n.t('audit.common.copy') }}</button>
+              </span>
+            }
+            @if (l.processExecutionId !== null) { <span class="q__chip">exec-{{ l.processExecutionId }}</span> }
+            <span class="q__chip">{{ i18n.t('audit.quarantine.rows', { count: l.rowCount }) }}</span>
+            <span class="q__chip">{{ i18n.t('audit.quarantine.fragments', { count: l.totalFragments }) }}</span>
+          </div>
+          <p class="ih-muted">{{ i18n.t('audit.quarantine.subtitleLote') }}</p>
+        </div>
+      } @else {
+        <div>
+          <h2 class="ih-section-title">{{ i18n.t('audit.quarantine.title') }}</h2>
+          <p class="ih-muted">{{ i18n.t('audit.quarantine.subtitle') }}</p>
+        </div>
+      }
+
+      <div class="q__search">
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.quarantine.fieldExecution') }}</mat-label>
+          <input matInput type="number" min="1" [(ngModel)]="processExecutionId" placeholder="123" (keyup.enter)="loadLote()" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.quarantine.fieldSet') }}</mat-label>
+          <input matInput [(ngModel)]="fragmentSetId" placeholder="E2E-123" (keyup.enter)="loadLote()" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.common.connection') }}</mat-label>
+          <input matInput [(ngModel)]="connectionRef" placeholder="default" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.quarantine.fieldCorrective') }}</mat-label>
+          <input matInput [(ngModel)]="correctiveSetId" placeholder="E2E-123-FIX" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.quarantine.fieldRequestReason') }}</mat-label>
+          <input matInput [(ngModel)]="rebuildRequestReason" placeholder="INC-123" />
+        </mat-form-field>
+        <div class="q__actions">
+          <button mat-flat-button color="primary" type="button" (click)="loadLote()" [disabled]="loading() || (!fragmentSetId.trim() && !processExecutionId.trim())">{{ i18n.t('audit.quarantine.loadLote') }}</button>
+          <button mat-stroked-button type="button" [class.q__danger--armed]="armed() === 'build'" (click)="confirmBuild()" [disabled]="loading() || !fragmentSetId.trim()">
+            {{ armed() === 'build' ? i18n.t('audit.quarantine.buildConfirm') : i18n.t('audit.quarantine.build') }}
+          </button>
+          <button mat-stroked-button type="button" (click)="list()" [disabled]="loading() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.list') }}</button>
+          <button mat-flat-button color="primary" type="button" (click)="requestRebuild()" [disabled]="loading() || !!rebuildRun() || !fragmentSetId.trim() || !correctiveSetId.trim()">{{ i18n.t('audit.quarantine.runRequest') }}</button>
+        </div>
+      </div>
+
+      <div class="q__filters">
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.quarantine.filterStatus') }}</mat-label>
+          <input matInput [(ngModel)]="statusFilter" placeholder="QUARANTINED" (keyup.enter)="list()" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.quarantine.filterHash') }}</mat-label>
+          <input matInput [(ngModel)]="sourceFileHashFilter" placeholder="SHA-256" (keyup.enter)="list()" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.quarantine.filterRow') }}</mat-label>
+          <input matInput type="number" min="1" [(ngModel)]="sourceRecordNumberFilter" placeholder="847192" (keyup.enter)="list()" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.quarantine.filterRule') }}</mat-label>
+          <input matInput [(ngModel)]="ruleCodeFilter" placeholder="STRUCT.CHARGES" (keyup.enter)="list()" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>:20:</mat-label>
+          <input matInput [(ngModel)]="sendersReferenceFilter" placeholder="P16944" (keyup.enter)="list()" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>:21:</mat-label>
+          <input matInput [(ngModel)]="transactionReferenceFilter" placeholder="TX847192" (keyup.enter)="list()" />
+        </mat-form-field>
+        <div class="q__actions">
+          <button mat-stroked-button type="button" (click)="list()" [disabled]="loading() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.applyFilters') }}</button>
+          <button mat-button type="button" (click)="clearFilters()" [disabled]="loading() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.clearFilters') }}</button>
+        </div>
+      </div>
+
+      @if (rebuildRun(); as run) {
+        <div class="q__confirm" role="status">
+          <div class="q__confirm-title"><ih-icon name="alert-triangle" /> {{ i18n.t('audit.quarantine.runTitle') }} · {{ run.status }}</div>
+          <ul class="q__confirm-list">
+            <li>{{ i18n.t('audit.quarantine.runImpact', { rows: run.selectedRows, fragments: run.affectedFragments }) }}</li>
+            <li>{{ i18n.t('audit.quarantine.confirmSet', { set: run.correctiveSetId }) }}</li>
+            <li class="q__muted">{{ i18n.t('audit.quarantine.runMakerChecker') }}</li>
+          </ul>
+          @if (run.status === 'REQUESTED') {
+            <mat-form-field subscriptSizing="dynamic" class="q__reason">
+              <mat-label>{{ i18n.t('audit.quarantine.fieldApprovalReason') }}</mat-label>
+              <input matInput [(ngModel)]="rebuildApprovalReason" placeholder="Aprobado por control operativo" />
+            </mat-form-field>
+          }
+          <div class="q__actions">
+            @if (run.status === 'REQUESTED') {
+              <button mat-flat-button color="primary" type="button" (click)="approveRun()" [disabled]="loading()">{{ i18n.t('audit.quarantine.runApprove') }}</button>
+            }
+            @if (run.status === 'APPROVED') {
+              <button mat-flat-button color="warn" type="button" (click)="executeRun()" [disabled]="loading()">{{ i18n.t('audit.quarantine.runExecute') }}</button>
+            }
+            <button mat-stroked-button type="button" (click)="cancelRebuild()" [disabled]="loading()">{{ i18n.t('audit.common.cancel') }}</button>
+          </div>
+        </div>
+      }
+
+      @if (summary(); as s) {
+        <div class="q__cards">
+          <div class="q__card"><small>{{ i18n.t('audit.quarantine.cardFragments') }}</small><strong>{{ s.total }}</strong></div>
+          @for (entry of statusEntries(); track entry.status) {
+            <div class="q__card q__card--{{ entry.status }}"><small>{{ entry.status }}</small><strong>{{ entry.count }}</strong></div>
+          }
+          <div class="q__card q__card--QUARANTINED"><small>{{ i18n.t('audit.quarantine.cardQuarantine') }}</small><strong>{{ pendingCount() }}</strong></div>
+        </div>
+      }
+
+      @if (message()) {
+        <p class="q__ok" role="status">{{ message() }}</p>
+      }
+      @if (loading()) {
+        <p class="q__empty" role="status">{{ i18n.t('audit.quarantine.processing') }}</p>
+      } @else if (error()) {
+        <p class="q__error" role="alert">{{ error() }}</p>
+      } @else if (rows().length === 0) {
+        <p class="q__empty">{{ fragmentSetId.trim() ? i18n.t('audit.quarantine.emptyWithSet') : i18n.t('audit.quarantine.emptyNoSet') }}</p>
+      } @else {
+        <p class="ih-muted">{{ i18n.t('audit.quarantine.pending', { count: pendingCount() }) }}</p>
+        <div class="q__table">
+          <table class="ih-dense-table">
+            <caption class="ih-visually-hidden">{{ i18n.t('audit.quarantine.caption', { set: fragmentSetId }) }}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{{ i18n.t('audit.quarantine.col.row') }}</th>
+                <th scope="col">:20:</th>
+                <th scope="col">:21:</th>
+                <th scope="col">{{ i18n.t('audit.quarantine.col.rule') }}</th>
+                <th scope="col">{{ i18n.t('audit.quarantine.col.severity') }}</th>
+                <th scope="col">{{ i18n.t('audit.quarantine.col.message') }}</th>
+                <th scope="col">{{ i18n.t('audit.quarantine.col.hash') }}</th>
+                <th scope="col">{{ i18n.t('audit.quarantine.col.status') }}</th>
+                <th scope="col">{{ i18n.t('audit.quarantine.col.trace') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of rows(); track row.id) {
+                <tr>
+                  <td class="q__row">{{ row.sourceRecordNumber ?? '—' }}</td>
+                  <td class="q__mono">{{ row.sendersReference || '—' }}</td>
+                  <td class="q__mono">{{ row.transactionReference || '—' }}</td>
+                  <td class="q__mono">{{ row.ruleCode || '—' }}</td>
+                  <td>{{ row.severity || '—' }}</td>
+                  <td>{{ row.message || '—' }}</td>
+                  <td class="q__mono">
+                    <span [title]="row.sourceFileHash || ''">{{ (row.sourceFileHash | slice:0:12) || '—' }}</span>
+                    @if (row.sourceFileHash) {
+                      <button type="button" class="q__copy" [cdkCopyToClipboard]="row.sourceFileHash" (cdkCopyToClipboardCopied)="markCopied('hash-' + row.id)" [attr.aria-label]="i18n.t('audit.common.copyHash')"><ih-icon [name]="copied() === 'hash-' + row.id ? 'check' : 'copy'" [size]="13" /> {{ copied() === 'hash-' + row.id ? i18n.t('audit.common.copied') : i18n.t('audit.common.copy') }}</button>
+                    }
+                  </td>
+                  <td class="q__status--{{ row.status }}">{{ row.status }}</td>
+                  <td>
+                    @if (row.sourceRecordNumber !== null && row.sourceFileHash) {
+                      <button mat-button type="button" (click)="toggleTimeline(row)">
+                        {{ selectedRow() === row.id ? i18n.t('audit.quarantine.hide') : i18n.t('audit.quarantine.timeline') }}
+                      </button>
+                      <button mat-button type="button" (click)="toggleCorrect(row)">{{ i18n.t('audit.quarantine.correct') }}</button>
+                        <a class="q__link" [routerLink]="['/audit/record-lineage']" [queryParams]="{ sourceFileHash: row.sourceFileHash, recordNumber: row.sourceRecordNumber }" [title]="i18n.t('audit.quarantine.traceAria', { row: row.sourceRecordNumber })" [attr.aria-label]="i18n.t('audit.quarantine.traceAria', { row: row.sourceRecordNumber })">{{ i18n.t('audit.quarantine.traceLink') }} ↗</a>
+                    }
+                  </td>
+                </tr>
+                @if (correctingRow() === row.id) {
+                  <tr class="q__tl-row">
+                    <td colspan="9">
+                      <div class="q__correct">
+                        <mat-form-field subscriptSizing="dynamic" class="q__correct-field">
+                          <mat-label>{{ i18n.t('audit.quarantine.correctLabel', { row: row.sourceRecordNumber ?? '' }) }}</mat-label>
+                          <textarea matInput [(ngModel)]="correctionPayload" rows="3" placeholder='{&quot;cargos&quot;:&quot;OUR&quot;, ...}'></textarea>
+                        </mat-form-field>
+                        <mat-form-field subscriptSizing="dynamic">
+                          <mat-label>{{ i18n.t('audit.quarantine.correctReason') }}</mat-label>
+                          <input matInput [(ngModel)]="correctionReason" placeholder="Corrección validada" />
+                        </mat-form-field>
+                        <mat-form-field subscriptSizing="dynamic">
+                          <mat-label>{{ i18n.t('audit.quarantine.ticketRef') }}</mat-label>
+                          <input matInput [(ngModel)]="correctionTicketRef" placeholder="INC-123" />
+                        </mat-form-field>
+                        <div class="q__actions">
+                          <button mat-flat-button color="primary" type="button" (click)="saveCorrection(row)" [disabled]="loading() || !correctionPayload.trim()">{{ i18n.t('audit.quarantine.saveCorrection') }}</button>
+                          <button mat-stroked-button type="button" (click)="toggleCorrect(row)">{{ i18n.t('audit.common.cancel') }}</button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                }
+                @if (selectedRow() === row.id) {
+                  <tr class="q__tl-row">
+                    <td colspan="9">
+                      @if (timelineLoading()) {
+                        <span class="q__empty">{{ i18n.t('audit.quarantine.timelineLoading') }}</span>
+                      } @else if (timeline().length === 0) {
+                        <span class="q__empty">{{ i18n.t('audit.quarantine.timelineEmpty') }}</span>
+                      } @else {
+                        <div class="q__timeline">
+                          <div class="q__tl-title">{{ i18n.t('audit.quarantine.timelineTitle', { row: row.sourceRecordNumber ?? '' }) }} <span class="q__tl-note">{{ i18n.t('audit.quarantine.timelineNote') }}</span></div>
+                          @for (e of timeline(); track $index; let i = $index) {
+                            <div class="q__tl-entry q__tl-entry--{{ e.status }}">
+                              <span class="q__tl-stage"><ih-icon [name]="statusIcon(e.status)" class="q__tl-icon q__tl-icon--{{ statusKind(e.status) }}" /> {{ e.stage }}</span>
+                              <span class="q__status--{{ e.status }}">{{ e.status }}</span>
+                              <span>{{ e.detail }}</span>
+                              <span class="q__tl-ts">{{ e.eventTs || '—' }}@if (durationAt(i); as d) { <span class="q__tl-dur">· +{{ d }}</span> }</span>
+                            </div>
+                          }
+                        </div>
+                      }
+                    </td>
+                  </tr>
+                }
+              }
+            </tbody>
+          </table>
+        </div>
+        <div class="q__pager">
+          <button mat-stroked-button type="button" (click)="previousPage()" [disabled]="loading() || !hasPreviousPage()">{{ i18n.t('audit.common.previous') }}</button>
+          <button mat-stroked-button type="button" (click)="nextPage()" [disabled]="loading() || !hasNextPage()">{{ i18n.t('audit.common.next') }}</button>
+        </div>
+      }
+    </section>

@@ -65,12 +65,53 @@ public class Mt101ValidationIssueRepository {
         return result;
     }
 
-    public record IssueRecord(String ruleCode,
+    /** Lee issues por keyset para construir cuarentena de sets grandes sin cargar todo. */
+    public List<IssueRecord> findBySetPage(DataSource dataSource,
+                                           String table,
+                                           String fragmentSetId,
+                                           long afterId,
+                                           int limit) throws SQLException {
+        var safeTable = sanitize(table);
+        var sql = "select id, rule_code, rule_set, severity, message, senders_reference, transaction_reference "
+                + "from " + safeTable
+                + " where fragment_set_id = ? and id > ? order by id asc limit ?";
+        var result = new java.util.ArrayList<IssueRecord>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, fragmentSetId);
+            statement.setLong(2, Math.max(afterId, 0L));
+            statement.setInt(3, Math.max(limit, 1));
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new IssueRecord(
+                            rs.getLong("id"),
+                            rs.getString("rule_code"),
+                            rs.getString("rule_set"),
+                            rs.getString("severity"),
+                            rs.getString("message"),
+                            rs.getString("senders_reference"),
+                            rs.getString("transaction_reference")));
+                }
+            }
+        }
+        return result;
+    }
+
+    public record IssueRecord(Long id,
+                              String ruleCode,
                               String ruleSet,
                               String severity,
                               String message,
                               String sendersReference,
                               String transactionReference) {
+        public IssueRecord(String ruleCode,
+                           String ruleSet,
+                           String severity,
+                           String message,
+                           String sendersReference,
+                           String transactionReference) {
+            this(null, ruleCode, ruleSet, severity, message, sendersReference, transactionReference);
+        }
     }
 
     private String sanitize(String identifier) {

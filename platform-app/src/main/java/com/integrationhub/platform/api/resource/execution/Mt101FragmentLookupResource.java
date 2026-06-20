@@ -80,12 +80,13 @@ public class Mt101FragmentLookupResource {
     @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
     public List<Mt101RowTimelineService.Milestone> rowTimeline(@QueryParam("connectionRef") String connectionRef,
                                                                @QueryParam("fragmentSetId") String fragmentSetId,
+                                                               @QueryParam("sourceFileHash") String sourceFileHash,
                                                                @QueryParam("recordNumber") Long recordNumber) {
         if (recordNumber == null) {
             throw new BadRequestException("recordNumber is required");
         }
         try {
-            return rowTimelineService.rowTimeline(connectionRef, fragmentSetId, recordNumber);
+            return rowTimelineService.rowTimeline(connectionRef, fragmentSetId, sourceFileHash, recordNumber);
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }

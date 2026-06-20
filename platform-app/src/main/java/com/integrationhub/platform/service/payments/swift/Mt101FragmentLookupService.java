@@ -34,9 +34,10 @@ public class Mt101FragmentLookupService {
         if (recordNumber == null || recordNumber < 1) {
             throw new IllegalArgumentException("recordNumber must be positive");
         }
+        var hash = requireSourceFileHash(sourceFileHash);
         try {
-            return repository.findBySourceRow(resolveDataSource(connectionRef),
-                    recordNumber, blankToNull(sourceFileHash), blankToNull(sourceTable), processExecutionId,
+            return repository.findBySourceRecord(resolveDataSource(connectionRef),
+                    recordNumber, hash, blankToNull(sourceTable), processExecutionId,
                     blankToNull(fragmentSetId), Math.min(Math.max(limit, 1), 100));
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot resolve MT101 fragment for source row " + recordNumber, error);
@@ -64,5 +65,12 @@ public class Mt101FragmentLookupService {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    private String requireSourceFileHash(String sourceFileHash) {
+        if (sourceFileHash == null || sourceFileHash.isBlank()) {
+            throw new IllegalArgumentException("sourceFileHash is required for MT101 source-row lookup");
+        }
+        return sourceFileHash.trim();
     }
 }

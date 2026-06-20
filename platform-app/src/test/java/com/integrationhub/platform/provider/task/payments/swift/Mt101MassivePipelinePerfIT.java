@@ -206,6 +206,7 @@ class Mt101MassivePipelinePerfIT {
             statement.executeUpdate("drop table if exists mt101_transaction");
             statement.executeUpdate("drop table if exists mt101_archive");
             statement.executeUpdate("drop table if exists swift_message_envelope");
+            statement.executeUpdate("drop table if exists mt101_fragment_record");
             statement.executeUpdate("drop table if exists mt101_build_fragment");
             statement.executeUpdate("drop table if exists staging_record");
             statement.executeUpdate("create table staging_record ("
@@ -230,6 +231,23 @@ class Mt101MassivePipelinePerfIT {
                     + "(fragment_set_id, senders_reference)");
             statement.executeUpdate("create index ix_perf_fragment_status on mt101_build_fragment"
                     + "(fragment_set_id, status, fragment_index)");
+            statement.executeUpdate("create table mt101_fragment_record ("
+                    + "id bigserial primary key,"
+                    + "fragment_id bigint references mt101_build_fragment(id) on delete cascade,"
+                    + "fragment_set_id varchar(80) not null,"
+                    + "original_fragment_set_id varchar(80),"
+                    + "source_file_hash varchar(64),"
+                    + "source_record_number bigint not null,"
+                    + "staging_id bigint,"
+                    + "original_senders_reference varchar(16),"
+                    + "original_transaction_reference varchar(35),"
+                    + "current_senders_reference varchar(16),"
+                    + "current_transaction_reference varchar(35),"
+                    + "rebuild_run_id varchar(80),"
+                    + "status varchar(30) not null default 'BUILT',"
+                    + "created_at timestamp not null default current_timestamp)");
+            statement.executeUpdate("create unique index ux_perf_fragment_record_current on mt101_fragment_record "
+                    + "(fragment_set_id, coalesce(source_file_hash, ''), source_record_number)");
             statement.executeUpdate("create table swift_message_envelope ("
                     + "id bigserial primary key, message_type char(3) not null, sender_lt char(12),"
                     + "receiver_lt char(12), uetr varchar(36), priority char(1), raw_payload text,"
