@@ -107,6 +107,26 @@
         </div>
       }
 
+      @if (correctiveRun(); as corr) {
+        <div class="q__rebuild">
+          <h3>{{ i18n.t('audit.quarantine.correctiveTitle') }}</h3>
+          <ul>
+            <li>{{ i18n.t('audit.quarantine.confirmSet', { set: corr.correctiveSetId }) }}</li>
+            <li><span class="q__status--{{ corr.status }}">{{ corr.status }}</span></li>
+          </ul>
+          <div class="q__actions">
+            @if (corr.status === 'BUILT' || corr.status === 'VALIDATED') {
+              <button mat-flat-button color="primary" type="button" (click)="advanceCorrective()" [disabled]="loading()">{{ i18n.t('audit.quarantine.correctiveAdvance') }}</button>
+            }
+            @if (corr.status === 'ARCHIVED') {
+              <button mat-stroked-button type="button" (click)="requestCorrectivePay()" [disabled]="loading()">{{ i18n.t('audit.quarantine.correctiveRequestPay') }}</button>
+              <button mat-flat-button color="warn" type="button" (click)="approveCorrectivePay()" [disabled]="loading()">{{ i18n.t('audit.quarantine.correctiveApprovePay') }}</button>
+            }
+            <button mat-stroked-button type="button" (click)="dismissCorrective()" [disabled]="loading()">{{ i18n.t('audit.common.cancel') }}</button>
+          </div>
+        </div>
+      }
+
       @if (summary(); as s) {
         <div class="q__cards">
           <div class="q__card"><small>{{ i18n.t('audit.quarantine.cardFragments') }}</small><strong>{{ s.total }}</strong></div>

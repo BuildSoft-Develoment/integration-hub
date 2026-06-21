@@ -16,6 +16,16 @@ public class ProcessTaskDefinitionRepository implements PanacheRepository<Proces
         return taskDefinition;
     }
 
+    /**
+     * B2': primera tarea activa de un tipo dado dentro del mismo proceso (p.ej.
+     * MT101_VALIDATE / MT101_ARCHIVE / MT101_PAY), para reusar su config al orquestar
+     * el ciclo del set correctivo. Null si el proceso no tiene esa tarea.
+     */
+    public ProcessTaskDefinition findActiveByProcessAndType(ProcessDefinition processDefinition, String taskType) {
+        return find("processDefinition = ?1 and taskType = ?2 and active = true order by taskOrder asc",
+                processDefinition, taskType).firstResult();
+    }
+
     public long deactivateByProcessDefinition(ProcessDefinition processDefinition) {
         return update("active = false where processDefinition = ?1 and active = true", processDefinition);
     }

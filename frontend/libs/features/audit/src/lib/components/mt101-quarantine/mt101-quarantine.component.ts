@@ -9,8 +9,9 @@ import { MatInputModule } from '@angular/material/input';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { I18nService } from '@integration-hub/core/services';
 import { BreadcrumbComponent, IconComponent, IhBreadcrumbItem } from '@integration-hub/shared/ui';
+import { Observable } from 'rxjs';
 import { AuditApiService } from '../../api/audit-api.service';
-import { Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101RebuildRunSummary, Mt101RowTimelineEntry } from '../../models/audit.models';
+import { Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101RebuildRunSummary, Mt101RowTimelineEntry } from '../../models/audit.models';
 import { durationBetween, timelineStatusIcon, timelineStatusKind } from '../../utils/timeline-format';
 
 @Component({
@@ -468,10 +469,64 @@ export class Mt101QuarantineComponent {
           fragments: result.fragmentCount,
         }));
         this.rebuildRun.set(null);
+        // B2': el correctivo queda BUILT; se ofrece avanzar su ciclo bancario (VALIDATE/ARCHIVE/PAY).
+        this.correctiveRun.set({ rebuildRunId: result.rebuildRunId ?? result.correctiveSetId, correctiveSetId: result.correctiveSetId, status: 'BUILT' });
         this.list(true);
       },
       error: (e) => {
         this.error.set(this.backendError(e, 'audit.quarantine.rebuildError'));
+        this.loading.set(false);
+      },
+    });
+  }
+
+  // B2': ciclo bancario del correctivo. VALIDATE/ARCHIVE automáticos; PAY con maker-checker propio.
+  readonly correctiveRun = signal<Mt101CorrectiveLifecycle | null>(null);
+
+  dismissCorrective(): void {
+    this.correctiveRun.set(null);
+  }
+
+  /** B2': avanza el correctivo BUILT -> VALIDATED -> ARCHIVED (no envía). */
+  advanceCorrective(): void {
+    const run = this.correctiveRun();
+    if (!run) {
+      return;
+    }
+    this.runCorrectiveAction(this.api.mt101AdvanceCorrective({ rebuildRunId: run.rebuildRunId, connectionRef: this.connectionRef }));
+  }
+
+  /** B2': el maker solicita el envío del correctivo (ya ARCHIVED). */
+  requestCorrectivePay(): void {
+    const run = this.correctiveRun();
+    if (!run) {
+      return;
+    }
+    this.runCorrectiveAction(this.api.mt101RequestCorrectivePay({ rebuildRunId: run.rebuildRunId, connectionRef: this.connectionRef }));
+  }
+
+  /** B2': el checker (distinto del maker) aprueba y ejecuta el envío (PAY real). */
+  approveCorrectivePay(): void {
+    const run = this.correctiveRun();
+    if (!run) {
+      return;
+    }
+    this.runCorrectiveAction(this.api.mt101ApproveCorrectivePay({ rebuildRunId: run.rebuildRunId, connectionRef: this.connectionRef }));
+  }
+
+  private runCorrectiveAction(action: Observable<Mt101CorrectiveLifecycle>): void {
+    this.loading.set(true);
+    this.error.set(null);
+    this.message.set(null);
+    action.subscribe({
+      next: (result) => {
+        this.correctiveRun.set(result);
+        this.message.set(this.i18n.t('audit.quarantine.correctiveStatus', { status: result.status }));
+        this.loading.set(false);
+        this.list(false);
+      },
+      error: (e) => {
+        this.error.set(this.backendError(e, 'audit.quarantine.correctiveError'));
         this.loading.set(false);
       },
     });

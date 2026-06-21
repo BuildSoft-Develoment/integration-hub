@@ -122,6 +122,13 @@ export interface Mt101RebuildResult {
   resolvedQuarantine: number;
 }
 
+/** B2': estado del ciclo bancario del correctivo tras avanzar/enviar (BUILT/VALIDATED/ARCHIVED/SENT/...). */
+export interface Mt101CorrectiveLifecycle {
+  rebuildRunId: string;
+  correctiveSetId: string;
+  status: string;
+}
+
 /** Estado de un rebuild run gobernado: REQUESTED -> APPROVED -> BUILT -> VALIDATED/ARCHIVED/SENT/CONFIRMED/RECONCILED. */
 export interface Mt101RebuildRunSummary {
   rebuildRunId: string;

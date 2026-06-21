@@ -125,16 +125,17 @@ Está **acoplado a B2'**: sin orquestación automática del correctivo, no hay q
 | **R-b** | ✅ Hecho | Guard de longitud: si `<original>-FIX-<referenceCode>` excede `varchar(80)`, aborta ruidoso antes de crear el run (no lo trunca la BD). |
 | **R-c** | ✅ Hecho | El guard del `:20:` usa el **peor caso** `max(selectedRows, references.size())` (una fila por fragmento), no sólo el nº de fragmentos originales. |
 | **R-d** | ✅ Hecho | Migración **V40**: `mt101_rebuild_run.connection_ref`. `createRun` lo persiste y el scheduler (`synchronizeActiveLifecycles`) resuelve el datasource de cada run con su `connectionRef`, no sólo el default. |
-| **B2'** | ⏸️ Diferido (diseño) | Orquestar el correctivo por VALIDATE→ARCHIVE→PAY→STATUS→RECONCILE. Es una **feature de fondo**: requiere una ejecución hija gobernada que reúse los providers MT101 con los configs del proceso original. Además **PAY envía dinero**: auto-encadenar PAY sin maker-checker propio del correctivo sería incorrecto para banca. Debe diseñarse como proceso hijo reanudable **con su propia aprobación**, no como un encadenado automático. Es el pendiente principal. |
-| **B3'** | ⏸️ Diferido (= R8) | Identidad multiarchivo (`source_task_definition_id` + `source_instance_id`). Invasivo en el hot path de ingesta + todas las consultas; sigue diferido. |
+| **B2'** | ✅ Hecho | `Mt101CorrectiveLifecycleService` orquesta el correctivo reusando los providers MT101 con los configs del proceso original (`Mt101CorrectiveTaskConfigSource` → tarea hermana por tipo). **VALIDATE+ARCHIVE automáticos** (`advanceCorrective`, no mueven dinero); el estado lo deriva `synchronizeLifecycle`. **PAY con maker-checker propio** (V41): `requestCorrectivePay` (maker) + `approveAndPayCorrective` (checker ≠ maker) — porque PAY envía dinero real. Reanudable (cada etapa se salta si ya pasó). Endpoints `advance-corrective`/`request-pay`/`approve-pay` + panel UI "Ciclo del correctivo". El mecanismo: se siembra el fragment-source del correctivo en `taskOutputs` y los providers operan sobre él. |
+| **B3'** | ⏸️ Diferido (= R8) | Identidad multiarchivo (`source_task_definition_id` + `source_instance_id`). Invasivo en el hot path de ingesta + todas las consultas; sigue diferido. Único pendiente. |
 
 **Verificación:** `compile` + `test-compile` en verde; `Mt101RebuildServiceTest` (7),
 `Mt101ReprocessServiceTest` (10, con 2 nuevos de reapertura), `Mt101StagingCorrectionServiceTest`
 (6), `Mt101LargeVolumeLineageRebuildTest` (1) y el **E2E negativo** pasan; frontend 212/212 + build OK.
 
-> **Pendiente de fondo (B2'):** hoy el rebuild correctivo se construye pero **no se envía**
-> solo. Cerrarlo de verdad (y su prueba E2E real, R-e) es el siguiente trabajo grande, y debe
-> hacerse gobernado por el riesgo de PAY.
+> **B2' cerrado** con gobernanza: VALIDATE+ARCHIVE automáticos y PAY con maker-checker propio
+> (V41). Verificado con `Mt101CorrectiveLifecycleServiceTest` (avance + SoD del envío + guards).
+> Queda como verificación adicional el E2E real del ciclo correctivo completo (R-e) y, como
+> único pendiente de fondo, la identidad multiarchivo (B3'/R8).
 
 ## Conclusión
 

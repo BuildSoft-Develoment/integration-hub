@@ -515,6 +515,42 @@ public class Mt101RebuildRepository {
         }
     }
 
+    /** B2': solicita el envio del correctivo (maker). Idempotente: no pisa una solicitud previa. */
+    public int requestPay(DataSource dataSource, String rebuildRunId, String requestedBy) throws SQLException {
+        var sql = "update mt101_rebuild_run set pay_requested_by = ?, pay_requested_at = current_timestamp, "
+                + "updated_at = current_timestamp where rebuild_run_id = ? and pay_requested_by is null";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, requestedBy);
+            statement.setString(2, rebuildRunId);
+            return statement.executeUpdate();
+        }
+    }
+
+    /** B2': quien solicito el envio (para la segregacion de funciones del PAY). */
+    public String payRequestedBy(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "select pay_requested_by from mt101_rebuild_run where rebuild_run_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }
+    }
+
+    /** B2': registra quien aprobo+ejecuto el envio del correctivo. */
+    public void markPayApproved(DataSource dataSource, String rebuildRunId, String approvedBy) throws SQLException {
+        var sql = "update mt101_rebuild_run set pay_approved_by = ?, pay_approved_at = current_timestamp, "
+                + "updated_at = current_timestamp where rebuild_run_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, approvedBy);
+            statement.setString(2, rebuildRunId);
+            statement.executeUpdate();
+        }
+    }
+
     private String placeholders(int count) {
         return String.join(", ", java.util.Collections.nCopies(count, "?"));
     }

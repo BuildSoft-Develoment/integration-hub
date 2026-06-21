@@ -11,6 +11,7 @@ import {
   Mt101FragmentSetSummary,
   Mt101LoteHeader,
   Mt101QuarantineBuildResult,
+  Mt101CorrectiveLifecycle,
   Mt101RebuildResult,
   Mt101RebuildRunSummary,
   Mt101ReprocessResult,
@@ -389,6 +390,32 @@ export class AuditApiService {
     return this.http.post<Mt101RebuildResult>('/api/query/mt101-quarantine/rebuild-runs/execute', {}, {
       params: httpParams,
     });
+  }
+
+  /** B2': avanza el correctivo BUILT -> VALIDATED -> ARCHIVED (sin enviar; no mueve dinero). */
+  mt101AdvanceCorrective(query: { connectionRef?: string; rebuildRunId: string }): Observable<Mt101CorrectiveLifecycle> {
+    return this.http.post<Mt101CorrectiveLifecycle>('/api/query/mt101-quarantine/rebuild-runs/advance-corrective', {},
+      { params: this.runIdParams(query.rebuildRunId, query.connectionRef) });
+  }
+
+  /** B2': el maker solicita el envío (PAY) del correctivo, ya ARCHIVED. */
+  mt101RequestCorrectivePay(query: { connectionRef?: string; rebuildRunId: string }): Observable<Mt101CorrectiveLifecycle> {
+    return this.http.post<Mt101CorrectiveLifecycle>('/api/query/mt101-quarantine/rebuild-runs/request-pay', {},
+      { params: this.runIdParams(query.rebuildRunId, query.connectionRef) });
+  }
+
+  /** B2': el checker (distinto del maker) aprueba y ejecuta el envío del correctivo (PAY real). */
+  mt101ApproveCorrectivePay(query: { connectionRef?: string; rebuildRunId: string }): Observable<Mt101CorrectiveLifecycle> {
+    return this.http.post<Mt101CorrectiveLifecycle>('/api/query/mt101-quarantine/rebuild-runs/approve-pay', {},
+      { params: this.runIdParams(query.rebuildRunId, query.connectionRef) });
+  }
+
+  private runIdParams(rebuildRunId: string, connectionRef?: string): HttpParams {
+    let httpParams = new HttpParams().set('rebuildRunId', rebuildRunId);
+    if (connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', connectionRef.trim());
+    }
+    return httpParams;
   }
 
   /**

@@ -2,6 +2,7 @@ package com.integrationhub.platform.api.resource.execution;
 
 import com.integrationhub.platform.api.response.execution.Mt101FailedRecordResponse;
 import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRepository;
+import com.integrationhub.platform.service.payments.swift.Mt101CorrectiveLifecycleService;
 import com.integrationhub.platform.service.payments.swift.Mt101LoteService;
 import com.integrationhub.platform.service.payments.swift.Mt101QuarantineService;
 import com.integrationhub.platform.service.payments.swift.Mt101RebuildService;
@@ -39,15 +40,18 @@ public class Mt101QuarantineResource {
     private final Mt101RebuildService rebuildService;
     private final Mt101LoteService loteService;
     private final Mt101StagingCorrectionService correctionService;
+    private final Mt101CorrectiveLifecycleService correctiveLifecycleService;
 
     public Mt101QuarantineResource(Mt101QuarantineService service,
                                    Mt101RebuildService rebuildService,
                                    Mt101LoteService loteService,
-                                   Mt101StagingCorrectionService correctionService) {
+                                   Mt101StagingCorrectionService correctionService,
+                                   Mt101CorrectiveLifecycleService correctiveLifecycleService) {
         this.service = service;
         this.rebuildService = rebuildService;
         this.loteService = loteService;
         this.correctionService = correctionService;
+        this.correctiveLifecycleService = correctiveLifecycleService;
     }
 
     /**
@@ -200,6 +204,51 @@ public class Mt101QuarantineResource {
                                                             @Context SecurityContext securityContext) {
         try {
             return rebuildService.executeApprovedRebuildRun(connectionRef, rebuildRunId, actor(securityContext));
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /** B2': avanza el correctivo BUILT -> VALIDATED -> ARCHIVED (sin enviar; no mueve dinero). */
+    @POST
+    @Path("/rebuild-runs/advance-corrective")
+    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    public Mt101CorrectiveLifecycleService.CorrectiveLifecycleResult advanceCorrective(
+            @QueryParam("connectionRef") String connectionRef,
+            @QueryParam("rebuildRunId") String rebuildRunId,
+            @Context SecurityContext securityContext) {
+        try {
+            return correctiveLifecycleService.advanceCorrective(connectionRef, rebuildRunId, actor(securityContext));
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /** B2': el maker solicita el envio (PAY) del correctivo, que ya esta ARCHIVED. */
+    @POST
+    @Path("/rebuild-runs/request-pay")
+    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    public Mt101CorrectiveLifecycleService.CorrectiveLifecycleResult requestCorrectivePay(
+            @QueryParam("connectionRef") String connectionRef,
+            @QueryParam("rebuildRunId") String rebuildRunId,
+            @Context SecurityContext securityContext) {
+        try {
+            return correctiveLifecycleService.requestCorrectivePay(connectionRef, rebuildRunId, actor(securityContext));
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /** B2': el checker (distinto del maker) aprueba y ejecuta el envio del correctivo (PAY real). */
+    @POST
+    @Path("/rebuild-runs/approve-pay")
+    @RolesAllowed({"platform-admin", "integration-admin"})
+    public Mt101CorrectiveLifecycleService.CorrectiveLifecycleResult approveCorrectivePay(
+            @QueryParam("connectionRef") String connectionRef,
+            @QueryParam("rebuildRunId") String rebuildRunId,
+            @Context SecurityContext securityContext) {
+        try {
+            return correctiveLifecycleService.approveAndPayCorrective(connectionRef, rebuildRunId, actor(securityContext));
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }
