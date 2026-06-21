@@ -13,6 +13,7 @@
 .q__confirm-title { font-weight:600; color:var(--ih-status-error); display:flex; align-items:center; gap:.4rem; }
 .q__confirm-list { margin:0; padding-left:1.1rem; display:flex; flex-direction:column; gap:.2rem; font-size:.86rem; }
 .q__confirm-list .q__muted { color:var(--ih-text-soft); list-style:none; margin-left:-1.1rem; }
+.q__muted { color:var(--ih-text-soft); font-size:.78rem; }
 .q__table { overflow:auto; border:1px solid var(--ih-border,#354052); border-radius:8px; }
 table { width:100%; border-collapse:collapse; min-width:60rem; }
 th, td { padding:.55rem .65rem; border-bottom:1px solid var(--ih-border,#354052); text-align:left; vertical-align:top; }

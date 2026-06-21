@@ -67,6 +67,7 @@ class Mt101BuildFromTableTaskProviderTest {
                     + "task_definition_id bigint,"
                     + "record_index integer,"
                     + "source_file_hash varchar(64),"
+                    + "source_name varchar(255),"
                     + "payload_json text not null)");
             statement.executeUpdate("create table mt101_build_fragment ("
                     + "id bigserial primary key,"
@@ -100,6 +101,8 @@ class Mt101BuildFromTableTaskProviderTest {
                     + "source_file_hash varchar(64),"
                     + "source_record_number bigint not null,"
                     + "staging_id bigint,"
+                    + "source_task_definition_id bigint,"
+                    + "source_name varchar(255),"
                     + "original_senders_reference varchar(16),"
                     + "original_transaction_reference varchar(35),"
                     + "current_senders_reference varchar(16),"

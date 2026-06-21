@@ -101,14 +101,18 @@ public class Mt101ReprocessResource {
                                                  @QueryParam("fragmentSetId") String fragmentSetId,
                                                  @QueryParam("sourceFileHash") String sourceFileHash,
                                                  @QueryParam("recordNumber") Long recordNumber,
+                                                 @QueryParam("stagingId") Long stagingId,
                                                  @QueryParam("reason") String reason,
                                                  @QueryParam("ticketRef") String ticketRef,
                                                  @Context SecurityContext securityContext) {
         if (recordNumber == null) {
             throw new BadRequestException("recordNumber is required");
         }
+        if (stagingId == null) {
+            throw new BadRequestException("stagingId is required");
+        }
         try {
-            var affected = service.reopenRejectedRebuild(connectionRef, fragmentSetId, sourceFileHash, recordNumber,
+            var affected = service.reopenRejectedRebuild(connectionRef, fragmentSetId, sourceFileHash, recordNumber, stagingId,
                     actor(securityContext), reason, ticketRef);
             return new Mt101ReprocessResponse(fragmentSetId, "REBUILD_REJECTED", "QUARANTINED", affected);
         } catch (IllegalArgumentException error) {

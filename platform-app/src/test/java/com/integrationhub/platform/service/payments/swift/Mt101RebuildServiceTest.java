@@ -261,12 +261,13 @@ class Mt101RebuildServiceTest {
         try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement(
                      "insert into mt101_failed_record (fragment_set_id, senders_reference, transaction_reference, "
-                             + "source_file_hash, source_record_number, rule_code, status) "
-                             + "values ('SET', ?, ?, 'hashA', ?, ?, 'QUARANTINED')")) {
+                             + "source_file_hash, source_record_number, staging_id, rule_code, status) "
+                             + "values ('SET', ?, ?, 'hashA', ?, ?, ?, 'QUARANTINED')")) {
             statement.setString(1, sendersReference);
             statement.setString(2, transactionReference);
             statement.setLong(3, sourceRecordNumber);
-            statement.setString(4, ruleCode);
+            statement.setLong(4, 10_000L + sourceRecordNumber);
+            statement.setString(5, ruleCode);
             statement.executeUpdate();
         }
     }
@@ -280,6 +281,7 @@ class Mt101RebuildServiceTest {
             var fragmentId = insertCorrectiveFragment(connection, correctiveSetId);
             try (var select = connection.prepareStatement("""
                          select source_file_hash, source_record_number, staging_id,
+                                source_task_definition_id, source_name,
                                 original_senders_reference, original_transaction_reference
                            from mt101_rebuild_selection
                           where rebuild_run_id = ?
@@ -288,9 +290,10 @@ class Mt101RebuildServiceTest {
                  var insert = connection.prepareStatement("""
                          insert into mt101_fragment_record
                          (fragment_id, fragment_set_id, original_fragment_set_id, source_file_hash, source_record_number, staging_id,
+                          source_task_definition_id, source_name,
                           original_senders_reference, original_transaction_reference,
                           current_senders_reference, current_transaction_reference, rebuild_run_id)
-                         values (?, ?, 'SET', ?, ?, ?, ?, ?, 'RTEST1', ?, ?)
+                         values (?, ?, 'SET', ?, ?, ?, ?, ?, ?, ?, 'RTEST1', ?, ?)
                     """)) {
                 select.setString(1, rebuildRunId);
                 try (var rs = select.executeQuery()) {
@@ -300,10 +303,17 @@ class Mt101RebuildServiceTest {
                         insert.setString(3, rs.getString("source_file_hash"));
                         insert.setLong(4, rs.getLong("source_record_number"));
                         insert.setLong(5, rs.getLong("staging_id"));
-                        insert.setString(6, rs.getString("original_senders_reference"));
-                        insert.setString(7, rs.getString("original_transaction_reference"));
-                        insert.setString(8, "C" + rs.getLong("source_record_number"));
-                        insert.setString(9, rebuildRunId);
+                        var sourceTask = rs.getObject("source_task_definition_id");
+                        if (sourceTask == null) {
+                            insert.setNull(6, java.sql.Types.BIGINT);
+                        } else {
+                            insert.setLong(6, rs.getLong("source_task_definition_id"));
+                        }
+                        insert.setString(7, rs.getString("source_name"));
+                        insert.setString(8, rs.getString("original_senders_reference"));
+                        insert.setString(9, rs.getString("original_transaction_reference"));
+                        insert.setString(10, "C" + rs.getLong("source_record_number"));
+                        insert.setString(11, rebuildRunId);
                         insert.addBatch();
                     }
                 }
@@ -465,6 +475,11 @@ class Mt101RebuildServiceTest {
                     + "selected_rows bigint not null default 0,"
                     + "affected_fragments integer not null default 0,"
                     + "error_message text, reference_code varchar(12), connection_ref varchar(120),"
+                    + "pay_status varchar(30) not null default 'NOT_REQUESTED',"
+                    + "pay_requested_by varchar(120), pay_requested_at timestamp,"
+                    + "pay_approved_by varchar(120), pay_approved_at timestamp,"
+                    + "pay_claimed_by varchar(120), pay_claimed_at timestamp,"
+                    + "pay_completed_at timestamp, pay_error_message text,"
                     + "created_at timestamp not null default current_timestamp,"
                     + "approved_at timestamp, executed_at timestamp, built_at timestamp, completed_at timestamp,"
                     + "last_lifecycle_sync_at timestamp,"
@@ -479,13 +494,15 @@ class Mt101RebuildServiceTest {
                     + "staging_id bigint, source_task_definition_id bigint, source_name varchar(255),"
                     + "original_senders_reference varchar(16),"
                     + "original_transaction_reference varchar(35),"
+                    + "corrective_senders_reference varchar(16), corrective_transaction_reference varchar(35),"
                     + "status varchar(30) not null default 'SELECTED',"
+                    + "lifecycle_updated_at timestamp,"
                     + "created_at timestamp not null default current_timestamp)");
             statement.executeUpdate("alter table mt101_rebuild_selection "
                     + "add column if not exists selected_payload_hash varchar(64), "
                     + "add column if not exists selected_staging_version bigint");
             statement.executeUpdate("create unique index ux_mt101_rebuild_selection_row_r on mt101_rebuild_selection "
-                    + "(rebuild_run_id, coalesce(source_file_hash, ''), source_record_number)");
+                    + "(rebuild_run_id, coalesce(source_file_hash, ''), source_record_number, coalesce(staging_id, 0))");
             statement.executeUpdate("drop table if exists staging_record");
             statement.executeUpdate("create table staging_record ("
                     + "id bigserial primary key, task_definition_id bigint, source_name varchar(255),"
@@ -493,7 +510,8 @@ class Mt101RebuildServiceTest {
             statement.executeUpdate("create table mt101_failed_record ("
                     + "id bigserial primary key, fragment_set_id varchar(80) not null,"
                     + "senders_reference varchar(16), transaction_reference varchar(35), source_file_hash varchar(64),"
-                    + "source_record_number bigint, rule_code varchar(80), rule_set varchar(50), severity char(1),"
+                    + "source_record_number bigint, staging_id bigint, source_task_definition_id bigint, source_name varchar(255),"
+                    + "rule_code varchar(80), rule_set varchar(50), severity char(1),"
                     + "message text, status varchar(40) not null default 'QUARANTINED',"
                     + "created_at timestamp not null default current_timestamp, resolved_at timestamp)");
             statement.executeUpdate("drop table if exists mt101_archive");

@@ -27,7 +27,15 @@ public class ProcessTaskDefinitionCorrectiveConfigSource implements Mt101Correct
     @Transactional
     public Map<String, Object> taskConfig(long buildTaskDefinitionId, String taskType) {
         var buildTask = taskDefinitionRepository.findRequired(buildTaskDefinitionId);
-        var sibling = taskDefinitionRepository.findActiveByProcessAndType(buildTask.processDefinition, taskType);
-        return sibling == null ? null : jsonConfigurationMapper.toMap(sibling.configurationJson);
+        var siblings = taskDefinitionRepository.listActiveByProcessAndType(buildTask.processDefinition, taskType);
+        if (siblings.isEmpty()) {
+            return null;
+        }
+        if (siblings.size() > 1) {
+            throw new IllegalStateException("Process " + buildTask.processDefinition.id
+                    + " has " + siblings.size() + " active " + taskType
+                    + " tasks; corrective lifecycle requires an unambiguous task definition");
+        }
+        return jsonConfigurationMapper.toMap(siblings.get(0).configurationJson);
     }
 }

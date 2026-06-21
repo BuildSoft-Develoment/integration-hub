@@ -147,6 +147,7 @@ export class Mt101QuarantineComponent {
   // Flujo gobernado del rebuild (maker-checker): REQUESTED -> APPROVED -> ejecutado.
   // Solicitar no ejecuta; aprobar lo hace un usuario distinto; ejecutar genera el lote.
   readonly rebuildRun = signal<Mt101RebuildRunSummary | null>(null);
+  readonly rebuildRuns = signal<Mt101RebuildRunSummary[]>([]);
   private armTimer?: ReturnType<typeof setTimeout>;
 
   private arm(id: string, run: () => void): void {
@@ -206,7 +207,7 @@ export class Mt101QuarantineComponent {
   /** B1': reabre una fila REBUILD_REJECTED para corregir y reconstruir de nuevo. */
   reopenRejected(row: Mt101FailedRecord): void {
     const sourceFileHash = row.sourceFileHash?.trim();
-    if (row.sourceRecordNumber === null || !sourceFileHash) {
+    if (row.sourceRecordNumber === null || row.stagingId === null || !sourceFileHash) {
       return;
     }
     this.loading.set(true);
@@ -216,6 +217,7 @@ export class Mt101QuarantineComponent {
       fragmentSetId: this.fragmentSetId,
       sourceFileHash,
       recordNumber: row.sourceRecordNumber,
+      stagingId: row.stagingId,
       connectionRef: this.connectionRef,
       reason: this.correctionReason,
     }).subscribe({
@@ -265,7 +267,7 @@ export class Mt101QuarantineComponent {
     this.correctionVersion.set(null);
     this.correctingRow.set(row.id);
     const sourceFileHash = row.sourceFileHash?.trim();
-    if (row.sourceRecordNumber === null || !sourceFileHash) {
+    if (row.sourceRecordNumber === null || row.stagingId === null || !sourceFileHash) {
       return;
     }
     // Carga el payload actual + version: se edita sobre lo real y habilita el locking optimista.
@@ -273,6 +275,7 @@ export class Mt101QuarantineComponent {
       fragmentSetId: this.fragmentSetId,
       sourceFileHash,
       recordNumber: row.sourceRecordNumber,
+      stagingId: row.stagingId,
       connectionRef: this.connectionRef,
     }).subscribe({
       next: (view) => {
@@ -289,7 +292,7 @@ export class Mt101QuarantineComponent {
 
   saveCorrection(row: Mt101FailedRecord): void {
     const sourceFileHash = row.sourceFileHash?.trim();
-    if (row.sourceRecordNumber === null || !sourceFileHash || !this.correctionPayload.trim()) {
+    if (row.sourceRecordNumber === null || row.stagingId === null || !sourceFileHash || !this.correctionPayload.trim()) {
       return;
     }
     this.loading.set(true);
@@ -298,6 +301,7 @@ export class Mt101QuarantineComponent {
       fragmentSetId: this.fragmentSetId,
       sourceFileHash,
       recordNumber: row.sourceRecordNumber,
+      stagingId: row.stagingId,
       payload: this.correctionPayload,
       version: this.correctionVersion() ?? undefined,
       connectionRef: this.connectionRef,
@@ -326,7 +330,7 @@ export class Mt101QuarantineComponent {
       return;
     }
     const sourceFileHash = row.sourceFileHash?.trim();
-    if (row.sourceRecordNumber === null || !sourceFileHash) {
+    if (row.sourceRecordNumber === null || row.stagingId === null || !sourceFileHash) {
       return;
     }
     this.selectedRow.set(row.id);
@@ -337,6 +341,7 @@ export class Mt101QuarantineComponent {
       fragmentSetId: this.fragmentSetId,
       sourceFileHash,
       recordNumber: row.sourceRecordNumber,
+      stagingId: row.stagingId,
       connectionRef: this.connectionRef,
     }).subscribe({
       next: (entries) => {
@@ -390,6 +395,7 @@ export class Mt101QuarantineComponent {
     }).subscribe({
       next: (rows) => {
         this.rows.set(rows);
+        this.loadRebuildRuns();
         this.loading.set(false);
       },
       error: () => {
@@ -487,6 +493,10 @@ export class Mt101QuarantineComponent {
     this.correctiveRun.set(null);
   }
 
+  payStatusFor(rebuildRunId: string): string {
+    return this.rebuildRuns().find((run) => run.rebuildRunId === rebuildRunId)?.payStatus || 'NOT_REQUESTED';
+  }
+
   /** B2': avanza el correctivo BUILT -> VALIDATED -> ARCHIVED (no envía). */
   advanceCorrective(): void {
     const run = this.correctiveRun();
@@ -523,6 +533,7 @@ export class Mt101QuarantineComponent {
         this.correctiveRun.set(result);
         this.message.set(this.i18n.t('audit.quarantine.correctiveStatus', { status: result.status }));
         this.loading.set(false);
+        this.loadRebuildRuns();
         this.list(false);
       },
       error: (e) => {
@@ -539,5 +550,35 @@ export class Mt101QuarantineComponent {
       return httpError.error;
     }
     return this.i18n.t(fallbackKey);
+  }
+
+  private loadRebuildRuns(): void {
+    if (!this.fragmentSetId.trim()) {
+      return;
+    }
+    this.api.mt101RebuildRuns({
+      fragmentSetId: this.fragmentSetId,
+      connectionRef: this.connectionRef,
+      limit: 10,
+    }).subscribe({
+      next: (runs) => {
+        this.rebuildRuns.set(runs);
+        const governed = runs.find((run) => ['REQUESTED', 'APPROVED'].includes(run.status));
+        if (governed) {
+          this.rebuildRun.set(governed);
+          return;
+        }
+        const corrective = runs.find((run) =>
+          ['BUILT', 'VALIDATED', 'ARCHIVED', 'SENT', 'PARTIALLY_FAILED', 'CONFIRMED'].includes(run.status));
+        if (corrective) {
+          this.correctiveRun.set({
+            rebuildRunId: corrective.rebuildRunId,
+            correctiveSetId: corrective.correctiveSetId,
+            status: corrective.status,
+          });
+        }
+      },
+      error: () => this.rebuildRuns.set([]),
+    });
   }
 }

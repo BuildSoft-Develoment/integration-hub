@@ -87,6 +87,7 @@
           <ul class="q__confirm-list">
             <li>{{ i18n.t('audit.quarantine.runImpact', { rows: run.selectedRows, fragments: run.affectedFragments }) }}</li>
             <li>{{ i18n.t('audit.quarantine.confirmSet', { set: run.correctiveSetId }) }}</li>
+            <li class="q__muted">PAY: {{ run.payStatus || 'NOT_REQUESTED' }}</li>
             <li class="q__muted">{{ i18n.t('audit.quarantine.runMakerChecker') }}</li>
           </ul>
           @if (run.status === 'REQUESTED') {
@@ -113,14 +114,15 @@
           <ul>
             <li>{{ i18n.t('audit.quarantine.confirmSet', { set: corr.correctiveSetId }) }}</li>
             <li><span class="q__status--{{ corr.status }}">{{ corr.status }}</span></li>
+            <li class="q__muted">PAY: {{ payStatusFor(corr.rebuildRunId) }}</li>
           </ul>
           <div class="q__actions">
             @if (corr.status === 'BUILT' || corr.status === 'VALIDATED') {
               <button mat-flat-button color="primary" type="button" (click)="advanceCorrective()" [disabled]="loading()">{{ i18n.t('audit.quarantine.correctiveAdvance') }}</button>
             }
             @if (corr.status === 'ARCHIVED') {
-              <button mat-stroked-button type="button" (click)="requestCorrectivePay()" [disabled]="loading()">{{ i18n.t('audit.quarantine.correctiveRequestPay') }}</button>
-              <button mat-flat-button color="warn" type="button" (click)="approveCorrectivePay()" [disabled]="loading()">{{ i18n.t('audit.quarantine.correctiveApprovePay') }}</button>
+              <button mat-stroked-button type="button" (click)="requestCorrectivePay()" [disabled]="loading() || payStatusFor(corr.rebuildRunId) !== 'NOT_REQUESTED'">{{ i18n.t('audit.quarantine.correctiveRequestPay') }}</button>
+              <button mat-flat-button color="warn" type="button" (click)="approveCorrectivePay()" [disabled]="loading() || payStatusFor(corr.rebuildRunId) !== 'REQUESTED'">{{ i18n.t('audit.quarantine.correctiveApprovePay') }}</button>
             }
             <button mat-stroked-button type="button" (click)="dismissCorrective()" [disabled]="loading()">{{ i18n.t('audit.common.cancel') }}</button>
           </div>
@@ -167,7 +169,10 @@
             <tbody>
               @for (row of rows(); track row.id) {
                 <tr>
-                  <td class="q__row">{{ row.sourceRecordNumber ?? '—' }}</td>
+                  <td class="q__row">
+                    {{ row.sourceRecordNumber ?? '—' }}
+                    @if (row.stagingId !== null) { <small class="q__muted">#{{ row.stagingId }}</small> }
+                  </td>
                   <td class="q__mono">{{ row.sendersReference || '—' }}</td>
                   <td class="q__mono">{{ row.transactionReference || '—' }}</td>
                   <td class="q__mono">{{ row.ruleCode || '—' }}</td>
@@ -181,7 +186,7 @@
                   </td>
                   <td class="q__status--{{ row.status }}">{{ row.status }}</td>
                   <td>
-                    @if (row.sourceRecordNumber !== null && row.sourceFileHash) {
+                    @if (row.sourceRecordNumber !== null && row.stagingId !== null && row.sourceFileHash) {
                       <button mat-button type="button" (click)="toggleTimeline(row)">
                         {{ selectedRow() === row.id ? i18n.t('audit.quarantine.hide') : i18n.t('audit.quarantine.timeline') }}
                       </button>

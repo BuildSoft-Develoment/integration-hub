@@ -155,9 +155,17 @@ class Mt101LargeVolumeLineageRebuildTest {
                  var record = connection.prepareStatement("""
                          insert into mt101_fragment_record
                          (fragment_id, fragment_set_id, source_file_hash, source_record_number, staging_id,
+                          source_task_definition_id, source_name,
                           original_senders_reference, original_transaction_reference,
                           current_senders_reference, current_transaction_reference, status)
-                         values (?, ?, ?, ?, ?, ?, ?, ?, ?, 'BUILT')
+                         values (?, ?, ?, ?, ?, 20, 'payments-large.csv', ?, ?, ?, ?, 'BUILT')
+                    """);
+                 var staging = connection.prepareStatement("""
+                         insert into staging_record
+                         (id, process_execution_id, task_definition_id, source_name, source_file_hash,
+                          record_index, payload_json)
+                         values (?, 100, 20, 'payments-large.csv', ?, ?, ?)
+                         on conflict do nothing
                     """);
                  var issue = connection.prepareStatement("""
                          insert into mt101_validation_issue
@@ -199,11 +207,20 @@ class Mt101LargeVolumeLineageRebuildTest {
                     record.setString(8, reference);
                     record.setString(9, "TX-" + row);
                     record.addBatch();
+                    if (affected.contains(reference)) {
+                        staging.setLong(1, 1_000_000L + row);
+                        staging.setString(2, HASH);
+                        staging.setLong(3, row - 1);
+                        staging.setString(4, "{\"recordNumber\":" + row + "}");
+                        staging.addBatch();
+                    }
                     if (row % 1000 == 0) {
                         record.executeBatch();
+                        staging.executeBatch();
                     }
                 }
                 record.executeBatch();
+                staging.executeBatch();
 
                 for (var row : BAD_ROWS) {
                     issue.setString(1, "STRUCT.BAD." + row);
@@ -248,6 +265,7 @@ class Mt101LargeVolumeLineageRebuildTest {
             var fragmentId = insertCorrectiveFragment(connection, correctiveSetId);
             try (var select = connection.prepareStatement("""
                          select source_file_hash, source_record_number, staging_id,
+                                source_task_definition_id, source_name,
                                 original_senders_reference, original_transaction_reference
                            from mt101_rebuild_selection
                           where rebuild_run_id = ?
@@ -256,9 +274,10 @@ class Mt101LargeVolumeLineageRebuildTest {
                  var insert = connection.prepareStatement("""
                          insert into mt101_fragment_record
                          (fragment_id, fragment_set_id, original_fragment_set_id, source_file_hash, source_record_number, staging_id,
+                          source_task_definition_id, source_name,
                           original_senders_reference, original_transaction_reference,
                           current_senders_reference, current_transaction_reference, rebuild_run_id)
-                         values (?, ?, ?, ?, ?, ?, ?, ?, 'RFIX1', ?, ?)
+                         values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'RFIX1', ?, ?)
                     """)) {
                 select.setString(1, rebuildRunId);
                 try (var rs = select.executeQuery()) {
@@ -270,10 +289,17 @@ class Mt101LargeVolumeLineageRebuildTest {
                         insert.setString(4, rs.getString("source_file_hash"));
                         insert.setLong(5, row);
                         insert.setLong(6, rs.getLong("staging_id"));
-                        insert.setString(7, rs.getString("original_senders_reference"));
-                        insert.setString(8, rs.getString("original_transaction_reference"));
-                        insert.setString(9, "C" + row);
-                        insert.setString(10, rebuildRunId);
+                        var taskDefinitionId = rs.getLong("source_task_definition_id");
+                        if (rs.wasNull()) {
+                            insert.setNull(7, java.sql.Types.BIGINT);
+                        } else {
+                            insert.setLong(7, taskDefinitionId);
+                        }
+                        insert.setString(8, rs.getString("source_name"));
+                        insert.setString(9, rs.getString("original_senders_reference"));
+                        insert.setString(10, rs.getString("original_transaction_reference"));
+                        insert.setString(11, "C" + row);
+                        insert.setString(12, rebuildRunId);
                         insert.addBatch();
                     }
                 }
@@ -350,6 +376,7 @@ class Mt101LargeVolumeLineageRebuildTest {
             statement.executeUpdate("drop table if exists mt101_validation_issue");
             statement.executeUpdate("drop table if exists mt101_fragment_record");
             statement.executeUpdate("drop table if exists mt101_build_fragment");
+            statement.executeUpdate("drop table if exists staging_record");
             statement.executeUpdate("create table mt101_build_fragment ("
                     + "id bigint primary key, fragment_set_id varchar(80) not null,"
                     + "process_execution_id bigint, task_definition_id bigint, source_table varchar(255),"
@@ -380,7 +407,7 @@ class Mt101LargeVolumeLineageRebuildTest {
                     + "status varchar(30) not null default 'BUILT',"
                     + "created_at timestamp not null default current_timestamp)");
             statement.executeUpdate("create unique index ux_mt101_fragment_record_current_large on mt101_fragment_record "
-                    + "(fragment_set_id, coalesce(source_file_hash, ''), source_record_number)");
+                    + "(fragment_set_id, coalesce(source_file_hash, ''), source_record_number, coalesce(staging_id, 0))");
             statement.executeUpdate("create table mt101_validation_issue ("
                     + "id bigserial primary key, archive_id bigint, transaction_id bigint,"
                     + "rule_code varchar(80) not null, rule_set varchar(50) not null, severity char(1) not null,"
@@ -390,12 +417,13 @@ class Mt101LargeVolumeLineageRebuildTest {
             statement.executeUpdate("create table mt101_failed_record ("
                     + "id bigserial primary key, fragment_set_id varchar(80) not null,"
                     + "senders_reference varchar(16), transaction_reference varchar(35), source_file_hash varchar(64),"
-                    + "source_record_number bigint, rule_code varchar(80), rule_set varchar(50), severity char(1),"
+                    + "source_record_number bigint, staging_id bigint, source_task_definition_id bigint,"
+                    + "source_name varchar(255), rule_code varchar(80), rule_set varchar(50), severity char(1),"
                     + "message text, status varchar(40) not null default 'QUARANTINED',"
                     + "created_at timestamp not null default current_timestamp, resolved_at timestamp)");
             statement.executeUpdate("create unique index ux_mt101_failed_dedup_large on mt101_failed_record "
                     + "(fragment_set_id, coalesce(senders_reference, ''), "
-                    + " coalesce(transaction_reference, ''), coalesce(rule_code, ''))");
+                    + " coalesce(transaction_reference, ''), coalesce(rule_code, ''), coalesce(staging_id, 0))");
             statement.executeUpdate("create table mt101_rebuild_run ("
                     + "rebuild_run_id varchar(80) primary key,"
                     + "original_fragment_set_id varchar(80) not null,"
@@ -406,6 +434,11 @@ class Mt101LargeVolumeLineageRebuildTest {
                     + "selected_rows bigint not null default 0,"
                     + "affected_fragments integer not null default 0,"
                     + "error_message text, reference_code varchar(12), connection_ref varchar(120),"
+                    + "pay_status varchar(30) not null default 'NOT_REQUESTED',"
+                    + "pay_requested_by varchar(120), pay_requested_at timestamp,"
+                    + "pay_approved_by varchar(120), pay_approved_at timestamp,"
+                    + "pay_claimed_by varchar(120), pay_claimed_at timestamp,"
+                    + "pay_completed_at timestamp, pay_error_message text,"
                     + "created_at timestamp not null default current_timestamp,"
                     + "approved_at timestamp, executed_at timestamp, built_at timestamp, completed_at timestamp,"
                     + "last_lifecycle_sync_at timestamp,"
@@ -420,14 +453,17 @@ class Mt101LargeVolumeLineageRebuildTest {
                     + "staging_id bigint, source_task_definition_id bigint, source_name varchar(255),"
                     + "original_senders_reference varchar(16),"
                     + "original_transaction_reference varchar(35),"
+                    + "corrective_senders_reference varchar(16),"
+                    + "corrective_transaction_reference varchar(35),"
                     + "status varchar(30) not null default 'SELECTED',"
                     + "selected_payload_hash varchar(64), selected_staging_version bigint,"
-                    + "created_at timestamp not null default current_timestamp)");
+                    + "created_at timestamp not null default current_timestamp,"
+                    + "lifecycle_updated_at timestamp)");
             statement.executeUpdate("create unique index ux_mt101_rebuild_selection_row_large on mt101_rebuild_selection "
-                    + "(rebuild_run_id, coalesce(source_file_hash, ''), source_record_number)");
-            statement.executeUpdate("drop table if exists staging_record");
+                    + "(rebuild_run_id, coalesce(source_file_hash, ''), source_record_number, coalesce(staging_id, 0))");
             statement.executeUpdate("create table staging_record ("
-                    + "id bigserial primary key, task_definition_id bigint, source_name varchar(255),"
+                    + "id bigint primary key, process_execution_id bigint, task_definition_id bigint,"
+                    + "source_name varchar(255), source_file_hash varchar(64), record_index bigint,"
                     + "payload_json text, version bigint not null default 0)");
         }
     }

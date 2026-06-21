@@ -99,11 +99,11 @@ public class Mt101QuarantineService {
                     afterId = issue.id() == null ? afterId : issue.id();
                     var lineage = lineage(issue, lineageByTransaction);
                     if (lineage == null || lineage.sourceFileHash() == null || lineage.sourceFileHash().isBlank()
-                            || lineage.sourceRecordNumber() == null) {
+                            || lineage.sourceRecordNumber() == null || lineage.stagingId() == null) {
                         throw new IllegalArgumentException("cannot quarantine MT101 issue "
                                 + (issue.id() == null ? "<unknown>" : issue.id())
                                 + " in set " + set
-                                + "; exact mt101_fragment_record lineage by :20:/:21: is required");
+                                + "; exact mt101_fragment_record lineage with staging_id by :20:/:21: is required");
                     }
                     rows.add(new Mt101FailedRecordRepository.FailedRecordRow(
                             set,
@@ -111,6 +111,9 @@ public class Mt101QuarantineService {
                             issue.transactionReference(),
                             lineage.sourceFileHash(),
                             lineage.sourceRecordNumber(),
+                            lineage.stagingId(),
+                            lineage.sourceTaskDefinitionId(),
+                            lineage.sourceName(),
                             issue.ruleCode(),
                             issue.ruleSet(),
                             issue.severity(),

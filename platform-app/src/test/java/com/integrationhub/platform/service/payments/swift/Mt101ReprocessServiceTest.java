@@ -34,6 +34,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Testcontainers
 class Mt101ReprocessServiceTest {
 
+    private static final long REJECTED_STAGING_ID = 18472L;
+
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("mt101_reprocess")
@@ -168,11 +170,12 @@ class Mt101ReprocessServiceTest {
         try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement(
                      "insert into mt101_failed_record (fragment_set_id, senders_reference, source_file_hash, "
-                             + "source_record_number, rule_code, status) values ('SET', 'P2', 'hashA', 8472, 'STRUCT.X', 'REBUILD_REJECTED')")) {
+                             + "source_record_number, staging_id, rule_code, status) values ('SET', 'P2', 'hashA', 8472, ?, 'STRUCT.X', 'REBUILD_REJECTED')")) {
+            statement.setLong(1, REJECTED_STAGING_ID);
             statement.executeUpdate();
         }
 
-        var reopened = service.reopenRejectedRebuild(null, "SET", "hashA", 8472, "ana", "INC-9", "OPS-9");
+        var reopened = service.reopenRejectedRebuild(null, "SET", "hashA", 8472, REJECTED_STAGING_ID, "ana", "INC-9", "OPS-9");
 
         assertEquals(1, reopened);
         assertEquals("QUARANTINED", failedStatus(8472), "la fila rechazada vuelve a cuarentena");
@@ -183,7 +186,7 @@ class Mt101ReprocessServiceTest {
     void reopenFailsWhenNoRejectedRow() {
         // Sin fallback: reabrir una fila que no esta REBUILD_REJECTED es un error accionable.
         var error = assertThrows(IllegalArgumentException.class,
-                () -> service.reopenRejectedRebuild(null, "SET", "hashA", 999, "ana", null, null));
+                () -> service.reopenRejectedRebuild(null, "SET", "hashA", 999, 1999, "ana", null, null));
         assertTrue(error.getMessage().contains("no REBUILD_REJECTED row"));
     }
 
@@ -323,7 +326,7 @@ class Mt101ReprocessServiceTest {
             statement.executeUpdate("create table mt101_failed_record ("
                     + "id bigserial primary key, fragment_set_id varchar(80) not null,"
                     + "senders_reference varchar(16), transaction_reference varchar(35), source_file_hash varchar(64),"
-                    + "source_record_number bigint, rule_code varchar(80), status varchar(40) not null default 'QUARANTINED',"
+                    + "source_record_number bigint, staging_id bigint, rule_code varchar(80), status varchar(40) not null default 'QUARANTINED',"
                     + "created_at timestamp not null default current_timestamp, resolved_at timestamp)");
         }
     }

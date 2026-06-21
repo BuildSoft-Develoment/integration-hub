@@ -81,12 +81,16 @@ public class Mt101FragmentLookupResource {
     public List<Mt101RowTimelineService.Milestone> rowTimeline(@QueryParam("connectionRef") String connectionRef,
                                                                @QueryParam("fragmentSetId") String fragmentSetId,
                                                                @QueryParam("sourceFileHash") String sourceFileHash,
-                                                               @QueryParam("recordNumber") Long recordNumber) {
+                                                               @QueryParam("recordNumber") Long recordNumber,
+                                                               @QueryParam("stagingId") Long stagingId) {
         if (recordNumber == null) {
             throw new BadRequestException("recordNumber is required");
         }
+        if (stagingId == null) {
+            throw new BadRequestException("stagingId is required");
+        }
         try {
-            return rowTimelineService.rowTimeline(connectionRef, fragmentSetId, sourceFileHash, recordNumber);
+            return rowTimelineService.rowTimeline(connectionRef, fragmentSetId, sourceFileHash, recordNumber, stagingId);
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }

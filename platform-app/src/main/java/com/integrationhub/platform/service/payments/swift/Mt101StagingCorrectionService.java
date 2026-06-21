@@ -92,32 +92,17 @@ public class Mt101StagingCorrectionService {
                                        String fragmentSetId,
                                        String sourceFileHash,
                                        long recordNumber,
-                                       String patchJson) {
-        return correctRow(connectionRef, fragmentSetId, sourceFileHash, recordNumber, patchJson, null, null);
-    }
-
-    public CorrectionResult correctRow(String connectionRef, String fragmentSetId, String sourceFileHash, long recordNumber,
-                                       String patchJson, String correctedBy) {
-        return correctRow(connectionRef, fragmentSetId, sourceFileHash, recordNumber, patchJson, correctedBy, null);
-    }
-
-    public CorrectionResult correctRow(String connectionRef, String fragmentSetId, String sourceFileHash, long recordNumber,
-                                       String patchJson, String correctedBy, Long expectedVersion) {
-        return correctRow(connectionRef, fragmentSetId, sourceFileHash, recordNumber, patchJson,
-                correctedBy, expectedVersion, null, null);
-    }
-
-    public CorrectionResult correctRow(String connectionRef, String fragmentSetId, String sourceFileHash, long recordNumber,
+                                       long stagingId,
                                        String patchJson, String correctedBy, Long expectedVersion,
                                        String correctionReason, String ticketRef) {
-        var hash = validateInputs(fragmentSetId, sourceFileHash, recordNumber);
+        var hash = validateInputs(fragmentSetId, sourceFileHash, recordNumber, stagingId);
         if (patchJson == null || patchJson.isBlank()) {
             throw new IllegalArgumentException("payload patch is required");
         }
         var set = fragmentSetId.trim();
         var dataSource = resolveDataSource(connectionRef);
         try {
-            var row = resolve(dataSource, set, hash, recordNumber);
+            var row = resolve(dataSource, set, hash, recordNumber, stagingId);
             try (var connection = dataSource.getConnection()) {
                 var previousAutoCommit = connection.getAutoCommit();
                 connection.setAutoCommit(false);
@@ -125,13 +110,12 @@ public class Mt101StagingCorrectionService {
                     // B2: si la fila esta en un rebuild APPROVED/BUILDING, sus datos ya fueron
                     // congelados por el checker. No se admite corregirla hasta cerrar/invalidar
                     // ese run, para no romper la segregacion maker-checker.
-                    if (rebuildRepository.isRowLockedByActiveRun(connection, set, row.sourceFileHash(), recordNumber)) {
+                    if (rebuildRepository.isRowLockedByActiveRun(connection, set, row.sourceFileHash(), recordNumber, row.stagingId())) {
                         throw new RowLockedForRebuildException(recordNumber, set);
                     }
-                    var current = stagingRepository.findStagingPayload(
-                            connection, row.processExecutionId(), row.recordIndex(), row.sourceFileHash());
+                    var current = stagingRepository.findStagingPayloadById(connection, row.stagingId());
                     if (current == null) {
-                        throw new IllegalArgumentException("no staging row at file row " + recordNumber
+                        throw new IllegalArgumentException("no staging row " + row.stagingId()
                                 + " for set " + set + " and source file " + sourceFileHash);
                     }
                     // Locking optimista: si el cliente trae la version que leyo (If-Match) y ya
@@ -146,8 +130,8 @@ public class Mt101StagingCorrectionService {
                     var after = mergePatch(before, patch);
                     var newPayload = jsonConfigurationMapper.toJson(after);
                     var changedFields = changedFields(before, after);
-                    var updated = stagingRepository.updatePayload(
-                            connection, row.processExecutionId(), row.recordIndex(), row.sourceFileHash(), newPayload, checkVersion);
+                    var updated = stagingRepository.updatePayloadById(
+                            connection, row.stagingId(), newPayload, checkVersion);
                     if (updated == 0) {
                         throw new StaleStagingRowException(recordNumber, checkVersion, current.version());
                     }
@@ -157,7 +141,7 @@ public class Mt101StagingCorrectionService {
                             row.sourceFileHash(),
                             recordNumber,
                             row.recordIndex(),
-                            current.id(),
+                            row.stagingId(),
                             sha256Hex(current.payloadJson() == null ? "" : current.payloadJson()),
                             sha256Hex(newPayload == null ? "" : newPayload),
                             String.join(",", changedFields),
@@ -187,19 +171,20 @@ public class Mt101StagingCorrectionService {
     }
 
     /** Payload actual + version de una fila en cuarentena, para cargar antes de corregir (ETag/If-Match). */
-    public StagingRowView readRow(String connectionRef, String fragmentSetId, String sourceFileHash, long recordNumber) {
-        var hash = validateInputs(fragmentSetId, sourceFileHash, recordNumber);
+    public StagingRowView readRow(String connectionRef, String fragmentSetId, String sourceFileHash, long recordNumber,
+                                  long stagingId) {
+        var hash = validateInputs(fragmentSetId, sourceFileHash, recordNumber, stagingId);
         var set = fragmentSetId.trim();
         var dataSource = resolveDataSource(connectionRef);
         try {
-            var row = resolve(dataSource, set, hash, recordNumber);
-            return new StagingRowView(set, hash, recordNumber, row.current().payloadJson(), row.current().version());
+            var row = resolve(dataSource, set, hash, recordNumber, stagingId);
+            return new StagingRowView(set, hash, recordNumber, row.stagingId(), row.current().payloadJson(), row.current().version());
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot read staging row " + recordNumber + " for set " + set, error);
         }
     }
 
-    private String validateInputs(String fragmentSetId, String sourceFileHash, long recordNumber) {
+    private String validateInputs(String fragmentSetId, String sourceFileHash, long recordNumber, long stagingId) {
         if (fragmentSetId == null || fragmentSetId.isBlank()) {
             throw new IllegalArgumentException("fragmentSetId is required");
         }
@@ -209,12 +194,17 @@ public class Mt101StagingCorrectionService {
         if (recordNumber < 1) {
             throw new IllegalArgumentException("recordNumber must be positive");
         }
+        if (stagingId < 1) {
+            throw new IllegalArgumentException("stagingId must be positive");
+        }
         return sourceFileHash.trim();
     }
 
     /** Resuelve y valida que la fila pertenezca al set/fragmento REJECTED y exista en staging. */
-    private ResolvedRow resolve(DataSource dataSource, String set, String sourceFileHash, long recordNumber) throws SQLException {
-        var failedRows = failedRecordRepository.findBySourceRow(dataSource, set, sourceFileHash, recordNumber, QUARANTINED, 1);
+    private ResolvedRow resolve(DataSource dataSource, String set, String sourceFileHash, long recordNumber,
+                                long stagingId) throws SQLException {
+        var failedRows = failedRecordRepository.findBySourceRow(dataSource, set, sourceFileHash, recordNumber,
+                stagingId, QUARANTINED, 1);
         if (failedRows.isEmpty()) {
             throw new IllegalArgumentException("no quarantined row at source file " + sourceFileHash
                     + " row " + recordNumber + " for set " + set);
@@ -231,27 +221,26 @@ public class Mt101StagingCorrectionService {
                     + "; affected fragment " + failed.sendersReference()
                     + " must be REJECTED but is " + (status == null ? "<missing>" : status));
         }
-        var fragments = fragmentRepository.findBySourceRecord(
-                dataSource, recordNumber, sourceFileHash, null, null, set, 10);
-        var fragment = fragments.stream()
-                .filter(row -> failed.sendersReference().equals(row.sendersReference()))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("row " + recordNumber
-                        + " does not belong to fragment " + failed.sendersReference() + " in set " + set));
+        var fragment = fragmentRepository.findBySourceIdentity(
+                dataSource, set, sourceFileHash, recordNumber, stagingId, failed.sendersReference());
+        if (fragment == null) {
+            throw new IllegalArgumentException("row " + recordNumber + " stagingId " + stagingId
+                    + " does not belong to fragment " + failed.sendersReference() + " in set " + set);
+        }
         if (fragment.processExecutionId() == null) {
             throw new IllegalArgumentException("cannot resolve execution for fragment set " + set);
         }
-        var recordIndex = recordNumber - 1;
-        var current = stagingRepository.findStagingPayload(
-                dataSource, fragment.processExecutionId(), recordIndex, sourceFileHash);
-        if (current == null) {
-            throw new IllegalArgumentException("no staging row at file row " + recordNumber
-                    + " for set " + set + " and source file " + sourceFileHash);
+        try (var connection = dataSource.getConnection()) {
+            var current = stagingRepository.findStagingPayloadById(connection, stagingId);
+            if (current == null) {
+                throw new IllegalArgumentException("no staging row " + stagingId
+                        + " for set " + set + " and source file " + sourceFileHash);
+            }
+            return new ResolvedRow(fragment.processExecutionId(), sourceFileHash, recordNumber - 1, stagingId, current);
         }
-        return new ResolvedRow(fragment.processExecutionId(), sourceFileHash, recordIndex, current);
     }
 
-    private record ResolvedRow(long processExecutionId, String sourceFileHash, long recordIndex,
+    private record ResolvedRow(long processExecutionId, String sourceFileHash, long recordIndex, long stagingId,
                                Mt101StagingRecordRepository.StagingPayload current) {
     }
 
@@ -367,7 +356,8 @@ public class Mt101StagingCorrectionService {
     public record CorrectionResult(String fragmentSetId, long recordNumber, int updated, long version) {
     }
 
-    public record StagingRowView(String fragmentSetId, String sourceFileHash, long recordNumber, String payloadJson, long version) {
+    public record StagingRowView(String fragmentSetId, String sourceFileHash, long recordNumber, long stagingId,
+                                 String payloadJson, long version) {
     }
 
     /** Conflicto de locking optimista: la fila cambio desde que el operador la leyo. */

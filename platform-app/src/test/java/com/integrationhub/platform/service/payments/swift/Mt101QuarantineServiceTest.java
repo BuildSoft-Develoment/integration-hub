@@ -155,12 +155,35 @@ class Mt101QuarantineServiceTest {
         assertTrue(rows.stream().anyMatch(r -> r.sourceRecordNumber() == 60L && "TX-3".equals(r.transactionReference())));
     }
 
-    private void insertFragment(String reference, String sourceFileHash, Map<String, Long> sourceRecords) {
+    private void insertFragment(String reference, String sourceFileHash, Map<String, Long> sourceRecords) throws SQLException {
+        var stagingIds = new java.util.LinkedHashMap<Long, Long>();
+        insertStagingRows(sourceFileHash, sourceRecords, stagingIds);
         fragmentStore.insertFragments(null, List.of(new Mt101FragmentStore.FragmentInsert(
                 "SET", 1L, 10L, "staging_record",
                 1L, 2L, 1L, 2L, sourceFileHash, sourceRecords,
-                Map.of(),
+                stagingIds,
                 1, 2, sampleMessage(reference))));
+    }
+
+    private void insertStagingRows(String sourceFileHash,
+                                   Map<String, Long> sourceRecords,
+                                   Map<Long, Long> stagingIds) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "insert into staging_record "
+                             + "(id, process_execution_id, task_definition_id, source_name, source_file_hash, record_index, payload_json) "
+                             + "values (?, 1, 10, ?, ?, ?, '{}') on conflict do nothing")) {
+            for (var sourceRecordNumber : sourceRecords.values()) {
+                var stagingId = 1_000_000L + sourceRecordNumber;
+                stagingIds.put(sourceRecordNumber, stagingId);
+                statement.setLong(1, stagingId);
+                statement.setString(2, "payments-" + sourceFileHash + ".csv");
+                statement.setString(3, sourceFileHash);
+                statement.setLong(4, sourceRecordNumber - 1);
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        }
     }
 
     private void insertIssue(String sendersReference, String transactionReference,
@@ -203,6 +226,7 @@ class Mt101QuarantineServiceTest {
             statement.executeUpdate("drop table if exists mt101_validation_issue");
             statement.executeUpdate("drop table if exists mt101_fragment_record");
             statement.executeUpdate("drop table if exists mt101_build_fragment");
+            statement.executeUpdate("drop table if exists staging_record");
             statement.executeUpdate("create table mt101_build_fragment ("
                     + "id bigserial primary key, fragment_set_id varchar(80) not null,"
                     + "process_execution_id bigint, task_definition_id bigint, source_table varchar(255),"
@@ -223,7 +247,7 @@ class Mt101QuarantineServiceTest {
                     + "original_fragment_set_id varchar(80),"
                     + "source_file_hash varchar(64),"
                     + "source_record_number bigint not null,"
-                    + "staging_id bigint,"
+                    + "staging_id bigint, source_task_definition_id bigint, source_name varchar(255),"
                     + "original_senders_reference varchar(16),"
                     + "original_transaction_reference varchar(35),"
                     + "current_senders_reference varchar(16),"
@@ -232,7 +256,7 @@ class Mt101QuarantineServiceTest {
                     + "status varchar(30) not null default 'BUILT',"
                     + "created_at timestamp not null default current_timestamp)");
             statement.executeUpdate("create unique index ux_mt101_fragment_record_current_q on mt101_fragment_record "
-                    + "(fragment_set_id, coalesce(source_file_hash, ''), source_record_number)");
+                    + "(fragment_set_id, coalesce(source_file_hash, ''), source_record_number, coalesce(staging_id, 0))");
             statement.executeUpdate("create table mt101_validation_issue ("
                     + "id bigserial primary key, archive_id bigint, transaction_id bigint,"
                     + "rule_code varchar(80) not null, rule_set varchar(50) not null, severity char(1) not null,"
@@ -242,12 +266,17 @@ class Mt101QuarantineServiceTest {
             statement.executeUpdate("create table mt101_failed_record ("
                     + "id bigserial primary key, fragment_set_id varchar(80) not null,"
                     + "senders_reference varchar(16), transaction_reference varchar(35), source_file_hash varchar(64),"
-                    + "source_record_number bigint, rule_code varchar(80), rule_set varchar(50), severity char(1),"
+                    + "source_record_number bigint, staging_id bigint, source_task_definition_id bigint,"
+                    + "source_name varchar(255), rule_code varchar(80), rule_set varchar(50), severity char(1),"
                     + "message text, status varchar(40) not null default 'QUARANTINED',"
                     + "created_at timestamp not null default current_timestamp, resolved_at timestamp)");
             statement.executeUpdate("create unique index ux_mt101_failed_dedup on mt101_failed_record "
                     + "(fragment_set_id, coalesce(senders_reference, ''), "
-                    + " coalesce(transaction_reference, ''), coalesce(rule_code, ''))");
+                    + " coalesce(transaction_reference, ''), coalesce(rule_code, ''), coalesce(staging_id, 0))");
+            statement.executeUpdate("create table staging_record ("
+                    + "id bigint primary key, process_execution_id bigint, task_definition_id bigint,"
+                    + "source_name varchar(255), source_file_hash varchar(64), record_index bigint,"
+                    + "payload_json text, version bigint not null default 0)");
         }
     }
 

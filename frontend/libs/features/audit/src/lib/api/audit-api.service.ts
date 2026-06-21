@@ -163,11 +163,13 @@ export class AuditApiService {
     fragmentSetId: string;
     sourceFileHash: string;
     recordNumber: number;
+    stagingId: number;
   }): Observable<Mt101RowTimelineEntry[]> {
     let httpParams = new HttpParams()
       .set('fragmentSetId', query.fragmentSetId)
       .set('sourceFileHash', query.sourceFileHash.trim())
-      .set('recordNumber', String(query.recordNumber));
+      .set('recordNumber', String(query.recordNumber))
+      .set('stagingId', String(query.stagingId));
     if (query.connectionRef?.trim()) {
       httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }
@@ -301,15 +303,17 @@ export class AuditApiService {
     fragmentSetId: string;
     sourceFileHash: string;
     recordNumber: number;
-  }): Observable<{ fragmentSetId: string; sourceFileHash: string; recordNumber: number; payloadJson: string; version: number }> {
+    stagingId: number;
+  }): Observable<{ fragmentSetId: string; sourceFileHash: string; recordNumber: number; stagingId: number; payloadJson: string; version: number }> {
     let httpParams = new HttpParams()
       .set('fragmentSetId', query.fragmentSetId)
       .set('sourceFileHash', query.sourceFileHash.trim())
-      .set('recordNumber', String(query.recordNumber));
+      .set('recordNumber', String(query.recordNumber))
+      .set('stagingId', String(query.stagingId));
     if (query.connectionRef?.trim()) {
       httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }
-    return this.http.get<{ fragmentSetId: string; sourceFileHash: string; recordNumber: number; payloadJson: string; version: number }>(
+    return this.http.get<{ fragmentSetId: string; sourceFileHash: string; recordNumber: number; stagingId: number; payloadJson: string; version: number }>(
       '/api/query/mt101-quarantine/staging-row', { params: httpParams });
   }
 
@@ -322,6 +326,7 @@ export class AuditApiService {
     fragmentSetId: string;
     sourceFileHash: string;
     recordNumber: number;
+    stagingId: number;
     payload: string;
     version?: number;
     reason?: string;
@@ -330,7 +335,8 @@ export class AuditApiService {
     let httpParams = new HttpParams()
       .set('fragmentSetId', query.fragmentSetId)
       .set('sourceFileHash', query.sourceFileHash.trim())
-      .set('recordNumber', String(query.recordNumber));
+      .set('recordNumber', String(query.recordNumber))
+      .set('stagingId', String(query.stagingId));
     if (query.connectionRef?.trim()) {
       httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }
@@ -392,6 +398,22 @@ export class AuditApiService {
     });
   }
 
+  mt101RebuildRuns(query: { connectionRef?: string; fragmentSetId: string; limit?: number }): Observable<Mt101RebuildRunSummary[]> {
+    let httpParams = new HttpParams()
+      .set('fragmentSetId', query.fragmentSetId)
+      .set('limit', String(query.limit ?? 20));
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.get<Mt101RebuildRunSummary[]>('/api/query/mt101-quarantine/rebuild-runs', { params: httpParams });
+  }
+
+  mt101RebuildRun(query: { connectionRef?: string; rebuildRunId: string }): Observable<Mt101RebuildRunSummary> {
+    return this.http.get<Mt101RebuildRunSummary>('/api/query/mt101-quarantine/rebuild-runs/detail', {
+      params: this.runIdParams(query.rebuildRunId, query.connectionRef),
+    });
+  }
+
   /** B2': avanza el correctivo BUILT -> VALIDATED -> ARCHIVED (sin enviar; no mueve dinero). */
   mt101AdvanceCorrective(query: { connectionRef?: string; rebuildRunId: string }): Observable<Mt101CorrectiveLifecycle> {
     return this.http.post<Mt101CorrectiveLifecycle>('/api/query/mt101-quarantine/rebuild-runs/advance-corrective', {},
@@ -427,12 +449,14 @@ export class AuditApiService {
     fragmentSetId: string;
     sourceFileHash: string;
     recordNumber: number;
+    stagingId: number;
     reason?: string;
   }): Observable<{ fragmentSetId: string; fromStatus: string; toStatus: string; affected: number }> {
     let httpParams = new HttpParams()
       .set('fragmentSetId', query.fragmentSetId)
       .set('sourceFileHash', query.sourceFileHash)
-      .set('recordNumber', query.recordNumber);
+      .set('recordNumber', query.recordNumber)
+      .set('stagingId', query.stagingId);
     if (query.connectionRef?.trim()) {
       httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }

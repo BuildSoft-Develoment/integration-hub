@@ -56,7 +56,8 @@ public class Mt101RowTimelineService {
                 stagingRepository, new Mt101ArchiveStatusRepository());
     }
 
-    public List<Milestone> rowTimeline(String connectionRef, String fragmentSetId, String sourceFileHash, long recordNumber) {
+    public List<Milestone> rowTimeline(String connectionRef, String fragmentSetId, String sourceFileHash,
+                                       long recordNumber, long stagingId) {
         if (fragmentSetId == null || fragmentSetId.isBlank()) {
             throw new IllegalArgumentException("fragmentSetId is required");
         }
@@ -66,22 +67,20 @@ public class Mt101RowTimelineService {
         if (recordNumber < 1) {
             throw new IllegalArgumentException("recordNumber must be positive");
         }
+        if (stagingId < 1) {
+            throw new IllegalArgumentException("stagingId must be positive");
+        }
         var set = fragmentSetId.trim();
         var hash = sourceFileHash.trim();
         var dataSource = resolveDataSource(connectionRef);
         try {
-            var fragments = fragmentRepository.findBySourceRecord(dataSource, recordNumber, hash, null, null, set, 1);
-            if (fragments.isEmpty()) {
+            var fragment = fragmentRepository.findBySourceIdentity(dataSource, set, hash, recordNumber, stagingId, null);
+            if (fragment == null) {
                 return List.of();
             }
-            var fragment = fragments.get(0);
             var milestones = new ArrayList<Milestone>();
 
-            var staging = fragment.processExecutionId() == null ? null
-                    : stagingRepository.findStagingRow(dataSource, fragment.processExecutionId(), recordNumber - 1, hash);
-            var stagingId = staging != null ? staging.id()
-                    : (fragment.sourceRecordFrom() == null ? fragment.stagingIdFrom()
-                            : fragment.stagingIdFrom() + (recordNumber - fragment.sourceRecordFrom()));
+            var staging = stagingRepository.findStagingRowById(dataSource, stagingId);
             milestones.add(new Milestone("RECORD_INGESTED", "INGESTED",
                     "fila " + recordNumber + " - staging id " + stagingId,
                     staging == null ? null : staging.createdAt()));
@@ -93,7 +92,7 @@ public class Mt101RowTimelineService {
 
             // Lookup indexado por (set, fila exacta): no escanear las primeras 5000
             // cuarentenas (una fila mas alla del tope no mostraria su issue).
-            for (var failed : failedRecordRepository.findBySourceRow(dataSource, set, hash, recordNumber, null, 50)) {
+            for (var failed : failedRecordRepository.findBySourceRow(dataSource, set, hash, recordNumber, stagingId, null, 50)) {
                 milestones.add(new Milestone("RECORD_VALIDATION_ISSUE", "REJECTED",
                         nullSafe(failed.ruleCode())
                                 + (failed.message() == null || failed.message().isBlank() ? "" : ": " + failed.message())
@@ -111,7 +110,7 @@ public class Mt101RowTimelineService {
             }
 
             appendFinancialMilestones(dataSource, milestones, fragment);
-            appendCorrectiveMilestones(dataSource, milestones, set, hash, recordNumber);
+            appendCorrectiveMilestones(dataSource, milestones, set, hash, recordNumber, stagingId);
             return milestones;
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot build operational row timeline for set " + set, error);
@@ -122,9 +121,10 @@ public class Mt101RowTimelineService {
                                             List<Milestone> milestones,
                                             String originalSet,
                                             String sourceFileHash,
-                                            long recordNumber) throws SQLException {
+                                            long recordNumber,
+                                            long stagingId) throws SQLException {
         var corrective = fragmentRepository.findCorrectiveByOriginalSourceRecord(
-                dataSource, originalSet, sourceFileHash, recordNumber);
+                dataSource, originalSet, sourceFileHash, recordNumber, stagingId);
         if (corrective == null) {
             return;
         }

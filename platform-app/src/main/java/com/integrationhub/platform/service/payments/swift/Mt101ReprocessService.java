@@ -244,6 +244,7 @@ public class Mt101ReprocessService {
                                      String fragmentSetId,
                                      String sourceFileHash,
                                      long sourceRecordNumber,
+                                     long stagingId,
                                      String actor,
                                      String reason,
                                      String ticketRef) {
@@ -252,16 +253,19 @@ public class Mt101ReprocessService {
         if (sourceRecordNumber < 1) {
             throw new IllegalArgumentException("sourceRecordNumber must be positive");
         }
+        if (stagingId < 1) {
+            throw new IllegalArgumentException("stagingId must be positive");
+        }
         var dataSource = resolveDataSource(connectionRef);
         try (var connection = dataSource.getConnection()) {
             var previousAutoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
             try {
-                var reopened = failedRecordRepository.reopenRejectedRow(connection, set, hash, sourceRecordNumber);
+                var reopened = failedRecordRepository.reopenRejectedRow(connection, set, hash, sourceRecordNumber, stagingId);
                 if (reopened == 0) {
                     // Sin fallback: si no hay fila REBUILD_REJECTED, es un error accionable.
                     throw new IllegalArgumentException("no REBUILD_REJECTED row at source file " + hash
-                            + " row " + sourceRecordNumber + " for set " + set);
+                            + " row " + sourceRecordNumber + " stagingId " + stagingId + " for set " + set);
                 }
                 auditRepository.insert(connection, new Mt101ReprocessAuditRepository.ReprocessAuditRow(
                         "REBUILD_REOPEN", set, hash, sourceRecordNumber, sourceRecordNumber,

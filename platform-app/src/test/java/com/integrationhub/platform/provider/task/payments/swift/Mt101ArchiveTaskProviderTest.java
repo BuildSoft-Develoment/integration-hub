@@ -88,6 +88,7 @@ class Mt101ArchiveTaskProviderTest {
                     " account_servicing_value text," +
                     " status varchar(20) not null default 'PENDING'," +
                     " format char(4)," +
+                    " process_execution_id bigint," +
                     " created_at timestamp not null default current_timestamp," +
                     " updated_at timestamp not null default current_timestamp," +
                     " retention_until date)");

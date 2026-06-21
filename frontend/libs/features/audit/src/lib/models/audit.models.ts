@@ -99,6 +99,9 @@ export interface Mt101FailedRecord {
   transactionReference: string | null;
   sourceFileHash: string | null;
   sourceRecordNumber: number | null;
+  stagingId: number | null;
+  sourceTaskDefinitionId: number | null;
+  sourceName: string | null;
   ruleCode: string | null;
   ruleSet: string | null;
   severity: string | null;
@@ -137,6 +140,10 @@ export interface Mt101RebuildRunSummary {
   status: string;
   selectedRows: number;
   affectedFragments: number;
+  connectionRef: string | null;
+  payStatus: string | null;
+  payRequestedBy: string | null;
+  payApprovedBy: string | null;
 }
 
 export interface Mt101FragmentSetSummary {

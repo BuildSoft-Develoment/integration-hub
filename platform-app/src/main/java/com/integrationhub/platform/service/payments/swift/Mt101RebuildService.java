@@ -129,7 +129,8 @@ public class Mt101RebuildService {
                     }
                     rebuildRepository.updateSelectionStats(connection, runId, selectedRows, references.size());
                     connection.commit();
-                    return new RebuildRunSummary(runId, set, corrective, "REQUESTED", selectedRows, references.size());
+                    return new RebuildRunSummary(runId, set, corrective, "REQUESTED", selectedRows, references.size(),
+                            blankToNull(connectionRef), "NOT_REQUESTED", null, null);
                 } catch (SQLException | RuntimeException error) {
                     try {
                         connection.rollback();
@@ -379,7 +380,37 @@ public class Mt101RebuildService {
                 run.correctiveSetId(),
                 run.status(),
                 run.selectedRows(),
-                run.affectedFragments());
+                run.affectedFragments(),
+                run.connectionRef(),
+                run.payStatus(),
+                run.payRequestedBy(),
+                run.payApprovedBy());
+    }
+
+    public RebuildRunSummary getRebuildRun(String connectionRef, String rebuildRunId) {
+        var runId = require(rebuildRunId, "rebuildRunId");
+        var dataSource = resolveDataSource(connectionRef);
+        try {
+            var run = rebuildRepository.findRun(dataSource, runId);
+            if (run == null) {
+                throw new IllegalArgumentException("rebuildRunId not found: " + runId);
+            }
+            return summary(run);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot read MT101 rebuild run " + runId, error);
+        }
+    }
+
+    public List<RebuildRunSummary> listRebuildRuns(String connectionRef, String fragmentSetId, int limit) {
+        var set = require(fragmentSetId, "fragmentSetId");
+        var dataSource = resolveDataSource(connectionRef);
+        try {
+            return rebuildRepository.listRunsByOriginalSet(dataSource, set, Math.min(Math.max(limit, 1), 100)).stream()
+                    .map(this::summary)
+                    .toList();
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot list MT101 rebuild runs for set " + set, error);
+        }
     }
 
     public int synchronizeLifecycle(String connectionRef, String originalFragmentSetId) {
@@ -391,14 +422,20 @@ public class Mt101RebuildService {
                 var lifecycle = rebuildRepository.deriveLifecycleStatus(dataSource, run.correctiveSetId());
                 // R6: registra el intento de sincronizacion aunque no haya avance.
                 rebuildRepository.touchLifecycleSync(dataSource, run.rebuildRunId());
+                rebuildRepository.syncSelectionStatusesFromCorrective(dataSource, run.rebuildRunId());
                 if (lifecycle.status() == null || lifecycle.status().isBlank()) {
                     continue;
                 }
                 if (rebuildRepository.updateLifecycleIfAdvanced(dataSource, run, lifecycle.status())) {
                     updated++;
                 }
+                if ("PARTIALLY_FAILED".equalsIgnoreCase(lifecycle.status())) {
+                    markRejectedSelections(dataSource, set, run.rebuildRunId());
+                    continue;
+                }
                 var quarantineStatus = quarantineStatus(lifecycle.status());
                 if (quarantineStatus != null) {
+                    rebuildRepository.markSelectionLifecycle(dataSource, run.rebuildRunId(), quarantineStatus);
                     failedRecordRepository.updateStatusByRun(
                             dataSource, set, run.rebuildRunId(), currentQuarantineStatus(run.status()), quarantineStatus);
                 }
@@ -435,8 +472,16 @@ public class Mt101RebuildService {
             case "SENT" -> "REBUILD_SENT";
             case "CONFIRMED" -> "REBUILD_CONFIRMED";
             case "RECONCILED", "RESOLVED" -> "RESOLVED";
+            case "FAILED" -> "REBUILD_REJECTED";
             default -> "REBUILD_PENDING_VALIDATION";
         };
+    }
+
+    private void markRejectedSelections(DataSource dataSource, String set, String rebuildRunId) throws SQLException {
+        for (var from : List.of("REBUILD_PENDING_VALIDATION", "REBUILD_VALIDATED", "REBUILD_ARCHIVED", "REBUILD_SENT")) {
+            failedRecordRepository.updateStatusByRunSelectionStatus(
+                    dataSource, set, rebuildRunId, from, "REBUILD_REJECTED", "REBUILD_REJECTED");
+        }
     }
 
     private String quarantineStatus(String lifecycleStatus) {
@@ -489,7 +534,11 @@ public class Mt101RebuildService {
             String correctiveSetId,
             String status,
             long selectedRows,
-            int affectedFragments
+            int affectedFragments,
+            String connectionRef,
+            String payStatus,
+            String payRequestedBy,
+            String payApprovedBy
     ) {
     }
 }

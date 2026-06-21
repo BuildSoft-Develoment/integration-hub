@@ -110,6 +110,26 @@ Cubre las tareas QA T-022 (sprint 2 inbound + reconciliación) y T-028
 - rechazo de acción no soportada
 - `totalChanges` cuenta solo cambios reales (no records sin cambio)
 
+## Hardening correctivo y reproceso sin fallback
+
+### Identidad estricta por fila
+- corregir fila exige `stagingId` junto con `fragmentSetId`, `sourceFileHash` y `recordNumber`
+- timeline de fila exige `stagingId` y no busca por hash+fila solamente
+- reabrir rechazo exige `stagingId`
+- dos archivos con misma fila/hash pero distinto origen no se mezclan
+
+### Lifecycle correctivo
+- rebuild desde cuarentena crea seleccion con `stagingId`
+- correctivo con algunos fragmentos rechazados queda `PARTIALLY_FAILED`
+- `PARTIALLY_FAILED` actualiza solo las selecciones rechazadas, no todo el run
+- runs correctivos exponen `payStatus`, requester y checker para UI
+
+### PAY correctivo
+- request PAY solo aplica a runs `ARCHIVED`
+- checker no puede ser el mismo requester
+- claim atomico evita doble envio cuando dos checkers compiten
+- fallo de transporte deja `pay_status=FAILED` para reintento gobernado
+
 ## Frontend (sprint 1 + 2 + 3)
 
 ### M-1b registry
@@ -133,9 +153,12 @@ Cubre las tareas QA T-022 (sprint 2 inbound + reconciliación) y T-028
 | Caso | Test automatizado |
 |------|-------------------|
 | BUILD/VALIDATE/ARCHIVE/PAY/ROUTE/RECONCILE/STATUS/PARSE/SPLIT/REPAIR | tests unitarios backend (113 tests) |
+| Correctivo/reproceso sin fallback | `Mt101CorrectiveLifecycleServiceTest`, `Mt101RebuildServiceTest`, `Mt101StagingCorrectionServiceTest`, `Mt101RowTimelineServiceTest`, `Mt101ReprocessServiceTest`, `Mt101MultiSourceLineageTest`, `Mt101QuarantineServiceTest`, `Mt101LargeVolumeLineageRebuildTest`, `Mt101ArchiveTaskProviderTest`, `Mt101BuildFromTableTaskProviderTest` |
 | RBAC payments-operator | `PaymentsOperatorRoleIT` |
 | Pipeline end-to-end | `Mt101OutboundEndToEndIT` |
 | Forms TS providers | vitest specs (10 providers × ~5 tests) |
 | M-1b registry | `process-task-form-registry.spec.ts` |
+
+Ejecucion correctiva 2026-06-21: `mvn -pl platform-app "-Dtest=Mt101CorrectiveLifecycleServiceTest,Mt101RebuildServiceTest,Mt101StagingCorrectionServiceTest,Mt101RowTimelineServiceTest,Mt101ReprocessServiceTest,Mt101MultiSourceLineageTest,Mt101QuarantineServiceTest,Mt101LargeVolumeLineageRebuildTest,Mt101ArchiveTaskProviderTest,Mt101BuildFromTableTaskProviderTest" test` (59 tests PASS).
 
 Ejecución: `mvn -pl platform-app test` (backend) + `npx nx run web:test` (frontend).

@@ -22,6 +22,9 @@ function failed(p: Partial<Mt101FailedRecord>): Mt101FailedRecord {
     createdAt: null,
     resolvedAt: null,
     ...p,
+    stagingId: p.stagingId ?? null,
+    sourceTaskDefinitionId: p.sourceTaskDefinitionId ?? null,
+    sourceName: p.sourceName ?? null,
   };
 }
 
@@ -51,6 +54,7 @@ describe('Mt101QuarantineComponent', () => {
       mt101FragmentSetSummary: () => of({ fragmentSetId: 'S', total: 0, byStatus: {} }),
       mt101FailedRecords: () => of([] as Mt101FailedRecord[]),
       mt101BuildQuarantine: () => of({ fragmentSetId: 'S', quarantined: 0 }),
+      mt101RebuildRuns: () => of([]),
     } as unknown as AuditApiService;
     const route = { snapshot: { queryParamMap: { get: () => null } } } as unknown as ActivatedRoute;
 

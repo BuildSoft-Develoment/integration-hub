@@ -28,6 +28,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Testcontainers
 class Mt101StagingCorrectionServiceTest {
 
+    private static final long STAGING_ID = 10025L;
+
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("mt101_correction")
@@ -54,7 +56,8 @@ class Mt101StagingCorrectionServiceTest {
         insertQuarantine(25);
         insertStaging(24, "{\"moneda\":\"PEN\",\"monto\":\"10.00\",\"cargos\":\"BAD\"}");
 
-        var result = service.correctRow(null, "SET", "hashA", 25, "{\"cargos\":\"OUR\"}");
+        var result = service.correctRow(null, "SET", "hashA", 25, STAGING_ID,
+                "{\"cargos\":\"OUR\"}", null, null, null, null);
 
         assertEquals(1, result.updated());
         assertEquals("{\"moneda\":\"PEN\",\"monto\":\"10.00\",\"cargos\":\"OUR\"}", stagingPayload(24),
@@ -75,7 +78,8 @@ class Mt101StagingCorrectionServiceTest {
         insertQuarantine(25);
         insertStaging(24, "{\"cargos\":\"BAD\"}");
 
-        var result = service.correctRow(null, "SET", "hashA", 25, "{\"cargos\":\"OUR\"}", "ana", 0L);
+        var result = service.correctRow(null, "SET", "hashA", 25, STAGING_ID,
+                "{\"cargos\":\"OUR\"}", "ana", 0L, null, null);
 
         assertEquals(1, result.updated());
         assertEquals(1L, result.version(), "la version se incrementa tras corregir");
@@ -90,7 +94,8 @@ class Mt101StagingCorrectionServiceTest {
 
         // El operador trae version 5 pero la fila esta en version 0 -> conflicto.
         var error = assertThrows(Mt101StagingCorrectionService.StaleStagingRowException.class,
-                () -> service.correctRow(null, "SET", "hashA", 25, "{\"cargos\":\"OUR\"}", "ana", 5L));
+                () -> service.correctRow(null, "SET", "hashA", 25, STAGING_ID,
+                        "{\"cargos\":\"OUR\"}", "ana", 5L, null, null));
 
         assertTrue(error.getMessage().contains("modified concurrently"));
         assertEquals("{\"cargos\":\"BAD\"}", stagingPayload(24), "no se pisa el payload en conflicto");
@@ -101,7 +106,8 @@ class Mt101StagingCorrectionServiceTest {
         insertFragment("REJECTED");
         insertQuarantine(25);
         var error = assertThrows(IllegalArgumentException.class,
-                () -> service.correctRow(null, "SET", "hashA", 9999, "{\"cargos\":\"OUR\"}"));
+                () -> service.correctRow(null, "SET", "hashA", 9999, STAGING_ID,
+                        "{\"cargos\":\"OUR\"}", null, null, null, null));
         assertTrue(error.getMessage().contains("no quarantined row"));
     }
 
@@ -111,7 +117,8 @@ class Mt101StagingCorrectionServiceTest {
         insertStaging(24, "{\"cargos\":\"BAD\"}");
 
         var error = assertThrows(IllegalArgumentException.class,
-                () -> service.correctRow(null, "SET", "hashA", 25, "{\"cargos\":\"OUR\"}"));
+                () -> service.correctRow(null, "SET", "hashA", 25, STAGING_ID,
+                        "{\"cargos\":\"OUR\"}", null, null, null, null));
 
         assertTrue(error.getMessage().contains("no quarantined row"));
     }
@@ -123,7 +130,8 @@ class Mt101StagingCorrectionServiceTest {
         insertStaging(24, "{\"cargos\":\"BAD\"}");
 
         var error = assertThrows(IllegalArgumentException.class,
-                () -> service.correctRow(null, "SET", "hashA", 25, "{\"cargos\":\"OUR\"}"));
+                () -> service.correctRow(null, "SET", "hashA", 25, STAGING_ID,
+                        "{\"cargos\":\"OUR\"}", null, null, null, null));
 
         assertTrue(error.getMessage().contains("must be REJECTED"));
     }
@@ -147,8 +155,9 @@ class Mt101StagingCorrectionServiceTest {
         try (var st = connection.prepareStatement(
                 "insert into mt101_fragment_record (fragment_id, fragment_set_id, source_file_hash, "
                         + "source_record_number, staging_id, current_senders_reference, current_transaction_reference) "
-                        + "values (?, 'SET', 'hashA', 25, 10025, 'P1', 'T25')")) {
+                        + "values (?, 'SET', 'hashA', 25, ?, 'P1', 'T25')")) {
             st.setLong(1, fragmentId);
+            st.setLong(2, STAGING_ID);
             st.executeUpdate();
         }
     }
@@ -157,9 +166,10 @@ class Mt101StagingCorrectionServiceTest {
         try (Connection connection = dataSource.getConnection();
              var st = connection.prepareStatement(
                      "insert into mt101_failed_record (fragment_set_id, senders_reference, transaction_reference, "
-                             + "source_file_hash, source_record_number, rule_code, status) "
-                             + "values ('SET', 'P1', 'T25', 'hashA', ?, 'STRUCT.X', 'QUARANTINED')")) {
+                             + "source_file_hash, source_record_number, staging_id, rule_code, status) "
+                             + "values ('SET', 'P1', 'T25', 'hashA', ?, ?, 'STRUCT.X', 'QUARANTINED')")) {
             st.setLong(1, recordNumber);
+            st.setLong(2, STAGING_ID);
             st.executeUpdate();
         }
     }
@@ -167,10 +177,11 @@ class Mt101StagingCorrectionServiceTest {
     private void insertStaging(long recordIndex, String payload) throws SQLException {
         try (Connection connection = dataSource.getConnection();
              var st = connection.prepareStatement(
-                     "insert into staging_record (process_execution_id, task_definition_id, record_index, source_file_hash, payload_json) "
-                             + "values (100, 9, ?, 'hashA', ?)")) {
-            st.setLong(1, recordIndex);
-            st.setString(2, payload);
+                     "insert into staging_record (id, process_execution_id, task_definition_id, record_index, source_file_hash, payload_json) "
+                             + "values (?, 100, 9, ?, 'hashA', ?)")) {
+            st.setLong(1, STAGING_ID);
+            st.setLong(2, recordIndex);
+            st.setString(3, payload);
             st.executeUpdate();
         }
     }
@@ -219,7 +230,8 @@ class Mt101StagingCorrectionServiceTest {
             statement.executeUpdate("create table mt101_failed_record ("
                     + "id bigserial primary key, fragment_set_id varchar(80) not null,"
                     + "senders_reference varchar(16), transaction_reference varchar(35), source_file_hash varchar(64),"
-                    + "source_record_number bigint, rule_code varchar(80), rule_set varchar(50), severity char(1),"
+                    + "source_record_number bigint, staging_id bigint, source_task_definition_id bigint, source_name varchar(255),"
+                    + "rule_code varchar(80), rule_set varchar(50), severity char(1),"
                     + "message text, status varchar(40) not null default 'QUARANTINED',"
                     + "created_at timestamp not null default current_timestamp, resolved_at timestamp)");
             statement.executeUpdate("create table mt101_fragment_record ("
@@ -244,7 +256,7 @@ class Mt101StagingCorrectionServiceTest {
             statement.executeUpdate("create table mt101_rebuild_selection ("
                     + "id bigserial primary key, rebuild_run_id varchar(80) not null references mt101_rebuild_run(rebuild_run_id),"
                     + "fragment_set_id varchar(80) not null, source_file_hash varchar(64),"
-                    + "source_record_number bigint not null)");
+                    + "source_record_number bigint not null, staging_id bigint)");
         }
     }
 

@@ -20,6 +20,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -43,11 +44,13 @@ class Mt101CorrectiveLifecycleServiceTest {
 
     private DataSource dataSource;
     private Mt101CorrectiveLifecycleService service;
+    private AtomicInteger payInvocations;
 
     @BeforeEach
     void setUp() throws Exception {
         dataSource = dataSource();
         prepareSchema();
+        payInvocations = new AtomicInteger();
 
         var rebuildService = new Mt101RebuildService(dataSource, null, null, null,
                 new Mt101FailedRecordRepository(), new Mt101FragmentRepository(), new Mt101RebuildRepository());
@@ -71,6 +74,7 @@ class Mt101CorrectiveLifecycleServiceTest {
         var pay = new Mt101PayTaskProvider(null) {
             @Override
             public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
+                payInvocations.incrementAndGet();
                 markCorrective("SENT");
                 return TaskResult.success("fake pay");
             }
@@ -123,6 +127,21 @@ class Mt101CorrectiveLifecycleServiceTest {
         assertTrue(noRequest.getMessage().contains("must be requested"));
     }
 
+    @Test
+    void payClaimPreventsDoubleSendWhenAnotherCheckerWonTheClaim() throws Exception {
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana");
+
+        assertTrue(new Mt101RebuildRepository().claimPayForExecution(dataSource, FIX, "luis"),
+                "simula que otro checker ya reclamo PAY");
+
+        var error = assertThrows(IllegalStateException.class,
+                () -> service.approveAndPayCorrective(null, FIX, "maria"));
+
+        assertTrue(error.getMessage().contains("could not be claimed"));
+        assertEquals(0, payInvocations.get(), "no se invoca MT101_PAY si el claim atomico no gana");
+    }
+
     private void markCorrective(String status) {
         try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement(
@@ -169,6 +188,7 @@ class Mt101CorrectiveLifecycleServiceTest {
             s.executeUpdate("drop table if exists mt101_rebuild_run");
             s.executeUpdate("drop table if exists mt101_failed_record");
             s.executeUpdate("drop table if exists mt101_archive");
+            s.executeUpdate("drop table if exists mt101_fragment_record");
             s.executeUpdate("drop table if exists mt101_build_fragment");
             s.executeUpdate("create table mt101_build_fragment ("
                     + "id bigserial primary key, fragment_set_id varchar(80) not null,"
@@ -181,6 +201,17 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "values ('" + SET + "', 100, 20, 'staging_record', 'P1', 'SUPERSEDED')");
             s.executeUpdate("insert into mt101_build_fragment (fragment_set_id, process_execution_id, task_definition_id, source_table, senders_reference, status) "
                     + "values ('" + FIX + "', 100, 20, 'staging_record', 'RTEST1', 'BUILT')");
+            s.executeUpdate("create table mt101_fragment_record ("
+                    + "id bigserial primary key, fragment_id bigint references mt101_build_fragment(id),"
+                    + "fragment_set_id varchar(80) not null, source_file_hash varchar(64),"
+                    + "source_record_number bigint not null, staging_id bigint,"
+                    + "source_task_definition_id bigint, source_name varchar(255),"
+                    + "current_senders_reference varchar(16), current_transaction_reference varchar(35),"
+                    + "rebuild_run_id varchar(80))");
+            s.executeUpdate("insert into mt101_fragment_record "
+                    + "(fragment_id, fragment_set_id, source_file_hash, source_record_number, staging_id, current_senders_reference, current_transaction_reference, rebuild_run_id) "
+                    + "select id, '" + FIX + "', 'hashA', 25, 10025, 'RTEST1', 'C25', '" + FIX + "' "
+                    + "from mt101_build_fragment where fragment_set_id = '" + FIX + "'");
             s.executeUpdate("create table mt101_rebuild_run ("
                     + "rebuild_run_id varchar(80) primary key, original_fragment_set_id varchar(80) not null,"
                     + "corrective_set_id varchar(80) not null, status varchar(30) not null default 'BUILT',"
@@ -188,7 +219,10 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "request_reason text, approval_reason text, selected_rows bigint not null default 1,"
                     + "affected_fragments integer not null default 1, error_message text, reference_code varchar(12),"
                     + "connection_ref varchar(120), pay_requested_by varchar(120), pay_requested_at timestamp,"
+                    + "pay_status varchar(30) not null default 'NOT_REQUESTED',"
                     + "pay_approved_by varchar(120), pay_approved_at timestamp,"
+                    + "pay_claimed_by varchar(120), pay_claimed_at timestamp,"
+                    + "pay_completed_at timestamp, pay_error_message text,"
                     + "created_at timestamp not null default current_timestamp, approved_at timestamp, executed_at timestamp,"
                     + "built_at timestamp, completed_at timestamp, last_lifecycle_sync_at timestamp,"
                     + "updated_at timestamp not null default current_timestamp)");
@@ -197,15 +231,19 @@ class Mt101CorrectiveLifecycleServiceTest {
             s.executeUpdate("create table mt101_rebuild_selection ("
                     + "id bigserial primary key, rebuild_run_id varchar(80) not null,"
                     + "fragment_set_id varchar(80) not null, source_file_hash varchar(64),"
-                    + "source_record_number bigint not null, original_senders_reference varchar(16))");
-            s.executeUpdate("insert into mt101_rebuild_selection (rebuild_run_id, fragment_set_id, source_file_hash, source_record_number, original_senders_reference) "
-                    + "values ('" + FIX + "', '" + SET + "', 'hashA', 25, 'P1')");
+                    + "source_record_number bigint not null, staging_id bigint,"
+                    + "source_task_definition_id bigint, source_name varchar(255),"
+                    + "original_senders_reference varchar(16), status varchar(30) not null default 'SELECTED',"
+                    + "lifecycle_updated_at timestamp)");
+            s.executeUpdate("insert into mt101_rebuild_selection (rebuild_run_id, fragment_set_id, source_file_hash, source_record_number, staging_id, original_senders_reference) "
+                    + "values ('" + FIX + "', '" + SET + "', 'hashA', 25, 10025, 'P1')");
             s.executeUpdate("create table mt101_failed_record ("
                     + "id bigserial primary key, fragment_set_id varchar(80) not null, senders_reference varchar(16),"
-                    + "source_file_hash varchar(64), source_record_number bigint, status varchar(40) not null default 'QUARANTINED',"
+                    + "source_file_hash varchar(64), source_record_number bigint, staging_id bigint,"
+                    + "status varchar(40) not null default 'QUARANTINED',"
                     + "resolved_at timestamp)");
-            s.executeUpdate("insert into mt101_failed_record (fragment_set_id, senders_reference, source_file_hash, source_record_number, status) "
-                    + "values ('" + SET + "', 'P1', 'hashA', 25, 'REBUILD_PENDING_VALIDATION')");
+            s.executeUpdate("insert into mt101_failed_record (fragment_set_id, senders_reference, source_file_hash, source_record_number, staging_id, status) "
+                    + "values ('" + SET + "', 'P1', 'hashA', 25, 10025, 'REBUILD_PENDING_VALIDATION')");
             s.executeUpdate("create table mt101_archive ("
                     + "id bigserial primary key, senders_reference varchar(16) not null, process_execution_id bigint,"
                     + "status varchar(20) not null default 'ARCHIVED')");

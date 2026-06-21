@@ -24,10 +24,12 @@ public class Mt101FailedRecordRepository {
         }
         var sql = "insert into mt101_failed_record "
                 + "(fragment_set_id, senders_reference, transaction_reference, source_file_hash, "
-                + " source_record_number, rule_code, rule_set, severity, message) "
-                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                + " source_record_number, staging_id, source_task_definition_id, source_name, "
+                + " rule_code, rule_set, severity, message) "
+                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                 + "on conflict (fragment_set_id, coalesce(senders_reference, ''), "
-                + "             coalesce(transaction_reference, ''), coalesce(rule_code, '')) do nothing";
+                + "             coalesce(transaction_reference, ''), coalesce(rule_code, ''), "
+                + "             coalesce(staging_id, 0)) do nothing";
         var inserted = 0;
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
@@ -38,10 +40,15 @@ public class Mt101FailedRecordRepository {
                 statement.setString(4, row.sourceFileHash());
                 if (row.sourceRecordNumber() == null) statement.setNull(5, Types.BIGINT);
                 else statement.setLong(5, row.sourceRecordNumber());
-                statement.setString(6, row.ruleCode());
-                statement.setString(7, row.ruleSet());
-                statement.setString(8, row.severity());
-                statement.setString(9, row.message());
+                if (row.stagingId() == null) statement.setNull(6, Types.BIGINT);
+                else statement.setLong(6, row.stagingId());
+                if (row.sourceTaskDefinitionId() == null) statement.setNull(7, Types.BIGINT);
+                else statement.setLong(7, row.sourceTaskDefinitionId());
+                statement.setString(8, row.sourceName());
+                statement.setString(9, row.ruleCode());
+                statement.setString(10, row.ruleSet());
+                statement.setString(11, row.severity());
+                statement.setString(12, row.message());
                 statement.addBatch();
             }
             for (var count : statement.executeBatch()) {
@@ -61,7 +68,8 @@ public class Mt101FailedRecordRepository {
                                         int limit) throws SQLException {
         var sql = new StringBuilder("""
                 select id, fragment_set_id, senders_reference, transaction_reference, source_file_hash,
-                       source_record_number, rule_code, rule_set, severity, message, status, created_at, resolved_at
+                       source_record_number, staging_id, source_task_definition_id, source_name,
+                       rule_code, rule_set, severity, message, status, created_at, resolved_at
                   from mt101_failed_record
                  where fragment_set_id = ?
                 """);
@@ -88,6 +96,9 @@ public class Mt101FailedRecordRepository {
                             rs.getString("transaction_reference"),
                             rs.getString("source_file_hash"),
                             nullableLong(rs, "source_record_number"),
+                            nullableLong(rs, "staging_id"),
+                            nullableLong(rs, "source_task_definition_id"),
+                            rs.getString("source_name"),
                             rs.getString("rule_code"),
                             rs.getString("rule_set"),
                             rs.getString("severity"),
@@ -121,7 +132,8 @@ public class Mt101FailedRecordRepository {
                                             int limit) throws SQLException {
         var sql = new StringBuilder("""
                 select id, fragment_set_id, senders_reference, transaction_reference, source_file_hash,
-                       source_record_number, rule_code, rule_set, severity, message, status, created_at, resolved_at
+                       source_record_number, staging_id, source_task_definition_id, source_name,
+                       rule_code, rule_set, severity, message, status, created_at, resolved_at
                   from mt101_failed_record
                  where fragment_set_id = ?
                    and id > ?
@@ -180,6 +192,9 @@ public class Mt101FailedRecordRepository {
                             rs.getString("transaction_reference"),
                             rs.getString("source_file_hash"),
                             nullableLong(rs, "source_record_number"),
+                            nullableLong(rs, "staging_id"),
+                            nullableLong(rs, "source_task_definition_id"),
+                            rs.getString("source_name"),
                             rs.getString("rule_code"),
                             rs.getString("rule_set"),
                             rs.getString("severity"),
@@ -217,15 +232,18 @@ public class Mt101FailedRecordRepository {
                                               String fragmentSetId,
                                               String sourceFileHash,
                                               long sourceRecordNumber,
+                                              long stagingId,
                                               String status,
                                               int limit) throws SQLException {
         var sql = new StringBuilder("""
                 select id, fragment_set_id, senders_reference, transaction_reference, source_file_hash,
-                       source_record_number, rule_code, rule_set, severity, message, status, created_at, resolved_at
+                       source_record_number, staging_id, source_task_definition_id, source_name,
+                       rule_code, rule_set, severity, message, status, created_at, resolved_at
                   from mt101_failed_record
                  where fragment_set_id = ?
                    and source_file_hash = ?
                    and source_record_number = ?
+                   and staging_id = ?
                 """);
         if (status != null && !status.isBlank()) {
             sql.append(" and status = ?");
@@ -239,6 +257,7 @@ public class Mt101FailedRecordRepository {
             statement.setString(parameter++, fragmentSetId);
             statement.setString(parameter++, sourceFileHash);
             statement.setLong(parameter++, sourceRecordNumber);
+            statement.setLong(parameter++, stagingId);
             if (status != null && !status.isBlank()) {
                 statement.setString(parameter++, status);
             }
@@ -252,6 +271,9 @@ public class Mt101FailedRecordRepository {
                             rs.getString("transaction_reference"),
                             rs.getString("source_file_hash"),
                             nullableLong(rs, "source_record_number"),
+                            nullableLong(rs, "staging_id"),
+                            nullableLong(rs, "source_task_definition_id"),
+                            rs.getString("source_name"),
                             rs.getString("rule_code"),
                             rs.getString("rule_set"),
                             rs.getString("severity"),
@@ -295,7 +317,7 @@ public class Mt101FailedRecordRepository {
                 + "and exists (select 1 from mt101_rebuild_selection sel "
                 + "where sel.rebuild_run_id = ? "
                 + "and sel.fragment_set_id = mt101_failed_record.fragment_set_id "
-                + "and sel.source_file_hash is not null "
+                + "and mt101_failed_record.staging_id = sel.staging_id "
                 + "and mt101_failed_record.source_file_hash = sel.source_file_hash "
                 + "and mt101_failed_record.source_record_number = sel.source_record_number "
                 + "and mt101_failed_record.senders_reference = sel.original_senders_reference)";
@@ -310,6 +332,37 @@ public class Mt101FailedRecordRepository {
         }
     }
 
+    /** Cambia solo las filas seleccionadas cuyo estado granular del run coincide. */
+    public int updateStatusByRunSelectionStatus(DataSource dataSource,
+                                                String fragmentSetId,
+                                                String rebuildRunId,
+                                                String fromStatus,
+                                                String selectionStatus,
+                                                String toStatus) throws SQLException {
+        var terminal = "RESOLVED".equalsIgnoreCase(toStatus) || "DISCARDED".equalsIgnoreCase(toStatus);
+        var sql = "update mt101_failed_record set status = ?, "
+                + "resolved_at = case when ? then current_timestamp else resolved_at end "
+                + "where fragment_set_id = ? and status = ? "
+                + "and exists (select 1 from mt101_rebuild_selection sel "
+                + "where sel.rebuild_run_id = ? "
+                + "and sel.status = ? "
+                + "and sel.fragment_set_id = mt101_failed_record.fragment_set_id "
+                + "and mt101_failed_record.staging_id = sel.staging_id "
+                + "and mt101_failed_record.source_file_hash = sel.source_file_hash "
+                + "and mt101_failed_record.source_record_number = sel.source_record_number "
+                + "and mt101_failed_record.senders_reference = sel.original_senders_reference)";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, toStatus);
+            statement.setBoolean(2, terminal);
+            statement.setString(3, fragmentSetId);
+            statement.setString(4, fromStatus);
+            statement.setString(5, rebuildRunId);
+            statement.setString(6, selectionStatus);
+            return statement.executeUpdate();
+        }
+    }
+
     /**
      * B1': reabre una fila rechazada del correctivo ({@code REBUILD_REJECTED -> QUARANTINED})
      * conservando rebuild_run_id y las referencias correctivas, para que vuelva al ciclo
@@ -318,14 +371,17 @@ public class Mt101FailedRecordRepository {
     public int reopenRejectedRow(java.sql.Connection connection,
                                  String fragmentSetId,
                                  String sourceFileHash,
-                                 long sourceRecordNumber) throws SQLException {
+                                 long sourceRecordNumber,
+                                 long stagingId) throws SQLException {
         var sql = "update mt101_failed_record set status = 'QUARANTINED', resolved_at = null "
                 + "where fragment_set_id = ? and source_file_hash = ? and source_record_number = ? "
+                + "and staging_id = ? "
                 + "and status = 'REBUILD_REJECTED'";
         try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, fragmentSetId);
             statement.setString(2, sourceFileHash);
             statement.setLong(3, sourceRecordNumber);
+            statement.setLong(4, stagingId);
             return statement.executeUpdate();
         }
     }
@@ -336,6 +392,9 @@ public class Mt101FailedRecordRepository {
             String transactionReference,
             String sourceFileHash,
             Long sourceRecordNumber,
+            Long stagingId,
+            Long sourceTaskDefinitionId,
+            String sourceName,
             String ruleCode,
             String ruleSet,
             String severity,
@@ -350,6 +409,9 @@ public class Mt101FailedRecordRepository {
             String transactionReference,
             String sourceFileHash,
             Long sourceRecordNumber,
+            Long stagingId,
+            Long sourceTaskDefinitionId,
+            String sourceName,
             String ruleCode,
             String ruleSet,
             String severity,

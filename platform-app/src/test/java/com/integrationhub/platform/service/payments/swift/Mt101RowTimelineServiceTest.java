@@ -55,7 +55,7 @@ class Mt101RowTimelineServiceTest {
         // #6: staging_id real resuelto por query (record_index = 25-1 = 24), no por formula.
         var realStagingId = insertStaging(24);
 
-        var tl = service.rowTimeline(null, "SET", "hashA", 25);
+        var tl = service.rowTimeline(null, "SET", "hashA", 25, realStagingId);
 
         assertEquals(4, tl.size());
         assertEquals("RECORD_INGESTED", tl.get(0).stage());
@@ -73,9 +73,10 @@ class Mt101RowTimelineServiceTest {
     private long insertStaging(long recordIndex) throws SQLException {
         try (Connection connection = dataSource.getConnection();
              var st = connection.prepareStatement(
-                     "insert into staging_record (process_execution_id, task_definition_id, record_index, source_file_hash, payload_json) "
-                             + "values (1, 9, ?, 'hashA', '{}') returning id")) {
-            st.setLong(1, recordIndex);
+                     "insert into staging_record (id, process_execution_id, task_definition_id, record_index, source_file_hash, payload_json) "
+                             + "values (?, 1, 9, ?, 'hashA', '{}') returning id")) {
+            st.setLong(1, 10_000L + recordIndex + 1);
+            st.setLong(2, recordIndex);
             try (var rs = st.executeQuery()) {
                 rs.next();
                 return rs.getLong(1);
@@ -86,17 +87,17 @@ class Mt101RowTimelineServiceTest {
     @Test
     void emptyWhenNoFragmentCoversRow() throws Exception {
         insertFragment("P1", 1000, 1049, 1, 50, 1, 2, "VALIDATED", null);
-        assertEquals(List.of(), service.rowTimeline(null, "SET", "hashA", 9999));
+        assertEquals(List.of(), service.rowTimeline(null, "SET", "hashA", 9999, 19999));
     }
 
     @Test
     void includesConfirmedAndReconciledFinancialMilestones() throws Exception {
         insertFragment("P1", 1000, 1049, 1, 50, 1, 2, "SENT", null);
-        insertStaging(24);
+        var realStagingId = insertStaging(24);
         var archiveId = insertArchive("P1", "RECONCILED");
         insertConfirmation(archiveId, "ACCP", "GW-1");
 
-        var tl = service.rowTimeline(null, "SET", "hashA", 25);
+        var tl = service.rowTimeline(null, "SET", "hashA", 25, realStagingId);
 
         assertTrue(tl.stream().anyMatch(m -> "RECORD_ARCHIVED".equals(m.stage())),
                 "timeline debe incluir el archive operativo");
@@ -152,13 +153,14 @@ class Mt101RowTimelineServiceTest {
         try (Connection connection = dataSource.getConnection();
              var st = connection.prepareStatement(
                      "insert into mt101_failed_record (fragment_set_id, senders_reference, transaction_reference, "
-                             + "source_file_hash, source_record_number, rule_code, message, status) "
-                             + "values ('SET', ?, ?, 'hashA', ?, ?, ?, 'QUARANTINED')")) {
+                             + "source_file_hash, source_record_number, staging_id, rule_code, message, status) "
+                             + "values ('SET', ?, ?, 'hashA', ?, ?, ?, ?, 'QUARANTINED')")) {
             st.setString(1, ref);
             st.setString(2, txRef);
             st.setLong(3, recordNumber);
-            st.setString(4, rule);
-            st.setString(5, message);
+            st.setLong(4, 10_000L + recordNumber);
+            st.setString(5, rule);
+            st.setString(6, message);
             st.executeUpdate();
         }
     }
@@ -222,7 +224,8 @@ class Mt101RowTimelineServiceTest {
             statement.executeUpdate("create table mt101_failed_record ("
                     + "id bigserial primary key, fragment_set_id varchar(80) not null,"
                     + "senders_reference varchar(16), transaction_reference varchar(35), source_file_hash varchar(64),"
-                    + "source_record_number bigint, rule_code varchar(80), rule_set varchar(50), severity char(1),"
+                    + "source_record_number bigint, staging_id bigint, source_task_definition_id bigint, source_name varchar(255),"
+                    + "rule_code varchar(80), rule_set varchar(50), severity char(1),"
                     + "message text, status varchar(40) not null default 'QUARANTINED',"
                     + "created_at timestamp not null default current_timestamp, resolved_at timestamp)");
             statement.executeUpdate("create table mt101_archive ("

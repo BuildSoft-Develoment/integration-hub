@@ -319,6 +319,21 @@ public class Mt101StagingRecordRepository {
     public record StagingRowInfo(long id, java.time.LocalDateTime createdAt) {
     }
 
+    public StagingRowInfo findStagingRowById(DataSource dataSource, long stagingId) throws SQLException {
+        var sql = "select id, created_at from staging_record where id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, stagingId);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                var ts = rs.getTimestamp("created_at");
+                return new StagingRowInfo(rs.getLong("id"), ts == null ? null : ts.toLocalDateTime());
+            }
+        }
+    }
+
     public StagingPayload findStagingPayload(DataSource dataSource,
                                              long processExecutionId,
                                              long recordIndex,
@@ -349,6 +364,20 @@ public class Mt101StagingRecordRepository {
     }
 
     public record StagingPayload(long id, String payloadJson, long version) {
+    }
+
+    /** Fila exacta por id tecnico de staging; camino requerido para archivos identicos. */
+    public StagingPayload findStagingPayloadById(Connection connection, long stagingId) throws SQLException {
+        var sql = "select id, payload_json, version from staging_record where id = ?";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, stagingId);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return new StagingPayload(rs.getLong("id"), rs.getString("payload_json"), rs.getLong("version"));
+            }
+        }
     }
 
     /**
@@ -384,6 +413,21 @@ public class Mt101StagingRecordRepository {
             statement.setLong(parameter++, recordIndex);
             statement.setString(parameter++, hash);
             statement.setLong(parameter, expectedVersion);
+            return statement.executeUpdate();
+        }
+    }
+
+    /** Update con locking optimista por id tecnico de staging. */
+    public int updatePayloadById(Connection connection,
+                                 long stagingId,
+                                 String payloadJson,
+                                 long expectedVersion) throws SQLException {
+        var sql = "update staging_record set payload_json = ?, version = version + 1 "
+                + "where id = ? and version = ?";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, payloadJson);
+            statement.setLong(2, stagingId);
+            statement.setLong(3, expectedVersion);
             return statement.executeUpdate();
         }
     }

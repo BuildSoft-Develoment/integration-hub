@@ -343,7 +343,8 @@ public class Mt101FragmentRepository {
     public FragmentLookupRow findCorrectiveByOriginalSourceRecord(DataSource dataSource,
                                                                   String originalFragmentSetId,
                                                                   String sourceFileHash,
-                                                                  long sourceRecordNumber) throws SQLException {
+                                                                  long sourceRecordNumber,
+                                                                  long stagingId) throws SQLException {
         var sql = """
                 select f.fragment_set_id, f.process_execution_id, f.task_definition_id, f.source_table,
                        f.staging_id_from, f.staging_id_to, f.source_record_from, f.source_record_to,
@@ -354,6 +355,7 @@ public class Mt101FragmentRepository {
                  where r.original_fragment_set_id = ?
                    and r.source_file_hash = ?
                    and r.source_record_number = ?
+                   and r.staging_id = ?
                    and r.rebuild_run_id is not null
                  order by f.created_at desc, f.fragment_index asc
                  limit 1
@@ -363,6 +365,7 @@ public class Mt101FragmentRepository {
             statement.setString(1, originalFragmentSetId);
             statement.setString(2, sourceFileHash);
             statement.setLong(3, sourceRecordNumber);
+            statement.setLong(4, stagingId);
             try (var rs = statement.executeQuery()) {
                 if (!rs.next()) {
                     return null;
@@ -544,7 +547,8 @@ public class Mt101FragmentRepository {
             return Map.of();
         }
         var sql = "select current_senders_reference, current_transaction_reference, source_file_hash, "
-                + "source_record_number, staging_id from mt101_fragment_record "
+                + "source_record_number, staging_id, source_task_definition_id, source_name "
+                + "from mt101_fragment_record "
                 + "where fragment_set_id = ? and (current_senders_reference, current_transaction_reference) in ("
                 + String.join(", ", java.util.Collections.nCopies(keys.size(), "(?, ?)")) + ")";
         var result = new LinkedHashMap<TransactionKey, FragmentRecordLineage>();
@@ -564,17 +568,75 @@ public class Mt101FragmentRepository {
                     result.put(key, new FragmentRecordLineage(
                             rs.getString("source_file_hash"),
                             nullableLong(rs, "source_record_number"),
-                            nullableLong(rs, "staging_id")));
+                            nullableLong(rs, "staging_id"),
+                            nullableLong(rs, "source_task_definition_id"),
+                            rs.getString("source_name")));
                 }
             }
         }
         return result;
     }
 
+    /** Lookup estricto por identidad de fila de origen: sin rango ni fallback por hash+fila. */
+    public FragmentLookupRow findBySourceIdentity(DataSource dataSource,
+                                                  String fragmentSetId,
+                                                  String sourceFileHash,
+                                                  long sourceRecordNumber,
+                                                  long stagingId,
+                                                  String sendersReference) throws SQLException {
+        var sql = """
+                select f.fragment_set_id, f.process_execution_id, f.task_definition_id, f.source_table,
+                       f.staging_id_from, f.staging_id_to, f.source_record_from, f.source_record_to,
+                       f.source_file_hash, f.fragment_index, f.fragment_total, f.senders_reference,
+                       f.status, f.error_message, f.created_at, f.updated_at
+                  from mt101_fragment_record r
+                  join mt101_build_fragment f on f.id = r.fragment_id
+                 where r.fragment_set_id = ?
+                   and r.source_file_hash = ?
+                   and r.source_record_number = ?
+                   and r.staging_id = ?
+                   and (? is null or r.current_senders_reference = ?)
+                 order by f.created_at desc, f.fragment_index asc
+                 limit 1
+                """;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, fragmentSetId);
+            statement.setString(2, sourceFileHash);
+            statement.setLong(3, sourceRecordNumber);
+            statement.setLong(4, stagingId);
+            statement.setString(5, sendersReference);
+            statement.setString(6, sendersReference);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return new FragmentLookupRow(
+                        rs.getString("fragment_set_id"),
+                        nullableLong(rs, "process_execution_id"),
+                        nullableLong(rs, "task_definition_id"),
+                        rs.getString("source_table"),
+                        rs.getLong("staging_id_from"),
+                        rs.getLong("staging_id_to"),
+                        nullableLong(rs, "source_record_from"),
+                        nullableLong(rs, "source_record_to"),
+                        rs.getString("source_file_hash"),
+                        rs.getInt("fragment_index"),
+                        rs.getInt("fragment_total"),
+                        rs.getString("senders_reference"),
+                        rs.getString("status"),
+                        rs.getString("error_message"),
+                        timestamp(rs, "created_at"),
+                        timestamp(rs, "updated_at"));
+            }
+        }
+    }
+
     public record TransactionKey(String sendersReference, String transactionReference) {
     }
 
-    public record FragmentRecordLineage(String sourceFileHash, Long sourceRecordNumber, Long stagingId) {
+    public record FragmentRecordLineage(String sourceFileHash, Long sourceRecordNumber, Long stagingId,
+                                        Long sourceTaskDefinitionId, String sourceName) {
     }
 
     /** Estado actual por {@code :20:} dentro de un set, usado antes de mutaciones correctivas. */

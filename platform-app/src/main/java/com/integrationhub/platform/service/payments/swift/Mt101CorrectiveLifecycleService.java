@@ -74,6 +74,7 @@ public class Mt101CorrectiveLifecycleService {
             if (run == null) {
                 throw new IllegalArgumentException("rebuildRunId not found: " + runId);
             }
+            assertConnectionRef(run, connectionRef);
             var status = normalize(run.status());
             if ("FAILED".equals(status)) {
                 throw new IllegalArgumentException("rebuild run " + runId
@@ -112,13 +113,15 @@ public class Mt101CorrectiveLifecycleService {
             if (run == null) {
                 throw new IllegalArgumentException("rebuildRunId not found: " + runId);
             }
+            assertConnectionRef(run, connectionRef);
             if (!"ARCHIVED".equals(normalize(run.status()))) {
                 throw new IllegalArgumentException("rebuild run " + runId
                         + " must be ARCHIVED before requesting corrective pay; current status is " + run.status());
             }
             var requested = rebuildRepository.requestPay(dataSource, runId, requester);
-            if (requested == 0 && rebuildRepository.payRequestedBy(dataSource, runId) == null) {
-                throw new IllegalStateException("cannot request corrective pay for run " + runId);
+            if (requested == 0) {
+                throw new IllegalStateException("cannot request corrective pay for run " + runId
+                        + "; payStatus=" + run.payStatus());
             }
             return new CorrectiveLifecycleResult(runId, run.correctiveSetId(), run.status());
         } catch (SQLException error) {
@@ -139,6 +142,7 @@ public class Mt101CorrectiveLifecycleService {
             if (run == null) {
                 throw new IllegalArgumentException("rebuildRunId not found: " + runId);
             }
+            assertConnectionRef(run, connectionRef);
             if (!"ARCHIVED".equals(normalize(run.status()))) {
                 throw new IllegalArgumentException("rebuild run " + runId
                         + " must be ARCHIVED before paying the corrective; current status is " + run.status());
@@ -154,9 +158,18 @@ public class Mt101CorrectiveLifecycleService {
                         + " cannot be approved by its requester " + approver
                         + "; segregation of duties requires a different approver");
             }
+            if (!rebuildRepository.claimPayForExecution(dataSource, runId, approver)) {
+                throw new IllegalStateException("corrective pay for run " + runId
+                        + " could not be claimed for execution (concurrent approval or payStatus changed)");
+            }
             var prep = prepare(dataSource, run, connectionRef);
-            runStage(payProvider, prep, "MT101_PAY");
-            rebuildRepository.markPayApproved(dataSource, runId, approver);
+            try {
+                runStage(payProvider, prep, "MT101_PAY");
+                rebuildRepository.markPaySent(dataSource, runId);
+            } catch (RuntimeException error) {
+                rebuildRepository.markPayFailed(dataSource, runId, error.getMessage());
+                throw error;
+            }
             rebuildService.synchronizeLifecycle(connectionRef, run.originalFragmentSetId());
             run = rebuildRepository.findRun(dataSource, runId);
             return new CorrectiveLifecycleResult(runId, run.correctiveSetId(), run.status());
@@ -227,6 +240,19 @@ public class Mt101CorrectiveLifecycleService {
             return defaultDataSource;
         }
         return connectionPoolManager.resolveJdbcDataSource(connectionRef);
+    }
+
+    private void assertConnectionRef(Mt101RebuildRepository.RebuildRun run, String requestConnectionRef) {
+        var persisted = run.connectionRef();
+        if (persisted == null || persisted.isBlank()) {
+            return;
+        }
+        var requested = requestConnectionRef == null ? "" : requestConnectionRef.trim();
+        if (!persisted.equals(requested)) {
+            throw new IllegalArgumentException("rebuild run " + run.rebuildRunId()
+                    + " belongs to connectionRef " + persisted + " but request used "
+                    + (requested.isBlank() ? "<default>" : requested));
+        }
     }
 
     private record StagePrep(long processExecutionId, long buildTaskDefinitionId,

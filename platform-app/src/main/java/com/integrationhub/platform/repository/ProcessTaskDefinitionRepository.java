@@ -5,6 +5,8 @@ import com.integrationhub.platform.entity.ProcessTaskDefinition;
 import io.quarkus.hibernate.orm.panache.PanacheRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 
+import java.util.List;
+
 @ApplicationScoped
 public class ProcessTaskDefinitionRepository implements PanacheRepository<ProcessTaskDefinition> {
 
@@ -24,6 +26,11 @@ public class ProcessTaskDefinitionRepository implements PanacheRepository<Proces
     public ProcessTaskDefinition findActiveByProcessAndType(ProcessDefinition processDefinition, String taskType) {
         return find("processDefinition = ?1 and taskType = ?2 and active = true order by taskOrder asc",
                 processDefinition, taskType).firstResult();
+    }
+
+    public List<ProcessTaskDefinition> listActiveByProcessAndType(ProcessDefinition processDefinition, String taskType) {
+        return find("processDefinition = ?1 and taskType = ?2 and active = true order by taskOrder asc",
+                processDefinition, taskType).list();
     }
 
     public long deactivateByProcessDefinition(ProcessDefinition processDefinition) {
