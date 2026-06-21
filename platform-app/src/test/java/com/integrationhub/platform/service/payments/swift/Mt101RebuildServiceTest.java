@@ -445,7 +445,7 @@ class Mt101RebuildServiceTest {
                     + "original_fragment_set_id varchar(80),"
                     + "source_file_hash varchar(64),"
                     + "source_record_number bigint not null,"
-                    + "staging_id bigint,"
+                    + "staging_id bigint, source_task_definition_id bigint, source_name varchar(255),"
                     + "original_senders_reference varchar(16),"
                     + "original_transaction_reference varchar(35),"
                     + "current_senders_reference varchar(16),"
@@ -476,7 +476,7 @@ class Mt101RebuildServiceTest {
                     + "source_file_hash varchar(64),"
                     + "source_record_number bigint not null,"
                     + "record_index bigint not null,"
-                    + "staging_id bigint,"
+                    + "staging_id bigint, source_task_definition_id bigint, source_name varchar(255),"
                     + "original_senders_reference varchar(16),"
                     + "original_transaction_reference varchar(35),"
                     + "status varchar(30) not null default 'SELECTED',"
@@ -488,7 +488,8 @@ class Mt101RebuildServiceTest {
                     + "(rebuild_run_id, coalesce(source_file_hash, ''), source_record_number)");
             statement.executeUpdate("drop table if exists staging_record");
             statement.executeUpdate("create table staging_record ("
-                    + "id bigserial primary key, payload_json text, version bigint not null default 0)");
+                    + "id bigserial primary key, task_definition_id bigint, source_name varchar(255),"
+                    + "payload_json text, version bigint not null default 0)");
             statement.executeUpdate("create table mt101_failed_record ("
                     + "id bigserial primary key, fragment_set_id varchar(80) not null,"
                     + "senders_reference varchar(16), transaction_reference varchar(35), source_file_hash varchar(64),"

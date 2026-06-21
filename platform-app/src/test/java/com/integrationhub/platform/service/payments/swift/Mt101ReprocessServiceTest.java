@@ -305,8 +305,13 @@ class Mt101ReprocessServiceTest {
                     + "id bigserial primary key, fragment_id bigint references mt101_build_fragment(id) on delete cascade,"
                     + "fragment_set_id varchar(80) not null, source_file_hash varchar(64),"
                     + "source_record_number bigint not null, staging_id bigint,"
+                    + "source_task_definition_id bigint, source_name varchar(255),"
                     + "original_senders_reference varchar(16), original_transaction_reference varchar(35),"
                     + "current_senders_reference varchar(16), current_transaction_reference varchar(35))");
+            statement.executeUpdate("drop table if exists staging_record");
+            statement.executeUpdate("create table staging_record ("
+                    + "id bigserial primary key, task_definition_id bigint, source_name varchar(255),"
+                    + "payload_json text, version bigint not null default 0)");
             statement.executeUpdate("create table mt101_reprocess_audit ("
                     + "id bigserial primary key, action varchar(40) not null,"
                     + "fragment_set_id varchar(80) not null, source_file_hash varchar(64),"

@@ -130,6 +130,23 @@ public class Mt101FragmentRepository {
             }
             statement.executeBatch();
         }
+        // B3': rellena el origen (tarea DB_WRITE + nombre de archivo) desde staging por staging_id,
+        // para desambiguar dos archivos del mismo hash y distinta ubicacion.
+        var fragmentSetId = fragments.isEmpty() ? null : fragments.get(0).fragmentSetId();
+        if (fragmentSetId != null) {
+            fillSourceIdentity(connection, fragmentSetId);
+        }
+    }
+
+    private void fillSourceIdentity(java.sql.Connection connection, String fragmentSetId) throws SQLException {
+        var sql = "update mt101_fragment_record fr "
+                + "set source_task_definition_id = s.task_definition_id, source_name = s.source_name "
+                + "from staging_record s "
+                + "where fr.staging_id = s.id and fr.fragment_set_id = ? and fr.source_task_definition_id is null";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, fragmentSetId);
+            statement.executeUpdate();
+        }
     }
 
     public List<MessageJsonRow> readPage(DataSource dataSource,
