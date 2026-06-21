@@ -51,7 +51,7 @@ class Mt101ReprocessServiceTest {
                 .registerModule(new JavaTimeModule())
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         fragmentStore = new Mt101FragmentStore(dataSource, null, objectMapper);
-        service = new Mt101ReprocessService(dataSource, null, new Mt101FragmentRepository(), fragmentStore);
+        service = new Mt101ReprocessService(dataSource, null, new Mt101FragmentRepository());
         prepareSchema();
     }
 
@@ -160,6 +160,42 @@ class Mt101ReprocessServiceTest {
         var error = assertThrows(IllegalArgumentException.class,
                 () -> service.reprocessSourceRows(null, "SET", 9999, 9999, "hashA", "BUILT"));
         assertTrue(error.getMessage().contains("no MT101 fragments cover source rows"));
+    }
+
+    @Test
+    void reopensRejectedRebuildBackToQuarantine() throws Exception {
+        // B1': una fila cuyo correctivo fue rechazado vuelve a QUARANTINED para corregir de nuevo.
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "insert into mt101_failed_record (fragment_set_id, senders_reference, source_file_hash, "
+                             + "source_record_number, rule_code, status) values ('SET', 'P2', 'hashA', 8472, 'STRUCT.X', 'REBUILD_REJECTED')")) {
+            statement.executeUpdate();
+        }
+
+        var reopened = service.reopenRejectedRebuild(null, "SET", "hashA", 8472, "ana", "INC-9", "OPS-9");
+
+        assertEquals(1, reopened);
+        assertEquals("QUARANTINED", failedStatus(8472), "la fila rechazada vuelve a cuarentena");
+        assertEquals(1L, auditCount("REBUILD_REOPEN"));
+    }
+
+    @Test
+    void reopenFailsWhenNoRejectedRow() {
+        // Sin fallback: reabrir una fila que no esta REBUILD_REJECTED es un error accionable.
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> service.reopenRejectedRebuild(null, "SET", "hashA", 999, "ana", null, null));
+        assertTrue(error.getMessage().contains("no REBUILD_REJECTED row"));
+    }
+
+    private String failedStatus(long recordNumber) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "select status from mt101_failed_record where source_record_number = ?")) {
+            statement.setLong(1, recordNumber);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }
     }
 
     private void insertFragment(String reference, int rowFrom, int rowTo) {
@@ -278,6 +314,12 @@ class Mt101ReprocessServiceTest {
                     + "from_status varchar(30), to_status varchar(30), affected integer not null default 0,"
                     + "actor varchar(120), reason text, ticket_ref varchar(120),"
                     + "created_at timestamp not null default current_timestamp)");
+            statement.executeUpdate("drop table if exists mt101_failed_record");
+            statement.executeUpdate("create table mt101_failed_record ("
+                    + "id bigserial primary key, fragment_set_id varchar(80) not null,"
+                    + "senders_reference varchar(16), transaction_reference varchar(35), source_file_hash varchar(64),"
+                    + "source_record_number bigint, rule_code varchar(80), status varchar(40) not null default 'QUARANTINED',"
+                    + "created_at timestamp not null default current_timestamp, resolved_at timestamp)");
         }
     }
 

@@ -77,16 +77,16 @@ describe('Mt101QuarantineComponent', () => {
   describe('flujo gobernado del rebuild (maker-checker)', () => {
     it('requestRebuild crea el run REQUESTED sin ejecutar', () => {
       component.fragmentSetId = 'S';
-      component.correctiveSetId = 'S-FIX';
       component.requestRebuild();
       expect(component.rebuildRun()?.status).toBe('REQUESTED');
+      // B1: el correctiveSetId lo genera el servidor y vuelve en el summary.
+      expect(component.rebuildRun()?.correctiveSetId).toBe('S-FIX');
       expect(requestCalls).toBe(1);
       expect(executeCalls).toBe(0);
     });
 
-    it('no solicita sin set correctivo', () => {
-      component.fragmentSetId = 'S';
-      component.correctiveSetId = '';
+    it('no solicita sin fragmentSetId', () => {
+      component.fragmentSetId = '';
       component.requestRebuild();
       expect(component.rebuildRun()).toBeNull();
       expect(requestCalls).toBe(0);
@@ -94,7 +94,6 @@ describe('Mt101QuarantineComponent', () => {
 
     it('aprobar pasa a APPROVED; ejecutar reconstruye y limpia el run', () => {
       component.fragmentSetId = 'S';
-      component.correctiveSetId = 'S-FIX';
       component.requestRebuild();
       component.approveRun();
       expect(component.rebuildRun()?.status).toBe('APPROVED');
@@ -106,7 +105,6 @@ describe('Mt101QuarantineComponent', () => {
 
     it('cancelar limpia el run sin ejecutar', () => {
       component.fragmentSetId = 'S';
-      component.correctiveSetId = 'S-FIX';
       component.requestRebuild();
       component.cancelRebuild();
       expect(component.rebuildRun()).toBeNull();

@@ -310,6 +310,26 @@ public class Mt101FailedRecordRepository {
         }
     }
 
+    /**
+     * B1': reabre una fila rechazada del correctivo ({@code REBUILD_REJECTED -> QUARANTINED})
+     * conservando rebuild_run_id y las referencias correctivas, para que vuelva al ciclo
+     * corregir->rebuild. Connection-scoped (audita en la misma transaccion).
+     */
+    public int reopenRejectedRow(java.sql.Connection connection,
+                                 String fragmentSetId,
+                                 String sourceFileHash,
+                                 long sourceRecordNumber) throws SQLException {
+        var sql = "update mt101_failed_record set status = 'QUARANTINED', resolved_at = null "
+                + "where fragment_set_id = ? and source_file_hash = ? and source_record_number = ? "
+                + "and status = 'REBUILD_REJECTED'";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, fragmentSetId);
+            statement.setString(2, sourceFileHash);
+            statement.setLong(3, sourceRecordNumber);
+            return statement.executeUpdate();
+        }
+    }
+
     public record FailedRecordRow(
             String fragmentSetId,
             String sendersReference,

@@ -27,6 +27,8 @@ import java.util.Map;
 public class Mt101RebuildService {
 
     private static final String REBUILDABLE_FRAGMENT_STATUS = "REJECTED";
+    /** Limite de varchar(80) de fragment_set_id / corrective_set_id / rebuild_run_id. */
+    private static final int MAX_FRAGMENT_SET_ID_LENGTH = 80;
 
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
@@ -65,21 +67,20 @@ public class Mt101RebuildService {
 
     public RebuildRunSummary requestRebuildFromQuarantine(String connectionRef,
                                                           String fragmentSetId,
-                                                          String correctiveSetId,
                                                           String requestedBy) {
-        return requestRebuildFromQuarantine(connectionRef, fragmentSetId, correctiveSetId, requestedBy, null);
+        return requestRebuildFromQuarantine(connectionRef, fragmentSetId, requestedBy, null);
     }
 
+    /**
+     * B1: el {@code correctiveSetId} lo genera el servidor de forma irrepetible
+     * ({@code <original>-FIX-<referenceCode>}). El cliente ya no lo provee, evitando que
+     * un set existente sea reemplazado/borrado por el build correctivo ({@code replaceExisting}).
+     */
     public RebuildRunSummary requestRebuildFromQuarantine(String connectionRef,
                                                           String fragmentSetId,
-                                                          String correctiveSetId,
                                                           String requestedBy,
                                                           String requestReason) {
         var set = require(fragmentSetId, "fragmentSetId");
-        var corrective = require(correctiveSetId, "correctiveSetId");
-        if (corrective.equals(set)) {
-            throw new IllegalArgumentException("correctiveSetId must differ from the original fragmentSetId");
-        }
         var dataSource = resolveDataSource(connectionRef);
         try {
             var quarantinedCount = failedRecordRepository.countByStatus(dataSource, set, "QUARANTINED");
@@ -99,16 +100,47 @@ public class Mt101RebuildService {
             assertRebuildableFragments(
                     fragmentRepository.statusesByReferences(dataSource, set, references), references, set);
 
-            var runId = corrective;
-            rebuildRepository.createRun(dataSource, runId, set, corrective, requestedBy, blankToNull(requestReason));
-            rebuildRepository.insertSelectionFromFragmentRecords(dataSource, runId, set, references);
-            var selectedRows = rebuildRepository.countSelection(dataSource, runId);
-            if (selectedRows == 0) {
-                throw new IllegalArgumentException("cannot resolve selected rows for set " + set
-                        + ". mt101_fragment_record is required; previous data is not corrected automatically.");
+            // B1: id determinista e irrepetible por secuencia; rechazar si ya existe como lote.
+            var referenceCode = rebuildRepository.nextReferenceCode(dataSource);
+            var corrective = set + "-FIX-" + referenceCode;
+            // R-b: el id correctivo no puede exceder varchar(80) (run/corrective/fragment_set).
+            // Sin fallback: si el set original es demasiado largo, se aborta ruidoso (no truncar).
+            if (corrective.length() > MAX_FRAGMENT_SET_ID_LENGTH) {
+                throw new IllegalArgumentException("corrective set id " + corrective + " exceeds "
+                        + MAX_FRAGMENT_SET_ID_LENGTH + " chars; original fragmentSetId is too long to derive a corrective id");
             }
-            rebuildRepository.updateSelectionStats(dataSource, runId, selectedRows, references.size());
-            return new RebuildRunSummary(runId, set, corrective, "REQUESTED", selectedRows, references.size());
+            if (corrective.equals(set) || rebuildRepository.fragmentSetExists(dataSource, corrective)) {
+                throw new IllegalStateException("generated corrective set " + corrective
+                        + " already exists; aborting to avoid overwriting an existing batch");
+            }
+            var runId = corrective;
+            // R-a: crear run + seleccion + stats en UNA transaccion local. Un fallo intermedio
+            // hace rollback completo: nunca queda un rebuild REQUESTED con seleccion incompleta.
+            try (var connection = dataSource.getConnection()) {
+                var previousAutoCommit = connection.getAutoCommit();
+                connection.setAutoCommit(false);
+                try {
+                    rebuildRepository.createRun(connection, runId, set, corrective, requestedBy, blankToNull(requestReason), referenceCode, connectionRef);
+                    rebuildRepository.insertSelectionFromFragmentRecords(connection, runId, set, references);
+                    var selectedRows = rebuildRepository.countSelection(connection, runId);
+                    if (selectedRows == 0) {
+                        throw new IllegalArgumentException("cannot resolve selected rows for set " + set
+                                + ". mt101_fragment_record is required; previous data is not corrected automatically.");
+                    }
+                    rebuildRepository.updateSelectionStats(connection, runId, selectedRows, references.size());
+                    connection.commit();
+                    return new RebuildRunSummary(runId, set, corrective, "REQUESTED", selectedRows, references.size());
+                } catch (SQLException | RuntimeException error) {
+                    try {
+                        connection.rollback();
+                    } catch (SQLException rollbackError) {
+                        error.addSuppressed(rollbackError);
+                    }
+                    throw error;
+                } finally {
+                    connection.setAutoCommit(previousAutoCommit);
+                }
+            }
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot request MT101 rebuild for set " + set, error);
         }
@@ -162,6 +194,16 @@ public class Mt101RebuildService {
                 throw new IllegalArgumentException("rebuild run " + runId
                         + " must be APPROVED before execution; current status is " + run.status());
             }
+            // B2: la aprobacion congela los datos. Si alguna fila cambio en staging despues
+            // de aprobar, se revoca la aprobacion (vuelve a REQUESTED) y no se ejecuta con
+            // datos no aprobados. Sin fallback: re-aprobacion obligatoria.
+            var stale = rebuildRepository.countStaleSelections(dataSource, runId);
+            if (stale > 0) {
+                rebuildRepository.revertApprovalToRequested(dataSource, runId,
+                        "approval invalidated: " + stale + " selected row(s) changed in staging after approval");
+                throw new IllegalStateException("rebuild run " + runId + " has " + stale
+                        + " selected row(s) modified in staging after approval; approval revoked, re-approval required");
+            }
             var set = run.originalFragmentSetId();
             var corrective = run.correctiveSetId();
             var references = rebuildRepository.referencesFromSelection(dataSource, runId);
@@ -185,10 +227,13 @@ public class Mt101RebuildService {
             }
             // :20: = R + referenceCode + messageIndex (1..N). SWIFT limita :20: a 16 chars;
             // abortar antes de construir si el peor caso lo excede (sin truncado silencioso).
-            var maxSendersReferenceLength = 1 + referenceCode.length() + String.valueOf(references.size()).length();
+            // R-c: peor caso = una fila por fragmento (selectedRows), no el nº de fragmentos
+            // originales: el correctivo puede fragmentar mas si cambian tamanos/reglas.
+            var worstCaseMessages = Math.max(run.selectedRows(), references.size());
+            var maxSendersReferenceLength = 1 + referenceCode.length() + String.valueOf(worstCaseMessages).length();
             if (maxSendersReferenceLength > 16) {
                 throw new IllegalStateException("corrective :20: would exceed 16 chars for run " + runId
-                        + " (R + " + referenceCode + " + messageIndex up to " + references.size() + ")");
+                        + " (R + " + referenceCode + " + messageIndex up to " + worstCaseMessages + ")");
             }
 
             // Reclamo atomico APPROVED -> BUILDING: solo un executor procede (evita doble
@@ -344,6 +389,8 @@ public class Mt101RebuildService {
             var updated = 0;
             for (var run : rebuildRepository.findRunsByOriginalSet(dataSource, set)) {
                 var lifecycle = rebuildRepository.deriveLifecycleStatus(dataSource, run.correctiveSetId());
+                // R6: registra el intento de sincronizacion aunque no haya avance.
+                rebuildRepository.touchLifecycleSync(dataSource, run.rebuildRunId());
                 if (lifecycle.status() == null || lifecycle.status().isBlank()) {
                     continue;
                 }
@@ -359,6 +406,25 @@ public class Mt101RebuildService {
             return updated;
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot synchronize MT101 rebuild lifecycle for set " + set, error);
+        }
+    }
+
+    /**
+     * R6: sincroniza el lifecycle de TODOS los runs correctivos en curso, sin depender de
+     * que alguien abra la pantalla de cuarentena. Lo invoca el scheduler.
+     *
+     * @return cuantos runs avanzaron de estado.
+     */
+    public int synchronizeActiveLifecycles() {
+        try {
+            var updated = 0;
+            // R-d: cada run se sincroniza con el connectionRef con que se creo (no solo el default).
+            for (var active : rebuildRepository.findActiveOriginalSets(defaultDataSource)) {
+                updated += synchronizeLifecycle(active.connectionRef(), active.originalFragmentSetId());
+            }
+            return updated;
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot synchronize active MT101 rebuild lifecycles", error);
         }
     }
 
@@ -381,6 +447,10 @@ public class Mt101RebuildService {
             case "SENT" -> "REBUILD_SENT";
             case "CONFIRMED" -> "REBUILD_CONFIRMED";
             case "RECONCILED", "RESOLVED" -> "RESOLVED";
+            // B5: un correctivo con fragmentos REJECTED no se queda "pendiente de validar":
+            // marca la fila como REBUILD_REJECTED para que la operacion sepa que debe
+            // corregir de nuevo o abrir un run nuevo (no estado ambiguo).
+            case "FAILED" -> "REBUILD_REJECTED";
             default -> null;
         };
     }

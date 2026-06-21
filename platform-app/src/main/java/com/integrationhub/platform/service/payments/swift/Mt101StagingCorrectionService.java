@@ -4,6 +4,7 @@ import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRepository;
 import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
+import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
 import com.integrationhub.platform.repository.payments.swift.Mt101StagingCorrectionRepository;
 import com.integrationhub.platform.repository.payments.swift.Mt101StagingRecordRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
@@ -44,6 +45,7 @@ public class Mt101StagingCorrectionService {
     private final Mt101StagingRecordRepository stagingRepository;
     private final Mt101FailedRecordRepository failedRecordRepository;
     private final Mt101StagingCorrectionRepository correctionRepository;
+    private final Mt101RebuildRepository rebuildRepository;
     private final JsonConfigurationMapper jsonConfigurationMapper;
     private final RecordAuditEmitter recordAuditEmitter;
 
@@ -54,6 +56,7 @@ public class Mt101StagingCorrectionService {
                                           Mt101StagingRecordRepository stagingRepository,
                                           Mt101FailedRecordRepository failedRecordRepository,
                                           Mt101StagingCorrectionRepository correctionRepository,
+                                          Mt101RebuildRepository rebuildRepository,
                                           JsonConfigurationMapper jsonConfigurationMapper,
                                           RecordAuditEmitter recordAuditEmitter) {
         this.defaultDataSource = defaultDataSource;
@@ -62,6 +65,7 @@ public class Mt101StagingCorrectionService {
         this.stagingRepository = stagingRepository;
         this.failedRecordRepository = failedRecordRepository;
         this.correctionRepository = correctionRepository;
+        this.rebuildRepository = rebuildRepository;
         this.jsonConfigurationMapper = jsonConfigurationMapper;
         this.recordAuditEmitter = recordAuditEmitter;
     }
@@ -73,7 +77,7 @@ public class Mt101StagingCorrectionService {
                                           RecordAuditEmitter recordAuditEmitter) {
         this(defaultDataSource, connectionPoolManager, fragmentRepository, stagingRepository,
                 new Mt101FailedRecordRepository(), new Mt101StagingCorrectionRepository(),
-                new JsonConfigurationMapper(), recordAuditEmitter);
+                new Mt101RebuildRepository(), new JsonConfigurationMapper(), recordAuditEmitter);
     }
 
     /** Conveniencia para tests sin auditoria. */
@@ -118,6 +122,12 @@ public class Mt101StagingCorrectionService {
                 var previousAutoCommit = connection.getAutoCommit();
                 connection.setAutoCommit(false);
                 try {
+                    // B2: si la fila esta en un rebuild APPROVED/BUILDING, sus datos ya fueron
+                    // congelados por el checker. No se admite corregirla hasta cerrar/invalidar
+                    // ese run, para no romper la segregacion maker-checker.
+                    if (rebuildRepository.isRowLockedByActiveRun(connection, set, row.sourceFileHash(), recordNumber)) {
+                        throw new RowLockedForRebuildException(recordNumber, set);
+                    }
                     var current = stagingRepository.findStagingPayload(
                             connection, row.processExecutionId(), row.recordIndex(), row.sourceFileHash());
                     if (current == null) {
@@ -365,6 +375,18 @@ public class Mt101StagingCorrectionService {
         public StaleStagingRowException(long recordNumber, long expectedVersion, long actualVersion) {
             super("staging row " + recordNumber + " was modified concurrently (expected version "
                     + expectedVersion + " but is " + actualVersion + "); reload and retry");
+        }
+    }
+
+    /**
+     * B2: la fila esta en un rebuild APPROVED/BUILDING; sus datos fueron congelados por el
+     * checker y no pueden corregirse hasta cerrar o invalidar ese run.
+     */
+    public static class RowLockedForRebuildException extends RuntimeException {
+        public RowLockedForRebuildException(long recordNumber, String fragmentSetId) {
+            super("staging row " + recordNumber + " in set " + fragmentSetId
+                    + " is locked by an approved/building rebuild run; data was frozen for maker-checker."
+                    + " Wait for the run to finish or invalidate it before correcting again");
         }
     }
 }

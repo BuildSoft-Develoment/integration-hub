@@ -76,6 +76,9 @@ public class Mt101QuarantineResource {
         } catch (Mt101StagingCorrectionService.StaleStagingRowException conflict) {
             // Locking optimista: otro operador corrigio la fila desde que la cargaste.
             throw new ClientErrorException(conflict.getMessage(), Response.Status.CONFLICT);
+        } catch (Mt101StagingCorrectionService.RowLockedForRebuildException locked) {
+            // B2: la fila esta congelada por un rebuild APPROVED/BUILDING (maker-checker).
+            throw new ClientErrorException(locked.getMessage(), Response.Status.CONFLICT);
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }
@@ -164,12 +167,12 @@ public class Mt101QuarantineResource {
     @RolesAllowed({"platform-admin", "integration-admin", "operator"})
     public Mt101RebuildService.RebuildRunSummary requestRebuild(@QueryParam("connectionRef") String connectionRef,
                                                                 @QueryParam("fragmentSetId") String fragmentSetId,
-                                                                @QueryParam("correctiveSetId") String correctiveSetId,
                                                                 @QueryParam("reason") String reason,
                                                                 @Context SecurityContext securityContext) {
         try {
+            // B1: el correctiveSetId lo genera el servidor (no se acepta del cliente).
             return rebuildService.requestRebuildFromQuarantine(
-                    connectionRef, fragmentSetId, correctiveSetId, actor(securityContext), reason);
+                    connectionRef, fragmentSetId, actor(securityContext), reason);
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }

@@ -44,7 +44,7 @@ td { font-size:.86rem; }
 .q__card strong { font-size:1.35rem; font-weight:600; }
 .q__empty,.q__error,.q__ok { padding:.75rem; }
 .q__empty,.q__card--SUPERSEDED strong,.q__status--DISCARDED { color:var(--ih-text-soft); }
-.q__error,.q__card--REJECTED strong,.q__tl-icon--error { color:var(--ih-status-error); }
+.q__error,.q__card--REJECTED strong,.q__status--REBUILD_REJECTED,.q__tl-icon--error { color:var(--ih-status-error); }
 .q__ok,.q__status--RESOLVED,.q__status--REBUILD_VALIDATED,.q__status--REBUILD_SENT,.q__status--REBUILD_CONFIRMED,.q__tl-icon--ok,.q__card--SENT strong,.q__card--ARCHIVED strong,.q__card--VALIDATED strong { color:var(--ih-status-success); }
 .q__status--QUARANTINED,.q__card--QUARANTINED strong { color:var(--ih-status-warning); }
 .q__status--REBUILD_PENDING_VALIDATION,.q__status--REBUILD_ARCHIVED { color:var(--ih-status-warning); }

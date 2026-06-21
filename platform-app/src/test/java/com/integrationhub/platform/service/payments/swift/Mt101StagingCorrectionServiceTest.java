@@ -235,6 +235,16 @@ class Mt101StagingCorrectionServiceTest {
                     + "corrected_by varchar(120), correction_reason text, ticket_ref varchar(120),"
                     + "old_version bigint, new_version bigint,"
                     + "created_at timestamp not null default current_timestamp)");
+            // B2: el servicio comprueba si la fila esta en un run APPROVED/BUILDING (lock).
+            statement.executeUpdate("drop table if exists mt101_rebuild_selection");
+            statement.executeUpdate("drop table if exists mt101_rebuild_run");
+            statement.executeUpdate("create table mt101_rebuild_run ("
+                    + "rebuild_run_id varchar(80) primary key, original_fragment_set_id varchar(80) not null,"
+                    + "corrective_set_id varchar(80) not null, status varchar(30) not null default 'REQUESTED')");
+            statement.executeUpdate("create table mt101_rebuild_selection ("
+                    + "id bigserial primary key, rebuild_run_id varchar(80) not null references mt101_rebuild_run(rebuild_run_id),"
+                    + "fragment_set_id varchar(80) not null, source_file_hash varchar(64),"
+                    + "source_record_number bigint not null)");
         }
     }
 

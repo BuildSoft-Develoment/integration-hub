@@ -1,6 +1,6 @@
 package com.integrationhub.platform.service.payments.swift;
 
-import com.integrationhub.platform.provider.task.payments.swift.Mt101FragmentStore;
+import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRepository;
 import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
 import com.integrationhub.platform.repository.payments.swift.Mt101ReprocessAuditRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
@@ -44,28 +44,27 @@ public class Mt101ReprocessService {
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
     private final Mt101FragmentRepository repository;
-    private final Mt101FragmentStore fragmentStore;
+    private final Mt101FailedRecordRepository failedRecordRepository;
     private final Mt101ReprocessAuditRepository auditRepository;
 
     @Inject
     public Mt101ReprocessService(DataSource defaultDataSource,
                                  ConnectionPoolManager connectionPoolManager,
                                  Mt101FragmentRepository repository,
-                                 Mt101FragmentStore fragmentStore,
+                                 Mt101FailedRecordRepository failedRecordRepository,
                                  Mt101ReprocessAuditRepository auditRepository) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.repository = repository;
-        this.fragmentStore = fragmentStore;
+        this.failedRecordRepository = failedRecordRepository;
         this.auditRepository = auditRepository;
     }
 
     public Mt101ReprocessService(DataSource defaultDataSource,
                                  ConnectionPoolManager connectionPoolManager,
-                                 Mt101FragmentRepository repository,
-                                 Mt101FragmentStore fragmentStore) {
-        this(defaultDataSource, connectionPoolManager, repository, fragmentStore,
-                new Mt101ReprocessAuditRepository());
+                                 Mt101FragmentRepository repository) {
+        this(defaultDataSource, connectionPoolManager, repository,
+                new Mt101FailedRecordRepository(), new Mt101ReprocessAuditRepository());
     }
 
     /**
@@ -89,13 +88,28 @@ public class Mt101ReprocessService {
         var from = requireStatus(fromStatus, "fromStatus");
         var to = requireStatus(toStatus, "toStatus");
         validateTransition(from, to);
-        try {
-            var dataSource = resolveDataSource(connectionRef);
-            var affected = repository.resetStatus(dataSource, set, from, to);
-            auditRepository.insert(dataSource, new Mt101ReprocessAuditRepository.ReprocessAuditRow(
-                    "STATUS_RESET", set, null, null, null, from, to, affected, normalizeActor(actor),
-                    blankToNull(reason), blankToNull(ticketRef)));
-            return affected;
+        var dataSource = resolveDataSource(connectionRef);
+        // B4: reset de estado + auditoria en UNA transaccion local (no best-effort).
+        try (var connection = dataSource.getConnection()) {
+            var previousAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                var affected = repository.resetStatus(connection, set, from, to);
+                auditRepository.insert(connection, new Mt101ReprocessAuditRepository.ReprocessAuditRow(
+                        "STATUS_RESET", set, null, null, null, from, to, affected, normalizeActor(actor),
+                        blankToNull(reason), blankToNull(ticketRef)));
+                connection.commit();
+                return affected;
+            } catch (SQLException | RuntimeException error) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackError) {
+                    error.addSuppressed(rollbackError);
+                }
+                throw error;
+            } finally {
+                connection.setAutoCommit(previousAutoCommit);
+            }
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot reset MT101 fragments " + from + " -> " + to
                     + " for set " + set, error);
@@ -177,30 +191,98 @@ public class Mt101ReprocessService {
                     + "] in set " + set + " to " + to + "; invalid current states: " + invalidTransitions
                     + "; permitted: " + ALLOWED_TRANSITIONS);
         }
-        var errorByRef = new LinkedHashMap<String, String>();
+        var expectedByRef = new LinkedHashMap<String, String>();
         for (var fragment : fragments) {
             if (fragment.sendersReference() != null && !fragment.sendersReference().isBlank()) {
-                errorByRef.put(fragment.sendersReference(), null);
+                expectedByRef.put(fragment.sendersReference(),
+                        fragment.status() == null ? null : fragment.status().toUpperCase());
             }
         }
-        fragmentStore.markStatusBatch(fragmentSource(set, connectionRef), errorByRef, to);
-        try {
-            auditRepository.insert(dataSource, new Mt101ReprocessAuditRepository.ReprocessAuditRow(
-                    "SOURCE_ROW_REPROCESS", set, hash, recordFrom, recordTo, null, to, errorByRef.size(), normalizeActor(actor),
-                    blankToNull(reason), blankToNull(ticketRef)));
+        // B3+B4: transicion condicional (cada fragmento solo cambia si su estado sigue siendo
+        // el leido -> no pisa un PAY concurrente que lo llevo a SENT) + auditoria durable, todo
+        // en UNA transaccion local. Si no cambian todas las filas esperadas: rollback, sin parcial.
+        try (var connection = dataSource.getConnection()) {
+            var previousAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                var updated = repository.transitionStatusConditional(connection, set, expectedByRef, to);
+                if (updated != expectedByRef.size()) {
+                    throw new IllegalStateException("cannot reprocess source rows [" + recordFrom + ", " + recordTo
+                            + "] in set " + set + " to " + to + "; expected " + expectedByRef.size()
+                            + " fragments but " + updated + " changed (concurrent status change). No partial apply.");
+                }
+                auditRepository.insert(connection, new Mt101ReprocessAuditRepository.ReprocessAuditRow(
+                        "SOURCE_ROW_REPROCESS", set, hash, recordFrom, recordTo, null, to, updated, normalizeActor(actor),
+                        blankToNull(reason), blankToNull(ticketRef)));
+                connection.commit();
+            } catch (SQLException | RuntimeException error) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackError) {
+                    error.addSuppressed(rollbackError);
+                }
+                throw error;
+            } finally {
+                connection.setAutoCommit(previousAutoCommit);
+            }
         } catch (SQLException error) {
-            throw new IllegalStateException("Cannot audit MT101 source-row reprocess for set " + set, error);
+            throw new IllegalStateException("Cannot reprocess source rows [" + recordFrom + ", " + recordTo
+                    + "] in set " + set, error);
         }
         return fragments;
     }
 
-    private Map<String, Object> fragmentSource(String fragmentSetId, String connectionRef) {
-        var source = new LinkedHashMap<String, Object>();
-        source.put("fragmentSetId", fragmentSetId);
-        if (connectionRef != null && !connectionRef.isBlank()) {
-            source.put("connectionRef", connectionRef);
+    /**
+     * B1': reabre una fila cuyo rebuild correctivo fue rechazado
+     * ({@code REBUILD_REJECTED -> QUARANTINED}) para que vuelva al ciclo corregir->rebuild,
+     * conservando el run previo y las referencias correctivas. Cambio de estado + auditoria
+     * en una sola transaccion local.
+     *
+     * @return cuantas filas se reabrieron (1 si existia la fila rechazada).
+     */
+    public int reopenRejectedRebuild(String connectionRef,
+                                     String fragmentSetId,
+                                     String sourceFileHash,
+                                     long sourceRecordNumber,
+                                     String actor,
+                                     String reason,
+                                     String ticketRef) {
+        var set = requireFragmentSetId(fragmentSetId);
+        var hash = requireSourceFileHash(sourceFileHash);
+        if (sourceRecordNumber < 1) {
+            throw new IllegalArgumentException("sourceRecordNumber must be positive");
         }
-        return source;
+        var dataSource = resolveDataSource(connectionRef);
+        try (var connection = dataSource.getConnection()) {
+            var previousAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                var reopened = failedRecordRepository.reopenRejectedRow(connection, set, hash, sourceRecordNumber);
+                if (reopened == 0) {
+                    // Sin fallback: si no hay fila REBUILD_REJECTED, es un error accionable.
+                    throw new IllegalArgumentException("no REBUILD_REJECTED row at source file " + hash
+                            + " row " + sourceRecordNumber + " for set " + set);
+                }
+                auditRepository.insert(connection, new Mt101ReprocessAuditRepository.ReprocessAuditRow(
+                        "REBUILD_REOPEN", set, hash, sourceRecordNumber, sourceRecordNumber,
+                        "REBUILD_REJECTED", "QUARANTINED", reopened, normalizeActor(actor),
+                        blankToNull(reason), blankToNull(ticketRef)));
+                connection.commit();
+                return reopened;
+            } catch (SQLException | RuntimeException error) {
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackError) {
+                    error.addSuppressed(rollbackError);
+                }
+                throw error;
+            } finally {
+                connection.setAutoCommit(previousAutoCommit);
+            }
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot reopen rejected rebuild row " + sourceRecordNumber
+                    + " for set " + set, error);
+        }
     }
 
     private void validateTransition(String from, String to) {

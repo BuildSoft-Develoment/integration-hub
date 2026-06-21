@@ -42,7 +42,6 @@ class Mt101LargeVolumeLineageRebuildTest {
     private static final int TOTAL_ROWS = 100_000;
     private static final int ROWS_PER_FRAGMENT = 50;
     private static final String SET_ID = "SET-100K";
-    private static final String FIX_SET_ID = "SET-100K-FIX";
     private static final String HASH = "hash-100k";
     private static final List<Long> BAD_ROWS = List.of(123L, 126L, 50_250L, 77_777L, 99_999L);
 
@@ -55,6 +54,7 @@ class Mt101LargeVolumeLineageRebuildTest {
     private DataSource dataSource;
     private Mt101QuarantineService quarantineService;
     private Mt101RebuildService rebuildService;
+    private String fixSetId;
     private final AtomicReference<Map<String, Object>> capturedConfig = new AtomicReference<>();
 
     @BeforeEach
@@ -104,8 +104,11 @@ class Mt101LargeVolumeLineageRebuildTest {
             assertEquals(referenceFor(row), failedSenderReference("TX-" + row));
         }
 
-        var requested = rebuildService.requestRebuildFromQuarantine(null, SET_ID, FIX_SET_ID, "operator");
+        var requested = rebuildService.requestRebuildFromQuarantine(null, SET_ID, "operator");
         assertEquals("REQUESTED", requested.status());
+        // B1: el id correctivo lo genera el servidor (<original>-FIX-<referenceCode>).
+        fixSetId = requested.correctiveSetId();
+        assertTrue(fixSetId.startsWith(SET_ID + "-FIX-"), "id correctivo generado por servidor: " + fixSetId);
         assertEquals(affectedReferences().size(), requested.affectedFragments());
         assertEquals(affectedReferences().size() * ROWS_PER_FRAGMENT, requested.selectedRows());
 
@@ -117,22 +120,22 @@ class Mt101LargeVolumeLineageRebuildTest {
         assertFalse(selectionContains(151), "no inventa rango entre fragmentos no contiguos");
         assertFalse(selectionContains(50_251), "no toma la fila valida posterior al fragmento afectado");
 
-        rebuildService.approveRebuildRun(null, FIX_SET_ID, "approver");
-        var result = rebuildService.executeApprovedRebuildRun(null, FIX_SET_ID, "executor");
+        rebuildService.approveRebuildRun(null, fixSetId, "approver");
+        var result = rebuildService.executeApprovedRebuildRun(null, fixSetId, "executor");
 
-        assertEquals(FIX_SET_ID, result.correctiveSetId());
+        assertEquals(fixSetId, result.correctiveSetId());
         assertEquals(affectedReferences().size() * ROWS_PER_FRAGMENT, result.rebuiltRows());
         assertEquals(affectedReferences().size(), result.supersededFragments());
         assertEquals(BAD_ROWS.size(), result.resolvedQuarantine());
 
         @SuppressWarnings("unchecked")
         var source = (Map<String, Object>) capturedConfig.get().get("source");
-        assertEquals(FIX_SET_ID, source.get("rebuildRunId"));
+        assertEquals(fixSetId, source.get("rebuildRunId"));
         assertFalse(source.containsKey("recordIndexIn"), "el rebuild no debe usar IN masivo");
         assertEquals(affectedReferences().size(), countWhere("mt101_build_fragment", "status = 'SUPERSEDED'"));
         assertEquals(0, countWhere("mt101_failed_record", "status = 'QUARANTINED'"));
         assertEquals(BAD_ROWS.size(), countWhere("mt101_failed_record", "status = 'REBUILD_PENDING_VALIDATION'"));
-        assertEquals("BUILT", queryString("select status from mt101_rebuild_run where rebuild_run_id = '" + FIX_SET_ID + "'"));
+        assertEquals("BUILT", queryString("select status from mt101_rebuild_run where rebuild_run_id = '" + fixSetId + "'"));
     }
 
     private void seedOneHundredThousandRowsWithFailures() throws SQLException {
@@ -233,7 +236,7 @@ class Mt101LargeVolumeLineageRebuildTest {
 
     private boolean selectionContains(long sourceRecordNumber) throws SQLException {
         return countWhere("mt101_rebuild_selection",
-                "rebuild_run_id = '" + FIX_SET_ID + "' and source_record_number = " + sourceRecordNumber) > 0;
+                "rebuild_run_id = '" + fixSetId + "' and source_record_number = " + sourceRecordNumber) > 0;
     }
 
     private void insertCorrectiveLineage(Map<String, Object> configuration) {
@@ -402,7 +405,7 @@ class Mt101LargeVolumeLineageRebuildTest {
                     + "request_reason text, approval_reason text,"
                     + "selected_rows bigint not null default 0,"
                     + "affected_fragments integer not null default 0,"
-                    + "error_message text, reference_code varchar(12),"
+                    + "error_message text, reference_code varchar(12), connection_ref varchar(120),"
                     + "created_at timestamp not null default current_timestamp,"
                     + "approved_at timestamp, executed_at timestamp, built_at timestamp, completed_at timestamp,"
                     + "last_lifecycle_sync_at timestamp,"
@@ -418,9 +421,13 @@ class Mt101LargeVolumeLineageRebuildTest {
                     + "original_senders_reference varchar(16),"
                     + "original_transaction_reference varchar(35),"
                     + "status varchar(30) not null default 'SELECTED',"
+                    + "selected_payload_hash varchar(64), selected_staging_version bigint,"
                     + "created_at timestamp not null default current_timestamp)");
             statement.executeUpdate("create unique index ux_mt101_rebuild_selection_row_large on mt101_rebuild_selection "
                     + "(rebuild_run_id, coalesce(source_file_hash, ''), source_record_number)");
+            statement.executeUpdate("drop table if exists staging_record");
+            statement.executeUpdate("create table staging_record ("
+                    + "id bigserial primary key, payload_json text, version bigint not null default 0)");
         }
     }
 

@@ -347,14 +347,19 @@ export class AuditApiService {
       '/api/query/mt101-quarantine/staging-row', query.payload, { params: httpParams, headers });
   }
 
-  /** Paso 1 del flujo gobernado: solicita el rebuild (queda REQUESTED, sin ejecutarse). */
+  /**
+   * Paso 1 del flujo gobernado: solicita el rebuild (queda REQUESTED, sin ejecutarse).
+   * El correctiveSetId lo genera el servidor (B1) y vuelve en el summary; el cliente no lo provee.
+   */
   mt101RequestRebuildRun(query: {
     connectionRef?: string;
     fragmentSetId: string;
-    correctiveSetId: string;
     reason?: string;
   }): Observable<Mt101RebuildRunSummary> {
-    let httpParams = this.rebuildRunParams(query.fragmentSetId, query.correctiveSetId, query.connectionRef);
+    let httpParams = new HttpParams().set('fragmentSetId', query.fragmentSetId);
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
     if (query.reason?.trim()) {
       httpParams = httpParams.set('reason', query.reason.trim());
     }
@@ -386,13 +391,29 @@ export class AuditApiService {
     });
   }
 
-  private rebuildRunParams(fragmentSetId: string, correctiveSetId: string, connectionRef?: string): HttpParams {
+  /**
+   * B1': reabre una fila cuyo rebuild correctivo fue rechazado (REBUILD_REJECTED -> QUARANTINED)
+   * para corregirla y reconstruir de nuevo, conservando el run y las referencias correctivas.
+   */
+  mt101ReopenRejected(query: {
+    connectionRef?: string;
+    fragmentSetId: string;
+    sourceFileHash: string;
+    recordNumber: number;
+    reason?: string;
+  }): Observable<{ fragmentSetId: string; fromStatus: string; toStatus: string; affected: number }> {
     let httpParams = new HttpParams()
-      .set('fragmentSetId', fragmentSetId)
-      .set('correctiveSetId', correctiveSetId);
-    if (connectionRef?.trim()) {
-      httpParams = httpParams.set('connectionRef', connectionRef.trim());
+      .set('fragmentSetId', query.fragmentSetId)
+      .set('sourceFileHash', query.sourceFileHash)
+      .set('recordNumber', query.recordNumber);
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }
-    return httpParams;
+    if (query.reason?.trim()) {
+      httpParams = httpParams.set('reason', query.reason.trim());
+    }
+    return this.http.post<{ fragmentSetId: string; fromStatus: string; toStatus: string; affected: number }>(
+      '/api/query/mt101-fragments/reprocess/reopen-rejected', {}, { params: httpParams });
   }
+
 }

@@ -5,7 +5,7 @@ const OK_STATES = new Set([
   'SENT', 'ARCHIVED', 'VALIDATED', 'INGESTED', 'BUILT', 'CONFIRMED', 'RECONCILED', 'RESOLVED', 'COMPOSED',
 ]);
 const ERROR_STATES = new Set([
-  'REJECTED', 'ERROR', 'DEAD', 'FAILED', 'VALIDATION_ISSUE',
+  'REJECTED', 'ERROR', 'DEAD', 'FAILED', 'VALIDATION_ISSUE', 'REBUILD_REJECTED',
 ]);
 
 export type TimelineStatusKind = 'ok' | 'error' | 'pending';

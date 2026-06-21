@@ -206,11 +206,15 @@ class Mt101MillionFileProcessE2EIT {
 
             // 4) Reproceso quirurgico: corregir la fila y rebuild del FRAGMENTO COMPLETO afectado.
             correctStagingRow(BAD_ROW);
-            String rebuildRunId = given()
+            var requestRun = given()
                     .queryParam("fragmentSetId", fragmentSetId)
-                    .queryParam("correctiveSetId", fragmentSetId + "-FIX")
                     .when().post("/api/query/mt101-quarantine/rebuild-runs/request")
-                    .then().statusCode(200).extract().path("rebuildRunId");
+                    .then().statusCode(200).extract().jsonPath();
+            // B1: el correctiveSetId lo genera el servidor (<original>-FIX-<referenceCode>).
+            String correctiveSetId = requestRun.getString("correctiveSetId");
+            String rebuildRunId = requestRun.getString("rebuildRunId");
+            assertTrue(correctiveSetId.startsWith(fragmentSetId + "-FIX-"),
+                    "el correctiveSetId lo genera el servidor: " + correctiveSetId);
             rebuildService.approveRebuildRun(null, rebuildRunId, "integration-approver");
             var rebuild = rebuildService.executeApprovedRebuildRun(null, rebuildRunId, "integration-executor");
             // P0-1: reconstruye TODAS las filas del fragmento afectado, no solo la fila fallida.
@@ -224,7 +228,7 @@ class Mt101MillionFileProcessE2EIT {
             // Critico (#14): el set correctivo conserva TODAS las transacciones del fragmento
             // afectado -> no se pierde ninguna transaccion valida hermana de la 847192/8472.
             assertEquals(affectedRows, queryLong("select coalesce(sum(source_record_to - source_record_from + 1), 0) "
-                            + "from mt101_build_fragment where fragment_set_id = '" + fragmentSetId + "-FIX'"),
+                            + "from mt101_build_fragment where fragment_set_id = '" + correctiveSetId + "'"),
                     "el correctivo cubre todas las filas del fragmento afectado, sin perder transacciones");
         }
     }
@@ -300,11 +304,15 @@ class Mt101MillionFileProcessE2EIT {
                     .then().statusCode(409);
 
             // Rebuild gobernado maker-checker: solicita (A) / aprueba otro (B) / ejecuta (C).
-            String rebuildRunId = given()
+            var requestRun = given()
                     .queryParam("fragmentSetId", fragmentSetId)
-                    .queryParam("correctiveSetId", fragmentSetId + "-FIX")
                     .when().post("/api/query/mt101-quarantine/rebuild-runs/request")
-                    .then().statusCode(200).extract().path("rebuildRunId");
+                    .then().statusCode(200).extract().jsonPath();
+            // B1: el correctiveSetId lo genera el servidor (<original>-FIX-<referenceCode>).
+            String correctiveSetId = requestRun.getString("correctiveSetId");
+            String rebuildRunId = requestRun.getString("rebuildRunId");
+            assertTrue(correctiveSetId.startsWith(fragmentSetId + "-FIX-"),
+                    "el correctiveSetId lo genera el servidor: " + correctiveSetId);
             rebuildService.approveRebuildRun(null, rebuildRunId, "integration-approver");
             var rebuild = rebuildService.executeApprovedRebuildRun(null, rebuildRunId, "integration-executor");
 
@@ -315,7 +323,7 @@ class Mt101MillionFileProcessE2EIT {
                     "fragment_set_id = '" + fragmentSetId + "' and status = 'SUPERSEDED'"),
                     "exactamente los dos fragmentos con fila fallida quedan SUPERSEDED");
             assertEquals(affected, queryLong("select coalesce(sum(source_record_to - source_record_from + 1), 0) "
-                            + "from mt101_build_fragment where fragment_set_id = '" + fragmentSetId + "-FIX'"),
+                            + "from mt101_build_fragment where fragment_set_id = '" + correctiveSetId + "'"),
                     "el correctivo cubre ambos fragmentos completos, sin perder ninguna transaccion valida");
         }
     }

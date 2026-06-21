@@ -391,6 +391,53 @@ public class Mt101FragmentRepository {
         }
     }
 
+    /**
+     * B3: transicion condicional por referencia (cada fragmento solo cambia si su estado
+     * actual sigue siendo el esperado). Evita pisar un fragmento que un PAY concurrente
+     * llevo a SENT entre la lectura y la escritura. Connection-scoped para auditar atomico.
+     *
+     * @return cuantos fragmentos cambiaron realmente (debe ser == esperado, si no abortar).
+     */
+    public int transitionStatusConditional(java.sql.Connection connection,
+                                           String fragmentSetId,
+                                           Map<String, String> expectedStatusByReference,
+                                           String toStatus) throws SQLException {
+        if (expectedStatusByReference == null || expectedStatusByReference.isEmpty()) {
+            return 0;
+        }
+        var sql = "update mt101_build_fragment set status = ?, error_message = null, updated_at = current_timestamp "
+                + "where fragment_set_id = ? and senders_reference = ? and status = ?";
+        var updated = 0;
+        try (var statement = connection.prepareStatement(sql)) {
+            for (var entry : expectedStatusByReference.entrySet()) {
+                if (entry.getKey() == null || entry.getKey().isBlank() || entry.getValue() == null) {
+                    continue;
+                }
+                statement.setString(1, toStatus);
+                statement.setString(2, fragmentSetId);
+                statement.setString(3, entry.getKey());
+                statement.setString(4, entry.getValue());
+                updated += statement.executeUpdate();
+            }
+        }
+        return updated;
+    }
+
+    /** B4: reset condicional (from->to) en una conexion dada, para auditar en la misma transaccion. */
+    public int resetStatus(java.sql.Connection connection,
+                           String fragmentSetId,
+                           String fromStatus,
+                           String toStatus) throws SQLException {
+        var sql = "update mt101_build_fragment set status = ?, error_message = null, updated_at = current_timestamp "
+                + "where fragment_set_id = ? and status = ?";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, toStatus);
+            statement.setString(2, fragmentSetId);
+            statement.setString(3, fromStatus);
+            return statement.executeUpdate();
+        }
+    }
+
     /** Metadata del set (de cualquier fragmento) para re-construir scoped a filas corregidas. */
     public SetMetadata findSetMetadata(DataSource dataSource, String fragmentSetId) throws SQLException {
         var sql = "select process_execution_id, task_definition_id, source_table "

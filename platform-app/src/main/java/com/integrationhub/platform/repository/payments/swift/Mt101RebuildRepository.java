@@ -16,28 +16,52 @@ import java.util.Map;
 @ApplicationScoped
 public class Mt101RebuildRepository {
 
-    public void createRun(DataSource dataSource,
+    public void createRun(java.sql.Connection connection,
                           String rebuildRunId,
                           String originalFragmentSetId,
                           String correctiveSetId,
                           String requestedBy,
-                          String requestReason) throws SQLException {
-        // Codigo de referencia unico por run (secuencia de BD, base36) -> prefijo del
-        // :20: correctivo. No depende de CRC32 (colisionable). Una sola conexion.
+                          String requestReason,
+                          String referenceCode,
+                          String connectionRef) throws SQLException {
+        // B1: el id del run/correctivo lo genera el servidor a partir del reference_code
+        // (secuencia de BD, base36). El cliente no puede reutilizar un set existente.
+        // R-d: se guarda el connectionRef para que el scheduler resuelva el datasource.
         var insert = "insert into mt101_rebuild_run "
-                + "(rebuild_run_id, original_fragment_set_id, corrective_set_id, requested_by, request_reason, reference_code, status) "
-                + "values (?, ?, ?, ?, ?, ?, 'REQUESTED') "
-                + "on conflict (rebuild_run_id) do nothing";
+                + "(rebuild_run_id, original_fragment_set_id, corrective_set_id, requested_by, request_reason, "
+                + " reference_code, connection_ref, status) "
+                + "values (?, ?, ?, ?, ?, ?, ?, 'REQUESTED')";
+        try (var statement = connection.prepareStatement(insert)) {
+            statement.setString(1, rebuildRunId);
+            statement.setString(2, originalFragmentSetId);
+            statement.setString(3, correctiveSetId);
+            statement.setString(4, requestedBy);
+            statement.setString(5, requestReason);
+            statement.setString(6, referenceCode);
+            statement.setString(7, blankToNull(connectionRef));
+            statement.executeUpdate();
+        }
+    }
+
+    private String blankToNull(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
+    }
+
+    /** Reserva el siguiente codigo de referencia unico (secuencia de BD, base36). */
+    public String nextReferenceCode(DataSource dataSource) throws SQLException {
         try (var connection = dataSource.getConnection()) {
-            var referenceCode = nextReferenceCode(connection);
-            try (var statement = connection.prepareStatement(insert)) {
-                statement.setString(1, rebuildRunId);
-                statement.setString(2, originalFragmentSetId);
-                statement.setString(3, correctiveSetId);
-                statement.setString(4, requestedBy);
-                statement.setString(5, requestReason);
-                statement.setString(6, referenceCode);
-                statement.executeUpdate();
+            return nextReferenceCode(connection);
+        }
+    }
+
+    /** True si el set ya existe como lote de fragmentos (B1: evita sobrescribir lotes). */
+    public boolean fragmentSetExists(DataSource dataSource, String fragmentSetId) throws SQLException {
+        var sql = "select 1 from mt101_build_fragment where fragment_set_id = ? limit 1";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, fragmentSetId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next();
             }
         }
     }
@@ -304,14 +328,13 @@ public class Mt101RebuildRepository {
         return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
     }
 
-    public void updateSelectionStats(DataSource dataSource,
+    public void updateSelectionStats(java.sql.Connection connection,
                                      String rebuildRunId,
                                      long selectedRows,
                                      int affectedFragments) throws SQLException {
         var sql = "update mt101_rebuild_run set selected_rows = ?, affected_fragments = ?, "
                 + "updated_at = current_timestamp where rebuild_run_id = ?";
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
+        try (var statement = connection.prepareStatement(sql)) {
             statement.setLong(1, selectedRows);
             statement.setInt(2, affectedFragments);
             statement.setString(3, rebuildRunId);
@@ -319,24 +342,28 @@ public class Mt101RebuildRepository {
         }
     }
 
-    public int insertSelectionFromFragmentRecords(DataSource dataSource,
+    public int insertSelectionFromFragmentRecords(java.sql.Connection connection,
                                                   String rebuildRunId,
                                                   String fragmentSetId,
                                                   Collection<String> sendersReferences) throws SQLException {
         if (sendersReferences == null || sendersReferences.isEmpty()) {
             return 0;
         }
+        // B2: congela el payload aprobado por fila (hash SHA-256 + version del staging al
+        // momento de solicitar). Al ejecutar se compara contra el staging actual.
         var sql = "insert into mt101_rebuild_selection "
                 + "(rebuild_run_id, fragment_set_id, source_file_hash, source_record_number, record_index, "
-                + " staging_id, original_senders_reference, original_transaction_reference, status) "
-                + "select ?, fragment_set_id, source_file_hash, source_record_number, source_record_number - 1, "
-                + "       staging_id, current_senders_reference, current_transaction_reference, 'SELECTED' "
-                + "  from mt101_fragment_record "
-                + " where fragment_set_id = ? "
-                + "   and current_senders_reference in (" + placeholders(sendersReferences.size()) + ") "
+                + " staging_id, original_senders_reference, original_transaction_reference, "
+                + " selected_payload_hash, selected_staging_version, status) "
+                + "select ?, fr.fragment_set_id, fr.source_file_hash, fr.source_record_number, fr.source_record_number - 1, "
+                + "       fr.staging_id, fr.current_senders_reference, fr.current_transaction_reference, "
+                + "       encode(sha256(s.payload_json::bytea), 'hex'), s.version, 'SELECTED' "
+                + "  from mt101_fragment_record fr "
+                + "  left join staging_record s on s.id = fr.staging_id "
+                + " where fr.fragment_set_id = ? "
+                + "   and fr.current_senders_reference in (" + placeholders(sendersReferences.size()) + ") "
                 + "on conflict do nothing";
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
+        try (var statement = connection.prepareStatement(sql)) {
             var parameter = 1;
             statement.setString(parameter++, rebuildRunId);
             statement.setString(parameter++, fragmentSetId);
@@ -347,10 +374,9 @@ public class Mt101RebuildRepository {
         }
     }
 
-    public long countSelection(DataSource dataSource, String rebuildRunId) throws SQLException {
+    public long countSelection(java.sql.Connection connection, String rebuildRunId) throws SQLException {
         var sql = "select count(*) from mt101_rebuild_selection where rebuild_run_id = ?";
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
+        try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, rebuildRunId);
             try (var rs = statement.executeQuery()) {
                 return rs.next() ? rs.getLong(1) : 0L;
@@ -399,6 +425,94 @@ public class Mt101RebuildRepository {
             }
         }
         return result;
+    }
+
+    /**
+     * B2: cuantas filas seleccionadas cambiaron en staging despues de aprobar (hash o
+     * version distintos del snapshot). > 0 => la aprobacion ya no cubre los datos reales.
+     */
+    public int countStaleSelections(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "select count(*) from mt101_rebuild_selection sel "
+                + "join staging_record s on s.id = sel.staging_id "
+                + "where sel.rebuild_run_id = ? "
+                + "  and (sel.selected_staging_version is distinct from s.version "
+                + "       or sel.selected_payload_hash is distinct from encode(sha256(s.payload_json::bytea), 'hex'))";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        }
+    }
+
+    /** B2: revoca la aprobacion (APPROVED -> REQUESTED) cuando el staging cambio tras aprobar. */
+    public int revertApprovalToRequested(DataSource dataSource, String rebuildRunId, String reason) throws SQLException {
+        var sql = "update mt101_rebuild_run set status = 'REQUESTED', approved_by = null, approved_at = null, "
+                + "error_message = ?, updated_at = current_timestamp "
+                + "where rebuild_run_id = ? and status = 'APPROVED'";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, reason);
+            statement.setString(2, rebuildRunId);
+            return statement.executeUpdate();
+        }
+    }
+
+    /**
+     * B2: true si la fila esta en un run APPROVED/BUILDING (datos congelados): no se admite
+     * corregirla hasta que el run termine o se invalide. Connection-scoped para correr dentro
+     * de la transaccion de la correccion.
+     */
+    public boolean isRowLockedByActiveRun(java.sql.Connection connection,
+                                          String fragmentSetId,
+                                          String sourceFileHash,
+                                          long recordNumber) throws SQLException {
+        var sql = "select 1 from mt101_rebuild_selection sel "
+                + "join mt101_rebuild_run run on run.rebuild_run_id = sel.rebuild_run_id "
+                + "where sel.fragment_set_id = ? "
+                + "  and coalesce(sel.source_file_hash, '') = coalesce(?, '') "
+                + "  and sel.source_record_number = ? "
+                + "  and run.status in ('APPROVED', 'BUILDING') limit 1";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, fragmentSetId);
+            statement.setString(2, sourceFileHash);
+            statement.setLong(3, recordNumber);
+            try (var rs = statement.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    /**
+     * R6/R-d: sets originales con un run correctivo en curso (lifecycle no terminal) y el
+     * connectionRef con que se crearon, para que el scheduler resuelva el datasource correcto.
+     */
+    public List<ActiveSet> findActiveOriginalSets(DataSource dataSource) throws SQLException {
+        var sql = "select distinct original_fragment_set_id, connection_ref from mt101_rebuild_run "
+                + "where status in ('BUILDING', 'BUILT', 'VALIDATED', 'ARCHIVED', 'SENT', 'CONFIRMED')";
+        var result = new ArrayList<ActiveSet>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql);
+             var rs = statement.executeQuery()) {
+            while (rs.next()) {
+                result.add(new ActiveSet(rs.getString(1), rs.getString(2)));
+            }
+        }
+        return result;
+    }
+
+    public record ActiveSet(String originalFragmentSetId, String connectionRef) {
+    }
+
+    /** R6: marca el instante de la ultima sincronizacion de lifecycle del run. */
+    public void touchLifecycleSync(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "update mt101_rebuild_run set last_lifecycle_sync_at = current_timestamp where rebuild_run_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            statement.executeUpdate();
+        }
     }
 
     private String placeholders(int count) {

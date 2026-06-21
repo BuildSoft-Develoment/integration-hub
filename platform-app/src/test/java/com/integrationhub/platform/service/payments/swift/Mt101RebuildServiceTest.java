@@ -86,23 +86,26 @@ class Mt101RebuildServiceTest {
         setFragmentStatus("P1", "REJECTED");
         insertQuarantine("P1", "TX-25", 25L, "STRUCT.X");
 
-        var requested = service.requestRebuildFromQuarantine(null, "SET", "SET-FIX", "ana");
+        var requested = service.requestRebuildFromQuarantine(null, "SET", "ana");
         assertEquals("REQUESTED", requested.status());
-        service.approveRebuildRun(null, "SET-FIX", "luis");
-        var result = service.executeApprovedRebuildRun(null, "SET-FIX", "maria");
+        // B1: el id correctivo lo genera el servidor (<original>-FIX-<referenceCode>).
+        var fix = requested.correctiveSetId();
+        assertTrue(fix.startsWith("SET-FIX-"), "el correctiveSetId lo genera el servidor: " + fix);
+        service.approveRebuildRun(null, fix, "luis");
+        var result = service.executeApprovedRebuildRun(null, fix, "maria");
 
-        assertEquals("SET-FIX", result.correctiveSetId());
+        assertEquals(fix, result.correctiveSetId());
         // P0: reconstruye las 50 filas del fragmento afectado, no solo la fila 25.
         assertEquals(50, result.rebuiltRows(), "rebuild de TODO el fragmento, no solo la fila fallida");
         assertEquals(1, result.supersededFragments());
         assertEquals(1, result.resolvedQuarantine());
 
         var config = capturedConfig.get();
-        assertEquals("SET-FIX", config.get("fragmentSetIdTemplate"));
+        assertEquals(fix, config.get("fragmentSetIdTemplate"));
         assertEquals(true, config.get("replaceExisting"));
         @SuppressWarnings("unchecked")
         var source = (Map<String, Object>) config.get("source");
-        assertEquals("SET-FIX", source.get("rebuildRunId"),
+        assertEquals(fix, source.get("rebuildRunId"),
                 "la seleccion aprobada via tabla gobierna el rebuild");
         assertTrue(!source.containsKey("recordIndexIn"), "no debe construir un IN masivo en config");
         @SuppressWarnings("unchecked")
@@ -117,9 +120,9 @@ class Mt101RebuildServiceTest {
                 "el :21: correctivo se deriva de la fila fuente estable");
 
         assertEquals("SUPERSEDED", fragmentStatus("SET", "P1"));
-        assertEquals("SET-FIX", supersededBy("SET", "P1"));
+        assertEquals(fix, supersededBy("SET", "P1"));
         assertEquals("REBUILD_PENDING_VALIDATION", quarantineStatus("SET"));
-        assertEquals("BUILT", rebuildRunStatus("SET-FIX"));
+        assertEquals("BUILT", rebuildRunStatus(fix));
     }
 
     @Test
@@ -128,20 +131,21 @@ class Mt101RebuildServiceTest {
         setFragmentStatus("P1", "REJECTED");
         insertQuarantine("P1", "TX-25", 25L, "STRUCT.X");
 
-        var requested = service.requestRebuildFromQuarantine(null, "SET", "SET-FIX", "ana");
+        var requested = service.requestRebuildFromQuarantine(null, "SET", "ana");
         assertEquals("REQUESTED", requested.status());
+        var fix = requested.correctiveSetId();
 
         // Segregacion de funciones: el solicitante no puede aprobar su propio rebuild.
         assertThrows(IllegalArgumentException.class,
-                () -> service.approveRebuildRun(null, "SET-FIX", "ana"));
+                () -> service.approveRebuildRun(null, fix, "ana"));
 
         // Un aprobador distinto si puede; luego se ejecuta.
-        var approved = service.approveRebuildRun(null, "SET-FIX", "luis");
+        var approved = service.approveRebuildRun(null, fix, "luis");
         assertEquals("APPROVED", approved.status());
-        var result = service.executeApprovedRebuildRun(null, "SET-FIX", "maria");
+        var result = service.executeApprovedRebuildRun(null, fix, "maria");
         assertEquals(50, result.rebuiltRows());
         assertEquals("REBUILD_PENDING_VALIDATION", quarantineStatus("SET"));
-        assertEquals("BUILT", rebuildRunStatus("SET-FIX"));
+        assertEquals("BUILT", rebuildRunStatus(fix));
     }
 
     @Test
@@ -150,33 +154,33 @@ class Mt101RebuildServiceTest {
         setFragmentStatus("P1", "REJECTED");
         insertQuarantine("P1", "TX-25", 25L, "STRUCT.X");
 
-        service.requestRebuildFromQuarantine(null, "SET", "SET-FIX", "ana");
-        service.approveRebuildRun(null, "SET-FIX", "luis");
-        service.executeApprovedRebuildRun(null, "SET-FIX", "maria");
+        var fix = service.requestRebuildFromQuarantine(null, "SET", "ana").correctiveSetId();
+        service.approveRebuildRun(null, fix, "luis");
+        service.executeApprovedRebuildRun(null, fix, "maria");
 
-        setCorrectiveFragmentStatus("SET-FIX", "RTEST1", "VALIDATED");
+        setCorrectiveFragmentStatus(fix, "RTEST1", "VALIDATED");
         assertEquals(1, service.synchronizeLifecycle(null, "SET"));
-        assertEquals("VALIDATED", rebuildRunStatus("SET-FIX"));
+        assertEquals("VALIDATED", rebuildRunStatus(fix));
         assertEquals("REBUILD_VALIDATED", quarantineStatus("SET"));
 
-        setCorrectiveFragmentStatus("SET-FIX", "RTEST1", "ARCHIVED");
+        setCorrectiveFragmentStatus(fix, "RTEST1", "ARCHIVED");
         assertEquals(1, service.synchronizeLifecycle(null, "SET"));
-        assertEquals("ARCHIVED", rebuildRunStatus("SET-FIX"));
+        assertEquals("ARCHIVED", rebuildRunStatus(fix));
         assertEquals("REBUILD_ARCHIVED", quarantineStatus("SET"));
 
-        setCorrectiveFragmentStatus("SET-FIX", "RTEST1", "SENT");
+        setCorrectiveFragmentStatus(fix, "RTEST1", "SENT");
         assertEquals(1, service.synchronizeLifecycle(null, "SET"));
-        assertEquals("SENT", rebuildRunStatus("SET-FIX"));
+        assertEquals("SENT", rebuildRunStatus(fix));
         assertEquals("REBUILD_SENT", quarantineStatus("SET"));
 
         upsertArchive("RTEST1", "CONFIRMED");
         assertEquals(1, service.synchronizeLifecycle(null, "SET"));
-        assertEquals("CONFIRMED", rebuildRunStatus("SET-FIX"));
+        assertEquals("CONFIRMED", rebuildRunStatus(fix));
         assertEquals("REBUILD_CONFIRMED", quarantineStatus("SET"));
 
         upsertArchive("RTEST1", "RECONCILED");
         assertEquals(1, service.synchronizeLifecycle(null, "SET"));
-        assertEquals("RECONCILED", rebuildRunStatus("SET-FIX"));
+        assertEquals("RECONCILED", rebuildRunStatus(fix));
         assertEquals("RESOLVED", quarantineStatus("SET"));
 
         assertEquals(0, service.synchronizeLifecycle(null, "SET"),
@@ -188,7 +192,7 @@ class Mt101RebuildServiceTest {
         insertFragmentWithLineage("P1", 2, 2);
 
         var error = assertThrows(IllegalArgumentException.class,
-                () -> service.requestRebuildFromQuarantine(null, "SET", "SET-FIX", "operator"));
+                () -> service.requestRebuildFromQuarantine(null, "SET", "operator"));
         assertTrue(error.getMessage().contains("no quarantined rows"));
     }
 
@@ -199,7 +203,7 @@ class Mt101RebuildServiceTest {
         insertQuarantine("P1", "TX-25", 25L, "STRUCT.X");
 
         var error = assertThrows(IllegalArgumentException.class,
-                () -> service.requestRebuildFromQuarantine(null, "SET", "SET-FIX", "operator"));
+                () -> service.requestRebuildFromQuarantine(null, "SET", "operator"));
 
         assertTrue(error.getMessage().contains("only REJECTED"),
                 () -> "mensaje inesperado: " + error.getMessage());
@@ -208,26 +212,20 @@ class Mt101RebuildServiceTest {
     }
 
     @Test
-    void rejectsCorrectiveSetEqualToOriginal() {
-        var error = assertThrows(IllegalArgumentException.class,
-                () -> service.requestRebuildFromQuarantine(null, "SET", "SET", "operator"));
-        assertTrue(error.getMessage().contains("must differ"));
-    }
-
-    @Test
     void executeRequiresApproval() throws Exception {
         insertFragmentWithLineage("P1", 1, 50);
         setFragmentStatus("P1", "REJECTED");
         insertQuarantine("P1", "TX-25", 25L, "STRUCT.X");
 
-        var run = service.requestRebuildFromQuarantine(null, "SET", "SET-FIX", "operator");
+        var run = service.requestRebuildFromQuarantine(null, "SET", "operator");
         assertEquals("REQUESTED", run.status());
+        var fix = run.correctiveSetId();
 
         var error = assertThrows(IllegalArgumentException.class,
-                () -> service.executeApprovedRebuildRun(null, "SET-FIX", "runner"));
+                () -> service.executeApprovedRebuildRun(null, fix, "runner"));
         assertTrue(error.getMessage().contains("must be APPROVED"));
 
-        var approved = service.approveRebuildRun(null, "SET-FIX", "approver");
+        var approved = service.approveRebuildRun(null, fix, "approver");
         assertEquals("APPROVED", approved.status());
     }
 
@@ -239,7 +237,7 @@ class Mt101RebuildServiceTest {
         insertQuarantine("P1", "TX-25", 25L, "STRUCT.X");
 
         var error = assertThrows(IllegalArgumentException.class,
-                () -> service.requestRebuildFromQuarantine(null, "SET", "SET-FIX", "operator"));
+                () -> service.requestRebuildFromQuarantine(null, "SET", "operator"));
 
         assertTrue(error.getMessage().contains("mt101_fragment_record"),
                 () -> "mensaje inesperado: " + error.getMessage());
@@ -466,7 +464,7 @@ class Mt101RebuildServiceTest {
                     + "request_reason text, approval_reason text,"
                     + "selected_rows bigint not null default 0,"
                     + "affected_fragments integer not null default 0,"
-                    + "error_message text, reference_code varchar(12),"
+                    + "error_message text, reference_code varchar(12), connection_ref varchar(120),"
                     + "created_at timestamp not null default current_timestamp,"
                     + "approved_at timestamp, executed_at timestamp, built_at timestamp, completed_at timestamp,"
                     + "last_lifecycle_sync_at timestamp,"
@@ -483,8 +481,14 @@ class Mt101RebuildServiceTest {
                     + "original_transaction_reference varchar(35),"
                     + "status varchar(30) not null default 'SELECTED',"
                     + "created_at timestamp not null default current_timestamp)");
+            statement.executeUpdate("alter table mt101_rebuild_selection "
+                    + "add column if not exists selected_payload_hash varchar(64), "
+                    + "add column if not exists selected_staging_version bigint");
             statement.executeUpdate("create unique index ux_mt101_rebuild_selection_row_r on mt101_rebuild_selection "
                     + "(rebuild_run_id, coalesce(source_file_hash, ''), source_record_number)");
+            statement.executeUpdate("drop table if exists staging_record");
+            statement.executeUpdate("create table staging_record ("
+                    + "id bigserial primary key, payload_json text, version bigint not null default 0)");
             statement.executeUpdate("create table mt101_failed_record ("
                     + "id bigserial primary key, fragment_set_id varchar(80) not null,"
                     + "senders_reference varchar(16), transaction_reference varchar(35), source_file_hash varchar(64),"

@@ -90,6 +90,32 @@ public class Mt101ReprocessResource {
         }
     }
 
+    /**
+     * B1': reabre una fila cuyo rebuild correctivo fue rechazado
+     * ({@code REBUILD_REJECTED -> QUARANTINED}) para corregir y reconstruir de nuevo.
+     */
+    @POST
+    @Path("/reopen-rejected")
+    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    public Mt101ReprocessResponse reopenRejected(@QueryParam("connectionRef") String connectionRef,
+                                                 @QueryParam("fragmentSetId") String fragmentSetId,
+                                                 @QueryParam("sourceFileHash") String sourceFileHash,
+                                                 @QueryParam("recordNumber") Long recordNumber,
+                                                 @QueryParam("reason") String reason,
+                                                 @QueryParam("ticketRef") String ticketRef,
+                                                 @Context SecurityContext securityContext) {
+        if (recordNumber == null) {
+            throw new BadRequestException("recordNumber is required");
+        }
+        try {
+            var affected = service.reopenRejectedRebuild(connectionRef, fragmentSetId, sourceFileHash, recordNumber,
+                    actor(securityContext), reason, ticketRef);
+            return new Mt101ReprocessResponse(fragmentSetId, "REBUILD_REJECTED", "QUARANTINED", affected);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
     private static String actor(SecurityContext securityContext) {
         if (securityContext != null && securityContext.getUserPrincipal() != null) {
             var name = securityContext.getUserPrincipal().getName();

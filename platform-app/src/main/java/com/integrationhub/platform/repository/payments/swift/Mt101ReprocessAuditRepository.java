@@ -11,14 +11,20 @@ import java.sql.Types;
 public class Mt101ReprocessAuditRepository {
 
     public void insert(DataSource dataSource, ReprocessAuditRow row) throws SQLException {
+        try (var connection = dataSource.getConnection()) {
+            insert(connection, row);
+        }
+    }
+
+    /** Connection-scoped: para auditar en la MISMA transaccion que el cambio de estado (B4). */
+    public void insert(java.sql.Connection connection, ReprocessAuditRow row) throws SQLException {
         var sql = """
                 insert into mt101_reprocess_audit
                     (action, fragment_set_id, source_file_hash, record_from, record_to, from_status,
                      to_status, affected, actor, reason, ticket_ref)
                 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
+        try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, row.action());
             statement.setString(2, row.fragmentSetId());
             statement.setString(3, row.sourceFileHash());

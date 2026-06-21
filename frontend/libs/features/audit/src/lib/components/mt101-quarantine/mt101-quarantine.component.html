@@ -37,10 +37,6 @@
           <input matInput [(ngModel)]="connectionRef" placeholder="default" />
         </mat-form-field>
         <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('audit.quarantine.fieldCorrective') }}</mat-label>
-          <input matInput [(ngModel)]="correctiveSetId" placeholder="E2E-123-FIX" />
-        </mat-form-field>
-        <mat-form-field subscriptSizing="dynamic">
           <mat-label>{{ i18n.t('audit.quarantine.fieldRequestReason') }}</mat-label>
           <input matInput [(ngModel)]="rebuildRequestReason" placeholder="INC-123" />
         </mat-form-field>
@@ -50,7 +46,7 @@
             {{ armed() === 'build' ? i18n.t('audit.quarantine.buildConfirm') : i18n.t('audit.quarantine.build') }}
           </button>
           <button mat-stroked-button type="button" (click)="list()" [disabled]="loading() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.list') }}</button>
-          <button mat-flat-button color="primary" type="button" (click)="requestRebuild()" [disabled]="loading() || !!rebuildRun() || !fragmentSetId.trim() || !correctiveSetId.trim()">{{ i18n.t('audit.quarantine.runRequest') }}</button>
+          <button mat-flat-button color="primary" type="button" (click)="requestRebuild()" [disabled]="loading() || !!rebuildRun() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.runRequest') }}</button>
         </div>
       </div>
 
@@ -170,6 +166,9 @@
                         {{ selectedRow() === row.id ? i18n.t('audit.quarantine.hide') : i18n.t('audit.quarantine.timeline') }}
                       </button>
                       <button mat-button type="button" (click)="toggleCorrect(row)">{{ i18n.t('audit.quarantine.correct') }}</button>
+                      @if (row.status === 'REBUILD_REJECTED') {
+                        <button mat-button type="button" (click)="reopenRejected(row)" [disabled]="loading()">{{ i18n.t('audit.quarantine.reopen') }}</button>
+                      }
                         <a class="q__link" [routerLink]="['/audit/record-lineage']" [queryParams]="{ sourceFileHash: row.sourceFileHash, recordNumber: row.sourceRecordNumber }" [title]="i18n.t('audit.quarantine.traceAria', { row: row.sourceRecordNumber })" [attr.aria-label]="i18n.t('audit.quarantine.traceAria', { row: row.sourceRecordNumber })">{{ i18n.t('audit.quarantine.traceLink') }} ↗</a>
                     }
                   </td>

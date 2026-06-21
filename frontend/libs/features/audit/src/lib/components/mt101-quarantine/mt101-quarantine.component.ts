@@ -55,7 +55,6 @@ export class Mt101QuarantineComponent {
 
   fragmentSetId = '';
   connectionRef = '';
-  correctiveSetId = '';
   processExecutionId = '';
   statusFilter = '';
   sourceFileHashFilter = '';
@@ -105,7 +104,6 @@ export class Mt101QuarantineComponent {
         this.lote.set(header);
         if (header?.fragmentSetId) {
           this.fragmentSetId = header.fragmentSetId;
-          this.correctiveSetId = `${header.fragmentSetId}-FIX`;
         }
         this.list(true);
       },
@@ -177,15 +175,15 @@ export class Mt101QuarantineComponent {
 
   /** Paso 1: solicita el rebuild (no ejecuta). Queda REQUESTED para que otro lo apruebe. */
   requestRebuild(): void {
-    if (!this.fragmentSetId.trim() || !this.correctiveSetId.trim()) {
+    if (!this.fragmentSetId.trim()) {
       return;
     }
     this.loading.set(true);
     this.error.set(null);
     this.message.set(null);
+    // B1: el correctiveSetId lo genera el servidor y vuelve en el summary (run.correctiveSetId).
     this.api.mt101RequestRebuildRun({
       fragmentSetId: this.fragmentSetId,
-      correctiveSetId: this.correctiveSetId,
       connectionRef: this.connectionRef,
       reason: this.rebuildRequestReason,
     }).subscribe({
@@ -202,6 +200,33 @@ export class Mt101QuarantineComponent {
 
   cancelRebuild(): void {
     this.rebuildRun.set(null);
+  }
+
+  /** B1': reabre una fila REBUILD_REJECTED para corregir y reconstruir de nuevo. */
+  reopenRejected(row: Mt101FailedRecord): void {
+    const sourceFileHash = row.sourceFileHash?.trim();
+    if (row.sourceRecordNumber === null || !sourceFileHash) {
+      return;
+    }
+    this.loading.set(true);
+    this.error.set(null);
+    this.message.set(null);
+    this.api.mt101ReopenRejected({
+      fragmentSetId: this.fragmentSetId,
+      sourceFileHash,
+      recordNumber: row.sourceRecordNumber,
+      connectionRef: this.connectionRef,
+      reason: this.correctionReason,
+    }).subscribe({
+      next: () => {
+        this.message.set(this.i18n.t('audit.quarantine.reopenOk', { row: row.sourceRecordNumber as number }));
+        this.list(true);
+      },
+      error: (e) => {
+        this.error.set(this.backendError(e, 'audit.quarantine.reopenError'));
+        this.loading.set(false);
+      },
+    });
   }
 
   /** Paso 2: aprueba el run. El backend rechaza si el aprobador es el mismo solicitante. */
