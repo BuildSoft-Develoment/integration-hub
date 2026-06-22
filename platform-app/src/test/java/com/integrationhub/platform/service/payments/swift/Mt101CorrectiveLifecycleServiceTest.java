@@ -66,6 +66,7 @@ class Mt101CorrectiveLifecycleServiceTest {
     private AtomicInteger reconcileInvocations;
     private boolean rejectSecondPayFragment;
     private boolean payUncertain;
+    private boolean statusSyncFails;
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -80,6 +81,7 @@ class Mt101CorrectiveLifecycleServiceTest {
         reconcileInvocations = new AtomicInteger();
         rejectSecondPayFragment = false;
         payUncertain = false;
+        statusSyncFails = false;
 
         rebuildService = new Mt101RebuildService(dataSource, null, null, null,
                 new Mt101FailedRecordRepository(), new Mt101FragmentRepository(), new Mt101RebuildRepository());
@@ -162,6 +164,9 @@ class Mt101CorrectiveLifecycleServiceTest {
             @Override
             public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
                 statusInvocations.incrementAndGet();
+                if (statusSyncFails) {
+                    throw new IllegalStateException("gateway STATUS query unavailable");
+                }
                 if (Boolean.TRUE.equals(configuration.get("resolveCorrectivePay"))) {
                     try {
                         var repository = new Mt101RebuildRepository();
@@ -373,6 +378,25 @@ class Mt101CorrectiveLifecycleServiceTest {
                 + "where rebuild_run_id = '" + child.rebuildRunId() + "'"));
     }
 
+    @Test
+    void postPayStatusFailureDoesNotRevertSentAndIsVisibleSeparately() throws Exception {
+        // P2 v20: el PAY sale; MT101_STATUS falla DESPUES. No debe lanzar ni revertir el pago.
+        statusSyncFails = true;
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana");
+
+        service.approveAndPayCorrective(null, FIX, "luis");
+
+        assertEquals("SENT", payStatus(FIX), "el pago salio; un fallo de STATUS no lo revierte");
+        assertEquals("FAILED",
+                queryString("select status_sync_status from mt101_rebuild_run where rebuild_run_id = '" + FIX + "'"),
+                "el fallo de la consulta posterior se ve aparte, no como 'PAY fallo'");
+        assertEquals("OK",
+                queryString("select reconciliation_status from mt101_rebuild_run where rebuild_run_id = '" + FIX + "'"),
+                "RECONCILE corre igual: un fallo de STATUS no lo aborta");
+        assertEquals(1, reconcileInvocations.get(), "RECONCILE no se omite por el fallo de STATUS");
+    }
+
     private void markCorrective(String status) {
         try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement(
@@ -504,6 +528,8 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "pay_requested_payload_hash varchar(64), pay_claimed_payload_hash varchar(64),"
                     + "pay_lease_until timestamp, pay_uncertain_reason text,"
                     + "pay_completed_at timestamp, pay_error_message text,"
+                    + "status_sync_status varchar(20) not null default 'PENDING', status_sync_error text,"
+                    + "reconciliation_status varchar(20) not null default 'PENDING', reconciliation_error text,"
                     + "parent_rebuild_run_id varchar(80), parent_corrective_set_id varchar(80),"
                     + "corrective_generation integer not null default 1,"
                     + "created_at timestamp not null default current_timestamp, approved_at timestamp, executed_at timestamp,"

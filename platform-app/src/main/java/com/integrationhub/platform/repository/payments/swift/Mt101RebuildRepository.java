@@ -758,6 +758,35 @@ public class Mt101RebuildRepository {
         }
     }
 
+    /**
+     * P2 v20: resultado de MT101_STATUS tras un PAY ya enviado. Estado separado de pay_status:
+     * un fallo de la consulta posterior NO revierte el pago, solo da visibilidad operativa.
+     */
+    public void markStatusSync(DataSource dataSource, String rebuildRunId, String status, String error) throws SQLException {
+        var sql = "update mt101_rebuild_run set status_sync_status = ?, status_sync_error = ?, "
+                + "updated_at = current_timestamp where rebuild_run_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, status);
+            statement.setString(2, error);
+            statement.setString(3, rebuildRunId);
+            statement.executeUpdate();
+        }
+    }
+
+    /** P2 v20: resultado de MT101_RECONCILE tras un PAY ya enviado (no revierte el pago). */
+    public void markReconciliation(DataSource dataSource, String rebuildRunId, String status, String error) throws SQLException {
+        var sql = "update mt101_rebuild_run set reconciliation_status = ?, reconciliation_error = ?, "
+                + "updated_at = current_timestamp where rebuild_run_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, status);
+            statement.setString(2, error);
+            statement.setString(3, rebuildRunId);
+            statement.executeUpdate();
+        }
+    }
+
     /** B2': registra fallo de PAY; el operador debe solicitar de nuevo si corresponde. */
     public void markPayFailed(DataSource dataSource, String rebuildRunId, String errorMessage) throws SQLException {
         markPayCompleted(dataSource, rebuildRunId, "FAILED", errorMessage);

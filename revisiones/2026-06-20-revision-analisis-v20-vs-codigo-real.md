@@ -23,7 +23,7 @@ genéricos. Pero (como v15/v16/v19) revisó un **snapshot anterior**. Contra el 
 | P1 | PAY incierto no emite evento RECORD | **YA RESUELTO** | `recordEnvelope(...)` emite `RECORD_SEND_UNCERTAIN` / status `UNCERTAIN` (no como rechazo). *(Una regresión que introduje con el `continue` ya fue corregida en el round actual.)* |
 | P1 | UNCERTAIN sin acción de resolución | **YA RESUELTO** | endpoint "Resuelve PAY_UNCERTAIN consultando MT101_STATUS. No reenvia MT101_PAY" (`Mt101QuarantineResource:306`) + V46 |
 | P1 | Parcial sin correctivo de 2º nivel | **YA RESUELTO** | V46 `mt101_uncertain_resolution_and_child_corrective` (parent/child corrective; los SENT quedan inmutables) |
-| P1 | STATUS/RECONCILE post-PAY sin visibilidad separada | **Parcial (P2)** | la **seguridad** ya está: STATUS/RECONCILE son etapas opcionales y su fallo **no** revierte `PAY=SENT` (el catch solo marca FAILED si sigue EXECUTING). Falta sólo el *detalle UX* de columnas `status_sync_status`/`reconciliation_status` separadas — visibilidad, no corrección |
+| P1 | STATUS/RECONCILE post-PAY sin visibilidad separada | **YA RESUELTO (este pase)** | V47: `status_sync_status` + `reconciliation_status` (+ error). `runPostPaySync` ejecuta STATUS/RECONCILE tras PAY enviado capturando OK/FAILED/SKIPPED **sin** lanzar ni revertir el pago. Test `postPayStatusFailureDoesNotRevertSentAndIsVisibleSeparately` |
 
 ---
 
@@ -65,13 +65,18 @@ solo el fragmento rechazado dejando inmutables los enviados.
 - Frontend: **214**.
 - ITs de pipeline (perf + outbound) reparadas en pases anteriores.
 
-## Único residual (menor / P2)
+## Residual cerrado en este pase (P2)
 
-Visibilidad operativa separada de `status_sync_status` / `reconciliation_status` cuando STATUS o
-RECONCILE fallan tras un PAY ya enviado. Hoy la **corrección** es segura (no hay falsa reversión:
-`PAY=SENT` se mantiene; sólo el catch sobre `EXECUTING` marcaría FAILED, que ya no aplica). Lo que
-falta es el *detalle de UX* para que el operador lea "el pago salió; falló la consulta posterior"
-en vez de inferirlo. Es mejora de visibilidad, no un bloqueante.
+Se implementó la visibilidad operativa separada (migración **V47**): `mt101_rebuild_run` gana
+`status_sync_status` y `reconciliation_status` (+ `*_error`). Tras un PAY enviado, `runPostPaySync`
+ejecuta MT101_STATUS y MT101_RECONCILE **capturando** su resultado (OK/FAILED/SKIPPED) **sin lanzar
+al operador ni revertir** `PAY=SENT`: ahora se lee "el pago salió; falló la consulta posterior" en
+vez de "el PAY falló", y un fallo de STATUS no aborta el RECONCILE. Evidencia:
+`postPayStatusFailureDoesNotRevertSentAndIsVisibleSeparately` (PAY=SENT, status_sync=FAILED,
+reconciliation=OK, sin excepción). Backend swift: **245** tests, 0 fallos.
+
+Pendiente cosmético menor (no bloqueante): surfacear estos dos estados en el DTO/UI del run para
+que el operador los vea sin consultar la BD; el dato ya está persistido y es la fuente de verdad.
 
 ## Conclusión
 

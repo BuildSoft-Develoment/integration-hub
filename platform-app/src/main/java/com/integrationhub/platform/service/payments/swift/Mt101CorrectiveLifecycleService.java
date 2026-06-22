@@ -223,18 +223,18 @@ public class Mt101CorrectiveLifecycleService {
                     throw new IllegalStateException("MT101_PAY produced no fragment results for run " + runId);
                 } else if (summary.sent() == summary.total()) {
                     rebuildRepository.markPaySent(dataSource, runId);
-                    runOptionalStageWithInput(statusProvider, prep, "MT101_STATUS",
-                            correctivePaySource(runId, connectionRef));
-                    runOptionalStageWithInput(reconcileProvider, prep, "MT101_RECONCILE",
-                            correctivePaySource(runId, connectionRef));
+                    runPostPaySync(prep, "MT101_STATUS", statusProvider,
+                            correctivePaySource(runId, connectionRef), dataSource, runId, true);
+                    runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
+                            correctivePaySource(runId, connectionRef), dataSource, runId, false);
                 } else if (summary.sent() > 0) {
                     rebuildRepository.markPayCompleted(dataSource, runId, "PARTIALLY_SENT",
                             "PAY sent " + summary.sent() + " of " + summary.total()
                                     + " fragment(s); rejected=" + summary.rejected());
-                    runOptionalStageWithInput(statusProvider, prep, "MT101_STATUS",
-                            correctivePaySource(runId, connectionRef));
-                    runOptionalStageWithInput(reconcileProvider, prep, "MT101_RECONCILE",
-                            correctivePaySource(runId, connectionRef));
+                    runPostPaySync(prep, "MT101_STATUS", statusProvider,
+                            correctivePaySource(runId, connectionRef), dataSource, runId, true);
+                    runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
+                            correctivePaySource(runId, connectionRef), dataSource, runId, false);
                 } else {
                     rebuildRepository.markPayFailed(dataSource, runId,
                             payResult.details() == null ? "MT101_PAY rejected all fragments" : payResult.details());
@@ -344,6 +344,38 @@ public class Mt101CorrectiveLifecycleService {
             return;
         }
         runStage(provider, prep, taskType, true, input);
+    }
+
+    /**
+     * P2 v20: ejecuta STATUS/RECONCILE DESPUES de que el PAY ya salio. Un fallo aqui NO revierte el
+     * pago (no lanza al operador): se registra en su propio estado (OK/FAILED/SKIPPED) para que se
+     * lea "el pago salio; fallo la consulta posterior" en vez de "el PAY fallo". No reintenta PAY.
+     */
+    private void runPostPaySync(StagePrep prep, String taskType, TaskProvider provider, Object input,
+                                DataSource dataSource, String runId, boolean isStatus) throws SQLException {
+        if (stageConfig(prep, taskType) == null) {
+            setPostPaySync(dataSource, runId, isStatus, "SKIPPED", null);
+            return;
+        }
+        try {
+            var result = runStage(provider, prep, taskType, false, input);
+            if (result != null && !result.success()) {
+                setPostPaySync(dataSource, runId, isStatus, "FAILED", result.details());
+            } else {
+                setPostPaySync(dataSource, runId, isStatus, "OK", null);
+            }
+        } catch (RuntimeException error) {
+            setPostPaySync(dataSource, runId, isStatus, "FAILED", error.getMessage());
+        }
+    }
+
+    private void setPostPaySync(DataSource dataSource, String runId, boolean isStatus, String status, String error)
+            throws SQLException {
+        if (isStatus) {
+            rebuildRepository.markStatusSync(dataSource, runId, status, error);
+        } else {
+            rebuildRepository.markReconciliation(dataSource, runId, status, error);
+        }
     }
 
     private TaskResult runStage(TaskProvider provider, StagePrep prep, String taskType, boolean failOnTaskFailure) {
