@@ -220,6 +220,48 @@ public class Mt101FragmentStore {
         }
     }
 
+    public void forEachRoutedPage(Map<String, Object> fragmentSource,
+                                  List<String> defaultStatuses,
+                                  int pageSize,
+                                  java.util.function.Consumer<List<RoutedFragmentMessage>> consumer) {
+        var fragmentSetId = stringValue(fragmentSource.get("fragmentSetId"));
+        if (fragmentSetId.isBlank()) {
+            throw new IllegalArgumentException("MT101 fragment source requires fragmentSetId");
+        }
+        var connectionRef = stringValue(fragmentSource.get("connectionRef"));
+        var statuses = statuses(fragmentSource.get("statuses"), defaultStatuses);
+        var effectivePageSize = Math.max(pageSize, 1);
+        var afterIndex = 0;
+        try {
+            while (true) {
+                var rows = fragmentRepository.readRoutedPage(
+                        resolveDataSource(connectionRef),
+                        fragmentSetId,
+                        statuses,
+                        afterIndex,
+                        effectivePageSize);
+                var page = new ArrayList<RoutedFragmentMessage>(rows.size());
+                for (var row : rows) {
+                    afterIndex = row.fragmentIndex();
+                    page.add(new RoutedFragmentMessage(fromJson(row.messageJson()),
+                            row.routedAs(), row.routeError()));
+                }
+                if (page.isEmpty()) {
+                    return;
+                }
+                consumer.accept(page);
+                if (page.size() < effectivePageSize) {
+                    return;
+                }
+            }
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot read routed MT101 fragments for set " + fragmentSetId, error);
+        }
+    }
+
+    public record RoutedFragmentMessage(Mt101Message message, String routedAs, String routeError) {
+    }
+
     public void markStatus(Map<String, Object> fragmentSource,
                            String sendersReference,
                            String status,

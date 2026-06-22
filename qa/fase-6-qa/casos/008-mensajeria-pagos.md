@@ -141,6 +141,8 @@ Cubre las tareas QA T-022 (sprint 2 inbound + reconciliación) y T-028
 - `MT101_PAY` correctivo crea ledger `PREPARED` antes de invocar el transporte
 - `MT101_PAY` marca el fragmento `DISPATCHING` antes de llamar al gateway/SFTP
 - la clave persistida en el ledger coincide con la clave entregada al transporte
+- `MT101_PAY` consume `routed_as` y selecciona REST/SFTP desde `routeTransports`
+- un cambio en configuracion `MT101_PAY` entre maker y checker invalida el request antes del dispatch
 - `MT101_STATUS` correctivo lee todos los `SENT` del ledger paginado, no el sample de PAY
 - `MT101_RECONCILE` correctivo usa scope por `rebuildRunId` y no reconcilia archivos ajenos
 - `PAY_UNCERTAIN` requiere conciliacion/operacion explicita; no hay reenvio ciego automatico

@@ -68,6 +68,8 @@ class Mt101CorrectiveLifecycleServiceTest {
     private boolean payUncertain;
     private boolean statusSyncFails;
     private boolean payThrowsAfterDispatch;
+    private boolean payConfigChangedAfterRequest;
+    private boolean routePayConfig;
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -84,6 +86,8 @@ class Mt101CorrectiveLifecycleServiceTest {
         payUncertain = false;
         statusSyncFails = false;
         payThrowsAfterDispatch = false;
+        payConfigChangedAfterRequest = false;
+        routePayConfig = false;
 
         rebuildService = new Mt101RebuildService(dataSource, null, null, null,
                 new Mt101FailedRecordRepository(), new Mt101FragmentRepository(), new Mt101RebuildRepository());
@@ -114,6 +118,10 @@ class Mt101CorrectiveLifecycleServiceTest {
             @Override
             public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
                 routeInvocations.incrementAndGet();
+                if (routePayConfig) {
+                    markRoute("RTEST1", "REST_MAIN", null);
+                    markRoute("RTEST2", "SFTP_SECONDARY", null);
+                }
                 return TaskResult.success("fake route");
             }
         };
@@ -201,8 +209,25 @@ class Mt101CorrectiveLifecycleServiceTest {
                 return TaskResult.success("fake reconcile");
             }
         };
-        Mt101CorrectiveTaskConfigSource configSource = (buildTaskDefinitionId, taskType) -> Map.of(
-                "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "fragments"));
+        Mt101CorrectiveTaskConfigSource configSource = (buildTaskDefinitionId, taskType) -> {
+            var config = new java.util.LinkedHashMap<String, Object>();
+            config.put("input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "fragments"));
+            if ("MT101_PAY".equals(taskType)) {
+                config.put("transport", "REST");
+                config.put("idempotencyKeyTemplate",
+                        (payConfigChangedAfterRequest ? "changed-" : "approved-") + "${sendersReference}");
+                if (routePayConfig) {
+                    config.put("routeTransports", Map.of(
+                            "REST_MAIN", Map.of(
+                                    "transport", "REST",
+                                    "idempotencyKeyTemplate", "rest-${sendersReference}"),
+                            "SFTP_SECONDARY", Map.of(
+                                    "transport", "SFTP",
+                                    "sftp", Map.of("dropPathTemplate", "/bank/${sendersReference}.fin"))));
+                }
+            }
+            return config;
+        };
 
         service = new Mt101CorrectiveLifecycleService(dataSource, null,
                 new Mt101RebuildRepository(), new Mt101FragmentRepository(), rebuildService,
@@ -260,8 +285,9 @@ class Mt101CorrectiveLifecycleServiceTest {
 
         var repository = new Mt101RebuildRepository();
         var payloadHash = repository.archivedCorrectivePayloadHash(dataSource, FIX);
+        var configHash = repository.payRequestedConfigHash(dataSource, FIX);
         assertTrue(repository.claimPayForExecution(dataSource, FIX, "luis",
-                        payloadHash, java.time.LocalDateTime.now().plusMinutes(15)),
+                        payloadHash, configHash, java.time.LocalDateTime.now().plusMinutes(15)),
                 "simula que otro checker ya reclamo PAY");
 
         var error = assertThrows(IllegalStateException.class,
@@ -291,6 +317,44 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
+    void invalidatesPayRequestWhenPayConfigurationChanges() throws Exception {
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana");
+
+        payConfigChangedAfterRequest = true;
+
+        var error = assertThrows(IllegalStateException.class,
+                () -> service.approveAndPayCorrective(null, FIX, "luis"));
+
+        assertTrue(error.getMessage().contains("configuration changed"));
+        assertEquals("INVALIDATED", payStatus(FIX));
+        assertEquals(0, payInvocations.get(), "no se invoca MT101_PAY si cambio la configuracion aprobada");
+    }
+
+    @Test
+    void correctivePayPreparesIntentsFromPersistedRoutes() throws Exception {
+        routePayConfig = true;
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana");
+
+        var result = service.approveAndPayCorrective(null, FIX, "luis");
+
+        assertEquals("SENT", result.status());
+        assertEquals("REST",
+                queryString("select transport from mt101_corrective_pay_fragment "
+                        + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'"));
+        assertEquals("rest-RTEST1",
+                queryString("select endpoint_ref from mt101_corrective_pay_fragment "
+                        + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'"));
+        assertEquals("SFTP",
+                queryString("select transport from mt101_corrective_pay_fragment "
+                        + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST2'"));
+        assertEquals("/bank/RTEST2.fin",
+                queryString("select endpoint_ref from mt101_corrective_pay_fragment "
+                        + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST2'"));
+    }
+
+    @Test
     void partialPayPersistsFragmentDetailAndKeepsGranularQuarantine() throws Exception {
         rejectSecondPayFragment = true;
         service.advanceCorrective(null, FIX, "executor");
@@ -315,8 +379,9 @@ class Mt101CorrectiveLifecycleServiceTest {
         service.requestCorrectivePay(null, FIX, "ana");
         var repository = new Mt101RebuildRepository();
         var payloadHash = repository.archivedCorrectivePayloadHash(dataSource, FIX);
+        var configHash = repository.payRequestedConfigHash(dataSource, FIX);
         assertTrue(repository.claimPayForExecution(dataSource, FIX, "luis",
-                payloadHash, java.time.LocalDateTime.now().minusMinutes(1)));
+                payloadHash, configHash, java.time.LocalDateTime.now().minusMinutes(1)));
 
         var marked = repository.markExpiredPayExecutionsUncertain(dataSource, java.time.LocalDateTime.now());
 
@@ -451,6 +516,20 @@ class Mt101CorrectiveLifecycleServiceTest {
         }
     }
 
+    private void markRoute(String reference, String routedAs, String routeError) {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "update mt101_build_fragment set routed_as = ?, route_error = ?, routed_at = current_timestamp "
+                             + "where fragment_set_id = '" + FIX + "' and senders_reference = ?")) {
+            statement.setString(1, routedAs);
+            statement.setString(2, routeError);
+            statement.setString(3, reference);
+            statement.executeUpdate();
+        } catch (SQLException error) {
+            throw new IllegalStateException(error);
+        }
+    }
+
     private void upsertArchive(String status) {
         try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement(
@@ -555,6 +634,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "pay_approved_by varchar(120), pay_approved_at timestamp,"
                     + "pay_claimed_by varchar(120), pay_claimed_at timestamp,"
                     + "pay_requested_payload_hash varchar(64), pay_claimed_payload_hash varchar(64),"
+                    + "pay_requested_config_hash varchar(64), pay_claimed_config_hash varchar(64),"
                     + "pay_lease_until timestamp, pay_uncertain_reason text,"
                     + "pay_completed_at timestamp, pay_error_message text,"
                     + "status_sync_status varchar(20) not null default 'PENDING', status_sync_error text,"

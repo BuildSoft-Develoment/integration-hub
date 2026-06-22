@@ -180,6 +180,88 @@ class Mt101PayFragmentReprocessTest {
                 "el ledger persiste los 5 resultados, no la muestra: ningun fragmento se pierde (P0.1)");
     }
 
+    @Test
+    void routedPayUsesPersistedRouteToChooseTransportAndEndpoint() throws Exception {
+        var fragmentSetId = "PAY-ROUTED-1";
+        insertFragmentSet(fragmentSetId, "R1", "R2");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 2);
+        fragmentStore.markStatus(fragmentSource, "R1", "ARCHIVED", null);
+        fragmentStore.markStatus(fragmentSource, "R2", "ARCHIVED", null);
+        fragmentStore.markRouteBatch(fragmentSource,
+                Map.of("R1", "REST_MAIN", "R2", "SFTP_SECONDARY"),
+                Map.of());
+
+        var rest = new StubTransport("REST", List.of(TransportResult.accepted("GW-R1", 1, 10L)));
+        var sftp = new StubTransport("SFTP", List.of(TransportResult.accepted("GW-R2", 1, 10L)));
+        var provider = new Mt101PayTaskProvider(new InstanceOfList<>(List.of(rest, sftp)), fragmentStore);
+
+        var config = new LinkedHashMap<String, Object>(payConfig(50));
+        config.remove("transport");
+        config.put("routeTransports", Map.of(
+                "REST_MAIN", Map.of(
+                        "transport", "REST",
+                        "idempotencyKeyTemplate", "rest-${sendersReference}"),
+                "SFTP_SECONDARY", Map.of(
+                        "transport", "SFTP",
+                        "sftp", Map.of("dropPathTemplate", "/swift/${sendersReference}.fin"))));
+
+        var result = provider.execute(contextWith(fragmentSource), config);
+
+        assertTrue(result.success(), () -> "expected routed PAY success: " + result.details());
+        assertEquals("ROUTED", result.outputs().get("transport"));
+        assertEquals(List.of("R1"), rest.receivedReferences());
+        assertEquals(List.of("R2"), sftp.receivedReferences());
+        assertEquals("rest-R1", rest.receivedConfigurations().get(0).get("idempotencyKeyTemplate"));
+        @SuppressWarnings("unchecked")
+        var sftpConfig = (Map<String, Object>) sftp.receivedConfigurations().get(0).get("sftp");
+        assertEquals("/swift/R2.fin", sftpConfig.get("dropPathTemplate"));
+    }
+
+    @Test
+    void correctivePayNeverCallsTransportWithoutPreparedIntent() throws Exception {
+        // P0.2 v22: un fragmento sin intencion PREPARED en el ledger NO debe enviarse.
+        var fragmentSetId = "PAY-NO-INTENT";
+        insertFragmentSet(fragmentSetId, "N1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", "RUN-NO-INTENT");
+        fragmentStore.markStatus(fragmentSource, "N1", "ARCHIVED", null);
+        // (a proposito) NO se inserta el ledger: no hay intencion PREPARED para N1.
+
+        var transport = new StubTransport(List.of(TransportResult.accepted("GW-N1", 1, 1L)));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore,
+                null, null, payStore);
+
+        provider.execute(contextWith(fragmentSource), payConfig(50));
+
+        assertEquals(0, transport.callsReceived(),
+                "sin intencion PREPARED no se llama al transporte (ninguna llamada externa sin intencion)");
+    }
+
+    @Test
+    void correctivePayDoesNotResendAlreadyDispatchedFragment() throws Exception {
+        // P0.2 v22: un fragmento ya DISPATCHING (envio previo / crash) NO se reenvia; se resuelve por STATUS.
+        var fragmentSetId = "PAY-ALREADY";
+        insertFragmentSet(fragmentSetId, "T1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", "RUN-ALREADY");
+        fragmentStore.markStatus(fragmentSource, "T1", "ARCHIVED", null);
+        insertPayLedger("RUN-ALREADY", fragmentSetId, "T1");
+        // un dispatch previo dejo la intencion en DISPATCHING (ya no es PREPARED).
+        assertEquals(1, new Mt101RebuildRepository().markPayFragmentDispatching(dataSource, "RUN-ALREADY", "T1"));
+
+        var transport = new StubTransport(List.of(TransportResult.accepted("GW-T1", 1, 1L)));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore,
+                null, null, payStore);
+
+        provider.execute(contextWith(fragmentSource), payConfig(50));
+
+        assertEquals(0, transport.callsReceived(),
+                "un fragmento ya DISPATCHING no se reenvia a ciegas (se resuelve por STATUS)");
+        assertEquals("DISPATCHING", payLedgerStatus("RUN-ALREADY", "T1"), "permanece DISPATCHING para conciliar");
+    }
+
     private TaskContext contextWith(Map<String, Object> fragmentSource) {
         var context = new TaskContext(500L, 600L);
         context.attributes().put("taskOutputs", Map.of("build.fragments", fragmentSource));
@@ -244,6 +326,7 @@ class Mt101PayFragmentReprocessTest {
                     + "message_json text not null,"
                     + "status varchar(20) not null default 'BUILT',"
                     + "error_message text,"
+                    + "routed_as varchar(80), routed_at timestamp, route_error text,"
                     + "created_at timestamp not null default current_timestamp,"
                     + "updated_at timestamp not null default current_timestamp)");
             statement.executeUpdate("create table mt101_corrective_pay_fragment ("
@@ -349,21 +432,29 @@ class Mt101PayFragmentReprocessTest {
     }
 
     private static final class StubTransport implements PaymentMessageTransport {
+        private final String transportId;
         private final List<TransportResult> results;
         private final List<Mt101Message> received = new ArrayList<>();
+        private final List<Map<String, Object>> receivedConfigurations = new ArrayList<>();
 
         StubTransport(List<TransportResult> results) {
+            this("REST", results);
+        }
+
+        StubTransport(String transportId, List<TransportResult> results) {
+            this.transportId = transportId;
             this.results = results;
         }
 
         @Override
         public String transport() {
-            return "REST";
+            return transportId;
         }
 
         @Override
         public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
             received.add(message);
+            receivedConfigurations.add(new LinkedHashMap<>(configuration));
             if (received.size() > results.size()) {
                 return TransportResult.accepted("GW-" + received.size(), 1, 1L);
             }
@@ -379,6 +470,30 @@ class Mt101PayFragmentReprocessTest {
         int callsReceived() {
             return received.size();
         }
+
+        List<Map<String, Object>> receivedConfigurations() {
+            return receivedConfigurations;
+        }
+    }
+
+    private static final class InstanceOfList<T> implements Instance<T> {
+        private final List<T> instances;
+
+        InstanceOfList(List<T> instances) {
+            this.instances = instances;
+        }
+
+        @Override public Instance<T> select(java.lang.annotation.Annotation... q) { return this; }
+        @Override public <U extends T> Instance<U> select(Class<U> s, java.lang.annotation.Annotation... q) { throw new UnsupportedOperationException(); }
+        @Override public <U extends T> Instance<U> select(jakarta.enterprise.util.TypeLiteral<U> s, java.lang.annotation.Annotation... q) { throw new UnsupportedOperationException(); }
+        @Override public boolean isUnsatisfied() { return instances.isEmpty(); }
+        @Override public boolean isAmbiguous() { return instances.size() > 1; }
+        @Override public void destroy(T inst) {}
+        @Override public Handle<T> getHandle() { throw new UnsupportedOperationException(); }
+        @Override public Iterable<? extends Handle<T>> handles() { throw new UnsupportedOperationException(); }
+        @Override public Iterator<T> iterator() { return instances.iterator(); }
+        @Override public T get() { return instances.get(0); }
+        @Override public Stream<T> stream() { return StreamSupport.stream(spliterator(), false); }
     }
 
     private static final class InstanceOfOne<T> implements Instance<T> {

@@ -152,6 +152,13 @@ seccion "Motor para verticales (ADR-009)".
 | T-059 | RF-022, RF-024 | impl backend | un run `PARTIALLY_SENT` permite solicitar un correctivo hijo solo para fragmentos correctivos rechazados, preservando los enviados como inmutables | Mt101CorrectiveLifecycleServiceTest | mvn -pl platform-app -Dtest=Mt101CorrectiveLifecycleServiceTest test | FAIL si selecciona fragmentos enviados o no registra lineage padre-hijo | mvn -pl platform-app "-Dtest=Mt101CorrectiveLifecycleServiceTest" test | PASS | T-049, T-054 | si | done |
 | T-060 | RF-024 | impl API | la operacion expone endpoints para `resolve-uncertain-pay` y `request-child`, sin acceso directo a BD y con roles administrativos/operador segun el flujo | testCompile + pruebas recurso existentes | mvn -pl platform-app test-compile | FAIL sin contrato REST compilable | mvn -pl platform-app test-compile | PASS | T-058, T-059 | si | done |
 
+### Sprint 10 - Cierre de ruteo ejecutable y snapshot de destino PAY
+
+| id | rf | tipo | objetivo verificable | test | comando_red | expected_red | comando_green | expected_green | depende_de | paralelizable | estado |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| T-061 | RF-004, RF-007, RF-024 | impl backend | `MT101_PAY` consume `routed_as` persistido y selecciona transporte/destino por `routeTransports`; si falta ruta, no llama al gateway/SFTP | Mt101PayFragmentReprocessTest | mvn -pl platform-app -Dtest=Mt101PayFragmentReprocessTest test | FAIL si PAY ignora `routed_as` y usa `transport` global | mvn -pl platform-app "-Dtest=Mt101PayFragmentReprocessTest" test | PASS | T-053, T-054 | si | done |
+| T-062 | RF-004, RF-024 | impl BD/backend | maker-checker congela hash de payload y hash canonico de configuracion `MT101_PAY`; cambios de ruta/destino invalidan el request antes del dispatch | Mt101CorrectiveLifecycleServiceTest | mvn -pl platform-app -Dtest=Mt101CorrectiveLifecycleServiceTest test | FAIL si un cambio de URL/dropPath/idempotencia permite enviar con aprobacion vieja | mvn -pl platform-app "-Dtest=Mt101CorrectiveLifecycleServiceTest" test | PASS | T-048, T-061 | si | done |
+
 ## Checklist de cierre
 - [ ] Todas las tareas tienen estado (pendiente / en curso / hecho / bloqueado).
 - [ ] Cada tarea critica tiene evidencia TDD (prueba red + green) en `tdd-evidence.md`.

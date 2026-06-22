@@ -47,18 +47,22 @@ public class Mt101CorrectivePayStore {
         }
     }
 
-    public void markDispatching(Map<String, Object> fragmentSource,
-                                String rebuildRunId,
-                                String sendersReference) {
+    /**
+     * P0.2 v22: transicion atomica PREPARED -> DISPATCHING. Devuelve true solo si se reclamo
+     * EXACTAMENTE una intencion PREPARED; false si no habia intencion valida (no se debe enviar).
+     */
+    public boolean markDispatching(Map<String, Object> fragmentSource,
+                                   String rebuildRunId,
+                                   String sendersReference) {
         if (rebuildRunId == null || rebuildRunId.isBlank()
                 || sendersReference == null || sendersReference.isBlank()) {
-            return;
+            return false;
         }
         try {
-            rebuildRepository.markPayFragmentDispatching(
+            return rebuildRepository.markPayFragmentDispatching(
                     resolveDataSource(stringValue(fragmentSource == null ? null : fragmentSource.get("connectionRef"))),
                     rebuildRunId,
-                    sendersReference);
+                    sendersReference) == 1;
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot mark MT101 corrective PAY fragment as DISPATCHING: "
                     + sendersReference, error);

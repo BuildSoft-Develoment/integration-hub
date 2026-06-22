@@ -41,7 +41,6 @@ import java.util.UUID;
 @ApplicationScoped
 public class Mt101PayTaskProvider implements TaskProvider {
 
-    private static final String DEFAULT_TRANSPORT = "REST";
     /**
      * Gate de estados (P1): por defecto PAY solo despacha fragmentos {@code ARCHIVED}
      * (hash + retencion ya persistidos). Enviar {@code BUILT} (sin validar/archivar)
@@ -101,70 +100,42 @@ public class Mt101PayTaskProvider implements TaskProvider {
     @Override
     @Transactional(Transactional.TxType.NOT_SUPPORTED)
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
-        var transportId = stringValue(configuration.get("transport"), DEFAULT_TRANSPORT).toUpperCase();
-        var transport = resolveTransport(transportId);
+        var routedPay = Mt101PayRouteResolver.hasRouteTransports(configuration);
+        var transportId = routedPay
+                ? "ROUTED"
+                : stringValue(configuration.get("transport"), Mt101PayRouteResolver.DEFAULT_TRANSPORT).toUpperCase();
+        var transport = routedPay ? null : resolveTransport(transportId);
         var fragmentSource = Mt101MessageInputResolver.fragmentSource(context, configuration, type());
 
         var accumulator = new DispatchAccumulator(
                 intValue(configuration.get("maxRecordsInOutput"), DEFAULT_MAX_RECORDS_IN_OUTPUT));
         if (!fragmentSource.isEmpty() && fragmentStore != null) {
             var pageSize = intValue(configuration.get("pageSize"), Mt101FragmentStore.DEFAULT_PAGE_SIZE);
-            fragmentStore.forEachPage(fragmentSource, FRAGMENT_READ_STATUSES, pageSize, page -> {
-                // Marcado por lote al cierre de cada pagina. Trade-off: si el
-                // proceso muere a mitad de pagina, hasta pageSize fragmentos
-                // quedan SENT-en-banco pero ARCHIVED-en-BD; el Idempotency-Key
-                // del transporte REST hace seguro el re-envio.
-                var sentRefs = new ArrayList<String>(page.size());
-                var sentTargets = new ArrayList<Mt101ArchiveStatusUpdater.StatusTarget>(page.size());
-                var rejectedTargets = new ArrayList<Mt101ArchiveStatusUpdater.StatusTarget>();
-                // Mapa de errores acotado a la pagina (no a la ejecucion completa).
-                var rejectedByRef = new LinkedHashMap<String, String>();
-                var pageAudit = new ArrayList<AuditEnvelope>(page.size());
-                // P0.1 v21: resultado durable POR FRAGMENTO de toda la pagina (no la muestra
-                // acotada): el ledger es la fuente de verdad para 20k fragmentos correctivos.
-                var pageLedger = new ArrayList<Mt101RebuildRepository.PayFragmentResult>(page.size());
-                for (var message : page) {
-                    var reference = message.sequenceA() == null ? null
-                            : message.sequenceA().sendersReference();
-                    markCorrectiveDispatching(fragmentSource, reference);
-                    var result = dispatch(transport, configuration, message, accumulator);
-                    if (reference == null) {
-                        continue;
-                    }
-                    if (result.accepted()) {
-                        sentRefs.add(reference);
-                        sentTargets.add(archiveTarget(message));
-                    } else if (result.uncertain()) {
-                        // INCIERTO: no se marca SENT ni REJECTED (ningun bucket) -> el fragmento
-                        // queda ARCHIVED y requiere conciliacion; reenviarlo duplicaria el pago.
-                    } else {
-                        rejectedByRef.put(reference, result.lastError());
-                        rejectedTargets.add(archiveTarget(message));
-                    }
-                    pageAudit.add(recordEnvelope(context, reference, result));
-                    var payStatus = result.accepted() ? "SENT" : (result.uncertain() ? "UNCERTAIN" : "REJECTED");
-                    pageLedger.add(new Mt101RebuildRepository.PayFragmentResult(
-                            reference, payStatus, result.gatewayReference(), result.attempts(), result.lastError()));
-                }
-                // Trazabilidad E2E por registro: una trama RECORD por fragmento,
-                // emitida en lote por pagina (un solo JDBC batch), fuera de la TX.
-                emitRecordAudit(pageAudit);
-                persistCorrectiveLedger(fragmentSource, pageLedger);
-                fragmentStore.markStatusBatch(fragmentSource, sentRefs, "SENT");
-                fragmentStore.markStatusBatch(fragmentSource, rejectedByRef, "REJECTED");
-                // H5: avanza el estado durable en mt101_archive (la tabla de
-                // auditoria, no solo el fragmento) si la sincronizacion no se
-                // desactivo explicitamente.
-                syncArchive(configuration, fragmentSource, sentTargets, "SENT");
-                syncArchive(configuration, fragmentSource, rejectedTargets, "REJECTED");
-            });
+            if (routedPay) {
+                fragmentStore.forEachRoutedPage(fragmentSource, FRAGMENT_READ_STATUSES, pageSize, page -> {
+                    dispatchFragmentPage(context, configuration, fragmentSource, accumulator,
+                            page.stream()
+                                    .map(item -> new RoutedDispatchMessage(item.message(), item.routedAs(), item.routeError()))
+                                    .toList());
+                });
+            } else {
+                fragmentStore.forEachPage(fragmentSource, FRAGMENT_READ_STATUSES, pageSize, page -> {
+                    dispatchFragmentPage(context, configuration, fragmentSource, accumulator,
+                            page.stream()
+                                    .map(message -> new RoutedDispatchMessage(message, null, null))
+                                    .toList(),
+                            transport);
+                });
+            }
         } else {
             var inputs = Mt101MessageInputResolver.readResolvedMessages(context, configuration, type(), fragmentStore);
             var sentArchiveIds = new LinkedHashMap<String, List<Long>>();
             var rejectedArchiveIds = new LinkedHashMap<String, List<Long>>();
             var audit = new ArrayList<AuditEnvelope>(inputs.size());
             for (var input : inputs) {
-                var result = dispatch(transport, configuration, input, accumulator);
+                var plan = Mt101PayRouteResolver.resolve(configuration, null, null, input.message());
+                var effectiveTransport = routedPay ? resolveTransport(plan.transport()) : transport;
+                var result = dispatch(effectiveTransport, plan.configuration(), input, accumulator);
                 var reference = input.message() != null && input.message().sequenceA() != null
                         ? input.message().sequenceA().sendersReference() : null;
                 if (result.accepted()) {
@@ -216,6 +187,80 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 : TaskResult.success(summary, outputs);
     }
 
+    private void dispatchFragmentPage(TaskContext context,
+                                      Map<String, Object> configuration,
+                                      Map<String, Object> fragmentSource,
+                                      DispatchAccumulator accumulator,
+                                      List<RoutedDispatchMessage> page) {
+        dispatchFragmentPage(context, configuration, fragmentSource, accumulator, page, null);
+    }
+
+    private void dispatchFragmentPage(TaskContext context,
+                                      Map<String, Object> configuration,
+                                      Map<String, Object> fragmentSource,
+                                      DispatchAccumulator accumulator,
+                                      List<RoutedDispatchMessage> page,
+                                      PaymentMessageTransport defaultTransport) {
+        // Marcado por lote al cierre de cada pagina. Trade-off: si el
+        // proceso muere a mitad de pagina, hasta pageSize fragmentos
+        // quedan SENT-en-banco pero ARCHIVED-en-BD; la clave de correlacion
+        // estable hace seguro resolver/reconciliar antes de cualquier reenvio.
+        var sentRefs = new ArrayList<String>(page.size());
+        var sentTargets = new ArrayList<Mt101ArchiveStatusUpdater.StatusTarget>(page.size());
+        var rejectedTargets = new ArrayList<Mt101ArchiveStatusUpdater.StatusTarget>();
+        // Mapa de errores acotado a la pagina (no a la ejecucion completa).
+        var rejectedByRef = new LinkedHashMap<String, String>();
+        var pageAudit = new ArrayList<AuditEnvelope>(page.size());
+        // P0.1 v21: resultado durable POR FRAGMENTO de toda la pagina (no la muestra
+        // acotada): el ledger es la fuente de verdad para 20k fragmentos correctivos.
+        var pageLedger = new ArrayList<Mt101RebuildRepository.PayFragmentResult>(page.size());
+        for (var item : page) {
+            var message = item.message();
+            var plan = Mt101PayRouteResolver.resolve(configuration, item.routedAs(), item.routeError(), message);
+            var transport = defaultTransport == null ? resolveTransport(plan.transport()) : defaultTransport;
+            var reference = message.sequenceA() == null ? null
+                    : message.sequenceA().sendersReference();
+            // P0.2 v22: ninguna llamada externa sin intencion durable aprobada. Solo se despacha
+            // si se reclamo EXACTAMENTE una intencion PREPARED del ledger correctivo; un fragmento
+            // ya DISPATCHING/terminal o sin intencion NO se reenvia (se resuelve por STATUS).
+            if (!claimDispatch(fragmentSource, reference)) {
+                continue;
+            }
+            var result = dispatch(transport, plan.configuration(), message, accumulator);
+            if (reference == null) {
+                continue;
+            }
+            if (result.accepted()) {
+                sentRefs.add(reference);
+                sentTargets.add(archiveTarget(message));
+            } else if (result.uncertain()) {
+                // INCIERTO: no se marca SENT ni REJECTED (ningun bucket) -> el fragmento
+                // queda ARCHIVED y requiere conciliacion; reenviarlo duplicaria el pago.
+            } else {
+                rejectedByRef.put(reference, result.lastError());
+                rejectedTargets.add(archiveTarget(message));
+            }
+            pageAudit.add(recordEnvelope(context, reference, result));
+            var payStatus = result.accepted() ? "SENT" : (result.uncertain() ? "UNCERTAIN" : "REJECTED");
+            pageLedger.add(new Mt101RebuildRepository.PayFragmentResult(
+                    reference, payStatus, result.gatewayReference(), result.attempts(), result.lastError()));
+        }
+        // Trazabilidad E2E por registro: una trama RECORD por fragmento,
+        // emitida en lote por pagina (un solo JDBC batch), fuera de la TX.
+        emitRecordAudit(pageAudit);
+        persistCorrectiveLedger(fragmentSource, pageLedger);
+        fragmentStore.markStatusBatch(fragmentSource, sentRefs, "SENT");
+        fragmentStore.markStatusBatch(fragmentSource, rejectedByRef, "REJECTED");
+        // H5: avanza el estado durable en mt101_archive (la tabla de
+        // auditoria, no solo el fragmento) si la sincronizacion no se
+        // desactivo explicitamente.
+        syncArchive(configuration, fragmentSource, sentTargets, "SENT");
+        syncArchive(configuration, fragmentSource, rejectedTargets, "REJECTED");
+    }
+
+    private record RoutedDispatchMessage(Mt101Message message, String routedAs, String routeError) {
+    }
+
     /** P0.1 v21: persiste el resultado por fragmento de la pagina al ledger correctivo (todos). */
     private void persistCorrectiveLedger(Map<String, Object> fragmentSource,
                                          java.util.List<Mt101RebuildRepository.PayFragmentResult> pageLedger) {
@@ -226,15 +271,24 @@ public class Mt101PayTaskProvider implements TaskProvider {
         correctivePayStore.markResults(fragmentSource, rebuildRunId, pageLedger);
     }
 
-    private void markCorrectiveDispatching(Map<String, Object> fragmentSource, String reference) {
+    /**
+     * P0.2 v22: reclama la intencion durable antes del envio. Devuelve true si se puede despachar:
+     * en el flujo no-correctivo siempre; en el correctivo, solo si se reclamo EXACTAMENTE una
+     * intencion {@code PREPARED} (transicion atomica PREPARED -> DISPATCHING). Si false, NO se
+     * llama al transporte (un fragmento ya DISPATCHING/terminal o sin intencion no se reenvia).
+     */
+    private boolean claimDispatch(Map<String, Object> fragmentSource, String reference) {
         var rebuildRunId = stringValue(fragmentSource.get("correctivePayRunId"), null);
         if (rebuildRunId == null) {
-            return;
+            return true;
         }
         if (correctivePayStore == null) {
             throw new IllegalStateException("MT101_PAY corrective source requires Mt101CorrectivePayStore");
         }
-        correctivePayStore.markDispatching(fragmentSource, rebuildRunId, reference);
+        if (reference == null || reference.isBlank()) {
+            return false;
+        }
+        return correctivePayStore.markDispatching(fragmentSource, rebuildRunId, reference);
     }
 
     /** Construye la trama RECORD de despacho para un fragmento (traceId=ejecucion, recordId=:20:). */

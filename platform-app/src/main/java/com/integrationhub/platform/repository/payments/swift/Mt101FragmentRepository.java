@@ -179,6 +179,38 @@ public class Mt101FragmentRepository {
         return page;
     }
 
+    public List<RoutedMessageJsonRow> readRoutedPage(DataSource dataSource,
+                                                     String fragmentSetId,
+                                                     List<String> statuses,
+                                                     int afterIndex,
+                                                     int pageSize) throws SQLException {
+        var sql = "select fragment_index, message_json, routed_as, route_error "
+                + "from mt101_build_fragment where fragment_set_id = ?"
+                + (statuses == null || statuses.isEmpty() ? "" : " and status in (" + placeholders(statuses.size()) + ")")
+                + " and fragment_index > ?"
+                + " order by fragment_index asc limit ?";
+        var page = new ArrayList<RoutedMessageJsonRow>(Math.max(pageSize, 1));
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            statement.setString(parameter++, fragmentSetId);
+            if (statuses != null) {
+                for (var status : statuses) {
+                    statement.setString(parameter++, status);
+                }
+            }
+            statement.setInt(parameter++, afterIndex);
+            statement.setInt(parameter, pageSize);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    page.add(new RoutedMessageJsonRow(rs.getInt(1), rs.getString(2),
+                            rs.getString(3), rs.getString(4)));
+                }
+            }
+        }
+        return page;
+    }
+
     public void updateStatusBatch(DataSource dataSource,
                                   String fragmentSetId,
                                   Map<String, String> errorBySendersReference,
@@ -803,6 +835,9 @@ public class Mt101FragmentRepository {
     }
 
     public record MessageJsonRow(int fragmentIndex, String messageJson) {
+    }
+
+    public record RoutedMessageJsonRow(int fragmentIndex, String messageJson, String routedAs, String routeError) {
     }
 
     public record FragmentLookupRow(

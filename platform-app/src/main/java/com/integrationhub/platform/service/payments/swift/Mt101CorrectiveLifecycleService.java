@@ -4,8 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101ArchiveTaskProvider;
-import com.integrationhub.platform.provider.task.payments.swift.Mt101PaymentCorrelation;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101PayTaskProvider;
+import com.integrationhub.platform.provider.task.payments.swift.Mt101PayRouteResolver;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101ReconcileTaskProvider;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101RepairTaskProvider;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101RouteTaskProvider;
@@ -146,8 +146,10 @@ public class Mt101CorrectiveLifecycleService {
                 throw new IllegalArgumentException("rebuild run " + runId
                         + " must be ARCHIVED before requesting corrective pay; current status is " + run.status());
             }
+            var prep = prepare(dataSource, run, connectionRef);
             var payloadHash = archivedPayloadHash(dataSource, run);
-            var requested = rebuildRepository.requestPay(dataSource, runId, requester, payloadHash);
+            var configHash = payConfigHash(prep);
+            var requested = rebuildRepository.requestPay(dataSource, runId, requester, payloadHash, configHash);
             if (requested == 0) {
                 throw new IllegalStateException("cannot request corrective pay for run " + runId
                         + "; payStatus=" + run.payStatus());
@@ -187,6 +189,7 @@ public class Mt101CorrectiveLifecycleService {
                         + " cannot be approved by its requester " + approver
                         + "; segregation of duties requires a different approver");
             }
+            var prep = prepare(dataSource, run, connectionRef);
             var payloadHash = archivedPayloadHash(dataSource, run);
             if (!payloadHash.equals(run.payRequestedPayloadHash())) {
                 rebuildRepository.invalidatePayRequest(dataSource, runId,
@@ -194,12 +197,19 @@ public class Mt101CorrectiveLifecycleService {
                 throw new IllegalStateException("corrective pay for run " + runId
                         + " was invalidated because the archived payload changed after request");
             }
+            var configHash = payConfigHash(prep);
+            var requestedConfigHash = rebuildRepository.payRequestedConfigHash(dataSource, runId);
+            if (!configHash.equals(requestedConfigHash)) {
+                rebuildRepository.invalidatePayRequest(dataSource, runId,
+                        "PAY configuration changed after request; request again before sending");
+                throw new IllegalStateException("corrective pay for run " + runId
+                        + " was invalidated because the MT101_PAY configuration changed after request");
+            }
             if (!rebuildRepository.claimPayForExecution(dataSource, runId, approver,
-                    payloadHash, LocalDateTime.now().plusMinutes(15))) {
+                    payloadHash, configHash, LocalDateTime.now().plusMinutes(15))) {
                 throw new IllegalStateException("corrective pay for run " + runId
                         + " could not be claimed for execution (concurrent approval or payStatus changed)");
             }
-            var prep = prepare(dataSource, run, connectionRef);
             var payConfig = stageConfig(prep, "MT101_PAY");
             rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, run.correctiveSetId());
             preparePayIntents(dataSource, runId, run.correctiveSetId(), payConfig);
@@ -283,8 +293,14 @@ public class Mt101CorrectiveLifecycleService {
             // STATUS, nunca se reenvia a ciegas.
             statusOverrides.put("correctivePayStatuses", List.of("UNCERTAIN", "DISPATCHING"));
             statusOverrides.put("resolveCorrectivePay", true);
-            runStage(statusProvider, prep, "MT101_STATUS", true,
-                    correctivePaySource(runId, connectionRef), statusOverrides);
+            try {
+                runStage(statusProvider, prep, "MT101_STATUS", true,
+                        correctivePaySource(runId, connectionRef), statusOverrides);
+                rebuildRepository.markStatusSync(dataSource, runId, "OK", null);
+            } catch (RuntimeException error) {
+                rebuildRepository.markStatusSync(dataSource, runId, "FAILED", error.getMessage());
+                throw error;
+            }
 
             rebuildRepository.syncCorrectiveBuildFragmentsFromPay(dataSource, runId);
             var summary = rebuildRepository.payFragmentSummary(dataSource, runId);
@@ -297,14 +313,14 @@ public class Mt101CorrectiveLifecycleService {
                                 + summary.pending() + " fragment(s)");
             } else if (summary.sent() == summary.total()) {
                 rebuildRepository.markPayResolution(dataSource, runId, "SENT", null);
-                runOptionalStageWithInput(reconcileProvider, prep, "MT101_RECONCILE",
-                        correctivePaySource(runId, connectionRef));
+                runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
+                        correctivePaySource(runId, connectionRef), dataSource, runId, false);
             } else if (summary.sent() > 0) {
                 rebuildRepository.markPayResolution(dataSource, runId, "PARTIALLY_SENT",
                         "PAY resolved by MT101_STATUS: sent=" + summary.sent()
                                 + ", rejected=" + summary.rejected());
-                runOptionalStageWithInput(reconcileProvider, prep, "MT101_RECONCILE",
-                        correctivePaySource(runId, connectionRef));
+                runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
+                        correctivePaySource(runId, connectionRef), dataSource, runId, false);
             } else {
                 rebuildRepository.markPayResolution(dataSource, runId, "FAILED",
                         "PAY resolved by MT101_STATUS: all fragments rejected");
@@ -433,6 +449,37 @@ public class Mt101CorrectiveLifecycleService {
         return taskConfigSource.taskConfig(prep.buildTaskDefinitionId(), taskType);
     }
 
+    private String payConfigHash(StagePrep prep) {
+        var payConfig = stageConfig(prep, "MT101_PAY");
+        if (payConfig == null) {
+            throw new IllegalStateException("the original process has no MT101_PAY task; cannot request corrective PAY");
+        }
+        try {
+            return java.util.HexFormat.of().formatHex(sha256(objectMapper.writeValueAsString(canonicalize(payConfig))));
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("Cannot canonicalize MT101_PAY configuration", error);
+        }
+    }
+
+    private Object canonicalize(Object value) {
+        if (value instanceof Map<?, ?> rawMap) {
+            var sortedKeys = new ArrayList<String>();
+            for (var key : rawMap.keySet()) {
+                sortedKeys.add(String.valueOf(key));
+            }
+            sortedKeys.sort(String::compareTo);
+            var result = new LinkedHashMap<String, Object>();
+            for (var key : sortedKeys) {
+                result.put(key, canonicalize(rawMap.get(key)));
+            }
+            return result;
+        }
+        if (value instanceof Collection<?> collection) {
+            return collection.stream().map(this::canonicalize).toList();
+        }
+        return value;
+    }
+
     private Map<String, Object> correctivePaySource(String runId, String connectionRef) {
         var source = new LinkedHashMap<String, Object>();
         source.put("correctivePayRunId", runId);
@@ -457,14 +504,10 @@ public class Mt101CorrectiveLifecycleService {
         if (payConfig == null) {
             throw new IllegalStateException("the original process has no MT101_PAY task; cannot prepare PAY intents");
         }
-        var transport = stringOrNull(payConfig.get("transport"));
-        if (transport == null) {
-            transport = "REST";
-        }
         var pageSize = intValue(payConfig.get("pageSize"), 200);
         var afterIndex = 0;
         while (true) {
-            var rows = fragmentRepository.readPage(dataSource, correctiveSetId, List.of("ARCHIVED"),
+            var rows = fragmentRepository.readRoutedPage(dataSource, correctiveSetId, List.of("ARCHIVED"),
                     afterIndex, pageSize);
             if (rows.isEmpty()) {
                 return;
@@ -477,7 +520,8 @@ public class Mt101CorrectiveLifecycleService {
                 if (reference == null || reference.isBlank()) {
                     continue;
                 }
-                var key = Mt101PaymentCorrelation.correlationKey(transport, payConfig, message);
+                var plan = Mt101PayRouteResolver.resolve(payConfig, row.routedAs(), row.routeError(), message);
+                var key = plan.endpointRef();
                 intents.add(new Mt101RebuildRepository.PayFragmentIntent(
                         correctiveSetId,
                         reference,
@@ -486,7 +530,7 @@ public class Mt101CorrectiveLifecycleService {
                         null,
                         payloadHash(message),
                         key,
-                        transport.toUpperCase(java.util.Locale.ROOT),
+                        plan.transport(),
                         key));
             }
             rebuildRepository.preparePayIntents(dataSource, runId, intents);

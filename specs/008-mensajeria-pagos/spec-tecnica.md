@@ -340,6 +340,17 @@ Outputs:
       "timeoutMillis": 15000
     },
     "idempotencyKeyTemplate": "${sendersReference}",
+    "routeTransports": {
+      "REST_MAIN": {
+        "transport": "REST",
+        "rest": { "url": "${env:GATEWAY_MT101_REST_MAIN_URL}" },
+        "idempotencyKeyTemplate": "rest-main-${sendersReference}"
+      },
+      "SFTP_SECONDARY": {
+        "transport": "SFTP",
+        "sftp": { "dropPathTemplate": "/in/mt101/${sendersReference}.fin" }
+      }
+    },
     "retryPolicy": {
       "maxRetries": 5,
       "backoffStrategy": "exponential",
@@ -365,6 +376,13 @@ Outputs:
 - `pay-mt101.records`: por mensaje `{sendersReference, archiveId?, envelopeId?, uetr, status, gatewayReference, attempts, lastError}`.
 - `pay-mt101.errors`: mensajes fallidos definitivamente.
 
+Cuando `configuration.routeTransports` existe, `MT101_PAY` no usa un transporte
+global: cada fragmento persistido debe tener `routed_as` generado por
+`MT101_ROUTE`, y esa clave debe existir en `routeTransports`. Si falta la ruta,
+existe `route_error`, o la ruta no define `transport`, el provider falla antes de
+llamar al gateway/SFTP. El `endpoint_ref` del ledger corresponde al
+`Idempotency-Key` REST o al `dropPath` SFTP ya resuelto para esa ruta.
+
 Regla de aceptacion del transporte:
 
 - `MT101_PAY` considera enviado solo cuando `TransportResult.accepted()` es
@@ -378,11 +396,13 @@ El PAY de un rebuild correctivo usa maker-checker y no reusa ciegamente el estad
 del archivo original:
 
 - `requestPay` solo aplica a rebuilds `ARCHIVED` y persiste el hash deterministico
-  del payload archivado por fragmento.
-- `approveAndPay` recalcula el hash antes de enviar; si no coincide, el request
-  queda `INVALIDATED` y no hay llamada al transporte.
+  del payload archivado por fragmento y el hash canonico de la configuracion
+  efectiva de `MT101_PAY` (transporte, rutas, destinos y correlacion).
+- `approveAndPay` recalcula ambos hashes antes de enviar; si cualquiera no
+  coincide, el request queda `INVALIDATED` y no hay llamada al transporte.
 - el claim de ejecucion es atomico y guarda `pay_claimed_payload_hash` +
-  `pay_lease_until` para impedir doble envio por checkers concurrentes.
+  `pay_claimed_config_hash` + `pay_lease_until` para impedir doble envio por
+  checkers concurrentes o cambios de destino entre maker y checker.
 - si el proceso se cae o vence el lease con `pay_status=EXECUTING`, el scheduler
   lo marca `UNCERTAIN`; no se reintenta automaticamente.
 - un `pay_status=UNCERTAIN` solo puede cerrarse con una resolucion explicita:
@@ -742,6 +762,8 @@ Columnas relevantes para PAY correctivo:
 | `pay_status` | varchar(20) | NOT_REQUESTED/REQUESTED/EXECUTING/SENT/PARTIALLY_SENT/FAILED/INVALIDATED/UNCERTAIN |
 | `pay_requested_payload_hash` | char(64) | hash aprobado por maker antes del envio |
 | `pay_claimed_payload_hash` | char(64) | hash reclamado por checker al iniciar PAY |
+| `pay_requested_config_hash` | char(64) | hash canonico de configuracion `MT101_PAY` aprobado por maker |
+| `pay_claimed_config_hash` | char(64) | hash canonico reclamado por checker al iniciar PAY |
 | `pay_lease_until` | timestamp | limite para declarar ejecucion incierta |
 | `pay_uncertain_reason` | text | razon operativa cuando queda `UNCERTAIN` |
 | `parent_rebuild_run_id` | varchar(80) | run padre cuando el correctivo nace de un parcial |
@@ -781,6 +803,9 @@ Contrato correctivo:
 - `MT101_PAY` correctivo recibe `{fragmentSetId, correctivePayRunId}`. Antes
   de invocar el transporte debe existir una fila `PREPARED` por fragmento y,
   justo antes de la llamada externa, esa fila pasa a `DISPATCHING`.
+- Si el proceso define `routeTransports`, `MT101_PAY` lee `routed_as`/`route_error`
+  desde `mt101_build_fragment` y prepara/envia cada fragmento con el transporte
+  de esa ruta; no usa el transporte global para fragmentos ruteados.
 - La clave de correlacion se resuelve una sola vez: para REST es el
   `Idempotency-Key`; para SFTP es el `dropPath` final. Esa misma clave se
   persiste y se entrega al transporte.

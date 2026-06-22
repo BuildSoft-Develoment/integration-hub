@@ -672,11 +672,12 @@ public class Mt101RebuildRepository {
 
     /** B2': solicita el envio del correctivo (maker) con estado explicito PAY. */
     public int requestPay(DataSource dataSource, String rebuildRunId, String requestedBy,
-                          String payloadHash) throws SQLException {
+                          String payloadHash, String configHash) throws SQLException {
         var sql = "update mt101_rebuild_run set pay_status = 'REQUESTED', pay_requested_by = ?, "
                 + "pay_requested_at = current_timestamp, pay_claimed_by = null, pay_claimed_at = null, "
                 + "pay_approved_by = null, pay_approved_at = null, pay_completed_at = null, "
-                + "pay_requested_payload_hash = ?, pay_claimed_payload_hash = null, pay_lease_until = null, "
+                + "pay_requested_payload_hash = ?, pay_claimed_payload_hash = null, "
+                + "pay_requested_config_hash = ?, pay_claimed_config_hash = null, pay_lease_until = null, "
                 + "pay_uncertain_reason = null, pay_error_message = null, updated_at = current_timestamp "
                 + "where rebuild_run_id = ? and status = 'ARCHIVED' "
                 + "and pay_status in ('NOT_REQUESTED', 'FAILED', 'INVALIDATED')";
@@ -684,7 +685,8 @@ public class Mt101RebuildRepository {
              var statement = connection.prepareStatement(sql)) {
             statement.setString(1, requestedBy);
             statement.setString(2, payloadHash);
-            statement.setString(3, rebuildRunId);
+            statement.setString(3, configHash);
+            statement.setString(4, rebuildRunId);
             return statement.executeUpdate();
         }
     }
@@ -701,27 +703,41 @@ public class Mt101RebuildRepository {
         }
     }
 
+    public String payRequestedConfigHash(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "select pay_requested_config_hash from mt101_rebuild_run where rebuild_run_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }
+    }
+
     /**
      * Claim atomico REQUESTED -> EXECUTING. Solo la transaccion que gana este update
      * puede invocar el provider MT101_PAY; asi se evita doble envio concurrente.
      */
     public boolean claimPayForExecution(DataSource dataSource, String rebuildRunId, String approvedBy,
-                                        String payloadHash, LocalDateTime leaseUntil) throws SQLException {
+                                        String payloadHash, String configHash, LocalDateTime leaseUntil) throws SQLException {
         var sql = "update mt101_rebuild_run set pay_status = 'EXECUTING', pay_claimed_by = ?, "
                 + "pay_claimed_at = current_timestamp, pay_approved_by = ?, pay_approved_at = current_timestamp, "
-                + "pay_claimed_payload_hash = ?, pay_lease_until = ?, updated_at = current_timestamp "
+                + "pay_claimed_payload_hash = ?, pay_claimed_config_hash = ?, pay_lease_until = ?, "
+                + "updated_at = current_timestamp "
                 + "where rebuild_run_id = ? and status = 'ARCHIVED' and pay_status = 'REQUESTED' "
                 + "and pay_requested_by is not null and pay_requested_by <> ? "
-                + "and pay_requested_payload_hash = ?";
+                + "and pay_requested_payload_hash = ? and pay_requested_config_hash = ?";
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
             statement.setString(1, approvedBy);
             statement.setString(2, approvedBy);
             statement.setString(3, payloadHash);
-            statement.setObject(4, leaseUntil);
-            statement.setString(5, rebuildRunId);
-            statement.setString(6, approvedBy);
-            statement.setString(7, payloadHash);
+            statement.setString(4, configHash);
+            statement.setObject(5, leaseUntil);
+            statement.setString(6, rebuildRunId);
+            statement.setString(7, approvedBy);
+            statement.setString(8, payloadHash);
+            statement.setString(9, configHash);
             return statement.executeUpdate() == 1;
         }
     }
@@ -999,7 +1015,7 @@ public class Mt101RebuildRepository {
                        updated_at = current_timestamp
                  where rebuild_run_id = ?
                    and corrective_senders_reference = ?
-                   and pay_status in ('PREPARED', 'DISPATCHING')
+                   and pay_status = 'PREPARED'
                 """;
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
