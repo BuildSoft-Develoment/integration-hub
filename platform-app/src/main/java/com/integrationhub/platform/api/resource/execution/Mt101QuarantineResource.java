@@ -280,9 +280,12 @@ public class Mt101QuarantineResource {
     public Mt101CorrectiveLifecycleService.CorrectiveLifecycleResult requestCorrectivePay(
             @QueryParam("connectionRef") String connectionRef,
             @QueryParam("rebuildRunId") String rebuildRunId,
+            @QueryParam("reason") String reason,
+            @QueryParam("ticketRef") String ticketRef,
             @Context SecurityContext securityContext) {
         try {
-            return correctiveLifecycleService.requestCorrectivePay(connectionRef, rebuildRunId, actor(securityContext));
+            return correctiveLifecycleService.requestCorrectivePay(
+                    connectionRef, rebuildRunId, actor(securityContext), reason, ticketRef);
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }

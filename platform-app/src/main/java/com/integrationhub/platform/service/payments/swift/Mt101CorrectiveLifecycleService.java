@@ -133,6 +133,15 @@ public class Mt101CorrectiveLifecycleService {
 
     /** B2': el maker solicita el envio del correctivo (run ARCHIVED). */
     public CorrectiveLifecycleResult requestCorrectivePay(String connectionRef, String rebuildRunId, String requestedBy) {
+        return requestCorrectivePay(connectionRef, rebuildRunId, requestedBy, null, null);
+    }
+
+    /**
+     * B2': el maker solicita el envio del correctivo (run ARCHIVED) dejando motivo/ticket de negocio
+     * como evidencia durable de la solicitud (auditoria maker-checker, simetrica a la resolucion).
+     */
+    public CorrectiveLifecycleResult requestCorrectivePay(String connectionRef, String rebuildRunId, String requestedBy,
+                                                          String requestReason, String requestTicket) {
         var runId = require(rebuildRunId, "rebuildRunId");
         var requester = require(requestedBy, "requestedBy");
         var dataSource = resolveDataSource(connectionRef);
@@ -149,7 +158,8 @@ public class Mt101CorrectiveLifecycleService {
             var prep = prepare(dataSource, run, connectionRef);
             var payloadHash = archivedPayloadHash(dataSource, run);
             var configHash = payConfigHash(prep);
-            var requested = rebuildRepository.requestPay(dataSource, runId, requester, payloadHash, configHash);
+            var requested = rebuildRepository.requestPay(dataSource, runId, requester, payloadHash, configHash,
+                    requestReason, requestTicket);
             if (requested == 0) {
                 throw new IllegalStateException("cannot request corrective pay for run " + runId
                         + "; payStatus=" + run.payStatus());

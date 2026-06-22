@@ -672,12 +672,15 @@ public class Mt101RebuildRepository {
 
     /** B2': solicita el envio del correctivo (maker) con estado explicito PAY. */
     public int requestPay(DataSource dataSource, String rebuildRunId, String requestedBy,
-                          String payloadHash, String configHash) throws SQLException {
+                          String payloadHash, String configHash,
+                          String requestReason, String requestTicket) throws SQLException {
         var sql = "update mt101_rebuild_run set pay_status = 'REQUESTED', pay_requested_by = ?, "
                 + "pay_requested_at = current_timestamp, pay_claimed_by = null, pay_claimed_at = null, "
                 + "pay_approved_by = null, pay_approved_at = null, pay_completed_at = null, "
                 + "pay_requested_payload_hash = ?, pay_claimed_payload_hash = null, "
                 + "pay_requested_config_hash = ?, pay_claimed_config_hash = null, pay_lease_until = null, "
+                + "pay_request_reason = ?, pay_request_ticket = ?, "
+                + "pay_resolved_by = null, pay_resolved_at = null, pay_resolution_reason = null, "
                 + "pay_uncertain_reason = null, pay_error_message = null, updated_at = current_timestamp "
                 + "where rebuild_run_id = ? and status = 'ARCHIVED' "
                 + "and pay_status in ('NOT_REQUESTED', 'FAILED', 'INVALIDATED')";
@@ -686,7 +689,9 @@ public class Mt101RebuildRepository {
             statement.setString(1, requestedBy);
             statement.setString(2, payloadHash);
             statement.setString(3, configHash);
-            statement.setString(4, rebuildRunId);
+            statement.setString(4, blankToNull(requestReason));
+            statement.setString(5, blankToNull(requestTicket));
+            statement.setString(6, rebuildRunId);
             return statement.executeUpdate();
         }
     }

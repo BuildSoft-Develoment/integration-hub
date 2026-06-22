@@ -279,6 +279,26 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
+    void payRequestPersistsBusinessReasonAndTicketAsDurableEvidence() throws Exception {
+        // v22: la SOLICITUD de PAY (paso del maker) deja motivo/ticket de negocio como evidencia
+        // durable, simetrica a la auditoria de resolucion. Sin fallback: queda registrado.
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana",
+                "reproceso aprobado por tesoreria", "JIRA-PAY-4321");
+
+        assertEquals("reproceso aprobado por tesoreria",
+                queryString("select pay_request_reason from mt101_rebuild_run where rebuild_run_id = '" + FIX + "'"),
+                "se registra el motivo de la solicitud de PAY");
+        assertEquals("JIRA-PAY-4321",
+                queryString("select pay_request_ticket from mt101_rebuild_run where rebuild_run_id = '" + FIX + "'"),
+                "se registra el ticket de la solicitud de PAY");
+
+        // El motivo/ticket no rompe la segregacion de funciones: otro checker aprueba y se envia.
+        var paid = service.approveAndPayCorrective(null, FIX, "luis");
+        assertEquals("SENT", paid.status());
+    }
+
+    @Test
     void payClaimPreventsDoubleSendWhenAnotherCheckerWonTheClaim() throws Exception {
         service.advanceCorrective(null, FIX, "executor");
         service.requestCorrectivePay(null, FIX, "ana");
@@ -645,6 +665,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "pay_lease_until timestamp, pay_uncertain_reason text,"
                     + "pay_completed_at timestamp, pay_error_message text,"
                     + "pay_resolved_by varchar(120), pay_resolved_at timestamp, pay_resolution_reason text,"
+                    + "pay_request_reason text, pay_request_ticket varchar(120),"
                     + "status_sync_status varchar(20) not null default 'PENDING', status_sync_error text,"
                     + "reconciliation_status varchar(20) not null default 'PENDING', reconciliation_error text,"
                     + "parent_rebuild_run_id varchar(80), parent_corrective_set_id varchar(80),"

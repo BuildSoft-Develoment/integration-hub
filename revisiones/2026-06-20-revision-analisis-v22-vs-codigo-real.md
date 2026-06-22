@@ -57,9 +57,10 @@ en `requestPay`, un fragmento que aparezca/cambie **después** del claim (ARCHIV
 - `Mt101PayFragmentReprocessTest` (7): + `correctivePayNeverCallsTransportWithoutPreparedIntent`
   (sin intención → 0 llamadas al transporte) y `correctivePayDoesNotResendAlreadyDispatchedFragment`
   (DISPATCHING no se reenvía; queda DISPATCHING para conciliar).
-- `Mt101CorrectiveLifecycleServiceTest` (14): el flujo normal sigue verde (preparePayIntents crea
-  PREPARED → el claim estricto funciona) + los casos de incierto/parcial/lease/post-dispatch.
-- Backend swift en este run: **252** tests, 0 fallos.
+- `Mt101CorrectiveLifecycleServiceTest` (15): el flujo normal sigue verde (preparePayIntents crea
+  PREPARED → el claim estricto funciona) + los casos de incierto/parcial/lease/post-dispatch +
+  `payRequestPersistsBusinessReasonAndTicketAsDurableEvidence` (V50, motivo/ticket del maker).
+- Dominio swift (provider + service + repository) en el run de cierre: **187** tests, 0 fallos.
 
 ## Segundo pase (validación profunda + auditoría de resolución)
 
@@ -89,10 +90,20 @@ resuelve a `UNROUTED` se trata como **error de ruta** (`route_error` + `errorCou
 **REJECTED en ROUTE**, de modo que ARCHIVE/PAY (que leen VALIDATED/ARCHIVED) lo **excluyen**. La
 falla ocurre temprano, en ROUTE. Test `unroutedFragmentIsRejectedAtRouteSoArchiveAndPayExcludeIt`.
 
-**Riesgos P2 restantes (documentados, no bloqueantes).** STATUS por perfil/ruta (REST vs SFTP) por
-fragmento — aceptable si todas las rutas comparten el servicio de consulta; `pay_request_reason`/
-`pay_request_ticket` explícitos en la solicitud de PAY. No afectan la garantía central de seguridad
-de dinero.
+**`pay_request_reason` / `pay_request_ticket` — CORREGIDO (cierre).** Era un gap de auditoría real:
+la SOLICITUD de PAY (paso del maker) registraba quién/cuándo (`pay_requested_by`/`pay_requested_at`)
+pero **no el motivo ni el ticket de negocio** que justifica el envío correctivo — asimétrico frente a
+la auditoría de resolución (V49). V50 añade `pay_request_reason`/`pay_request_ticket`; `requestPay`
+los persiste (con `blankToNull`) y limpia el rastro de resolución previo; `requestCorrectivePay`
+acepta motivo/ticket por la cadena resource → service → repo (`@QueryParam reason`/`ticketRef`). El
+maker-checker queda con evidencia durable en **ambos** extremos (solicitud y resolución). Test
+`payRequestPersistsBusinessReasonAndTicketAsDurableEvidence`.
+
+**Riesgo P2 restante (documentado, no bloqueante).** STATUS por perfil/ruta (REST vs SFTP) por
+fragmento — el propio v22 lo da por **aceptable** cuando todas las rutas comparten el servicio de
+consulta MT101_STATUS, que es el caso actual (`Mt101StatusTaskProvider` consulta por `senders_reference`/
+`uetr`, no por transporte). Es un endurecimiento mayor y condicional; se deja documentado. No afecta
+la garantía central de seguridad de dinero (ninguna llamada al banco sin intención aprobada y única).
 
 ## Conclusión
 
