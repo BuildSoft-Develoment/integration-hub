@@ -431,6 +431,13 @@ class Mt101CorrectiveLifecycleServiceTest {
         assertEquals(1, reconcileInvocations.get(), "con pagos resueltos como enviados se ejecuta RECONCILE");
         assertEquals(2L, queryLong("select count(*) from mt101_corrective_pay_fragment "
                 + "where rebuild_run_id = '" + FIX + "' and pay_status = 'SENT'"));
+        // v22: la resolucion de PAY incierto deja evidencia durable del actor/motivo.
+        assertEquals("operador",
+                queryString("select pay_resolved_by from mt101_rebuild_run where rebuild_run_id = '" + FIX + "'"),
+                "se registra quien resolvio el PAY incierto");
+        assertEquals(1L, queryLong("select count(*) from mt101_rebuild_run where rebuild_run_id = '" + FIX
+                + "' and pay_resolved_at is not null and pay_resolution_reason is not null"),
+                "se registra cuando y por que se resolvio");
     }
 
     @Test
@@ -637,6 +644,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "pay_requested_config_hash varchar(64), pay_claimed_config_hash varchar(64),"
                     + "pay_lease_until timestamp, pay_uncertain_reason text,"
                     + "pay_completed_at timestamp, pay_error_message text,"
+                    + "pay_resolved_by varchar(120), pay_resolved_at timestamp, pay_resolution_reason text,"
                     + "status_sync_status varchar(20) not null default 'PENDING', status_sync_error text,"
                     + "reconciliation_status varchar(20) not null default 'PENDING', reconciliation_error text,"
                     + "parent_rebuild_run_id varchar(80), parent_corrective_set_id varchar(80),"

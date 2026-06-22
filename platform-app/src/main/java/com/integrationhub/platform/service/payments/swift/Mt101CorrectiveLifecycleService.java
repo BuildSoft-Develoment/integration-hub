@@ -310,20 +310,21 @@ public class Mt101CorrectiveLifecycleService {
             if (summary.pending() > 0) {
                 rebuildRepository.markPayResolution(dataSource, runId, "UNCERTAIN",
                         "MT101_STATUS did not return a final accepted/rejected status for "
-                                + summary.pending() + " fragment(s)");
+                                + summary.pending() + " fragment(s)", executedBy);
             } else if (summary.sent() == summary.total()) {
-                rebuildRepository.markPayResolution(dataSource, runId, "SENT", null);
+                rebuildRepository.markPayResolution(dataSource, runId, "SENT",
+                        "resolved by MT101_STATUS: all fragments sent", executedBy);
                 runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
                         correctivePaySource(runId, connectionRef), dataSource, runId, false);
             } else if (summary.sent() > 0) {
                 rebuildRepository.markPayResolution(dataSource, runId, "PARTIALLY_SENT",
                         "PAY resolved by MT101_STATUS: sent=" + summary.sent()
-                                + ", rejected=" + summary.rejected());
+                                + ", rejected=" + summary.rejected(), executedBy);
                 runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
                         correctivePaySource(runId, connectionRef), dataSource, runId, false);
             } else {
                 rebuildRepository.markPayResolution(dataSource, runId, "FAILED",
-                        "PAY resolved by MT101_STATUS: all fragments rejected");
+                        "PAY resolved by MT101_STATUS: all fragments rejected", executedBy);
             }
             rebuildService.synchronizeLifecycle(connectionRef, run.originalFragmentSetId());
             run = rebuildRepository.findRun(dataSource, runId);

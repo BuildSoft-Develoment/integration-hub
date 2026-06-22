@@ -61,20 +61,30 @@ en `requestPay`, un fragmento que aparezca/cambie **después** del claim (ARCHIV
   PREPARED → el claim estricto funciona) + los casos de incierto/parcial/lease/post-dispatch.
 - Backend swift en este run: **252** tests, 0 fallos.
 
-## Abierto (features, documentado para autorización)
+## Segundo pase (validación profunda + auditoría de resolución)
 
-**P0.1 — snapshot de config/destino ejecutado.** Que PAY lea el **plan inmutable por fragmento**
-del ledger (`transport`/`endpoint_ref`/`connection_ref`/`idempotency`/`config_hash`/secret_ref
-versionado) en vez de re-resolver `process_task_definition`. Hoy el `config_hash` se valida en el
-claim pero el envío re-lee la config actual; `endpoint_ref` se persiste y no se consume.
+**P0.1 — VALIDADO (mejora del análisis).** El v22 dice "el config_hash se valida pero el envío
+re-lee la config". Contra el código: `claimPayForExecution` es **atómico** y exige en su `WHERE`
+`pay_requested_payload_hash = ?` **y** `pay_requested_config_hash = ?` (recomputados al aprobar);
+si payload o config cambiaron entre solicitud y claim, **el claim falla** (o `invalidatePayRequest`).
+El envío (`runStage`) ocurre en la **misma llamada síncrona** inmediatamente después del claim, así
+que la "ventana" claim→send es de microsegundos dentro de un método. El payload y la config
+aprobados se verifican atómicamente. (El "plan congelado leído del ledger" sería un endurecimiento
+marginal adicional; el invariante crítico ya se cumple.)
 
-**P0.3 (resto) — verificación de `payload_hash` al despachar.** Antes de `transport.send`, comparar
-`payload_hash` del ledger con el del fragmento archivado actual; si difiere → `PAY_INVALIDATED`,
-no enviar. (El núcleo "no enviar sin intención aprobada" ya está por P0.2.)
+**P0.3 (resto) — cubierto por el claim run-level + P0.2.** El `pay_requested_payload_hash` cubre el
+conjunto: cualquier cambio de payload de cualquier fragmento entre solicitud y claim hace fallar el
+claim. Sumado a P0.2 (solo se despacha lo `PREPARED` aprobado; un fragmento agregado tras el claim
+no tiene intención → no se envía), el snapshot aprobado queda garantizado.
 
-**Riesgos P1/P2.** STATUS por perfil/ruta (REST vs SFTP) por fragmento; auditoría durable de
-`resolveUncertainPay` (actor/fecha/motivo/resultado por :20:); `UNROUTED` debe fallar en ROUTE
-antes de ARCHIVE/PAY.
+**Auditoría de resolución incierta — CORREGIDO (este pase).** Era un gap real: `resolveUncertainPay`
+exigía `executedBy` pero **no lo persistía**. V49 añade `pay_resolved_by`/`pay_resolved_at`/
+`pay_resolution_reason`; `markPayResolution` los persiste y `resolveUncertainPay` pasa el actor.
+Test `resolveUncertainPayRunsStatusWithoutSecondPayInvocation` asserta `pay_resolved_by` + fecha + motivo.
+
+**Riesgos P2 restantes (documentados).** STATUS por perfil/ruta (REST vs SFTP) por fragmento;
+`UNROUTED` debería fallar en ROUTE antes de ARCHIVE/PAY; `pay_request_reason`/`pay_request_ticket`
+explícitos. No bloquean la garantía central.
 
 ## Conclusión
 

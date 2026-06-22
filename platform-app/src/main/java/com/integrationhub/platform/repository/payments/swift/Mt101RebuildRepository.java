@@ -858,8 +858,9 @@ public class Mt101RebuildRepository {
     }
 
     public void markPayResolution(DataSource dataSource, String rebuildRunId, String payStatus,
-                                  String reason) throws SQLException {
+                                  String reason, String resolvedBy) throws SQLException {
         var normalized = payStatus == null ? "UNCERTAIN" : payStatus.trim().toUpperCase(Locale.ROOT);
+        // v22: evidencia durable de la resolucion del PAY incierto (actor/fecha/motivo).
         var sql = """
                 update mt101_rebuild_run
                    set pay_status = ?,
@@ -867,6 +868,9 @@ public class Mt101RebuildRepository {
                        pay_lease_until = null,
                        pay_uncertain_reason = case when ? = 'UNCERTAIN' then ? else null end,
                        pay_error_message = ?,
+                       pay_resolved_by = ?,
+                       pay_resolved_at = current_timestamp,
+                       pay_resolution_reason = ?,
                        updated_at = current_timestamp
                  where rebuild_run_id = ?
                    and pay_status in ('UNCERTAIN', 'EXECUTING', 'PARTIALLY_SENT', 'FAILED')
@@ -877,7 +881,9 @@ public class Mt101RebuildRepository {
             statement.setString(2, normalized);
             statement.setString(3, reason);
             statement.setString(4, reason);
-            statement.setString(5, rebuildRunId);
+            statement.setString(5, resolvedBy);
+            statement.setString(6, reason);
+            statement.setString(7, rebuildRunId);
             statement.executeUpdate();
         }
     }
