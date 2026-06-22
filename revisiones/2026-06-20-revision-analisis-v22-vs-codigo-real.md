@@ -82,9 +82,17 @@ exigía `executedBy` pero **no lo persistía**. V49 añade `pay_resolved_by`/`pa
 `pay_resolution_reason`; `markPayResolution` los persiste y `resolveUncertainPay` pasa el actor.
 Test `resolveUncertainPayRunsStatusWithoutSecondPayInvocation` asserta `pay_resolved_by` + fecha + motivo.
 
-**Riesgos P2 restantes (documentados).** STATUS por perfil/ruta (REST vs SFTP) por fragmento;
-`UNROUTED` debería fallar en ROUTE antes de ARCHIVE/PAY; `pay_request_reason`/`pay_request_ticket`
-explícitos. No bloquean la garantía central.
+**`UNROUTED` → falla en ROUTE — CORREGIDO (este pase).** Era un gap real: ROUTE marcaba
+`routed_as=UNROUTED` (default sin regla) y lo contaba como ruteado; ARCHIVE/PAY no filtraban por
+ruta, así que un fragmento sin ruta usable se archivaba e intentaba pagar. Ahora un fragmento que
+resuelve a `UNROUTED` se trata como **error de ruta** (`route_error` + `errorCount`) y se marca
+**REJECTED en ROUTE**, de modo que ARCHIVE/PAY (que leen VALIDATED/ARCHIVED) lo **excluyen**. La
+falla ocurre temprano, en ROUTE. Test `unroutedFragmentIsRejectedAtRouteSoArchiveAndPayExcludeIt`.
+
+**Riesgos P2 restantes (documentados, no bloqueantes).** STATUS por perfil/ruta (REST vs SFTP) por
+fragmento — aceptable si todas las rutas comparten el servicio de consulta; `pay_request_reason`/
+`pay_request_ticket` explícitos en la solicitud de PAY. No afectan la garantía central de seguridad
+de dinero.
 
 ## Conclusión
 

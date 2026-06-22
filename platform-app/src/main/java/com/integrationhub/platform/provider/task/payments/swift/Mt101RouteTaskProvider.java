@@ -225,14 +225,23 @@ public class Mt101RouteTaskProvider implements TaskProvider {
                 var reference = message.sequenceA() == null ? null : message.sequenceA().sendersReference();
                 try {
                     var route = evaluate(rules, asMap, defaultRoute);
-                    if (reference != null && !reference.isBlank()) {
-                        routeByRef.put(reference, route);
+                    if ("UNROUTED".equals(route)) {
+                        // P2 v22: sin ruta usable (ninguna regla matcheo y sin defaultRoute valido) la
+                        // falla ocurre en ROUTE: el fragmento NO debe archivarse ni pagarse.
+                        stats[1]++;
+                        if (reference != null && !reference.isBlank()) {
+                            errorByRef.put(reference, "MT101_ROUTE: no rule matched and no usable defaultRoute (UNROUTED)");
+                        }
+                    } else {
+                        if (reference != null && !reference.isBlank()) {
+                            routeByRef.put(reference, route);
+                        }
+                        countByRoute.merge(route, 1, Integer::sum);
+                        stats[0]++;
+                        var enriched = new LinkedHashMap<String, Object>(asMap);
+                        enriched.put(fieldName, route);
+                        pageAudit.add(routeEnvelope(context, enriched, route));
                     }
-                    countByRoute.merge(route, 1, Integer::sum);
-                    stats[0]++;
-                    var enriched = new LinkedHashMap<String, Object>(asMap);
-                    enriched.put(fieldName, route);
-                    pageAudit.add(routeEnvelope(context, enriched, route));
                 } catch (RuntimeException error) {
                     stats[1]++;
                     if (reference != null && !reference.isBlank()) {
@@ -241,6 +250,10 @@ public class Mt101RouteTaskProvider implements TaskProvider {
                 }
             }
             fragmentStore.markRouteBatch(fragmentSource, routeByRef, errorByRef);
+            if (!errorByRef.isEmpty()) {
+                // P2 v22: los fragmentos sin ruta usable se marcan REJECTED -> ARCHIVE/PAY los excluyen.
+                fragmentStore.markStatusBatch(fragmentSource, new ArrayList<>(errorByRef.keySet()), "REJECTED");
+            }
             emitRecordAudit(pageAudit);
         });
 

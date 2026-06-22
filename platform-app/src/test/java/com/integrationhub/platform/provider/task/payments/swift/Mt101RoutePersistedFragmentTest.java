@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -74,6 +76,33 @@ class Mt101RoutePersistedFragmentTest {
         assertEquals("SFTP", routeFor(fragmentSetId, "R2"));
         assertEquals("VALIDATED", statusFor(fragmentSetId, "R1"),
                 "ROUTE persiste la decision pero no consume ni cambia el gate de ARCHIVE/PAY");
+    }
+
+    @Test
+    void unroutedFragmentIsRejectedAtRouteSoArchiveAndPayExcludeIt() throws Exception {
+        // P2 v22: un fragmento sin ruta usable (UNROUTED) falla en ROUTE y NO se archiva ni se paga.
+        var fragmentSetId = "ROUTE-UNROUTED";
+        insertFragment(fragmentSetId, "U1", 1, 2);
+        insertFragment(fragmentSetId, "R1", 2, 2);
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 2);
+        fragmentStore.markStatusBatch(fragmentSource, List.of("U1", "R1"), "VALIDATED");
+
+        var context = new TaskContext(100L, 20L);
+        context.attributes().put("taskOutputs", Map.of("build.fragments", fragmentSource));
+        var result = provider.execute(context, Map.of(
+                "pageSize", 10,
+                "input", Map.of("sourceTaskRef", "build", "sourceOutput", "fragments"),
+                "rules", List.of(
+                        Map.of("name", "r1", "predicate", "sequenceA.sendersReference == 'R1'", "routeTo", "REST"))));
+
+        assertFalse(result.success(), "un fragmento sin ruta usable hace fallar ROUTE");
+        assertEquals(1L, result.outputs().get("errorCount"));
+        // U1 sin ruta -> REJECTED en ROUTE (con route_error): ARCHIVE/PAY lo excluyen.
+        assertEquals("REJECTED", statusFor(fragmentSetId, "U1"), "el fragmento sin ruta se rechaza en ROUTE");
+        assertNotNull(columnFor(fragmentSetId, "U1", "route_error"), "queda el motivo de la no-ruta");
+        // R1 ruteado normalmente sigue su curso.
+        assertEquals("REST", routeFor(fragmentSetId, "R1"));
+        assertEquals("VALIDATED", statusFor(fragmentSetId, "R1"));
     }
 
     private void insertFragment(String fragmentSetId, String reference, int index, int total) {
