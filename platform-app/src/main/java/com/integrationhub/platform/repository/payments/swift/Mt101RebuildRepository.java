@@ -1149,7 +1149,7 @@ public class Mt101RebuildRepository {
         var statuses = normalizedStatuses(payStatuses, List.of("SENT"));
         var sql = """
                 select cpf.id, cpf.corrective_senders_reference, cpf.gateway_reference,
-                       cpf.idempotency_key, a.id as archive_id
+                       cpf.idempotency_key, f.routed_as as routed_as, a.id as archive_id
                   from mt101_corrective_pay_fragment cpf
                   left join mt101_build_fragment f
                     on f.fragment_set_id = cpf.corrective_set_id
@@ -1181,6 +1181,10 @@ public class Mt101RebuildRepository {
                     row.put("sendersReference", rs.getString("corrective_senders_reference"));
                     row.put("gatewayReference", rs.getString("gateway_reference"));
                     row.put("idempotencyKey", rs.getString("idempotency_key"));
+                    var routedAs = rs.getString("routed_as");
+                    if (routedAs != null && !routedAs.isBlank()) {
+                        row.put("route", routedAs);
+                    }
                     var archiveId = rs.getObject("archive_id");
                     if (archiveId != null) {
                         row.put("archiveId", rs.getLong("archive_id"));

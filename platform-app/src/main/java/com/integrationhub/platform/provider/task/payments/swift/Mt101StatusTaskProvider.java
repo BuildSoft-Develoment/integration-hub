@@ -535,7 +535,15 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
             effectiveConfiguration.put("connectionRef", connectionRef);
         }
         var queryCfg = mapValue(configuration.get("query"));
-        var urlTemplate = stringRequired(queryCfg.get("url"), "query.url");
+        // STATUS por ruta (P2 v22): si se declara routeQuery (override por ruta REST/SFTP/...),
+        // cada fragmento se consulta contra el endpoint de SU ruta. Sin routeQuery, todas las
+        // rutas comparten query.url (caso aceptado por el v22). Sin fallback: en modo route-aware,
+        // una ruta sin entrada en routeQuery es error ruidoso (no se consulta contra otro endpoint).
+        var routeQuery = mapValue(configuration.get("routeQuery"));
+        var routeAware = !routeQuery.isEmpty();
+        var urlTemplate = routeAware
+                ? stringOrNull(queryCfg.get("url"))
+                : stringRequired(queryCfg.get("url"), "query.url");
         var httpMethod = stringValue(queryCfg.get("method"), "GET").toUpperCase(Locale.ROOT);
         var timeoutSeconds = intValue(queryCfg.get("timeoutSeconds"), DEFAULT_TIMEOUT_SECONDS);
         var expected = mapValue(configuration.get("expectedGatewayResponse"));
@@ -566,8 +574,25 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                 }
                 for (var record : page) {
                     queriedCount++;
-                    var url = resolveTemplate(urlTemplate, record);
-                    var queryResult = gateway.query(httpMethod, url, timeoutSeconds);
+                    var statusQuery = resolveStatusQuery(record, routeAware, routeQuery,
+                            urlTemplate, httpMethod, timeoutSeconds, statusPath, referencePath);
+                    if (statusQuery.error() != null) {
+                        // Ruta sin endpoint declarado: error ruidoso, no se consulta a ciegas.
+                        errorCount++;
+                        byStatus.merge("ERROR", 1, Integer::sum);
+                        if (errors.size() < maxRecordsInOutput) {
+                            var entry = new LinkedHashMap<String, Object>();
+                            entry.put("sendersReference", record.get("sendersReference"));
+                            entry.put("gatewayReference", record.get("gatewayReference"));
+                            entry.put("route", record.get("route"));
+                            entry.put("status", "ERROR");
+                            entry.put("error", statusQuery.error());
+                            errors.add(entry);
+                        }
+                        continue;
+                    }
+                    var url = resolveTemplate(statusQuery.url(), record);
+                    var queryResult = gateway.query(statusQuery.method(), url, statusQuery.timeoutSeconds());
                     if (queryResult.error() != null) {
                         errorCount++;
                         byStatus.merge("ERROR", 1, Integer::sum);
@@ -582,8 +607,8 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                         continue;
                     }
                     var rawBody = queryResult.body();
-                    var confirmedStatus = gateway.extractField(rawBody, statusPath);
-                    var gatewayReference = gateway.extractField(rawBody, referencePath);
+                    var confirmedStatus = gateway.extractField(rawBody, statusQuery.statusPath());
+                    var gatewayReference = gateway.extractField(rawBody, statusQuery.referencePath());
                     if (gatewayReference == null) {
                         gatewayReference = String.valueOf(record.getOrDefault("gatewayReference", ""));
                     }
@@ -662,6 +687,50 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         return errorCount == 0
                 ? TaskResult.success(summary, outputs)
                 : TaskResult.failure(summary, outputs);
+    }
+
+    /** Endpoint de consulta efectivo para un fragmento (resuelto por ruta), o {@code error} si la ruta no tiene endpoint. */
+    private record StatusQuery(String url, String method, int timeoutSeconds,
+                               String statusPath, String referencePath, String error) {
+        static StatusQuery error(String message) {
+            return new StatusQuery(null, null, 0, null, null, message);
+        }
+    }
+
+    /**
+     * Resuelve el endpoint de STATUS para un fragmento correctivo. Sin {@code routeQuery} usa el
+     * endpoint compartido (todas las rutas comparten el servicio de consulta, caso aceptado por el
+     * v22). Con {@code routeQuery} es estricto: cada fragmento se consulta contra el endpoint de su
+     * ruta; una ruta sin entrada (o un fragmento sin ruta) es error ruidoso, sin fallback a un
+     * endpoint que podria ser el de otra ruta (p. ej. consultar un SFTP contra el REST).
+     */
+    private StatusQuery resolveStatusQuery(Map<String, Object> record,
+                                           boolean routeAware,
+                                           Map<String, Object> routeQuery,
+                                           String sharedUrl, String sharedMethod, int sharedTimeout,
+                                           String sharedStatusPath, String sharedReferencePath) {
+        if (!routeAware) {
+            return new StatusQuery(sharedUrl, sharedMethod, sharedTimeout,
+                    sharedStatusPath, sharedReferencePath, null);
+        }
+        var route = stringOrNull(record.get("route"));
+        if (route == null) {
+            return StatusQuery.error("corrective fragment has no route (routed_as) but routeQuery is "
+                    + "configured; refusing to pick a STATUS endpoint by fallback");
+        }
+        var override = mapValue(routeQuery.get(route));
+        var routeUrl = stringOrNull(override.get("url"));
+        if (routeUrl == null) {
+            return StatusQuery.error("no routeQuery entry with url for route '" + route
+                    + "'; refusing to query it against another route's STATUS endpoint");
+        }
+        return new StatusQuery(
+                routeUrl,
+                stringValue(override.get("method"), sharedMethod).toUpperCase(Locale.ROOT),
+                intValue(override.get("timeoutSeconds"), sharedTimeout),
+                stringValue(override.get("statusField"), sharedStatusPath),
+                stringValue(override.get("referenceField"), sharedReferencePath),
+                null);
     }
 
     // ------------------------------------------------------------------

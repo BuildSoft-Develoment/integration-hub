@@ -147,6 +147,45 @@ class Mt101StatusTaskProviderTest {
     }
 
     @Test
+    void correctiveStatusQueriesEachFragmentAgainstItsRouteEndpointAndFailsLoudWhenRouteHasNoEndpoint(
+            WireMockRuntimeInfo wm) throws Exception {
+        // P2 v22: STATUS por perfil/ruta. Con routeQuery cada fragmento se consulta contra el
+        // endpoint de SU ruta; una ruta sin endpoint declarado es error ruidoso (sin fallback al
+        // endpoint de otra ruta, p. ej. consultar un SFTP contra el REST).
+        stubFor(get(urlPathMatching("/rest/status/.*"))
+                .willReturn(aResponse().withStatus(200)
+                        .withBody("{\"status\":\"CONFIRMED\",\"gatewayReference\":\"GW-REST\"}")));
+        stubFor(get(urlPathMatching("/sftp/status/.*"))
+                .willReturn(aResponse().withStatus(200)
+                        .withBody("{\"status\":\"CONFIRMED\",\"gatewayReference\":\"GW-SFTP\"}")));
+        insertCorrectiveStatusRecord("RUN-RT", "SET-RT", "R1", "KEY-R1", 401L, "SENT", "REST");
+        insertCorrectiveStatusRecord("RUN-RT", "SET-RT", "R2", "KEY-R2", 402L, "SENT", "SFTP");
+        // R3 ruteado por una ruta sin entrada en routeQuery: no se puede consultar sin fallback.
+        insertCorrectiveStatusRecord("RUN-RT", "SET-RT", "R3", "KEY-R3", 403L, "SENT", "SFTP_PROFILE_B");
+
+        var result = provider.execute(contextWith("pay-mt101.records",
+                Map.of("correctivePayRunId", "RUN-RT")), Map.of(
+                "mode", "query",
+                "input", Map.of("sourceTaskRef", "pay-mt101", "sourceOutput", "records"),
+                "routeQuery", Map.of(
+                        "REST", Map.of("url", wm.getHttpBaseUrl() + "/rest/status/${idempotencyKey}"),
+                        "SFTP", Map.of("url", wm.getHttpBaseUrl() + "/sftp/status/${idempotencyKey}"))));
+
+        // R3 cuenta como error -> el run falla ruidosamente.
+        assertFalse(result.success(), () -> "una ruta sin endpoint hace fallar STATUS: " + result.details());
+        assertEquals(3, result.outputs().get("queriedCount"));
+        assertEquals(2, result.outputs().get("confirmedCount"));
+        assertEquals(1, result.outputs().get("errorCount"));
+        // Cada fragmento se consulto contra el endpoint de SU ruta.
+        verify(getRequestedFor(urlEqualTo("/rest/status/KEY-R1")));
+        verify(getRequestedFor(urlEqualTo("/sftp/status/KEY-R2")));
+        // R3 NUNCA se consulto contra otro endpoint (sin fallback).
+        verify(0, getRequestedFor(urlEqualTo("/rest/status/KEY-R3")));
+        verify(0, getRequestedFor(urlEqualTo("/sftp/status/KEY-R3")));
+        assertEquals(2, countRows("mt101_confirmation"), "solo se confirman los fragmentos con ruta resuelta");
+    }
+
+    @Test
     void queriesGatewayPerRecordAndPersistsConfirmations(WireMockRuntimeInfo wm) throws Exception {
         insertArchive(100L);
         insertArchive(101L);
@@ -465,6 +504,7 @@ class Mt101StatusTaskProviderTest {
                     " id bigserial primary key," +
                     " fragment_set_id varchar(80) not null," +
                     " senders_reference varchar(16) not null," +
+                    " routed_as varchar(80)," +
                     " process_execution_id bigint)");
             stmt.executeUpdate("create table mt101_corrective_pay_fragment (" +
                     " id bigserial primary key," +
@@ -512,11 +552,22 @@ class Mt101StatusTaskProviderTest {
                                               String idempotencyKey,
                                               long archiveId,
                                               String payStatus) throws SQLException {
+        insertCorrectiveStatusRecord(runId, correctiveSetId, reference, idempotencyKey, archiveId, payStatus, null);
+    }
+
+    private void insertCorrectiveStatusRecord(String runId,
+                                              String correctiveSetId,
+                                              String reference,
+                                              String idempotencyKey,
+                                              long archiveId,
+                                              String payStatus,
+                                              String routedAs) throws SQLException {
         try (Connection c = dataSource.getConnection()) {
             try (var fragment = c.prepareStatement(
-                    "insert into mt101_build_fragment (fragment_set_id, senders_reference, process_execution_id) values (?, ?, 1)")) {
+                    "insert into mt101_build_fragment (fragment_set_id, senders_reference, routed_as, process_execution_id) values (?, ?, ?, 1)")) {
                 fragment.setString(1, correctiveSetId);
                 fragment.setString(2, reference);
+                fragment.setString(3, routedAs);
                 fragment.executeUpdate();
             }
             try (var archive = c.prepareStatement(

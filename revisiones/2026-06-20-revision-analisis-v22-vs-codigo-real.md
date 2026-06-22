@@ -99,11 +99,17 @@ acepta motivo/ticket por la cadena resource → service → repo (`@QueryParam r
 maker-checker queda con evidencia durable en **ambos** extremos (solicitud y resolución). Test
 `payRequestPersistsBusinessReasonAndTicketAsDurableEvidence`.
 
-**Riesgo P2 restante (documentado, no bloqueante).** STATUS por perfil/ruta (REST vs SFTP) por
-fragmento — el propio v22 lo da por **aceptable** cuando todas las rutas comparten el servicio de
-consulta MT101_STATUS, que es el caso actual (`Mt101StatusTaskProvider` consulta por `senders_reference`/
-`uetr`, no por transporte). Es un endurecimiento mayor y condicional; se deja documentado. No afecta
-la garantía central de seguridad de dinero (ninguna llamada al banco sin intención aprobada y única).
+**STATUS por perfil/ruta (REST vs SFTP) — CORREGIDO (cierre).** El v22 lo daba por aceptable cuando
+todas las rutas comparten el servicio de consulta; aun así se cerró sin fallback. `correctivePayStatusRecords`
+ahora expone `routed_as` por fragmento (join a `mt101_build_fragment`). `executeCorrectiveQuery` admite
+`routeQuery` (override de endpoint por ruta): con él, cada fragmento se consulta contra el endpoint de
+**su** ruta; sin él, todas comparten `query.url` (caso aceptado, sin cambios). Lo clave es la garantía
+**sin fallback**: en modo route-aware una ruta sin entrada en `routeQuery` —o un fragmento sin ruta— es
+**error ruidoso**, nunca se consulta a ciegas contra el endpoint de otra ruta (p. ej. un SFTP contra el
+REST). Test `correctiveStatusQueriesEachFragmentAgainstItsRouteEndpointAndFailsLoudWhenRouteHasNoEndpoint`
+(R1→REST, R2→SFTP consultados en su endpoint; R3 con ruta sin endpoint → error, 0 consultas a ciegas).
+
+No quedan P2 abiertos.
 
 ## Conclusión
 

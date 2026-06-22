@@ -22,9 +22,11 @@ y los docs por ronda `2026-06-*-revision-analisis-v15..v21-*`.
 | Fallo de STATUS/RECONCILE **no revierte** PAY=SENT (visibilidad separada) | `status_sync_status` / `reconciliation_status` | `postPayStatusFailureDoesNotRevertSentAndIsVisibleSeparately` |
 | Fragmento sin ruta usable (UNROUTED) **no se archiva ni se paga** | UNROUTED = error de ruta + `REJECTED` en ROUTE | `unroutedFragmentIsRejectedAtRouteSoArchiveAndPayExcludeIt` |
 | Solicitud de PAY del maker deja **motivo/ticket** de negocio | V50 `pay_request_reason/ticket`; cadena resource→service→repo | `payRequestPersistsBusinessReasonAndTicketAsDurableEvidence` |
+| STATUS consulta cada fragmento contra el endpoint de **su ruta**; ruta sin endpoint = error ruidoso (sin fallback) | `routed_as` por registro + `routeQuery` por ruta en `executeCorrectiveQuery` | `correctiveStatusQueriesEachFragmentAgainstItsRouteEndpointAndFailsLoudWhenRouteHasNoEndpoint` |
 
 ## Cambios de esta ronda de cierre
 
+**Auditoría de la solicitud de PAY (motivo/ticket del maker):**
 - **V50** `mt101_corrective_pay_request_reason.sql`: `pay_request_reason text`, `pay_request_ticket varchar(120)`.
 - `Mt101RebuildRepository.requestPay(...)`: persiste motivo/ticket (`blankToNull`) y limpia rastro de
   resolución previo al re-solicitar.
@@ -32,18 +34,25 @@ y los docs por ronda `2026-06-*-revision-analisis-v15..v21-*`.
   (el de 3 args delega, sin romper callers).
 - `Mt101QuarantineResource`: `@QueryParam("reason")` / `@QueryParam("ticketRef")` en `request-pay`.
 
+**STATUS por perfil/ruta (REST vs SFTP), sin fallback:**
+- `Mt101RebuildRepository.correctivePayStatusRecords(...)`: expone `routed_as` por fragmento (`route`).
+- `Mt101StatusTaskProvider.executeCorrectiveQuery(...)`: config `routeQuery` (endpoint por ruta);
+  `resolveStatusQuery` elige el endpoint de la ruta del fragmento; una ruta sin entrada —o un fragmento
+  sin ruta— es **error ruidoso** (no se consulta contra el endpoint de otra ruta). Sin `routeQuery`,
+  todas comparten `query.url` (caso aceptado por el v22, sin cambios de comportamiento).
+
 ## Evidencia de pruebas (run de cierre, offline)
 
 - `Mt101CorrectiveLifecycleServiceTest` — **15** tests, 0 fallos.
 - `Mt101PayFragmentReprocessTest` — **7** tests, 0 fallos.
+- `Mt101StatusTaskProviderTest` — **17** tests, 0 fallos (incluye STATUS por ruta).
 - `Mt101RoutePersistedFragmentTest` — **2** tests, 0 fallos.
-- Dominio swift completo (provider + service + repository), reactor: **187** tests, 0 fallos, `BUILD SUCCESS`.
+- Dominio swift completo (provider + service + repository), reactor: **188** tests, 0 fallos, `BUILD SUCCESS`.
 
-## Riesgo P2 documentado (no bloqueante)
+## P2 abiertos
 
-- **STATUS por perfil/ruta (REST vs SFTP)**: el propio v22 lo da por aceptable cuando todas las rutas
-  comparten el servicio de consulta MT101_STATUS — que es el caso actual. Endurecimiento mayor y
-  condicional; se deja documentado. No afecta la garantía central de seguridad de dinero.
+Ninguno. Los dos P2 documentados del v22 (motivo/ticket de PAY y STATUS por ruta) quedaron cerrados en
+esta ronda, ambos sin fallback y con prueba evidenciada.
 
 ## App / login
 
