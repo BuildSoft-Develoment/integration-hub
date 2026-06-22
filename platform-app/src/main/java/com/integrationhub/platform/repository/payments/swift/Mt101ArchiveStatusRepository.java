@@ -65,13 +65,25 @@ public class Mt101ArchiveStatusRepository {
                                List<JoinSpec> matchKeys,
                                LocalDate from,
                                LocalDate to) throws SQLException {
+        markReconciled(connection, sentTable, confirmationTable, matchKeys, from, to, List.of());
+    }
+
+    public void markReconciled(Connection connection,
+                               String sentTable,
+                               String confirmationTable,
+                               List<JoinSpec> matchKeys,
+                               LocalDate from,
+                               LocalDate to,
+                               List<String> scopeSendersReferences) throws SQLException {
         if (matchKeys == null || matchKeys.isEmpty()) {
             return;
         }
         var safeSentTable = sanitize(sentTable);
         var safeConfirmationTable = sanitize(confirmationTable);
         var joinClause = buildJoinClause("s", "c", matchKeys);
-        executeReconcileUpdate(connection, safeSentTable, safeConfirmationTable, joinClause, from, to);
+        var scope = scopeSendersReferences == null ? List.<String>of()
+                : scopeSendersReferences.stream().filter(value -> value != null && !value.isBlank()).toList();
+        executeReconcileUpdate(connection, safeSentTable, safeConfirmationTable, joinClause, from, to, scope);
     }
 
     public ArchiveStatus findLatestBySendersReference(DataSource dataSource,
@@ -221,18 +233,29 @@ public class Mt101ArchiveStatusRepository {
                                         String safeConfirmationTable,
                                         String joinClause,
                                         LocalDate from,
-                                        LocalDate to) throws SQLException {
+                                        LocalDate to,
+                                        List<String> scopeSendersReferences) throws SQLException {
         var sql = "update " + safeSentTable + " s set status = 'RECONCILED'"
                 + ", updated_at = current_timestamp"
                 + " from " + safeConfirmationTable + " c"
                 + " where " + joinClause
                 + " and s.created_at::date between ? and ?"
+                + (scopeSendersReferences.isEmpty()
+                ? "" : " and s.senders_reference in (" + placeholders(scopeSendersReferences.size()) + ")")
                 + " and s.status <> 'RECONCILED'";
         try (var statement = connection.prepareStatement(sql)) {
             statement.setObject(1, from);
             statement.setObject(2, to);
+            var parameter = 3;
+            for (var reference : scopeSendersReferences) {
+                statement.setString(parameter++, reference);
+            }
             statement.executeUpdate();
         }
+    }
+
+    private String placeholders(int count) {
+        return String.join(",", java.util.Collections.nCopies(count, "?"));
     }
 
     private String buildJoinClause(String leftAlias, String rightAlias, List<JoinSpec> keys) {

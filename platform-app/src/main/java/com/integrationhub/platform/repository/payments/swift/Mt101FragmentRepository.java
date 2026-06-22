@@ -632,6 +632,47 @@ public class Mt101FragmentRepository {
         }
     }
 
+    public void updateRouteBatch(DataSource dataSource,
+                                 String fragmentSetId,
+                                 Map<String, String> routeBySendersReference,
+                                 Map<String, String> errorBySendersReference) throws SQLException {
+        if ((routeBySendersReference == null || routeBySendersReference.isEmpty())
+                && (errorBySendersReference == null || errorBySendersReference.isEmpty())) {
+            return;
+        }
+        var sql = "update mt101_build_fragment set routed_as = ?, route_error = ?, "
+                + "routed_at = current_timestamp, updated_at = current_timestamp "
+                + "where fragment_set_id = ? and senders_reference = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            if (routeBySendersReference != null) {
+                for (var entry : routeBySendersReference.entrySet()) {
+                    if (entry.getKey() == null || entry.getKey().isBlank()) {
+                        continue;
+                    }
+                    statement.setString(1, entry.getValue());
+                    statement.setString(2, null);
+                    statement.setString(3, fragmentSetId);
+                    statement.setString(4, entry.getKey());
+                    statement.addBatch();
+                }
+            }
+            if (errorBySendersReference != null) {
+                for (var entry : errorBySendersReference.entrySet()) {
+                    if (entry.getKey() == null || entry.getKey().isBlank()) {
+                        continue;
+                    }
+                    statement.setString(1, null);
+                    statement.setString(2, entry.getValue());
+                    statement.setString(3, fragmentSetId);
+                    statement.setString(4, entry.getKey());
+                    statement.addBatch();
+                }
+            }
+            statement.executeBatch();
+        }
+    }
+
     public record TransactionKey(String sendersReference, String transactionReference) {
     }
 

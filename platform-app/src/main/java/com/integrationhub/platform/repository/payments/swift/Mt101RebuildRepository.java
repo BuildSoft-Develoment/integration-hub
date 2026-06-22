@@ -43,6 +43,37 @@ public class Mt101RebuildRepository {
         }
     }
 
+    public void createChildRun(java.sql.Connection connection,
+                               String rebuildRunId,
+                               String originalFragmentSetId,
+                               String correctiveSetId,
+                               String requestedBy,
+                               String requestReason,
+                               String referenceCode,
+                               String connectionRef,
+                               String parentRebuildRunId,
+                               String parentCorrectiveSetId,
+                               int correctiveGeneration) throws SQLException {
+        var insert = "insert into mt101_rebuild_run "
+                + "(rebuild_run_id, original_fragment_set_id, corrective_set_id, requested_by, request_reason, "
+                + " reference_code, connection_ref, parent_rebuild_run_id, parent_corrective_set_id, "
+                + " corrective_generation, status) "
+                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'REQUESTED')";
+        try (var statement = connection.prepareStatement(insert)) {
+            statement.setString(1, rebuildRunId);
+            statement.setString(2, originalFragmentSetId);
+            statement.setString(3, correctiveSetId);
+            statement.setString(4, requestedBy);
+            statement.setString(5, requestReason);
+            statement.setString(6, referenceCode);
+            statement.setString(7, blankToNull(connectionRef));
+            statement.setString(8, parentRebuildRunId);
+            statement.setString(9, parentCorrectiveSetId);
+            statement.setInt(10, Math.max(correctiveGeneration, 2));
+            statement.executeUpdate();
+        }
+    }
+
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }
@@ -62,6 +93,23 @@ public class Mt101RebuildRepository {
             statement.setString(1, fragmentSetId);
             try (var rs = statement.executeQuery()) {
                 return rs.next();
+            }
+        }
+    }
+
+    public int nextChildGeneration(DataSource dataSource, String parentRebuildRunId) throws SQLException {
+        var sql = """
+                select coalesce(max(corrective_generation), 1) + 1
+                  from mt101_rebuild_run
+                 where rebuild_run_id = ?
+                    or parent_rebuild_run_id = ?
+                """;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, parentRebuildRunId);
+            statement.setString(2, parentRebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? Math.max(rs.getInt(1), 2) : 2;
             }
         }
     }
@@ -729,16 +777,52 @@ public class Mt101RebuildRepository {
         }
     }
 
+    public void markPayResolution(DataSource dataSource, String rebuildRunId, String payStatus,
+                                  String reason) throws SQLException {
+        var normalized = payStatus == null ? "UNCERTAIN" : payStatus.trim().toUpperCase(Locale.ROOT);
+        var sql = """
+                update mt101_rebuild_run
+                   set pay_status = ?,
+                       pay_completed_at = current_timestamp,
+                       pay_lease_until = null,
+                       pay_uncertain_reason = case when ? = 'UNCERTAIN' then ? else null end,
+                       pay_error_message = ?,
+                       updated_at = current_timestamp
+                 where rebuild_run_id = ?
+                   and pay_status in ('UNCERTAIN', 'EXECUTING', 'PARTIALLY_SENT', 'FAILED')
+                """;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, normalized);
+            statement.setString(2, normalized);
+            statement.setString(3, reason);
+            statement.setString(4, reason);
+            statement.setString(5, rebuildRunId);
+            statement.executeUpdate();
+        }
+    }
+
     public int markExpiredPayExecutionsUncertain(DataSource dataSource, LocalDateTime now) throws SQLException {
         var sql = "update mt101_rebuild_run set pay_status = 'UNCERTAIN', "
                 + "pay_uncertain_reason = 'PAY lease expired before completion; reconcile with MT101_STATUS before retry', "
                 + "pay_error_message = 'PAY lease expired before completion; reconcile with MT101_STATUS before retry', "
                 + "pay_completed_at = current_timestamp, updated_at = current_timestamp "
-                + "where pay_status = 'EXECUTING' and pay_lease_until is not null and pay_lease_until < ?";
+                + "where pay_status = 'EXECUTING' and pay_lease_until is not null and pay_lease_until < ? "
+                + "returning rebuild_run_id";
+        var ids = new ArrayList<String>();
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
             statement.setObject(1, now);
-            return statement.executeUpdate();
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    ids.add(rs.getString(1));
+                }
+            }
+            for (var id : ids) {
+                markPayFragmentsUncertain(dataSource, id,
+                        "PAY lease expired before completion; reconcile with MT101_STATUS before retry");
+            }
+            return ids.size();
         }
     }
 
@@ -755,7 +839,7 @@ public class Mt101RebuildRepository {
                        min(sel.source_record_number),
                        min(sel.staging_id),
                        f.payload_hash,
-                       'MT101:' || f.fragment_set_id || ':' || f.senders_reference || ':' || f.payload_hash,
+                       f.senders_reference,
                        case
                            when f.status = 'SENT' then 'SENT'
                            when f.status = 'REJECTED' then 'REJECTED'
@@ -772,7 +856,6 @@ public class Mt101RebuildRepository {
                     set pay_status = excluded.pay_status,
                         error_message = excluded.error_message,
                         payload_hash = excluded.payload_hash,
-                        idempotency_key = excluded.idempotency_key,
                         updated_at = current_timestamp
                 """;
         try (var connection = dataSource.getConnection();
@@ -784,6 +867,82 @@ public class Mt101RebuildRepository {
         }
     }
 
+    /** Inserta la intencion durable antes de invocar el gateway de PAY. */
+    public int preparePayIntents(DataSource dataSource, String rebuildRunId,
+                                 Collection<PayFragmentIntent> intents) throws SQLException {
+        if (intents == null || intents.isEmpty()) {
+            return 0;
+        }
+        var sql = """
+                insert into mt101_corrective_pay_fragment
+                    (rebuild_run_id, corrective_set_id, corrective_senders_reference,
+                     source_file_hash, source_record_number, staging_id,
+                     payload_hash, idempotency_key, transport, endpoint_ref,
+                     pay_status, attempts, prepared_at, error_message)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PREPARED', 0, current_timestamp, null)
+                on conflict (rebuild_run_id, corrective_senders_reference) do update
+                    set payload_hash = excluded.payload_hash,
+                        idempotency_key = excluded.idempotency_key,
+                        transport = excluded.transport,
+                        endpoint_ref = excluded.endpoint_ref,
+                        pay_status = 'PREPARED',
+                        attempts = 0,
+                        prepared_at = current_timestamp,
+                        error_message = null,
+                        updated_at = current_timestamp
+                """;
+        var updated = 0;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            for (var intent : intents) {
+                statement.setString(1, rebuildRunId);
+                statement.setString(2, intent.correctiveSetId());
+                statement.setString(3, intent.correctiveSendersReference());
+                statement.setString(4, intent.sourceFileHash());
+                if (intent.sourceRecordNumber() == null) {
+                    statement.setNull(5, java.sql.Types.BIGINT);
+                } else {
+                    statement.setLong(5, intent.sourceRecordNumber());
+                }
+                if (intent.stagingId() == null) {
+                    statement.setNull(6, java.sql.Types.BIGINT);
+                } else {
+                    statement.setLong(6, intent.stagingId());
+                }
+                statement.setString(7, intent.payloadHash());
+                statement.setString(8, intent.idempotencyKey());
+                statement.setString(9, intent.transport());
+                statement.setString(10, intent.endpointRef());
+                statement.addBatch();
+                updated++;
+            }
+            statement.executeBatch();
+        }
+        return updated;
+    }
+
+    /** Marca un fragmento como DISPATCHING justo antes de invocar el transporte externo. */
+    public int markPayFragmentDispatching(DataSource dataSource,
+                                          String rebuildRunId,
+                                          String correctiveSendersReference) throws SQLException {
+        var sql = """
+                update mt101_corrective_pay_fragment
+                   set pay_status = 'DISPATCHING',
+                       attempts = attempts + 1,
+                       dispatched_at = current_timestamp,
+                       updated_at = current_timestamp
+                 where rebuild_run_id = ?
+                   and corrective_senders_reference = ?
+                   and pay_status in ('PREPARED', 'DISPATCHING')
+                """;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            statement.setString(2, correctiveSendersReference);
+            return statement.executeUpdate();
+        }
+    }
+
     /** Completa el detalle de PAY desde la muestra que devuelve el provider (gateway ref/intentos). */
     public int updatePayFragmentResults(DataSource dataSource, String rebuildRunId,
                                         Collection<PayFragmentResult> results) throws SQLException {
@@ -791,7 +950,7 @@ public class Mt101RebuildRepository {
             return 0;
         }
         var sql = "update mt101_corrective_pay_fragment set gateway_reference = ?, attempts = ?, "
-                + "pay_status = ?, error_message = ?, updated_at = current_timestamp "
+                + "pay_status = ?, error_message = ?, dispatched_at = current_timestamp, updated_at = current_timestamp "
                 + "where rebuild_run_id = ? and corrective_senders_reference = ?";
         var updated = 0;
         try (var connection = dataSource.getConnection();
@@ -811,6 +970,177 @@ public class Mt101RebuildRepository {
             }
         }
         return updated;
+    }
+
+    /** Resuelve fragmentos inciertos desde MT101_STATUS sin alterar intentos de PAY ni reenviar. */
+    public int resolvePayFragmentResults(DataSource dataSource, String rebuildRunId,
+                                         Collection<PayFragmentResult> results,
+                                         String resolutionSource) throws SQLException {
+        if (results == null || results.isEmpty()) {
+            return 0;
+        }
+        var sql = """
+                update mt101_corrective_pay_fragment
+                   set gateway_reference = coalesce(?, gateway_reference),
+                       pay_status = ?,
+                       error_message = ?,
+                       resolution_source = ?,
+                       resolved_at = current_timestamp,
+                       updated_at = current_timestamp
+                 where rebuild_run_id = ?
+                   and corrective_senders_reference = ?
+                   and pay_status in ('UNCERTAIN', 'DISPATCHING', 'PREPARED')
+                """;
+        var updated = 0;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            for (var result : results) {
+                if (result == null || result.correctiveSendersReference() == null
+                        || result.correctiveSendersReference().isBlank()) {
+                    continue;
+                }
+                statement.setString(1, result.gatewayReference());
+                statement.setString(2, result.payStatus());
+                statement.setString(3, result.errorMessage());
+                statement.setString(4, resolutionSource == null ? "STATUS_API" : resolutionSource);
+                statement.setString(5, rebuildRunId);
+                statement.setString(6, result.correctiveSendersReference());
+                updated += statement.executeUpdate();
+            }
+        }
+        return updated;
+    }
+
+    public int syncCorrectiveBuildFragmentsFromPay(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = """
+                update mt101_build_fragment f
+                   set status = cpf.pay_status,
+                       error_message = cpf.error_message,
+                       updated_at = current_timestamp
+                  from mt101_corrective_pay_fragment cpf
+                 where cpf.rebuild_run_id = ?
+                   and cpf.pay_status in ('SENT', 'REJECTED')
+                   and f.fragment_set_id = cpf.corrective_set_id
+                   and f.senders_reference = cpf.corrective_senders_reference
+                   and f.status not in ('SENT', 'REJECTED', 'SUPERSEDED')
+                """;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            return statement.executeUpdate();
+        }
+    }
+
+    public int markPayFragmentsUncertain(DataSource dataSource, String rebuildRunId, String reason) throws SQLException {
+        var sql = "update mt101_corrective_pay_fragment set pay_status = 'UNCERTAIN', "
+                + "error_message = ?, updated_at = current_timestamp "
+                + "where rebuild_run_id = ? and pay_status in ('PREPARED', 'DISPATCHING')";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, reason);
+            statement.setString(2, rebuildRunId);
+            return statement.executeUpdate();
+        }
+    }
+
+    public List<Map<String, Object>> correctivePayStatusRecords(DataSource dataSource, String rebuildRunId,
+                                                                long afterId, int limit) throws SQLException {
+        return correctivePayStatusRecords(dataSource, rebuildRunId, List.of("SENT"), afterId, limit);
+    }
+
+    public List<Map<String, Object>> correctivePayStatusRecords(DataSource dataSource,
+                                                                String rebuildRunId,
+                                                                Collection<String> payStatuses,
+                                                                long afterId,
+                                                                int limit) throws SQLException {
+        var statuses = normalizedStatuses(payStatuses, List.of("SENT"));
+        var sql = """
+                select cpf.id, cpf.corrective_senders_reference, cpf.gateway_reference,
+                       cpf.idempotency_key, a.id as archive_id
+                  from mt101_corrective_pay_fragment cpf
+                  left join mt101_build_fragment f
+                    on f.fragment_set_id = cpf.corrective_set_id
+                   and f.senders_reference = cpf.corrective_senders_reference
+                  left join mt101_archive a
+                    on a.senders_reference = cpf.corrective_senders_reference
+                   and (a.process_execution_id = f.process_execution_id or a.process_execution_id is null)
+                 where cpf.rebuild_run_id = ?
+                   and cpf.pay_status in (""" + placeholders(statuses.size()) + """
+                   )
+                   and cpf.id > ?
+                 order by cpf.id asc
+                 limit ?
+                """;
+        var result = new ArrayList<Map<String, Object>>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            statement.setString(parameter++, rebuildRunId);
+            for (var status : statuses) {
+                statement.setString(parameter++, status);
+            }
+            statement.setLong(parameter++, afterId);
+            statement.setInt(parameter, Math.max(limit, 1));
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    var row = new java.util.LinkedHashMap<String, Object>();
+                    row.put("ledgerId", rs.getLong("id"));
+                    row.put("sendersReference", rs.getString("corrective_senders_reference"));
+                    row.put("gatewayReference", rs.getString("gateway_reference"));
+                    row.put("idempotencyKey", rs.getString("idempotency_key"));
+                    var archiveId = rs.getObject("archive_id");
+                    if (archiveId != null) {
+                        row.put("archiveId", rs.getLong("archive_id"));
+                    }
+                    result.add(row);
+                }
+            }
+        }
+        return result;
+    }
+
+    private List<String> normalizedStatuses(Collection<String> raw, List<String> defaults) {
+        var source = raw == null || raw.isEmpty() ? defaults : raw;
+        var result = new ArrayList<String>(source.size());
+        for (var item : source) {
+            if (item == null || item.isBlank()) {
+                continue;
+            }
+            result.add(item.trim().toUpperCase(Locale.ROOT));
+        }
+        return result.isEmpty() ? defaults : result;
+    }
+
+    public List<String> correctivePaySentReferences(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "select corrective_senders_reference from mt101_corrective_pay_fragment "
+                + "where rebuild_run_id = ? and pay_status = 'SENT' order by corrective_senders_reference";
+        var result = new ArrayList<String>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(rs.getString(1));
+                }
+            }
+        }
+        return result;
+    }
+
+    public List<String> correctivePayRejectedReferences(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "select corrective_senders_reference from mt101_corrective_pay_fragment "
+                + "where rebuild_run_id = ? and pay_status = 'REJECTED' order by corrective_senders_reference";
+        var result = new ArrayList<String>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(rs.getString(1));
+                }
+            }
+        }
+        return result;
     }
 
     public PayFragmentSummary payFragmentSummary(DataSource dataSource, String rebuildRunId) throws SQLException {
@@ -930,6 +1260,19 @@ public class Mt101RebuildRepository {
             String gatewayReference,
             int attempts,
             String errorMessage
+    ) {
+    }
+
+    public record PayFragmentIntent(
+            String correctiveSetId,
+            String correctiveSendersReference,
+            String sourceFileHash,
+            Long sourceRecordNumber,
+            Long stagingId,
+            String payloadHash,
+            String idempotencyKey,
+            String transport,
+            String endpointRef
     ) {
     }
 

@@ -2,6 +2,7 @@ package com.integrationhub.platform.provider.task.payments.swift.transport;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.integrationhub.platform.provider.task.payments.swift.Mt101PaymentCorrelation;
 import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
 import com.integrationhub.platform.spi.task.payments.TransportResult;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
@@ -81,14 +82,7 @@ public class RestPaymentTransport implements PaymentMessageTransport {
         var timeoutSeconds = intValue(restCfg.get("timeoutSeconds"), DEFAULT_TIMEOUT_SECONDS);
         // Idempotency-Key: si la clave NO esta en config, usamos el default ${sendersReference}.
         // Si la clave SI esta pero vacia, el caller pidio explicitamente "no emitir header".
-        String idempotencyTemplate;
-        if (configuration.containsKey("idempotencyKeyTemplate")) {
-            var raw = configuration.get("idempotencyKeyTemplate");
-            idempotencyTemplate = raw == null ? "" : String.valueOf(raw);
-        } else {
-            idempotencyTemplate = "${sendersReference}";
-        }
-        var idempotencyKey = resolveTemplate(idempotencyTemplate, message);
+        var idempotencyKey = Mt101PaymentCorrelation.restIdempotencyKey(configuration, message);
         var extraHeaders = configuredHeaders(restCfg.get("extraHeaders"), restCfg.get("extraHeadersJson"));
         var retry = retryPolicy(configuration.get("retryPolicy"));
         var expected = mapValue(configuration.get("expectedGatewayResponse"));
@@ -333,11 +327,7 @@ public class RestPaymentTransport implements PaymentMessageTransport {
         if (template == null || template.isBlank()) {
             return template;
         }
-        var sendersReference = message.sequenceA() != null ? message.sequenceA().sendersReference() : "";
-        var uetr = message.envelope() != null ? message.envelope().uetr() : "";
-        return template
-                .replace("${sendersReference}", sendersReference == null ? "" : sendersReference)
-                .replace("${uetr}", uetr == null ? "" : uetr);
+        return Mt101PaymentCorrelation.resolveTemplate(template, message);
     }
 
     @SuppressWarnings("unchecked")

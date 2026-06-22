@@ -273,6 +273,26 @@ public class Mt101FragmentStore {
         }
     }
 
+    public void markRouteBatch(Map<String, Object> fragmentSource,
+                               Map<String, String> routeBySendersReference,
+                               Map<String, String> errorBySendersReference) {
+        if (fragmentSource == null || fragmentSource.isEmpty()) {
+            return;
+        }
+        var fragmentSetId = stringValue(fragmentSource.get("fragmentSetId"));
+        if (fragmentSetId.isBlank()) {
+            return;
+        }
+        var connectionRef = stringValue(fragmentSource.get("connectionRef"));
+        try {
+            fragmentRepository.updateRouteBatch(resolveDataSource(connectionRef), fragmentSetId,
+                    routeBySendersReference, errorBySendersReference);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot update MT101 fragment route batch for set "
+                    + fragmentSetId, error);
+        }
+    }
+
     private DataSource resolveDataSource(String connectionRef) {
         if (connectionRef == null || connectionRef.isBlank() || connectionPoolManager == null) {
             return defaultDataSource;

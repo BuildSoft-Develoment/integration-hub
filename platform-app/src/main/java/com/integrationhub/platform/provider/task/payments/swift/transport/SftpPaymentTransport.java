@@ -1,5 +1,6 @@
 package com.integrationhub.platform.provider.task.payments.swift.transport;
 
+import com.integrationhub.platform.provider.task.payments.swift.Mt101PaymentCorrelation;
 import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
 import com.integrationhub.platform.spi.task.payments.TransportResult;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
@@ -257,11 +258,7 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
     }
 
     private String resolveTemplate(String template, Mt101Message message) {
-        var sendersReference = message.sequenceA() != null ? message.sequenceA().sendersReference() : "";
-        var uetr = message.envelope() != null ? message.envelope().uetr() : "";
-        return template
-                .replace("${sendersReference}", sendersReference == null ? "" : sendersReference)
-                .replace("${uetr}", uetr == null ? "" : uetr);
+        return Mt101PaymentCorrelation.resolveTemplate(template, message);
     }
 
     private RetryPolicy retryPolicy(Object raw) {

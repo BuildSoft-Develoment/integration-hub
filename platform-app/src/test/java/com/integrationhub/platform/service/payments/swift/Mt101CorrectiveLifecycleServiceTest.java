@@ -1,5 +1,8 @@
 package com.integrationhub.platform.service.payments.swift;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101ArchiveTaskProvider;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101PayTaskProvider;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101ReconcileTaskProvider;
@@ -12,6 +15,7 @@ import com.integrationhub.platform.repository.payments.swift.Mt101FragmentReposi
 import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
+import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;
@@ -20,9 +24,16 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import javax.sql.DataSource;
+import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.LocalDate;
+import java.util.HexFormat;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -55,6 +66,9 @@ class Mt101CorrectiveLifecycleServiceTest {
     private AtomicInteger reconcileInvocations;
     private boolean rejectSecondPayFragment;
     private boolean payUncertain;
+    private final ObjectMapper objectMapper = new ObjectMapper()
+            .registerModule(new JavaTimeModule())
+            .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
     @BeforeEach
     void setUp() throws Exception {
@@ -148,6 +162,18 @@ class Mt101CorrectiveLifecycleServiceTest {
             @Override
             public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
                 statusInvocations.incrementAndGet();
+                if (Boolean.TRUE.equals(configuration.get("resolveCorrectivePay"))) {
+                    try {
+                        var repository = new Mt101RebuildRepository();
+                        repository.resolvePayFragmentResults(dataSource, FIX, List.of(
+                                new Mt101RebuildRepository.PayFragmentResult("RTEST1", "SENT", "GW-1", 0, null),
+                                new Mt101RebuildRepository.PayFragmentResult("RTEST2", "SENT", "GW-2", 0, null)
+                        ), "STATUS_API");
+                        repository.syncCorrectiveBuildFragmentsFromPay(dataSource, FIX);
+                    } catch (SQLException error) {
+                        throw new IllegalStateException(error);
+                    }
+                }
                 return TaskResult.success("fake status");
             }
         };
@@ -301,6 +327,52 @@ class Mt101CorrectiveLifecycleServiceTest {
                 + "where rebuild_run_id = '" + FIX + "' and pay_status = 'SENT'"));
     }
 
+    @Test
+    void resolveUncertainPayRunsStatusWithoutSecondPayInvocation() throws Exception {
+        payUncertain = true;
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana");
+        service.approveAndPayCorrective(null, FIX, "luis");
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'UNCERTAIN' "
+                    + "where rebuild_run_id = '" + FIX + "'");
+        }
+
+        var result = service.resolveUncertainPay(null, FIX, "operador");
+
+        assertEquals("SENT", result.status());
+        assertEquals("SENT", runStatus(FIX));
+        assertEquals("SENT", payStatus(FIX));
+        assertEquals(1, payInvocations.get(), "resolver incertidumbre no reenvia MT101_PAY");
+        assertEquals(1, statusInvocations.get(), "resolver incertidumbre consulta MT101_STATUS");
+        assertEquals(1, reconcileInvocations.get(), "con pagos resueltos como enviados se ejecuta RECONCILE");
+        assertEquals(2L, queryLong("select count(*) from mt101_corrective_pay_fragment "
+                + "where rebuild_run_id = '" + FIX + "' and pay_status = 'SENT'"));
+    }
+
+    @Test
+    void childCorrectiveFromPartialPaySelectsOnlyRejectedCorrectiveFragment() throws Exception {
+        rejectSecondPayFragment = true;
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana");
+        service.approveAndPayCorrective(null, FIX, "luis");
+
+        var child = rebuildService.requestRebuildFromRejectedCorrective(null, FIX, "sofia", "retry rejected");
+
+        assertEquals(FIX, child.originalFragmentSetId());
+        assertEquals(1L, child.selectedRows());
+        assertEquals(1, child.affectedFragments());
+        assertEquals(1L, queryLong("select count(*) from mt101_rebuild_selection "
+                + "where rebuild_run_id = '" + child.rebuildRunId() + "' and original_senders_reference = 'RTEST2'"));
+        assertEquals(0L, queryLong("select count(*) from mt101_rebuild_selection "
+                + "where rebuild_run_id = '" + child.rebuildRunId() + "' and original_senders_reference = 'RTEST1'"));
+        assertEquals(FIX, queryString("select parent_rebuild_run_id from mt101_rebuild_run "
+                + "where rebuild_run_id = '" + child.rebuildRunId() + "'"));
+        assertEquals(FIX, queryString("select parent_corrective_set_id from mt101_rebuild_run "
+                + "where rebuild_run_id = '" + child.rebuildRunId() + "'"));
+    }
+
     private void markCorrective(String status) {
         try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement(
@@ -372,30 +444,38 @@ class Mt101CorrectiveLifecycleServiceTest {
         }
     }
 
-    private void prepareSchema() throws SQLException {
+    private void prepareSchema() throws Exception {
         try (Connection connection = dataSource.getConnection();
              Statement s = connection.createStatement()) {
             s.executeUpdate("drop table if exists mt101_corrective_pay_fragment");
             s.executeUpdate("drop table if exists mt101_rebuild_selection");
             s.executeUpdate("drop table if exists mt101_rebuild_run");
+            s.executeUpdate("drop table if exists staging_record");
             s.executeUpdate("drop table if exists mt101_failed_record");
             s.executeUpdate("drop table if exists mt101_archive");
             s.executeUpdate("drop table if exists mt101_fragment_record");
             s.executeUpdate("drop table if exists mt101_build_fragment");
+            s.executeUpdate("drop sequence if exists mt101_rebuild_reference_seq");
+            s.executeUpdate("create sequence mt101_rebuild_reference_seq start with 2");
             s.executeUpdate("create table mt101_build_fragment ("
                     + "id bigserial primary key, fragment_set_id varchar(80) not null,"
                     + "process_execution_id bigint, task_definition_id bigint, source_table varchar(255),"
+                    + "staging_id_from bigint, staging_id_to bigint,"
+                    + "source_record_from bigint, source_record_to bigint, source_file_hash varchar(64),"
+                    + "source_records_json text,"
+                    + "fragment_index integer not null, fragment_total integer not null,"
                     + "senders_reference varchar(16) not null, superseded_by varchar(80),"
                     + "payload_hash varchar(64) not null default repeat('0', 64),"
+                    + "raw_payload text not null, message_json text not null,"
                     + "status varchar(20) not null default 'BUILT',"
                     + "error_message text,"
+                    + "routed_as varchar(80), routed_at timestamp, route_error text,"
+                    + "created_at timestamp not null default current_timestamp,"
                     + "updated_at timestamp not null default current_timestamp)");
             // Fragmento del set original (para findSetMetadata) y del correctivo (BUILT).
-            s.executeUpdate("insert into mt101_build_fragment (fragment_set_id, process_execution_id, task_definition_id, source_table, senders_reference, payload_hash, status) "
-                    + "values ('" + SET + "', 100, 20, 'staging_record', 'P1', repeat('a', 64), 'SUPERSEDED')");
-            s.executeUpdate("insert into mt101_build_fragment (fragment_set_id, process_execution_id, task_definition_id, source_table, senders_reference, payload_hash, status) "
-                    + "values ('" + FIX + "', 100, 20, 'staging_record', 'RTEST1', repeat('1', 64), 'BUILT'),"
-                    + "('" + FIX + "', 100, 20, 'staging_record', 'RTEST2', repeat('2', 64), 'BUILT')");
+            insertBuildFragment(connection, SET, "P1", "SUPERSEDED", 1, 1, 1);
+            insertBuildFragment(connection, FIX, "RTEST1", "BUILT", 1, 2, 25);
+            insertBuildFragment(connection, FIX, "RTEST2", "BUILT", 2, 2, 75);
             s.executeUpdate("create table mt101_fragment_record ("
                     + "id bigserial primary key, fragment_id bigint references mt101_build_fragment(id),"
                     + "fragment_set_id varchar(80) not null, source_file_hash varchar(64),"
@@ -424,18 +504,29 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "pay_requested_payload_hash varchar(64), pay_claimed_payload_hash varchar(64),"
                     + "pay_lease_until timestamp, pay_uncertain_reason text,"
                     + "pay_completed_at timestamp, pay_error_message text,"
+                    + "parent_rebuild_run_id varchar(80), parent_corrective_set_id varchar(80),"
+                    + "corrective_generation integer not null default 1,"
                     + "created_at timestamp not null default current_timestamp, approved_at timestamp, executed_at timestamp,"
                     + "built_at timestamp, completed_at timestamp, last_lifecycle_sync_at timestamp,"
                     + "updated_at timestamp not null default current_timestamp)");
             s.executeUpdate("insert into mt101_rebuild_run (rebuild_run_id, original_fragment_set_id, corrective_set_id, status, reference_code) "
                     + "values ('" + FIX + "', '" + SET + "', '" + FIX + "', 'BUILT', '1')");
+            s.executeUpdate("create table staging_record ("
+                    + "id bigint primary key, process_execution_id bigint, task_definition_id bigint,"
+                    + "record_index bigint, payload_json text not null, version bigint not null default 1)");
+            s.executeUpdate("insert into staging_record (id, process_execution_id, task_definition_id, record_index, payload_json, version) "
+                    + "values (10025, 100, 20, 24, '{\"row\":25}', 1),"
+                    + "(10075, 100, 20, 74, '{\"row\":75}', 1)");
             s.executeUpdate("create table mt101_rebuild_selection ("
                     + "id bigserial primary key, rebuild_run_id varchar(80) not null,"
                     + "fragment_set_id varchar(80) not null, source_file_hash varchar(64),"
-                    + "source_record_number bigint not null, staging_id bigint,"
+                    + "source_record_number bigint not null, record_index bigint, staging_id bigint,"
                     + "source_task_definition_id bigint, source_name varchar(255),"
-                    + "original_senders_reference varchar(16), corrective_senders_reference varchar(16),"
+                    + "original_senders_reference varchar(16), original_transaction_reference varchar(35),"
+                    + "corrective_senders_reference varchar(16), corrective_transaction_reference varchar(35),"
+                    + "selected_payload_hash varchar(64), selected_staging_version bigint,"
                     + "status varchar(30) not null default 'SELECTED',"
+                    + "created_at timestamp not null default current_timestamp,"
                     + "lifecycle_updated_at timestamp)");
             s.executeUpdate("insert into mt101_rebuild_selection (rebuild_run_id, fragment_set_id, source_file_hash, source_record_number, staging_id, original_senders_reference, corrective_senders_reference) "
                     + "values ('" + FIX + "', '" + SET + "', 'hashA', 25, 10025, 'P1', 'RTEST1'),"
@@ -457,11 +548,83 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "corrective_set_id varchar(80) not null, corrective_senders_reference varchar(16) not null,"
                     + "source_file_hash varchar(64), source_record_number bigint, staging_id bigint,"
                     + "payload_hash varchar(64) not null, idempotency_key varchar(180) not null,"
+                    + "transport varchar(20), endpoint_ref varchar(512),"
                     + "gateway_reference varchar(120), pay_status varchar(30) not null default 'REQUESTED',"
                     + "attempts integer not null default 0, error_message text,"
+                    + "prepared_at timestamp, dispatched_at timestamp,"
+                    + "resolved_at timestamp, resolution_source varchar(40),"
                     + "created_at timestamp not null default current_timestamp,"
                     + "updated_at timestamp not null default current_timestamp,"
                     + "unique (rebuild_run_id, corrective_senders_reference))");
+        }
+    }
+
+    private void insertBuildFragment(Connection connection,
+                                     String fragmentSetId,
+                                     String reference,
+                                     String status,
+                                     int index,
+                                     int total,
+                                     long recordNumber) throws Exception {
+        var message = sampleMessage(reference, index, total);
+        var rawPayload = message.rawPayload();
+        try (var statement = connection.prepareStatement("""
+                insert into mt101_build_fragment
+                    (fragment_set_id, process_execution_id, task_definition_id, source_table,
+                     staging_id_from, staging_id_to, source_record_from, source_record_to,
+                     source_file_hash, fragment_index, fragment_total, senders_reference,
+                     payload_hash, raw_payload, message_json, status)
+                values (?, 100, 20, 'staging_record',
+                        ?, ?, ?, ?, 'hashA', ?, ?, ?,
+                        ?, ?, ?, ?)
+                """)) {
+            statement.setString(1, fragmentSetId);
+            statement.setLong(2, recordNumber);
+            statement.setLong(3, recordNumber);
+            statement.setLong(4, recordNumber);
+            statement.setLong(5, recordNumber);
+            statement.setInt(6, index);
+            statement.setInt(7, total);
+            statement.setString(8, reference);
+            statement.setString(9, sha256(rawPayload));
+            statement.setString(10, rawPayload);
+            statement.setString(11, objectMapper.writeValueAsString(message));
+            statement.setString(12, status);
+            statement.executeUpdate();
+        }
+    }
+
+    private Mt101Message sampleMessage(String reference, int index, int total) {
+        var rawPayload = "{1:F01SGOBFRPPAXXX0000000000}{2:I101BCPLPEPLXXXXN}{4:\n"
+                + ":20:" + reference + "\n"
+                + ":28D:" + index + "/" + total + "\n"
+                + ":50H:/001\nACME\n"
+                + ":30:260612\n"
+                + ":21:TX-" + reference + "\n"
+                + ":32B:PEN100,00\n"
+                + ":59:/ACC-" + reference + "\nBENE\n"
+                + "-}";
+        return new Mt101Message(
+                new Mt101Message.Envelope("SGOBFRPPAXXX", "BCPLPEPLXXXX", "uetr-" + reference, "N"),
+                new Mt101Message.SequenceA(reference, null, index, total, LocalDate.of(2026, 6, 12),
+                        null, new Mt101Message.Party("H", "001", null, List.of("ACME")), null, null),
+                List.of(new Mt101Message.Transaction(
+                        1, "TX-" + reference, null, null,
+                        new Mt101Message.Amount("PEN", new BigDecimal("100.00")),
+                        null, null, null, null,
+                        new Mt101Message.Party("", "ACC-" + reference, null, List.of("BENE")),
+                        null, null, null, "SHA", null, null)),
+                new Mt101Message.ControlTotals(1, Map.of("PEN", new BigDecimal("100.00"))),
+                rawPayload,
+                "FIN");
+    }
+
+    private String sha256(String value) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 not available", error);
         }
     }
 

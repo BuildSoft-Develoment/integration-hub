@@ -147,6 +147,33 @@ class Mt101ReconcileTaskProviderTest {
         assertEquals(0, result.outputs().get("unmatchedConfirmCount"));
     }
 
+    @Test
+    void correctiveScopeDoesNotReconcileUnrelatedArchiveRows() throws Exception {
+        var today = LocalDate.of(2026, 6, 9);
+        insertArchive("FIX-1", today);
+        insertArchive("OTHER-1", today);
+        insertConfirmation("FIX-1", today);
+        insertConfirmation("OTHER-1", today);
+        insertCorrectivePayFragment("RUN-FIX", "FIX-1");
+
+        var context = new TaskContext(1L, 1L);
+        context.attributes().put("taskOutputs",
+                Map.of("pay-mt101.records", Map.of("correctivePayRunId", "RUN-FIX")));
+
+        var result = provider.execute(context, Map.of(
+                "asOfDate", today.toString(),
+                "lookbackDays", 0,
+                "input", Map.of("sourceTaskRef", "pay-mt101", "sourceOutput", "records"),
+                "matchKeys", List.of("senders_reference")));
+
+        assertTrue(result.success(), () -> "expected success, got: " + result.details());
+        assertEquals(1, result.outputs().get("matchedCount"));
+        assertEquals(1, result.outputs().get("scopedCount"));
+        assertEquals("RECONCILED", archiveStatus("FIX-1"));
+        assertEquals("ARCHIVED", archiveStatus("OTHER-1"),
+                "un pago ajeno al correctivo no debe cambiar de estado");
+    }
+
     // --- helpers ---
 
     private DataSource dataSource() {
@@ -161,6 +188,7 @@ class Mt101ReconcileTaskProviderTest {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("drop table if exists mt101_reconciliation_exception");
+            statement.executeUpdate("drop table if exists mt101_corrective_pay_fragment");
             statement.executeUpdate("drop table if exists mt101_confirmation");
             statement.executeUpdate("drop table if exists mt101_archive");
             statement.executeUpdate("create table mt101_archive (" +
@@ -174,6 +202,11 @@ class Mt101ReconcileTaskProviderTest {
                     " archive_id bigint," +
                     " senders_reference varchar(16) not null," +
                     " received_at timestamp not null default current_timestamp)");
+            statement.executeUpdate("create table mt101_corrective_pay_fragment (" +
+                    " id bigserial primary key," +
+                    " rebuild_run_id varchar(80) not null," +
+                    " corrective_senders_reference varchar(16) not null," +
+                    " pay_status varchar(30) not null)");
             statement.executeUpdate("create table mt101_reconciliation_exception (" +
                     " id bigserial primary key," +
                     " as_of_date date not null," +
@@ -212,6 +245,17 @@ class Mt101ReconcileTaskProviderTest {
             stmt.setLong(1, archiveId);
             stmt.setString(2, "UNUSED");
             stmt.setObject(3, receivedAt.atStartOfDay());
+            stmt.executeUpdate();
+        }
+    }
+
+    private void insertCorrectivePayFragment(String runId, String reference) throws SQLException {
+        try (Connection c = dataSource.getConnection();
+             var stmt = c.prepareStatement(
+                     "insert into mt101_corrective_pay_fragment "
+                             + "(rebuild_run_id, corrective_senders_reference, pay_status) values (?, ?, 'SENT')")) {
+            stmt.setString(1, runId);
+            stmt.setString(2, reference);
             stmt.executeUpdate();
         }
     }

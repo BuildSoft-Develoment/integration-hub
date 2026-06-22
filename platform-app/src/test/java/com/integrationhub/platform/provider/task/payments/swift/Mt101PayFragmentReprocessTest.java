@@ -3,6 +3,7 @@ package com.integrationhub.platform.provider.task.payments.swift;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
 import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
 import com.integrationhub.platform.spi.task.payments.TransportResult;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
@@ -115,6 +116,31 @@ class Mt101PayFragmentReprocessTest {
         assertEquals("ARCHIVED", fragmentStatus(fragmentSetId, "F3"));
     }
 
+    @Test
+    void correctivePayMarksFragmentDispatchingBeforeTransportCall() throws Exception {
+        var fragmentSetId = "PAY-LEDGER-1";
+        insertFragmentSet(fragmentSetId, "F1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", "RUN-PAY-1");
+        fragmentStore.markStatus(fragmentSource, "F1", "ARCHIVED", null);
+        insertPayLedger("RUN-PAY-1", fragmentSetId, "F1");
+
+        var transport = new StubTransport(List.of(TransportResult.accepted("GW-F1", 1, 10L)));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore,
+                null, null, payStore);
+
+        var result = provider.execute(contextWith(fragmentSource), payConfig(50));
+
+        assertTrue(result.success(), () -> "expected PAY success: " + result.details());
+        assertEquals(1, transport.callsReceived());
+        assertEquals("DISPATCHING", payLedgerStatus("RUN-PAY-1", "F1"),
+                "el lifecycle completa luego a SENT/REJECTED; el provider garantiza pre-envio durable");
+        assertEquals(1, payLedgerAttempts("RUN-PAY-1", "F1"));
+        assertEquals(1L, countRowsWhere("mt101_corrective_pay_fragment",
+                "rebuild_run_id = 'RUN-PAY-1' and corrective_senders_reference = 'F1' and dispatched_at is not null"));
+    }
+
     private TaskContext contextWith(Map<String, Object> fragmentSource) {
         var context = new TaskContext(500L, 600L);
         context.attributes().put("taskOutputs", Map.of("build.fragments", fragmentSource));
@@ -156,6 +182,7 @@ class Mt101PayFragmentReprocessTest {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("drop table if exists mt101_build_fragment");
+            statement.executeUpdate("drop table if exists mt101_corrective_pay_fragment");
             statement.executeUpdate("create table mt101_build_fragment ("
                     + "id bigserial primary key,"
                     + "fragment_set_id varchar(80) not null,"
@@ -180,6 +207,19 @@ class Mt101PayFragmentReprocessTest {
                     + "error_message text,"
                     + "created_at timestamp not null default current_timestamp,"
                     + "updated_at timestamp not null default current_timestamp)");
+            statement.executeUpdate("create table mt101_corrective_pay_fragment ("
+                    + "id bigserial primary key,"
+                    + "rebuild_run_id varchar(80) not null,"
+                    + "corrective_set_id varchar(80) not null,"
+                    + "corrective_senders_reference varchar(16) not null,"
+                    + "payload_hash varchar(64) not null,"
+                    + "idempotency_key varchar(180) not null,"
+                    + "pay_status varchar(30) not null default 'PREPARED',"
+                    + "attempts integer not null default 0,"
+                    + "prepared_at timestamp,"
+                    + "dispatched_at timestamp,"
+                    + "updated_at timestamp not null default current_timestamp,"
+                    + "unique (rebuild_run_id, corrective_senders_reference))");
             statement.executeUpdate("create unique index ux_test_fragment_ref on mt101_build_fragment"
                     + "(fragment_set_id, senders_reference)");
             statement.executeUpdate("create index ix_test_fragment_status on mt101_build_fragment"
@@ -206,6 +246,57 @@ class Mt101PayFragmentReprocessTest {
                 rs.next();
                 return rs.getString(1);
             }
+        }
+    }
+
+    private void insertPayLedger(String runId, String correctiveSetId, String reference) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "insert into mt101_corrective_pay_fragment "
+                             + "(rebuild_run_id, corrective_set_id, corrective_senders_reference, payload_hash, idempotency_key, pay_status, prepared_at) "
+                             + "values (?, ?, ?, repeat('1', 64), ?, 'PREPARED', current_timestamp)")) {
+            statement.setString(1, runId);
+            statement.setString(2, correctiveSetId);
+            statement.setString(3, reference);
+            statement.setString(4, "KEY-" + reference);
+            statement.executeUpdate();
+        }
+    }
+
+    private String payLedgerStatus(String runId, String reference) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "select pay_status from mt101_corrective_pay_fragment "
+                             + "where rebuild_run_id = ? and corrective_senders_reference = ?")) {
+            statement.setString(1, runId);
+            statement.setString(2, reference);
+            try (var rs = statement.executeQuery()) {
+                rs.next();
+                return rs.getString(1);
+            }
+        }
+    }
+
+    private int payLedgerAttempts(String runId, String reference) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "select attempts from mt101_corrective_pay_fragment "
+                             + "where rebuild_run_id = ? and corrective_senders_reference = ?")) {
+            statement.setString(1, runId);
+            statement.setString(2, reference);
+            try (var rs = statement.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    private long countRowsWhere(String table, String where) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             var rs = statement.executeQuery("select count(*) from " + table + " where " + where)) {
+            rs.next();
+            return rs.getLong(1);
         }
     }
 
@@ -243,6 +334,10 @@ class Mt101PayFragmentReprocessTest {
             return received.stream()
                     .map(message -> message.sequenceA().sendersReference())
                     .toList();
+        }
+
+        int callsReceived() {
+            return received.size();
         }
     }
 

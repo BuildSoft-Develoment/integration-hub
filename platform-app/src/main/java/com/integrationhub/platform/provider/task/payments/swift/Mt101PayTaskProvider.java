@@ -55,16 +55,26 @@ public class Mt101PayTaskProvider implements TaskProvider {
     private final Mt101FragmentStore fragmentStore;
     private final Mt101ArchiveStatusUpdater archiveStatusUpdater;
     private final RecordAuditEmitter recordAuditEmitter;
+    private final Mt101CorrectivePayStore correctivePayStore;
 
     @Inject
     public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports,
                                 Mt101FragmentStore fragmentStore,
                                 Mt101ArchiveStatusUpdater archiveStatusUpdater,
-                                RecordAuditEmitter recordAuditEmitter) {
+                                RecordAuditEmitter recordAuditEmitter,
+                                Mt101CorrectivePayStore correctivePayStore) {
         this.transports = transports;
         this.fragmentStore = fragmentStore;
         this.archiveStatusUpdater = archiveStatusUpdater;
         this.recordAuditEmitter = recordAuditEmitter;
+        this.correctivePayStore = correctivePayStore;
+    }
+
+    public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports,
+                                Mt101FragmentStore fragmentStore,
+                                Mt101ArchiveStatusUpdater archiveStatusUpdater,
+                                RecordAuditEmitter recordAuditEmitter) {
+        this(transports, fragmentStore, archiveStatusUpdater, recordAuditEmitter, null);
     }
 
     public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports,
@@ -110,9 +120,10 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 var rejectedByRef = new LinkedHashMap<String, String>();
                 var pageAudit = new ArrayList<AuditEnvelope>(page.size());
                 for (var message : page) {
-                    var result = dispatch(transport, configuration, message, accumulator);
                     var reference = message.sequenceA() == null ? null
                             : message.sequenceA().sendersReference();
+                    markCorrectiveDispatching(fragmentSource, reference);
+                    var result = dispatch(transport, configuration, message, accumulator);
                     if (reference == null) {
                         continue;
                     }
@@ -122,12 +133,11 @@ public class Mt101PayTaskProvider implements TaskProvider {
                     } else if (result.uncertain()) {
                         // INCIERTO: no se marca SENT ni REJECTED (ningun bucket) -> el fragmento
                         // queda ARCHIVED y requiere conciliacion; reenviarlo duplicaria el pago.
-                        continue;
                     } else {
                         rejectedByRef.put(reference, result.lastError());
                         rejectedTargets.add(archiveTarget(message));
                     }
-                    pageAudit.add(recordEnvelope(context, reference, result.accepted(), result.lastError()));
+                    pageAudit.add(recordEnvelope(context, reference, result));
                 }
                 // Trazabilidad E2E por registro: una trama RECORD por fragmento,
                 // emitida en lote por pagina (un solo JDBC batch), fuera de la TX.
@@ -153,12 +163,12 @@ public class Mt101PayTaskProvider implements TaskProvider {
                     collectArchiveId(configuration, input, sentArchiveIds);
                 } else if (result.uncertain()) {
                     // INCIERTO: no se sincroniza a SENT ni REJECTED; queda para conciliacion.
-                    audit.add(recordEnvelope(context, reference, false, result.lastError()));
+                    audit.add(recordEnvelope(context, reference, result));
                     continue;
                 } else {
                     collectArchiveId(configuration, input, rejectedArchiveIds);
                 }
-                audit.add(recordEnvelope(context, reference, result.accepted(), result.lastError()));
+                audit.add(recordEnvelope(context, reference, result));
             }
             emitRecordAudit(audit);
             syncArchiveIds(configuration, sentArchiveIds, "SENT");
@@ -198,20 +208,33 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 : TaskResult.success(summary, outputs);
     }
 
+    private void markCorrectiveDispatching(Map<String, Object> fragmentSource, String reference) {
+        var rebuildRunId = stringValue(fragmentSource.get("correctivePayRunId"), null);
+        if (rebuildRunId == null) {
+            return;
+        }
+        if (correctivePayStore == null) {
+            throw new IllegalStateException("MT101_PAY corrective source requires Mt101CorrectivePayStore");
+        }
+        correctivePayStore.markDispatching(fragmentSource, rebuildRunId, reference);
+    }
+
     /** Construye la trama RECORD de despacho para un fragmento (traceId=ejecucion, recordId=:20:). */
-    private AuditEnvelope recordEnvelope(TaskContext context, String reference, boolean accepted, String error) {
+    private AuditEnvelope recordEnvelope(TaskContext context, String reference, TransportResult result) {
+        var uncertain = result.uncertain();
+        var accepted = result.accepted();
         return new AuditEnvelope(
                 UUID.randomUUID().toString(),
                 context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
                 reference,
                 AuditLevel.RECORD,
-                accepted ? "RECORD_SENT" : "RECORD_REJECTED",
-                accepted ? "SENT" : "REJECTED",
+                accepted ? "RECORD_SENT" : (uncertain ? "RECORD_SEND_UNCERTAIN" : "RECORD_REJECTED"),
+                accepted ? "SENT" : (uncertain ? "UNCERTAIN" : "REJECTED"),
                 context.processExecutionId(),
                 context.taskDefinitionId(),
-                error,
+                result.lastError(),
                 null,
-                Map.of(),
+                Map.of("attempts", String.valueOf(result.attempts())),
                 "SWIFT",
                 "MT101",
                 null,
@@ -251,8 +274,11 @@ public class Mt101PayTaskProvider implements TaskProvider {
                                      DispatchAccumulator accumulator) {
         var message = input.message();
         TransportResult result;
+        var correlationKey = Mt101PaymentCorrelation.correlationKey(transport.transport(), configuration, message);
+        var dispatchConfiguration = Mt101PaymentCorrelation.withResolvedCorrelation(
+                transport.transport(), configuration, message);
         try {
-            result = transport.send(message, configuration);
+            result = transport.send(message, dispatchConfiguration);
         } catch (RuntimeException error) {
             result = TransportResult.rejected(1, 0L, "transport error: " + error.getMessage());
         }
@@ -268,6 +294,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
             entry.put("envelopeId", input.envelopeId());
         }
         entry.put("uetr", uetr);
+        entry.put("idempotencyKey", correlationKey);
         entry.put("status", result.accepted() ? "ACCEPTED" : (result.uncertain() ? "UNCERTAIN" : "REJECTED"));
         entry.put("gatewayReference", result.gatewayReference());
         entry.put("attempts", result.attempts());

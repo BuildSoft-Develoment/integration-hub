@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.repository.payments.swift.Mt101ConfirmationRepository;
+import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.SuspendableTaskProvider;
@@ -83,6 +84,8 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
 
     private static final List<String> DEFAULT_ACCEPTED_STATUSES =
             List.of("ACCEPTED", "CONFIRMED", "SETTLED", "ACSC", "ACCP");
+    private static final List<String> DEFAULT_REJECTED_STATUSES =
+            List.of("REJECTED", "FAILED", "DECLINED", "RJCT");
     /** Muestra de records/errors en el output; los conteos son siempre exactos. */
     private static final int DEFAULT_MAX_RECORDS_IN_OUTPUT = 1000;
     /** Flush de confirmaciones a BD cada N para no retener todos los rawBody. */
@@ -93,6 +96,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     private final ConnectionPoolManager connectionPoolManager;
     private final Mt101ArchiveStatusUpdater archiveStatusUpdater;
     private final Mt101ConfirmationRepository confirmationRepository;
+    private final Mt101RebuildRepository rebuildRepository;
     private final Mt101StatusGateway gateway;
     private final RecordAuditEmitter recordAuditEmitter;
 
@@ -102,9 +106,10 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                                    ConnectionPoolManager connectionPoolManager,
                                    Mt101ArchiveStatusUpdater archiveStatusUpdater,
                                    Mt101ConfirmationRepository confirmationRepository,
+                                   Mt101RebuildRepository rebuildRepository,
                                    RecordAuditEmitter recordAuditEmitter) {
         this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager,
-                archiveStatusUpdater, confirmationRepository, recordAuditEmitter);
+                archiveStatusUpdater, confirmationRepository, rebuildRepository, recordAuditEmitter);
     }
 
     public Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -113,7 +118,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                                    Mt101ArchiveStatusUpdater archiveStatusUpdater,
                                    Mt101ConfirmationRepository confirmationRepository) {
         this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager,
-                archiveStatusUpdater, confirmationRepository, null);
+                archiveStatusUpdater, confirmationRepository, new Mt101RebuildRepository(), null);
     }
 
     /** Constructor de test: permite inyectar un HttpClient custom. */
@@ -123,7 +128,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             ConnectionPoolManager connectionPoolManager) {
         this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
                 new Mt101ArchiveStatusUpdater(defaultDataSource, connectionPoolManager),
-                new Mt101ConfirmationRepository(), null);
+                new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null);
     }
 
     Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -132,7 +137,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             ConnectionPoolManager connectionPoolManager,
                             Mt101ArchiveStatusUpdater archiveStatusUpdater) {
         this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
-                archiveStatusUpdater, new Mt101ConfirmationRepository(), null);
+                archiveStatusUpdater, new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null);
     }
 
     Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -142,7 +147,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             Mt101ArchiveStatusUpdater archiveStatusUpdater,
                             Mt101ConfirmationRepository confirmationRepository) {
         this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
-                archiveStatusUpdater, confirmationRepository, null);
+                archiveStatusUpdater, confirmationRepository, new Mt101RebuildRepository(), null);
     }
 
     Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -151,12 +156,14 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             ConnectionPoolManager connectionPoolManager,
                             Mt101ArchiveStatusUpdater archiveStatusUpdater,
                             Mt101ConfirmationRepository confirmationRepository,
+                            Mt101RebuildRepository rebuildRepository,
                             RecordAuditEmitter recordAuditEmitter) {
         this.objectMapper = objectMapper;
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.archiveStatusUpdater = archiveStatusUpdater;
         this.confirmationRepository = confirmationRepository;
+        this.rebuildRepository = rebuildRepository == null ? new Mt101RebuildRepository() : rebuildRepository;
         this.gateway = new Mt101StatusGateway(httpClient, objectMapper);
         this.recordAuditEmitter = recordAuditEmitter;
     }
@@ -423,6 +430,10 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     // ------------------------------------------------------------------
 
     private TaskResult executeQuery(TaskContext context, Map<String, Object> configuration) {
+        var corrective = correctivePaySource(context, configuration);
+        if (!corrective.isEmpty()) {
+            return executeCorrectiveQuery(context, configuration, corrective);
+        }
         var records = readRecords(context, configuration);
         if (records.isEmpty()) {
             return TaskResult.success("MT101_STATUS skipped because there are no messages to query");
@@ -507,6 +518,145 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         outputs.put("recordsSampled", confirmedCount > confirmations.size() || errorCount > errors.size());
 
         var summary = "MT101_STATUS queried=" + queriedCount
+                + " confirmed=" + confirmedCount
+                + " errors=" + errorCount;
+        return errorCount == 0
+                ? TaskResult.success(summary, outputs)
+                : TaskResult.failure(summary, outputs);
+    }
+
+    private TaskResult executeCorrectiveQuery(TaskContext context,
+                                              Map<String, Object> configuration,
+                                              Map<String, Object> corrective) {
+        var runId = stringRequired(corrective.get("correctivePayRunId"), "input.correctivePayRunId");
+        var connectionRef = stringOrNull(corrective.get("connectionRef"));
+        var effectiveConfiguration = new LinkedHashMap<String, Object>(configuration);
+        if (!effectiveConfiguration.containsKey("connectionRef") && connectionRef != null) {
+            effectiveConfiguration.put("connectionRef", connectionRef);
+        }
+        var queryCfg = mapValue(configuration.get("query"));
+        var urlTemplate = stringRequired(queryCfg.get("url"), "query.url");
+        var httpMethod = stringValue(queryCfg.get("method"), "GET").toUpperCase(Locale.ROOT);
+        var timeoutSeconds = intValue(queryCfg.get("timeoutSeconds"), DEFAULT_TIMEOUT_SECONDS);
+        var expected = mapValue(configuration.get("expectedGatewayResponse"));
+        var statusPath = stringValue(expected.get("statusField"), DEFAULT_STATUS_PATH);
+        var referencePath = stringValue(expected.get("referenceField"), DEFAULT_REFERENCE_PATH);
+        var pageSize = intValue(configuration.get("pageSize"), 500);
+        var maxRecordsInOutput = intValue(configuration.get("maxRecordsInOutput"), DEFAULT_MAX_RECORDS_IN_OUTPUT);
+        var payStatuses = correctivePayStatuses(configuration.get("correctivePayStatuses"));
+        var resolveCorrectivePay = boolValue(configuration.get("resolveCorrectivePay"), false);
+
+        var confirmations = new ArrayList<Map<String, Object>>();
+        var errors = new ArrayList<Map<String, Object>>();
+        var byStatus = new TreeMap<String, Integer>();
+        var pendingRows = new ArrayList<ConfirmationRow>(PERSIST_BATCH_SIZE);
+        var pendingAuditEntries = new ArrayList<Map<String, Object>>(PERSIST_BATCH_SIZE);
+        var pendingPayResults = new ArrayList<Mt101RebuildRepository.PayFragmentResult>(PERSIST_BATCH_SIZE);
+        var dataSource = resolveDataSource(connectionRef);
+        var afterId = 0L;
+        int queriedCount = 0;
+        int confirmedCount = 0;
+        int errorCount = 0;
+        int resolvedPayCount = 0;
+        try {
+            while (true) {
+                var page = rebuildRepository.correctivePayStatusRecords(dataSource, runId, payStatuses, afterId, pageSize);
+                if (page.isEmpty()) {
+                    break;
+                }
+                for (var record : page) {
+                    queriedCount++;
+                    var url = resolveTemplate(urlTemplate, record);
+                    var queryResult = gateway.query(httpMethod, url, timeoutSeconds);
+                    if (queryResult.error() != null) {
+                        errorCount++;
+                        byStatus.merge("ERROR", 1, Integer::sum);
+                        if (errors.size() < maxRecordsInOutput) {
+                            var entry = new LinkedHashMap<String, Object>();
+                            entry.put("sendersReference", record.get("sendersReference"));
+                            entry.put("gatewayReference", record.get("gatewayReference"));
+                            entry.put("status", "ERROR");
+                            entry.put("error", queryResult.error());
+                            errors.add(entry);
+                        }
+                        continue;
+                    }
+                    var rawBody = queryResult.body();
+                    var confirmedStatus = gateway.extractField(rawBody, statusPath);
+                    var gatewayReference = gateway.extractField(rawBody, referencePath);
+                    if (gatewayReference == null) {
+                        gatewayReference = String.valueOf(record.getOrDefault("gatewayReference", ""));
+                    }
+                    pendingRows.add(new ConfirmationRow(readArchiveId(record), "STATUS_API",
+                            gatewayReference, confirmedStatus, rawBody));
+                    var auditEntry = new LinkedHashMap<String, Object>();
+                    auditEntry.put("sendersReference", record.get("sendersReference"));
+                    auditEntry.put("gatewayReference", gatewayReference);
+                    auditEntry.put("status", confirmedStatus);
+                    auditEntry.put("archiveId", record.get("archiveId"));
+                    pendingAuditEntries.add(auditEntry);
+                    if (resolveCorrectivePay) {
+                        var resolvedPayStatus = correctivePayResolution(confirmedStatus, configuration);
+                        if (resolvedPayStatus != null) {
+                            pendingPayResults.add(new Mt101RebuildRepository.PayFragmentResult(
+                                    String.valueOf(record.get("sendersReference")),
+                                    resolvedPayStatus,
+                                    gatewayReference,
+                                    0,
+                                    "REJECTED".equals(resolvedPayStatus) ? "confirmed by MT101_STATUS as " + confirmedStatus : null));
+                        }
+                    }
+                    if (pendingRows.size() >= PERSIST_BATCH_SIZE) {
+                        persistConfirmations(context, effectiveConfiguration, pendingRows, pendingAuditEntries);
+                        if (!pendingPayResults.isEmpty()) {
+                            resolvedPayCount += rebuildRepository.resolvePayFragmentResults(
+                                    dataSource, runId, pendingPayResults, "STATUS_API");
+                        }
+                        pendingRows.clear();
+                        pendingAuditEntries.clear();
+                        pendingPayResults.clear();
+                    }
+                    confirmedCount++;
+                    byStatus.merge(confirmedStatus == null ? "UNKNOWN" : confirmedStatus, 1, Integer::sum);
+                    if (confirmations.size() < maxRecordsInOutput) {
+                        var entry = new LinkedHashMap<String, Object>();
+                        entry.put("sendersReference", record.get("sendersReference"));
+                        entry.put("gatewayReference", gatewayReference);
+                        entry.put("status", confirmedStatus);
+                        confirmations.add(entry);
+                    }
+                }
+                var last = page.get(page.size() - 1).get("ledgerId");
+                afterId = last instanceof Number number ? number.longValue() : afterId + page.size();
+                if (page.size() < pageSize) {
+                    break;
+                }
+            }
+            persistConfirmations(context, effectiveConfiguration, pendingRows, pendingAuditEntries);
+            if (!pendingPayResults.isEmpty()) {
+                resolvedPayCount += rebuildRepository.resolvePayFragmentResults(
+                        dataSource, runId, pendingPayResults, "STATUS_API");
+            }
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot read corrective PAY status records for run " + runId, error);
+        }
+
+        if (queriedCount == 0) {
+            return TaskResult.success("MT101_STATUS skipped because there are no corrective PAY records to query");
+        }
+        var outputs = new LinkedHashMap<String, Object>();
+        outputs.put("queriedCount", queriedCount);
+        outputs.put("confirmedCount", confirmedCount);
+        outputs.put("errorCount", errorCount);
+        outputs.put("countByStatus", byStatus);
+        outputs.put("records", confirmations);
+        outputs.put("errors", errors);
+        outputs.put("recordsSampled", confirmedCount > confirmations.size() || errorCount > errors.size());
+        outputs.put("correctivePayRunId", runId);
+        outputs.put("resolvedPayCount", resolvedPayCount);
+
+        var summary = "MT101_STATUS correctiveRun=" + runId
+                + " queried=" + queriedCount
                 + " confirmed=" + confirmedCount
                 + " errors=" + errorCount;
         return errorCount == 0
@@ -643,6 +793,44 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         return result;
     }
 
+    private List<String> rejectedStatuses(Object raw) {
+        if (!(raw instanceof List<?> rawList) || rawList.isEmpty()) {
+            return DEFAULT_REJECTED_STATUSES;
+        }
+        var result = new ArrayList<String>(rawList.size());
+        for (var item : rawList) {
+            result.add(String.valueOf(item).toUpperCase(Locale.ROOT));
+        }
+        return result;
+    }
+
+    private List<String> correctivePayStatuses(Object raw) {
+        if (!(raw instanceof List<?> rawList) || rawList.isEmpty()) {
+            return List.of("SENT");
+        }
+        var result = new ArrayList<String>(rawList.size());
+        for (var item : rawList) {
+            if (item != null && !String.valueOf(item).isBlank()) {
+                result.add(String.valueOf(item).trim().toUpperCase(Locale.ROOT));
+            }
+        }
+        return result.isEmpty() ? List.of("SENT") : result;
+    }
+
+    private String correctivePayResolution(String confirmedStatus, Map<String, Object> configuration) {
+        if (confirmedStatus == null || confirmedStatus.isBlank()) {
+            return null;
+        }
+        var normalized = confirmedStatus.trim().toUpperCase(Locale.ROOT);
+        if (acceptedStatuses(configuration.get("acceptedStatuses")).contains(normalized)) {
+            return "SENT";
+        }
+        if (rejectedStatuses(configuration.get("rejectedStatuses")).contains(normalized)) {
+            return "REJECTED";
+        }
+        return null;
+    }
+
     private Map<String, Object> callbackConfig(Map<String, Object> configuration) {
         return mapValue(configuration.get("callback"));
     }
@@ -678,6 +866,31 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
 
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> readRecords(TaskContext context, Map<String, Object> configuration) {
+        var corrective = correctivePaySource(context, configuration);
+        if (!corrective.isEmpty()) {
+            var dataSource = resolveDataSource(stringOrNull(corrective.get("connectionRef")));
+            var runId = stringOrNull(corrective.get("correctivePayRunId"));
+            var pageSize = intValue(configuration.get("pageSize"), 500);
+            var payStatuses = correctivePayStatuses(configuration.get("correctivePayStatuses"));
+            var afterId = 0L;
+            var result = new ArrayList<Map<String, Object>>();
+            try {
+                while (true) {
+                    var page = rebuildRepository.correctivePayStatusRecords(dataSource, runId, payStatuses, afterId, pageSize);
+                    if (page.isEmpty()) {
+                        return result;
+                    }
+                    result.addAll(page);
+                    var last = page.get(page.size() - 1).get("ledgerId");
+                    afterId = last instanceof Number number ? number.longValue() : afterId + page.size();
+                    if (page.size() < pageSize) {
+                        return result;
+                    }
+                }
+            } catch (SQLException error) {
+                throw new IllegalStateException("Cannot read corrective PAY status records for run " + runId, error);
+            }
+        }
         var rawTaskOutputs = context.attributes().get("taskOutputs");
         if (!(rawTaskOutputs instanceof Map<?, ?> taskOutputs) || taskOutputs.isEmpty()) {
             return List.of();
@@ -708,6 +921,27 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
             }
         }
         return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> correctivePaySource(TaskContext context, Map<String, Object> configuration) {
+        var rawTaskOutputs = context.attributes().get("taskOutputs");
+        if (!(rawTaskOutputs instanceof Map<?, ?> taskOutputs) || taskOutputs.isEmpty()
+                || !(configuration.get("input") instanceof Map<?, ?> rawInput)) {
+            return Map.of();
+        }
+        var sourceTaskRef = stringValue(((Map<String, Object>) rawInput).get("sourceTaskRef"), "");
+        if (sourceTaskRef.isBlank()) {
+            return Map.of();
+        }
+        var sourceOutput = stringValue(((Map<String, Object>) rawInput).get("sourceOutput"), "records");
+        var raw = taskOutputs.get(sourceTaskRef + "." + sourceOutput);
+        if (!(raw instanceof Map<?, ?> rawMap) || !rawMap.containsKey("correctivePayRunId")) {
+            return Map.of();
+        }
+        var source = new LinkedHashMap<String, Object>();
+        rawMap.forEach((key, value) -> source.put(String.valueOf(key), value));
+        return source;
     }
 
     private DataSource resolveDataSource(String connectionRef) {

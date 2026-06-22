@@ -59,14 +59,17 @@ public class Mt101RouteTaskProvider implements TaskProvider {
     private final JexlEngine jexlEngine;
     private final RecordAuditEmitter recordAuditEmitter;
     private final SwiftInboundStore inboundStore;
+    private final Mt101FragmentStore fragmentStore;
 
     @Inject
     public Mt101RouteTaskProvider(ObjectMapper objectMapper,
                                   RecordAuditEmitter recordAuditEmitter,
-                                  SwiftInboundStore inboundStore) {
+                                  SwiftInboundStore inboundStore,
+                                  Mt101FragmentStore fragmentStore) {
         this.objectMapper = objectMapper;
         this.recordAuditEmitter = recordAuditEmitter;
         this.inboundStore = inboundStore;
+        this.fragmentStore = fragmentStore;
         this.jexlEngine = new JexlBuilder()
                 .strict(false)   // null-tolerant
                 .silent(true)    // no NPE en propiedades inexistentes
@@ -77,6 +80,7 @@ public class Mt101RouteTaskProvider implements TaskProvider {
         this.objectMapper = objectMapper;
         this.recordAuditEmitter = null;
         this.inboundStore = null;
+        this.fragmentStore = null;
         this.jexlEngine = new JexlBuilder()
                 .strict(false)
                 .silent(true)
@@ -95,6 +99,10 @@ public class Mt101RouteTaskProvider implements TaskProvider {
         var inboundSource = Mt101MessageInputResolver.inboundSource(context, configuration, type());
         if (!inboundSource.isEmpty() && inboundStore != null) {
             return routeFromInboundStore(context, configuration, inboundSource);
+        }
+        var fragmentSource = Mt101MessageInputResolver.fragmentSource(context, configuration, type());
+        if (!fragmentSource.isEmpty() && fragmentStore != null) {
+            return routeFromFragmentStore(context, configuration, fragmentSource);
         }
 
         var records = readRecords(context, configuration);
@@ -193,6 +201,58 @@ public class Mt101RouteTaskProvider implements TaskProvider {
                 + " errors=" + stats[1]
                 + " distribution=" + countByRoute;
         return TaskResult.success(summary, outputs);
+    }
+
+    /** Rama outbound/correctiva: clasifica fragmentos VALIDATED sin materializarlos ni cambiar su status. */
+    private TaskResult routeFromFragmentStore(TaskContext context, Map<String, Object> configuration,
+                                              Map<String, Object> fragmentSource) {
+        var rules = parseRules(configuration.get("rules"));
+        if (rules.isEmpty()) {
+            throw new IllegalArgumentException("MT101_ROUTE requires configuration.rules (non-empty array)");
+        }
+        var defaultRoute = stringValue(configuration.get("defaultRoute"), "UNROUTED");
+        var fieldName = stringValue(configuration.get("routeField"), DEFAULT_FIELD_NAME);
+        var pageSize = intValue(configuration.get("pageSize"), Mt101FragmentStore.DEFAULT_PAGE_SIZE);
+        var countByRoute = new TreeMap<String, Integer>();
+        var stats = new long[]{0L, 0L};
+
+        fragmentStore.forEachPage(fragmentSource, List.of("VALIDATED"), pageSize, page -> {
+            var routeByRef = new LinkedHashMap<String, String>();
+            var errorByRef = new LinkedHashMap<String, String>();
+            var pageAudit = new ArrayList<AuditEnvelope>(page.size());
+            for (var message : page) {
+                var asMap = toMap(message);
+                var reference = message.sequenceA() == null ? null : message.sequenceA().sendersReference();
+                try {
+                    var route = evaluate(rules, asMap, defaultRoute);
+                    if (reference != null && !reference.isBlank()) {
+                        routeByRef.put(reference, route);
+                    }
+                    countByRoute.merge(route, 1, Integer::sum);
+                    stats[0]++;
+                    var enriched = new LinkedHashMap<String, Object>(asMap);
+                    enriched.put(fieldName, route);
+                    pageAudit.add(routeEnvelope(context, enriched, route));
+                } catch (RuntimeException error) {
+                    stats[1]++;
+                    if (reference != null && !reference.isBlank()) {
+                        errorByRef.put(reference, error.getMessage());
+                    }
+                }
+            }
+            fragmentStore.markRouteBatch(fragmentSource, routeByRef, errorByRef);
+            emitRecordAudit(pageAudit);
+        });
+
+        var outputs = new LinkedHashMap<String, Object>();
+        outputs.put("routedCount", stats[0]);
+        outputs.put("errorCount", stats[1]);
+        outputs.put("countByRoute", countByRoute);
+        outputs.put("fragments", fragmentSource);
+        var summary = "MT101_ROUTE routed=" + stats[0]
+                + " errors=" + stats[1]
+                + " distribution=" + countByRoute;
+        return stats[1] == 0 ? TaskResult.success(summary, outputs) : TaskResult.failure(summary, outputs);
     }
 
     private int intValue(Object raw, int defaultValue) {

@@ -190,6 +190,22 @@ public class Mt101QuarantineResource {
         }
     }
 
+    @POST
+    @Path("/rebuild-runs/request-child")
+    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    public Mt101RebuildService.RebuildRunSummary requestChildCorrective(
+            @QueryParam("connectionRef") String connectionRef,
+            @QueryParam("parentRebuildRunId") String parentRebuildRunId,
+            @QueryParam("reason") String reason,
+            @Context SecurityContext securityContext) {
+        try {
+            return rebuildService.requestRebuildFromRejectedCorrective(
+                    connectionRef, parentRebuildRunId, actor(securityContext), reason);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
     @GET
     @Path("/rebuild-runs")
     @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
@@ -282,6 +298,21 @@ public class Mt101QuarantineResource {
             @Context SecurityContext securityContext) {
         try {
             return correctiveLifecycleService.approveAndPayCorrective(connectionRef, rebuildRunId, actor(securityContext));
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /** Resuelve PAY_UNCERTAIN consultando MT101_STATUS. No reenvia MT101_PAY. */
+    @POST
+    @Path("/rebuild-runs/resolve-uncertain-pay")
+    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    public Mt101CorrectiveLifecycleService.CorrectiveLifecycleResult resolveUncertainPay(
+            @QueryParam("connectionRef") String connectionRef,
+            @QueryParam("rebuildRunId") String rebuildRunId,
+            @Context SecurityContext securityContext) {
+        try {
+            return correctiveLifecycleService.resolveUncertainPay(connectionRef, rebuildRunId, actor(securityContext));
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }

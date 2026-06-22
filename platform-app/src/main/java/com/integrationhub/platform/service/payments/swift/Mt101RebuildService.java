@@ -147,6 +147,92 @@ public class Mt101RebuildService {
         }
     }
 
+    public RebuildRunSummary requestRebuildFromRejectedCorrective(String connectionRef,
+                                                                  String parentRebuildRunId,
+                                                                  String requestedBy,
+                                                                  String requestReason) {
+        var parentRunId = require(parentRebuildRunId, "parentRebuildRunId");
+        var requester = require(requestedBy, "requestedBy");
+        var dataSource = resolveDataSource(connectionRef);
+        try {
+            var parent = rebuildRepository.findRun(dataSource, parentRunId);
+            if (parent == null) {
+                throw new IllegalArgumentException("parent rebuildRunId not found: " + parentRunId);
+            }
+            if (parent.connectionRef() != null && !parent.connectionRef().isBlank()) {
+                var requestedConnection = connectionRef == null ? "" : connectionRef.trim();
+                if (!parent.connectionRef().equals(requestedConnection)) {
+                    throw new IllegalArgumentException("parent rebuild run " + parentRunId
+                            + " belongs to connectionRef " + parent.connectionRef() + " but request used "
+                            + (requestedConnection.isBlank() ? "<default>" : requestedConnection));
+                }
+            }
+            if (!"PARTIALLY_SENT".equalsIgnoreCase(parent.payStatus())) {
+                throw new IllegalArgumentException("parent rebuild run " + parentRunId
+                        + " must have payStatus PARTIALLY_SENT to request a child corrective; current payStatus is "
+                        + parent.payStatus());
+            }
+            var rejectedReferences = rebuildRepository.correctivePayRejectedReferences(dataSource, parentRunId);
+            if (rejectedReferences.isEmpty()) {
+                throw new IllegalArgumentException("parent rebuild run " + parentRunId
+                        + " has no rejected corrective PAY fragments");
+            }
+            assertRebuildableFragments(fragmentRepository.statusesByReferences(
+                    dataSource, parent.correctiveSetId(), rejectedReferences), rejectedReferences, parent.correctiveSetId());
+
+            var metadata = fragmentRepository.findSetMetadata(dataSource, parent.correctiveSetId());
+            if (metadata == null || metadata.taskDefinitionId() == null) {
+                throw new IllegalArgumentException("cannot resolve build metadata for corrective set "
+                        + parent.correctiveSetId());
+            }
+
+            var referenceCode = rebuildRepository.nextReferenceCode(dataSource);
+            var corrective = parent.correctiveSetId() + "-FIX-" + referenceCode;
+            if (corrective.length() > MAX_FRAGMENT_SET_ID_LENGTH) {
+                throw new IllegalArgumentException("child corrective set id " + corrective + " exceeds "
+                        + MAX_FRAGMENT_SET_ID_LENGTH + " chars; parent correctiveSetId is too long to derive a child corrective id");
+            }
+            if (rebuildRepository.fragmentSetExists(dataSource, corrective)) {
+                throw new IllegalStateException("generated child corrective set " + corrective
+                        + " already exists; aborting to avoid overwriting an existing batch");
+            }
+            var runId = corrective;
+            var generation = rebuildRepository.nextChildGeneration(dataSource, parentRunId);
+            try (var connection = dataSource.getConnection()) {
+                var previousAutoCommit = connection.getAutoCommit();
+                connection.setAutoCommit(false);
+                try {
+                    rebuildRepository.createChildRun(connection, runId, parent.correctiveSetId(), corrective,
+                            requester, blankToNull(requestReason), referenceCode, connectionRef,
+                            parentRunId, parent.correctiveSetId(), generation);
+                    rebuildRepository.insertSelectionFromFragmentRecords(
+                            connection, runId, parent.correctiveSetId(), rejectedReferences);
+                    var selectedRows = rebuildRepository.countSelection(connection, runId);
+                    if (selectedRows == 0) {
+                        throw new IllegalArgumentException("cannot resolve selected rows for child corrective from set "
+                                + parent.correctiveSetId() + "; mt101_fragment_record is required");
+                    }
+                    rebuildRepository.updateSelectionStats(connection, runId, selectedRows, rejectedReferences.size());
+                    connection.commit();
+                    return new RebuildRunSummary(runId, parent.correctiveSetId(), corrective, "REQUESTED",
+                            selectedRows, rejectedReferences.size(), blankToNull(connectionRef),
+                            "NOT_REQUESTED", null, null);
+                } catch (SQLException | RuntimeException error) {
+                    try {
+                        connection.rollback();
+                    } catch (SQLException rollbackError) {
+                        error.addSuppressed(rollbackError);
+                    }
+                    throw error;
+                } finally {
+                    connection.setAutoCommit(previousAutoCommit);
+                }
+            }
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot request child MT101 corrective for run " + parentRunId, error);
+        }
+    }
+
     /** Aprobacion gobernada: exige segregacion de funciones (approver != requester). */
     public RebuildRunSummary approveRebuildRun(String connectionRef, String rebuildRunId, String approvedBy) {
         return approveRebuildRun(connectionRef, rebuildRunId, approvedBy, null);

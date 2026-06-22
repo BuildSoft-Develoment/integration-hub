@@ -23,15 +23,30 @@ public class Mt101ReconciliationRepository {
                                           LocalDate to,
                                           String exceptionTable,
                                           LocalDate asOfDate) throws SQLException {
+        return reconcile(connection, sentTable, confirmationTable, matchKeys, from, to,
+                exceptionTable, asOfDate, List.of());
+    }
+
+    public ReconciliationResult reconcile(Connection connection,
+                                          String sentTable,
+                                          String confirmationTable,
+                                          List<JoinSpec> matchKeys,
+                                          LocalDate from,
+                                          LocalDate to,
+                                          String exceptionTable,
+                                          LocalDate asOfDate,
+                                          List<String> scopeSendersReferences) throws SQLException {
         var safeSentTable = sanitize(sentTable);
         var safeConfirmationTable = sanitize(confirmationTable);
         var safeExceptionTable = exceptionTable == null ? null : sanitize(exceptionTable);
+        var scope = scopeSendersReferences == null ? List.<String>of()
+                : scopeSendersReferences.stream().filter(value -> value != null && !value.isBlank()).toList();
         var exceptions = new ArrayList<Map<String, Object>>();
         var unmatchedSent = collectUnmatchedSent(connection, safeSentTable, safeConfirmationTable,
-                matchKeys, from, to, exceptions);
+                matchKeys, from, to, exceptions, scope);
         var unmatchedConfirm = collectUnmatchedConfirm(connection, safeSentTable, safeConfirmationTable,
-                matchKeys, from, to, exceptions);
-        var matched = countMatched(connection, safeSentTable, safeConfirmationTable, matchKeys, from, to);
+                matchKeys, from, to, exceptions, scope);
+        var matched = countMatched(connection, safeSentTable, safeConfirmationTable, matchKeys, from, to, scope);
         if (safeExceptionTable != null && !exceptions.isEmpty()) {
             persistExceptions(connection, safeExceptionTable, asOfDate, exceptions);
         }
@@ -44,15 +59,16 @@ public class Mt101ReconciliationRepository {
                                      List<JoinSpec> matchKeys,
                                      LocalDate from,
                                      LocalDate to,
-                                     List<Map<String, Object>> exceptions) throws SQLException {
+                                     List<Map<String, Object>> exceptions,
+                                     List<String> scopeSendersReferences) throws SQLException {
         var joinClause = buildJoinClause("s", "c", matchKeys);
         var sql = "select s.id, s.senders_reference from " + sentTable + " s"
                 + " left join " + confirmationTable + " c on " + joinClause
                 + " where s.created_at::date between ? and ?"
+                + scopeClause("s", scopeSendersReferences)
                 + " and c.id is null";
         try (var statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, from);
-            statement.setObject(2, to);
+            var parameter = bindWindowAndScope(statement, from, to, scopeSendersReferences);
             try (var rs = statement.executeQuery()) {
                 int count = 0;
                 while (rs.next()) {
@@ -75,15 +91,18 @@ public class Mt101ReconciliationRepository {
                                         List<JoinSpec> matchKeys,
                                         LocalDate from,
                                         LocalDate to,
-                                        List<Map<String, Object>> exceptions) throws SQLException {
+                                        List<Map<String, Object>> exceptions,
+                                        List<String> scopeSendersReferences) throws SQLException {
         var joinClause = buildJoinClause("s", "c", matchKeys);
         var sql = "select c.id from " + confirmationTable + " c"
                 + " left join " + sentTable + " s on " + joinClause
                 + " where c.received_at::date between ? and ?"
+                + (scopeSendersReferences == null || scopeSendersReferences.isEmpty()
+                ? "" : " and c.archive_id in (select id from " + sentTable + " where senders_reference in ("
+                + placeholders(scopeSendersReferences.size()) + "))")
                 + " and s.id is null";
         try (var statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, from);
-            statement.setObject(2, to);
+            bindWindowAndScope(statement, from, to, scopeSendersReferences);
             try (var rs = statement.executeQuery()) {
                 int count = 0;
                 while (rs.next()) {
@@ -104,19 +123,44 @@ public class Mt101ReconciliationRepository {
                              String confirmationTable,
                              List<JoinSpec> matchKeys,
                              LocalDate from,
-                             LocalDate to) throws SQLException {
+                             LocalDate to,
+                             List<String> scopeSendersReferences) throws SQLException {
         var joinClause = buildJoinClause("s", "c", matchKeys);
         var sql = "select count(*) from " + sentTable + " s"
                 + " inner join " + confirmationTable + " c on " + joinClause
-                + " where s.created_at::date between ? and ?";
+                + " where s.created_at::date between ? and ?"
+                + scopeClause("s", scopeSendersReferences);
         try (var statement = connection.prepareStatement(sql)) {
-            statement.setObject(1, from);
-            statement.setObject(2, to);
+            bindWindowAndScope(statement, from, to, scopeSendersReferences);
             try (var rs = statement.executeQuery()) {
                 rs.next();
                 return rs.getInt(1);
             }
         }
+    }
+
+    private String scopeClause(String alias, List<String> scopeSendersReferences) {
+        if (scopeSendersReferences == null || scopeSendersReferences.isEmpty()) {
+            return "";
+        }
+        return " and " + alias + ".senders_reference in (" + placeholders(scopeSendersReferences.size()) + ")";
+    }
+
+    private int bindWindowAndScope(java.sql.PreparedStatement statement, LocalDate from, LocalDate to,
+                                   List<String> scopeSendersReferences) throws SQLException {
+        var parameter = 1;
+        statement.setObject(parameter++, from);
+        statement.setObject(parameter++, to);
+        if (scopeSendersReferences != null) {
+            for (var reference : scopeSendersReferences) {
+                statement.setString(parameter++, reference);
+            }
+        }
+        return parameter;
+    }
+
+    private String placeholders(int count) {
+        return String.join(",", java.util.Collections.nCopies(count, "?"));
     }
 
     private void persistExceptions(Connection connection,

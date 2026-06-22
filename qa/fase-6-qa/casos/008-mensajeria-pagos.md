@@ -136,6 +136,24 @@ Cubre las tareas QA T-022 (sprint 2 inbound + reconciliación) y T-028
 - envio parcial deja `pay_status=PARTIALLY_SENT` y detalle por fragmento
 - despues de PAY se ejecutan `MT101_STATUS` y `MT101_RECONCILE` cuando existen en el proceso
 
+### Cierre P0 correctivo pre-homologacion
+- `MT101_ROUTE` acepta fuente persistida `{fragmentSetId}` y persiste `routed_as` por fragmento
+- `MT101_PAY` correctivo crea ledger `PREPARED` antes de invocar el transporte
+- `MT101_PAY` marca el fragmento `DISPATCHING` antes de llamar al gateway/SFTP
+- la clave persistida en el ledger coincide con la clave entregada al transporte
+- `MT101_STATUS` correctivo lee todos los `SENT` del ledger paginado, no el sample de PAY
+- `MT101_RECONCILE` correctivo usa scope por `rebuildRunId` y no reconcilia archivos ajenos
+- `PAY_UNCERTAIN` requiere conciliacion/operacion explicita; no hay reenvio ciego automatico
+
+### Resolucion de incertidumbre y correctivo hijo
+- `resolve-uncertain-pay` consulta `MT101_STATUS` sobre ledger `UNCERTAIN` y no invoca `MT101_PAY`
+- estados aceptados del banco cierran fragmentos inciertos como `SENT`
+- estados rechazados del banco cierran fragmentos inciertos como `REJECTED`
+- estados no finales mantienen el run en `pay_status=UNCERTAIN`
+- un padre `PARTIALLY_SENT` permite crear correctivo hijo solo con fragmentos `REJECTED`
+- fragmentos `SENT` del padre parcial no se seleccionan ni se sobrescriben
+- el run hijo registra lineage `parent_rebuild_run_id` y `parent_corrective_set_id`
+
 ## Frontend (sprint 1 + 2 + 3)
 
 ### M-1b registry
@@ -161,6 +179,8 @@ Cubre las tareas QA T-022 (sprint 2 inbound + reconciliación) y T-028
 | BUILD/VALIDATE/ARCHIVE/PAY/ROUTE/RECONCILE/STATUS/PARSE/SPLIT/REPAIR | tests unitarios backend (113 tests) |
 | Correctivo/reproceso sin fallback | `Mt101CorrectiveLifecycleServiceTest`, `Mt101RebuildServiceTest`, `Mt101StagingCorrectionServiceTest`, `Mt101RowTimelineServiceTest`, `Mt101ReprocessServiceTest`, `Mt101MultiSourceLineageTest`, `Mt101QuarantineServiceTest`, `Mt101LargeVolumeLineageRebuildTest`, `Mt101ArchiveTaskProviderTest`, `Mt101BuildFromTableTaskProviderTest` |
 | PAY correctivo gobernado V44 | `Mt101CorrectiveLifecycleServiceTest`, `Mt101RebuildServiceTest`, `Mt101StagingCorrectionServiceTest`, `Mt101MillionFileProcessE2EIT` |
+| Cierre P0 correctivo V45 | `Mt101RoutePersistedFragmentTest`, `Mt101PayFragmentReprocessTest`, `Mt101StatusTaskProviderTest`, `Mt101ReconcileTaskProviderTest`, `Mt101CorrectiveLifecycleServiceTest` |
+| Resolucion PAY incierto y correctivo hijo V46 | `Mt101StatusTaskProviderTest`, `Mt101CorrectiveLifecycleServiceTest` |
 | RBAC payments-operator | `PaymentsOperatorRoleIT` |
 | Pipeline end-to-end | `Mt101OutboundEndToEndIT` |
 | Forms TS providers | vitest specs (10 providers × ~5 tests) |
@@ -169,5 +189,9 @@ Cubre las tareas QA T-022 (sprint 2 inbound + reconciliación) y T-028
 Ejecucion correctiva 2026-06-21: `mvn -pl platform-app "-Dtest=Mt101CorrectiveLifecycleServiceTest,Mt101RebuildServiceTest,Mt101StagingCorrectionServiceTest,Mt101RowTimelineServiceTest,Mt101ReprocessServiceTest,Mt101MultiSourceLineageTest,Mt101QuarantineServiceTest,Mt101LargeVolumeLineageRebuildTest,Mt101ArchiveTaskProviderTest,Mt101BuildFromTableTaskProviderTest" test` (59 tests PASS).
 
 Ejecucion V44 2026-06-21: `mvn -pl platform-app "-Dtest=Mt101CorrectiveLifecycleServiceTest,Mt101StagingCorrectionServiceTest" test` (13 tests PASS), `mvn -pl platform-app "-Dtest=Mt101RebuildServiceTest" test` (8 tests PASS, incluye scheduler sobre conexion JDBC no-default) y `mvn -pl platform-app "-Dtest=Mt101MillionFileProcessE2EIT" "-De2e.rows=1000" "-De2e.negativeRows=200" "-De2e.ncRows=200" test` (3 tests PASS).
+
+Ejecucion V45 2026-06-21: `mvn -pl platform-app "-Dtest=Mt101CorrectiveLifecycleServiceTest,Mt101StatusTaskProviderTest,Mt101ReconcileTaskProviderTest,Mt101PayFragmentReprocessTest,Mt101RoutePersistedFragmentTest" test` (32 tests PASS).
+
+Ejecucion V46 2026-06-21: `mvn -pl platform-app "-Dtest=Mt101CorrectiveLifecycleServiceTest,Mt101StatusTaskProviderTest" test` (26 tests PASS).
 
 Ejecución: `mvn -pl platform-app test` (backend) + `npx nx run web:test` (frontend).

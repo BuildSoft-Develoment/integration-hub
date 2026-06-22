@@ -385,9 +385,16 @@ del archivo original:
   `pay_lease_until` para impedir doble envio por checkers concurrentes.
 - si el proceso se cae o vence el lease con `pay_status=EXECUTING`, el scheduler
   lo marca `UNCERTAIN`; no se reintenta automaticamente.
+- un `pay_status=UNCERTAIN` solo puede cerrarse con una resolucion explicita:
+  `MT101_STATUS` consulta el ledger con `pay_status=UNCERTAIN`, interpreta
+  estados finales aceptados/rechazados y actualiza el ledger sin reenviar
+  `MT101_PAY`.
 - el resultado se persiste por fragmento en `mt101_corrective_pay_fragment`.
   Si hay aceptados y rechazados en el mismo run, el estado global es
   `PARTIALLY_SENT`; si todos fallan, queda `FAILED`; si todos aceptan, `SENT`.
+- si un run queda `PARTIALLY_SENT`, los fragmentos `SENT` son inmutables y un
+  correctivo hijo solo puede seleccionarse sobre los fragmentos correctivos
+  `REJECTED`, conservando lineage padre-hijo.
 - luego de PAY, el flujo correctivo ejecuta `MT101_STATUS` y `MT101_RECONCILE`
   cuando esas tareas existen en el proceso. La ausencia de esas tareas no revierte
   un PAY ya enviado.
@@ -712,6 +719,9 @@ solo para `platform-admin` e `integration-admin`.
 | `message_json` | text | representacion canonica para validar, archivar y pagar |
 | `status` | varchar(20) | BUILT/VALIDATED/ARCHIVED/SENT/REJECTED/CONFIRMED/RECONCILED |
 | `error_message` | text | ultimo error operacional del fragmento |
+| `routed_as` | varchar(80) | ruta decidida por `MT101_ROUTE` para el fragmento persistido |
+| `route_error` | text | error de evaluacion de ruta, si aplica |
+| `routed_at` | timestamp | instante de clasificacion |
 | `created_at` | timestamp | |
 | `updated_at` | timestamp | |
 
@@ -734,6 +744,9 @@ Columnas relevantes para PAY correctivo:
 | `pay_claimed_payload_hash` | char(64) | hash reclamado por checker al iniciar PAY |
 | `pay_lease_until` | timestamp | limite para declarar ejecucion incierta |
 | `pay_uncertain_reason` | text | razon operativa cuando queda `UNCERTAIN` |
+| `parent_rebuild_run_id` | varchar(80) | run padre cuando el correctivo nace de un parcial |
+| `parent_corrective_set_id` | varchar(80) | set correctivo padre usado como origen |
+| `corrective_generation` | integer | generacion del correctivo, default 1 |
 
 ### Tabla `mt101_corrective_pay_fragment`
 
@@ -741,15 +754,50 @@ Detalle auditable del PAY correctivo por fragmento:
 
 | Columna | Tipo | Notas |
 |---|---|---|
-| `rebuild_run_id` | bigint | run correctivo |
+| `rebuild_run_id` | varchar(80) | run correctivo |
 | `corrective_set_id` | varchar(80) | lote correctivo generado |
 | `corrective_senders_reference` | varchar(16) | `:20:` del fragmento correctivo |
+| `source_file_hash` | varchar(64) | archivo origen de la fila corregida, si aplica |
+| `source_record_number` | bigint | fila origen corregida, si aplica |
+| `staging_id` | bigint | staging exacto corregido, si aplica |
 | `payload_hash` | char(64) | hash del payload enviado |
-| `idempotency_key` | varchar(120) | clave enviada al transporte |
+| `idempotency_key` | varchar(180) | clave real enviada al transporte |
+| `transport` | varchar(20) | REST/SFTP u otro transporte soportado |
+| `endpoint_ref` | varchar(512) | idempotency key REST o drop path SFTP resuelto |
 | `gateway_reference` | varchar(120) | referencia devuelta por gateway |
-| `pay_status` | varchar(20) | SENT/REJECTED/FAILED |
-| `attempt_count` | integer | intentos registrados |
-| `last_error` | text | ultimo error operacional |
+| `pay_status` | varchar(30) | PREPARED/DISPATCHING/SENT/REJECTED/UNCERTAIN |
+| `attempts` | integer | intentos registrados |
+| `error_message` | text | ultimo error operacional |
+| `prepared_at` | timestamp | intencion durable creada antes del transporte |
+| `dispatched_at` | timestamp | instante previo a llamar al transporte externo |
+| `resolved_at` | timestamp | instante en que `STATUS` resolvio un estado incierto |
+| `resolution_source` | varchar(40) | origen de resolucion, por ejemplo `STATUS_API` |
+
+Contrato correctivo:
+
+- `MT101_ROUTE` acepta una fuente persistida `{fragmentSetId, connectionRef}` y
+  persiste `routed_as`/`route_error` por `:20:` sin cambiar el gate de estado
+  del fragmento.
+- `MT101_PAY` correctivo recibe `{fragmentSetId, correctivePayRunId}`. Antes
+  de invocar el transporte debe existir una fila `PREPARED` por fragmento y,
+  justo antes de la llamada externa, esa fila pasa a `DISPATCHING`.
+- La clave de correlacion se resuelve una sola vez: para REST es el
+  `Idempotency-Key`; para SFTP es el `dropPath` final. Esa misma clave se
+  persiste y se entrega al transporte.
+- `MT101_STATUS` correctivo no consume el output muestral de `MT101_PAY`; lee
+  paginadamente `mt101_corrective_pay_fragment`. Por defecto consulta
+  `pay_status='SENT'`; para resolucion operativa de incertidumbre recibe
+  `correctivePayStatuses=["UNCERTAIN"]` y `resolveCorrectivePay=true`.
+- La resolucion de incertidumbre mapea estados de `acceptedStatuses` a `SENT`
+  y estados de `rejectedStatuses` a `REJECTED`; cualquier estado no final queda
+  pendiente y el run conserva `pay_status=UNCERTAIN`.
+- `MT101_RECONCILE` correctivo opera con scope explicito por `rebuildRunId`
+  y solo puede reconciliar referencias incluidas en ese ledger.
+- API operativa:
+  `POST /api/query/mt101-quarantine/rebuild-runs/resolve-uncertain-pay` resuelve
+  incertidumbre con `MT101_STATUS`, sin reenviar pagos; y
+  `POST /api/query/mt101-quarantine/rebuild-runs/request-child` crea un run hijo desde
+  los fragmentos rechazados de un padre `PARTIALLY_SENT`.
 
 ## Variables de entorno y secretos
 

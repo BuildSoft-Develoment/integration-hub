@@ -108,8 +108,18 @@ public class Mt101ArchiveStatusUpdater {
                                List<JoinSpec> matchKeys,
                                LocalDate from,
                                LocalDate to) throws SQLException {
+        markReconciled(connection, sentTable, confirmationTable, matchKeys, from, to, List.of());
+    }
+
+    public void markReconciled(Connection connection,
+                               String sentTable,
+                               String confirmationTable,
+                               List<JoinSpec> matchKeys,
+                               LocalDate from,
+                               LocalDate to,
+                               List<String> scopeSendersReferences) throws SQLException {
         repository.markReconciled(connection, tableName(sentTable), requiredTable(confirmationTable),
-                repositoryJoinSpecs(matchKeys), from, to);
+                repositoryJoinSpecs(matchKeys), from, to, scopeSendersReferences);
     }
 
     private DataSource resolveDataSource(String connectionRef) {

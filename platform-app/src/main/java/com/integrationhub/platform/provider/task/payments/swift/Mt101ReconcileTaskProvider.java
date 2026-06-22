@@ -3,6 +3,7 @@ package com.integrationhub.platform.provider.task.payments.swift;
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.repository.payments.swift.Mt101ReconciliationRepository;
+import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
@@ -68,6 +69,7 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
     private final Mt101ArchiveStatusUpdater archiveStatusUpdater;
     private final Mt101ReconciliationRepository reconciliationRepository;
     private final RecordAuditEmitter recordAuditEmitter;
+    private final Mt101RebuildRepository rebuildRepository = new Mt101RebuildRepository();
 
     @Inject
     public Mt101ReconcileTaskProvider(DataSource defaultDataSource,
@@ -109,7 +111,9 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
 
     @Override
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
-        var connectionRef = stringValue(configuration.get("connectionRef"), null);
+        var correctiveSource = correctivePaySource(context, configuration);
+        var connectionRef = stringValue(configuration.get("connectionRef"),
+                stringValue(correctiveSource.get("connectionRef"), null));
         var dataSource = resolveDataSource(connectionRef);
         var sentTable = sanitize(stringValue(configuration.get("sentTable"), DEFAULT_SENT_TABLE));
         var confirmationTable = sanitize(stringValue(configuration.get("confirmationTable"), DEFAULT_CONFIRMATION_TABLE));
@@ -124,10 +128,12 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
         int unmatchedSentCount;
         int unmatchedConfirmCount;
         int amountMismatchCount = 0;
+        List<String> scope;
 
         try (Connection connection = dataSource.getConnection()) {
+            scope = correctiveScope(dataSource, correctiveSource);
             var result = reconciliationRepository.reconcile(connection, sentTable, confirmationTable,
-                    parseRepositoryJoinSpecs(matchKeys), fromDate, asOfDate, exceptionTable, asOfDate);
+                    parseRepositoryJoinSpecs(matchKeys), fromDate, asOfDate, exceptionTable, asOfDate, scope);
             matchedCount = result.matchedCount();
             unmatchedSentCount = result.unmatchedSentCount();
             unmatchedConfirmCount = result.unmatchedConfirmCount();
@@ -137,7 +143,7 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
             if (boolValue(configuration.get("archiveStatusSync"), true)) {
                 try {
                     archiveStatusUpdater.markReconciled(connection, sentTable, confirmationTable,
-                            parseJoinSpecs(matchKeys), fromDate, asOfDate);
+                            parseJoinSpecs(matchKeys), fromDate, asOfDate, scope);
                 } catch (SQLException reconcileError) {
                     // 42703 = columna inexistente (sentTable sin status/updated_at,
                     // e.g. tabla custom): la conciliacion-reporte sigue valida.
@@ -157,6 +163,7 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
         outputs.put("amountMismatchCount", amountMismatchCount);
         outputs.put("asOfDate", asOfDate.toString());
         outputs.put("lookbackDays", lookbackDays);
+        outputs.put("scopedCount", scope.size());
         outputs.put("records", exceptions);
 
         emitRecordAudit(exceptions.stream().map(exception -> reconciliationEnvelope(context, exception)).toList());
@@ -167,6 +174,35 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
                 + " unmatchedConfirm=" + unmatchedConfirmCount;
         // No marcamos failure por excepciones; son hallazgos esperados.
         return TaskResult.success(summary, outputs);
+    }
+
+    private List<String> correctiveScope(DataSource dataSource, Map<String, Object> source) throws SQLException {
+        var runId = stringValue(source.get("correctivePayRunId"), null);
+        if (runId == null) {
+            return List.of();
+        }
+        return rebuildRepository.correctivePaySentReferences(dataSource, runId);
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> correctivePaySource(TaskContext context, Map<String, Object> configuration) {
+        var rawTaskOutputs = context.attributes().get("taskOutputs");
+        if (!(rawTaskOutputs instanceof Map<?, ?> taskOutputs) || taskOutputs.isEmpty()
+                || !(configuration.get("input") instanceof Map<?, ?> rawInput)) {
+            return Map.of();
+        }
+        var sourceTaskRef = stringValue(((Map<String, Object>) rawInput).get("sourceTaskRef"), "");
+        if (sourceTaskRef.isBlank()) {
+            return Map.of();
+        }
+        var sourceOutput = stringValue(((Map<String, Object>) rawInput).get("sourceOutput"), "records");
+        var raw = taskOutputs.get(sourceTaskRef + "." + sourceOutput);
+        if (!(raw instanceof Map<?, ?> rawMap) || !rawMap.containsKey("correctivePayRunId")) {
+            return Map.of();
+        }
+        var source = new LinkedHashMap<String, Object>();
+        rawMap.forEach((key, value) -> source.put(String.valueOf(key), value));
+        return source;
     }
 
     private boolean boolValue(Object raw, boolean defaultValue) {

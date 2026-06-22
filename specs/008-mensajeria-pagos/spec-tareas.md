@@ -28,6 +28,9 @@ capture en `tdd-evidence.md`.
 - **Sprint 4 (hardening MT101 multi-debito/subsidiarias)**: T-029 a T-034.
 - **Sprint 5 (alto volumen y reproceso MT101)**: T-035 a T-041.
 - **Sprint 6 (perfiles bancarios operables)**: T-042 a T-046.
+- **Sprint 7 (PAY correctivo gobernado y concurrencia)**: T-047 a T-052.
+- **Sprint 8 (cierre P0 correctivo pre-homologacion)**: T-053 a T-057.
+- **Sprint 9 (resolucion de incertidumbre y correctivo hijo)**: T-058 a T-060.
 
 ## Tabla ejecutable de tareas
 
@@ -130,6 +133,24 @@ seccion "Motor para verticales (ADR-009)".
 | T-050 | RF-024 | impl backend | scheduler sincroniza lifecycles correctivos en datasource default y conexiones JDBC activas, y convierte PAY vencido en `UNCERTAIN` | Mt101RebuildServiceTest | mvn -pl platform-app -Dtest=Mt101RebuildServiceTest test | FAIL si reintenta automaticamente un PAY incierto | mvn -pl platform-app -Dtest=Mt101RebuildServiceTest test | PASS | T-047, spec 005 | si | done |
 | T-051 | RF-024 | impl frontend/backend | correccion de staging exige version `If-Match`; sin version retorna 400 y con version obsoleta retorna conflicto | Mt101StagingCorrectionServiceTest, Mt101MillionFileProcessE2EIT, mt101-quarantine.component.spec.ts | mvn -pl platform-app -Dtest=Mt101StagingCorrectionServiceTest test | FAIL si permite guardar sin version | mvn -pl platform-app "-Dtest=Mt101StagingCorrectionServiceTest,Mt101MillionFileProcessE2EIT" "-De2e.rows=1000" "-De2e.negativeRows=200" "-De2e.ncRows=200" test | PASS | T-038 | si | done |
 | T-052 | RF-005, RF-006, RF-007, RF-010, RF-024 | impl backend | el avance correctivo ejecuta `REPAIR -> VALIDATE -> ROUTE -> ARCHIVE` antes de PAY y, despues de PAY, invoca `STATUS/RECONCILE` cuando existen | Mt101CorrectiveLifecycleServiceTest | mvn -pl platform-app -Dtest=Mt101CorrectiveLifecycleServiceTest test | FAIL si salta ROUTE o no invoca STATUS/RECONCILE configurados | mvn -pl platform-app -Dtest=Mt101CorrectiveLifecycleServiceTest test | PASS | T-042, T-047 | si | done |
+
+### Sprint 8 - Cierre P0 correctivo pre-homologacion
+
+| id | rf | tipo | objetivo verificable | test | comando_red | expected_red | comando_green | expected_green | depende_de | paralelizable | estado |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| T-053 | RF-007, RF-024 | impl backend | `MT101_ROUTE` acepta `{fragmentSetId}` persistido del correctivo y guarda `routed_as` por `:20:` sin depender de listas en memoria | Mt101RoutePersistedFragmentTest | mvn -pl platform-app -Dtest=Mt101RoutePersistedFragmentTest test | FAIL si ROUTE espera `List` y no fuente persistida | mvn -pl platform-app -Dtest=Mt101RoutePersistedFragmentTest test | PASS | T-017, T-052 | si | done |
+| T-054 | RF-004, RF-024 | impl BD/backend | PAY correctivo crea intencion `PREPARED` antes del transporte y marca `DISPATCHING` por fragmento antes de invocar gateway/SFTP | Mt101PayFragmentReprocessTest | mvn -pl platform-app -Dtest=Mt101PayFragmentReprocessTest test | FAIL si no existe ledger durable pre-envio | mvn -pl platform-app -Dtest=Mt101PayFragmentReprocessTest test | PASS | T-047, T-049 | si | done |
+| T-055 | RF-004, RF-024 | impl backend | la clave de correlacion persistida es la misma que usa el transporte (`Idempotency-Key` REST o drop path SFTP) | Mt101CorrectiveLifecycleServiceTest, Mt101PayTaskProviderTest | mvn -pl platform-app -Dtest=Mt101CorrectiveLifecycleServiceTest,Mt101PayTaskProviderTest test | FAIL si el ledger guarda una clave distinta a la enviada | mvn -pl platform-app -Dtest=Mt101CorrectiveLifecycleServiceTest,Mt101PayTaskProviderTest test | PASS | T-054 | si | done |
+| T-056 | RF-005, RF-024 | impl backend | `MT101_STATUS` correctivo consulta todos los `SENT` del ledger paginado y no el output muestral de PAY | Mt101StatusTaskProviderTest | mvn -pl platform-app -Dtest=Mt101StatusTaskProviderTest test | FAIL si solo procesa `maxRecordsInOutput` | mvn -pl platform-app -Dtest=Mt101StatusTaskProviderTest test | PASS | T-013, T-054 | si | done |
+| T-057 | RF-006, RF-024 | impl backend | `MT101_RECONCILE` correctivo filtra por referencias del run y no actualiza archivos ajenos | Mt101ReconcileTaskProviderTest | mvn -pl platform-app -Dtest=Mt101ReconcileTaskProviderTest test | FAIL si reconcilia todo el dia/base | mvn -pl platform-app -Dtest=Mt101ReconcileTaskProviderTest test | PASS | T-014, T-054 | si | done |
+
+### Sprint 9 - Resolucion de incertidumbre y correctivo hijo
+
+| id | rf | tipo | objetivo verificable | test | comando_red | expected_red | comando_green | expected_green | depende_de | paralelizable | estado |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| T-058 | RF-005, RF-024 | impl BD/backend | un PAY correctivo `UNCERTAIN` se resuelve consultando `MT101_STATUS` sobre ledger `UNCERTAIN`, sin reejecutar `MT101_PAY`, y actualiza fragmentos a `SENT`/`REJECTED` solo con estados finales conocidos | Mt101StatusTaskProviderTest, Mt101CorrectiveLifecycleServiceTest | mvn -pl platform-app -Dtest=Mt101StatusTaskProviderTest,Mt101CorrectiveLifecycleServiceTest test | FAIL si reenvia PAY o marca enviado sin confirmacion | mvn -pl platform-app "-Dtest=Mt101CorrectiveLifecycleServiceTest,Mt101StatusTaskProviderTest" test | PASS | T-050, T-056 | si | done |
+| T-059 | RF-022, RF-024 | impl backend | un run `PARTIALLY_SENT` permite solicitar un correctivo hijo solo para fragmentos correctivos rechazados, preservando los enviados como inmutables | Mt101CorrectiveLifecycleServiceTest | mvn -pl platform-app -Dtest=Mt101CorrectiveLifecycleServiceTest test | FAIL si selecciona fragmentos enviados o no registra lineage padre-hijo | mvn -pl platform-app "-Dtest=Mt101CorrectiveLifecycleServiceTest" test | PASS | T-049, T-054 | si | done |
+| T-060 | RF-024 | impl API | la operacion expone endpoints para `resolve-uncertain-pay` y `request-child`, sin acceso directo a BD y con roles administrativos/operador segun el flujo | testCompile + pruebas recurso existentes | mvn -pl platform-app test-compile | FAIL sin contrato REST compilable | mvn -pl platform-app test-compile | PASS | T-058, T-059 | si | done |
 
 ## Checklist de cierre
 - [ ] Todas las tareas tienen estado (pendiente / en curso / hecho / bloqueado).

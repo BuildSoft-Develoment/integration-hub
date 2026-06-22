@@ -96,6 +96,57 @@ class Mt101StatusTaskProviderTest {
     }
 
     @Test
+    void correctiveQueryReadsAllSentLedgerRecordsNotPayOutputSample(WireMockRuntimeInfo wm) throws Exception {
+        stubFor(get(urlPathMatching("/v1/swift/status/.*"))
+                .willReturn(aResponse().withStatus(200)
+                        .withBody("{\"status\":\"CONFIRMED\",\"gatewayReference\":\"GW-OK\"}")));
+        insertCorrectiveStatusRecord("RUN-1", "SET-FIX", "R1", "KEY-R1", 201L);
+        insertCorrectiveStatusRecord("RUN-1", "SET-FIX", "R2", "KEY-R2", 202L);
+        insertCorrectiveStatusRecord("RUN-1", "SET-FIX", "R3", "KEY-R3", 203L);
+
+        var result = provider.execute(contextWith("pay-mt101.records",
+                Map.of("correctivePayRunId", "RUN-1")), Map.of(
+                "mode", "query",
+                "pageSize", 2,
+                "maxRecordsInOutput", 1,
+                "input", Map.of("sourceTaskRef", "pay-mt101", "sourceOutput", "records"),
+                "query", Map.of("url", wm.getHttpBaseUrl() + "/v1/swift/status/${idempotencyKey}")));
+
+        assertTrue(result.success(), () -> "expected success, got: " + result.details());
+        assertEquals(3, result.outputs().get("queriedCount"));
+        assertEquals(3, result.outputs().get("confirmedCount"));
+        assertEquals(Boolean.TRUE, result.outputs().get("recordsSampled"));
+        assertEquals(3, countRows("mt101_confirmation"));
+        verify(getRequestedFor(urlEqualTo("/v1/swift/status/KEY-R1")));
+        verify(getRequestedFor(urlEqualTo("/v1/swift/status/KEY-R2")));
+        verify(getRequestedFor(urlEqualTo("/v1/swift/status/KEY-R3")));
+    }
+
+    @Test
+    void correctiveQueryResolvesUncertainLedgerWithoutReSendingPay(WireMockRuntimeInfo wm) throws Exception {
+        stubFor(get(urlEqualTo("/v1/swift/status/KEY-R1"))
+                .willReturn(aResponse().withStatus(200)
+                        .withBody("{\"status\":\"ACCEPTED\",\"gatewayReference\":\"GW-OK\"}")));
+        insertCorrectiveStatusRecord("RUN-UNC", "SET-FIX", "R1", "KEY-R1", 301L, "UNCERTAIN");
+
+        var result = provider.execute(contextWith("pay-mt101.records",
+                Map.of("correctivePayRunId", "RUN-UNC")), Map.of(
+                "mode", "query",
+                "correctivePayStatuses", List.of("UNCERTAIN"),
+                "resolveCorrectivePay", true,
+                "acceptedStatuses", List.of("ACCEPTED"),
+                "input", Map.of("sourceTaskRef", "pay-mt101", "sourceOutput", "records"),
+                "query", Map.of("url", wm.getHttpBaseUrl() + "/v1/swift/status/${idempotencyKey}")));
+
+        assertTrue(result.success(), () -> "expected success, got: " + result.details());
+        assertEquals(1, result.outputs().get("queriedCount"));
+        assertEquals(1, result.outputs().get("resolvedPayCount"));
+        assertEquals(1, countRowsWithPayStatus("SENT"));
+        assertEquals(0, countRowsWithPayStatus("UNCERTAIN"));
+        verify(1, getRequestedFor(urlEqualTo("/v1/swift/status/KEY-R1")));
+    }
+
+    @Test
     void queriesGatewayPerRecordAndPersistsConfirmations(WireMockRuntimeInfo wm) throws Exception {
         insertArchive(100L);
         insertArchive(101L);
@@ -382,6 +433,12 @@ class Mt101StatusTaskProviderTest {
         return context;
     }
 
+    private TaskContext contextWith(String key, Map<String, Object> source) {
+        var context = new TaskContext(1L, 1L);
+        context.attributes().put("taskOutputs", Map.of(key, source));
+        return context;
+    }
+
     private DataSource dataSource() {
         var pg = new PGSimpleDataSource();
         pg.setURL(POSTGRES.getJdbcUrl());
@@ -394,10 +451,33 @@ class Mt101StatusTaskProviderTest {
         try (Connection c = dataSource.getConnection();
              Statement stmt = c.createStatement()) {
             stmt.executeUpdate("drop table if exists mt101_archive");
+            stmt.executeUpdate("drop table if exists mt101_corrective_pay_fragment");
+            stmt.executeUpdate("drop table if exists mt101_build_fragment");
             stmt.executeUpdate("drop table if exists mt101_confirmation");
             stmt.executeUpdate("create table mt101_archive (" +
                     " id bigint primary key," +
+                    " senders_reference varchar(16)," +
+                    " process_execution_id bigint," +
                     " status varchar(20) not null default 'ARCHIVED'," +
+                    " created_at timestamp not null default current_timestamp," +
+                    " updated_at timestamp not null default current_timestamp)");
+            stmt.executeUpdate("create table mt101_build_fragment (" +
+                    " id bigserial primary key," +
+                    " fragment_set_id varchar(80) not null," +
+                    " senders_reference varchar(16) not null," +
+                    " process_execution_id bigint)");
+            stmt.executeUpdate("create table mt101_corrective_pay_fragment (" +
+                    " id bigserial primary key," +
+                    " rebuild_run_id varchar(80) not null," +
+                    " corrective_set_id varchar(80) not null," +
+                    " corrective_senders_reference varchar(16) not null," +
+                    " gateway_reference varchar(120)," +
+                    " idempotency_key varchar(180) not null," +
+                    " pay_status varchar(30) not null," +
+                    " error_message text," +
+                    " resolved_at timestamp," +
+                    " resolution_source varchar(40)," +
+                    " created_at timestamp not null default current_timestamp," +
                     " updated_at timestamp not null default current_timestamp)");
             stmt.executeUpdate("create table mt101_confirmation (" +
                     " id bigserial primary key," +
@@ -415,6 +495,48 @@ class Mt101StatusTaskProviderTest {
              var stmt = c.prepareStatement("insert into mt101_archive (id, status) values (?, 'SENT')")) {
             stmt.setLong(1, id);
             stmt.executeUpdate();
+        }
+    }
+
+    private void insertCorrectiveStatusRecord(String runId,
+                                              String correctiveSetId,
+                                              String reference,
+                                              String idempotencyKey,
+                                              long archiveId) throws SQLException {
+        insertCorrectiveStatusRecord(runId, correctiveSetId, reference, idempotencyKey, archiveId, "SENT");
+    }
+
+    private void insertCorrectiveStatusRecord(String runId,
+                                              String correctiveSetId,
+                                              String reference,
+                                              String idempotencyKey,
+                                              long archiveId,
+                                              String payStatus) throws SQLException {
+        try (Connection c = dataSource.getConnection()) {
+            try (var fragment = c.prepareStatement(
+                    "insert into mt101_build_fragment (fragment_set_id, senders_reference, process_execution_id) values (?, ?, 1)")) {
+                fragment.setString(1, correctiveSetId);
+                fragment.setString(2, reference);
+                fragment.executeUpdate();
+            }
+            try (var archive = c.prepareStatement(
+                    "insert into mt101_archive (id, senders_reference, process_execution_id, status) values (?, ?, 1, 'SENT')")) {
+                archive.setLong(1, archiveId);
+                archive.setString(2, reference);
+                archive.executeUpdate();
+            }
+            try (var ledger = c.prepareStatement(
+                    "insert into mt101_corrective_pay_fragment "
+                            + "(rebuild_run_id, corrective_set_id, corrective_senders_reference, gateway_reference, idempotency_key, pay_status) "
+                            + "values (?, ?, ?, ?, ?, ?)")) {
+                ledger.setString(1, runId);
+                ledger.setString(2, correctiveSetId);
+                ledger.setString(3, reference);
+                ledger.setString(4, "GW-" + reference);
+                ledger.setString(5, idempotencyKey);
+                ledger.setString(6, payStatus);
+                ledger.executeUpdate();
+            }
         }
     }
 
@@ -453,6 +575,17 @@ class Mt101StatusTaskProviderTest {
         try (Connection c = dataSource.getConnection();
              var stmt = c.prepareStatement("select count(*) from mt101_confirmation where confirmation_type = ?")) {
             stmt.setString(1, confirmationType);
+            try (var rs = stmt.executeQuery()) {
+                rs.next();
+                return rs.getInt(1);
+            }
+        }
+    }
+
+    private int countRowsWithPayStatus(String payStatus) throws SQLException {
+        try (Connection c = dataSource.getConnection();
+             var stmt = c.prepareStatement("select count(*) from mt101_corrective_pay_fragment where pay_status = ?")) {
+            stmt.setString(1, payStatus);
             try (var rs = stmt.executeQuery()) {
                 rs.next();
                 return rs.getInt(1);
