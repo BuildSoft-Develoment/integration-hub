@@ -26,6 +26,27 @@ public class Mt101CorrectivePayStore {
         this.rebuildRepository = rebuildRepository;
     }
 
+    /**
+     * P0.1 v21: persiste el resultado real de CADA fragmento de la pagina (SENT/REJECTED/UNCERTAIN),
+     * no la muestra acotada del output. Asi el ledger es la fuente de verdad para 20k fragmentos.
+     */
+    public void markResults(Map<String, Object> fragmentSource,
+                            String rebuildRunId,
+                            java.util.Collection<Mt101RebuildRepository.PayFragmentResult> results) {
+        if (rebuildRunId == null || rebuildRunId.isBlank() || results == null || results.isEmpty()) {
+            return;
+        }
+        try {
+            rebuildRepository.updatePayFragmentResults(
+                    resolveDataSource(stringValue(fragmentSource == null ? null : fragmentSource.get("connectionRef"))),
+                    rebuildRunId,
+                    results);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot persist MT101 corrective PAY fragment results batch for run "
+                    + rebuildRunId, error);
+        }
+    }
+
     public void markDispatching(Map<String, Object> fragmentSource,
                                 String rebuildRunId,
                                 String sendersReference) {

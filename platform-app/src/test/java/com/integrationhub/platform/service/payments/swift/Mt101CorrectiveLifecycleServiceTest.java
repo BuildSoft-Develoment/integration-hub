@@ -67,6 +67,7 @@ class Mt101CorrectiveLifecycleServiceTest {
     private boolean rejectSecondPayFragment;
     private boolean payUncertain;
     private boolean statusSyncFails;
+    private boolean payThrowsAfterDispatch;
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -82,6 +83,7 @@ class Mt101CorrectiveLifecycleServiceTest {
         rejectSecondPayFragment = false;
         payUncertain = false;
         statusSyncFails = false;
+        payThrowsAfterDispatch = false;
 
         rebuildService = new Mt101RebuildService(dataSource, null, null, null,
                 new Mt101FailedRecordRepository(), new Mt101FragmentRepository(), new Mt101RebuildRepository());
@@ -119,6 +121,16 @@ class Mt101CorrectiveLifecycleServiceTest {
             @Override
             public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
                 payInvocations.incrementAndGet();
+                if (payThrowsAfterDispatch) {
+                    // Simula: se despacho al menos un fragmento (DISPATCHING durable) y LUEGO algo
+                    // falla (BD/auditoria) lanzando excepcion. No debe quedar FAILED (reusable).
+                    try {
+                        new Mt101RebuildRepository().markPayFragmentDispatching(dataSource, FIX, "RTEST1");
+                    } catch (SQLException error) {
+                        throw new IllegalStateException(error);
+                    }
+                    throw new IllegalStateException("local persistence failed after gateway accepted");
+                }
                 if (payUncertain) {
                     // Timeout/conexion tras enviar: el provider clasifica UNCERTAIN (no marca
                     // SENT/REJECTED) y lo reporta en uncertainCount. No toca los fragmentos.
@@ -376,6 +388,23 @@ class Mt101CorrectiveLifecycleServiceTest {
                 + "where rebuild_run_id = '" + child.rebuildRunId() + "'"));
         assertEquals(FIX, queryString("select parent_corrective_set_id from mt101_rebuild_run "
                 + "where rebuild_run_id = '" + child.rebuildRunId() + "'"));
+    }
+
+    @Test
+    void payFailureAfterDispatchBecomesUncertainNotReusableFailed() throws Exception {
+        // P0.2 v21: si ya se despacho algun fragmento y LUEGO falla, NO debe quedar FAILED
+        // (reusable -> doble pago): debe quedar UNCERTAIN para conciliacion.
+        payThrowsAfterDispatch = true;
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana");
+
+        assertThrows(RuntimeException.class, () -> service.approveAndPayCorrective(null, FIX, "luis"));
+
+        assertEquals("UNCERTAIN", payStatus(FIX), "un fallo tras dispatch es UNCERTAIN, nunca FAILED reusable");
+        assertEquals("UNCERTAIN",
+                queryString("select pay_status from mt101_corrective_pay_fragment where rebuild_run_id = '"
+                        + FIX + "' and corrective_senders_reference = 'RTEST1'"),
+                "el fragmento despachado queda UNCERTAIN para conciliar (no reenvio ciego)");
     }
 
     @Test

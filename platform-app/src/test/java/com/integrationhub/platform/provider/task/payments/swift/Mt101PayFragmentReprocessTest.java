@@ -134,11 +134,50 @@ class Mt101PayFragmentReprocessTest {
 
         assertTrue(result.success(), () -> "expected PAY success: " + result.details());
         assertEquals(1, transport.callsReceived());
-        assertEquals("DISPATCHING", payLedgerStatus("RUN-PAY-1", "F1"),
-                "el lifecycle completa luego a SENT/REJECTED; el provider garantiza pre-envio durable");
+        // P0.1 v21: el provider marca DISPATCHING antes del envio y persiste el resultado real
+        // por fragmento (SENT) al cerrar la pagina; ya no depende de que el lifecycle lo complete.
+        assertEquals("SENT", payLedgerStatus("RUN-PAY-1", "F1"),
+                "el provider persiste el resultado durable por fragmento, no solo DISPATCHING");
         assertEquals(1, payLedgerAttempts("RUN-PAY-1", "F1"));
         assertEquals(1L, countRowsWhere("mt101_corrective_pay_fragment",
                 "rebuild_run_id = 'RUN-PAY-1' and corrective_senders_reference = 'F1' and dispatched_at is not null"));
+    }
+
+    @Test
+    void correctivePayPersistsEveryFragmentResultNotJustTheOutputSample() throws Exception {
+        // P0.1 v21: 5 fragmentos, todos INCIERTOS, con la muestra del output acotada a 2.
+        // El ledger debe quedar con los 5 como UNCERTAIN (no se pierde ninguno fuera de la muestra).
+        var fragmentSetId = "PAY-LEDGER-UNC";
+        var refs = List.of("U1", "U2", "U3", "U4", "U5");
+        insertFragmentSet(fragmentSetId, refs.toArray(new String[0]));
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, refs.size());
+        fragmentSource.put("correctivePayRunId", "RUN-UNC");
+        for (var ref : refs) {
+            fragmentStore.markStatus(fragmentSource, ref, "ARCHIVED", null);
+            insertPayLedger("RUN-UNC", fragmentSetId, ref);
+        }
+
+        var transport = new StubTransport(List.of(
+                TransportResult.uncertain(1, 5L, "timeout: read timed out"),
+                TransportResult.uncertain(1, 5L, "timeout: read timed out"),
+                TransportResult.uncertain(1, 5L, "timeout: read timed out"),
+                TransportResult.uncertain(1, 5L, "timeout: read timed out"),
+                TransportResult.uncertain(1, 5L, "timeout: read timed out")));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore,
+                null, null, payStore);
+
+        var config = new java.util.LinkedHashMap<String, Object>(payConfig(50));
+        config.put("maxRecordsInOutput", 2);
+        var result = provider.execute(contextWith(fragmentSource), config);
+
+        assertFalse(result.success(), "PAY con inciertos no es exito");
+        assertEquals(5, result.outputs().get("uncertainCount"), "el conteo es exacto (5)");
+        assertEquals(2, ((List<?>) result.outputs().get("uncertain")).size(),
+                "la muestra del output sigue acotada (maxRecordsInOutput=2)");
+        assertEquals(5L, countRowsWhere("mt101_corrective_pay_fragment",
+                "rebuild_run_id = 'RUN-UNC' and pay_status = 'UNCERTAIN'"),
+                "el ledger persiste los 5 resultados, no la muestra: ningun fragmento se pierde (P0.1)");
     }
 
     private TaskContext contextWith(Map<String, Object> fragmentSource) {
@@ -216,6 +255,7 @@ class Mt101PayFragmentReprocessTest {
                     + "idempotency_key varchar(180) not null,"
                     + "pay_status varchar(30) not null default 'PREPARED',"
                     + "attempts integer not null default 0,"
+                    + "gateway_reference varchar(120), error_message text,"
                     + "prepared_at timestamp,"
                     + "dispatched_at timestamp,"
                     + "updated_at timestamp not null default current_timestamp,"

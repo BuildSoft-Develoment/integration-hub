@@ -2,6 +2,7 @@ package com.integrationhub.platform.provider.task.payments.swift;
 
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
+import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
 import com.integrationhub.platform.spi.task.payments.TransportResult;
@@ -119,6 +120,9 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 // Mapa de errores acotado a la pagina (no a la ejecucion completa).
                 var rejectedByRef = new LinkedHashMap<String, String>();
                 var pageAudit = new ArrayList<AuditEnvelope>(page.size());
+                // P0.1 v21: resultado durable POR FRAGMENTO de toda la pagina (no la muestra
+                // acotada): el ledger es la fuente de verdad para 20k fragmentos correctivos.
+                var pageLedger = new ArrayList<Mt101RebuildRepository.PayFragmentResult>(page.size());
                 for (var message : page) {
                     var reference = message.sequenceA() == null ? null
                             : message.sequenceA().sendersReference();
@@ -138,10 +142,14 @@ public class Mt101PayTaskProvider implements TaskProvider {
                         rejectedTargets.add(archiveTarget(message));
                     }
                     pageAudit.add(recordEnvelope(context, reference, result));
+                    var payStatus = result.accepted() ? "SENT" : (result.uncertain() ? "UNCERTAIN" : "REJECTED");
+                    pageLedger.add(new Mt101RebuildRepository.PayFragmentResult(
+                            reference, payStatus, result.gatewayReference(), result.attempts(), result.lastError()));
                 }
                 // Trazabilidad E2E por registro: una trama RECORD por fragmento,
                 // emitida en lote por pagina (un solo JDBC batch), fuera de la TX.
                 emitRecordAudit(pageAudit);
+                persistCorrectiveLedger(fragmentSource, pageLedger);
                 fragmentStore.markStatusBatch(fragmentSource, sentRefs, "SENT");
                 fragmentStore.markStatusBatch(fragmentSource, rejectedByRef, "REJECTED");
                 // H5: avanza el estado durable en mt101_archive (la tabla de
@@ -206,6 +214,16 @@ public class Mt101PayTaskProvider implements TaskProvider {
         return accumulator.rejectedCount > 0 || accumulator.uncertainCount > 0
                 ? TaskResult.failure(summary, outputs)
                 : TaskResult.success(summary, outputs);
+    }
+
+    /** P0.1 v21: persiste el resultado por fragmento de la pagina al ledger correctivo (todos). */
+    private void persistCorrectiveLedger(Map<String, Object> fragmentSource,
+                                         java.util.List<Mt101RebuildRepository.PayFragmentResult> pageLedger) {
+        var rebuildRunId = stringValue(fragmentSource.get("correctivePayRunId"), null);
+        if (rebuildRunId == null || rebuildRunId.isBlank() || correctivePayStore == null || pageLedger.isEmpty()) {
+            return;
+        }
+        correctivePayStore.markResults(fragmentSource, rebuildRunId, pageLedger);
     }
 
     private void markCorrectiveDispatching(Map<String, Object> fragmentSource, String reference) {

@@ -242,7 +242,17 @@ public class Mt101CorrectiveLifecycleService {
                             + ": " + payResult.details());
                 }
             } catch (RuntimeException error) {
-                rebuildRepository.markPayFailed(dataSource, runId, error.getMessage());
+                // P0.2 v21: si ya se despacho algun fragmento (DISPATCHING/SENT/UNCERTAIN), el mensaje
+                // pudo llegar al banco -> NUNCA FAILED (reusable -> doble pago). Se marca UNCERTAIN.
+                if (rebuildRepository.hasDispatchedPayFragments(dataSource, runId)) {
+                    rebuildRepository.markPayUncertain(dataSource, runId,
+                            "PAY interrupted after dispatching at least one fragment: " + error.getMessage()
+                                    + "; reconcile with the gateway before any resend");
+                    rebuildRepository.markPayFragmentsUncertain(dataSource, runId,
+                            "PAY interrupted after dispatch; reconcile before any resend");
+                } else {
+                    rebuildRepository.markPayFailed(dataSource, runId, error.getMessage());
+                }
                 throw error;
             }
             rebuildService.synchronizeLifecycle(connectionRef, run.originalFragmentSetId());
@@ -269,7 +279,9 @@ public class Mt101CorrectiveLifecycleService {
             }
             var prep = prepare(dataSource, run, connectionRef);
             var statusOverrides = new LinkedHashMap<String, Object>();
-            statusOverrides.put("correctivePayStatuses", List.of("UNCERTAIN"));
+            // P1 v21: tambien DISPATCHING (un crash tras marcar DISPATCHING queda asi); se consulta
+            // STATUS, nunca se reenvia a ciegas.
+            statusOverrides.put("correctivePayStatuses", List.of("UNCERTAIN", "DISPATCHING"));
             statusOverrides.put("resolveCorrectivePay", true);
             runStage(statusProvider, prep, "MT101_STATUS", true,
                     correctivePaySource(runId, connectionRef), statusOverrides);

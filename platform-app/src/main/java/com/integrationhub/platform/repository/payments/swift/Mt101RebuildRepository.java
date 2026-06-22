@@ -805,6 +805,23 @@ public class Mt101RebuildRepository {
     public record PayStageSync(String statusSyncStatus, String reconciliationStatus) {
     }
 
+    /**
+     * P0.2 v21: true si algun fragmento del run ya fue despachado (DISPATCHING/SENT/UNCERTAIN).
+     * Tras un fallo, si esto es true NO se debe marcar el PAY FAILED (reusable -> doble pago):
+     * el mensaje pudo llegar al banco; corresponde UNCERTAIN para conciliacion.
+     */
+    public boolean hasDispatchedPayFragments(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "select 1 from mt101_corrective_pay_fragment where rebuild_run_id = ? "
+                + "and pay_status in ('DISPATCHING', 'SENT', 'UNCERTAIN') limit 1";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
     /** B2': registra fallo de PAY; el operador debe solicitar de nuevo si corresponde. */
     public void markPayFailed(DataSource dataSource, String rebuildRunId, String errorMessage) throws SQLException {
         markPayCompleted(dataSource, rebuildRunId, "FAILED", errorMessage);
@@ -904,6 +921,8 @@ public class Mt101RebuildRepository {
                         error_message = excluded.error_message,
                         payload_hash = excluded.payload_hash,
                         updated_at = current_timestamp
+                    where mt101_corrective_pay_fragment.pay_status
+                          not in ('DISPATCHING', 'SENT', 'REJECTED', 'UNCERTAIN')
                 """;
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
