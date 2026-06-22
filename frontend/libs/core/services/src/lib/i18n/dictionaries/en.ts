@@ -898,6 +898,8 @@ export const en = {
   'audit.quarantine.correctiveRequestPay': 'Request send',
   'audit.quarantine.correctiveApprovePay': 'Approve and send (PAY)',
   'audit.quarantine.correctiveStatus': 'Corrective: {status}',
+  'audit.quarantine.correctiveStatusSync': 'Status query (STATUS): {status}',
+  'audit.quarantine.correctiveReconcile': 'Reconciliation (RECONCILE): {status}',
   'audit.quarantine.correctiveError': 'Could not advance the corrective lifecycle.',
   'audit.quarantine.traceAria': 'View full traceability of row {row}',
   'audit.quarantine.traceLink': 'Lineage',

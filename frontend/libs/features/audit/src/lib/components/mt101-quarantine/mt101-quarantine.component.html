@@ -115,6 +115,12 @@
             <li>{{ i18n.t('audit.quarantine.confirmSet', { set: corr.correctiveSetId }) }}</li>
             <li><span class="q__status--{{ corr.status }}">{{ corr.status }}</span></li>
             <li class="q__muted">PAY: {{ payStatusFor(corr.rebuildRunId) }}</li>
+            @if (corr.statusSyncStatus && corr.statusSyncStatus !== 'PENDING') {
+              <li class="q__muted" [class.q__error]="corr.statusSyncStatus === 'FAILED'">{{ i18n.t('audit.quarantine.correctiveStatusSync', { status: corr.statusSyncStatus }) }}</li>
+            }
+            @if (corr.reconciliationStatus && corr.reconciliationStatus !== 'PENDING') {
+              <li class="q__muted" [class.q__error]="corr.reconciliationStatus === 'FAILED'">{{ i18n.t('audit.quarantine.correctiveReconcile', { status: corr.reconciliationStatus }) }}</li>
+            }
           </ul>
           <div class="q__actions">
             @if (corr.status === 'BUILT' || corr.status === 'VALIDATED') {

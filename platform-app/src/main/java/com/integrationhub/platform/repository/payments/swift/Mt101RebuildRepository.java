@@ -787,6 +787,24 @@ public class Mt101RebuildRepository {
         }
     }
 
+    /** P2 v20: estados de sincronizacion post-PAY (STATUS/RECONCILE) para visibilidad operativa. */
+    public PayStageSync payStageSync(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "select status_sync_status, reconciliation_status from mt101_rebuild_run where rebuild_run_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return new PayStageSync("PENDING", "PENDING");
+                }
+                return new PayStageSync(rs.getString("status_sync_status"), rs.getString("reconciliation_status"));
+            }
+        }
+    }
+
+    public record PayStageSync(String statusSyncStatus, String reconciliationStatus) {
+    }
+
     /** B2': registra fallo de PAY; el operador debe solicitar de nuevo si corresponde. */
     public void markPayFailed(DataSource dataSource, String rebuildRunId, String errorMessage) throws SQLException {
         markPayCompleted(dataSource, rebuildRunId, "FAILED", errorMessage);

@@ -130,6 +130,10 @@ export interface Mt101CorrectiveLifecycle {
   rebuildRunId: string;
   correctiveSetId: string;
   status: string;
+  /** P2 v20: resultado de MT101_STATUS tras el PAY (separado de status; PENDING/OK/FAILED/SKIPPED). */
+  statusSyncStatus?: string;
+  /** P2 v20: resultado de MT101_RECONCILE tras el PAY (separado de status). */
+  reconciliationStatus?: string;
 }
 
 /** Estado de un rebuild run gobernado: REQUESTED -> APPROVED -> BUILT -> VALIDATED/ARCHIVED/SENT/CONFIRMED/RECONCILED. */

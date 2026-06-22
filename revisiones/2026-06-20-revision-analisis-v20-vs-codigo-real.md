@@ -75,8 +75,11 @@ vez de "el PAY falló", y un fallo de STATUS no aborta el RECONCILE. Evidencia:
 `postPayStatusFailureDoesNotRevertSentAndIsVisibleSeparately` (PAY=SENT, status_sync=FAILED,
 reconciliation=OK, sin excepción). Backend swift: **245** tests, 0 fallos.
 
-Pendiente cosmético menor (no bloqueante): surfacear estos dos estados en el DTO/UI del run para
-que el operador los vea sin consultar la BD; el dato ya está persistido y es la fuente de verdad.
+Surfaceo a UI (cerrado): `CorrectiveLifecycleResult` lleva `statusSyncStatus`/`reconciliationStatus`
+(leídos con `payStageSync`), y el panel "Ciclo del correctivo" los muestra ("Consulta de estado
+(STATUS): FAILED", "Conciliación (RECONCILE): OK"), en rojo si FAILED. Frontend 214 + build verde.
+
+No quedan pendientes del v20.
 
 ## Conclusión
 

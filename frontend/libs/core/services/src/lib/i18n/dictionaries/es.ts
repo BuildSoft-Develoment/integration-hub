@@ -918,6 +918,8 @@ export const es = {
   'audit.quarantine.correctiveRequestPay': 'Solicitar envío',
   'audit.quarantine.correctiveApprovePay': 'Aprobar y enviar (PAY)',
   'audit.quarantine.correctiveStatus': 'Correctivo: {status}',
+  'audit.quarantine.correctiveStatusSync': 'Consulta de estado (STATUS): {status}',
+  'audit.quarantine.correctiveReconcile': 'Conciliación (RECONCILE): {status}',
   'audit.quarantine.correctiveError': 'No se pudo avanzar el ciclo del correctivo.',
   'audit.quarantine.traceAria': 'Ver trazabilidad completa de la fila {row}',
   'audit.quarantine.traceLink': 'Linaje',

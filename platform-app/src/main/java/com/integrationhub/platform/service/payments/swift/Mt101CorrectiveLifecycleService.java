@@ -116,7 +116,7 @@ public class Mt101CorrectiveLifecycleService {
                 status = normalize(run.status());
                 if (!"VALIDATED".equals(status)) {
                     // VALIDATE rechazo (o no avanzo a VALIDATED): no se archiva un correctivo invalido.
-                    return new CorrectiveLifecycleResult(runId, run.correctiveSetId(), run.status());
+                    return correctiveResult(dataSource, runId, run);
                 }
             }
             if ("VALIDATED".equals(status)) {
@@ -125,7 +125,7 @@ public class Mt101CorrectiveLifecycleService {
                 rebuildService.synchronizeLifecycle(connectionRef, run.originalFragmentSetId());
                 run = rebuildRepository.findRun(dataSource, runId);
             }
-            return new CorrectiveLifecycleResult(runId, run.correctiveSetId(), run.status());
+            return correctiveResult(dataSource, runId, run);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot advance corrective lifecycle for run " + runId, error);
         }
@@ -152,7 +152,7 @@ public class Mt101CorrectiveLifecycleService {
                 throw new IllegalStateException("cannot request corrective pay for run " + runId
                         + "; payStatus=" + run.payStatus());
             }
-            return new CorrectiveLifecycleResult(runId, run.correctiveSetId(), run.status());
+            return correctiveResult(dataSource, runId, run);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot request corrective pay for run " + runId, error);
         }
@@ -247,7 +247,7 @@ public class Mt101CorrectiveLifecycleService {
             }
             rebuildService.synchronizeLifecycle(connectionRef, run.originalFragmentSetId());
             run = rebuildRepository.findRun(dataSource, runId);
-            return new CorrectiveLifecycleResult(runId, run.correctiveSetId(), run.status());
+            return correctiveResult(dataSource, runId, run);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot pay corrective for run " + runId, error);
         }
@@ -299,7 +299,7 @@ public class Mt101CorrectiveLifecycleService {
             }
             rebuildService.synchronizeLifecycle(connectionRef, run.originalFragmentSetId());
             run = rebuildRepository.findRun(dataSource, runId);
-            return new CorrectiveLifecycleResult(runId, run.correctiveSetId(), run.status());
+            return correctiveResult(dataSource, runId, run);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot resolve uncertain PAY for run " + runId, error);
         }
@@ -611,6 +611,15 @@ public class Mt101CorrectiveLifecycleService {
                              String correctiveSetId, String connectionRef) {
     }
 
-    public record CorrectiveLifecycleResult(String rebuildRunId, String correctiveSetId, String status) {
+    public record CorrectiveLifecycleResult(String rebuildRunId, String correctiveSetId, String status,
+                                            String statusSyncStatus, String reconciliationStatus) {
+    }
+
+    /** Construye el resultado leyendo los estados de sincronizacion post-PAY (P2 v20). */
+    private CorrectiveLifecycleResult correctiveResult(DataSource dataSource, String runId,
+                                                       Mt101RebuildRepository.RebuildRun run) throws SQLException {
+        var sync = rebuildRepository.payStageSync(dataSource, runId);
+        return new CorrectiveLifecycleResult(runId, run.correctiveSetId(), run.status(),
+                sync.statusSyncStatus(), sync.reconciliationStatus());
     }
 }
