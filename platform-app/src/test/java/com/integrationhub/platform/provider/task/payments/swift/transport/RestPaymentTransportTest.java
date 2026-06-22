@@ -111,6 +111,28 @@ class RestPaymentTransportTest {
     }
 
     @Test
+    void readTimeoutYieldsUncertainNotRejected(WireMockRuntimeInfo wm) {
+        // El gateway tarda mas que el timeout: la peticion salio pero no hubo respuesta clara.
+        stubFor(any(anyUrl()).willReturn(aResponse()
+                .withFixedDelay(3000)
+                .withStatus(200)
+                .withBody("{\"accepted\":true}")));
+
+        var configuration = new LinkedHashMap<String, Object>();
+        configuration.put("transport", "REST");
+        configuration.put("rest", Map.of(
+                "url", wm.getHttpBaseUrl() + "/v1/swift/mt101",
+                "timeoutSeconds", 1));
+        configuration.put("retryPolicy", Map.of("maxRetries", 0));
+
+        var result = transport.send(sampleMessage("PROC-TO", "u"), configuration);
+
+        assertFalse(result.accepted());
+        assertTrue(result.uncertain(), "un timeout de lectura es INCIERTO, no un rechazo");
+        assertTrue(result.lastError().contains("timeout"));
+    }
+
+    @Test
     void performsLoginRequestAndUsesReturnedBearerToken(WireMockRuntimeInfo wm) {
         stubFor(any(urlEqualTo("/oauth/token")).willReturn(aResponse()
                 .withStatus(200)

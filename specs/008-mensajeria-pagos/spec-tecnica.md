@@ -372,6 +372,26 @@ Regla de aceptacion del transporte:
   responde `accepted=false`, el fragmento/archivo se marca `REJECTED` aunque no
   exista mensaje de error legible.
 
+### PAY correctivo gobernado
+
+El PAY de un rebuild correctivo usa maker-checker y no reusa ciegamente el estado
+del archivo original:
+
+- `requestPay` solo aplica a rebuilds `ARCHIVED` y persiste el hash deterministico
+  del payload archivado por fragmento.
+- `approveAndPay` recalcula el hash antes de enviar; si no coincide, el request
+  queda `INVALIDATED` y no hay llamada al transporte.
+- el claim de ejecucion es atomico y guarda `pay_claimed_payload_hash` +
+  `pay_lease_until` para impedir doble envio por checkers concurrentes.
+- si el proceso se cae o vence el lease con `pay_status=EXECUTING`, el scheduler
+  lo marca `UNCERTAIN`; no se reintenta automaticamente.
+- el resultado se persiste por fragmento en `mt101_corrective_pay_fragment`.
+  Si hay aceptados y rechazados en el mismo run, el estado global es
+  `PARTIALLY_SENT`; si todos fallan, queda `FAILED`; si todos aceptan, `SENT`.
+- luego de PAY, el flujo correctivo ejecuta `MT101_STATUS` y `MT101_RECONCILE`
+  cuando esas tareas existen en el proceso. La ausencia de esas tareas no revierte
+  un PAY ya enviado.
+
 ### MT101_STATUS
 
 Primer consumidor productivo del SPI M-2 (`SuspendableTaskProvider`). Tres modos:
@@ -690,7 +710,7 @@ solo para `platform-admin` e `integration-admin`.
 | `payload_hash` | char(64) | SHA-256 del `raw_payload` |
 | `raw_payload` | text | FIN/XML/JSON generado |
 | `message_json` | text | representacion canonica para validar, archivar y pagar |
-| `status` | varchar(20) | BUILT/ARCHIVED/SENT/REJECTED |
+| `status` | varchar(20) | BUILT/VALIDATED/ARCHIVED/SENT/REJECTED/CONFIRMED/RECONCILED |
 | `error_message` | text | ultimo error operacional del fragmento |
 | `created_at` | timestamp | |
 | `updated_at` | timestamp | |
@@ -702,6 +722,34 @@ INDEX `(process_execution_id, task_definition_id)`.
 El estado de fragmento es operacional. El archivo bancario oficial sigue siendo
 `mt101_archive`; `mt101_build_fragment` habilita volumen alto, reintentos y
 reconstruccion controlada antes y despues de archivo/pago.
+
+### Tabla `mt101_rebuild_run`
+
+Columnas relevantes para PAY correctivo:
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `pay_status` | varchar(20) | NOT_REQUESTED/REQUESTED/EXECUTING/SENT/PARTIALLY_SENT/FAILED/INVALIDATED/UNCERTAIN |
+| `pay_requested_payload_hash` | char(64) | hash aprobado por maker antes del envio |
+| `pay_claimed_payload_hash` | char(64) | hash reclamado por checker al iniciar PAY |
+| `pay_lease_until` | timestamp | limite para declarar ejecucion incierta |
+| `pay_uncertain_reason` | text | razon operativa cuando queda `UNCERTAIN` |
+
+### Tabla `mt101_corrective_pay_fragment`
+
+Detalle auditable del PAY correctivo por fragmento:
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `rebuild_run_id` | bigint | run correctivo |
+| `corrective_set_id` | varchar(80) | lote correctivo generado |
+| `corrective_senders_reference` | varchar(16) | `:20:` del fragmento correctivo |
+| `payload_hash` | char(64) | hash del payload enviado |
+| `idempotency_key` | varchar(120) | clave enviada al transporte |
+| `gateway_reference` | varchar(120) | referencia devuelta por gateway |
+| `pay_status` | varchar(20) | SENT/REJECTED/FAILED |
+| `attempt_count` | integer | intentos registrados |
+| `last_error` | text | ultimo error operacional |
 
 ## Variables de entorno y secretos
 

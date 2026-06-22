@@ -151,7 +151,8 @@ public class Mt101StagingCorrectionService {
                             checkVersion,
                             checkVersion + 1));
                     connection.commit();
-                    emit(set, row.processExecutionId(), row.sourceFileHash(), recordNumber,
+                    emit(set, row.processExecutionId(), row.sourceFileHash(), recordNumber, row.stagingId(),
+                            row.sourceTaskDefinitionId(), row.sourceName(),
                             before, after, current.payloadJson(), newPayload, normalizeActor(correctedBy));
                     return new CorrectionResult(set, recordNumber, updated, checkVersion + 1);
                 } catch (SQLException | RuntimeException error) {
@@ -236,11 +237,13 @@ public class Mt101StagingCorrectionService {
                 throw new IllegalArgumentException("no staging row " + stagingId
                         + " for set " + set + " and source file " + sourceFileHash);
             }
-            return new ResolvedRow(fragment.processExecutionId(), sourceFileHash, recordNumber - 1, stagingId, current);
+            return new ResolvedRow(fragment.processExecutionId(), sourceFileHash, recordNumber - 1, stagingId,
+                    failed.sourceTaskDefinitionId(), failed.sourceName(), current);
         }
     }
 
     private record ResolvedRow(long processExecutionId, String sourceFileHash, long recordIndex, long stagingId,
+                               Long sourceTaskDefinitionId, String sourceName,
                                Mt101StagingRecordRepository.StagingPayload current) {
     }
 
@@ -281,6 +284,9 @@ public class Mt101StagingCorrectionService {
                       Long processExecutionId,
                       String sourceFileHash,
                       long recordNumber,
+                      long stagingId,
+                      Long sourceTaskDefinitionId,
+                      String sourceName,
                       Map<String, Object> before,
                       Map<String, Object> after,
                       String rawBefore,
@@ -295,10 +301,18 @@ public class Mt101StagingCorrectionService {
         attrs.put("oldPayloadHash", sha256Hex(rawBefore == null ? "" : rawBefore));
         attrs.put("newPayloadHash", sha256Hex(rawAfter == null ? "" : rawAfter));
         attrs.put("changedFields", String.join(",", changedFields(before, after)));
+        attrs.put("stagingId", String.valueOf(stagingId));
+        attrs.put("sourceRecordNumber", String.valueOf(recordNumber));
+        if (sourceTaskDefinitionId != null) {
+            attrs.put("sourceTaskDefinitionId", String.valueOf(sourceTaskDefinitionId));
+        }
+        if (sourceName != null && !sourceName.isBlank()) {
+            attrs.put("sourceName", sourceName);
+        }
         var envelope = new AuditEnvelope(
                 UUID.randomUUID().toString(),
                 processExecutionId == null ? null : "exec-" + processExecutionId,
-                fragmentSetId + ":" + recordNumber,
+                fragmentSetId + ":" + sourceFileHash + ":" + stagingId,
                 AuditLevel.RECORD,
                 "STAGING_ROW_CORRECTED",
                 "CORRECTED",

@@ -33,11 +33,15 @@ describe('Mt101QuarantineComponent', () => {
   let requestCalls: number;
   let approveCalls: number;
   let executeCalls: number;
+  let correctCalls: number;
+  let lastCorrectionVersion: number | undefined;
 
   beforeEach(() => {
     requestCalls = 0;
     approveCalls = 0;
     executeCalls = 0;
+    correctCalls = 0;
+    lastCorrectionVersion = undefined;
     const api = {
       mt101RequestRebuildRun: () => {
         requestCalls++;
@@ -55,6 +59,19 @@ describe('Mt101QuarantineComponent', () => {
       mt101FailedRecords: () => of([] as Mt101FailedRecord[]),
       mt101BuildQuarantine: () => of({ fragmentSetId: 'S', quarantined: 0 }),
       mt101RebuildRuns: () => of([]),
+      mt101StagingRow: () => of({
+        fragmentSetId: 'S',
+        sourceFileHash: 'hashA',
+        recordNumber: 25,
+        stagingId: 10025,
+        payloadJson: '{"cargos":"BAD"}',
+        version: 7,
+      }),
+      mt101CorrectStagingRow: (query: { version: number }) => {
+        correctCalls++;
+        lastCorrectionVersion = query.version;
+        return of({ fragmentSetId: 'S', recordNumber: 25, updated: 1, version: 8 });
+      },
     } as unknown as AuditApiService;
     const route = { snapshot: { queryParamMap: { get: () => null } } } as unknown as ActivatedRoute;
 
@@ -121,6 +138,39 @@ describe('Mt101QuarantineComponent', () => {
       component.fragmentSetId = 'S';
       component.confirmBuild();
       expect(component.armed()).toBe('build');
+    });
+  });
+
+  describe('correccion de staging con If-Match', () => {
+    it('no guarda si no se cargo version ETag', () => {
+      component.fragmentSetId = 'S';
+      component.correctionPayload = '{"cargos":"OUR"}';
+      component.correctionVersion.set(null);
+
+      component.saveCorrection(failed({
+        id: 1,
+        sourceFileHash: 'hashA',
+        sourceRecordNumber: 25,
+        stagingId: 10025,
+      }));
+
+      expect(correctCalls).toBe(0);
+    });
+
+    it('envia la version cargada al guardar', () => {
+      component.fragmentSetId = 'S';
+      component.correctionPayload = '{"cargos":"OUR"}';
+      component.correctionVersion.set(7);
+
+      component.saveCorrection(failed({
+        id: 1,
+        sourceFileHash: 'hashA',
+        sourceRecordNumber: 25,
+        stagingId: 10025,
+      }));
+
+      expect(correctCalls).toBe(1);
+      expect(lastCorrectionVersion).toBe(7);
     });
   });
 });

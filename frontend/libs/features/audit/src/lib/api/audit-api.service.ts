@@ -328,7 +328,7 @@ export class AuditApiService {
     recordNumber: number;
     stagingId: number;
     payload: string;
-    version?: number;
+    version: number;
     reason?: string;
     ticketRef?: string;
   }): Observable<{ fragmentSetId: string; recordNumber: number; updated: number; version: number }> {
@@ -346,10 +346,7 @@ export class AuditApiService {
     if (query.ticketRef?.trim()) {
       httpParams = httpParams.set('ticketRef', query.ticketRef.trim());
     }
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (query.version !== undefined && query.version !== null) {
-      headers['If-Match'] = `"${query.version}"`;
-    }
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', 'If-Match': `"${query.version}"` };
     return this.http.patch<{ fragmentSetId: string; recordNumber: number; updated: number; version: number }>(
       '/api/query/mt101-quarantine/staging-row', query.payload, { params: httpParams, headers });
   }

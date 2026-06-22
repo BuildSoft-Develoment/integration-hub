@@ -285,7 +285,12 @@ export class Mt101QuarantineComponent {
         }
       },
       error: () => {
-        // Si no se puede cargar (fila purgada, etc.) el operador puede teclear el payload a mano.
+        if (this.correctingRow() === row.id) {
+          this.correctingRow.set(null);
+          this.correctionPayload = '';
+          this.correctionVersion.set(null);
+          this.error.set(this.i18n.t('audit.quarantine.correctError'));
+        }
       },
     });
   }
@@ -293,6 +298,10 @@ export class Mt101QuarantineComponent {
   saveCorrection(row: Mt101FailedRecord): void {
     const sourceFileHash = row.sourceFileHash?.trim();
     if (row.sourceRecordNumber === null || row.stagingId === null || !sourceFileHash || !this.correctionPayload.trim()) {
+      return;
+    }
+    if (this.correctionVersion() === null) {
+      this.error.set(this.i18n.t('audit.quarantine.correctError'));
       return;
     }
     this.loading.set(true);
@@ -303,7 +312,7 @@ export class Mt101QuarantineComponent {
       recordNumber: row.sourceRecordNumber,
       stagingId: row.stagingId,
       payload: this.correctionPayload,
-      version: this.correctionVersion() ?? undefined,
+      version: this.correctionVersion() as number,
       connectionRef: this.connectionRef,
       reason: this.correctionReason,
       ticketRef: this.correctionTicketRef,
@@ -569,7 +578,7 @@ export class Mt101QuarantineComponent {
           return;
         }
         const corrective = runs.find((run) =>
-          ['BUILT', 'VALIDATED', 'ARCHIVED', 'SENT', 'PARTIALLY_FAILED', 'CONFIRMED'].includes(run.status));
+          ['BUILT', 'VALIDATED', 'ARCHIVED', 'SENT', 'PARTIALLY_SENT', 'PARTIALLY_FAILED', 'CONFIRMED'].includes(run.status));
         if (corrective) {
           this.correctiveRun.set({
             rebuildRunId: corrective.rebuildRunId,

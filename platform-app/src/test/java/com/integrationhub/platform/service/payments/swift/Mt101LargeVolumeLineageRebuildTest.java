@@ -438,6 +438,8 @@ class Mt101LargeVolumeLineageRebuildTest {
                     + "pay_requested_by varchar(120), pay_requested_at timestamp,"
                     + "pay_approved_by varchar(120), pay_approved_at timestamp,"
                     + "pay_claimed_by varchar(120), pay_claimed_at timestamp,"
+                    + "pay_requested_payload_hash varchar(64), pay_claimed_payload_hash varchar(64),"
+                    + "pay_lease_until timestamp, pay_uncertain_reason text,"
                     + "pay_completed_at timestamp, pay_error_message text,"
                     + "created_at timestamp not null default current_timestamp,"
                     + "approved_at timestamp, executed_at timestamp, built_at timestamp, completed_at timestamp,"

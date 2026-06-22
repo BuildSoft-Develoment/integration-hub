@@ -56,6 +56,7 @@ Excepciones legitimas (no son acceso a datos de negocio):
 | Outbox de auditoria | `AuditSpoolRepository` (claim `FOR UPDATE SKIP LOCKED`, retry/dead, cleanup) | `OutboxRelay`, `AuditSpoolWriter` |
 | Store frio de registro | `PostgresColdStore` / `ClickHouseColdStore` | `AuditEventHandler` |
 | Archivo/estado/conciliacion MT101 | `Mt101*Repository` (`repository/payments/swift`) | `Mt101Archive/Status/Reconcile/BuildFromTable*TaskProvider` |
+| Rebuild/correccion/PAY correctivo MT101 | `Mt101RebuildRepository` (`mt101_rebuild_*`, `mt101_corrective_pay_fragment`) | `Mt101RebuildService`, `Mt101CorrectiveLifecycleService`, `Mt101StagingCorrectionService` |
 | Funcion de BD / stored procedure | `*DatabaseFunctionDialect` / `*StoredProcedureDialect` | `DatabaseFunctionTaskProvider` / `StoredProcedureTaskProvider` |
 
 ## Consecuencias

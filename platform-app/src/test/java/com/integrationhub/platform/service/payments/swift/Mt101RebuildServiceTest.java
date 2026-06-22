@@ -8,6 +8,7 @@ import com.integrationhub.platform.provider.task.payments.swift.Mt101FragmentSto
 import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRepository;
 import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
+import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
@@ -185,6 +186,39 @@ class Mt101RebuildServiceTest {
 
         assertEquals(0, service.synchronizeLifecycle(null, "SET"),
                 "no debe reescribir si ya no hay avance de lifecycle");
+    }
+
+    @Test
+    void schedulerDiscoversActiveRunsInNonDefaultJdbcConnections() throws Exception {
+        var remoteDataSource = schemaDataSource("remote_scheduler");
+        createSchema("remote_scheduler");
+        prepareSchema(remoteDataSource);
+        insertRemoteActiveRun(remoteDataSource);
+
+        var remotePool = new ConnectionPoolManager(null, null) {
+            @Override
+            public List<String> activeJdbcConnectionRefs() {
+                return List.of("remote-jdbc");
+            }
+
+            @Override
+            public DataSource resolveJdbcDataSource(String connectionRef) {
+                assertEquals("remote-jdbc", connectionRef);
+                return remoteDataSource;
+            }
+        };
+        var schedulerService = new Mt101RebuildService(dataSource, remotePool, null, null,
+                new Mt101FailedRecordRepository(), new Mt101FragmentRepository());
+
+        assertEquals("BUILT", queryString(remoteDataSource,
+                "select status from mt101_rebuild_run where rebuild_run_id = ?", "FIX-REMOTE"));
+
+        assertEquals(1, schedulerService.synchronizeActiveLifecycles());
+
+        assertEquals("ARCHIVED", queryString(remoteDataSource,
+                "select status from mt101_rebuild_run where rebuild_run_id = ?", "FIX-REMOTE"));
+        assertEquals(null, queryString("select status from mt101_rebuild_run where rebuild_run_id = ?", "FIX-REMOTE"),
+                "el run no existe en default; el avance vino de la conexion JDBC activa");
     }
 
     @Test
@@ -397,7 +431,11 @@ class Mt101RebuildServiceTest {
     }
 
     private String queryString(String sql, String... params) throws SQLException {
-        try (Connection connection = dataSource.getConnection();
+        return queryString(dataSource, sql, params);
+    }
+
+    private String queryString(DataSource targetDataSource, String sql, String... params) throws SQLException {
+        try (Connection connection = targetDataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
             for (int i = 0; i < params.length; i++) {
                 statement.setString(i + 1, params[i]);
@@ -425,7 +463,11 @@ class Mt101RebuildServiceTest {
     }
 
     private void prepareSchema() throws SQLException {
-        try (Connection connection = dataSource.getConnection();
+        prepareSchema(dataSource);
+    }
+
+    private void prepareSchema(DataSource targetDataSource) throws SQLException {
+        try (Connection connection = targetDataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("drop table if exists mt101_rebuild_selection");
             statement.executeUpdate("drop table if exists mt101_rebuild_run");
@@ -479,6 +521,8 @@ class Mt101RebuildServiceTest {
                     + "pay_requested_by varchar(120), pay_requested_at timestamp,"
                     + "pay_approved_by varchar(120), pay_approved_at timestamp,"
                     + "pay_claimed_by varchar(120), pay_claimed_at timestamp,"
+                    + "pay_requested_payload_hash varchar(64), pay_claimed_payload_hash varchar(64),"
+                    + "pay_lease_until timestamp, pay_uncertain_reason text,"
                     + "pay_completed_at timestamp, pay_error_message text,"
                     + "created_at timestamp not null default current_timestamp,"
                     + "approved_at timestamp, executed_at timestamp, built_at timestamp, completed_at timestamp,"
@@ -531,5 +575,40 @@ class Mt101RebuildServiceTest {
         pgDataSource.setUser(POSTGRES.getUsername());
         pgDataSource.setPassword(POSTGRES.getPassword());
         return pgDataSource;
+    }
+
+    private DataSource schemaDataSource(String schema) {
+        var pgDataSource = new PGSimpleDataSource();
+        pgDataSource.setURL(POSTGRES.getJdbcUrl() + "&currentSchema=" + schema);
+        pgDataSource.setUser(POSTGRES.getUsername());
+        pgDataSource.setPassword(POSTGRES.getPassword());
+        return pgDataSource;
+    }
+
+    private void createSchema(String schema) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("drop schema if exists " + schema + " cascade");
+            statement.executeUpdate("create schema " + schema);
+        }
+    }
+
+    private void insertRemoteActiveRun(DataSource targetDataSource) throws SQLException {
+        try (Connection connection = targetDataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    insert into mt101_rebuild_run
+                    (rebuild_run_id, original_fragment_set_id, corrective_set_id, status, connection_ref)
+                    values ('FIX-REMOTE', 'SET-REMOTE', 'FIX-REMOTE', 'BUILT', 'remote-jdbc')
+                    """);
+            statement.executeUpdate("""
+                    insert into mt101_build_fragment
+                    (fragment_set_id, process_execution_id, task_definition_id, source_table,
+                     source_row_from, source_row_to, fragment_index, fragment_total,
+                     senders_reference, payload_hash, raw_payload, message_json, status)
+                    values ('FIX-REMOTE', 200, 30, 'staging_record',
+                            1, 1, 1, 1, 'RREMOTE1', repeat('7', 64), '{}', '{}', 'ARCHIVED')
+                    """);
+        }
     }
 }

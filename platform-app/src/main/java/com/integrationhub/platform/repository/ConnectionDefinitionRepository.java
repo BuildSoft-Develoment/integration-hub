@@ -25,4 +25,7 @@ public class ConnectionDefinitionRepository implements PanacheRepository<Connect
     public List<ConnectionDefinition> listAllOrdered() {
         return list("order by name");
     }
+    public List<ConnectionDefinition> listActiveOrdered() {
+        return list("active = true order by name");
+    }
 }

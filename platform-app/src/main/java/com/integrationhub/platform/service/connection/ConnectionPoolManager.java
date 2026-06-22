@@ -13,6 +13,7 @@ import javax.sql.DataSource;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
@@ -33,6 +34,13 @@ public class ConnectionPoolManager {
     }
     public DataSource resolveJdbcDataSource(String connectionRef) {
         return resolveJdbcTarget(connectionRef).dataSource();
+    }
+    public List<String> activeJdbcConnectionRefs() {
+        return connectionDefinitionRepository.listActiveOrdered().stream()
+                .filter(definition -> definition.connectionType != null && definition.connectionType.isJdbc())
+                .map(definition -> definition.name)
+                .filter(name -> name != null && !name.isBlank())
+                .toList();
     }
     public void testJdbcConnection(String connectionName, String configurationJson) {
         var definition = new ConnectionDefinition();

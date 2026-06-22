@@ -123,12 +123,18 @@ Cubre las tareas QA T-022 (sprint 2 inbound + reconciliación) y T-028
 - correctivo con algunos fragmentos rechazados queda `PARTIALLY_FAILED`
 - `PARTIALLY_FAILED` actualiza solo las selecciones rechazadas, no todo el run
 - runs correctivos exponen `payStatus`, requester y checker para UI
+- scheduler revisa runs activos en la base por defecto y conexiones JDBC activas
+- PAY correctivo vencido en `EXECUTING` pasa a `UNCERTAIN` sin reintento automatico
 
 ### PAY correctivo
 - request PAY solo aplica a runs `ARCHIVED`
 - checker no puede ser el mismo requester
 - claim atomico evita doble envio cuando dos checkers compiten
 - fallo de transporte deja `pay_status=FAILED` para reintento gobernado
+- request PAY guarda el hash del payload archivado y el checker lo revalida antes de enviar
+- si el payload archivado cambia entre request y approve, PAY queda `INVALIDATED`
+- envio parcial deja `pay_status=PARTIALLY_SENT` y detalle por fragmento
+- despues de PAY se ejecutan `MT101_STATUS` y `MT101_RECONCILE` cuando existen en el proceso
 
 ## Frontend (sprint 1 + 2 + 3)
 
@@ -154,11 +160,14 @@ Cubre las tareas QA T-022 (sprint 2 inbound + reconciliación) y T-028
 |------|-------------------|
 | BUILD/VALIDATE/ARCHIVE/PAY/ROUTE/RECONCILE/STATUS/PARSE/SPLIT/REPAIR | tests unitarios backend (113 tests) |
 | Correctivo/reproceso sin fallback | `Mt101CorrectiveLifecycleServiceTest`, `Mt101RebuildServiceTest`, `Mt101StagingCorrectionServiceTest`, `Mt101RowTimelineServiceTest`, `Mt101ReprocessServiceTest`, `Mt101MultiSourceLineageTest`, `Mt101QuarantineServiceTest`, `Mt101LargeVolumeLineageRebuildTest`, `Mt101ArchiveTaskProviderTest`, `Mt101BuildFromTableTaskProviderTest` |
+| PAY correctivo gobernado V44 | `Mt101CorrectiveLifecycleServiceTest`, `Mt101RebuildServiceTest`, `Mt101StagingCorrectionServiceTest`, `Mt101MillionFileProcessE2EIT` |
 | RBAC payments-operator | `PaymentsOperatorRoleIT` |
 | Pipeline end-to-end | `Mt101OutboundEndToEndIT` |
 | Forms TS providers | vitest specs (10 providers × ~5 tests) |
 | M-1b registry | `process-task-form-registry.spec.ts` |
 
 Ejecucion correctiva 2026-06-21: `mvn -pl platform-app "-Dtest=Mt101CorrectiveLifecycleServiceTest,Mt101RebuildServiceTest,Mt101StagingCorrectionServiceTest,Mt101RowTimelineServiceTest,Mt101ReprocessServiceTest,Mt101MultiSourceLineageTest,Mt101QuarantineServiceTest,Mt101LargeVolumeLineageRebuildTest,Mt101ArchiveTaskProviderTest,Mt101BuildFromTableTaskProviderTest" test` (59 tests PASS).
+
+Ejecucion V44 2026-06-21: `mvn -pl platform-app "-Dtest=Mt101CorrectiveLifecycleServiceTest,Mt101StagingCorrectionServiceTest" test` (13 tests PASS), `mvn -pl platform-app "-Dtest=Mt101RebuildServiceTest" test` (8 tests PASS, incluye scheduler sobre conexion JDBC no-default) y `mvn -pl platform-app "-Dtest=Mt101MillionFileProcessE2EIT" "-De2e.rows=1000" "-De2e.negativeRows=200" "-De2e.ncRows=200" test` (3 tests PASS).
 
 Ejecución: `mvn -pl platform-app test` (backend) + `npx nx run web:test` (frontend).

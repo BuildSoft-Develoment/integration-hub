@@ -239,6 +239,7 @@ class Mt101MassivePipelinePerfIT {
                     + "source_file_hash varchar(64),"
                     + "source_record_number bigint not null,"
                     + "staging_id bigint,"
+                    + "source_task_definition_id bigint, source_name varchar(255),"
                     + "original_senders_reference varchar(16),"
                     + "original_transaction_reference varchar(35),"
                     + "current_senders_reference varchar(16),"
@@ -255,7 +256,7 @@ class Mt101MassivePipelinePerfIT {
                     + "source_file_name varchar(255), process_execution_id bigint)");
             statement.executeUpdate("create table mt101_archive ("
                     + "id bigserial primary key, envelope_id bigint references swift_message_envelope(id),"
-                    + "sender_lt char(12),"
+                    + "sender_lt char(12), process_execution_id bigint,"
                     + "senders_reference varchar(16) not null, customer_specified_reference varchar(16),"
                     + "message_index integer, message_total integer, requested_execution_date date,"
                     + "instructing_party_kind char(1), instructing_party_value text,"

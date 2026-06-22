@@ -9,6 +9,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import java.io.IOException;
+import java.net.ConnectException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -201,6 +202,8 @@ public class RestPaymentTransport implements PaymentMessageTransport {
                                              Map<String, Object> expected) {
         var startedAt = System.currentTimeMillis();
         String lastError = null;
+        // Marca si el ultimo fallo dejo el envio en estado INCIERTO (pudo llegar al gateway).
+        boolean lastUncertain = false;
         for (int attempt = 1; attempt <= retry.maxRetries() + 1; attempt++) {
             try {
                 var request = buildRequest(method, url, headers, body, timeoutSeconds);
@@ -229,24 +232,39 @@ public class RestPaymentTransport implements PaymentMessageTransport {
                 }
             } catch (java.net.http.HttpTimeoutException timeoutException) {
                 // HttpTimeoutException extiende IOException; va PRIMERO para que el catch
-                // generico de IO no lo capture.
+                // generico de IO no lo capture. Timeout de lectura = INCIERTO: la peticion ya
+                // salio y el gateway pudo recibirla; no es un rechazo.
                 lastError = "timeout: " + timeoutException.getMessage();
+                lastUncertain = true;
                 if (!retry.shouldRetry("TIMEOUT")) {
-                    return TransportResult.rejected(attempt, System.currentTimeMillis() - startedAt, lastError);
+                    return TransportResult.uncertain(attempt, System.currentTimeMillis() - startedAt, lastError);
                 }
-            } catch (IOException ioException) {
-                lastError = "IO error: " + ioException.getMessage();
+            } catch (ConnectException connectException) {
+                // Conexion rechazada ANTES de enviar: fallo DEFINITIVO, seguro reintentar/reenviar.
+                lastError = "connection refused: " + connectException.getMessage();
+                lastUncertain = false;
                 if (!retry.shouldRetry("CONNECTION_REFUSED")) {
                     return TransportResult.rejected(attempt, System.currentTimeMillis() - startedAt, lastError);
                 }
+            } catch (IOException ioException) {
+                // Otro IO (p.ej. conexion cortada tras enviar) = INCIERTO: no sabemos si llego.
+                lastError = "IO error: " + ioException.getMessage();
+                lastUncertain = true;
+                if (!retry.shouldRetry("CONNECTION_REFUSED")) {
+                    return TransportResult.uncertain(attempt, System.currentTimeMillis() - startedAt, lastError);
+                }
             } catch (InterruptedException interruptedException) {
                 Thread.currentThread().interrupt();
-                return TransportResult.rejected(attempt, System.currentTimeMillis() - startedAt,
+                // Interrumpido a mitad: no sabemos si el envio se completo -> INCIERTO.
+                return TransportResult.uncertain(attempt, System.currentTimeMillis() - startedAt,
                         "interrupted: " + interruptedException.getMessage());
             }
             sleepBackoff(retry, attempt);
         }
-        return TransportResult.rejected(retry.maxRetries() + 1, System.currentTimeMillis() - startedAt, lastError);
+        // Reintentos agotados: si el ultimo fallo fue incierto, NO lo reportamos como rechazo.
+        return lastUncertain
+                ? TransportResult.uncertain(retry.maxRetries() + 1, System.currentTimeMillis() - startedAt, lastError)
+                : TransportResult.rejected(retry.maxRetries() + 1, System.currentTimeMillis() - startedAt, lastError);
     }
 
     private HttpRequest buildRequest(String method, String url, Map<String, String> headers,

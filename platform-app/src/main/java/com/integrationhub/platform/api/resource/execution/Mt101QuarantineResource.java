@@ -287,10 +287,10 @@ public class Mt101QuarantineResource {
         }
     }
 
-    /** Parsea el header If-Match (ETag) a la version esperada; null si no viene. */
+    /** Parsea el header If-Match (ETag) a la version esperada; obligatorio para mutaciones. */
     private static Long parseIfMatch(String ifMatch) {
         if (ifMatch == null || ifMatch.isBlank()) {
-            return null;
+            throw new BadRequestException("If-Match header is required for staging-row corrections");
         }
         var token = ifMatch.trim();
         if (token.startsWith("W/")) {

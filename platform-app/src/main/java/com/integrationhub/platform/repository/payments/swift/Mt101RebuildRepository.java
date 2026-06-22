@@ -82,6 +82,8 @@ public class Mt101RebuildRepository {
                        requested_by, approved_by, executed_by, request_reason, approval_reason,
                        selected_rows, affected_fragments, error_message,
                        reference_code, connection_ref, pay_status, pay_requested_by, pay_approved_by,
+                       pay_requested_payload_hash, pay_claimed_payload_hash, pay_lease_until,
+                       pay_uncertain_reason, pay_error_message,
                        created_at, approved_at, executed_at, built_at, completed_at, updated_at
                   from mt101_rebuild_run
                  where rebuild_run_id = ?
@@ -111,6 +113,11 @@ public class Mt101RebuildRepository {
                         rs.getString("pay_status"),
                         rs.getString("pay_requested_by"),
                         rs.getString("pay_approved_by"),
+                        rs.getString("pay_requested_payload_hash"),
+                        rs.getString("pay_claimed_payload_hash"),
+                        timestamp(rs, "pay_lease_until"),
+                        rs.getString("pay_uncertain_reason"),
+                        rs.getString("pay_error_message"),
                         timestamp(rs, "created_at"),
                         timestamp(rs, "approved_at"),
                         timestamp(rs, "executed_at"),
@@ -254,7 +261,11 @@ public class Mt101RebuildRepository {
             return new LifecycleStatus(null, false);
         }
         var rejected = fragments.getOrDefault("REJECTED", 0L);
+        var sent = fragments.getOrDefault("SENT", 0L);
         var total = fragments.values().stream().mapToLong(Long::longValue).sum();
+        if (rejected > 0 && sent > 0) {
+            return new LifecycleStatus("PARTIALLY_SENT", false);
+        }
         if (rejected > 0 && rejected == total) {
             return new LifecycleStatus("FAILED", false);
         }
@@ -342,7 +353,7 @@ public class Mt101RebuildRepository {
             case "VALIDATED" -> 50;
             case "ARCHIVED" -> 60;
             case "SENT" -> 70;
-            case "PARTIALLY_FAILED" -> 75;
+            case "PARTIALLY_SENT", "PARTIALLY_FAILED" -> 75;
             case "CONFIRMED" -> 80;
             case "RECONCILED", "RESOLVED" -> 90;
             case "FAILED", "CANCELLED" -> 100;
@@ -560,7 +571,7 @@ public class Mt101RebuildRepository {
      */
     public List<ActiveSet> findActiveOriginalSets(DataSource dataSource) throws SQLException {
         var sql = "select distinct original_fragment_set_id, connection_ref from mt101_rebuild_run "
-                + "where status in ('BUILDING', 'BUILT', 'VALIDATED', 'ARCHIVED', 'SENT', 'PARTIALLY_FAILED', 'CONFIRMED')";
+                + "where status in ('BUILDING', 'BUILT', 'VALIDATED', 'ARCHIVED', 'SENT', 'PARTIALLY_SENT', 'PARTIALLY_FAILED', 'CONFIRMED')";
         var result = new ArrayList<ActiveSet>();
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql);
@@ -585,18 +596,47 @@ public class Mt101RebuildRepository {
         }
     }
 
+    /** Hash deterministico del set correctivo ARCHIVED que el maker solicita enviar. */
+    public String archivedCorrectivePayloadHash(DataSource dataSource, String correctiveSetId) throws SQLException {
+        var sql = """
+                select encode(sha256(string_agg(senders_reference || ':' || payload_hash, '|' order by senders_reference)::bytea), 'hex') as payload_hash,
+                       count(*) filter (where status = 'ARCHIVED') as archived_count,
+                       count(*) as total_count
+                  from mt101_build_fragment
+                 where fragment_set_id = ?
+                """;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, correctiveSetId);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                var archived = rs.getLong("archived_count");
+                var total = rs.getLong("total_count");
+                if (total == 0 || archived != total) {
+                    return null;
+                }
+                return rs.getString("payload_hash");
+            }
+        }
+    }
+
     /** B2': solicita el envio del correctivo (maker) con estado explicito PAY. */
-    public int requestPay(DataSource dataSource, String rebuildRunId, String requestedBy) throws SQLException {
+    public int requestPay(DataSource dataSource, String rebuildRunId, String requestedBy,
+                          String payloadHash) throws SQLException {
         var sql = "update mt101_rebuild_run set pay_status = 'REQUESTED', pay_requested_by = ?, "
                 + "pay_requested_at = current_timestamp, pay_claimed_by = null, pay_claimed_at = null, "
                 + "pay_approved_by = null, pay_approved_at = null, pay_completed_at = null, "
-                + "pay_error_message = null, updated_at = current_timestamp "
+                + "pay_requested_payload_hash = ?, pay_claimed_payload_hash = null, pay_lease_until = null, "
+                + "pay_uncertain_reason = null, pay_error_message = null, updated_at = current_timestamp "
                 + "where rebuild_run_id = ? and status = 'ARCHIVED' "
-                + "and pay_status in ('NOT_REQUESTED', 'FAILED')";
+                + "and pay_status in ('NOT_REQUESTED', 'FAILED', 'INVALIDATED')";
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
             statement.setString(1, requestedBy);
-            statement.setString(2, rebuildRunId);
+            statement.setString(2, payloadHash);
+            statement.setString(3, rebuildRunId);
             return statement.executeUpdate();
         }
     }
@@ -617,44 +657,184 @@ public class Mt101RebuildRepository {
      * Claim atomico REQUESTED -> EXECUTING. Solo la transaccion que gana este update
      * puede invocar el provider MT101_PAY; asi se evita doble envio concurrente.
      */
-    public boolean claimPayForExecution(DataSource dataSource, String rebuildRunId, String approvedBy) throws SQLException {
+    public boolean claimPayForExecution(DataSource dataSource, String rebuildRunId, String approvedBy,
+                                        String payloadHash, LocalDateTime leaseUntil) throws SQLException {
         var sql = "update mt101_rebuild_run set pay_status = 'EXECUTING', pay_claimed_by = ?, "
                 + "pay_claimed_at = current_timestamp, pay_approved_by = ?, pay_approved_at = current_timestamp, "
-                + "updated_at = current_timestamp "
+                + "pay_claimed_payload_hash = ?, pay_lease_until = ?, updated_at = current_timestamp "
                 + "where rebuild_run_id = ? and status = 'ARCHIVED' and pay_status = 'REQUESTED' "
-                + "and pay_requested_by is not null and pay_requested_by <> ?";
+                + "and pay_requested_by is not null and pay_requested_by <> ? "
+                + "and pay_requested_payload_hash = ?";
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
             statement.setString(1, approvedBy);
             statement.setString(2, approvedBy);
-            statement.setString(3, rebuildRunId);
-            statement.setString(4, approvedBy);
+            statement.setString(3, payloadHash);
+            statement.setObject(4, leaseUntil);
+            statement.setString(5, rebuildRunId);
+            statement.setString(6, approvedBy);
+            statement.setString(7, payloadHash);
             return statement.executeUpdate() == 1;
+        }
+    }
+
+    public int invalidatePayRequest(DataSource dataSource, String rebuildRunId, String reason) throws SQLException {
+        var sql = "update mt101_rebuild_run set pay_status = 'INVALIDATED', pay_error_message = ?, "
+                + "pay_completed_at = current_timestamp, updated_at = current_timestamp "
+                + "where rebuild_run_id = ? and pay_status = 'REQUESTED'";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, reason);
+            statement.setString(2, rebuildRunId);
+            return statement.executeUpdate();
         }
     }
 
     /** B2': registra que el PAY correctivo ejecuto sin error local. */
     public void markPaySent(DataSource dataSource, String rebuildRunId) throws SQLException {
-        var sql = "update mt101_rebuild_run set pay_status = 'SENT', pay_completed_at = current_timestamp, "
-                + "pay_error_message = null, updated_at = current_timestamp "
+        markPayCompleted(dataSource, rebuildRunId, "SENT", null);
+    }
+
+    /** B2': registra resultado global del PAY correctivo. */
+    public void markPayCompleted(DataSource dataSource, String rebuildRunId, String payStatus,
+                                 String errorMessage) throws SQLException {
+        var sql = "update mt101_rebuild_run set pay_status = ?, pay_completed_at = current_timestamp, "
+                + "pay_lease_until = null, pay_error_message = ?, updated_at = current_timestamp "
                 + "where rebuild_run_id = ? and pay_status = 'EXECUTING'";
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
-            statement.setString(1, rebuildRunId);
+            statement.setString(1, payStatus);
+            statement.setString(2, errorMessage);
+            statement.setString(3, rebuildRunId);
             statement.executeUpdate();
         }
     }
 
     /** B2': registra fallo de PAY; el operador debe solicitar de nuevo si corresponde. */
     public void markPayFailed(DataSource dataSource, String rebuildRunId, String errorMessage) throws SQLException {
-        var sql = "update mt101_rebuild_run set pay_status = 'FAILED', pay_error_message = ?, "
-                + "pay_completed_at = current_timestamp, updated_at = current_timestamp "
+        markPayCompleted(dataSource, rebuildRunId, "FAILED", errorMessage);
+    }
+
+    /** B2': PAY incierto; no se reintenta automaticamente para evitar doble envio. */
+    public void markPayUncertain(DataSource dataSource, String rebuildRunId, String reason) throws SQLException {
+        var sql = "update mt101_rebuild_run set pay_status = 'UNCERTAIN', pay_uncertain_reason = ?, "
+                + "pay_error_message = ?, pay_completed_at = current_timestamp, updated_at = current_timestamp "
                 + "where rebuild_run_id = ? and pay_status = 'EXECUTING'";
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
-            statement.setString(1, errorMessage);
-            statement.setString(2, rebuildRunId);
+            statement.setString(1, reason);
+            statement.setString(2, reason);
+            statement.setString(3, rebuildRunId);
             statement.executeUpdate();
+        }
+    }
+
+    public int markExpiredPayExecutionsUncertain(DataSource dataSource, LocalDateTime now) throws SQLException {
+        var sql = "update mt101_rebuild_run set pay_status = 'UNCERTAIN', "
+                + "pay_uncertain_reason = 'PAY lease expired before completion; reconcile with MT101_STATUS before retry', "
+                + "pay_error_message = 'PAY lease expired before completion; reconcile with MT101_STATUS before retry', "
+                + "pay_completed_at = current_timestamp, updated_at = current_timestamp "
+                + "where pay_status = 'EXECUTING' and pay_lease_until is not null and pay_lease_until < ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setObject(1, now);
+            return statement.executeUpdate();
+        }
+    }
+
+    /** Refresca el detalle durable de PAY por fragmento correctivo completo. */
+    public int refreshPayFragmentsFromCorrectiveSet(DataSource dataSource, String rebuildRunId,
+                                                    String correctiveSetId) throws SQLException {
+        var sql = """
+                insert into mt101_corrective_pay_fragment
+                    (rebuild_run_id, corrective_set_id, corrective_senders_reference,
+                     source_file_hash, source_record_number, staging_id,
+                     payload_hash, idempotency_key, pay_status, error_message)
+                select ?, f.fragment_set_id, f.senders_reference,
+                       min(sel.source_file_hash),
+                       min(sel.source_record_number),
+                       min(sel.staging_id),
+                       f.payload_hash,
+                       'MT101:' || f.fragment_set_id || ':' || f.senders_reference || ':' || f.payload_hash,
+                       case
+                           when f.status = 'SENT' then 'SENT'
+                           when f.status = 'REJECTED' then 'REJECTED'
+                           else f.status
+                       end,
+                       max(f.error_message)
+                  from mt101_build_fragment f
+                  left join mt101_rebuild_selection sel
+                    on sel.rebuild_run_id = ?
+                   and sel.corrective_senders_reference = f.senders_reference
+                 where f.fragment_set_id = ?
+                 group by f.fragment_set_id, f.senders_reference, f.payload_hash, f.status
+                on conflict (rebuild_run_id, corrective_senders_reference) do update
+                    set pay_status = excluded.pay_status,
+                        error_message = excluded.error_message,
+                        payload_hash = excluded.payload_hash,
+                        idempotency_key = excluded.idempotency_key,
+                        updated_at = current_timestamp
+                """;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            statement.setString(2, rebuildRunId);
+            statement.setString(3, correctiveSetId);
+            return statement.executeUpdate();
+        }
+    }
+
+    /** Completa el detalle de PAY desde la muestra que devuelve el provider (gateway ref/intentos). */
+    public int updatePayFragmentResults(DataSource dataSource, String rebuildRunId,
+                                        Collection<PayFragmentResult> results) throws SQLException {
+        if (results == null || results.isEmpty()) {
+            return 0;
+        }
+        var sql = "update mt101_corrective_pay_fragment set gateway_reference = ?, attempts = ?, "
+                + "pay_status = ?, error_message = ?, updated_at = current_timestamp "
+                + "where rebuild_run_id = ? and corrective_senders_reference = ?";
+        var updated = 0;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            for (var result : results) {
+                if (result == null || result.correctiveSendersReference() == null
+                        || result.correctiveSendersReference().isBlank()) {
+                    continue;
+                }
+                statement.setString(1, result.gatewayReference());
+                statement.setInt(2, Math.max(result.attempts(), 0));
+                statement.setString(3, result.payStatus());
+                statement.setString(4, result.errorMessage());
+                statement.setString(5, rebuildRunId);
+                statement.setString(6, result.correctiveSendersReference());
+                updated += statement.executeUpdate();
+            }
+        }
+        return updated;
+    }
+
+    public PayFragmentSummary payFragmentSummary(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = """
+                select count(*) total,
+                       count(*) filter (where pay_status = 'SENT') sent,
+                       count(*) filter (where pay_status = 'REJECTED') rejected,
+                       count(*) filter (where pay_status not in ('SENT', 'REJECTED')) pending
+                  from mt101_corrective_pay_fragment
+                 where rebuild_run_id = ?
+                """;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return new PayFragmentSummary(0, 0, 0, 0);
+                }
+                return new PayFragmentSummary(
+                        rs.getLong("total"),
+                        rs.getLong("sent"),
+                        rs.getLong("rejected"),
+                        rs.getLong("pending"));
+            }
         }
     }
 
@@ -727,6 +907,11 @@ public class Mt101RebuildRepository {
             String payStatus,
             String payRequestedBy,
             String payApprovedBy,
+            String payRequestedPayloadHash,
+            String payClaimedPayloadHash,
+            LocalDateTime payLeaseUntil,
+            String payUncertainReason,
+            String payErrorMessage,
             LocalDateTime createdAt,
             LocalDateTime approvedAt,
             LocalDateTime executedAt,
@@ -737,5 +922,17 @@ public class Mt101RebuildRepository {
     }
 
     public record LifecycleStatus(String status, boolean terminal) {
+    }
+
+    public record PayFragmentResult(
+            String correctiveSendersReference,
+            String payStatus,
+            String gatewayReference,
+            int attempts,
+            String errorMessage
+    ) {
+    }
+
+    public record PayFragmentSummary(long total, long sent, long rejected, long pending) {
     }
 }

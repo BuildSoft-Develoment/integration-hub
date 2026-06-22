@@ -121,7 +121,7 @@
               <button mat-flat-button color="primary" type="button" (click)="advanceCorrective()" [disabled]="loading()">{{ i18n.t('audit.quarantine.correctiveAdvance') }}</button>
             }
             @if (corr.status === 'ARCHIVED') {
-              <button mat-stroked-button type="button" (click)="requestCorrectivePay()" [disabled]="loading() || payStatusFor(corr.rebuildRunId) !== 'NOT_REQUESTED'">{{ i18n.t('audit.quarantine.correctiveRequestPay') }}</button>
+              <button mat-stroked-button type="button" (click)="requestCorrectivePay()" [disabled]="loading() || !['NOT_REQUESTED', 'FAILED', 'INVALIDATED'].includes(payStatusFor(corr.rebuildRunId))">{{ i18n.t('audit.quarantine.correctiveRequestPay') }}</button>
               <button mat-flat-button color="warn" type="button" (click)="approveCorrectivePay()" [disabled]="loading() || payStatusFor(corr.rebuildRunId) !== 'REQUESTED'">{{ i18n.t('audit.quarantine.correctiveApprovePay') }}</button>
             }
             <button mat-stroked-button type="button" (click)="dismissCorrective()" [disabled]="loading()">{{ i18n.t('audit.common.cancel') }}</button>

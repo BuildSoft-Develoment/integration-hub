@@ -96,6 +96,11 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
 - RF-023 el catalogo de reglas de pago expone API y pantalla admin para listar,
   crear, editar, activar/desactivar, importar y exportar perfiles por banco,
   manteniendo las reglas reales como datos del ambiente.
+- RF-024 el reproceso correctivo de MT101 conserva identidad estricta por fila
+  (`stagingId`, origen, archivo y numero de registro), exige bloqueo optimista en
+  correcciones y gobierna el PAY con maker-checker, hash de payload archivado,
+  claim atomico, lease y estados auditables (`INVALIDATED`, `UNCERTAIN`,
+  `PARTIALLY_SENT`, `FAILED`, `SENT`).
 
 ### Modelo de dominio
 
@@ -154,6 +159,16 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
   memoria o una referencia persistida `{fragmentSetId, table}` producida por
   `MT101_BUILD_FROM_TABLE`; al avanzar, actualizan el estado del fragmento
   (`BUILT`, `ARCHIVED`, `SENT`, `REJECTED`) para habilitar reproceso operativo.
+- Una correccion manual de staging debe enviar version `If-Match`; sin version
+  se rechaza y con version obsoleta se retorna conflicto para evitar perdida de
+  cambios.
+- El PAY correctivo no puede enviar si el payload archivado cambio desde el
+  request de pago; en ese caso queda `INVALIDATED` y requiere nuevo request.
+- Un PAY correctivo con envio parcial no se resume como enviado completo:
+  mantiene detalle por fragmento y estado global `PARTIALLY_SENT`.
+- Un PAY correctivo reclamado pero no finalizado antes del lease queda
+  `UNCERTAIN`; no se reintenta automaticamente porque pudo haber movimiento de
+  fondos en el banco.
 - El reader `swift-mt` (catalogo 002) **no interpreta** Sequence A/B ni aplica NVR;
   esa responsabilidad es de `MT101_PARSE` (catalogo 008).
 - Solo perfiles `payments-operator` y superiores ejecutan procesos del catalogo 008
@@ -173,6 +188,8 @@ El sprint 1 entrega el sub-catalogo `swift/` MT101 outbound completo.
   no enumera codigos.
 - El catalogo de perfiles bancarios permite promocionar reglas por import/export
   entre dev, homologacion y produccion, sin deploy de codigo.
+- El flujo correctivo exige identidad estricta, bloqueo optimista, maker-checker
+  y PAY con hash/lease antes de despachar al banco.
 - (UI) cada task type tiene formulario dedicado registrado en el mecanismo de
   discovery de tareas del motor, sin que spec 003 conozca semantica SWIFT.
 - (Seguridad) los `${secret:...}` cubren credenciales del gateway, SFTP y la

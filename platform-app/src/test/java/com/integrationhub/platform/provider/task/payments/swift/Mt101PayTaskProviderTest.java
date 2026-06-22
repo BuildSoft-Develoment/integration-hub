@@ -183,7 +183,7 @@ class Mt101PayTaskProviderTest {
     @Test
     void treatsNotAcceptedWithoutErrorAsRejected() {
         var transport = new StubTransport("REST", List.of(
-                new TransportResult(false, null, 1, 25L, null)
+                new TransportResult(false, false, null, 1, 25L, null)
         ));
         var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
         var context = contextWith(List.of(sampleMessage("PROC-NACK")));
@@ -222,6 +222,31 @@ class Mt101PayTaskProviderTest {
         var records = (List<Map<String, Object>>) result.outputs().get("records");
         assertEquals("REJECTED", records.get(0).get("status"));
         assertTrue(((String) records.get(0).get("lastError")).contains("DNS"));
+    }
+
+    @Test
+    void classifiesUncertainTransportResultSeparatelyFromRejected() {
+        // Timeout/conexion tras enviar: el transporte devuelve UNCERTAIN (no rechazo).
+        var transport = new StubTransport("REST", List.of(
+                TransportResult.uncertain(2, 50L, "timeout: read timed out")));
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
+        var context = contextWith(List.of(sampleMessage("PROC-UNC")));
+
+        var result = provider.execute(context, Map.of(
+                "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records")
+        ));
+
+        assertFalse(result.success());
+        assertEquals(1, result.outputs().get("uncertainCount"));
+        assertEquals(0, result.outputs().get("rejectedCount"));
+        assertEquals(0, result.outputs().get("acceptedCount"));
+        @SuppressWarnings("unchecked")
+        var errors = (List<Map<String, Object>>) result.outputs().get("errors");
+        assertTrue(errors.isEmpty(), "el incierto NO se reporta como rechazo");
+        @SuppressWarnings("unchecked")
+        var uncertain = (List<Map<String, Object>>) result.outputs().get("uncertain");
+        assertEquals(1, uncertain.size());
+        assertEquals("UNCERTAIN", uncertain.get(0).get("status"));
     }
 
     @Test

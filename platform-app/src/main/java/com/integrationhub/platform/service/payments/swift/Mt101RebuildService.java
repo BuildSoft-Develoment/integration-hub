@@ -429,8 +429,9 @@ public class Mt101RebuildService {
                 if (rebuildRepository.updateLifecycleIfAdvanced(dataSource, run, lifecycle.status())) {
                     updated++;
                 }
-                if ("PARTIALLY_FAILED".equalsIgnoreCase(lifecycle.status())) {
-                    markRejectedSelections(dataSource, set, run.rebuildRunId());
+                if ("PARTIALLY_FAILED".equalsIgnoreCase(lifecycle.status())
+                        || "PARTIALLY_SENT".equalsIgnoreCase(lifecycle.status())) {
+                    markPartialSelections(dataSource, set, run.rebuildRunId());
                     continue;
                 }
                 var quarantineStatus = quarantineStatus(lifecycle.status());
@@ -455,9 +456,12 @@ public class Mt101RebuildService {
     public int synchronizeActiveLifecycles() {
         try {
             var updated = 0;
-            // R-d: cada run se sincroniza con el connectionRef con que se creo (no solo el default).
-            for (var active : rebuildRepository.findActiveOriginalSets(defaultDataSource)) {
-                updated += synchronizeLifecycle(active.connectionRef(), active.originalFragmentSetId());
+            updated += synchronizeActiveLifecycles(null, defaultDataSource);
+            if (connectionPoolManager != null) {
+                for (var connectionRef : connectionPoolManager.activeJdbcConnectionRefs()) {
+                    updated += synchronizeActiveLifecycles(connectionRef,
+                            connectionPoolManager.resolveJdbcDataSource(connectionRef));
+                }
             }
             return updated;
         } catch (SQLException error) {
@@ -465,11 +469,23 @@ public class Mt101RebuildService {
         }
     }
 
+    private int synchronizeActiveLifecycles(String schedulerConnectionRef, DataSource schedulerDataSource) throws SQLException {
+        var updated = rebuildRepository.markExpiredPayExecutionsUncertain(
+                schedulerDataSource, java.time.LocalDateTime.now());
+        for (var active : rebuildRepository.findActiveOriginalSets(schedulerDataSource)) {
+            var effectiveConnectionRef = active.connectionRef() == null || active.connectionRef().isBlank()
+                    ? schedulerConnectionRef
+                    : active.connectionRef();
+            updated += synchronizeLifecycle(effectiveConnectionRef, active.originalFragmentSetId());
+        }
+        return updated;
+    }
+
     private String currentQuarantineStatus(String runStatus) {
         return switch (runStatus == null ? "" : runStatus.toUpperCase(java.util.Locale.ROOT)) {
             case "VALIDATED" -> "REBUILD_VALIDATED";
             case "ARCHIVED" -> "REBUILD_ARCHIVED";
-            case "SENT" -> "REBUILD_SENT";
+            case "SENT", "PARTIALLY_SENT" -> "REBUILD_SENT";
             case "CONFIRMED" -> "REBUILD_CONFIRMED";
             case "RECONCILED", "RESOLVED" -> "RESOLVED";
             case "FAILED" -> "REBUILD_REJECTED";
@@ -477,7 +493,11 @@ public class Mt101RebuildService {
         };
     }
 
-    private void markRejectedSelections(DataSource dataSource, String set, String rebuildRunId) throws SQLException {
+    private void markPartialSelections(DataSource dataSource, String set, String rebuildRunId) throws SQLException {
+        for (var from : List.of("REBUILD_PENDING_VALIDATION", "REBUILD_VALIDATED", "REBUILD_ARCHIVED")) {
+            failedRecordRepository.updateStatusByRunSelectionStatus(
+                    dataSource, set, rebuildRunId, from, "REBUILD_SENT", "REBUILD_SENT");
+        }
         for (var from : List.of("REBUILD_PENDING_VALIDATION", "REBUILD_VALIDATED", "REBUILD_ARCHIVED", "REBUILD_SENT")) {
             failedRecordRepository.updateStatusByRunSelectionStatus(
                     dataSource, set, rebuildRunId, from, "REBUILD_REJECTED", "REBUILD_REJECTED");
@@ -490,6 +510,7 @@ public class Mt101RebuildService {
             case "VALIDATED" -> "REBUILD_VALIDATED";
             case "ARCHIVED" -> "REBUILD_ARCHIVED";
             case "SENT" -> "REBUILD_SENT";
+            case "PARTIALLY_SENT" -> null;
             case "CONFIRMED" -> "REBUILD_CONFIRMED";
             case "RECONCILED", "RESOLVED" -> "RESOLVED";
             // B5: un correctivo con fragmentos REJECTED no se queda "pendiente de validar":

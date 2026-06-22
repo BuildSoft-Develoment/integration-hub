@@ -119,6 +119,10 @@ public class Mt101PayTaskProvider implements TaskProvider {
                     if (result.accepted()) {
                         sentRefs.add(reference);
                         sentTargets.add(archiveTarget(message));
+                    } else if (result.uncertain()) {
+                        // INCIERTO: no se marca SENT ni REJECTED (ningun bucket) -> el fragmento
+                        // queda ARCHIVED y requiere conciliacion; reenviarlo duplicaria el pago.
+                        continue;
                     } else {
                         rejectedByRef.put(reference, result.lastError());
                         rejectedTargets.add(archiveTarget(message));
@@ -147,6 +151,10 @@ public class Mt101PayTaskProvider implements TaskProvider {
                         ? input.message().sequenceA().sendersReference() : null;
                 if (result.accepted()) {
                     collectArchiveId(configuration, input, sentArchiveIds);
+                } else if (result.uncertain()) {
+                    // INCIERTO: no se sincroniza a SENT ni REJECTED; queda para conciliacion.
+                    audit.add(recordEnvelope(context, reference, false, result.lastError()));
+                    continue;
                 } else {
                     collectArchiveId(configuration, input, rejectedArchiveIds);
                 }
@@ -166,13 +174,15 @@ public class Mt101PayTaskProvider implements TaskProvider {
         outputs.put("sentCount", accumulator.acceptedCount);
         outputs.put("acceptedCount", accumulator.acceptedCount);
         outputs.put("rejectedCount", accumulator.rejectedCount);
+        outputs.put("uncertainCount", accumulator.uncertainCount);
         outputs.put("retriedCount", accumulator.retriedCount);
         outputs.put("totalDurationMs", accumulator.totalDurationMs);
         outputs.put("transport", transportId);
-        // records/errors son una MUESTRA acotada (ver maxRecordsInOutput); para
+        // records/errors/uncertain son una MUESTRA acotada (ver maxRecordsInOutput); para
         // el detalle completo, consultar mt101_build_fragment por fragmentSetId.
         outputs.put("records", accumulator.sent);
         outputs.put("errors", accumulator.errors);
+        outputs.put("uncertain", accumulator.uncertain);
         outputs.put("recordsSampled", accumulator.totalCount() > accumulator.sent.size());
 
         var summary = "MT101_PAY via " + transportId
@@ -180,8 +190,10 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 + " sent=" + accumulator.acceptedCount
                 + " accepted=" + accumulator.acceptedCount
                 + " rejected=" + accumulator.rejectedCount
+                + " uncertain=" + accumulator.uncertainCount
                 + " retried=" + accumulator.retriedCount;
-        return accumulator.rejectedCount > 0
+        // INCIERTO tambien es no-exito: el orquestador debe tratarlo (no asumir enviado).
+        return accumulator.rejectedCount > 0 || accumulator.uncertainCount > 0
                 ? TaskResult.failure(summary, outputs)
                 : TaskResult.success(summary, outputs);
     }
@@ -256,7 +268,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
             entry.put("envelopeId", input.envelopeId());
         }
         entry.put("uetr", uetr);
-        entry.put("status", result.accepted() ? "ACCEPTED" : "REJECTED");
+        entry.put("status", result.accepted() ? "ACCEPTED" : (result.uncertain() ? "UNCERTAIN" : "REJECTED"));
         entry.put("gatewayReference", result.gatewayReference());
         entry.put("attempts", result.attempts());
         entry.put("durationMs", result.durationMs());
@@ -271,6 +283,11 @@ public class Mt101PayTaskProvider implements TaskProvider {
         accumulator.addSentSample(entry);
         if (result.accepted()) {
             accumulator.acceptedCount++;
+        } else if (result.uncertain()) {
+            // INCIERTO: ni enviado ni rechazado. No se reenvia a ciegas (duplicaria el pago);
+            // exige conciliacion/intervencion. Se reporta aparte para el orquestador.
+            accumulator.uncertainCount++;
+            accumulator.addUncertainSample(entry);
         } else {
             accumulator.rejectedCount++;
             accumulator.addErrorSample(entry);
@@ -285,9 +302,11 @@ public class Mt101PayTaskProvider implements TaskProvider {
     private static final class DispatchAccumulator {
         private final List<Map<String, Object>> sent = new ArrayList<>();
         private final List<Map<String, Object>> errors = new ArrayList<>();
+        private final List<Map<String, Object>> uncertain = new ArrayList<>();
         private final int maxRecordsInOutput;
         int acceptedCount;
         int rejectedCount;
+        int uncertainCount;
         int retriedCount;
         long totalDurationMs;
 
@@ -307,8 +326,14 @@ public class Mt101PayTaskProvider implements TaskProvider {
             }
         }
 
+        void addUncertainSample(Map<String, Object> entry) {
+            if (uncertain.size() < maxRecordsInOutput) {
+                uncertain.add(entry);
+            }
+        }
+
         int totalCount() {
-            return acceptedCount + rejectedCount;
+            return acceptedCount + rejectedCount + uncertainCount;
         }
     }
 

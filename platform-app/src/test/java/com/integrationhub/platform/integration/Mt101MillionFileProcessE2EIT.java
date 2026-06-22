@@ -284,6 +284,8 @@ class Mt101MillionFileProcessE2EIT {
                     new java.util.TreeSet<>(rows.getList("sourceRecordNumber", Integer.class)),
                     "el operador ve las dos filas exactas del archivo que fallaron");
             var sourceFileHash = rows.getString("[0].sourceFileHash");
+            long stagingA = rows.getLong("[0].stagingId");
+            long stagingB = rows.getLong("[1].stagingId");
 
             // Cada fila cae en un fragmento MT101 distinto -> reproceso NO contiguo.
             var fragA = lookupFragment(fragmentSetId, sourceFileHash, BAD_A);
@@ -292,13 +294,22 @@ class Mt101MillionFileProcessE2EIT {
             long affected = (fragA[1] - fragA[0] + 1) + (fragB[1] - fragB[0] + 1);
 
             // Correccion por fila exacta via REST con If-Match; reintento con version vieja -> 409.
-            long staleVersionA = correctRowViaRest(fragmentSetId, sourceFileHash, BAD_A);
-            correctRowViaRest(fragmentSetId, sourceFileHash, BAD_B);
+            long staleVersionA = correctRowViaRest(fragmentSetId, sourceFileHash, BAD_A, stagingA);
+            correctRowViaRest(fragmentSetId, sourceFileHash, BAD_B, stagingB);
+            given().contentType(ContentType.JSON)
+                    .queryParam("fragmentSetId", fragmentSetId)
+                    .queryParam("sourceFileHash", sourceFileHash)
+                    .queryParam("recordNumber", BAD_A)
+                    .queryParam("stagingId", stagingA)
+                    .body("{}")
+                    .when().patch("/api/query/mt101-quarantine/staging-row")
+                    .then().statusCode(400);
             given().contentType(ContentType.JSON)
                     .header("If-Match", "\"" + staleVersionA + "\"")
                     .queryParam("fragmentSetId", fragmentSetId)
                     .queryParam("sourceFileHash", sourceFileHash)
                     .queryParam("recordNumber", BAD_A)
+                    .queryParam("stagingId", stagingA)
                     .body("{}")
                     .when().patch("/api/query/mt101-quarantine/staging-row")
                     .then().statusCode(409);
@@ -346,11 +357,12 @@ class Mt101MillionFileProcessE2EIT {
      * Carga la fila (GET, devuelve version/ETag), corrige cargos BAD->OUR y la guarda con
      * {@code If-Match} (locking optimista). Devuelve la version vieja para probar el conflicto.
      */
-    private long correctRowViaRest(String fragmentSetId, String sourceFileHash, long recordNumber) {
+    private long correctRowViaRest(String fragmentSetId, String sourceFileHash, long recordNumber, long stagingId) {
         var view = given()
                 .queryParam("fragmentSetId", fragmentSetId)
                 .queryParam("sourceFileHash", sourceFileHash)
                 .queryParam("recordNumber", recordNumber)
+                .queryParam("stagingId", stagingId)
                 .when().get("/api/query/mt101-quarantine/staging-row")
                 .then().statusCode(200).extract().jsonPath();
         long version = view.getLong("version");
@@ -361,6 +373,7 @@ class Mt101MillionFileProcessE2EIT {
                 .queryParam("fragmentSetId", fragmentSetId)
                 .queryParam("sourceFileHash", sourceFileHash)
                 .queryParam("recordNumber", recordNumber)
+                .queryParam("stagingId", stagingId)
                 .queryParam("reason", "corrige detailsOfCharges invalido")
                 .queryParam("ticketRef", "OPS-" + recordNumber)
                 .body(corrected)
