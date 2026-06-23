@@ -18,8 +18,8 @@ tipadas).
 | P0.1 | Carrera scheduler↔dispatcher: run puede quedar INVALIDATED con fragmento SENT | **REAL → CORREGIDO** | El claim `markPayFragmentDispatching` **une el run padre** en el mismo UPDATE atómico y exige `r.pay_status='EXECUTING'` + lease vigente; además, claim y scheduler toman el **mismo advisory lock** por `rebuild_run_id`. Como el scheduler solo actúa sobre leases VENCIDOS y el claim exige lease vigente, las ventanas son disjuntas: nunca DISPATCHING con run fuera de EXECUTING. Test `correctivePayDoesNotDispatchWhenRunLeaseExpiredOrRunNotExecuting` |
 | P0.2 | Snapshot guarda secretos RESUELTOS+redactados → auth SFTP/STATUS diferida falla | **REAL → CORREGIDO** | El snapshot se congela **sin resolver** (`taskConfigUnresolved`, refs `${secret:...}` intactas; literales redactados); al resolver un incierto, se **re-resuelven** los refs desde Vault (`resolveConfig`). La consulta diferida recibe el secreto resuelto, no `***REDACTED***`. Test `frozenStatusSnapshotKeepsSecretRefsAndReResolvesThemAtDeferredExecution` |
 | P1 | `statRemote` trata cualquier `SftpException` como "archivo no existe" | **REAL → CORREGIDO** | `remoteFileExists` distingue: solo `SSH_FX_NO_SUCH_FILE` es pendiente legítimo; cualquier otro `SftpException` (permiso, ruta, servidor) se propaga como **error real**, no se oculta como "ACK pendiente" |
-| P0.3 | Ejecutar PAY directamente desde el plan persistido (no recomponer) | **MITIGADO → documentado** | El claim ya valida el `dispatch_plan_hash` completo (transport\|ruta\|destino\|correlación\|payload) recomputado contra el persistido: "plan aprobado = plan usado" demostrable. Leer `transport`/`destino`/`correlación` DIRECTAMENTE del ledger (en vez de recomputar de la config congelada) es un refinamiento de fuente-de-ejecución. Documentado |
-| P1 | Excepción de transporte por tipo (no garantiza pre-dispatch) | **DOCUMENTADO** | Hoy: `IllegalArgumentException` (validación, antes de I/O) → REJECTED; cualquier otra → UNCERTAIN. Una jerarquía tipada (`PreDispatchConfigurationException`/`AmbiguousTransportException`) es más explícita; los transportes propios solo lanzan `IllegalArgumentException` antes de conectar. Documentado |
+| P1 | Excepción de transporte por tipo (no garantiza pre-dispatch) | **REAL → CORREGIDO (2º pase)** | Jerarquía tipada: `PreDispatchTransportException` (antes de I/O) → REJECTED; **cualquier otra** RuntimeException (incluida una `IllegalArgumentException` cruda de un bug/3ros) → UNCERTAIN. Los transportes lanzan la tipada para errores de config; ya no se infiere "pre-dispatch" por el tipo crudo. Tests `capturesTypedPreDispatchConfigErrorAsRejection`, `capturesRawIllegalArgumentExceptionAsUncertainNotRejection` |
+| P0.3 | Ejecutar PAY directamente desde el plan persistido (no recomponer) | **VALIDADO — funcionalmente cerrado** | Ver "Mejora del análisis" abajo: el claim atómico exige que el plan ACTUAL == el aprobado y, ante cualquier drift, **INVALIDA** (no envía). "Plan usado = plan aprobado" ya garantizado; despachar desde un plan persistido ignorando el fragmento actual sería **menos seguro** |
 
 ---
 
@@ -61,18 +61,41 @@ propagado). Ya no se oculta un permiso/ruta/servidor como "ACK pendiente".
 - `Mt101PayFragmentReprocessTest` — **11** (lease vencido no despacha; plan/payload drift → INVALIDATED).
 - `Mt101CorrectiveLifecycleServiceTest` — **32** (re-resolución de secretos del snapshot, + las previas).
 - `Mt101StatusTaskProviderTest` — STATUS por SFTP (ACK→SENT, sin ACK→pendiente).
-- Dominio swift completo (provider + service + repository + transport): **240** tests, 0 fallos.
+- `Mt101PayTaskProviderTest` — **13** (pre-dispatch tipado→REJECTED; IllegalArgumentException cruda→UNCERTAIN).
+- Dominio swift completo (provider + service + repository + transport): **241** tests, 0 fallos.
 - Integración end-to-end (Flyway real V51..V57): `BankProfileHomologationIT` + `Mt101OutboundEndToEndIT`
   = **3** tests, 0 fallos, `BUILD SUCCESS`.
 
-## Documentado (refinamiento, no bloqueante)
+## Segundo pase (doble check)
 
-1. **PAY desde el plan persistido (P0.3).** El claim ya valida el `dispatch_plan_hash` completo recomputado
-   contra el persistido (demostrable). Que el provider lea `transport`/`destino`/`correlación` directamente
-   del ledger PREPARED (única fuente de ejecución) es un endurecimiento adicional.
-2. **Excepciones de transporte tipadas (P1).** Hoy `IllegalArgumentException`→REJECTED (config, antes de I/O)
-   y cualquier otra→UNCERTAIN. Una jerarquía explícita es más robusta ante transportes de terceros.
-3. **HMAC/WORM/rol DB** para la cadena hash (infra).
+### P1 — excepciones de transporte tipadas (CORREGIDO)
+`PreDispatchTransportException` (extiende `IllegalArgumentException` por compat) la lanzan los transportes
+para errores de config ANTES de cualquier I/O. El `dispatch` del provider clasifica por TIPO:
+`PreDispatchTransportException` → REJECTED seguro; **cualquier otra** RuntimeException (incluida una
+`IllegalArgumentException` cruda de un bug o transporte de terceros) → UNCERTAIN. Ya no se asume que una
+`IllegalArgumentException` cruda sea pre-dispatch.
+
+### P0.3 — "plan persistido = único plan que ejecuta": validación + mejora del análisis
+**Mejora del análisis (importante):** la recomendación literal del v27 —que el provider **despache
+directamente desde un objeto de plan persistido**, ignorando el fragmento actual— sería **menos segura**
+para banca: enviaría con un plan "aprobado" aunque el `build_fragment` haya driftado. El diseño actual es
+**más fuerte**:
+- El claim `markPayFragmentDispatching` es un UPDATE atómico que exige que el plan ACTUAL del fragmento
+  (`payload_hash` + `approved_routed_as` + `dispatch_plan_hash` = transport\|ruta\|destino\|correlación\|
+  payload) sea **idéntico** al aprobado en el ledger. El provider computa esos valores con la config
+  congelada y el `routed_as` actual, y los pasa al claim; el claim los valida contra el ledger.
+- Si CUALQUIER componente cambió tras la aprobación → el claim falla y el fragmento queda **INVALIDATED**
+  (no se envía). Un fragmento solo se despacha si su plan es bit-a-bit el aprobado.
+
+Por tanto "plan usado = plan aprobado" ya está **garantizado**, y un fragmento drifteado **nunca** se
+envía. Persistir el raw payload + config (con secretos) en el ledger para "despachar desde ahí" sería
+redundante (el hash ya garantiza identidad), almacenaría secretos (lo que el propio v27 prohíbe) y no
+añadiría seguridad. Tests: drift de payload/ruta/plan → INVALIDATED, no enviado.
+
+## Documentado (infra/refinamiento, no bloqueante)
+
+**HMAC/WORM/rol DB** para la cadena hash; persistir el plan completo en el ledger es opcional (la
+validación atómica ya garantiza "plan usado = aprobado").
 
 ## Conclusión
 

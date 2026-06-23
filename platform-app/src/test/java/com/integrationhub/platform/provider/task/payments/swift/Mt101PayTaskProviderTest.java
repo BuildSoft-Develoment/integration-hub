@@ -227,13 +227,14 @@ class Mt101PayTaskProviderTest {
     }
 
     @Test
-    void capturesTransportConfigErrorAsRejection() {
-        // Un error de CONFIG (IllegalArgumentException, antes de cualquier I/O) si es rechazo seguro: el
-        // mensaje no salio. Re-solicitable tras corregir la config.
+    void capturesTypedPreDispatchConfigErrorAsRejection() {
+        // v27 P1: un error de pre-dispatch TIPADO (PreDispatchTransportException, antes de cualquier I/O)
+        // si es rechazo seguro: el mensaje no salio. Re-solicitable tras corregir la config.
         var transport = new StubTransport("REST", null) {
             @Override
             public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
-                throw new IllegalArgumentException("missing rest.url");
+                throw new com.integrationhub.platform.spi.task.payments.PreDispatchTransportException(
+                        "missing rest.url");
             }
         };
         var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
@@ -248,6 +249,30 @@ class Mt101PayTaskProviderTest {
         var records = (List<Map<String, Object>>) result.outputs().get("records");
         assertEquals("REJECTED", records.get(0).get("status"));
         assertTrue(((String) records.get(0).get("lastError")).contains("config error"));
+    }
+
+    @Test
+    void capturesRawIllegalArgumentExceptionAsUncertainNotRejection() {
+        // v27 P1: una IllegalArgumentException CRUDA (no tipada como pre-dispatch) NO se asume pre-I/O:
+        // un transporte de terceros o un bug podria lanzarla tras iniciar la llamada. Regla bancaria: si
+        // no se puede demostrar que no salio, es INCIERTA, nunca REJECTED reusable.
+        var transport = new StubTransport("REST", null) {
+            @Override
+            public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
+                throw new IllegalArgumentException("ambiguous failure after remote call started");
+            }
+        };
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
+        var context = contextWith(List.of(sampleMessage("PROC-AMB")));
+
+        var result = provider.execute(context, Map.of(
+                "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records")
+        ));
+
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
+        var uncertain = (List<Map<String, Object>>) result.outputs().get("uncertain");
+        assertEquals("UNCERTAIN", uncertain.get(0).get("status"));
     }
 
     @Test

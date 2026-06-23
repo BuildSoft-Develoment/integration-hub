@@ -2,6 +2,7 @@ package com.integrationhub.platform.provider.task.payments.swift.transport;
 
 import com.integrationhub.platform.provider.task.payments.swift.Mt101PaymentCorrelation;
 import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
+import com.integrationhub.platform.spi.task.payments.PreDispatchTransportException;
 import com.integrationhub.platform.spi.task.payments.TransportResult;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.jcraft.jsch.ChannelSftp;
@@ -111,7 +112,7 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
     private TransportResult attemptUpload(Mt101Message message, Map<String, Object> configuration) {
         var sftpCfg = mapValue(configuration.get("sftp"));
         if (sftpCfg.isEmpty()) {
-            throw new IllegalArgumentException("MT101_PAY transport=SFTP requires configuration.sftp");
+            throw new PreDispatchTransportException("MT101_PAY transport=SFTP requires configuration.sftp");
         }
         var host = stringRequired(sftpCfg.get("host"), "sftp.host");
         var port = intValue(sftpCfg.get("port"), DEFAULT_PORT);
@@ -201,7 +202,7 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
                     case "OVERWRITE" -> {
                         // continua: el put/rename sobrescribe.
                     }
-                    default -> throw new IllegalArgumentException(
+                    default -> throw new PreDispatchTransportException(
                             "Unknown sftp.remoteDuplicatePolicy: " + duplicatePolicy
                                     + " (expected SKIP_IF_SAME_HASH, FAIL, OVERWRITE, RENAME_WITH_SUFFIX)");
                 }
@@ -346,7 +347,7 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
     private String stringRequired(Object raw, String fieldName) {
         var value = stringOrNull(raw);
         if (value == null) {
-            throw new IllegalArgumentException("MT101_PAY transport=SFTP requires configuration." + fieldName);
+            throw new PreDispatchTransportException("MT101_PAY transport=SFTP requires configuration." + fieldName);
         }
         return value;
     }

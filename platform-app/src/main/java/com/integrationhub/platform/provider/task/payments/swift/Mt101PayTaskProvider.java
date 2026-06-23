@@ -5,6 +5,7 @@ import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
+import com.integrationhub.platform.spi.task.payments.PreDispatchTransportException;
 import com.integrationhub.platform.spi.task.payments.TransportResult;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.integrationhub.platform.spi.task.TaskContext;
@@ -371,13 +372,14 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 transport.transport(), configuration, message);
         try {
             result = transport.send(message, dispatchConfiguration);
-        } catch (IllegalArgumentException configError) {
-            // Error de configuracion/validacion ANTES de cualquier I/O (los transportes validan la config
-            // antes de conectar): el mensaje NO salio al banco -> rechazo seguro (re-solicitable).
+        } catch (PreDispatchTransportException configError) {
+            // v27 P1: error TIPADO de pre-dispatch (validacion/config, antes de cualquier I/O): el mensaje
+            // NO salio al banco -> rechazo seguro (re-solicitable). Clasificacion por TIPO, no por suposicion.
             result = TransportResult.rejected(1, 0L, "transport config error: " + configError.getMessage());
         } catch (RuntimeException error) {
-            // P0 v26: excepcion INESPERADA durante el envio. Regla bancaria: si no se puede DEMOSTRAR que
-            // no salio al banco, se clasifica INCIERTO (nunca REJECTED reusable -> evita doble pago).
+            // P0 v26+v27: cualquier OTRA excepcion (incluida una IllegalArgumentException cruda de un bug o
+            // transporte de terceros) es INCIERTA: si no se puede DEMOSTRAR que no salio al banco, nunca se
+            // marca REJECTED reusable (evita doble pago); se resuelve por STATUS/conciliacion.
             result = TransportResult.uncertain(1, 0L, "unexpected transport error: " + error.getMessage());
         }
 
