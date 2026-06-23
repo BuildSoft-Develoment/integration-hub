@@ -12,6 +12,7 @@ import {
   Mt101LoteHeader,
   Mt101QuarantineBuildResult,
   Mt101CorrectiveLifecycle,
+  Mt101PayAction,
   Mt101RebuildResult,
   Mt101RebuildRunSummary,
   Mt101ReprocessResult,
@@ -438,6 +439,12 @@ export class AuditApiService {
   /** B2': el checker (distinto del maker) aprueba y ejecuta el envío del correctivo (PAY real). */
   mt101ApproveCorrectivePay(query: { connectionRef?: string; rebuildRunId: string }): Observable<Mt101CorrectiveLifecycle> {
     return this.http.post<Mt101CorrectiveLifecycle>('/api/query/mt101-quarantine/rebuild-runs/approve-pay', {},
+      { params: this.runIdParams(query.rebuildRunId, query.connectionRef) });
+  }
+
+  /** v24: historial append-only completo de acciones PAY del run (trazabilidad operativa). */
+  mt101PayActions(query: { connectionRef?: string; rebuildRunId: string }): Observable<Mt101PayAction[]> {
+    return this.http.get<Mt101PayAction[]>('/api/query/mt101-quarantine/rebuild-runs/pay-actions',
       { params: this.runIdParams(query.rebuildRunId, query.connectionRef) });
   }
 

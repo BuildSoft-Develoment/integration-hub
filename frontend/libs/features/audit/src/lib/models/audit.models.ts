@@ -143,6 +143,17 @@ export interface Mt101CorrectiveLifecycle {
   payResolutionReason?: string;
 }
 
+/** v24: una accion del historial append-only de PAY (mt101_corrective_pay_action). */
+export interface Mt101PayAction {
+  actionType: string;
+  previousStatus?: string;
+  newStatus?: string;
+  actor?: string;
+  reason?: string;
+  ticket?: string;
+  createdAt?: string;
+}
+
 /** Estado de un rebuild run gobernado: REQUESTED -> APPROVED -> BUILT -> VALIDATED/ARCHIVED/SENT/CONFIRMED/RECONCILED. */
 export interface Mt101RebuildRunSummary {
   rebuildRunId: string;

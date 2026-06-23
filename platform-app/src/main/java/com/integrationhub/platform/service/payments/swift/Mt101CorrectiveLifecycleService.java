@@ -131,19 +131,18 @@ public class Mt101CorrectiveLifecycleService {
         }
     }
 
-    /** B2': el maker solicita el envio del correctivo (run ARCHIVED). */
-    public CorrectiveLifecycleResult requestCorrectivePay(String connectionRef, String rebuildRunId, String requestedBy) {
-        return requestCorrectivePay(connectionRef, rebuildRunId, requestedBy, null, null);
-    }
-
     /**
      * B2': el maker solicita el envio del correctivo (run ARCHIVED) dejando motivo/ticket de negocio
      * como evidencia durable de la solicitud (auditoria maker-checker, simetrica a la resolucion).
+     * P0.3 v24: motivo y ticket son OBLIGATORIOS en el backend (no se delega al frontend): un PAY sin
+     * justificacion de negocio se rechaza aqui, no exista o no la UI. Sin overload legacy sin motivo.
      */
     public CorrectiveLifecycleResult requestCorrectivePay(String connectionRef, String rebuildRunId, String requestedBy,
                                                           String requestReason, String requestTicket) {
         var runId = require(rebuildRunId, "rebuildRunId");
         var requester = require(requestedBy, "requestedBy");
+        var reason = require(requestReason, "reason");
+        var ticket = require(requestTicket, "ticketRef");
         var dataSource = resolveDataSource(connectionRef);
         try {
             var run = rebuildRepository.findRun(dataSource, runId);
@@ -163,14 +162,15 @@ public class Mt101CorrectiveLifecycleService {
             }
             assertCorrectivePayPolicy(payConfig);
             var configHash = payConfigHashOf(payConfig);
-            var requested = rebuildRepository.requestPay(dataSource, runId, requester, payloadHash, configHash,
-                    requestReason, requestTicket);
+            // P0.1 v24: el cambio de estado y su accion auditada ocurren en UNA sola transaccion: si
+            // falla el insert de auditoria, se revierte el cambio de pay_status (no queda estado sin
+            // evidencia). Sin secuencia de dos conexiones separadas.
+            var requested = rebuildRepository.requestPayWithAction(dataSource, runId, requester,
+                    payloadHash, configHash, reason, ticket, run.payStatus());
             if (requested == 0) {
                 throw new IllegalStateException("cannot request corrective pay for run " + runId
                         + "; payStatus=" + run.payStatus());
             }
-            recordPayAction(dataSource, runId, "PAY_REQUESTED", run.payStatus(), "REQUESTED",
-                    requester, requestReason, requestTicket, payloadHash, configHash);
             return correctiveResult(dataSource, runId);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot request corrective pay for run " + runId, error);
@@ -284,7 +284,7 @@ public class Mt101CorrectiveLifecycleService {
                     recordPayAction(dataSource, runId, "PAY_SENT", "EXECUTING", "SENT",
                             approver, null, null, payloadHash, configHash);
                     runPostPaySync(prep, "MT101_STATUS", statusProvider,
-                            correctivePaySource(runId, connectionRef), dataSource, runId, true);
+                            correctivePaySource(runId, connectionRef), dataSource, runId, true, frozenStatusConfig);
                     runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
                             correctivePaySource(runId, connectionRef), dataSource, runId, false);
                 } else if (summary.sent() > 0) {
@@ -295,7 +295,7 @@ public class Mt101CorrectiveLifecycleService {
                             approver, "sent=" + summary.sent() + " rejected=" + summary.rejected(), null,
                             payloadHash, configHash);
                     runPostPaySync(prep, "MT101_STATUS", statusProvider,
-                            correctivePaySource(runId, connectionRef), dataSource, runId, true);
+                            correctivePaySource(runId, connectionRef), dataSource, runId, true, frozenStatusConfig);
                     runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
                             correctivePaySource(runId, connectionRef), dataSource, runId, false);
                 } else {
@@ -332,21 +332,28 @@ public class Mt101CorrectiveLifecycleService {
         }
     }
 
-    public CorrectiveLifecycleResult resolveUncertainPay(String connectionRef, String rebuildRunId, String executedBy) {
-        return resolveUncertainPay(connectionRef, rebuildRunId, executedBy, null);
+    /** v24: historial append-only completo de acciones PAY de un run, para trazabilidad operativa E2E. */
+    public List<Mt101RebuildRepository.PayAction> listPayActions(String connectionRef, String rebuildRunId) {
+        var runId = require(rebuildRunId, "rebuildRunId");
+        var dataSource = resolveDataSource(connectionRef);
+        try {
+            return rebuildRepository.payActions(dataSource, runId);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot list corrective PAY actions for run " + runId, error);
+        }
     }
 
     /**
-     * Resuelve un PAY_UNCERTAIN consultando MT101_STATUS (nunca reenvia). El operador puede aportar
-     * un motivo/ticket de negocio (P1 v23) que queda en la evidencia de resolucion JUNTO al detalle
-     * tecnico que devuelve el sistema, no en su lugar: la auditoria conserva ambos.
+     * Resuelve un PAY_UNCERTAIN consultando MT101_STATUS (nunca reenvia). El motivo de negocio del
+     * operador es OBLIGATORIO en el backend (P0.3 v24): queda en la evidencia de resolucion JUNTO al
+     * detalle tecnico que devuelve el sistema, no en su lugar. Sin overload legacy sin motivo.
      */
     public CorrectiveLifecycleResult resolveUncertainPay(String connectionRef, String rebuildRunId,
                                                          String executedBy, String resolutionReason) {
         var runId = require(rebuildRunId, "rebuildRunId");
         require(executedBy, "executedBy");
-        var reasonPrefix = resolutionReason == null || resolutionReason.isBlank()
-                ? "" : resolutionReason.trim() + " | ";
+        var reason = require(resolutionReason, "reason");
+        var reasonPrefix = reason + " | ";
         var dataSource = resolveDataSource(connectionRef);
         try {
             var run = rebuildRepository.findRun(dataSource, runId);
@@ -464,12 +471,22 @@ public class Mt101CorrectiveLifecycleService {
      */
     private void runPostPaySync(StagePrep prep, String taskType, TaskProvider provider, Object input,
                                 DataSource dataSource, String runId, boolean isStatus) throws SQLException {
-        if (stageConfig(prep, taskType) == null) {
+        runPostPaySync(prep, taskType, provider, input, dataSource, runId, isStatus, null);
+    }
+
+    /**
+     * Hardening v24: el STATUS post-PAY normal usa el MISMO snapshot congelado de la config de STATUS
+     * que la resolucion de inciertos (no la config vigente, que pudo cambiar). Se pasa {@code frozenBaseConfig}.
+     */
+    private void runPostPaySync(StagePrep prep, String taskType, TaskProvider provider, Object input,
+                                DataSource dataSource, String runId, boolean isStatus,
+                                Map<String, Object> frozenBaseConfig) throws SQLException {
+        if (frozenBaseConfig == null && stageConfig(prep, taskType) == null) {
             setPostPaySync(dataSource, runId, isStatus, "SKIPPED", null);
             return;
         }
         try {
-            var result = runStage(provider, prep, taskType, false, input);
+            var result = runStage(provider, prep, taskType, false, input, null, frozenBaseConfig);
             if (result != null && !result.success()) {
                 setPostPaySync(dataSource, runId, isStatus, "FAILED", result.details());
             } else {
@@ -574,9 +591,17 @@ public class Mt101CorrectiveLifecycleService {
             return;
         }
         var policy = sftp.get("remoteDuplicatePolicy");
-        if (policy != null && "OVERWRITE".equalsIgnoreCase(String.valueOf(policy).trim())) {
-            throw new IllegalArgumentException("corrective PAY must not use sftp.remoteDuplicatePolicy=OVERWRITE; "
-                    + "use SKIP_IF_SAME_HASH (idempotent) or FAIL to avoid re-delivering a payment instruction");
+        if (policy == null) {
+            return;
+        }
+        // P0.4 v24: para PAY correctivo solo SKIP_IF_SAME_HASH (idempotente) y FAIL son seguras. OVERWRITE
+        // y RENAME_WITH_SUFFIX pueden re-entregar una instruccion de pago (sobrescribir el final, o crear
+        // un archivo nuevo que el banco trate como nueva instruccion). Sin fallback: se rechazan ambas.
+        var normalized = String.valueOf(policy).trim().toUpperCase(java.util.Locale.ROOT);
+        if ("OVERWRITE".equals(normalized) || "RENAME_WITH_SUFFIX".equals(normalized)) {
+            throw new IllegalArgumentException("corrective PAY must not use sftp.remoteDuplicatePolicy="
+                    + normalized + "; use SKIP_IF_SAME_HASH (idempotent) or FAIL to avoid re-delivering a "
+                    + "payment instruction");
         }
     }
 

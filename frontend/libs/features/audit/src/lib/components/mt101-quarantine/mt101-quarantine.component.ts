@@ -11,7 +11,7 @@ import { I18nService } from '@integration-hub/core/services';
 import { BreadcrumbComponent, IconComponent, IhBreadcrumbItem } from '@integration-hub/shared/ui';
 import { Observable } from 'rxjs';
 import { AuditApiService } from '../../api/audit-api.service';
-import { Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101RebuildRunSummary, Mt101RowTimelineEntry } from '../../models/audit.models';
+import { Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101PayAction, Mt101RebuildRunSummary, Mt101RowTimelineEntry } from '../../models/audit.models';
 import { durationBetween, timelineStatusIcon, timelineStatusKind } from '../../utils/timeline-format';
 
 @Component({
@@ -502,9 +502,24 @@ export class Mt101QuarantineComponent {
 
   // B2': ciclo bancario del correctivo. VALIDATE/ARCHIVE automáticos; PAY con maker-checker propio.
   readonly correctiveRun = signal<Mt101CorrectiveLifecycle | null>(null);
+  // v24: historial append-only de acciones PAY visible para el operador (trazabilidad E2E).
+  readonly payActions = signal<Mt101PayAction[]>([]);
+
+  /** v24: carga el historial completo de acciones PAY del run correctivo actual. */
+  loadPayActions(): void {
+    const run = this.correctiveRun();
+    if (!run) {
+      return;
+    }
+    this.api.mt101PayActions({ rebuildRunId: run.rebuildRunId, connectionRef: this.connectionRef }).subscribe({
+      next: (actions) => this.payActions.set(actions),
+      error: (e) => this.error.set(this.backendError(e, 'audit.quarantine.correctiveError')),
+    });
+  }
 
   dismissCorrective(): void {
     this.correctiveRun.set(null);
+    this.payActions.set([]);
   }
 
   payStatusFor(rebuildRunId: string): string {

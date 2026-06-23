@@ -76,8 +76,8 @@ class Mt101CorrectiveLifecycleServiceTest {
     private boolean payConfigDriftsAfterApprovalHash;
     private final AtomicInteger payConfigReadCount = new AtomicInteger();
     private volatile String dispatchedIdempotencyTemplate;
-    // P0/P1 v23: PAY correctivo con sftp.remoteDuplicatePolicy=OVERWRITE debe rechazarse.
-    private boolean payUsesOverwritePolicy;
+    // P0/P1 v23-v24: PAY correctivo con sftp.remoteDuplicatePolicy OVERWRITE/RENAME_WITH_SUFFIX debe rechazarse.
+    private String paySftpPolicy;
     // Hardening v23: el perfil de MT101_STATUS cambia DESPUES del PAY; la resolucion debe usar el congelado.
     private boolean statusConfigChangedAfterPay;
     private volatile String dispatchedStatusQueryUrl;
@@ -102,7 +102,7 @@ class Mt101CorrectiveLifecycleServiceTest {
         payConfigDriftsAfterApprovalHash = false;
         payConfigReadCount.set(0);
         dispatchedIdempotencyTemplate = null;
-        payUsesOverwritePolicy = false;
+        paySftpPolicy = null;
         statusConfigChangedAfterPay = false;
         dispatchedStatusQueryUrl = null;
 
@@ -244,11 +244,11 @@ class Mt101CorrectiveLifecycleServiceTest {
                 var template = payConfigDriftsAfterApprovalHash && read >= 3 ? "drift-" : "approved-";
                 config.put("idempotencyKeyTemplate",
                         (payConfigChangedAfterRequest ? "changed-" : template) + "${sendersReference}");
-                if (payUsesOverwritePolicy) {
+                if (paySftpPolicy != null) {
                     config.put("transport", "SFTP");
                     config.put("sftp", Map.of(
                             "dropPathTemplate", "/bank/${sendersReference}.fin",
-                            "remoteDuplicatePolicy", "OVERWRITE"));
+                            "remoteDuplicatePolicy", paySftpPolicy));
                 }
                 if (routePayConfig) {
                     config.put("routeTransports", Map.of(
@@ -287,7 +287,7 @@ class Mt101CorrectiveLifecycleServiceTest {
     void correctivePayRequiresSegregationOfDuties() throws Exception {
         service.advanceCorrective(null, FIX, "executor");
 
-        service.requestCorrectivePay(null, FIX, "ana");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
         // El mismo que solicita no puede aprobar el envio.
         var error = assertThrows(IllegalArgumentException.class,
                 () -> service.approveAndPayCorrective(null, FIX, "ana"));
@@ -307,7 +307,7 @@ class Mt101CorrectiveLifecycleServiceTest {
     void payRequiresArchivedAndPriorRequest() throws Exception {
         // No se puede pagar un correctivo que aun no esta ARCHIVED.
         var notArchived = assertThrows(IllegalArgumentException.class,
-                () -> service.requestCorrectivePay(null, FIX, "ana"));
+                () -> service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1"));
         assertTrue(notArchived.getMessage().contains("must be ARCHIVED"));
 
         service.advanceCorrective(null, FIX, "executor");
@@ -384,7 +384,7 @@ class Mt101CorrectiveLifecycleServiceTest {
         // en el momento del PAY, no la config vigente (que pudo cambiar entre el envio y la resolucion).
         payUncertain = true;
         service.advanceCorrective(null, FIX, "executor");
-        service.requestCorrectivePay(null, FIX, "ana");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
         service.approveAndPayCorrective(null, FIX, "luis"); // congela el perfil STATUS = "frozen-status/"
         try (Connection connection = dataSource.getConnection();
              var statement = connection.createStatement()) {
@@ -406,15 +406,91 @@ class Mt101CorrectiveLifecycleServiceTest {
     void correctivePayRejectsSftpOverwritePolicy() throws Exception {
         // P0/P1 v23: OVERWRITE puede re-entregar una instruccion de pago; se rechaza en la solicitud
         // (sin fallback), antes de cualquier hash/claim/envio.
-        payUsesOverwritePolicy = true;
+        paySftpPolicy = "OVERWRITE";
         service.advanceCorrective(null, FIX, "executor");
 
         var error = assertThrows(IllegalArgumentException.class,
-                () -> service.requestCorrectivePay(null, FIX, "ana"));
+                () -> service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1"));
         assertTrue(error.getMessage().contains("OVERWRITE"),
                 () -> "mensaje inesperado: " + error.getMessage());
         // No quedo solicitud de PAY.
         assertEquals("NOT_REQUESTED", payStatus(FIX));
+    }
+
+    @Test
+    void correctivePayRejectsSftpRenameWithSuffixPolicy() throws Exception {
+        // P0.4 v24: RENAME_WITH_SUFFIX crea un archivo nuevo que el banco puede tratar como otra
+        // instruccion de pago; para PAY correctivo solo SKIP_IF_SAME_HASH y FAIL son seguras.
+        paySftpPolicy = "RENAME_WITH_SUFFIX";
+        service.advanceCorrective(null, FIX, "executor");
+
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1"));
+        assertTrue(error.getMessage().contains("RENAME_WITH_SUFFIX"),
+                () -> "mensaje inesperado: " + error.getMessage());
+        assertEquals("NOT_REQUESTED", payStatus(FIX));
+    }
+
+    @Test
+    void requestAndResolveRequireBusinessReasonInBackendNotOnlyUi() throws Exception {
+        // P0.3 v24: motivo/ticket obligatorios en el BACKEND. Un cliente directo del API (sin pasar por
+        // la UI) no puede solicitar PAY sin justificacion ni resolver un incierto sin motivo.
+        service.advanceCorrective(null, FIX, "executor");
+
+        assertThrows(IllegalArgumentException.class,
+                () -> service.requestCorrectivePay(null, FIX, "ana", null, "TCK-1"), "sin motivo debe fallar");
+        assertThrows(IllegalArgumentException.class,
+                () -> service.requestCorrectivePay(null, FIX, "ana", "motivo", "   "), "sin ticket debe fallar");
+        assertEquals("NOT_REQUESTED", payStatus(FIX), "ninguna solicitud invalida queda persistida");
+
+        // Con motivo+ticket si: y resolver un incierto exige motivo.
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        payUncertain = true; // no se usa aqui, pero deja claro el contexto
+        assertThrows(IllegalArgumentException.class,
+                () -> service.resolveUncertainPay(null, FIX, "operador", null),
+                "resolver un incierto sin motivo debe fallar");
+    }
+
+    @Test
+    void payActionAuditTableIsAppendOnlyAtDatabaseLevel() throws Exception {
+        // P0.1 v24: la BD rechaza UPDATE/DELETE sobre el historial de acciones (trigger V53).
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        assertTrue(queryLong("select count(*) from mt101_corrective_pay_action where rebuild_run_id = '"
+                + FIX + "'") > 0, "debe existir al menos PAY_REQUESTED");
+
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement()) {
+            assertThrows(SQLException.class,
+                    () -> statement.executeUpdate("update mt101_corrective_pay_action set actor = 'tampered' "
+                            + "where rebuild_run_id = '" + FIX + "'"),
+                    "UPDATE sobre el historial debe ser rechazado por la BD");
+        }
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement()) {
+            assertThrows(SQLException.class,
+                    () -> statement.executeUpdate("delete from mt101_corrective_pay_action "
+                            + "where rebuild_run_id = '" + FIX + "'"),
+                    "DELETE sobre el historial debe ser rechazado por la BD");
+        }
+    }
+
+    @Test
+    void requestPayStateAndActionAreAtomicRollingBackOnAuditFailure() throws Exception {
+        // P0.1 v24: el cambio de pay_status y su accion auditada son atomicos. Si el insert de auditoria
+        // falla, el cambio de estado se revierte (no queda PAY_REQUESTED sin evidencia append-only).
+        service.advanceCorrective(null, FIX, "executor");
+        // Forzamos el fallo del insert de auditoria eliminando la tabla del historial.
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement()) {
+            statement.executeUpdate("drop table mt101_corrective_pay_action");
+        }
+
+        assertThrows(Exception.class,
+                () -> service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1"));
+        // El pay_status NO cambio: la transaccion completa se revirtio.
+        assertEquals("NOT_REQUESTED", payStatus(FIX),
+                "si falla la auditoria, el cambio de estado debe revertirse (atomico)");
     }
 
     @Test
@@ -425,7 +501,7 @@ class Mt101CorrectiveLifecycleServiceTest {
         // ruta/endpoint/idempotency distinta a la aprobada por el checker.
         payConfigDriftsAfterApprovalHash = true;
         service.advanceCorrective(null, FIX, "executor");
-        service.requestCorrectivePay(null, FIX, "ana");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
         var paid = service.approveAndPayCorrective(null, FIX, "luis");
 
         assertEquals("SENT", paid.payStatus());
@@ -443,7 +519,7 @@ class Mt101CorrectiveLifecycleServiceTest {
     @Test
     void payClaimPreventsDoubleSendWhenAnotherCheckerWonTheClaim() throws Exception {
         service.advanceCorrective(null, FIX, "executor");
-        service.requestCorrectivePay(null, FIX, "ana");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
 
         var repository = new Mt101RebuildRepository();
         var payloadHash = repository.archivedCorrectivePayloadHash(dataSource, FIX);
@@ -462,7 +538,7 @@ class Mt101CorrectiveLifecycleServiceTest {
     @Test
     void invalidatesPayRequestWhenArchivedPayloadHashChanges() throws Exception {
         service.advanceCorrective(null, FIX, "executor");
-        service.requestCorrectivePay(null, FIX, "ana");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
 
         try (Connection connection = dataSource.getConnection();
              var statement = connection.createStatement()) {
@@ -481,7 +557,7 @@ class Mt101CorrectiveLifecycleServiceTest {
     @Test
     void invalidatesPayRequestWhenPayConfigurationChanges() throws Exception {
         service.advanceCorrective(null, FIX, "executor");
-        service.requestCorrectivePay(null, FIX, "ana");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
 
         payConfigChangedAfterRequest = true;
 
@@ -497,7 +573,7 @@ class Mt101CorrectiveLifecycleServiceTest {
     void correctivePayPreparesIntentsFromPersistedRoutes() throws Exception {
         routePayConfig = true;
         service.advanceCorrective(null, FIX, "executor");
-        service.requestCorrectivePay(null, FIX, "ana");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
 
         var result = service.approveAndPayCorrective(null, FIX, "luis");
 
@@ -520,7 +596,7 @@ class Mt101CorrectiveLifecycleServiceTest {
     void partialPayPersistsFragmentDetailAndKeepsGranularQuarantine() throws Exception {
         rejectSecondPayFragment = true;
         service.advanceCorrective(null, FIX, "executor");
-        service.requestCorrectivePay(null, FIX, "ana");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
 
         var result = service.approveAndPayCorrective(null, FIX, "luis");
 
@@ -538,7 +614,7 @@ class Mt101CorrectiveLifecycleServiceTest {
     @Test
     void expiredExecutingPayBecomesUncertainWithoutRetry() throws Exception {
         service.advanceCorrective(null, FIX, "executor");
-        service.requestCorrectivePay(null, FIX, "ana");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
         var repository = new Mt101RebuildRepository();
         var payloadHash = repository.archivedCorrectivePayloadHash(dataSource, FIX);
         var configHash = repository.payRequestedConfigHash(dataSource, FIX);
@@ -556,7 +632,7 @@ class Mt101CorrectiveLifecycleServiceTest {
     void uncertainPayMarksRunUncertainWithoutSendingOrReconciling() throws Exception {
         payUncertain = true;
         service.advanceCorrective(null, FIX, "executor");
-        service.requestCorrectivePay(null, FIX, "ana");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
 
         service.approveAndPayCorrective(null, FIX, "luis");
 
@@ -575,7 +651,7 @@ class Mt101CorrectiveLifecycleServiceTest {
     void resolveUncertainPayRunsStatusWithoutSecondPayInvocation() throws Exception {
         payUncertain = true;
         service.advanceCorrective(null, FIX, "executor");
-        service.requestCorrectivePay(null, FIX, "ana");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
         service.approveAndPayCorrective(null, FIX, "luis");
         try (Connection connection = dataSource.getConnection();
              var statement = connection.createStatement()) {
@@ -617,7 +693,7 @@ class Mt101CorrectiveLifecycleServiceTest {
     void childCorrectiveFromPartialPaySelectsOnlyRejectedCorrectiveFragment() throws Exception {
         rejectSecondPayFragment = true;
         service.advanceCorrective(null, FIX, "executor");
-        service.requestCorrectivePay(null, FIX, "ana");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
         service.approveAndPayCorrective(null, FIX, "luis");
 
         var child = rebuildService.requestRebuildFromRejectedCorrective(null, FIX, "sofia", "retry rejected");
@@ -641,7 +717,7 @@ class Mt101CorrectiveLifecycleServiceTest {
         // (reusable -> doble pago): debe quedar UNCERTAIN para conciliacion.
         payThrowsAfterDispatch = true;
         service.advanceCorrective(null, FIX, "executor");
-        service.requestCorrectivePay(null, FIX, "ana");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
 
         assertThrows(RuntimeException.class, () -> service.approveAndPayCorrective(null, FIX, "luis"));
 
@@ -657,7 +733,7 @@ class Mt101CorrectiveLifecycleServiceTest {
         // P2 v20: el PAY sale; MT101_STATUS falla DESPUES. No debe lanzar ni revertir el pago.
         statusSyncFails = true;
         service.advanceCorrective(null, FIX, "executor");
-        service.requestCorrectivePay(null, FIX, "ana");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
 
         service.approveAndPayCorrective(null, FIX, "luis");
 
@@ -893,6 +969,14 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "actor varchar(120), reason text, ticket varchar(120),"
                     + "payload_hash varchar(64), config_hash varchar(64),"
                     + "created_at timestamp not null default current_timestamp)");
+            // V53: refuerzo append-only (mismo trigger que produccion) para evidenciarlo en test.
+            s.executeUpdate("create or replace function mt101_pay_action_block_mutation() returns trigger as $$ "
+                    + "begin raise exception 'mt101_corrective_pay_action is append-only: % is not allowed', tg_op; "
+                    + "end; $$ language plpgsql");
+            s.executeUpdate("drop trigger if exists trg_mt101_pay_action_no_row_mutation on mt101_corrective_pay_action");
+            s.executeUpdate("create trigger trg_mt101_pay_action_no_row_mutation "
+                    + "before update or delete on mt101_corrective_pay_action "
+                    + "for each row execute function mt101_pay_action_block_mutation()");
         }
     }
 

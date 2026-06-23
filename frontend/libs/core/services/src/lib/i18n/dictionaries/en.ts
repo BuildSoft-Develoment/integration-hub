@@ -907,6 +907,7 @@ export const en = {
   'audit.quarantine.payResolutionReason': 'Resolution reason (reviewed evidence)',
   'audit.quarantine.payResolutionReasonRequired': 'A business reason is required to resolve an uncertain PAY.',
   'audit.quarantine.resolveUncertainPay': 'Resolve uncertain PAY',
+  'audit.quarantine.payHistory': 'PAY history',
   'audit.quarantine.traceAria': 'View full traceability of row {row}',
   'audit.quarantine.traceLink': 'Lineage',
   'audit.quarantine.correctLabel': 'Fixed payload (JSON) for row {row}',

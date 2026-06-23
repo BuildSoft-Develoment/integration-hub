@@ -927,6 +927,7 @@ export const es = {
   'audit.quarantine.payResolutionReason': 'Motivo de la resolución (evidencia revisada)',
   'audit.quarantine.payResolutionReasonRequired': 'Se requiere un motivo de negocio para resolver un PAY incierto.',
   'audit.quarantine.resolveUncertainPay': 'Resolver PAY incierto',
+  'audit.quarantine.payHistory': 'Historial PAY',
   'audit.quarantine.traceAria': 'Ver trazabilidad completa de la fila {row}',
   'audit.quarantine.traceLink': 'Linaje',
   'audit.quarantine.correctLabel': 'Payload corregido (JSON) para la fila {row}',

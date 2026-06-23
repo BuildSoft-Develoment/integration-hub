@@ -2,6 +2,7 @@ package com.integrationhub.platform.api.resource.execution;
 
 import com.integrationhub.platform.api.response.execution.Mt101FailedRecordResponse;
 import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRepository;
+import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
 import com.integrationhub.platform.service.payments.swift.Mt101CorrectiveLifecycleService;
 import com.integrationhub.platform.service.payments.swift.Mt101LoteService;
 import com.integrationhub.platform.service.payments.swift.Mt101QuarantineService;
@@ -318,6 +319,20 @@ public class Mt101QuarantineResource {
         try {
             return correctiveLifecycleService.resolveUncertainPay(
                     connectionRef, rebuildRunId, actor(securityContext), reason);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /** v24: historial append-only completo de acciones PAY del run (trazabilidad operativa E2E). */
+    @GET
+    @Path("/rebuild-runs/pay-actions")
+    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    public List<Mt101RebuildRepository.PayAction> payActions(
+            @QueryParam("connectionRef") String connectionRef,
+            @QueryParam("rebuildRunId") String rebuildRunId) {
+        try {
+            return correctiveLifecycleService.listPayActions(connectionRef, rebuildRunId);
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }

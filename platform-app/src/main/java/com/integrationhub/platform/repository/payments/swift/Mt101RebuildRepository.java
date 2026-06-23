@@ -677,10 +677,38 @@ public class Mt101RebuildRepository {
         }
     }
 
-    /** B2': solicita el envio del correctivo (maker) con estado explicito PAY. */
-    public int requestPay(DataSource dataSource, String rebuildRunId, String requestedBy,
-                          String payloadHash, String configHash,
-                          String requestReason, String requestTicket) throws SQLException {
+    /**
+     * B2': solicita el envio del correctivo (maker) y registra la accion PAY_REQUESTED en UNA sola
+     * transaccion (P0.1 v24): si falla el insert de auditoria, se revierte el cambio de pay_status. No
+     * quedan estados sin evidencia ni evidencia sin estado.
+     */
+    public int requestPayWithAction(DataSource dataSource, String rebuildRunId, String requestedBy,
+                                    String payloadHash, String configHash, String requestReason,
+                                    String requestTicket, String previousStatus) throws SQLException {
+        try (var connection = dataSource.getConnection()) {
+            var previousAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                var updated = requestPay(connection, rebuildRunId, requestedBy, payloadHash, configHash,
+                        requestReason, requestTicket);
+                if (updated > 0) {
+                    recordPayAction(connection, rebuildRunId, "PAY_REQUESTED", previousStatus, "REQUESTED",
+                            requestedBy, requestReason, requestTicket, payloadHash, configHash);
+                }
+                connection.commit();
+                return updated;
+            } catch (SQLException error) {
+                connection.rollback();
+                throw error;
+            } finally {
+                connection.setAutoCommit(previousAutoCommit);
+            }
+        }
+    }
+
+    private int requestPay(java.sql.Connection connection, String rebuildRunId, String requestedBy,
+                           String payloadHash, String configHash,
+                           String requestReason, String requestTicket) throws SQLException {
         var sql = "update mt101_rebuild_run set pay_status = 'REQUESTED', pay_requested_by = ?, "
                 + "pay_requested_at = current_timestamp, pay_claimed_by = null, pay_claimed_at = null, "
                 + "pay_approved_by = null, pay_approved_at = null, pay_completed_at = null, "
@@ -691,8 +719,7 @@ public class Mt101RebuildRepository {
                 + "pay_uncertain_reason = null, pay_error_message = null, updated_at = current_timestamp "
                 + "where rebuild_run_id = ? and status = 'ARCHIVED' "
                 + "and pay_status in ('NOT_REQUESTED', 'FAILED', 'INVALIDATED')";
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
+        try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, requestedBy);
             statement.setString(2, payloadHash);
             statement.setString(3, configHash);
@@ -864,11 +891,21 @@ public class Mt101RebuildRepository {
                                 String previousStatus, String newStatus, String actor,
                                 String reason, String ticket, String payloadHash, String configHash)
             throws SQLException {
+        try (var connection = dataSource.getConnection()) {
+            recordPayAction(connection, rebuildRunId, actionType, previousStatus, newStatus, actor,
+                    reason, ticket, payloadHash, configHash);
+        }
+    }
+
+    /** Variante transaccional: inserta la accion en la conexion dada (misma tx que el cambio de estado). */
+    private void recordPayAction(java.sql.Connection connection, String rebuildRunId, String actionType,
+                                 String previousStatus, String newStatus, String actor,
+                                 String reason, String ticket, String payloadHash, String configHash)
+            throws SQLException {
         var sql = "insert into mt101_corrective_pay_action "
                 + "(rebuild_run_id, action_type, previous_status, new_status, actor, reason, ticket, "
                 + "payload_hash, config_hash) values (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
+        try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, rebuildRunId);
             statement.setString(2, actionType);
             statement.setString(3, previousStatus);
@@ -908,6 +945,34 @@ public class Mt101RebuildRepository {
                 return rs.next() ? rs.getString(1) : null;
             }
         }
+    }
+
+    /** v24: historial append-only completo de acciones PAY de un run (orden cronologico). */
+    public List<PayAction> payActions(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "select action_type, previous_status, new_status, actor, reason, ticket, created_at "
+                + "from mt101_corrective_pay_action where rebuild_run_id = ? order by id";
+        var result = new ArrayList<PayAction>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new PayAction(
+                            rs.getString("action_type"),
+                            rs.getString("previous_status"),
+                            rs.getString("new_status"),
+                            rs.getString("actor"),
+                            rs.getString("reason"),
+                            rs.getString("ticket"),
+                            timestamp(rs, "created_at")));
+                }
+            }
+        }
+        return result;
+    }
+
+    public record PayAction(String actionType, String previousStatus, String newStatus,
+                            String actor, String reason, String ticket, LocalDateTime createdAt) {
     }
 
     /** B2': PAY incierto; no se reintenta automaticamente para evitar doble envio. */

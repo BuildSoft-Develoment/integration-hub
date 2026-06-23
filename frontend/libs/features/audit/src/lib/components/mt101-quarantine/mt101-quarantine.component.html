@@ -153,8 +153,22 @@
             @if (payStatusFor(corr.rebuildRunId) === 'UNCERTAIN') {
               <button mat-stroked-button type="button" (click)="resolveUncertainPay()" [disabled]="loading()">{{ i18n.t('audit.quarantine.resolveUncertainPay') }}</button>
             }
+            <button mat-stroked-button type="button" (click)="loadPayActions()" [disabled]="loading()">{{ i18n.t('audit.quarantine.payHistory') }}</button>
             <button mat-stroked-button type="button" (click)="dismissCorrective()" [disabled]="loading()">{{ i18n.t('audit.common.cancel') }}</button>
           </div>
+          @if (payActions().length > 0) {
+            <ol class="q__pay-actions">
+              @for (action of payActions(); track $index) {
+                <li class="q__muted">
+                  {{ action.actionType }}
+                  @if (action.actor) { — {{ action.actor }} }
+                  @if (action.createdAt) { ({{ action.createdAt }}) }
+                  @if (action.reason) { · {{ action.reason }} }
+                  @if (action.ticket) { · {{ action.ticket }} }
+                </li>
+              }
+            </ol>
+          }
         </div>
       }
 
