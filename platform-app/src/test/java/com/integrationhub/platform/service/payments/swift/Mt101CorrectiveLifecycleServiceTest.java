@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -77,6 +78,9 @@ class Mt101CorrectiveLifecycleServiceTest {
     private volatile String dispatchedIdempotencyTemplate;
     // P0/P1 v23: PAY correctivo con sftp.remoteDuplicatePolicy=OVERWRITE debe rechazarse.
     private boolean payUsesOverwritePolicy;
+    // Hardening v23: el perfil de MT101_STATUS cambia DESPUES del PAY; la resolucion debe usar el congelado.
+    private boolean statusConfigChangedAfterPay;
+    private volatile String dispatchedStatusQueryUrl;
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -99,6 +103,8 @@ class Mt101CorrectiveLifecycleServiceTest {
         payConfigReadCount.set(0);
         dispatchedIdempotencyTemplate = null;
         payUsesOverwritePolicy = false;
+        statusConfigChangedAfterPay = false;
+        dispatchedStatusQueryUrl = null;
 
         rebuildService = new Mt101RebuildService(dataSource, null, null, null,
                 new Mt101FailedRecordRepository(), new Mt101FragmentRepository(), new Mt101RebuildRepository());
@@ -197,6 +203,10 @@ class Mt101CorrectiveLifecycleServiceTest {
             @Override
             public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
                 statusInvocations.incrementAndGet();
+                // Hardening v23: registra el perfil de STATUS con el que REALMENTE se consulta.
+                if (configuration.get("query") instanceof Map<?, ?> query) {
+                    dispatchedStatusQueryUrl = String.valueOf(query.get("url"));
+                }
                 if (statusSyncFails) {
                     throw new IllegalStateException("gateway STATUS query unavailable");
                 }
@@ -249,6 +259,11 @@ class Mt101CorrectiveLifecycleServiceTest {
                                     "transport", "SFTP",
                                     "sftp", Map.of("dropPathTemplate", "/bank/${sendersReference}.fin"))));
                 }
+            }
+            if ("MT101_STATUS".equals(taskType)) {
+                // El perfil de STATUS "deriva" si cambia despues del PAY; el snapshot congelado lo evita.
+                config.put("query", Map.of("url",
+                        (statusConfigChangedAfterPay ? "drift-status/" : "frozen-status/") + "${idempotencyKey}"));
             }
             return config;
         };
@@ -347,8 +362,8 @@ class Mt101CorrectiveLifecycleServiceTest {
 
         var actions = queryStrings("select action_type from mt101_corrective_pay_action "
                 + "where rebuild_run_id = '" + FIX + "' order by id");
-        assertEquals(List.of("PAY_REQUESTED", "PAY_CLAIMED", "PAY_UNCERTAIN", "PAY_RESOLVED"), actions,
-                "el historial conserva todas las acciones en orden, no solo la ultima");
+        assertEquals(List.of("PAY_REQUESTED", "PAY_CLAIMED", "PAY_DISPATCHING", "PAY_UNCERTAIN", "PAY_RESOLVED"),
+                actions, "el historial conserva todas las acciones en orden, no solo la ultima");
         // El actor queda por accion: maker en REQUESTED, checker en CLAIMED, operador en RESOLVED.
         assertEquals("ana", queryString("select actor from mt101_corrective_pay_action "
                 + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_REQUESTED'"));
@@ -361,6 +376,30 @@ class Mt101CorrectiveLifecycleServiceTest {
                 + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_REQUESTED'"));
         assertEquals("INC-1", queryString("select ticket from mt101_corrective_pay_action "
                 + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_REQUESTED'"));
+    }
+
+    @Test
+    void resolveUncertainPayUsesTheStatusProfileFrozenAtPayNotTheCurrentConfig() throws Exception {
+        // Hardening v23: la resolucion de un PAY_UNCERTAIN consulta el perfil de MT101_STATUS CONGELADO
+        // en el momento del PAY, no la config vigente (que pudo cambiar entre el envio y la resolucion).
+        payUncertain = true;
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana");
+        service.approveAndPayCorrective(null, FIX, "luis"); // congela el perfil STATUS = "frozen-status/"
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'UNCERTAIN' "
+                    + "where rebuild_run_id = '" + FIX + "'");
+        }
+        // El perfil de STATUS cambia DESPUES del PAY.
+        statusConfigChangedAfterPay = true;
+
+        service.resolveUncertainPay(null, FIX, "operador", "INC-9 revisado");
+
+        assertNotNull(dispatchedStatusQueryUrl, "la resolucion debe consultar STATUS");
+        assertTrue(dispatchedStatusQueryUrl.startsWith("frozen-status/"),
+                () -> "la resolucion debe usar el perfil de STATUS congelado en el PAY, no el vigente: "
+                        + dispatchedStatusQueryUrl);
     }
 
     @Test
@@ -792,6 +831,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "pay_completed_at timestamp, pay_error_message text,"
                     + "pay_resolved_by varchar(120), pay_resolved_at timestamp, pay_resolution_reason text,"
                     + "pay_request_reason text, pay_request_ticket varchar(120),"
+                    + "pay_status_config_snapshot text,"
                     + "status_sync_status varchar(20) not null default 'PENDING', status_sync_error text,"
                     + "reconciliation_status varchar(20) not null default 'PENDING', reconciliation_error text,"
                     + "parent_rebuild_run_id varchar(80), parent_corrective_set_id varchar(80),"

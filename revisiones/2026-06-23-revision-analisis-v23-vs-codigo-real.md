@@ -28,8 +28,8 @@ se cumple con el claim atómico (validado en v22).
 | P1 | Resolver PAY incierto no recibe motivo de negocio (solo texto técnico) | **REAL → CORREGIDO** | `resolveUncertainPay(...reason)` antepone el motivo del operador AL detalle técnico (la auditoría conserva ambos). Test asserta ambos en `pay_resolution_reason` |
 | P0.1 | El plan aprobado no es el plan ejecutado (PAY re-lee config dinámica) | **REAL → CORREGIDO (2º pase)** | `approveAndPayCorrective` lee la config de MT101_PAY **una sola vez** (snapshot congelado); ese mismo objeto se hashea, se valida contra el hash de la solicitud, y se usa para preparar intents **y** despachar (overload `runStage(...frozenBaseConfig)`). Sin re-lectura entre hash y envío. Test `payDispatchesTheFrozenApprovedConfigNotAConfigReReadAtDispatch` (config que "deriva" tras el hash → el envío usa la aprobada) |
 | P1 | OVERWRITE permitido para PAY (puede re-entregar un pago) | **REAL → CORREGIDO (2º pase)** | `assertCorrectivePayPolicy` rechaza `sftp.remoteDuplicatePolicy=OVERWRITE` (base y por ruta) en solicitud y aprobación, sin fallback. Test `correctivePayRejectsSftpOverwritePolicy` |
-| P1 | Auditoría de PAY mutable, no append-only | **REAL → CORREGIDO (2º pase)** | **V51** `mt101_corrective_pay_action`: historial inmutable con una fila por transición (REQUESTED/CLAIMED/SENT/UNCERTAIN/PARTIALLY_SENT/REJECTED/INVALIDATED/RESOLVED) con actor/motivo/ticket/hashes. Test `payActionsAreRecordedAppendOnlyAcrossRequestClaimUncertainAndResolution` |
-| P1 | STATUS usa config actual, no perfil congelado por fragmento | **ABIERTO (hardening, documentado)** | `routeQuery` (cierre v22) ya consulta por ruta del fragmento; falta congelar `status_profile_ref`/`version` por fragmento. Mismo concepto que P0.1 pero en la consulta post-PAY; el riesgo es acotado (la ruta del fragmento ya está persistida e inmutable). Documentado |
+| P1 | Auditoría de PAY mutable, no append-only | **REAL → CORREGIDO (2º pase)** | **V51** `mt101_corrective_pay_action`: historial inmutable con una fila por transición (REQUESTED/CLAIMED/**DISPATCHING**/SENT/UNCERTAIN/PARTIALLY_SENT/REJECTED/INVALIDATED/RESOLVED) con actor/motivo/ticket/hashes. Test `payActionsAreRecordedAppendOnlyAcrossRequestClaimUncertainAndResolution` |
+| P1 | STATUS usa config actual, no perfil congelado por fragmento | **REAL → CORREGIDO (3er pase)** | **V52** `pay_status_config_snapshot`: el PAY congela el perfil de MT101_STATUS y `resolveUncertainPay` consulta ese snapshot, no la config vigente (que pudo cambiar entre el envío y la resolución). Sin fallback cuando hay snapshot. Test `resolveUncertainPayUsesTheStatusProfileFrozenAtPayNotTheCurrentConfig` |
 
 ---
 
@@ -85,10 +85,13 @@ Test asserta que `pay_resolution_reason` contiene el motivo de negocio **y** la 
 
 - `SftpPaymentTransportTest` — **13** (incluye los 2 de clasificación por fase).
 - `RestPaymentTransportTest` — **15** (sin cambios; paridad de referencia).
-- `Mt101CorrectiveLifecycleServiceTest` — **18** (1er pase: `payStatus` en respuesta + motivo de
-  resolución operador+técnico; 2º pase: config congelada, rechazo de OVERWRITE, historial append-only).
-- Dominio swift completo (provider + service + repository + transport): **219** tests, 0 fallos.
-- Frontend: `nx build web` exitoso (1er pase).
+- `Mt101CorrectiveLifecycleServiceTest` — **19** (1er pase: `payStatus` en respuesta + motivo de
+  resolución; 2º pase: config congelada, rechazo de OVERWRITE, historial append-only; 3er pase: perfil
+  de STATUS congelado).
+- Dominio swift completo (provider + service + repository + transport): **220** tests, 0 fallos.
+- **Integración end-to-end (Flyway real con V51/V52):** `BankProfileHomologationIT` + `Mt101OutboundEndToEndIT`
+  = **3** tests, 0 fallos, `BUILD SUCCESS`.
+- Frontend: `nx build web` exitoso + `nx test web` **214** specs (56 archivos), 0 fallos.
 
 ## Segundo pase (doble check) — cierre de los P0.1/P1 que quedaban abiertos
 
@@ -120,13 +123,21 @@ A diferencia de `mt101_rebuild_run` (que se sobrescribe), el historial conserva 
 Test `payActionsAreRecordedAppendOnlyAcrossRequestClaimUncertainAndResolution` (request→claim→uncertain
 →resolución deja 4 filas ordenadas con su actor; el motivo/ticket del maker queda en la fila de solicitud).
 
-## Riesgo abierto restante (documentado, no bloqueante; hardening)
+## Tercer pase (cierre del último hardening) — perfil de STATUS congelado
 
-**Perfil de STATUS congelado por fragmento (P1).** `routeQuery` (cierre v22) ya consulta por la ruta
-persistida del fragmento; el endurecimiento adicional sería congelar `status_profile_ref`/`version` por
-fragmento, simétrico al plan de PAY. Riesgo acotado: la ruta del fragmento (`routed_as`) ya está
-persistida e inmutable tras MT101_ROUTE, así que la consulta usa la ruta real del envío. Se deja
-documentado; no afecta la garantía central de seguridad de dinero.
+**P1 — la resolución de un incierto usa el perfil de STATUS congelado en el PAY.** **V52** agrega
+`pay_status_config_snapshot`. En `approveAndPayCorrective`, tras el claim, se serializa y persiste la
+config de MT101_STATUS (el perfil usado al enviar). `resolveUncertainPay` deserializa ese snapshot y lo
+pasa como `frozenBaseConfig` al `runStage` de STATUS, de modo que la consulta diferida (que puede correr
+mucho después) usa el perfil del PAY, **no** la config vigente. Sin fallback cuando hay snapshot.
+Además, `PAY_DISPATCHING` ya queda registrado en el historial append-only. Test
+`resolveUncertainPayUsesTheStatusProfileFrozenAtPayNotTheCurrentConfig` (el perfil de STATUS "deriva"
+tras el PAY → la resolución usa el congelado, no el derivado).
+
+## Pendientes
+
+Ninguno funcional. Todos los hallazgos del v23 (P0/P1/P2) quedaron cerrados con prueba; no quedan
+endurecimientos abiertos.
 
 ## Conclusión
 

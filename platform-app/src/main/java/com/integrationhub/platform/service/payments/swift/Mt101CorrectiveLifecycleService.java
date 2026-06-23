@@ -242,8 +242,21 @@ public class Mt101CorrectiveLifecycleService {
             }
             recordPayAction(dataSource, runId, "PAY_CLAIMED", "REQUESTED", "EXECUTING",
                     approver, null, null, payloadHash, configHash);
+            // Hardening v23: congela el perfil de MT101_STATUS usado al enviar, para que la resolucion
+            // diferida de un PAY_UNCERTAIN consulte ese perfil (no la config vigente, que pudo cambiar).
+            var frozenStatusConfig = stageConfig(prep, "MT101_STATUS");
+            if (frozenStatusConfig != null) {
+                try {
+                    rebuildRepository.freezePayStatusConfig(dataSource, runId,
+                            objectMapper.writeValueAsString(frozenStatusConfig));
+                } catch (JsonProcessingException error) {
+                    throw new IllegalStateException("cannot freeze MT101_STATUS config for run " + runId, error);
+                }
+            }
             rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, run.correctiveSetId());
             preparePayIntents(dataSource, runId, run.correctiveSetId(), frozenPayConfig);
+            recordPayAction(dataSource, runId, "PAY_DISPATCHING", "EXECUTING", "DISPATCHING",
+                    approver, null, null, payloadHash, configHash);
             try {
                 var payResult = runStage(payProvider, prep, "MT101_PAY", false,
                         correctiveFragmentPaySource(runId, prep), null, frozenPayConfig);
@@ -351,9 +364,12 @@ public class Mt101CorrectiveLifecycleService {
             // STATUS, nunca se reenvia a ciegas.
             statusOverrides.put("correctivePayStatuses", List.of("UNCERTAIN", "DISPATCHING"));
             statusOverrides.put("resolveCorrectivePay", true);
+            // Hardening v23: si el PAY congelo el perfil de MT101_STATUS, la resolucion consulta ESE perfil
+            // (no la config vigente, que pudo cambiar entre el envio y esta resolucion). Sin fallback.
+            var frozenStatusConfig = frozenStatusConfig(dataSource, runId);
             try {
                 runStage(statusProvider, prep, "MT101_STATUS", true,
-                        correctivePaySource(runId, connectionRef), statusOverrides);
+                        correctivePaySource(runId, connectionRef), statusOverrides, frozenStatusConfig);
                 rebuildRepository.markStatusSync(dataSource, runId, "OK", null);
             } catch (RuntimeException error) {
                 rebuildRepository.markStatusSync(dataSource, runId, "FAILED", error.getMessage());
@@ -561,6 +577,24 @@ public class Mt101CorrectiveLifecycleService {
         if (policy != null && "OVERWRITE".equalsIgnoreCase(String.valueOf(policy).trim())) {
             throw new IllegalArgumentException("corrective PAY must not use sftp.remoteDuplicatePolicy=OVERWRITE; "
                     + "use SKIP_IF_SAME_HASH (idempotent) or FAIL to avoid re-delivering a payment instruction");
+        }
+    }
+
+    /**
+     * v23: deserializa el snapshot congelado de la config de MT101_STATUS (perfil usado al enviar). Si no
+     * hay snapshot (p. ej. el proceso no tiene STATUS), devuelve {@code null} y {@code runStage} usa la
+     * config vigente. Sin fallback cuando SI existe snapshot: se usa exactamente ese perfil.
+     */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> frozenStatusConfig(DataSource dataSource, String runId) throws SQLException {
+        var snapshot = rebuildRepository.payStatusConfigSnapshot(dataSource, runId);
+        if (snapshot == null || snapshot.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(snapshot, LinkedHashMap.class);
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("cannot read frozen MT101_STATUS config for run " + runId, error);
         }
     }
 

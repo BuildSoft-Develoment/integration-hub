@@ -882,6 +882,34 @@ public class Mt101RebuildRepository {
         }
     }
 
+    /**
+     * v23: congela un snapshot (JSON) de la config de MT101_STATUS en el momento del PAY, para que la
+     * resolucion diferida de un PAY_UNCERTAIN consulte el perfil usado al enviar, no la config vigente.
+     */
+    public void freezePayStatusConfig(DataSource dataSource, String rebuildRunId, String snapshotJson)
+            throws SQLException {
+        var sql = "update mt101_rebuild_run set pay_status_config_snapshot = ?, updated_at = current_timestamp "
+                + "where rebuild_run_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, snapshotJson);
+            statement.setString(2, rebuildRunId);
+            statement.executeUpdate();
+        }
+    }
+
+    /** v23: snapshot congelado de la config de MT101_STATUS, o {@code null} si no se congelo. */
+    public String payStatusConfigSnapshot(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "select pay_status_config_snapshot from mt101_rebuild_run where rebuild_run_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }
+    }
+
     /** B2': PAY incierto; no se reintenta automaticamente para evitar doble envio. */
     public void markPayUncertain(DataSource dataSource, String rebuildRunId, String reason) throws SQLException {
         var sql = "update mt101_rebuild_run set pay_status = 'UNCERTAIN', pay_uncertain_reason = ?, "
