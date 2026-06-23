@@ -203,11 +203,13 @@ class Mt101PayTaskProviderTest {
     }
 
     @Test
-    void capturesTransportExceptionAsRejection() {
+    void capturesUnexpectedTransportExceptionAsUncertain() {
+        // P0 v26: una excepcion INESPERADA del transporte (no IllegalArgumentException de config) se
+        // clasifica INCIERTO, nunca REJECTED reusable: no se puede demostrar que no salio al banco.
         var transport = new StubTransport("REST", null) {
             @Override
             public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
-                throw new IllegalStateException("DNS lookup failed");
+                throw new IllegalStateException("connection dropped mid-send");
             }
         };
         var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
@@ -219,9 +221,33 @@ class Mt101PayTaskProviderTest {
 
         assertFalse(result.success());
         @SuppressWarnings("unchecked")
+        var records = (List<Map<String, Object>>) result.outputs().get("uncertain");
+        assertEquals("UNCERTAIN", records.get(0).get("status"));
+        assertTrue(((String) records.get(0).get("lastError")).contains("unexpected transport error"));
+    }
+
+    @Test
+    void capturesTransportConfigErrorAsRejection() {
+        // Un error de CONFIG (IllegalArgumentException, antes de cualquier I/O) si es rechazo seguro: el
+        // mensaje no salio. Re-solicitable tras corregir la config.
+        var transport = new StubTransport("REST", null) {
+            @Override
+            public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
+                throw new IllegalArgumentException("missing rest.url");
+            }
+        };
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
+        var context = contextWith(List.of(sampleMessage("PROC-CFG")));
+
+        var result = provider.execute(context, Map.of(
+                "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records")
+        ));
+
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
         var records = (List<Map<String, Object>>) result.outputs().get("records");
         assertEquals("REJECTED", records.get(0).get("status"));
-        assertTrue(((String) records.get(0).get("lastError")).contains("DNS"));
+        assertTrue(((String) records.get(0).get("lastError")).contains("config error"));
     }
 
     @Test

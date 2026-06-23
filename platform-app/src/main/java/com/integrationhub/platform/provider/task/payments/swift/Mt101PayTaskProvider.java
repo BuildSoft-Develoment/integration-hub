@@ -367,8 +367,14 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 transport.transport(), configuration, message);
         try {
             result = transport.send(message, dispatchConfiguration);
+        } catch (IllegalArgumentException configError) {
+            // Error de configuracion/validacion ANTES de cualquier I/O (los transportes validan la config
+            // antes de conectar): el mensaje NO salio al banco -> rechazo seguro (re-solicitable).
+            result = TransportResult.rejected(1, 0L, "transport config error: " + configError.getMessage());
         } catch (RuntimeException error) {
-            result = TransportResult.rejected(1, 0L, "transport error: " + error.getMessage());
+            // P0 v26: excepcion INESPERADA durante el envio. Regla bancaria: si no se puede DEMOSTRAR que
+            // no salio al banco, se clasifica INCIERTO (nunca REJECTED reusable -> evita doble pago).
+            result = TransportResult.uncertain(1, 0L, "unexpected transport error: " + error.getMessage());
         }
 
         var ref = message.sequenceA() != null ? message.sequenceA().sendersReference() : null;

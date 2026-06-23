@@ -8,18 +8,26 @@ import com.integrationhub.platform.spi.task.TaskResult;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import com.jcraft.jsch.ChannelSftp;
+import com.jcraft.jsch.JSch;
+import com.jcraft.jsch.Session;
 import org.postgresql.ds.PGSimpleDataSource;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import javax.sql.DataSource;
+import java.io.ByteArrayInputStream;
 import java.net.http.HttpClient;
+import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
@@ -48,6 +56,15 @@ class Mt101StatusTaskProviderTest {
             .withDatabaseName("status_test")
             .withUsername("postgres")
             .withPassword("postgres");
+
+    private static final String SFTP_USER = "swift";
+    private static final String SFTP_PASSWORD = "swift123";
+
+    @Container
+    static final GenericContainer<?> SFTP = new GenericContainer<>("atmoz/sftp:alpine")
+            .withExposedPorts(22)
+            .withCommand(SFTP_USER + ":" + SFTP_PASSWORD + ":1001:100:upload")
+            .waitingFor(Wait.forListeningPort());
 
     private DataSource dataSource;
     private Mt101StatusTaskProvider provider;
@@ -183,6 +200,91 @@ class Mt101StatusTaskProviderTest {
         verify(0, getRequestedFor(urlEqualTo("/rest/status/KEY-R3")));
         verify(0, getRequestedFor(urlEqualTo("/sftp/status/KEY-R3")));
         assertEquals(2, countRows("mt101_confirmation"), "solo se confirman los fragmentos con ruta resuelta");
+    }
+
+    @Test
+    void correctiveStatusResolvesSftpRouteFromBankAckFile() throws Exception {
+        // StatusTransport SFTP: un fragmento ruteado por SFTP se resuelve leyendo el archivo ACK/NACK que
+        // el banco deja en el directorio de confirmaciones, NO por HTTP. ACK -> ACCEPTED -> SENT.
+        insertCorrectiveStatusRecord("RUN-SFTP", "SET-FIX", "S1", "KEY-S1", 401L, "UNCERTAIN", "SFTP_BANK");
+        writeSftpFile("/upload/S1.ack", "PaymentStatusReport: STATUS=ACCP (ACK) ref=S1");
+
+        var result = provider.execute(contextWith("pay-mt101.records",
+                Map.of("correctivePayRunId", "RUN-SFTP")), Map.of(
+                "mode", "query",
+                "correctivePayStatuses", List.of("UNCERTAIN"),
+                "resolveCorrectivePay", true,
+                "acceptedStatuses", List.of("ACCEPTED"),
+                "input", Map.of("sourceTaskRef", "pay-mt101", "sourceOutput", "records"),
+                "routeQuery", Map.of("SFTP_BANK", Map.of(
+                        "transport", "SFTP",
+                        "responseFileTemplate", "/upload/${sendersReference}.ack",
+                        "acceptedTokens", List.of("ACCP", "ACK"),
+                        "rejectedTokens", List.of("RJCT", "NACK"),
+                        "sftp", sftpRouteConfig()))));
+
+        assertTrue(result.success(), () -> "expected success, got: " + result.details());
+        assertEquals(1, result.outputs().get("resolvedPayCount"));
+        assertEquals(1, countRowsWithPayStatus("SENT"), "el ACK del banco resuelve el fragmento SFTP a SENT");
+        assertEquals(0, countRowsWithPayStatus("UNCERTAIN"));
+    }
+
+    @Test
+    void correctiveStatusSftpKeepsFragmentPendingWhenBankHasNotAckedYet() throws Exception {
+        // Si el banco AUN no dejo el archivo de respuesta, el fragmento queda pendiente (UNCERTAIN), NO
+        // error: se reintenta en otra corrida. No se asume enviado ni rechazado.
+        insertCorrectiveStatusRecord("RUN-SFTP2", "SET-FIX", "S2", "KEY-S2", 402L, "UNCERTAIN", "SFTP_BANK");
+        // (no se escribe ningun archivo ACK)
+
+        var result = provider.execute(contextWith("pay-mt101.records",
+                Map.of("correctivePayRunId", "RUN-SFTP2")), Map.of(
+                "mode", "query",
+                "correctivePayStatuses", List.of("UNCERTAIN"),
+                "resolveCorrectivePay", true,
+                "acceptedStatuses", List.of("ACCEPTED"),
+                "input", Map.of("sourceTaskRef", "pay-mt101", "sourceOutput", "records"),
+                "routeQuery", Map.of("SFTP_BANK", Map.of(
+                        "transport", "SFTP",
+                        "responseFileTemplate", "/upload/${sendersReference}.ack",
+                        "acceptedTokens", List.of("ACCP", "ACK"),
+                        "sftp", sftpRouteConfig()))));
+
+        assertTrue(result.success(), () -> "sin ACK aun, no es error: " + result.details());
+        assertEquals(0, result.outputs().get("resolvedPayCount"));
+        assertEquals(0, result.outputs().get("errorCount"), "archivo de respuesta ausente = pendiente, no error");
+        assertEquals(1, countRowsWithPayStatus("UNCERTAIN"), "el fragmento sigue UNCERTAIN hasta el ACK");
+    }
+
+    private Map<String, Object> sftpRouteConfig() {
+        return Map.of(
+                "host", SFTP.getHost(),
+                "port", SFTP.getMappedPort(22),
+                "username", SFTP_USER,
+                "password", SFTP_PASSWORD,
+                "strictHostKeyChecking", false,
+                "timeoutMillis", 15000);
+    }
+
+    private void writeSftpFile(String path, String content) throws Exception {
+        Session session = null;
+        ChannelSftp channel = null;
+        try {
+            var jsch = new JSch();
+            session = jsch.getSession(SFTP_USER, SFTP.getHost(), SFTP.getMappedPort(22));
+            session.setPassword(SFTP_PASSWORD);
+            var props = new Properties();
+            props.put("StrictHostKeyChecking", "no");
+            session.setConfig(props);
+            session.connect(5000);
+            channel = (ChannelSftp) session.openChannel("sftp");
+            channel.connect(5000);
+            try (var input = new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8))) {
+                channel.put(input, path, ChannelSftp.OVERWRITE);
+            }
+        } finally {
+            if (channel != null && channel.isConnected()) channel.disconnect();
+            if (session != null && session.isConnected()) session.disconnect();
+        }
     }
 
     @Test

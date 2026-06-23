@@ -983,10 +983,12 @@ public class Mt101RebuildRepository {
                                 String previousStatus, String newStatus, String actor,
                                 String reason, String ticket, String payloadHash, String configHash)
             throws SQLException {
-        try (var connection = dataSource.getConnection()) {
+        // v26: en transaccion para que el advisory lock de la cadena (xact) sea efectivo.
+        inTransaction(dataSource, connection -> {
             recordPayAction(connection, rebuildRunId, actionType, previousStatus, newStatus, actor,
                     reason, ticket, payloadHash, configHash);
-        }
+            return null;
+        });
     }
 
     /** Variante transaccional: inserta la accion en la conexion dada (misma tx que el cambio de estado). */
@@ -996,6 +998,10 @@ public class Mt101RebuildRepository {
             throws SQLException {
         // v25: cadena criptografica. previous_action_hash = hash de la accion anterior del run;
         // action_hash = sha256(previous | campos). Alterar/borrar/insertar una fila rompe la cadena.
+        // v26: lock advisory por rebuild_run_id (mismo xact) para SERIALIZAR los inserts del run: dos
+        // transacciones concurrentes (scheduler/aprobacion/resolucion) no pueden leer el mismo hash
+        // previo ni bifurcar la cadena. El lock se libera al commit/rollback de la transaccion.
+        lockRunForActionChain(connection, rebuildRunId);
         var storedReason = blankToNull(reason);
         var storedTicket = blankToNull(ticket);
         var previousHash = lastActionHash(connection, rebuildRunId);
@@ -1020,6 +1026,14 @@ public class Mt101RebuildRepository {
             statement.setString(11, actionHash);
             statement.setObject(12, createdAt);
             statement.executeUpdate();
+        }
+    }
+
+    /** v26: lock advisory transaccional por run (namespace 0x504159 = "PAY") para serializar la cadena. */
+    private void lockRunForActionChain(java.sql.Connection connection, String rebuildRunId) throws SQLException {
+        try (var statement = connection.prepareStatement("select pg_advisory_xact_lock(5259865, hashtext(?))")) {
+            statement.setString(1, rebuildRunId);
+            statement.executeQuery().close();
         }
     }
 

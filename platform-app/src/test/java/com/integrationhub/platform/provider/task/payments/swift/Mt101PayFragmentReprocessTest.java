@@ -264,6 +264,38 @@ class Mt101PayFragmentReprocessTest {
     }
 
     @Test
+    void unexpectedTransportExceptionIsUncertainNotRejected() throws Exception {
+        // P0 v26: una excepcion INESPERADA del transporte (no de config) durante el envio se clasifica
+        // INCIERTO, nunca REJECTED reusable: no se puede demostrar que el mensaje no salio al banco.
+        var fragmentSetId = "PAY-THROW";
+        insertFragmentSet(fragmentSetId, "T1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", "RUN-THROW");
+        fragmentStore.markStatus(fragmentSource, "T1", "ARCHIVED", null);
+        insertPayLedger("RUN-THROW", fragmentSetId, "T1");
+
+        var throwing = new PaymentMessageTransport() {
+            @Override
+            public String transport() {
+                return "REST";
+            }
+
+            @Override
+            public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
+                throw new RuntimeException("boom after the remote call started");
+            }
+        };
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(throwing), fragmentStore,
+                null, null, payStore);
+
+        provider.execute(contextWith(fragmentSource), payConfig(50));
+
+        assertEquals("UNCERTAIN", payLedgerStatus("RUN-THROW", "T1"),
+                "excepcion inesperada del transporte = UNCERTAIN, no REJECTED reusable");
+    }
+
+    @Test
     void correctivePayInvalidatesFragmentWhenPayloadChangedAfterApproval() throws Exception {
         // P0.2 v24: si el payload del fragmento cambia tras preparar la intencion (el payload_hash actual
         // ya no coincide con el aprobado en el ledger), el fragmento se INVALIDA y NO se envia.

@@ -98,6 +98,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     private final Mt101ConfirmationRepository confirmationRepository;
     private final Mt101RebuildRepository rebuildRepository;
     private final Mt101StatusGateway gateway;
+    private final Mt101StatusSftpGateway sftpGateway = new Mt101StatusSftpGateway();
     private final RecordAuditEmitter recordAuditEmitter;
 
     @Inject
@@ -591,26 +592,60 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                         }
                         continue;
                     }
-                    var url = resolveTemplate(statusQuery.url(), record);
-                    var queryResult = gateway.query(statusQuery.method(), url, statusQuery.timeoutSeconds());
-                    if (queryResult.error() != null) {
-                        errorCount++;
-                        byStatus.merge("ERROR", 1, Integer::sum);
-                        if (errors.size() < maxRecordsInOutput) {
-                            var entry = new LinkedHashMap<String, Object>();
-                            entry.put("sendersReference", record.get("sendersReference"));
-                            entry.put("gatewayReference", record.get("gatewayReference"));
-                            entry.put("status", "ERROR");
-                            entry.put("error", queryResult.error());
-                            errors.add(entry);
+                    String rawBody;
+                    String confirmedStatus;
+                    String gatewayReference;
+                    if ("SFTP".equals(statusQuery.transport())) {
+                        // STATUS por SFTP: se lee el archivo de respuesta ACK/NACK del banco. Si aun no
+                        // existe, el fragmento queda pendiente (no es error): se reintenta en otra corrida.
+                        var responsePath = resolveTemplate(statusQuery.responseFileTemplate(), record);
+                        var sftpResult = sftpGateway.fetchResponse(statusQuery.sftp(), responsePath);
+                        if (sftpResult.error() != null) {
+                            errorCount++;
+                            byStatus.merge("ERROR", 1, Integer::sum);
+                            if (errors.size() < maxRecordsInOutput) {
+                                var entry = new LinkedHashMap<String, Object>();
+                                entry.put("sendersReference", record.get("sendersReference"));
+                                entry.put("gatewayReference", record.get("gatewayReference"));
+                                entry.put("route", record.get("route"));
+                                entry.put("status", "ERROR");
+                                entry.put("error", sftpResult.error());
+                                errors.add(entry);
+                            }
+                            continue;
                         }
-                        continue;
-                    }
-                    var rawBody = queryResult.body();
-                    var confirmedStatus = gateway.extractField(rawBody, statusQuery.statusPath());
-                    var gatewayReference = gateway.extractField(rawBody, statusQuery.referencePath());
-                    if (gatewayReference == null) {
+                        if (!sftpResult.found()) {
+                            // El banco aun no dejo el ACK/NACK: pendiente, se mantiene el estado actual.
+                            continue;
+                        }
+                        rawBody = sftpResult.body();
+                        confirmedStatus = statusQuery.acceptedTokens().isEmpty()
+                                ? gateway.extractField(rawBody, statusQuery.statusPath())
+                                : sftpGateway.classifyByTokens(rawBody, statusQuery.acceptedTokens(),
+                                        statusQuery.rejectedTokens());
                         gatewayReference = String.valueOf(record.getOrDefault("gatewayReference", ""));
+                    } else {
+                        var url = resolveTemplate(statusQuery.url(), record);
+                        var queryResult = gateway.query(statusQuery.method(), url, statusQuery.timeoutSeconds());
+                        if (queryResult.error() != null) {
+                            errorCount++;
+                            byStatus.merge("ERROR", 1, Integer::sum);
+                            if (errors.size() < maxRecordsInOutput) {
+                                var entry = new LinkedHashMap<String, Object>();
+                                entry.put("sendersReference", record.get("sendersReference"));
+                                entry.put("gatewayReference", record.get("gatewayReference"));
+                                entry.put("status", "ERROR");
+                                entry.put("error", queryResult.error());
+                                errors.add(entry);
+                            }
+                            continue;
+                        }
+                        rawBody = queryResult.body();
+                        confirmedStatus = gateway.extractField(rawBody, statusQuery.statusPath());
+                        gatewayReference = gateway.extractField(rawBody, statusQuery.referencePath());
+                        if (gatewayReference == null) {
+                            gatewayReference = String.valueOf(record.getOrDefault("gatewayReference", ""));
+                        }
                     }
                     pendingRows.add(new ConfirmationRow(readArchiveId(record), "STATUS_API",
                             gatewayReference, confirmedStatus, rawBody));
@@ -689,20 +724,35 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                 : TaskResult.failure(summary, outputs);
     }
 
-    /** Endpoint de consulta efectivo para un fragmento (resuelto por ruta), o {@code error} si la ruta no tiene endpoint. */
-    private record StatusQuery(String url, String method, int timeoutSeconds,
-                               String statusPath, String referencePath, String error) {
+    /**
+     * Plan de consulta efectivo para un fragmento (resuelto por ruta), por transporte REST o SFTP, o
+     * {@code error} si la ruta no tiene endpoint declarado.
+     */
+    private record StatusQuery(String transport, String url, String method, int timeoutSeconds,
+                               String statusPath, String referencePath,
+                               Map<String, Object> sftp, String responseFileTemplate,
+                               List<String> acceptedTokens, List<String> rejectedTokens, String error) {
+        static StatusQuery rest(String url, String method, int timeout, String statusPath, String refPath) {
+            return new StatusQuery("REST", url, method, timeout, statusPath, refPath,
+                    null, null, List.of(), List.of(), null);
+        }
+
+        static StatusQuery sftp(Map<String, Object> sftp, String responseFileTemplate, String statusPath,
+                                List<String> acceptedTokens, List<String> rejectedTokens) {
+            return new StatusQuery("SFTP", null, null, 0, statusPath, null,
+                    sftp, responseFileTemplate, acceptedTokens, rejectedTokens, null);
+        }
+
         static StatusQuery error(String message) {
-            return new StatusQuery(null, null, 0, null, null, message);
+            return new StatusQuery(null, null, null, 0, null, null, null, null, List.of(), List.of(), message);
         }
     }
 
     /**
-     * Resuelve el endpoint de STATUS para un fragmento correctivo. Sin {@code routeQuery} usa el
-     * endpoint compartido (todas las rutas comparten el servicio de consulta, caso aceptado por el
-     * v22). Con {@code routeQuery} es estricto: cada fragmento se consulta contra el endpoint de su
-     * ruta; una ruta sin entrada (o un fragmento sin ruta) es error ruidoso, sin fallback a un
-     * endpoint que podria ser el de otra ruta (p. ej. consultar un SFTP contra el REST).
+     * Resuelve el plan de STATUS para un fragmento correctivo. Sin {@code routeQuery} usa el endpoint
+     * REST compartido (caso aceptado por el v22). Con {@code routeQuery} es estricto y por transporte:
+     * cada fragmento se consulta contra el endpoint de SU ruta (REST por HTTP, SFTP leyendo el archivo
+     * de respuesta ACK/NACK); una ruta sin endpoint declarado es error ruidoso, sin fallback.
      */
     private StatusQuery resolveStatusQuery(Map<String, Object> record,
                                            boolean routeAware,
@@ -710,8 +760,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                                            String sharedUrl, String sharedMethod, int sharedTimeout,
                                            String sharedStatusPath, String sharedReferencePath) {
         if (!routeAware) {
-            return new StatusQuery(sharedUrl, sharedMethod, sharedTimeout,
-                    sharedStatusPath, sharedReferencePath, null);
+            return StatusQuery.rest(sharedUrl, sharedMethod, sharedTimeout, sharedStatusPath, sharedReferencePath);
         }
         var route = stringOrNull(record.get("route"));
         if (route == null) {
@@ -719,18 +768,48 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                     + "configured; refusing to pick a STATUS endpoint by fallback");
         }
         var override = mapValue(routeQuery.get(route));
+        var routeTransport = stringValue(override.get("transport"), "REST").toUpperCase(Locale.ROOT);
+        if ("SFTP".equals(routeTransport)) {
+            var sftp = mapValue(override.get("sftp"));
+            var responseFileTemplate = stringOrNull(override.get("responseFileTemplate"));
+            if (sftp.isEmpty() || responseFileTemplate == null) {
+                return StatusQuery.error("SFTP STATUS route '" + route + "' requires routeQuery." + route
+                        + ".sftp and .responseFileTemplate (the bank ACK/NACK file path)");
+            }
+            var accepted = stringList(override.get("acceptedTokens"));
+            var rejected = stringList(override.get("rejectedTokens"));
+            if (accepted.isEmpty() && stringOrNull(override.get("statusField")) == null) {
+                return StatusQuery.error("SFTP STATUS route '" + route + "' requires acceptedTokens "
+                        + "(and rejectedTokens) or a statusField to classify the response file");
+            }
+            return StatusQuery.sftp(sftp, responseFileTemplate,
+                    stringValue(override.get("statusField"), sharedStatusPath), accepted, rejected);
+        }
         var routeUrl = stringOrNull(override.get("url"));
         if (routeUrl == null) {
             return StatusQuery.error("no routeQuery entry with url for route '" + route
                     + "'; refusing to query it against another route's STATUS endpoint");
         }
-        return new StatusQuery(
+        return StatusQuery.rest(
                 routeUrl,
                 stringValue(override.get("method"), sharedMethod).toUpperCase(Locale.ROOT),
                 intValue(override.get("timeoutSeconds"), sharedTimeout),
                 stringValue(override.get("statusField"), sharedStatusPath),
-                stringValue(override.get("referenceField"), sharedReferencePath),
-                null);
+                stringValue(override.get("referenceField"), sharedReferencePath));
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> stringList(Object raw) {
+        if (!(raw instanceof List<?> rawList)) {
+            return List.of();
+        }
+        var result = new ArrayList<String>(rawList.size());
+        for (var item : rawList) {
+            if (item != null) {
+                result.add(String.valueOf(item));
+            }
+        }
+        return result;
     }
 
     // ------------------------------------------------------------------
