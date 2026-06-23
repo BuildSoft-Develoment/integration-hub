@@ -268,6 +268,36 @@ class Mt101PayFragmentReprocessTest {
     }
 
     @Test
+    void correctivePayDoesNotDispatchWhenRunLeaseExpiredOrRunNotExecuting() throws Exception {
+        // P0.1 v27: el claim une el run padre. Si el lease vencio (el scheduler lo resolvera) o el run ya
+        // no esta EXECUTING (el scheduler lo invalido), el fragmento NO se despacha: no hay carrera
+        // scheduler<->dispatcher que deje run invalidado con fragmento SENT.
+        var fragmentSetId = "PAY-LEASE";
+        insertFragmentSet(fragmentSetId, "T1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", "RUN-LEASE");
+        fragmentStore.markStatus(fragmentSource, "T1", "ARCHIVED", null);
+        insertPayLedger("RUN-LEASE", fragmentSetId, "T1");
+        // El lease del run ya vencio.
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_lease_until = current_timestamp - interval "
+                    + "'1 minute' where rebuild_run_id = 'RUN-LEASE'");
+        }
+
+        var transport = new StubTransport(List.of(TransportResult.accepted("GW-T1", 1, 1L)));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore,
+                null, null, payStore);
+
+        provider.execute(contextWith(fragmentSource), payConfig(50));
+
+        assertEquals(0, transport.callsReceived(), "lease vencido -> el fragmento NO se despacha");
+        assertEquals("PREPARED", payLedgerStatus("RUN-LEASE", "T1"),
+                "el fragmento queda PREPARED (lo clasifica el scheduler), nunca DISPATCHING tras vencer el lease");
+    }
+
+    @Test
     void correctivePayInvalidatesFragmentWhenDispatchPlanChangedEvenIfPayloadAndRouteMatch() throws Exception {
         // P0 #1 v26: el claim valida el PLAN COMPLETO (dispatch_plan_hash = transport|ruta|destino|
         // correlacion|payload). Aunque payload_hash y routed_as coincidan, si el plan aprobado difiere
@@ -392,6 +422,12 @@ class Mt101PayFragmentReprocessTest {
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("drop table if exists mt101_build_fragment");
             statement.executeUpdate("drop table if exists mt101_corrective_pay_fragment");
+            statement.executeUpdate("drop table if exists mt101_rebuild_run");
+            // v27 P0.1: el claim une el run padre (EXECUTING + lease vigente). Tabla minima para el join.
+            statement.executeUpdate("create table mt101_rebuild_run ("
+                    + "rebuild_run_id varchar(80) primary key,"
+                    + "pay_status varchar(30) not null default 'EXECUTING',"
+                    + "pay_lease_until timestamp)");
             statement.executeUpdate("create table mt101_build_fragment ("
                     + "id bigserial primary key,"
                     + "fragment_set_id varchar(80) not null,"
@@ -467,8 +503,22 @@ class Mt101PayFragmentReprocessTest {
                 sha256Hex("{\"sendersReference\":\"" + reference + "\"}"));
     }
 
+    /** v27 P0.1: el run padre debe existir EXECUTING con lease vigente para que el claim proceda. */
+    private void ensureRun(String runId) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "insert into mt101_rebuild_run (rebuild_run_id, pay_status, pay_lease_until) "
+                             + "values (?, 'EXECUTING', current_timestamp + interval '15 minutes') "
+                             + "on conflict (rebuild_run_id) do update set pay_status = 'EXECUTING', "
+                             + "pay_lease_until = current_timestamp + interval '15 minutes'")) {
+            statement.setString(1, runId);
+            statement.executeUpdate();
+        }
+    }
+
     private void insertPayLedgerWithPlanHash(String runId, String correctiveSetId, String reference,
                                              String approvedPayloadHash, String approvedPlanHash) throws SQLException {
+        ensureRun(runId);
         try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement(
                      "insert into mt101_corrective_pay_fragment "
@@ -489,6 +539,7 @@ class Mt101PayFragmentReprocessTest {
         // P0.2 v24+v26: el ledger guarda el payload_hash aprobado = sha256(rawPayload), Y el dispatch_plan_hash
         // (transport|ruta|destino|correlacion|payload) computado IGUAL que el provider al despachar, para que
         // el claim (plan aprobado = plan usado) coincida. approved_routed_as null (no routeTransports).
+        ensureRun(runId);
         var message = sampleMessage(reference);
         var plan = Mt101PayRouteResolver.resolve(Map.of("transport", "REST"), null, null, message);
         var planHash = Mt101PayRouteResolver.dispatchPlanHash(plan, approvedPayloadHash, null, message);

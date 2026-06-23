@@ -38,4 +38,26 @@ public class ProcessTaskDefinitionCorrectiveConfigSource implements Mt101Correct
         }
         return jsonConfigurationMapper.toMap(siblings.get(0).configurationJson);
     }
+
+    @Override
+    @Transactional
+    public Map<String, Object> taskConfigUnresolved(long buildTaskDefinitionId, String taskType) {
+        var buildTask = taskDefinitionRepository.findRequired(buildTaskDefinitionId);
+        var siblings = taskDefinitionRepository.listActiveByProcessAndType(buildTask.processDefinition, taskType);
+        if (siblings.isEmpty()) {
+            return null;
+        }
+        if (siblings.size() > 1) {
+            throw new IllegalStateException("Process " + buildTask.processDefinition.id
+                    + " has " + siblings.size() + " active " + taskType
+                    + " tasks; corrective lifecycle requires an unambiguous task definition");
+        }
+        // v27 P0.2: refs ${secret:...} intactos -> el snapshot no persiste secretos resueltos.
+        return jsonConfigurationMapper.toMapUnresolved(siblings.get(0).configurationJson);
+    }
+
+    @Override
+    public Map<String, Object> resolveConfig(Map<String, Object> config) {
+        return jsonConfigurationMapper.resolveSecretsIn(config);
+    }
 }

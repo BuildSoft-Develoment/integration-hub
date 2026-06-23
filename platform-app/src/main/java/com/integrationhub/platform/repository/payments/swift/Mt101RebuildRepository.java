@@ -1274,6 +1274,8 @@ public class Mt101RebuildRepository {
 
     private int resolveExpiredPayLease(java.sql.Connection connection, String rebuildRunId, LocalDateTime now)
             throws SQLException {
+        // v27 P0.1: mismo advisory lock por run que el claim del dispatcher -> serializa scheduler<->dispatcher.
+        lockRunForActionChain(connection, rebuildRunId);
         var dispatched = hasDispatchedPayFragments(connection, rebuildRunId);
         var newStatus = dispatched ? "UNCERTAIN" : "INVALIDATED";
         var actionType = dispatched ? "PAY_UNCERTAIN" : "PAY_INVALIDATED";
@@ -1450,28 +1452,42 @@ public class Mt101RebuildRepository {
                                           String currentPlanHash) throws SQLException {
         // v26: el claim valida el PLAN COMPLETO aprobado: payload_hash + routed_as + dispatch_plan_hash
         // (transport|ruta|destino|correlacion|payload). "Plan aprobado = plan usado", demostrable.
+        // v27 P0.1: ademas valida el RUN padre en el MISMO update atomico: solo despacha si el run sigue
+        // EXECUTING y el lease no vencio. Como el scheduler solo invalida/marca-incierto leases VENCIDOS,
+        // las ventanas son disjuntas: ningun fragmento puede ir a DISPATCHING tras vencer el lease ni
+        // despues de que el scheduler invalide el run (no hay carrera scheduler<->dispatcher).
         var sql = """
-                update mt101_corrective_pay_fragment
+                update mt101_corrective_pay_fragment f
                    set pay_status = 'DISPATCHING',
                        attempts = attempts + 1,
                        dispatched_at = current_timestamp,
                        updated_at = current_timestamp
-                 where rebuild_run_id = ?
-                   and corrective_senders_reference = ?
-                   and pay_status = 'PREPARED'
-                   and payload_hash = ?
-                   and approved_routed_as is not distinct from ?
-                   and dispatch_plan_hash is not distinct from ?
+                  from mt101_rebuild_run r
+                 where f.rebuild_run_id = r.rebuild_run_id
+                   and f.rebuild_run_id = ?
+                   and f.corrective_senders_reference = ?
+                   and f.pay_status = 'PREPARED'
+                   and f.payload_hash = ?
+                   and f.approved_routed_as is not distinct from ?
+                   and f.dispatch_plan_hash is not distinct from ?
+                   and r.pay_status = 'EXECUTING'
+                   and r.pay_lease_until is not null
+                   and r.pay_lease_until > current_timestamp
                 """;
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
-            statement.setString(1, rebuildRunId);
-            statement.setString(2, correctiveSendersReference);
-            statement.setString(3, currentPayloadHash);
-            statement.setString(4, currentRoutedAs);
-            statement.setString(5, currentPlanHash);
-            return statement.executeUpdate();
-        }
+        var insertSql = sql;
+        return inTransaction(dataSource, connection -> {
+            // v27 P0.1: mismo advisory lock por run que el scheduler -> claim y resolucion de lease son
+            // mutuamente exclusivos (ni el limite exacto del lease puede producir DISPATCHING + run invalidado).
+            lockRunForActionChain(connection, rebuildRunId);
+            try (var statement = connection.prepareStatement(insertSql)) {
+                statement.setString(1, rebuildRunId);
+                statement.setString(2, correctiveSendersReference);
+                statement.setString(3, currentPayloadHash);
+                statement.setString(4, currentRoutedAs);
+                statement.setString(5, currentPlanHash);
+                return statement.executeUpdate();
+            }
+        });
     }
 
     /**

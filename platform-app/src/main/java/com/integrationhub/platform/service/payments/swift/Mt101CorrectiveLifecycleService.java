@@ -241,23 +241,27 @@ public class Mt101CorrectiveLifecycleService {
             }
             // Hardening v23: congela el perfil de MT101_STATUS usado al enviar, para que la resolucion
             // diferida de un PAY_UNCERTAIN consulte ese perfil (no la config vigente, que pudo cambiar).
+            // Resuelto para el uso INMEDIATO post-PAY (al aprobar live == aprobado).
             var frozenStatusConfig = stageConfig(prep, "MT101_STATUS");
-            if (frozenStatusConfig != null) {
+            // v27 P0.2: el snapshot persiste la config SIN resolver (refs ${secret:...} intactas) + redacta
+            // secretos LITERALES; al resolver un incierto luego, se re-resuelven los refs desde Vault fresco.
+            // Asi el snapshot no guarda secretos resueltos y la auth SFTP/STATUS diferida sigue funcionando.
+            var unresolvedStatusConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_STATUS");
+            if (unresolvedStatusConfig != null) {
                 try {
-                    // v24: el snapshot NUNCA persiste secretos resueltos (Authorization/password/token/
-                    // privateKey/...): se redactan antes de guardar. Las referencias (${secret:...}) quedan.
                     rebuildRepository.freezePayStatusConfig(dataSource, runId,
-                            objectMapper.writeValueAsString(redactSecrets(frozenStatusConfig)));
+                            objectMapper.writeValueAsString(redactSecrets(unresolvedStatusConfig)));
                 } catch (JsonProcessingException error) {
                     throw new IllegalStateException("cannot freeze MT101_STATUS config for run " + runId, error);
                 }
             }
-            // v26 #4: congela tambien el perfil de MT101_RECONCILE (mismo patron que STATUS), redactado.
+            // v26 #4 + v27 P0.2: congela tambien el perfil de MT101_RECONCILE sin resolver secretos.
             var frozenReconcileConfig = stageConfig(prep, "MT101_RECONCILE");
-            if (frozenReconcileConfig != null) {
+            var unresolvedReconcileConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_RECONCILE");
+            if (unresolvedReconcileConfig != null) {
                 try {
                     rebuildRepository.freezePayReconcileConfig(dataSource, runId,
-                            objectMapper.writeValueAsString(redactSecrets(frozenReconcileConfig)));
+                            objectMapper.writeValueAsString(redactSecrets(unresolvedReconcileConfig)));
                 } catch (JsonProcessingException error) {
                     throw new IllegalStateException("cannot freeze MT101_RECONCILE config for run " + runId, error);
                 }
@@ -631,7 +635,9 @@ public class Mt101CorrectiveLifecycleService {
             return null;
         }
         try {
-            return objectMapper.readValue(snapshot, LinkedHashMap.class);
+            // v27 P0.2: el snapshot tiene refs ${secret:...} sin resolver; se RE-RESUELVEN ahora (Vault
+            // fresco) para que la consulta SFTP/STATUS diferida pueda autenticarse.
+            return taskConfigSource.resolveConfig(objectMapper.readValue(snapshot, LinkedHashMap.class));
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("cannot read frozen MT101_STATUS config for run " + runId, error);
         }
@@ -645,7 +651,7 @@ public class Mt101CorrectiveLifecycleService {
             return null;
         }
         try {
-            return objectMapper.readValue(snapshot, LinkedHashMap.class);
+            return taskConfigSource.resolveConfig(objectMapper.readValue(snapshot, LinkedHashMap.class));
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("cannot read frozen MT101_RECONCILE config for run " + runId, error);
         }

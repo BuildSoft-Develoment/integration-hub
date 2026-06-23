@@ -84,6 +84,7 @@ class Mt101CorrectiveLifecycleServiceTest {
     // Hardening v23: el perfil de MT101_STATUS cambia DESPUES del PAY; la resolucion debe usar el congelado.
     private boolean statusConfigChangedAfterPay;
     private volatile String dispatchedStatusQueryUrl;
+    private volatile String dispatchedStatusToken;
     // P0.3 v25: drift de plan -> fragmentos INVALIDATED -> el run debe quedar INVALIDATED, no FAILED.
     private boolean payInvalidatesAllFragments;
     // v26 #4: el perfil de MT101_RECONCILE cambia DESPUES del PAY; debe usarse el congelado.
@@ -113,6 +114,7 @@ class Mt101CorrectiveLifecycleServiceTest {
         paySftpPolicy = null;
         statusConfigChangedAfterPay = false;
         dispatchedStatusQueryUrl = null;
+        dispatchedStatusToken = null;
         payInvalidatesAllFragments = false;
         reconcileConfigChangedAfterPay = false;
         dispatchedReconcileQueryUrl = null;
@@ -233,6 +235,8 @@ class Mt101CorrectiveLifecycleServiceTest {
                 if (configuration.get("query") instanceof Map<?, ?> query) {
                     dispatchedStatusQueryUrl = String.valueOf(query.get("url"));
                 }
+                // v27 P0.2: registra el secreto re-resuelto (no debe llegar redactado al provider).
+                dispatchedStatusToken = String.valueOf(configuration.get("token"));
                 if (statusSyncFails) {
                     throw new IllegalStateException("gateway STATUS query unavailable");
                 }
@@ -262,7 +266,21 @@ class Mt101CorrectiveLifecycleServiceTest {
                 return TaskResult.success("fake reconcile");
             }
         };
-        Mt101CorrectiveTaskConfigSource configSource = (buildTaskDefinitionId, taskType) -> {
+        Mt101CorrectiveTaskConfigSource configSource = new Mt101CorrectiveTaskConfigSource() {
+            @Override
+            public Map<String, Object> taskConfig(long buildTaskDefinitionId, String taskType) {
+                // v27 P0.2: la config "viva" = sin resolver + secretos resueltos (como JsonConfigurationMapper).
+                return resolveConfig(taskConfigUnresolved(buildTaskDefinitionId, taskType));
+            }
+
+            @Override
+            @SuppressWarnings("unchecked")
+            public Map<String, Object> resolveConfig(Map<String, Object> config) {
+                return config == null ? null : (Map<String, Object>) resolveTestSecrets(config);
+            }
+
+            @Override
+            public Map<String, Object> taskConfigUnresolved(long buildTaskDefinitionId, String taskType) {
             var config = new java.util.LinkedHashMap<String, Object>();
             config.put("input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "fragments"));
             if ("MT101_PAY".equals(taskType)) {
@@ -306,6 +324,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                 config.put("token", "${secret:status_token}");
             }
             return config;
+            }
         };
 
         service = new Mt101CorrectiveLifecycleService(dataSource, null,
@@ -416,6 +435,36 @@ class Mt101CorrectiveLifecycleServiceTest {
                 + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_REQUESTED'"));
         assertEquals("INC-1", queryString("select ticket from mt101_corrective_pay_action "
                 + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_REQUESTED'"));
+    }
+
+    @Test
+    void frozenStatusSnapshotKeepsSecretRefsAndReResolvesThemAtDeferredExecution() throws Exception {
+        // P0.2 v27: el snapshot NO persiste secretos resueltos (refs ${secret:...} intactas, literales
+        // redactados); al resolver un incierto DESPUES, se re-resuelven los refs -> la consulta diferida
+        // recibe el secreto resuelto (no "***REDACTED***"), asi STATUS/SFTP autenticado sigue funcionando.
+        payUncertain = true;
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        service.approveAndPayCorrective(null, FIX, "luis"); // congela el snapshot SIN resolver
+
+        // El snapshot guarda la referencia sin resolver y redacta el literal; nunca el secreto resuelto.
+        var snapshot = queryString(
+                "select pay_status_config_snapshot from mt101_rebuild_run where rebuild_run_id = '" + FIX + "'");
+        assertNotNull(snapshot);
+        assertTrue(snapshot.contains("${secret:status_token}"), "la referencia se conserva sin resolver");
+        assertFalse(snapshot.contains("top-secret-value"), "un literal secreto no se persiste");
+        assertTrue(snapshot.contains("***REDACTED***"), "el literal secreto queda redactado");
+
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'UNCERTAIN' "
+                    + "where rebuild_run_id = '" + FIX + "'");
+        }
+        service.resolveUncertainPay(null, FIX, "operador", "INC-9 revisado");
+
+        // La consulta diferida recibio el secreto RE-RESUELTO, no el valor redactado.
+        assertEquals("RESOLVED:status_token", dispatchedStatusToken,
+                "el secreto del snapshot se re-resuelve al ejecutar (no llega redactado al provider)");
     }
 
     @Test
@@ -974,6 +1023,27 @@ class Mt101CorrectiveLifecycleServiceTest {
                 queryString("select reconciliation_status from mt101_rebuild_run where rebuild_run_id = '" + FIX + "'"),
                 "RECONCILE corre igual: un fallo de STATUS no lo aborta");
         assertEquals(1, reconcileInvocations.get(), "RECONCILE no se omite por el fallo de STATUS");
+    }
+
+    /** v27 P0.2: simula la re-resolucion de secretos del snapshot ({@code ${secret:X}} -> {@code RESOLVED:X}). */
+    @SuppressWarnings("unchecked")
+    private static Object resolveTestSecrets(Object value) {
+        if (value instanceof Map<?, ?> map) {
+            var result = new java.util.LinkedHashMap<String, Object>();
+            map.forEach((k, v) -> result.put(String.valueOf(k), resolveTestSecrets(v)));
+            return result;
+        }
+        if (value instanceof java.util.List<?> list) {
+            var result = new java.util.ArrayList<Object>(list.size());
+            for (var item : list) {
+                result.add(resolveTestSecrets(item));
+            }
+            return result;
+        }
+        if (value instanceof String text && text.startsWith("${secret:") && text.endsWith("}")) {
+            return "RESOLVED:" + text.substring("${secret:".length(), text.length() - 1);
+        }
+        return value;
     }
 
     private void markCorrective(String status) {

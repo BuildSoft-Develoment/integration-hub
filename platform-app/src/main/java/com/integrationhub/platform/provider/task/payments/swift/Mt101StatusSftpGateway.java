@@ -76,7 +76,7 @@ public final class Mt101StatusSftpGateway {
             channel = (ChannelSftp) session.openChannel("sftp");
             channel.connect(timeoutMillis);
 
-            if (statRemote(channel, responseFilePath) == null) {
+            if (!remoteFileExists(channel, responseFilePath)) {
                 // El banco aun no dejo el archivo de respuesta: pendiente, no error.
                 return new SftpStatusResponse(null, false, null);
             }
@@ -98,11 +98,20 @@ public final class Mt101StatusSftpGateway {
         }
     }
 
-    private com.jcraft.jsch.SftpATTRS statRemote(ChannelSftp channel, String path) {
+    /**
+     * v27 P1: distingue "el archivo aun no existe" (pendiente legitimo) de un error real (permiso, ruta
+     * invalida, servidor): solo {@code SSH_FX_NO_SUCH_FILE} es pendiente; cualquier otro SftpException se
+     * propaga como error (no se oculta como "ACK pendiente").
+     */
+    private boolean remoteFileExists(ChannelSftp channel, String path) throws SftpException {
         try {
-            return channel.stat(path);
-        } catch (SftpException notFound) {
-            return null;
+            channel.stat(path);
+            return true;
+        } catch (SftpException error) {
+            if (error.id == ChannelSftp.SSH_FX_NO_SUCH_FILE) {
+                return false;
+            }
+            throw error;
         }
     }
 
