@@ -69,7 +69,8 @@ botón "Historial PAY" que carga y muestra la línea de tiempo con actor/fecha/m
 - `Mt101CorrectiveLifecycleServiceTest` — **23** (RENAME_WITH_SUFFIX, validación backend de
   motivo/ticket, append-only en BD, atomicidad con rollback).
 - `Mt101PayFragmentReprocessTest` — **8** (incluye `correctivePayInvalidatesFragmentWhenPayloadChangedAfterApproval`).
-- Dominio swift completo (provider + service + repository + transport): **225** tests, 0 fallos.
+- `Mt101CorrectiveLifecycleServiceTest` — **25** (+ atomicidad del claim, redacción de secretos).
+- Dominio swift completo (provider + service + repository + transport): **227** tests, 0 fallos.
 - Integración end-to-end (Flyway real con V51..V54): `BankProfileHomologationIT` +
   `Mt101OutboundEndToEndIT` = **3** tests, 0 fallos, `BUILD SUCCESS`.
 - Frontend: `nx build web` exitoso + `nx test web` **214** specs (56 archivos), 0 fallos.
@@ -87,16 +88,30 @@ re-leía `mt101_build_fragment` (payload, routed_as) y re-resolvía la ruta en e
   **INVALIDATED** y NO se envía. Test `correctivePayInvalidatesFragmentWhenPayloadChangedAfterApproval`
   (payload distinto al aprobado → 0 llamadas al transporte, ledger INVALIDATED).
 
-## Documentado (endurecimiento, no bloqueante)
+## Tercer pase — atomicidad completa + redacción de secretos
 
-1. **Atomicidad del resto de transiciones (claim/terminal/resolución).** El patrón transaccional
-   `requestPayWithAction` (estado + acción en una tx con rollback) está aplicado a la **entrada** de
-   solicitud, que es donde un audit perdido es más grave. El trigger V53 garantiza además que **toda**
-   fila escrita es inmutable. Extender el mismo `*WithAction` a claim, terminal y resolución es mecánico
-   (Connection-variant + wrapper por método) y queda como refinamiento.
-2. **Secretos del snapshot de STATUS.** Verificado: se persiste la config con referencias sin resolver.
-   Recomendación: almacenar `status_profile_ref`/`version` + `config_hash` y resolver secretos en Vault
-   al consultar, para no depender de que la config nunca contenga secretos resueltos.
+### Atomicidad de TODAS las transiciones estado+acción (P0.1 cerrado)
+Se extendió el patrón transaccional (estado + acción en **una sola** transacción con rollback) a todas
+las transiciones, no solo la solicitud: helper `inTransaction` + variantes `Connection` + wrappers
+`claimPayForExecutionWithAction`, `markPayCompletedWithAction` (SENT/PARTIALLY_SENT/FAILED),
+`markPayUncertainWithAction`, `markPayResolutionWithAction`, `invalidatePayRequestWithAction`. El
+servicio llama estos métodos y ya **no** hace el `recordPayAction` en una conexión aparte. Si falla el
+insert de la acción, el cambio de `pay_status` se revierte. Test
+`claimStateAndActionAreAtomicRollingBackOnAuditFailure` (drop de la tabla de auditoría antes de aprobar
+→ el run sigue `REQUESTED`, sin estado sin evidencia). (`PAY_DISPATCHING` no tiene cambio de estado a
+nivel run — es el claim por fragmento — así que sigue como inserción informativa.)
+
+### Redacción de secretos del snapshot de STATUS
+`redactSecrets` recorre la config de STATUS antes de congelarla y redacta valores de claves sensibles
+(`authorization`/`password`/`token`/`privateKey`/...). Una **referencia** sin resolver (`${secret:...}`)
+se conserva (no es un secreto y se resuelve al consultar); un **valor resuelto** se reemplaza por
+`***REDACTED***`. Test `payStatusSnapshotRedactsResolvedSecretsButKeepsReferences`. Endurecimiento
+adicional recomendado (no implementado): almacenar `status_profile_ref`/`version` + `config_hash` y
+resolver desde Vault al consultar.
+
+## Pendientes
+
+Ninguno funcional. Todos los hallazgos del v24 (P0/P1/riesgos) quedaron cerrados con prueba.
 
 ## Conclusión
 

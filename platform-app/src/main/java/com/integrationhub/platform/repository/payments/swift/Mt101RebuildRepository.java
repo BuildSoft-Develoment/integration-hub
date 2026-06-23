@@ -757,8 +757,52 @@ public class Mt101RebuildRepository {
      * Claim atomico REQUESTED -> EXECUTING. Solo la transaccion que gana este update
      * puede invocar el provider MT101_PAY; asi se evita doble envio concurrente.
      */
+    /** P0.1 v24: ejecuta una unidad de trabajo en UNA transaccion (estado + accion auditada juntos). */
+    @FunctionalInterface
+    private interface TxWork<T> {
+        T run(java.sql.Connection connection) throws SQLException;
+    }
+
+    private <T> T inTransaction(DataSource dataSource, TxWork<T> work) throws SQLException {
+        try (var connection = dataSource.getConnection()) {
+            var previousAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                var result = work.run(connection);
+                connection.commit();
+                return result;
+            } catch (SQLException error) {
+                connection.rollback();
+                throw error;
+            } finally {
+                connection.setAutoCommit(previousAutoCommit);
+            }
+        }
+    }
+
     public boolean claimPayForExecution(DataSource dataSource, String rebuildRunId, String approvedBy,
                                         String payloadHash, String configHash, LocalDateTime leaseUntil) throws SQLException {
+        try (var connection = dataSource.getConnection()) {
+            return claimPayForExecution(connection, rebuildRunId, approvedBy, payloadHash, configHash, leaseUntil);
+        }
+    }
+
+    /** P0.1 v24: claim + accion PAY_CLAIMED en una sola transaccion (si no reclama, no registra). */
+    public boolean claimPayForExecutionWithAction(DataSource dataSource, String rebuildRunId, String approvedBy,
+                                                  String payloadHash, String configHash, LocalDateTime leaseUntil)
+            throws SQLException {
+        return inTransaction(dataSource, connection -> {
+            var claimed = claimPayForExecution(connection, rebuildRunId, approvedBy, payloadHash, configHash, leaseUntil);
+            if (claimed) {
+                recordPayAction(connection, rebuildRunId, "PAY_CLAIMED", "REQUESTED", "EXECUTING",
+                        approvedBy, null, null, payloadHash, configHash);
+            }
+            return claimed;
+        });
+    }
+
+    private boolean claimPayForExecution(java.sql.Connection connection, String rebuildRunId, String approvedBy,
+                                         String payloadHash, String configHash, LocalDateTime leaseUntil) throws SQLException {
         var sql = "update mt101_rebuild_run set pay_status = 'EXECUTING', pay_claimed_by = ?, "
                 + "pay_claimed_at = current_timestamp, pay_approved_by = ?, pay_approved_at = current_timestamp, "
                 + "pay_claimed_payload_hash = ?, pay_claimed_config_hash = ?, pay_lease_until = ?, "
@@ -766,8 +810,7 @@ public class Mt101RebuildRepository {
                 + "where rebuild_run_id = ? and status = 'ARCHIVED' and pay_status = 'REQUESTED' "
                 + "and pay_requested_by is not null and pay_requested_by <> ? "
                 + "and pay_requested_payload_hash = ? and pay_requested_config_hash = ?";
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
+        try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, approvedBy);
             statement.setString(2, approvedBy);
             statement.setString(3, payloadHash);
@@ -781,16 +824,58 @@ public class Mt101RebuildRepository {
         }
     }
 
+    /** P0.1 v24: invalida la solicitud + accion PAY_INVALIDATED en una sola transaccion. */
+    public int invalidatePayRequestWithAction(DataSource dataSource, String rebuildRunId, String reason,
+                                              String actor, String previousStatus, String payloadHash,
+                                              String configHash) throws SQLException {
+        return inTransaction(dataSource, connection -> {
+            var invalidated = invalidatePayRequest(connection, rebuildRunId, reason);
+            if (invalidated > 0) {
+                recordPayAction(connection, rebuildRunId, "PAY_INVALIDATED", previousStatus, "INVALIDATED",
+                        actor, reason, null, payloadHash, configHash);
+            }
+            return invalidated;
+        });
+    }
+
     public int invalidatePayRequest(DataSource dataSource, String rebuildRunId, String reason) throws SQLException {
+        try (var connection = dataSource.getConnection()) {
+            return invalidatePayRequest(connection, rebuildRunId, reason);
+        }
+    }
+
+    private int invalidatePayRequest(java.sql.Connection connection, String rebuildRunId, String reason) throws SQLException {
         var sql = "update mt101_rebuild_run set pay_status = 'INVALIDATED', pay_error_message = ?, "
                 + "pay_completed_at = current_timestamp, updated_at = current_timestamp "
                 + "where rebuild_run_id = ? and pay_status = 'REQUESTED'";
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
+        try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, reason);
             statement.setString(2, rebuildRunId);
             return statement.executeUpdate();
         }
+    }
+
+    /**
+     * P0.1 v24: marca el resultado terminal del PAY (SENT/PARTIALLY_SENT/FAILED) y registra su accion en
+     * UNA sola transaccion. El tipo de accion se deriva del estado: SENT->PAY_SENT, PARTIALLY_SENT->
+     * PAY_PARTIALLY_SENT, FAILED->PAY_REJECTED.
+     */
+    public void markPayCompletedWithAction(DataSource dataSource, String rebuildRunId, String payStatus,
+                                           String errorMessage, String actor, String actionReason,
+                                           String payloadHash, String configHash) throws SQLException {
+        var actionType = switch (payStatus) {
+            case "SENT" -> "PAY_SENT";
+            case "PARTIALLY_SENT" -> "PAY_PARTIALLY_SENT";
+            default -> "PAY_REJECTED";
+        };
+        inTransaction(dataSource, connection -> {
+            var updated = markPayCompleted(connection, rebuildRunId, payStatus, errorMessage);
+            if (updated > 0) {
+                recordPayAction(connection, rebuildRunId, actionType, "EXECUTING", payStatus,
+                        actor, actionReason, null, payloadHash, configHash);
+            }
+            return null;
+        });
     }
 
     /** B2': registra que el PAY correctivo ejecuto sin error local. */
@@ -801,15 +886,21 @@ public class Mt101RebuildRepository {
     /** B2': registra resultado global del PAY correctivo. */
     public void markPayCompleted(DataSource dataSource, String rebuildRunId, String payStatus,
                                  String errorMessage) throws SQLException {
+        try (var connection = dataSource.getConnection()) {
+            markPayCompleted(connection, rebuildRunId, payStatus, errorMessage);
+        }
+    }
+
+    private int markPayCompleted(java.sql.Connection connection, String rebuildRunId, String payStatus,
+                                 String errorMessage) throws SQLException {
         var sql = "update mt101_rebuild_run set pay_status = ?, pay_completed_at = current_timestamp, "
                 + "pay_lease_until = null, pay_error_message = ?, updated_at = current_timestamp "
                 + "where rebuild_run_id = ? and pay_status = 'EXECUTING'";
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
+        try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, payStatus);
             statement.setString(2, errorMessage);
             statement.setString(3, rebuildRunId);
-            statement.executeUpdate();
+            return statement.executeUpdate();
         }
     }
 
@@ -975,23 +1066,62 @@ public class Mt101RebuildRepository {
                             String actor, String reason, String ticket, LocalDateTime createdAt) {
     }
 
+    /** P0.1 v24: PAY incierto + accion PAY_UNCERTAIN en una sola transaccion. */
+    public void markPayUncertainWithAction(DataSource dataSource, String rebuildRunId, String reason,
+                                           String actor, String payloadHash, String configHash) throws SQLException {
+        inTransaction(dataSource, connection -> {
+            var updated = markPayUncertain(connection, rebuildRunId, reason);
+            if (updated > 0) {
+                recordPayAction(connection, rebuildRunId, "PAY_UNCERTAIN", "EXECUTING", "UNCERTAIN",
+                        actor, reason, null, payloadHash, configHash);
+            }
+            return null;
+        });
+    }
+
     /** B2': PAY incierto; no se reintenta automaticamente para evitar doble envio. */
     public void markPayUncertain(DataSource dataSource, String rebuildRunId, String reason) throws SQLException {
+        try (var connection = dataSource.getConnection()) {
+            markPayUncertain(connection, rebuildRunId, reason);
+        }
+    }
+
+    private int markPayUncertain(java.sql.Connection connection, String rebuildRunId, String reason) throws SQLException {
         var sql = "update mt101_rebuild_run set pay_status = 'UNCERTAIN', pay_uncertain_reason = ?, "
                 + "pay_error_message = ?, pay_completed_at = current_timestamp, updated_at = current_timestamp "
                 + "where rebuild_run_id = ? and pay_status = 'EXECUTING'";
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
+        try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, reason);
             statement.setString(2, reason);
             statement.setString(3, rebuildRunId);
-            statement.executeUpdate();
+            return statement.executeUpdate();
         }
+    }
+
+    /** P0.1 v24: resolucion del PAY incierto + accion PAY_RESOLVED en una sola transaccion. */
+    public void markPayResolutionWithAction(DataSource dataSource, String rebuildRunId, String payStatus,
+                                            String reason, String resolvedBy) throws SQLException {
+        var normalized = payStatus == null ? "UNCERTAIN" : payStatus.trim().toUpperCase(Locale.ROOT);
+        inTransaction(dataSource, connection -> {
+            var updated = markPayResolution(connection, rebuildRunId, normalized, reason, resolvedBy);
+            if (updated > 0) {
+                recordPayAction(connection, rebuildRunId, "PAY_RESOLVED", "UNCERTAIN", normalized,
+                        resolvedBy, reason, null, null, null);
+            }
+            return null;
+        });
     }
 
     public void markPayResolution(DataSource dataSource, String rebuildRunId, String payStatus,
                                   String reason, String resolvedBy) throws SQLException {
         var normalized = payStatus == null ? "UNCERTAIN" : payStatus.trim().toUpperCase(Locale.ROOT);
+        try (var connection = dataSource.getConnection()) {
+            markPayResolution(connection, rebuildRunId, normalized, reason, resolvedBy);
+        }
+    }
+
+    private int markPayResolution(java.sql.Connection connection, String rebuildRunId, String normalized,
+                                  String reason, String resolvedBy) throws SQLException {
         // v22: evidencia durable de la resolucion del PAY incierto (actor/fecha/motivo).
         var sql = """
                 update mt101_rebuild_run
@@ -1007,8 +1137,7 @@ public class Mt101RebuildRepository {
                  where rebuild_run_id = ?
                    and pay_status in ('UNCERTAIN', 'EXECUTING', 'PARTIALLY_SENT', 'FAILED')
                 """;
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
+        try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, normalized);
             statement.setString(2, normalized);
             statement.setString(3, reason);
@@ -1016,7 +1145,7 @@ public class Mt101RebuildRepository {
             statement.setString(5, resolvedBy);
             statement.setString(6, reason);
             statement.setString(7, rebuildRunId);
-            statement.executeUpdate();
+            return statement.executeUpdate();
         }
     }
 

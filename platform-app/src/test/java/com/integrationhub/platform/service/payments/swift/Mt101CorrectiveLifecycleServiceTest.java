@@ -38,6 +38,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -266,6 +267,9 @@ class Mt101CorrectiveLifecycleServiceTest {
                 // El perfil de STATUS "deriva" si cambia despues del PAY; el snapshot congelado lo evita.
                 config.put("query", Map.of("url",
                         (statusConfigChangedAfterPay ? "drift-status/" : "frozen-status/") + "${idempotencyKey}"));
+                // v24: un secreto RESUELTO no debe persistirse en el snapshot; una referencia si (se resuelve luego).
+                config.put("password", "top-secret-value");
+                config.put("token", "${secret:status_token}");
             }
             return config;
         };
@@ -451,6 +455,39 @@ class Mt101CorrectiveLifecycleServiceTest {
         assertThrows(IllegalArgumentException.class,
                 () -> service.resolveUncertainPay(null, FIX, "operador", null),
                 "resolver un incierto sin motivo debe fallar");
+    }
+
+    @Test
+    void payStatusSnapshotRedactsResolvedSecretsButKeepsReferences() throws Exception {
+        // v24: el snapshot congelado de la config de STATUS no persiste secretos RESUELTOS
+        // (password/token con valor literal); una referencia ${secret:...} si se conserva.
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        service.approveAndPayCorrective(null, FIX, "luis"); // congela el snapshot de STATUS
+
+        var snapshot = queryString(
+                "select pay_status_config_snapshot from mt101_rebuild_run where rebuild_run_id = '" + FIX + "'");
+        assertNotNull(snapshot, "debe haber snapshot de STATUS congelado");
+        assertFalse(snapshot.contains("top-secret-value"), "el secreto resuelto no debe persistirse");
+        assertTrue(snapshot.contains("***REDACTED***"), "el secreto resuelto debe quedar redactado");
+        assertTrue(snapshot.contains("${secret:status_token}"), "una referencia sin resolver se conserva");
+        assertTrue(snapshot.contains("frozen-status/"), "el resto del perfil (query.url) se conserva");
+    }
+
+    @Test
+    void claimStateAndActionAreAtomicRollingBackOnAuditFailure() throws Exception {
+        // P0.1 v24: la atomicidad estado+accion aplica tambien al CLAIM. Si falla el insert de la accion
+        // PAY_CLAIMED, el cambio a EXECUTING se revierte (el run sigue REQUESTED, sin estado sin evidencia).
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement()) {
+            statement.executeUpdate("drop table mt101_corrective_pay_action");
+        }
+
+        assertThrows(Exception.class, () -> service.approveAndPayCorrective(null, FIX, "luis"));
+        assertEquals("REQUESTED", payStatus(FIX),
+                "si falla la auditoria del claim, el run no queda EXECUTING (rollback atomico)");
     }
 
     @Test
