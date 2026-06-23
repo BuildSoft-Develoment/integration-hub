@@ -1300,14 +1300,17 @@ public class Mt101RebuildRepository {
                     (rebuild_run_id, corrective_set_id, corrective_senders_reference,
                      source_file_hash, source_record_number, staging_id,
                      payload_hash, idempotency_key, transport, endpoint_ref, approved_routed_as,
+                     dispatch_destination, dispatch_plan_hash,
                      pay_status, attempts, prepared_at, error_message)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PREPARED', 0, current_timestamp, null)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PREPARED', 0, current_timestamp, null)
                 on conflict (rebuild_run_id, corrective_senders_reference) do update
                     set payload_hash = excluded.payload_hash,
                         idempotency_key = excluded.idempotency_key,
                         transport = excluded.transport,
                         endpoint_ref = excluded.endpoint_ref,
                         approved_routed_as = excluded.approved_routed_as,
+                        dispatch_destination = excluded.dispatch_destination,
+                        dispatch_plan_hash = excluded.dispatch_plan_hash,
                         pay_status = 'PREPARED',
                         attempts = 0,
                         prepared_at = current_timestamp,
@@ -1337,6 +1340,8 @@ public class Mt101RebuildRepository {
                 statement.setString(9, intent.transport());
                 statement.setString(10, intent.endpointRef());
                 statement.setString(11, intent.approvedRoutedAs());
+                statement.setString(12, intent.dispatchDestination());
+                statement.setString(13, intent.dispatchPlanHash());
                 statement.addBatch();
                 updated++;
             }
@@ -1747,7 +1752,9 @@ public class Mt101RebuildRepository {
             String idempotencyKey,
             String transport,
             String endpointRef,
-            String approvedRoutedAs
+            String approvedRoutedAs,
+            String dispatchDestination,
+            String dispatchPlanHash
     ) {
     }
 

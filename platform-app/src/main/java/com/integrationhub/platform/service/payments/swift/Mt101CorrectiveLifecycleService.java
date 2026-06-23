@@ -6,6 +6,7 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101ArchiveTaskProvider;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101PayTaskProvider;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101PayRouteResolver;
+import com.integrationhub.platform.provider.task.payments.swift.Mt101PaymentCorrelation;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101ReconcileTaskProvider;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101RepairTaskProvider;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101RouteTaskProvider;
@@ -748,17 +749,23 @@ public class Mt101CorrectiveLifecycleService {
                 }
                 var plan = Mt101PayRouteResolver.resolve(payConfig, row.routedAs(), row.routeError(), message);
                 var key = plan.endpointRef();
+                var payloadHashValue = payloadHash(message);
+                // P0.4 v25: plan aprobado durable por fragmento (destino real redactado + hash del plan).
+                var destination = dispatchDestination(plan, message);
+                var planHash = dispatchPlanHash(plan, key, payloadHashValue, row.routedAs(), destination);
                 intents.add(new Mt101RebuildRepository.PayFragmentIntent(
                         correctiveSetId,
                         reference,
                         null,
                         null,
                         null,
-                        payloadHash(message),
+                        payloadHashValue,
                         key,
                         plan.transport(),
                         key,
-                        row.routedAs()));
+                        row.routedAs(),
+                        destination,
+                        planHash));
             }
             rebuildRepository.preparePayIntents(dataSource, runId, intents);
             if (rows.size() < pageSize) {
@@ -816,6 +823,46 @@ public class Mt101CorrectiveLifecycleService {
 
     private String payloadHash(Mt101Message message) {
         return java.util.HexFormat.of().formatHex(sha256(message.rawPayload()));
+    }
+
+    /**
+     * P0.4 v25: destino REAL resuelto del despacho (para reconstruir a que host/ruta se envio), redactado
+     * de credenciales. REST: la URL resuelta; SFTP: sftp://host/dropPath. No incluye secretos resueltos.
+     */
+    @SuppressWarnings("unchecked")
+    private String dispatchDestination(Mt101PayRouteResolver.PayPlan plan, Mt101Message message) {
+        var config = plan.configuration();
+        if ("SFTP".equalsIgnoreCase(plan.transport())) {
+            var sftp = config.get("sftp") instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.<String, Object>of();
+            var host = stringOrNull(sftp.get("host"));
+            return "sftp://" + (host == null ? "?" : host) + (plan.endpointRef() == null ? "" : plan.endpointRef());
+        }
+        var rest = config.get("rest") instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.<String, Object>of();
+        var url = stringOrNull(rest.get("url"));
+        if (url == null) {
+            return "rest://?";
+        }
+        return redactUrlCredentials(Mt101PaymentCorrelation.resolveTemplate(url, message));
+    }
+
+    /** Redacta credenciales embebidas en una URL ({@code scheme://user:pass@host} -> {@code scheme://***@host}). */
+    private String redactUrlCredentials(String url) {
+        if (url == null) {
+            return null;
+        }
+        return url.replaceAll("://[^/@\\s]+@", "://***@");
+    }
+
+    /** P0.4 v25: hash sha256 del plan canonico por fragmento (transport|ruta|destino|correlacion|payloadHash). */
+    private String dispatchPlanHash(Mt101PayRouteResolver.PayPlan plan, String correlationKey,
+                                    String payloadHash, String routedAs, String destination) {
+        var canonical = String.join("|",
+                plan.transport() == null ? "" : plan.transport(),
+                routedAs == null ? "" : routedAs,
+                destination == null ? "" : destination,
+                correlationKey == null ? "" : correlationKey,
+                payloadHash == null ? "" : payloadHash);
+        return java.util.HexFormat.of().formatHex(sha256(canonical));
     }
 
     private byte[] sha256(String value) {

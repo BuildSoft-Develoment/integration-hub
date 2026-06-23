@@ -273,10 +273,12 @@ class Mt101CorrectiveLifecycleServiceTest {
                     config.put("routeTransports", Map.of(
                             "REST_MAIN", Map.of(
                                     "transport", "REST",
-                                    "idempotencyKeyTemplate", "rest-${sendersReference}"),
+                                    "idempotencyKeyTemplate", "rest-${sendersReference}",
+                                    "rest", Map.of("url", "https://bank-a/pay/${sendersReference}")),
                             "SFTP_SECONDARY", Map.of(
                                     "transport", "SFTP",
-                                    "sftp", Map.of("dropPathTemplate", "/bank/${sendersReference}.fin"))));
+                                    "sftp", Map.of("host", "sftp.bank-b.local",
+                                            "dropPathTemplate", "/bank/${sendersReference}.fin"))));
                 }
             }
             if ("MT101_STATUS".equals(taskType)) {
@@ -664,6 +666,52 @@ class Mt101CorrectiveLifecycleServiceTest {
                 + "where rebuild_run_id = '" + FIX + "' and pay_status = 'REJECTED'"));
         assertEquals("REBUILD_SENT", quarantineStatus(25));
         assertEquals("REBUILD_REJECTED", quarantineStatus(75));
+    }
+
+    @Test
+    void approvedDispatchPlanIsPersistedPerFragmentForAudit() throws Exception {
+        // P0.4 v25: al preparar la intencion, el ledger guarda el PLAN aprobado por fragmento: el destino
+        // real (no solo la correlacion) y un hash del plan, para reconstruir/auditar a que se despacho.
+        routePayConfig = true;
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        service.approveAndPayCorrective(null, FIX, "luis"); // dispara preparePayIntents
+
+        // RTEST1 va por REST_MAIN (REST), RTEST2 por SFTP_SECONDARY (SFTP) segun routeTransports del test.
+        var restDestination = queryString("select dispatch_destination from mt101_corrective_pay_fragment "
+                + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'");
+        var sftpDestination = queryString("select dispatch_destination from mt101_corrective_pay_fragment "
+                + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST2'");
+        assertTrue(restDestination != null && restDestination.startsWith("https://bank-a/pay/"),
+                () -> "se persiste el destino REST real (URL resuelta): " + restDestination);
+        assertTrue(sftpDestination != null && sftpDestination.startsWith("sftp://sftp.bank-b.local/bank/"),
+                () -> "se persiste el destino SFTP real (host + dropPath): " + sftpDestination);
+        // El hash del plan queda por fragmento como evidencia durable del plan aprobado.
+        assertEquals(2L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = '"
+                + FIX + "' and dispatch_plan_hash is not null and length(dispatch_plan_hash) = 64"));
+    }
+
+    @Test
+    void schedulerLeaseTransitionRollsBackStateAndActionTogetherOnAuditFailure() throws Exception {
+        // P0.1/test#5 v25: el scheduler resuelve el lease en UNA transaccion. Si falla el insert de la
+        // accion append-only, el cambio de pay_status se revierte (el run sigue EXECUTING).
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        var repository = new Mt101RebuildRepository();
+        var payloadHash = repository.archivedCorrectivePayloadHash(dataSource, FIX);
+        var configHash = repository.payRequestedConfigHash(dataSource, FIX);
+        assertTrue(repository.claimPayForExecution(dataSource, FIX, "luis",
+                payloadHash, configHash, java.time.LocalDateTime.now().minusMinutes(1)));
+        // Forzamos el fallo del insert de auditoria eliminando la tabla del historial.
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement()) {
+            statement.executeUpdate("drop table mt101_corrective_pay_action");
+        }
+
+        assertThrows(Exception.class,
+                () -> repository.markExpiredPayExecutionsUncertain(dataSource, java.time.LocalDateTime.now()));
+        assertEquals("EXECUTING", payStatus(FIX),
+                "si falla la accion del scheduler, el estado del lease se revierte (atomico)");
     }
 
     @Test
@@ -1069,6 +1117,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "source_file_hash varchar(64), source_record_number bigint, staging_id bigint,"
                     + "payload_hash varchar(64) not null, idempotency_key varchar(180) not null,"
                     + "transport varchar(20), endpoint_ref varchar(512), approved_routed_as varchar(80),"
+                    + "dispatch_destination text, dispatch_plan_hash varchar(64),"
                     + "gateway_reference varchar(120), pay_status varchar(30) not null default 'REQUESTED',"
                     + "attempts integer not null default 0, error_message text,"
                     + "prepared_at timestamp, dispatched_at timestamp,"
