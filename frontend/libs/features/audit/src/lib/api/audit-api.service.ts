@@ -417,16 +417,42 @@ export class AuditApiService {
       { params: this.runIdParams(query.rebuildRunId, query.connectionRef) });
   }
 
-  /** B2': el maker solicita el envío (PAY) del correctivo, ya ARCHIVED. */
-  mt101RequestCorrectivePay(query: { connectionRef?: string; rebuildRunId: string }): Observable<Mt101CorrectiveLifecycle> {
+  /** B2': el maker solicita el envío (PAY) del correctivo, ya ARCHIVED. Motivo + ticket de negocio. */
+  mt101RequestCorrectivePay(query: {
+    connectionRef?: string;
+    rebuildRunId: string;
+    reason?: string;
+    ticketRef?: string;
+  }): Observable<Mt101CorrectiveLifecycle> {
+    let httpParams = this.runIdParams(query.rebuildRunId, query.connectionRef);
+    if (query.reason?.trim()) {
+      httpParams = httpParams.set('reason', query.reason.trim());
+    }
+    if (query.ticketRef?.trim()) {
+      httpParams = httpParams.set('ticketRef', query.ticketRef.trim());
+    }
     return this.http.post<Mt101CorrectiveLifecycle>('/api/query/mt101-quarantine/rebuild-runs/request-pay', {},
-      { params: this.runIdParams(query.rebuildRunId, query.connectionRef) });
+      { params: httpParams });
   }
 
   /** B2': el checker (distinto del maker) aprueba y ejecuta el envío del correctivo (PAY real). */
   mt101ApproveCorrectivePay(query: { connectionRef?: string; rebuildRunId: string }): Observable<Mt101CorrectiveLifecycle> {
     return this.http.post<Mt101CorrectiveLifecycle>('/api/query/mt101-quarantine/rebuild-runs/approve-pay', {},
       { params: this.runIdParams(query.rebuildRunId, query.connectionRef) });
+  }
+
+  /** B2': resuelve un PAY_UNCERTAIN consultando MT101_STATUS (no reenvía). Motivo de negocio. */
+  mt101ResolveUncertainPay(query: {
+    connectionRef?: string;
+    rebuildRunId: string;
+    reason?: string;
+  }): Observable<Mt101CorrectiveLifecycle> {
+    let httpParams = this.runIdParams(query.rebuildRunId, query.connectionRef);
+    if (query.reason?.trim()) {
+      httpParams = httpParams.set('reason', query.reason.trim());
+    }
+    return this.http.post<Mt101CorrectiveLifecycle>('/api/query/mt101-quarantine/rebuild-runs/resolve-uncertain-pay', {},
+      { params: httpParams });
   }
 
   private runIdParams(rebuildRunId: string, connectionRef?: string): HttpParams {

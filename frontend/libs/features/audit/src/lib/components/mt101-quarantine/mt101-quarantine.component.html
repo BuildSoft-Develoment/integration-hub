@@ -122,6 +122,26 @@
               <li class="q__muted" [class.q__error]="corr.reconciliationStatus === 'FAILED'">{{ i18n.t('audit.quarantine.correctiveReconcile', { status: corr.reconciliationStatus }) }}</li>
             }
           </ul>
+          @if (corr.status === 'ARCHIVED' && ['NOT_REQUESTED', 'FAILED', 'INVALIDATED'].includes(payStatusFor(corr.rebuildRunId))) {
+            <div class="q__pay-fields">
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('audit.quarantine.payRequestReason') }}</mat-label>
+                <input matInput [(ngModel)]="payRequestReason" placeholder="reproceso aprobado por tesorería" />
+              </mat-form-field>
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('audit.quarantine.payRequestTicket') }}</mat-label>
+                <input matInput [(ngModel)]="payRequestTicket" placeholder="JIRA-PAY-123" />
+              </mat-form-field>
+            </div>
+          }
+          @if (payStatusFor(corr.rebuildRunId) === 'UNCERTAIN') {
+            <div class="q__pay-fields">
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('audit.quarantine.payResolutionReason') }}</mat-label>
+                <input matInput [(ngModel)]="payResolutionReason" placeholder="INC-77 revisado vs extracto" />
+              </mat-form-field>
+            </div>
+          }
           <div class="q__actions">
             @if (corr.status === 'BUILT' || corr.status === 'VALIDATED') {
               <button mat-flat-button color="primary" type="button" (click)="advanceCorrective()" [disabled]="loading()">{{ i18n.t('audit.quarantine.correctiveAdvance') }}</button>
@@ -129,6 +149,9 @@
             @if (corr.status === 'ARCHIVED') {
               <button mat-stroked-button type="button" (click)="requestCorrectivePay()" [disabled]="loading() || !['NOT_REQUESTED', 'FAILED', 'INVALIDATED'].includes(payStatusFor(corr.rebuildRunId))">{{ i18n.t('audit.quarantine.correctiveRequestPay') }}</button>
               <button mat-flat-button color="warn" type="button" (click)="approveCorrectivePay()" [disabled]="loading() || payStatusFor(corr.rebuildRunId) !== 'REQUESTED'">{{ i18n.t('audit.quarantine.correctiveApprovePay') }}</button>
+            }
+            @if (payStatusFor(corr.rebuildRunId) === 'UNCERTAIN') {
+              <button mat-stroked-button type="button" (click)="resolveUncertainPay()" [disabled]="loading()">{{ i18n.t('audit.quarantine.resolveUncertainPay') }}</button>
             }
             <button mat-stroked-button type="button" (click)="dismissCorrective()" [disabled]="loading()">{{ i18n.t('audit.common.cancel') }}</button>
           </div>

@@ -132,7 +132,9 @@ public class Mt101RebuildRepository {
                        reference_code, connection_ref, pay_status, pay_requested_by, pay_approved_by,
                        pay_requested_payload_hash, pay_claimed_payload_hash, pay_lease_until,
                        pay_uncertain_reason, pay_error_message,
-                       created_at, approved_at, executed_at, built_at, completed_at, updated_at
+                       created_at, approved_at, executed_at, built_at, completed_at, updated_at,
+                       pay_request_reason, pay_request_ticket,
+                       pay_resolved_by, pay_resolved_at, pay_resolution_reason
                   from mt101_rebuild_run
                  where rebuild_run_id = ?
                 """;
@@ -171,7 +173,12 @@ public class Mt101RebuildRepository {
                         timestamp(rs, "executed_at"),
                         timestamp(rs, "built_at"),
                         timestamp(rs, "completed_at"),
-                        timestamp(rs, "updated_at"));
+                        timestamp(rs, "updated_at"),
+                        rs.getString("pay_request_reason"),
+                        rs.getString("pay_request_ticket"),
+                        rs.getString("pay_resolved_by"),
+                        timestamp(rs, "pay_resolved_at"),
+                        rs.getString("pay_resolution_reason"));
             }
         }
     }
@@ -1344,7 +1351,12 @@ public class Mt101RebuildRepository {
             LocalDateTime executedAt,
             LocalDateTime builtAt,
             LocalDateTime completedAt,
-            LocalDateTime updatedAt
+            LocalDateTime updatedAt,
+            String payRequestReason,
+            String payRequestTicket,
+            String payResolvedBy,
+            LocalDateTime payResolvedAt,
+            String payResolutionReason
     ) {
     }
 

@@ -283,7 +283,7 @@ class Mt101CorrectiveLifecycleServiceTest {
         // v22: la SOLICITUD de PAY (paso del maker) deja motivo/ticket de negocio como evidencia
         // durable, simetrica a la auditoria de resolucion. Sin fallback: queda registrado.
         service.advanceCorrective(null, FIX, "executor");
-        service.requestCorrectivePay(null, FIX, "ana",
+        var requested = service.requestCorrectivePay(null, FIX, "ana",
                 "reproceso aprobado por tesoreria", "JIRA-PAY-4321");
 
         assertEquals("reproceso aprobado por tesoreria",
@@ -293,9 +293,17 @@ class Mt101CorrectiveLifecycleServiceTest {
                 queryString("select pay_request_ticket from mt101_rebuild_run where rebuild_run_id = '" + FIX + "'"),
                 "se registra el ticket de la solicitud de PAY");
 
+        // P2/P1-API v23: la RESPUESTA refleja el pay_status recien aplicado (no el snapshot previo)
+        // y expone la evidencia de gobierno para que el operador la vea por API, no solo en BD.
+        assertEquals("REQUESTED", requested.payStatus(),
+                "la respuesta debe reflejar PAY_REQUESTED, no el ARCHIVED previo");
+        assertEquals("reproceso aprobado por tesoreria", requested.payRequestReason());
+        assertEquals("JIRA-PAY-4321", requested.payRequestTicket());
+
         // El motivo/ticket no rompe la segregacion de funciones: otro checker aprueba y se envia.
         var paid = service.approveAndPayCorrective(null, FIX, "luis");
         assertEquals("SENT", paid.status());
+        assertEquals("SENT", paid.payStatus(), "la respuesta de aprobacion refleja PAY=SENT");
     }
 
     @Test
@@ -441,7 +449,8 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "where rebuild_run_id = '" + FIX + "'");
         }
 
-        var result = service.resolveUncertainPay(null, FIX, "operador");
+        var result = service.resolveUncertainPay(null, FIX, "operador",
+                "incidente INC-77 revisado contra extracto bancario");
 
         assertEquals("SENT", result.status());
         assertEquals("SENT", runStatus(FIX));
@@ -458,6 +467,16 @@ class Mt101CorrectiveLifecycleServiceTest {
         assertEquals(1L, queryLong("select count(*) from mt101_rebuild_run where rebuild_run_id = '" + FIX
                 + "' and pay_resolved_at is not null and pay_resolution_reason is not null"),
                 "se registra cuando y por que se resolvio");
+        // P1 v23: el motivo de negocio del operador queda JUNTO al detalle tecnico del sistema.
+        var resolutionReason = queryString(
+                "select pay_resolution_reason from mt101_rebuild_run where rebuild_run_id = '" + FIX + "'");
+        assertTrue(resolutionReason.contains("incidente INC-77 revisado contra extracto bancario"),
+                () -> "falta el motivo de negocio del operador: " + resolutionReason);
+        assertTrue(resolutionReason.contains("MT101_STATUS"),
+                () -> "falta la evidencia tecnica del sistema: " + resolutionReason);
+        // P1-API v23: la respuesta expone la evidencia de resolucion al operador.
+        assertEquals("operador", result.payResolvedBy());
+        assertTrue(result.payResolutionReason().contains("INC-77"));
     }
 
     @Test

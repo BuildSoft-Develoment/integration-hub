@@ -133,6 +133,50 @@ class SftpPaymentTransportTest {
     }
 
     @Test
+    void networkOrServerErrorAfterUploadStartedIsUncertainNotRejected() throws Exception {
+        // P0 v23 (seguridad de dinero): si el despacho del archivo final ya comenzo y el
+        // rename/servidor falla, el resultado debe ser INCIERTO, nunca REJECTED reusable: el banco
+        // pudo recibir el archivo y reenviar a ciegas duplicaria el pago. Forzamos el fallo creando
+        // un DIRECTORIO en la ruta final: el put del .part se completa pero el rename al destino falla.
+        makeRemoteDir("/upload/collide.json");
+        var message = sampleMessage("COLLIDE");
+        var cfg = configurationFor("/upload/collide.json");
+        @SuppressWarnings("unchecked")
+        var sftpCfg = new LinkedHashMap<>((Map<String, Object>) cfg.get("sftp"));
+        // OVERWRITE para no cortar antes del put por el stat del directorio existente.
+        sftpCfg.put("remoteDuplicatePolicy", "OVERWRITE");
+        cfg.put("sftp", sftpCfg);
+        cfg.put("retryPolicy", Map.of("maxRetries", 0));
+
+        var result = transport.send(message, cfg);
+
+        assertFalse(result.accepted(), "el rename fallido no es aceptado");
+        assertTrue(result.uncertain(),
+                () -> "error tras iniciar el despacho debe ser INCIERTO, no rechazo: " + result.lastError());
+        assertNotNull(result.lastError());
+    }
+
+    @Test
+    void connectionFailureBeforeDispatchIsRejectedNotUncertain() {
+        // Contraparte: un fallo ANTES de iniciar el despacho (puerto cerrado) es un rechazo seguro
+        // (reusable), no incierto: el archivo final nunca se toco.
+        var configuration = new LinkedHashMap<String, Object>();
+        configuration.put("sftp", Map.of(
+                "host", "127.0.0.1",
+                "port", 1,
+                "username", "x",
+                "password", "y",
+                "dropPathTemplate", "/x",
+                "timeoutMillis", 300));
+        configuration.put("retryPolicy", Map.of("maxRetries", 0));
+
+        var result = transport.send(sampleMessage("PRE"), configuration);
+
+        assertFalse(result.accepted());
+        assertFalse(result.uncertain(), "fallo de conexion previo al despacho es REJECTED, no INCIERTO");
+    }
+
+    @Test
     void appliesCustomTmpExtension() throws Exception {
         var message = sampleMessage("PROC-TMP");
         var cfg = configurationFor("/upload/${sendersReference}.fin");
@@ -287,6 +331,26 @@ class SftpPaymentTransportTest {
             try (var input = new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8))) {
                 channel.put(input, path, ChannelSftp.OVERWRITE);
             }
+        } finally {
+            if (channel != null && channel.isConnected()) channel.disconnect();
+            if (session != null && session.isConnected()) session.disconnect();
+        }
+    }
+
+    private void makeRemoteDir(String path) throws Exception {
+        Session session = null;
+        ChannelSftp channel = null;
+        try {
+            var jsch = new JSch();
+            session = jsch.getSession(SFTP_USER, SFTP.getHost(), SFTP.getMappedPort(22));
+            session.setPassword(SFTP_PASSWORD);
+            var props = new Properties();
+            props.put("StrictHostKeyChecking", "no");
+            session.setConfig(props);
+            session.connect(5000);
+            channel = (ChannelSftp) session.openChannel("sftp");
+            channel.connect(5000);
+            channel.mkdir(path);
         } finally {
             if (channel != null && channel.isConnected()) channel.disconnect();
             if (session != null && session.isConnected()) session.disconnect();

@@ -313,9 +313,11 @@ public class Mt101QuarantineResource {
     public Mt101CorrectiveLifecycleService.CorrectiveLifecycleResult resolveUncertainPay(
             @QueryParam("connectionRef") String connectionRef,
             @QueryParam("rebuildRunId") String rebuildRunId,
+            @QueryParam("reason") String reason,
             @Context SecurityContext securityContext) {
         try {
-            return correctiveLifecycleService.resolveUncertainPay(connectionRef, rebuildRunId, actor(securityContext));
+            return correctiveLifecycleService.resolveUncertainPay(
+                    connectionRef, rebuildRunId, actor(securityContext), reason);
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }

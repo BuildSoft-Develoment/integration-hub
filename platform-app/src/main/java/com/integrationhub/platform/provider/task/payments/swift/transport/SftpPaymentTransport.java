@@ -84,6 +84,9 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
         var retry = retryPolicy(configuration.get("retryPolicy"));
         var startedAt = System.currentTimeMillis();
         String lastError = null;
+        // Marca si el ultimo fallo dejo el envio en estado INCIERTO (el upload/rename del archivo
+        // final ya habia comenzado y la red fallo): pudo llegar al banco; no es un rechazo reusable.
+        boolean lastUncertain = false;
         for (int attempt = 1; attempt <= retry.maxRetries() + 1; attempt++) {
             var result = attemptUpload(message, configuration);
             if (result.accepted()) {
@@ -91,12 +94,18 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
                         System.currentTimeMillis() - startedAt);
             }
             lastError = result.lastError();
+            lastUncertain = result.uncertain();
             if (attempt <= retry.maxRetries()) {
                 sleepBackoff(retry, attempt);
             }
         }
-        return TransportResult.rejected(retry.maxRetries() + 1,
-                System.currentTimeMillis() - startedAt, lastError);
+        // Reintentos agotados: si el ultimo fallo fue post-despacho, NO lo reportamos como rechazo
+        // (que el lifecycle reusaria) sino como INCIERTO, a resolver por verificacion remota/STATUS.
+        return lastUncertain
+                ? TransportResult.uncertain(retry.maxRetries() + 1,
+                        System.currentTimeMillis() - startedAt, lastError)
+                : TransportResult.rejected(retry.maxRetries() + 1,
+                        System.currentTimeMillis() - startedAt, lastError);
     }
 
     private TransportResult attemptUpload(Mt101Message message, Map<String, Object> configuration) {
@@ -123,6 +132,10 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
         var startedAt = System.currentTimeMillis();
         Session session = null;
         ChannelSftp channel = null;
+        // Frontera de seguridad de dinero: hasta aqui (connect/stat/get) cualquier fallo es seguro
+        // de reintentar/reenviar (el archivo final nunca se toco). En cuanto empieza el put/rename
+        // del archivo destino, un error de red ya NO permite afirmar que el banco no lo recibio.
+        boolean dispatchStarted = false;
         try {
             var jsch = new JSch();
             if (knownHostsPath != null) {
@@ -194,6 +207,9 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
                 }
             }
 
+            // A partir de aqui el despacho del archivo final esta en curso: un fallo de red ya no
+            // es un rechazo seguro sino INCIERTO (el .part o el rename pudieron completarse).
+            dispatchStarted = true;
             // Upload with temporary extension, then atomic rename.
             try (var input = new ByteArrayInputStream(bytes)) {
                 channel.put(input, tmpPath, ChannelSftp.OVERWRITE);
@@ -213,8 +229,13 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
             return TransportResult.accepted(dropPath, 1, durationMs);
         } catch (JSchException | SftpException | java.io.IOException error) {
             var durationMs = System.currentTimeMillis() - startedAt;
-            return TransportResult.rejected(1, durationMs,
-                    "SFTP " + error.getClass().getSimpleName() + ": " + error.getMessage());
+            var detail = "SFTP " + error.getClass().getSimpleName() + ": " + error.getMessage();
+            // Sin fallback por texto del error: la clasificacion es por FASE. Antes del despacho
+            // (connect/stat) = REJECTED reusable; durante/despues del put/rename = UNCERTAIN, que el
+            // lifecycle nunca reenvia a ciegas (se resuelve verificando el dropPath remoto / STATUS).
+            return dispatchStarted
+                    ? TransportResult.uncertain(1, durationMs, detail)
+                    : TransportResult.rejected(1, durationMs, detail);
         } finally {
             if (channel != null && channel.isConnected()) {
                 channel.disconnect();

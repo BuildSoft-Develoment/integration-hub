@@ -116,7 +116,7 @@ public class Mt101CorrectiveLifecycleService {
                 status = normalize(run.status());
                 if (!"VALIDATED".equals(status)) {
                     // VALIDATE rechazo (o no avanzo a VALIDATED): no se archiva un correctivo invalido.
-                    return correctiveResult(dataSource, runId, run);
+                    return correctiveResult(dataSource, runId);
                 }
             }
             if ("VALIDATED".equals(status)) {
@@ -125,7 +125,7 @@ public class Mt101CorrectiveLifecycleService {
                 rebuildService.synchronizeLifecycle(connectionRef, run.originalFragmentSetId());
                 run = rebuildRepository.findRun(dataSource, runId);
             }
-            return correctiveResult(dataSource, runId, run);
+            return correctiveResult(dataSource, runId);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot advance corrective lifecycle for run " + runId, error);
         }
@@ -164,7 +164,7 @@ public class Mt101CorrectiveLifecycleService {
                 throw new IllegalStateException("cannot request corrective pay for run " + runId
                         + "; payStatus=" + run.payStatus());
             }
-            return correctiveResult(dataSource, runId, run);
+            return correctiveResult(dataSource, runId);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot request corrective pay for run " + runId, error);
         }
@@ -277,15 +277,27 @@ public class Mt101CorrectiveLifecycleService {
             }
             rebuildService.synchronizeLifecycle(connectionRef, run.originalFragmentSetId());
             run = rebuildRepository.findRun(dataSource, runId);
-            return correctiveResult(dataSource, runId, run);
+            return correctiveResult(dataSource, runId);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot pay corrective for run " + runId, error);
         }
     }
 
     public CorrectiveLifecycleResult resolveUncertainPay(String connectionRef, String rebuildRunId, String executedBy) {
+        return resolveUncertainPay(connectionRef, rebuildRunId, executedBy, null);
+    }
+
+    /**
+     * Resuelve un PAY_UNCERTAIN consultando MT101_STATUS (nunca reenvia). El operador puede aportar
+     * un motivo/ticket de negocio (P1 v23) que queda en la evidencia de resolucion JUNTO al detalle
+     * tecnico que devuelve el sistema, no en su lugar: la auditoria conserva ambos.
+     */
+    public CorrectiveLifecycleResult resolveUncertainPay(String connectionRef, String rebuildRunId,
+                                                         String executedBy, String resolutionReason) {
         var runId = require(rebuildRunId, "rebuildRunId");
         require(executedBy, "executedBy");
+        var reasonPrefix = resolutionReason == null || resolutionReason.isBlank()
+                ? "" : resolutionReason.trim() + " | ";
         var dataSource = resolveDataSource(connectionRef);
         try {
             var run = rebuildRepository.findRun(dataSource, runId);
@@ -319,26 +331,26 @@ public class Mt101CorrectiveLifecycleService {
             }
             if (summary.pending() > 0) {
                 rebuildRepository.markPayResolution(dataSource, runId, "UNCERTAIN",
-                        "MT101_STATUS did not return a final accepted/rejected status for "
+                        reasonPrefix + "MT101_STATUS did not return a final accepted/rejected status for "
                                 + summary.pending() + " fragment(s)", executedBy);
             } else if (summary.sent() == summary.total()) {
                 rebuildRepository.markPayResolution(dataSource, runId, "SENT",
-                        "resolved by MT101_STATUS: all fragments sent", executedBy);
+                        reasonPrefix + "resolved by MT101_STATUS: all fragments sent", executedBy);
                 runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
                         correctivePaySource(runId, connectionRef), dataSource, runId, false);
             } else if (summary.sent() > 0) {
                 rebuildRepository.markPayResolution(dataSource, runId, "PARTIALLY_SENT",
-                        "PAY resolved by MT101_STATUS: sent=" + summary.sent()
+                        reasonPrefix + "PAY resolved by MT101_STATUS: sent=" + summary.sent()
                                 + ", rejected=" + summary.rejected(), executedBy);
                 runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
                         correctivePaySource(runId, connectionRef), dataSource, runId, false);
             } else {
                 rebuildRepository.markPayResolution(dataSource, runId, "FAILED",
-                        "PAY resolved by MT101_STATUS: all fragments rejected", executedBy);
+                        reasonPrefix + "PAY resolved by MT101_STATUS: all fragments rejected", executedBy);
             }
             rebuildService.synchronizeLifecycle(connectionRef, run.originalFragmentSetId());
             run = rebuildRepository.findRun(dataSource, runId);
-            return correctiveResult(dataSource, runId, run);
+            return correctiveResult(dataSource, runId);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot resolve uncertain PAY for run " + runId, error);
         }
@@ -679,14 +691,26 @@ public class Mt101CorrectiveLifecycleService {
     }
 
     public record CorrectiveLifecycleResult(String rebuildRunId, String correctiveSetId, String status,
-                                            String statusSyncStatus, String reconciliationStatus) {
+                                            String payStatus, String statusSyncStatus, String reconciliationStatus,
+                                            String payRequestReason, String payRequestTicket,
+                                            String payResolvedBy, String payResolutionReason) {
     }
 
-    /** Construye el resultado leyendo los estados de sincronizacion post-PAY (P2 v20). */
-    private CorrectiveLifecycleResult correctiveResult(DataSource dataSource, String runId,
-                                                       Mt101RebuildRepository.RebuildRun run) throws SQLException {
+    /**
+     * Construye el resultado RELEYENDO el run tras el cambio de estado (P2 v23): asi la respuesta
+     * refleja el {@code pay_status} recien aplicado (p. ej. REQUESTED), no el snapshot previo. Incluye
+     * la evidencia de gobierno (motivo/ticket de la solicitud y actor/motivo de la resolucion) para
+     * que el operador la vea por API, no solo en BD. Lee tambien los estados de sync post-PAY (P2 v20).
+     */
+    private CorrectiveLifecycleResult correctiveResult(DataSource dataSource, String runId) throws SQLException {
+        var run = rebuildRepository.findRun(dataSource, runId);
+        if (run == null) {
+            throw new IllegalStateException("rebuild run disappeared while building result: " + runId);
+        }
         var sync = rebuildRepository.payStageSync(dataSource, runId);
         return new CorrectiveLifecycleResult(runId, run.correctiveSetId(), run.status(),
-                sync.statusSyncStatus(), sync.reconciliationStatus());
+                run.payStatus(), sync.statusSyncStatus(), sync.reconciliationStatus(),
+                run.payRequestReason(), run.payRequestTicket(),
+                run.payResolvedBy(), run.payResolutionReason());
     }
 }

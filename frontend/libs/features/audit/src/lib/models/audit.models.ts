@@ -130,10 +130,17 @@ export interface Mt101CorrectiveLifecycle {
   rebuildRunId: string;
   correctiveSetId: string;
   status: string;
+  /** P2/P1-API v23: estado real del PAY (NOT_REQUESTED/REQUESTED/.../SENT/UNCERTAIN), reflejando el update recién aplicado. */
+  payStatus?: string;
   /** P2 v20: resultado de MT101_STATUS tras el PAY (separado de status; PENDING/OK/FAILED/SKIPPED). */
   statusSyncStatus?: string;
   /** P2 v20: resultado de MT101_RECONCILE tras el PAY (separado de status). */
   reconciliationStatus?: string;
+  /** P1-API v23: evidencia de gobierno del PAY, visible para el operador (no solo en BD). */
+  payRequestReason?: string;
+  payRequestTicket?: string;
+  payResolvedBy?: string;
+  payResolutionReason?: string;
 }
 
 /** Estado de un rebuild run gobernado: REQUESTED -> APPROVED -> BUILT -> VALIDATED/ARCHIVED/SENT/CONFIRMED/RECONCILED. */

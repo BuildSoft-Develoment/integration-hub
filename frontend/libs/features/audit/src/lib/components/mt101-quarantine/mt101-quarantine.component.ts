@@ -72,6 +72,11 @@ export class Mt101QuarantineComponent {
   rebuildApprovalReason = '';
   correctionReason = '';
   correctionTicketRef = '';
+  // P1 v23: evidencia de gobierno del PAY. Obligatorios al solicitar/resolver (no se envia dinero
+  // sin justificacion de negocio ni ticket/incidente trazable).
+  payRequestReason = '';
+  payRequestTicket = '';
+  payResolutionReason = '';
 
   constructor() {
     // Entrada unificada: desde la ejecución (?processExecutionId=) o desde el lookup
@@ -515,13 +520,39 @@ export class Mt101QuarantineComponent {
     this.runCorrectiveAction(this.api.mt101AdvanceCorrective({ rebuildRunId: run.rebuildRunId, connectionRef: this.connectionRef }));
   }
 
-  /** B2': el maker solicita el envío del correctivo (ya ARCHIVED). */
+  /** B2': el maker solicita el envío del correctivo (ya ARCHIVED). Motivo + ticket obligatorios. */
   requestCorrectivePay(): void {
     const run = this.correctiveRun();
     if (!run) {
       return;
     }
-    this.runCorrectiveAction(this.api.mt101RequestCorrectivePay({ rebuildRunId: run.rebuildRunId, connectionRef: this.connectionRef }));
+    if (!this.payRequestReason.trim() || !this.payRequestTicket.trim()) {
+      this.error.set(this.i18n.t('audit.quarantine.payReasonRequired'));
+      return;
+    }
+    this.runCorrectiveAction(this.api.mt101RequestCorrectivePay({
+      rebuildRunId: run.rebuildRunId,
+      connectionRef: this.connectionRef,
+      reason: this.payRequestReason,
+      ticketRef: this.payRequestTicket,
+    }));
+  }
+
+  /** B2': resuelve un PAY_UNCERTAIN consultando STATUS (no reenvía). Motivo de negocio obligatorio. */
+  resolveUncertainPay(): void {
+    const run = this.correctiveRun();
+    if (!run) {
+      return;
+    }
+    if (!this.payResolutionReason.trim()) {
+      this.error.set(this.i18n.t('audit.quarantine.payResolutionReasonRequired'));
+      return;
+    }
+    this.runCorrectiveAction(this.api.mt101ResolveUncertainPay({
+      rebuildRunId: run.rebuildRunId,
+      connectionRef: this.connectionRef,
+      reason: this.payResolutionReason,
+    }));
   }
 
   /** B2': el checker (distinto del maker) aprueba y ejecuta el envío (PAY real). */
