@@ -154,6 +154,9 @@ export interface Mt101PayAction {
   /** v25: hashes aprobados visibles para auditoría operativa (qué payload/config aprobó el checker). */
   payloadHash?: string;
   configHash?: string;
+  /** v25: cadena tamper-evident del historial (action_hash encadena el previous_action_hash). */
+  previousActionHash?: string;
+  actionHash?: string;
   createdAt?: string;
 }
 

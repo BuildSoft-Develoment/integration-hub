@@ -39,7 +39,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -506,6 +508,31 @@ class Mt101CorrectiveLifecycleServiceTest {
         assertThrows(Exception.class, () -> service.approveAndPayCorrective(null, FIX, "luis"));
         assertEquals("REQUESTED", payStatus(FIX),
                 "si falla la auditoria del claim, el run no queda EXECUTING (rollback atomico)");
+    }
+
+    @Test
+    void payActionHistoryFormsTamperEvidentHashChain() throws Exception {
+        // v25 hardening: el historial es una cadena criptografica. Cada accion encadena el hash de la
+        // anterior; alterar/insertar/borrar una fila romperia la cadena (tamper-evident, no solo append-only).
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        service.approveAndPayCorrective(null, FIX, "luis"); // -> REQUESTED, CLAIMED, DISPATCHING, SENT
+
+        var actions = service.listPayActions(null, FIX);
+        assertTrue(actions.size() >= 4, "deben existir varias acciones encadenadas");
+        // La primera accion es genesis (sin hash previo); cada siguiente encadena el hash de la anterior.
+        assertNull(actions.get(0).previousActionHash(), "la primera accion no tiene hash previo (genesis)");
+        for (int i = 0; i < actions.size(); i++) {
+            var current = actions.get(i);
+            assertNotNull(current.actionHash(), "cada accion tiene su action_hash");
+            assertEquals(64, current.actionHash().length(), "action_hash es sha256 (64 hex)");
+            if (i > 0) {
+                assertEquals(actions.get(i - 1).actionHash(), current.previousActionHash(),
+                        "cada accion encadena el action_hash de la anterior");
+            }
+        }
+        // Los hashes son distintos entre acciones (la cadena avanza, no se repite).
+        assertNotEquals(actions.get(0).actionHash(), actions.get(1).actionHash());
     }
 
     @Test
@@ -1131,6 +1158,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "action_type varchar(30) not null, previous_status varchar(30), new_status varchar(30),"
                     + "actor varchar(120), reason text, ticket varchar(120),"
                     + "payload_hash varchar(64), config_hash varchar(64),"
+                    + "previous_action_hash varchar(64), action_hash varchar(64),"
                     + "created_at timestamp not null default current_timestamp)");
             // V53: refuerzo append-only (mismo trigger que produccion) para evidenciarlo en test.
             s.executeUpdate("create or replace function mt101_pay_action_block_mutation() returns trigger as $$ "

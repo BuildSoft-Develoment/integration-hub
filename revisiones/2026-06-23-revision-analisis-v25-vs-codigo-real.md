@@ -94,9 +94,13 @@ append-only durante la resolución del lease, el cambio de `pay_status` se revie
 2. **StatusTransport SFTP (ACK/NACK).** `MT101_STATUS` por ruta es REST (url/method/timeout); falla
    ruidosamente sin `routeQuery.url` (mejor que consultar el endpoint equivocado). Un transporte de
    STATUS por SFTP (archivo de respuesta/ACK) es una feature aparte.
-3. **Cadena criptográfica del historial.** El trigger evita mutación desde la app; para auditoría bancaria
-   formal: `action_hash`/`previous_action_hash` encadenados, HMAC/firma, export a WORM/Object Lock y rol
-   de BD exclusivo de inserción (sin UPDATE/DELETE/TRUNCATE para el usuario aplicativo).
+3. **Cadena criptográfica del historial — CORREGIDO (3er pase).** **V56** agrega `previous_action_hash`
+   y `action_hash` a `mt101_corrective_pay_action`: cada acción encadena el hash de la anterior
+   (`action_hash = sha256(previous | campos canónicos de la fila)`). Alterar/insertar/borrar cualquier
+   fila rompe la cadena → el historial es **tamper-evident**, no solo append-only. La cadena se expone en
+   `PayAction` (API + timeline de la UI). Test `payActionHistoryFormsTamperEvidentHashChain`. Quedan como
+   endurecimiento de infra el HMAC con clave gestionada, WORM/Object Lock y el rol de BD exclusivo de
+   inserción (revocar UPDATE/DELETE/TRUNCATE al usuario aplicativo).
 
 ## Conclusión
 

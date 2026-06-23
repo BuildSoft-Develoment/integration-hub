@@ -994,21 +994,66 @@ public class Mt101RebuildRepository {
                                  String previousStatus, String newStatus, String actor,
                                  String reason, String ticket, String payloadHash, String configHash)
             throws SQLException {
+        // v25: cadena criptografica. previous_action_hash = hash de la accion anterior del run;
+        // action_hash = sha256(previous | campos). Alterar/borrar/insertar una fila rompe la cadena.
+        var storedReason = blankToNull(reason);
+        var storedTicket = blankToNull(ticket);
+        var previousHash = lastActionHash(connection, rebuildRunId);
+        var createdAt = LocalDateTime.now();
+        var actionHash = actionChainHash(previousHash, rebuildRunId, actionType, previousStatus, newStatus,
+                actor, storedReason, storedTicket, payloadHash, configHash, createdAt);
         var sql = "insert into mt101_corrective_pay_action "
                 + "(rebuild_run_id, action_type, previous_status, new_status, actor, reason, ticket, "
-                + "payload_hash, config_hash) values (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + "payload_hash, config_hash, previous_action_hash, action_hash, created_at) "
+                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, rebuildRunId);
             statement.setString(2, actionType);
             statement.setString(3, previousStatus);
             statement.setString(4, newStatus);
             statement.setString(5, actor);
-            statement.setString(6, blankToNull(reason));
-            statement.setString(7, blankToNull(ticket));
+            statement.setString(6, storedReason);
+            statement.setString(7, storedTicket);
             statement.setString(8, payloadHash);
             statement.setString(9, configHash);
+            statement.setString(10, previousHash);
+            statement.setString(11, actionHash);
+            statement.setObject(12, createdAt);
             statement.executeUpdate();
         }
+    }
+
+    private String lastActionHash(java.sql.Connection connection, String rebuildRunId) throws SQLException {
+        var sql = "select action_hash from mt101_corrective_pay_action where rebuild_run_id = ? "
+                + "order by id desc limit 1";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }
+    }
+
+    /** v25: hash encadenado de una accion = sha256(previous | campos canonicos de la fila). */
+    private String actionChainHash(String previousHash, String rebuildRunId, String actionType,
+                                   String previousStatus, String newStatus, String actor, String reason,
+                                   String ticket, String payloadHash, String configHash, LocalDateTime createdAt) {
+        var canonical = String.join("|",
+                previousHash == null ? "GENESIS" : previousHash,
+                nz(rebuildRunId), nz(actionType), nz(previousStatus), nz(newStatus), nz(actor),
+                nz(reason), nz(ticket), nz(payloadHash), nz(configHash),
+                createdAt == null ? "" : createdAt.toString());
+        try {
+            var digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 not available", error);
+        }
+    }
+
+    private static String nz(String value) {
+        return value == null ? "" : value;
     }
 
     /**
@@ -1042,7 +1087,7 @@ public class Mt101RebuildRepository {
     /** v24: historial append-only completo de acciones PAY de un run (orden cronologico). */
     public List<PayAction> payActions(DataSource dataSource, String rebuildRunId) throws SQLException {
         var sql = "select action_type, previous_status, new_status, actor, reason, ticket, "
-                + "payload_hash, config_hash, created_at "
+                + "payload_hash, config_hash, previous_action_hash, action_hash, created_at "
                 + "from mt101_corrective_pay_action where rebuild_run_id = ? order by id";
         var result = new ArrayList<PayAction>();
         try (var connection = dataSource.getConnection();
@@ -1059,6 +1104,8 @@ public class Mt101RebuildRepository {
                             rs.getString("ticket"),
                             rs.getString("payload_hash"),
                             rs.getString("config_hash"),
+                            rs.getString("previous_action_hash"),
+                            rs.getString("action_hash"),
                             timestamp(rs, "created_at")));
                 }
             }
@@ -1068,7 +1115,8 @@ public class Mt101RebuildRepository {
 
     public record PayAction(String actionType, String previousStatus, String newStatus,
                             String actor, String reason, String ticket,
-                            String payloadHash, String configHash, LocalDateTime createdAt) {
+                            String payloadHash, String configHash,
+                            String previousActionHash, String actionHash, LocalDateTime createdAt) {
     }
 
     /** P0.1 v24: PAY incierto + accion PAY_UNCERTAIN en una sola transaccion. */
