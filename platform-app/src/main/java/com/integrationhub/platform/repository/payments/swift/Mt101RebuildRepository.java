@@ -1097,14 +1097,15 @@ public class Mt101RebuildRepository {
                 insert into mt101_corrective_pay_fragment
                     (rebuild_run_id, corrective_set_id, corrective_senders_reference,
                      source_file_hash, source_record_number, staging_id,
-                     payload_hash, idempotency_key, transport, endpoint_ref,
+                     payload_hash, idempotency_key, transport, endpoint_ref, approved_routed_as,
                      pay_status, attempts, prepared_at, error_message)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PREPARED', 0, current_timestamp, null)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PREPARED', 0, current_timestamp, null)
                 on conflict (rebuild_run_id, corrective_senders_reference) do update
                     set payload_hash = excluded.payload_hash,
                         idempotency_key = excluded.idempotency_key,
                         transport = excluded.transport,
                         endpoint_ref = excluded.endpoint_ref,
+                        approved_routed_as = excluded.approved_routed_as,
                         pay_status = 'PREPARED',
                         attempts = 0,
                         prepared_at = current_timestamp,
@@ -1133,6 +1134,7 @@ public class Mt101RebuildRepository {
                 statement.setString(8, intent.idempotencyKey());
                 statement.setString(9, intent.transport());
                 statement.setString(10, intent.endpointRef());
+                statement.setString(11, intent.approvedRoutedAs());
                 statement.addBatch();
                 updated++;
             }
@@ -1141,10 +1143,16 @@ public class Mt101RebuildRepository {
         return updated;
     }
 
-    /** Marca un fragmento como DISPATCHING justo antes de invocar el transporte externo. */
+    /**
+     * Marca un fragmento como DISPATCHING justo antes de invocar el transporte externo. P0.2 v24: el
+     * claim exige que el {@code payload_hash} y {@code routed_as} ACTUALES coincidan con los aprobados
+     * en el ledger (plan por fragmento inmutable): solo despacha lo aprobado, sin re-resolver dinamico.
+     */
     public int markPayFragmentDispatching(DataSource dataSource,
                                           String rebuildRunId,
-                                          String correctiveSendersReference) throws SQLException {
+                                          String correctiveSendersReference,
+                                          String currentPayloadHash,
+                                          String currentRoutedAs) throws SQLException {
         var sql = """
                 update mt101_corrective_pay_fragment
                    set pay_status = 'DISPATCHING',
@@ -1154,11 +1162,44 @@ public class Mt101RebuildRepository {
                  where rebuild_run_id = ?
                    and corrective_senders_reference = ?
                    and pay_status = 'PREPARED'
+                   and payload_hash = ?
+                   and approved_routed_as is not distinct from ?
                 """;
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
             statement.setString(1, rebuildRunId);
             statement.setString(2, correctiveSendersReference);
+            statement.setString(3, currentPayloadHash);
+            statement.setString(4, currentRoutedAs);
+            return statement.executeUpdate();
+        }
+    }
+
+    /**
+     * P0.2 v24: si una intencion PREPARED ya no coincide con el plan aprobado (payload o ruta cambiados
+     * tras el claim), se marca INVALIDATED y NO se envia. Devuelve 1 si invalido (drift detectado).
+     */
+    public int invalidatePayFragmentOnPlanDrift(DataSource dataSource,
+                                                String rebuildRunId,
+                                                String correctiveSendersReference,
+                                                String currentPayloadHash,
+                                                String currentRoutedAs) throws SQLException {
+        var sql = """
+                update mt101_corrective_pay_fragment
+                   set pay_status = 'INVALIDATED',
+                       error_message = 'payload or route changed after approval; not dispatched',
+                       updated_at = current_timestamp
+                 where rebuild_run_id = ?
+                   and corrective_senders_reference = ?
+                   and pay_status = 'PREPARED'
+                   and (payload_hash <> ? or approved_routed_as is distinct from ?)
+                """;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            statement.setString(2, correctiveSendersReference);
+            statement.setString(3, currentPayloadHash);
+            statement.setString(4, currentRoutedAs);
             return statement.executeUpdate();
         }
     }
@@ -1501,7 +1542,8 @@ public class Mt101RebuildRepository {
             String payloadHash,
             String idempotencyKey,
             String transport,
-            String endpointRef
+            String endpointRef,
+            String approvedRoutedAs
     ) {
     }
 

@@ -220,10 +220,10 @@ public class Mt101PayTaskProvider implements TaskProvider {
             var transport = defaultTransport == null ? resolveTransport(plan.transport()) : defaultTransport;
             var reference = message.sequenceA() == null ? null
                     : message.sequenceA().sendersReference();
-            // P0.2 v22: ninguna llamada externa sin intencion durable aprobada. Solo se despacha
-            // si se reclamo EXACTAMENTE una intencion PREPARED del ledger correctivo; un fragmento
-            // ya DISPATCHING/terminal o sin intencion NO se reenvia (se resuelve por STATUS).
-            if (!claimDispatch(fragmentSource, reference)) {
+            // P0.2 v22+v24: ninguna llamada externa sin intencion durable aprobada Y sin que el plan por
+            // fragmento (payload_hash + routed_as) siga siendo el aprobado. Si cambio tras el claim, el
+            // fragmento se INVALIDA y NO se envia; si no hay intencion valida tampoco se reenvia.
+            if (!claimDispatch(fragmentSource, reference, message, item.routedAs())) {
                 continue;
             }
             var result = dispatch(transport, plan.configuration(), message, accumulator);
@@ -277,7 +277,8 @@ public class Mt101PayTaskProvider implements TaskProvider {
      * intencion {@code PREPARED} (transicion atomica PREPARED -> DISPATCHING). Si false, NO se
      * llama al transporte (un fragmento ya DISPATCHING/terminal o sin intencion no se reenvia).
      */
-    private boolean claimDispatch(Map<String, Object> fragmentSource, String reference) {
+    private boolean claimDispatch(Map<String, Object> fragmentSource, String reference,
+                                  Mt101Message message, String routedAs) {
         var rebuildRunId = stringValue(fragmentSource.get("correctivePayRunId"), null);
         if (rebuildRunId == null) {
             return true;
@@ -288,7 +289,22 @@ public class Mt101PayTaskProvider implements TaskProvider {
         if (reference == null || reference.isBlank()) {
             return false;
         }
-        return correctivePayStore.markDispatching(fragmentSource, rebuildRunId, reference);
+        // P0.2 v24: el plan aprobado por fragmento es payload_hash (sha256 del rawPayload) + routed_as.
+        // El claim solo procede si el plan ACTUAL sigue siendo el aprobado; si no, se INVALIDA.
+        return correctivePayStore.markDispatching(fragmentSource, rebuildRunId, reference,
+                payloadHash(message), routedAs);
+    }
+
+    /** P0.2 v24: hash del payload actual, idéntico al que el servicio congeló en el ledger al preparar. */
+    private String payloadHash(Mt101Message message) {
+        var raw = message == null ? "" : message.rawPayload();
+        try {
+            var digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest((raw == null ? "" : raw).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 not available", error);
+        }
     }
 
     /** Construye la trama RECORD de despacho para un fragmento (traceId=ejecucion, recordId=:20:). */

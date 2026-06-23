@@ -151,8 +151,10 @@ class Mt101CorrectiveLifecycleServiceTest {
                 if (payThrowsAfterDispatch) {
                     // Simula: se despacho al menos un fragmento (DISPATCHING durable) y LUEGO algo
                     // falla (BD/auditoria) lanzando excepcion. No debe quedar FAILED (reusable).
-                    try {
-                        new Mt101RebuildRepository().markPayFragmentDispatching(dataSource, FIX, "RTEST1");
+                    try (Connection connection = dataSource.getConnection();
+                         var statement = connection.createStatement()) {
+                        statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'DISPATCHING' "
+                                + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'");
                     } catch (SQLException error) {
                         throw new IllegalStateException(error);
                     }
@@ -954,7 +956,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "corrective_set_id varchar(80) not null, corrective_senders_reference varchar(16) not null,"
                     + "source_file_hash varchar(64), source_record_number bigint, staging_id bigint,"
                     + "payload_hash varchar(64) not null, idempotency_key varchar(180) not null,"
-                    + "transport varchar(20), endpoint_ref varchar(512),"
+                    + "transport varchar(20), endpoint_ref varchar(512), approved_routed_as varchar(80),"
                     + "gateway_reference varchar(120), pay_status varchar(30) not null default 'REQUESTED',"
                     + "attempts integer not null default 0, error_message text,"
                     + "prepared_at timestamp, dispatched_at timestamp,"

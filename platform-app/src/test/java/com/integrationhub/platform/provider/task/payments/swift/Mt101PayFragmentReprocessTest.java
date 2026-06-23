@@ -248,7 +248,8 @@ class Mt101PayFragmentReprocessTest {
         fragmentStore.markStatus(fragmentSource, "T1", "ARCHIVED", null);
         insertPayLedger("RUN-ALREADY", fragmentSetId, "T1");
         // un dispatch previo dejo la intencion en DISPATCHING (ya no es PREPARED).
-        assertEquals(1, new Mt101RebuildRepository().markPayFragmentDispatching(dataSource, "RUN-ALREADY", "T1"));
+        assertEquals(1, new Mt101RebuildRepository().markPayFragmentDispatching(dataSource, "RUN-ALREADY", "T1",
+                sha256Hex("{\"sendersReference\":\"T1\"}"), null));
 
         var transport = new StubTransport(List.of(TransportResult.accepted("GW-T1", 1, 1L)));
         var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
@@ -260,6 +261,31 @@ class Mt101PayFragmentReprocessTest {
         assertEquals(0, transport.callsReceived(),
                 "un fragmento ya DISPATCHING no se reenvia a ciegas (se resuelve por STATUS)");
         assertEquals("DISPATCHING", payLedgerStatus("RUN-ALREADY", "T1"), "permanece DISPATCHING para conciliar");
+    }
+
+    @Test
+    void correctivePayInvalidatesFragmentWhenPayloadChangedAfterApproval() throws Exception {
+        // P0.2 v24: si el payload del fragmento cambia tras preparar la intencion (el payload_hash actual
+        // ya no coincide con el aprobado en el ledger), el fragmento se INVALIDA y NO se envia.
+        var fragmentSetId = "PAY-DRIFT";
+        insertFragmentSet(fragmentSetId, "T1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", "RUN-DRIFT");
+        fragmentStore.markStatus(fragmentSource, "T1", "ARCHIVED", null);
+        // El plan aprobado tenia OTRO payload_hash; el fragmento actual difiere (drift de payload).
+        insertPayLedger("RUN-DRIFT", fragmentSetId, "T1", sha256Hex("{\"sendersReference\":\"TAMPERED\"}"));
+
+        var transport = new StubTransport(List.of(TransportResult.accepted("GW-T1", 1, 1L)));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore,
+                null, null, payStore);
+
+        provider.execute(contextWith(fragmentSource), payConfig(50));
+
+        assertEquals(0, transport.callsReceived(),
+                "un fragmento cuyo plan cambio tras la aprobacion NO se envia");
+        assertEquals("INVALIDATED", payLedgerStatus("RUN-DRIFT", "T1"),
+                "el fragmento con drift de payload queda INVALIDATED, no enviado");
     }
 
     private TaskContext contextWith(Map<String, Object> fragmentSource) {
@@ -336,6 +362,7 @@ class Mt101PayFragmentReprocessTest {
                     + "corrective_senders_reference varchar(16) not null,"
                     + "payload_hash varchar(64) not null,"
                     + "idempotency_key varchar(180) not null,"
+                    + "approved_routed_as varchar(80),"
                     + "pay_status varchar(30) not null default 'PREPARED',"
                     + "attempts integer not null default 0,"
                     + "gateway_reference varchar(120), error_message text,"
@@ -373,16 +400,35 @@ class Mt101PayFragmentReprocessTest {
     }
 
     private void insertPayLedger(String runId, String correctiveSetId, String reference) throws SQLException {
+        insertPayLedger(runId, correctiveSetId, reference,
+                sha256Hex("{\"sendersReference\":\"" + reference + "\"}"));
+    }
+
+    private void insertPayLedger(String runId, String correctiveSetId, String reference, String approvedPayloadHash)
+            throws SQLException {
+        // P0.2 v24: el ledger guarda el payload_hash aprobado = sha256(rawPayload) del mensaje, igual que
+        // calcula el provider al despachar; approved_routed_as null (estos tests no usan routeTransports).
         try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement(
                      "insert into mt101_corrective_pay_fragment "
-                             + "(rebuild_run_id, corrective_set_id, corrective_senders_reference, payload_hash, idempotency_key, pay_status, prepared_at) "
-                             + "values (?, ?, ?, repeat('1', 64), ?, 'PREPARED', current_timestamp)")) {
+                             + "(rebuild_run_id, corrective_set_id, corrective_senders_reference, payload_hash, idempotency_key, approved_routed_as, pay_status, prepared_at) "
+                             + "values (?, ?, ?, ?, ?, null, 'PREPARED', current_timestamp)")) {
             statement.setString(1, runId);
             statement.setString(2, correctiveSetId);
             statement.setString(3, reference);
-            statement.setString(4, "KEY-" + reference);
+            statement.setString(4, approvedPayloadHash);
+            statement.setString(5, "KEY-" + reference);
             statement.executeUpdate();
+        }
+    }
+
+    private String sha256Hex(String value) {
+        try {
+            var digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException error) {
+            throw new IllegalStateException(error);
         }
     }
 

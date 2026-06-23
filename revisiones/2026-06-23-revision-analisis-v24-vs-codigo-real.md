@@ -23,7 +23,7 @@ implementaron en su núcleo, documentando el resto.
 | P0.1b | Estado PAY y acción auditada no atómicos (conexiones separadas) | **REAL → CORREGIDO (núcleo)** | `requestPayWithAction`: UPDATE de estado + INSERT de auditoría en **una sola transacción** con rollback. Test `requestPayStateAndActionAreAtomicRollingBackOnAuditFailure` (si falla la auditoría, el estado se revierte). Resto de transiciones documentado abajo |
 | Riesgo | STATUS post-PAY normal usa config vigente, no la congelada | **REAL → CORREGIDO** | `runPostPaySync` acepta `frozenBaseConfig`; el STATUS post-PAY usa el MISMO snapshot congelado que la resolución de inciertos |
 | Riesgo | Historial PAY no expuesto como auditoría operativa | **REAL → CORREGIDO** | `GET /rebuild-runs/pay-actions` + `Mt101CorrectiveLifecycleService.listPayActions`; cliente Angular `mt101PayActions` + línea de tiempo en la UI de cuarentena |
-| P0.2 | Plan por fragmento no totalmente inmutable (PAY re-lee build_fragment) | **MITIGADO → resto documentado** | El hash de payload a nivel run se valida en el claim (cualquier cambio de payload de cualquier fragmento → claim falla) y el claim estricto `PREPARED→DISPATCHING` por fragmento impide despachar lo no aprobado. El plan-por-fragmento persistido (transport/route_profile/dispatch_plan_hash) es un endurecimiento mayor. Documentado |
+| P0.2 | Plan por fragmento no totalmente inmutable (PAY re-lee build_fragment) | **REAL → CORREGIDO (2º pase)** | **V54** `approved_routed_as` + validación en el claim: `markPayFragmentDispatching` exige que el `payload_hash` (sha256 del rawPayload) **y** `routed_as` ACTUALES coincidan con los aprobados en el ledger; si cambian tras el claim, el fragmento se **INVALIDATED** y NO se envía. Test `correctivePayInvalidatesFragmentWhenPayloadChangedAfterApproval` |
 | Riesgo | El snapshot de STATUS podría persistir secretos | **VALIDADO/documentado** | El snapshot guarda la config tal cual la entrega `taskConfigSource` (referencias `${secret:...}` sin resolver, no secretos resueltos). Recomendación documentada: almacenar `profileRef`/`config_hash` y resolver secretos en Vault al consultar |
 
 ---
@@ -66,26 +66,35 @@ botón "Historial PAY" que carga y muestra la línea de tiempo con actor/fecha/m
 
 ## Pruebas que evidencian el cierre (todas en verde)
 
-- `Mt101CorrectiveLifecycleServiceTest` — **23** (incluye los 4 nuevos: RENAME_WITH_SUFFIX, validación
-  backend de motivo/ticket, append-only en BD, atomicidad con rollback).
-- Dominio swift completo (provider + service + repository + transport): **224** tests, 0 fallos.
-- Integración end-to-end (Flyway real con V51/V52/V53): `BankProfileHomologationIT` +
+- `Mt101CorrectiveLifecycleServiceTest` — **23** (RENAME_WITH_SUFFIX, validación backend de
+  motivo/ticket, append-only en BD, atomicidad con rollback).
+- `Mt101PayFragmentReprocessTest` — **8** (incluye `correctivePayInvalidatesFragmentWhenPayloadChangedAfterApproval`).
+- Dominio swift completo (provider + service + repository + transport): **225** tests, 0 fallos.
+- Integración end-to-end (Flyway real con V51..V54): `BankProfileHomologationIT` +
   `Mt101OutboundEndToEndIT` = **3** tests, 0 fallos, `BUILD SUCCESS`.
 - Frontend: `nx build web` exitoso + `nx test web` **214** specs (56 archivos), 0 fallos.
 
-## Documentado (endurecimiento mayor, no bloqueante)
+## Segundo pase (doble check) — cierre de P0.2
+
+**P0.2 — plan por fragmento inmutable (payload + ruta).** Confirmado contra el código: el provider
+re-leía `mt101_build_fragment` (payload, routed_as) y re-resolvía la ruta en el dispatch; el claim
+`PREPARED→DISPATCHING` no validaba que el plan siguiera siendo el aprobado. **Corregido sin fallback:**
+- **V54** añade `approved_routed_as` al ledger; `preparePayIntents` lo congela junto al `payload_hash`.
+- `markPayFragmentDispatching` exige en su `WHERE` que `payload_hash = sha256(rawPayload actual)` **y**
+  `approved_routed_as is not distinct from routed_as actual`. El provider calcula el `payload_hash`
+  actual con el MISMO algoritmo que el servicio congeló al preparar.
+- Si el plan cambió (payload o ruta) tras el claim, `invalidatePayFragmentOnPlanDrift` marca el fragmento
+  **INVALIDATED** y NO se envía. Test `correctivePayInvalidatesFragmentWhenPayloadChangedAfterApproval`
+  (payload distinto al aprobado → 0 llamadas al transporte, ledger INVALIDATED).
+
+## Documentado (endurecimiento, no bloqueante)
 
 1. **Atomicidad del resto de transiciones (claim/terminal/resolución).** El patrón transaccional
-   `requestPayWithAction` (estado + acción en una tx) está aplicado a la **entrada** de solicitud, que es
-   donde un audit perdido es más grave. El trigger V53 garantiza además que **toda** fila escrita es
-   inmutable. Extender el mismo `*WithAction` a claim, terminal (SENT/UNCERTAIN/PARTIALLY/REJECTED) y
-   resolución es mecánico y queda como refinamiento (Connection-variant + wrapper por método).
-2. **Plan por fragmento totalmente inmutable (P0.2).** Hoy lo protegen el hash de payload a nivel run
-   (validado en el claim) y el claim estricto `PREPARED→DISPATCHING` por fragmento. El endurecimiento
-   sería persistir el plan por `:20:` (transport, route_profile_ref/version, endpoint_profile_ref/version,
-   idempotency/dropPath, dispatch_plan_hash) y validar `payload_hash`/`plan_hash` actuales == aprobados
-   antes de DISPATCHING; el provider no re-resolvería ruta dinámicamente.
-3. **Secretos del snapshot de STATUS.** Verificado: se persiste la config con referencias sin resolver.
+   `requestPayWithAction` (estado + acción en una tx con rollback) está aplicado a la **entrada** de
+   solicitud, que es donde un audit perdido es más grave. El trigger V53 garantiza además que **toda**
+   fila escrita es inmutable. Extender el mismo `*WithAction` a claim, terminal y resolución es mecánico
+   (Connection-variant + wrapper por método) y queda como refinamiento.
+2. **Secretos del snapshot de STATUS.** Verificado: se persiste la config con referencias sin resolver.
    Recomendación: almacenar `status_profile_ref`/`version` + `config_hash` y resolver secretos en Vault
    al consultar, para no depender de que la config nunca contenga secretos resueltos.
 

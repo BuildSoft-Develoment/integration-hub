@@ -715,7 +715,8 @@ public class Mt101CorrectiveLifecycleService {
                         payloadHash(message),
                         key,
                         plan.transport(),
-                        key));
+                        key,
+                        row.routedAs()));
             }
             rebuildRepository.preparePayIntents(dataSource, runId, intents);
             if (rows.size() < pageSize) {

@@ -48,21 +48,32 @@ public class Mt101CorrectivePayStore {
     }
 
     /**
-     * P0.2 v22: transicion atomica PREPARED -> DISPATCHING. Devuelve true solo si se reclamo
-     * EXACTAMENTE una intencion PREPARED; false si no habia intencion valida (no se debe enviar).
+     * P0.2 v22+v24: transicion atomica PREPARED -> DISPATCHING. Devuelve true solo si se reclamo
+     * EXACTAMENTE una intencion PREPARED cuyo plan (payload_hash + routed_as) sigue siendo el aprobado.
+     * Si el plan cambio tras la aprobacion (payload/ruta), el fragmento se INVALIDA y NO se envia. Si no
+     * habia intencion valida (ya DISPATCHING/terminal), devuelve false sin invalidar.
      */
     public boolean markDispatching(Map<String, Object> fragmentSource,
                                    String rebuildRunId,
-                                   String sendersReference) {
+                                   String sendersReference,
+                                   String currentPayloadHash,
+                                   String currentRoutedAs) {
         if (rebuildRunId == null || rebuildRunId.isBlank()
                 || sendersReference == null || sendersReference.isBlank()) {
             return false;
         }
+        var dataSource = resolveDataSource(
+                stringValue(fragmentSource == null ? null : fragmentSource.get("connectionRef")));
         try {
-            return rebuildRepository.markPayFragmentDispatching(
-                    resolveDataSource(stringValue(fragmentSource == null ? null : fragmentSource.get("connectionRef"))),
-                    rebuildRunId,
-                    sendersReference) == 1;
+            var claimed = rebuildRepository.markPayFragmentDispatching(
+                    dataSource, rebuildRunId, sendersReference, currentPayloadHash, currentRoutedAs) == 1;
+            if (claimed) {
+                return true;
+            }
+            // No se reclamo: si fue por drift del plan (sigue PREPARED pero cambio), se INVALIDA.
+            rebuildRepository.invalidatePayFragmentOnPlanDrift(
+                    dataSource, rebuildRunId, sendersReference, currentPayloadHash, currentRoutedAs);
+            return false;
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot mark MT101 corrective PAY fragment as DISPATCHING: "
                     + sendersReference, error);
