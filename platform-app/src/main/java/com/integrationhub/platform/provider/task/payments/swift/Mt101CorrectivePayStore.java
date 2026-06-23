@@ -57,7 +57,8 @@ public class Mt101CorrectivePayStore {
                                    String rebuildRunId,
                                    String sendersReference,
                                    String currentPayloadHash,
-                                   String currentRoutedAs) {
+                                   String currentRoutedAs,
+                                   String currentPlanHash) {
         if (rebuildRunId == null || rebuildRunId.isBlank()
                 || sendersReference == null || sendersReference.isBlank()) {
             return false;
@@ -66,13 +67,15 @@ public class Mt101CorrectivePayStore {
                 stringValue(fragmentSource == null ? null : fragmentSource.get("connectionRef")));
         try {
             var claimed = rebuildRepository.markPayFragmentDispatching(
-                    dataSource, rebuildRunId, sendersReference, currentPayloadHash, currentRoutedAs) == 1;
+                    dataSource, rebuildRunId, sendersReference, currentPayloadHash, currentRoutedAs,
+                    currentPlanHash) == 1;
             if (claimed) {
                 return true;
             }
             // No se reclamo: si fue por drift del plan (sigue PREPARED pero cambio), se INVALIDA.
             rebuildRepository.invalidatePayFragmentOnPlanDrift(
-                    dataSource, rebuildRunId, sendersReference, currentPayloadHash, currentRoutedAs);
+                    dataSource, rebuildRunId, sendersReference, currentPayloadHash, currentRoutedAs,
+                    currentPlanHash);
             return false;
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot mark MT101 corrective PAY fragment as DISPATCHING: "

@@ -220,10 +220,11 @@ public class Mt101PayTaskProvider implements TaskProvider {
             var transport = defaultTransport == null ? resolveTransport(plan.transport()) : defaultTransport;
             var reference = message.sequenceA() == null ? null
                     : message.sequenceA().sendersReference();
-            // P0.2 v22+v24: ninguna llamada externa sin intencion durable aprobada Y sin que el plan por
-            // fragmento (payload_hash + routed_as) siga siendo el aprobado. Si cambio tras el claim, el
-            // fragmento se INVALIDA y NO se envia; si no hay intencion valida tampoco se reenvia.
-            if (!claimDispatch(fragmentSource, reference, message, item.routedAs())) {
+            // P0.2 v22+v24+v26: ninguna llamada externa sin intencion durable aprobada Y sin que el PLAN por
+            // fragmento (payload_hash + routed_as + dispatch_plan_hash = transport|ruta|destino|correlacion)
+            // siga siendo el aprobado. El provider recomputa el plan_hash y lo valida contra el del ledger:
+            // si difiere, el fragmento se INVALIDA y NO se envia (plan aprobado = plan usado, demostrable).
+            if (!claimDispatch(fragmentSource, reference, message, item.routedAs(), plan)) {
                 continue;
             }
             var result = dispatch(transport, plan.configuration(), message, accumulator);
@@ -278,7 +279,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
      * llama al transporte (un fragmento ya DISPATCHING/terminal o sin intencion no se reenvia).
      */
     private boolean claimDispatch(Map<String, Object> fragmentSource, String reference,
-                                  Mt101Message message, String routedAs) {
+                                  Mt101Message message, String routedAs, Mt101PayRouteResolver.PayPlan plan) {
         var rebuildRunId = stringValue(fragmentSource.get("correctivePayRunId"), null);
         if (rebuildRunId == null) {
             return true;
@@ -289,10 +290,13 @@ public class Mt101PayTaskProvider implements TaskProvider {
         if (reference == null || reference.isBlank()) {
             return false;
         }
-        // P0.2 v24: el plan aprobado por fragmento es payload_hash (sha256 del rawPayload) + routed_as.
-        // El claim solo procede si el plan ACTUAL sigue siendo el aprobado; si no, se INVALIDA.
+        // P0.2 v24+v26: el plan aprobado por fragmento es payload_hash + routed_as + dispatch_plan_hash
+        // (transport|ruta|destino|correlacion|payload). El provider recomputa el plan_hash y el claim solo
+        // procede si TODO sigue siendo lo aprobado; si no, se INVALIDA y no se envia.
+        var payloadHash = payloadHash(message);
+        var planHash = Mt101PayRouteResolver.dispatchPlanHash(plan, payloadHash, routedAs, message);
         return correctivePayStore.markDispatching(fragmentSource, rebuildRunId, reference,
-                payloadHash(message), routedAs);
+                payloadHash, routedAs, planHash);
     }
 
     /** P0.2 v24: hash del payload actual, idéntico al que el servicio congeló en el ledger al preparar. */

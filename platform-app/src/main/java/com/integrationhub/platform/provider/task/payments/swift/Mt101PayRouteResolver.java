@@ -85,4 +85,51 @@ public final class Mt101PayRouteResolver {
 
     public record PayPlan(String transport, Map<String, Object> configuration, String endpointRef) {
     }
+
+    /**
+     * v25/v26: destino REAL resuelto del despacho (REST: URL resuelta; SFTP: {@code sftp://host/dropPath}),
+     * redactado de credenciales. Compartido por el servicio (al preparar el plan) y el provider (al
+     * validar en el dispatch) para que computen idéntico.
+     */
+    @SuppressWarnings("unchecked")
+    public static String dispatchDestination(PayPlan plan, Mt101Message message) {
+        var config = plan.configuration();
+        if ("SFTP".equalsIgnoreCase(plan.transport())) {
+            var sftp = config.get("sftp") instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.<String, Object>of();
+            var host = stringValue(sftp.get("host"), null);
+            return "sftp://" + (host == null ? "?" : host) + (plan.endpointRef() == null ? "" : plan.endpointRef());
+        }
+        var rest = config.get("rest") instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.<String, Object>of();
+        var url = stringValue(rest.get("url"), null);
+        if (url == null) {
+            return "rest://?";
+        }
+        return redactUrlCredentials(Mt101PaymentCorrelation.resolveTemplate(url, message));
+    }
+
+    private static String redactUrlCredentials(String url) {
+        return url == null ? null : url.replaceAll("://[^/@\\s]+@", "://***@");
+    }
+
+    /**
+     * v25/v26: hash sha256 del plan canónico por fragmento ({@code transport|ruta|destino|correlación|
+     * payloadHash}). El provider lo recomputa al despachar y lo valida contra el persistido en el ledger:
+     * así se DEMUESTRA "plan aprobado = plan usado", no solo se infiere.
+     */
+    public static String dispatchPlanHash(PayPlan plan, String payloadHash, String routedAs, Mt101Message message) {
+        var destination = dispatchDestination(plan, message);
+        var canonical = String.join("|",
+                plan.transport() == null ? "" : plan.transport(),
+                routedAs == null ? "" : routedAs,
+                destination == null ? "" : destination,
+                plan.endpointRef() == null ? "" : plan.endpointRef(),
+                payloadHash == null ? "" : payloadHash);
+        try {
+            var digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(canonical.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 not available", error);
+        }
+    }
 }

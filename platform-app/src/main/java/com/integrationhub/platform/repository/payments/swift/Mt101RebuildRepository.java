@@ -1098,6 +1098,31 @@ public class Mt101RebuildRepository {
         }
     }
 
+    /** v26 #4: congela el snapshot (JSON redactado) de la config de MT101_RECONCILE en el momento del PAY. */
+    public void freezePayReconcileConfig(DataSource dataSource, String rebuildRunId, String snapshotJson)
+            throws SQLException {
+        var sql = "update mt101_rebuild_run set pay_reconcile_config_snapshot = ?, updated_at = current_timestamp "
+                + "where rebuild_run_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, snapshotJson);
+            statement.setString(2, rebuildRunId);
+            statement.executeUpdate();
+        }
+    }
+
+    /** v26 #4: snapshot congelado de la config de MT101_RECONCILE, o {@code null} si no se congelo. */
+    public String payReconcileConfigSnapshot(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "select pay_reconcile_config_snapshot from mt101_rebuild_run where rebuild_run_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }
+    }
+
     /** v24: historial append-only completo de acciones PAY de un run (orden cronologico). */
     public List<PayAction> payActions(DataSource dataSource, String rebuildRunId) throws SQLException {
         var sql = "select action_type, previous_status, new_status, actor, reason, ticket, "
@@ -1421,7 +1446,10 @@ public class Mt101RebuildRepository {
                                           String rebuildRunId,
                                           String correctiveSendersReference,
                                           String currentPayloadHash,
-                                          String currentRoutedAs) throws SQLException {
+                                          String currentRoutedAs,
+                                          String currentPlanHash) throws SQLException {
+        // v26: el claim valida el PLAN COMPLETO aprobado: payload_hash + routed_as + dispatch_plan_hash
+        // (transport|ruta|destino|correlacion|payload). "Plan aprobado = plan usado", demostrable.
         var sql = """
                 update mt101_corrective_pay_fragment
                    set pay_status = 'DISPATCHING',
@@ -1433,6 +1461,7 @@ public class Mt101RebuildRepository {
                    and pay_status = 'PREPARED'
                    and payload_hash = ?
                    and approved_routed_as is not distinct from ?
+                   and dispatch_plan_hash is not distinct from ?
                 """;
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
@@ -1440,28 +1469,32 @@ public class Mt101RebuildRepository {
             statement.setString(2, correctiveSendersReference);
             statement.setString(3, currentPayloadHash);
             statement.setString(4, currentRoutedAs);
+            statement.setString(5, currentPlanHash);
             return statement.executeUpdate();
         }
     }
 
     /**
-     * P0.2 v24: si una intencion PREPARED ya no coincide con el plan aprobado (payload o ruta cambiados
-     * tras el claim), se marca INVALIDATED y NO se envia. Devuelve 1 si invalido (drift detectado).
+     * P0.2 v24+v26: si una intencion PREPARED ya no coincide con el plan aprobado (payload, ruta o el
+     * plan_hash completo cambiados tras el claim), se marca INVALIDATED y NO se envia. Devuelve 1 si
+     * invalido (drift detectado).
      */
     public int invalidatePayFragmentOnPlanDrift(DataSource dataSource,
                                                 String rebuildRunId,
                                                 String correctiveSendersReference,
                                                 String currentPayloadHash,
-                                                String currentRoutedAs) throws SQLException {
+                                                String currentRoutedAs,
+                                                String currentPlanHash) throws SQLException {
         var sql = """
                 update mt101_corrective_pay_fragment
                    set pay_status = 'INVALIDATED',
-                       error_message = 'payload or route changed after approval; not dispatched',
+                       error_message = 'payload, route or dispatch plan changed after approval; not dispatched',
                        updated_at = current_timestamp
                  where rebuild_run_id = ?
                    and corrective_senders_reference = ?
                    and pay_status = 'PREPARED'
-                   and (payload_hash <> ? or approved_routed_as is distinct from ?)
+                   and (payload_hash <> ? or approved_routed_as is distinct from ?
+                        or dispatch_plan_hash is distinct from ?)
                 """;
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
@@ -1469,6 +1502,7 @@ public class Mt101RebuildRepository {
             statement.setString(2, correctiveSendersReference);
             statement.setString(3, currentPayloadHash);
             statement.setString(4, currentRoutedAs);
+            statement.setString(5, currentPlanHash);
             return statement.executeUpdate();
         }
     }

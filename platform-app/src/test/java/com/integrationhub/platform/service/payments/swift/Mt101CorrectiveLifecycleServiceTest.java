@@ -86,6 +86,9 @@ class Mt101CorrectiveLifecycleServiceTest {
     private volatile String dispatchedStatusQueryUrl;
     // P0.3 v25: drift de plan -> fragmentos INVALIDATED -> el run debe quedar INVALIDATED, no FAILED.
     private boolean payInvalidatesAllFragments;
+    // v26 #4: el perfil de MT101_RECONCILE cambia DESPUES del PAY; debe usarse el congelado.
+    private boolean reconcileConfigChangedAfterPay;
+    private volatile String dispatchedReconcileQueryUrl;
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -111,6 +114,8 @@ class Mt101CorrectiveLifecycleServiceTest {
         statusConfigChangedAfterPay = false;
         dispatchedStatusQueryUrl = null;
         payInvalidatesAllFragments = false;
+        reconcileConfigChangedAfterPay = false;
+        dispatchedReconcileQueryUrl = null;
 
         rebuildService = new Mt101RebuildService(dataSource, null, null, null,
                 new Mt101FailedRecordRepository(), new Mt101FragmentRepository(), new Mt101RebuildRepository());
@@ -250,6 +255,10 @@ class Mt101CorrectiveLifecycleServiceTest {
             @Override
             public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
                 reconcileInvocations.incrementAndGet();
+                // v26 #4: registra el perfil de RECONCILE con el que REALMENTE se concilia.
+                if (configuration.get("query") instanceof Map<?, ?> query) {
+                    dispatchedReconcileQueryUrl = String.valueOf(query.get("url"));
+                }
                 return TaskResult.success("fake reconcile");
             }
         };
@@ -282,6 +291,11 @@ class Mt101CorrectiveLifecycleServiceTest {
                                     "sftp", Map.of("host", "sftp.bank-b.local",
                                             "dropPathTemplate", "/bank/${sendersReference}.fin"))));
                 }
+            }
+            if ("MT101_RECONCILE".equals(taskType)) {
+                // v26 #4: el perfil de RECONCILE "deriva" si cambia despues del PAY; el snapshot lo evita.
+                config.put("query", Map.of("url",
+                        (reconcileConfigChangedAfterPay ? "drift-reconcile/" : "frozen-reconcile/") + "${idempotencyKey}"));
             }
             if ("MT101_STATUS".equals(taskType)) {
                 // El perfil de STATUS "deriva" si cambia despues del PAY; el snapshot congelado lo evita.
@@ -402,6 +416,32 @@ class Mt101CorrectiveLifecycleServiceTest {
                 + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_REQUESTED'"));
         assertEquals("INC-1", queryString("select ticket from mt101_corrective_pay_action "
                 + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_REQUESTED'"));
+    }
+
+    @Test
+    void resolveUncertainPayUsesTheReconcileProfileFrozenAtPayNotTheCurrentConfig() throws Exception {
+        // v26 #4: RECONCILE tambien usa el perfil CONGELADO en el PAY, no la config vigente (que pudo
+        // cambiar entre el envio y la resolucion). Simetrico al snapshot de STATUS.
+        payUncertain = true;
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        service.approveAndPayCorrective(null, FIX, "luis"); // congela el perfil de RECONCILE = "frozen-reconcile/"
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'UNCERTAIN' "
+                    + "where rebuild_run_id = '" + FIX + "'");
+        }
+        // El perfil de RECONCILE cambia DESPUES del PAY.
+        reconcileConfigChangedAfterPay = true;
+
+        service.resolveUncertainPay(null, FIX, "operador", "INC-9 revisado"); // resuelve a SENT -> corre RECONCILE
+
+        assertNotNull(dispatchedReconcileQueryUrl, "la resolucion debe conciliar (RECONCILE)");
+        assertTrue(dispatchedReconcileQueryUrl.startsWith("frozen-reconcile/"),
+                () -> "RECONCILE debe usar el perfil congelado en el PAY, no el vigente: " + dispatchedReconcileQueryUrl);
+        // El snapshot de RECONCILE quedo persistido al aprobar.
+        assertNotNull(queryString("select pay_reconcile_config_snapshot from mt101_rebuild_run "
+                + "where rebuild_run_id = '" + FIX + "'"), "el perfil de RECONCILE se congelo en el PAY");
     }
 
     @Test
@@ -1096,7 +1136,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "pay_completed_at timestamp, pay_error_message text,"
                     + "pay_resolved_by varchar(120), pay_resolved_at timestamp, pay_resolution_reason text,"
                     + "pay_request_reason text, pay_request_ticket varchar(120),"
-                    + "pay_status_config_snapshot text,"
+                    + "pay_status_config_snapshot text, pay_reconcile_config_snapshot text,"
                     + "status_sync_status varchar(20) not null default 'PENDING', status_sync_error text,"
                     + "reconciliation_status varchar(20) not null default 'PENDING', reconciliation_error text,"
                     + "parent_rebuild_run_id varchar(80), parent_corrective_set_id varchar(80),"

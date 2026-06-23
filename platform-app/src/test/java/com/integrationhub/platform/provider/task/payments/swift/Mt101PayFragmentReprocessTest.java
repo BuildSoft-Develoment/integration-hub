@@ -248,8 +248,12 @@ class Mt101PayFragmentReprocessTest {
         fragmentStore.markStatus(fragmentSource, "T1", "ARCHIVED", null);
         insertPayLedger("RUN-ALREADY", fragmentSetId, "T1");
         // un dispatch previo dejo la intencion en DISPATCHING (ya no es PREPARED).
+        var t1Message = sampleMessage("T1");
+        var t1Plan = Mt101PayRouteResolver.resolve(Map.of("transport", "REST"), null, null, t1Message);
+        var t1PlanHash = Mt101PayRouteResolver.dispatchPlanHash(t1Plan,
+                sha256Hex("{\"sendersReference\":\"T1\"}"), null, t1Message);
         assertEquals(1, new Mt101RebuildRepository().markPayFragmentDispatching(dataSource, "RUN-ALREADY", "T1",
-                sha256Hex("{\"sendersReference\":\"T1\"}"), null));
+                sha256Hex("{\"sendersReference\":\"T1\"}"), null, t1PlanHash));
 
         var transport = new StubTransport(List.of(TransportResult.accepted("GW-T1", 1, 1L)));
         var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
@@ -261,6 +265,32 @@ class Mt101PayFragmentReprocessTest {
         assertEquals(0, transport.callsReceived(),
                 "un fragmento ya DISPATCHING no se reenvia a ciegas (se resuelve por STATUS)");
         assertEquals("DISPATCHING", payLedgerStatus("RUN-ALREADY", "T1"), "permanece DISPATCHING para conciliar");
+    }
+
+    @Test
+    void correctivePayInvalidatesFragmentWhenDispatchPlanChangedEvenIfPayloadAndRouteMatch() throws Exception {
+        // P0 #1 v26: el claim valida el PLAN COMPLETO (dispatch_plan_hash = transport|ruta|destino|
+        // correlacion|payload). Aunque payload_hash y routed_as coincidan, si el plan aprobado difiere
+        // (otro transport/destino/correlacion), el fragmento se INVALIDA y NO se envia.
+        var fragmentSetId = "PAY-PLAN-DRIFT";
+        insertFragmentSet(fragmentSetId, "T1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", "RUN-PLAN-DRIFT");
+        fragmentStore.markStatus(fragmentSource, "T1", "ARCHIVED", null);
+        // payload_hash correcto, pero dispatch_plan_hash NO coincide con el que el provider recomputa.
+        insertPayLedgerWithPlanHash("RUN-PLAN-DRIFT", fragmentSetId, "T1",
+                sha256Hex("{\"sendersReference\":\"T1\"}"), "deadbeef".repeat(8));
+
+        var transport = new StubTransport(List.of(TransportResult.accepted("GW-T1", 1, 1L)));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore,
+                null, null, payStore);
+
+        provider.execute(contextWith(fragmentSource), payConfig(50));
+
+        assertEquals(0, transport.callsReceived(), "un plan distinto al aprobado NO se envia");
+        assertEquals("INVALIDATED", payLedgerStatus("RUN-PLAN-DRIFT", "T1"),
+                "plan distinto (mismo payload/ruta) = INVALIDATED, no enviado");
     }
 
     @Test
@@ -395,6 +425,7 @@ class Mt101PayFragmentReprocessTest {
                     + "payload_hash varchar(64) not null,"
                     + "idempotency_key varchar(180) not null,"
                     + "approved_routed_as varchar(80),"
+                    + "dispatch_destination text, dispatch_plan_hash varchar(64),"
                     + "pay_status varchar(30) not null default 'PREPARED',"
                     + "attempts integer not null default 0,"
                     + "gateway_reference varchar(120), error_message text,"
@@ -436,20 +467,44 @@ class Mt101PayFragmentReprocessTest {
                 sha256Hex("{\"sendersReference\":\"" + reference + "\"}"));
     }
 
-    private void insertPayLedger(String runId, String correctiveSetId, String reference, String approvedPayloadHash)
-            throws SQLException {
-        // P0.2 v24: el ledger guarda el payload_hash aprobado = sha256(rawPayload) del mensaje, igual que
-        // calcula el provider al despachar; approved_routed_as null (estos tests no usan routeTransports).
+    private void insertPayLedgerWithPlanHash(String runId, String correctiveSetId, String reference,
+                                             String approvedPayloadHash, String approvedPlanHash) throws SQLException {
         try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement(
                      "insert into mt101_corrective_pay_fragment "
-                             + "(rebuild_run_id, corrective_set_id, corrective_senders_reference, payload_hash, idempotency_key, approved_routed_as, pay_status, prepared_at) "
-                             + "values (?, ?, ?, ?, ?, null, 'PREPARED', current_timestamp)")) {
+                             + "(rebuild_run_id, corrective_set_id, corrective_senders_reference, payload_hash, idempotency_key, approved_routed_as, dispatch_destination, dispatch_plan_hash, pay_status, prepared_at) "
+                             + "values (?, ?, ?, ?, ?, null, 'rest://?', ?, 'PREPARED', current_timestamp)")) {
             statement.setString(1, runId);
             statement.setString(2, correctiveSetId);
             statement.setString(3, reference);
             statement.setString(4, approvedPayloadHash);
             statement.setString(5, "KEY-" + reference);
+            statement.setString(6, approvedPlanHash);
+            statement.executeUpdate();
+        }
+    }
+
+    private void insertPayLedger(String runId, String correctiveSetId, String reference, String approvedPayloadHash)
+            throws SQLException {
+        // P0.2 v24+v26: el ledger guarda el payload_hash aprobado = sha256(rawPayload), Y el dispatch_plan_hash
+        // (transport|ruta|destino|correlacion|payload) computado IGUAL que el provider al despachar, para que
+        // el claim (plan aprobado = plan usado) coincida. approved_routed_as null (no routeTransports).
+        var message = sampleMessage(reference);
+        var plan = Mt101PayRouteResolver.resolve(Map.of("transport", "REST"), null, null, message);
+        var planHash = Mt101PayRouteResolver.dispatchPlanHash(plan, approvedPayloadHash, null, message);
+        var destination = Mt101PayRouteResolver.dispatchDestination(plan, message);
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "insert into mt101_corrective_pay_fragment "
+                             + "(rebuild_run_id, corrective_set_id, corrective_senders_reference, payload_hash, idempotency_key, approved_routed_as, dispatch_destination, dispatch_plan_hash, pay_status, prepared_at) "
+                             + "values (?, ?, ?, ?, ?, null, ?, ?, 'PREPARED', current_timestamp)")) {
+            statement.setString(1, runId);
+            statement.setString(2, correctiveSetId);
+            statement.setString(3, reference);
+            statement.setString(4, approvedPayloadHash);
+            statement.setString(5, "KEY-" + reference);
+            statement.setString(6, destination);
+            statement.setString(7, planHash);
             statement.executeUpdate();
         }
     }

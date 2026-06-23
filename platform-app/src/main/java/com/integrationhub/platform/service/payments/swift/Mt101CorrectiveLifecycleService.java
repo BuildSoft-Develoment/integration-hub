@@ -252,6 +252,16 @@ public class Mt101CorrectiveLifecycleService {
                     throw new IllegalStateException("cannot freeze MT101_STATUS config for run " + runId, error);
                 }
             }
+            // v26 #4: congela tambien el perfil de MT101_RECONCILE (mismo patron que STATUS), redactado.
+            var frozenReconcileConfig = stageConfig(prep, "MT101_RECONCILE");
+            if (frozenReconcileConfig != null) {
+                try {
+                    rebuildRepository.freezePayReconcileConfig(dataSource, runId,
+                            objectMapper.writeValueAsString(redactSecrets(frozenReconcileConfig)));
+                } catch (JsonProcessingException error) {
+                    throw new IllegalStateException("cannot freeze MT101_RECONCILE config for run " + runId, error);
+                }
+            }
             rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, run.correctiveSetId());
             preparePayIntents(dataSource, runId, run.correctiveSetId(), frozenPayConfig);
             recordPayAction(dataSource, runId, "PAY_DISPATCHING", "EXECUTING", "DISPATCHING",
@@ -283,7 +293,7 @@ public class Mt101CorrectiveLifecycleService {
                     runPostPaySync(prep, "MT101_STATUS", statusProvider,
                             correctivePaySource(runId, connectionRef), dataSource, runId, true, frozenStatusConfig);
                     runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
-                            correctivePaySource(runId, connectionRef), dataSource, runId, false);
+                            correctivePaySource(runId, connectionRef), dataSource, runId, false, frozenReconcileConfig);
                 } else if (summary.sent() > 0) {
                     rebuildRepository.markPayCompletedWithAction(dataSource, runId, "PARTIALLY_SENT",
                             "PAY sent " + summary.sent() + " of " + summary.total()
@@ -295,7 +305,7 @@ public class Mt101CorrectiveLifecycleService {
                     runPostPaySync(prep, "MT101_STATUS", statusProvider,
                             correctivePaySource(runId, connectionRef), dataSource, runId, true, frozenStatusConfig);
                     runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
-                            correctivePaySource(runId, connectionRef), dataSource, runId, false);
+                            correctivePaySource(runId, connectionRef), dataSource, runId, false, frozenReconcileConfig);
                 } else if (summary.invalidated() > 0 && summary.rejected() == 0) {
                     // P0.3 v25: el plan cambio tras aprobar (drift) y se bloqueo el envio. NO es un rechazo
                     // bancario (FAILED): es INVALIDATED, re-solicitable, con su propia accion auditada.
@@ -379,6 +389,7 @@ public class Mt101CorrectiveLifecycleService {
             // Hardening v23: si el PAY congelo el perfil de MT101_STATUS, la resolucion consulta ESE perfil
             // (no la config vigente, que pudo cambiar entre el envio y esta resolucion). Sin fallback.
             var frozenStatusConfig = frozenStatusConfig(dataSource, runId);
+            var frozenReconcileConfig = frozenReconcileConfig(dataSource, runId);
             try {
                 runStage(statusProvider, prep, "MT101_STATUS", true,
                         correctivePaySource(runId, connectionRef), statusOverrides, frozenStatusConfig);
@@ -405,14 +416,14 @@ public class Mt101CorrectiveLifecycleService {
                 resolvedDetail = reasonPrefix + "resolved by MT101_STATUS: all fragments sent";
                 rebuildRepository.markPayResolutionWithAction(dataSource, runId, resolvedStatus, resolvedDetail, executedBy);
                 runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
-                        correctivePaySource(runId, connectionRef), dataSource, runId, false);
+                        correctivePaySource(runId, connectionRef), dataSource, runId, false, frozenReconcileConfig);
             } else if (summary.sent() > 0) {
                 resolvedStatus = "PARTIALLY_SENT";
                 resolvedDetail = reasonPrefix + "PAY resolved by MT101_STATUS: sent=" + summary.sent()
                         + ", rejected=" + summary.rejected();
                 rebuildRepository.markPayResolutionWithAction(dataSource, runId, resolvedStatus, resolvedDetail, executedBy);
                 runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
-                        correctivePaySource(runId, connectionRef), dataSource, runId, false);
+                        correctivePaySource(runId, connectionRef), dataSource, runId, false, frozenReconcileConfig);
             } else {
                 resolvedStatus = "FAILED";
                 resolvedDetail = reasonPrefix + "PAY resolved by MT101_STATUS: all fragments rejected";
@@ -626,6 +637,20 @@ public class Mt101CorrectiveLifecycleService {
         }
     }
 
+    /** v26 #4: snapshot congelado de la config de MT101_RECONCILE (perfil aprobado al enviar), o null. */
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> frozenReconcileConfig(DataSource dataSource, String runId) throws SQLException {
+        var snapshot = rebuildRepository.payReconcileConfigSnapshot(dataSource, runId);
+        if (snapshot == null || snapshot.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(snapshot, LinkedHashMap.class);
+        } catch (JsonProcessingException error) {
+            throw new IllegalStateException("cannot read frozen MT101_RECONCILE config for run " + runId, error);
+        }
+    }
+
     private static final java.util.Set<String> SECRET_KEYS = java.util.Set.of(
             "authorization", "password", "passphrase", "token", "secret", "privatekey", "private_key",
             "apikey", "api_key", "credential", "credentials", "bearer", "clientsecret", "client_secret");
@@ -751,8 +776,8 @@ public class Mt101CorrectiveLifecycleService {
                 var key = plan.endpointRef();
                 var payloadHashValue = payloadHash(message);
                 // P0.4 v25: plan aprobado durable por fragmento (destino real redactado + hash del plan).
-                var destination = dispatchDestination(plan, message);
-                var planHash = dispatchPlanHash(plan, key, payloadHashValue, row.routedAs(), destination);
+                var destination = Mt101PayRouteResolver.dispatchDestination(plan, message);
+                var planHash = Mt101PayRouteResolver.dispatchPlanHash(plan, payloadHashValue, row.routedAs(), message);
                 intents.add(new Mt101RebuildRepository.PayFragmentIntent(
                         correctiveSetId,
                         reference,
@@ -830,41 +855,6 @@ public class Mt101CorrectiveLifecycleService {
      * de credenciales. REST: la URL resuelta; SFTP: sftp://host/dropPath. No incluye secretos resueltos.
      */
     @SuppressWarnings("unchecked")
-    private String dispatchDestination(Mt101PayRouteResolver.PayPlan plan, Mt101Message message) {
-        var config = plan.configuration();
-        if ("SFTP".equalsIgnoreCase(plan.transport())) {
-            var sftp = config.get("sftp") instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.<String, Object>of();
-            var host = stringOrNull(sftp.get("host"));
-            return "sftp://" + (host == null ? "?" : host) + (plan.endpointRef() == null ? "" : plan.endpointRef());
-        }
-        var rest = config.get("rest") instanceof Map<?, ?> map ? (Map<String, Object>) map : Map.<String, Object>of();
-        var url = stringOrNull(rest.get("url"));
-        if (url == null) {
-            return "rest://?";
-        }
-        return redactUrlCredentials(Mt101PaymentCorrelation.resolveTemplate(url, message));
-    }
-
-    /** Redacta credenciales embebidas en una URL ({@code scheme://user:pass@host} -> {@code scheme://***@host}). */
-    private String redactUrlCredentials(String url) {
-        if (url == null) {
-            return null;
-        }
-        return url.replaceAll("://[^/@\\s]+@", "://***@");
-    }
-
-    /** P0.4 v25: hash sha256 del plan canonico por fragmento (transport|ruta|destino|correlacion|payloadHash). */
-    private String dispatchPlanHash(Mt101PayRouteResolver.PayPlan plan, String correlationKey,
-                                    String payloadHash, String routedAs, String destination) {
-        var canonical = String.join("|",
-                plan.transport() == null ? "" : plan.transport(),
-                routedAs == null ? "" : routedAs,
-                destination == null ? "" : destination,
-                correlationKey == null ? "" : correlationKey,
-                payloadHash == null ? "" : payloadHash);
-        return java.util.HexFormat.of().formatHex(sha256(canonical));
-    }
-
     private byte[] sha256(String value) {
         try {
             return java.security.MessageDigest.getInstance("SHA-256")
