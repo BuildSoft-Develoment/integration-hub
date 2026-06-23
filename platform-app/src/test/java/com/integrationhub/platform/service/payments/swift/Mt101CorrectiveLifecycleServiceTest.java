@@ -70,6 +70,13 @@ class Mt101CorrectiveLifecycleServiceTest {
     private boolean payThrowsAfterDispatch;
     private boolean payConfigChangedAfterRequest;
     private boolean routePayConfig;
+    // P0.1 v23: simula que la config de MT101_PAY "deriva" DESPUES del hash de aprobacion (lecturas >= 3
+    // devuelven otra plantilla). Con el snapshot congelado el dispatch usa la config aprobada, no la derivada.
+    private boolean payConfigDriftsAfterApprovalHash;
+    private final AtomicInteger payConfigReadCount = new AtomicInteger();
+    private volatile String dispatchedIdempotencyTemplate;
+    // P0/P1 v23: PAY correctivo con sftp.remoteDuplicatePolicy=OVERWRITE debe rechazarse.
+    private boolean payUsesOverwritePolicy;
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -88,6 +95,10 @@ class Mt101CorrectiveLifecycleServiceTest {
         payThrowsAfterDispatch = false;
         payConfigChangedAfterRequest = false;
         routePayConfig = false;
+        payConfigDriftsAfterApprovalHash = false;
+        payConfigReadCount.set(0);
+        dispatchedIdempotencyTemplate = null;
+        payUsesOverwritePolicy = false;
 
         rebuildService = new Mt101RebuildService(dataSource, null, null, null,
                 new Mt101FailedRecordRepository(), new Mt101FragmentRepository(), new Mt101RebuildRepository());
@@ -129,6 +140,8 @@ class Mt101CorrectiveLifecycleServiceTest {
             @Override
             public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
                 payInvocations.incrementAndGet();
+                // P0.1 v23: registra la config con la que REALMENTE se despacha (debe ser la aprobada).
+                dispatchedIdempotencyTemplate = String.valueOf(configuration.get("idempotencyKeyTemplate"));
                 if (payThrowsAfterDispatch) {
                     // Simula: se despacho al menos un fragmento (DISPATCHING durable) y LUEGO algo
                     // falla (BD/auditoria) lanzando excepcion. No debe quedar FAILED (reusable).
@@ -214,8 +227,19 @@ class Mt101CorrectiveLifecycleServiceTest {
             config.put("input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "fragments"));
             if ("MT101_PAY".equals(taskType)) {
                 config.put("transport", "REST");
+                // Las 2 primeras lecturas (hash de solicitud + hash de aprobacion) devuelven "approved-";
+                // a partir de la 3a, si el drift esta activo, devuelven "drift-". El snapshot congelado
+                // (P0.1) hace que el dispatch NO llegue a una 3a lectura: usa la config aprobada.
+                var read = payConfigReadCount.incrementAndGet();
+                var template = payConfigDriftsAfterApprovalHash && read >= 3 ? "drift-" : "approved-";
                 config.put("idempotencyKeyTemplate",
-                        (payConfigChangedAfterRequest ? "changed-" : "approved-") + "${sendersReference}");
+                        (payConfigChangedAfterRequest ? "changed-" : template) + "${sendersReference}");
+                if (payUsesOverwritePolicy) {
+                    config.put("transport", "SFTP");
+                    config.put("sftp", Map.of(
+                            "dropPathTemplate", "/bank/${sendersReference}.fin",
+                            "remoteDuplicatePolicy", "OVERWRITE"));
+                }
                 if (routePayConfig) {
                     config.put("routeTransports", Map.of(
                             "REST_MAIN", Map.of(
@@ -304,6 +328,77 @@ class Mt101CorrectiveLifecycleServiceTest {
         var paid = service.approveAndPayCorrective(null, FIX, "luis");
         assertEquals("SENT", paid.status());
         assertEquals("SENT", paid.payStatus(), "la respuesta de aprobacion refleja PAY=SENT");
+    }
+
+    @Test
+    void payActionsAreRecordedAppendOnlyAcrossRequestClaimUncertainAndResolution() throws Exception {
+        // P1 v23: historial INMUTABLE de acciones PAY. La fila de mt101_rebuild_run se sobrescribe,
+        // pero mt101_corrective_pay_action conserva TODAS las transiciones, en orden, con su actor.
+        payUncertain = true;
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "INC-1");
+        service.approveAndPayCorrective(null, FIX, "luis"); // -> UNCERTAIN
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'UNCERTAIN' "
+                    + "where rebuild_run_id = '" + FIX + "'");
+        }
+        service.resolveUncertainPay(null, FIX, "operador", "INC-1 revisado vs extracto");
+
+        var actions = queryStrings("select action_type from mt101_corrective_pay_action "
+                + "where rebuild_run_id = '" + FIX + "' order by id");
+        assertEquals(List.of("PAY_REQUESTED", "PAY_CLAIMED", "PAY_UNCERTAIN", "PAY_RESOLVED"), actions,
+                "el historial conserva todas las acciones en orden, no solo la ultima");
+        // El actor queda por accion: maker en REQUESTED, checker en CLAIMED, operador en RESOLVED.
+        assertEquals("ana", queryString("select actor from mt101_corrective_pay_action "
+                + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_REQUESTED'"));
+        assertEquals("luis", queryString("select actor from mt101_corrective_pay_action "
+                + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_CLAIMED'"));
+        assertEquals("operador", queryString("select actor from mt101_corrective_pay_action "
+                + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_RESOLVED'"));
+        // El motivo/ticket del maker queda en la accion de solicitud (evidencia durable independiente).
+        assertEquals("reproceso aprobado", queryString("select reason from mt101_corrective_pay_action "
+                + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_REQUESTED'"));
+        assertEquals("INC-1", queryString("select ticket from mt101_corrective_pay_action "
+                + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_REQUESTED'"));
+    }
+
+    @Test
+    void correctivePayRejectsSftpOverwritePolicy() throws Exception {
+        // P0/P1 v23: OVERWRITE puede re-entregar una instruccion de pago; se rechaza en la solicitud
+        // (sin fallback), antes de cualquier hash/claim/envio.
+        payUsesOverwritePolicy = true;
+        service.advanceCorrective(null, FIX, "executor");
+
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> service.requestCorrectivePay(null, FIX, "ana"));
+        assertTrue(error.getMessage().contains("OVERWRITE"),
+                () -> "mensaje inesperado: " + error.getMessage());
+        // No quedo solicitud de PAY.
+        assertEquals("NOT_REQUESTED", payStatus(FIX));
+    }
+
+    @Test
+    void payDispatchesTheFrozenApprovedConfigNotAConfigReReadAtDispatch() throws Exception {
+        // P0.1 v23: "configuracion aprobada = configuracion usada para enviar". Aunque la config de
+        // MT101_PAY "derive" entre el hash de aprobacion y el despacho, el envio usa el snapshot
+        // congelado (una sola lectura), no la config vigente. Sin esto el banco podria recibir una
+        // ruta/endpoint/idempotency distinta a la aprobada por el checker.
+        payConfigDriftsAfterApprovalHash = true;
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana");
+        var paid = service.approveAndPayCorrective(null, FIX, "luis");
+
+        assertEquals("SENT", paid.payStatus());
+        // El dispatch uso la plantilla APROBADA, no la derivada (drift-).
+        assertEquals("approved-${sendersReference}", dispatchedIdempotencyTemplate,
+                "el despacho debe usar la config congelada aprobada, no una re-leida con drift");
+        // Los intents persistidos en el ledger tambien usan la config congelada.
+        assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment "
+                + "where rebuild_run_id = '" + FIX + "' and idempotency_key like 'drift-%'"),
+                "ningun intent del ledger usa la config derivada");
+        assertEquals(2L, queryLong("select count(*) from mt101_corrective_pay_fragment "
+                + "where rebuild_run_id = '" + FIX + "' and idempotency_key like 'approved-%'"));
     }
 
     @Test
@@ -622,6 +717,18 @@ class Mt101CorrectiveLifecycleServiceTest {
         }
     }
 
+    private List<String> queryStrings(String sql) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement();
+             var rs = statement.executeQuery(sql)) {
+            var result = new java.util.ArrayList<String>();
+            while (rs.next()) {
+                result.add(rs.getString(1));
+            }
+            return result;
+        }
+    }
+
     private void prepareSchema() throws Exception {
         try (Connection connection = dataSource.getConnection();
              Statement s = connection.createStatement()) {
@@ -739,6 +846,13 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "created_at timestamp not null default current_timestamp,"
                     + "updated_at timestamp not null default current_timestamp,"
                     + "unique (rebuild_run_id, corrective_senders_reference))");
+            s.executeUpdate("drop table if exists mt101_corrective_pay_action");
+            s.executeUpdate("create table mt101_corrective_pay_action ("
+                    + "id bigserial primary key, rebuild_run_id varchar(80) not null,"
+                    + "action_type varchar(30) not null, previous_status varchar(30), new_status varchar(30),"
+                    + "actor varchar(120), reason text, ticket varchar(120),"
+                    + "payload_hash varchar(64), config_hash varchar(64),"
+                    + "created_at timestamp not null default current_timestamp)");
         }
     }
 

@@ -157,13 +157,20 @@ public class Mt101CorrectiveLifecycleService {
             }
             var prep = prepare(dataSource, run, connectionRef);
             var payloadHash = archivedPayloadHash(dataSource, run);
-            var configHash = payConfigHash(prep);
+            var payConfig = stageConfig(prep, "MT101_PAY");
+            if (payConfig == null) {
+                throw new IllegalStateException("the original process has no MT101_PAY task; cannot request corrective PAY");
+            }
+            assertCorrectivePayPolicy(payConfig);
+            var configHash = payConfigHashOf(payConfig);
             var requested = rebuildRepository.requestPay(dataSource, runId, requester, payloadHash, configHash,
                     requestReason, requestTicket);
             if (requested == 0) {
                 throw new IllegalStateException("cannot request corrective pay for run " + runId
                         + "; payStatus=" + run.payStatus());
             }
+            recordPayAction(dataSource, runId, "PAY_REQUESTED", run.payStatus(), "REQUESTED",
+                    requester, requestReason, requestTicket, payloadHash, configHash);
             return correctiveResult(dataSource, runId);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot request corrective pay for run " + runId, error);
@@ -204,14 +211,27 @@ public class Mt101CorrectiveLifecycleService {
             if (!payloadHash.equals(run.payRequestedPayloadHash())) {
                 rebuildRepository.invalidatePayRequest(dataSource, runId,
                         "PAY payload hash changed after request; request again before sending");
+                recordPayAction(dataSource, runId, "PAY_INVALIDATED", run.payStatus(), "INVALIDATED",
+                        approver, "archived payload changed after request", null, payloadHash, null);
                 throw new IllegalStateException("corrective pay for run " + runId
                         + " was invalidated because the archived payload changed after request");
             }
-            var configHash = payConfigHash(prep);
+            // P0.1 v23: "configuracion aprobada = configuracion usada para enviar". Se lee la config de
+            // MT101_PAY UNA sola vez (snapshot congelado), se hashea ESE objeto, se valida contra el hash
+            // de la solicitud, y los MISMOS bytes se usan para preparar intents y para despachar. Asi no
+            // hay ventana de re-lectura entre el hash y el envio (sin fallback a config dinamica vigente).
+            var frozenPayConfig = stageConfig(prep, "MT101_PAY");
+            if (frozenPayConfig == null) {
+                throw new IllegalStateException("the original process has no MT101_PAY task; cannot pay corrective");
+            }
+            assertCorrectivePayPolicy(frozenPayConfig);
+            var configHash = payConfigHashOf(frozenPayConfig);
             var requestedConfigHash = rebuildRepository.payRequestedConfigHash(dataSource, runId);
             if (!configHash.equals(requestedConfigHash)) {
                 rebuildRepository.invalidatePayRequest(dataSource, runId,
                         "PAY configuration changed after request; request again before sending");
+                recordPayAction(dataSource, runId, "PAY_INVALIDATED", run.payStatus(), "INVALIDATED",
+                        approver, "MT101_PAY configuration changed after request", null, payloadHash, configHash);
                 throw new IllegalStateException("corrective pay for run " + runId
                         + " was invalidated because the MT101_PAY configuration changed after request");
             }
@@ -220,12 +240,13 @@ public class Mt101CorrectiveLifecycleService {
                 throw new IllegalStateException("corrective pay for run " + runId
                         + " could not be claimed for execution (concurrent approval or payStatus changed)");
             }
-            var payConfig = stageConfig(prep, "MT101_PAY");
+            recordPayAction(dataSource, runId, "PAY_CLAIMED", "REQUESTED", "EXECUTING",
+                    approver, null, null, payloadHash, configHash);
             rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, run.correctiveSetId());
-            preparePayIntents(dataSource, runId, run.correctiveSetId(), payConfig);
+            preparePayIntents(dataSource, runId, run.correctiveSetId(), frozenPayConfig);
             try {
                 var payResult = runStage(payProvider, prep, "MT101_PAY", false,
-                        correctiveFragmentPaySource(runId, prep));
+                        correctiveFragmentPaySource(runId, prep), null, frozenPayConfig);
                 persistPayDetail(dataSource, runId, run.correctiveSetId(), payResult);
                 // INCIERTO de forma TIPADA: TransportResult.uncertain (timeout/conexion tras enviar)
                 // llega como uncertainCount en el output, no por heuristica de texto del error.
@@ -238,11 +259,17 @@ public class Mt101CorrectiveLifecycleService {
                             "PAY uncertain for " + uncertainCount + " fragment(s); reconcile with the gateway before resending");
                     rebuildRepository.markPayFragmentsUncertain(dataSource, runId,
                             "PAY uncertain for " + uncertainCount + " fragment(s); reconcile with the gateway before resending");
+                    recordPayAction(dataSource, runId, "PAY_UNCERTAIN", "EXECUTING", "UNCERTAIN",
+                            approver, "uncertain fragments=" + uncertainCount, null, payloadHash, configHash);
                 } else if (summary.total() == 0) {
                     rebuildRepository.markPayFailed(dataSource, runId, "MT101_PAY produced no fragment results");
+                    recordPayAction(dataSource, runId, "PAY_REJECTED", "EXECUTING", "FAILED",
+                            approver, "MT101_PAY produced no fragment results", null, payloadHash, configHash);
                     throw new IllegalStateException("MT101_PAY produced no fragment results for run " + runId);
                 } else if (summary.sent() == summary.total()) {
                     rebuildRepository.markPaySent(dataSource, runId);
+                    recordPayAction(dataSource, runId, "PAY_SENT", "EXECUTING", "SENT",
+                            approver, null, null, payloadHash, configHash);
                     runPostPaySync(prep, "MT101_STATUS", statusProvider,
                             correctivePaySource(runId, connectionRef), dataSource, runId, true);
                     runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
@@ -251,6 +278,9 @@ public class Mt101CorrectiveLifecycleService {
                     rebuildRepository.markPayCompleted(dataSource, runId, "PARTIALLY_SENT",
                             "PAY sent " + summary.sent() + " of " + summary.total()
                                     + " fragment(s); rejected=" + summary.rejected());
+                    recordPayAction(dataSource, runId, "PAY_PARTIALLY_SENT", "EXECUTING", "PARTIALLY_SENT",
+                            approver, "sent=" + summary.sent() + " rejected=" + summary.rejected(), null,
+                            payloadHash, configHash);
                     runPostPaySync(prep, "MT101_STATUS", statusProvider,
                             correctivePaySource(runId, connectionRef), dataSource, runId, true);
                     runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
@@ -258,6 +288,8 @@ public class Mt101CorrectiveLifecycleService {
                 } else {
                     rebuildRepository.markPayFailed(dataSource, runId,
                             payResult.details() == null ? "MT101_PAY rejected all fragments" : payResult.details());
+                    recordPayAction(dataSource, runId, "PAY_REJECTED", "EXECUTING", "FAILED",
+                            approver, payResult.details(), null, payloadHash, configHash);
                     throw new IllegalStateException("MT101_PAY rejected all fragments for run " + runId
                             + ": " + payResult.details());
                 }
@@ -270,8 +302,12 @@ public class Mt101CorrectiveLifecycleService {
                                     + "; reconcile with the gateway before any resend");
                     rebuildRepository.markPayFragmentsUncertain(dataSource, runId,
                             "PAY interrupted after dispatch; reconcile before any resend");
+                    recordPayAction(dataSource, runId, "PAY_UNCERTAIN", "EXECUTING", "UNCERTAIN",
+                            approver, "interrupted after dispatch: " + error.getMessage(), null, payloadHash, configHash);
                 } else {
                     rebuildRepository.markPayFailed(dataSource, runId, error.getMessage());
+                    recordPayAction(dataSource, runId, "PAY_REJECTED", "EXECUTING", "FAILED",
+                            approver, error.getMessage(), null, payloadHash, configHash);
                 }
                 throw error;
             }
@@ -329,25 +365,33 @@ public class Mt101CorrectiveLifecycleService {
             if (summary.total() == 0) {
                 throw new IllegalStateException("no corrective PAY fragment ledger exists for run " + runId);
             }
+            String resolvedStatus;
+            String resolvedDetail;
             if (summary.pending() > 0) {
-                rebuildRepository.markPayResolution(dataSource, runId, "UNCERTAIN",
-                        reasonPrefix + "MT101_STATUS did not return a final accepted/rejected status for "
-                                + summary.pending() + " fragment(s)", executedBy);
+                resolvedStatus = "UNCERTAIN";
+                resolvedDetail = reasonPrefix + "MT101_STATUS did not return a final accepted/rejected status for "
+                        + summary.pending() + " fragment(s)";
+                rebuildRepository.markPayResolution(dataSource, runId, resolvedStatus, resolvedDetail, executedBy);
             } else if (summary.sent() == summary.total()) {
-                rebuildRepository.markPayResolution(dataSource, runId, "SENT",
-                        reasonPrefix + "resolved by MT101_STATUS: all fragments sent", executedBy);
+                resolvedStatus = "SENT";
+                resolvedDetail = reasonPrefix + "resolved by MT101_STATUS: all fragments sent";
+                rebuildRepository.markPayResolution(dataSource, runId, resolvedStatus, resolvedDetail, executedBy);
                 runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
                         correctivePaySource(runId, connectionRef), dataSource, runId, false);
             } else if (summary.sent() > 0) {
-                rebuildRepository.markPayResolution(dataSource, runId, "PARTIALLY_SENT",
-                        reasonPrefix + "PAY resolved by MT101_STATUS: sent=" + summary.sent()
-                                + ", rejected=" + summary.rejected(), executedBy);
+                resolvedStatus = "PARTIALLY_SENT";
+                resolvedDetail = reasonPrefix + "PAY resolved by MT101_STATUS: sent=" + summary.sent()
+                        + ", rejected=" + summary.rejected();
+                rebuildRepository.markPayResolution(dataSource, runId, resolvedStatus, resolvedDetail, executedBy);
                 runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
                         correctivePaySource(runId, connectionRef), dataSource, runId, false);
             } else {
-                rebuildRepository.markPayResolution(dataSource, runId, "FAILED",
-                        reasonPrefix + "PAY resolved by MT101_STATUS: all fragments rejected", executedBy);
+                resolvedStatus = "FAILED";
+                resolvedDetail = reasonPrefix + "PAY resolved by MT101_STATUS: all fragments rejected";
+                rebuildRepository.markPayResolution(dataSource, runId, resolvedStatus, resolvedDetail, executedBy);
             }
+            recordPayAction(dataSource, runId, "PAY_RESOLVED", "UNCERTAIN", resolvedStatus,
+                    executedBy, resolvedDetail, null, null, null);
             rebuildService.synchronizeLifecycle(connectionRef, run.originalFragmentSetId());
             run = rebuildRepository.findRun(dataSource, runId);
             return correctiveResult(dataSource, runId);
@@ -446,10 +490,22 @@ public class Mt101CorrectiveLifecycleService {
     private TaskResult runStage(TaskProvider provider, StagePrep prep, String taskType,
                                 boolean failOnTaskFailure, Object stageInput,
                                 Map<String, Object> configOverrides) {
+        return runStage(provider, prep, taskType, failOnTaskFailure, stageInput, configOverrides, null);
+    }
+
+    /**
+     * Variante con {@code frozenBaseConfig}: cuando se pasa, NO se re-lee la config del task
+     * definition; se despacha con el snapshot congelado (P0.1 v23, "aprobado = enviado"). Sin
+     * fallback: si viene null se lee la config vigente (etapas no-PAY).
+     */
+    private TaskResult runStage(TaskProvider provider, StagePrep prep, String taskType,
+                                boolean failOnTaskFailure, Object stageInput,
+                                Map<String, Object> configOverrides, Map<String, Object> frozenBaseConfig) {
         if (provider == null) {
             throw new IllegalStateException(taskType + " provider is not available");
         }
-        var baseConfig = taskConfigSource.taskConfig(prep.buildTaskDefinitionId(), taskType);
+        var baseConfig = frozenBaseConfig != null ? frozenBaseConfig
+                : taskConfigSource.taskConfig(prep.buildTaskDefinitionId(), taskType);
         if (baseConfig == null) {
             throw new IllegalStateException("the original process has no " + taskType
                     + " task; cannot orchestrate the corrective lifecycle for set " + prep.correctiveSetId());
@@ -477,6 +533,52 @@ public class Mt101CorrectiveLifecycleService {
         if (payConfig == null) {
             throw new IllegalStateException("the original process has no MT101_PAY task; cannot request corrective PAY");
         }
+        return payConfigHashOf(payConfig);
+    }
+
+    /**
+     * P0/P1 v23: para PAY correctivo se prohibe {@code sftp.remoteDuplicatePolicy=OVERWRITE}:
+     * sobrescribir el archivo final del banco puede re-entregar una instruccion de pago. Las politicas
+     * seguras son {@code SKIP_IF_SAME_HASH} (default, idempotente) y {@code FAIL}. Se valida tanto en la
+     * config base como por ruta (routeTransports.*). Sin fallback: se rechaza la solicitud/aprobacion.
+     */
+    private void assertCorrectivePayPolicy(Map<String, Object> payConfig) {
+        assertSftpPolicy(payConfig);
+        if (payConfig.get("routeTransports") instanceof Map<?, ?> routes) {
+            for (var routeCfg : routes.values()) {
+                if (routeCfg instanceof Map<?, ?> route) {
+                    assertSftpPolicy(route);
+                }
+            }
+        }
+    }
+
+    private void assertSftpPolicy(Map<?, ?> config) {
+        if (!(config.get("sftp") instanceof Map<?, ?> sftp)) {
+            return;
+        }
+        var policy = sftp.get("remoteDuplicatePolicy");
+        if (policy != null && "OVERWRITE".equalsIgnoreCase(String.valueOf(policy).trim())) {
+            throw new IllegalArgumentException("corrective PAY must not use sftp.remoteDuplicatePolicy=OVERWRITE; "
+                    + "use SKIP_IF_SAME_HASH (idempotent) or FAIL to avoid re-delivering a payment instruction");
+        }
+    }
+
+    /** v23: registra una accion del ciclo PAY en el historial inmutable (append-only). */
+    private void recordPayAction(DataSource dataSource, String runId, String actionType,
+                                 String previousStatus, String newStatus, String actor,
+                                 String reason, String ticket, String payloadHash, String configHash) {
+        try {
+            rebuildRepository.recordPayAction(dataSource, runId, actionType, previousStatus, newStatus,
+                    actor, reason, ticket, payloadHash, configHash);
+        } catch (SQLException error) {
+            throw new IllegalStateException("cannot record corrective PAY action " + actionType
+                    + " for run " + runId, error);
+        }
+    }
+
+    /** Hash canonico de un snapshot de config de MT101_PAY (mismo objeto que se hashea y se envia). */
+    private String payConfigHashOf(Map<String, Object> payConfig) {
         try {
             return java.util.HexFormat.of().formatHex(sha256(objectMapper.writeValueAsString(canonicalize(payConfig))));
         } catch (JsonProcessingException error) {

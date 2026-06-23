@@ -26,9 +26,10 @@ se cumple con el claim atómico (validado en v22).
 | P1 | La API no devuelve la evidencia de PAY (reason/ticket/resolved_*) | **REAL → CORREGIDO** | `CorrectiveLifecycleResult` expone `payStatus` + `payRequestReason/Ticket` + `payResolvedBy/ResolutionReason`; `RebuildRun`/`findRun` leen las columnas V49/V50 |
 | P1 | La UI no envía motivo/ticket al solicitar PAY ni motivo al resolver incierto | **REAL → CORREGIDO** | Cliente `mt101RequestCorrectivePay`/`mt101ResolveUncertainPay` envían `reason`/`ticketRef`; el componente los hace **obligatorios**; nueva acción "Resolver PAY incierto"; modelo expone `payStatus`/evidencia |
 | P1 | Resolver PAY incierto no recibe motivo de negocio (solo texto técnico) | **REAL → CORREGIDO** | `resolveUncertainPay(...reason)` antepone el motivo del operador AL detalle técnico (la auditoría conserva ambos). Test asserta ambos en `pay_resolution_reason` |
-| P0.1 | El plan aprobado no es el plan ejecutado (PAY re-lee config dinámica) | **ABIERTO (hardening)** | Validado en v22: el claim atómico exige `payload_hash` **y** `config_hash` recomputados; el envío ocurre en la misma llamada síncrona inmediatamente tras el claim. El "plan congelado leído del ledger" es endurecimiento adicional. Documentado |
-| P1 | Auditoría de PAY mutable, no append-only | **ABIERTO (hardening)** | Recomendado `mt101_corrective_pay_action` (id, action_type, prev/new status, actor, reason, ticket, hashes, created_at). No bloqueante: el ledger por fragmento + V49/V50 ya dan evidencia durable del estado actual. Documentado |
-| P1 | STATUS usa config actual, no perfil congelado por fragmento | **ABIERTO (hardening)** | `routeQuery` (cierre v22) ya consulta por ruta del fragmento; falta congelar `status_profile` por fragmento. Mismo concepto que P0.1. Documentado |
+| P0.1 | El plan aprobado no es el plan ejecutado (PAY re-lee config dinámica) | **REAL → CORREGIDO (2º pase)** | `approveAndPayCorrective` lee la config de MT101_PAY **una sola vez** (snapshot congelado); ese mismo objeto se hashea, se valida contra el hash de la solicitud, y se usa para preparar intents **y** despachar (overload `runStage(...frozenBaseConfig)`). Sin re-lectura entre hash y envío. Test `payDispatchesTheFrozenApprovedConfigNotAConfigReReadAtDispatch` (config que "deriva" tras el hash → el envío usa la aprobada) |
+| P1 | OVERWRITE permitido para PAY (puede re-entregar un pago) | **REAL → CORREGIDO (2º pase)** | `assertCorrectivePayPolicy` rechaza `sftp.remoteDuplicatePolicy=OVERWRITE` (base y por ruta) en solicitud y aprobación, sin fallback. Test `correctivePayRejectsSftpOverwritePolicy` |
+| P1 | Auditoría de PAY mutable, no append-only | **REAL → CORREGIDO (2º pase)** | **V51** `mt101_corrective_pay_action`: historial inmutable con una fila por transición (REQUESTED/CLAIMED/SENT/UNCERTAIN/PARTIALLY_SENT/REJECTED/INVALIDATED/RESOLVED) con actor/motivo/ticket/hashes. Test `payActionsAreRecordedAppendOnlyAcrossRequestClaimUncertainAndResolution` |
+| P1 | STATUS usa config actual, no perfil congelado por fragmento | **ABIERTO (hardening, documentado)** | `routeQuery` (cierre v22) ya consulta por ruta del fragmento; falta congelar `status_profile_ref`/`version` por fragmento. Mismo concepto que P0.1 pero en la consulta post-PAY; el riesgo es acotado (la ruta del fragmento ya está persistida e inmutable). Documentado |
 
 ---
 
@@ -84,34 +85,57 @@ Test asserta que `pay_resolution_reason` contiene el motivo de negocio **y** la 
 
 - `SftpPaymentTransportTest` — **13** (incluye los 2 de clasificación por fase).
 - `RestPaymentTransportTest` — **15** (sin cambios; paridad de referencia).
-- `Mt101CorrectiveLifecycleServiceTest` — **15** (request/approve/resolve reflejan `payStatus`; motivo
-  de resolución conserva operador + técnico).
-- Dominio swift completo (provider + service + repository + transport): **216** tests, 0 fallos.
-- Frontend: `nx build web` exitoso.
+- `Mt101CorrectiveLifecycleServiceTest` — **18** (1er pase: `payStatus` en respuesta + motivo de
+  resolución operador+técnico; 2º pase: config congelada, rechazo de OVERWRITE, historial append-only).
+- Dominio swift completo (provider + service + repository + transport): **219** tests, 0 fallos.
+- Frontend: `nx build web` exitoso (1er pase).
 
-## Riesgos abiertos (documentados, no bloqueantes; hardening bancario)
+## Segundo pase (doble check) — cierre de los P0.1/P1 que quedaban abiertos
 
-1. **Plan de envío congelado por fragmento (P0.1).** Hoy el invariante crítico lo garantiza el claim
-   atómico (`payload_hash` + `config_hash` recomputados; envío en la misma llamada síncrona). El
-   endurecimiento sería persistir el plan inmutable (transport, route_profile + version, endpoint_profile
-   + version, connection_ref, status_profile, idempotency/drop_path, approved_plan_hash) y que PAY
-   lea **solo** ese plan, no `process_task_definition`. Observación válida del v23: `endpoint_ref`
-   guarda la clave de correlación (idempotency key / dropPath), no el host/perfil/versión.
-2. **Historial append-only `mt101_corrective_pay_action` (P1).** Tabla inmutable con una fila por
-   acción (REQUESTED/CLAIMED/DISPATCHING/SENT/UNCERTAIN/RESOLVED/REJECTED/INVALIDATED) con actor,
-   motivo, ticket, hashes. Hoy `mt101_rebuild_run` guarda el estado actual (mutable) y el ledger por
-   fragmento guarda el resultado por `:20:`.
-3. **Perfil de STATUS congelado por fragmento (P1).** `routeQuery` ya consulta por la ruta del
-   fragmento; falta congelar `status_profile_ref`/`version` por fragmento (mismo concepto que P0.1).
-4. **Prohibir `remoteDuplicatePolicy=OVERWRITE` para PAY correctivo.** El default es `SKIP_IF_SAME_HASH`
-   (idempotente y seguro). OVERWRITE no debería permitirse para pagos; documentado.
+### P0.1 — el plan aprobado ES el plan ejecutado (config congelada)
+**Hallazgo confirmado contra el código:** `approveAndPayCorrective` leía la config de MT101_PAY **tres
+veces** independientes vía `taskConfigSource.taskConfig(...)` (en `payConfigHash`, en `preparePayIntents`,
+y en `runStage`). Aunque el claim valida `config_hash`, el despacho re-leía config viva: una "deriva"
+entre la lectura del hash y la del envío podía despachar bytes distintos a los aprobados.
+
+**Fix (sin fallback):** se lee la config **una sola vez** → `frozenPayConfig`. Ese mismo objeto se
+hashea (`payConfigHashOf`), se valida contra el hash de la solicitud, se usa para `preparePayIntents`
+y se despacha con un overload `runStage(..., frozenBaseConfig)` que **no re-lee** el task definition.
+"Configuración aprobada = configuración usada para enviar", literal. Test
+`payDispatchesTheFrozenApprovedConfigNotAConfigReReadAtDispatch`: un `taskConfigSource` que devuelve
+`approved-` en las 2 primeras lecturas y `drift-` a partir de la 3ª; con el snapshot el despacho y el
+ledger usan `approved-` (con la versión anterior usarían `drift-`).
+
+### P1 — prohibir OVERWRITE para PAY correctivo
+`assertCorrectivePayPolicy` rechaza `sftp.remoteDuplicatePolicy=OVERWRITE` (en la config base y en cada
+`routeTransports.*`) tanto al **solicitar** como al **aprobar**, antes de cualquier hash/claim/envío.
+Las políticas seguras (`SKIP_IF_SAME_HASH` default idempotente, `FAIL`) siguen permitidas. Test
+`correctivePayRejectsSftpOverwritePolicy`.
+
+### P1 — historial append-only `mt101_corrective_pay_action`
+**V51** crea la tabla inmutable; `recordPayAction` (repo) inserta una fila por transición y el servicio
+la invoca en cada paso: `PAY_REQUESTED`, `PAY_CLAIMED`, `PAY_SENT`/`PAY_UNCERTAIN`/`PAY_PARTIALLY_SENT`/
+`PAY_REJECTED`, `PAY_INVALIDATED` y `PAY_RESOLVED`, con actor, motivo, ticket y hashes payload/config.
+A diferencia de `mt101_rebuild_run` (que se sobrescribe), el historial conserva **todas** las acciones.
+Test `payActionsAreRecordedAppendOnlyAcrossRequestClaimUncertainAndResolution` (request→claim→uncertain
+→resolución deja 4 filas ordenadas con su actor; el motivo/ticket del maker queda en la fila de solicitud).
+
+## Riesgo abierto restante (documentado, no bloqueante; hardening)
+
+**Perfil de STATUS congelado por fragmento (P1).** `routeQuery` (cierre v22) ya consulta por la ruta
+persistida del fragmento; el endurecimiento adicional sería congelar `status_profile_ref`/`version` por
+fragmento, simétrico al plan de PAY. Riesgo acotado: la ruta del fragmento (`routed_as`) ya está
+persistida e inmutable tras MT101_ROUTE, así que la consulta usa la ruta real del envío. Se deja
+documentado; no afecta la garantía central de seguridad de dinero.
 
 ## Conclusión
 
 El v23 detectó correctamente el **bug de dinero abierto** (SFTP post-despacho como rechazo reusable),
-ya corregido y probado contra un servidor SFTP real. Se cerró además el ciclo de **gobierno/evidencia**
-extremo a extremo (respuesta fresca, API que expone la evidencia, UI que la captura obligatoriamente y
-permite resolver inciertos con motivo). Quedan como endurecimientos acotados el **plan congelado**, el
-**historial append-only** y el **perfil de STATUS congelado**, documentados; el invariante bancario
-central ("ninguna llamada al banco sin intención aprobada y única, y ningún incierto reenviado a
-ciegas") ya se cumple.
+corregido y probado contra un servidor SFTP real. En el primer pase se cerró el ciclo de
+**gobierno/evidencia** extremo a extremo (respuesta fresca, API que expone la evidencia, UI que la
+captura obligatoriamente, resolución de inciertos con motivo). En el **segundo pase (doble check)** se
+cerraron además el **plan congelado** (config aprobada = enviada, sin re-lectura), la **prohibición de
+OVERWRITE** para PAY y el **historial append-only** de acciones. Queda como único endurecimiento
+documentado el **perfil de STATUS congelado por fragmento**. El "último control crítico" del v23
+—garantizar que el correctivo se envíe exactamente como fue aprobado, una sola vez y con evidencia
+bancaria recuperable— queda cumplido.

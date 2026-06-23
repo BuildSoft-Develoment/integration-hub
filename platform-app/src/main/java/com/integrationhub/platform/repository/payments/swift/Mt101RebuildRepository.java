@@ -855,6 +855,33 @@ public class Mt101RebuildRepository {
         markPayCompleted(dataSource, rebuildRunId, "FAILED", errorMessage);
     }
 
+    /**
+     * v23: registra una accion del ciclo PAY en el historial INMUTABLE {@code mt101_corrective_pay_action}.
+     * Append-only: nunca actualiza ni borra; cada transicion deja un rastro durable independiente de la
+     * fila (mutable) de {@code mt101_rebuild_run}.
+     */
+    public void recordPayAction(DataSource dataSource, String rebuildRunId, String actionType,
+                                String previousStatus, String newStatus, String actor,
+                                String reason, String ticket, String payloadHash, String configHash)
+            throws SQLException {
+        var sql = "insert into mt101_corrective_pay_action "
+                + "(rebuild_run_id, action_type, previous_status, new_status, actor, reason, ticket, "
+                + "payload_hash, config_hash) values (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            statement.setString(2, actionType);
+            statement.setString(3, previousStatus);
+            statement.setString(4, newStatus);
+            statement.setString(5, actor);
+            statement.setString(6, blankToNull(reason));
+            statement.setString(7, blankToNull(ticket));
+            statement.setString(8, payloadHash);
+            statement.setString(9, configHash);
+            statement.executeUpdate();
+        }
+    }
+
     /** B2': PAY incierto; no se reintenta automaticamente para evitar doble envio. */
     public void markPayUncertain(DataSource dataSource, String rebuildRunId, String reason) throws SQLException {
         var sql = "update mt101_rebuild_run set pay_status = 'UNCERTAIN', pay_uncertain_reason = ?, "
