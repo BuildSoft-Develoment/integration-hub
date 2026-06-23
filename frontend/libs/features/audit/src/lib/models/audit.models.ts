@@ -151,6 +151,9 @@ export interface Mt101PayAction {
   actor?: string;
   reason?: string;
   ticket?: string;
+  /** v25: hashes aprobados visibles para auditoría operativa (qué payload/config aprobó el checker). */
+  payloadHash?: string;
+  configHash?: string;
   createdAt?: string;
 }
 

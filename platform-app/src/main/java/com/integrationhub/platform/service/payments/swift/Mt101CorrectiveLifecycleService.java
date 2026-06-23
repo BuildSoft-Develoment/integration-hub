@@ -286,13 +286,25 @@ public class Mt101CorrectiveLifecycleService {
                 } else if (summary.sent() > 0) {
                     rebuildRepository.markPayCompletedWithAction(dataSource, runId, "PARTIALLY_SENT",
                             "PAY sent " + summary.sent() + " of " + summary.total()
-                                    + " fragment(s); rejected=" + summary.rejected(),
-                            approver, "sent=" + summary.sent() + " rejected=" + summary.rejected(),
+                                    + " fragment(s); rejected=" + summary.rejected()
+                                    + " invalidated=" + summary.invalidated(),
+                            approver, "sent=" + summary.sent() + " rejected=" + summary.rejected()
+                                    + " invalidated=" + summary.invalidated(),
                             payloadHash, configHash);
                     runPostPaySync(prep, "MT101_STATUS", statusProvider,
                             correctivePaySource(runId, connectionRef), dataSource, runId, true, frozenStatusConfig);
                     runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
                             correctivePaySource(runId, connectionRef), dataSource, runId, false);
+                } else if (summary.invalidated() > 0 && summary.rejected() == 0) {
+                    // P0.3 v25: el plan cambio tras aprobar (drift) y se bloqueo el envio. NO es un rechazo
+                    // bancario (FAILED): es INVALIDATED, re-solicitable, con su propia accion auditada.
+                    rebuildRepository.markPayCompletedWithAction(dataSource, runId, "INVALIDATED",
+                            "PAY invalidated by plan drift for " + summary.invalidated() + " fragment(s); "
+                                    + "request and approve again", approver,
+                            "invalidated=" + summary.invalidated() + " (payload/route changed after approval)",
+                            payloadHash, configHash);
+                    throw new IllegalStateException("MT101_PAY invalidated " + summary.invalidated()
+                            + " fragment(s) by plan drift for run " + runId + "; request and approve again");
                 } else {
                     rebuildRepository.markPayCompletedWithAction(dataSource, runId, "FAILED",
                             payResult.details() == null ? "MT101_PAY rejected all fragments" : payResult.details(),

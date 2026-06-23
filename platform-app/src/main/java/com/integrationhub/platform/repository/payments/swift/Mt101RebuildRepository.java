@@ -866,6 +866,7 @@ public class Mt101RebuildRepository {
         var actionType = switch (payStatus) {
             case "SENT" -> "PAY_SENT";
             case "PARTIALLY_SENT" -> "PAY_PARTIALLY_SENT";
+            case "INVALIDATED" -> "PAY_INVALIDATED";
             default -> "PAY_REJECTED";
         };
         inTransaction(dataSource, connection -> {
@@ -1040,7 +1041,8 @@ public class Mt101RebuildRepository {
 
     /** v24: historial append-only completo de acciones PAY de un run (orden cronologico). */
     public List<PayAction> payActions(DataSource dataSource, String rebuildRunId) throws SQLException {
-        var sql = "select action_type, previous_status, new_status, actor, reason, ticket, created_at "
+        var sql = "select action_type, previous_status, new_status, actor, reason, ticket, "
+                + "payload_hash, config_hash, created_at "
                 + "from mt101_corrective_pay_action where rebuild_run_id = ? order by id";
         var result = new ArrayList<PayAction>();
         try (var connection = dataSource.getConnection();
@@ -1055,6 +1057,8 @@ public class Mt101RebuildRepository {
                             rs.getString("actor"),
                             rs.getString("reason"),
                             rs.getString("ticket"),
+                            rs.getString("payload_hash"),
+                            rs.getString("config_hash"),
                             timestamp(rs, "created_at")));
                 }
             }
@@ -1063,7 +1067,8 @@ public class Mt101RebuildRepository {
     }
 
     public record PayAction(String actionType, String previousStatus, String newStatus,
-                            String actor, String reason, String ticket, LocalDateTime createdAt) {
+                            String actor, String reason, String ticket,
+                            String payloadHash, String configHash, LocalDateTime createdAt) {
     }
 
     /** P0.1 v24: PAY incierto + accion PAY_UNCERTAIN en una sola transaccion. */
@@ -1149,27 +1154,95 @@ public class Mt101RebuildRepository {
         }
     }
 
+    private static final String LEASE_SCHEDULER_ACTOR = "system:pay-lease-scheduler";
+
+    /**
+     * P0.1+P0.2 v25: resuelve los leases de PAY vencidos. Cada run se procesa en UNA transaccion
+     * (estado + fragmentos + accion append-only del scheduler), y se DISTINGUE "no iniciado" de
+     * "realmente incierto":
+     *  - si algun fragmento ya se despacho (DISPATCHING/SENT/UNCERTAIN) -> run UNCERTAIN (solo
+     *    STATUS/conciliacion, el banco pudo recibir).
+     *  - si NO se despacho nada (cayo entre el claim y el primer envio) -> run INVALIDATED, re-solicitable
+     *    (no hubo llamada al banco). Sin fallback: no todo EXECUTING se vuelve UNCERTAIN a ciegas.
+     */
     public int markExpiredPayExecutionsUncertain(DataSource dataSource, LocalDateTime now) throws SQLException {
-        var sql = "update mt101_rebuild_run set pay_status = 'UNCERTAIN', "
-                + "pay_uncertain_reason = 'PAY lease expired before completion; reconcile with MT101_STATUS before retry', "
-                + "pay_error_message = 'PAY lease expired before completion; reconcile with MT101_STATUS before retry', "
-                + "pay_completed_at = current_timestamp, updated_at = current_timestamp "
-                + "where pay_status = 'EXECUTING' and pay_lease_until is not null and pay_lease_until < ? "
-                + "returning rebuild_run_id";
         var ids = new ArrayList<String>();
+        var selectSql = "select rebuild_run_id from mt101_rebuild_run where pay_status = 'EXECUTING' "
+                + "and pay_lease_until is not null and pay_lease_until < ?";
         try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
+             var statement = connection.prepareStatement(selectSql)) {
             statement.setObject(1, now);
             try (var rs = statement.executeQuery()) {
                 while (rs.next()) {
                     ids.add(rs.getString(1));
                 }
             }
-            for (var id : ids) {
-                markPayFragmentsUncertain(dataSource, id,
-                        "PAY lease expired before completion; reconcile with MT101_STATUS before retry");
+        }
+        var processed = 0;
+        for (var id : ids) {
+            processed += inTransaction(dataSource, connection -> resolveExpiredPayLease(connection, id, now));
+        }
+        return processed;
+    }
+
+    private int resolveExpiredPayLease(java.sql.Connection connection, String rebuildRunId, LocalDateTime now)
+            throws SQLException {
+        var dispatched = hasDispatchedPayFragments(connection, rebuildRunId);
+        var newStatus = dispatched ? "UNCERTAIN" : "INVALIDATED";
+        var actionType = dispatched ? "PAY_UNCERTAIN" : "PAY_INVALIDATED";
+        var reason = dispatched
+                ? "PAY lease expired after dispatch; reconcile with MT101_STATUS before any retry"
+                : "PAY lease expired before any dispatch; no bank call made; re-requestable";
+        var updated = updateRunPayStatusOnLeaseExpiry(connection, rebuildRunId, now, newStatus, reason);
+        if (updated == 0) {
+            return 0;
+        }
+        markPayFragmentsOnLeaseExpiry(connection, rebuildRunId, newStatus, reason);
+        recordPayAction(connection, rebuildRunId, actionType, "EXECUTING", newStatus,
+                LEASE_SCHEDULER_ACTOR, reason, null, null, null);
+        return 1;
+    }
+
+    private boolean hasDispatchedPayFragments(java.sql.Connection connection, String rebuildRunId) throws SQLException {
+        var sql = "select 1 from mt101_corrective_pay_fragment where rebuild_run_id = ? "
+                + "and pay_status in ('DISPATCHING', 'SENT', 'UNCERTAIN') limit 1";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next();
             }
-            return ids.size();
+        }
+    }
+
+    private int updateRunPayStatusOnLeaseExpiry(java.sql.Connection connection, String rebuildRunId,
+                                                LocalDateTime now, String newStatus, String reason) throws SQLException {
+        var sql = "update mt101_rebuild_run set pay_status = ?, "
+                + "pay_uncertain_reason = case when ? = 'UNCERTAIN' then ? else null end, "
+                + "pay_error_message = ?, pay_completed_at = current_timestamp, updated_at = current_timestamp "
+                + "where rebuild_run_id = ? and pay_status = 'EXECUTING' "
+                + "and pay_lease_until is not null and pay_lease_until < ?";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, newStatus);
+            statement.setString(2, newStatus);
+            statement.setString(3, reason);
+            statement.setString(4, reason);
+            statement.setString(5, rebuildRunId);
+            statement.setObject(6, now);
+            return statement.executeUpdate();
+        }
+    }
+
+    private void markPayFragmentsOnLeaseExpiry(java.sql.Connection connection, String rebuildRunId,
+                                               String newStatus, String reason) throws SQLException {
+        // UNCERTAIN: PREPARED/DISPATCHING -> UNCERTAIN. INVALIDATED: solo PREPARED -> INVALIDATED.
+        var fromStatuses = "UNCERTAIN".equals(newStatus) ? "('PREPARED', 'DISPATCHING')" : "('PREPARED')";
+        var sql = "update mt101_corrective_pay_fragment set pay_status = ?, error_message = ?, "
+                + "updated_at = current_timestamp where rebuild_run_id = ? and pay_status in " + fromStatuses;
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, newStatus);
+            statement.setString(2, reason);
+            statement.setString(3, rebuildRunId);
+            statement.executeUpdate();
         }
     }
 
@@ -1205,7 +1278,7 @@ public class Mt101RebuildRepository {
                         payload_hash = excluded.payload_hash,
                         updated_at = current_timestamp
                     where mt101_corrective_pay_fragment.pay_status
-                          not in ('DISPATCHING', 'SENT', 'REJECTED', 'UNCERTAIN')
+                          not in ('DISPATCHING', 'SENT', 'REJECTED', 'UNCERTAIN', 'INVALIDATED')
                 """;
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
@@ -1542,7 +1615,8 @@ public class Mt101RebuildRepository {
                 select count(*) total,
                        count(*) filter (where pay_status = 'SENT') sent,
                        count(*) filter (where pay_status = 'REJECTED') rejected,
-                       count(*) filter (where pay_status not in ('SENT', 'REJECTED')) pending
+                       count(*) filter (where pay_status = 'INVALIDATED') invalidated,
+                       count(*) filter (where pay_status not in ('SENT', 'REJECTED', 'INVALIDATED')) pending
                   from mt101_corrective_pay_fragment
                  where rebuild_run_id = ?
                 """;
@@ -1551,13 +1625,14 @@ public class Mt101RebuildRepository {
             statement.setString(1, rebuildRunId);
             try (var rs = statement.executeQuery()) {
                 if (!rs.next()) {
-                    return new PayFragmentSummary(0, 0, 0, 0);
+                    return new PayFragmentSummary(0, 0, 0, 0, 0);
                 }
                 return new PayFragmentSummary(
                         rs.getLong("total"),
                         rs.getLong("sent"),
                         rs.getLong("rejected"),
-                        rs.getLong("pending"));
+                        rs.getLong("pending"),
+                        rs.getLong("invalidated"));
             }
         }
     }
@@ -1676,6 +1751,6 @@ public class Mt101RebuildRepository {
     ) {
     }
 
-    public record PayFragmentSummary(long total, long sent, long rejected, long pending) {
+    public record PayFragmentSummary(long total, long sent, long rejected, long pending, long invalidated) {
     }
 }

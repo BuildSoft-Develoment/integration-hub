@@ -82,6 +82,8 @@ class Mt101CorrectiveLifecycleServiceTest {
     // Hardening v23: el perfil de MT101_STATUS cambia DESPUES del PAY; la resolucion debe usar el congelado.
     private boolean statusConfigChangedAfterPay;
     private volatile String dispatchedStatusQueryUrl;
+    // P0.3 v25: drift de plan -> fragmentos INVALIDATED -> el run debe quedar INVALIDATED, no FAILED.
+    private boolean payInvalidatesAllFragments;
     private final ObjectMapper objectMapper = new ObjectMapper()
             .registerModule(new JavaTimeModule())
             .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -106,6 +108,7 @@ class Mt101CorrectiveLifecycleServiceTest {
         paySftpPolicy = null;
         statusConfigChangedAfterPay = false;
         dispatchedStatusQueryUrl = null;
+        payInvalidatesAllFragments = false;
 
         rebuildService = new Mt101RebuildService(dataSource, null, null, null,
                 new Mt101FailedRecordRepository(), new Mt101FragmentRepository(), new Mt101RebuildRepository());
@@ -149,6 +152,19 @@ class Mt101CorrectiveLifecycleServiceTest {
                 payInvocations.incrementAndGet();
                 // P0.1 v23: registra la config con la que REALMENTE se despacha (debe ser la aprobada).
                 dispatchedIdempotencyTemplate = String.valueOf(configuration.get("idempotencyKeyTemplate"));
+                if (payInvalidatesAllFragments) {
+                    // P0.3 v25: simula drift de plan: los fragmentos quedan INVALIDATED en el ledger (no se
+                    // envia nada). El provider real lo hace en el claim; aqui se inyecta para el outcome.
+                    try (Connection connection = dataSource.getConnection();
+                         var statement = connection.createStatement()) {
+                        statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'INVALIDATED' "
+                                + "where rebuild_run_id = '" + FIX + "'");
+                    } catch (SQLException error) {
+                        throw new IllegalStateException(error);
+                    }
+                    return TaskResult.failure("fake invalidated by plan drift", Map.of(
+                            "records", java.util.List.of(), "errors", java.util.List.of()));
+                }
                 if (payThrowsAfterDispatch) {
                     // Simula: se despacho al menos un fragmento (DISPATCHING durable) y LUEGO algo
                     // falla (BD/auditoria) lanzando excepcion. No debe quedar FAILED (reusable).
@@ -651,7 +667,29 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
-    void expiredExecutingPayBecomesUncertainWithoutRetry() throws Exception {
+    void planDriftMakesRunInvalidatedNotFailedAndRequestable() throws Exception {
+        // P0.3 v25: si el plan cambio tras aprobar y se bloqueo el envio (fragmentos INVALIDATED),
+        // el run debe quedar PAY_INVALIDATED (sistema bloqueo), NO FAILED (rechazo bancario). Re-solicitable.
+        payInvalidatesAllFragments = true;
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+
+        assertThrows(IllegalStateException.class, () -> service.approveAndPayCorrective(null, FIX, "luis"));
+
+        assertEquals("INVALIDATED", payStatus(FIX), "drift de plan = INVALIDATED, no FAILED (no es rechazo bancario)");
+        assertEquals("PAY_INVALIDATED", queryString("select action_type from mt101_corrective_pay_action "
+                + "where rebuild_run_id = '" + FIX + "' order by id desc limit 1"));
+        assertEquals(0, statusInvocations.get(), "no se corre STATUS: no se envio nada al banco");
+        // Re-solicitable: el maker puede volver a solicitar tras corregir.
+        payInvalidatesAllFragments = false;
+        service.requestCorrectivePay(null, FIX, "ana", "reintento corregido", "TCK-2");
+        assertEquals("REQUESTED", payStatus(FIX));
+    }
+
+    @Test
+    void expiredLeaseWithoutDispatchBecomesInvalidatedAndRequestable() throws Exception {
+        // P0.2 v25: si el lease vence ANTES de cualquier despacho (no hubo llamada al banco), el run
+        // queda INVALIDATED (re-solicitable), NO UNCERTAIN. Y deja accion append-only del scheduler.
         service.advanceCorrective(null, FIX, "executor");
         service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
         var repository = new Mt101RebuildRepository();
@@ -663,8 +701,45 @@ class Mt101CorrectiveLifecycleServiceTest {
         var marked = repository.markExpiredPayExecutionsUncertain(dataSource, java.time.LocalDateTime.now());
 
         assertEquals(1, marked);
-        assertEquals("UNCERTAIN", payStatus(FIX));
+        assertEquals("INVALIDATED", payStatus(FIX), "sin despacho, lease vencido = INVALIDATED, no UNCERTAIN");
         assertEquals(0, payInvocations.get(), "el vencimiento de lease no reintenta PAY");
+        // El scheduler deja una accion append-only con actor tecnico.
+        assertEquals("PAY_INVALIDATED", queryString("select action_type from mt101_corrective_pay_action "
+                + "where rebuild_run_id = '" + FIX + "' order by id desc limit 1"));
+        assertEquals("system:pay-lease-scheduler", queryString("select actor from mt101_corrective_pay_action "
+                + "where rebuild_run_id = '" + FIX + "' order by id desc limit 1"));
+        // INVALIDATED es re-solicitable: el maker puede volver a solicitar PAY.
+        service.requestCorrectivePay(null, FIX, "ana", "reintento", "TCK-2");
+        assertEquals("REQUESTED", payStatus(FIX));
+    }
+
+    @Test
+    void expiredLeaseAfterDispatchBecomesUncertainWithSchedulerAction() throws Exception {
+        // P0.1+P0.2 v25: si algun fragmento ya se despacho, el lease vencido = UNCERTAIN (el banco pudo
+        // recibir), con accion append-only del scheduler. Estado + fragmentos + accion en una tx.
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        var repository = new Mt101RebuildRepository();
+        var payloadHash = repository.archivedCorrectivePayloadHash(dataSource, FIX);
+        var configHash = repository.payRequestedConfigHash(dataSource, FIX);
+        assertTrue(repository.claimPayForExecution(dataSource, FIX, "luis",
+                payloadHash, configHash, java.time.LocalDateTime.now().minusMinutes(1)));
+        // Hay intencion preparada y un fragmento ya DISPATCHING (se inicio el envio).
+        repository.refreshPayFragmentsFromCorrectiveSet(dataSource, FIX, FIX);
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'DISPATCHING' "
+                    + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'");
+        }
+
+        var marked = repository.markExpiredPayExecutionsUncertain(dataSource, java.time.LocalDateTime.now());
+
+        assertEquals(1, marked);
+        assertEquals("UNCERTAIN", payStatus(FIX), "con despacho previo, lease vencido = UNCERTAIN");
+        assertEquals("PAY_UNCERTAIN", queryString("select action_type from mt101_corrective_pay_action "
+                + "where rebuild_run_id = '" + FIX + "' order by id desc limit 1"));
+        assertEquals("system:pay-lease-scheduler", queryString("select actor from mt101_corrective_pay_action "
+                + "where rebuild_run_id = '" + FIX + "' order by id desc limit 1"));
     }
 
     @Test

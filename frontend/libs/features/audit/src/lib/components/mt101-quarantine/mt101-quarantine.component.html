@@ -165,6 +165,8 @@
                   @if (action.createdAt) { ({{ action.createdAt }}) }
                   @if (action.reason) { · {{ action.reason }} }
                   @if (action.ticket) { · {{ action.ticket }} }
+                  @if (action.payloadHash) { · payloadHash={{ action.payloadHash }} }
+                  @if (action.configHash) { · configHash={{ action.configHash }} }
                 </li>
               }
             </ol>
