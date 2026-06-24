@@ -148,6 +148,49 @@ class Mt101PayFragmentReprocessTest {
     }
 
     @Test
+    void dispatchedPlanIsBitForBitTheApprovedLedgerPlan() throws Exception {
+        // v29 #2 (validacion positiva, "plan usado = plan aprobado"): el mensaje y la config que REALMENTE
+        // recibe el transporte re-derivan EXACTAMENTE el mismo destino + dispatch_plan_hash + payload_hash que
+        // el ledger aprobo. Asi se evidencia que se ejecuta el plan aprobado, sin reconstruccion divergente,
+        // sin necesidad de un segundo camino que "lea del ledger" (que persistiria secretos / seria fallback).
+        var fragmentSetId = "PAY-DET-1";
+        insertFragmentSet(fragmentSetId, "DET1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", "RUN-DET");
+        fragmentStore.markStatus(fragmentSource, "DET1", "ARCHIVED", null);
+        insertPayLedger("RUN-DET", fragmentSetId, "DET1"); // congela payload_hash + destino + plan_hash aprobados
+
+        var approvedDestination = payLedgerColumn("RUN-DET", "DET1", "dispatch_destination");
+        var approvedPlanHash = payLedgerColumn("RUN-DET", "DET1", "dispatch_plan_hash");
+        var approvedPayloadHash = payLedgerColumn("RUN-DET", "DET1", "payload_hash");
+
+        var transport = new StubTransport(List.of(TransportResult.accepted("GW-DET1", 1, 10L)));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore,
+                null, null, payStore);
+
+        var result = provider.execute(contextWith(fragmentSource), payConfig(50));
+        assertTrue(result.success(), () -> "expected PAY success: " + result.details());
+
+        // Exactamente un envio del fragmento aprobado (no reenvio).
+        assertEquals(1, transport.callsReceived(), "un solo envio del fragmento aprobado");
+        var dispatchedMessage = transport.received.get(0);
+        assertEquals("DET1", dispatchedMessage.sequenceA().sendersReference());
+
+        // Lo enviado al banco re-deriva al MISMO plan que el ledger aprobo (payload + destino + plan_hash).
+        var dispatchedPlan = Mt101PayRouteResolver.resolve(Map.of("transport", "REST"), null, null, dispatchedMessage);
+        var dispatchedPayloadHash = sha256Hex(dispatchedMessage.rawPayload());
+        assertEquals(approvedPayloadHash, dispatchedPayloadHash, "payload enviado = payload aprobado");
+        assertEquals(approvedDestination,
+                Mt101PayRouteResolver.dispatchDestination(dispatchedPlan, dispatchedMessage),
+                "destino enviado = destino aprobado (credenciales redactadas en el ledger)");
+        assertEquals(approvedPlanHash,
+                Mt101PayRouteResolver.dispatchPlanHash(dispatchedPlan, dispatchedPayloadHash, null, dispatchedMessage),
+                "dispatch_plan_hash enviado = dispatch_plan_hash aprobado (transport|ruta|destino|correlacion|payload)");
+        assertEquals("SENT", payLedgerStatus("RUN-DET", "DET1"));
+    }
+
+    @Test
     void correctivePayPersistsEveryFragmentResultNotJustTheOutputSample() throws Exception {
         // P0.1 v21: 5 fragmentos, todos INCIERTOS, con la muestra del output acotada a 2.
         // El ledger debe quedar con los 5 como UNCERTAIN (no se pierde ninguno fuera de la muestra).
@@ -683,6 +726,20 @@ class Mt101PayFragmentReprocessTest {
             try (var rs = statement.executeQuery()) {
                 rs.next();
                 return rs.getInt(1);
+            }
+        }
+    }
+
+    private String payLedgerColumn(String runId, String reference, String column) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "select " + column + " from mt101_corrective_pay_fragment "
+                             + "where rebuild_run_id = ? and corrective_senders_reference = ?")) {
+            statement.setString(1, runId);
+            statement.setString(2, reference);
+            try (var rs = statement.executeQuery()) {
+                rs.next();
+                return rs.getString(1);
             }
         }
     }
