@@ -30,8 +30,12 @@ import java.util.Map;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicReference;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -268,6 +272,80 @@ class Mt101PayFragmentReprocessTest {
     }
 
     @Test
+    void schedulerAndDispatcherNeverLeaveRunNotExecutingWithDispatchingFragment() throws Exception {
+        // P0.1 v28: prueba de CONCURRENCIA real (2 hilos, Postgres real). El scheduler (lease vencido) y el
+        // dispatcher (claim) corren SIMULTANEAMENTE sobre el mismo run, N veces. El advisory lock + el check
+        // de run/lease en el claim garantizan el INVARIANTE: nunca queda un fragmento DISPATCHING con el run
+        // fuera de EXECUTING (no hay carrera que deje run invalidado con un pago despachado).
+        var repository = new Mt101RebuildRepository();
+        for (int iteration = 0; iteration < 25; iteration++) {
+            var runId = "RUN-RACE-" + iteration;
+            var fragmentSetId = "PAY-RACE-" + iteration;
+            insertFragmentSet(fragmentSetId, "T1");
+            var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+            fragmentSource.put("correctivePayRunId", runId);
+            fragmentStore.markStatus(fragmentSource, "T1", "ARCHIVED", null);
+            insertPayLedger(runId, fragmentSetId, "T1"); // run EXECUTING + lease futuro + ledger PREPARED
+            // El lease del run ya vencio (el escenario de carrera del v27/v28).
+            try (Connection connection = dataSource.getConnection();
+                 var statement = connection.createStatement()) {
+                statement.executeUpdate("update mt101_rebuild_run set pay_lease_until = current_timestamp - "
+                        + "interval '1 minute' where rebuild_run_id = '" + runId + "'");
+            }
+            var message = sampleMessage("T1");
+            var plan = Mt101PayRouteResolver.resolve(Map.of("transport", "REST"), null, null, message);
+            var planHash = Mt101PayRouteResolver.dispatchPlanHash(plan,
+                    sha256Hex("{\"sendersReference\":\"T1\"}"), null, message);
+
+            var start = new CountDownLatch(1);
+            var claimResult = new AtomicReference<Integer>();
+            var error = new AtomicReference<Throwable>();
+            var scheduler = new Thread(() -> {
+                try {
+                    start.await();
+                    repository.markExpiredPayExecutionsUncertain(dataSource, java.time.LocalDateTime.now());
+                } catch (Throwable t) {
+                    error.set(t);
+                }
+            });
+            var dispatcher = new Thread(() -> {
+                try {
+                    start.await();
+                    claimResult.set(repository.markPayFragmentDispatching(dataSource, runId, "T1",
+                            sha256Hex("{\"sendersReference\":\"T1\"}"), null, planHash));
+                } catch (Throwable t) {
+                    error.set(t);
+                }
+            });
+            scheduler.start();
+            dispatcher.start();
+            start.countDown();
+            scheduler.join();
+            dispatcher.join();
+
+            assertEquals(null, error.get(), () -> "sin excepciones en la carrera: " + error.get());
+            // INVARIANTE: con el lease vencido el dispatcher NUNCA reclama (claim devuelve 0); el fragmento
+            // jamas queda DISPATCHING; el run queda INVALIDATED (el scheduler), nunca EXECUTING+DISPATCHING.
+            assertEquals(0, claimResult.get(), "lease vencido: el dispatcher no puede reclamar");
+            assertNotEquals("DISPATCHING", payLedgerStatus(runId, "T1"),
+                    "nunca un fragmento DISPATCHING tras vencer el lease");
+            assertEquals("INVALIDATED", runPayStatus(runId), "el scheduler resolvio el run (sin despacho)");
+        }
+    }
+
+    private String runPayStatus(String runId) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "select pay_status from mt101_rebuild_run where rebuild_run_id = ?")) {
+            statement.setString(1, runId);
+            try (var rs = statement.executeQuery()) {
+                rs.next();
+                return rs.getString(1);
+            }
+        }
+    }
+
+    @Test
     void correctivePayDoesNotDispatchWhenRunLeaseExpiredOrRunNotExecuting() throws Exception {
         // P0.1 v27: el claim une el run padre. Si el lease vencio (el scheduler lo resolvera) o el run ya
         // no esta EXECUTING (el scheduler lo invalido), el fragmento NO se despacha: no hay carrera
@@ -427,7 +505,18 @@ class Mt101PayFragmentReprocessTest {
             statement.executeUpdate("create table mt101_rebuild_run ("
                     + "rebuild_run_id varchar(80) primary key,"
                     + "pay_status varchar(30) not null default 'EXECUTING',"
+                    + "pay_uncertain_reason text, pay_error_message text, pay_completed_at timestamp,"
+                    + "updated_at timestamp not null default current_timestamp,"
                     + "pay_lease_until timestamp)");
+            // v28: tabla de acciones (cadena hash) para que el scheduler de lease registre su accion.
+            statement.executeUpdate("drop table if exists mt101_corrective_pay_action");
+            statement.executeUpdate("create table mt101_corrective_pay_action ("
+                    + "id bigserial primary key, rebuild_run_id varchar(80) not null,"
+                    + "action_type varchar(30) not null, previous_status varchar(30), new_status varchar(30),"
+                    + "actor varchar(120), reason text, ticket varchar(120),"
+                    + "payload_hash varchar(64), config_hash varchar(64),"
+                    + "previous_action_hash varchar(64), action_hash varchar(64),"
+                    + "created_at timestamp not null default current_timestamp)");
             statement.executeUpdate("create table mt101_build_fragment ("
                     + "id bigserial primary key,"
                     + "fragment_set_id varchar(80) not null,"

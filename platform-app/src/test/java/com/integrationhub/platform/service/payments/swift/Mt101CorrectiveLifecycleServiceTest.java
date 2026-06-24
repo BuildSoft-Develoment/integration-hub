@@ -83,6 +83,8 @@ class Mt101CorrectiveLifecycleServiceTest {
     private String paySftpPolicy;
     // Hardening v23: el perfil de MT101_STATUS cambia DESPUES del PAY; la resolucion debe usar el congelado.
     private boolean statusConfigChangedAfterPay;
+    // v28 #3: si true, MT101_STATUS trae un secreto LITERAL (no ref) -> el approve debe rechazarlo.
+    private boolean statusSecretLiteral;
     private volatile String dispatchedStatusQueryUrl;
     private volatile String dispatchedStatusToken;
     // P0.3 v25: drift de plan -> fragmentos INVALIDATED -> el run debe quedar INVALIDATED, no FAILED.
@@ -113,6 +115,7 @@ class Mt101CorrectiveLifecycleServiceTest {
         dispatchedIdempotencyTemplate = null;
         paySftpPolicy = null;
         statusConfigChangedAfterPay = false;
+        statusSecretLiteral = false;
         dispatchedStatusQueryUrl = null;
         dispatchedStatusToken = null;
         payInvalidatesAllFragments = false;
@@ -319,8 +322,9 @@ class Mt101CorrectiveLifecycleServiceTest {
                 // El perfil de STATUS "deriva" si cambia despues del PAY; el snapshot congelado lo evita.
                 config.put("query", Map.of("url",
                         (statusConfigChangedAfterPay ? "drift-status/" : "frozen-status/") + "${idempotencyKey}"));
-                // v24: un secreto RESUELTO no debe persistirse en el snapshot; una referencia si (se resuelve luego).
-                config.put("password", "top-secret-value");
+                // v28 #3: STATUS exige secretRef/Vault. Por defecto ambos secretos son refs ${secret:...}
+                // (re-resolubles para un PAY_UNCERTAIN diferido). El caso literal se rechaza al aprobar.
+                config.put("password", statusSecretLiteral ? "top-secret-value" : "${secret:status_pass}");
                 config.put("token", "${secret:status_token}");
             }
             return config;
@@ -447,13 +451,14 @@ class Mt101CorrectiveLifecycleServiceTest {
         service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
         service.approveAndPayCorrective(null, FIX, "luis"); // congela el snapshot SIN resolver
 
-        // El snapshot guarda la referencia sin resolver y redacta el literal; nunca el secreto resuelto.
+        // v28 #3: STATUS exige secretRef; el snapshot guarda ambas referencias SIN resolver (re-resolubles),
+        // nunca el secreto resuelto ni un literal redactado-irrecuperable.
         var snapshot = queryString(
                 "select pay_status_config_snapshot from mt101_rebuild_run where rebuild_run_id = '" + FIX + "'");
         assertNotNull(snapshot);
-        assertTrue(snapshot.contains("${secret:status_token}"), "la referencia se conserva sin resolver");
-        assertFalse(snapshot.contains("top-secret-value"), "un literal secreto no se persiste");
-        assertTrue(snapshot.contains("***REDACTED***"), "el literal secreto queda redactado");
+        assertTrue(snapshot.contains("${secret:status_token}"), "la referencia del token se conserva sin resolver");
+        assertTrue(snapshot.contains("${secret:status_pass}"), "la referencia del password se conserva sin resolver");
+        assertFalse(snapshot.contains("RESOLVED:"), "el snapshot nunca persiste un secreto resuelto");
 
         try (Connection connection = dataSource.getConnection();
              var statement = connection.createStatement()) {
@@ -567,9 +572,27 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
-    void payStatusSnapshotRedactsResolvedSecretsButKeepsReferences() throws Exception {
-        // v24: el snapshot congelado de la config de STATUS no persiste secretos RESUELTOS
-        // (password/token con valor literal); una referencia ${secret:...} si se conserva.
+    void approvalRejectsLiteralSecretInStatusConfigDemandingVaultRef() throws Exception {
+        // v28 #3: STATUS/RECONCILE exigen secretRef/Vault. Un secreto LITERAL se redactaria al congelar el
+        // snapshot y luego seria IRRECUPERABLE para autenticar un PAY_UNCERTAIN diferido. Sin fallback: en
+        // vez de degradar en silencio, el approve RECHAZA y exige una referencia ${secret:...}.
+        statusSecretLiteral = true;
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+
+        var error = assertThrows(IllegalStateException.class,
+                () -> service.approveAndPayCorrective(null, FIX, "luis"),
+                "un secreto literal en MT101_STATUS debe rechazarse al aprobar");
+        assertTrue(error.getMessage().contains("MT101_STATUS") && error.getMessage().contains("password"),
+                "el error debe senalar el secreto literal: " + error.getMessage());
+        // No se despacho ningun pago: el rechazo es PRE-dispatch.
+        assertEquals("REQUESTED", payStatus(FIX), "el PAY no avanza con un secreto irrecuperable");
+    }
+
+    @Test
+    void approvalKeepsSecretRefProfileWhenStatusUsesVaultReferences() throws Exception {
+        // v28 #3 (camino feliz): con refs ${secret:...} el approve procede y el snapshot conserva el perfil
+        // completo SIN resolver (re-resoluble en la ejecucion diferida).
         service.advanceCorrective(null, FIX, "executor");
         service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
         service.approveAndPayCorrective(null, FIX, "luis"); // congela el snapshot de STATUS
@@ -577,9 +600,9 @@ class Mt101CorrectiveLifecycleServiceTest {
         var snapshot = queryString(
                 "select pay_status_config_snapshot from mt101_rebuild_run where rebuild_run_id = '" + FIX + "'");
         assertNotNull(snapshot, "debe haber snapshot de STATUS congelado");
-        assertFalse(snapshot.contains("top-secret-value"), "el secreto resuelto no debe persistirse");
-        assertTrue(snapshot.contains("***REDACTED***"), "el secreto resuelto debe quedar redactado");
-        assertTrue(snapshot.contains("${secret:status_token}"), "una referencia sin resolver se conserva");
+        assertFalse(snapshot.contains("RESOLVED:"), "el snapshot nunca persiste un secreto resuelto");
+        assertTrue(snapshot.contains("${secret:status_token}"), "la referencia del token se conserva sin resolver");
+        assertTrue(snapshot.contains("${secret:status_pass}"), "la referencia del password se conserva sin resolver");
         assertTrue(snapshot.contains("frozen-status/"), "el resto del perfil (query.url) se conserva");
     }
 

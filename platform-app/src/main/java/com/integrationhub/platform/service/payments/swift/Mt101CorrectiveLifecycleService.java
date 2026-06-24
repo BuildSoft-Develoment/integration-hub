@@ -234,6 +234,17 @@ public class Mt101CorrectiveLifecycleService {
                 throw new IllegalStateException("corrective pay for run " + runId
                         + " was invalidated because the MT101_PAY configuration changed after request");
             }
+            // v28 #3: exige secretRef/Vault para STATUS y RECONCILE ANTES de reclamar. Un secreto LITERAL se
+            // redactaria al congelar el snapshot y seria IRRECUPERABLE para autenticar un PAY_UNCERTAIN
+            // diferido; se rechaza pre-claim (sin dejar el run en EXECUTING) y se exige una ref re-resoluble.
+            var unresolvedStatusConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_STATUS");
+            if (unresolvedStatusConfig != null) {
+                assertSecretsAreResolvableRefs(unresolvedStatusConfig, "STATUS", "");
+            }
+            var unresolvedReconcileConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_RECONCILE");
+            if (unresolvedReconcileConfig != null) {
+                assertSecretsAreResolvableRefs(unresolvedReconcileConfig, "RECONCILE", "");
+            }
             if (!rebuildRepository.claimPayForExecutionWithAction(dataSource, runId, approver,
                     payloadHash, configHash, LocalDateTime.now().plusMinutes(15))) {
                 throw new IllegalStateException("corrective pay for run " + runId
@@ -246,7 +257,6 @@ public class Mt101CorrectiveLifecycleService {
             // v27 P0.2: el snapshot persiste la config SIN resolver (refs ${secret:...} intactas) + redacta
             // secretos LITERALES; al resolver un incierto luego, se re-resuelven los refs desde Vault fresco.
             // Asi el snapshot no guarda secretos resueltos y la auth SFTP/STATUS diferida sigue funcionando.
-            var unresolvedStatusConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_STATUS");
             if (unresolvedStatusConfig != null) {
                 try {
                     rebuildRepository.freezePayStatusConfig(dataSource, runId,
@@ -257,7 +267,6 @@ public class Mt101CorrectiveLifecycleService {
             }
             // v26 #4 + v27 P0.2: congela tambien el perfil de MT101_RECONCILE sin resolver secretos.
             var frozenReconcileConfig = stageConfig(prep, "MT101_RECONCILE");
-            var unresolvedReconcileConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_RECONCILE");
             if (unresolvedReconcileConfig != null) {
                 try {
                     rebuildRepository.freezePayReconcileConfig(dataSource, runId,
@@ -695,6 +704,33 @@ public class Mt101CorrectiveLifecycleService {
             return raw;
         }
         return "***REDACTED***";
+    }
+
+    /**
+     * v28 #3: exige secretRef/Vault para STATUS y RECONCILE. Un secreto LITERAL en estas configs se redacta
+     * al congelar el snapshot, pero entonces NO podra recuperarse para resolver un PAY_UNCERTAIN diferido
+     * (la auth quedaria como {@code ***REDACTED***}). Sin fallback: en vez de degradar silenciosamente, se
+     * rechaza el PAY al aprobar y se exige que el secreto sea una referencia {@code ${secret:...}}
+     * re-resoluble desde Vault en la ejecucion diferida.
+     */
+    private void assertSecretsAreResolvableRefs(Object value, String taskName, String path) {
+        if (value instanceof Map<?, ?> map) {
+            map.forEach((key, raw) -> {
+                var name = String.valueOf(key);
+                var childPath = path.isEmpty() ? name : path + "." + name;
+                if (SECRET_KEYS.contains(name.toLowerCase(java.util.Locale.ROOT))
+                        && raw instanceof String text && !text.isBlank() && !text.contains("${")) {
+                    throw new IllegalStateException("MT101_" + taskName + " secret '" + childPath
+                            + "' must be a ${secret:...} reference (Vault), not a literal: a literal cannot be"
+                            + " re-resolved to authenticate a deferred PAY_UNCERTAIN resolution");
+                }
+                assertSecretsAreResolvableRefs(raw, taskName, childPath);
+            });
+        } else if (value instanceof List<?> list) {
+            for (int i = 0; i < list.size(); i++) {
+                assertSecretsAreResolvableRefs(list.get(i), taskName, path + "[" + i + "]");
+            }
+        }
     }
 
     /** v23: registra una accion del ciclo PAY en el historial inmutable (append-only). */
