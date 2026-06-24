@@ -1241,6 +1241,73 @@ public class Mt101RebuildRepository {
         }
     }
 
+    /**
+     * v29: aceptacion TARDIA tras vencer el lease. Si el lease vencio durante {@code Transport.send()} y el
+     * scheduler marco el run UNCERTAIN (y el/los fragmento(s) DISPATCHING->UNCERTAIN), pero el envio fue
+     * finalmente ACEPTADO y TODOS los fragmentos quedaron SENT, se RESUELVE el run UNCERTAIN->SENT con una
+     * accion PAY_RESOLVED append-only y SIN reenviar (el banco ya recibio). Si queda algun fragmento no-SENT
+     * (DISPATCHING/UNCERTAIN/...), se MANTIENE UNCERTAIN para conciliar por MT101_STATUS. Serializado con el
+     * scheduler por el MISMO advisory lock por run -> determinista. Devuelve 1 si resolvio; 0 si no aplica.
+     */
+    public int resolveLateAcceptedPayRun(DataSource dataSource, String rebuildRunId, String actor) throws SQLException {
+        return inTransaction(dataSource, connection -> {
+            // Mismo advisory lock por run que el scheduler de lease: la resolucion tardia no se solapa con
+            // una clasificacion de lease en curso (lectura del run + de los fragmentos consistente).
+            lockRunForActionChain(connection, rebuildRunId);
+            // Solo aplica si el scheduler dejo el run UNCERTAIN; no toca runs terminales del flujo normal.
+            if (!"UNCERTAIN".equals(currentPayStatus(connection, rebuildRunId))) {
+                return 0;
+            }
+            long total = 0;
+            long sent = 0;
+            try (var statement = connection.prepareStatement(
+                    "select count(*) total, count(*) filter (where pay_status = 'SENT') sent "
+                            + "from mt101_corrective_pay_fragment where rebuild_run_id = ?")) {
+                statement.setString(1, rebuildRunId);
+                try (var rs = statement.executeQuery()) {
+                    if (rs.next()) {
+                        total = rs.getLong("total");
+                        sent = rs.getLong("sent");
+                    }
+                }
+            }
+            // Regla v29: solo se auto-resuelve a SENT si TODOS los fragmentos quedaron SENT; cualquier
+            // fragmento pendiente mantiene el run UNCERTAIN (conciliar por STATUS, sin reenvio ciego).
+            if (total == 0 || sent != total) {
+                return 0;
+            }
+            var reason = "late acceptance after lease expiry: all " + total
+                    + " fragment(s) confirmed SENT; run resolved without resend";
+            var sql = "update mt101_rebuild_run set pay_status = 'SENT', pay_uncertain_reason = null, "
+                    + "pay_completed_at = current_timestamp, pay_lease_until = null, "
+                    + "pay_resolved_by = ?, pay_resolved_at = current_timestamp, pay_resolution_reason = ?, "
+                    + "updated_at = current_timestamp where rebuild_run_id = ? and pay_status = 'UNCERTAIN'";
+            int updated;
+            try (var statement = connection.prepareStatement(sql)) {
+                statement.setString(1, actor);
+                statement.setString(2, reason);
+                statement.setString(3, rebuildRunId);
+                updated = statement.executeUpdate();
+            }
+            if (updated == 0) {
+                return 0;
+            }
+            recordPayAction(connection, rebuildRunId, "PAY_RESOLVED", "UNCERTAIN", "SENT",
+                    actor, reason, null, null, null);
+            return 1;
+        });
+    }
+
+    private String currentPayStatus(java.sql.Connection connection, String rebuildRunId) throws SQLException {
+        try (var statement = connection.prepareStatement(
+                "select pay_status from mt101_rebuild_run where rebuild_run_id = ?")) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }
+    }
+
     private static final String LEASE_SCHEDULER_ACTOR = "system:pay-lease-scheduler";
 
     /**

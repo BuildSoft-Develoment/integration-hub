@@ -89,6 +89,9 @@ class Mt101CorrectiveLifecycleServiceTest {
     private volatile String dispatchedStatusToken;
     // P0.3 v25: drift de plan -> fragmentos INVALIDATED -> el run debe quedar INVALIDATED, no FAILED.
     private boolean payInvalidatesAllFragments;
+    // v29: simula aceptacion TARDIA: el lease vence durante send() y el scheduler marca el run UNCERTAIN
+    // ANTES de que el transport responda ACCEPTED. Debe resolverse el run a SENT (append-only), sin reenviar.
+    private boolean payLateAcceptanceAfterLeaseExpiry;
     // v26 #4: el perfil de MT101_RECONCILE cambia DESPUES del PAY; debe usarse el congelado.
     private boolean reconcileConfigChangedAfterPay;
     private volatile String dispatchedReconcileQueryUrl;
@@ -119,6 +122,7 @@ class Mt101CorrectiveLifecycleServiceTest {
         dispatchedStatusQueryUrl = null;
         dispatchedStatusToken = null;
         payInvalidatesAllFragments = false;
+        payLateAcceptanceAfterLeaseExpiry = false;
         reconcileConfigChangedAfterPay = false;
         dispatchedReconcileQueryUrl = null;
 
@@ -188,6 +192,32 @@ class Mt101CorrectiveLifecycleServiceTest {
                         throw new IllegalStateException(error);
                     }
                     throw new IllegalStateException("local persistence failed after gateway accepted");
+                }
+                if (payLateAcceptanceAfterLeaseExpiry) {
+                    // v29: simula que send() reclamo el fragmento (DISPATCHING), se BLOQUEO, el lease VENCIO y
+                    // el scheduler corrio marcando el run UNCERTAIN (y el fragmento DISPATCHING->UNCERTAIN)
+                    // ANTES de que el transport responda. Luego el banco responde ACCEPTED (abajo, records).
+                    try (Connection connection = dataSource.getConnection();
+                         var statement = connection.createStatement()) {
+                        statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'DISPATCHING' "
+                                + "where rebuild_run_id = '" + FIX + "'");
+                        statement.executeUpdate("update mt101_rebuild_run set pay_lease_until = "
+                                + "current_timestamp - interval '1 minute' where rebuild_run_id = '" + FIX + "'");
+                    } catch (SQLException error) {
+                        throw new IllegalStateException(error);
+                    }
+                    try {
+                        // El scheduler (otra conexion) clasifica el lease vencido: run UNCERTAIN, frag UNCERTAIN.
+                        new Mt101RebuildRepository().markExpiredPayExecutionsUncertain(dataSource,
+                                java.time.LocalDateTime.now());
+                    } catch (SQLException error) {
+                        throw new IllegalStateException(error);
+                    }
+                    // ACCEPTED tardio: NO se llama markCorrective; persistPayDetail escribira SENT (el caso real).
+                    return TaskResult.success("fake late accepted pay", Map.of(
+                            "records", java.util.List.of(
+                                    Map.of("sendersReference", "RTEST1", "status", "ACCEPTED", "gatewayReference", "GW-1", "attempts", 1),
+                                    Map.of("sendersReference", "RTEST2", "status", "ACCEPTED", "gatewayReference", "GW-2", "attempts", 1))));
                 }
                 if (payUncertain) {
                     // Timeout/conexion tras enviar: el provider clasifica UNCERTAIN (no marca
@@ -470,6 +500,63 @@ class Mt101CorrectiveLifecycleServiceTest {
         // La consulta diferida recibio el secreto RE-RESUELTO, no el valor redactado.
         assertEquals("RESOLVED:status_token", dispatchedStatusToken,
                 "el secreto del snapshot se re-resuelve al ejecutar (no llega redactado al provider)");
+    }
+
+    @Test
+    void lateAcceptanceAfterLeaseExpiryResolvesRunToSentWithoutResend() throws Exception {
+        // v29: el lease vence durante send(); el scheduler marca el run UNCERTAIN (y el fragmento). Luego el
+        // banco responde ACCEPTED -> persistPayDetail escribe SENT. El run debe RESOLVERSE a SENT (accion
+        // append-only PAY_RESOLVED) SIN reenviar, conservando la accion PAY_UNCERTAIN del scheduler.
+        payLateAcceptanceAfterLeaseExpiry = true;
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        service.approveAndPayCorrective(null, FIX, "luis");
+
+        // El run no queda atascado en UNCERTAIN: se resuelve a SENT, y los 2 fragmentos quedaron SENT.
+        assertEquals("SENT", payStatus(FIX), "el run se resuelve a SENT tras la aceptacion tardia");
+        assertEquals(2, queryLong("select count(*) from mt101_corrective_pay_fragment "
+                + "where rebuild_run_id = '" + FIX + "' and pay_status = 'SENT'"),
+                "ambos fragmentos quedan SENT");
+        // NO hubo segundo envio: una sola invocacion de MT101_PAY.
+        assertEquals(1, payInvocations.get(), "no hay reenvio ciego en la aceptacion tardia");
+        // Auditoria append-only: el scheduler dejo PAY_UNCERTAIN y la resolucion tardia dejo PAY_RESOLVED.
+        assertEquals(1, queryLong("select count(*) from mt101_corrective_pay_action "
+                + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_UNCERTAIN'"),
+                "queda la accion del scheduler (lease vencido tras dispatch)");
+        assertEquals(1, queryLong("select count(*) from mt101_corrective_pay_action "
+                + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_RESOLVED'"),
+                "queda la accion de resolucion tardia");
+        // La resolucion es UNCERTAIN -> SENT (transicion correcta, no reenvio).
+        assertEquals("UNCERTAIN", queryString("select previous_status from mt101_corrective_pay_action "
+                + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_RESOLVED'"));
+        assertEquals("SENT", queryString("select new_status from mt101_corrective_pay_action "
+                + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_RESOLVED'"));
+    }
+
+    @Test
+    void lateLeaseExpiryWithStillPendingFragmentKeepsRunUncertainForReconciliation() throws Exception {
+        // v29 (regla conservadora): si tras la aceptacion tardia AUN queda algun fragmento no-SENT, el run
+        // se MANTIENE UNCERTAIN (conciliar por STATUS); no se auto-resuelve a SENT.
+        var repository = new Mt101RebuildRepository();
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        service.approveAndPayCorrective(null, FIX, "luis"); // crea los fragmentos (flujo SENT normal)
+        // Estado post-scheduler simulado: run UNCERTAIN con un fragmento SENT y otro aun UNCERTAIN.
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'UNCERTAIN', "
+                    + "pay_lease_until = null where rebuild_run_id = '" + FIX + "'");
+            statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'SENT' "
+                    + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'");
+            statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'UNCERTAIN' "
+                    + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST2'");
+        }
+        assertEquals(0, repository.resolveLateAcceptedPayRun(dataSource, FIX, "executor"),
+                "con un fragmento pendiente no se auto-resuelve");
+        assertEquals("UNCERTAIN", payStatus(FIX), "el run se mantiene UNCERTAIN para conciliar por STATUS");
+        assertEquals(0, queryLong("select count(*) from mt101_corrective_pay_action "
+                + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_RESOLVED'"),
+                "no se registra resolucion mientras quede un fragmento pendiente");
     }
 
     @Test

@@ -336,6 +336,11 @@ public class Mt101CorrectiveLifecycleService {
                     throw new IllegalStateException("MT101_PAY rejected all fragments for run " + runId
                             + ": " + payResult.details());
                 }
+                // v29: aceptacion TARDIA. Si el lease vencio durante send() y el scheduler marco el run
+                // UNCERTAIN, pero los fragmentos finalmente quedaron SENT, el cierre EXECUTING->SENT del
+                // worker fue no-op (la guarda 'EXECUTING' lo impide). Se resuelve el run UNCERTAIN->SENT con
+                // accion append-only, sin reenviar; si queda algun fragmento pendiente, se mantiene UNCERTAIN.
+                rebuildRepository.resolveLateAcceptedPayRun(dataSource, runId, approver);
             } catch (RuntimeException error) {
                 // P0.2 v21: si ya se despacho algun fragmento (DISPATCHING/SENT/UNCERTAIN), el mensaje
                 // pudo llegar al banco -> NUNCA FAILED (reusable -> doble pago). Se marca UNCERTAIN.
