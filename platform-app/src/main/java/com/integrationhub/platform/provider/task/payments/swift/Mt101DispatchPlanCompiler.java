@@ -27,10 +27,24 @@ public final class Mt101DispatchPlanCompiler {
 
     public static final String SPEC_VERSION = "MT101_PAY_PLAN_V1";
 
-    private static final java.util.Set<String> SECRET_KEYS = java.util.Set.of(
-            "authorization", "password", "passphrase", "token", "secret", "privatekey", "private_key",
-            "apikey", "api_key", "credential", "credentials", "bearer", "clientsecret", "client_secret",
-            "knownhosts", "known_hosts");
+    // v37 (P1): deteccion por SUBSTRING sobre el nombre normalizado (sin separadores), no por clave exacta.
+    // Asi se detectan X-API-Key, X-Bank-Token, Authorization-Internal, client_secret, etc.
+    private static final List<String> SECRET_NAME_TOKENS = List.of(
+            "authorization", "password", "passphrase", "token", "secret", "privatekey",
+            "apikey", "credential", "bearer", "knownhosts");
+    // Credenciales embebidas en una URL (user:pass@host): nunca deben viajar literales en la spec.
+    private static final java.util.regex.Pattern URL_CREDENTIALS =
+            java.util.regex.Pattern.compile("://[^/@\\s]+:[^/@\\s]+@");
+
+    private static boolean isSecretName(String name) {
+        var normalized = name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
+        for (var token : SECRET_NAME_TOKENS) {
+            if (normalized.contains(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     private final ObjectMapper objectMapper;
 
@@ -115,14 +129,18 @@ public final class Mt101DispatchPlanCompiler {
         return value;
     }
 
-    /** Un secreto en la spec debe ser una referencia ${secret:...}; un literal se rechaza (no se persiste). */
+    /**
+     * Un campo sensible de la spec debe ser una referencia {@code ${secret:...}}; un literal se rechaza (no se
+     * persiste). v37 (P1): deteccion por substring del nombre normalizado (X-API-Key, X-Bank-Token,
+     * client_secret, Authorization-Internal, ...) y rechazo de credenciales embebidas en URL (user:pass@host)
+     * en CUALQUIER valor de cadena, no solo en claves "sensibles".
+     */
     private void assertNoLiteralSecrets(Object value, String path) {
         if (value instanceof Map<?, ?> map) {
             map.forEach((key, raw) -> {
                 var name = String.valueOf(key);
                 var childPath = path.isEmpty() ? name : path + "." + name;
-                if (SECRET_KEYS.contains(name.toLowerCase(Locale.ROOT))
-                        && raw instanceof String text && !text.isBlank() && !text.contains("${")) {
+                if (isSecretName(name) && raw instanceof String text && !text.isBlank() && !text.contains("${")) {
                     throw new IllegalStateException("MT101_PAY dispatch spec secret '" + childPath
                             + "' must be a ${secret:...} reference, not a literal: the executable plan is"
                             + " persisted and must never contain resolved secrets");
@@ -133,6 +151,9 @@ public final class Mt101DispatchPlanCompiler {
             for (int i = 0; i < list.size(); i++) {
                 assertNoLiteralSecrets(list.get(i), path + "[" + i + "]");
             }
+        } else if (value instanceof String text && URL_CREDENTIALS.matcher(text).find()) {
+            throw new IllegalStateException("MT101_PAY dispatch spec value at '" + path
+                    + "' embeds URL credentials (user:pass@host); use a ${secret:...} reference instead");
         }
     }
 

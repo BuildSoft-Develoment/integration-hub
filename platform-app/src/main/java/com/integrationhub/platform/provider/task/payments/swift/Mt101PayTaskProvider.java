@@ -236,6 +236,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
             var reference = message.sequenceA() == null ? null
                     : message.sequenceA().sendersReference();
             Mt101PayRouteResolver.PayPlan plan;
+            PaymentMessageTransport transport;
             if (rebuildRunId != null) {
                 // v37: FLUJO CORRECTIVO. El plan ejecutable es el CONTRATO persistido en el ledger;
                 // Mt101PayRouteResolver YA NO se ejecuta aqui (no se vuelve a decidir ruta/transporte/destino).
@@ -251,14 +252,24 @@ public class Mt101PayTaskProvider implements TaskProvider {
                     correctivePayStore.invalidateMissingSpec(fragmentSource, rebuildRunId, reference);
                     continue;
                 }
+                // v37 (hallazgo P0.2): INTEGRIDAD de la spec. El dispatch_spec_json debe coincidir con su
+                // dispatch_spec_hash persistido; si se altero (p.ej. method/headers/timeout) sin recalcular el
+                // hash, se INVALIDA y NO se llama al banco (manipulacion detectada).
+                if (!dispatchPlanCompiler.specHash(prepared.specJson()).equals(prepared.specHash())) {
+                    correctivePayStore.invalidateTamperedSpec(fragmentSource, rebuildRunId, reference);
+                    continue;
+                }
                 plan = dispatchPlanCompiler.materialize(prepared.specJson(), correctiveSecretResolver);
-                // El claim valida el CONTRATO persistido: payload_hash actual = aprobado + approved_routed_as +
-                // dispatch_plan_hash (recomputado del plan materializado). Si difiere -> INVALIDATED, no se envia.
+                // v37 (hallazgo P0.1): el transporte sale SIEMPRE del plan persistido, nunca de la config viva.
+                transport = resolveTransport(plan.transport());
+                // El claim enlaza ATOMICAMENTE el contrato persistido: payload_hash actual = aprobado +
+                // approved_routed_as + dispatch_plan_hash (recomputado) + dispatch_spec_hash. Si difiere ->
+                // INVALIDATED, no se envia.
                 var payloadHash = payloadHash(message);
                 var planHash = Mt101PayRouteResolver.dispatchPlanHash(plan, payloadHash,
                         prepared.approvedRoutedAs(), message);
                 if (!correctivePayStore.markDispatching(fragmentSource, rebuildRunId, reference,
-                        payloadHash, prepared.approvedRoutedAs(), planHash)) {
+                        payloadHash, prepared.approvedRoutedAs(), planHash, prepared.specHash())) {
                     continue;
                 }
             } else {
@@ -267,8 +278,8 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 if (!claimDispatch(fragmentSource, reference, message, item.routedAs(), plan)) {
                     continue;
                 }
+                transport = defaultTransport == null ? resolveTransport(plan.transport()) : defaultTransport;
             }
-            var transport = defaultTransport == null ? resolveTransport(plan.transport()) : defaultTransport;
             var result = dispatch(transport, plan.configuration(), message, accumulator);
             if (reference == null) {
                 continue;

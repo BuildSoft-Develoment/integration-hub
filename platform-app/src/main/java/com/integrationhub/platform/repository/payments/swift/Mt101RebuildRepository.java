@@ -1529,12 +1529,27 @@ public class Mt101RebuildRepository {
                                           String currentPayloadHash,
                                           String currentRoutedAs,
                                           String currentPlanHash) throws SQLException {
+        return markPayFragmentDispatching(dataSource, rebuildRunId, correctiveSendersReference,
+                currentPayloadHash, currentRoutedAs, currentPlanHash, null);
+    }
+
+    public int markPayFragmentDispatching(DataSource dataSource,
+                                          String rebuildRunId,
+                                          String correctiveSendersReference,
+                                          String currentPayloadHash,
+                                          String currentRoutedAs,
+                                          String currentPlanHash,
+                                          String expectedDispatchSpecHash) throws SQLException {
         // v26: el claim valida el PLAN COMPLETO aprobado: payload_hash + routed_as + dispatch_plan_hash
         // (transport|ruta|destino|correlacion|payload). "Plan aprobado = plan usado", demostrable.
         // v27 P0.1: ademas valida el RUN padre en el MISMO update atomico: solo despacha si el run sigue
         // EXECUTING y el lease no vencio. Como el scheduler solo invalida/marca-incierto leases VENCIDOS,
         // las ventanas son disjuntas: ningun fragmento puede ir a DISPATCHING tras vencer el lease ni
         // despues de que el scheduler invalide el run (no hay carrera scheduler<->dispatcher).
+        // v37 (P0.2): cuando el dispatch correctivo trae el dispatch_spec_hash esperado, se enlaza ATOMICAMENTE
+        // (la spec del ledger no pudo cambiar entre la lectura y el claim).
+        var specBinding = expectedDispatchSpecHash == null ? ""
+                : " and f.dispatch_spec_hash is not distinct from ?";
         var sql = """
                 update mt101_corrective_pay_fragment f
                    set pay_status = 'DISPATCHING',
@@ -1552,21 +1567,38 @@ public class Mt101RebuildRepository {
                    and r.pay_status = 'EXECUTING'
                    and r.pay_lease_until is not null
                    and r.pay_lease_until > current_timestamp
-                """;
-        var insertSql = sql;
+                """ + specBinding;
         return inTransaction(dataSource, connection -> {
             // v27 P0.1: mismo advisory lock por run que el scheduler -> claim y resolucion de lease son
             // mutuamente exclusivos (ni el limite exacto del lease puede producir DISPATCHING + run invalidado).
             lockRunForActionChain(connection, rebuildRunId);
-            try (var statement = connection.prepareStatement(insertSql)) {
+            try (var statement = connection.prepareStatement(sql)) {
                 statement.setString(1, rebuildRunId);
                 statement.setString(2, correctiveSendersReference);
                 statement.setString(3, currentPayloadHash);
                 statement.setString(4, currentRoutedAs);
                 statement.setString(5, currentPlanHash);
+                if (expectedDispatchSpecHash != null) {
+                    statement.setString(6, expectedDispatchSpecHash);
+                }
                 return statement.executeUpdate();
             }
         });
+    }
+
+    /** v37 (P0.2): la spec persistida no coincide con su hash (manipulada): INVALIDA y no se llama al banco. */
+    public int invalidatePayFragmentTamperedSpec(DataSource dataSource, String rebuildRunId,
+                                                 String correctiveSendersReference) throws SQLException {
+        var sql = "update mt101_corrective_pay_fragment set pay_status = 'INVALIDATED', "
+                + "error_message = 'persisted dispatch spec does not match its hash (tampered); not dispatched', "
+                + "updated_at = current_timestamp where rebuild_run_id = ? and corrective_senders_reference = ? "
+                + "and pay_status = 'PREPARED'";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            statement.setString(2, correctiveSendersReference);
+            return statement.executeUpdate();
+        }
     }
 
     /**

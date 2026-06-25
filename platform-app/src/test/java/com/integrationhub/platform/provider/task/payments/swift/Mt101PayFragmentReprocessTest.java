@@ -187,6 +187,106 @@ class Mt101PayFragmentReprocessTest {
     }
 
     @Test
+    void correctiveDispatchUsesPersistedSftpTransportNotLiveRestConfig() throws Exception {
+        // v37 (P0.1): el transporte sale SIEMPRE del plan persistido. La config viva es REST SIN routeTransports
+        // (el caso que dejaba defaultTransport=REST); el plan persistido es SFTP -> debe usarse SFTP, no REST.
+        var runId = "RUN-SFTP-SPEC";
+        var fragmentSetId = "PAY-SFTP-SPEC";
+        insertFragmentSet(fragmentSetId, "Q1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "Q1", "ARCHIVED", null);
+        insertPayLedgerSftp(runId, fragmentSetId, "Q1");
+
+        var rest = new StubTransport("REST", List.of(TransportResult.accepted("GW-R", 1, 1L)));
+        var sftp = new StubTransport("SFTP", List.of(TransportResult.accepted("GW-S", 1, 1L)));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfList<>(List.of(rest, sftp)), fragmentStore,
+                null, null, payStore);
+
+        provider.execute(contextWith(fragmentSource), payConfig(50)); // config viva: transport REST, sin routes
+
+        assertEquals(0, rest.callsReceived(), "NO se usa el transporte REST de la config viva");
+        assertEquals(1, sftp.callsReceived(), "se usa el transporte SFTP del plan persistido");
+        assertEquals("SENT", payLedgerStatus(runId, "Q1"));
+    }
+
+    @Test
+    void correctiveDispatchInvalidatesWhenPersistedSpecTamperedWithoutHash() throws Exception {
+        // v37 (P0.2): integridad. Si dispatch_spec_json se altera sin recalcular dispatch_spec_hash, el
+        // dispatcher lo detecta (specHash(json) != hash persistido) -> INVALIDATED, sin llamar al banco.
+        var runId = "RUN-TAMPER";
+        var fragmentSetId = "PAY-TAMPER";
+        insertFragmentSet(fragmentSetId, "T9");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "T9", "ARCHIVED", null);
+        insertPayLedger(runId, fragmentSetId, "T9");
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set dispatch_spec_json = "
+                    + "dispatch_spec_json || ' ' where rebuild_run_id = '" + runId + "'"); // altera el json, no el hash
+        }
+        var transport = new StubTransport(List.of(TransportResult.accepted("GW", 1, 1L)));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore, null, null, payStore);
+
+        provider.execute(contextWith(fragmentSource), payConfig(50));
+
+        assertEquals(0, transport.callsReceived(), "una spec manipulada NO se envia al banco");
+        assertEquals("INVALIDATED", payLedgerStatus(runId, "T9"), "spec manipulada -> INVALIDATED");
+    }
+
+    @Test
+    void dispatchPlanCompilerRejectsNonStandardSecretKeysAndUrlCredentials() {
+        // v37 (P1): deteccion estricta de secretos: claves no estandar (X-API-Key, ...) y credenciales en URL.
+        var compiler = new Mt101DispatchPlanCompiler(new com.fasterxml.jackson.databind.ObjectMapper());
+        var message = sampleMessage("SEC3");
+        var apiKeyLiteral = Map.<String, Object>of("transport", "REST", "rest", Map.of("url", "https://b/",
+                "extraHeaders", Map.of("X-API-Key", "clave-real-del-banco")));
+        assertTrue(assertThrows(IllegalStateException.class,
+                () -> compiler.compile(apiKeyLiteral, null, null, message)).getMessage().contains("X-API-Key"));
+
+        var urlCredential = Map.<String, Object>of("transport", "REST",
+                "rest", Map.of("url", "https://user:pass@bank/"));
+        assertThrows(IllegalStateException.class, () -> compiler.compile(urlCredential, null, null, message));
+
+        var apiKeyRef = Map.<String, Object>of("transport", "REST", "rest", Map.of("url", "https://b/",
+                "extraHeaders", Map.of("X-API-Key", "${secret:bank-api-key}")));
+        var spec = compiler.compile(apiKeyRef, null, null, message);
+        assertTrue(spec.specJson().contains("${secret:bank-api-key}"), "una referencia se conserva");
+    }
+
+    private void insertPayLedgerSftp(String runId, String correctiveSetId, String reference) throws SQLException {
+        ensureRun(runId);
+        var message = sampleMessage(reference);
+        var sftpConfig = Map.<String, Object>of("transport", "SFTP",
+                "sftp", Map.of("host", "sftp.bank.local", "dropPathTemplate", "/inbox/${sendersReference}.fin"));
+        var plan = Mt101PayRouteResolver.resolve(sftpConfig, null, null, message);
+        var payloadHash = sha256Hex("{\"sendersReference\":\"" + reference + "\"}");
+        var planHash = Mt101PayRouteResolver.dispatchPlanHash(plan, payloadHash, null, message);
+        var destination = Mt101PayRouteResolver.dispatchDestination(plan, message);
+        var spec = new Mt101DispatchPlanCompiler(new com.fasterxml.jackson.databind.ObjectMapper())
+                .compile(sftpConfig, null, null, message);
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "insert into mt101_corrective_pay_fragment "
+                             + "(rebuild_run_id, corrective_set_id, corrective_senders_reference, payload_hash, idempotency_key, approved_routed_as, dispatch_destination, dispatch_plan_hash, dispatch_spec_version, dispatch_spec_json, dispatch_spec_hash, pay_status, prepared_at) "
+                             + "values (?, ?, ?, ?, ?, null, ?, ?, ?, ?, ?, 'PREPARED', current_timestamp)")) {
+            statement.setString(1, runId);
+            statement.setString(2, correctiveSetId);
+            statement.setString(3, reference);
+            statement.setString(4, payloadHash);
+            statement.setString(5, "KEY-" + reference);
+            statement.setString(6, destination);
+            statement.setString(7, planHash);
+            statement.setString(8, spec.version());
+            statement.setString(9, spec.specJson());
+            statement.setString(10, spec.specHash());
+            statement.executeUpdate();
+        }
+    }
+
+    @Test
     void correctivePayMarksFragmentDispatchingBeforeTransportCall() throws Exception {
         var fragmentSetId = "PAY-LEDGER-1";
         insertFragmentSet(fragmentSetId, "F1");

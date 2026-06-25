@@ -62,6 +62,22 @@ public class Mt101CorrectivePayStore {
                                    String currentPayloadHash,
                                    String currentRoutedAs,
                                    String currentPlanHash) {
+        return markDispatching(fragmentSource, rebuildRunId, sendersReference, currentPayloadHash,
+                currentRoutedAs, currentPlanHash, null);
+    }
+
+    /**
+     * v37: el claim enlaza ATOMICAMENTE el contrato persistido. Ademas de payload_hash + routed_as +
+     * dispatch_plan_hash, valida el {@code dispatch_spec_hash} esperado (el de la spec leida): si la spec del
+     * ledger cambio entre la lectura y el claim, no se reclama.
+     */
+    public boolean markDispatching(Map<String, Object> fragmentSource,
+                                   String rebuildRunId,
+                                   String sendersReference,
+                                   String currentPayloadHash,
+                                   String currentRoutedAs,
+                                   String currentPlanHash,
+                                   String expectedDispatchSpecHash) {
         if (rebuildRunId == null || rebuildRunId.isBlank()
                 || sendersReference == null || sendersReference.isBlank()) {
             return false;
@@ -71,7 +87,7 @@ public class Mt101CorrectivePayStore {
         try {
             var claimed = rebuildRepository.markPayFragmentDispatching(
                     dataSource, rebuildRunId, sendersReference, currentPayloadHash, currentRoutedAs,
-                    currentPlanHash) == 1;
+                    currentPlanHash, expectedDispatchSpecHash) == 1;
             if (claimed) {
                 return true;
             }
@@ -82,6 +98,18 @@ public class Mt101CorrectivePayStore {
             return false;
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot mark MT101 corrective PAY fragment as DISPATCHING: "
+                    + sendersReference, error);
+        }
+    }
+
+    /** v37: la spec persistida no coincide con su hash (manipulada): se INVALIDA y NO se llama al banco. */
+    public void invalidateTamperedSpec(Map<String, Object> fragmentSource, String rebuildRunId, String sendersReference) {
+        var dataSource = resolveDataSource(
+                stringValue(fragmentSource == null ? null : fragmentSource.get("connectionRef")));
+        try {
+            rebuildRepository.invalidatePayFragmentTamperedSpec(dataSource, rebuildRunId, sendersReference);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot invalidate MT101 corrective PAY fragment with tampered spec: "
                     + sendersReference, error);
         }
     }
