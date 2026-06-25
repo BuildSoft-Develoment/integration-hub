@@ -1584,7 +1584,9 @@ public class Mt101RebuildRepository {
                      dispatch_destination, dispatch_plan_hash,
                      dispatch_spec_version, dispatch_spec_json, dispatch_spec_hash,
                      pay_status, attempts, prepared_at, error_message)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PREPARED', 0, current_timestamp, null)
+                select ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PREPARED', 0, current_timestamp, null
+                where exists (select 1 from mt101_rebuild_run r where r.rebuild_run_id = ?
+                              and r.pay_status in ('NOT_REQUESTED', 'FAILED', 'INVALIDATED'))
                 on conflict (rebuild_run_id, corrective_senders_reference) do update
                     set payload_hash = excluded.payload_hash,
                         idempotency_key = excluded.idempotency_key,
@@ -1601,6 +1603,8 @@ public class Mt101RebuildRepository {
                         prepared_at = current_timestamp,
                         error_message = null,
                         updated_at = current_timestamp
+                    where mt101_corrective_pay_fragment.pay_status
+                          not in ('DISPATCHING', 'SENT', 'REJECTED', 'UNCERTAIN', 'INVALIDATED')
                 """;
         var updated = 0;
         try (var connection = dataSource.getConnection();
@@ -1630,6 +1634,9 @@ public class Mt101RebuildRepository {
                 statement.setString(14, intent.dispatchSpecVersion());
                 statement.setString(15, intent.dispatchSpecJson());
                 statement.setString(16, intent.dispatchSpecHash());
+                // v40: el upsert SOLO escribe si el run sigue elegible (no REQUESTED/EXECUTING/...): impide que
+                // una segunda solicitud reescriba specs de un plan ya aprobado/en ejecucion.
+                statement.setString(17, rebuildRunId);
                 statement.addBatch();
                 updated++;
             }

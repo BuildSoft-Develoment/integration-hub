@@ -1306,6 +1306,26 @@ class Mt101PayFragmentReprocessTest {
     }
 
     @Test
+    void dispatchPlanCompilerRequiresCompleteSecretReferenceNotMixedLiteral() {
+        // v40: un campo de credencial debe ser una referencia COMPLETA ${fuente:nombre}, no una cadena que
+        // mezcle literal con plantilla ("Bearer token-real ${sendersReference}", "clave-real-${uetr}").
+        var compiler = new Mt101DispatchPlanCompiler(new com.fasterxml.jackson.databind.ObjectMapper());
+        var message = sampleMessage("SEC4");
+        var mixedBearer = Map.<String, Object>of("transport", "REST",
+                "rest", Map.of("url", "https://b/", "authorization", "Bearer ${secret:bank-token}"));
+        assertThrows(IllegalStateException.class, () -> compiler.compile(mixedBearer, null, null, message),
+                "un campo de credencial con prefijo literal (Bearer ...) debe rechazarse");
+        var mixedKey = Map.<String, Object>of("transport", "REST",
+                "rest", Map.of("url", "https://b/", "extraHeaders", Map.of("X-API-Key", "clave-real-${uetr}")));
+        assertThrows(IllegalStateException.class, () -> compiler.compile(mixedKey, null, null, message),
+                "un literal mezclado con plantilla debe rechazarse");
+        var complete = Map.<String, Object>of("transport", "REST",
+                "rest", Map.of("url", "https://b/", "token", "${secret:bank-token}"));
+        var spec = compiler.compile(complete, null, null, message);
+        assertTrue(spec.specJson().contains("${secret:bank-token}"), "una referencia completa se conserva");
+    }
+
+    @Test
     void dispatchPlanCompilerRejectsDynamicRefInRoutingFieldButAllowsItInCredentials() {
         // v39: una referencia ${secret|vault|env|config:...} en un campo de ruta/destino/host/URL podria mover
         // el destino del banco al re-resolver el secreto, sin cambiar la spec. Se prohibe; solo se permite en

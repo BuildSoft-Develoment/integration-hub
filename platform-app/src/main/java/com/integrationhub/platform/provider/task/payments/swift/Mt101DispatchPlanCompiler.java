@@ -41,6 +41,10 @@ public final class Mt101DispatchPlanCompiler {
     // No matchea plantillas de mensaje como ${sendersReference} (sin prefijo fuente:).
     private static final java.util.regex.Pattern DYNAMIC_REF =
             java.util.regex.Pattern.compile("\\$\\{(secret|vault|env|config):[^}]*\\}");
+    // v40: un campo de credencial debe ser EXACTAMENTE una referencia ${fuente:nombre}, no una cadena que solo
+    // contenga ${...} mezclado con literales.
+    private static final java.util.regex.Pattern COMPLETE_REF =
+            java.util.regex.Pattern.compile("\\$\\{(secret|vault|env|config):[^}]+\\}");
 
     private static boolean isSecretName(String name) {
         var normalized = name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
@@ -162,10 +166,15 @@ public final class Mt101DispatchPlanCompiler {
             }
             var secretField = fieldKey != null && isSecretName(fieldKey);
             if (secretField) {
-                if (!text.contains("${")) {
+                // v40: un campo de credencial debe ser una referencia COMPLETA (${...}), no un literal ni una
+                // cadena que solo "contenga ${" (p.ej. "Bearer token-real ${sendersReference}" o
+                // "clave-real-${uetr}" mezclarian un secreto literal). Para esquemas tipo Bearer, usar una
+                // estructura explicita {authScheme, token}.
+                if (!COMPLETE_REF.matcher(text.trim()).matches()) {
                     throw new IllegalStateException("MT101_PAY dispatch spec secret '" + path
-                            + "' must be a ${secret:...} reference, not a literal: the executable plan is"
-                            + " persisted and must never contain resolved secrets");
+                            + "' must be a COMPLETE ${secret:...} reference (the whole value), not a literal nor a"
+                            + " template mixing literals with ${...}: the persisted plan must never contain"
+                            + " resolved secrets");
                 }
             } else if (DYNAMIC_REF.matcher(text).find()) {
                 throw new IllegalStateException("MT101_PAY dispatch spec field '" + path

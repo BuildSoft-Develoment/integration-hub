@@ -871,6 +871,54 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
+    void secondRequestWhilePlanExecutingIsRejectedAndDoesNotOverwriteApprovedPlan() throws Exception {
+        // v40 (P0 inmutabilidad): el checker aprobo P1 y el run esta EXECUTING. Una segunda solicitud NO es
+        // elegible: se rechaza ANTES de tocar el ledger y el plan aprobado P1 no se reescribe.
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        var approvedHash = queryString("select dispatch_spec_hash from mt101_corrective_pay_fragment where "
+                + "rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'");
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'EXECUTING' "
+                    + "where rebuild_run_id = '" + FIX + "'");
+        }
+
+        assertThrows(IllegalStateException.class,
+                () -> service.requestCorrectivePay(null, FIX, "ana", "segunda concurrente", "TCK-2"),
+                "una segunda solicitud con el plan EXECUTING no es elegible");
+        assertEquals(approvedHash, queryString("select dispatch_spec_hash from mt101_corrective_pay_fragment "
+                + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'"),
+                "el plan aprobado (P1) NO se reescribe");
+        assertEquals("EXECUTING", payStatus(FIX), "el run sigue EXECUTING con P1");
+    }
+
+    @Test
+    void preparePayIntentsWritesOnlyWhenRunIsEligibleNeverOverwritingAnApprovedPlan() throws Exception {
+        // v40 (P0, defensa TOCTOU): aunque se invoque preparePayIntents con el run en EXECUTING (carrera),
+        // el upsert es no-op: no crea ni reescribe specs de un plan en ejecucion.
+        var repository = new Mt101RebuildRepository();
+        var intent = new Mt101RebuildRepository.PayFragmentIntent(FIX, "GUARD1", null, null, null,
+                "ph", "key-GUARD1", "REST", "key-GUARD1", null, "rest://x", "planhash",
+                "MT101_PAY_PLAN_V1", "{\"version\":\"MT101_PAY_PLAN_V1\"}", "spechash");
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("insert into mt101_rebuild_run (rebuild_run_id, original_fragment_set_id, "
+                    + "corrective_set_id, status, pay_status, reference_code) values ('RUN-GUARD', '"
+                    + SET + "', 'RUN-GUARD', 'ARCHIVED', 'EXECUTING', '9')");
+        }
+        repository.preparePayIntents(dataSource, "RUN-GUARD", java.util.List.of(intent));
+        assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = "
+                + "'RUN-GUARD'"), "run EXECUTING: el upsert no escribe (plan inmutable)");
+        // Run elegible -> si escribe.
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'NOT_REQUESTED' "
+                    + "where rebuild_run_id = 'RUN-GUARD'");
+        }
+        repository.preparePayIntents(dataSource, "RUN-GUARD", java.util.List.of(intent));
+        assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = "
+                + "'RUN-GUARD' and pay_status = 'PREPARED'"), "run elegible: el upsert escribe");
+    }
+
+    @Test
     void orphanPreparedIntentsAreCleanedOnlyWhenNoActiveRequestOwnsTheRun() throws Exception {
         // v39 (Caso A): un request fallido no debe dejar intents PREPARED huerfanos. La limpieza es race-safe:
         // borra solo si el run NO esta poseido por una solicitud activa (REQUESTED/EXECUTING).

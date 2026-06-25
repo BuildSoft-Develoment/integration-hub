@@ -156,6 +156,16 @@ public class Mt101CorrectiveLifecycleService {
                 throw new IllegalArgumentException("rebuild run " + runId
                         + " must be ARCHIVED before requesting corrective pay; current status is " + run.status());
             }
+            // v40 (P0 inmutabilidad del plan): solo se prepara/compila el plan si el PAY esta en un estado
+            // ELEGIBLE. Si ya hay una solicitud o despacho en curso (REQUESTED/EXECUTING/UNCERTAIN/SENT/...),
+            // se rechaza ANTES de tocar el ledger: una segunda solicitud no puede reescribir el plan aprobado.
+            var currentPayStatus = normalize(run.payStatus());
+            if (!"NOT_REQUESTED".equals(currentPayStatus) && !"FAILED".equals(currentPayStatus)
+                    && !"INVALIDATED".equals(currentPayStatus)) {
+                throw new IllegalStateException("corrective pay for run " + runId + " is not eligible to request;"
+                        + " payStatus=" + run.payStatus() + " (a request or dispatch is in progress and the"
+                        + " approved plan is immutable; resolve or invalidate it before requesting again)");
+            }
             var prep = prepare(dataSource, run, connectionRef);
             var payloadHash = archivedPayloadHash(dataSource, run);
             var payConfig = stageConfig(prep, "MT101_PAY");
