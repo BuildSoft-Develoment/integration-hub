@@ -1590,33 +1590,99 @@ public class Mt101RebuildRepository {
         }
     }
 
-    /** Completa el detalle de PAY desde la muestra que devuelve el provider (gateway ref/intentos). */
+    /**
+     * Completa el detalle de PAY desde el resultado real del provider (gateway ref/intentos).
+     * v33: recepción centralizada bajo el MISMO advisory lock por run que usan scheduler, dispatcher y
+     * resolución tardía. Un resultado solo transiciona el fragmento desde {@code DISPATCHING} o
+     * {@code UNCERTAIN}: NUNCA sobrescribe en silencio un estado TERMINAL (SENT/REJECTED/INVALIDATED). Si un
+     * ACCEPTED tardío (SENT) llega cuando el fragmento ya fue resuelto a REJECTED/INVALIDATED (p.ej. por una
+     * resolución STATUS terminal), no se sobrescribe: se registra una acción {@code PAY_CONFLICT} append-only
+     * y el run se mantiene {@code UNCERTAIN} para conciliación manual (estado real ambiguo: el banco aceptó,
+     * pero una resolución previa lo dio por no enviado). Sin fallback: no hay escritura ciega.
+     */
     public int updatePayFragmentResults(DataSource dataSource, String rebuildRunId,
                                         Collection<PayFragmentResult> results) throws SQLException {
         if (results == null || results.isEmpty()) {
             return 0;
         }
-        var sql = "update mt101_corrective_pay_fragment set gateway_reference = ?, attempts = ?, "
-                + "pay_status = ?, error_message = ?, dispatched_at = current_timestamp, updated_at = current_timestamp "
-                + "where rebuild_run_id = ? and corrective_senders_reference = ?";
-        var updated = 0;
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
-            for (var result : results) {
-                if (result == null || result.correctiveSendersReference() == null
-                        || result.correctiveSendersReference().isBlank()) {
-                    continue;
+        return inTransaction(dataSource, connection -> {
+            lockRunForActionChain(connection, rebuildRunId);
+            // Guarda v33: solo transiciona desde un estado NO terminal (PREPARED/DISPATCHING/UNCERTAIN);
+            // nunca sobrescribe un terminal ya resuelto (SENT/REJECTED/INVALIDATED).
+            var sql = "update mt101_corrective_pay_fragment set gateway_reference = ?, attempts = ?, "
+                    + "pay_status = ?, error_message = ?, dispatched_at = current_timestamp, updated_at = current_timestamp "
+                    + "where rebuild_run_id = ? and corrective_senders_reference = ? "
+                    + "and pay_status not in ('SENT', 'REJECTED', 'INVALIDATED')";
+            var updated = 0;
+            var conflicts = new ArrayList<String>();
+            try (var statement = connection.prepareStatement(sql)) {
+                for (var result : results) {
+                    if (result == null || result.correctiveSendersReference() == null
+                            || result.correctiveSendersReference().isBlank()) {
+                        continue;
+                    }
+                    statement.setString(1, result.gatewayReference());
+                    statement.setInt(2, Math.max(result.attempts(), 0));
+                    statement.setString(3, result.payStatus());
+                    statement.setString(4, result.errorMessage());
+                    statement.setString(5, rebuildRunId);
+                    statement.setString(6, result.correctiveSendersReference());
+                    var rows = statement.executeUpdate();
+                    updated += rows;
+                    if (rows == 0 && "SENT".equals(result.payStatus())) {
+                        // El ACCEPTED no se aplicó: si el fragmento ya está en un terminal CONTRADICTORIO,
+                        // el banco aceptó algo que se dio por no enviado -> conflicto, no sobrescritura.
+                        var current = currentFragmentStatus(connection, rebuildRunId,
+                                result.correctiveSendersReference());
+                        if ("REJECTED".equals(current) || "INVALIDATED".equals(current)) {
+                            conflicts.add(result.correctiveSendersReference());
+                        }
+                    }
                 }
-                statement.setString(1, result.gatewayReference());
-                statement.setInt(2, Math.max(result.attempts(), 0));
-                statement.setString(3, result.payStatus());
-                statement.setString(4, result.errorMessage());
-                statement.setString(5, rebuildRunId);
-                statement.setString(6, result.correctiveSendersReference());
-                updated += statement.executeUpdate();
+            }
+            if (!conflicts.isEmpty()) {
+                recordLatePayConflict(connection, rebuildRunId, conflicts);
+            }
+            return updated;
+        });
+    }
+
+    private String currentFragmentStatus(java.sql.Connection connection, String rebuildRunId,
+                                         String reference) throws SQLException {
+        try (var statement = connection.prepareStatement("select pay_status from mt101_corrective_pay_fragment "
+                + "where rebuild_run_id = ? and corrective_senders_reference = ?")) {
+            statement.setString(1, rebuildRunId);
+            statement.setString(2, reference);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
             }
         }
-        return updated;
+    }
+
+    private static final String LATE_CONFLICT_ACTOR = "system:pay-late-conflict";
+
+    /**
+     * v33: aceptación tardía que CONTRADICE una resolución terminal previa (el banco aceptó pero STATUS/drift
+     * dio el fragmento por no enviado). No se sobrescribe el fragmento; se registra {@code PAY_CONFLICT} y el
+     * run se fuerza a {@code UNCERTAIN} (estado real ambiguo) para conciliación manual, nunca un terminal
+     * silencioso ni un re-request ciego de un fragmento que el banco sí aceptó.
+     */
+    private void recordLatePayConflict(java.sql.Connection connection, String rebuildRunId,
+                                       List<String> conflicts) throws SQLException {
+        var reason = "late gateway ACCEPTED for fragment(s) " + String.join(", ", conflicts)
+                + " already resolved non-SENT (REJECTED/INVALIDATED); manual reconciliation required, "
+                + "no silent overwrite";
+        var previous = currentPayStatus(connection, rebuildRunId);
+        try (var statement = connection.prepareStatement("update mt101_rebuild_run set pay_status = 'UNCERTAIN', "
+                + "pay_uncertain_reason = ?, pay_error_message = ?, pay_completed_at = null, "
+                + "updated_at = current_timestamp where rebuild_run_id = ?")) {
+            statement.setString(1, reason);
+            statement.setString(2, reason);
+            statement.setString(3, rebuildRunId);
+            statement.executeUpdate();
+        }
+        recordPayAction(connection, rebuildRunId, "PAY_CONFLICT", previous, "UNCERTAIN",
+                LATE_CONFLICT_ACTOR, reason, null, null, null);
     }
 
     /** Resuelve fragmentos inciertos desde MT101_STATUS sin alterar intentos de PAY ni reenviar. */

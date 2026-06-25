@@ -446,6 +446,63 @@ class Mt101PayFragmentReprocessTest {
                 "el run nunca queda INVALIDATED tras un dispatch aceptado");
     }
 
+    @Test
+    void lateAcceptedSentDoesNotOverwriteStatusRejectedFragmentAndRecordsConflict() throws Exception {
+        // v33: carrera aceptacion-tardia <-> resolucion STATUS terminal. STATUS ya resolvio el fragmento a
+        // REJECTED (run FAILED); luego llega un ACCEPTED tardio (SENT). NO debe sobrescribirse en silencio:
+        // el fragmento conserva REJECTED, el run pasa a UNCERTAIN y se registra PAY_CONFLICT append-only.
+        var runId = "RUN-CONFLICT";
+        var fragmentSetId = "PAY-CONFLICT";
+        insertFragmentSet(fragmentSetId, "C1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "C1", "ARCHIVED", null);
+        insertPayLedger(runId, fragmentSetId, "C1");
+        // Estado post-STATUS: fragmento REJECTED, run FAILED (resolucion terminal contradictoria).
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'REJECTED' "
+                    + "where rebuild_run_id = '" + runId + "'");
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'FAILED', pay_lease_until = null "
+                    + "where rebuild_run_id = '" + runId + "'");
+        }
+
+        var repository = new Mt101RebuildRepository();
+        var lateSent = List.of(new Mt101RebuildRepository.PayFragmentResult("C1", "SENT", "GW-LATE", 1, null));
+        var updated = repository.updatePayFragmentResults(dataSource, runId, lateSent);
+
+        assertEquals(0, updated, "el ACCEPTED tardio NO sobrescribe un terminal");
+        assertEquals("REJECTED", payLedgerStatus(runId, "C1"), "el fragmento conserva la resolucion STATUS");
+        assertEquals("UNCERTAIN", runPayStatus(runId), "el run pasa a UNCERTAIN (conflicto, no FAILED silencioso)");
+        assertEquals(1L, countRowsWhere("mt101_corrective_pay_action",
+                "rebuild_run_id = '" + runId + "' and action_type = 'PAY_CONFLICT'"),
+                "se registra PAY_CONFLICT append-only");
+    }
+
+    @Test
+    void lateResultNeverOverwritesAlreadySentFragmentWithoutFalseConflict() throws Exception {
+        // v33: un resultado SENT repetido sobre un fragmento ya SENT es no-op idempotente, sin PAY_CONFLICT
+        // (no es una contradiccion: el banco acepto y el fragmento ya estaba SENT).
+        var runId = "RUN-IDEMP";
+        var fragmentSetId = "PAY-IDEMP";
+        insertFragmentSet(fragmentSetId, "I1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "I1", "ARCHIVED", null);
+        insertPayLedger(runId, fragmentSetId, "I1");
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'SENT' "
+                    + "where rebuild_run_id = '" + runId + "'");
+        }
+        var repository = new Mt101RebuildRepository();
+        var lateSent = List.of(new Mt101RebuildRepository.PayFragmentResult("I1", "SENT", "GW-1", 1, null));
+        assertEquals(0, repository.updatePayFragmentResults(dataSource, runId, lateSent),
+                "no se re-escribe un fragmento ya SENT");
+        assertEquals("SENT", payLedgerStatus(runId, "I1"));
+        assertEquals(0L, countRowsWhere("mt101_corrective_pay_action",
+                "rebuild_run_id = '" + runId + "' and action_type = 'PAY_CONFLICT'"),
+                "SENT sobre SENT no es conflicto");
+    }
+
     private String runPayStatus(String runId) throws SQLException {
         try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement(
