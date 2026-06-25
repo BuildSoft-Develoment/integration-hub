@@ -1306,6 +1306,29 @@ class Mt101PayFragmentReprocessTest {
     }
 
     @Test
+    void dispatchPlanCompilerRejectsDynamicRefInRoutingFieldButAllowsItInCredentials() {
+        // v39: una referencia ${secret|vault|env|config:...} en un campo de ruta/destino/host/URL podria mover
+        // el destino del banco al re-resolver el secreto, sin cambiar la spec. Se prohibe; solo se permite en
+        // campos de credencial. Las plantillas de mensaje (${sendersReference}) si se permiten.
+        var compiler = new Mt101DispatchPlanCompiler(new com.fasterxml.jackson.databind.ObjectMapper());
+        var message = sampleMessage("DYN1");
+        var urlSecret = Map.<String, Object>of("transport", "REST",
+                "rest", Map.of("url", "https://${secret:bank-host}/api/mt101"));
+        assertThrows(IllegalStateException.class, () -> compiler.compile(urlSecret, null, null, message),
+                "${secret:...} en la URL (destino) debe rechazarse");
+        var hostEnv = Map.<String, Object>of("transport", "SFTP",
+                "sftp", Map.of("host", "${env:BANK_HOST}", "dropPathTemplate", "/x/${sendersReference}.fin"));
+        assertThrows(IllegalStateException.class, () -> compiler.compile(hostEnv, null, null, message),
+                "${env:...} en el host debe rechazarse");
+        // Referencia en un campo de credencial + plantilla de mensaje en la URL -> permitido.
+        var ok = Map.<String, Object>of("transport", "REST",
+                "rest", Map.of("url", "https://bank/${sendersReference}", "token", "${secret:bank-token}"));
+        var spec = compiler.compile(ok, null, null, message);
+        assertTrue(spec.specJson().contains("${secret:bank-token}"),
+                "la referencia de credencial se conserva; el destino es estatico");
+    }
+
+    @Test
     void dispatchPlanCompilerRejectsLiteralSecretButKeepsSecretReference() {
         // v37: el plan ejecutable se persiste -> NUNCA puede contener un secreto resuelto. Un secreto LITERAL
         // se rechaza al compilar; una referencia ${secret:...} se conserva (se re-resuelve al materializar).

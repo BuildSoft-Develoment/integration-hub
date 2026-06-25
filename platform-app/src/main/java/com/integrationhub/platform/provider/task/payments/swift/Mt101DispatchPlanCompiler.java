@@ -35,6 +35,12 @@ public final class Mt101DispatchPlanCompiler {
     // Credenciales embebidas en una URL (user:pass@host): nunca deben viajar literales en la spec.
     private static final java.util.regex.Pattern URL_CREDENTIALS =
             java.util.regex.Pattern.compile("://[^/@\\s]+:[^/@\\s]+@");
+    // v39: referencia DINAMICA a una fuente externa MUTABLE (secret/vault/env/config). Solo se permite en
+    // campos de CREDENCIAL; en ruta/destino/endpoint/correlacion el valor debe ser estatico persistido, para
+    // que "plan persistido = destino aprobado" sea estrictamente cierto (un secreto no puede mover el host).
+    // No matchea plantillas de mensaje como ${sendersReference} (sin prefijo fuente:).
+    private static final java.util.regex.Pattern DYNAMIC_REF =
+            java.util.regex.Pattern.compile("\\$\\{(secret|vault|env|config):[^}]*\\}");
 
     private static boolean isSecretName(String name) {
         var normalized = name.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]", "");
@@ -63,7 +69,7 @@ public final class Mt101DispatchPlanCompiler {
     public CompiledDispatchSpec compile(Map<String, Object> unresolvedPayConfig, String routedAs,
                                         String routeError, Mt101Message message) {
         var plan = Mt101PayRouteResolver.resolve(unresolvedPayConfig, routedAs, routeError, message);
-        assertNoLiteralSecrets(plan.configuration(), "");
+        assertSpecSafety(plan.configuration(), "", null);
         var spec = new LinkedHashMap<String, Object>();
         spec.put("version", SPEC_VERSION);
         spec.put("transport", plan.transport());
@@ -130,30 +136,43 @@ public final class Mt101DispatchPlanCompiler {
     }
 
     /**
-     * Un campo sensible de la spec debe ser una referencia {@code ${secret:...}}; un literal se rechaza (no se
-     * persiste). v37 (P1): deteccion por substring del nombre normalizado (X-API-Key, X-Bank-Token,
-     * client_secret, Authorization-Internal, ...) y rechazo de credenciales embebidas en URL (user:pass@host)
-     * en CUALQUIER valor de cadena, no solo en claves "sensibles".
+     * Reglas de seguridad de la spec ejecutable persistida:
+     * v37 (P1): un campo de CREDENCIAL (detectado por substring del nombre normalizado: X-API-Key, X-Bank-Token,
+     *   client_secret, Authorization-Internal, ...) no puede ser un literal: debe ser una referencia.
+     *   Ningun valor puede embeber credenciales en URL (user:pass@host).
+     * v39: una referencia DINAMICA a fuente externa mutable ({@code ${secret|vault|env|config:...}}) solo se
+     *   permite en campos de CREDENCIAL; en campos de ruta/destino/endpoint/correlacion el valor debe ser
+     *   estatico persistido (un secreto no puede mover host/URL/puerto/path sin cambiar la spec). Las plantillas
+     *   de mensaje ({@code ${sendersReference}}, {@code ${idempotencyKey}}) si se permiten (deterministas).
      */
-    private void assertNoLiteralSecrets(Object value, String path) {
+    private void assertSpecSafety(Object value, String path, String fieldKey) {
         if (value instanceof Map<?, ?> map) {
             map.forEach((key, raw) -> {
                 var name = String.valueOf(key);
-                var childPath = path.isEmpty() ? name : path + "." + name;
-                if (isSecretName(name) && raw instanceof String text && !text.isBlank() && !text.contains("${")) {
-                    throw new IllegalStateException("MT101_PAY dispatch spec secret '" + childPath
-                            + "' must be a ${secret:...} reference, not a literal: the executable plan is"
-                            + " persisted and must never contain resolved secrets");
-                }
-                assertNoLiteralSecrets(raw, childPath);
+                assertSpecSafety(raw, path.isEmpty() ? name : path + "." + name, name);
             });
         } else if (value instanceof List<?> list) {
             for (int i = 0; i < list.size(); i++) {
-                assertNoLiteralSecrets(list.get(i), path + "[" + i + "]");
+                assertSpecSafety(list.get(i), path + "[" + i + "]", fieldKey);
             }
-        } else if (value instanceof String text && URL_CREDENTIALS.matcher(text).find()) {
-            throw new IllegalStateException("MT101_PAY dispatch spec value at '" + path
-                    + "' embeds URL credentials (user:pass@host); use a ${secret:...} reference instead");
+        } else if (value instanceof String text && !text.isBlank()) {
+            if (URL_CREDENTIALS.matcher(text).find()) {
+                throw new IllegalStateException("MT101_PAY dispatch spec value at '" + path
+                        + "' embeds URL credentials (user:pass@host); use a ${secret:...} reference instead");
+            }
+            var secretField = fieldKey != null && isSecretName(fieldKey);
+            if (secretField) {
+                if (!text.contains("${")) {
+                    throw new IllegalStateException("MT101_PAY dispatch spec secret '" + path
+                            + "' must be a ${secret:...} reference, not a literal: the executable plan is"
+                            + " persisted and must never contain resolved secrets");
+                }
+            } else if (DYNAMIC_REF.matcher(text).find()) {
+                throw new IllegalStateException("MT101_PAY dispatch spec field '" + path
+                        + "' uses a dynamic reference (${secret|vault|env|config:...}) in a routing/destination"
+                        + " field; only credential fields may reference secrets — host/URL/port/path/endpoint/"
+                        + "correlation must be static persisted values so the persisted plan = approved destination");
+            }
         }
     }
 

@@ -851,6 +851,26 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
+    void requestPayWithPlanSetIsAtomicLeavingNoRequestedWithoutPlanOrAudit() throws Exception {
+        // v39: el cambio a REQUESTED + pay_plan_set_hash + PAY_REQUESTED + PAY_PLAN_PREPARED es UNA transaccion
+        // atomica bajo advisory lock. Una solicitud no elegible (run ya REQUESTED) falla sin corromper estado
+        // ni duplicar acciones: queda exactamente 1 PAY_REQUESTED + 1 PAY_PLAN_PREPARED, con hash persistido.
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        assertThrows(IllegalStateException.class,
+                () -> service.requestCorrectivePay(null, FIX, "ana", "segunda no elegible", "TCK-2"),
+                "una segunda solicitud sobre un run ya REQUESTED no es elegible");
+
+        assertEquals("REQUESTED", payStatus(FIX), "el estado de la primera solicitud queda intacto");
+        assertNotNull(queryString("select pay_plan_set_hash from mt101_rebuild_run where rebuild_run_id = '"
+                + FIX + "'"), "el hash del conjunto persiste");
+        assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_action where rebuild_run_id = '"
+                + FIX + "' and action_type = 'PAY_REQUESTED'"), "exactamente una PAY_REQUESTED");
+        assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_action where rebuild_run_id = '"
+                + FIX + "' and action_type = 'PAY_PLAN_PREPARED'"), "exactamente una PAY_PLAN_PREPARED");
+    }
+
+    @Test
     void approvalInvalidatesWhenPersistedPlanSetChangedAfterRequest() throws Exception {
         // v37 fase 2: el checker aprueba el conjunto EXACTO. Si el conjunto persistido cambia tras la solicitud
         // (drift del spec_hash de un fragmento), la aprobacion INVALIDA y NO llama al banco (re-solicitar).

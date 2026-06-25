@@ -172,18 +172,15 @@ public class Mt101CorrectiveLifecycleService {
             var unresolvedPayConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_PAY");
             preparePayIntents(dataSource, runId, run.correctiveSetId(), payConfig, unresolvedPayConfig);
             var planSet = rebuildRepository.computePayPlanSet(dataSource, runId);
-            // P0.1 v24: el cambio de estado y su accion auditada ocurren en UNA sola transaccion: si falla el
-            // insert de auditoria, se revierte el cambio de pay_status (no queda estado sin evidencia).
-            var requested = rebuildRepository.requestPayWithAction(dataSource, runId, requester,
-                    payloadHash, configHash, reason, ticket, run.payStatus());
+            // v39: cambio a REQUESTED + persistencia del hash del conjunto + PAY_REQUESTED + PAY_PLAN_PREPARED
+            // en UNA sola transaccion atomica bajo el advisory lock (sin estados intermedios documentalmente
+            // incompletos). Si el run no es elegible o falla, se revierte todo (no queda REQUESTED sin plan).
+            var requested = rebuildRepository.requestPayWithPlanSet(dataSource, runId, requester,
+                    payloadHash, configHash, reason, ticket, run.payStatus(), planSet);
             if (requested == 0) {
                 throw new IllegalStateException("cannot request corrective pay for run " + runId
                         + "; payStatus=" + run.payStatus());
             }
-            rebuildRepository.persistPayPlanSet(dataSource, runId, planSet);
-            recordPayAction(dataSource, runId, "PAY_PLAN_PREPARED", "REQUESTED", "REQUESTED", requester,
-                    "compiled and persisted " + planSet.count() + " executable plan(s); set hash "
-                            + planSet.setHash(), null, payloadHash, configHash);
             return correctiveResult(dataSource, runId);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot request corrective pay for run " + runId, error);
