@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101ArchiveTaskProvider;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101PayTaskProvider;
+import com.integrationhub.platform.provider.task.payments.swift.Mt101DispatchPlanCompiler;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101PayRouteResolver;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101PaymentCorrelation;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101ReconcileTaskProvider;
@@ -276,7 +277,8 @@ public class Mt101CorrectiveLifecycleService {
                 }
             }
             rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, run.correctiveSetId());
-            preparePayIntents(dataSource, runId, run.correctiveSetId(), frozenPayConfig);
+            var unresolvedPayConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_PAY");
+            preparePayIntents(dataSource, runId, run.correctiveSetId(), frozenPayConfig, unresolvedPayConfig);
             recordPayAction(dataSource, runId, "PAY_DISPATCHING", "EXECUTING", "DISPATCHING",
                     approver, null, null, payloadHash, configHash);
             try {
@@ -807,10 +809,17 @@ public class Mt101CorrectiveLifecycleService {
     }
 
     private void preparePayIntents(DataSource dataSource, String runId, String correctiveSetId,
-                                   Map<String, Object> payConfig) throws SQLException {
+                                   Map<String, Object> payConfig, Map<String, Object> unresolvedPayConfig)
+            throws SQLException {
         if (payConfig == null) {
             throw new IllegalStateException("the original process has no MT101_PAY task; cannot prepare PAY intents");
         }
+        if (unresolvedPayConfig == null) {
+            throw new IllegalStateException("MT101_PAY unresolved config required to compile the executable plan");
+        }
+        // v37: compila la especificacion EJECUTABLE por fragmento desde la config SIN resolver (refs intactas)
+        // -> el ledger pasa a ser el contrato de despacho; el dispatch correctivo ya no resuelve la ruta.
+        var compiler = new Mt101DispatchPlanCompiler(objectMapper);
         var pageSize = intValue(payConfig.get("pageSize"), 200);
         var afterIndex = 0;
         while (true) {
@@ -833,6 +842,9 @@ public class Mt101CorrectiveLifecycleService {
                 // P0.4 v25: plan aprobado durable por fragmento (destino real redactado + hash del plan).
                 var destination = Mt101PayRouteResolver.dispatchDestination(plan, message);
                 var planHash = Mt101PayRouteResolver.dispatchPlanHash(plan, payloadHashValue, row.routedAs(), message);
+                // v37: especificacion ejecutable canonica (transporte + config con refs ${secret:...} + correlacion)
+                // compilada desde la config SIN resolver; el dispatch correctivo la lee y re-resuelve solo secretos.
+                var spec = compiler.compile(unresolvedPayConfig, row.routedAs(), row.routeError(), message);
                 intents.add(new Mt101RebuildRepository.PayFragmentIntent(
                         correctiveSetId,
                         reference,
@@ -845,7 +857,10 @@ public class Mt101CorrectiveLifecycleService {
                         key,
                         row.routedAs(),
                         destination,
-                        planHash));
+                        planHash,
+                        spec.version(),
+                        spec.specJson(),
+                        spec.specHash()));
             }
             rebuildRepository.preparePayIntents(dataSource, runId, intents);
             if (rows.size() < pageSize) {

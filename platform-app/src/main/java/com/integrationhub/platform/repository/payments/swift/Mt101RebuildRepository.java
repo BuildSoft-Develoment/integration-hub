@@ -1462,8 +1462,9 @@ public class Mt101RebuildRepository {
                      source_file_hash, source_record_number, staging_id,
                      payload_hash, idempotency_key, transport, endpoint_ref, approved_routed_as,
                      dispatch_destination, dispatch_plan_hash,
+                     dispatch_spec_version, dispatch_spec_json, dispatch_spec_hash,
                      pay_status, attempts, prepared_at, error_message)
-                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PREPARED', 0, current_timestamp, null)
+                values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PREPARED', 0, current_timestamp, null)
                 on conflict (rebuild_run_id, corrective_senders_reference) do update
                     set payload_hash = excluded.payload_hash,
                         idempotency_key = excluded.idempotency_key,
@@ -1472,6 +1473,9 @@ public class Mt101RebuildRepository {
                         approved_routed_as = excluded.approved_routed_as,
                         dispatch_destination = excluded.dispatch_destination,
                         dispatch_plan_hash = excluded.dispatch_plan_hash,
+                        dispatch_spec_version = excluded.dispatch_spec_version,
+                        dispatch_spec_json = excluded.dispatch_spec_json,
+                        dispatch_spec_hash = excluded.dispatch_spec_hash,
                         pay_status = 'PREPARED',
                         attempts = 0,
                         prepared_at = current_timestamp,
@@ -1503,6 +1507,9 @@ public class Mt101RebuildRepository {
                 statement.setString(11, intent.approvedRoutedAs());
                 statement.setString(12, intent.dispatchDestination());
                 statement.setString(13, intent.dispatchPlanHash());
+                statement.setString(14, intent.dispatchSpecVersion());
+                statement.setString(15, intent.dispatchSpecJson());
+                statement.setString(16, intent.dispatchSpecHash());
                 statement.addBatch();
                 updated++;
             }
@@ -1591,6 +1598,47 @@ public class Mt101RebuildRepository {
             statement.setString(3, currentPayloadHash);
             statement.setString(4, currentRoutedAs);
             statement.setString(5, currentPlanHash);
+            return statement.executeUpdate();
+        }
+    }
+
+    /** v37: lee la especificacion ejecutable persistida (contrato de despacho) de un fragmento PREPARED. */
+    public PreparedDispatchSpec readPreparedDispatchSpec(DataSource dataSource, String rebuildRunId,
+                                                         String correctiveSendersReference) throws SQLException {
+        var sql = "select dispatch_spec_json, dispatch_spec_hash, approved_routed_as, payload_hash "
+                + "from mt101_corrective_pay_fragment where rebuild_run_id = ? and corrective_senders_reference = ? "
+                + "and pay_status = 'PREPARED'";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            statement.setString(2, correctiveSendersReference);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return new PreparedDispatchSpec(rs.getString("dispatch_spec_json"), rs.getString("dispatch_spec_hash"),
+                        rs.getString("approved_routed_as"), rs.getString("payload_hash"));
+            }
+        }
+    }
+
+    public record PreparedDispatchSpec(String specJson, String specHash, String approvedRoutedAs, String payloadHash) {
+    }
+
+    /**
+     * v37: un run correctivo SIN especificacion ejecutable persistida NO tiene fallback al resolver vigente:
+     * el fragmento PREPARED se INVALIDA (requiere solicitar PAY de nuevo) y NO se llama al banco.
+     */
+    public int invalidatePayFragmentMissingSpec(DataSource dataSource, String rebuildRunId,
+                                                String correctiveSendersReference) throws SQLException {
+        var sql = "update mt101_corrective_pay_fragment set pay_status = 'INVALIDATED', "
+                + "error_message = 'no persisted dispatch spec (executable plan); request PAY again', "
+                + "updated_at = current_timestamp where rebuild_run_id = ? and corrective_senders_reference = ? "
+                + "and pay_status = 'PREPARED'";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            statement.setString(2, correctiveSendersReference);
             return statement.executeUpdate();
         }
     }
@@ -2059,7 +2107,10 @@ public class Mt101RebuildRepository {
             String endpointRef,
             String approvedRoutedAs,
             String dispatchDestination,
-            String dispatchPlanHash
+            String dispatchPlanHash,
+            String dispatchSpecVersion,
+            String dispatchSpecJson,
+            String dispatchSpecHash
     ) {
     }
 

@@ -57,18 +57,33 @@ public class Mt101PayTaskProvider implements TaskProvider {
     private final Mt101ArchiveStatusUpdater archiveStatusUpdater;
     private final RecordAuditEmitter recordAuditEmitter;
     private final Mt101CorrectivePayStore correctivePayStore;
+    // v37: compila/materializa el plan EJECUTABLE persistido (dispatch correctivo sin Mt101PayRouteResolver).
+    private final Mt101DispatchPlanCompiler dispatchPlanCompiler =
+            new Mt101DispatchPlanCompiler(new com.fasterxml.jackson.databind.ObjectMapper());
+    // v37: re-resuelve SOLO las referencias ${secret:...} del plan persistido al materializarlo en el dispatch.
+    private final java.util.function.UnaryOperator<Map<String, Object>> correctiveSecretResolver;
 
     @Inject
     public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports,
                                 Mt101FragmentStore fragmentStore,
                                 Mt101ArchiveStatusUpdater archiveStatusUpdater,
                                 RecordAuditEmitter recordAuditEmitter,
-                                Mt101CorrectivePayStore correctivePayStore) {
+                                Mt101CorrectivePayStore correctivePayStore,
+                                com.integrationhub.platform.service.JsonConfigurationMapper configurationMapper) {
         this.transports = transports;
         this.fragmentStore = fragmentStore;
         this.archiveStatusUpdater = archiveStatusUpdater;
         this.recordAuditEmitter = recordAuditEmitter;
         this.correctivePayStore = correctivePayStore;
+        this.correctiveSecretResolver = configurationMapper == null ? null : configurationMapper::resolveSecretsIn;
+    }
+
+    public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports,
+                                Mt101FragmentStore fragmentStore,
+                                Mt101ArchiveStatusUpdater archiveStatusUpdater,
+                                RecordAuditEmitter recordAuditEmitter,
+                                Mt101CorrectivePayStore correctivePayStore) {
+        this(transports, fragmentStore, archiveStatusUpdater, recordAuditEmitter, correctivePayStore, null);
     }
 
     public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports,
@@ -215,19 +230,45 @@ public class Mt101PayTaskProvider implements TaskProvider {
         // P0.1 v21: resultado durable POR FRAGMENTO de toda la pagina (no la muestra
         // acotada): el ledger es la fuente de verdad para 20k fragmentos correctivos.
         var pageLedger = new ArrayList<Mt101RebuildRepository.PayFragmentResult>(page.size());
+        var rebuildRunId = stringValue(fragmentSource.get("correctivePayRunId"), null);
         for (var item : page) {
             var message = item.message();
-            var plan = Mt101PayRouteResolver.resolve(configuration, item.routedAs(), item.routeError(), message);
-            var transport = defaultTransport == null ? resolveTransport(plan.transport()) : defaultTransport;
             var reference = message.sequenceA() == null ? null
                     : message.sequenceA().sendersReference();
-            // P0.2 v22+v24+v26: ninguna llamada externa sin intencion durable aprobada Y sin que el PLAN por
-            // fragmento (payload_hash + routed_as + dispatch_plan_hash = transport|ruta|destino|correlacion)
-            // siga siendo el aprobado. El provider recomputa el plan_hash y lo valida contra el del ledger:
-            // si difiere, el fragmento se INVALIDA y NO se envia (plan aprobado = plan usado, demostrable).
-            if (!claimDispatch(fragmentSource, reference, message, item.routedAs(), plan)) {
-                continue;
+            Mt101PayRouteResolver.PayPlan plan;
+            if (rebuildRunId != null) {
+                // v37: FLUJO CORRECTIVO. El plan ejecutable es el CONTRATO persistido en el ledger;
+                // Mt101PayRouteResolver YA NO se ejecuta aqui (no se vuelve a decidir ruta/transporte/destino).
+                // Sin spec persistido NO hay fallback al resolver vigente: se INVALIDA y NO se llama al banco.
+                if (reference == null || reference.isBlank()) {
+                    continue;
+                }
+                if (correctivePayStore == null) {
+                    throw new IllegalStateException("MT101_PAY corrective source requires Mt101CorrectivePayStore");
+                }
+                var prepared = correctivePayStore.readPreparedSpec(fragmentSource, rebuildRunId, reference);
+                if (prepared == null || prepared.specJson() == null || prepared.specJson().isBlank()) {
+                    correctivePayStore.invalidateMissingSpec(fragmentSource, rebuildRunId, reference);
+                    continue;
+                }
+                plan = dispatchPlanCompiler.materialize(prepared.specJson(), correctiveSecretResolver);
+                // El claim valida el CONTRATO persistido: payload_hash actual = aprobado + approved_routed_as +
+                // dispatch_plan_hash (recomputado del plan materializado). Si difiere -> INVALIDATED, no se envia.
+                var payloadHash = payloadHash(message);
+                var planHash = Mt101PayRouteResolver.dispatchPlanHash(plan, payloadHash,
+                        prepared.approvedRoutedAs(), message);
+                if (!correctivePayStore.markDispatching(fragmentSource, rebuildRunId, reference,
+                        payloadHash, prepared.approvedRoutedAs(), planHash)) {
+                    continue;
+                }
+            } else {
+                // Flujo no-correctivo (inalterado): resuelve la ruta y despacha.
+                plan = Mt101PayRouteResolver.resolve(configuration, item.routedAs(), item.routeError(), message);
+                if (!claimDispatch(fragmentSource, reference, message, item.routedAs(), plan)) {
+                    continue;
+                }
             }
+            var transport = defaultTransport == null ? resolveTransport(plan.transport()) : defaultTransport;
             var result = dispatch(transport, plan.configuration(), message, accumulator);
             if (reference == null) {
                 continue;

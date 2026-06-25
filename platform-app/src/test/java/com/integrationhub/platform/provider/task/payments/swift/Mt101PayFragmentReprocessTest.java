@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -118,6 +119,71 @@ class Mt101PayFragmentReprocessTest {
         assertEquals("SENT", fragmentStatus(fragmentSetId, "F1"));
         assertEquals("SENT", fragmentStatus(fragmentSetId, "F2"));
         assertEquals("ARCHIVED", fragmentStatus(fragmentSetId, "F3"));
+    }
+
+    @Test
+    void correctiveDispatchWithoutPersistedSpecInvalidatesAndNeverCallsBank() throws Exception {
+        // v37: un run correctivo SIN especificacion ejecutable persistida NO tiene fallback al resolver
+        // vigente: el fragmento PREPARED se INVALIDA y NUNCA se llama al banco.
+        var runId = "RUN-NOSPEC";
+        var fragmentSetId = "PAY-NOSPEC";
+        insertFragmentSet(fragmentSetId, "Z1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "Z1", "ARCHIVED", null);
+        ensureRun(runId);
+        // Ledger PREPARED pero SIN dispatch_spec_json (spec nula).
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "insert into mt101_corrective_pay_fragment (rebuild_run_id, corrective_set_id, "
+                             + "corrective_senders_reference, payload_hash, idempotency_key, pay_status, prepared_at) "
+                             + "values (?, ?, ?, ?, ?, 'PREPARED', current_timestamp)")) {
+            statement.setString(1, runId);
+            statement.setString(2, fragmentSetId);
+            statement.setString(3, "Z1");
+            statement.setString(4, sha256Hex("{\"sendersReference\":\"Z1\"}"));
+            statement.setString(5, "KEY-Z1");
+            statement.executeUpdate();
+        }
+        var transport = new StubTransport(List.of(TransportResult.accepted("GW-Z1", 1, 10L)));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore, null, null, payStore);
+
+        provider.execute(contextWith(fragmentSource), payConfig(50));
+
+        assertEquals(0, transport.callsReceived(), "sin spec persistido NO se llama al banco");
+        assertEquals("INVALIDATED", payLedgerStatus(runId, "Z1"), "sin spec el fragmento se INVALIDA (sin fallback)");
+    }
+
+    @Test
+    void correctiveDispatchExecutesPersistedSpecNotTheLiveConfig() throws Exception {
+        // v37: el dispatch correctivo ejecuta el PLAN PERSISTIDO; Mt101PayRouteResolver ya no corre aqui. Se
+        // pasa una config vigente con routeTransports que, de re-resolverse con routed_as nulo, LANZARIA; como
+        // el plan se lee del ledger (REST), el envio procede sin tocar el resolver.
+        var runId = "RUN-SPEC-SRC";
+        var fragmentSetId = "PAY-SPEC-SRC";
+        insertFragmentSet(fragmentSetId, "W1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "W1", "ARCHIVED", null);
+        insertPayLedger(runId, fragmentSetId, "W1"); // persiste la spec REST aprobada
+
+        var transport = new StubTransport(List.of(TransportResult.accepted("GW-W1", 1, 10L)));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore, null, null, payStore);
+        // Config vigente que el resolver rechazaria (routeTransports + routed_as nulo): si se ejecutara el
+        // resolver en el dispatch, lanzaria; al leer del ledger, no se toca.
+        var liveConfigWithRouteThatWouldThrow = Map.<String, Object>of(
+                "transport", "REST", "pageSize", 50,
+                "routeTransports", Map.of("BANK_A", Map.of("transport", "REST",
+                        "rest", Map.of("url", "https://bank-a/${sendersReference}"))),
+                "input", Map.of("sourceTaskRef", "build", "sourceOutput", "fragments"));
+
+        var result = provider.execute(contextWith(fragmentSource), liveConfigWithRouteThatWouldThrow);
+
+        assertTrue(result.success(), () -> "el plan persistido se ejecuta sin resolver: " + result.details());
+        assertEquals(1, transport.callsReceived(), "un solo envio, desde el plan persistido");
+        assertEquals("SENT", payLedgerStatus(runId, "W1"));
     }
 
     @Test
@@ -932,6 +998,7 @@ class Mt101PayFragmentReprocessTest {
                     + "gateway_reference varchar(120), error_message text,"
                     + "resolution_source varchar(40), resolved_at timestamp,"
                     + "pay_conflict boolean not null default false, pay_conflict_reason text,"
+                    + "dispatch_spec_version varchar(40), dispatch_spec_json text, dispatch_spec_hash varchar(64),"
                     + "prepared_at timestamp,"
                     + "dispatched_at timestamp,"
                     + "updated_at timestamp not null default current_timestamp,"
@@ -986,17 +1053,21 @@ class Mt101PayFragmentReprocessTest {
     private void insertPayLedgerWithPlanHash(String runId, String correctiveSetId, String reference,
                                              String approvedPayloadHash, String approvedPlanHash) throws SQLException {
         ensureRun(runId);
+        var spec = dispatchSpec(sampleMessage(reference));
         try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement(
                      "insert into mt101_corrective_pay_fragment "
-                             + "(rebuild_run_id, corrective_set_id, corrective_senders_reference, payload_hash, idempotency_key, approved_routed_as, dispatch_destination, dispatch_plan_hash, pay_status, prepared_at) "
-                             + "values (?, ?, ?, ?, ?, null, 'rest://?', ?, 'PREPARED', current_timestamp)")) {
+                             + "(rebuild_run_id, corrective_set_id, corrective_senders_reference, payload_hash, idempotency_key, approved_routed_as, dispatch_destination, dispatch_plan_hash, dispatch_spec_version, dispatch_spec_json, dispatch_spec_hash, pay_status, prepared_at) "
+                             + "values (?, ?, ?, ?, ?, null, 'rest://?', ?, ?, ?, ?, 'PREPARED', current_timestamp)")) {
             statement.setString(1, runId);
             statement.setString(2, correctiveSetId);
             statement.setString(3, reference);
             statement.setString(4, approvedPayloadHash);
             statement.setString(5, "KEY-" + reference);
             statement.setString(6, approvedPlanHash);
+            statement.setString(7, spec.version());
+            statement.setString(8, spec.specJson());
+            statement.setString(9, spec.specHash());
             statement.executeUpdate();
         }
     }
@@ -1011,11 +1082,13 @@ class Mt101PayFragmentReprocessTest {
         var plan = Mt101PayRouteResolver.resolve(Map.of("transport", "REST"), null, null, message);
         var planHash = Mt101PayRouteResolver.dispatchPlanHash(plan, approvedPayloadHash, null, message);
         var destination = Mt101PayRouteResolver.dispatchDestination(plan, message);
+        // v37: el ledger es el contrato ejecutable -> persistir tambien la spec compilada (el dispatch la lee).
+        var spec = dispatchSpec(message);
         try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement(
                      "insert into mt101_corrective_pay_fragment "
-                             + "(rebuild_run_id, corrective_set_id, corrective_senders_reference, payload_hash, idempotency_key, approved_routed_as, dispatch_destination, dispatch_plan_hash, pay_status, prepared_at) "
-                             + "values (?, ?, ?, ?, ?, null, ?, ?, 'PREPARED', current_timestamp)")) {
+                             + "(rebuild_run_id, corrective_set_id, corrective_senders_reference, payload_hash, idempotency_key, approved_routed_as, dispatch_destination, dispatch_plan_hash, dispatch_spec_version, dispatch_spec_json, dispatch_spec_hash, pay_status, prepared_at) "
+                             + "values (?, ?, ?, ?, ?, null, ?, ?, ?, ?, ?, 'PREPARED', current_timestamp)")) {
             statement.setString(1, runId);
             statement.setString(2, correctiveSetId);
             statement.setString(3, reference);
@@ -1023,8 +1096,36 @@ class Mt101PayFragmentReprocessTest {
             statement.setString(5, "KEY-" + reference);
             statement.setString(6, destination);
             statement.setString(7, planHash);
+            statement.setString(8, spec.version());
+            statement.setString(9, spec.specJson());
+            statement.setString(10, spec.specHash());
             statement.executeUpdate();
         }
+    }
+
+    /** v37: spec ejecutable compilada (igual que el servicio) para que el dispatch correctivo la materialice. */
+    private Mt101DispatchPlanCompiler.CompiledDispatchSpec dispatchSpec(Mt101Message message) {
+        return new Mt101DispatchPlanCompiler(new com.fasterxml.jackson.databind.ObjectMapper())
+                .compile(Map.of("transport", "REST"), null, null, message);
+    }
+
+    @Test
+    void dispatchPlanCompilerRejectsLiteralSecretButKeepsSecretReference() {
+        // v37: el plan ejecutable se persiste -> NUNCA puede contener un secreto resuelto. Un secreto LITERAL
+        // se rechaza al compilar; una referencia ${secret:...} se conserva (se re-resuelve al materializar).
+        var compiler = new Mt101DispatchPlanCompiler(new com.fasterxml.jackson.databind.ObjectMapper());
+        var message = sampleMessage("SEC1");
+        var literal = Map.<String, Object>of("transport", "REST",
+                "rest", Map.of("url", "https://bank/", "token", "plain-literal-secret"));
+        var error = assertThrows(IllegalStateException.class,
+                () -> compiler.compile(literal, null, null, message));
+        assertTrue(error.getMessage().contains("token"), error.getMessage());
+
+        var withRef = Map.<String, Object>of("transport", "REST",
+                "rest", Map.of("url", "https://bank/", "token", "${secret:bank-token}"));
+        var spec = compiler.compile(withRef, null, null, message);
+        assertTrue(spec.specJson().contains("${secret:bank-token}"),
+                "la spec persiste la referencia, nunca el valor resuelto");
     }
 
     private String sha256Hex(String value) {

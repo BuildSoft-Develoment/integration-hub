@@ -86,6 +86,30 @@ public class Mt101CorrectivePayStore {
         }
     }
 
+    /** v37: lee el contrato de despacho persistido (spec ejecutable) de un fragmento PREPARED. */
+    public Mt101RebuildRepository.PreparedDispatchSpec readPreparedSpec(Map<String, Object> fragmentSource,
+                                                                        String rebuildRunId, String sendersReference) {
+        var dataSource = resolveDataSource(
+                stringValue(fragmentSource == null ? null : fragmentSource.get("connectionRef")));
+        try {
+            return rebuildRepository.readPreparedDispatchSpec(dataSource, rebuildRunId, sendersReference);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot read MT101 corrective PAY dispatch spec for " + sendersReference, error);
+        }
+    }
+
+    /** v37: sin spec persistido NO hay fallback: el fragmento PREPARED se INVALIDA (no se llama al banco). */
+    public void invalidateMissingSpec(Map<String, Object> fragmentSource, String rebuildRunId, String sendersReference) {
+        var dataSource = resolveDataSource(
+                stringValue(fragmentSource == null ? null : fragmentSource.get("connectionRef")));
+        try {
+            rebuildRepository.invalidatePayFragmentMissingSpec(dataSource, rebuildRunId, sendersReference);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot invalidate MT101 corrective PAY fragment without spec: "
+                    + sendersReference, error);
+        }
+    }
+
     private DataSource resolveDataSource(String connectionRef) {
         if (connectionRef == null || connectionRef.isBlank() || connectionPoolManager == null) {
             return defaultDataSource;

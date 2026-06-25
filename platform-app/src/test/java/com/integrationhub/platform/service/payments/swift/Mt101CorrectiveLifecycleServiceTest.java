@@ -1401,6 +1401,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "prepared_at timestamp, dispatched_at timestamp,"
                     + "resolved_at timestamp, resolution_source varchar(40),"
                     + "pay_conflict boolean not null default false, pay_conflict_reason text,"
+                    + "dispatch_spec_version varchar(40), dispatch_spec_json text, dispatch_spec_hash varchar(64),"
                     + "created_at timestamp not null default current_timestamp,"
                     + "updated_at timestamp not null default current_timestamp,"
                     + "unique (rebuild_run_id, corrective_senders_reference))");
