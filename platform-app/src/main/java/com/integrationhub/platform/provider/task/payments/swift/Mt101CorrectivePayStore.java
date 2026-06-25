@@ -78,6 +78,23 @@ public class Mt101CorrectivePayStore {
                                    String currentRoutedAs,
                                    String currentPlanHash,
                                    String expectedDispatchSpecHash) {
+        return markDispatching(fragmentSource, rebuildRunId, sendersReference, currentPayloadHash,
+                currentRoutedAs, currentPlanHash, expectedDispatchSpecHash, null);
+    }
+
+    /**
+     * v38: el claim enlaza ademas el {@code dispatch_spec_json} EXACTO (no solo su hash): el ledger representa
+     * byte-a-byte lo que se va a enviar. Reclamar ocurre ANTES de re-resolver secretos (el provider materializa
+     * tras ganar el claim).
+     */
+    public boolean markDispatching(Map<String, Object> fragmentSource,
+                                   String rebuildRunId,
+                                   String sendersReference,
+                                   String currentPayloadHash,
+                                   String currentRoutedAs,
+                                   String currentPlanHash,
+                                   String expectedDispatchSpecHash,
+                                   String expectedDispatchSpecJson) {
         if (rebuildRunId == null || rebuildRunId.isBlank()
                 || sendersReference == null || sendersReference.isBlank()) {
             return false;
@@ -87,7 +104,7 @@ public class Mt101CorrectivePayStore {
         try {
             var claimed = rebuildRepository.markPayFragmentDispatching(
                     dataSource, rebuildRunId, sendersReference, currentPayloadHash, currentRoutedAs,
-                    currentPlanHash, expectedDispatchSpecHash) == 1;
+                    currentPlanHash, expectedDispatchSpecHash, expectedDispatchSpecJson) == 1;
             if (claimed) {
                 return true;
             }
@@ -99,6 +116,19 @@ public class Mt101CorrectivePayStore {
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot mark MT101 corrective PAY fragment as DISPATCHING: "
                     + sendersReference, error);
+        }
+    }
+
+    /** v38: fallo de materializacion (Vault/spec) DESPUES del claim, ANTES del envio -> INVALIDATED (sin banco). */
+    public void invalidateMaterializeFailure(Map<String, Object> fragmentSource, String rebuildRunId,
+                                             String sendersReference, String reason) {
+        var dataSource = resolveDataSource(
+                stringValue(fragmentSource == null ? null : fragmentSource.get("connectionRef")));
+        try {
+            rebuildRepository.invalidatePayFragmentMaterializeFailure(dataSource, rebuildRunId, sendersReference, reason);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot invalidate MT101 corrective PAY fragment after materialize "
+                    + "failure: " + sendersReference, error);
         }
     }
 

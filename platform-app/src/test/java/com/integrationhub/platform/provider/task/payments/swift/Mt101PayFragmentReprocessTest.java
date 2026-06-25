@@ -204,11 +204,107 @@ class Mt101PayFragmentReprocessTest {
         var provider = new Mt101PayTaskProvider(new InstanceOfList<>(List.of(rest, sftp)), fragmentStore,
                 null, null, payStore);
 
-        provider.execute(contextWith(fragmentSource), payConfig(50)); // config viva: transport REST, sin routes
+        var result = provider.execute(contextWith(fragmentSource), payConfig(50)); // config viva: REST, sin routes
 
         assertEquals(0, rest.callsReceived(), "NO se usa el transporte REST de la config viva");
         assertEquals(1, sftp.callsReceived(), "se usa el transporte SFTP del plan persistido");
         assertEquals("SENT", payLedgerStatus(runId, "Q1"));
+        // v38 (#4): el output reporta el transporte REAL del plan persistido, no el REST de la config viva.
+        assertEquals("PERSISTED_PLAN", result.outputs().get("transport"), "output transport = PERSISTED_PLAN");
+        assertEquals(List.of("SFTP"), result.outputs().get("transportsUsed"), "transportes realmente usados");
+    }
+
+    @Test
+    void correctiveSecretResolutionFailureAfterClaimInvalidatesWithoutBankCall() throws Exception {
+        // v38 (#1): la resolucion de secretos ocurre DESPUES de ganar el claim. Si Vault falla, no hubo llamada
+        // al banco -> el fragmento se INVALIDA (re-solicitable), nunca UNCERTAIN ni se exige STATUS.
+        var runId = "RUN-VAULT-FAIL";
+        var fragmentSetId = "PAY-VAULT-FAIL";
+        insertFragmentSet(fragmentSetId, "V1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "V1", "ARCHIVED", null);
+        insertPayLedger(runId, fragmentSetId, "V1");
+
+        var transport = new StubTransport(List.of(TransportResult.accepted("GW-V1", 1, 1L)));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        // Mapper cuya resolucion de secretos LANZA (simula Vault caido).
+        var throwingMapper = new com.integrationhub.platform.service.JsonConfigurationMapper(
+                new com.fasterxml.jackson.databind.ObjectMapper(), null) {
+            @Override
+            public Map<String, Object> resolveSecretsIn(Map<String, Object> raw) {
+                throw new RuntimeException("vault unavailable");
+            }
+        };
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore,
+                null, null, payStore, throwingMapper);
+
+        provider.execute(contextWith(fragmentSource), payConfig(50));
+
+        assertEquals(0, transport.callsReceived(), "fallo de Vault tras el claim: NO se llama al banco");
+        assertEquals("INVALIDATED", payLedgerStatus(runId, "V1"),
+                "fallo de materializacion tras claim -> INVALIDATED, nunca UNCERTAIN");
+    }
+
+    @Test
+    void correctiveDispatchDoesNotResolveSecretsWhenClaimIsLost() throws Exception {
+        // v38 (#1): un worker que NO gana el claim (lease vencido / run no EXECUTING) no debe tocar Vault.
+        var runId = "RUN-NOCLAIM-VAULT";
+        var fragmentSetId = "PAY-NOCLAIM-VAULT";
+        insertFragmentSet(fragmentSetId, "L1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "L1", "ARCHIVED", null);
+        insertPayLedger(runId, fragmentSetId, "L1");
+        // Lease vencido -> el claim no procede.
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_lease_until = current_timestamp - "
+                    + "interval '1 minute' where rebuild_run_id = '" + runId + "'");
+        }
+        var resolveCalls = new java.util.concurrent.atomic.AtomicInteger();
+        var countingMapper = new com.integrationhub.platform.service.JsonConfigurationMapper(
+                new com.fasterxml.jackson.databind.ObjectMapper(), null) {
+            @Override
+            public Map<String, Object> resolveSecretsIn(Map<String, Object> raw) {
+                resolveCalls.incrementAndGet();
+                return raw;
+            }
+        };
+        var transport = new StubTransport(List.of(TransportResult.accepted("GW", 1, 1L)));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore,
+                null, null, payStore, countingMapper);
+
+        provider.execute(contextWith(fragmentSource), payConfig(50));
+
+        assertEquals(0, transport.callsReceived(), "sin claim no se envia");
+        assertEquals(0, resolveCalls.get(), "si se pierde el claim, NO se resuelven secretos (no se toca Vault)");
+    }
+
+    @Test
+    void claimBindsExactDispatchSpecJsonNotOnlyItsHash() throws Exception {
+        // v38 (#2): el claim enlaza el dispatch_spec_json EXACTO (no solo su hash). Un JSON distinto al
+        // persistido no reclama, aunque el resto coincida.
+        var runId = "RUN-JSON-BIND";
+        var fragmentSetId = "PAY-JSON-BIND";
+        insertFragmentSet(fragmentSetId, "J1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "J1", "ARCHIVED", null);
+        insertPayLedger(runId, fragmentSetId, "J1");
+
+        var repository = new Mt101RebuildRepository();
+        var prepared = repository.readPreparedDispatchSpec(dataSource, runId, "J1");
+        // Mismo payload/ruta/plan_hash/spec_hash, pero un dispatch_spec_json DISTINTO -> NO reclama.
+        assertEquals(0, repository.markPayFragmentDispatching(dataSource, runId, "J1", prepared.payloadHash(),
+                prepared.approvedRoutedAs(), prepared.dispatchPlanHash(), prepared.specHash(),
+                "{\"version\":\"MT101_PAY_PLAN_V1\",\"tampered\":true}"),
+                "un dispatch_spec_json distinto al persistido NO reclama");
+        assertEquals("PREPARED", payLedgerStatus(runId, "J1"), "el fragmento sigue PREPARED");
+        // Con el JSON EXACTO persistido si reclama.
+        assertEquals(1, repository.markPayFragmentDispatching(dataSource, runId, "J1", prepared.payloadHash(),
+                prepared.approvedRoutedAs(), prepared.dispatchPlanHash(), prepared.specHash(), prepared.specJson()),
+                "con el dispatch_spec_json exacto, reclama");
     }
 
     @Test

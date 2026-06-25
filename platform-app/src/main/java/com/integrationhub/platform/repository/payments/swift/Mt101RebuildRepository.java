@@ -1607,16 +1607,30 @@ public class Mt101RebuildRepository {
                                           String currentRoutedAs,
                                           String currentPlanHash,
                                           String expectedDispatchSpecHash) throws SQLException {
+        return markPayFragmentDispatching(dataSource, rebuildRunId, correctiveSendersReference,
+                currentPayloadHash, currentRoutedAs, currentPlanHash, expectedDispatchSpecHash, null);
+    }
+
+    public int markPayFragmentDispatching(DataSource dataSource,
+                                          String rebuildRunId,
+                                          String correctiveSendersReference,
+                                          String currentPayloadHash,
+                                          String currentRoutedAs,
+                                          String currentPlanHash,
+                                          String expectedDispatchSpecHash,
+                                          String expectedDispatchSpecJson) throws SQLException {
         // v26: el claim valida el PLAN COMPLETO aprobado: payload_hash + routed_as + dispatch_plan_hash
         // (transport|ruta|destino|correlacion|payload). "Plan aprobado = plan usado", demostrable.
         // v27 P0.1: ademas valida el RUN padre en el MISMO update atomico: solo despacha si el run sigue
         // EXECUTING y el lease no vencio. Como el scheduler solo invalida/marca-incierto leases VENCIDOS,
         // las ventanas son disjuntas: ningun fragmento puede ir a DISPATCHING tras vencer el lease ni
         // despues de que el scheduler invalide el run (no hay carrera scheduler<->dispatcher).
-        // v37 (P0.2): cuando el dispatch correctivo trae el dispatch_spec_hash esperado, se enlaza ATOMICAMENTE
-        // (la spec del ledger no pudo cambiar entre la lectura y el claim).
-        var specBinding = expectedDispatchSpecHash == null ? ""
-                : " and f.dispatch_spec_hash is not distinct from ?";
+        // v37 (P0.2): enlaza ATOMICAMENTE el dispatch_spec_hash. v38: enlaza ademas el dispatch_spec_json EXACTO
+        // (no solo su hash): el ledger no pudo cambiar entre la lectura y el claim ni siquiera con un hash igual.
+        var specBinding = (expectedDispatchSpecHash == null ? ""
+                : " and f.dispatch_spec_hash is not distinct from ?")
+                + (expectedDispatchSpecJson == null ? ""
+                : " and f.dispatch_spec_json is not distinct from ?");
         var sql = """
                 update mt101_corrective_pay_fragment f
                    set pay_status = 'DISPATCHING',
@@ -1645,12 +1659,35 @@ public class Mt101RebuildRepository {
                 statement.setString(3, currentPayloadHash);
                 statement.setString(4, currentRoutedAs);
                 statement.setString(5, currentPlanHash);
+                var index = 6;
                 if (expectedDispatchSpecHash != null) {
-                    statement.setString(6, expectedDispatchSpecHash);
+                    statement.setString(index++, expectedDispatchSpecHash);
+                }
+                if (expectedDispatchSpecJson != null) {
+                    statement.setString(index, expectedDispatchSpecJson);
                 }
                 return statement.executeUpdate();
             }
         });
+    }
+
+    /**
+     * v38: un fragmento ya RECLAMADO (DISPATCHING) cuya MATERIALIZACION falla ANTES del envio (p.ej. fallo de
+     * Vault al re-resolver secretos, o version de spec invalida) NO llamo al banco -> se marca INVALIDATED
+     * (re-solicitable), nunca UNCERTAIN ni se exige STATUS. Sin pago, sin doble pago, sin run colgado.
+     */
+    public int invalidatePayFragmentMaterializeFailure(DataSource dataSource, String rebuildRunId,
+                                                       String correctiveSendersReference, String reason) throws SQLException {
+        var sql = "update mt101_corrective_pay_fragment set pay_status = 'INVALIDATED', error_message = ?, "
+                + "updated_at = current_timestamp where rebuild_run_id = ? and corrective_senders_reference = ? "
+                + "and pay_status = 'DISPATCHING'";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, reason);
+            statement.setString(2, rebuildRunId);
+            statement.setString(3, correctiveSendersReference);
+            return statement.executeUpdate();
+        }
     }
 
     /** v37 (P0.2): la spec persistida no coincide con su hash (manipulada): INVALIDA y no se llama al banco. */
@@ -1704,7 +1741,7 @@ public class Mt101RebuildRepository {
     /** v37: lee la especificacion ejecutable persistida (contrato de despacho) de un fragmento PREPARED. */
     public PreparedDispatchSpec readPreparedDispatchSpec(DataSource dataSource, String rebuildRunId,
                                                          String correctiveSendersReference) throws SQLException {
-        var sql = "select dispatch_spec_json, dispatch_spec_hash, approved_routed_as, payload_hash "
+        var sql = "select dispatch_spec_json, dispatch_spec_hash, approved_routed_as, payload_hash, dispatch_plan_hash "
                 + "from mt101_corrective_pay_fragment where rebuild_run_id = ? and corrective_senders_reference = ? "
                 + "and pay_status = 'PREPARED'";
         try (var connection = dataSource.getConnection();
@@ -1716,12 +1753,14 @@ public class Mt101RebuildRepository {
                     return null;
                 }
                 return new PreparedDispatchSpec(rs.getString("dispatch_spec_json"), rs.getString("dispatch_spec_hash"),
-                        rs.getString("approved_routed_as"), rs.getString("payload_hash"));
+                        rs.getString("approved_routed_as"), rs.getString("payload_hash"),
+                        rs.getString("dispatch_plan_hash"));
             }
         }
     }
 
-    public record PreparedDispatchSpec(String specJson, String specHash, String approvedRoutedAs, String payloadHash) {
+    public record PreparedDispatchSpec(String specJson, String specHash, String approvedRoutedAs, String payloadHash,
+                                       String dispatchPlanHash) {
     }
 
     /**

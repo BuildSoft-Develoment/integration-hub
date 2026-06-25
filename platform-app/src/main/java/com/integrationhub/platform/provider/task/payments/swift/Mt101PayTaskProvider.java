@@ -182,7 +182,11 @@ public class Mt101PayTaskProvider implements TaskProvider {
         outputs.put("uncertainCount", accumulator.uncertainCount);
         outputs.put("retriedCount", accumulator.retriedCount);
         outputs.put("totalDurationMs", accumulator.totalDurationMs);
-        outputs.put("transport", transportId);
+        // v38 (trazabilidad): en el correctivo el transporte sale del plan PERSISTIDO, no de la config viva.
+        // Se reporta PERSISTED_PLAN y la lista de transportes realmente usados por fragmento.
+        var corrective = stringValue(fragmentSource.get("correctivePayRunId"), null) != null;
+        outputs.put("transport", corrective ? "PERSISTED_PLAN" : transportId);
+        outputs.put("transportsUsed", new ArrayList<>(accumulator.transportsUsed));
         // records/errors/uncertain son una MUESTRA acotada (ver maxRecordsInOutput); para
         // el detalle completo, consultar mt101_build_fragment por fragmentSetId.
         outputs.put("records", accumulator.sent);
@@ -252,24 +256,43 @@ public class Mt101PayTaskProvider implements TaskProvider {
                     correctivePayStore.invalidateMissingSpec(fragmentSource, rebuildRunId, reference);
                     continue;
                 }
-                // v37 (hallazgo P0.2): INTEGRIDAD de la spec. El dispatch_spec_json debe coincidir con su
-                // dispatch_spec_hash persistido; si se altero (p.ej. method/headers/timeout) sin recalcular el
-                // hash, se INVALIDA y NO se llama al banco (manipulacion detectada).
+                // v37 (P0.2): INTEGRIDAD de la spec. El dispatch_spec_json debe coincidir con su dispatch_spec_hash
+                // persistido; si se altero sin recalcular el hash, se INVALIDA y NO se llama al banco.
                 if (!dispatchPlanCompiler.specHash(prepared.specJson()).equals(prepared.specHash())) {
                     correctivePayStore.invalidateTamperedSpec(fragmentSource, rebuildRunId, reference);
                     continue;
                 }
-                plan = dispatchPlanCompiler.materialize(prepared.specJson(), correctiveSecretResolver);
-                // v37 (hallazgo P0.1): el transporte sale SIEMPRE del plan persistido, nunca de la config viva.
-                transport = resolveTransport(plan.transport());
-                // El claim enlaza ATOMICAMENTE el contrato persistido: payload_hash actual = aprobado +
-                // approved_routed_as + dispatch_plan_hash (recomputado) + dispatch_spec_hash. Si difiere ->
-                // INVALIDATED, no se envia.
+                // v38 (hallazgo #1): materializa SIN resolver secretos (solo parseo JSON, sin Vault) para validar
+                // la estructura y computar el plan_hash del claim. La resolucion de secretos ocurre DESPUES de
+                // ganar el claim: un worker que pierda el claim o llegue tarde NO consulta Vault.
+                Mt101PayRouteResolver.PayPlan structuralPlan;
+                try {
+                    structuralPlan = dispatchPlanCompiler.materialize(prepared.specJson(), null);
+                } catch (RuntimeException specError) {
+                    correctivePayStore.invalidateTamperedSpec(fragmentSource, rebuildRunId, reference);
+                    continue;
+                }
                 var payloadHash = payloadHash(message);
-                var planHash = Mt101PayRouteResolver.dispatchPlanHash(plan, payloadHash,
+                var planHash = Mt101PayRouteResolver.dispatchPlanHash(structuralPlan, payloadHash,
                         prepared.approvedRoutedAs(), message);
+                // v37 P0.2 + v38 #2: el claim enlaza ATOMICAMENTE el contrato persistido EXACTO: payload_hash
+                // actual = aprobado + approved_routed_as + dispatch_plan_hash + dispatch_spec_hash + el
+                // dispatch_spec_json byte-a-byte. Si difiere -> INVALIDATED, no se envia.
                 if (!correctivePayStore.markDispatching(fragmentSource, rebuildRunId, reference,
-                        payloadHash, prepared.approvedRoutedAs(), planHash, prepared.specHash())) {
+                        payloadHash, prepared.approvedRoutedAs(), planHash, prepared.specHash(), prepared.specJson())) {
+                    continue;
+                }
+                // v38 (hallazgo #1): ganado el claim -> ahora si se re-resuelven los secretos. Si la resolucion
+                // (Vault/OpenBao) o la materializacion falla ANTES del envio, NO hubo llamada al banco -> el
+                // fragmento se INVALIDA (re-solicitable), nunca UNCERTAIN ni se exige STATUS.
+                try {
+                    plan = dispatchPlanCompiler.materialize(prepared.specJson(), correctiveSecretResolver);
+                    // v37 (P0.1): el transporte sale SIEMPRE del plan persistido, nunca de la config viva.
+                    transport = resolveTransport(plan.transport());
+                } catch (RuntimeException materializeError) {
+                    correctivePayStore.invalidateMaterializeFailure(fragmentSource, rebuildRunId, reference,
+                            "dispatch plan materialization failed before send (no bank call): "
+                                    + materializeError.getMessage());
                     continue;
                 }
             } else {
@@ -433,6 +456,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
                                      DispatchAccumulator accumulator) {
         var message = input.message();
         TransportResult result;
+        accumulator.transportsUsed.add(transport.transport());
         var correlationKey = Mt101PaymentCorrelation.correlationKey(transport.transport(), configuration, message);
         var dispatchConfiguration = Mt101PaymentCorrelation.withResolvedCorrelation(
                 transport.transport(), configuration, message);
@@ -497,6 +521,9 @@ public class Mt101PayTaskProvider implements TaskProvider {
         private final List<Map<String, Object>> errors = new ArrayList<>();
         private final List<Map<String, Object>> uncertain = new ArrayList<>();
         private final int maxRecordsInOutput;
+        // v38: transportes REALMENTE usados por el dispatch (del plan persistido en el correctivo), no el
+        // inferido de la configuracion viva.
+        final java.util.Set<String> transportsUsed = new java.util.LinkedHashSet<>();
         int acceptedCount;
         int rejectedCount;
         int uncertainCount;

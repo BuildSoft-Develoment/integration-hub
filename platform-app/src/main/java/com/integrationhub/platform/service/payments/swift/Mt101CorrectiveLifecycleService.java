@@ -164,22 +164,22 @@ public class Mt101CorrectiveLifecycleService {
             }
             assertCorrectivePayPolicy(payConfig);
             var configHash = payConfigHashOf(payConfig);
-            // P0.1 v24: el cambio de estado y su accion auditada ocurren en UNA sola transaccion: si
-            // falla el insert de auditoria, se revierte el cambio de pay_status (no queda estado sin
-            // evidencia). Sin secuencia de dos conexiones separadas.
+            // v38 (hallazgo #3): el MAKER compila y persiste el conjunto EXACTO de planes ejecutables ANTES de
+            // cambiar el estado a REQUESTED. Asi, si la compilacion de una spec falla a mitad, el run NO queda
+            // atascado en REQUESTED con planes parciales/hash nulo: sigue en su estado previo (re-solicitable).
+            // La compilacion (resolver de ruta) vive solo aqui, en la preparacion.
+            rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, run.correctiveSetId());
+            var unresolvedPayConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_PAY");
+            preparePayIntents(dataSource, runId, run.correctiveSetId(), payConfig, unresolvedPayConfig);
+            var planSet = rebuildRepository.computePayPlanSet(dataSource, runId);
+            // P0.1 v24: el cambio de estado y su accion auditada ocurren en UNA sola transaccion: si falla el
+            // insert de auditoria, se revierte el cambio de pay_status (no queda estado sin evidencia).
             var requested = rebuildRepository.requestPayWithAction(dataSource, runId, requester,
                     payloadHash, configHash, reason, ticket, run.payStatus());
             if (requested == 0) {
                 throw new IllegalStateException("cannot request corrective pay for run " + runId
                         + "; payStatus=" + run.payStatus());
             }
-            // v37 fase 2: el MAKER compila y persiste el conjunto EXACTO de planes ejecutables al SOLICITAR
-            // (antes de aprobar), y persiste su hash agregado. El checker aprobara ese conjunto, no una config
-            // equivalente. La compilacion (resolver de ruta) vive solo aqui, en la preparacion.
-            rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, run.correctiveSetId());
-            var unresolvedPayConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_PAY");
-            preparePayIntents(dataSource, runId, run.correctiveSetId(), payConfig, unresolvedPayConfig);
-            var planSet = rebuildRepository.computePayPlanSet(dataSource, runId);
             rebuildRepository.persistPayPlanSet(dataSource, runId, planSet);
             recordPayAction(dataSource, runId, "PAY_PLAN_PREPARED", "REQUESTED", "REQUESTED", requester,
                     "compiled and persisted " + planSet.count() + " executable plan(s); set hash "
@@ -858,15 +858,17 @@ public class Mt101CorrectiveLifecycleService {
                 if (reference == null || reference.isBlank()) {
                     continue;
                 }
-                var plan = Mt101PayRouteResolver.resolve(payConfig, row.routedAs(), row.routeError(), message);
-                var key = plan.endpointRef();
                 var payloadHashValue = payloadHash(message);
-                // P0.4 v25: plan aprobado durable por fragmento (destino real redactado + hash del plan).
-                var destination = Mt101PayRouteResolver.dispatchDestination(plan, message);
-                var planHash = Mt101PayRouteResolver.dispatchPlanHash(plan, payloadHashValue, row.routedAs(), message);
                 // v37: especificacion ejecutable canonica (transporte + config con refs ${secret:...} + correlacion)
                 // compilada desde la config SIN resolver; el dispatch correctivo la lee y re-resuelve solo secretos.
                 var spec = compiler.compile(unresolvedPayConfig, row.routedAs(), row.routeError(), message);
+                // v38: destino + dispatch_plan_hash se derivan de la materializacion SIN resolver secretos del
+                // PROPIO spec (mismo calculo que hara el dispatch antes del claim), garantizando consistencia y
+                // que el claim no dependa de un plan re-resuelto con Vault. P0.4 v25: destino real redactado.
+                var plan = compiler.materialize(spec.specJson(), null);
+                var key = plan.endpointRef();
+                var destination = Mt101PayRouteResolver.dispatchDestination(plan, message);
+                var planHash = Mt101PayRouteResolver.dispatchPlanHash(plan, payloadHashValue, row.routedAs(), message);
                 intents.add(new Mt101RebuildRepository.PayFragmentIntent(
                         correctiveSetId,
                         reference,
