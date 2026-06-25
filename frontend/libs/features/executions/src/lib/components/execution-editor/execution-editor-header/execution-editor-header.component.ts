@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, input } from '@angular/core';
 
 import { I18nService } from '@integration-hub/core/services';
+import { IconComponent } from '@integration-hub/shared/ui';
 
 import { formatTriggerSourceLabel } from '../../../details/execution-detail.utils';
 import { ProcessExecutionRecord } from '../../../models/execution.models';
@@ -9,7 +10,7 @@ import { ProcessExecutionRecord } from '../../../models/execution.models';
 @Component({
   selector: 'ih-execution-editor-header',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, IconComponent],
   styles: [`
     .profile-stack { display: grid; gap: 0.8rem; margin-bottom: 1rem; }
     .profile-header { display: flex; align-items: center; gap: 1rem; min-width: 0; }

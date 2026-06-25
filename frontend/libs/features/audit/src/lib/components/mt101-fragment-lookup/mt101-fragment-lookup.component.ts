@@ -1,13 +1,13 @@
 // @trace SWIFT-MT101: lookup de fragmentos generados por fila origen
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { I18nService } from '@integration-hub/core/services';
-import { BreadcrumbComponent, IhBreadcrumbItem, RelativeTimePipe } from '@integration-hub/shared/ui';
+import { BreadcrumbService, I18nService } from '@integration-hub/core/services';
+import { RelativeTimePipe } from '@integration-hub/shared/ui';
 import { AuditApiService } from '../../api/audit-api.service';
 import { Mt101FragmentLink } from '../../models/audit.models';
 
@@ -22,7 +22,6 @@ import { Mt101FragmentLink } from '../../models/audit.models';
     MatFormFieldModule,
     MatInputModule,
     RelativeTimePipe,
-    BreadcrumbComponent,
   ],
   styleUrl: './mt101-fragment-lookup.component.css',
   templateUrl: './mt101-fragment-lookup.component.html',
@@ -30,12 +29,8 @@ import { Mt101FragmentLink } from '../../models/audit.models';
 export class Mt101FragmentLookupComponent {
   private readonly api = inject(AuditApiService);
   private readonly route = inject(ActivatedRoute);
+  private readonly breadcrumb = inject(BreadcrumbService);
   readonly i18n = inject(I18nService);
-
-  readonly breadcrumbItems = computed<IhBreadcrumbItem[]>(() => [
-    { label: this.i18n.t('audit.breadcrumb.root'), link: ['/audit'] },
-    { label: this.i18n.t('audit.breadcrumb.fragments') },
-  ]);
 
   recordNumber = '';
   sourceFileHash = '';
@@ -49,6 +44,11 @@ export class Mt101FragmentLookupComponent {
   readonly error = signal<string | null>(null);
 
   constructor() {
+    this.breadcrumb.setItems([
+      { label: this.i18n.t('audit.breadcrumb.root'), link: ['/audit'] },
+      { label: this.i18n.t('audit.breadcrumb.fragments') },
+    ]);
+    this.breadcrumb.setBackLabel(this.i18n.t('audit.common.back'));
     // Drill-in desde el lineage (?recordNumber=) u otra vista -> auto-busca.
     const qp = this.route.snapshot.queryParamMap;
     const recordNumber = qp.get('recordNumber');

@@ -1,8 +1,23 @@
 <div class="list-card ih-catalog-list">
       <div class="table-head ih-catalog-table-head">
-        <span>{{ i18n.t('common.name') }}</span>
-        <span>{{ i18n.t('processes.mode') }}</span>
-        <span>{{ i18n.t('common.status') }}</span>
+        <button type="button" class="col-sortable" (click)="toggleSort.emit('name')">
+          {{ i18n.t('common.name') }}
+          @if (sortField() === 'name') {
+            <span class="sort-arrow">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
+          }
+        </button>
+        <button type="button" class="col-sortable" (click)="toggleSort.emit('mode')">
+          {{ i18n.t('processes.mode') }}
+          @if (sortField() === 'mode') {
+            <span class="sort-arrow">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
+          }
+        </button>
+        <button type="button" class="col-sortable" (click)="toggleSort.emit('active')">
+          {{ i18n.t('common.status') }}
+          @if (sortField() === 'active') {
+            <span class="sort-arrow">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
+          }
+        </button>
       </div>
 
       <div class="table-body ih-catalog-table-body ih-thin-scroll">
@@ -15,7 +30,9 @@
             (click)="selectProcess.emit(process)"
           >
             <div class="row-primary ih-catalog-row-primary">
-              <div class="row-avatar ih-catalog-row-avatar">{{ process.name.slice(0, 1).toUpperCase() }}</div>
+              <div class="row-avatar ih-catalog-row-avatar ih-tone-integration">
+                <ih-icon name="git-branch" [size]="20" />
+              </div>
               <div class="row-copy ih-catalog-row-copy">
                 <strong>{{ process.name }}</strong>
                 <small>ID {{ process.id }}</small>

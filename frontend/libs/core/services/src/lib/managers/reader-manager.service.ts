@@ -1,10 +1,12 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
+import { ResourcePresentation } from '@integration-hub/shared/ui';
 import {
   READER_PROVIDERS,
   ReaderDraft,
   ReaderProvider,
   ReaderProviderType,
 } from '@integration-hub/core/providers';
+import { READER_PRESENTATION } from '../presentation/resource-presentation.maps';
 
 @Injectable({ providedIn: 'root' })
 export class ReaderManagerService {
@@ -32,6 +34,15 @@ export class ReaderManagerService {
 
   resolve(type: ReaderProviderType): ReaderProvider | null {
     return this.providers.find((provider) => provider.supports(type)) ?? null;
+  }
+
+  /**
+   * Presentacion visual (icono + tono) del tipo de lector. Resolucion total
+   * via {@link READER_PRESENTATION}: siempre devuelve una presentacion
+   * concreta, sin fallback en runtime.
+   */
+  presentation(type: ReaderProviderType): ResourcePresentation {
+    return READER_PRESENTATION[type];
   }
 
   createDraftFor(type: ReaderProviderType): ReaderDraft {

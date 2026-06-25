@@ -26,6 +26,8 @@ export class SchedulesPageComponent implements OnInit {
     schedules: this.store.pagedSchedules(),
     totalLength: this.store.totalLength(),
     selectedSchedule: this.store.selectedSchedule(),
+    sortField: this.store.sortField(),
+    sortDirection: this.store.sortDirection(),
     drawerOpen: this.store.drawerOpen(),
     pageIndex: this.store.currentPage(),
     pageSize: this.store.pageSize(),

@@ -18,9 +18,12 @@
             [schedules]="vm.schedules"
             [totalLength]="vm.totalLength"
             [selectedScheduleId]="vm.selectedSchedule?.id ?? null"
+            [sortField]="vm.sortField"
+            [sortDirection]="vm.sortDirection"
             [pageIndex]="vm.pageIndex"
             [pageSize]="vm.pageSize"
             (selectSchedule)="selectSchedule($event)"
+            (toggleSort)="store.toggleSort($event)"
             (pageChange)="updatePagination($event)"
           />
         </section>

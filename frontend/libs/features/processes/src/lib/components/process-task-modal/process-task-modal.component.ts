@@ -37,7 +37,7 @@ export class ProcessTaskModalComponent {
     return this.manager.label(taskType);
   }
 
-  modalLayout(): 'workspace' | 'rest' | 'default' {
+  modalLayout(): 'workspace' | 'rest' | undefined {
     return this.manager.modalLayout(this.task().taskType);
   }
 }

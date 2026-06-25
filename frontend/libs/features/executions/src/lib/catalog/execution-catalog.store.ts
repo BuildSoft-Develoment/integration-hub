@@ -34,6 +34,8 @@ export class ExecutionCatalogStore {
   readonly currentPage = this.query.currentPage;
   readonly pageSize = this.query.pageSize;
   readonly navigationStack = this.detail.navigationStack;
+  readonly sortField = this.query.sortField;
+  readonly sortDirection = this.query.sortDirection;
   readonly pagedExecutions = this.query.pagedExecutions;
 
   async load(): Promise<void> {
@@ -66,6 +68,10 @@ export class ExecutionCatalogStore {
 
   updateStatusFilter(value: ExecutionStatusFilter): void {
     this.query.updateStatusFilter(value);
+  }
+
+  toggleSort(field: string): void {
+    this.query.toggleSort(field);
   }
 
   updatePagination(pageIndex: number, pageSize: number): void {

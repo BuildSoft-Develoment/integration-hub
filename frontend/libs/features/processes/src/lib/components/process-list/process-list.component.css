@@ -1,16 +1,50 @@
-.row-type,
+:host .table-head,
+      :host .table-row {
+        grid-template-columns: minmax(200px, 1.5fr) 0.9fr 0.8fr;
+      }
+      :host .table-head {
+        padding-left: 0.5rem;
+      }
+      :host .table-row {
+        padding-left: 0.5rem;
+      }
+
+      .col-sortable {
+        background: none;
+        border: none;
+        color: inherit;
+        font: inherit;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0;
+      }
+
+      .col-sortable:hover {
+        color: var(--ih-text);
+      }
+
+      .sort-arrow {
+        font-size: 0.6rem;
+        line-height: 1;
+      }
+
+      .row-type,
       .row-status {
         display: flex;
         align-items: center;
       }
       .row-status {
         gap: 0.45rem;
-        color: #166534;
+        color: var(--ih-status-success);
         font-size: 0.86rem;
         font-weight: 600;
       }
       .row-status--inactive {
-        color: #b45309;
+        color: var(--ih-status-warning);
       }
       .status-dot {
         width: 0.52rem;

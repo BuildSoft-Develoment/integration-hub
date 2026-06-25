@@ -1,6 +1,8 @@
 import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
+import { TablePreferencesService, sortData, SortState } from '@integration-hub/core/services';
+
 import { ExecutionApiService, ExecutionModeFilter } from '../api/execution-api.service';
 import { ExecutionDetailStore } from '../details/execution-detail.store';
 import { ProcessExecutionRecord } from '../models/execution.models';
@@ -12,9 +14,12 @@ export type ExecutionStatusFilter =
   | 'FAILED'
   | 'COMPLETED_WITH_ERRORS';
 
+const TABLE_ID = 'executions';
+
 @Injectable()
 export class ExecutionCatalogQueryStore implements OnDestroy {
   private readonly api = inject(ExecutionApiService);
+  private readonly prefs = inject(TablePreferencesService);
   private readonly detail = inject(ExecutionDetailStore);
   private readonly searchDebounceMs = 300;
   private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
@@ -29,7 +34,19 @@ export class ExecutionCatalogQueryStore implements OnDestroy {
   readonly currentPage = signal(0);
   readonly pageSize = signal(8);
 
-  readonly pagedExecutions = computed(() => this.executions());
+  readonly sortField = signal<string | null>(this.prefs.getSort(TABLE_ID)?.field ?? null);
+  readonly sortDirection = signal<'asc' | 'desc'>(this.prefs.getSort(TABLE_ID)?.direction ?? 'asc');
+
+  private readonly sort = computed<SortState | null>(() => {
+    const field = this.sortField();
+    return field ? { field, direction: this.sortDirection() } : null;
+  });
+
+  readonly pagedExecutions = computed(() => {
+    const data = this.executions();
+    const s = this.sort();
+    return s ? sortData(data, s) : data;
+  });
 
   async load(): Promise<void> {
     await this.loadExecutions(true);
@@ -61,6 +78,18 @@ export class ExecutionCatalogQueryStore implements OnDestroy {
     this.pageSize.set(pageSize);
     this.currentPage.set(pageIndex);
     void this.loadExecutions(false);
+  }
+
+  toggleSort(field: string): void {
+    if (this.sortField() === field) {
+      const dir = this.sortDirection() === 'asc' ? 'desc' : 'asc';
+      this.sortDirection.set(dir);
+      this.prefs.setSort(TABLE_ID, { field, direction: dir });
+    } else {
+      this.sortField.set(field);
+      this.sortDirection.set('asc');
+      this.prefs.setSort(TABLE_ID, { field, direction: 'asc' });
+    }
   }
 
   async reload(): Promise<void> {

@@ -1,15 +1,14 @@
 <section class="spool audit-page">
-      <ih-breadcrumb [items]="breadcrumbItems()" [backLabel]="i18n.t('audit.common.back')" />
       <div class="spool__toolbar">
         <div>
           <h2 class="ih-section-title">{{ i18n.t('audit.spool.title') }}</h2>
           <p class="ih-muted">{{ i18n.t('audit.spool.subtitle') }}</p>
         </div>
         <div class="spool__actions">
-          <mat-checkbox [ngModel]="autoRefresh" (ngModelChange)="setAutoRefresh($event)">{{ i18n.t('audit.spool.autoRefresh') }}</mat-checkbox>
+          <mat-checkbox [ngModel]="autoRefresh()" (ngModelChange)="setAutoRefresh($event)">{{ i18n.t('audit.spool.autoRefresh') }}</mat-checkbox>
           <mat-form-field subscriptSizing="dynamic">
             <mat-label>{{ i18n.t('audit.spool.refreshInterval') }}</mat-label>
-            <mat-select [ngModel]="refreshMs" (ngModelChange)="setRefreshMs($event)" [disabled]="!autoRefresh">
+            <mat-select [ngModel]="refreshMs()" (ngModelChange)="setRefreshMs($event)" [disabled]="!autoRefresh()">
               <mat-option [value]="30000">30s</mat-option>
               <mat-option [value]="60000">1 min</mat-option>
               <mat-option [value]="300000">5 min</mat-option>

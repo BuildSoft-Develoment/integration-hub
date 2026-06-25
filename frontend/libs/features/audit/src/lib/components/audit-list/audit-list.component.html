@@ -1,15 +1,32 @@
 <div class="list-card ih-catalog-list">
       <div class="table-head ih-catalog-table-head">
-        <span>{{ i18n.t('audit.eventType') }}</span>
-        <span>{{ i18n.t('common.status') }}</span>
-        <span>{{ i18n.t('audit.createdAt') }}</span>
+        <button type="button" class="col-sortable" (click)="toggleSort.emit('eventType')">
+          {{ i18n.t('audit.eventType') }}
+          @if (sortField() === 'eventType') {
+            <span class="sort-arrow">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
+          }
+        </button>
+        <button type="button" class="col-sortable" (click)="toggleSort.emit('status')">
+          {{ i18n.t('common.status') }}
+          @if (sortField() === 'status') {
+            <span class="sort-arrow">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
+          }
+        </button>
+        <button type="button" class="col-sortable" (click)="toggleSort.emit('createdAt')">
+          {{ i18n.t('audit.createdAt') }}
+          @if (sortField() === 'createdAt') {
+            <span class="sort-arrow">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
+          }
+        </button>
       </div>
 
       <div class="table-body ih-catalog-table-body ih-thin-scroll">
         @for (event of events(); track event.id) {
           <button type="button" class="table-row ih-catalog-table-row" [class.table-row--selected]="selectedEventId() === event.id" [class.ih-catalog-table-row--selected]="selectedEventId() === event.id" (click)="selectEvent.emit(event)">
             <div class="row-primary ih-catalog-row-primary">
-              <div class="row-avatar ih-catalog-row-avatar">{{ eventLabel(event).slice(0, 1).toUpperCase() }}</div>
+              <div class="row-avatar ih-catalog-row-avatar ih-tone-document">
+                <ih-icon name="shield" [size]="20" />
+              </div>
               <div class="row-copy ih-catalog-row-copy">
                 <strong>{{ eventLabel(event) }}</strong>
                 <small>#{{ event.id }} · PE {{ event.processExecutionId ?? '-' }}</small>
@@ -25,7 +42,7 @@
               </mat-chip-set>
             </div>
 
-            <div class="row-status ih-catalog-row-meta">{{ formatDate(event.createdAt) }}</div>
+            <div class="row-status ih-catalog-row-meta"><time [attr.datetime]="event.createdAt" [title]="event.createdAt | ihTime:'absolute'">{{ event.createdAt | ihTime }}</time></div>
           </button>
         } @empty {
           <div class="empty-state ih-catalog-empty-state ih-muted">{{ i18n.t('audit.noData') }}</div>

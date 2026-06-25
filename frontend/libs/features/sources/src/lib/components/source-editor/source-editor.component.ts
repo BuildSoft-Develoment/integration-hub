@@ -1,11 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { Component, input, output } from '@angular/core';
+import { Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   SourceDraft,
   SourceProviderDescriptor,
   SourceProviderType,
 } from '@integration-hub/core/providers';
+import { SourceManagerService } from '@integration-hub/core/services';
 import { ManagedEditorFormActionsComponent, ManagedEditorHeaderComponent, ManagedEditorOverviewComponent, ManagedEditorReadonlyActionsComponent, ManagedEditorSectionComponent, ManagedEditorShellComponent, ManagedEditorTestResultComponent } from '@integration-hub/shared/ui';
 import { SourceFormModel, SourceTestResult } from '../../models/source.models';
 import { SourceTypeFormHostComponent } from '../source-type-form/source-type-form-host/source-type-form-host.component';
@@ -41,6 +42,8 @@ import { SourceTypeFormHostComponent } from '../source-type-form/source-type-for
     templateUrl: './source-editor.component.html'
 })
 export class SourceEditorComponent {
+  private readonly sourceManager = inject(SourceManagerService);
+
   readonly form = input.required<SourceFormModel>();
   readonly draft = input.required<SourceDraft>();
   readonly providerOptions = input.required<readonly SourceProviderDescriptor[]>();
@@ -66,6 +69,10 @@ export class SourceEditorComponent {
       this.providerOptions().find((provider) => provider.type === this.form().sourceType)
         ?.label ?? this.form().sourceType
     );
+  }
+
+  presentation() {
+    return this.sourceManager.presentation(this.form().sourceType);
   }
 
   changeSourceType(value: string): void {

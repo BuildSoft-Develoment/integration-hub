@@ -8,7 +8,6 @@ import { ProcessFlowSyncService } from '../flow/process-flow-sync.service';
 import { ProcessFormFactoryService } from '../forms/process-form-factory.service';
 import {
   createTaskForm,
-  defaultTaskConfig,
   normalizeTaskOrders,
   ProcessFormModel,
   ProcessRecord,
@@ -25,10 +24,8 @@ export class ProcessEditorStore {
   private readonly formFactory = inject(ProcessFormFactoryService);
   private readonly flowApi = inject(ProcessFlowApiService);
   private readonly flowSync = inject(ProcessFlowSyncService);
-  // M-1a: para que createTaskForm respete los defaults del provider registrado
-  // (motor o vertical), pasamos el config derivado via el manager.
-  // {@code optional: true} para que tests con TestBed sin providers no quiebren;
-  // si no esta disponible, createTaskForm usa el switch hardcoded de fallback.
+  // M-1a: el config inicial sale del provider registrado via el manager.
+  // Optional: true para tests que no proveen el servicio.
   private readonly taskManager = inject(ProcessTaskManagerService, { optional: true });
 
   readonly saving = signal(false);
@@ -123,9 +120,6 @@ export class ProcessEditorStore {
     position?: ProcessFlowNodePosition
   ): void {
     this.form.update((current) => {
-      // M-1a: el config inicial sale del provider registrado para este
-      // taskType (motor o vertical). Si no hay provider, createTaskForm cae
-      // al switch hardcoded de los 6 motor types o un placeholder.
       const nextOrder = current.tasks.length + 1;
       const provisionalRef = `task-${nextOrder}`;
       const tasks = normalizeTaskOrders([
@@ -301,17 +295,13 @@ export class ProcessEditorStore {
         }, null, 2),
       };
     } catch {
-      // Fallback conservador para configs invalidas: mantiene el comportamiento previo.
+      // Si el JSON es invalido, se queda con la config actual.
     }
-    return {
-      ...task,
-      configurationJson: defaultTaskConfig(task.taskType, task.clientId, suggested),
-    };
+    return task;
   }
 
   private defaultConfigurationJson(taskType: ProcessTaskType, taskRef: string): string {
-    return this.taskManager?.defaultConfigurationJson(taskType, taskRef)
-      ?? defaultTaskConfig(taskType, taskRef);
+    return this.taskManager?.defaultConfigurationJson(taskType, taskRef) ?? '{}';
   }
 
   private suggestedInput(taskType: ProcessTaskType, previousTasks: readonly ProcessTaskFormModel[]): { sourceTaskRef: string; sourceOutput: ProcessTaskOutputKind } | undefined {

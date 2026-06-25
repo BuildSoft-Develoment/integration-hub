@@ -117,6 +117,16 @@ $ih-dark-theme: mat.define-theme((
   --ih-status-error-bg: color-mix(in srgb, var(--ih-status-error) 14%, transparent);
   --ih-status-warning-bg: color-mix(in srgb, var(--ih-status-warning) 12%, transparent);
   --ih-status-success-bg: color-mix(in srgb, var(--ih-status-success) 12%, transparent);
+  --ih-status-info-bg: color-mix(in srgb, var(--ih-status-info) 14%, transparent);
+  /* Tonos de presentacion de recursos (avatares/chips por tipo).
+     Derivan de la identidad existente; no introducen colores literales. */
+  --ih-tone-database: var(--ih-accent-strong);
+  --ih-tone-document: var(--ih-text-soft);
+  --ih-tone-storage: var(--ih-accent);
+  --ih-tone-network: var(--ih-status-info);
+  --ih-tone-integration: var(--ih-accent-strong);
+  --ih-tone-cloud: var(--ih-status-info);
+  --ih-tone-payment: var(--ih-status-warning);
   --mat-sys-primary: var(--ih-accent);
   --mat-sys-secondary: var(--ih-accent-strong);
   --mat-sys-error: var(--ih-error);
@@ -984,6 +994,27 @@ select {
   color: var(--ih-accent-strong);
   font-weight: 800;
 }
+
+/* Tonos de presentacion por tipo de recurso (avatar/chip). El color se toma
+   del token tonal; el fondo es una mezcla translucida del mismo tono. */
+.ih-tone-database,
+.ih-tone-document,
+.ih-tone-storage,
+.ih-tone-network,
+.ih-tone-integration,
+.ih-tone-cloud,
+.ih-tone-payment {
+  color: var(--ih-tone);
+  background: color-mix(in srgb, var(--ih-tone) 15%, transparent);
+}
+
+.ih-tone-database { --ih-tone: var(--ih-tone-database); }
+.ih-tone-document { --ih-tone: var(--ih-tone-document); }
+.ih-tone-storage { --ih-tone: var(--ih-tone-storage); }
+.ih-tone-network { --ih-tone: var(--ih-tone-network); }
+.ih-tone-integration { --ih-tone: var(--ih-tone-integration); }
+.ih-tone-cloud { --ih-tone: var(--ih-tone-cloud); }
+.ih-tone-payment { --ih-tone: var(--ih-tone-payment); }
 
 .ih-catalog-row-copy {
   display: grid;

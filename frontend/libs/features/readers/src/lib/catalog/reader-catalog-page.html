@@ -17,9 +17,12 @@
             [readers]="store.pagedReaders()"
             [totalLength]="store.totalLength()"
             [selectedReaderId]="store.selectedReader()?.id ?? null"
+            [sortField]="store.sortField()"
+            [sortDirection]="store.sortDirection()"
             [pageIndex]="store.currentPage()"
             [pageSize]="store.pageSize()"
             (selectReader)="store.selectReader($event)"
+            (toggleSort)="store.toggleSort($event)"
             (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
           />
         </section>

@@ -1,12 +1,12 @@
 .test-result {
   padding: 0.85rem 0.95rem;
   border-radius: 16px;
-  background: rgba(22, 101, 52, 0.1);
-  color: #166534;
+  background: var(--ih-status-success-bg);
+  color: var(--ih-status-success);
   font-weight: 600;
 }
 
 .test-result--danger {
-  background: rgba(185, 28, 28, 0.12);
-  color: #b91c1c;
+  background: var(--ih-status-error-bg);
+  color: var(--ih-status-error);
 }

@@ -21,7 +21,7 @@
   gap: 1rem;
   align-items: start;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--ih-border-subtle, var(--color-border, #e2e8f0));
+  border-bottom: 1px solid var(--ih-border);
 }
 
 .mt101-status__header h3 {
@@ -44,7 +44,7 @@
 
 .mt101-status__section h4 {
   margin: 0;
-  color: var(--ih-text-soft, var(--color-text-muted, #475569));
+  color: var(--ih-text-soft);
   font-size: 0.82rem;
   font-weight: 600;
   letter-spacing: 0;
@@ -70,10 +70,10 @@
 .mt101-status__notice {
   margin: 0;
   padding: 0.75rem 1rem;
-  border: 1px dashed var(--ih-border-subtle, var(--color-border, #cbd5e1));
+  border: 1px dashed var(--ih-border);
   border-radius: 6px;
-  background: var(--ih-surface-soft, var(--color-surface-muted, #f1f5f9));
-  color: var(--ih-text-soft, var(--color-text-muted, #475569));
+  background: var(--ih-surface-soft);
+  color: var(--ih-text-soft);
   font-size: 0.85rem;
 }
 

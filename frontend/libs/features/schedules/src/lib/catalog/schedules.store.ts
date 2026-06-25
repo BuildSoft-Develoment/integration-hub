@@ -3,9 +3,14 @@ import { firstValueFrom } from 'rxjs';
 import {
   AppFeedbackService,
   AuthAccessService,
+  TablePreferencesService,
+  sortData,
+  SortState,
 } from '@integration-hub/core/services';
 import { ScheduleRecord } from '../models/schedules.models';
 import { SchedulesApiService } from '../api/schedules-api.service';
+
+const TABLE_ID = 'schedules';
 
 type ModeFilter = 'ALL' | 'SCHEDULED' | 'MANUAL';
 type StatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
@@ -15,6 +20,7 @@ export class SchedulesStore implements OnDestroy {
   private readonly api = inject(SchedulesApiService);
   private readonly access = inject(AuthAccessService);
   private readonly feedback = inject(AppFeedbackService);
+  private readonly prefs = inject(TablePreferencesService);
   private readonly searchDebounceMs = 300;
   private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
   private requestSequence = 0;
@@ -32,8 +38,23 @@ export class SchedulesStore implements OnDestroy {
   readonly currentPage = signal(0);
   readonly pageSize = signal(8);
 
+  readonly sortField = signal<string | null>(this.prefs.getSort(TABLE_ID)?.field ?? null);
+  readonly sortDirection = signal<'asc' | 'desc'>(this.prefs.getSort(TABLE_ID)?.direction ?? 'asc');
+
   readonly canOperate = computed(() => this.access.canOperate());
-  readonly pagedSchedules = computed(() => this.schedules());
+
+  private readonly sort = computed<SortState | null>(() => {
+    const field = this.sortField();
+    return field ? { field, direction: this.sortDirection() } : null;
+  });
+
+  readonly pagedSchedules = computed(() => {
+    const data = this.schedules();
+    const s = this.sort();
+    return s
+      ? sortData(data, s, (item, field) => (field === 'mode' ? item.scheduled : (item as unknown as Record<string, unknown>)[field]))
+      : data;
+  });
 
   async load(): Promise<void> {
     await this.loadSchedules(true);
@@ -90,6 +111,18 @@ export class SchedulesStore implements OnDestroy {
       await this.loadSchedules(false);
     } finally {
       this.executing.set(false);
+    }
+  }
+
+  toggleSort(field: string): void {
+    if (this.sortField() === field) {
+      const dir = this.sortDirection() === 'asc' ? 'desc' : 'asc';
+      this.sortDirection.set(dir);
+      this.prefs.setSort(TABLE_ID, { field, direction: dir });
+    } else {
+      this.sortField.set(field);
+      this.sortDirection.set('asc');
+      this.prefs.setSort(TABLE_ID, { field, direction: 'asc' });
     }
   }
 

@@ -18,9 +18,12 @@
             [processes]="viewModel().list.processes"
             [totalLength]="viewModel().list.totalLength"
             [selectedProcessId]="viewModel().list.selectedProcessId"
+            [sortField]="store.sortField()"
+            [sortDirection]="store.sortDirection()"
             [pageIndex]="viewModel().list.pageIndex"
             [pageSize]="viewModel().list.pageSize"
             (selectProcess)="selectProcess($event)"
+            (toggleSort)="store.toggleSort($event)"
             (pageChange)="updatePagination($event)"
           />
         </section>

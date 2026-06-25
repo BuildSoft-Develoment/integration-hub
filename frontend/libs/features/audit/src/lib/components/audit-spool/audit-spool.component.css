@@ -5,19 +5,19 @@
     .spool__actions { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
     .spool__danger--armed { --mdc-outlined-button-label-text-color:var(--ih-status-error); --mdc-outlined-button-outline-color:var(--ih-status-error); }
     .spool__summary { display:grid; grid-template-columns:repeat(auto-fit, minmax(9rem, 1fr)); gap:.6rem; }
-    .spool__metric { display:grid; gap:.25rem; padding:.75rem; border:1px solid var(--ih-border, #354052); border-radius:8px; background:var(--ih-surface-alt, #1b1f27); }
+    .spool__metric { display:grid; gap:.25rem; padding:.75rem; border:1px solid var(--ih-border); border-radius:8px; background:var(--ih-surface-alt); }
     .spool__metric small { color:var(--ih-text-soft); }
     .spool__metric strong { font-size:1.35rem; }
     .spool__metric--alert { border-color:var(--ih-status-error); background:var(--ih-status-error-bg); }
     .spool__metric--alert strong { color:var(--ih-status-error); }
-    .spool__health { display:flex; align-items:center; gap:.5rem; padding:.5rem .75rem; border-radius:8px; font-size:.86rem; font-weight:600; border:1px solid var(--ih-border, #354052); }
+    .spool__health { display:flex; align-items:center; gap:.5rem; padding:.5rem .75rem; border-radius:8px; font-size:.86rem; font-weight:600; border:1px solid var(--ih-border); }
     .spool__health-dot { width:.6rem; height:.6rem; border-radius:50%; background:currentColor; flex:0 0 auto; }
     .spool__health--ok { color:var(--ih-status-success); background:var(--ih-status-success-bg); border-color:var(--ih-status-success); }
     .spool__health--warn { color:var(--ih-status-warning); background:var(--ih-status-warning-bg); border-color:var(--ih-status-warning); }
     .spool__health--error { color:var(--ih-status-error); background:var(--ih-status-error-bg); border-color:var(--ih-status-error); }
-    .spool__table { overflow:auto; border:1px solid var(--ih-border, #354052); border-radius:8px; }
+    .spool__table { overflow:auto; border:1px solid var(--ih-border); border-radius:8px; }
     table { width:100%; border-collapse:collapse; min-width:58rem; }
-    th, td { padding:.55rem .65rem; border-bottom:1px solid var(--ih-border, #354052); text-align:left; vertical-align:top; }
+    th, td { padding:.55rem .65rem; border-bottom:1px solid var(--ih-border); text-align:left; vertical-align:top; }
     th { font-size:.75rem; color:var(--ih-text-soft); font-weight:600; }
     td { font-size:.86rem; }
     .spool__mono { font-family:ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap:anywhere; }

@@ -24,6 +24,8 @@ export class ProcessCatalogStore {
   readonly search = this.query.search;
   readonly scheduleFilter = this.query.scheduleFilter;
   readonly statusFilter = this.query.statusFilter;
+  readonly sortField = this.query.sortField;
+  readonly sortDirection = this.query.sortDirection;
   readonly currentPage = this.query.currentPage;
   readonly pageSize = this.query.pageSize;
   readonly referencesLoading = this.references.loading;
@@ -69,6 +71,10 @@ export class ProcessCatalogStore {
 
   updateStatusFilter(value: 'ALL' | 'ACTIVE' | 'INACTIVE'): void {
     this.query.updateStatusFilter(value);
+  }
+
+  toggleSort(field: string): void {
+    this.query.toggleSort(field);
   }
 
   async startCreate(): Promise<void> {

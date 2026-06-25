@@ -376,6 +376,76 @@ class Mt101PayFragmentReprocessTest {
         }
     }
 
+    @Test
+    void physicalLateAcceptanceWithBlockedSendAndConcurrentSchedulerResolvesRunToSent() throws Exception {
+        // v30 #2: prueba FISICA del escenario (no simulada en un fake). El provider REAL reclama el fragmento
+        // y entra a transport.send() que se BLOQUEA en un hilo; en otra conexion vence el lease y corre el
+        // scheduler (run+fragmento UNCERTAIN); luego send() devuelve ACCEPTED -> fragmento SENT; la resolucion
+        // tardia deja el run SENT. Verifica: un solo envio fisico, fragmento SENT, run SENT (nunca INVALIDATED),
+        // auditoria append-only PAY_UNCERTAIN (scheduler) + PAY_RESOLVED (resolucion tardia).
+        var runId = "RUN-PHYS-LATE";
+        var fragmentSetId = "PAY-PHYS-LATE";
+        insertFragmentSet(fragmentSetId, "P1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "P1", "ARCHIVED", null);
+        insertPayLedger(runId, fragmentSetId, "P1"); // run EXECUTING + lease futuro + ledger PREPARED
+
+        var dispatchReached = new CountDownLatch(1);
+        var releaseSend = new CountDownLatch(1);
+        var transport = new BlockingTransport(dispatchReached, releaseSend,
+                TransportResult.accepted("GW-P1", 1, 10L));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore, null, null, payStore);
+        var repository = new Mt101RebuildRepository();
+
+        var workerError = new AtomicReference<Throwable>();
+        var worker = new Thread(() -> {
+            try {
+                provider.execute(contextWith(fragmentSource), payConfig(50));
+            } catch (Throwable t) {
+                workerError.set(t);
+            }
+        });
+        worker.start();
+
+        // El worker reclamo el fragmento (PREPARED->DISPATCHING, commiteado) y esta BLOQUEADO dentro de send().
+        assertTrue(dispatchReached.await(10, java.util.concurrent.TimeUnit.SECONDS),
+                "el worker debe alcanzar transport.send()");
+        assertEquals("DISPATCHING", payLedgerStatus(runId, "P1"), "el fragmento se reclamo antes del envio");
+
+        // Vence el lease y corre el scheduler (otra conexion) MIENTRAS send() sigue bloqueado.
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_lease_until = current_timestamp - "
+                    + "interval '1 minute' where rebuild_run_id = '" + runId + "'");
+        }
+        repository.markExpiredPayExecutionsUncertain(dataSource, java.time.LocalDateTime.now());
+        assertEquals("UNCERTAIN", runPayStatus(runId), "el scheduler marca el run UNCERTAIN (hubo dispatch)");
+        assertEquals("UNCERTAIN", payLedgerStatus(runId, "P1"), "el fragmento DISPATCHING pasa a UNCERTAIN");
+
+        // El banco responde ACCEPTED tardiamente -> el worker completa el fragmento a SENT.
+        releaseSend.countDown();
+        worker.join(10_000);
+        assertFalse(worker.isAlive(), "el worker termina tras liberar send()");
+        assertEquals(null, workerError.get(), () -> "worker sin errores: " + workerError.get());
+        assertEquals(1, transport.callsReceived(), "un solo envio fisico al banco (sin reenvio)");
+        assertEquals("SENT", payLedgerStatus(runId, "P1"), "aceptacion tardia: el fragmento queda SENT");
+
+        // Resolucion tardia (como la invoca el servicio): run UNCERTAIN + todos SENT -> SENT, append-only.
+        assertEquals(1, repository.resolveLateAcceptedPayRun(dataSource, runId, "operator"),
+                "se resuelve el run tardiamente");
+        assertEquals("SENT", runPayStatus(runId), "el run se resuelve a SENT, nunca INVALIDATED");
+        assertEquals(1L, countRowsWhere("mt101_corrective_pay_action",
+                "rebuild_run_id = '" + runId + "' and action_type = 'PAY_UNCERTAIN'"),
+                "queda la accion del scheduler");
+        assertEquals(1L, countRowsWhere("mt101_corrective_pay_action",
+                "rebuild_run_id = '" + runId + "' and action_type = 'PAY_RESOLVED'"),
+                "queda la accion de resolucion tardia");
+        assertEquals(0L, countRowsWhere("mt101_rebuild_run",
+                "rebuild_run_id = '" + runId + "' and pay_status = 'INVALIDATED'"),
+                "el run nunca queda INVALIDATED tras un dispatch aceptado");
+    }
+
     private String runPayStatus(String runId) throws SQLException {
         try (Connection connection = dataSource.getConnection();
              var statement = connection.prepareStatement(
@@ -549,6 +619,7 @@ class Mt101PayFragmentReprocessTest {
                     + "rebuild_run_id varchar(80) primary key,"
                     + "pay_status varchar(30) not null default 'EXECUTING',"
                     + "pay_uncertain_reason text, pay_error_message text, pay_completed_at timestamp,"
+                    + "pay_resolved_by varchar(120), pay_resolved_at timestamp, pay_resolution_reason text,"
                     + "updated_at timestamp not null default current_timestamp,"
                     + "pay_lease_until timestamp)");
             // v28: tabla de acciones (cadena hash) para que el scheduler de lease registre su accion.
@@ -803,6 +874,44 @@ class Mt101PayFragmentReprocessTest {
 
         List<Map<String, Object>> receivedConfigurations() {
             return receivedConfigurations;
+        }
+    }
+
+    /** v30: transporte cuyo send() se BLOQUEA hasta liberarlo, para probar el solape fisico con el scheduler. */
+    private static final class BlockingTransport implements PaymentMessageTransport {
+        private final CountDownLatch dispatchReached;
+        private final CountDownLatch releaseSend;
+        private final TransportResult result;
+        private final List<Mt101Message> received = new ArrayList<>();
+
+        BlockingTransport(CountDownLatch dispatchReached, CountDownLatch releaseSend, TransportResult result) {
+            this.dispatchReached = dispatchReached;
+            this.releaseSend = releaseSend;
+            this.result = result;
+        }
+
+        @Override
+        public String transport() {
+            return "REST";
+        }
+
+        @Override
+        public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
+            received.add(message);
+            dispatchReached.countDown(); // el fragmento ya esta DISPATCHING (claim commiteado antes del send)
+            try {
+                if (!releaseSend.await(15, java.util.concurrent.TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("send() no fue liberado a tiempo");
+                }
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(error);
+            }
+            return result;
+        }
+
+        int callsReceived() {
+            return received.size();
         }
     }
 

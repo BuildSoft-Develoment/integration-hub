@@ -17,7 +17,7 @@
 
 .mt101-reconcile__header {
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--ih-border-subtle, var(--color-border, #e2e8f0));
+  border-bottom: 1px solid var(--ih-border);
 }
 
 .mt101-reconcile__header h3 {
@@ -35,7 +35,7 @@
 
 .mt101-reconcile__section h4 {
   margin: 0;
-  color: var(--ih-text-soft, var(--color-text-muted, #475569));
+  color: var(--ih-text-soft);
   font-size: 0.82rem;
   font-weight: 600;
   letter-spacing: 0;

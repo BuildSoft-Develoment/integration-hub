@@ -1,14 +1,14 @@
 // @trace observabilidad: operacion del spool asincronico de auditoria
 import { CommonModule } from '@angular/common';
-import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, effect, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { I18nService } from '@integration-hub/core/services';
-import { BreadcrumbComponent, IhBreadcrumbItem, RelativeTimePipe } from '@integration-hub/shared/ui';
+import { BreadcrumbService, I18nService } from '@integration-hub/core/services';
+import { RelativeTimePipe } from '@integration-hub/shared/ui';
 import { forkJoin } from 'rxjs';
 import { AuditApiService } from '../../api/audit-api.service';
 import { AuditSpoolEntry, AuditSpoolSummary } from '../../models/audit.models';
@@ -25,19 +25,14 @@ import { AuditSpoolEntry, AuditSpoolSummary } from '../../models/audit.models';
     MatInputModule,
     MatSelectModule,
     RelativeTimePipe,
-    BreadcrumbComponent,
   ],
   styleUrl: './audit-spool.component.css',
   templateUrl: './audit-spool.component.html',
 })
-export class AuditSpoolComponent implements OnInit, OnDestroy {
+export class AuditSpoolComponent implements OnInit {
   private readonly api = inject(AuditApiService);
+  private readonly breadcrumb = inject(BreadcrumbService);
   readonly i18n = inject(I18nService);
-
-  readonly breadcrumbItems = computed<IhBreadcrumbItem[]>(() => [
-    { label: this.i18n.t('audit.breadcrumb.root'), link: ['/audit'] },
-    { label: this.i18n.t('audit.breadcrumb.spool') },
-  ]);
 
   readonly summary = signal<AuditSpoolSummary | null>(null);
   readonly deadRows = signal<AuditSpoolEntry[]>([]);
@@ -54,9 +49,18 @@ export class AuditSpoolComponent implements OnInit, OnDestroy {
   cleanupLimit = 10000;
 
   // Auto-refresh del backbone asincronico (apagado por defecto).
-  autoRefresh = false;
-  refreshMs = 30000;
-  private refreshTimer?: ReturnType<typeof setInterval>;
+  readonly autoRefresh = signal(false);
+  readonly refreshMs = signal(30000);
+
+  constructor() {
+    effect((onCleanup) => {
+      if (!this.autoRefresh()) { return; }
+      const id = setInterval(() => {
+        if (!this.loading()) { this.load(); }
+      }, this.refreshMs());
+      onCleanup(() => clearInterval(id));
+    });
+  }
 
   // Semaforo de salud: DEAD>0 critico, cola estancada (>5min) advertencia, vacia sana.
   readonly health = computed<'ok' | 'warn' | 'error' | null>(() => {
@@ -90,42 +94,26 @@ export class AuditSpoolComponent implements OnInit, OnDestroy {
   });
 
   ngOnInit(): void {
+    this.breadcrumb.setItems([
+      { label: this.i18n.t('audit.breadcrumb.root'), link: ['/audit'] },
+      { label: this.i18n.t('audit.breadcrumb.spool') },
+    ]);
+    this.breadcrumb.setBackLabel(this.i18n.t('audit.common.back'));
     this.load();
   }
 
   ngOnDestroy(): void {
-    if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
-    }
     if (this.armTimer) {
       clearTimeout(this.armTimer);
     }
   }
 
   setAutoRefresh(on: boolean): void {
-    this.autoRefresh = on;
-    this.applyAutoRefresh();
+    this.autoRefresh.set(on);
   }
 
   setRefreshMs(ms: number): void {
-    this.refreshMs = ms;
-    if (this.autoRefresh) {
-      this.applyAutoRefresh();
-    }
-  }
-
-  private applyAutoRefresh(): void {
-    if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
-      this.refreshTimer = undefined;
-    }
-    if (this.autoRefresh) {
-      this.refreshTimer = setInterval(() => {
-        if (!this.loading()) {
-          this.load();
-        }
-      }, this.refreshMs);
-    }
+    this.refreshMs.set(ms);
   }
 
   private isStale(ts: string | null | undefined): boolean {

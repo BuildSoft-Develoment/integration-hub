@@ -52,6 +52,8 @@ export class ExecutionCatalogPageComponent implements OnInit {
       executions: this.store.pagedExecutions(),
       totalLength: this.store.totalLength(),
       selectedExecutionId: this.store.selectedExecution()?.id ?? null,
+      sortField: this.store.sortField(),
+      sortDirection: this.store.sortDirection(),
       pageIndex: this.store.currentPage(),
       pageSize: this.store.pageSize(),
     },
@@ -86,6 +88,10 @@ export class ExecutionCatalogPageComponent implements OnInit {
 
   selectExecution(execution: ProcessExecutionRecord): void {
     void this.store.selectExecution(execution);
+  }
+
+  toggleSort(field: string): void {
+    this.store.toggleSort(field);
   }
 
   updatePagination(pageIndex: number, pageSize: number): void {

@@ -19,10 +19,13 @@
             [connections]="store.pagedConnections()"
             [totalLength]="store.totalLength()"
             [selectedConnectionId]="store.selectedConnection()?.id ?? null"
+            [sortField]="store.sortField()"
+            [sortDirection]="store.sortDirection()"
             [providerOptions]="providerOptions()"
             [pageIndex]="store.currentPage()"
             [pageSize]="store.pageSize()"
             (selectConnection)="store.selectConnection($event)"
+            (toggleSort)="store.toggleSort($event)"
             (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
           />
         </section>

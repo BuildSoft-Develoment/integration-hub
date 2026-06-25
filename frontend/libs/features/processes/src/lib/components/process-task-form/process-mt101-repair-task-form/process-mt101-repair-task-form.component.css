@@ -17,7 +17,7 @@
 
 .mt101-repair__header {
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid var(--ih-border-subtle, var(--color-border, #e2e8f0));
+  border-bottom: 1px solid var(--ih-border);
 }
 
 .mt101-repair__header h3 {
@@ -28,7 +28,7 @@
 
 .mt101-repair__description {
   margin: 0;
-  color: var(--ih-text-soft, var(--color-text-muted, #475569));
+  color: var(--ih-text-soft);
   font-size: 0.85rem;
 }
 
@@ -41,7 +41,7 @@
 
 .mt101-repair__section h4 {
   margin: 0;
-  color: var(--ih-text-soft, var(--color-text-muted, #475569));
+  color: var(--ih-text-soft);
   font-size: 0.82rem;
   font-weight: 600;
   letter-spacing: 0;
@@ -63,9 +63,9 @@
   gap: 0.65rem;
   min-width: 0;
   padding: 0.65rem;
-  border: 1px solid var(--ih-border-subtle, var(--color-border, #e2e8f0));
+  border: 1px solid var(--ih-border);
   border-radius: 6px;
-  background: var(--ih-surface-soft, var(--color-surface-muted, #f8fafc));
+  background: var(--ih-surface-soft);
 }
 
 .mt101-repair__row {

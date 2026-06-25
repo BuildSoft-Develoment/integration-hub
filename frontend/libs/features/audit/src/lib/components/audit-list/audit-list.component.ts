@@ -4,20 +4,19 @@ import { Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { I18nService } from '@integration-hub/core/services';
+import { IconComponent, RelativeTimePipe } from '@integration-hub/shared/ui';
 
 import { AuditPresentationService } from '../../utils/audit-presentation.service';
 import { AuditRecord } from '../../models/audit.models';
 
+export type SortDir = 'asc' | 'desc';
+
 @Component({
   selector: 'ih-audit-list',
   standalone: true,
-  imports: [CommonModule, MatChipsModule, MatPaginatorModule],
-  styles: [`
-    .row-type,.row-status { display:flex; align-items:center; }
-    .row-status { font-size:0.86rem; color:var(--ih-text-soft); }
-    .row-task { color:var(--ih-text-soft); }
-  `],
-    templateUrl: './audit-list.component.html'
+  imports: [CommonModule, MatChipsModule, MatPaginatorModule, IconComponent, RelativeTimePipe],
+  templateUrl: './audit-list.component.html',
+  styleUrl: './audit-list.component.css'
 })
 export class AuditListComponent {
   readonly i18n = inject(I18nService);
@@ -26,11 +25,14 @@ export class AuditListComponent {
   readonly events = input.required<readonly AuditRecord[]>();
   readonly totalLength = input.required<number>();
   readonly selectedEventId = input<number | null>(null);
+  readonly sortField = input<string | null>(null);
+  readonly sortDirection = input<SortDir>('asc');
   readonly pageIndex = input(0);
   readonly pageSize = input(8);
   readonly pageSizeOptions = input<readonly number[]>([8, 16, 24]);
 
   readonly selectEvent = output<AuditRecord>();
+  readonly toggleSort = output<string>();
   readonly pageChange = output<PageEvent>();
 
   onPageChange(event: PageEvent): void {
@@ -39,10 +41,6 @@ export class AuditListComponent {
 
   statusLabel(status: string): string {
     return this.presentation.statusLabel(status);
-  }
-
-  formatDate(value: string | null): string {
-    return this.presentation.formatDate(value);
   }
 
   eventLabel(event: AuditRecord): string {

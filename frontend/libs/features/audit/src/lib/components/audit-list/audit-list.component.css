@@ -1,0 +1,54 @@
+:host .table-head,
+:host .table-row {
+  grid-template-columns: 2.5rem minmax(200px, 1.5fr) 0.9fr 0.8fr;
+}
+:host .table-head {
+  padding-left: 0.5rem;
+}
+:host .table-row {
+  padding-left: 0.5rem;
+}
+
+.row-type,
+.row-status {
+  display: flex;
+  align-items: center;
+}
+.row-status {
+  font-size: 0.86rem;
+  color: var(--ih-text-soft);
+}
+.row-task {
+  color: var(--ih-text-soft);
+}
+
+.col-check {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.5rem;
+  flex-shrink: 0;
+}
+
+.col-sortable {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0;
+}
+
+.col-sortable:hover {
+  color: var(--ih-text);
+}
+
+.sort-arrow {
+  font-size: 0.6rem;
+  line-height: 1;
+}

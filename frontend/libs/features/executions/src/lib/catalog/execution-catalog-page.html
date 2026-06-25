@@ -16,9 +16,12 @@
             [executions]="viewModel().list.executions"
             [totalLength]="viewModel().list.totalLength"
             [selectedExecutionId]="viewModel().list.selectedExecutionId"
+            [sortField]="viewModel().list.sortField"
+            [sortDirection]="viewModel().list.sortDirection"
             [pageIndex]="viewModel().list.pageIndex"
             [pageSize]="viewModel().list.pageSize"
             (selectExecution)="selectExecution($event)"
+            (toggleSort)="toggleSort($event)"
             (pageChange)="updatePagination($event.pageIndex, $event.pageSize)"
           />
         </section>

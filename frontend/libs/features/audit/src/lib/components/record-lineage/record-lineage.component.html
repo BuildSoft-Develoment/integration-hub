@@ -1,5 +1,4 @@
 <section class="lineage audit-page">
-      <ih-breadcrumb [items]="breadcrumbItems()" [backLabel]="i18n.t('audit.common.back')" />
       <div class="lineage__search">
         <mat-button-toggle-group [value]="mode()" (change)="setMode($event.value)" [attr.aria-label]="i18n.t('audit.lineage.mode')" hideSingleSelectionIndicator>
           @for (m of modes; track m.value) {

@@ -3,9 +3,10 @@ import { Component, HostListener, inject, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSidenavModule } from '@angular/material/sidenav';
-import { AuthService } from '@integration-hub/core/services';
+import { AuthService, BreadcrumbService } from '@integration-hub/core/services';
 
 import { AppNavigationComponent } from './navigation/app-navigation.component';
+import { BreadcrumbComponent } from '../breadcrumb/breadcrumb.component';
 import { AppPreferencesFacade } from './preferences/app-preferences.facade';
 import { AppSessionActionComponent } from './session-action/app-session-action.component';
 import { AppThemeActionComponent } from './theme-action/app-theme-action.component';
@@ -21,12 +22,14 @@ import { AppThemeActionComponent } from './theme-action/app-theme-action.compone
     AppNavigationComponent,
     AppSessionActionComponent,
     AppThemeActionComponent,
+    BreadcrumbComponent,
   ],
   templateUrl: './app-layout.component.html',
   styleUrl: './app-layout.component.css',
 })
 export class AppLayoutComponent {
   readonly auth = inject(AuthService);
+  readonly breadcrumb = inject(BreadcrumbService);
   readonly preferences = inject(AppPreferencesFacade);
   readonly i18n = this.preferences.i18n;
   readonly theme = this.preferences.theme;

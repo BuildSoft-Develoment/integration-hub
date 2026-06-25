@@ -18,9 +18,12 @@
             [events]="vm.events"
             [totalLength]="vm.totalLength"
             [selectedEventId]="vm.selectedEvent?.id ?? null"
+            [sortField]="vm.sortField"
+            [sortDirection]="vm.sortDirection"
             [pageIndex]="vm.pageIndex"
             [pageSize]="vm.pageSize"
             (selectEvent)="selectEvent($event)"
+            (toggleSort)="store.toggleSort($event)"
             (pageChange)="updatePagination($event)"
           />
         </section>

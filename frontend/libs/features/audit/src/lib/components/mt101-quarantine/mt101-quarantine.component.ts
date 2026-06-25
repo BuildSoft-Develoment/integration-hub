@@ -7,8 +7,8 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { I18nService } from '@integration-hub/core/services';
-import { BreadcrumbComponent, IconComponent, IhBreadcrumbItem } from '@integration-hub/shared/ui';
+import { BreadcrumbService, I18nService } from '@integration-hub/core/services';
+import { IconComponent } from '@integration-hub/shared/ui';
 import { Observable } from 'rxjs';
 import { AuditApiService } from '../../api/audit-api.service';
 import { Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101PayAction, Mt101RebuildRunSummary, Mt101RowTimelineEntry } from '../../models/audit.models';
@@ -25,7 +25,6 @@ import { durationBetween, timelineStatusIcon, timelineStatusKind } from '../../u
     MatFormFieldModule,
     MatInputModule,
     ClipboardModule,
-    BreadcrumbComponent,
     IconComponent,
   ],
   styleUrl: './mt101-quarantine.component.css',
@@ -34,16 +33,11 @@ import { durationBetween, timelineStatusIcon, timelineStatusKind } from '../../u
 export class Mt101QuarantineComponent {
   private readonly api = inject(AuditApiService);
   private readonly route = inject(ActivatedRoute);
+  private readonly breadcrumb = inject(BreadcrumbService);
   readonly i18n = inject(I18nService);
 
   protected readonly statusKind = timelineStatusKind;
   protected readonly statusIcon = timelineStatusIcon;
-
-  readonly breadcrumbItems = computed<IhBreadcrumbItem[]>(() => [
-    { label: this.i18n.t('audit.breadcrumb.root'), link: ['/audit'] },
-    { label: this.i18n.t('audit.breadcrumb.fragments'), link: ['/audit/mt101-fragments'] },
-    { label: this.i18n.t('audit.breadcrumb.quarantine') },
-  ]);
 
   /** Duración entre el hito i-1 y el i del timeline operacional (null en el primero). */
   durationAt(index: number): string | null {
@@ -79,6 +73,12 @@ export class Mt101QuarantineComponent {
   payResolutionReason = '';
 
   constructor() {
+    this.breadcrumb.setItems([
+      { label: this.i18n.t('audit.breadcrumb.root'), link: ['/audit'] },
+      { label: this.i18n.t('audit.breadcrumb.fragments'), link: ['/audit/mt101-fragments'] },
+      { label: this.i18n.t('audit.breadcrumb.quarantine') },
+    ]);
+    this.breadcrumb.setBackLabel(this.i18n.t('audit.common.back'));
     // Entrada unificada: desde la ejecución (?processExecutionId=) o desde el lookup
     // (?fragmentSetId=). Resuelve la cabecera del lote y auto-lista, sin teclear IDs.
     const qp = this.route.snapshot.queryParamMap;

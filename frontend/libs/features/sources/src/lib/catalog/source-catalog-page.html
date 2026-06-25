@@ -19,9 +19,12 @@
             [sources]="store.pagedSources()"
             [totalLength]="store.totalLength()"
             [selectedSourceId]="store.selectedSource()?.id ?? null"
+            [sortField]="store.sortField()"
+            [sortDirection]="store.sortDirection()"
             [pageIndex]="store.currentPage()"
             [pageSize]="store.pageSize()"
             (selectSource)="store.selectSource($event)"
+            (toggleSort)="store.toggleSort($event)"
             (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
           />
         </section>

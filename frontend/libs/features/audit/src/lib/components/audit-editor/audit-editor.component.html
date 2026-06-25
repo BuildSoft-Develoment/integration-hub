@@ -10,7 +10,7 @@
         @if (event()) {
           <div class="profile-stack">
             <div class="profile-header">
-              <div class="profile-avatar">{{ eventLabel(event()!).slice(0, 1).toUpperCase() }}</div>
+              <div class="profile-avatar ih-tone-document"><ih-icon name="shield" [size]="22" /></div>
               <div class="profile-copy">
                 <h3 class="profile-name">{{ eventLabel(event()!) }}</h3>
                 <p class="profile-subtitle">#{{ event()!.id }} · {{ statusLabel(event()!.status) }}</p>

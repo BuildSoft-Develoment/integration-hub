@@ -25,6 +25,8 @@ export class AuditPageComponent implements OnInit {
     events: this.store.pagedEvents(),
     totalLength: this.store.totalLength(),
     selectedEvent: this.store.selectedEvent(),
+    sortField: this.store.sortField(),
+    sortDirection: this.store.sortDirection(),
     drawerOpen: this.store.drawerOpen(),
     pageIndex: this.store.currentPage(),
     pageSize: this.store.pageSize(),

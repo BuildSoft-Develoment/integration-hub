@@ -33,6 +33,8 @@ export class SourceCatalogStore {
   readonly statusFilter = this.query.statusFilter;
   readonly selectedSourceId = this.query.selectedSourceId;
   readonly selectedSource = this.query.selectedSource;
+  readonly sortField = this.query.sortField;
+  readonly sortDirection = this.query.sortDirection;
   readonly drawerOpen = this.query.drawerOpen;
   readonly currentPage = this.query.currentPage;
   readonly pageSize = this.query.pageSize;
@@ -99,6 +101,10 @@ export class SourceCatalogStore {
 
   updateStatusFilter(value: SourceStatusFilter): void {
     this.query.updateStatusFilter(value);
+  }
+
+  toggleSort(field: string): void {
+    this.query.toggleSort(field);
   }
 
   startCreate(): void {

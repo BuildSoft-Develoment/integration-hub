@@ -1,11 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { Component, input, output } from '@angular/core';
+import { Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ReaderDraft,
   ReaderProviderDescriptor,
   ReaderProviderType,
 } from '@integration-hub/core/providers';
+import { ReaderManagerService } from '@integration-hub/core/services';
 import { ManagedEditorFormActionsComponent, ManagedEditorHeaderComponent, ManagedEditorOverviewComponent, ManagedEditorReadonlyActionsComponent, ManagedEditorSectionComponent, ManagedEditorShellComponent } from '@integration-hub/shared/ui';
 import { ReaderFormModel } from '../../models/reader.models';
 import { ReaderTypeFormHostComponent } from '../reader-type-form/reader-type-form-host/reader-type-form-host.component';
@@ -40,6 +41,8 @@ import { ReaderTypeFormHostComponent } from '../reader-type-form/reader-type-for
     templateUrl: './reader-editor.component.html'
 })
 export class ReaderEditorComponent {
+  private readonly readerManager = inject(ReaderManagerService);
+
   readonly form = input.required<ReaderFormModel>();
   readonly draft = input.required<ReaderDraft>();
   readonly providerOptions = input.required<readonly ReaderProviderDescriptor[]>();
@@ -62,6 +65,10 @@ export class ReaderEditorComponent {
       this.providerOptions().find((provider) => provider.type === this.form().readerType)
         ?.label ?? this.form().readerType
     );
+  }
+
+  presentation() {
+    return this.readerManager.presentation(this.form().readerType);
   }
 
   changeReaderType(value: string): void {

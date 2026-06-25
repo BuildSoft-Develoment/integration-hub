@@ -17,19 +17,19 @@
       }
 
       .snackbar-content[data-kind='success'] .snackbar-icon {
-        background: #16a34a;
+        background: var(--ih-status-success);
       }
 
       .snackbar-content[data-kind='error'] .snackbar-icon {
-        background: #dc2626;
+        background: var(--ih-status-error);
       }
 
       .snackbar-content[data-kind='warning'] .snackbar-icon {
-        background: #f59e0b;
+        background: var(--ih-status-warning);
       }
 
       .snackbar-content[data-kind='info'] .snackbar-icon {
-        background: #3b82f6;
+        background: var(--ih-status-info);
       }
 
       .snackbar-svg {

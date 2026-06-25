@@ -4,10 +4,7 @@ import { AuthAccessService } from '@integration-hub/core/services';
 
 import { ProcessEditorStore } from './process-editor.store';
 import { ProcessFlowApiService } from '../api/process-flow-api.service';
-import {
-  defaultTaskConfig,
-  ProcessRecord,
-} from '../models/process.models';
+import { ProcessRecord } from '../models/process.models';
 
 describe('ProcessEditorStore', () => {
   let store: ProcessEditorStore;
@@ -112,7 +109,7 @@ describe('ProcessEditorStore', () => {
         taskType: 'DB_WRITE',
         sourceDefinitionId: null,
         readerDefinitionId: null,
-        configurationJson: defaultTaskConfig('DB_WRITE', task.clientId),
+        configurationJson: '{}',
       })
     );
   });

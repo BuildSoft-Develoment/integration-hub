@@ -8,8 +8,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { I18nService } from '@integration-hub/core/services';
-import { BreadcrumbComponent, IconComponent, IhBreadcrumbItem, RelativeTimePipe } from '@integration-hub/shared/ui';
+import { BreadcrumbService, I18nService } from '@integration-hub/core/services';
+import { IconComponent, RelativeTimePipe } from '@integration-hub/shared/ui';
 import { AuditApiService } from '../../api/audit-api.service';
 import { RecordLineageEntry } from '../../models/audit.models';
 import { durationBetween, timelineStatusIcon, timelineStatusKind } from '../../utils/timeline-format';
@@ -34,7 +34,6 @@ type SearchMode = 'record' | 'trace' | 'key' | 'sourceRow';
     MatInputModule,
     MatSelectModule,
     RelativeTimePipe,
-    BreadcrumbComponent,
     IconComponent,
   ],
   styleUrl: './record-lineage.component.css',
@@ -43,15 +42,11 @@ type SearchMode = 'record' | 'trace' | 'key' | 'sourceRow';
 export class RecordLineageComponent {
   private readonly api = inject(AuditApiService);
   private readonly route = inject(ActivatedRoute);
+  private readonly breadcrumb = inject(BreadcrumbService);
   readonly i18n = inject(I18nService);
 
   protected readonly statusKind = timelineStatusKind;
   protected readonly statusIcon = timelineStatusIcon;
-
-  readonly breadcrumbItems = computed<IhBreadcrumbItem[]>(() => [
-    { label: this.i18n.t('audit.breadcrumb.root'), link: ['/audit'] },
-    { label: this.i18n.t('audit.breadcrumb.lineage') },
-  ]);
 
   recordId = '';
   traceId = '';
@@ -69,6 +64,11 @@ export class RecordLineageComponent {
   ];
 
   constructor() {
+    this.breadcrumb.setItems([
+      { label: this.i18n.t('audit.breadcrumb.root'), link: ['/audit'] },
+      { label: this.i18n.t('audit.breadcrumb.lineage') },
+    ]);
+    this.breadcrumb.setBackLabel(this.i18n.t('audit.common.back'));
     // Drill-in desde cuarentena / ejecuciones: pre-rellena, fija el modo y auto-busca.
     const qp = this.route.snapshot.queryParamMap;
     const recordId = qp.get('recordId');

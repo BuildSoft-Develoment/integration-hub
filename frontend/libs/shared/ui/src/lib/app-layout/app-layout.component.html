@@ -50,6 +50,9 @@
       }
 
       <div class="shell-route-body">
+        @if (breadcrumb.items().length) {
+          <ih-breadcrumb [items]="breadcrumb.items()" [backLabel]="breadcrumb.backLabel()" />
+        }
         <router-outlet></router-outlet>
       </div>
     </section>

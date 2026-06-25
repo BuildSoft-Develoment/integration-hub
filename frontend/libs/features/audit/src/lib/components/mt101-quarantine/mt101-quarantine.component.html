@@ -1,5 +1,4 @@
 <section class="q audit-page">
-      <ih-breadcrumb [items]="breadcrumbItems()" [backLabel]="i18n.t('audit.common.back')" />
       @if (lote(); as l) {
         <div class="q__lote">
           <div class="q__lote-title"><ih-icon name="list" /> {{ i18n.t('audit.quarantine.titleLote', { set: l.fragmentSetId }) }}</div>

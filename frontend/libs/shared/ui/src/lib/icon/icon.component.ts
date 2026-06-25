@@ -21,7 +21,22 @@ export type IhIconName =
   | 'download'
   | 'upload'
   | 'toggle-on'
-  | 'toggle-off';
+  | 'toggle-off'
+  | 'database'
+  | 'server'
+  | 'folder'
+  | 'globe'
+  | 'file-text'
+  | 'table'
+  | 'code'
+  | 'cloud'
+  | 'cpu'
+  | 'play'
+  | 'send'
+  | 'bell'
+  | 'shield'
+  | 'git-branch'
+  | 'banknote';
 
 @Component({
   selector: 'ih-icon',

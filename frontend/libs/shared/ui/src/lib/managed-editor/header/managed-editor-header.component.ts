@@ -1,12 +1,13 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, input } from '@angular/core';
+import { Component, input } from '@angular/core';
 import { I18nService } from '@integration-hub/core/services';
+import { IconComponent, IhIconName } from '../../icon/icon.component';
 import { inject } from '@angular/core';
 
 @Component({
   selector: 'ih-managed-editor-header',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, IconComponent],
   templateUrl: './managed-editor-header.component.html',
   styleUrl: './managed-editor-header.component.css',
 })
@@ -15,5 +16,8 @@ export class ManagedEditorHeaderComponent {
 
   readonly titleKey = input.required<string>();
   readonly subtitle = input.required<string>();
-  readonly avatarText = computed(() => this.subtitle().slice(0, 1).toUpperCase());
+  /** Icono del recurso (politica no-fallback: requerido, sin inicial de texto). */
+  readonly icon = input.required<IhIconName>();
+  /** Clase tonal del Design System para el avatar. */
+  readonly toneClass = input.required<string>();
 }

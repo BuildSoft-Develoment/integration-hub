@@ -32,6 +32,8 @@ export class ConnectionCatalogStore {
   readonly statusFilter = this.query.statusFilter;
   readonly selectedConnectionId = this.query.selectedConnectionId;
   readonly selectedConnection = this.query.selectedConnection;
+  readonly sortField = this.query.sortField;
+  readonly sortDirection = this.query.sortDirection;
   readonly drawerOpen = this.query.drawerOpen;
   readonly currentPage = this.query.currentPage;
   readonly pageSize = this.query.pageSize;
@@ -82,6 +84,10 @@ export class ConnectionCatalogStore {
 
   updateStatusFilter(value: ConnectionStatusFilter): void {
     this.query.updateStatusFilter(value);
+  }
+
+  toggleSort(field: string): void {
+    this.query.toggleSort(field);
   }
 
   startCreate(): void {

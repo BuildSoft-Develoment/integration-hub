@@ -5,9 +5,9 @@
     .lineage__tl { display:flex; flex-direction:column; }
     .lineage__row { display:grid; grid-template-columns:1.7rem minmax(0,1fr); gap:.65rem; }
     .lineage__rail { position:relative; display:flex; justify-content:center; }
-    .lineage__rail::before { content:''; position:absolute; top:1.75rem; bottom:-.35rem; width:2px; background:var(--ih-border-strong, #354052); }
+    .lineage__rail::before { content:''; position:absolute; top:1.75rem; bottom:-.35rem; width:2px; background:var(--ih-border-strong); }
     .lineage__row:last-child .lineage__rail::before { display:none; }
-    .lineage__dot { width:1.6rem; height:1.6rem; border-radius:50%; display:grid; place-items:center; font-size:.85rem; z-index:1; border:2px solid var(--ih-border-strong); background:var(--ih-surface, #10141b); }
+    .lineage__dot { width:1.6rem; height:1.6rem; border-radius:50%; display:grid; place-items:center; font-size:.85rem; z-index:1; border:2px solid var(--ih-border-strong); background:var(--ih-surface); }
     .lineage__row--ok .lineage__dot { color:var(--ih-status-success); border-color:var(--ih-status-success); }
     .lineage__row--error .lineage__dot { color:var(--ih-status-error); border-color:var(--ih-status-error); }
     .lineage__row--pending .lineage__dot { color:var(--ih-status-neutral); }
@@ -22,7 +22,7 @@
     .lineage__key { color:var(--ih-text-soft); }
     .lineage__key--btn { font:inherit; color:var(--ih-accent-strong); background:color-mix(in srgb, var(--ih-accent) 8%, transparent); border:1px solid color-mix(in srgb, var(--ih-accent) 25%, var(--ih-border)); border-radius:6px; padding:1px 6px; cursor:pointer; text-align:left; width:fit-content; }
     .lineage__key--btn:hover,.lineage__key--btn:focus-visible { background:color-mix(in srgb, var(--ih-accent) 16%, transparent); }
-    .lineage__link { font-size:.78rem; color:var(--ih-accent, #4c6ef5); text-decoration:none; width:fit-content; }
+    .lineage__link { font-size:.78rem; color:var(--ih-accent); text-decoration:none; width:fit-content; }
     .lineage__link:hover { text-decoration:underline; }
     .lineage__empty,.lineage__error { color:var(--ih-text-soft); padding:.75rem; }
     .lineage__error { color:var(--ih-status-error); }

@@ -63,6 +63,10 @@ export class ConnectionEditorComponent {
     );
   }
 
+  presentation() {
+    return this.connectionManager.presentation(this.form().connectionType);
+  }
+
   configurationPreview(): string {
     return this.connectionManager.serializeDraft(this.form().connectionType, this.draft());
   }

@@ -1,4 +1,5 @@
 import { computed, inject, Injectable } from '@angular/core';
+import { ResourcePresentation } from '@integration-hub/shared/ui';
 import { I18nService } from '../i18n/i18n.service';
 import {
   PROCESS_TASK_PROVIDERS,
@@ -7,6 +8,7 @@ import {
   ProcessTaskSummaryContext,
   ProcessTaskType,
 } from '@integration-hub/core/providers';
+import { TASK_PRESENTATION } from '../presentation/resource-presentation.maps';
 
 @Injectable()
 export class ProcessTaskManagerService {
@@ -15,16 +17,29 @@ export class ProcessTaskManagerService {
 
   readonly availableProviders = computed(() => this.providers.map((provider) => provider.descriptor));
 
+  /**
+   * Presentacion visual (icono + tono) del tipo de tarea. Resolucion total
+   * via {@link TASK_PRESENTATION}: siempre devuelve una presentacion
+   * concreta, sin fallback en runtime.
+   */
+  presentation(type: ProcessTaskType): ResourcePresentation {
+    return TASK_PRESENTATION[type];
+  }
+
   resolve(type: ProcessTaskType): ProcessTaskProvider<any> | null {
     return this.providers.find((provider) => provider.supports(type)) ?? null;
   }
 
   label(type: ProcessTaskType): string {
-    return this.resolve(type) ? this.i18n.t(this.resolve(type)!.descriptor.labelKey) : type;
+    const provider = this.resolve(type);
+    if (!provider) throw new Error(`No provider registered for task type: ${type}`);
+    return this.i18n.t(provider.descriptor.labelKey);
   }
 
-  modalLayout(type: ProcessTaskType): 'workspace' | 'rest' | 'default' {
-    return this.resolve(type)?.descriptor.modalLayout ?? 'default';
+  modalLayout(type: ProcessTaskType): 'workspace' | 'rest' | undefined {
+    const provider = this.resolve(type);
+    if (!provider) throw new Error(`No provider registered for task type: ${type}`);
+    return provider.descriptor.modalLayout;
   }
 
   hydrateDraft<TDraft>(task: ProcessTaskFormModel): TDraft | null {
@@ -37,30 +52,25 @@ export class ProcessTaskManagerService {
 
   /**
    * Devuelve el {@code configurationJson} default para un task type recien
-   * creado, consultando el provider registrado (sin importar si es del motor o
-   * de una vertical). Si no hay provider, retorna {@code undefined} y el caller
-   * cae al placeholder hardcoded de {@code defaultTaskConfig}.
-   *
-   * <p>Cierra el gap M-1a a nivel UX: ahora cuando el usuario agrega un
-   * {@code MT101_BUILD} desde el palette, el config inicial respeta los
-   * defaults del {@code Mt101BuildTaskProvider} (format=JSON, envelope
-   * vacio, sequenceA con sendersReferenceTemplate, etc.).</p>
+   * creado, consultando el provider registrado. Si no hay provider, lanza
+   * error (politica no-fallback: todo task type debe tener un provider).
    */
-  defaultConfigurationJson(type: ProcessTaskType, taskRef: string): string | undefined {
+  defaultConfigurationJson(type: ProcessTaskType, taskRef: string): string {
     const provider = this.resolve(type);
-    if (!provider) {
-      return undefined;
-    }
+    if (!provider) throw new Error(`No provider registered for task type: ${type}`);
     const draft = provider.createDraft() as Record<string, unknown>;
     // Sobre-escribe el taskRef del draft con el clientId real de la tarea.
     if (draft && typeof draft === 'object') {
       (draft as { taskRef?: string }).taskRef = taskRef;
     }
     const patch = provider.toTaskPatch(draft);
-    return typeof patch.configurationJson === 'string' ? patch.configurationJson : undefined;
+    if (typeof patch.configurationJson !== 'string') throw new Error(`Provider for ${type} did not produce a string configurationJson`);
+    return patch.configurationJson;
   }
 
   summarize(task: ProcessTaskFormModel, context: ProcessTaskSummaryContext): string {
-    return this.resolve(task.taskType)?.summarize(task, context, this.i18n) ?? this.label(task.taskType);
+    const provider = this.resolve(task.taskType);
+    if (!provider) throw new Error(`No provider registered for task type: ${task.taskType}`);
+    return provider.summarize(task, context, this.i18n);
   }
 }
