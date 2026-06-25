@@ -893,9 +893,10 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
-    void preparePayIntentsWritesOnlyWhenRunIsEligibleNeverOverwritingAnApprovedPlan() throws Exception {
-        // v40 (P0, defensa TOCTOU): aunque se invoque preparePayIntents con el run en EXECUTING (carrera),
-        // el upsert es no-op: no crea ni reescribe specs de un plan en ejecucion.
+    void preparePayIntentsWritesOnlyWhileTheRunIsExclusivelyReservedForPlanPreparation() throws Exception {
+        // v40-bis: el upsert de specs escribe SOLO cuando el run esta RESERVADO (PREPARING_PLAN) por el maker.
+        // Con el run EXECUTING (despacho en curso) o NOT_REQUESTED (sin reserva), es no-op: ni dos makers
+        // concurrentes ni una segunda solicitud pueden escribir specs sin ganar antes la reserva exclusiva.
         var repository = new Mt101RebuildRepository();
         var intent = new Mt101RebuildRepository.PayFragmentIntent(FIX, "GUARD1", null, null, null,
                 "ph", "key-GUARD1", "REST", "key-GUARD1", null, "rest://x", "planhash",
@@ -908,14 +909,49 @@ class Mt101CorrectiveLifecycleServiceTest {
         repository.preparePayIntents(dataSource, "RUN-GUARD", java.util.List.of(intent));
         assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = "
                 + "'RUN-GUARD'"), "run EXECUTING: el upsert no escribe (plan inmutable)");
-        // Run elegible -> si escribe.
+        // Sin reserva (NOT_REQUESTED): el upsert TAMPOCO escribe; los specs solo se compilan bajo la reserva.
         try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
             statement.executeUpdate("update mt101_rebuild_run set pay_status = 'NOT_REQUESTED' "
                     + "where rebuild_run_id = 'RUN-GUARD'");
         }
         repository.preparePayIntents(dataSource, "RUN-GUARD", java.util.List.of(intent));
+        assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = "
+                + "'RUN-GUARD'"), "run NOT_REQUESTED (sin reserva): el upsert no escribe");
+        // Reserva exclusiva (PREPARING_PLAN) -> ahora si escribe el spec.
+        assertEquals(1, repository.reservePayForPlanPreparation(dataSource, "RUN-GUARD", 120),
+                "el run elegible se reserva (PREPARING_PLAN)");
+        repository.preparePayIntents(dataSource, "RUN-GUARD", java.util.List.of(intent));
         assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = "
-                + "'RUN-GUARD' and pay_status = 'PREPARED'"), "run elegible: el upsert escribe");
+                + "'RUN-GUARD' and pay_status = 'PREPARED'"), "run RESERVADO: el upsert escribe");
+    }
+
+    @Test
+    void planPreparationReservationIsExclusiveAndReclaimsOnlyStaleReservations() throws Exception {
+        // v40-bis: la reserva es ATOMICA y EXCLUSIVA. Dos makers no pueden reservar a la vez; una reserva vigente
+        // bloquea; solo una reserva CAIDA (mas vieja que la ventana) puede reclamarse.
+        var repository = new Mt101RebuildRepository();
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("insert into mt101_rebuild_run (rebuild_run_id, original_fragment_set_id, "
+                    + "corrective_set_id, status, pay_status, reference_code) values ('RUN-RES', '"
+                    + SET + "', 'RUN-RES', 'ARCHIVED', 'NOT_REQUESTED', '8')");
+        }
+        assertEquals(1, repository.reservePayForPlanPreparation(dataSource, "RUN-RES", 120),
+                "primer maker gana la reserva");
+        assertEquals("PREPARING_PLAN", queryString("select pay_status from mt101_rebuild_run where "
+                + "rebuild_run_id = 'RUN-RES'"));
+        assertEquals(0, repository.reservePayForPlanPreparation(dataSource, "RUN-RES", 120),
+                "segundo maker NO puede reservar mientras la reserva esta vigente");
+        // Reserva caida (back-date de la marca) -> reclamable.
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_plan_reserved_at = current_timestamp - "
+                    + "interval '10 minutes' where rebuild_run_id = 'RUN-RES'");
+        }
+        assertEquals(1, repository.reservePayForPlanPreparation(dataSource, "RUN-RES", 120),
+                "una reserva CAIDA (mayor que la ventana) se reclama");
+        // Liberar -> vuelve a NOT_REQUESTED.
+        assertEquals(1, repository.releasePayPlanReservation(dataSource, "RUN-RES"));
+        assertEquals("NOT_REQUESTED", queryString("select pay_status from mt101_rebuild_run where "
+                + "rebuild_run_id = 'RUN-RES'"));
     }
 
     @Test
@@ -1481,6 +1517,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "pay_resolved_by varchar(120), pay_resolved_at timestamp, pay_resolution_reason text,"
                     + "pay_request_reason text, pay_request_ticket varchar(120),"
                     + "pay_plan_version varchar(40), pay_plan_count integer, pay_plan_set_hash varchar(64),"
+                    + "pay_plan_reserved_at timestamp,"
                     + "pay_status_config_snapshot text, pay_reconcile_config_snapshot text,"
                     + "status_sync_status varchar(20) not null default 'PENDING', status_sync_error text,"
                     + "reconciliation_status varchar(20) not null default 'PENDING', reconciliation_error text,"

@@ -712,6 +712,49 @@ public class Mt101RebuildRepository {
      * quedan estados intermedios: REQUESTED-sin-hash, hash-sin-PAY_PLAN_PREPARED, etc. Los intents/specs ya se
      * persistieron antes (idempotentes); el conjunto (planSet) se calculo sobre ellos. Devuelve filas afectadas.
      */
+    /**
+     * v40-bis (RESERVA EXCLUSIVA para preparar el plan): transiciona el run a PREPARING_PLAN de forma ATOMICA
+     * (un solo UPDATE condicional, sin estados intermedios) desde un estado ELEGIBLE
+     * (NOT_REQUESTED/FAILED/INVALIDATED) o desde una reserva CAIDA (PREPARING_PLAN cuya marca de tiempo supera la
+     * ventana de obsolescencia {@code staleSeconds}). Devuelve 1 si la reserva se gana, 0 si no es elegible o si
+     * otro maker ya esta preparando (reserva vigente) o hay una solicitud/despacho en curso. Como el UPDATE es
+     * atomico, dos makers concurrentes NO pueden reservar a la vez: solo uno gana y prepara los specs en
+     * exclusiva (los demas reciben 0). El advisory lock serializa ademas contra la cadena de acciones del run.
+     */
+    public int reservePayForPlanPreparation(DataSource dataSource, String rebuildRunId, int staleSeconds)
+            throws SQLException {
+        var sql = "update mt101_rebuild_run set pay_status = 'PREPARING_PLAN', "
+                + "pay_plan_reserved_at = current_timestamp, updated_at = current_timestamp "
+                + "where rebuild_run_id = ? and status = 'ARCHIVED' "
+                + "and (pay_status in ('NOT_REQUESTED', 'FAILED', 'INVALIDATED') "
+                + "     or (pay_status = 'PREPARING_PLAN' "
+                + "         and pay_plan_reserved_at < current_timestamp - make_interval(secs => ?)))";
+        return inTransaction(dataSource, connection -> {
+            lockRunForActionChain(connection, rebuildRunId);
+            try (var statement = connection.prepareStatement(sql)) {
+                statement.setString(1, rebuildRunId);
+                statement.setInt(2, staleSeconds);
+                return statement.executeUpdate();
+            }
+        });
+    }
+
+    /**
+     * v40-bis: libera la RESERVA de preparacion (PREPARING_PLAN -> NOT_REQUESTED) cuando la solicitud NO llega a
+     * concretarse a REQUESTED (fallo de compilacion/preparacion). Solo actua si el run sigue en PREPARING_PLAN
+     * (idempotente y race-safe: si la solicitud ya concreto a REQUESTED, no toca nada). Tras liberar, el run
+     * vuelve a ser re-solicitable y {@link #deleteOrphanPreparedIntents} puede limpiar specs PREPARED parciales.
+     */
+    public int releasePayPlanReservation(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "update mt101_rebuild_run set pay_status = 'NOT_REQUESTED', pay_plan_reserved_at = null, "
+                + "updated_at = current_timestamp where rebuild_run_id = ? and pay_status = 'PREPARING_PLAN'";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            return statement.executeUpdate();
+        }
+    }
+
     public int requestPayWithPlanSet(DataSource dataSource, String rebuildRunId, String requestedBy,
                                      String payloadHash, String configHash, String requestReason,
                                      String requestTicket, String previousStatus, PayPlanSet planSet)
@@ -769,9 +812,12 @@ public class Mt101RebuildRepository {
                 + "pay_requested_config_hash = ?, pay_claimed_config_hash = null, pay_lease_until = null, "
                 + "pay_request_reason = ?, pay_request_ticket = ?, "
                 + "pay_resolved_by = null, pay_resolved_at = null, pay_resolution_reason = null, "
+                + "pay_plan_reserved_at = null, "
                 + "pay_uncertain_reason = null, pay_error_message = null, updated_at = current_timestamp "
+                // v40-bis: la solicitud concreta SOLO desde la reserva exclusiva (PREPARING_PLAN) que el mismo
+                // maker gano antes de compilar/persistir el plan: nadie mas pudo escribir specs en el intervalo.
                 + "where rebuild_run_id = ? and status = 'ARCHIVED' "
-                + "and pay_status in ('NOT_REQUESTED', 'FAILED', 'INVALIDATED')";
+                + "and pay_status = 'PREPARING_PLAN'";
         try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, requestedBy);
             statement.setString(2, payloadHash);
@@ -1586,7 +1632,7 @@ public class Mt101RebuildRepository {
                      pay_status, attempts, prepared_at, error_message)
                 select ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PREPARED', 0, current_timestamp, null
                 where exists (select 1 from mt101_rebuild_run r where r.rebuild_run_id = ?
-                              and r.pay_status in ('NOT_REQUESTED', 'FAILED', 'INVALIDATED'))
+                              and r.pay_status = 'PREPARING_PLAN')
                 on conflict (rebuild_run_id, corrective_senders_reference) do update
                     set payload_hash = excluded.payload_hash,
                         idempotency_key = excluded.idempotency_key,
@@ -1634,8 +1680,9 @@ public class Mt101RebuildRepository {
                 statement.setString(14, intent.dispatchSpecVersion());
                 statement.setString(15, intent.dispatchSpecJson());
                 statement.setString(16, intent.dispatchSpecHash());
-                // v40: el upsert SOLO escribe si el run sigue elegible (no REQUESTED/EXECUTING/...): impide que
-                // una segunda solicitud reescriba specs de un plan ya aprobado/en ejecucion.
+                // v40-bis: el upsert SOLO escribe si el run esta RESERVADO por este maker (PREPARING_PLAN):
+                // impide que una segunda solicitud reescriba specs de un plan REQUESTED/EXECUTING y que dos makers
+                // concurrentes mezclen specs (solo uno gana la reserva exclusiva antes de compilar).
                 statement.setString(17, rebuildRunId);
                 statement.addBatch();
                 updated++;

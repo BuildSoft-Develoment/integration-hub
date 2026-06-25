@@ -45,6 +45,12 @@ import java.util.Map;
 @ApplicationScoped
 public class Mt101CorrectiveLifecycleService {
 
+    // v40-bis: ventana de obsolescencia de la RESERVA de preparacion del plan. Si un maker reserva el run
+    // (PREPARING_PLAN) y muere antes de concretar la solicitud, otro maker puede reclamar la reserva pasados
+    // estos segundos. La preparacion (compilar/persistir specs) es de milisegundos; 120s es holgado y evita
+    // dejar el run atascado por un proceso caido.
+    private static final int PLAN_RESERVATION_STALE_SECONDS = 120;
+
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
     private final Mt101RebuildRepository rebuildRepository;
@@ -156,50 +162,54 @@ public class Mt101CorrectiveLifecycleService {
                 throw new IllegalArgumentException("rebuild run " + runId
                         + " must be ARCHIVED before requesting corrective pay; current status is " + run.status());
             }
-            // v40 (P0 inmutabilidad del plan): solo se prepara/compila el plan si el PAY esta en un estado
-            // ELEGIBLE. Si ya hay una solicitud o despacho en curso (REQUESTED/EXECUTING/UNCERTAIN/SENT/...),
-            // se rechaza ANTES de tocar el ledger: una segunda solicitud no puede reescribir el plan aprobado.
-            var currentPayStatus = normalize(run.payStatus());
-            if (!"NOT_REQUESTED".equals(currentPayStatus) && !"FAILED".equals(currentPayStatus)
-                    && !"INVALIDATED".equals(currentPayStatus)) {
+            // v40-bis (P0 inmutabilidad + atomicidad): se RESERVA el run de forma EXCLUSIVA y ATOMICA antes de
+            // tocar el ledger (NOT_REQUESTED/FAILED/INVALIDATED -> PREPARING_PLAN; o se reclama una reserva caida).
+            // Si ya hay una solicitud/despacho en curso (REQUESTED/EXECUTING/...) o OTRO maker esta preparando, la
+            // reserva devuelve 0 y se rechaza: el plan aprobado es inmutable y dos makers no pueden mezclar specs.
+            var reserved = rebuildRepository.reservePayForPlanPreparation(dataSource, runId, PLAN_RESERVATION_STALE_SECONDS);
+            if (reserved == 0) {
                 throw new IllegalStateException("corrective pay for run " + runId + " is not eligible to request;"
-                        + " payStatus=" + run.payStatus() + " (a request or dispatch is in progress and the"
-                        + " approved plan is immutable; resolve or invalidate it before requesting again)");
+                        + " payStatus=" + run.payStatus() + " (a request/dispatch is in progress or another maker is"
+                        + " preparing the plan; the approved plan is immutable — resolve or invalidate it before"
+                        + " requesting again)");
             }
-            var prep = prepare(dataSource, run, connectionRef);
-            var payloadHash = archivedPayloadHash(dataSource, run);
-            var payConfig = stageConfig(prep, "MT101_PAY");
-            if (payConfig == null) {
-                throw new IllegalStateException("the original process has no MT101_PAY task; cannot request corrective PAY");
-            }
-            assertCorrectivePayPolicy(payConfig);
-            var configHash = payConfigHashOf(payConfig);
-            // v38 (hallazgo #3): el MAKER compila y persiste el conjunto EXACTO de planes ejecutables ANTES de
-            // cambiar el estado a REQUESTED. Asi, si la compilacion de una spec falla a mitad, el run NO queda
-            // atascado en REQUESTED con planes parciales/hash nulo: sigue en su estado previo (re-solicitable).
-            // La compilacion (resolver de ruta) vive solo aqui, en la preparacion.
-            rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, run.correctiveSetId());
-            var unresolvedPayConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_PAY");
-            preparePayIntents(dataSource, runId, run.correctiveSetId(), payConfig, unresolvedPayConfig);
-            var planSet = rebuildRepository.computePayPlanSet(dataSource, runId);
-            // v39: cambio a REQUESTED + persistencia del hash del conjunto + PAY_REQUESTED + PAY_PLAN_PREPARED
-            // en UNA sola transaccion atomica bajo el advisory lock (sin estados intermedios documentalmente
-            // incompletos). Si el run no es elegible o falla, se revierte todo (no queda REQUESTED sin plan).
+            // A partir de aqui el run esta RESERVADO (PREPARING_PLAN). Cualquier salida sin concretar la solicitud
+            // debe liberar la reserva y limpiar specs PREPARED parciales (no dejar el run atascado).
             var requestConcreted = false;
             try {
+                var prep = prepare(dataSource, run, connectionRef);
+                var payloadHash = archivedPayloadHash(dataSource, run);
+                var payConfig = stageConfig(prep, "MT101_PAY");
+                if (payConfig == null) {
+                    throw new IllegalStateException("the original process has no MT101_PAY task; cannot request corrective PAY");
+                }
+                assertCorrectivePayPolicy(payConfig);
+                var configHash = payConfigHashOf(payConfig);
+                // v38 (hallazgo #3): el MAKER compila y persiste el conjunto EXACTO de planes ejecutables (en
+                // exclusiva, bajo la reserva) ANTES de cambiar el estado a REQUESTED. Si la compilacion de una
+                // spec falla a mitad, el run NO queda atascado: el finally libera la reserva (re-solicitable).
+                // La compilacion (resolver de ruta) vive solo aqui, en la preparacion.
+                rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, run.correctiveSetId());
+                var unresolvedPayConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_PAY");
+                preparePayIntents(dataSource, runId, run.correctiveSetId(), payConfig, unresolvedPayConfig);
+                var planSet = rebuildRepository.computePayPlanSet(dataSource, runId);
+                // v39: cambio PREPARING_PLAN -> REQUESTED + persistencia del hash del conjunto + PAY_REQUESTED +
+                // PAY_PLAN_PREPARED en UNA sola transaccion atomica bajo el advisory lock (sin estados intermedios
+                // documentalmente incompletos). previousStatus = el estado original del run (antes de la reserva).
                 var requested = rebuildRepository.requestPayWithPlanSet(dataSource, runId, requester,
-                        payloadHash, configHash, reason, ticket, run.payStatus(), planSet);
+                        payloadHash, configHash, reason, ticket, normalize(run.payStatus()), planSet);
                 if (requested == 0) {
                     throw new IllegalStateException("cannot request corrective pay for run " + runId
                             + "; payStatus=" + run.payStatus());
                 }
                 requestConcreted = true;
             } finally {
-                // v39 (Caso A): si la solicitud no se concreto, los intents/specs compilados antes quedarian
-                // huerfanos. Se eliminan de forma race-safe (solo si ninguna solicitud activa posee el run), de
-                // modo que un request fallido no deja planes PREPARED no aprobables.
+                // v40-bis: si la solicitud no se concreto, se LIBERA la reserva (PREPARING_PLAN -> NOT_REQUESTED) y
+                // se eliminan los intents/specs PREPARED parciales (race-safe, solo si ninguna solicitud activa
+                // posee el run). Asi un request fallido no deja el run atascado ni planes no aprobables.
                 if (!requestConcreted) {
                     try {
+                        rebuildRepository.releasePayPlanReservation(dataSource, runId);
                         rebuildRepository.deleteOrphanPreparedIntents(dataSource, runId);
                     } catch (SQLException cleanupError) {
                         // no enmascarar el error original de la solicitud
