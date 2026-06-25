@@ -55,12 +55,29 @@ resultados `UNCERTAIN` siguen admitidos desde estados no terminales (flujo de in
 - Integración end-to-end (Flyway real **V58**): `BankProfileHomologationIT` + `Mt101OutboundEndToEndIT`
   = **3** tests, 0 fallos, `BUILD SUCCESS`.
 
+## Segundo pase (doble check) — divergencia ledger↔archive en la ruta STATUS cerrada
+
+El v35 señalaba que `Mt101StatusTaskProvider` actualizaba `mt101_archive` (CONFIRMED/REJECTED) **antes** de
+llamar a `resolvePayFragmentResults`, por lo que en un conflicto podía quedar `ledger=SENT, archive=REJECTED`
+(orden de persistencia). **Cerrado:**
+- `resolvePayFragmentResults` ahora **devuelve los conflictos** (`PayFragmentWriteResult`).
+- El provider STATUS **resuelve el ledger PRIMERO** (conoce los conflictos) y **excluye del sync de archive**
+  los `archiveId` en conflicto: el archive **no se vuelca a un terminal contradictorio** con el ledger. La
+  confirmación del banco se **conserva como evidencia** en `mt101_confirmation` (no se pierde señal), y el
+  conflicto queda explícito en el ledger (`pay_conflict` + `PAY_CONFLICT` + run UNCERTAIN). No se falsifica
+  ninguna señal: ni se sobrescribe el ledger, ni se ignora el rechazo del banco, ni se vuelca el archive a un
+  estado que un lector malinterpretaría.
+- Test `correctiveStatusRejectedAgainstSentLedgerDoesNotFlipArchiveAndMarksConflict` (provider real + WireMock):
+  STATUS REJECTED contra un ledger SENT → fragmento sigue SENT + `pay_conflict=true`, run UNCERTAIN, **archive
+  sigue SENT** (no REJECTED), confirmación registrada, `PAY_CONFLICT` append-only.
+
 ## Pendientes documentados (no implementados este pase)
 
 - **Prueba física de tres actores** (worker bloqueado + scheduler + STATUS REJECTED concurrente, verificando
   ledger/build/archive/confirmación a la vez): el comportamiento ya está cubierto por la prueba física de
-  conflicto (2 actores) + las pruebas de repositorio del filtro simétrico y de `pay_conflict`; la variante de
-  3 actores se deja documentada como refuerzo de cobertura, no como brecha funcional.
+  conflicto (2 actores) + las de repositorio del filtro simétrico/`pay_conflict` + la nueva prueba del provider
+  STATUS que verifica ledger+archive+confirmación+acción; la variante de 3 hilos se deja documentada como
+  refuerzo de cobertura, no como brecha funcional.
 - **`resolvePayFragmentResults` desde PREPARED**: la resolución STATUS hoy apunta a `UNCERTAIN`/`DISPATCHING`
   (override del servicio `correctivePayStatuses`), por lo que el PREPARED del guard es inalcanzable en el flujo
   actual; se deja como está (no es una vía viva) y se anota para endurecer si surge un caso formal.

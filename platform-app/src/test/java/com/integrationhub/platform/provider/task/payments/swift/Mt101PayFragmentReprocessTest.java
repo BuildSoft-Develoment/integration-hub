@@ -570,9 +570,11 @@ class Mt101PayFragmentReprocessTest {
         var repository = new Mt101RebuildRepository();
         var statusRejected = List.of(
                 new Mt101RebuildRepository.PayFragmentResult("S1", "REJECTED", null, 0, "bank rejected after sent"));
-        var resolved = repository.resolvePayFragmentResults(dataSource, runId, statusRejected, "STATUS_API");
+        var resolveResult = repository.resolvePayFragmentResults(dataSource, runId, statusRejected, "STATUS_API");
 
-        assertEquals(0, resolved, "STATUS no sobrescribe un terminal SENT");
+        assertEquals(0, resolveResult.updated(), "STATUS no sobrescribe un terminal SENT");
+        assertTrue(resolveResult.conflictReferences().contains("S1"),
+                "el conflicto STATUS se reporta para excluir el archive contradictorio");
         assertEquals("SENT", payLedgerStatus(runId, "S1"), "el fragmento conserva SENT (ni ignorado ni sobrescrito)");
         assertEquals("UNCERTAIN", runPayStatus(runId), "el run pasa a UNCERTAIN por conflicto STATUS<->ledger");
         assertEquals(1L, countRowsWhere("mt101_corrective_pay_action",

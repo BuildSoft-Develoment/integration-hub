@@ -1726,11 +1726,11 @@ public class Mt101RebuildRepository {
      * REJECTED pero el fragmento ya quedó SENT por una aceptación tardía), no se ignora en silencio: se
      * registra {@code PAY_CONFLICT} append-only y el run se fuerza a {@code UNCERTAIN} para conciliación manual.
      */
-    public int resolvePayFragmentResults(DataSource dataSource, String rebuildRunId,
+    public PayFragmentWriteResult resolvePayFragmentResults(DataSource dataSource, String rebuildRunId,
                                          Collection<PayFragmentResult> results,
                                          String resolutionSource) throws SQLException {
         if (results == null || results.isEmpty()) {
-            return 0;
+            return new PayFragmentWriteResult(0, List.of());
         }
         var sql = """
                 update mt101_corrective_pay_fragment
@@ -1771,9 +1771,9 @@ public class Mt101RebuildRepository {
             }
             if (!conflicts.isEmpty()) {
                 recordTerminalPayConflict(connection, rebuildRunId, conflicts,
-                        "MT101_STATUS " + "result", resolutionSource == null ? "STATUS_API" : resolutionSource);
+                        "MT101_STATUS result", resolutionSource == null ? "STATUS_API" : resolutionSource);
             }
-            return updated;
+            return new PayFragmentWriteResult(updated, List.copyOf(conflicts));
         });
     }
 

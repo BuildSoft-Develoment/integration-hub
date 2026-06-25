@@ -164,6 +164,39 @@ class Mt101StatusTaskProviderTest {
     }
 
     @Test
+    void correctiveStatusRejectedAgainstSentLedgerDoesNotFlipArchiveAndMarksConflict(WireMockRuntimeInfo wm)
+            throws Exception {
+        // v35 (cierre de la divergencia ledger<->archive): STATUS dice REJECTED pero el ledger ya quedo SENT
+        // (aceptacion previa). No se sobrescribe el fragmento NI se vuelca el archive a REJECTED: el ledger
+        // conserva SENT + pay_conflict, el run queda UNCERTAIN, y la confirmacion del banco queda como evidencia.
+        stubFor(get(urlEqualTo("/v1/swift/status/KEY-C1"))
+                .willReturn(aResponse().withStatus(200)
+                        .withBody("{\"status\":\"REJECTED\",\"gatewayReference\":\"GW-C1\"}")));
+        insertRebuildRun("RUN-CONF", "SENT");
+        insertCorrectiveStatusRecord("RUN-CONF", "SET-FIX", "C1", "KEY-C1", 501L, "SENT");
+
+        var result = provider.execute(contextWith("pay-mt101.records",
+                Map.of("correctivePayRunId", "RUN-CONF")), Map.of(
+                "mode", "query",
+                "correctivePayStatuses", List.of("SENT"),
+                "resolveCorrectivePay", true,
+                "acceptedStatuses", List.of("ACCEPTED", "CONFIRMED"),
+                "input", Map.of("sourceTaskRef", "pay-mt101", "sourceOutput", "records"),
+                "query", Map.of("url", wm.getHttpBaseUrl() + "/v1/swift/status/${idempotencyKey}")));
+
+        assertTrue(result.success(), () -> "expected success, got: " + result.details());
+        assertEquals(1, countRowsWithPayStatus("SENT"), "el fragmento conserva SENT (no se sobrescribe)");
+        assertEquals("t", queryString("select pay_conflict from mt101_corrective_pay_fragment "
+                + "where corrective_senders_reference = 'C1'"), "el fragmento queda pay_conflict=true");
+        assertEquals("UNCERTAIN", queryString("select pay_status from mt101_rebuild_run "
+                + "where rebuild_run_id = 'RUN-CONF'"), "el run pasa a UNCERTAIN por conflicto");
+        assertEquals("SENT", queryString("select status from mt101_archive where id = 501"),
+                "el archive NO se vuelca a REJECTED en conflicto (coherente con el ledger)");
+        assertEquals(1, countRows("mt101_confirmation"), "la confirmacion del banco queda como evidencia");
+        assertEquals(1, countRows("mt101_corrective_pay_action"), "se registra PAY_CONFLICT append-only");
+    }
+
+    @Test
     void correctiveStatusQueriesEachFragmentAgainstItsRouteEndpointAndFailsLoudWhenRouteHasNoEndpoint(
             WireMockRuntimeInfo wm) throws Exception {
         // P2 v22: STATUS por perfil/ruta. Con routeQuery cada fragmento se consulta contra el
@@ -619,8 +652,25 @@ class Mt101StatusTaskProviderTest {
                     " error_message text," +
                     " resolved_at timestamp," +
                     " resolution_source varchar(40)," +
+                    " pay_conflict boolean not null default false," +
+                    " pay_conflict_reason text," +
                     " created_at timestamp not null default current_timestamp," +
                     " updated_at timestamp not null default current_timestamp)");
+            // v35: tablas minimas para la ruta de conflicto (recordTerminalPayConflict actualiza el run y
+            // registra PAY_CONFLICT append-only bajo el mismo advisory lock).
+            stmt.executeUpdate("drop table if exists mt101_rebuild_run");
+            stmt.executeUpdate("create table mt101_rebuild_run (" +
+                    " rebuild_run_id varchar(80) primary key, pay_status varchar(30) not null default 'EXECUTING'," +
+                    " pay_uncertain_reason text, pay_error_message text, pay_completed_at timestamp," +
+                    " updated_at timestamp not null default current_timestamp)");
+            stmt.executeUpdate("drop table if exists mt101_corrective_pay_action");
+            stmt.executeUpdate("create table mt101_corrective_pay_action (" +
+                    " id bigserial primary key, rebuild_run_id varchar(80) not null," +
+                    " action_type varchar(30) not null, previous_status varchar(30), new_status varchar(30)," +
+                    " actor varchar(120), reason text, ticket varchar(120)," +
+                    " payload_hash varchar(64), config_hash varchar(64)," +
+                    " previous_action_hash varchar(64), action_hash varchar(64)," +
+                    " created_at timestamp not null default current_timestamp)");
             stmt.executeUpdate("create table mt101_confirmation (" +
                     " id bigserial primary key," +
                     " archive_id bigint," +
@@ -690,6 +740,23 @@ class Mt101StatusTaskProviderTest {
                 ledger.setString(6, payStatus);
                 ledger.executeUpdate();
             }
+        }
+    }
+
+    private void insertRebuildRun(String runId, String payStatus) throws SQLException {
+        try (Connection c = dataSource.getConnection();
+             var stmt = c.prepareStatement("insert into mt101_rebuild_run (rebuild_run_id, pay_status) values (?, ?)")) {
+            stmt.setString(1, runId);
+            stmt.setString(2, payStatus);
+            stmt.executeUpdate();
+        }
+    }
+
+    private String queryString(String sql) throws SQLException {
+        try (Connection c = dataSource.getConnection();
+             var stmt = c.prepareStatement(sql);
+             var rs = stmt.executeQuery()) {
+            return rs.next() ? rs.getString(1) : null;
         }
     }
 

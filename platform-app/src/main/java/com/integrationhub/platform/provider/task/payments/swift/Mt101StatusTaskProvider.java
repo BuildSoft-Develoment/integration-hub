@@ -561,6 +561,9 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         var pendingRows = new ArrayList<ConfirmationRow>(PERSIST_BATCH_SIZE);
         var pendingAuditEntries = new ArrayList<Map<String, Object>>(PERSIST_BATCH_SIZE);
         var pendingPayResults = new ArrayList<Mt101RebuildRepository.PayFragmentResult>(PERSIST_BATCH_SIZE);
+        // v35: archiveId por sendersReference del lote, para excluir del sync de archive los refs que el
+        // ledger marque en conflicto (no volcar el archive a un terminal contradictorio con el ledger).
+        var archiveIdByRef = new LinkedHashMap<String, Long>();
         var dataSource = resolveDataSource(connectionRef);
         var afterId = 0L;
         int queriedCount = 0;
@@ -658,23 +661,25 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                     if (resolveCorrectivePay) {
                         var resolvedPayStatus = correctivePayResolution(confirmedStatus, configuration);
                         if (resolvedPayStatus != null) {
+                            var payRef = String.valueOf(record.get("sendersReference"));
                             pendingPayResults.add(new Mt101RebuildRepository.PayFragmentResult(
-                                    String.valueOf(record.get("sendersReference")),
+                                    payRef,
                                     resolvedPayStatus,
                                     gatewayReference,
                                     0,
                                     "REJECTED".equals(resolvedPayStatus) ? "confirmed by MT101_STATUS as " + confirmedStatus : null));
+                            archiveIdByRef.put(payRef, readArchiveId(record));
                         }
                     }
                     if (pendingRows.size() >= PERSIST_BATCH_SIZE) {
-                        persistConfirmations(context, effectiveConfiguration, pendingRows, pendingAuditEntries);
-                        if (!pendingPayResults.isEmpty()) {
-                            resolvedPayCount += rebuildRepository.resolvePayFragmentResults(
-                                    dataSource, runId, pendingPayResults, "STATUS_API");
-                        }
+                        // v35: resuelve el ledger PRIMERO para conocer los conflictos, y excluye sus archiveId
+                        // del sync de archive (la confirmacion del banco se conserva como evidencia).
+                        resolvedPayCount += flushPayResolutionAndConfirmations(context, effectiveConfiguration,
+                                dataSource, runId, pendingRows, pendingAuditEntries, pendingPayResults, archiveIdByRef);
                         pendingRows.clear();
                         pendingAuditEntries.clear();
                         pendingPayResults.clear();
+                        archiveIdByRef.clear();
                     }
                     confirmedCount++;
                     byStatus.merge(confirmedStatus == null ? "UNKNOWN" : confirmedStatus, 1, Integer::sum);
@@ -692,11 +697,8 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                     break;
                 }
             }
-            persistConfirmations(context, effectiveConfiguration, pendingRows, pendingAuditEntries);
-            if (!pendingPayResults.isEmpty()) {
-                resolvedPayCount += rebuildRepository.resolvePayFragmentResults(
-                        dataSource, runId, pendingPayResults, "STATUS_API");
-            }
+            resolvedPayCount += flushPayResolutionAndConfirmations(context, effectiveConfiguration,
+                    dataSource, runId, pendingRows, pendingAuditEntries, pendingPayResults, archiveIdByRef);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot read corrective PAY status records for run " + runId, error);
         }
@@ -824,10 +826,44 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                                    String rawPayload) {
     }
 
+    /**
+     * v35: resuelve el ledger PAY ANTES de tocar el archive para conocer los conflictos terminales y excluir
+     * sus archiveId del sync de archive (no volcar el archive a un terminal contradictorio con el ledger; la
+     * confirmacion del banco se conserva como evidencia en mt101_confirmation). Devuelve filas resueltas.
+     */
+    private int flushPayResolutionAndConfirmations(TaskContext context, Map<String, Object> configuration,
+                                                   DataSource dataSource, String runId,
+                                                   List<ConfirmationRow> rows, List<Map<String, Object>> auditEntries,
+                                                   List<Mt101RebuildRepository.PayFragmentResult> payResults,
+                                                   Map<String, Long> archiveIdByRef) throws SQLException {
+        var conflictArchiveIds = new java.util.HashSet<Long>();
+        var resolved = 0;
+        if (payResults != null && !payResults.isEmpty()) {
+            var result = rebuildRepository.resolvePayFragmentResults(dataSource, runId, payResults, "STATUS_API");
+            resolved = result.updated();
+            for (var reference : result.conflictReferences()) {
+                var archiveId = archiveIdByRef.get(reference);
+                if (archiveId != null) {
+                    conflictArchiveIds.add(archiveId);
+                }
+            }
+        }
+        persistConfirmations(context, configuration, rows, auditEntries, conflictArchiveIds);
+        return resolved;
+    }
+
     private void persistConfirmations(TaskContext context,
                                       Map<String, Object> configuration,
                                       List<ConfirmationRow> rows,
                                       List<Map<String, Object>> auditEntries) {
+        persistConfirmations(context, configuration, rows, auditEntries, java.util.Set.of());
+    }
+
+    private void persistConfirmations(TaskContext context,
+                                      Map<String, Object> configuration,
+                                      List<ConfirmationRow> rows,
+                                      List<Map<String, Object>> auditEntries,
+                                      java.util.Set<Long> conflictArchiveIds) {
         if (rows.isEmpty()) {
             return;
         }
@@ -847,7 +883,9 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
             confirmationRepository.insertConfirmations(connection, confirmationTable, repositoryRows);
             // H5: avanza el estado durable en mt101_archive (CONFIRMED/REJECTED)
             // por archive_id. Mismo connection que la insercion de confirmacion.
-            syncArchiveStatus(connection, configuration, rows);
+            // v35: salvo los archiveId en conflicto terminal con el ledger (no se vuelca un estado
+            // contradictorio; el conflicto queda en el ledger: pay_conflict + PAY_CONFLICT + run UNCERTAIN).
+            syncArchiveStatus(connection, configuration, rows, conflictArchiveIds);
             emitRecordAudit(statusEnvelopes(context, rows, auditEntries,
                     acceptedStatuses(configuration.get("acceptedStatuses"))));
         } catch (SQLException error) {
@@ -903,7 +941,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     }
 
     private void syncArchiveStatus(Connection connection, Map<String, Object> configuration,
-                                   List<ConfirmationRow> rows) {
+                                   List<ConfirmationRow> rows, java.util.Set<Long> conflictArchiveIds) {
         if (!boolValue(configuration.get("archiveStatusSync"), true)) {
             return;
         }
@@ -912,6 +950,11 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         var updates = new ArrayList<Mt101ArchiveStatusUpdater.ArchiveStatusUpdate>(rows.size());
         for (var row : rows) {
             if (row.archiveId() == null) {
+                continue;
+            }
+            // v35: no se vuelca el archive a un terminal contradictorio con el ledger (conflicto detectado
+            // al resolver el ledger). La confirmacion del banco ya quedo registrada como evidencia.
+            if (conflictArchiveIds != null && conflictArchiveIds.contains(row.archiveId())) {
                 continue;
             }
             var confirmed = row.confirmedStatus() != null
