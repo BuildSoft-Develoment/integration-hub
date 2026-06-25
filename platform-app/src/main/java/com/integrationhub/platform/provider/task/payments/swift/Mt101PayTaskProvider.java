@@ -250,7 +250,14 @@ public class Mt101PayTaskProvider implements TaskProvider {
         // Trazabilidad E2E por registro: una trama RECORD por fragmento,
         // emitida en lote por pagina (un solo JDBC batch), fuera de la TX.
         emitRecordAudit(pageAudit);
-        persistCorrectiveLedger(fragmentSource, pageLedger);
+        var conflicts = persistCorrectiveLedger(fragmentSource, pageLedger);
+        // v34 (hallazgo 2): si el ledger NO aceptó la transición a SENT (conflicto terminal contra una
+        // resolución previa), NO se propaga SENT a build_fragment ni a archive: el ledger es la fuente de
+        // verdad y las tres tablas deben quedar coherentes. El fragmento queda para conciliación (PAY_CONFLICT).
+        if (!conflicts.isEmpty()) {
+            sentRefs.removeAll(conflicts);
+            sentTargets.removeIf(target -> conflicts.contains(target.sendersReference()));
+        }
         fragmentStore.markStatusBatch(fragmentSource, sentRefs, "SENT");
         fragmentStore.markStatusBatch(fragmentSource, rejectedByRef, "REJECTED");
         // H5: avanza el estado durable en mt101_archive (la tabla de
@@ -263,14 +270,18 @@ public class Mt101PayTaskProvider implements TaskProvider {
     private record RoutedDispatchMessage(Mt101Message message, String routedAs, String routeError) {
     }
 
-    /** P0.1 v21: persiste el resultado por fragmento de la pagina al ledger correctivo (todos). */
-    private void persistCorrectiveLedger(Map<String, Object> fragmentSource,
+    /**
+     * P0.1 v21: persiste el resultado por fragmento de la pagina al ledger correctivo (todos).
+     * v34: devuelve las referencias en conflicto terminal (el ledger no aceptó SENT) para no propagarlas a
+     * build_fragment/archive.
+     */
+    private java.util.List<String> persistCorrectiveLedger(Map<String, Object> fragmentSource,
                                          java.util.List<Mt101RebuildRepository.PayFragmentResult> pageLedger) {
         var rebuildRunId = stringValue(fragmentSource.get("correctivePayRunId"), null);
         if (rebuildRunId == null || rebuildRunId.isBlank() || correctivePayStore == null || pageLedger.isEmpty()) {
-            return;
+            return java.util.List.of();
         }
-        correctivePayStore.markResults(fragmentSource, rebuildRunId, pageLedger);
+        return correctivePayStore.markResults(fragmentSource, rebuildRunId, pageLedger);
     }
 
     /**

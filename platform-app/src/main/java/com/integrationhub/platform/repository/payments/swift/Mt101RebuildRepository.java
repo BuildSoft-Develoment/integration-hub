@@ -1600,27 +1600,32 @@ public class Mt101RebuildRepository {
      * y el run se mantiene {@code UNCERTAIN} para conciliación manual (estado real ambiguo: el banco aceptó,
      * pero una resolución previa lo dio por no enviado). Sin fallback: no hay escritura ciega.
      */
-    public int updatePayFragmentResults(DataSource dataSource, String rebuildRunId,
+    public PayFragmentWriteResult updatePayFragmentResults(DataSource dataSource, String rebuildRunId,
                                         Collection<PayFragmentResult> results) throws SQLException {
         if (results == null || results.isEmpty()) {
-            return 0;
+            return new PayFragmentWriteResult(0, List.of());
         }
         return inTransaction(dataSource, connection -> {
             lockRunForActionChain(connection, rebuildRunId);
-            // Guarda v33: solo transiciona desde un estado NO terminal (PREPARED/DISPATCHING/UNCERTAIN);
-            // nunca sobrescribe un terminal ya resuelto (SENT/REJECTED/INVALIDATED).
-            var sql = "update mt101_corrective_pay_fragment set gateway_reference = ?, attempts = ?, "
+            // v34 (hallazgo 3): un resultado SENT solo puede llegar desde DISPATCHING o UNCERTAIN (hubo claim
+            // previo); un bug interno no puede registrar SENT sin claim. Un resultado NO terminal (UNCERTAIN)
+            // puede llegar desde un estado no terminal (PREPARED/DISPATCHING/UNCERTAIN). En ningun caso se
+            // sobrescribe un terminal ya resuelto (SENT/REJECTED/INVALIDATED).
+            var base = "update mt101_corrective_pay_fragment set gateway_reference = ?, attempts = ?, "
                     + "pay_status = ?, error_message = ?, dispatched_at = current_timestamp, updated_at = current_timestamp "
-                    + "where rebuild_run_id = ? and corrective_senders_reference = ? "
-                    + "and pay_status not in ('SENT', 'REJECTED', 'INVALIDATED')";
+                    + "where rebuild_run_id = ? and corrective_senders_reference = ? and ";
             var updated = 0;
             var conflicts = new ArrayList<String>();
-            try (var statement = connection.prepareStatement(sql)) {
+            // SENT exige claim previo (DISPATCHING/UNCERTAIN). Un resultado no terminal (UNCERTAIN) puede
+            // llegar desde cualquier estado NO terminal (incluye PREPARED/ARCHIVED), nunca desde un terminal.
+            try (var sentStatement = connection.prepareStatement(base + "pay_status in ('DISPATCHING', 'UNCERTAIN')");
+                 var openStatement = connection.prepareStatement(base + "pay_status not in ('SENT', 'REJECTED', 'INVALIDATED')")) {
                 for (var result : results) {
                     if (result == null || result.correctiveSendersReference() == null
                             || result.correctiveSendersReference().isBlank()) {
                         continue;
                     }
+                    var statement = "SENT".equals(result.payStatus()) ? sentStatement : openStatement;
                     statement.setString(1, result.gatewayReference());
                     statement.setInt(2, Math.max(result.attempts(), 0));
                     statement.setString(3, result.payStatus());
@@ -1629,22 +1634,37 @@ public class Mt101RebuildRepository {
                     statement.setString(6, result.correctiveSendersReference());
                     var rows = statement.executeUpdate();
                     updated += rows;
-                    if (rows == 0 && "SENT".equals(result.payStatus())) {
-                        // El ACCEPTED no se aplicó: si el fragmento ya está en un terminal CONTRADICTORIO,
-                        // el banco aceptó algo que se dio por no enviado -> conflicto, no sobrescritura.
-                        var current = currentFragmentStatus(connection, rebuildRunId,
-                                result.correctiveSendersReference());
-                        if ("REJECTED".equals(current) || "INVALIDATED".equals(current)) {
-                            conflicts.add(result.correctiveSendersReference());
-                        }
+                    if (rows == 0 && isTerminalPayStatus(result.payStatus())
+                            && isTerminalConflict(connection, rebuildRunId, result.correctiveSendersReference(),
+                            result.payStatus())) {
+                        conflicts.add(result.correctiveSendersReference());
                     }
                 }
             }
             if (!conflicts.isEmpty()) {
-                recordLatePayConflict(connection, rebuildRunId, conflicts);
+                recordTerminalPayConflict(connection, rebuildRunId, conflicts,
+                        "gateway result", "gateway");
             }
-            return updated;
+            return new PayFragmentWriteResult(updated, List.copyOf(conflicts));
         });
+    }
+
+    /** Resultado de una escritura de fragmentos: filas aplicadas + referencias en conflicto terminal. */
+    public record PayFragmentWriteResult(int updated, List<String> conflictReferences) {
+    }
+
+    private static boolean isTerminalPayStatus(String status) {
+        return "SENT".equals(status) || "REJECTED".equals(status) || "INVALIDATED".equals(status);
+    }
+
+    /**
+     * v34: un resultado terminal entrante CONTRADICE el estado terminal actual del fragmento (ambos terminales
+     * y distintos). p.ej. el ledger ya SENT y STATUS dice REJECTED, o ya REJECTED y llega SENT.
+     */
+    private boolean isTerminalConflict(java.sql.Connection connection, String rebuildRunId, String reference,
+                                       String incomingStatus) throws SQLException {
+        var current = currentFragmentStatus(connection, rebuildRunId, reference);
+        return isTerminalPayStatus(current) && !incomingStatus.equals(current);
     }
 
     private String currentFragmentStatus(java.sql.Connection connection, String rebuildRunId,
@@ -1662,16 +1682,18 @@ public class Mt101RebuildRepository {
     private static final String LATE_CONFLICT_ACTOR = "system:pay-late-conflict";
 
     /**
-     * v33: aceptación tardía que CONTRADICE una resolución terminal previa (el banco aceptó pero STATUS/drift
-     * dio el fragmento por no enviado). No se sobrescribe el fragmento; se registra {@code PAY_CONFLICT} y el
-     * run se fuerza a {@code UNCERTAIN} (estado real ambiguo) para conciliación manual, nunca un terminal
-     * silencioso ni un re-request ciego de un fragmento que el banco sí aceptó.
+     * v33/v34: un resultado terminal entrante (de gateway o de STATUS) CONTRADICE una resolución terminal
+     * previa del fragmento (el banco aceptó algo dado por no enviado, o STATUS rechaza algo ya marcado SENT).
+     * No se sobrescribe el fragmento (la fila se conserva); se registra {@code PAY_CONFLICT} append-only y el
+     * run se fuerza a {@code UNCERTAIN} (estado real ambiguo) para conciliación manual — nunca un terminal
+     * silencioso, ni un re-request ciego, ni ignorar el resultado. Protección simétrica en ambos sentidos.
      */
-    private void recordLatePayConflict(java.sql.Connection connection, String rebuildRunId,
-                                       List<String> conflicts) throws SQLException {
-        var reason = "late gateway ACCEPTED for fragment(s) " + String.join(", ", conflicts)
-                + " already resolved non-SENT (REJECTED/INVALIDATED); manual reconciliation required, "
-                + "no silent overwrite";
+    private void recordTerminalPayConflict(java.sql.Connection connection, String rebuildRunId,
+                                           List<String> conflicts, String incomingKind, String source)
+            throws SQLException {
+        var reason = "terminal conflict on fragment(s) " + String.join(", ", conflicts) + ": " + incomingKind
+                + " contradicts an existing terminal ledger state; manual reconciliation required, "
+                + "no silent overwrite and no ignore (source=" + source + ")";
         var previous = currentPayStatus(connection, rebuildRunId);
         try (var statement = connection.prepareStatement("update mt101_rebuild_run set pay_status = 'UNCERTAIN', "
                 + "pay_uncertain_reason = ?, pay_error_message = ?, pay_completed_at = null, "
@@ -1685,7 +1707,14 @@ public class Mt101RebuildRepository {
                 LATE_CONFLICT_ACTOR, reason, null, null, null);
     }
 
-    /** Resuelve fragmentos inciertos desde MT101_STATUS sin alterar intentos de PAY ni reenviar. */
+    /**
+     * Resuelve fragmentos inciertos desde MT101_STATUS sin alterar intentos de PAY ni reenviar.
+     * v34 (hallazgo 1, simetría): bajo el MISMO advisory lock por run. Solo transiciona desde un estado no
+     * terminal (UNCERTAIN/DISPATCHING/PREPARED); NUNCA sobrescribe un terminal ya resuelto. Si STATUS reporta
+     * un resultado TERMINAL (SENT/REJECTED) que CONTRADICE el terminal actual del ledger (p.ej. STATUS dice
+     * REJECTED pero el fragmento ya quedó SENT por una aceptación tardía), no se ignora en silencio: se
+     * registra {@code PAY_CONFLICT} append-only y el run se fuerza a {@code UNCERTAIN} para conciliación manual.
+     */
     public int resolvePayFragmentResults(DataSource dataSource, String rebuildRunId,
                                          Collection<PayFragmentResult> results,
                                          String resolutionSource) throws SQLException {
@@ -1704,24 +1733,37 @@ public class Mt101RebuildRepository {
                    and corrective_senders_reference = ?
                    and pay_status in ('UNCERTAIN', 'DISPATCHING', 'PREPARED')
                 """;
-        var updated = 0;
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
-            for (var result : results) {
-                if (result == null || result.correctiveSendersReference() == null
-                        || result.correctiveSendersReference().isBlank()) {
-                    continue;
+        return inTransaction(dataSource, connection -> {
+            lockRunForActionChain(connection, rebuildRunId);
+            var updated = 0;
+            var conflicts = new ArrayList<String>();
+            try (var statement = connection.prepareStatement(sql)) {
+                for (var result : results) {
+                    if (result == null || result.correctiveSendersReference() == null
+                            || result.correctiveSendersReference().isBlank()) {
+                        continue;
+                    }
+                    statement.setString(1, result.gatewayReference());
+                    statement.setString(2, result.payStatus());
+                    statement.setString(3, result.errorMessage());
+                    statement.setString(4, resolutionSource == null ? "STATUS_API" : resolutionSource);
+                    statement.setString(5, rebuildRunId);
+                    statement.setString(6, result.correctiveSendersReference());
+                    var rows = statement.executeUpdate();
+                    updated += rows;
+                    if (rows == 0 && isTerminalPayStatus(result.payStatus())
+                            && isTerminalConflict(connection, rebuildRunId, result.correctiveSendersReference(),
+                            result.payStatus())) {
+                        conflicts.add(result.correctiveSendersReference());
+                    }
                 }
-                statement.setString(1, result.gatewayReference());
-                statement.setString(2, result.payStatus());
-                statement.setString(3, result.errorMessage());
-                statement.setString(4, resolutionSource == null ? "STATUS_API" : resolutionSource);
-                statement.setString(5, rebuildRunId);
-                statement.setString(6, result.correctiveSendersReference());
-                updated += statement.executeUpdate();
             }
-        }
-        return updated;
+            if (!conflicts.isEmpty()) {
+                recordTerminalPayConflict(connection, rebuildRunId, conflicts,
+                        "MT101_STATUS " + "result", resolutionSource == null ? "STATUS_API" : resolutionSource);
+            }
+            return updated;
+        });
     }
 
     public int syncCorrectiveBuildFragmentsFromPay(DataSource dataSource, String rebuildRunId) throws SQLException {

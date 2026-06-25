@@ -468,7 +468,7 @@ class Mt101PayFragmentReprocessTest {
 
         var repository = new Mt101RebuildRepository();
         var lateSent = List.of(new Mt101RebuildRepository.PayFragmentResult("C1", "SENT", "GW-LATE", 1, null));
-        var updated = repository.updatePayFragmentResults(dataSource, runId, lateSent);
+        var updated = repository.updatePayFragmentResults(dataSource, runId, lateSent).updated();
 
         assertEquals(0, updated, "el ACCEPTED tardio NO sobrescribe un terminal");
         assertEquals("REJECTED", payLedgerStatus(runId, "C1"), "el fragmento conserva la resolucion STATUS");
@@ -542,6 +542,64 @@ class Mt101PayFragmentReprocessTest {
         assertEquals(1L, countRowsWhere("mt101_corrective_pay_action",
                 "rebuild_run_id = '" + runId + "' and action_type = 'PAY_CONFLICT'"),
                 "se registra PAY_CONFLICT append-only");
+        // v34 (hallazgo 2): coherencia entre fuentes de verdad: si el ledger no acepto SENT, el provider
+        // tampoco propaga SENT a mt101_build_fragment (no queda ledger=REJECTED y build=SENT).
+        assertNotEquals("SENT", fragmentColumn(fragmentSetId, "X1", "status"),
+                "build_fragment no se marca SENT cuando el ledger quedo en conflicto");
+    }
+
+    @Test
+    void statusRejectedAfterFragmentAlreadySentRaisesConflictNotSilentIgnore() throws Exception {
+        // v34 (hallazgo 1, SIMETRIA): orden inverso. Una aceptacion tardia dejo el fragmento SENT; luego
+        // MT101_STATUS responde REJECTED. No debe ignorarse en silencio (0 filas y seguir): PAY_CONFLICT +
+        // run UNCERTAIN, sin sobrescribir el SENT existente.
+        var runId = "RUN-STATUS-CONFLICT";
+        var fragmentSetId = "PAY-STATUS-CONFLICT";
+        insertFragmentSet(fragmentSetId, "S1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "S1", "ARCHIVED", null);
+        insertPayLedger(runId, fragmentSetId, "S1");
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'SENT' "
+                    + "where rebuild_run_id = '" + runId + "'");
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'SENT', pay_lease_until = null "
+                    + "where rebuild_run_id = '" + runId + "'");
+        }
+
+        var repository = new Mt101RebuildRepository();
+        var statusRejected = List.of(
+                new Mt101RebuildRepository.PayFragmentResult("S1", "REJECTED", null, 0, "bank rejected after sent"));
+        var resolved = repository.resolvePayFragmentResults(dataSource, runId, statusRejected, "STATUS_API");
+
+        assertEquals(0, resolved, "STATUS no sobrescribe un terminal SENT");
+        assertEquals("SENT", payLedgerStatus(runId, "S1"), "el fragmento conserva SENT (ni ignorado ni sobrescrito)");
+        assertEquals("UNCERTAIN", runPayStatus(runId), "el run pasa a UNCERTAIN por conflicto STATUS<->ledger");
+        assertEquals(1L, countRowsWhere("mt101_corrective_pay_action",
+                "rebuild_run_id = '" + runId + "' and action_type = 'PAY_CONFLICT'"),
+                "STATUS contradictorio registra PAY_CONFLICT (no silencioso)");
+    }
+
+    @Test
+    void sentResultIsDroppedWhenFragmentWasNeverClaimedNoSentWithoutDispatch() throws Exception {
+        // v34 (hallazgo 3): un SENT no puede registrarse sin claim previo. Un fragmento PREPARED (jamas
+        // reclamado) que reciba un SENT por un bug interno NO se marca SENT (0 filas) y no es conflicto.
+        var runId = "RUN-NOCLAIM";
+        var fragmentSetId = "PAY-NOCLAIM";
+        insertFragmentSet(fragmentSetId, "N1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "N1", "ARCHIVED", null);
+        insertPayLedger(runId, fragmentSetId, "N1"); // fragmento PREPARED, nunca DISPATCHING
+
+        var repository = new Mt101RebuildRepository();
+        var sent = List.of(new Mt101RebuildRepository.PayFragmentResult("N1", "SENT", "GW-X", 1, null));
+        assertEquals(0, repository.updatePayFragmentResults(dataSource, runId, sent).updated(),
+                "un SENT sin claim previo no se registra");
+        assertEquals("PREPARED", payLedgerStatus(runId, "N1"), "el fragmento sigue PREPARED");
+        assertEquals(0L, countRowsWhere("mt101_corrective_pay_action",
+                "rebuild_run_id = '" + runId + "' and action_type = 'PAY_CONFLICT'"),
+                "un PREPARED no reclamado no es conflicto terminal");
     }
 
     @Test
@@ -561,7 +619,7 @@ class Mt101PayFragmentReprocessTest {
         }
         var repository = new Mt101RebuildRepository();
         var lateSent = List.of(new Mt101RebuildRepository.PayFragmentResult("I1", "SENT", "GW-1", 1, null));
-        assertEquals(0, repository.updatePayFragmentResults(dataSource, runId, lateSent),
+        assertEquals(0, repository.updatePayFragmentResults(dataSource, runId, lateSent).updated(),
                 "no se re-escribe un fragmento ya SENT");
         assertEquals("SENT", payLedgerStatus(runId, "I1"));
         assertEquals(0L, countRowsWhere("mt101_corrective_pay_action",
@@ -791,6 +849,7 @@ class Mt101PayFragmentReprocessTest {
                     + "pay_status varchar(30) not null default 'PREPARED',"
                     + "attempts integer not null default 0,"
                     + "gateway_reference varchar(120), error_message text,"
+                    + "resolution_source varchar(40), resolved_at timestamp,"
                     + "prepared_at timestamp,"
                     + "dispatched_at timestamp,"
                     + "updated_at timestamp not null default current_timestamp,"
