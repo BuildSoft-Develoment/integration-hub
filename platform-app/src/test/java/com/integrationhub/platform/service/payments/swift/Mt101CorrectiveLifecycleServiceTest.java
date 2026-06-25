@@ -318,11 +318,12 @@ class Mt101CorrectiveLifecycleServiceTest {
             config.put("input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "fragments"));
             if ("MT101_PAY".equals(taskType)) {
                 config.put("transport", "REST");
-                // Las 2 primeras lecturas (hash de solicitud + hash de aprobacion) devuelven "approved-";
-                // a partir de la 3a, si el drift esta activo, devuelven "drift-". El snapshot congelado
-                // (P0.1) hace que el dispatch NO llegue a una 3a lectura: usa la config aprobada.
+                // v37 fase 2: la preparacion de planes vive en requestCorrectivePay -> el maker consume 2
+                // lecturas (hash de solicitud + spec sin resolver) y el checker 1 (hash de aprobacion): las 3
+                // devuelven "approved-". A partir de la 4a, si el drift esta activo, devuelven "drift-": como
+                // el dispatch usa el plan PERSISTIDO (no re-lee la config), nunca se alcanza una 4a lectura.
                 var read = payConfigReadCount.incrementAndGet();
-                var template = payConfigDriftsAfterApprovalHash && read >= 3 ? "drift-" : "approved-";
+                var template = payConfigDriftsAfterApprovalHash && read >= 4 ? "drift-" : "approved-";
                 config.put("idempotencyKeyTemplate",
                         (payConfigChangedAfterRequest ? "changed-" : template) + "${sendersReference}");
                 if (paySftpPolicy != null) {
@@ -455,8 +456,9 @@ class Mt101CorrectiveLifecycleServiceTest {
 
         var actions = queryStrings("select action_type from mt101_corrective_pay_action "
                 + "where rebuild_run_id = '" + FIX + "' order by id");
-        assertEquals(List.of("PAY_REQUESTED", "PAY_CLAIMED", "PAY_DISPATCHING", "PAY_UNCERTAIN", "PAY_RESOLVED"),
-                actions, "el historial conserva todas las acciones en orden, no solo la ultima");
+        assertEquals(List.of("PAY_REQUESTED", "PAY_PLAN_PREPARED", "PAY_CLAIMED", "PAY_DISPATCHING",
+                        "PAY_UNCERTAIN", "PAY_RESOLVED"),
+                actions, "el historial conserva todas las acciones en orden (incluye PAY_PLAN_PREPARED al solicitar)");
         // El actor queda por accion: maker en REQUESTED, checker en CLAIMED, operador en RESOLVED.
         assertEquals("ana", queryString("select actor from mt101_corrective_pay_action "
                 + "where rebuild_run_id = '" + FIX + "' and action_type = 'PAY_REQUESTED'"));
@@ -828,6 +830,41 @@ class Mt101CorrectiveLifecycleServiceTest {
                 "ningun intent del ledger usa la config derivada");
         assertEquals(2L, queryLong("select count(*) from mt101_corrective_pay_fragment "
                 + "where rebuild_run_id = '" + FIX + "' and idempotency_key like 'approved-%'"));
+    }
+
+    @Test
+    void makerPreparesAndPersistsPlanSetAtRequestBeforeApproval() throws Exception {
+        // v37 fase 2: el MAKER compila y persiste el conjunto EXACTO de planes ejecutables al SOLICITAR
+        // (antes de aprobar), con su hash agregado y una accion PAY_PLAN_PREPARED append-only.
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+
+        assertEquals(2L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = '"
+                + FIX + "' and pay_status = 'PREPARED' and dispatch_spec_json is not null"),
+                "los planes ejecutables ya existen tras solicitar, antes de aprobar");
+        assertNotNull(queryString("select pay_plan_set_hash from mt101_rebuild_run where rebuild_run_id = '"
+                + FIX + "'"), "el hash agregado del conjunto queda persistido");
+        assertEquals(2L, queryLong("select pay_plan_count from mt101_rebuild_run where rebuild_run_id = '"
+                + FIX + "'"));
+        assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_action where rebuild_run_id = '"
+                + FIX + "' and action_type = 'PAY_PLAN_PREPARED'"), "accion PAY_PLAN_PREPARED append-only");
+    }
+
+    @Test
+    void approvalInvalidatesWhenPersistedPlanSetChangedAfterRequest() throws Exception {
+        // v37 fase 2: el checker aprueba el conjunto EXACTO. Si el conjunto persistido cambia tras la solicitud
+        // (drift del spec_hash de un fragmento), la aprobacion INVALIDA y NO llama al banco (re-solicitar).
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set dispatch_spec_hash = 'TAMPERED' "
+                    + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'");
+        }
+
+        assertThrows(IllegalStateException.class, () -> service.approveAndPayCorrective(null, FIX, "luis"),
+                "el checker no aprueba un conjunto de planes distinto al solicitado");
+        assertEquals("INVALIDATED", payStatus(FIX), "conjunto cambiado -> INVALIDATED");
+        assertEquals(0, payInvocations.get(), "no se llama a PAY si el conjunto de planes cambio");
     }
 
     @Test
@@ -1347,6 +1384,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "pay_completed_at timestamp, pay_error_message text,"
                     + "pay_resolved_by varchar(120), pay_resolved_at timestamp, pay_resolution_reason text,"
                     + "pay_request_reason text, pay_request_ticket varchar(120),"
+                    + "pay_plan_version varchar(40), pay_plan_count integer, pay_plan_set_hash varchar(64),"
                     + "pay_status_config_snapshot text, pay_reconcile_config_snapshot text,"
                     + "status_sync_status varchar(20) not null default 'PENDING', status_sync_error text,"
                     + "reconciliation_status varchar(20) not null default 'PENDING', reconciliation_error text,"

@@ -173,6 +173,17 @@ public class Mt101CorrectiveLifecycleService {
                 throw new IllegalStateException("cannot request corrective pay for run " + runId
                         + "; payStatus=" + run.payStatus());
             }
+            // v37 fase 2: el MAKER compila y persiste el conjunto EXACTO de planes ejecutables al SOLICITAR
+            // (antes de aprobar), y persiste su hash agregado. El checker aprobara ese conjunto, no una config
+            // equivalente. La compilacion (resolver de ruta) vive solo aqui, en la preparacion.
+            rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, run.correctiveSetId());
+            var unresolvedPayConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_PAY");
+            preparePayIntents(dataSource, runId, run.correctiveSetId(), payConfig, unresolvedPayConfig);
+            var planSet = rebuildRepository.computePayPlanSet(dataSource, runId);
+            rebuildRepository.persistPayPlanSet(dataSource, runId, planSet);
+            recordPayAction(dataSource, runId, "PAY_PLAN_PREPARED", "REQUESTED", "REQUESTED", requester,
+                    "compiled and persisted " + planSet.count() + " executable plan(s); set hash "
+                            + planSet.setHash(), null, payloadHash, configHash);
             return correctiveResult(dataSource, runId);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot request corrective pay for run " + runId, error);
@@ -235,6 +246,18 @@ public class Mt101CorrectiveLifecycleService {
                 throw new IllegalStateException("corrective pay for run " + runId
                         + " was invalidated because the MT101_PAY configuration changed after request");
             }
+            // v37 fase 2: el checker aprueba el CONJUNTO EXACTO de planes preparados al solicitar. La aprobacion
+            // NO reconstruye ni reemplaza los planes: valida que el hash agregado del conjunto persistido siga
+            // siendo el aprobado. Si cambio (drift de payload/spec tras la solicitud) -> INVALIDA, re-solicitar.
+            var approvedPlanSetHash = rebuildRepository.payPlanSetHash(dataSource, runId);
+            var currentPlanSet = rebuildRepository.computePayPlanSet(dataSource, runId);
+            if (approvedPlanSetHash == null || !approvedPlanSetHash.equals(currentPlanSet.setHash())) {
+                rebuildRepository.invalidatePayRequestWithAction(dataSource, runId,
+                        "PAY plan set changed after request; request again before sending",
+                        approver, run.payStatus(), payloadHash, configHash);
+                throw new IllegalStateException("corrective pay for run " + runId
+                        + " was invalidated because the persisted plan set changed after request");
+            }
             // v28 #3: exige secretRef/Vault para STATUS y RECONCILE ANTES de reclamar. Un secreto LITERAL se
             // redactaria al congelar el snapshot y seria IRRECUPERABLE para autenticar un PAY_UNCERTAIN
             // diferido; se rechaza pre-claim (sin dejar el run en EXECUTING) y se exige una ref re-resoluble.
@@ -276,9 +299,8 @@ public class Mt101CorrectiveLifecycleService {
                     throw new IllegalStateException("cannot freeze MT101_RECONCILE config for run " + runId, error);
                 }
             }
-            rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, run.correctiveSetId());
-            var unresolvedPayConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_PAY");
-            preparePayIntents(dataSource, runId, run.correctiveSetId(), frozenPayConfig, unresolvedPayConfig);
+            // v37 fase 2: los planes ejecutables YA fueron compilados y persistidos al solicitar (y su conjunto
+            // validado arriba). La aprobacion NO reconstruye ni reemplaza los planes: solo ejecuta los aprobados.
             recordPayAction(dataSource, runId, "PAY_DISPATCHING", "EXECUTING", "DISPATCHING",
                     approver, null, null, payloadHash, configHash);
             try {

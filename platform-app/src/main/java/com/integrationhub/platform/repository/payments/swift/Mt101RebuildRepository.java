@@ -753,6 +753,73 @@ public class Mt101RebuildRepository {
         }
     }
 
+    public static final String PAY_PLAN_SET_VERSION = "MT101_PAY_PLAN_SET_V1";
+
+    /**
+     * v37 fase 2: hash AGREGADO del conjunto de planes ejecutables del run, en orden canonico por
+     * {@code corrective_senders_reference}, concatenando {@code reference|payload_hash|dispatch_spec_hash}.
+     * Es el artefacto que el maker prepara y el checker aprueba: "plan aprobado = plan ejecutado" a nivel de
+     * conjunto, no solo de configuracion equivalente.
+     */
+    public PayPlanSet computePayPlanSet(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "select corrective_senders_reference, payload_hash, dispatch_spec_hash "
+                + "from mt101_corrective_pay_fragment where rebuild_run_id = ? "
+                + "order by corrective_senders_reference";
+        var canonical = new StringBuilder();
+        var count = 0;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    canonical.append(rs.getString(1) == null ? "" : rs.getString(1)).append('|')
+                            .append(rs.getString(2) == null ? "" : rs.getString(2)).append('|')
+                            .append(rs.getString(3) == null ? "" : rs.getString(3)).append('\n');
+                    count++;
+                }
+            }
+        }
+        return new PayPlanSet(PAY_PLAN_SET_VERSION, count, sha256Hex(canonical.toString()));
+    }
+
+    public record PayPlanSet(String version, int count, String setHash) {
+    }
+
+    private static String sha256Hex(String value) {
+        try {
+            var digest = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (java.security.NoSuchAlgorithmException error) {
+            throw new IllegalStateException("SHA-256 not available", error);
+        }
+    }
+
+    /** v37 fase 2: persiste el conjunto de planes aprobable en el run (al solicitar el PAY). */
+    public void persistPayPlanSet(DataSource dataSource, String rebuildRunId, PayPlanSet planSet) throws SQLException {
+        var sql = "update mt101_rebuild_run set pay_plan_version = ?, pay_plan_count = ?, pay_plan_set_hash = ?, "
+                + "updated_at = current_timestamp where rebuild_run_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, planSet.version());
+            statement.setInt(2, planSet.count());
+            statement.setString(3, planSet.setHash());
+            statement.setString(4, rebuildRunId);
+            statement.executeUpdate();
+        }
+    }
+
+    public String payPlanSetHash(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "select pay_plan_set_hash from mt101_rebuild_run where rebuild_run_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }
+    }
+
     /**
      * Claim atomico REQUESTED -> EXECUTING. Solo la transaccion que gana este update
      * puede invocar el provider MT101_PAY; asi se evita doble envio concurrente.
