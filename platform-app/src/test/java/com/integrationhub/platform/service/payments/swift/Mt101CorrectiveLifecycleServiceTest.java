@@ -871,6 +871,34 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
+    void orphanPreparedIntentsAreCleanedOnlyWhenNoActiveRequestOwnsTheRun() throws Exception {
+        // v39 (Caso A): un request fallido no debe dejar intents PREPARED huerfanos. La limpieza es race-safe:
+        // borra solo si el run NO esta poseido por una solicitud activa (REQUESTED/EXECUTING).
+        var repository = new Mt101RebuildRepository();
+        service.advanceCorrective(null, FIX, "executor"); // run ARCHIVED, pay_status NOT_REQUESTED
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("insert into mt101_corrective_pay_fragment (rebuild_run_id, corrective_set_id, "
+                    + "corrective_senders_reference, payload_hash, idempotency_key, pay_status) "
+                    + "values ('" + FIX + "', '" + FIX + "', 'RX', 'h', 'k', 'PREPARED')");
+        }
+        // run NOT_REQUESTED -> los huerfanos se eliminan.
+        assertEquals(1, repository.deleteOrphanPreparedIntents(dataSource, FIX),
+                "intents PREPARED huerfanos bajo NOT_REQUESTED se eliminan");
+        assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = '"
+                + FIX + "' and pay_status = 'PREPARED'"));
+
+        // Solicitud real -> run REQUESTED con sus intents PREPARED; la limpieza NO los toca (race-safe).
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        var preparedOfRequest = queryLong("select count(*) from mt101_corrective_pay_fragment where "
+                + "rebuild_run_id = '" + FIX + "' and pay_status = 'PREPARED'");
+        assertEquals(0, repository.deleteOrphanPreparedIntents(dataSource, FIX),
+                "bajo un run REQUESTED no se borra nada (solicitud activa)");
+        assertEquals(preparedOfRequest, queryLong("select count(*) from mt101_corrective_pay_fragment where "
+                + "rebuild_run_id = '" + FIX + "' and pay_status = 'PREPARED'"),
+                "los planes de la solicitud activa se conservan");
+    }
+
+    @Test
     void approvalInvalidatesWhenPersistedPlanSetChangedAfterRequest() throws Exception {
         // v37 fase 2: el checker aprueba el conjunto EXACTO. Si el conjunto persistido cambia tras la solicitud
         // (drift del spec_hash de un fragmento), la aprobacion INVALIDA y NO llama al banco (re-solicitar).

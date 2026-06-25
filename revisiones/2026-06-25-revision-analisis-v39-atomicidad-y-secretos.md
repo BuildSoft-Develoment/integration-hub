@@ -26,11 +26,14 @@ secreto no pueda cambiar el destino. Directiva: sin código fallback / sin camin
 Todo-o-nada: ya no puede quedar `REQUESTED` con `pay_plan_set_hash` nulo, ni un hash sin su acción
 append-only. La cadena hash de auditoría encadena PAY_REQUESTED → PAY_PLAN_PREPARED en la misma transacción.
 
-**Caso A (intents huérfanos):** los intents/specs se compilan y persisten ANTES (idempotentes vía ON CONFLICT)
-para no mantener una transacción larga con miles de fragmentos. Si la solicitud atómica falla, quedan filas
-`PREPARED` bajo un run `NOT_REQUESTED`: son **inertes** (no hay solicitud → no hay aprobación → no hay despacho)
-y una re-solicitud las **sobrescribe**. No es una brecha de seguridad ni de doble pago. (La alternativa de tabla
-draft del v39 cerraría también esto; se deja documentada como opción de escalabilidad.)
+**Caso A (intents huérfanos) — CERRADO (2º pase):** los intents/specs se compilan y persisten ANTES
+(idempotentes vía ON CONFLICT) para no mantener una transacción larga con miles de fragmentos. Si la solicitud
+atómica NO se concreta (no elegible o error), un bloque `finally` ejecuta `deleteOrphanPreparedIntents`, que
+elimina los `PREPARED` HUÉRFANOS de forma **race-safe**: solo borra si el run NO está poseído por una solicitud
+activa (`pay_status in NOT_REQUESTED/FAILED/INVALIDATED`); si una solicitud concurrente ya posee el run
+(REQUESTED/EXECUTING) no borra nada. Así un request fallido NO deja planes huérfanos no aprobables. (La tabla
+draft del v39 sigue siendo la opción de máxima escalabilidad para muchos fragmentos; aquí se cierra el caso sin
+mantener una transacción larga ni heap de 100k intents.)
 
 ### Control de secretos en ruta/destino
 `Mt101DispatchPlanCompiler.assertSpecSafety` (antes `assertNoLiteralSecrets`):

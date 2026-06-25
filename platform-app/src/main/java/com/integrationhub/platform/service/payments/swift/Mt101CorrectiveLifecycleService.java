@@ -175,11 +175,26 @@ public class Mt101CorrectiveLifecycleService {
             // v39: cambio a REQUESTED + persistencia del hash del conjunto + PAY_REQUESTED + PAY_PLAN_PREPARED
             // en UNA sola transaccion atomica bajo el advisory lock (sin estados intermedios documentalmente
             // incompletos). Si el run no es elegible o falla, se revierte todo (no queda REQUESTED sin plan).
-            var requested = rebuildRepository.requestPayWithPlanSet(dataSource, runId, requester,
-                    payloadHash, configHash, reason, ticket, run.payStatus(), planSet);
-            if (requested == 0) {
-                throw new IllegalStateException("cannot request corrective pay for run " + runId
-                        + "; payStatus=" + run.payStatus());
+            var requestConcreted = false;
+            try {
+                var requested = rebuildRepository.requestPayWithPlanSet(dataSource, runId, requester,
+                        payloadHash, configHash, reason, ticket, run.payStatus(), planSet);
+                if (requested == 0) {
+                    throw new IllegalStateException("cannot request corrective pay for run " + runId
+                            + "; payStatus=" + run.payStatus());
+                }
+                requestConcreted = true;
+            } finally {
+                // v39 (Caso A): si la solicitud no se concreto, los intents/specs compilados antes quedarian
+                // huerfanos. Se eliminan de forma race-safe (solo si ninguna solicitud activa posee el run), de
+                // modo que un request fallido no deja planes PREPARED no aprobables.
+                if (!requestConcreted) {
+                    try {
+                        rebuildRepository.deleteOrphanPreparedIntents(dataSource, runId);
+                    } catch (SQLException cleanupError) {
+                        // no enmascarar el error original de la solicitud
+                    }
+                }
             }
             return correctiveResult(dataSource, runId);
         } catch (SQLException error) {

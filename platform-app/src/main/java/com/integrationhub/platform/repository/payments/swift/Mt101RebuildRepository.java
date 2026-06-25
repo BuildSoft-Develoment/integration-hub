@@ -741,6 +741,24 @@ public class Mt101RebuildRepository {
         });
     }
 
+    /**
+     * v39 (Caso A): si la solicitud atómica no llega a concretarse, elimina los intents PREPARED HUÉRFANOS —
+     * los que NO pertenecen a ninguna solicitud activa (run en NOT_REQUESTED/FAILED/INVALIDATED). Race-safe:
+     * si una solicitud concurrente ya posee el run (REQUESTED/EXECUTING), no borra nada. Devuelve filas
+     * eliminadas. Asi un request fallido no deja planes huérfanos no aprobables.
+     */
+    public int deleteOrphanPreparedIntents(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "delete from mt101_corrective_pay_fragment f where f.rebuild_run_id = ? "
+                + "and f.pay_status = 'PREPARED' and exists (select 1 from mt101_rebuild_run r "
+                + "where r.rebuild_run_id = f.rebuild_run_id "
+                + "and r.pay_status in ('NOT_REQUESTED', 'FAILED', 'INVALIDATED'))";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            return statement.executeUpdate();
+        }
+    }
+
     private int requestPay(java.sql.Connection connection, String rebuildRunId, String requestedBy,
                            String payloadHash, String configHash,
                            String requestReason, String requestTicket) throws SQLException {
