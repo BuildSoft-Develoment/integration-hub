@@ -1369,6 +1369,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "attempts integer not null default 0, error_message text,"
                     + "prepared_at timestamp, dispatched_at timestamp,"
                     + "resolved_at timestamp, resolution_source varchar(40),"
+                    + "pay_conflict boolean not null default false, pay_conflict_reason text,"
                     + "created_at timestamp not null default current_timestamp,"
                     + "updated_at timestamp not null default current_timestamp,"
                     + "unique (rebuild_run_id, corrective_senders_reference))");

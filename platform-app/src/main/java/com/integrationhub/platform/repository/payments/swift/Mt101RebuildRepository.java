@@ -1607,25 +1607,24 @@ public class Mt101RebuildRepository {
         }
         return inTransaction(dataSource, connection -> {
             lockRunForActionChain(connection, rebuildRunId);
-            // v34 (hallazgo 3): un resultado SENT solo puede llegar desde DISPATCHING o UNCERTAIN (hubo claim
-            // previo); un bug interno no puede registrar SENT sin claim. Un resultado NO terminal (UNCERTAIN)
-            // puede llegar desde un estado no terminal (PREPARED/DISPATCHING/UNCERTAIN). En ningun caso se
-            // sobrescribe un terminal ya resuelto (SENT/REJECTED/INVALIDATED).
+            // v34/v35 (hallazgos 2/3): un resultado TERMINAL de transporte (SENT o REJECTED) solo puede llegar
+            // desde DISPATCHING o UNCERTAIN (hubo claim/dispatch previo); un bug interno no puede registrar un
+            // terminal sin claim. Un resultado NO terminal (UNCERTAIN) puede llegar desde un estado no terminal
+            // (PREPARED/ARCHIVED/DISPATCHING/UNCERTAIN). En ningun caso se sobrescribe un terminal ya resuelto.
             var base = "update mt101_corrective_pay_fragment set gateway_reference = ?, attempts = ?, "
                     + "pay_status = ?, error_message = ?, dispatched_at = current_timestamp, updated_at = current_timestamp "
                     + "where rebuild_run_id = ? and corrective_senders_reference = ? and ";
             var updated = 0;
             var conflicts = new ArrayList<String>();
-            // SENT exige claim previo (DISPATCHING/UNCERTAIN). Un resultado no terminal (UNCERTAIN) puede
-            // llegar desde cualquier estado NO terminal (incluye PREPARED/ARCHIVED), nunca desde un terminal.
-            try (var sentStatement = connection.prepareStatement(base + "pay_status in ('DISPATCHING', 'UNCERTAIN')");
+            try (var terminalStatement = connection.prepareStatement(base + "pay_status in ('DISPATCHING', 'UNCERTAIN')");
                  var openStatement = connection.prepareStatement(base + "pay_status not in ('SENT', 'REJECTED', 'INVALIDATED')")) {
                 for (var result : results) {
                     if (result == null || result.correctiveSendersReference() == null
                             || result.correctiveSendersReference().isBlank()) {
                         continue;
                     }
-                    var statement = "SENT".equals(result.payStatus()) ? sentStatement : openStatement;
+                    // SENT y REJECTED (terminales de transporte) exigen claim previo; UNCERTAIN no.
+                    var statement = isTerminalPayStatus(result.payStatus()) ? terminalStatement : openStatement;
                     statement.setString(1, result.gatewayReference());
                     statement.setInt(2, Math.max(result.attempts(), 0));
                     statement.setString(3, result.payStatus());
@@ -1702,6 +1701,18 @@ public class Mt101RebuildRepository {
             statement.setString(2, reason);
             statement.setString(3, rebuildRunId);
             statement.executeUpdate();
+        }
+        // v35 (hallazgo 1): marca durable y explicita por fragmento. El fragmento conserva su pay_status real
+        // (no se sobrescribe) pero queda pay_conflict=true para que API/UI no malinterpreten el estado.
+        try (var statement = connection.prepareStatement("update mt101_corrective_pay_fragment "
+                + "set pay_conflict = true, pay_conflict_reason = ?, updated_at = current_timestamp "
+                + "where rebuild_run_id = ? and corrective_senders_reference = ?")) {
+            for (var reference : conflicts) {
+                statement.setString(1, reason);
+                statement.setString(2, rebuildRunId);
+                statement.setString(3, reference);
+                statement.executeUpdate();
+            }
         }
         recordPayAction(connection, rebuildRunId, "PAY_CONFLICT", previous, "UNCERTAIN",
                 LATE_CONFLICT_ACTOR, reason, null, null, null);

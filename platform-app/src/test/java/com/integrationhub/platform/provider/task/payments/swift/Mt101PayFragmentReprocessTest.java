@@ -578,6 +578,55 @@ class Mt101PayFragmentReprocessTest {
         assertEquals(1L, countRowsWhere("mt101_corrective_pay_action",
                 "rebuild_run_id = '" + runId + "' and action_type = 'PAY_CONFLICT'"),
                 "STATUS contradictorio registra PAY_CONFLICT (no silencioso)");
+        // v35 (hallazgo 1): marca durable por fragmento, para que API/UI no malinterpreten SENT vs REJECTED.
+        assertEquals("t", payLedgerColumn(runId, "S1", "pay_conflict"), "el fragmento queda pay_conflict=true");
+    }
+
+    @Test
+    void rejectedResultIsDroppedWhenFragmentWasNeverClaimedNoTerminalWithoutDispatch() throws Exception {
+        // v35 (hallazgo 2): tambien REJECTED es terminal de transporte y exige claim previo. Un fragmento
+        // PREPARED (jamas reclamado) que reciba un REJECTED NO se marca REJECTED (0 filas) y no es conflicto.
+        var runId = "RUN-REJ-NOCLAIM";
+        var fragmentSetId = "PAY-REJ-NOCLAIM";
+        insertFragmentSet(fragmentSetId, "R1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "R1", "ARCHIVED", null);
+        insertPayLedger(runId, fragmentSetId, "R1"); // PREPARED, nunca DISPATCHING
+
+        var repository = new Mt101RebuildRepository();
+        var rejected = List.of(new Mt101RebuildRepository.PayFragmentResult("R1", "REJECTED", null, 0, "bank rejected"));
+        var result = repository.updatePayFragmentResults(dataSource, runId, rejected);
+        assertEquals(0, result.updated(), "un REJECTED sin claim previo no se registra");
+        assertTrue(result.conflictReferences().isEmpty(), "PREPARED no es conflicto terminal");
+        assertEquals("PREPARED", payLedgerStatus(runId, "R1"), "el fragmento sigue PREPARED");
+    }
+
+    @Test
+    void lateRejectedAgainstSentFragmentIsReportedAsConflictForBuildArchiveExclusion() throws Exception {
+        // v35 (hallazgos 1 y 2, simetria inversa): el ledger ya quedo SENT y llega un REJECTED tardio del
+        // gateway. No se sobrescribe (sigue SENT), se reporta como conflicto (para que el provider lo excluya
+        // de build/archive) y queda pay_conflict=true + PAY_CONFLICT.
+        var runId = "RUN-LATE-REJ";
+        var fragmentSetId = "PAY-LATE-REJ";
+        insertFragmentSet(fragmentSetId, "L1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "L1", "ARCHIVED", null);
+        insertPayLedger(runId, fragmentSetId, "L1");
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'SENT' "
+                    + "where rebuild_run_id = '" + runId + "'");
+        }
+        var repository = new Mt101RebuildRepository();
+        var lateRejected = List.of(new Mt101RebuildRepository.PayFragmentResult("L1", "REJECTED", null, 1, "late reject"));
+        var result = repository.updatePayFragmentResults(dataSource, runId, lateRejected);
+
+        assertEquals(0, result.updated(), "el REJECTED tardio no sobrescribe el SENT");
+        assertTrue(result.conflictReferences().contains("L1"), "se reporta el conflicto para excluir build/archive");
+        assertEquals("SENT", payLedgerStatus(runId, "L1"), "el fragmento conserva SENT");
+        assertEquals("UNCERTAIN", runPayStatus(runId), "run UNCERTAIN por conflicto");
+        assertEquals("t", payLedgerColumn(runId, "L1", "pay_conflict"), "fragmento pay_conflict=true");
     }
 
     @Test
@@ -850,6 +899,7 @@ class Mt101PayFragmentReprocessTest {
                     + "attempts integer not null default 0,"
                     + "gateway_reference varchar(120), error_message text,"
                     + "resolution_source varchar(40), resolved_at timestamp,"
+                    + "pay_conflict boolean not null default false, pay_conflict_reason text,"
                     + "prepared_at timestamp,"
                     + "dispatched_at timestamp,"
                     + "updated_at timestamp not null default current_timestamp,"

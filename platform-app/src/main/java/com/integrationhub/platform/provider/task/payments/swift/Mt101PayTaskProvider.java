@@ -251,12 +251,15 @@ public class Mt101PayTaskProvider implements TaskProvider {
         // emitida en lote por pagina (un solo JDBC batch), fuera de la TX.
         emitRecordAudit(pageAudit);
         var conflicts = persistCorrectiveLedger(fragmentSource, pageLedger);
-        // v34 (hallazgo 2): si el ledger NO aceptó la transición a SENT (conflicto terminal contra una
-        // resolución previa), NO se propaga SENT a build_fragment ni a archive: el ledger es la fuente de
-        // verdad y las tres tablas deben quedar coherentes. El fragmento queda para conciliación (PAY_CONFLICT).
+        // v34/v35 (hallazgo 2): si el ledger NO aceptó la transición terminal (conflicto contra una resolución
+        // previa), NO se propaga a build_fragment ni a archive en NINGÚN sentido (ni SENT ni REJECTED): el
+        // ledger es la fuente de verdad y las tres tablas quedan coherentes. El fragmento conserva su estado
+        // real y queda marcado pay_conflict para conciliación (PAY_CONFLICT append-only). Filtro simétrico.
         if (!conflicts.isEmpty()) {
             sentRefs.removeAll(conflicts);
             sentTargets.removeIf(target -> conflicts.contains(target.sendersReference()));
+            rejectedByRef.keySet().removeAll(conflicts);
+            rejectedTargets.removeIf(target -> conflicts.contains(target.sendersReference()));
         }
         fragmentStore.markStatusBatch(fragmentSource, sentRefs, "SENT");
         fragmentStore.markStatusBatch(fragmentSource, rejectedByRef, "REJECTED");
