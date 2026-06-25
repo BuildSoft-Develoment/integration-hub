@@ -45,16 +45,21 @@ actúa si el run sigue UNCERTAIN).
 
 ## Pruebas que evidencian el cierre (todas en verde)
 
-- `Mt101PayFragmentReprocessTest` — **16**:
+- `Mt101PayFragmentReprocessTest` — **17**:
   - `lateAcceptedSentDoesNotOverwriteStatusRejectedFragmentAndRecordsConflict`: STATUS dejó REJECTED+run
     FAILED; un SENT tardío **no** sobrescribe → fragmento REJECTED, run UNCERTAIN, `PAY_CONFLICT` registrado,
     `updated==0`.
+  - `physicalStatusRejectionDuringBlockedSendMakesLateAcceptedRaiseConflictNotOverwrite`: **variante
+    CONCURRENTE** (la que pedía el v33) — worker real bloqueado en `transport.send()`; en otra conexión vence
+    el lease + scheduler (UNCERTAIN) y luego una resolución STATUS terminal deja REJECTED+run FAILED; al
+    liberar `send()`, el ACCEPTED tardío **no** sobrescribe → fragmento REJECTED, run UNCERTAIN, `PAY_CONFLICT`,
+    un solo envío físico.
   - `lateResultNeverOverwritesAlreadySentFragmentWithoutFalseConflict`: SENT sobre SENT es no-op idempotente,
     **sin** falso PAY_CONFLICT.
-  - más la prueba **física** concurrente (`send()` bloqueado + scheduler), la carrera real (25 iteraciones) y
-    el determinismo positivo del plan.
+  - más la prueba **física** de aceptación tardía (`send()` bloqueado + scheduler), la carrera real (25
+    iteraciones) y el determinismo positivo del plan.
 - `Mt101CorrectiveLifecycleServiceTest` — **35**: aceptación tardía end-to-end + regla conservadora.
-- Dominio swift completo: **221** tests, 0 fallos.
+- Dominio swift completo: **222** tests, 0 fallos.
 - Integración end-to-end (Flyway real **V57**): `BankProfileHomologationIT` + `Mt101OutboundEndToEndIT`
   = **3** tests, 0 fallos, `BUILD SUCCESS`.
 

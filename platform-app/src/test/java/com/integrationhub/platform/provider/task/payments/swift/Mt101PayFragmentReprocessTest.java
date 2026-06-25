@@ -479,6 +479,72 @@ class Mt101PayFragmentReprocessTest {
     }
 
     @Test
+    void physicalStatusRejectionDuringBlockedSendMakesLateAcceptedRaiseConflictNotOverwrite() throws Exception {
+        // v33 (variante CONCURRENTE del conflicto, la que pedia el analisis): el worker reclama el fragmento y
+        // se BLOQUEA dentro de transport.send(); en otra conexion vence el lease + scheduler (UNCERTAIN) y luego
+        // una resolucion STATUS terminal deja el fragmento REJECTED + run FAILED. Al liberar send(), el ACCEPTED
+        // tardio NO sobrescribe en silencio: PAY_CONFLICT append-only + run UNCERTAIN. Un solo envio fisico.
+        var runId = "RUN-PHYS-CONFLICT";
+        var fragmentSetId = "PAY-PHYS-CONFLICT";
+        insertFragmentSet(fragmentSetId, "X1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "X1", "ARCHIVED", null);
+        insertPayLedger(runId, fragmentSetId, "X1");
+
+        var dispatchReached = new CountDownLatch(1);
+        var releaseSend = new CountDownLatch(1);
+        var transport = new BlockingTransport(dispatchReached, releaseSend,
+                TransportResult.accepted("GW-X1", 1, 10L));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore, null, null, payStore);
+        var repository = new Mt101RebuildRepository();
+
+        var workerError = new AtomicReference<Throwable>();
+        var worker = new Thread(() -> {
+            try {
+                provider.execute(contextWith(fragmentSource), payConfig(50));
+            } catch (Throwable t) {
+                workerError.set(t);
+            }
+        });
+        worker.start();
+
+        // El worker reclamo el fragmento (DISPATCHING) y esta bloqueado dentro de send().
+        assertTrue(dispatchReached.await(10, java.util.concurrent.TimeUnit.SECONDS),
+                "el worker debe alcanzar transport.send()");
+        assertEquals("DISPATCHING", payLedgerStatus(runId, "X1"));
+
+        // Vence el lease + scheduler (UNCERTAIN) y luego una resolucion STATUS terminal: REJECTED + run FAILED.
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_lease_until = current_timestamp - "
+                    + "interval '1 minute' where rebuild_run_id = '" + runId + "'");
+        }
+        repository.markExpiredPayExecutionsUncertain(dataSource, java.time.LocalDateTime.now());
+        assertEquals("UNCERTAIN", runPayStatus(runId), "el scheduler marca el run UNCERTAIN");
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'REJECTED' "
+                    + "where rebuild_run_id = '" + runId + "'");
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'FAILED', pay_lease_until = null "
+                    + "where rebuild_run_id = '" + runId + "'");
+        }
+
+        // El banco responde ACCEPTED tardiamente -> el worker intenta persistir SENT.
+        releaseSend.countDown();
+        worker.join(10_000);
+        assertFalse(worker.isAlive(), "el worker termina tras liberar send()");
+        assertEquals(null, workerError.get(), () -> "worker sin errores: " + workerError.get());
+
+        // El ACCEPTED tardio NO sobrescribe la resolucion terminal contradictoria.
+        assertEquals(1, transport.callsReceived(), "un solo envio fisico al banco");
+        assertEquals("REJECTED", payLedgerStatus(runId, "X1"), "el fragmento conserva la resolucion STATUS");
+        assertEquals("UNCERTAIN", runPayStatus(runId), "run UNCERTAIN (conflicto), nunca FAILED ni SENT silencioso");
+        assertEquals(1L, countRowsWhere("mt101_corrective_pay_action",
+                "rebuild_run_id = '" + runId + "' and action_type = 'PAY_CONFLICT'"),
+                "se registra PAY_CONFLICT append-only");
+    }
+
+    @Test
     void lateResultNeverOverwritesAlreadySentFragmentWithoutFalseConflict() throws Exception {
         // v33: un resultado SENT repetido sobre un fragmento ya SENT es no-op idempotente, sin PAY_CONFLICT
         // (no es una contradiccion: el banco acepto y el fragmento ya estaba SENT).
