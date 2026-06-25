@@ -424,7 +424,15 @@ public class Mt101CorrectiveLifecycleService {
             }
             String resolvedStatus;
             String resolvedDetail;
-            if (summary.pending() > 0) {
+            if (summary.conflicts() > 0) {
+                // v36: un PAY_CONFLICT (resultado terminal contradictorio, p.ej. STATUS REJECTED contra un
+                // ledger SENT) exige conciliacion MANUAL. NO se auto-resuelve a SENT/PARTIALLY_SENT/FAILED: el
+                // run se mantiene UNCERTAIN hasta que un operador concilie el conflicto explicitamente.
+                resolvedStatus = "UNCERTAIN";
+                resolvedDetail = reasonPrefix + "MT101_STATUS detected " + summary.conflicts()
+                        + " fragment(s) in conflict (pay_conflict); manual reconciliation required, no auto-resolution";
+                rebuildRepository.markPayResolutionWithAction(dataSource, runId, resolvedStatus, resolvedDetail, executedBy);
+            } else if (summary.pending() > 0) {
                 resolvedStatus = "UNCERTAIN";
                 resolvedDetail = reasonPrefix + "MT101_STATUS did not return a final accepted/rejected status for "
                         + summary.pending() + " fragment(s)";

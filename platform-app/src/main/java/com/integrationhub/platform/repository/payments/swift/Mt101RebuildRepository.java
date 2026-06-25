@@ -1260,20 +1260,25 @@ public class Mt101RebuildRepository {
             }
             long total = 0;
             long sent = 0;
+            long conflicts = 0;
             try (var statement = connection.prepareStatement(
-                    "select count(*) total, count(*) filter (where pay_status = 'SENT') sent "
+                    "select count(*) total, count(*) filter (where pay_status = 'SENT') sent, "
+                            + "count(*) filter (where pay_conflict) conflicts "
                             + "from mt101_corrective_pay_fragment where rebuild_run_id = ?")) {
                 statement.setString(1, rebuildRunId);
                 try (var rs = statement.executeQuery()) {
                     if (rs.next()) {
                         total = rs.getLong("total");
                         sent = rs.getLong("sent");
+                        conflicts = rs.getLong("conflicts");
                     }
                 }
             }
             // Regla v29: solo se auto-resuelve a SENT si TODOS los fragmentos quedaron SENT; cualquier
             // fragmento pendiente mantiene el run UNCERTAIN (conciliar por STATUS, sin reenvio ciego).
-            if (total == 0 || sent != total) {
+            // v36: ademas, NUNCA se auto-resuelve si hay un fragmento en conflicto (pay_conflict=true): un
+            // PAY_CONFLICT exige conciliacion MANUAL; un STATUS/RECONCILE contradictorio no debe auto-cerrarse.
+            if (total == 0 || sent != total || conflicts > 0) {
                 return 0;
             }
             var reason = "late acceptance after lease expiry: all " + total
@@ -1919,7 +1924,8 @@ public class Mt101RebuildRepository {
                        count(*) filter (where pay_status = 'SENT') sent,
                        count(*) filter (where pay_status = 'REJECTED') rejected,
                        count(*) filter (where pay_status = 'INVALIDATED') invalidated,
-                       count(*) filter (where pay_status not in ('SENT', 'REJECTED', 'INVALIDATED')) pending
+                       count(*) filter (where pay_status not in ('SENT', 'REJECTED', 'INVALIDATED')) pending,
+                       count(*) filter (where pay_conflict) conflicts
                   from mt101_corrective_pay_fragment
                  where rebuild_run_id = ?
                 """;
@@ -1928,14 +1934,15 @@ public class Mt101RebuildRepository {
             statement.setString(1, rebuildRunId);
             try (var rs = statement.executeQuery()) {
                 if (!rs.next()) {
-                    return new PayFragmentSummary(0, 0, 0, 0, 0);
+                    return new PayFragmentSummary(0, 0, 0, 0, 0, 0);
                 }
                 return new PayFragmentSummary(
                         rs.getLong("total"),
                         rs.getLong("sent"),
                         rs.getLong("rejected"),
                         rs.getLong("pending"),
-                        rs.getLong("invalidated"));
+                        rs.getLong("invalidated"),
+                        rs.getLong("conflicts"));
             }
         }
     }
@@ -2056,6 +2063,7 @@ public class Mt101RebuildRepository {
     ) {
     }
 
-    public record PayFragmentSummary(long total, long sent, long rejected, long pending, long invalidated) {
+    public record PayFragmentSummary(long total, long sent, long rejected, long pending, long invalidated,
+                                     long conflicts) {
     }
 }

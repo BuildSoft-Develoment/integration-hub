@@ -585,6 +585,36 @@ class Mt101PayFragmentReprocessTest {
     }
 
     @Test
+    void resolveLateAcceptedPayRunDoesNotAutoCloseWhenAnyFragmentInConflict() throws Exception {
+        // v36: un PAY_CONFLICT NO debe auto-cerrarse. Aunque todos los fragmentos esten SENT, si alguno tiene
+        // pay_conflict=true (p.ej. STATUS REJECTED contra un SENT), resolveLateAcceptedPayRun NO resuelve el
+        // run a SENT: exige conciliacion manual.
+        var runId = "RUN-CONF-NOAUTOCLOSE";
+        var fragmentSetId = "PAY-CONF-NOAUTOCLOSE";
+        insertFragmentSet(fragmentSetId, "K1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "K1", "ARCHIVED", null);
+        insertPayLedger(runId, fragmentSetId, "K1");
+        // Estado tras un conflicto: run UNCERTAIN, fragmento SENT pero pay_conflict=true.
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'SENT', "
+                    + "pay_conflict = true, pay_conflict_reason = 'STATUS rejected after sent' "
+                    + "where rebuild_run_id = '" + runId + "'");
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'UNCERTAIN', pay_lease_until = null "
+                    + "where rebuild_run_id = '" + runId + "'");
+        }
+
+        var repository = new Mt101RebuildRepository();
+        assertEquals(0, repository.resolveLateAcceptedPayRun(dataSource, runId, "scheduler"),
+                "no se auto-resuelve un run con un fragmento en conflicto");
+        assertEquals("UNCERTAIN", runPayStatus(runId), "el run se mantiene UNCERTAIN para conciliacion manual");
+        assertEquals(0L, countRowsWhere("mt101_corrective_pay_action",
+                "rebuild_run_id = '" + runId + "' and action_type = 'PAY_RESOLVED'"),
+                "no se registra PAY_RESOLVED mientras haya conflicto");
+    }
+
+    @Test
     void rejectedResultIsDroppedWhenFragmentWasNeverClaimedNoTerminalWithoutDispatch() throws Exception {
         // v35 (hallazgo 2): tambien REJECTED es terminal de transporte y exige claim previo. Un fragmento
         // PREPARED (jamas reclamado) que reciba un REJECTED NO se marca REJECTED (0 filas) y no es conflicto.

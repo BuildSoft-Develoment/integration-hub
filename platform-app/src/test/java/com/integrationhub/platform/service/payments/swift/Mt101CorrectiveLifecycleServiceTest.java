@@ -560,6 +560,37 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
+    void payConflictBlocksAutoResolutionRequiringManualReconciliation() throws Exception {
+        // v36: un PAY_CONFLICT (resultado terminal contradictorio) NO debe auto-cerrarse. Aunque todos los
+        // fragmentos esten SENT, si hay pay_conflict=true: ni resolveLateAcceptedPayRun (scheduler/tardio) ni
+        // resolveUncertainPay (operador) resuelven el run a un terminal; queda UNCERTAIN para conciliacion manual.
+        var repository = new Mt101RebuildRepository();
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        service.approveAndPayCorrective(null, FIX, "luis"); // flujo SENT normal (fragmentos SENT)
+        // Conflicto: STATUS rechazo un fragmento ya SENT -> run UNCERTAIN, fragmento SENT + pay_conflict=true.
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'UNCERTAIN', "
+                    + "pay_lease_until = null where rebuild_run_id = '" + FIX + "'");
+            statement.executeUpdate("update mt101_corrective_pay_fragment set pay_conflict = true, "
+                    + "pay_conflict_reason = 'STATUS rejected after sent' "
+                    + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'");
+        }
+
+        // 1) La resolucion tardia (scheduler) NO cierra el run pese a "todos SENT".
+        assertEquals(0, repository.resolveLateAcceptedPayRun(dataSource, FIX, "scheduler"),
+                "resolveLateAcceptedPayRun no auto-cierra un run con conflicto");
+        assertEquals("UNCERTAIN", payStatus(FIX), "el run sigue UNCERTAIN tras la resolucion tardia");
+
+        // 2) La resolucion del operador tampoco auto-resuelve a SENT/PARTIALLY_SENT/FAILED.
+        service.resolveUncertainPay(null, FIX, "operador", "revisado INC-CONF");
+        assertEquals("UNCERTAIN", payStatus(FIX), "resolveUncertainPay mantiene UNCERTAIN mientras haya conflicto");
+        assertTrue(queryString("select pay_resolution_reason from mt101_rebuild_run where rebuild_run_id = '"
+                + FIX + "'").contains("conflict"), "la razon documenta el conflicto y la conciliacion manual");
+    }
+
+    @Test
     void resolveUncertainPayUsesTheReconcileProfileFrozenAtPayNotTheCurrentConfig() throws Exception {
         // v26 #4: RECONCILE tambien usa el perfil CONGELADO en el PAY, no la config vigente (que pudo
         // cambiar entre el envio y la resolucion). Simetrico al snapshot de STATUS.
