@@ -1995,6 +1995,10 @@ public class Mt101RebuildRepository {
         // (no solo su hash): el ledger no pudo cambiar entre la lectura y el claim ni siquiera con un hash igual.
         // v41 (modelo versionado): ademas exige que el fragmento pertenezca a la revision ACTIVA del run
         // (f.plan_revision = r.active_plan_revision): un fragmento de una revision SUPERSEDED jamas se despacha.
+        // v44-fix (jerarquia): el cross-check une ademas la CABECERA del plan y exige p.status='ACTIVE'. Asi, si la
+        // cabecera ACTIVE desaparece (DELETE) o el puntero r.active_plan_revision se altera hacia una revision
+        // SUPERSEDED/DRAFT, el claim falla (no basta que exista la fila de fragmento): cabecera+fragmento+puntero
+        // forman una cadena inseparable.
         // v43-bis/ter (trazabilidad estricta): ademas exige que TODO el contrato del ledger COINCIDA con la fila de
         // la revision ACTIVE INMUTABLE (mt101_corrective_pay_plan_fragment, protegida por trigger). No basta la
         // spec: tambien payload_hash, idempotency_key, approved_routed_as, dispatch_destination, dispatch_plan_hash y
@@ -2021,8 +2025,11 @@ public class Mt101RebuildRepository {
                    and f.dispatch_plan_hash is not distinct from ?
                    and f.plan_revision is not distinct from r.active_plan_revision
                    and exists (select 1 from mt101_corrective_pay_plan_fragment pf
+                               join mt101_corrective_pay_plan p
+                                 on p.rebuild_run_id = pf.rebuild_run_id and p.plan_revision = pf.plan_revision
                                where pf.rebuild_run_id = f.rebuild_run_id
                                  and pf.plan_revision = r.active_plan_revision
+                                 and p.status = 'ACTIVE'
                                  and pf.corrective_senders_reference = f.corrective_senders_reference
                                  and pf.payload_hash is not distinct from f.payload_hash
                                  and pf.idempotency_key is not distinct from f.idempotency_key

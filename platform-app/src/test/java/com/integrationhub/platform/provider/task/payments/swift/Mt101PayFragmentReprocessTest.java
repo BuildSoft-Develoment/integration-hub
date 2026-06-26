@@ -1170,6 +1170,7 @@ class Mt101PayFragmentReprocessTest {
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("drop table if exists mt101_build_fragment");
             statement.executeUpdate("drop table if exists mt101_corrective_pay_plan_fragment");
+            statement.executeUpdate("drop table if exists mt101_corrective_pay_plan");
             statement.executeUpdate("drop table if exists mt101_corrective_pay_fragment");
             statement.executeUpdate("drop table if exists mt101_rebuild_run");
             // v27 P0.1: el claim une el run padre (EXECUTING + lease vigente). Tabla minima para el join.
@@ -1235,6 +1236,11 @@ class Mt101PayFragmentReprocessTest {
                     + "dispatched_at timestamp,"
                     + "updated_at timestamp not null default current_timestamp,"
                     + "unique (rebuild_run_id, corrective_senders_reference))");
+            // v44-fix: la CABECERA del plan; el claim exige que la revision activa tenga cabecera status='ACTIVE'.
+            statement.executeUpdate("create table mt101_corrective_pay_plan ("
+                    + "id bigserial primary key, rebuild_run_id varchar(80) not null, plan_revision integer not null,"
+                    + "plan_version varchar(40), plan_count integer, plan_set_hash varchar(64), status varchar(20) not null,"
+                    + "unique (rebuild_run_id, plan_revision))");
             // v43-bis/ter: la revision ACTIVE INMUTABLE que el claim cruza contra TODO el contrato del ledger.
             statement.executeUpdate("create table mt101_corrective_pay_plan_fragment ("
                     + "id bigserial primary key, rebuild_run_id varchar(80) not null, plan_revision integer not null,"
@@ -1368,6 +1374,11 @@ class Mt101PayFragmentReprocessTest {
                     + " where rebuild_run_id = '" + runId + "'");
             statement.executeUpdate("update mt101_corrective_pay_fragment set plan_revision = " + revision
                     + " where rebuild_run_id = '" + runId + "' and corrective_senders_reference = '" + reference + "'");
+            // v44-fix: la cabecera ACTIVE que el claim ahora exige.
+            statement.executeUpdate("insert into mt101_corrective_pay_plan (rebuild_run_id, plan_revision, "
+                    + "plan_version, plan_count, plan_set_hash, status) values ('" + runId + "', " + revision
+                    + ", 'MT101_PAY_PLAN_SET_V1', 1, 'h', 'ACTIVE') on conflict (rebuild_run_id, plan_revision) "
+                    + "do update set status = 'ACTIVE'");
             // Copia EXACTA del contrato del ledger -> revision inmutable (igual que compileDraftPlanRevision).
             statement.executeUpdate("insert into mt101_corrective_pay_plan_fragment "
                     + "(rebuild_run_id, plan_revision, corrective_senders_reference, payload_hash, idempotency_key, "

@@ -1229,6 +1229,64 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
+    void anActiveOrSupersededPlanHeaderCannotBeDeleted() throws Exception {
+        // v44-fix: la EXISTENCIA de la cabecera ACTIVE/SUPERSEDED esta protegida (su DELETE desactivaria el trigger
+        // de inmutabilidad de los fragmentos). Solo un DRAFT abandonado puede borrarse.
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1"); // rev 1 ACTIVE
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            assertThrows(SQLException.class, () -> statement.executeUpdate(
+                    "delete from mt101_corrective_pay_plan where rebuild_run_id = '" + FIX
+                            + "' and status = 'ACTIVE'"),
+                    "no se puede borrar una cabecera ACTIVE");
+        }
+        // Supersede la rev 1 con una re-solicitud y verifica que tampoco se borra la SUPERSEDED.
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'INVALIDATED' "
+                    + "where rebuild_run_id = '" + FIX + "'");
+        }
+        service.requestCorrectivePay(null, FIX, "ana", "segunda solicitud", "TCK-2"); // rev 1 SUPERSEDED, rev 2 ACTIVE
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            assertThrows(SQLException.class, () -> statement.executeUpdate(
+                    "delete from mt101_corrective_pay_plan where rebuild_run_id = '" + FIX
+                            + "' and plan_revision = 1"),
+                    "no se puede borrar una cabecera SUPERSEDED");
+        }
+        assertEquals(2L, queryLong("select count(*) from mt101_corrective_pay_plan where rebuild_run_id = '" + FIX
+                + "'"), "ambas cabeceras (ACTIVE + SUPERSEDED) permanecen");
+    }
+
+    @Test
+    void claimFailsIfActivePlanRevisionPointsToANonActiveHeader() throws Exception {
+        // v44-fix: el claim exige que la cabecera de active_plan_revision sea ACTIVE. Si el puntero se altera hacia
+        // una revision SUPERSEDED (cuyo fragmento sigue existiendo), el claim falla: cabecera+puntero+fragmento son
+        // una cadena inseparable.
+        var repository = new Mt101RebuildRepository();
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1"); // rev 1 ACTIVE
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'INVALIDATED' "
+                    + "where rebuild_run_id = '" + FIX + "'");
+        }
+        service.requestCorrectivePay(null, FIX, "ana", "segunda solicitud", "TCK-2"); // rev 1 SUPERSEDED, rev 2 ACTIVE
+        // Habilita el claim y ALTERA el puntero hacia la revision SUPERSEDED (1); etiqueta el ledger igual.
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'EXECUTING', pay_claimed_by = 'luis', "
+                    + "pay_lease_until = current_timestamp + interval '15 minutes', active_plan_revision = 1 "
+                    + "where rebuild_run_id = '" + FIX + "'");
+            statement.executeUpdate("update mt101_corrective_pay_fragment set plan_revision = 1 "
+                    + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'");
+        }
+        var p1 = prepared(repository, "RTEST1");
+        assertEquals(0, repository.markPayFragmentDispatching(dataSource, FIX, "RTEST1", p1.payloadHash(),
+                p1.approvedRoutedAs(), p1.dispatchPlanHash(), p1.specHash(), p1.specJson()),
+                "puntero hacia una revision SUPERSEDED (cabecera no ACTIVE) -> el claim NO reclama");
+        assertEquals("PREPARED", queryString("select pay_status from mt101_corrective_pay_fragment where "
+                + "rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'"),
+                "el fragmento sigue PREPARED");
+    }
+
+    @Test
     void requestActivatesAnImmutablePlanRevisionAsTheApprovedSource() throws Exception {
         // v41 (modelo versionado): al solicitar, se ACTIVA exactamente una revision del plan (DRAFT->ACTIVE). El
         // run apunta a esa revision; su hash coincide con el de la revision inmutable; el ledger de ejecucion
@@ -1990,6 +2048,13 @@ class Mt101CorrectiveLifecycleServiceTest {
             s.executeUpdate("drop trigger if exists trg_pay_plan_insert_guard on mt101_corrective_pay_plan");
             s.executeUpdate("create trigger trg_pay_plan_insert_guard before insert on mt101_corrective_pay_plan "
                     + "for each row execute function mt101_pay_plan_insert_guard()");
+            // v44-fix: la cabecera ACTIVE/SUPERSEDED no se puede borrar (solo un DRAFT abandonado).
+            s.executeUpdate("create or replace function mt101_pay_plan_delete_guard() returns trigger as $$ begin "
+                    + "if old.status in ('ACTIVE','SUPERSEDED') then raise exception 'plan header immutable once ACTIVE/SUPERSEDED'; "
+                    + "end if; return old; end; $$ language plpgsql");
+            s.executeUpdate("drop trigger if exists trg_pay_plan_delete_guard on mt101_corrective_pay_plan");
+            s.executeUpdate("create trigger trg_pay_plan_delete_guard before delete on mt101_corrective_pay_plan "
+                    + "for each row execute function mt101_pay_plan_delete_guard()");
             s.executeUpdate("create or replace function mt101_pay_plan_status_guard() returns trigger as $$ begin "
                     + "if old.status = 'SUPERSEDED' then raise exception 'SUPERSEDED revision is immutable'; end if; "
                     + "if old.status = 'ACTIVE' then if new.status not in ('ACTIVE','SUPERSEDED') then "
