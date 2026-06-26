@@ -906,7 +906,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "corrective_set_id, status, pay_status, reference_code) values ('RUN-GUARD', '"
                     + SET + "', 'RUN-GUARD', 'ARCHIVED', 'EXECUTING', '9')");
         }
-        repository.preparePayIntents(dataSource, "RUN-GUARD", java.util.List.of(intent));
+        repository.preparePayIntents(dataSource, "RUN-GUARD", "tok-x", java.util.List.of(intent));
         assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = "
                 + "'RUN-GUARD'"), "run EXECUTING: el upsert no escribe (plan inmutable)");
         // Sin reserva (NOT_REQUESTED): el upsert TAMPOCO escribe; los specs solo se compilan bajo la reserva.
@@ -914,15 +914,20 @@ class Mt101CorrectiveLifecycleServiceTest {
             statement.executeUpdate("update mt101_rebuild_run set pay_status = 'NOT_REQUESTED' "
                     + "where rebuild_run_id = 'RUN-GUARD'");
         }
-        repository.preparePayIntents(dataSource, "RUN-GUARD", java.util.List.of(intent));
+        repository.preparePayIntents(dataSource, "RUN-GUARD", "tok-x", java.util.List.of(intent));
         assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = "
                 + "'RUN-GUARD'"), "run NOT_REQUESTED (sin reserva): el upsert no escribe");
-        // Reserva exclusiva (PREPARING_PLAN) -> ahora si escribe el spec.
-        assertEquals(1, repository.reservePayForPlanPreparation(dataSource, "RUN-GUARD", 120),
+        // Reserva exclusiva (PREPARING_PLAN) con token 'tok-guard'.
+        assertEquals(1, repository.reservePayForPlanPreparation(dataSource, "RUN-GUARD", "tok-guard", "ana", 120),
                 "el run elegible se reserva (PREPARING_PLAN)");
-        repository.preparePayIntents(dataSource, "RUN-GUARD", java.util.List.of(intent));
+        // v42: el upsert con un token DISTINTO (maker que no posee la reserva) es no-op.
+        repository.preparePayIntents(dataSource, "RUN-GUARD", "tok-wrong", java.util.List.of(intent));
+        assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = "
+                + "'RUN-GUARD'"), "reservado, pero token ajeno: el upsert no escribe");
+        // Con el token DUENO si escribe.
+        repository.preparePayIntents(dataSource, "RUN-GUARD", "tok-guard", java.util.List.of(intent));
         assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = "
-                + "'RUN-GUARD' and pay_status = 'PREPARED'"), "run RESERVADO: el upsert escribe");
+                + "'RUN-GUARD' and pay_status = 'PREPARED'"), "reservado y token dueno: el upsert escribe");
     }
 
     @Test
@@ -935,23 +940,72 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "corrective_set_id, status, pay_status, reference_code) values ('RUN-RES', '"
                     + SET + "', 'RUN-RES', 'ARCHIVED', 'NOT_REQUESTED', '8')");
         }
-        assertEquals(1, repository.reservePayForPlanPreparation(dataSource, "RUN-RES", 120),
+        assertEquals(1, repository.reservePayForPlanPreparation(dataSource, "RUN-RES", "tokA", "ana", 120),
                 "primer maker gana la reserva");
         assertEquals("PREPARING_PLAN", queryString("select pay_status from mt101_rebuild_run where "
                 + "rebuild_run_id = 'RUN-RES'"));
-        assertEquals(0, repository.reservePayForPlanPreparation(dataSource, "RUN-RES", 120),
+        assertEquals("tokA", queryString("select pay_plan_reservation_id from mt101_rebuild_run where "
+                + "rebuild_run_id = 'RUN-RES'"), "el token del dueno queda fijado");
+        assertEquals(0, repository.reservePayForPlanPreparation(dataSource, "RUN-RES", "tokB", "beto", 120),
                 "segundo maker NO puede reservar mientras la reserva esta vigente");
-        // Reserva caida (back-date de la marca) -> reclamable.
+        // Reserva caida (back-date de la marca) -> reclamable; el token pasa a ser el del nuevo dueno.
         try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
             statement.executeUpdate("update mt101_rebuild_run set pay_plan_reserved_at = current_timestamp - "
                     + "interval '10 minutes' where rebuild_run_id = 'RUN-RES'");
         }
-        assertEquals(1, repository.reservePayForPlanPreparation(dataSource, "RUN-RES", 120),
+        assertEquals(1, repository.reservePayForPlanPreparation(dataSource, "RUN-RES", "tokC", "caro", 120),
                 "una reserva CAIDA (mayor que la ventana) se reclama");
-        // Liberar -> vuelve a NOT_REQUESTED.
-        assertEquals(1, repository.releasePayPlanReservation(dataSource, "RUN-RES"));
+        assertEquals("tokC", queryString("select pay_plan_reservation_id from mt101_rebuild_run where "
+                + "rebuild_run_id = 'RUN-RES'"), "el token pasa al nuevo dueno (takeover)");
+        // v42: un dueno ANTERIOR (tokA) NO puede liberar la reserva del nuevo dueno.
+        assertEquals(0, repository.releasePayPlanReservation(dataSource, "RUN-RES", "tokA"),
+                "un dueno anterior (token perdido) no libera el trabajo del nuevo dueno");
+        assertEquals("PREPARING_PLAN", queryString("select pay_status from mt101_rebuild_run where "
+                + "rebuild_run_id = 'RUN-RES'"), "sigue reservado por el nuevo dueno");
+        // El dueno ACTUAL (tokC) si libera -> vuelve a NOT_REQUESTED.
+        assertEquals(1, repository.releasePayPlanReservation(dataSource, "RUN-RES", "tokC"));
         assertEquals("NOT_REQUESTED", queryString("select pay_status from mt101_rebuild_run where "
                 + "rebuild_run_id = 'RUN-RES'"));
+    }
+
+    @Test
+    void aStaleReservationTakeoverFullyDispossessesThePreviousMaker() throws Exception {
+        // v42 (P0 propiedad): simula el takeover de una reserva vencida. El maker A reserva y empieza a preparar;
+        // su reserva vence; el maker B la reclama. A, aun "vivo", YA NO puede escribir specs, ni concretar la
+        // solicitud, ni liberar la reserva: todas sus operaciones exigen su token, que B sobrescribio.
+        var repository = new Mt101RebuildRepository();
+        service.advanceCorrective(null, FIX, "executor"); // run ARCHIVED, pay_status NOT_REQUESTED
+        var intent = new Mt101RebuildRepository.PayFragmentIntent(FIX, "RTEST1", null, null, null,
+                "ph", "key", "REST", "key", "as-routed", "rest://x", "planhash",
+                "MT101_PAY_PLAN_V1", "{\"version\":\"MT101_PAY_PLAN_V1\"}", "spechash");
+        // A reserva (token A) y escribe un spec bajo su reserva.
+        assertEquals(1, repository.reservePayForPlanPreparation(dataSource, FIX, "tokA", "ana", 120));
+        repository.preparePayIntents(dataSource, FIX, "tokA", java.util.List.of(intent));
+        assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = '"
+                + FIX + "' and pay_status = 'PREPARED'"), "A escribio bajo su reserva");
+        // La reserva de A vence; B la reclama (token B sobrescribe el token A).
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_plan_reserved_at = current_timestamp - "
+                    + "interval '10 minutes' where rebuild_run_id = '" + FIX + "'");
+        }
+        assertEquals(1, repository.reservePayForPlanPreparation(dataSource, FIX, "tokB", "beto", 120),
+                "B reclama la reserva vencida");
+        // A (token perdido) ya NO puede: escribir specs...
+        var intentA2 = new Mt101RebuildRepository.PayFragmentIntent(FIX, "RTEST2", null, null, null,
+                "phA2", "keyA2", "REST", "keyA2", "as-routed", "rest://a2", "planhashA2",
+                "MT101_PAY_PLAN_V1", "{\"version\":\"MT101_PAY_PLAN_V1\",\"a\":2}", "spechashA2");
+        repository.preparePayIntents(dataSource, FIX, "tokA", java.util.List.of(intentA2));
+        assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = '"
+                + FIX + "' and corrective_senders_reference = 'RTEST2'"), "A ya no puede escribir (token perdido)");
+        // ...ni compilar/concretar el plan...
+        assertThrows(SQLException.class, () -> repository.compileDraftPlanRevision(dataSource, FIX, "ana", "tokA"),
+                "A ya no puede compilar el DRAFT (token perdido)");
+        // ...ni liberar la reserva del nuevo dueno.
+        assertEquals(0, repository.releasePayPlanReservation(dataSource, FIX, "tokA"),
+                "A ya no puede liberar (token perdido)");
+        assertEquals("PREPARING_PLAN", payStatus(FIX), "el run sigue reservado por B");
+        assertEquals("tokB", queryString("select pay_plan_reservation_id from mt101_rebuild_run where "
+                + "rebuild_run_id = '" + FIX + "'"), "B sigue siendo el dueno");
     }
 
     @Test
@@ -1007,6 +1061,36 @@ class Mt101CorrectiveLifecycleServiceTest {
                 + FIX + "'"), "el run apunta a la revision 2");
         assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = '"
                 + FIX + "' and plan_revision <> 2"), "el ledger queda etiquetado con la revision 2");
+    }
+
+    @Test
+    void reRequestRearmsPreSendInvalidatedFragmentsIntoTheNewRevision() throws Exception {
+        // Hallazgo 2 (v42): un fragmento INVALIDATED pre-envio (p.ej. fallo de materializacion/Vault, spec
+        // manipulada o drift detectado ANTES del envio; nunca llamo al banco) debe REARMARSE en una re-solicitud.
+        // Antes quedaba atascado (el upsert lo excluia) y la aprobacion no encontraba nada PREPARED para enviar.
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        // Simula un fragmento invalidado pre-envio y el run en un estado re-solicitable (FAILED).
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'INVALIDATED', "
+                    + "error_message = 'vault unavailable (pre-send)' where rebuild_run_id = '" + FIX
+                    + "' and corrective_senders_reference = 'RTEST1'");
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'FAILED' "
+                    + "where rebuild_run_id = '" + FIX + "'");
+        }
+        assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = '"
+                + FIX + "' and pay_status = 'INVALIDATED'"), "precondicion: un fragmento INVALIDATED pre-envio");
+
+        service.requestCorrectivePay(null, FIX, "ana", "reintento tras fallo de vault", "TCK-2");
+
+        assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = '"
+                + FIX + "' and pay_status = 'INVALIDATED'"), "el fragmento INVALIDATED pre-envio se rearmo");
+        assertEquals(2L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = '"
+                + FIX + "' and pay_status = 'PREPARED'"), "los dos fragmentos quedan PREPARED en la nueva solicitud");
+        assertEquals("REQUESTED", payStatus(FIX), "la re-solicitud concreta a REQUESTED");
+        // La nueva revision ACTIVE incluye ambos fragmentos (el rearmado entre ellos).
+        assertEquals(2L, queryLong("select plan_count from mt101_corrective_pay_plan where rebuild_run_id = '"
+                + FIX + "' and status = 'ACTIVE'"), "la revision ACTIVE cuenta los 2 fragmentos rearmados");
     }
 
     @Test
@@ -1575,6 +1659,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "pay_request_reason text, pay_request_ticket varchar(120),"
                     + "pay_plan_version varchar(40), pay_plan_count integer, pay_plan_set_hash varchar(64),"
                     + "pay_plan_reserved_at timestamp, active_plan_revision integer,"
+                    + "pay_plan_reservation_id varchar(64), pay_plan_reserved_by varchar(120),"
                     + "pay_status_config_snapshot text, pay_reconcile_config_snapshot text,"
                     + "status_sync_status varchar(20) not null default 'PENDING', status_sync_error text,"
                     + "reconciliation_status varchar(20) not null default 'PENDING', reconciliation_error text,"

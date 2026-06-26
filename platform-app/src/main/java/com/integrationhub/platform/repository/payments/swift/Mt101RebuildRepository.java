@@ -686,9 +686,13 @@ public class Mt101RebuildRepository {
      * atomico, dos makers concurrentes NO pueden reservar a la vez: solo uno gana y prepara los specs en
      * exclusiva (los demas reciben 0). El advisory lock serializa ademas contra la cadena de acciones del run.
      */
-    public int reservePayForPlanPreparation(DataSource dataSource, String rebuildRunId, int staleSeconds)
-            throws SQLException {
+    public int reservePayForPlanPreparation(DataSource dataSource, String rebuildRunId, String reservationId,
+                                            String reservedBy, int staleSeconds) throws SQLException {
+        // v42: la reserva fija un TOKEN de propiedad inmutable (reservation_id). Una reclamacion por reserva
+        // vencida sobrescribe el token: el maker anterior pierde la propiedad y ya no puede escribir/concretar/
+        // liberar (sus operaciones exigen este reservation_id).
         var sql = "update mt101_rebuild_run set pay_status = 'PREPARING_PLAN', "
+                + "pay_plan_reservation_id = ?, pay_plan_reserved_by = ?, "
                 + "pay_plan_reserved_at = current_timestamp, updated_at = current_timestamp "
                 + "where rebuild_run_id = ? and status = 'ARCHIVED' "
                 + "and (pay_status in ('NOT_REQUESTED', 'FAILED', 'INVALIDATED') "
@@ -697,8 +701,10 @@ public class Mt101RebuildRepository {
         return inTransaction(dataSource, connection -> {
             lockRunForActionChain(connection, rebuildRunId);
             try (var statement = connection.prepareStatement(sql)) {
-                statement.setString(1, rebuildRunId);
-                statement.setInt(2, staleSeconds);
+                statement.setString(1, reservationId);
+                statement.setString(2, reservedBy);
+                statement.setString(3, rebuildRunId);
+                statement.setInt(4, staleSeconds);
                 return statement.executeUpdate();
             }
         });
@@ -710,12 +716,17 @@ public class Mt101RebuildRepository {
      * (idempotente y race-safe: si la solicitud ya concreto a REQUESTED, no toca nada). Tras liberar, el run
      * vuelve a ser re-solicitable y {@link #deleteOrphanPreparedIntents} puede limpiar specs PREPARED parciales.
      */
-    public int releasePayPlanReservation(DataSource dataSource, String rebuildRunId) throws SQLException {
+    public int releasePayPlanReservation(DataSource dataSource, String rebuildRunId, String reservationId)
+            throws SQLException {
+        // v42: solo el DUENO de la reserva puede liberarla. Un maker que perdio la reserva (takeover) no puede
+        // dejar el run NOT_REQUESTED por debajo del nuevo dueno.
         var sql = "update mt101_rebuild_run set pay_status = 'NOT_REQUESTED', pay_plan_reserved_at = null, "
-                + "updated_at = current_timestamp where rebuild_run_id = ? and pay_status = 'PREPARING_PLAN'";
+                + "pay_plan_reservation_id = null, pay_plan_reserved_by = null, updated_at = current_timestamp "
+                + "where rebuild_run_id = ? and pay_status = 'PREPARING_PLAN' and pay_plan_reservation_id = ?";
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
             statement.setString(1, rebuildRunId);
+            statement.setString(2, reservationId);
             return statement.executeUpdate();
         }
     }
@@ -730,12 +741,12 @@ public class Mt101RebuildRepository {
     public int requestPayWithPlanSet(DataSource dataSource, String rebuildRunId, String requestedBy,
                                      String payloadHash, String configHash, String requestReason,
                                      String requestTicket, String previousStatus, PayPlanSet planSet,
-                                     int planRevision)
+                                     int planRevision, String reservationId)
             throws SQLException {
         return inTransaction(dataSource, connection -> {
             lockRunForActionChain(connection, rebuildRunId);
             var updated = requestPay(connection, rebuildRunId, requestedBy, payloadHash, configHash,
-                    requestReason, requestTicket);
+                    requestReason, requestTicket, reservationId);
             if (updated == 0) {
                 return 0;
             }
@@ -806,7 +817,7 @@ public class Mt101RebuildRepository {
 
     private int requestPay(java.sql.Connection connection, String rebuildRunId, String requestedBy,
                            String payloadHash, String configHash,
-                           String requestReason, String requestTicket) throws SQLException {
+                           String requestReason, String requestTicket, String reservationId) throws SQLException {
         var sql = "update mt101_rebuild_run set pay_status = 'REQUESTED', pay_requested_by = ?, "
                 + "pay_requested_at = current_timestamp, pay_claimed_by = null, pay_claimed_at = null, "
                 + "pay_approved_by = null, pay_approved_at = null, pay_completed_at = null, "
@@ -814,12 +825,13 @@ public class Mt101RebuildRepository {
                 + "pay_requested_config_hash = ?, pay_claimed_config_hash = null, pay_lease_until = null, "
                 + "pay_request_reason = ?, pay_request_ticket = ?, "
                 + "pay_resolved_by = null, pay_resolved_at = null, pay_resolution_reason = null, "
-                + "pay_plan_reserved_at = null, "
+                + "pay_plan_reserved_at = null, pay_plan_reservation_id = null, pay_plan_reserved_by = null, "
                 + "pay_uncertain_reason = null, pay_error_message = null, updated_at = current_timestamp "
                 // v40-bis: la solicitud concreta SOLO desde la reserva exclusiva (PREPARING_PLAN) que el mismo
                 // maker gano antes de compilar/persistir el plan: nadie mas pudo escribir specs en el intervalo.
+                // v42: ademas exige el TOKEN de propiedad: un maker que perdio la reserva (takeover) no concreta.
                 + "where rebuild_run_id = ? and status = 'ARCHIVED' "
-                + "and pay_status = 'PREPARING_PLAN'";
+                + "and pay_status = 'PREPARING_PLAN' and pay_plan_reservation_id = ?";
         try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, requestedBy);
             statement.setString(2, payloadHash);
@@ -827,6 +839,7 @@ public class Mt101RebuildRepository {
             statement.setString(4, blankToNull(requestReason));
             statement.setString(5, blankToNull(requestTicket));
             statement.setString(6, rebuildRunId);
+            statement.setString(7, reservationId);
             return statement.executeUpdate();
         }
     }
@@ -897,10 +910,16 @@ public class Mt101RebuildRepository {
      * (re-reserva tras una caida) y crea la revision siguiente. Devuelve la revision y su PayPlanSet (hash del
      * conjunto). La revision se ACTIVA luego, atomicamente, en {@link #requestPayWithPlanSet}.
      */
-    public DraftPlanRevision compileDraftPlanRevision(DataSource dataSource, String rebuildRunId, String createdBy)
-            throws SQLException {
+    public DraftPlanRevision compileDraftPlanRevision(DataSource dataSource, String rebuildRunId, String createdBy,
+                                                      String reservationId) throws SQLException {
         return inTransaction(dataSource, connection -> {
             lockRunForActionChain(connection, rebuildRunId);
+            // v42: solo el DUENO de la reserva compila. Un maker que perdio la reserva (takeover) no puede crear
+            // ni reemplazar el DRAFT del nuevo dueno.
+            if (!ownsReservation(connection, rebuildRunId, reservationId)) {
+                throw new SQLException("cannot compile plan draft for run " + rebuildRunId
+                        + ": the plan-preparation reservation was lost (taken over by another maker)");
+            }
             // Descarta un DRAFT anterior (no concretado) y calcula la siguiente revision.
             deleteDraftPlanRevision(connection, rebuildRunId);
             int nextRevision;
@@ -968,9 +987,32 @@ public class Mt101RebuildRepository {
         return new PayPlanSet(PAY_PLAN_SET_VERSION, count, sha256Hex(canonical.toString()));
     }
 
-    /** v41: elimina la revision DRAFT (no concretada) del run. Race-safe: solo toca DRAFT (nunca ACTIVE/SUPERSEDED). */
-    public int deleteDraftPlanRevision(DataSource dataSource, String rebuildRunId) throws SQLException {
-        return inTransaction(dataSource, connection -> deleteDraftPlanRevision(connection, rebuildRunId));
+    /** v42: ¿el run sigue reservado por ESTE token? (propiedad exclusiva de la preparacion). */
+    private boolean ownsReservation(java.sql.Connection connection, String rebuildRunId, String reservationId)
+            throws SQLException {
+        try (var statement = connection.prepareStatement("select 1 from mt101_rebuild_run where rebuild_run_id = ? "
+                + "and pay_status = 'PREPARING_PLAN' and pay_plan_reservation_id = ?")) {
+            statement.setString(1, rebuildRunId);
+            statement.setString(2, reservationId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    /**
+     * v41: elimina la revision DRAFT (no concretada) del run. Race-safe: solo toca DRAFT (nunca ACTIVE/SUPERSEDED).
+     * v42: gated por propiedad — solo borra si el run sigue reservado por ESTE token (un maker que perdio la
+     * reserva no borra el DRAFT del nuevo dueno).
+     */
+    public int deleteDraftPlanRevision(DataSource dataSource, String rebuildRunId, String reservationId)
+            throws SQLException {
+        return inTransaction(dataSource, connection -> {
+            if (!ownsReservation(connection, rebuildRunId, reservationId)) {
+                return 0;
+            }
+            return deleteDraftPlanRevision(connection, rebuildRunId);
+        });
     }
 
     private int deleteDraftPlanRevision(java.sql.Connection connection, String rebuildRunId) throws SQLException {
@@ -1720,11 +1762,17 @@ public class Mt101RebuildRepository {
     }
 
     /** Inserta la intencion durable antes de invocar el gateway de PAY. */
-    public int preparePayIntents(DataSource dataSource, String rebuildRunId,
+    public int preparePayIntents(DataSource dataSource, String rebuildRunId, String reservationId,
                                  Collection<PayFragmentIntent> intents) throws SQLException {
         if (intents == null || intents.isEmpty()) {
             return 0;
         }
+        // v42: el upsert SOLO escribe si el run esta reservado por ESTE maker (PREPARING_PLAN + reservation_id).
+        // v40-bis: ...y solo bajo la reserva exclusiva. Un maker que perdio la reserva (takeover) no escribe specs.
+        // Hallazgo 2 (v42): un fragmento INVALIDATED es SIEMPRE pre-envio (nunca llamo al banco: fallo de
+        // materializacion/Vault, spec manipulada o drift detectado ANTES del envio). Bajo la reserva exclusiva es
+        // seguro REARMARLO (recompilar specs frescas). Por eso INVALIDATED ya NO se excluye del DO UPDATE; solo se
+        // protegen los estados activos/enviados (DISPATCHING/SENT/REJECTED/UNCERTAIN) que no deben reescribirse.
         var sql = """
                 insert into mt101_corrective_pay_fragment
                     (rebuild_run_id, corrective_set_id, corrective_senders_reference,
@@ -1735,7 +1783,7 @@ public class Mt101RebuildRepository {
                      pay_status, attempts, prepared_at, error_message)
                 select ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PREPARED', 0, current_timestamp, null
                 where exists (select 1 from mt101_rebuild_run r where r.rebuild_run_id = ?
-                              and r.pay_status = 'PREPARING_PLAN')
+                              and r.pay_status = 'PREPARING_PLAN' and r.pay_plan_reservation_id = ?)
                 on conflict (rebuild_run_id, corrective_senders_reference) do update
                     set payload_hash = excluded.payload_hash,
                         idempotency_key = excluded.idempotency_key,
@@ -1753,7 +1801,7 @@ public class Mt101RebuildRepository {
                         error_message = null,
                         updated_at = current_timestamp
                     where mt101_corrective_pay_fragment.pay_status
-                          not in ('DISPATCHING', 'SENT', 'REJECTED', 'UNCERTAIN', 'INVALIDATED')
+                          not in ('DISPATCHING', 'SENT', 'REJECTED', 'UNCERTAIN')
                 """;
         var updated = 0;
         try (var connection = dataSource.getConnection();
@@ -1783,10 +1831,8 @@ public class Mt101RebuildRepository {
                 statement.setString(14, intent.dispatchSpecVersion());
                 statement.setString(15, intent.dispatchSpecJson());
                 statement.setString(16, intent.dispatchSpecHash());
-                // v40-bis: el upsert SOLO escribe si el run esta RESERVADO por este maker (PREPARING_PLAN):
-                // impide que una segunda solicitud reescriba specs de un plan REQUESTED/EXECUTING y que dos makers
-                // concurrentes mezclen specs (solo uno gana la reserva exclusiva antes de compilar).
                 statement.setString(17, rebuildRunId);
+                statement.setString(18, reservationId);
                 statement.addBatch();
                 updated++;
             }

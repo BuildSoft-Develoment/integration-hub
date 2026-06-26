@@ -166,7 +166,12 @@ public class Mt101CorrectiveLifecycleService {
             // tocar el ledger (NOT_REQUESTED/FAILED/INVALIDATED -> PREPARING_PLAN; o se reclama una reserva caida).
             // Si ya hay una solicitud/despacho en curso (REQUESTED/EXECUTING/...) o OTRO maker esta preparando, la
             // reserva devuelve 0 y se rechaza: el plan aprobado es inmutable y dos makers no pueden mezclar specs.
-            var reserved = rebuildRepository.reservePayForPlanPreparation(dataSource, runId, PLAN_RESERVATION_STALE_SECONDS);
+            // v42: la reserva genera un TOKEN de propiedad inmutable (reservation_id). Toda escritura/compilacion/
+            // promocion/liberacion exige ese token: un maker que pierda la reserva (takeover de una reserva vencida)
+            // ya no puede escribir specs, concretar la solicitud ni liberar el trabajo del nuevo dueno.
+            var reservationId = java.util.UUID.randomUUID().toString();
+            var reserved = rebuildRepository.reservePayForPlanPreparation(dataSource, runId, reservationId, requester,
+                    PLAN_RESERVATION_STALE_SECONDS);
             if (reserved == 0) {
                 throw new IllegalStateException("corrective pay for run " + runId + " is not eligible to request;"
                         + " payStatus=" + run.payStatus() + " (a request/dispatch is in progress or another maker is"
@@ -191,17 +196,17 @@ public class Mt101CorrectiveLifecycleService {
                 // La compilacion (resolver de ruta) vive solo aqui, en la preparacion.
                 rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, run.correctiveSetId());
                 var unresolvedPayConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_PAY");
-                preparePayIntents(dataSource, runId, run.correctiveSetId(), payConfig, unresolvedPayConfig);
+                preparePayIntents(dataSource, runId, reservationId, run.correctiveSetId(), payConfig, unresolvedPayConfig);
                 // v41 (modelo versionado): snapshot INMUTABLE del conjunto preparado como una revision DRAFT
                 // (bajo la reserva exclusiva; ningun otro maker escribe en paralelo). La revision se ACTIVA en la
-                // transaccion atomica de la solicitud.
-                var draft = rebuildRepository.compileDraftPlanRevision(dataSource, runId, requester);
+                // transaccion atomica de la solicitud. v42: exige el token de propiedad.
+                var draft = rebuildRepository.compileDraftPlanRevision(dataSource, runId, requester, reservationId);
                 // v39+v41: PREPARING_PLAN -> REQUESTED + ACTIVAR la revision DRAFT (DRAFT->ACTIVE, supersede la
                 // anterior, etiqueta el ledger con la revision) + hash del conjunto + PAY_REQUESTED +
                 // PAY_PLAN_PREPARED en UNA sola transaccion atomica. previousStatus = estado original (pre-reserva).
                 var requested = rebuildRepository.requestPayWithPlanSet(dataSource, runId, requester,
                         payloadHash, configHash, reason, ticket, normalize(run.payStatus()),
-                        draft.planSet(), draft.revision());
+                        draft.planSet(), draft.revision(), reservationId);
                 if (requested == 0) {
                     throw new IllegalStateException("cannot request corrective pay for run " + runId
                             + "; payStatus=" + run.payStatus());
@@ -213,9 +218,11 @@ public class Mt101CorrectiveLifecycleService {
                 // posee el run). Asi un request fallido no deja el run atascado ni planes no aprobables.
                 if (!requestConcreted) {
                     try {
-                        rebuildRepository.releasePayPlanReservation(dataSource, runId);
+                        // v42: liberacion/limpieza gated por el token: si OTRO maker reclamo la reserva (takeover),
+                        // estas operaciones son no-op y no tocan el trabajo del nuevo dueno.
+                        rebuildRepository.releasePayPlanReservation(dataSource, runId, reservationId);
                         // v41: descarta la revision DRAFT no concretada (nunca llego a ACTIVE) y los intents parciales.
-                        rebuildRepository.deleteDraftPlanRevision(dataSource, runId);
+                        rebuildRepository.deleteDraftPlanRevision(dataSource, runId, reservationId);
                         rebuildRepository.deleteOrphanPreparedIntents(dataSource, runId);
                     } catch (SQLException cleanupError) {
                         // no enmascarar el error original de la solicitud
@@ -874,7 +881,7 @@ public class Mt101CorrectiveLifecycleService {
         return source;
     }
 
-    private void preparePayIntents(DataSource dataSource, String runId, String correctiveSetId,
+    private void preparePayIntents(DataSource dataSource, String runId, String reservationId, String correctiveSetId,
                                    Map<String, Object> payConfig, Map<String, Object> unresolvedPayConfig)
             throws SQLException {
         if (payConfig == null) {
@@ -930,7 +937,7 @@ public class Mt101CorrectiveLifecycleService {
                         spec.specJson(),
                         spec.specHash()));
             }
-            rebuildRepository.preparePayIntents(dataSource, runId, intents);
+            rebuildRepository.preparePayIntents(dataSource, runId, reservationId, intents);
             if (rows.size() < pageSize) {
                 return;
             }
