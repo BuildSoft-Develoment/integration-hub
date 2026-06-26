@@ -251,13 +251,22 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 if (correctivePayStore == null) {
                     throw new IllegalStateException("MT101_PAY corrective source requires Mt101CorrectivePayStore");
                 }
+                // v46-fix (read-from-pf): el contrato (spec, payload_hash, ruta, destino, plan_hash) se lee
+                // DIRECTAMENTE de la revision ACTIVE INMUTABLE (mt101_corrective_pay_plan_fragment), no del ledger
+                // operativo. El ledger solo aporta el gate PREPARED. Sin contrato coherente (cadena run->cabecera
+                // ACTIVE->fragmento) NO hay fallback: se INVALIDA.
                 var prepared = correctivePayStore.readPreparedSpec(fragmentSource, rebuildRunId, reference);
                 if (prepared == null || prepared.specJson() == null || prepared.specJson().isBlank()) {
                     correctivePayStore.invalidateMissingSpec(fragmentSource, rebuildRunId, reference);
                     continue;
                 }
-                // v37 (P0.2): INTEGRIDAD de la spec. El dispatch_spec_json debe coincidir con su dispatch_spec_hash
-                // persistido; si se altero sin recalcular el hash, se INVALIDA y NO se llama al banco.
+                // v46-fix: si el ledger operativo DIVERGE de la revision inmutable de la que se leyo el contrato
+                // (manipulacion directa del ledger), se INVALIDA (estado terminal claro) y NO se despacha.
+                if (correctivePayStore.invalidateIfLedgerDivergesFromActiveRevision(fragmentSource, rebuildRunId, reference)) {
+                    continue;
+                }
+                // v37 (P0.2): INTEGRIDAD de la spec (de pf, inmutable): el dispatch_spec_json debe coincidir con su
+                // dispatch_spec_hash; defensa adicional aunque pf este protegida por trigger.
                 if (!dispatchPlanCompiler.specHash(prepared.specJson()).equals(prepared.specHash())) {
                     correctivePayStore.invalidateTamperedSpec(fragmentSource, rebuildRunId, reference);
                     continue;

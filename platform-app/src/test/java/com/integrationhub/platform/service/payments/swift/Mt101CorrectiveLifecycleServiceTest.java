@@ -1284,6 +1284,8 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "where rebuild_run_id = '" + FIX + "'");
         }
         service.requestCorrectivePay(null, FIX, "ana", "segunda solicitud", "TCK-2"); // rev 1 SUPERSEDED, rev 2 ACTIVE
+        // Lee el contrato MIENTRAS la revision activa (2) es ACTIVE (read-from-pf solo lee de una revision ACTIVE).
+        var p1 = prepared(repository, "RTEST1");
         // Habilita el claim y ALTERA el puntero hacia la revision SUPERSEDED (1); etiqueta el ledger igual.
         try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
             statement.executeUpdate("update mt101_rebuild_run set pay_status = 'EXECUTING', pay_claimed_by = 'luis', "
@@ -1292,7 +1294,6 @@ class Mt101CorrectiveLifecycleServiceTest {
             statement.executeUpdate("update mt101_corrective_pay_fragment set plan_revision = 1 "
                     + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'");
         }
-        var p1 = prepared(repository, "RTEST1");
         assertEquals(0, repository.markPayFragmentDispatching(dataSource, FIX, "RTEST1", p1.payloadHash(),
                 p1.approvedRoutedAs(), p1.dispatchPlanHash(), p1.specHash(), p1.specJson()),
                 "puntero hacia una revision SUPERSEDED (cabecera no ACTIVE) -> el claim NO reclama");
@@ -1321,6 +1322,28 @@ class Mt101CorrectiveLifecycleServiceTest {
         assertEquals("PREPARED", queryString("select pay_status from mt101_corrective_pay_fragment where "
                 + "rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'"),
                 "el fragmento sigue PREPARED (no hay envio sin revision activa)");
+    }
+
+    @Test
+    void readPreparedDispatchSpecReadsTheContractFromTheImmutableActiveRevisionNotTheLedger() throws Exception {
+        // v46-fix (read-from-pf): el contrato ejecutable se lee de la revision ACTIVE INMUTABLE (pf), no del ledger
+        // operativo. Manipular el ledger NO cambia lo que se lee: pf (protegida por trigger) es la fuente literal.
+        var repository = new Mt101RebuildRepository();
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1"); // rev 1 ACTIVE, ledger == pf
+        var original = prepared(repository, "RTEST1");
+        // Manipula SOLO el ledger operativo (pf es inmutable por trigger).
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set dispatch_spec_json = "
+                    + "'{\"tampered\":true}', dispatch_spec_hash = 'XHASH', payload_hash = 'YHASH' "
+                    + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'");
+        }
+        var afterTamper = prepared(repository, "RTEST1");
+        assertEquals(original.specJson(), afterTamper.specJson(),
+                "el contrato (spec) sale de la revision inmutable, no del ledger manipulado");
+        assertEquals(original.payloadHash(), afterTamper.payloadHash(),
+                "el payload_hash sale de pf, no del ledger manipulado");
+        assertEquals(original.specHash(), afterTamper.specHash(), "el spec_hash sale de pf");
     }
 
     @Test

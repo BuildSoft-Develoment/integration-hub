@@ -2100,6 +2100,50 @@ public class Mt101RebuildRepository {
     }
 
     /**
+     * v46-fix (read-from-pf): el contrato ejecutable se LEE de la revision ACTIVE inmutable (pf). Para no dejar un
+     * fragmento PREPARED atascado si el ledger operativo DIVERGE del plan inmutable (manipulacion directa del
+     * ledger, ya que en el flujo normal el ledger == pf), se INVALIDA explicitamente: si NO existe una fila de la
+     * revision ACTIVE cuyo contrato COMPLETO coincida con el ledger, el fragmento es incoherente con lo aprobado y
+     * no se despacha. Devuelve 1 si invalido (divergencia detectada). Se invoca tras leer pf (que ya existe) y
+     * antes del claim, dando un estado terminal claro.
+     */
+    public int invalidatePayFragmentDivergingFromActiveRevision(DataSource dataSource, String rebuildRunId,
+                                                                String correctiveSendersReference) throws SQLException {
+        var sql = """
+                update mt101_corrective_pay_fragment f
+                   set pay_status = 'INVALIDATED',
+                       error_message = 'operational ledger diverges from the approved immutable revision; not dispatched',
+                       updated_at = current_timestamp
+                  from mt101_rebuild_run r
+                 where f.rebuild_run_id = r.rebuild_run_id
+                   and f.rebuild_run_id = ?
+                   and f.corrective_senders_reference = ?
+                   and f.pay_status = 'PREPARED'
+                   and not exists (select 1 from mt101_corrective_pay_plan_fragment pf
+                                   join mt101_corrective_pay_plan p
+                                     on p.rebuild_run_id = pf.rebuild_run_id and p.plan_revision = pf.plan_revision
+                                    and p.status = 'ACTIVE'
+                                   where pf.rebuild_run_id = f.rebuild_run_id
+                                     and pf.plan_revision = r.active_plan_revision
+                                     and pf.corrective_senders_reference = f.corrective_senders_reference
+                                     and pf.payload_hash is not distinct from f.payload_hash
+                                     and pf.idempotency_key is not distinct from f.idempotency_key
+                                     and pf.approved_routed_as is not distinct from f.approved_routed_as
+                                     and pf.dispatch_destination is not distinct from f.dispatch_destination
+                                     and pf.dispatch_plan_hash is not distinct from f.dispatch_plan_hash
+                                     and pf.dispatch_spec_version is not distinct from f.dispatch_spec_version
+                                     and pf.dispatch_spec_hash = f.dispatch_spec_hash
+                                     and pf.dispatch_spec_json is not distinct from f.dispatch_spec_json)
+                """;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            statement.setString(2, correctiveSendersReference);
+            return statement.executeUpdate();
+        }
+    }
+
+    /**
      * P0.2 v24+v26: si una intencion PREPARED ya no coincide con el plan aprobado (payload, ruta o el
      * plan_hash completo cambiados tras el claim), se marca INVALIDATED y NO se envia. Devuelve 1 si
      * invalido (drift detectado).
@@ -2132,12 +2176,26 @@ public class Mt101RebuildRepository {
         }
     }
 
-    /** v37: lee la especificacion ejecutable persistida (contrato de despacho) de un fragmento PREPARED. */
+    /**
+     * v46-fix (read-from-pf): el contrato ejecutable (spec, payload_hash, ruta, destino, plan_hash) se lee
+     * DIRECTAMENTE de la REVISION ACTIVE INMUTABLE (mt101_corrective_pay_plan_fragment), no del ledger operativo
+     * mutable. El ledger solo aporta el GATE operativo (pay_status='PREPARED'). Asi la revision inmutable es la
+     * FUENTE LITERAL de ejecucion: el dispatcher materializa y envia exactamente lo aprobado. Solo devuelve fila si
+     * la cabecera de la revision activa es ACTIVE, el run apunta a esa revision y el fragmento del ledger esta
+     * PREPARED. Sin caminos legacy: si la cadena no es coherente, no hay contrato y el fragmento se INVALIDA.
+     */
     public PreparedDispatchSpec readPreparedDispatchSpec(DataSource dataSource, String rebuildRunId,
                                                          String correctiveSendersReference) throws SQLException {
-        var sql = "select dispatch_spec_json, dispatch_spec_hash, approved_routed_as, payload_hash, dispatch_plan_hash "
-                + "from mt101_corrective_pay_fragment where rebuild_run_id = ? and corrective_senders_reference = ? "
-                + "and pay_status = 'PREPARED'";
+        var sql = "select pf.dispatch_spec_json, pf.dispatch_spec_hash, pf.approved_routed_as, pf.payload_hash, "
+                + "pf.dispatch_plan_hash "
+                + "from mt101_corrective_pay_plan_fragment pf "
+                + "join mt101_corrective_pay_plan p on p.rebuild_run_id = pf.rebuild_run_id "
+                + "  and p.plan_revision = pf.plan_revision and p.status = 'ACTIVE' "
+                + "join mt101_rebuild_run r on r.rebuild_run_id = pf.rebuild_run_id "
+                + "  and r.active_plan_revision = pf.plan_revision "
+                + "join mt101_corrective_pay_fragment f on f.rebuild_run_id = pf.rebuild_run_id "
+                + "  and f.corrective_senders_reference = pf.corrective_senders_reference "
+                + "where pf.rebuild_run_id = ? and pf.corrective_senders_reference = ? and f.pay_status = 'PREPARED'";
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
             statement.setString(1, rebuildRunId);

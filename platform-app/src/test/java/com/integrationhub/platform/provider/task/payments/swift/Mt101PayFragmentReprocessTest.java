@@ -341,8 +341,10 @@ class Mt101PayFragmentReprocessTest {
 
     @Test
     void correctiveDispatchInvalidatesWhenPersistedSpecTamperedWithoutHash() throws Exception {
-        // v37 (P0.2): integridad. Si dispatch_spec_json se altera sin recalcular dispatch_spec_hash, el
-        // dispatcher lo detecta (specHash(json) != hash persistido) -> INVALIDATED, sin llamar al banco.
+        // v46-fix (read-from-pf): el contrato se lee de la revision ACTIVE inmutable (pf). Si el ledger operativo
+        // se manipula (spec divergente), el dispatcher detecta que el ledger NO coincide con la revision inmutable
+        // -> INVALIDATED, sin llamar al banco. (Antes lo detectaba la integridad specHash; ahora la divergencia
+        // ledger<->pf, porque pf es la fuente literal de ejecucion.)
         var runId = "RUN-TAMPER";
         var fragmentSetId = "PAY-TAMPER";
         insertFragmentSet(fragmentSetId, "T9");

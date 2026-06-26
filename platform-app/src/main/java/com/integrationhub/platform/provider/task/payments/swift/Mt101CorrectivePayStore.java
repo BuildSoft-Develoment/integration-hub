@@ -144,6 +144,24 @@ public class Mt101CorrectivePayStore {
         }
     }
 
+    /**
+     * v46-fix (read-from-pf): INVALIDA un fragmento PREPARED cuyo ledger operativo DIVERGE de la revision ACTIVE
+     * inmutable (de donde se lee el contrato). Devuelve true si invalido (divergencia). Asi una manipulacion
+     * directa del ledger no deja el fragmento atascado en PREPARED ni se despacha.
+     */
+    public boolean invalidateIfLedgerDivergesFromActiveRevision(Map<String, Object> fragmentSource,
+                                                                String rebuildRunId, String sendersReference) {
+        var dataSource = resolveDataSource(
+                stringValue(fragmentSource == null ? null : fragmentSource.get("connectionRef")));
+        try {
+            return rebuildRepository.invalidatePayFragmentDivergingFromActiveRevision(
+                    dataSource, rebuildRunId, sendersReference) > 0;
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot invalidate MT101 corrective PAY fragment diverging from the "
+                    + "active revision: " + sendersReference, error);
+        }
+    }
+
     /** v37: lee el contrato de despacho persistido (spec ejecutable) de un fragmento PREPARED. */
     public Mt101RebuildRepository.PreparedDispatchSpec readPreparedSpec(Map<String, Object> fragmentSource,
                                                                         String rebuildRunId, String sendersReference) {
