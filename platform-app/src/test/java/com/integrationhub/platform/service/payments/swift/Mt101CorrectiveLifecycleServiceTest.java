@@ -1122,26 +1122,33 @@ class Mt101CorrectiveLifecycleServiceTest {
             statement.executeUpdate("update mt101_rebuild_run set pay_status = 'EXECUTING', pay_claimed_by = 'luis', "
                     + "pay_lease_until = current_timestamp + interval '15 minutes' where rebuild_run_id = '" + FIX + "'");
         }
-        var payloadHash = queryString("select payload_hash from mt101_corrective_pay_fragment where rebuild_run_id = '"
-                + FIX + "' and corrective_senders_reference = 'RTEST1'");
-        var routedAs = queryString("select approved_routed_as from mt101_corrective_pay_fragment where rebuild_run_id = '"
-                + FIX + "' and corrective_senders_reference = 'RTEST1'");
-        var planHash = queryString("select dispatch_plan_hash from mt101_corrective_pay_fragment where rebuild_run_id = '"
-                + FIX + "' and corrective_senders_reference = 'RTEST1'");
-        // TAMPER del ledger: spec json + hash CONSISTENTES entre si pero distintos a la revision inmutable.
+        // CONTROL: en el MISMO estado, un fragmento legitimo (RTEST2, sin manipular) SI reclama. Asi el 0 de
+        // RTEST1 es atribuible especificamente al cross-check, no a otra condicion del claim.
+        var p2 = prepared(repository, "RTEST2");
+        assertEquals(1, repository.markPayFragmentDispatching(dataSource, FIX, "RTEST2", p2.payloadHash(),
+                p2.approvedRoutedAs(), p2.dispatchPlanHash(), p2.specHash(), p2.specJson()),
+                "control: el fragmento legitimo (spec = revision inmutable) SI reclama en este estado");
+
+        var p1 = prepared(repository, "RTEST1");
+        // TAMPER del ledger en RTEST1: spec json + hash CONSISTENTES entre si pero distintos a la revision inmutable.
         var tamperedJson = "{\"version\":\"MT101_PAY_PLAN_V1\",\"tampered\":true}";
         try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
             statement.executeUpdate("update mt101_corrective_pay_fragment set dispatch_spec_json = '" + tamperedJson
                     + "', dispatch_spec_hash = 'TAMPEREDHASH' where rebuild_run_id = '" + FIX
                     + "' and corrective_senders_reference = 'RTEST1'");
         }
-        assertEquals(0, repository.markPayFragmentDispatching(dataSource, FIX, "RTEST1", payloadHash, routedAs,
-                planHash, "TAMPEREDHASH", tamperedJson),
+        assertEquals(0, repository.markPayFragmentDispatching(dataSource, FIX, "RTEST1", p1.payloadHash(),
+                p1.approvedRoutedAs(), p1.dispatchPlanHash(), "TAMPEREDHASH", tamperedJson),
                 "una spec del ledger manipulada (aunque internamente consistente) que diverge de la revision "
                         + "inmutable NO se reclama");
         assertEquals("PREPARED", queryString("select pay_status from mt101_corrective_pay_fragment where "
                 + "rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'"),
-                "el fragmento sigue PREPARED (no se despacho la spec manipulada)");
+                "el fragmento manipulado sigue PREPARED (no se despacho la spec manipulada)");
+    }
+
+    private Mt101RebuildRepository.PreparedDispatchSpec prepared(Mt101RebuildRepository repository, String reference)
+            throws SQLException {
+        return repository.readPreparedDispatchSpec(dataSource, FIX, reference);
     }
 
     @Test
