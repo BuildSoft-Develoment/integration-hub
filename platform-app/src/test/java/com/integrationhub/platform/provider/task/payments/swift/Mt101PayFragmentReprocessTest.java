@@ -332,8 +332,8 @@ class Mt101PayFragmentReprocessTest {
                 prepared.approvedRoutedAs(), prepared.dispatchPlanHash(), prepared.specHash(), prepared.specJson()),
                 "un fragmento de una revision SUPERSEDED (1 != activa 2) NO se reclama");
         assertEquals("PREPARED", payLedgerStatus(runId, "V1"), "el fragmento sigue PREPARED");
-        // Alineado con la revision activa (2) -> reclama. La revision 2 INMUTABLE debe existir con la misma spec.
-        seedActivePlanRevision(runId, "V1", "MT101_PAY_PLAN_V1", prepared.specJson(), prepared.specHash(), 2);
+        // Alineado con la revision activa (2) -> reclama. La revision 2 INMUTABLE debe existir con el mismo contrato.
+        seedActivePlanRevision(runId, "V1", 2);
         assertEquals(1, repository.markPayFragmentDispatching(dataSource, runId, "V1", prepared.payloadHash(),
                 prepared.approvedRoutedAs(), prepared.dispatchPlanHash(), prepared.specHash(), prepared.specJson()),
                 "alineado con la revision activa, reclama");
@@ -1235,10 +1235,12 @@ class Mt101PayFragmentReprocessTest {
                     + "dispatched_at timestamp,"
                     + "updated_at timestamp not null default current_timestamp,"
                     + "unique (rebuild_run_id, corrective_senders_reference))");
-            // v43-bis: la revision ACTIVE INMUTABLE que el claim cruza contra el ledger.
+            // v43-bis/ter: la revision ACTIVE INMUTABLE que el claim cruza contra TODO el contrato del ledger.
             statement.executeUpdate("create table mt101_corrective_pay_plan_fragment ("
                     + "id bigserial primary key, rebuild_run_id varchar(80) not null, plan_revision integer not null,"
                     + "corrective_senders_reference varchar(16) not null,"
+                    + "payload_hash varchar(64), idempotency_key varchar(180), approved_routed_as varchar(80),"
+                    + "dispatch_destination text, dispatch_plan_hash varchar(64),"
                     + "dispatch_spec_version varchar(40), dispatch_spec_json text, dispatch_spec_hash varchar(64),"
                     + "unique (rebuild_run_id, plan_revision, corrective_senders_reference))");
             statement.executeUpdate("create unique index ux_test_fragment_ref on mt101_build_fragment"
@@ -1350,37 +1352,37 @@ class Mt101PayFragmentReprocessTest {
     }
 
     /**
-     * v43-bis: siembra la revision ACTIVE INMUTABLE (por defecto la 1) que el claim cruza contra el ledger:
-     * fija {@code active_plan_revision} en el run, etiqueta el fragmento del ledger y persiste la fila inmutable
-     * con la MISMA spec. Sin esto, el claim correctivo no reclama (el ledger ya no es la fuente final del plan).
+     * v43-bis/ter: siembra la revision ACTIVE INMUTABLE (por defecto la 1) que el claim cruza contra TODO el
+     * contrato del ledger: fija {@code active_plan_revision}, etiqueta el fragmento del ledger y COPIA la fila
+     * inmutable desde el ledger (payload/idempotencia/ruta/destino/plan_hash/spec). Sin esto el claim correctivo no
+     * reclama (el ledger ya no es la fuente final del plan).
      */
     private void seedActivePlanRevision(String runId, String reference,
                                         Mt101DispatchPlanCompiler.CompiledDispatchSpec spec) throws SQLException {
-        seedActivePlanRevision(runId, reference, spec.version(), spec.specJson(), spec.specHash(), 1);
+        seedActivePlanRevision(runId, reference, 1);
     }
 
-    private void seedActivePlanRevision(String runId, String reference, String specVersion, String specJson,
-                                        String specHash, int revision) throws SQLException {
+    private void seedActivePlanRevision(String runId, String reference, int revision) throws SQLException {
         try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
             statement.executeUpdate("update mt101_rebuild_run set active_plan_revision = " + revision
                     + " where rebuild_run_id = '" + runId + "'");
             statement.executeUpdate("update mt101_corrective_pay_fragment set plan_revision = " + revision
                     + " where rebuild_run_id = '" + runId + "' and corrective_senders_reference = '" + reference + "'");
-        }
-        try (Connection connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(
-                     "insert into mt101_corrective_pay_plan_fragment (rebuild_run_id, plan_revision, "
-                             + "corrective_senders_reference, dispatch_spec_version, dispatch_spec_json, dispatch_spec_hash) "
-                             + "values (?, ?, ?, ?, ?, ?) on conflict (rebuild_run_id, plan_revision, corrective_senders_reference) "
-                             + "do update set dispatch_spec_json = excluded.dispatch_spec_json, "
-                             + "dispatch_spec_hash = excluded.dispatch_spec_hash")) {
-            statement.setString(1, runId);
-            statement.setInt(2, revision);
-            statement.setString(3, reference);
-            statement.setString(4, specVersion);
-            statement.setString(5, specJson);
-            statement.setString(6, specHash);
-            statement.executeUpdate();
+            // Copia EXACTA del contrato del ledger -> revision inmutable (igual que compileDraftPlanRevision).
+            statement.executeUpdate("insert into mt101_corrective_pay_plan_fragment "
+                    + "(rebuild_run_id, plan_revision, corrective_senders_reference, payload_hash, idempotency_key, "
+                    + "approved_routed_as, dispatch_destination, dispatch_plan_hash, dispatch_spec_version, "
+                    + "dispatch_spec_json, dispatch_spec_hash) "
+                    + "select rebuild_run_id, " + revision + ", corrective_senders_reference, payload_hash, "
+                    + "idempotency_key, approved_routed_as, dispatch_destination, dispatch_plan_hash, "
+                    + "dispatch_spec_version, dispatch_spec_json, dispatch_spec_hash "
+                    + "from mt101_corrective_pay_fragment where rebuild_run_id = '" + runId
+                    + "' and corrective_senders_reference = '" + reference + "' "
+                    + "on conflict (rebuild_run_id, plan_revision, corrective_senders_reference) do update set "
+                    + "payload_hash = excluded.payload_hash, idempotency_key = excluded.idempotency_key, "
+                    + "approved_routed_as = excluded.approved_routed_as, dispatch_destination = excluded.dispatch_destination, "
+                    + "dispatch_plan_hash = excluded.dispatch_plan_hash, dispatch_spec_version = excluded.dispatch_spec_version, "
+                    + "dispatch_spec_json = excluded.dispatch_spec_json, dispatch_spec_hash = excluded.dispatch_spec_hash");
         }
     }
 

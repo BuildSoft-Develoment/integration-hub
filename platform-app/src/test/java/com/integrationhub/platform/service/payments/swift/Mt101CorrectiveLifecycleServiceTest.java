@@ -1152,6 +1152,55 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
+    void claimRejectsALedgerWhosePayloadOrPlanHashDivergesFromTheImmutableRevision() throws Exception {
+        // v43-ter: el cross-check ata TODO el contrato (no solo la spec). Un tamper del payload_hash +
+        // dispatch_plan_hash del ledger (consistentes entre si, spec intacta) es RECHAZADO contra la revision
+        // inmutable: "payload aprobado = payload enviado".
+        var repository = new Mt101RebuildRepository();
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1"); // rev 1 ACTIVE (ledger=pf)
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'EXECUTING', pay_claimed_by = 'luis', "
+                    + "pay_lease_until = current_timestamp + interval '15 minutes' where rebuild_run_id = '" + FIX + "'");
+        }
+        // CONTROL: RTEST2 legitimo reclama en este estado.
+        var p2 = prepared(repository, "RTEST2");
+        assertEquals(1, repository.markPayFragmentDispatching(dataSource, FIX, "RTEST2", p2.payloadHash(),
+                p2.approvedRoutedAs(), p2.dispatchPlanHash(), p2.specHash(), p2.specJson()),
+                "control: el fragmento legitimo reclama");
+        // TAMPER de RTEST1: payload_hash + dispatch_plan_hash divergentes (spec intacta).
+        var p1 = prepared(repository, "RTEST1");
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set payload_hash = 'H2TAMPER', "
+                    + "dispatch_plan_hash = 'PLANH2TAMPER' where rebuild_run_id = '" + FIX
+                    + "' and corrective_senders_reference = 'RTEST1'");
+        }
+        assertEquals(0, repository.markPayFragmentDispatching(dataSource, FIX, "RTEST1", "H2TAMPER",
+                p1.approvedRoutedAs(), "PLANH2TAMPER", p1.specHash(), p1.specJson()),
+                "payload/plan_hash del ledger divergente de la revision inmutable NO se reclama");
+        assertEquals("PREPARED", queryString("select pay_status from mt101_corrective_pay_fragment where "
+                + "rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'"),
+                "el fragmento manipulado sigue PREPARED");
+    }
+
+    @Test
+    void insertingAFragmentIntoAnActivePlanRevisionIsRejectedByTrigger() throws Exception {
+        // v43-ter: el trigger de inmutabilidad cubre tambien INSERT — agregar una fila a una revision ACTIVE
+        // (mutar el conjunto aprobado) es rechazado por la BD.
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1"); // rev 1 ACTIVE (2 fragmentos)
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            assertThrows(SQLException.class, () -> statement.executeUpdate(
+                    "insert into mt101_corrective_pay_plan_fragment (rebuild_run_id, plan_revision, "
+                            + "corrective_senders_reference, payload_hash, dispatch_spec_hash) values ('" + FIX
+                            + "', 1, 'RTESTX', 'h', 'sh')"),
+                    "no se puede INSERTAR un fragmento en una revision ACTIVE");
+        }
+        assertEquals(2L, queryLong("select count(*) from mt101_corrective_pay_plan_fragment where rebuild_run_id = '"
+                + FIX + "' and plan_revision = 1"), "la revision ACTIVE conserva exactamente sus 2 fragmentos");
+    }
+
+    @Test
     void activePlanRevisionAndItsFragmentsAreImmutableAtTheDatabaseLevel() throws Exception {
         // v43 (homologacion fuerte): triggers de BD impiden mutar una revision ACTIVE/SUPERSEDED. Ni un bug ni una
         // manipulacion pueden cambiar spec/hash de un plan aprobado, ni revertir la maquina de estados.
@@ -1922,15 +1971,25 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "dispatch_spec_version varchar(40), dispatch_spec_json text, dispatch_spec_hash varchar(64),"
                     + "created_at timestamp not null default current_timestamp,"
                     + "unique (rebuild_run_id, plan_revision, corrective_senders_reference))");
-            // v43: triggers de inmutabilidad de revisiones ACTIVE/SUPERSEDED (reflejan V65).
+            // v43/v43-ter: triggers de inmutabilidad de revisiones ACTIVE/SUPERSEDED (reflejan V65 + V66:
+            // cubre tambien INSERT, y la cabecera solo se inserta como DRAFT).
             s.executeUpdate("create or replace function mt101_pay_plan_fragment_immutable() returns trigger as $$ "
-                    + "begin if exists (select 1 from mt101_corrective_pay_plan p where p.rebuild_run_id = old.rebuild_run_id "
-                    + "and p.plan_revision = old.plan_revision and p.status in ('ACTIVE','SUPERSEDED')) then "
+                    + "declare target_run text; target_rev integer; begin "
+                    + "if tg_op = 'INSERT' then target_run := new.rebuild_run_id; target_rev := new.plan_revision; "
+                    + "else target_run := old.rebuild_run_id; target_rev := old.plan_revision; end if; "
+                    + "if exists (select 1 from mt101_corrective_pay_plan p where p.rebuild_run_id = target_run "
+                    + "and p.plan_revision = target_rev and p.status in ('ACTIVE','SUPERSEDED')) then "
                     + "raise exception 'plan_fragment immutable for ACTIVE/SUPERSEDED'; end if; "
                     + "if tg_op = 'DELETE' then return old; end if; return new; end; $$ language plpgsql");
             s.executeUpdate("drop trigger if exists trg_pay_plan_fragment_immutable on mt101_corrective_pay_plan_fragment");
-            s.executeUpdate("create trigger trg_pay_plan_fragment_immutable before update or delete "
+            s.executeUpdate("create trigger trg_pay_plan_fragment_immutable before insert or update or delete "
                     + "on mt101_corrective_pay_plan_fragment for each row execute function mt101_pay_plan_fragment_immutable()");
+            s.executeUpdate("create or replace function mt101_pay_plan_insert_guard() returns trigger as $$ begin "
+                    + "if new.status <> 'DRAFT' then raise exception 'plan must be inserted as DRAFT'; end if; "
+                    + "return new; end; $$ language plpgsql");
+            s.executeUpdate("drop trigger if exists trg_pay_plan_insert_guard on mt101_corrective_pay_plan");
+            s.executeUpdate("create trigger trg_pay_plan_insert_guard before insert on mt101_corrective_pay_plan "
+                    + "for each row execute function mt101_pay_plan_insert_guard()");
             s.executeUpdate("create or replace function mt101_pay_plan_status_guard() returns trigger as $$ begin "
                     + "if old.status = 'SUPERSEDED' then raise exception 'SUPERSEDED revision is immutable'; end if; "
                     + "if old.status = 'ACTIVE' then if new.status not in ('ACTIVE','SUPERSEDED') then "

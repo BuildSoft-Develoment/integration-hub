@@ -831,6 +831,7 @@ public class Mt101RebuildRepository {
                 + "pay_request_reason = ?, pay_request_ticket = ?, "
                 + "pay_resolved_by = null, pay_resolved_at = null, pay_resolution_reason = null, "
                 + "pay_plan_reserved_at = null, pay_plan_reservation_id = null, pay_plan_reserved_by = null, "
+                + "pay_plan_previous_status = null, "
                 + "pay_uncertain_reason = null, pay_error_message = null, updated_at = current_timestamp "
                 // v40-bis: la solicitud concreta SOLO desde la reserva exclusiva (PREPARING_PLAN) que el mismo
                 // maker gano antes de compilar/persistir el plan: nadie mas pudo escribir specs en el intervalo.
@@ -965,6 +966,9 @@ public class Mt101RebuildRepository {
                 statement.setString(6, createdBy);
                 statement.executeUpdate();
             }
+            // v43-ter (heartbeat): la compilacion + snapshot + hash puede ser larga con un millon de fragmentos;
+            // renueva la reserva antes de soltar el lock para no perderla por vencimiento entre fases.
+            renewReservation(connection, rebuildRunId, reservationId);
             return new DraftPlanRevision(nextRevision, planSet);
         });
     }
@@ -1837,14 +1841,19 @@ public class Mt101RebuildRepository {
             // v43 (P0): mismo advisory lock por run -> serializado contra el takeover (no basta el EXISTS del
             // snapshot). El guard de propiedad sigue en el WHERE EXISTS (dueño-en-PREPARING_PLAN o run no-reservado).
             lockRunForActionChain(connection, rebuildRunId);
+            int affected;
             try (var statement = connection.prepareStatement(sql)) {
                 statement.setString(1, rebuildRunId);
                 statement.setString(2, rebuildRunId);
                 statement.setString(3, correctiveSetId);
                 statement.setString(4, rebuildRunId);
                 statement.setString(5, reservationId);
-                return statement.executeUpdate();
+                affected = statement.executeUpdate();
             }
+            // v43-ter (heartbeat): si este refresh corre bajo la reserva, renueva su marca antes de soltar el lock
+            // (una fase larga no debe perder la reserva). Con reservationId null (post-dispatch) es no-op.
+            renewReservation(connection, rebuildRunId, reservationId);
+            return affected;
         });
     }
 
@@ -1986,11 +1995,12 @@ public class Mt101RebuildRepository {
         // (no solo su hash): el ledger no pudo cambiar entre la lectura y el claim ni siquiera con un hash igual.
         // v41 (modelo versionado): ademas exige que el fragmento pertenezca a la revision ACTIVA del run
         // (f.plan_revision = r.active_plan_revision): un fragmento de una revision SUPERSEDED jamas se despacha.
-        // v43-bis (trazabilidad estricta): ademas exige que la spec del ledger COINCIDA EXACTAMENTE con la fila de la
-        // revision ACTIVE INMUTABLE (mt101_corrective_pay_plan_fragment, protegida por trigger). Asi el dispatcher
-        // solo despacha la spec aprobada e inmutable: una manipulacion DIRECTA del ledger (spec_hash+json
-        // consistentes) que pasaria el binding exacto es atrapada aqui contra la fuente inmutable. Si no existe la
-        // fila de la revision activa, no se reclama (sin caminos legacy: el ledger no es la fuente final del plan).
+        // v43-bis/ter (trazabilidad estricta): ademas exige que TODO el contrato del ledger COINCIDA con la fila de
+        // la revision ACTIVE INMUTABLE (mt101_corrective_pay_plan_fragment, protegida por trigger). No basta la
+        // spec: tambien payload_hash, idempotency_key, approved_routed_as, dispatch_destination, dispatch_plan_hash y
+        // dispatch_spec_version. Asi "payload aprobado = payload enviado": una manipulacion DIRECTA del ledger
+        // (aunque internamente consistente y con payload origen alterado) que diverja del plan inmutable es atrapada
+        // aqui. Si no existe la fila de la revision activa, no se reclama (el ledger no es la fuente final del plan).
         var specBinding = (expectedDispatchSpecHash == null ? ""
                 : " and f.dispatch_spec_hash is not distinct from ?")
                 + (expectedDispatchSpecJson == null ? ""
@@ -2014,6 +2024,12 @@ public class Mt101RebuildRepository {
                                where pf.rebuild_run_id = f.rebuild_run_id
                                  and pf.plan_revision = r.active_plan_revision
                                  and pf.corrective_senders_reference = f.corrective_senders_reference
+                                 and pf.payload_hash is not distinct from f.payload_hash
+                                 and pf.idempotency_key is not distinct from f.idempotency_key
+                                 and pf.approved_routed_as is not distinct from f.approved_routed_as
+                                 and pf.dispatch_destination is not distinct from f.dispatch_destination
+                                 and pf.dispatch_plan_hash is not distinct from f.dispatch_plan_hash
+                                 and pf.dispatch_spec_version is not distinct from f.dispatch_spec_version
                                  and pf.dispatch_spec_hash = f.dispatch_spec_hash
                                  and pf.dispatch_spec_json is not distinct from f.dispatch_spec_json)
                    and r.pay_status = 'EXECUTING'
