@@ -192,12 +192,16 @@ public class Mt101CorrectiveLifecycleService {
                 rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, run.correctiveSetId());
                 var unresolvedPayConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_PAY");
                 preparePayIntents(dataSource, runId, run.correctiveSetId(), payConfig, unresolvedPayConfig);
-                var planSet = rebuildRepository.computePayPlanSet(dataSource, runId);
-                // v39: cambio PREPARING_PLAN -> REQUESTED + persistencia del hash del conjunto + PAY_REQUESTED +
-                // PAY_PLAN_PREPARED en UNA sola transaccion atomica bajo el advisory lock (sin estados intermedios
-                // documentalmente incompletos). previousStatus = el estado original del run (antes de la reserva).
+                // v41 (modelo versionado): snapshot INMUTABLE del conjunto preparado como una revision DRAFT
+                // (bajo la reserva exclusiva; ningun otro maker escribe en paralelo). La revision se ACTIVA en la
+                // transaccion atomica de la solicitud.
+                var draft = rebuildRepository.compileDraftPlanRevision(dataSource, runId, requester);
+                // v39+v41: PREPARING_PLAN -> REQUESTED + ACTIVAR la revision DRAFT (DRAFT->ACTIVE, supersede la
+                // anterior, etiqueta el ledger con la revision) + hash del conjunto + PAY_REQUESTED +
+                // PAY_PLAN_PREPARED en UNA sola transaccion atomica. previousStatus = estado original (pre-reserva).
                 var requested = rebuildRepository.requestPayWithPlanSet(dataSource, runId, requester,
-                        payloadHash, configHash, reason, ticket, normalize(run.payStatus()), planSet);
+                        payloadHash, configHash, reason, ticket, normalize(run.payStatus()),
+                        draft.planSet(), draft.revision());
                 if (requested == 0) {
                     throw new IllegalStateException("cannot request corrective pay for run " + runId
                             + "; payStatus=" + run.payStatus());
@@ -210,6 +214,8 @@ public class Mt101CorrectiveLifecycleService {
                 if (!requestConcreted) {
                     try {
                         rebuildRepository.releasePayPlanReservation(dataSource, runId);
+                        // v41: descarta la revision DRAFT no concretada (nunca llego a ACTIVE) y los intents parciales.
+                        rebuildRepository.deleteDraftPlanRevision(dataSource, runId);
                         rebuildRepository.deleteOrphanPreparedIntents(dataSource, runId);
                     } catch (SQLException cleanupError) {
                         // no enmascarar el error original de la solicitud
@@ -281,9 +287,15 @@ public class Mt101CorrectiveLifecycleService {
             // v37 fase 2: el checker aprueba el CONJUNTO EXACTO de planes preparados al solicitar. La aprobacion
             // NO reconstruye ni reemplaza los planes: valida que el hash agregado del conjunto persistido siga
             // siendo el aprobado. Si cambio (drift de payload/spec tras la solicitud) -> INVALIDA, re-solicitar.
+            // v41 (modelo versionado): la FUENTE de la verdad es la revision ACTIVE inmutable. Se valida en DOS
+            // frentes: (1) el run apunta al hash de la revision ACTIVE; (2) el ledger de ejecucion (lo que se
+            // despachara) sigue coincidiendo con ese hash. Cualquier divergencia -> INVALIDA (sin enviar).
             var approvedPlanSetHash = rebuildRepository.payPlanSetHash(dataSource, runId);
+            var activeRevisionHash = rebuildRepository.payActivePlanRevisionSetHash(dataSource, runId);
             var currentPlanSet = rebuildRepository.computePayPlanSet(dataSource, runId);
-            if (approvedPlanSetHash == null || !approvedPlanSetHash.equals(currentPlanSet.setHash())) {
+            if (approvedPlanSetHash == null || activeRevisionHash == null
+                    || !approvedPlanSetHash.equals(activeRevisionHash)
+                    || !approvedPlanSetHash.equals(currentPlanSet.setHash())) {
                 rebuildRepository.invalidatePayRequestWithAction(dataSource, runId,
                         "PAY plan set changed after request; request again before sending",
                         approver, run.payStatus(), payloadHash, configHash);

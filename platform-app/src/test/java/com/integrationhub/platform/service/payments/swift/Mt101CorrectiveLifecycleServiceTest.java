@@ -955,6 +955,61 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
+    void requestActivatesAnImmutablePlanRevisionAsTheApprovedSource() throws Exception {
+        // v41 (modelo versionado): al solicitar, se ACTIVA exactamente una revision del plan (DRAFT->ACTIVE). El
+        // run apunta a esa revision; su hash coincide con el de la revision inmutable; el ledger de ejecucion
+        // queda etiquetado con la revision activa.
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+
+        assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_plan where rebuild_run_id = '"
+                + FIX + "' and status = 'ACTIVE'"), "exactamente una revision ACTIVE");
+        assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_plan where rebuild_run_id = '"
+                + FIX + "' and status = 'DRAFT'"), "el DRAFT se consumio al activar");
+        var activeRevision = queryLong("select active_plan_revision from mt101_rebuild_run where rebuild_run_id = '"
+                + FIX + "'");
+        assertEquals(1L, activeRevision, "primera revision activa = 1");
+        assertEquals(queryString("select pay_plan_set_hash from mt101_rebuild_run where rebuild_run_id = '" + FIX
+                        + "'"),
+                queryString("select plan_set_hash from mt101_corrective_pay_plan where rebuild_run_id = '" + FIX
+                        + "' and status = 'ACTIVE'"),
+                "el hash del run = hash de la revision ACTIVE inmutable");
+        assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = '"
+                + FIX + "' and (plan_revision is null or plan_revision <> 1)"),
+                "todo el ledger de ejecucion etiquetado con la revision activa (1)");
+        // El conjunto inmutable de la revision tiene una fila por fragmento del ledger.
+        assertEquals(queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = '" + FIX
+                        + "'"),
+                queryLong("select count(*) from mt101_corrective_pay_plan_fragment where rebuild_run_id = '" + FIX
+                        + "' and plan_revision = 1"),
+                "la revision inmutable refleja el conjunto preparado");
+    }
+
+    @Test
+    void reRequestAfterInvalidationSupersedesPriorRevisionAndActivatesANewOne() throws Exception {
+        // v41: una nueva solicitud (tras invalidar) ACTIVA una nueva revision y marca la anterior SUPERSEDED,
+        // conservando el historico. Nunca hay dos ACTIVE a la vez.
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'INVALIDATED' "
+                    + "where rebuild_run_id = '" + FIX + "'");
+        }
+        service.requestCorrectivePay(null, FIX, "ana", "segunda solicitud", "TCK-2");
+
+        assertEquals("SUPERSEDED", queryString("select status from mt101_corrective_pay_plan where rebuild_run_id "
+                + "= '" + FIX + "' and plan_revision = 1"), "la revision 1 queda SUPERSEDED (historico)");
+        assertEquals("ACTIVE", queryString("select status from mt101_corrective_pay_plan where rebuild_run_id = '"
+                + FIX + "' and plan_revision = 2"), "la revision 2 es la ACTIVE");
+        assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_plan where rebuild_run_id = '" + FIX
+                + "' and status = 'ACTIVE'"), "nunca hay dos ACTIVE a la vez");
+        assertEquals(2L, queryLong("select active_plan_revision from mt101_rebuild_run where rebuild_run_id = '"
+                + FIX + "'"), "el run apunta a la revision 2");
+        assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = '"
+                + FIX + "' and plan_revision <> 2"), "el ledger queda etiquetado con la revision 2");
+    }
+
+    @Test
     void orphanPreparedIntentsAreCleanedOnlyWhenNoActiveRequestOwnsTheRun() throws Exception {
         // v39 (Caso A): un request fallido no debe dejar intents PREPARED huerfanos. La limpieza es race-safe:
         // borra solo si el run NO esta poseido por una solicitud activa (REQUESTED/EXECUTING).
@@ -1456,6 +1511,8 @@ class Mt101CorrectiveLifecycleServiceTest {
     private void prepareSchema() throws Exception {
         try (Connection connection = dataSource.getConnection();
              Statement s = connection.createStatement()) {
+            s.executeUpdate("drop table if exists mt101_corrective_pay_plan_fragment");
+            s.executeUpdate("drop table if exists mt101_corrective_pay_plan");
             s.executeUpdate("drop table if exists mt101_corrective_pay_fragment");
             s.executeUpdate("drop table if exists mt101_rebuild_selection");
             s.executeUpdate("drop table if exists mt101_rebuild_run");
@@ -1517,7 +1574,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "pay_resolved_by varchar(120), pay_resolved_at timestamp, pay_resolution_reason text,"
                     + "pay_request_reason text, pay_request_ticket varchar(120),"
                     + "pay_plan_version varchar(40), pay_plan_count integer, pay_plan_set_hash varchar(64),"
-                    + "pay_plan_reserved_at timestamp,"
+                    + "pay_plan_reserved_at timestamp, active_plan_revision integer,"
                     + "pay_status_config_snapshot text, pay_reconcile_config_snapshot text,"
                     + "status_sync_status varchar(20) not null default 'PENDING', status_sync_error text,"
                     + "reconciliation_status varchar(20) not null default 'PENDING', reconciliation_error text,"
@@ -1573,9 +1630,32 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "resolved_at timestamp, resolution_source varchar(40),"
                     + "pay_conflict boolean not null default false, pay_conflict_reason text,"
                     + "dispatch_spec_version varchar(40), dispatch_spec_json text, dispatch_spec_hash varchar(64),"
+                    + "plan_revision integer,"
                     + "created_at timestamp not null default current_timestamp,"
                     + "updated_at timestamp not null default current_timestamp,"
                     + "unique (rebuild_run_id, corrective_senders_reference))");
+            s.executeUpdate("create table mt101_corrective_pay_plan ("
+                    + "id bigserial primary key, rebuild_run_id varchar(80) not null,"
+                    + "plan_revision integer not null, plan_version varchar(40) not null,"
+                    + "plan_count integer not null, plan_set_hash varchar(64) not null,"
+                    + "status varchar(20) not null, created_by varchar(120),"
+                    + "created_at timestamp not null default current_timestamp,"
+                    + "activated_at timestamp, superseded_at timestamp,"
+                    + "unique (rebuild_run_id, plan_revision))");
+            s.executeUpdate("create unique index ux_pay_plan_one_active on mt101_corrective_pay_plan "
+                    + "(rebuild_run_id) where status = 'ACTIVE'");
+            s.executeUpdate("create unique index ux_pay_plan_one_draft on mt101_corrective_pay_plan "
+                    + "(rebuild_run_id) where status = 'DRAFT'");
+            s.executeUpdate("create table mt101_corrective_pay_plan_fragment ("
+                    + "id bigserial primary key, rebuild_run_id varchar(80) not null, plan_revision integer not null,"
+                    + "corrective_set_id varchar(80), corrective_senders_reference varchar(16) not null,"
+                    + "source_file_hash varchar(64), source_record_number bigint, staging_id bigint,"
+                    + "payload_hash varchar(64), idempotency_key varchar(180),"
+                    + "transport varchar(20), endpoint_ref varchar(512), approved_routed_as varchar(80),"
+                    + "dispatch_destination text, dispatch_plan_hash varchar(64),"
+                    + "dispatch_spec_version varchar(40), dispatch_spec_json text, dispatch_spec_hash varchar(64),"
+                    + "created_at timestamp not null default current_timestamp,"
+                    + "unique (rebuild_run_id, plan_revision, corrective_senders_reference))");
             s.executeUpdate("drop table if exists mt101_corrective_pay_action");
             s.executeUpdate("create table mt101_corrective_pay_action ("
                     + "id bigserial primary key, rebuild_run_id varchar(80) not null,"

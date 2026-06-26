@@ -308,6 +308,41 @@ class Mt101PayFragmentReprocessTest {
     }
 
     @Test
+    void claimRequiresFragmentToBelongToTheRunsActivePlanRevision() throws Exception {
+        // v41 (modelo versionado): el claim solo despacha fragmentos cuya plan_revision = run.active_plan_revision.
+        // Un fragmento de una revision SUPERSEDED (revision != activa) NO se reclama, aunque todo lo demas coincida.
+        var runId = "RUN-REV-BIND";
+        var fragmentSetId = "PAY-REV-BIND";
+        insertFragmentSet(fragmentSetId, "V1");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "V1", "ARCHIVED", null);
+        insertPayLedger(runId, fragmentSetId, "V1");
+
+        var repository = new Mt101RebuildRepository();
+        var prepared = repository.readPreparedDispatchSpec(dataSource, runId, "V1");
+        // El run pasa a apuntar a la revision 2 (activa); el fragmento sigue en la revision 1 (SUPERSEDED).
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set active_plan_revision = 2 where rebuild_run_id = '"
+                    + runId + "'");
+            statement.executeUpdate("update mt101_corrective_pay_fragment set plan_revision = 1 where "
+                    + "rebuild_run_id = '" + runId + "' and corrective_senders_reference = 'V1'");
+        }
+        assertEquals(0, repository.markPayFragmentDispatching(dataSource, runId, "V1", prepared.payloadHash(),
+                prepared.approvedRoutedAs(), prepared.dispatchPlanHash(), prepared.specHash(), prepared.specJson()),
+                "un fragmento de una revision SUPERSEDED (1 != activa 2) NO se reclama");
+        assertEquals("PREPARED", payLedgerStatus(runId, "V1"), "el fragmento sigue PREPARED");
+        // Alineado con la revision activa -> reclama.
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set plan_revision = 2 where "
+                    + "rebuild_run_id = '" + runId + "' and corrective_senders_reference = 'V1'");
+        }
+        assertEquals(1, repository.markPayFragmentDispatching(dataSource, runId, "V1", prepared.payloadHash(),
+                prepared.approvedRoutedAs(), prepared.dispatchPlanHash(), prepared.specHash(), prepared.specJson()),
+                "alineado con la revision activa, reclama");
+    }
+
+    @Test
     void correctiveDispatchInvalidatesWhenPersistedSpecTamperedWithoutHash() throws Exception {
         // v37 (P0.2): integridad. Si dispatch_spec_json se altera sin recalcular dispatch_spec_hash, el
         // dispatcher lo detecta (specHash(json) != hash persistido) -> INVALIDATED, sin llamar al banco.
@@ -1144,6 +1179,7 @@ class Mt101PayFragmentReprocessTest {
                     + "pay_status varchar(30) not null default 'EXECUTING',"
                     + "pay_uncertain_reason text, pay_error_message text, pay_completed_at timestamp,"
                     + "pay_resolved_by varchar(120), pay_resolved_at timestamp, pay_resolution_reason text,"
+                    + "active_plan_revision integer,"
                     + "updated_at timestamp not null default current_timestamp,"
                     + "pay_lease_until timestamp)");
             // v28: tabla de acciones (cadena hash) para que el scheduler de lease registre su accion.
@@ -1195,6 +1231,7 @@ class Mt101PayFragmentReprocessTest {
                     + "resolution_source varchar(40), resolved_at timestamp,"
                     + "pay_conflict boolean not null default false, pay_conflict_reason text,"
                     + "dispatch_spec_version varchar(40), dispatch_spec_json text, dispatch_spec_hash varchar(64),"
+                    + "plan_revision integer,"
                     + "prepared_at timestamp,"
                     + "dispatched_at timestamp,"
                     + "updated_at timestamp not null default current_timestamp,"

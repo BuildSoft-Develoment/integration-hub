@@ -755,9 +755,17 @@ public class Mt101RebuildRepository {
         }
     }
 
+    /**
+     * v41 (modelo versionado): ACTIVA la revision DRAFT compilada y concreta la solicitud en UNA sola transaccion
+     * atomica bajo el advisory lock: PREPARING_PLAN -> REQUESTED, fija {@code active_plan_revision}, ACTIVA la
+     * revision DRAFT (DRAFT -> ACTIVE) y marca la ANTERIOR ACTIVE como SUPERSEDED (historico), etiqueta el ledger
+     * de ejecucion con la revision activa, persiste el hash del conjunto y registra PAY_REQUESTED + PAY_PLAN_PREPARED.
+     * Devuelve 0 si el run no estaba reservado (PREPARING_PLAN) — entonces no se activa nada.
+     */
     public int requestPayWithPlanSet(DataSource dataSource, String rebuildRunId, String requestedBy,
                                      String payloadHash, String configHash, String requestReason,
-                                     String requestTicket, String previousStatus, PayPlanSet planSet)
+                                     String requestTicket, String previousStatus, PayPlanSet planSet,
+                                     int planRevision)
             throws SQLException {
         return inTransaction(dataSource, connection -> {
             lockRunForActionChain(connection, rebuildRunId);
@@ -766,20 +774,49 @@ public class Mt101RebuildRepository {
             if (updated == 0) {
                 return 0;
             }
+            // La revision ANTERIOR que estuviese ACTIVE pasa a SUPERSEDED (se conserva como historico inmutable).
+            try (var statement = connection.prepareStatement("update mt101_corrective_pay_plan "
+                    + "set status = 'SUPERSEDED', superseded_at = current_timestamp "
+                    + "where rebuild_run_id = ? and status = 'ACTIVE' and plan_revision <> ?")) {
+                statement.setString(1, rebuildRunId);
+                statement.setInt(2, planRevision);
+                statement.executeUpdate();
+            }
+            // La revision DRAFT compilada por este maker se ACTIVA. Debe existir exactamente una.
+            int activated;
+            try (var statement = connection.prepareStatement("update mt101_corrective_pay_plan "
+                    + "set status = 'ACTIVE', activated_at = current_timestamp "
+                    + "where rebuild_run_id = ? and plan_revision = ? and status = 'DRAFT'")) {
+                statement.setString(1, rebuildRunId);
+                statement.setInt(2, planRevision);
+                activated = statement.executeUpdate();
+            }
+            if (activated == 0) {
+                throw new SQLException("no DRAFT plan revision " + planRevision + " to activate for run " + rebuildRunId);
+            }
+            // El ledger de ejecucion (runtime) queda ETIQUETADO con la revision activa: el claim solo despachara
+            // fragmentos cuya plan_revision = run.active_plan_revision.
+            try (var statement = connection.prepareStatement("update mt101_corrective_pay_fragment "
+                    + "set plan_revision = ?, updated_at = current_timestamp where rebuild_run_id = ?")) {
+                statement.setInt(1, planRevision);
+                statement.setString(2, rebuildRunId);
+                statement.executeUpdate();
+            }
             try (var statement = connection.prepareStatement("update mt101_rebuild_run set pay_plan_version = ?, "
-                    + "pay_plan_count = ?, pay_plan_set_hash = ?, updated_at = current_timestamp "
-                    + "where rebuild_run_id = ?")) {
+                    + "pay_plan_count = ?, pay_plan_set_hash = ?, active_plan_revision = ?, "
+                    + "updated_at = current_timestamp where rebuild_run_id = ?")) {
                 statement.setString(1, planSet.version());
                 statement.setInt(2, planSet.count());
                 statement.setString(3, planSet.setHash());
-                statement.setString(4, rebuildRunId);
+                statement.setInt(4, planRevision);
+                statement.setString(5, rebuildRunId);
                 statement.executeUpdate();
             }
             recordPayAction(connection, rebuildRunId, "PAY_REQUESTED", previousStatus, "REQUESTED",
                     requestedBy, requestReason, requestTicket, payloadHash, configHash);
             recordPayAction(connection, rebuildRunId, "PAY_PLAN_PREPARED", "REQUESTED", "REQUESTED",
-                    requestedBy, "compiled and persisted " + planSet.count() + " executable plan(s); set hash "
-                            + planSet.setHash(), null, payloadHash, configHash);
+                    requestedBy, "activated plan revision " + planRevision + " with " + planSet.count()
+                            + " executable plan(s); set hash " + planSet.setHash(), null, payloadHash, configHash);
             return updated;
         });
     }
@@ -882,6 +919,121 @@ public class Mt101RebuildRepository {
     }
 
     public record PayPlanSet(String version, int count, String setHash) {
+    }
+
+    /** v41: revision DRAFT recien compilada (numero de revision + su conjunto aprobable). */
+    public record DraftPlanRevision(int revision, PayPlanSet planSet) {
+    }
+
+    /**
+     * v41 (modelo versionado): SNAPSHOT inmutable del conjunto de planes preparado en el ledger de ejecucion como
+     * una nueva revision DRAFT (mt101_corrective_pay_plan + _fragment). Se compila bajo la RESERVA exclusiva
+     * (PREPARING_PLAN), por lo que ningun otro maker escribe en paralelo. Elimina cualquier DRAFT previo del run
+     * (re-reserva tras una caida) y crea la revision siguiente. Devuelve la revision y su PayPlanSet (hash del
+     * conjunto). La revision se ACTIVA luego, atomicamente, en {@link #requestPayWithPlanSet}.
+     */
+    public DraftPlanRevision compileDraftPlanRevision(DataSource dataSource, String rebuildRunId, String createdBy)
+            throws SQLException {
+        return inTransaction(dataSource, connection -> {
+            lockRunForActionChain(connection, rebuildRunId);
+            // Descarta un DRAFT anterior (no concretado) y calcula la siguiente revision.
+            deleteDraftPlanRevision(connection, rebuildRunId);
+            int nextRevision;
+            try (var statement = connection.prepareStatement("select coalesce(max(plan_revision), 0) + 1 "
+                    + "from mt101_corrective_pay_plan where rebuild_run_id = ?")) {
+                statement.setString(1, rebuildRunId);
+                try (var rs = statement.executeQuery()) {
+                    rs.next();
+                    nextRevision = rs.getInt(1);
+                }
+            }
+            // Copia EXACTA de los specs preparados en el ledger de ejecucion -> plan_fragment (inmutable).
+            try (var statement = connection.prepareStatement("""
+                    insert into mt101_corrective_pay_plan_fragment
+                        (rebuild_run_id, plan_revision, corrective_set_id, corrective_senders_reference,
+                         source_file_hash, source_record_number, staging_id, payload_hash, idempotency_key,
+                         transport, endpoint_ref, approved_routed_as, dispatch_destination, dispatch_plan_hash,
+                         dispatch_spec_version, dispatch_spec_json, dispatch_spec_hash)
+                    select rebuild_run_id, ?, corrective_set_id, corrective_senders_reference,
+                           source_file_hash, source_record_number, staging_id, payload_hash, idempotency_key,
+                           transport, endpoint_ref, approved_routed_as, dispatch_destination, dispatch_plan_hash,
+                           dispatch_spec_version, dispatch_spec_json, dispatch_spec_hash
+                    from mt101_corrective_pay_fragment where rebuild_run_id = ?
+                    """)) {
+                statement.setInt(1, nextRevision);
+                statement.setString(2, rebuildRunId);
+                statement.executeUpdate();
+            }
+            var planSet = computePayPlanSetFromPlanRevision(connection, rebuildRunId, nextRevision);
+            try (var statement = connection.prepareStatement("insert into mt101_corrective_pay_plan "
+                    + "(rebuild_run_id, plan_revision, plan_version, plan_count, plan_set_hash, status, created_by) "
+                    + "values (?, ?, ?, ?, ?, 'DRAFT', ?)")) {
+                statement.setString(1, rebuildRunId);
+                statement.setInt(2, nextRevision);
+                statement.setString(3, planSet.version());
+                statement.setInt(4, planSet.count());
+                statement.setString(5, planSet.setHash());
+                statement.setString(6, createdBy);
+                statement.executeUpdate();
+            }
+            return new DraftPlanRevision(nextRevision, planSet);
+        });
+    }
+
+    /** Hash agregado del conjunto desde una revision del plan inmutable (mismo algoritmo que computePayPlanSet). */
+    private PayPlanSet computePayPlanSetFromPlanRevision(java.sql.Connection connection, String rebuildRunId,
+                                                         int planRevision) throws SQLException {
+        var sql = "select corrective_senders_reference, payload_hash, dispatch_spec_hash "
+                + "from mt101_corrective_pay_plan_fragment where rebuild_run_id = ? and plan_revision = ? "
+                + "order by corrective_senders_reference";
+        var canonical = new StringBuilder();
+        var count = 0;
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            statement.setInt(2, planRevision);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    canonical.append(rs.getString(1) == null ? "" : rs.getString(1)).append('|')
+                            .append(rs.getString(2) == null ? "" : rs.getString(2)).append('|')
+                            .append(rs.getString(3) == null ? "" : rs.getString(3)).append('\n');
+                    count++;
+                }
+            }
+        }
+        return new PayPlanSet(PAY_PLAN_SET_VERSION, count, sha256Hex(canonical.toString()));
+    }
+
+    /** v41: elimina la revision DRAFT (no concretada) del run. Race-safe: solo toca DRAFT (nunca ACTIVE/SUPERSEDED). */
+    public int deleteDraftPlanRevision(DataSource dataSource, String rebuildRunId) throws SQLException {
+        return inTransaction(dataSource, connection -> deleteDraftPlanRevision(connection, rebuildRunId));
+    }
+
+    private int deleteDraftPlanRevision(java.sql.Connection connection, String rebuildRunId) throws SQLException {
+        try (var fragments = connection.prepareStatement("delete from mt101_corrective_pay_plan_fragment "
+                + "where rebuild_run_id = ? and plan_revision in (select plan_revision from "
+                + "mt101_corrective_pay_plan where rebuild_run_id = ? and status = 'DRAFT')")) {
+            fragments.setString(1, rebuildRunId);
+            fragments.setString(2, rebuildRunId);
+            fragments.executeUpdate();
+        }
+        try (var plan = connection.prepareStatement("delete from mt101_corrective_pay_plan "
+                + "where rebuild_run_id = ? and status = 'DRAFT'")) {
+            plan.setString(1, rebuildRunId);
+            return plan.executeUpdate();
+        }
+    }
+
+    /** v41: hash del conjunto de la revision ACTIVE inmutable (la fuente aprobada de la verdad). */
+    public String payActivePlanRevisionSetHash(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "select plan_set_hash from mt101_corrective_pay_plan "
+                + "where rebuild_run_id = ? and status = 'ACTIVE'";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }
     }
 
     private static String sha256Hex(String value) {
@@ -1734,6 +1886,8 @@ public class Mt101RebuildRepository {
         // despues de que el scheduler invalide el run (no hay carrera scheduler<->dispatcher).
         // v37 (P0.2): enlaza ATOMICAMENTE el dispatch_spec_hash. v38: enlaza ademas el dispatch_spec_json EXACTO
         // (no solo su hash): el ledger no pudo cambiar entre la lectura y el claim ni siquiera con un hash igual.
+        // v41 (modelo versionado): ademas exige que el fragmento pertenezca a la revision ACTIVA del run
+        // (f.plan_revision = r.active_plan_revision): un fragmento de una revision SUPERSEDED jamas se despacha.
         var specBinding = (expectedDispatchSpecHash == null ? ""
                 : " and f.dispatch_spec_hash is not distinct from ?")
                 + (expectedDispatchSpecJson == null ? ""
@@ -1752,6 +1906,7 @@ public class Mt101RebuildRepository {
                    and f.payload_hash = ?
                    and f.approved_routed_as is not distinct from ?
                    and f.dispatch_plan_hash is not distinct from ?
+                   and f.plan_revision is not distinct from r.active_plan_revision
                    and r.pay_status = 'EXECUTING'
                    and r.pay_lease_until is not null
                    and r.pay_lease_until > current_timestamp
