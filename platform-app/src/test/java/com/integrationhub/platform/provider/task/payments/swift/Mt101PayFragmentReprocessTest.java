@@ -367,6 +367,34 @@ class Mt101PayFragmentReprocessTest {
     }
 
     @Test
+    void correctiveDispatchInvalidatesWhenLedgerPlanRevisionDivergesFromActive() throws Exception {
+        // v47-fix: caso residual de disponibilidad. Si SOLO se altera ledger.plan_revision (todo el contrato
+        // intacto), el fragmento NO queda atascado en PREPARED: se detecta la incoherencia con la revision activa y
+        // se INVALIDA, sin llamar al banco. (Antes la divergencia no lo cubria y el claim lo dejaba PREPARED.)
+        var runId = "RUN-REVDIV";
+        var fragmentSetId = "PAY-REVDIV";
+        insertFragmentSet(fragmentSetId, "R7");
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, 1);
+        fragmentSource.put("correctivePayRunId", runId);
+        fragmentStore.markStatus(fragmentSource, "R7", "ARCHIVED", null);
+        insertPayLedger(runId, fragmentSetId, "R7"); // seed: pf rev 1, active=1, ledger PREPARED etiquetado rev 1
+        // Altera SOLO el plan_revision del ledger (el contrato sigue coincidiendo con pf de la revision activa).
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set plan_revision = 99 "
+                    + "where rebuild_run_id = '" + runId + "' and corrective_senders_reference = 'R7'");
+        }
+        var transport = new StubTransport(List.of(TransportResult.accepted("GW", 1, 1L)));
+        var payStore = new Mt101CorrectivePayStore(dataSource, null, new Mt101RebuildRepository());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore, null, null, payStore);
+
+        provider.execute(contextWith(fragmentSource), payConfig(50));
+
+        assertEquals(0, transport.callsReceived(), "un plan_revision divergente NO se envia al banco");
+        assertEquals("INVALIDATED", payLedgerStatus(runId, "R7"),
+                "plan_revision divergente -> INVALIDATED (no queda PREPARED atascado)");
+    }
+
+    @Test
     void dispatchPlanCompilerRejectsNonStandardSecretKeysAndUrlCredentials() {
         // v37 (P1): deteccion estricta de secretos: claves no estandar (X-API-Key, ...) y credenciales en URL.
         var compiler = new Mt101DispatchPlanCompiler(new com.fasterxml.jackson.databind.ObjectMapper());

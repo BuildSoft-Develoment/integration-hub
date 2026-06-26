@@ -2102,10 +2102,12 @@ public class Mt101RebuildRepository {
     /**
      * v46-fix (read-from-pf): el contrato ejecutable se LEE de la revision ACTIVE inmutable (pf). Para no dejar un
      * fragmento PREPARED atascado si el ledger operativo DIVERGE del plan inmutable (manipulacion directa del
-     * ledger, ya que en el flujo normal el ledger == pf), se INVALIDA explicitamente: si NO existe una fila de la
-     * revision ACTIVE cuyo contrato COMPLETO coincida con el ledger, el fragmento es incoherente con lo aprobado y
-     * no se despacha. Devuelve 1 si invalido (divergencia detectada). Se invoca tras leer pf (que ya existe) y
-     * antes del claim, dando un estado terminal claro.
+     * ledger, ya que en el flujo normal el ledger == pf), se INVALIDA explicitamente cuando: (a) el ledger no
+     * apunta a la revision activa (f.plan_revision != r.active_plan_revision), o (b) NO existe una fila de la
+     * revision ACTIVE cuyo contrato COMPLETO coincida con el ledger. Ambas son incoherencias con lo aprobado: el
+     * fragmento no se despacha. (a) cierra el caso residual en que solo se altera plan_revision con el contrato
+     * intacto: el claim ya lo bloqueaba, pero sin esto quedaba PREPARED atascado. Devuelve 1 si invalido. Se invoca
+     * tras leer pf y antes del claim, dando un estado terminal claro.
      */
     public int invalidatePayFragmentDivergingFromActiveRevision(DataSource dataSource, String rebuildRunId,
                                                                 String correctiveSendersReference) throws SQLException {
@@ -2119,7 +2121,8 @@ public class Mt101RebuildRepository {
                    and f.rebuild_run_id = ?
                    and f.corrective_senders_reference = ?
                    and f.pay_status = 'PREPARED'
-                   and not exists (select 1 from mt101_corrective_pay_plan_fragment pf
+                   and (f.plan_revision is distinct from r.active_plan_revision
+                        or not exists (select 1 from mt101_corrective_pay_plan_fragment pf
                                    join mt101_corrective_pay_plan p
                                      on p.rebuild_run_id = pf.rebuild_run_id and p.plan_revision = pf.plan_revision
                                     and p.status = 'ACTIVE'
@@ -2133,7 +2136,7 @@ public class Mt101RebuildRepository {
                                      and pf.dispatch_plan_hash is not distinct from f.dispatch_plan_hash
                                      and pf.dispatch_spec_version is not distinct from f.dispatch_spec_version
                                      and pf.dispatch_spec_hash = f.dispatch_spec_hash
-                                     and pf.dispatch_spec_json is not distinct from f.dispatch_spec_json)
+                                     and pf.dispatch_spec_json is not distinct from f.dispatch_spec_json))
                 """;
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
