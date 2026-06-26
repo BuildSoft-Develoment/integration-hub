@@ -1324,6 +1324,37 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
+    void extendedSanitizeNullsPointersToNonActiveHeadersButNotActiveOnes() throws Exception {
+        // v46-fix: el saneamiento extendido (V69) anula active_plan_revision si NO apunta a una cabecera ACTIVE
+        // (DRAFT/SUPERSEDED/inexistente), corrigiendo runs corruptos historicos. Un run legitimo (puntero a su
+        // revision ACTIVE) NO se toca.
+        var sanitizeSql = "update mt101_rebuild_run r set active_plan_revision = null where r.active_plan_revision "
+                + "is not null and not exists (select 1 from mt101_corrective_pay_plan p where p.rebuild_run_id = "
+                + "r.rebuild_run_id and p.plan_revision = r.active_plan_revision and p.status = 'ACTIVE')";
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1"); // rev 1 ACTIVE, active = 1
+        // CONTROL: el puntero apunta a la cabecera ACTIVE -> el saneamiento NO lo toca.
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate(sanitizeSql);
+        }
+        assertEquals("1", queryString("select active_plan_revision from mt101_rebuild_run where rebuild_run_id = '"
+                + FIX + "'"), "un puntero a la cabecera ACTIVE no se sanea");
+        // Re-solicitud: rev 1 SUPERSEDED, rev 2 ACTIVE, active = 2. Luego se corrompe el puntero hacia la SUPERSEDED.
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'INVALIDATED' where rebuild_run_id = '"
+                    + FIX + "'");
+        }
+        service.requestCorrectivePay(null, FIX, "ana", "segunda solicitud", "TCK-2");
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set active_plan_revision = 1 where rebuild_run_id = '"
+                    + FIX + "'"); // la FK lo permite porque la cabecera rev 1 existe (SUPERSEDED)
+            statement.executeUpdate(sanitizeSql);
+        }
+        assertNull(queryString("select active_plan_revision from mt101_rebuild_run where rebuild_run_id = '" + FIX
+                + "'"), "un puntero a una cabecera SUPERSEDED (no ACTIVE) se anula");
+    }
+
+    @Test
     void requestActivatesAnImmutablePlanRevisionAsTheApprovedSource() throws Exception {
         // v41 (modelo versionado): al solicitar, se ACTIVA exactamente una revision del plan (DRAFT->ACTIVE). El
         // run apunta a esa revision; su hash coincide con el de la revision inmutable; el ledger de ejecucion
