@@ -1352,6 +1352,17 @@ class Mt101CorrectiveLifecycleServiceTest {
         }
         assertNull(queryString("select active_plan_revision from mt101_rebuild_run where rebuild_run_id = '" + FIX
                 + "'"), "un puntero a una cabecera SUPERSEDED (no ACTIVE) se anula");
+        // Caso DRAFT: una cabecera DRAFT tampoco es ACTIVE -> un puntero hacia ella tambien se anula.
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("insert into mt101_corrective_pay_plan (rebuild_run_id, plan_revision, "
+                    + "plan_version, plan_count, plan_set_hash, status) values ('" + FIX
+                    + "', 99, 'MT101_PAY_PLAN_SET_V1', 1, 'h', 'DRAFT')");
+            statement.executeUpdate("update mt101_rebuild_run set active_plan_revision = 99 where rebuild_run_id = '"
+                    + FIX + "'"); // la FK lo permite porque la cabecera rev 99 existe (DRAFT)
+            statement.executeUpdate(sanitizeSql);
+        }
+        assertNull(queryString("select active_plan_revision from mt101_rebuild_run where rebuild_run_id = '" + FIX
+                + "'"), "un puntero a una cabecera DRAFT (no ACTIVE) tambien se anula");
     }
 
     @Test
