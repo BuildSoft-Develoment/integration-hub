@@ -218,12 +218,12 @@ public class Mt101CorrectiveLifecycleService {
                 // posee el run). Asi un request fallido no deja el run atascado ni planes no aprobables.
                 if (!requestConcreted) {
                     try {
-                        // v42: liberacion/limpieza gated por el token: si OTRO maker reclamo la reserva (takeover),
-                        // estas operaciones son no-op y no tocan el trabajo del nuevo dueno.
-                        rebuildRepository.releasePayPlanReservation(dataSource, runId, reservationId);
-                        // v41: descarta la revision DRAFT no concretada (nunca llego a ACTIVE) y los intents parciales.
-                        rebuildRepository.deleteDraftPlanRevision(dataSource, runId, reservationId);
-                        rebuildRepository.deleteOrphanPreparedIntents(dataSource, runId);
+                        // v43: ABANDONO transaccional UNICO (bajo el advisory lock y gated por el token): borra el
+                        // DRAFT + intents parciales, RESTAURA el estado anterior y registra
+                        // PAY_PLAN_PREPARATION_ABORTED. Corrige el bug v42 (release limpiaba el token y dejaba el
+                        // DRAFT huerfano). Si OTRO maker reclamo la reserva (takeover), es no-op.
+                        rebuildRepository.abandonPayPlanPreparation(dataSource, runId, reservationId, requester,
+                                "plan preparation aborted: request did not concrete");
                     } catch (SQLException cleanupError) {
                         // no enmascarar el error original de la solicitud
                     }

@@ -794,7 +794,10 @@ class Mt101CorrectiveLifecycleServiceTest {
     @Test
     void requestPayStateAndActionAreAtomicRollingBackOnAuditFailure() throws Exception {
         // P0.1 v24: el cambio de pay_status y su accion auditada son atomicos. Si el insert de auditoria
-        // falla, el cambio de estado se revierte (no queda PAY_REQUESTED sin evidencia append-only).
+        // falla, el request NO concreta (no queda PAY_REQUESTED sin evidencia append-only).
+        // v43: con la auditoria caida ni siquiera el abandono puede registrar su accion (transaccion unica), por lo
+        // que el run queda RESERVADO (PREPARING_PLAN) y sera reclamado al vencer la reserva; el invariante clave es
+        // que NUNCA llego a REQUESTED ni activo un plan sin evidencia.
         service.advanceCorrective(null, FIX, "executor");
         // Forzamos el fallo del insert de auditoria eliminando la tabla del historial.
         try (Connection connection = dataSource.getConnection();
@@ -804,9 +807,11 @@ class Mt101CorrectiveLifecycleServiceTest {
 
         assertThrows(Exception.class,
                 () -> service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1"));
-        // El pay_status NO cambio: la transaccion completa se revirtio.
-        assertEquals("NOT_REQUESTED", payStatus(FIX),
-                "si falla la auditoria, el cambio de estado debe revertirse (atomico)");
+        // El request NO concreto: la transaccion atomica se revirtio (no hay estado sin evidencia).
+        assertNotEquals("REQUESTED", payStatus(FIX),
+                "si falla la auditoria, el request NO concreta a REQUESTED (atomico)");
+        assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_plan where rebuild_run_id = '" + FIX
+                + "' and status = 'ACTIVE'"), "no se activo ningun plan sin evidencia");
     }
 
     @Test
@@ -893,10 +898,10 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
-    void preparePayIntentsWritesOnlyWhileTheRunIsExclusivelyReservedForPlanPreparation() throws Exception {
-        // v40-bis: el upsert de specs escribe SOLO cuando el run esta RESERVADO (PREPARING_PLAN) por el maker.
-        // Con el run EXECUTING (despacho en curso) o NOT_REQUESTED (sin reserva), es no-op: ni dos makers
-        // concurrentes ni una segunda solicitud pueden escribir specs sin ganar antes la reserva exclusiva.
+    void preparePayIntentsRequiresOwnershipOfTheReservationOrThrows() throws Exception {
+        // v43 (P0): bajo el advisory lock, preparePayIntents exige ser el DUENO de la reserva (PREPARING_PLAN +
+        // token). Si el run no esta reservado, o lo esta por OTRO token (takeover), FALLA EXPLICITAMENTE (no
+        // escribe specs tardios). Solo el dueno escribe.
         var repository = new Mt101RebuildRepository();
         var intent = new Mt101RebuildRepository.PayFragmentIntent(FIX, "GUARD1", null, null, null,
                 "ph", "key-GUARD1", "REST", "key-GUARD1", null, "rest://x", "planhash",
@@ -906,25 +911,32 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "corrective_set_id, status, pay_status, reference_code) values ('RUN-GUARD', '"
                     + SET + "', 'RUN-GUARD', 'ARCHIVED', 'EXECUTING', '9')");
         }
-        repository.preparePayIntents(dataSource, "RUN-GUARD", "tok-x", java.util.List.of(intent));
+        // Run EXECUTING (no reservado) -> lanza, no escribe.
+        assertThrows(SQLException.class,
+                () -> repository.preparePayIntents(dataSource, "RUN-GUARD", "tok-x", java.util.List.of(intent)),
+                "run EXECUTING (no reservado): preparePayIntents falla");
         assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = "
-                + "'RUN-GUARD'"), "run EXECUTING: el upsert no escribe (plan inmutable)");
-        // Sin reserva (NOT_REQUESTED): el upsert TAMPOCO escribe; los specs solo se compilan bajo la reserva.
+                + "'RUN-GUARD'"), "no escribio");
+        // Sin reserva (NOT_REQUESTED) -> lanza, no escribe.
         try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
             statement.executeUpdate("update mt101_rebuild_run set pay_status = 'NOT_REQUESTED' "
                     + "where rebuild_run_id = 'RUN-GUARD'");
         }
-        repository.preparePayIntents(dataSource, "RUN-GUARD", "tok-x", java.util.List.of(intent));
+        assertThrows(SQLException.class,
+                () -> repository.preparePayIntents(dataSource, "RUN-GUARD", "tok-x", java.util.List.of(intent)),
+                "run NOT_REQUESTED (sin reserva): preparePayIntents falla");
         assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = "
-                + "'RUN-GUARD'"), "run NOT_REQUESTED (sin reserva): el upsert no escribe");
+                + "'RUN-GUARD'"), "no escribio");
         // Reserva exclusiva (PREPARING_PLAN) con token 'tok-guard'.
         assertEquals(1, repository.reservePayForPlanPreparation(dataSource, "RUN-GUARD", "tok-guard", "ana", 120),
                 "el run elegible se reserva (PREPARING_PLAN)");
-        // v42: el upsert con un token DISTINTO (maker que no posee la reserva) es no-op.
-        repository.preparePayIntents(dataSource, "RUN-GUARD", "tok-wrong", java.util.List.of(intent));
+        // Token AJENO (no dueno) -> lanza, no escribe.
+        assertThrows(SQLException.class,
+                () -> repository.preparePayIntents(dataSource, "RUN-GUARD", "tok-wrong", java.util.List.of(intent)),
+                "reservado por otro token: preparePayIntents falla");
         assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = "
-                + "'RUN-GUARD'"), "reservado, pero token ajeno: el upsert no escribe");
-        // Con el token DUENO si escribe.
+                + "'RUN-GUARD'"), "no escribio");
+        // Token DUENO -> escribe.
         repository.preparePayIntents(dataSource, "RUN-GUARD", "tok-guard", java.util.List.of(intent));
         assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = "
                 + "'RUN-GUARD' and pay_status = 'PREPARED'"), "reservado y token dueno: el upsert escribe");
@@ -990,13 +1002,15 @@ class Mt101CorrectiveLifecycleServiceTest {
         }
         assertEquals(1, repository.reservePayForPlanPreparation(dataSource, FIX, "tokB", "beto", 120),
                 "B reclama la reserva vencida");
-        // A (token perdido) ya NO puede: escribir specs...
+        // A (token perdido) ya NO puede: escribir specs (FALLA EXPLICITAMENTE bajo el lock)...
         var intentA2 = new Mt101RebuildRepository.PayFragmentIntent(FIX, "RTEST2", null, null, null,
                 "phA2", "keyA2", "REST", "keyA2", "as-routed", "rest://a2", "planhashA2",
                 "MT101_PAY_PLAN_V1", "{\"version\":\"MT101_PAY_PLAN_V1\",\"a\":2}", "spechashA2");
-        repository.preparePayIntents(dataSource, FIX, "tokA", java.util.List.of(intentA2));
+        assertThrows(SQLException.class,
+                () -> repository.preparePayIntents(dataSource, FIX, "tokA", java.util.List.of(intentA2)),
+                "A ya no puede escribir specs (token perdido): falla explicitamente");
         assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = '"
-                + FIX + "' and corrective_senders_reference = 'RTEST2'"), "A ya no puede escribir (token perdido)");
+                + FIX + "' and corrective_senders_reference = 'RTEST2'"), "no quedo ningun spec de A");
         // ...ni sincronizar el ledger desde el set correctivo (refresh) bajo la reserva de B...
         assertEquals(0, repository.refreshPayFragmentsFromCorrectiveSet(dataSource, FIX, "tokA", FIX),
                 "A ya no puede refrescar el ledger (token perdido); B mantiene la propiedad");
@@ -1009,6 +1023,118 @@ class Mt101CorrectiveLifecycleServiceTest {
         assertEquals("PREPARING_PLAN", payStatus(FIX), "el run sigue reservado por B");
         assertEquals("tokB", queryString("select pay_plan_reservation_id from mt101_rebuild_run where "
                 + "rebuild_run_id = '" + FIX + "'"), "B sigue siendo el dueno");
+    }
+
+    @Test
+    void abandoningPreparationRemovesDraftRestoresPreviousStatusAndRecordsAbortAction() throws Exception {
+        // v43 (limpieza del DRAFT fallido + restauracion de estado): si la preparacion no concreta, el abandono
+        // transaccional UNICO borra el DRAFT + sus fragmentos + los intents PREPARED parciales, RESTAURA el estado
+        // anterior (aqui INVALIDATED, no NOT_REQUESTED) y registra PAY_PLAN_PREPARATION_ABORTED. Cierra el bug v42
+        // (release limpiaba el token y dejaba el DRAFT huerfano).
+        var repository = new Mt101RebuildRepository();
+        service.advanceCorrective(null, FIX, "executor");
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'INVALIDATED' "
+                    + "where rebuild_run_id = '" + FIX + "'");
+        }
+        assertEquals(1, repository.reservePayForPlanPreparation(dataSource, FIX, "tokX", "ana", 120));
+        assertEquals("INVALIDATED", queryString("select pay_plan_previous_status from mt101_rebuild_run where "
+                + "rebuild_run_id = '" + FIX + "'"), "la reserva conserva el estado anterior");
+        var intent = new Mt101RebuildRepository.PayFragmentIntent(FIX, "RTEST1", null, null, null,
+                "ph", "key", "REST", "key", "as-routed", "rest://x", "planhash",
+                "MT101_PAY_PLAN_V1", "{\"version\":\"MT101_PAY_PLAN_V1\"}", "spechash");
+        repository.preparePayIntents(dataSource, FIX, "tokX", java.util.List.of(intent));
+        repository.compileDraftPlanRevision(dataSource, FIX, "ana", "tokX");
+        assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_plan where rebuild_run_id = '" + FIX
+                + "' and status = 'DRAFT'"), "precondicion: existe un DRAFT");
+        assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_plan_fragment where rebuild_run_id = '"
+                + FIX + "'"), "precondicion: el DRAFT tiene fragmentos");
+
+        assertEquals(1, repository.abandonPayPlanPreparation(dataSource, FIX, "tokX", "ana", "fallo simulado"));
+
+        assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_plan where rebuild_run_id = '" + FIX
+                + "'"), "cero revisiones DRAFT tras el abandono");
+        assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_plan_fragment where rebuild_run_id = '"
+                + FIX + "'"), "cero plan_fragment tras el abandono");
+        assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = '" + FIX
+                + "' and pay_status = 'PREPARED'"), "cero intents PREPARED huerfanos");
+        assertEquals("INVALIDATED", payStatus(FIX), "se RESTAURA el estado anterior (INVALIDATED, no NOT_REQUESTED)");
+        assertNull(queryString("select pay_plan_reservation_id from mt101_rebuild_run where rebuild_run_id = '"
+                + FIX + "'"), "el token de reserva queda limpio");
+        assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_action where rebuild_run_id = '" + FIX
+                + "' and action_type = 'PAY_PLAN_PREPARATION_ABORTED'"), "se registra la accion de abandono");
+    }
+
+    @Test
+    void twoConcurrentMakersOnTheSameRunYieldExactlyOneCoherentApprovedPlan() throws Exception {
+        // v43 (concurrencia real con CountDownLatch): dos makers solicitan a la vez sobre el MISMO run. La reserva
+        // exclusiva (UPDATE atomico + advisory lock) garantiza que solo uno concreta; el otro es rechazado. El
+        // plan aprobado es coherente (hash del run = hash de la revision ACTIVE), sin mezcla de specs.
+        service.advanceCorrective(null, FIX, "executor");
+        var startLatch = new java.util.concurrent.CountDownLatch(1);
+        var doneLatch = new java.util.concurrent.CountDownLatch(2);
+        var successes = new AtomicInteger();
+        var failures = new AtomicInteger();
+        Runnable maker = () -> {
+            try {
+                startLatch.await();
+                service.requestCorrectivePay(null, FIX, "ana", "concurrente", "TCK");
+                successes.incrementAndGet();
+            } catch (Exception expected) {
+                failures.incrementAndGet();
+            } finally {
+                doneLatch.countDown();
+            }
+        };
+        var t1 = new Thread(maker, "maker-A");
+        var t2 = new Thread(maker, "maker-B");
+        t1.start();
+        t2.start();
+        startLatch.countDown();
+        doneLatch.await();
+        t1.join();
+        t2.join();
+
+        assertEquals(1, successes.get(), "exactamente un maker concreta la solicitud");
+        assertEquals(1, failures.get(), "el otro maker concurrente es rechazado");
+        assertEquals("REQUESTED", payStatus(FIX), "el run queda REQUESTED por el unico ganador");
+        assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_plan where rebuild_run_id = '" + FIX
+                + "' and status = 'ACTIVE'"), "exactamente una revision ACTIVE");
+        assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_plan where rebuild_run_id = '" + FIX
+                + "' and status = 'DRAFT'"), "ningun DRAFT huerfano del maker perdedor");
+        assertEquals(queryString("select pay_plan_set_hash from mt101_rebuild_run where rebuild_run_id = '" + FIX
+                        + "'"),
+                queryString("select plan_set_hash from mt101_corrective_pay_plan where rebuild_run_id = '" + FIX
+                        + "' and status = 'ACTIVE'"),
+                "el plan aprobado es coherente (sin mezcla de specs entre makers)");
+    }
+
+    @Test
+    void activePlanRevisionAndItsFragmentsAreImmutableAtTheDatabaseLevel() throws Exception {
+        // v43 (homologacion fuerte): triggers de BD impiden mutar una revision ACTIVE/SUPERSEDED. Ni un bug ni una
+        // manipulacion pueden cambiar spec/hash de un plan aprobado, ni revertir la maquina de estados.
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1"); // revision 1 ACTIVE
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            assertThrows(SQLException.class, () -> statement.executeUpdate(
+                    "update mt101_corrective_pay_plan_fragment set dispatch_spec_hash = 'TAMPER' "
+                            + "where rebuild_run_id = '" + FIX + "'"),
+                    "no se puede mutar el spec de un plan_fragment de una revision ACTIVE");
+            assertThrows(SQLException.class, () -> statement.executeUpdate(
+                    "delete from mt101_corrective_pay_plan_fragment where rebuild_run_id = '" + FIX + "'"),
+                    "no se puede borrar un plan_fragment de una revision ACTIVE");
+            assertThrows(SQLException.class, () -> statement.executeUpdate(
+                    "update mt101_corrective_pay_plan set plan_set_hash = 'TAMPER' "
+                            + "where rebuild_run_id = '" + FIX + "' and status = 'ACTIVE'"),
+                    "no se puede cambiar el hash de una revision ACTIVE");
+            assertThrows(SQLException.class, () -> statement.executeUpdate(
+                    "update mt101_corrective_pay_plan set status = 'DRAFT' "
+                            + "where rebuild_run_id = '" + FIX + "' and status = 'ACTIVE'"),
+                    "una revision ACTIVE no puede revertir a DRAFT");
+        }
+        // El plan sigue intacto tras los intentos rechazados.
+        assertEquals("ACTIVE", queryString("select status from mt101_corrective_pay_plan where rebuild_run_id = '"
+                + FIX + "' and plan_revision = 1"), "la revision ACTIVE permanece intacta");
     }
 
     @Test
@@ -1672,6 +1798,7 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "pay_plan_version varchar(40), pay_plan_count integer, pay_plan_set_hash varchar(64),"
                     + "pay_plan_reserved_at timestamp, active_plan_revision integer,"
                     + "pay_plan_reservation_id varchar(64), pay_plan_reserved_by varchar(120),"
+                    + "pay_plan_previous_status varchar(30),"
                     + "pay_status_config_snapshot text, pay_reconcile_config_snapshot text,"
                     + "status_sync_status varchar(20) not null default 'PENDING', status_sync_error text,"
                     + "reconciliation_status varchar(20) not null default 'PENDING', reconciliation_error text,"
@@ -1753,6 +1880,27 @@ class Mt101CorrectiveLifecycleServiceTest {
                     + "dispatch_spec_version varchar(40), dispatch_spec_json text, dispatch_spec_hash varchar(64),"
                     + "created_at timestamp not null default current_timestamp,"
                     + "unique (rebuild_run_id, plan_revision, corrective_senders_reference))");
+            // v43: triggers de inmutabilidad de revisiones ACTIVE/SUPERSEDED (reflejan V65).
+            s.executeUpdate("create or replace function mt101_pay_plan_fragment_immutable() returns trigger as $$ "
+                    + "begin if exists (select 1 from mt101_corrective_pay_plan p where p.rebuild_run_id = old.rebuild_run_id "
+                    + "and p.plan_revision = old.plan_revision and p.status in ('ACTIVE','SUPERSEDED')) then "
+                    + "raise exception 'plan_fragment immutable for ACTIVE/SUPERSEDED'; end if; "
+                    + "if tg_op = 'DELETE' then return old; end if; return new; end; $$ language plpgsql");
+            s.executeUpdate("drop trigger if exists trg_pay_plan_fragment_immutable on mt101_corrective_pay_plan_fragment");
+            s.executeUpdate("create trigger trg_pay_plan_fragment_immutable before update or delete "
+                    + "on mt101_corrective_pay_plan_fragment for each row execute function mt101_pay_plan_fragment_immutable()");
+            s.executeUpdate("create or replace function mt101_pay_plan_status_guard() returns trigger as $$ begin "
+                    + "if old.status = 'SUPERSEDED' then raise exception 'SUPERSEDED revision is immutable'; end if; "
+                    + "if old.status = 'ACTIVE' then if new.status not in ('ACTIVE','SUPERSEDED') then "
+                    + "raise exception 'ACTIVE can only go to SUPERSEDED'; end if; "
+                    + "if new.plan_set_hash is distinct from old.plan_set_hash or new.plan_count is distinct from old.plan_count "
+                    + "or new.plan_version is distinct from old.plan_version or new.plan_revision is distinct from old.plan_revision then "
+                    + "raise exception 'ACTIVE hash/count immutable'; end if; end if; "
+                    + "if old.status = 'DRAFT' and new.status = 'SUPERSEDED' then raise exception 'DRAFT cannot go directly to SUPERSEDED'; end if; "
+                    + "return new; end; $$ language plpgsql");
+            s.executeUpdate("drop trigger if exists trg_pay_plan_status_guard on mt101_corrective_pay_plan");
+            s.executeUpdate("create trigger trg_pay_plan_status_guard before update on mt101_corrective_pay_plan "
+                    + "for each row execute function mt101_pay_plan_status_guard()");
             s.executeUpdate("drop table if exists mt101_corrective_pay_action");
             s.executeUpdate("create table mt101_corrective_pay_action ("
                     + "id bigserial primary key, rebuild_run_id varchar(80) not null,"

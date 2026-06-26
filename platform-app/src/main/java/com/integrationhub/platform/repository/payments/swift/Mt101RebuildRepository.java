@@ -691,8 +691,13 @@ public class Mt101RebuildRepository {
         // v42: la reserva fija un TOKEN de propiedad inmutable (reservation_id). Una reclamacion por reserva
         // vencida sobrescribe el token: el maker anterior pierde la propiedad y ya no puede escribir/concretar/
         // liberar (sus operaciones exigen este reservation_id).
+        // v43: conserva el estado ANTERIOR para restaurarlo si la preparacion se abandona. En un takeover de una
+        // reserva vencida (ya PREPARING_PLAN) se PRESERVA el previous_status original (no se sobrescribe con
+        // 'PREPARING_PLAN').
         var sql = "update mt101_rebuild_run set pay_status = 'PREPARING_PLAN', "
                 + "pay_plan_reservation_id = ?, pay_plan_reserved_by = ?, "
+                + "pay_plan_previous_status = case when pay_status = 'PREPARING_PLAN' "
+                + "    then pay_plan_previous_status else pay_status end, "
                 + "pay_plan_reserved_at = current_timestamp, updated_at = current_timestamp "
                 + "where rebuild_run_id = ? and status = 'ARCHIVED' "
                 + "and (pay_status in ('NOT_REQUESTED', 'FAILED', 'INVALIDATED') "
@@ -1000,6 +1005,30 @@ public class Mt101RebuildRepository {
         }
     }
 
+    /** v43 (heartbeat): renueva la marca de la reserva si este token sigue siendo el dueno. */
+    private int renewReservation(java.sql.Connection connection, String rebuildRunId, String reservationId)
+            throws SQLException {
+        try (var statement = connection.prepareStatement("update mt101_rebuild_run set "
+                + "pay_plan_reserved_at = current_timestamp, updated_at = current_timestamp "
+                + "where rebuild_run_id = ? and pay_status = 'PREPARING_PLAN' and pay_plan_reservation_id = ?")) {
+            statement.setString(1, rebuildRunId);
+            statement.setString(2, reservationId);
+            return statement.executeUpdate();
+        }
+    }
+
+    /**
+     * v43 (heartbeat de preparacion masiva): un maker legitimo y lento renueva su reserva para no perderla por
+     * vencimiento. Solo renueva si SIGUE siendo el dueno (PREPARING_PLAN + token). Devuelve 1 si renovo.
+     */
+    public int renewPayPlanReservation(DataSource dataSource, String rebuildRunId, String reservationId)
+            throws SQLException {
+        return inTransaction(dataSource, connection -> {
+            lockRunForActionChain(connection, rebuildRunId);
+            return renewReservation(connection, rebuildRunId, reservationId);
+        });
+    }
+
     /**
      * v41: elimina la revision DRAFT (no concretada) del run. Race-safe: solo toca DRAFT (nunca ACTIVE/SUPERSEDED).
      * v42: gated por propiedad — solo borra si el run sigue reservado por ESTE token (un maker que perdio la
@@ -1012,6 +1041,52 @@ public class Mt101RebuildRepository {
                 return 0;
             }
             return deleteDraftPlanRevision(connection, rebuildRunId);
+        });
+    }
+
+    /**
+     * v43: ABANDONA la preparacion del plan en UNA sola transaccion (bajo el advisory lock), si este token sigue
+     * siendo el dueno: borra la revision DRAFT y sus fragmentos, borra los intents PREPARED parciales, RESTAURA el
+     * estado anterior del run (NOT_REQUESTED/FAILED/INVALIDATED), limpia el token y registra
+     * PAY_PLAN_PREPARATION_ABORTED. Sustituye la secuencia release+deleteDraft+deleteOrphan (que dejaba un DRAFT
+     * huerfano porque el borrado exigia aun poseer la reserva). Si el maker perdio la reserva (takeover) devuelve
+     * 0 y NO toca el trabajo del nuevo dueno.
+     */
+    public int abandonPayPlanPreparation(DataSource dataSource, String rebuildRunId, String reservationId,
+                                         String actor, String reason) throws SQLException {
+        return inTransaction(dataSource, connection -> {
+            lockRunForActionChain(connection, rebuildRunId);
+            if (!ownsReservation(connection, rebuildRunId, reservationId)) {
+                return 0;
+            }
+            // Propiedad verificada bajo el lock: borra el DRAFT (incondicional) y los intents PREPARED parciales.
+            deleteDraftPlanRevision(connection, rebuildRunId);
+            try (var statement = connection.prepareStatement("delete from mt101_corrective_pay_fragment "
+                    + "where rebuild_run_id = ? and pay_status = 'PREPARED'")) {
+                statement.setString(1, rebuildRunId);
+                statement.executeUpdate();
+            }
+            String previous;
+            try (var statement = connection.prepareStatement("select coalesce(pay_plan_previous_status, "
+                    + "'NOT_REQUESTED') from mt101_rebuild_run where rebuild_run_id = ?")) {
+                statement.setString(1, rebuildRunId);
+                try (var rs = statement.executeQuery()) {
+                    rs.next();
+                    previous = rs.getString(1);
+                }
+            }
+            try (var statement = connection.prepareStatement("update mt101_rebuild_run set pay_status = ?, "
+                    + "pay_plan_reserved_at = null, pay_plan_reservation_id = null, pay_plan_reserved_by = null, "
+                    + "pay_plan_previous_status = null, updated_at = current_timestamp "
+                    + "where rebuild_run_id = ? and pay_status = 'PREPARING_PLAN' and pay_plan_reservation_id = ?")) {
+                statement.setString(1, previous);
+                statement.setString(2, rebuildRunId);
+                statement.setString(3, reservationId);
+                statement.executeUpdate();
+            }
+            recordPayAction(connection, rebuildRunId, "PAY_PLAN_PREPARATION_ABORTED", "PREPARING_PLAN", previous,
+                    actor, reason, null, null, null);
+            return 1;
         });
     }
 
@@ -1758,15 +1833,19 @@ public class Mt101RebuildRepository {
                     where mt101_corrective_pay_fragment.pay_status
                           not in ('DISPATCHING', 'SENT', 'REJECTED', 'UNCERTAIN', 'INVALIDATED')
                 """;
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
-            statement.setString(1, rebuildRunId);
-            statement.setString(2, rebuildRunId);
-            statement.setString(3, correctiveSetId);
-            statement.setString(4, rebuildRunId);
-            statement.setString(5, reservationId);
-            return statement.executeUpdate();
-        }
+        return inTransaction(dataSource, connection -> {
+            // v43 (P0): mismo advisory lock por run -> serializado contra el takeover (no basta el EXISTS del
+            // snapshot). El guard de propiedad sigue en el WHERE EXISTS (dueño-en-PREPARING_PLAN o run no-reservado).
+            lockRunForActionChain(connection, rebuildRunId);
+            try (var statement = connection.prepareStatement(sql)) {
+                statement.setString(1, rebuildRunId);
+                statement.setString(2, rebuildRunId);
+                statement.setString(3, correctiveSetId);
+                statement.setString(4, rebuildRunId);
+                statement.setString(5, reservationId);
+                return statement.executeUpdate();
+            }
+        });
     }
 
     /** Inserta la intencion durable antes de invocar el gateway de PAY. */
@@ -1811,42 +1890,56 @@ public class Mt101RebuildRepository {
                     where mt101_corrective_pay_fragment.pay_status
                           not in ('DISPATCHING', 'SENT', 'REJECTED', 'UNCERTAIN')
                 """;
-        var updated = 0;
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
-            for (var intent : intents) {
-                statement.setString(1, rebuildRunId);
-                statement.setString(2, intent.correctiveSetId());
-                statement.setString(3, intent.correctiveSendersReference());
-                statement.setString(4, intent.sourceFileHash());
-                if (intent.sourceRecordNumber() == null) {
-                    statement.setNull(5, java.sql.Types.BIGINT);
-                } else {
-                    statement.setLong(5, intent.sourceRecordNumber());
-                }
-                if (intent.stagingId() == null) {
-                    statement.setNull(6, java.sql.Types.BIGINT);
-                } else {
-                    statement.setLong(6, intent.stagingId());
-                }
-                statement.setString(7, intent.payloadHash());
-                statement.setString(8, intent.idempotencyKey());
-                statement.setString(9, intent.transport());
-                statement.setString(10, intent.endpointRef());
-                statement.setString(11, intent.approvedRoutedAs());
-                statement.setString(12, intent.dispatchDestination());
-                statement.setString(13, intent.dispatchPlanHash());
-                statement.setString(14, intent.dispatchSpecVersion());
-                statement.setString(15, intent.dispatchSpecJson());
-                statement.setString(16, intent.dispatchSpecHash());
-                statement.setString(17, rebuildRunId);
-                statement.setString(18, reservationId);
-                statement.addBatch();
-                updated++;
+        return inTransaction(dataSource, connection -> {
+            // v43 (P0): toma el MISMO advisory lock por run que reserva/compila/activa/claim, de modo que esta
+            // escritura de pagina queda SERIALIZADA contra un takeover. Asi no basta el EXISTS del snapshot: si B
+            // reclamo la reserva, A no puede colar specs tardios. El lock se toma POR PAGINA (no se mantiene
+            // durante el millon de filas): entre paginas, B puede tomar el lock y reclamar; la pagina siguiente de
+            // A verifica el token bajo el lock y aborta.
+            lockRunForActionChain(connection, rebuildRunId);
+            if (!ownsReservation(connection, rebuildRunId, reservationId)) {
+                throw new SQLException("cannot prepare PAY intents for run " + rebuildRunId
+                        + ": the plan-preparation reservation was lost (taken over by another maker)");
             }
-            statement.executeBatch();
-        }
-        return updated;
+            var updated = 0;
+            try (var statement = connection.prepareStatement(sql)) {
+                for (var intent : intents) {
+                    statement.setString(1, rebuildRunId);
+                    statement.setString(2, intent.correctiveSetId());
+                    statement.setString(3, intent.correctiveSendersReference());
+                    statement.setString(4, intent.sourceFileHash());
+                    if (intent.sourceRecordNumber() == null) {
+                        statement.setNull(5, java.sql.Types.BIGINT);
+                    } else {
+                        statement.setLong(5, intent.sourceRecordNumber());
+                    }
+                    if (intent.stagingId() == null) {
+                        statement.setNull(6, java.sql.Types.BIGINT);
+                    } else {
+                        statement.setLong(6, intent.stagingId());
+                    }
+                    statement.setString(7, intent.payloadHash());
+                    statement.setString(8, intent.idempotencyKey());
+                    statement.setString(9, intent.transport());
+                    statement.setString(10, intent.endpointRef());
+                    statement.setString(11, intent.approvedRoutedAs());
+                    statement.setString(12, intent.dispatchDestination());
+                    statement.setString(13, intent.dispatchPlanHash());
+                    statement.setString(14, intent.dispatchSpecVersion());
+                    statement.setString(15, intent.dispatchSpecJson());
+                    statement.setString(16, intent.dispatchSpecHash());
+                    statement.setString(17, rebuildRunId);
+                    statement.setString(18, reservationId);
+                    statement.addBatch();
+                    updated++;
+                }
+                statement.executeBatch();
+            }
+            // v43 (heartbeat): cada pagina escrita RENUEVA la reserva -> un maker legitimo y lento (millon de
+            // fragmentos, >120s) no la pierde mientras avanza realmente.
+            renewReservation(connection, rebuildRunId, reservationId);
+            return updated;
+        });
     }
 
     /**
