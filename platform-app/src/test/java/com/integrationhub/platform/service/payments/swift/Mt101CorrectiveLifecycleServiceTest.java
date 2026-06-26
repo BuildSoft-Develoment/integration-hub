@@ -1302,6 +1302,28 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
+    void claimFailsWhenTheRunHasNoActivePlanRevision() throws Exception {
+        // v45-fix (doble check): caso del dangler historico SANEADO por V68. Un run cuyo active_plan_revision es NULL
+        // (sin cabecera activa) no puede despachar: la cadena run->cabecera ACTIVE->fragmento no existe -> claim 0.
+        var repository = new Mt101RebuildRepository();
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1"); // rev 1 ACTIVE
+        var p1 = prepared(repository, "RTEST1");
+        // Habilita el claim pero anula el puntero (como dejaria el saneamiento V68 a un dangler historico).
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'EXECUTING', pay_claimed_by = 'luis', "
+                    + "pay_lease_until = current_timestamp + interval '15 minutes', active_plan_revision = null "
+                    + "where rebuild_run_id = '" + FIX + "'");
+        }
+        assertEquals(0, repository.markPayFragmentDispatching(dataSource, FIX, "RTEST1", p1.payloadHash(),
+                p1.approvedRoutedAs(), p1.dispatchPlanHash(), p1.specHash(), p1.specJson()),
+                "sin revision activa (puntero NULL) el claim NO reclama");
+        assertEquals("PREPARED", queryString("select pay_status from mt101_corrective_pay_fragment where "
+                + "rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'"),
+                "el fragmento sigue PREPARED (no hay envio sin revision activa)");
+    }
+
+    @Test
     void requestActivatesAnImmutablePlanRevisionAsTheApprovedSource() throws Exception {
         // v41 (modelo versionado): al solicitar, se ACTIVA exactamente una revision del plan (DRAFT->ACTIVE). El
         // run apunta a esa revision; su hash coincide con el de la revision inmutable; el ledger de ejecucion
