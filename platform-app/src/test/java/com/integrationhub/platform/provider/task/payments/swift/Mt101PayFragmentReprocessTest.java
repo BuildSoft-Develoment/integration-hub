@@ -1370,15 +1370,16 @@ class Mt101PayFragmentReprocessTest {
 
     private void seedActivePlanRevision(String runId, String reference, int revision) throws SQLException {
         try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
-            statement.executeUpdate("update mt101_rebuild_run set active_plan_revision = " + revision
-                    + " where rebuild_run_id = '" + runId + "'");
-            statement.executeUpdate("update mt101_corrective_pay_fragment set plan_revision = " + revision
-                    + " where rebuild_run_id = '" + runId + "' and corrective_senders_reference = '" + reference + "'");
-            // v44-fix: la cabecera ACTIVE que el claim ahora exige.
+            // v45-fix: ORDEN correcto frente a la FK real (cabecera -> fragmento -> puntero del run). Antes se
+            // apuntaba active_plan_revision antes de existir la cabecera, lo que con la FK de produccion fallaria.
             statement.executeUpdate("insert into mt101_corrective_pay_plan (rebuild_run_id, plan_revision, "
                     + "plan_version, plan_count, plan_set_hash, status) values ('" + runId + "', " + revision
                     + ", 'MT101_PAY_PLAN_SET_V1', 1, 'h', 'ACTIVE') on conflict (rebuild_run_id, plan_revision) "
                     + "do update set status = 'ACTIVE'");
+            statement.executeUpdate("update mt101_corrective_pay_fragment set plan_revision = " + revision
+                    + " where rebuild_run_id = '" + runId + "' and corrective_senders_reference = '" + reference + "'");
+            statement.executeUpdate("update mt101_rebuild_run set active_plan_revision = " + revision
+                    + " where rebuild_run_id = '" + runId + "'");
             // Copia EXACTA del contrato del ledger -> revision inmutable (igual que compileDraftPlanRevision).
             statement.executeUpdate("insert into mt101_corrective_pay_plan_fragment "
                     + "(rebuild_run_id, plan_revision, corrective_senders_reference, payload_hash, idempotency_key, "

@@ -1184,6 +1184,21 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
+    void pointingTheRunToANonExistentPlanRevisionIsRejectedByForeignKey() throws Exception {
+        // v45-fix: la FK fk_run_active_plan_revision impide que el puntero del run apunte a una cabecera
+        // inexistente (PostgreSQL rechaza el UPDATE), no solo el claim.
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1"); // rev 1 ACTIVE
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            assertThrows(SQLException.class, () -> statement.executeUpdate(
+                    "update mt101_rebuild_run set active_plan_revision = 999 where rebuild_run_id = '" + FIX + "'"),
+                    "no se puede apuntar active_plan_revision a una revision sin cabecera");
+        }
+        assertEquals(1L, queryLong("select active_plan_revision from mt101_rebuild_run where rebuild_run_id = '"
+                + FIX + "'"), "el puntero sigue en la revision 1 (valida)");
+    }
+
+    @Test
     void insertingAFragmentIntoAnActivePlanRevisionIsRejectedByTrigger() throws Exception {
         // v43-ter: el trigger de inmutabilidad cubre tambien INSERT — agregar una fila a una revision ACTIVE
         // (mutar el conjunto aprobado) es rechazado por la BD.
@@ -1883,7 +1898,8 @@ class Mt101CorrectiveLifecycleServiceTest {
         try (Connection connection = dataSource.getConnection();
              Statement s = connection.createStatement()) {
             s.executeUpdate("drop table if exists mt101_corrective_pay_plan_fragment");
-            s.executeUpdate("drop table if exists mt101_corrective_pay_plan");
+            // cascade: la FK fk_run_active_plan_revision (en mt101_rebuild_run) depende de esta tabla.
+            s.executeUpdate("drop table if exists mt101_corrective_pay_plan cascade");
             s.executeUpdate("drop table if exists mt101_corrective_pay_fragment");
             s.executeUpdate("drop table if exists mt101_rebuild_selection");
             s.executeUpdate("drop table if exists mt101_rebuild_run");
@@ -2067,6 +2083,18 @@ class Mt101CorrectiveLifecycleServiceTest {
             s.executeUpdate("drop trigger if exists trg_pay_plan_status_guard on mt101_corrective_pay_plan");
             s.executeUpdate("create trigger trg_pay_plan_status_guard before update on mt101_corrective_pay_plan "
                     + "for each row execute function mt101_pay_plan_status_guard()");
+            // v45-fix: la FK real del puntero del run a la cabecera (refleja produccion V67): apuntar a una
+            // revision inexistente es rechazado por PostgreSQL.
+            s.executeUpdate("alter table mt101_rebuild_run add constraint fk_run_active_plan_revision "
+                    + "foreign key (rebuild_run_id, active_plan_revision) "
+                    + "references mt101_corrective_pay_plan (rebuild_run_id, plan_revision)");
+            // v45-fix: FKs anti-huerfanos (refleja produccion V68). plan_fragment->plan es DEFERRABLE porque
+            // compileDraftPlanRevision inserta fragmentos antes que la cabecera dentro de una transaccion.
+            s.executeUpdate("alter table mt101_corrective_pay_plan add constraint fk_pay_plan_run "
+                    + "foreign key (rebuild_run_id) references mt101_rebuild_run (rebuild_run_id) on delete restrict");
+            s.executeUpdate("alter table mt101_corrective_pay_plan_fragment add constraint fk_pay_plan_fragment_plan "
+                    + "foreign key (rebuild_run_id, plan_revision) references mt101_corrective_pay_plan "
+                    + "(rebuild_run_id, plan_revision) on delete restrict deferrable initially deferred");
             s.executeUpdate("drop table if exists mt101_corrective_pay_action");
             s.executeUpdate("create table mt101_corrective_pay_action ("
                     + "id bigserial primary key, rebuild_run_id varchar(80) not null,"
