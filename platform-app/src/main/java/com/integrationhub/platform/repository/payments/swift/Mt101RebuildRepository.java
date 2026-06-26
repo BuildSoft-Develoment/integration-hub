@@ -678,41 +678,6 @@ public class Mt101RebuildRepository {
     }
 
     /**
-     * B2': solicita el envio del correctivo (maker) y registra la accion PAY_REQUESTED en UNA sola
-     * transaccion (P0.1 v24): si falla el insert de auditoria, se revierte el cambio de pay_status. No
-     * quedan estados sin evidencia ni evidencia sin estado.
-     */
-    public int requestPayWithAction(DataSource dataSource, String rebuildRunId, String requestedBy,
-                                    String payloadHash, String configHash, String requestReason,
-                                    String requestTicket, String previousStatus) throws SQLException {
-        try (var connection = dataSource.getConnection()) {
-            var previousAutoCommit = connection.getAutoCommit();
-            connection.setAutoCommit(false);
-            try {
-                var updated = requestPay(connection, rebuildRunId, requestedBy, payloadHash, configHash,
-                        requestReason, requestTicket);
-                if (updated > 0) {
-                    recordPayAction(connection, rebuildRunId, "PAY_REQUESTED", previousStatus, "REQUESTED",
-                            requestedBy, requestReason, requestTicket, payloadHash, configHash);
-                }
-                connection.commit();
-                return updated;
-            } catch (SQLException error) {
-                connection.rollback();
-                throw error;
-            } finally {
-                connection.setAutoCommit(previousAutoCommit);
-            }
-        }
-    }
-
-    /**
-     * v39 (atomicidad maker-checker): cambia el run a REQUESTED, persiste el hash del CONJUNTO de planes y
-     * registra PAY_REQUESTED + PAY_PLAN_PREPARED en UNA sola transaccion bajo el advisory lock por run. Asi no
-     * quedan estados intermedios: REQUESTED-sin-hash, hash-sin-PAY_PLAN_PREPARED, etc. Los intents/specs ya se
-     * persistieron antes (idempotentes); el conjunto (planSet) se calculo sobre ellos. Devuelve filas afectadas.
-     */
-    /**
      * v40-bis (RESERVA EXCLUSIVA para preparar el plan): transiciona el run a PREPARING_PLAN de forma ATOMICA
      * (un solo UPDATE condicional, sin estados intermedios) desde un estado ELEGIBLE
      * (NOT_REQUESTED/FAILED/INVALIDATED) o desde una reserva CAIDA (PREPARING_PLAN cuya marca de tiempo supera la
@@ -1043,20 +1008,6 @@ public class Mt101RebuildRepository {
             return java.util.HexFormat.of().formatHex(digest);
         } catch (java.security.NoSuchAlgorithmException error) {
             throw new IllegalStateException("SHA-256 not available", error);
-        }
-    }
-
-    /** v37 fase 2: persiste el conjunto de planes aprobable en el run (al solicitar el PAY). */
-    public void persistPayPlanSet(DataSource dataSource, String rebuildRunId, PayPlanSet planSet) throws SQLException {
-        var sql = "update mt101_rebuild_run set pay_plan_version = ?, pay_plan_count = ?, pay_plan_set_hash = ?, "
-                + "updated_at = current_timestamp where rebuild_run_id = ?";
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
-            statement.setString(1, planSet.version());
-            statement.setInt(2, planSet.count());
-            statement.setString(3, planSet.setHash());
-            statement.setString(4, rebuildRunId);
-            statement.executeUpdate();
         }
     }
 
