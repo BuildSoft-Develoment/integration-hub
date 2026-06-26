@@ -1110,6 +1110,41 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
+    void claimRejectsALedgerSpecThatDivergesFromTheImmutableActiveRevision() throws Exception {
+        // v43-bis (trazabilidad estricta): el dispatcher solo despacha la spec de la revision ACTIVE INMUTABLE. Una
+        // manipulacion DIRECTA del ledger (dispatch_spec_json + dispatch_spec_hash CONSISTENTES entre si, que
+        // pasaria el binding exacto del claim) que diverja de la revision inmutable es RECHAZADA por el cross-check.
+        var repository = new Mt101RebuildRepository();
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1"); // rev 1 ACTIVE (ledger=pf)
+        // Habilita el claim: run EXECUTING + lease vigente.
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_status = 'EXECUTING', pay_claimed_by = 'luis', "
+                    + "pay_lease_until = current_timestamp + interval '15 minutes' where rebuild_run_id = '" + FIX + "'");
+        }
+        var payloadHash = queryString("select payload_hash from mt101_corrective_pay_fragment where rebuild_run_id = '"
+                + FIX + "' and corrective_senders_reference = 'RTEST1'");
+        var routedAs = queryString("select approved_routed_as from mt101_corrective_pay_fragment where rebuild_run_id = '"
+                + FIX + "' and corrective_senders_reference = 'RTEST1'");
+        var planHash = queryString("select dispatch_plan_hash from mt101_corrective_pay_fragment where rebuild_run_id = '"
+                + FIX + "' and corrective_senders_reference = 'RTEST1'");
+        // TAMPER del ledger: spec json + hash CONSISTENTES entre si pero distintos a la revision inmutable.
+        var tamperedJson = "{\"version\":\"MT101_PAY_PLAN_V1\",\"tampered\":true}";
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set dispatch_spec_json = '" + tamperedJson
+                    + "', dispatch_spec_hash = 'TAMPEREDHASH' where rebuild_run_id = '" + FIX
+                    + "' and corrective_senders_reference = 'RTEST1'");
+        }
+        assertEquals(0, repository.markPayFragmentDispatching(dataSource, FIX, "RTEST1", payloadHash, routedAs,
+                planHash, "TAMPEREDHASH", tamperedJson),
+                "una spec del ledger manipulada (aunque internamente consistente) que diverge de la revision "
+                        + "inmutable NO se reclama");
+        assertEquals("PREPARED", queryString("select pay_status from mt101_corrective_pay_fragment where "
+                + "rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'"),
+                "el fragmento sigue PREPARED (no se despacho la spec manipulada)");
+    }
+
+    @Test
     void activePlanRevisionAndItsFragmentsAreImmutableAtTheDatabaseLevel() throws Exception {
         // v43 (homologacion fuerte): triggers de BD impiden mutar una revision ACTIVE/SUPERSEDED. Ni un bug ni una
         // manipulacion pueden cambiar spec/hash de un plan aprobado, ni revertir la maquina de estados.

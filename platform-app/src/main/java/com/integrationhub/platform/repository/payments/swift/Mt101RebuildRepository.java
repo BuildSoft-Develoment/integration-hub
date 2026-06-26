@@ -1986,6 +1986,11 @@ public class Mt101RebuildRepository {
         // (no solo su hash): el ledger no pudo cambiar entre la lectura y el claim ni siquiera con un hash igual.
         // v41 (modelo versionado): ademas exige que el fragmento pertenezca a la revision ACTIVA del run
         // (f.plan_revision = r.active_plan_revision): un fragmento de una revision SUPERSEDED jamas se despacha.
+        // v43-bis (trazabilidad estricta): ademas exige que la spec del ledger COINCIDA EXACTAMENTE con la fila de la
+        // revision ACTIVE INMUTABLE (mt101_corrective_pay_plan_fragment, protegida por trigger). Asi el dispatcher
+        // solo despacha la spec aprobada e inmutable: una manipulacion DIRECTA del ledger (spec_hash+json
+        // consistentes) que pasaria el binding exacto es atrapada aqui contra la fuente inmutable. Si no existe la
+        // fila de la revision activa, no se reclama (sin caminos legacy: el ledger no es la fuente final del plan).
         var specBinding = (expectedDispatchSpecHash == null ? ""
                 : " and f.dispatch_spec_hash is not distinct from ?")
                 + (expectedDispatchSpecJson == null ? ""
@@ -2005,6 +2010,12 @@ public class Mt101RebuildRepository {
                    and f.approved_routed_as is not distinct from ?
                    and f.dispatch_plan_hash is not distinct from ?
                    and f.plan_revision is not distinct from r.active_plan_revision
+                   and exists (select 1 from mt101_corrective_pay_plan_fragment pf
+                               where pf.rebuild_run_id = f.rebuild_run_id
+                                 and pf.plan_revision = r.active_plan_revision
+                                 and pf.corrective_senders_reference = f.corrective_senders_reference
+                                 and pf.dispatch_spec_hash = f.dispatch_spec_hash
+                                 and pf.dispatch_spec_json is not distinct from f.dispatch_spec_json)
                    and r.pay_status = 'EXECUTING'
                    and r.pay_lease_until is not null
                    and r.pay_lease_until > current_timestamp

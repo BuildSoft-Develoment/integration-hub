@@ -332,11 +332,8 @@ class Mt101PayFragmentReprocessTest {
                 prepared.approvedRoutedAs(), prepared.dispatchPlanHash(), prepared.specHash(), prepared.specJson()),
                 "un fragmento de una revision SUPERSEDED (1 != activa 2) NO se reclama");
         assertEquals("PREPARED", payLedgerStatus(runId, "V1"), "el fragmento sigue PREPARED");
-        // Alineado con la revision activa -> reclama.
-        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
-            statement.executeUpdate("update mt101_corrective_pay_fragment set plan_revision = 2 where "
-                    + "rebuild_run_id = '" + runId + "' and corrective_senders_reference = 'V1'");
-        }
+        // Alineado con la revision activa (2) -> reclama. La revision 2 INMUTABLE debe existir con la misma spec.
+        seedActivePlanRevision(runId, "V1", "MT101_PAY_PLAN_V1", prepared.specJson(), prepared.specHash(), 2);
         assertEquals(1, repository.markPayFragmentDispatching(dataSource, runId, "V1", prepared.payloadHash(),
                 prepared.approvedRoutedAs(), prepared.dispatchPlanHash(), prepared.specHash(), prepared.specJson()),
                 "alineado con la revision activa, reclama");
@@ -415,6 +412,7 @@ class Mt101PayFragmentReprocessTest {
             statement.setString(10, spec.specHash());
             statement.executeUpdate();
         }
+        seedActivePlanRevision(runId, reference, spec);
     }
 
     @Test
@@ -1171,6 +1169,7 @@ class Mt101PayFragmentReprocessTest {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("drop table if exists mt101_build_fragment");
+            statement.executeUpdate("drop table if exists mt101_corrective_pay_plan_fragment");
             statement.executeUpdate("drop table if exists mt101_corrective_pay_fragment");
             statement.executeUpdate("drop table if exists mt101_rebuild_run");
             // v27 P0.1: el claim une el run padre (EXECUTING + lease vigente). Tabla minima para el join.
@@ -1236,6 +1235,12 @@ class Mt101PayFragmentReprocessTest {
                     + "dispatched_at timestamp,"
                     + "updated_at timestamp not null default current_timestamp,"
                     + "unique (rebuild_run_id, corrective_senders_reference))");
+            // v43-bis: la revision ACTIVE INMUTABLE que el claim cruza contra el ledger.
+            statement.executeUpdate("create table mt101_corrective_pay_plan_fragment ("
+                    + "id bigserial primary key, rebuild_run_id varchar(80) not null, plan_revision integer not null,"
+                    + "corrective_senders_reference varchar(16) not null,"
+                    + "dispatch_spec_version varchar(40), dispatch_spec_json text, dispatch_spec_hash varchar(64),"
+                    + "unique (rebuild_run_id, plan_revision, corrective_senders_reference))");
             statement.executeUpdate("create unique index ux_test_fragment_ref on mt101_build_fragment"
                     + "(fragment_set_id, senders_reference)");
             statement.executeUpdate("create index ix_test_fragment_status on mt101_build_fragment"
@@ -1303,6 +1308,7 @@ class Mt101PayFragmentReprocessTest {
             statement.setString(9, spec.specHash());
             statement.executeUpdate();
         }
+        seedActivePlanRevision(runId, reference, spec);
     }
 
     private void insertPayLedger(String runId, String correctiveSetId, String reference, String approvedPayloadHash)
@@ -1334,12 +1340,48 @@ class Mt101PayFragmentReprocessTest {
             statement.setString(10, spec.specHash());
             statement.executeUpdate();
         }
+        seedActivePlanRevision(runId, reference, spec);
     }
 
     /** v37: spec ejecutable compilada (igual que el servicio) para que el dispatch correctivo la materialice. */
     private Mt101DispatchPlanCompiler.CompiledDispatchSpec dispatchSpec(Mt101Message message) {
         return new Mt101DispatchPlanCompiler(new com.fasterxml.jackson.databind.ObjectMapper())
                 .compile(Map.of("transport", "REST"), null, null, message);
+    }
+
+    /**
+     * v43-bis: siembra la revision ACTIVE INMUTABLE (por defecto la 1) que el claim cruza contra el ledger:
+     * fija {@code active_plan_revision} en el run, etiqueta el fragmento del ledger y persiste la fila inmutable
+     * con la MISMA spec. Sin esto, el claim correctivo no reclama (el ledger ya no es la fuente final del plan).
+     */
+    private void seedActivePlanRevision(String runId, String reference,
+                                        Mt101DispatchPlanCompiler.CompiledDispatchSpec spec) throws SQLException {
+        seedActivePlanRevision(runId, reference, spec.version(), spec.specJson(), spec.specHash(), 1);
+    }
+
+    private void seedActivePlanRevision(String runId, String reference, String specVersion, String specJson,
+                                        String specHash, int revision) throws SQLException {
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set active_plan_revision = " + revision
+                    + " where rebuild_run_id = '" + runId + "'");
+            statement.executeUpdate("update mt101_corrective_pay_fragment set plan_revision = " + revision
+                    + " where rebuild_run_id = '" + runId + "' and corrective_senders_reference = '" + reference + "'");
+        }
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "insert into mt101_corrective_pay_plan_fragment (rebuild_run_id, plan_revision, "
+                             + "corrective_senders_reference, dispatch_spec_version, dispatch_spec_json, dispatch_spec_hash) "
+                             + "values (?, ?, ?, ?, ?, ?) on conflict (rebuild_run_id, plan_revision, corrective_senders_reference) "
+                             + "do update set dispatch_spec_json = excluded.dispatch_spec_json, "
+                             + "dispatch_spec_hash = excluded.dispatch_spec_hash")) {
+            statement.setString(1, runId);
+            statement.setInt(2, revision);
+            statement.setString(3, reference);
+            statement.setString(4, specVersion);
+            statement.setString(5, specJson);
+            statement.setString(6, specHash);
+            statement.executeUpdate();
+        }
     }
 
     @Test
