@@ -997,6 +997,9 @@ class Mt101CorrectiveLifecycleServiceTest {
         repository.preparePayIntents(dataSource, FIX, "tokA", java.util.List.of(intentA2));
         assertEquals(0L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = '"
                 + FIX + "' and corrective_senders_reference = 'RTEST2'"), "A ya no puede escribir (token perdido)");
+        // ...ni sincronizar el ledger desde el set correctivo (refresh) bajo la reserva de B...
+        assertEquals(0, repository.refreshPayFragmentsFromCorrectiveSet(dataSource, FIX, "tokA", FIX),
+                "A ya no puede refrescar el ledger (token perdido); B mantiene la propiedad");
         // ...ni compilar/concretar el plan...
         assertThrows(SQLException.class, () -> repository.compileDraftPlanRevision(dataSource, FIX, "ana", "tokA"),
                 "A ya no puede compilar el DRAFT (token perdido)");
@@ -1064,10 +1067,12 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
-    void reRequestRearmsPreSendInvalidatedFragmentsIntoTheNewRevision() throws Exception {
+    void reRequestRearmsPreSendInvalidatedFragmentsAndCompletesTheRetryToSent() throws Exception {
         // Hallazgo 2 (v42): un fragmento INVALIDATED pre-envio (p.ej. fallo de materializacion/Vault, spec
         // manipulada o drift detectado ANTES del envio; nunca llamo al banco) debe REARMARSE en una re-solicitud.
         // Antes quedaba atascado (el upsert lo excluia) y la aprobacion no encontraba nada PREPARED para enviar.
+        // E2E completo (lo que pedia el analisis): request -> invalidacion pre-envio -> nuevo request -> aprobacion
+        // -> el transporte envia EXACTAMENTE una vez -> run SENT.
         service.advanceCorrective(null, FIX, "executor");
         service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
         // Simula un fragmento invalidado pre-envio y el run en un estado re-solicitable (FAILED).
@@ -1091,6 +1096,13 @@ class Mt101CorrectiveLifecycleServiceTest {
         // La nueva revision ACTIVE incluye ambos fragmentos (el rearmado entre ellos).
         assertEquals(2L, queryLong("select plan_count from mt101_corrective_pay_plan where rebuild_run_id = '"
                 + FIX + "' and status = 'ACTIVE'"), "la revision ACTIVE cuenta los 2 fragmentos rearmados");
+
+        // El checker aprueba la nueva revision: el transporte envia exactamente una vez y el run termina SENT.
+        service.approveAndPayCorrective(null, FIX, "luis");
+        assertEquals(1, payInvocations.get(), "el transporte recibe exactamente un envio en el reintento");
+        assertEquals("SENT", payStatus(FIX), "el reintento termina SENT");
+        assertEquals(2L, queryLong("select count(*) from mt101_corrective_pay_fragment where rebuild_run_id = '"
+                + FIX + "' and pay_status = 'SENT'"), "ambos fragmentos (incluido el rearmado) quedan SENT");
     }
 
     @Test
@@ -1337,8 +1349,8 @@ class Mt101CorrectiveLifecycleServiceTest {
         var configHash = repository.payRequestedConfigHash(dataSource, FIX);
         assertTrue(repository.claimPayForExecution(dataSource, FIX, "luis",
                 payloadHash, configHash, java.time.LocalDateTime.now().minusMinutes(1)));
-        // Hay intencion preparada y un fragmento ya DISPATCHING (se inicio el envio).
-        repository.refreshPayFragmentsFromCorrectiveSet(dataSource, FIX, FIX);
+        // Hay intencion preparada y un fragmento ya DISPATCHING (se inicio el envio). Run EXECUTING -> token null.
+        repository.refreshPayFragmentsFromCorrectiveSet(dataSource, FIX, null, FIX);
         try (Connection connection = dataSource.getConnection();
              var statement = connection.createStatement()) {
             statement.executeUpdate("update mt101_corrective_pay_fragment set pay_status = 'DISPATCHING' "

@@ -194,7 +194,7 @@ public class Mt101CorrectiveLifecycleService {
                 // exclusiva, bajo la reserva) ANTES de cambiar el estado a REQUESTED. Si la compilacion de una
                 // spec falla a mitad, el run NO queda atascado: el finally libera la reserva (re-solicitable).
                 // La compilacion (resolver de ruta) vive solo aqui, en la preparacion.
-                rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, run.correctiveSetId());
+                rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, reservationId, run.correctiveSetId());
                 var unresolvedPayConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_PAY");
                 preparePayIntents(dataSource, runId, reservationId, run.correctiveSetId(), payConfig, unresolvedPayConfig);
                 // v41 (modelo versionado): snapshot INMUTABLE del conjunto preparado como una revision DRAFT
@@ -946,7 +946,9 @@ public class Mt101CorrectiveLifecycleService {
 
     private void persistPayDetail(DataSource dataSource, String runId, String correctiveSetId,
                                   TaskResult payResult) throws SQLException {
-        rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, correctiveSetId);
+        // Sincronizacion post-dispatch (run EXECUTING): no hay reserva en juego -> token null (el guard de
+        // ownership solo aplica si el run esta en PREPARING_PLAN).
+        rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, null, correctiveSetId);
         var samples = new ArrayList<Mt101RebuildRepository.PayFragmentResult>();
         samples.addAll(payResults(payResult.outputs().get("records"), "SENT"));
         samples.addAll(payResults(payResult.outputs().get("errors"), "REJECTED"));

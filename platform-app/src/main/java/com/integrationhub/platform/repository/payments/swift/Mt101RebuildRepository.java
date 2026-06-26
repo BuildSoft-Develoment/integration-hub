@@ -1720,7 +1720,10 @@ public class Mt101RebuildRepository {
 
     /** Refresca el detalle durable de PAY por fragmento correctivo completo. */
     public int refreshPayFragmentsFromCorrectiveSet(DataSource dataSource, String rebuildRunId,
-                                                    String correctiveSetId) throws SQLException {
+                                                    String reservationId, String correctiveSetId) throws SQLException {
+        // v42 (doble check): si el run esta RESERVADO (PREPARING_PLAN) este refresh solo actua para el DUENO del
+        // token. Un maker que perdio la reserva (takeover) no puede tocar el ledger de ejecucion del nuevo dueno.
+        // En cualquier otro estado del run (p.ej. EXECUTING, sincronizacion post-dispatch) actua sin token (null).
         var sql = """
                 insert into mt101_corrective_pay_fragment
                     (rebuild_run_id, corrective_set_id, corrective_senders_reference,
@@ -1743,6 +1746,9 @@ public class Mt101RebuildRepository {
                     on sel.rebuild_run_id = ?
                    and sel.corrective_senders_reference = f.senders_reference
                  where f.fragment_set_id = ?
+                   and exists (select 1 from mt101_rebuild_run r where r.rebuild_run_id = ?
+                               and (r.pay_status <> 'PREPARING_PLAN'
+                                    or r.pay_plan_reservation_id is not distinct from ?))
                  group by f.fragment_set_id, f.senders_reference, f.payload_hash, f.status
                 on conflict (rebuild_run_id, corrective_senders_reference) do update
                     set pay_status = excluded.pay_status,
@@ -1757,6 +1763,8 @@ public class Mt101RebuildRepository {
             statement.setString(1, rebuildRunId);
             statement.setString(2, rebuildRunId);
             statement.setString(3, correctiveSetId);
+            statement.setString(4, rebuildRunId);
+            statement.setString(5, reservationId);
             return statement.executeUpdate();
         }
     }
