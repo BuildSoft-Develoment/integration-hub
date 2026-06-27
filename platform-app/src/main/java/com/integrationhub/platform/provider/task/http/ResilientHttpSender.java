@@ -45,6 +45,19 @@ public class ResilientHttpSender {
     @Retry(maxRetries = 2, delay = 250, jitter = 150, retryOn = IOException.class, abortOn = InterruptedException.class)
     @CircuitBreaker(requestVolumeThreshold = 8, failureRatio = 0.5, delay = 10, delayUnit = ChronoUnit.SECONDS, successThreshold = 2)
     public HttpResponse<String> send(HttpRequest request) throws IOException, InterruptedException {
-        return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        throwIfServerError(response.statusCode());
+        return response;
+    }
+
+    /**
+     * Promueve un 5xx a fallo de infraestructura para que el circuit breaker lo
+     * contabilice. Los 4xx no se promueven: son error de cliente y los interpreta
+     * el provider. No se reintenta (ver {@link RemoteServerException}).
+     */
+    static void throwIfServerError(int statusCode) {
+        if (statusCode >= 500) {
+            throw new RemoteServerException(statusCode);
+        }
     }
 }
