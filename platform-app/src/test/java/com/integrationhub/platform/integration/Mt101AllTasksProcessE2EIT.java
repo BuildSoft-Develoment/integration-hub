@@ -103,7 +103,7 @@ class Mt101AllTasksProcessE2EIT {
                     "MT101_VALIDATE ruleSet=structural-mvp messages=3 invalid=0 issues=0",
                     "MT101_ROUTE routed=3",
                     "MT101_ARCHIVE archived 3 messages",
-                    "MT101_PAY via REST dispatch=3 sent=3 accepted=3 rejected=0 retried=0",
+                    "MT101_PAY via REST dispatch=3 sent=3 accepted=3 rejected=0 uncertain=0 retried=0",
                     "MT101_STATUS queried=3 confirmed=3 errors=0",
                     "MT101_RECONCILE");
 

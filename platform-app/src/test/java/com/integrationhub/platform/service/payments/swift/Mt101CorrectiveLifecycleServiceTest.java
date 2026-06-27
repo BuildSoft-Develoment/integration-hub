@@ -1528,6 +1528,26 @@ class Mt101CorrectiveLifecycleServiceTest {
     }
 
     @Test
+    void approvalInvalidatesWhenAContractFieldBeyondPayloadAndSpecHashChanges() throws Exception {
+        // v48-fix (maker-checker criptograficamente completo): el hash agregado del conjunto cubre el CONTRATO
+        // COMPLETO (no solo payload + spec_hash). Si tras solicitar cambia SOLO approved_routed_as en el ledger
+        // (payload_hash y dispatch_spec_hash intactos) -> el hash del conjunto difiere del aprobado -> la aprobacion
+        // INVALIDA y NO llama al banco. Con el hash V1 (reference|payload|spec_hash) este cambio NO alteraba el hash
+        // y solo lo atrapaba el cross-check del claim; ahora lo atrapa tambien el propio artefacto maker-checker.
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_corrective_pay_fragment set approved_routed_as = 'REROUTED' "
+                    + "where rebuild_run_id = '" + FIX + "' and corrective_senders_reference = 'RTEST1'");
+        }
+
+        assertThrows(IllegalStateException.class, () -> service.approveAndPayCorrective(null, FIX, "luis"),
+                "un cambio en cualquier campo del contrato cambia el hash del conjunto -> no se aprueba");
+        assertEquals("INVALIDATED", payStatus(FIX), "contrato divergente -> INVALIDATED");
+        assertEquals(0, payInvocations.get(), "no se llama a PAY si un campo del contrato cambio tras solicitar");
+    }
+
+    @Test
     void payClaimPreventsDoubleSendWhenAnotherCheckerWonTheClaim() throws Exception {
         service.advanceCorrective(null, FIX, "executor");
         service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");

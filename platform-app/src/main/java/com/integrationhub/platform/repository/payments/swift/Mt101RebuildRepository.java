@@ -873,17 +873,35 @@ public class Mt101RebuildRepository {
         }
     }
 
-    public static final String PAY_PLAN_SET_VERSION = "MT101_PAY_PLAN_SET_V1";
+    // v48-fix: V2 = el hash agregado cubre el CONTRATO COMPLETO por fragmento (no solo payload + spec), para que
+    // la aprobacion maker-checker sea criptograficamente completa: el checker aprueba exactamente TODOS los
+    // atributos ejecutables (idempotencia, transporte, endpoint, ruta, destino, plan_hash, version de spec).
+    public static final String PAY_PLAN_SET_VERSION = "MT101_PAY_PLAN_SET_V2";
+
+    // Contrato completo por fragmento, en orden estable, para el hash agregado del conjunto (maker-checker).
+    private static final String PAY_PLAN_SET_COLUMNS =
+            "corrective_senders_reference, payload_hash, idempotency_key, transport, endpoint_ref, "
+            + "approved_routed_as, dispatch_destination, dispatch_plan_hash, dispatch_spec_version, dispatch_spec_hash";
+
+    /** Anexa al canonico el contrato COMPLETO de un fragmento (10 columnas de {@link #PAY_PLAN_SET_COLUMNS}). */
+    private static void appendPayPlanSetRow(StringBuilder canonical, java.sql.ResultSet rs) throws SQLException {
+        for (int column = 1; column <= 10; column++) {
+            canonical.append(rs.getString(column) == null ? "" : rs.getString(column)).append('|');
+        }
+        canonical.append('\n');
+    }
 
     /**
-     * v37 fase 2: hash AGREGADO del conjunto de planes ejecutables del run, en orden canonico por
-     * {@code corrective_senders_reference}, concatenando {@code reference|payload_hash|dispatch_spec_hash}.
-     * Es el artefacto que el maker prepara y el checker aprueba: "plan aprobado = plan ejecutado" a nivel de
-     * conjunto, no solo de configuracion equivalente.
+     * v37 fase 2 / v48-fix: hash AGREGADO del conjunto de planes ejecutables del run, en orden canonico por
+     * {@code corrective_senders_reference}, concatenando el CONTRATO COMPLETO por fragmento
+     * ({@link #PAY_PLAN_SET_COLUMNS}: payload_hash, idempotency_key, transport, endpoint_ref, approved_routed_as,
+     * dispatch_destination, dispatch_plan_hash, dispatch_spec_version, dispatch_spec_hash). Es el artefacto que el
+     * maker prepara y el checker aprueba: la aprobacion es CRIPTOGRAFICAMENTE COMPLETA (cubre todos los atributos
+     * ejecutables, no solo payload + spec). Un cambio en cualquier campo del contrato cambia el hash del conjunto.
      */
     public PayPlanSet computePayPlanSet(DataSource dataSource, String rebuildRunId) throws SQLException {
-        var sql = "select corrective_senders_reference, payload_hash, dispatch_spec_hash "
-                + "from mt101_corrective_pay_fragment where rebuild_run_id = ? "
+        var sql = "select " + PAY_PLAN_SET_COLUMNS
+                + " from mt101_corrective_pay_fragment where rebuild_run_id = ? "
                 + "order by corrective_senders_reference";
         var canonical = new StringBuilder();
         var count = 0;
@@ -892,9 +910,7 @@ public class Mt101RebuildRepository {
             statement.setString(1, rebuildRunId);
             try (var rs = statement.executeQuery()) {
                 while (rs.next()) {
-                    canonical.append(rs.getString(1) == null ? "" : rs.getString(1)).append('|')
-                            .append(rs.getString(2) == null ? "" : rs.getString(2)).append('|')
-                            .append(rs.getString(3) == null ? "" : rs.getString(3)).append('\n');
+                    appendPayPlanSetRow(canonical, rs);
                     count++;
                 }
             }
@@ -976,8 +992,8 @@ public class Mt101RebuildRepository {
     /** Hash agregado del conjunto desde una revision del plan inmutable (mismo algoritmo que computePayPlanSet). */
     private PayPlanSet computePayPlanSetFromPlanRevision(java.sql.Connection connection, String rebuildRunId,
                                                          int planRevision) throws SQLException {
-        var sql = "select corrective_senders_reference, payload_hash, dispatch_spec_hash "
-                + "from mt101_corrective_pay_plan_fragment where rebuild_run_id = ? and plan_revision = ? "
+        var sql = "select " + PAY_PLAN_SET_COLUMNS
+                + " from mt101_corrective_pay_plan_fragment where rebuild_run_id = ? and plan_revision = ? "
                 + "order by corrective_senders_reference";
         var canonical = new StringBuilder();
         var count = 0;
@@ -986,9 +1002,7 @@ public class Mt101RebuildRepository {
             statement.setInt(2, planRevision);
             try (var rs = statement.executeQuery()) {
                 while (rs.next()) {
-                    canonical.append(rs.getString(1) == null ? "" : rs.getString(1)).append('|')
-                            .append(rs.getString(2) == null ? "" : rs.getString(2)).append('|')
-                            .append(rs.getString(3) == null ? "" : rs.getString(3)).append('\n');
+                    appendPayPlanSetRow(canonical, rs);
                     count++;
                 }
             }
