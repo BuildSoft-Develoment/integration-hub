@@ -29,7 +29,9 @@
     "@angular/platform-browser": "~21.2.0",
     "@angular/router": "~21.2.0",
     "@foblex/flow": "^18.3.0",
+    "@softarc/native-federation-node": "^3.3.4",
     "@tailwindcss/postcss": "^4.2.2",
+    "es-module-shims": "^1.5.12",
     "keycloak-js": "^26.2.3",
     "luxon": "^3.7.2",
     "postcss": "^8.5.8",
@@ -37,6 +39,8 @@
     "tailwindcss": "^4.2.2"
   },
   "devDependencies": {
+    "@angular-architects/native-federation": "~21.2.0",
+    "@angular-devkit/build-angular": "~21.2.0",
     "@angular-devkit/core": "~21.2.0",
     "@angular-devkit/schematics": "~21.2.0",
     "@angular/build": "~21.2.0",

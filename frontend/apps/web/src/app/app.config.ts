@@ -17,8 +17,10 @@ import {
   provideReaderProviders,
   provideSourceProviders,
 } from '@integration-hub/core/providers';
+import { loadRemoteModule } from '@angular-architects/native-federation';
 import {
   provideAppPluginRegistryValidation,
+  provideAppPluginRemoteModuleLoader,
   provideExternalAppPluginManifestCatalog,
 } from '@integration-hub/shared/ui';
 import { appRoutes } from './app.routes';
@@ -47,6 +49,12 @@ export const appConfig: ApplicationConfig = {
     ...appNavigationProvider,
     provideAppPluginRegistryValidation(),
     provideExternalAppPluginManifestCatalog(),
+    provideAppPluginRemoteModuleLoader((request) =>
+      loadRemoteModule({
+        remoteEntry: request.remoteEntry,
+        exposedModule: request.exposedModule,
+      })
+    ),
     {
       provide: MAT_FORM_FIELD_DEFAULT_OPTIONS,
       useValue: {

@@ -4,10 +4,12 @@
 
 ## Estado
 
-Propuesto. Implementado parcialmente: el contrato `remote` y su validacion
-(JSON Schema, build gate y runtime con allowlist de origenes y cuarentena) ya
-estan en codigo. La carga de codigo via Module Federation y el sandbox de
-ejecucion siguen pendientes.
+Aceptado e implementado en su mayoria: el contrato `remote` y su validacion
+(JSON Schema, build gate y runtime con allowlist de origenes y cuarentena), la
+verificacion criptografica de carga, el loader con limite de error/estado
+`degraded`, y el cableado de Native Federation en el host (builder, test runner y
+`loadRemoteModule`) ya estan en codigo y en verde. Pendiente: un plugin remoto de
+ejemplo y la verificacion e2e en runtime con el dev server.
 
 Extiende [ADR-012](ADR-012-frontend-modular-extensible-plugins.md). No reemplaza el
 modelo metadata-only: lo complementa con un canal gobernado para plugins que
@@ -162,23 +164,27 @@ API (`withNativeFederation`, `shareAll`, `loadRemoteModule`) es equivalente.
   el runtime registry y nunca lanza, de modo que un plugin defectuoso no rompe el
   shell. La vista `/plugins` muestra instalados, en cuarentena y degradados.
 
+## Alcance implementado (Native Federation)
+
+Ver `qa/fase-6-qa/evidencias/native-federation-wiring-2026-06-27.md`.
+
+- Builder del host conmutado a `@angular-architects/native-federation:build`
+  (esbuild, dynamic host); `federation.config.js` con `shareAll` singleton; split
+  `main.ts` (`initFederation`) / `bootstrap.ts`.
+- Test runner reparado: nuevo target `test-build` (application builder con
+  `browser: bootstrap.ts`, sin `es-module-shims`). Confirmado: el fallo
+  `instrumentForCoverage` era de CONFIGURACION, no de dependencias.
+- Gate `validate-plugins` restaurado en el target `build`.
+- Host conectado: `provideAppPluginRemoteModuleLoader(...)` enlaza
+  `REMOTE_MODULE_LOADER` con `loadRemoteModule` de Native Federation.
+- Verde: `nx test web` 355, `nx build web` (federacion) PASS, node gate 27.
+
 ## Alcance pendiente
 
-Spike realizado (ver `qa/fase-6-qa/evidencias/native-federation-spike-2026-06-27.md`):
-`native-federation@~21.2.0` es compatible con Angular 21.2, el generador Nx
-`init --type=dynamic-host` convierte el host limpiamente y el build de federacion
-queda VERDE. Bloqueante: el test runner `@angular/build:unit-test` falla con
-`instrumentForCoverage is not a function`. Investigacion read-only posterior
-descarta una perturbacion de dependencias (Angular build/compiler-cli/esbuild
-identicos; solo cambian 4 utilidades WASM): la causa es de CONFIGURACION (el
-generador reescribe `main.ts` a `initFederation` y anade `es-module-shims`, que el
-unit-test hereda). Se difiere a una sesion dedicada con verificacion en vivo.
-
-- Instalar y configurar `@angular-architects/native-federation` en el build del
-  host (esbuild); dar al unit-test un target application-builder limpio (con su
-  propio `main`, sin `es-module-shims`), no el target de federacion.
-- Proveer en el host `provideAppPluginRemoteModuleLoader(loadRemoteModule)` con la
-  funcion `loadRemoteModule` de Native Federation, conectando el seam
-  `REMOTE_MODULE_LOADER` con la implementacion real.
-- Construir un plugin remoto de ejemplo y una prueba e2e de extremo a extremo
-  (descarga, verificacion, montaje y degradacion ante fallo).
+- Plugin remoto de ejemplo (`init --type=remote`) que exponga un componente
+  standalone y publique un `remoteEntry.json` firmado.
+- Verificacion e2e en runtime (host + remoto con dev server): descarga,
+  verificacion (`AppPluginRemoteVerifier`), montaje y degradacion ante fallo.
+- Config de confianza del host (`provideAppPluginRemoteOrigins`,
+  `provideAppPluginRemoteTrustedKeys`, `provideAppPluginRemoteKeys`) con el primer
+  remoto real.
