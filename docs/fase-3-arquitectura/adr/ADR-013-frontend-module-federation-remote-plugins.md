@@ -183,13 +183,16 @@ Ver `qa/fase-6-qa/evidencias/native-federation-wiring-2026-06-27.md`.
   montaje -> degradacion ante manipulacion.
 - Verde: `nx test web` 357, `nx build web` (federacion) PASS, node gate 30.
 
+- Remoto de ejemplo `apps/sample-plugin` (Native Federation remote) que expone un
+  componente standalone `./Widget` y produce un `remoteEntry.json` real. La cadena
+  se probo sobre ese artefacto real: `genkey` + `sign` -> `integrity` SRI coincide,
+  firma ECDSA verifica, y el build gate acepta el catalogo
+  (`qa/fase-6-qa/evidencias/native-federation-sample-remote-2026-06-27.md`).
+
 ## Alcance pendiente
 
-- Proyecto Angular remoto de ejemplo (`init --type=remote`) que exponga un
-  componente standalone y produzca el `remoteEntry.json` real.
-- Demo de verificacion en navegador (host + remoto con dev server): montaje
-  visual y degradacion ante fallo. La cadena de seguridad ya esta probada headless
-  de extremo a extremo; resta solo la demostracion visual.
-- Config de confianza del host (`provideAppPluginRemoteOrigins`,
-  `provideAppPluginRemoteTrustedKeys`, `provideAppPluginRemoteKeys`) con el primer
-  remoto real.
+- Demo visual en navegador: requiere servir el remoto por `https` (o desplegarlo),
+  anadir su origen/clave a la confianza del host
+  (`provideAppPluginRemoteOrigins/TrustedKeys/Keys`) y el manifest firmado al
+  catalogo. La cadena de seguridad ya esta probada de extremo a extremo sobre el
+  artefacto real; resta unicamente el montaje visual en un entorno https.
