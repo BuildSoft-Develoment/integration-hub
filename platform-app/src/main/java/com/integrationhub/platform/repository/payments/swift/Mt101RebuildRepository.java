@@ -876,17 +876,41 @@ public class Mt101RebuildRepository {
     // v48-fix: V2 = el hash agregado cubre el CONTRATO COMPLETO por fragmento (no solo payload + spec), para que
     // la aprobacion maker-checker sea criptograficamente completa: el checker aprueba exactamente TODOS los
     // atributos ejecutables (idempotencia, transporte, endpoint, ruta, destino, plan_hash, version de spec).
-    public static final String PAY_PLAN_SET_VERSION = "MT101_PAY_PLAN_SET_V2";
+    // v49-fix: V3 usa una serializacion canonica INYECTIVA (longitud-prefijada + centinela NULL explicito), de modo
+    // que tuplas de contrato distintas SIEMPRE producen cadenas distintas (null != "" , y un valor que contenga el
+    // separador no puede colisionar con otra combinacion de campos). V2 concatenaba con '|' y mapeaba null->"", lo
+    // que era teoricamente ambiguo. Sin rutas legacy: solo existe el algoritmo vigente.
+    public static final String PAY_PLAN_SET_VERSION = "MT101_PAY_PLAN_SET_V3";
 
     // Contrato completo por fragmento, en orden estable, para el hash agregado del conjunto (maker-checker).
     private static final String PAY_PLAN_SET_COLUMNS =
             "corrective_senders_reference, payload_hash, idempotency_key, transport, endpoint_ref, "
             + "approved_routed_as, dispatch_destination, dispatch_plan_hash, dispatch_spec_version, dispatch_spec_hash";
 
+    private static final int PAY_PLAN_SET_FIELD_COUNT = 10;
+
     /** Anexa al canonico el contrato COMPLETO de un fragmento (10 columnas de {@link #PAY_PLAN_SET_COLUMNS}). */
     private static void appendPayPlanSetRow(StringBuilder canonical, java.sql.ResultSet rs) throws SQLException {
-        for (int column = 1; column <= 10; column++) {
-            canonical.append(rs.getString(column) == null ? "" : rs.getString(column)).append('|');
+        var values = new java.util.ArrayList<String>(PAY_PLAN_SET_FIELD_COUNT);
+        for (int column = 1; column <= PAY_PLAN_SET_FIELD_COUNT; column++) {
+            values.add(rs.getString(column));
+        }
+        appendPayPlanSetRow(canonical, values);
+    }
+
+    /**
+     * v49-fix: codificacion canonica INYECTIVA de una fila (contrato de un fragmento). Cada campo se serializa como
+     * {@code N:valor} (N = longitud en chars) o {@code -1:} si es NULL. Como cada campo lleva su longitud explicita,
+     * la descomposicion es univoca: ni un valor con {@code |}/{@code \n} ni la diferencia null vs "" pueden producir
+     * colisiones entre tuplas distintas. Visible a nivel de paquete para pruebas de inyectividad.
+     */
+    static void appendPayPlanSetRow(StringBuilder canonical, java.util.List<String> values) {
+        for (var value : values) {
+            if (value == null) {
+                canonical.append("-1:");
+            } else {
+                canonical.append(value.length()).append(':').append(value);
+            }
         }
         canonical.append('\n');
     }
@@ -1123,15 +1147,27 @@ public class Mt101RebuildRepository {
         }
     }
 
-    /** v41: hash del conjunto de la revision ACTIVE inmutable (la fuente aprobada de la verdad). */
-    public String payActivePlanRevisionSetHash(DataSource dataSource, String rebuildRunId) throws SQLException {
-        var sql = "select plan_set_hash from mt101_corrective_pay_plan "
+    /** v49-fix: resumen del conjunto (algoritmo + conteo + hash), no solo el hash, para validacion completa. */
+    public record PayPlanSummary(String version, Integer count, String setHash) {
+    }
+
+    private static PayPlanSummary readPayPlanSummary(java.sql.ResultSet rs) throws SQLException {
+        if (!rs.next()) {
+            return null;
+        }
+        var count = rs.getObject(2) == null ? null : rs.getInt(2);
+        return new PayPlanSummary(rs.getString(1), count, rs.getString(3));
+    }
+
+    /** v41/v49: resumen del conjunto de la revision ACTIVE inmutable (la fuente aprobada de la verdad). */
+    public PayPlanSummary payActivePlanRevisionSummary(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "select plan_version, plan_count, plan_set_hash from mt101_corrective_pay_plan "
                 + "where rebuild_run_id = ? and status = 'ACTIVE'";
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
             statement.setString(1, rebuildRunId);
             try (var rs = statement.executeQuery()) {
-                return rs.next() ? rs.getString(1) : null;
+                return readPayPlanSummary(rs);
             }
         }
     }
@@ -1146,13 +1182,15 @@ public class Mt101RebuildRepository {
         }
     }
 
-    public String payPlanSetHash(DataSource dataSource, String rebuildRunId) throws SQLException {
-        var sql = "select pay_plan_set_hash from mt101_rebuild_run where rebuild_run_id = ?";
+    /** v49: resumen del conjunto APROBADO persistido en el run (algoritmo + conteo + hash). */
+    public PayPlanSummary payApprovedPlanSummary(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "select pay_plan_version, pay_plan_count, pay_plan_set_hash from mt101_rebuild_run "
+                + "where rebuild_run_id = ?";
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
             statement.setString(1, rebuildRunId);
             try (var rs = statement.executeQuery()) {
-                return rs.next() ? rs.getString(1) : null;
+                return readPayPlanSummary(rs);
             }
         }
     }

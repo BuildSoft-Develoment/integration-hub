@@ -1379,7 +1379,7 @@ class Mt101CorrectiveLifecycleServiceTest {
         try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
             statement.executeUpdate("insert into mt101_corrective_pay_plan (rebuild_run_id, plan_revision, "
                     + "plan_version, plan_count, plan_set_hash, status) values ('" + FIX
-                    + "', 99, 'MT101_PAY_PLAN_SET_V1', 1, 'h', 'DRAFT')");
+                    + "', 99, 'MT101_PAY_PLAN_SET_V3', 1, 'h', 'DRAFT')");
             statement.executeUpdate("update mt101_rebuild_run set active_plan_revision = 99 where rebuild_run_id = '"
                     + FIX + "'"); // la FK lo permite porque la cabecera rev 99 existe (DRAFT)
             statement.executeUpdate(sanitizeSql);
@@ -1545,6 +1545,42 @@ class Mt101CorrectiveLifecycleServiceTest {
                 "un cambio en cualquier campo del contrato cambia el hash del conjunto -> no se aprueba");
         assertEquals("INVALIDATED", payStatus(FIX), "contrato divergente -> INVALIDATED");
         assertEquals(0, payInvocations.get(), "no se llama a PAY si un campo del contrato cambio tras solicitar");
+    }
+
+    @Test
+    void approvalInvalidatesWhenTheApprovedPlanSetWasBuiltWithAnOlderHashAlgorithm() throws Exception {
+        // v49-fix (gobierno/evidencia, sin rama legacy): la aprobacion exige que el algoritmo del conjunto sea
+        // EXACTAMENTE el vigente. Un run preparado con un algoritmo de hash anterior (pay_plan_version distinto) se
+        // INVALIDA con un motivo explicito de version, no como un generico "cambio el plan" -> re-solicitar.
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_plan_version = 'MT101_PAY_PLAN_SET_V2' "
+                    + "where rebuild_run_id = '" + FIX + "'");
+        }
+
+        var error = assertThrows(IllegalStateException.class, () -> service.approveAndPayCorrective(null, FIX, "luis"),
+                "un conjunto firmado con un algoritmo anterior no es aprobable");
+        assertTrue(error.getMessage().contains("version/count/hash"));
+        assertEquals("INVALIDATED", payStatus(FIX), "algoritmo de hash anterior -> INVALIDATED");
+        assertEquals(0, payInvocations.get(), "no se llama a PAY si el algoritmo del conjunto no es el vigente");
+    }
+
+    @Test
+    void approvalInvalidatesWhenTheApprovedPlanCountDivergesFromTheActiveRevision() throws Exception {
+        // v49-fix: la validacion del conjunto incluye el CONTEO, no solo el hash. Si el conteo aprobado en el run
+        // diverge del de la revision ACTIVE / del ledger vivo -> INVALIDA (sin enviar).
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+        try (Connection connection = dataSource.getConnection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("update mt101_rebuild_run set pay_plan_count = pay_plan_count + 1 "
+                    + "where rebuild_run_id = '" + FIX + "'");
+        }
+
+        assertThrows(IllegalStateException.class, () -> service.approveAndPayCorrective(null, FIX, "luis"),
+                "un conteo aprobado distinto al de la revision ACTIVE no es aprobable");
+        assertEquals("INVALIDATED", payStatus(FIX), "conteo divergente -> INVALIDATED");
+        assertEquals(0, payInvocations.get(), "no se llama a PAY si el conteo del conjunto diverge");
     }
 
     @Test

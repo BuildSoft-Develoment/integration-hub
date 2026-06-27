@@ -295,19 +295,31 @@ public class Mt101CorrectiveLifecycleService {
             // NO reconstruye ni reemplaza los planes: valida que el hash agregado del conjunto persistido siga
             // siendo el aprobado. Si cambio (drift de payload/spec tras la solicitud) -> INVALIDA, re-solicitar.
             // v41 (modelo versionado): la FUENTE de la verdad es la revision ACTIVE inmutable. Se valida en DOS
-            // frentes: (1) el run apunta al hash de la revision ACTIVE; (2) el ledger de ejecucion (lo que se
-            // despachara) sigue coincidiendo con ese hash. Cualquier divergencia -> INVALIDA (sin enviar).
-            var approvedPlanSetHash = rebuildRepository.payPlanSetHash(dataSource, runId);
-            var activeRevisionHash = rebuildRepository.payActivePlanRevisionSetHash(dataSource, runId);
+            // frentes: (1) el run apunta al conjunto de la revision ACTIVE; (2) el ledger de ejecucion (lo que se
+            // despachara) sigue coincidiendo con ese conjunto. Cualquier divergencia -> INVALIDA (sin enviar).
+            // v49-fix: la validacion NO es solo del hash: se exige que las TRES vistas (run aprobado, revision ACTIVE,
+            // ledger vivo) coincidan en ALGORITMO (version), CONTEO y HASH, y que el algoritmo sea exactamente el
+            // vigente (MT101_PAY_PLAN_SET_V3). Asi un run preparado con un algoritmo de hash anterior se INVALIDA con
+            // un motivo explicito (no como un generico "cambio el plan"), sin rutas legacy de compatibilidad.
+            var expectedVersion = Mt101RebuildRepository.PAY_PLAN_SET_VERSION;
+            var approvedPlanSet = rebuildRepository.payApprovedPlanSummary(dataSource, runId);
+            var activeRevision = rebuildRepository.payActivePlanRevisionSummary(dataSource, runId);
             var currentPlanSet = rebuildRepository.computePayPlanSet(dataSource, runId);
-            if (approvedPlanSetHash == null || activeRevisionHash == null
-                    || !approvedPlanSetHash.equals(activeRevisionHash)
-                    || !approvedPlanSetHash.equals(currentPlanSet.setHash())) {
+            if (approvedPlanSet == null || activeRevision == null
+                    || !expectedVersion.equals(approvedPlanSet.version())
+                    || !expectedVersion.equals(activeRevision.version())
+                    || approvedPlanSet.count() == null
+                    || !approvedPlanSet.count().equals(activeRevision.count())
+                    || !approvedPlanSet.count().equals(currentPlanSet.count())
+                    || approvedPlanSet.setHash() == null
+                    || !approvedPlanSet.setHash().equals(activeRevision.setHash())
+                    || !approvedPlanSet.setHash().equals(currentPlanSet.setHash())) {
                 rebuildRepository.invalidatePayRequestWithAction(dataSource, runId,
-                        "PAY plan set changed after request; request again before sending",
+                        "PAY plan set (algorithm/count/hash) changed or is not " + expectedVersion
+                                + " after request; request again before sending",
                         approver, run.payStatus(), payloadHash, configHash);
                 throw new IllegalStateException("corrective pay for run " + runId
-                        + " was invalidated because the persisted plan set changed after request");
+                        + " was invalidated because the persisted plan set version/count/hash changed after request");
             }
             // v28 #3: exige secretRef/Vault para STATUS y RECONCILE ANTES de reclamar. Un secreto LITERAL se
             // redactaria al congelar el snapshot y seria IRRECUPERABLE para autenticar un PAY_UNCERTAIN

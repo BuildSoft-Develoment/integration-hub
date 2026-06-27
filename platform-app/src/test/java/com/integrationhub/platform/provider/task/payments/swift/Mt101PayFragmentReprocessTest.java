@@ -1404,7 +1404,7 @@ class Mt101PayFragmentReprocessTest {
             // apuntaba active_plan_revision antes de existir la cabecera, lo que con la FK de produccion fallaria.
             statement.executeUpdate("insert into mt101_corrective_pay_plan (rebuild_run_id, plan_revision, "
                     + "plan_version, plan_count, plan_set_hash, status) values ('" + runId + "', " + revision
-                    + ", 'MT101_PAY_PLAN_SET_V1', 1, 'h', 'ACTIVE') on conflict (rebuild_run_id, plan_revision) "
+                    + ", 'MT101_PAY_PLAN_SET_V3', 1, 'h', 'ACTIVE') on conflict (rebuild_run_id, plan_revision) "
                     + "do update set status = 'ACTIVE'");
             statement.executeUpdate("update mt101_corrective_pay_fragment set plan_revision = " + revision
                     + " where rebuild_run_id = '" + runId + "' and corrective_senders_reference = '" + reference + "'");
