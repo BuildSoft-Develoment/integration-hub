@@ -21,15 +21,34 @@ hallazgos para una sesion dedicada.
 
 ## Bloqueante (motivo del revert)
 
-- El `npm install` del generador altera el toolchain y rompe el test runner:
-  `@angular/build:unit-test` falla con
-  `pluginOptions.instrumentForCoverage is not a function` (plugin angular-compiler),
-  en todos los specs. Apuntar `test.buildTarget` al target `esbuild` preservado NO
-  lo resuelve: la perturbacion es a nivel de dependencias instaladas
-  (`@angular/build`/`@angular-devkit/build-angular` 21.2.6 + federacion), no de
-  configuracion del target.
-- Por tanto, la reconfiguracion necesita pinning/resolucion de dependencias
-  cuidadosa y verificacion con el dev server, fuera del alcance seguro de este pase.
+- El test runner `@angular/build:unit-test` falla con
+  `pluginOptions.instrumentForCoverage is not a function` (plugin angular-compiler)
+  tras correr el generador, en todos los specs. Esto motivo el revert.
+
+## Diagnostico rectificado (investigacion read-only posterior)
+
+La causa NO es una perturbacion de dependencias del toolchain. Comprobado sin
+instalar nada (estado limpio vs `npm install --dry-run`):
+
+- `@angular/build`, `@angular/compiler-cli` y `@angular-devkit/build-angular` son
+  IDENTICOS en limpio y tras la federacion (21.2.6 / 21.2.7 / 21.2.6).
+- `esbuild` se queda en `0.27.3` (0 add/change/remove en el dry-run).
+- Los unicos paquetes que cambian son 4 utilidades WASM
+  (`@tybys/wasm-util`, `@emnapi/core`, `@emnapi/runtime`, `@emnapi/wasi-threads`),
+  irrelevantes para la instrumentacion de coverage.
+
+Por tanto el fallo es de CONFIGURACION de build, no de dependencias:
+
+- El fallo con `test.buildTarget = web:build` esta explicado: el generador cambio
+  `build` al builder de federacion, cuyo plugin no expone `instrumentForCoverage`.
+- Con `test.buildTarget = web:esbuild` persistio, lo que apunta a una herencia
+  residual del target esbuild reescrito por el generador: `browser` pasa a apuntar
+  al `main.ts` federado (`initFederation(...)`) y se anade el polyfill
+  `es-module-shims`. El unit-test debe construir contra un `main` limpio y sin ese
+  polyfill.
+
+El blocker es por tanto mas tratable de lo estimado: separar el target de test del
+builder de federacion, no resolver un choque de ecosistema.
 
 ## Procedimiento para la sesion dedicada
 
@@ -38,9 +57,10 @@ hallazgos para una sesion dedicada.
 3. Restaurar el gate y el test runner en `apps/web/project.json`:
    - `build` (federacion) con `dependsOn: ["validate-plugins"]`.
    - `test.buildTarget` -> `web:esbuild` (el builder application preservado).
-4. Resolver el conflicto de `instrumentForCoverage`: fijar versiones de
-   `@angular/build` / `@angular-devkit/build-angular` coherentes con el unit-test
-   builder; si persiste, evaluar `vitest`/`@nx` runner alterno para los specs.
+4. Resolver `instrumentForCoverage` por CONFIGURACION (no es choque de versiones):
+   dar al unit-test un target application-builder limpio, con su propio `main`
+   (no el `main.ts` federado) y SIN el polyfill `es-module-shims`. Si persiste:
+   `npm ci` + `npx nx reset` para descartar daemon/cache antes de concluir.
 5. Wiring del host (ya soportado por el codigo):
    `provideAppPluginRemoteModuleLoader((req) => loadRemoteModule(req.remoteEntry, req.exposedModule))`
    + `provideAppPluginRemoteOrigins([...])` + `provideAppPluginRemoteTrustedKeys([...])`
@@ -57,5 +77,6 @@ hallazgos para una sesion dedicada.
 
 La viabilidad esta probada (build de federacion verde) y todo el codigo de
 aplicacion (contrato, procedencia, cripto, loader, limite de error, diagnostico)
-esta listo. El unico trabajo restante es de toolchain de build (resolver el test
-runner) + un remoto de ejemplo, idoneo para una sesion con verificacion en vivo.
+esta listo. El trabajo restante es de configuracion de build (separar el target de
+test del builder de federacion y su `main`/polyfills) + un remoto de ejemplo,
+idoneo para una sesion con verificacion en vivo. No es un choque de dependencias.

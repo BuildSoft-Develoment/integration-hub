@@ -167,14 +167,16 @@ API (`withNativeFederation`, `shareAll`, `loadRemoteModule`) es equivalente.
 Spike realizado (ver `qa/fase-6-qa/evidencias/native-federation-spike-2026-06-27.md`):
 `native-federation@~21.2.0` es compatible con Angular 21.2, el generador Nx
 `init --type=dynamic-host` convierte el host limpiamente y el build de federacion
-queda VERDE. Bloqueante: el `npm install` del generador rompe el test runner
-(`@angular/build:unit-test` -> `instrumentForCoverage is not a function`), por lo
-que la reconfiguracion se difiere a una sesion dedicada con resolucion de
-dependencias y verificacion en vivo.
+queda VERDE. Bloqueante: el test runner `@angular/build:unit-test` falla con
+`instrumentForCoverage is not a function`. Investigacion read-only posterior
+descarta una perturbacion de dependencias (Angular build/compiler-cli/esbuild
+identicos; solo cambian 4 utilidades WASM): la causa es de CONFIGURACION (el
+generador reescribe `main.ts` a `initFederation` y anade `es-module-shims`, que el
+unit-test hereda). Se difiere a una sesion dedicada con verificacion en vivo.
 
 - Instalar y configurar `@angular-architects/native-federation` en el build del
-  host (esbuild) resolviendo el conflicto del test runner; apuntar
-  `test.buildTarget` al builder application preservado (`web:esbuild`).
+  host (esbuild); dar al unit-test un target application-builder limpio (con su
+  propio `main`, sin `es-module-shims`), no el target de federacion.
 - Proveer en el host `provideAppPluginRemoteModuleLoader(loadRemoteModule)` con la
   funcion `loadRemoteModule` de Native Federation, conectando el seam
   `REMOTE_MODULE_LOADER` con la implementacion real.
