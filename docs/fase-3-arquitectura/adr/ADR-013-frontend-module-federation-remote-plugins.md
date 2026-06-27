@@ -164,9 +164,17 @@ API (`withNativeFederation`, `shareAll`, `loadRemoteModule`) es equivalente.
 
 ## Alcance pendiente
 
+Spike realizado (ver `qa/fase-6-qa/evidencias/native-federation-spike-2026-06-27.md`):
+`native-federation@~21.2.0` es compatible con Angular 21.2, el generador Nx
+`init --type=dynamic-host` convierte el host limpiamente y el build de federacion
+queda VERDE. Bloqueante: el `npm install` del generador rompe el test runner
+(`@angular/build:unit-test` -> `instrumentForCoverage is not a function`), por lo
+que la reconfiguracion se difiere a una sesion dedicada con resolucion de
+dependencias y verificacion en vivo.
+
 - Instalar y configurar `@angular-architects/native-federation` en el build del
-  host (esbuild): `withNativeFederation` y `shareAll` de Angular/router/RxJS/
-  `shared/ui`.
+  host (esbuild) resolviendo el conflicto del test runner; apuntar
+  `test.buildTarget` al builder application preservado (`web:esbuild`).
 - Proveer en el host `provideAppPluginRemoteModuleLoader(loadRemoteModule)` con la
   funcion `loadRemoteModule` de Native Federation, conectando el seam
   `REMOTE_MODULE_LOADER` con la implementacion real.
