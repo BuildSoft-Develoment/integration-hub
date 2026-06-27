@@ -177,14 +177,19 @@ Ver `qa/fase-6-qa/evidencias/native-federation-wiring-2026-06-27.md`.
 - Gate `validate-plugins` restaurado en el target `build`.
 - Host conectado: `provideAppPluginRemoteModuleLoader(...)` enlaza
   `REMOTE_MODULE_LOADER` con `loadRemoteModule` de Native Federation.
-- Verde: `nx test web` 355, `nx build web` (federacion) PASS, node gate 27.
+- Herramienta de firma `scripts/sign-plugin-remote.js` (genkey + sign con el
+  payload canonico del verifier) y e2e headless de la cadena completa
+  (`app-plugin-remote.e2e.spec.ts`): firma real -> descarga -> verificacion ->
+  montaje -> degradacion ante manipulacion.
+- Verde: `nx test web` 357, `nx build web` (federacion) PASS, node gate 30.
 
 ## Alcance pendiente
 
-- Plugin remoto de ejemplo (`init --type=remote`) que exponga un componente
-  standalone y publique un `remoteEntry.json` firmado.
-- Verificacion e2e en runtime (host + remoto con dev server): descarga,
-  verificacion (`AppPluginRemoteVerifier`), montaje y degradacion ante fallo.
+- Proyecto Angular remoto de ejemplo (`init --type=remote`) que exponga un
+  componente standalone y produzca el `remoteEntry.json` real.
+- Demo de verificacion en navegador (host + remoto con dev server): montaje
+  visual y degradacion ante fallo. La cadena de seguridad ya esta probada headless
+  de extremo a extremo; resta solo la demostracion visual.
 - Config de confianza del host (`provideAppPluginRemoteOrigins`,
   `provideAppPluginRemoteTrustedKeys`, `provideAppPluginRemoteKeys`) con el primer
   remoto real.

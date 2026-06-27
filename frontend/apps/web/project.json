@@ -69,11 +69,13 @@
         "{workspaceRoot}/scripts/validate-plugin-catalog.spec.js",
         "{workspaceRoot}/scripts/manage-plugin-catalog.js",
         "{workspaceRoot}/scripts/manage-plugin-catalog.spec.js",
+        "{workspaceRoot}/scripts/sign-plugin-remote.js",
+        "{workspaceRoot}/scripts/sign-plugin-remote.spec.js",
         "{workspaceRoot}/apps/web/public/plugins/catalog.schema.json",
         "{workspaceRoot}/apps/web/public/plugins/catalog.json"
       ],
       "options": {
-        "command": "node --test scripts/validate-plugin-catalog.spec.js scripts/manage-plugin-catalog.spec.js"
+        "command": "node --test scripts/validate-plugin-catalog.spec.js scripts/manage-plugin-catalog.spec.js scripts/sign-plugin-remote.spec.js"
       }
     },
     "serve-static": {
