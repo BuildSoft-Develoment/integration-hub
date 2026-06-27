@@ -3,6 +3,7 @@ package com.integrationhub.platform.provider.task.notification;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.provider.task.common.TaskOutputSupport;
 import com.integrationhub.platform.provider.task.http.HttpRequestSupport;
+import com.integrationhub.platform.provider.task.http.ResilientHttpSender;
 import com.integrationhub.platform.service.execution.AuditService;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.task.TaskContext;
@@ -33,6 +34,9 @@ public class NotificationTaskProvider implements TaskProvider {
 
     @Inject
     ObjectMapper objectMapper;
+
+    @Inject
+    ResilientHttpSender httpSender;
 
     @Override
     public String type() {
@@ -74,7 +78,7 @@ public class NotificationTaskProvider implements TaskProvider {
         HttpRequest request = HttpRequestSupport.build(httpClient, objectMapper, configuration, method, url, body, timeoutSeconds, headers);
 
         try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = httpSender.send(request);
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new IllegalStateException("Webhook notification returned status " + response.statusCode());
             }
