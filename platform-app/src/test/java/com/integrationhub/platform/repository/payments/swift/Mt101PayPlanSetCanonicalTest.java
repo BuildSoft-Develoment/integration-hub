@@ -3,8 +3,12 @@ package com.integrationhub.platform.repository.payments.swift;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HexFormat;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -63,6 +67,40 @@ class Mt101PayPlanSetCanonicalTest {
     void identicalTuplesProduceIdenticalCanonical() {
         assertEquals(canonical(row()), canonical(row()),
                 "tuplas identicas producen el mismo canonico (determinista)");
+    }
+
+    private static String sha256Hex(byte[] bytes) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
+        } catch (NoSuchAlgorithmException error) {
+            throw new IllegalStateException(error);
+        }
+    }
+
+    @Test
+    void streamingPerRowDigestEqualsTheMonolithicCanonicalDigest() throws Exception {
+        // v50-fix: digestPayPlanSet alimenta el MessageDigest fila a fila (memoria O(fila)) en vez de acumular todo
+        // el canonico. Esta prueba evidencia la invariante en la que se apoya: digerir las filas por partes produce
+        // EXACTAMENTE el mismo hash que SHA-256 del canonico completo concatenado (bytes identicos, mismo V3).
+        var rows = List.of(
+                row("0", "AAA1", "3", "REST"),
+                row("0", "AAA2", "4", null),
+                row("0", "AAA3", "2", "A|B\nC"));
+
+        var monolithic = new StringBuilder();
+        for (var r : rows) {
+            monolithic.append(canonical(r));
+        }
+        var monolithicHash = sha256Hex(monolithic.toString().getBytes(StandardCharsets.UTF_8));
+
+        var streaming = MessageDigest.getInstance("SHA-256");
+        for (var r : rows) {
+            streaming.update(canonical(r).getBytes(StandardCharsets.UTF_8));
+        }
+        var streamingHash = HexFormat.of().formatHex(streaming.digest());
+
+        assertEquals(monolithicHash, streamingHash,
+                "el hash en streaming por filas debe ser identico al del canonico completo (mismo V3)");
     }
 
     @Test

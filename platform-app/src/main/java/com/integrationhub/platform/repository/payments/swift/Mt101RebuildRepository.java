@@ -927,19 +927,35 @@ public class Mt101RebuildRepository {
         var sql = "select " + PAY_PLAN_SET_COLUMNS
                 + " from mt101_corrective_pay_fragment where rebuild_run_id = ? "
                 + "order by corrective_senders_reference";
-        var canonical = new StringBuilder();
-        var count = 0;
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
             statement.setString(1, rebuildRunId);
             try (var rs = statement.executeQuery()) {
-                while (rs.next()) {
-                    appendPayPlanSetRow(canonical, rs);
-                    count++;
-                }
+                return digestPayPlanSet(rs);
             }
         }
-        return new PayPlanSet(PAY_PLAN_SET_VERSION, count, sha256Hex(canonical.toString()));
+    }
+
+    /**
+     * v50-fix: calcula el hash del conjunto en STREAMING. En vez de acumular todo el canonico en un {@code
+     * StringBuilder} (memoria O(conjunto), problematico con cientos de miles / millones de fragmentos), digiere fila
+     * a fila: construye SOLO la fila actual y alimenta sus bytes UTF-8 al {@link java.security.MessageDigest}. La
+     * memoria queda acotada a UNA fila. El algoritmo V3 NO cambia: los bytes alimentados son exactamente la misma
+     * secuencia (concatenacion de filas canonicas) que producia el calculo monolitico anterior (SHA-256 del canonico
+     * completo), por lo que el hash resultante es identico (sin bump de version, sin rutas legacy).
+     */
+    private static PayPlanSet digestPayPlanSet(java.sql.ResultSet rs) throws SQLException {
+        var digest = newSha256();
+        var row = new StringBuilder();
+        var count = 0;
+        while (rs.next()) {
+            row.setLength(0);
+            appendPayPlanSetRow(row, rs);
+            digest.update(row.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            count++;
+        }
+        return new PayPlanSet(PAY_PLAN_SET_VERSION, count,
+                java.util.HexFormat.of().formatHex(digest.digest()));
     }
 
     public record PayPlanSet(String version, int count, String setHash) {
@@ -1019,19 +1035,13 @@ public class Mt101RebuildRepository {
         var sql = "select " + PAY_PLAN_SET_COLUMNS
                 + " from mt101_corrective_pay_plan_fragment where rebuild_run_id = ? and plan_revision = ? "
                 + "order by corrective_senders_reference";
-        var canonical = new StringBuilder();
-        var count = 0;
         try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, rebuildRunId);
             statement.setInt(2, planRevision);
             try (var rs = statement.executeQuery()) {
-                while (rs.next()) {
-                    appendPayPlanSetRow(canonical, rs);
-                    count++;
-                }
+                return digestPayPlanSet(rs);
             }
         }
-        return new PayPlanSet(PAY_PLAN_SET_VERSION, count, sha256Hex(canonical.toString()));
     }
 
     /** v42: ¿el run sigue reservado por ESTE token? (propiedad exclusiva de la preparacion). */
@@ -1172,11 +1182,9 @@ public class Mt101RebuildRepository {
         }
     }
 
-    private static String sha256Hex(String value) {
+    private static java.security.MessageDigest newSha256() {
         try {
-            var digest = java.security.MessageDigest.getInstance("SHA-256")
-                    .digest(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            return java.util.HexFormat.of().formatHex(digest);
+            return java.security.MessageDigest.getInstance("SHA-256");
         } catch (java.security.NoSuchAlgorithmException error) {
             throw new IllegalStateException("SHA-256 not available", error);
         }
