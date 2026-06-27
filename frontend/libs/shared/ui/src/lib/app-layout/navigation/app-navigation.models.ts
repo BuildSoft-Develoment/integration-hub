@@ -40,6 +40,46 @@ export interface AppWorkspaceContribution {
   readonly requiredCapability?: AuthCapability | null;
 }
 
+export type AppActionKind = 'command' | 'navigation' | 'external-link';
+export type AppActionPlacement = 'global' | 'workspace' | 'record' | 'toolbar';
+
+export interface AppActionContribution {
+  readonly id: string;
+  readonly labelKey: string;
+  readonly source?: string;
+  readonly order?: number;
+  readonly group?: string;
+  readonly placement?: AppActionPlacement;
+  readonly kind?: AppActionKind;
+  readonly route?: string;
+  readonly href?: string;
+  readonly command?: string;
+  readonly icon?: string;
+  readonly requiredCapability?: AuthCapability | null;
+  readonly confirmation?: {
+    readonly labelKey?: string;
+    readonly severity?: 'danger' | 'warning';
+  };
+}
+
+/**
+ * Descriptor of a code-bearing plugin loaded at runtime via Module Federation.
+ * See ADR-013. The shell only loads it when integrity, signature and origin are
+ * trusted; this contract carries the metadata required to make that decision.
+ */
+export interface AppPluginRemote {
+  /** URL of the Native Federation `remoteEntry.json` manifest. Must be https://. */
+  readonly url: string;
+  /** Name of the standalone Angular module/component exposed by the remote. */
+  readonly exposedModule: string;
+  /** Subresource Integrity hash (e.g. `sha384-...`) of the remote entry manifest. */
+  readonly integrity: string;
+  /** Provenance signature as `keyId:base64`; the keyId must be trusted. */
+  readonly signature: string;
+  /** Framework dependencies the remote expects the shell to share as singletons. */
+  readonly sharedDependencies?: readonly string[];
+}
+
 export interface AppPluginManifest {
   readonly id: string;
   readonly version: string;
@@ -49,5 +89,7 @@ export interface AppPluginManifest {
   readonly navigation?: readonly AppNavigationContribution[];
   readonly routes?: readonly AppRouteContribution[];
   readonly workspaces?: readonly AppWorkspaceContribution[];
+  readonly actions?: readonly AppActionContribution[];
   readonly i18nNamespaces?: readonly string[];
+  readonly remote?: AppPluginRemote;
 }

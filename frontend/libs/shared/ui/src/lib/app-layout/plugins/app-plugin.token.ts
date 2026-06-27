@@ -9,6 +9,7 @@ import {
 
 import { AppPluginManifest } from '../navigation/app-navigation.models';
 import { provideAppNavigationContributions } from '../navigation/app-navigation.token';
+import { provideAppActionContributions } from './app-action.token';
 import { provideAppWorkspaceContributions } from './app-workspace.token';
 import {
   AppPluginRegistryOptions,
@@ -34,6 +35,9 @@ export function provideAppPluginManifests(
     ),
     ...manifests.flatMap((manifest) =>
       provideAppWorkspaceContributions(manifest.workspaces ?? [], manifest.id)
+    ),
+    ...manifests.flatMap((manifest) =>
+      provideAppActionContributions(manifest.actions ?? [], manifest.id)
     ),
   ];
 }

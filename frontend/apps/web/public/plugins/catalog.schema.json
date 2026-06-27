@@ -100,6 +100,46 @@
           "items": {
             "$ref": "#/$defs/workspaceContribution"
           }
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/actionContribution"
+          }
+        },
+        "remote": {
+          "$ref": "#/$defs/pluginRemote"
+        }
+      }
+    },
+    "pluginRemote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "exposedModule", "integrity", "signature"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "exposedModule": {
+          "type": "string",
+          "minLength": 1
+        },
+        "integrity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "signature": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sharedDependencies": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
         }
       }
     },
@@ -174,6 +214,122 @@
           "$ref": "#/$defs/capability"
         }
       }
+    },
+    "actionKind": {
+      "type": "string",
+      "enum": ["command", "navigation", "external-link"]
+    },
+    "actionPlacement": {
+      "type": "string",
+      "enum": ["global", "workspace", "record", "toolbar"]
+    },
+    "actionConfirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "labelKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["danger", "warning"]
+        }
+      }
+    },
+    "actionContribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "labelKey"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "labelKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "order": {
+          "type": "number"
+        },
+        "group": {
+          "type": "string",
+          "minLength": 1
+        },
+        "placement": {
+          "$ref": "#/$defs/actionPlacement"
+        },
+        "kind": {
+          "$ref": "#/$defs/actionKind"
+        },
+        "route": {
+          "$ref": "#/$defs/knownShellRoute"
+        },
+        "href": {
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "icon": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requiredCapability": {
+          "$ref": "#/$defs/capability"
+        },
+        "confirmation": {
+          "$ref": "#/$defs/actionConfirmation"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "navigation"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": ["route"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "external-link"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": ["href"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "command"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": ["command"]
+          }
+        }
+      ]
     }
   }
 }

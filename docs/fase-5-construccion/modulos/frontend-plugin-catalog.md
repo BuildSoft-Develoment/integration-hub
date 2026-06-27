@@ -38,6 +38,7 @@ Cada manifest debe declarar:
 - `displayName`: nombre visible para trazabilidad.
 - `navigation`: entradas opcionales hacia rutas conocidas.
 - `workspaces`: superficies opcionales hacia rutas conocidas.
+- `actions`: acciones opcionales declarativas.
 - `capabilities`: capacidades opcionales conocidas por el shell.
 - `i18nNamespaces`: namespaces opcionales para traducciones.
 
@@ -67,6 +68,28 @@ Cada manifest debe declarar:
           "labelKey": "plugins.auditSummary.workspace",
           "mode": "query",
           "requiredCapability": "audit-read"
+        }
+      ],
+      "actions": [
+        {
+          "id": "audit-summary-open",
+          "labelKey": "plugins.auditSummary.open",
+          "kind": "navigation",
+          "placement": "toolbar",
+          "route": "/audit/record-lineage",
+          "requiredCapability": "audit-read"
+        },
+        {
+          "id": "audit-summary-docs",
+          "labelKey": "plugins.auditSummary.docs",
+          "kind": "external-link",
+          "href": "https://example.com/audit-summary"
+        },
+        {
+          "id": "audit-summary-refresh",
+          "labelKey": "plugins.auditSummary.refresh",
+          "kind": "command",
+          "command": "audit-summary.refresh"
         }
       ]
     }
@@ -128,6 +151,12 @@ del contrato, el archivo no se actualiza.
 - El catalogo debe referenciar `./catalog.schema.json`.
 - Las rutas deben pertenecer al conjunto publicado en el schema.
 - Las capabilities deben pertenecer al conjunto publicado en el schema.
+- Las acciones `navigation` deben apuntar a rutas conocidas del shell.
+- Las acciones `external-link` solo aceptan `https://`.
+- Las acciones `command` publican identificadores simbolicos; el catalogo JSON
+  no ejecuta handlers ni codigo remoto.
+- Los comandos se resuelven solo si la aplicacion instala un handler estatico
+  con `provideAppActionCommandHandlers(...)`.
 - No se aceptan campos fuera del contrato publico.
 - `routes` debe omitirse o estar vacio.
 - Un plugin con codigo Angular debe entrar por provider estatico y build
@@ -139,3 +168,39 @@ del contrato, el archivo no se actualiza.
 
 - [ADR-012 Frontend modular extensible por contribuciones](../../fase-3-arquitectura/adr/ADR-012-frontend-modular-extensible-plugins.md)
 - [Frontend Nx Angular](frontend-nx-angular.md)
+
+## Ejemplo de handler estatico
+
+```ts
+provideAppActionCommandHandlers([
+  {
+    command: 'audit-summary.refresh',
+    execute: async (_action, context) => {
+      await auditFacade.refresh(context.selection ?? []);
+    },
+  },
+], 'audit-summary');
+```
+
+El manifest externo solo declara `command: "audit-summary.refresh"`. El codigo
+que ejecuta la accion debe venir instalado en el build del shell o en un plugin
+estatico gobernado por release.
+
+## Consulta desde una feature
+
+```ts
+readonly actions = computed(() =>
+  this.appActions.actionBarActions({
+    placement: 'toolbar',
+    group: 'audit-summary',
+  })
+);
+```
+
+Las features deben consultar acciones mediante `AppActionQueryService`. Esta
+facade filtra capabilities y oculta comandos sin handler instalado, evitando que
+una pantalla conozca la estructura interna del registry de plugins.
+
+Si una feature registra handlers en su injector local, debe proveer tambien
+`AppActionExecutor` y `AppActionQueryService` en el mismo scope para que los
+handlers queden visibles durante la resolucion.

@@ -22,6 +22,13 @@ describe('buildAppPluginRegistry', () => {
             mode: 'configuration',
           },
         ],
+        actions: [
+          {
+            id: 'paymentsRulesRefresh',
+            labelKey: 'payments.refresh',
+            command: 'payments.rules.refresh',
+          },
+        ],
       }),
     ]);
 
@@ -37,6 +44,11 @@ describe('buildAppPluginRegistry', () => {
     expect(registry.workspaces[0]).toMatchObject({
       id: 'paymentsRulesWorkspace',
       source: 'payments',
+    });
+    expect(registry.actions[0]).toMatchObject({
+      id: 'paymentsRulesRefresh',
+      source: 'payments',
+      kind: 'command',
     });
     expect(registry.capabilities).toEqual(['operate']);
   });
@@ -83,6 +95,21 @@ describe('buildAppPluginRegistry', () => {
         }),
       ])
     ).toThrow(/Duplicate plugin contribution workspace route "\/audit"/);
+  });
+
+  it('rejects action id collisions across plugins', () => {
+    expect(() =>
+      buildAppPluginRegistry([
+        manifest({
+          id: 'plugin-a',
+          actions: [{ id: 'refresh', labelKey: 'refresh', command: 'plugin-a.refresh' }],
+        }),
+        manifest({
+          id: 'plugin-b',
+          actions: [{ id: 'refresh', labelKey: 'refreshB', command: 'plugin-b.refresh' }],
+        }),
+      ])
+    ).toThrow(/Duplicate action contribution action id "refresh"/);
   });
 });
 

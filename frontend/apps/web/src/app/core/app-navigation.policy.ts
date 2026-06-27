@@ -81,4 +81,10 @@ export const APP_NAVIGATION_DEFINITIONS: readonly AppNavigationItem[] = [
     labelKey: 'nav.mt101Quarantine',
     requiredCapability: APP_SECTION_CAPABILITIES.audit,
   },
+  {
+    id: 'plugins',
+    route: '/plugins',
+    labelKey: 'nav.plugins',
+    requiredCapability: APP_SECTION_CAPABILITIES.plugins,
+  },
 ];

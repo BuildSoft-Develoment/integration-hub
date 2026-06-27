@@ -1,13 +1,24 @@
+import { Provider } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 
 import { AppPluginManifest } from '../navigation/app-navigation.models';
 import { provideAppPluginManifests } from './app-plugin.token';
-import { AppPluginRuntimeRegistry } from './app-plugin-runtime.registry';
+import {
+  AppPluginRuntimeRegistry,
+  provideAppPluginRemoteOrigins,
+  provideAppPluginRemoteTrustedKeys,
+} from './app-plugin-runtime.registry';
+
+const VALID_INTEGRITY = `sha384-${'A'.repeat(64)}`;
+const VALID_SIGNATURE = `key-1:${'A'.repeat(43)}=`;
 
 describe('AppPluginRuntimeRegistry', () => {
-  function configure(staticManifest: AppPluginManifest = platformManifest()) {
+  function configure(
+    staticManifest: AppPluginManifest = platformManifest(),
+    extraProviders: Provider[] = []
+  ) {
     TestBed.configureTestingModule({
-      providers: [...provideAppPluginManifests([staticManifest])],
+      providers: [...provideAppPluginManifests([staticManifest]), ...extraProviders],
     });
     return TestBed.inject(AppPluginRuntimeRegistry);
   }
@@ -30,6 +41,20 @@ describe('AppPluginRuntimeRegistry', () => {
             mode: 'query',
           },
         ],
+        actions: [
+          {
+            id: 'audit-help-open-spool',
+            labelKey: 'audit.help.openSpool',
+            kind: 'navigation',
+            route: '/audit/spool',
+          },
+          {
+            id: 'audit-help-docs',
+            labelKey: 'audit.help.docs',
+            kind: 'external-link',
+            href: 'https://example.com/audit-help',
+          },
+        ],
       },
     ]);
 
@@ -38,6 +63,10 @@ describe('AppPluginRuntimeRegistry', () => {
       'audit-help',
     ]);
     expect(registry.workspaces().map((workspace) => workspace.id)).toContain('audit-help-spool');
+    expect(registry.actions().map((action) => action.id)).toEqual([
+      'audit-help-open-spool',
+      'audit-help-docs',
+    ]);
   });
 
   it('rejects external manifests that declare Angular routes', () => {
@@ -70,6 +99,349 @@ describe('AppPluginRuntimeRegistry', () => {
         },
       ])
     ).toThrow(/unknown route "\/missing"/);
+  });
+
+  it('rejects external actions pointing to unknown routes', () => {
+    const registry = configure();
+
+    expect(() =>
+      registry.registerExternalManifests([
+        {
+          id: 'broken-action-link',
+          version: '1.0.0',
+          platformVersion: '1.0.0',
+          displayName: 'Broken Action Link',
+          actions: [
+            {
+              id: 'open-missing',
+              labelKey: 'action.missing',
+              kind: 'navigation',
+              route: '/missing',
+            },
+          ],
+        },
+      ])
+    ).toThrow(/unknown route "\/missing"/);
+  });
+
+  it('rejects unsafe external action hrefs', () => {
+    const registry = configure();
+
+    expect(() =>
+      registry.registerExternalManifests([
+        {
+          id: 'unsafe-link',
+          version: '1.0.0',
+          platformVersion: '1.0.0',
+          displayName: 'Unsafe Link',
+          actions: [
+            {
+              id: 'open-docs',
+              labelKey: 'action.docs',
+              href: 'http://example.com/docs',
+            },
+          ],
+        },
+      ])
+    ).toThrow(/Only https:\/\/ links are allowed/);
+  });
+
+  it('installs valid plugins and quarantines invalid siblings in the same batch', () => {
+    const registry = configure();
+
+    const report = registry.installExternalManifests([
+      {
+        id: 'good-help',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Good Help',
+        actions: [
+          { id: 'good-open', labelKey: 'action.good', kind: 'navigation', route: '/audit' },
+        ],
+      },
+      {
+        id: 'bad-link',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Bad Link',
+        navigation: [{ id: 'bad', route: '/missing', labelKey: 'nav.bad' }],
+      },
+    ]);
+
+    expect(report.accepted).toEqual(['good-help']);
+    expect(report.rejected.map((rejected) => rejected.id)).toEqual(['bad-link']);
+    expect(report.rejected[0].reason).toMatch(/unknown route/);
+    expect(registry.manifests().map((manifest) => manifest.id)).toEqual([
+      'platform',
+      'good-help',
+    ]);
+    expect(registry.actions().map((action) => action.id)).toContain('good-open');
+  });
+
+  it('quarantines a plugin whose id collides with the platform and keeps the shell intact', () => {
+    const registry = configure();
+
+    const report = registry.installExternalManifests([
+      { id: 'platform', version: '9.9.9', platformVersion: '1.0.0', displayName: 'Impostor' },
+    ]);
+
+    expect(report.accepted).toEqual([]);
+    expect(report.rejected.map((rejected) => rejected.id)).toEqual(['platform']);
+    expect(registry.manifests().map((manifest) => manifest.id)).toEqual(['platform']);
+    // The shell snapshot still builds for the surviving (platform) manifest.
+    expect(registry.navigation().length).toBeGreaterThan(0);
+  });
+
+  it('quarantines plugins targeting an incompatible platform major', () => {
+    const registry = configure();
+
+    const report = registry.installExternalManifests([
+      { id: 'future', version: '1.0.0', platformVersion: '2.0.0', displayName: 'Future' },
+    ]);
+
+    expect(report.accepted).toEqual([]);
+    expect(report.rejected[0].id).toBe('future');
+    expect(report.rejected[0].reason).toMatch(/platform/);
+  });
+
+  it('quarantines metadata manifests that smuggle Angular routes without throwing', () => {
+    const registry = configure();
+
+    const report = registry.installExternalManifests([
+      {
+        id: 'remote-code',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Remote Code',
+        routes: [{ id: 'remote', path: '/remote' }],
+      },
+    ]);
+
+    expect(report.rejected.map((rejected) => rejected.id)).toEqual(['remote-code']);
+    expect(registry.rejected().map((rejected) => rejected.id)).toEqual(['remote-code']);
+  });
+
+  it('quarantines keys outside the plugin declared i18n namespaces', () => {
+    const registry = configure();
+
+    const report = registry.installExternalManifests([
+      {
+        id: 'scoped',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Scoped',
+        i18nNamespaces: ['scoped'],
+        actions: [
+          { id: 'scoped-open', labelKey: 'platform.audit', kind: 'navigation', route: '/audit' },
+        ],
+      },
+    ]);
+
+    expect(report.accepted).toEqual([]);
+    expect(report.rejected[0].id).toBe('scoped');
+    expect(report.rejected[0].reason).toMatch(/outside its declared i18n namespaces/);
+  });
+
+  it('accepts plugin keys that fall inside a declared namespace', () => {
+    const registry = configure();
+
+    const report = registry.installExternalManifests([
+      {
+        id: 'scoped-ok',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Scoped OK',
+        i18nNamespaces: ['scoped-ok'],
+        actions: [
+          { id: 'scoped-ok-open', labelKey: 'scoped-ok.open', kind: 'navigation', route: '/audit' },
+        ],
+      },
+    ]);
+
+    expect(report.accepted).toEqual(['scoped-ok']);
+    expect(report.rejected).toEqual([]);
+  });
+
+  it('reports installed and quarantined plugins for diagnostics', () => {
+    const registry = configure();
+
+    registry.installExternalManifests([
+      {
+        id: 'good-help',
+        version: '2.1.0',
+        platformVersion: '1.0.0',
+        displayName: 'Good Help',
+        actions: [
+          { id: 'good-open', labelKey: 'action.good', kind: 'navigation', route: '/audit' },
+        ],
+      },
+      { id: 'future', version: '1.0.0', platformVersion: '2.0.0', displayName: 'Future' },
+    ]);
+
+    const diagnostics = registry.diagnostics();
+    expect(diagnostics.installed).toEqual([
+      { id: 'platform', displayName: 'Platform', version: '1.0.0', origin: 'static' },
+      { id: 'good-help', displayName: 'Good Help', version: '2.1.0', origin: 'external' },
+    ]);
+    expect(diagnostics.quarantined.map((entry) => entry.id)).toEqual(['future']);
+  });
+
+  it('surfaces degraded plugins in diagnostics and replaces prior reasons', () => {
+    const registry = configure();
+
+    registry.markDegraded('remote-x', 'load failed: boom');
+    registry.markDegraded('remote-x', 'verification failed: invalid-signature');
+
+    expect(registry.diagnostics().degraded).toEqual([
+      { id: 'remote-x', reason: 'verification failed: invalid-signature' },
+    ]);
+  });
+
+  it('accepts a remote plugin from an allowlisted origin signed by a trusted key', () => {
+    const registry = configure(platformManifest(), [
+      provideAppPluginRemoteOrigins(['https://plugins.example.com']),
+      provideAppPluginRemoteTrustedKeys(['key-1']),
+    ]);
+
+    const report = registry.installExternalManifests([
+      {
+        id: 'remote-ok',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Remote OK',
+        remote: {
+          url: 'https://plugins.example.com/remoteEntry.js',
+          exposedModule: './Widget',
+          integrity: VALID_INTEGRITY,
+          signature: VALID_SIGNATURE,
+        },
+      },
+    ]);
+
+    expect(report.accepted).toEqual(['remote-ok']);
+    expect(report.rejected).toEqual([]);
+  });
+
+  it('quarantines a remote plugin from a non-allowlisted origin', () => {
+    const registry = configure(platformManifest(), [
+      provideAppPluginRemoteOrigins(['https://plugins.example.com']),
+      provideAppPluginRemoteTrustedKeys(['key-1']),
+    ]);
+
+    const report = registry.installExternalManifests([
+      {
+        id: 'remote-bad-origin',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Remote Bad Origin',
+        remote: {
+          url: 'https://evil.example.net/remoteEntry.js',
+          exposedModule: './Widget',
+          integrity: VALID_INTEGRITY,
+          signature: VALID_SIGNATURE,
+        },
+      },
+    ]);
+
+    expect(report.accepted).toEqual([]);
+    expect(report.rejected[0].id).toBe('remote-bad-origin');
+    expect(report.rejected[0].reason).toMatch(/not in the allowed plugin origins/);
+  });
+
+  it('quarantines a remote plugin missing provenance fields', () => {
+    const registry = configure(platformManifest(), [
+      provideAppPluginRemoteOrigins(['https://plugins.example.com']),
+      provideAppPluginRemoteTrustedKeys(['key-1']),
+    ]);
+
+    const report = registry.installExternalManifests([
+      {
+        id: 'remote-no-sig',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Remote No Sig',
+        remote: {
+          url: 'https://plugins.example.com/remoteEntry.js',
+          exposedModule: './Widget',
+          integrity: VALID_INTEGRITY,
+          signature: '',
+        },
+      },
+    ]);
+
+    expect(report.rejected[0].reason).toMatch(/missing "signature"/);
+  });
+
+  it('quarantines a remote with a malformed SRI integrity hash', () => {
+    const registry = configure(platformManifest(), [
+      provideAppPluginRemoteOrigins(['https://plugins.example.com']),
+      provideAppPluginRemoteTrustedKeys(['key-1']),
+    ]);
+
+    const report = registry.installExternalManifests([
+      {
+        id: 'remote-bad-integrity',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Remote Bad Integrity',
+        remote: {
+          url: 'https://plugins.example.com/remoteEntry.js',
+          exposedModule: './Widget',
+          integrity: 'sha384-abc',
+          signature: VALID_SIGNATURE,
+        },
+      },
+    ]);
+
+    expect(report.rejected[0].reason).toMatch(/not a valid SRI hash/);
+  });
+
+  it('quarantines a remote signed by an untrusted key', () => {
+    const registry = configure(platformManifest(), [
+      provideAppPluginRemoteOrigins(['https://plugins.example.com']),
+      provideAppPluginRemoteTrustedKeys(['key-1']),
+    ]);
+
+    const report = registry.installExternalManifests([
+      {
+        id: 'remote-rogue-key',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Remote Rogue Key',
+        remote: {
+          url: 'https://plugins.example.com/remoteEntry.js',
+          exposedModule: './Widget',
+          integrity: VALID_INTEGRITY,
+          signature: `rogue-key:${'A'.repeat(43)}=`,
+        },
+      },
+    ]);
+
+    expect(report.accepted).toEqual([]);
+    expect(report.rejected[0].id).toBe('remote-rogue-key');
+    expect(report.rejected[0].reason).toMatch(/not signed by a trusted key/);
+  });
+
+  it('quarantines remote plugins by default when no origin is allowlisted', () => {
+    const registry = configure();
+
+    const report = registry.installExternalManifests([
+      {
+        id: 'remote-default-deny',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Remote Default Deny',
+        remote: {
+          url: 'https://plugins.example.com/remoteEntry.js',
+          exposedModule: './Widget',
+          integrity: VALID_INTEGRITY,
+          signature: VALID_SIGNATURE,
+        },
+      },
+    ]);
+
+    expect(report.accepted).toEqual([]);
+    expect(report.rejected[0].id).toBe('remote-default-deny');
   });
 });
 

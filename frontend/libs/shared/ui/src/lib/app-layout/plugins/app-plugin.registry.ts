@@ -1,11 +1,18 @@
 import {
+  AppActionContribution,
   AppNavigationContribution,
   AppPluginManifest,
   AppRouteContribution,
   AppWorkspaceContribution,
 } from '../navigation/app-navigation.models';
 import { normalizeNavigationContributions } from '../navigation/app-navigation.registry';
+import { normalizeActionContributions } from './app-action.registry';
 
+/**
+ * Single source of truth for the frontend extension platform version. The build
+ * gate (`scripts/validate-plugin-catalog.js`) mirrors this value and a guard test
+ * (`validate-plugin-catalog.spec.js`) fails the build if the two ever diverge.
+ */
 export const FRONTEND_EXTENSION_PLATFORM_VERSION = '1.0.0';
 
 export interface AppPluginRegistryOptions {
@@ -18,6 +25,7 @@ export interface AppPluginRegistrySnapshot {
   readonly navigation: readonly AppNavigationContribution[];
   readonly routes: readonly AppRouteContribution[];
   readonly workspaces: readonly AppWorkspaceContribution[];
+  readonly actions: readonly AppActionContribution[];
   readonly capabilities: readonly string[];
 }
 
@@ -73,11 +81,22 @@ export function buildAppPluginRegistry(
   assertUnique(workspaces, (workspace) => workspace.id, 'workspace id');
   assertUnique(workspaces, (workspace) => normalizeRoutePath(workspace.route), 'workspace route');
 
+  const actions = normalizeActionContributions(
+    normalizedManifests.flatMap((manifest) =>
+      (manifest.actions ?? []).map((action, index) => ({
+        ...action,
+        source: action.source ?? manifest.id,
+        order: action.order ?? index * 100,
+      }))
+    )
+  );
+
   return {
     manifests: [...normalizedManifests].sort((a, b) => a.id.localeCompare(b.id)),
     navigation,
     routes,
     workspaces,
+    actions,
     capabilities: unique(normalizedManifests.flatMap((manifest) => manifest.capabilities ?? [])),
   };
 }

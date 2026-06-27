@@ -6,8 +6,16 @@ import { ConnectionManagerService } from '@integration-hub/core/services';
 import { ConnectionCatalogCommandService } from './connection-catalog-command.service';
 import { ConnectionCatalogQueryStore } from './connection-catalog-query.store';
 import { ConnectionCatalogStore } from './connection-catalog.store';
+import { provideConnectionBulkActionHandlers } from './connection-bulk-action.handlers';
 import { ConnectionEditorStateService } from '../editor/connection-editor-state.service';
-import { ActionBarAction, FloatingActionBarComponent } from '@integration-hub/shared/ui';
+import {
+  AppActionContribution,
+  AppActionExecutionContext,
+  AppActionExecutor,
+  AppActionQueryService,
+  FloatingActionBarComponent,
+  provideAppActionConfirmationGate,
+} from '@integration-hub/shared/ui';
 import { ConnectionEditorComponent } from '../components/connection-editor/connection-editor.component';
 import { ConnectionListComponent } from '../components/connection-list/connection-list.component';
 import { ConnectionToolbarComponent } from '../components/connection-toolbar/connection-toolbar.component';
@@ -20,6 +28,10 @@ import { ConnectionToolbarComponent } from '../components/connection-toolbar/con
     ConnectionCatalogQueryStore,
     ConnectionCatalogCommandService,
     ConnectionEditorStateService,
+    AppActionExecutor,
+    AppActionQueryService,
+    provideAppActionConfirmationGate(),
+    ...provideConnectionBulkActionHandlers(),
   ],
   imports: [
     CommonModule,
@@ -36,20 +48,29 @@ import { ConnectionToolbarComponent } from '../components/connection-toolbar/con
 export class ConnectionCatalogPageComponent implements OnInit {
   readonly connectionManager = inject(ConnectionManagerService);
   readonly store = inject(ConnectionCatalogStore);
+  private readonly actionExecutor = inject(AppActionExecutor);
+  private readonly actionQuery = inject(AppActionQueryService);
 
   readonly providerOptions = computed(() => this.connectionManager.availableProviders());
-
-  readonly bulkActions = computed<readonly ActionBarAction[]>(() => {
-    const selected = this.store.selectedConnections();
-    const actions: ActionBarAction[] = [];
-    if (selected.some((connection) => !connection.active)) {
-      actions.push({ id: 'activate', labelKey: 'connections.activateSelected', icon: 'toggle-on' });
-    }
-    if (selected.some((connection) => connection.active)) {
-      actions.push({ id: 'deactivate', labelKey: 'connections.deactivateSelected', icon: 'toggle-off' });
-    }
-    return actions;
-  });
+  readonly bulkActionContext = computed<AppActionExecutionContext>(() => ({
+    source: 'connections.bulk',
+    selection: [...this.store.selectedIds()].map((id) => String(id)),
+    payload: {
+      selectedConnections: this.store.selectedConnections(),
+    },
+  }));
+  readonly bulkActionContributions = computed<readonly AppActionContribution[]>(() =>
+    this.actionQuery.visibleActions(
+      { placement: 'toolbar', group: 'connections' },
+      this.bulkActionContext()
+    )
+  );
+  readonly bulkActions = computed(() =>
+    this.actionQuery.actionBarActions(
+      { placement: 'toolbar', group: 'connections' },
+      this.bulkActionContext()
+    )
+  );
 
   ngOnInit(): void {
     void this.store.load();
@@ -60,12 +81,10 @@ export class ConnectionCatalogPageComponent implements OnInit {
   }
 
   async onBulkAction(actionId: string): Promise<void> {
-    const ids = this.store.selectedIds();
-    if (ids.size === 0) { return; }
-    if (actionId === 'activate') {
-      await this.store.setSelectedActive(true);
-    } else if (actionId === 'deactivate') {
-      await this.store.setSelectedActive(false);
+    const action = this.bulkActionContributions().find((item) => item.id === actionId);
+    if (!action) {
+      return;
     }
+    await this.actionExecutor.execute(action, this.bulkActionContext());
   }
 }

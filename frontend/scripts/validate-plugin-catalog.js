@@ -16,7 +16,16 @@ const MANIFEST_FIELDS = new Set([
   'navigation',
   'routes',
   'workspaces',
+  'actions',
   'i18nNamespaces',
+  'remote',
+]);
+const REMOTE_FIELDS = new Set([
+  'url',
+  'exposedModule',
+  'integrity',
+  'signature',
+  'sharedDependencies',
 ]);
 const NAVIGATION_FIELDS = new Set([
   'id',
@@ -38,6 +47,24 @@ const WORKSPACE_FIELDS = new Set([
   'order',
   'requiredCapability',
 ]);
+const ACTION_FIELDS = new Set([
+  'id',
+  'labelKey',
+  'source',
+  'order',
+  'group',
+  'placement',
+  'kind',
+  'route',
+  'href',
+  'command',
+  'icon',
+  'requiredCapability',
+  'confirmation',
+]);
+const ACTION_CONFIRMATION_FIELDS = new Set(['labelKey', 'severity']);
+const ACTION_KINDS = new Set(['command', 'navigation', 'external-link']);
+const ACTION_PLACEMENTS = new Set(['global', 'workspace', 'record', 'toolbar']);
 
 const KNOWN_SHELL_ROUTES = new Set([
   '/overview',
@@ -177,6 +204,29 @@ function validateStringArray(value, field, errors) {
   });
 }
 
+function inferActionKind(action) {
+  if (action.kind) {
+    return action.kind;
+  }
+
+  if (action.route) {
+    return 'navigation';
+  }
+
+  if (action.href) {
+    return 'external-link';
+  }
+
+  return 'command';
+}
+
+function validateHttpsHref(href, field, errors) {
+  const value = requiredString(href, field, errors);
+  if (value && !value.startsWith('https://')) {
+    errors.push(`${field} must start with "https://".`);
+  }
+}
+
 function validateCatalogMetadata(catalog, errors) {
   if (!catalog || typeof catalog !== 'object' || Array.isArray(catalog)) {
     return;
@@ -259,6 +309,147 @@ function validateWorkspaceItem(item, fieldPrefix, seen, errors) {
   }
 }
 
+function validateActionConfirmation(confirmation, fieldPrefix, errors) {
+  if (confirmation == null) {
+    return;
+  }
+
+  if (!confirmation || typeof confirmation !== 'object' || Array.isArray(confirmation)) {
+    errors.push(`${fieldPrefix} must be an object.`);
+    return;
+  }
+
+  rejectUnknownProperties(confirmation, ACTION_CONFIRMATION_FIELDS, fieldPrefix, errors);
+
+  if (confirmation.labelKey != null) {
+    requiredString(confirmation.labelKey, `${fieldPrefix}.labelKey`, errors);
+  }
+
+  if (
+    confirmation.severity != null &&
+    !['danger', 'warning'].includes(confirmation.severity)
+  ) {
+    errors.push(`${fieldPrefix}.severity must be danger or warning.`);
+  }
+}
+
+function validateActionItem(item, fieldPrefix, seen, errors) {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) {
+    errors.push(`${fieldPrefix} must be an object.`);
+    return;
+  }
+
+  rejectUnknownProperties(item, ACTION_FIELDS, fieldPrefix, errors);
+
+  const id = requiredString(item.id, `${fieldPrefix}.id`, errors);
+  requiredString(item.labelKey, `${fieldPrefix}.labelKey`, errors);
+  validateCapability(item.requiredCapability, `${fieldPrefix}.requiredCapability`, errors);
+
+  if (item.placement != null && !ACTION_PLACEMENTS.has(item.placement)) {
+    errors.push(`${fieldPrefix}.placement must be one of: ${Array.from(ACTION_PLACEMENTS).join(', ')}.`);
+  }
+
+  const kind = inferActionKind(item);
+  if (!ACTION_KINDS.has(kind)) {
+    errors.push(`${fieldPrefix}.kind must be one of: ${Array.from(ACTION_KINDS).join(', ')}.`);
+  } else if (kind === 'navigation') {
+    const route = normalizeRoute(item.route, `${fieldPrefix}.route`, errors);
+    if (route && !KNOWN_SHELL_ROUTES.has(route)) {
+      errors.push(
+        `${fieldPrefix}.route points to "${route}", but external catalog actions may only target known shell routes.`
+      );
+    }
+  } else if (kind === 'external-link') {
+    validateHttpsHref(item.href, `${fieldPrefix}.href`, errors);
+  } else if (kind === 'command') {
+    requiredString(item.command, `${fieldPrefix}.command`, errors);
+  }
+
+  validateActionConfirmation(item.confirmation, `${fieldPrefix}.confirmation`, errors);
+  addUnique(seen.actionIds, id, 'action id', errors);
+}
+
+function collectContributedI18nKeys(manifest) {
+  const keys = [];
+  const push = (field, key) => {
+    if (typeof key === 'string' && key.trim().length > 0) {
+      keys.push({ field, key: key.trim() });
+    }
+  };
+
+  (Array.isArray(manifest.navigation) ? manifest.navigation : []).forEach((item, index) => {
+    push(`navigation[${index}]`, item && item.labelKey);
+  });
+  (Array.isArray(manifest.workspaces) ? manifest.workspaces : []).forEach((item, index) => {
+    push(`workspaces[${index}]`, item && item.labelKey);
+    push(`workspaces[${index}].descriptionKey`, item && item.descriptionKey);
+  });
+  (Array.isArray(manifest.actions) ? manifest.actions : []).forEach((item, index) => {
+    push(`actions[${index}]`, item && item.labelKey);
+    push(`actions[${index}].confirmation`, item && item.confirmation && item.confirmation.labelKey);
+  });
+
+  return keys;
+}
+
+function validatePluginRemote(remote, fieldPrefix, errors) {
+  if (remote == null) {
+    return;
+  }
+
+  if (typeof remote !== 'object' || Array.isArray(remote)) {
+    errors.push(`${fieldPrefix} must be an object.`);
+    return;
+  }
+
+  rejectUnknownProperties(remote, REMOTE_FIELDS, fieldPrefix, errors);
+
+  validateHttpsHref(remote.url, `${fieldPrefix}.url`, errors);
+  requiredString(remote.exposedModule, `${fieldPrefix}.exposedModule`, errors);
+
+  const integrity = requiredString(remote.integrity, `${fieldPrefix}.integrity`, errors);
+  if (integrity && !/^(sha256|sha384|sha512)-[A-Za-z0-9+/]{16,}={0,2}$/.test(integrity)) {
+    errors.push(
+      `${fieldPrefix}.integrity must be a subresource integrity hash (sha256|sha384|sha512-...).`
+    );
+  }
+
+  const signature = requiredString(remote.signature, `${fieldPrefix}.signature`, errors);
+  if (signature && !/^[A-Za-z0-9._-]+:[A-Za-z0-9+/]{8,}={0,2}$/.test(signature)) {
+    errors.push(
+      `${fieldPrefix}.signature must use the "keyId:base64signature" format.`
+    );
+  }
+
+  validateStringArray(remote.sharedDependencies, `${fieldPrefix}.sharedDependencies`, errors);
+}
+
+function validateI18nNamespaceScope(manifest, fieldPrefix, errors) {
+  if (!Array.isArray(manifest.i18nNamespaces)) {
+    return;
+  }
+
+  const namespaces = manifest.i18nNamespaces
+    .filter((namespace) => typeof namespace === 'string')
+    .map((namespace) => namespace.trim())
+    .filter((namespace) => namespace.length > 0);
+
+  if (namespaces.length === 0) {
+    return;
+  }
+
+  for (const { field, key } of collectContributedI18nKeys(manifest)) {
+    const withinNamespace = namespaces.some(
+      (namespace) => key === namespace || key.startsWith(`${namespace}.`)
+    );
+    if (!withinNamespace) {
+      errors.push(
+        `${fieldPrefix}.${field} key "${key}" is outside the declared i18nNamespaces [${namespaces.join(', ')}].`
+      );
+    }
+  }
+}
+
 function validateCatalog(catalog) {
   const manifests = asManifestList(catalog);
   const errors = [];
@@ -270,6 +461,7 @@ function validateCatalog(catalog) {
     navigationRoutes: new Set(),
     workspaceIds: new Set(),
     workspaceRoutes: new Set(),
+    actionIds: new Set(),
   };
 
   manifests.forEach((manifest, manifestIndex) => {
@@ -306,6 +498,10 @@ function validateCatalog(catalog) {
       errors.push(`${fieldPrefix}.workspaces must be an array when present.`);
     }
 
+    if (manifest.actions != null && !Array.isArray(manifest.actions)) {
+      errors.push(`${fieldPrefix}.actions must be an array when present.`);
+    }
+
     if (Array.isArray(manifest.capabilities)) {
       manifest.capabilities.forEach((capability, capabilityIndex) => {
         validateCapability(
@@ -318,13 +514,20 @@ function validateCatalog(catalog) {
       errors.push(`${fieldPrefix}.capabilities must be an array when present.`);
     }
 
-    (manifest.navigation || []).forEach((item, itemIndex) => {
+    (Array.isArray(manifest.navigation) ? manifest.navigation : []).forEach((item, itemIndex) => {
       validateNavigationItem(item, `${fieldPrefix}.navigation[${itemIndex}]`, seen, errors);
     });
 
-    (manifest.workspaces || []).forEach((item, itemIndex) => {
+    (Array.isArray(manifest.workspaces) ? manifest.workspaces : []).forEach((item, itemIndex) => {
       validateWorkspaceItem(item, `${fieldPrefix}.workspaces[${itemIndex}]`, seen, errors);
     });
+
+    (Array.isArray(manifest.actions) ? manifest.actions : []).forEach((item, itemIndex) => {
+      validateActionItem(item, `${fieldPrefix}.actions[${itemIndex}]`, seen, errors);
+    });
+
+    validateI18nNamespaceScope(manifest, fieldPrefix, errors);
+    validatePluginRemote(manifest.remote, `${fieldPrefix}.remote`, errors);
   });
 
   return {
@@ -358,5 +561,7 @@ module.exports = {
   KNOWN_CAPABILITIES,
   KNOWN_SHELL_ROUTES,
   PLATFORM_VERSION,
+  ACTION_KINDS,
+  ACTION_PLACEMENTS,
   validateCatalog,
 };

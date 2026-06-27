@@ -31,6 +31,9 @@ forma imperativa. Deben declarar contratos:
 - `AppRouteContribution`: rutas exponibles por un modulo/plugin.
 - `AppWorkspaceContribution`: superficies internas de un workspace, clasificadas
   como `query`, `operation` o `configuration`.
+- `AppActionContribution`: acciones declarativas para toolbars, registros,
+  workspaces o acciones globales. Una accion puede ser `command`, `navigation`
+  o `external-link`, pero siempre publica metadata y no funciones remotas.
 
 La primera implementacion real aplica al shell de navegacion:
 
@@ -43,6 +46,15 @@ La primera implementacion real aplica al shell de navegacion:
   manifests validados y conserva `pluginSource`/`pluginRouteId` en `data`.
 - `APP_WORKSPACE_CONTRIBUTIONS` registra superficies internas de workspaces y
   `normalizeWorkspaceContributions(...)` valida/ordena esas superficies.
+- `APP_ACTION_CONTRIBUTIONS` registra acciones declarativas y
+  `normalizeActionContributions(...)` valida `id`, `labelKey`, duplicados y el
+  campo obligatorio segun tipo de accion: `command`, `route` o `href`.
+- `APP_ACTION_COMMAND_HANDLERS` registra handlers de comandos instalados por
+  provider estatico. `AppActionExecutor` resuelve acciones declarativas hacia
+  navegacion Angular, enlaces externos seguros o comandos con handler local.
+- `AppActionQueryService` filtra acciones visibles por `placement`, `group`,
+  `source`, `kind`, capability y ejecutabilidad. Tambien adapta acciones al
+  contrato `ActionBarAction` para toolbars flotantes u otras superficies.
 - `AppPluginRuntimeRegistry` centraliza manifests estaticos y manifests externos
   metadata-only cargados en runtime.
 - `provideExternalAppPluginManifestCatalog(...)` carga
@@ -54,6 +66,8 @@ La primera implementacion real aplica al shell de navegacion:
 - `npm run validate:plugins` valida el catalogo externo antes de publicar:
   identidad, version compatible, capabilities conocidas, duplicados y enlaces
   solamente hacia rutas instaladas del shell.
+- Las acciones metadata-only del catalogo externo se validan contra rutas
+  instaladas del shell y solo permiten enlaces externos `https://`.
 - El validador rechaza propiedades fuera del contrato publico para evitar
   errores silenciosos por typos o campos no gobernados.
 - `web:build` depende de `web:validate-plugins`, por lo que el build productivo
@@ -91,6 +105,20 @@ La primera implementacion real aplica al shell de navegacion:
   verdad pasa a ser el manifest.
 - Los workspaces funcionales pueden extenderse por contribuciones de plugin,
   filtradas por `group` y capability.
+- Las acciones de UI quedan desacopladas de su resolucion: el plugin declara un
+  comando simbolico, ruta o enlace seguro; el shell o una facade publica decide
+  como ejecutarlo.
+- Los comandos extensibles solo se ejecutan si existe un handler registrado por
+  DI estatica, evitando que el catalogo JSON aporte comportamiento remoto.
+- Los componentes de feature no deben consultar manifests directamente para
+  acciones. Deben consumir `AppActionQueryService` y ejecutar por
+  `AppActionExecutor`, manteniendo una frontera estable entre UI y SPI.
+- Cuando una feature registra handlers en su injector local, tambien debe
+  proveer `AppActionExecutor`/`AppActionQueryService` en ese scope para que la
+  resolucion vea los handlers del modulo.
+- `connections` queda como primera feature migrada: sus acciones bulk
+  `activate`/`deactivate` se declaran en el manifest `platform`, se consultan
+  por `AppActionQueryService` y se ejecutan con handlers locales.
 - Los manifests JSON externos quedan limitados a metadata. Un plugin con codigo
   Angular debe registrarse mediante provider estatico y pasar por build/release.
 - El contrato queda preparado para extender el mismo patron a rutas, workspaces,
@@ -112,6 +140,11 @@ La primera implementacion real aplica al shell de navegacion:
 - Un manifest externo cargado desde JSON no puede declarar `loadChildren`,
   `loadComponent` ni rutas nuevas; sus enlaces deben apuntar a rutas conocidas
   del shell.
+- Una accion externa de tipo `navigation` debe apuntar a una ruta instalada del
+  shell; una accion `external-link` solo puede usar `https://`; una accion
+  `command` solo publica un identificador simbolico.
+- Un `command` solo puede ejecutarse mediante `APP_ACTION_COMMAND_HANDLERS`;
+  handlers duplicados para un mismo comando fallan en runtime controlado.
 - Todo cambio en `frontend/apps/web/public/plugins/catalog.json` debe pasar
   `npm run validate:plugins` o `npx nx run web:validate-plugins` antes de
   build/release.
@@ -121,7 +154,7 @@ La primera implementacion real aplica al shell de navegacion:
 ## Flujo de instalacion metadata-only
 
 1. El proveedor entrega un manifest JSON con `id`, `version`,
-   `platformVersion`, `displayName`, `navigation` y/o `workspaces`.
+   `platformVersion`, `displayName`, `navigation`, `workspaces` y/o `actions`.
 2. El proveedor valida/autocompleta el archivo con
    `frontend/apps/web/public/plugins/catalog.schema.json`.
 3. El equipo de plataforma revisa que el manifest apunte a rutas ya instaladas
@@ -146,6 +179,18 @@ controlado y provider estatico, con ADR o ampliacion explicita del contrato.
   `frontend/apps/web/src/app/core/platform-plugin.manifest.ts`.
 - Workspaces desde manifest: `app-workspace.registry.spec.ts` y
   `audit-workspace-nav.component.spec.ts`.
+- Acciones declarativas:
+  `frontend/libs/shared/ui/src/lib/app-layout/plugins/app-action.registry.ts`
+  y `app-action.registry.spec.ts`.
+- Ejecucion gobernada de acciones:
+  `frontend/libs/shared/ui/src/lib/app-layout/plugins/app-action.executor.ts`,
+  `app-action.command.ts` y `app-action.executor.spec.ts`.
+- Consulta/adaptacion de acciones:
+  `frontend/libs/shared/ui/src/lib/app-layout/plugins/app-action.query.ts` y
+  `app-action.query.spec.ts`.
+- Consumo real en feature:
+  `frontend/libs/features/connections/src/lib/catalog/connection-catalog-page.ts`
+  y `connection-bulk-action.handlers.ts`.
 - Runtime metadata-only: `app-plugin-runtime.registry.spec.ts` y
   `frontend/apps/web/public/plugins/catalog.json`.
 - Schema publico:

@@ -98,6 +98,16 @@ export const PLATFORM_ROUTE_CONTRIBUTIONS: readonly AppRouteContribution[] = [
         (module) => module.auditRoutes
       ),
   },
+  {
+    id: 'plugins',
+    path: '/plugins',
+    titleKey: 'plugins.title',
+    requiredCapability: APP_SECTION_CAPABILITIES.plugins,
+    loadComponent: () =>
+      import('../features/plugins/plugin-diagnostics-page.component').then(
+        (module) => module.PluginDiagnosticsPageComponent
+      ),
+  },
 ];
 
 export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {
@@ -152,6 +162,34 @@ export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {
       descriptionKey: 'audit.workspace.quarantineHint',
       mode: 'operation',
       requiredCapability: APP_SECTION_CAPABILITIES.audit,
+    },
+  ],
+  actions: [
+    {
+      id: 'connections-bulk-activate',
+      group: 'connections',
+      placement: 'toolbar',
+      labelKey: 'connections.activateSelected',
+      command: 'connections.bulk.activate',
+      icon: 'toggle-on',
+      requiredCapability: APP_SECTION_CAPABILITIES.connections,
+      confirmation: {
+        labelKey: 'connections.bulk.confirmActivate',
+        severity: 'warning',
+      },
+    },
+    {
+      id: 'connections-bulk-deactivate',
+      group: 'connections',
+      placement: 'toolbar',
+      labelKey: 'connections.deactivateSelected',
+      command: 'connections.bulk.deactivate',
+      icon: 'toggle-off',
+      requiredCapability: APP_SECTION_CAPABILITIES.connections,
+      confirmation: {
+        labelKey: 'connections.bulk.confirmDeactivate',
+        severity: 'danger',
+      },
     },
   ],
 };
