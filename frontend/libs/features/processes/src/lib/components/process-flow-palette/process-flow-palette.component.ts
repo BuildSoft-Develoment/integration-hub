@@ -1,13 +1,13 @@
 // @trace spec 003-diseno-y-ejecucion-procesos T-015 (M-1a: palette descubierta via manager)
 // @trace ADR-009
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { FFlowModule } from '@foblex/flow';
 import { ProcessTaskManagerService } from '@integration-hub/core/services';
 import { ProcessTaskType } from '../../models/process.models';
-import { getProcessFlowNodePresentation } from '../../flow/process-flow.presentation';
+import { CATEGORY_LABELS, getProcessFlowNodePresentation, taskCategory, TaskCategory } from '../../flow/process-flow.presentation';
 
 /**
  * Paleta del flow editor: muestra los task types disponibles para arrastrar al
@@ -33,10 +33,32 @@ import { getProcessFlowNodePresentation } from '../../flow/process-flow.presenta
 export class ProcessFlowPaletteComponent {
   private readonly manager = inject(ProcessTaskManagerService);
 
-  /** Tipos disponibles — derivados del registro DI, no hardcoded. */
-  readonly taskTypes = computed<readonly ProcessTaskType[]>(() =>
-    this.manager.availableProviders().map((descriptor) => descriptor.type),
-  );
+  readonly expandedCategories = signal<Set<TaskCategory>>(new Set(['motor', 'swift-mt101']));
+
+  readonly groupedTaskTypes = computed(() => {
+    const groups = new Map<TaskCategory, ProcessTaskType[]>();
+    for (const type of this.manager.availableProviders().map((d) => d.type)) {
+      const cat = taskCategory(type);
+      if (!groups.has(cat)) { groups.set(cat, []); }
+      groups.get(cat)!.push(type);
+    }
+    return groups;
+  });
+
+  readonly categories = computed<TaskCategory[]>(() => Array.from(this.groupedTaskTypes().keys()));
+
+  toggleCategory(cat: TaskCategory): void {
+    const next = new Set(this.expandedCategories());
+    if (next.has(cat)) { next.delete(cat); } else { next.add(cat); }
+    this.expandedCategories.set(next);
+  }
+
+  protected readonly CATEGORY_LABELS = CATEGORY_LABELS;
+  protected readonly taskCategory = taskCategory;
+
+  categoryLabel(cat: TaskCategory): string {
+    return CATEGORY_LABELS[cat];
+  }
 
   presentation(taskType: ProcessTaskType) {
     return getProcessFlowNodePresentation(taskType);

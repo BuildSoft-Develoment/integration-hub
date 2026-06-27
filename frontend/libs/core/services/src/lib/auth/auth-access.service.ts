@@ -2,7 +2,13 @@ import { computed, inject, Injectable } from '@angular/core';
 
 import { AuthService } from './auth.service';
 
-export type AuthCapability = 'admin' | 'operate' | 'audit';
+export type AuthCapability =
+  | 'admin'
+  | 'operate'
+  | 'audit'
+  | 'audit-read'
+  | 'audit-operate'
+  | 'audit-admin';
 
 @Injectable({ providedIn: 'root' })
 export class AuthAccessService {
@@ -14,12 +20,19 @@ export class AuthAccessService {
   );
 
   readonly canOperate = computed(
-    () => this.canAdmin() || this.auth.hasRole('operator')
+    () =>
+      this.canAdmin() ||
+      this.auth.hasRole('operator') ||
+      this.auth.hasRole('payments-operator')
   );
 
   readonly canAudit = computed(
     () => this.canOperate() || this.auth.hasRole('auditor')
   );
+
+  readonly canAuditRead = this.canAudit;
+  readonly canAuditOperate = this.canOperate;
+  readonly canAuditAdmin = this.canAdmin;
 
   readonly roleSummary = computed(() => {
     if (this.canAdmin()) {
@@ -44,7 +57,12 @@ export class AuthAccessService {
       case 'operate':
         return this.canOperate();
       case 'audit':
+      case 'audit-read':
         return this.canAudit();
+      case 'audit-operate':
+        return this.canAuditOperate();
+      case 'audit-admin':
+        return this.canAuditAdmin();
     }
   }
 }

@@ -1,6 +1,6 @@
 // @trace RF-001 (observabilidad: consultar ejecuciones por filtros)
 import { CommonModule } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { I18nService } from '@integration-hub/core/services';
@@ -15,7 +15,8 @@ export type SortDir = 'asc' | 'desc';
   standalone: true,
   imports: [CommonModule, MatChipsModule, MatPaginatorModule, IconComponent, RelativeTimePipe],
     templateUrl: './execution-list.component.html',
-    styleUrl: './execution-list.component.css'
+    styleUrl: './execution-list.component.css',
+    changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ExecutionListComponent {
   readonly i18n = inject(I18nService);

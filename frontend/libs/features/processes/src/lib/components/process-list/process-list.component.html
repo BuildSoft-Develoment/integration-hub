@@ -27,6 +27,7 @@
             class="table-row ih-catalog-table-row"
             [class.table-row--selected]="selectedProcessId() === process.id"
             [class.ih-catalog-table-row--selected]="selectedProcessId() === process.id"
+            [attr.aria-label]="i18n.t('common.selectItem', { name: process.name })"
             (click)="selectProcess.emit(process)"
           >
             <div class="row-primary ih-catalog-row-primary">
@@ -46,7 +47,7 @@
             </div>
 
             <div class="row-status" [class.row-status--inactive]="!process.active">
-              <span class="status-dot"></span>
+              <span class="status-dot" aria-hidden="true"></span>
               {{ process.active ? i18n.t('status.active') : i18n.t('status.inactive') }}
             </div>
           </button>
@@ -55,14 +56,16 @@
         }
       </div>
 
-      <mat-paginator
-        class="list-paginator ih-catalog-paginator"
-        [length]="totalLength()"
-        [pageIndex]="pageIndex()"
-        [pageSize]="pageSize()"
-        [pageSizeOptions]="pageSizeOptions()"
-        [hidePageSize]="false"
-        [showFirstLastButtons]="false"
-        (page)="onPageChange($event)"
-      />
+      @if (totalLength() > 0) {
+        <mat-paginator
+          class="list-paginator ih-catalog-paginator"
+          [length]="totalLength()"
+          [pageIndex]="pageIndex()"
+          [pageSize]="pageSize()"
+          [pageSizeOptions]="pageSizeOptions()"
+          [hidePageSize]="false"
+          [showFirstLastButtons]="false"
+          (page)="onPageChange($event)"
+        />
+      }
     </div>

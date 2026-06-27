@@ -46,7 +46,7 @@
             </div>
 
             <div class="row-status ih-catalog-row-meta" [class.row-status--inactive]="!schedule.active">
-              <span class="status-dot"></span>
+              <span class="status-dot" aria-hidden="true"></span>
               {{ schedule.active ? i18n.t('status.active') : i18n.t('status.inactive') }}
             </div>
           </button>
@@ -55,5 +55,7 @@
         }
       </div>
 
-      <mat-paginator class="list-paginator ih-catalog-paginator" [length]="totalLength()" [pageIndex]="pageIndex()" [pageSize]="pageSize()" [pageSizeOptions]="pageSizeOptions()" [hidePageSize]="false" [showFirstLastButtons]="false" (page)="onPageChange($event)" />
+      @if (totalLength() > 0) {
+        <mat-paginator class="list-paginator ih-catalog-paginator" [length]="totalLength()" [pageIndex]="pageIndex()" [pageSize]="pageSize()" [pageSizeOptions]="pageSizeOptions()" [hidePageSize]="false" [showFirstLastButtons]="false" (page)="onPageChange($event)" />
+      }
     </div>

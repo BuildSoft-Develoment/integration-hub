@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { SourceManagerService, I18nService } from '@integration-hub/core/services';
@@ -14,7 +14,8 @@ export type SortDir = 'asc' | 'desc';
   standalone: true,
   imports: [CommonModule, MatChipsModule, MatPaginatorModule, IconComponent],
     templateUrl: './source-list.component.html',
-    styleUrl: './source-list.component.css'
+    styleUrl: './source-list.component.css',
+    changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SourceListComponent {
   readonly i18n = inject(I18nService);
@@ -22,6 +23,14 @@ export class SourceListComponent {
 
   presentation(type: SourceProviderType): ResourcePresentation {
     return this.sourceManager.presentation(type);
+  }
+
+  providerLabel(type: SourceProviderType): string {
+    const descriptor = this.sourceManager.availableProviders().find((d) => d.type === type);
+    if (!descriptor) {
+      throw new Error(`No source provider registered for type: ${type}`);
+    }
+    return descriptor.label;
   }
 
   readonly sources = input.required<readonly SourceRecord[]>();

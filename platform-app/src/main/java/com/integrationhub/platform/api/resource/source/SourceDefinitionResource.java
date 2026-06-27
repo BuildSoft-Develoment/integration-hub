@@ -19,6 +19,10 @@ import jakarta.ws.rs.core.MediaType;
 
 import java.util.List;
 
+import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+
 @Path("/api/source-definitions")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -33,7 +37,7 @@ public class SourceDefinitionResource {
     }
 
     @GET
-    @RolesAllowed({"platform-admin", "integration-admin", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public List<SourceDefinitionResponse> list() {
         return sourceCatalogService.listAll().stream()
                 .map(sourceApiMapper::toResponse)
@@ -41,7 +45,7 @@ public class SourceDefinitionResource {
     }
 
     @POST
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public SourceDefinitionResponse create(SourceDefinitionRequest request) {
         return sourceApiMapper.toResponse(
                 sourceCatalogService.create(request.name(), request.sourceType(), request.active(), request.configurationJson())
@@ -50,14 +54,14 @@ public class SourceDefinitionResource {
 
     @POST
     @Path("/test")
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public SourceTestResponse test(SourceDefinitionRequest request) {
         return sourceCatalogService.test(request.name(), request.sourceType(), request.configurationJson());
     }
 
     @PUT
     @Path("/{sourceDefinitionId}")
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public SourceDefinitionResponse update(@PathParam("sourceDefinitionId") Long sourceDefinitionId, SourceDefinitionRequest request) {
         return sourceApiMapper.toResponse(
                 sourceCatalogService.update(sourceDefinitionId, request.name(), request.sourceType(), request.active(), request.configurationJson())
@@ -66,7 +70,7 @@ public class SourceDefinitionResource {
 
     @POST
     @Path("/{sourceDefinitionId}/activation/{active}")
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public SourceDefinitionResponse setActive(@PathParam("sourceDefinitionId") Long sourceDefinitionId, @PathParam("active") boolean active) {
         return sourceApiMapper.toResponse(sourceCatalogService.setActive(sourceDefinitionId, active));
     }

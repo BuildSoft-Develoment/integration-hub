@@ -1,8 +1,5 @@
-import { APP_NAVIGATION_ITEMS } from '@integration-hub/shared/ui';
+import { provideAppPluginManifests } from '@integration-hub/shared/ui';
 
-import { APP_NAVIGATION_DEFINITIONS } from './app-navigation.policy';
+import { PLATFORM_PLUGIN_MANIFEST } from './platform-plugin.manifest';
 
-export const appNavigationProvider = {
-  provide: APP_NAVIGATION_ITEMS,
-  useValue: APP_NAVIGATION_DEFINITIONS,
-};
+export const appNavigationProvider = provideAppPluginManifests([PLATFORM_PLUGIN_MANIFEST]);

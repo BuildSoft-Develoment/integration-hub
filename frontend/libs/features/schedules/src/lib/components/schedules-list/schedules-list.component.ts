@@ -1,6 +1,6 @@
 // @trace RF-003 (programacion: consultar las programaciones vigentes)
 import { CommonModule } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
@@ -14,6 +14,7 @@ export type SortDir = 'asc' | 'desc';
   standalone: true,
   imports: [CommonModule, MatChipsModule, MatPaginatorModule, IconComponent],
   styleUrl: './schedules-list.component.css',
+    changeDetection: ChangeDetectionStrategy.OnPush,
     templateUrl: './schedules-list.component.html'
 })
 export class SchedulesListComponent {

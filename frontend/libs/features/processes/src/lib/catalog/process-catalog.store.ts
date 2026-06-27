@@ -39,6 +39,7 @@ export class ProcessCatalogStore {
   readonly drawerOpen = this.editor.drawerOpen;
   readonly viewMode = this.editor.viewMode;
   readonly form = this.editor.form;
+  readonly dirty = this.editor.dirty;
   readonly canEdit = this.editor.canEdit;
   readonly canOperate = this.editor.canOperate;
   readonly pagedProcesses = computed(() => this.query.pagedProcesses());

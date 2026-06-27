@@ -1,19 +1,34 @@
 <div class="flow-palette">
-      @for (taskType of taskTypes(); track taskType) {
-        <button
-          fExternalItem
-          type="button"
-          class="flow-palette__item"
-          [fData]="taskType"
-          [matTooltip]="taskLabel(taskType)"
-          matTooltipPosition="right"
-        >
-          <span class="flow-palette__icon" [ngClass]="presentation(taskType).toneClass" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path [attr.d]="presentation(taskType).iconPath" />
-            </svg>
-          </span>
-          <span class="flow-palette__label">{{ presentation(taskType).badge }}</span>
+  @for (cat of categories(); track cat) {
+    @let types = groupedTaskTypes().get(cat) ?? [];
+    @if (types.length) {
+      <section class="flow-palette__group">
+        <button type="button" class="flow-palette__group-header" (click)="toggleCategory(cat)" [attr.aria-expanded]="expandedCategories().has(cat)">
+          <span class="flow-palette__group-arrow" [class.flow-palette__group-arrow--open]="expandedCategories().has(cat)">▶</span>
+          <span>{{ categoryLabel(cat) }}</span>
         </button>
-      }
-    </div>
+        @if (expandedCategories().has(cat)) {
+          <div class="flow-palette__group-items">
+            @for (taskType of types; track taskType) {
+              <button
+                fExternalItem
+                type="button"
+                class="flow-palette__item"
+                [fData]="taskType"
+                [matTooltip]="taskLabel(taskType)"
+                matTooltipPosition="right"
+              >
+                <span class="flow-palette__icon" [ngClass]="presentation(taskType).toneClass" aria-hidden="true">
+                  <svg viewBox="0 0 24 24">
+                    <path [attr.d]="presentation(taskType).iconPath" />
+                  </svg>
+                </span>
+                <span class="flow-palette__label">{{ presentation(taskType).badge }}</span>
+              </button>
+            }
+          </div>
+        }
+      </section>
+    }
+  }
+</div>

@@ -1,5 +1,14 @@
 <div class="list-card ih-catalog-list">
-      <div class="table-head ih-catalog-table-head">
+      <div class="table-head ih-catalog-table-head" [class.table-head--selectable]="canEdit()">
+        @if (canEdit()) {
+          <mat-checkbox
+            class="ih-checkbox-all"
+            [checked]="isAllSelected()"
+            [indeterminate]="selectedIds().size > 0 && !isAllSelected()"
+            (change)="toggleSelectAll.emit()"
+            [attr.aria-label]="i18n.t('common.selectAll')"
+          />
+        }
         <button type="button" class="col-sortable" (click)="toggleSort.emit('name')">
           {{ i18n.t('common.name') }}
           @if (sortField() === 'name') {
@@ -25,10 +34,17 @@
           <button
             type="button"
             class="table-row ih-catalog-table-row"
+            [class.table-row--selectable]="canEdit()"
             [class.table-row--selected]="selectedConnectionId() === connection.id"
             [class.ih-catalog-table-row--selected]="selectedConnectionId() === connection.id"
+            [attr.aria-label]="i18n.t('common.selectItem', { name: connection.name })"
             (click)="selectConnection.emit(connection)"
           >
+            @if (canEdit()) {
+              <div class="row-checkbox" (click)="$event.stopPropagation(); toggleSelection.emit(connection.id)">
+                <mat-checkbox [checked]="selectedIds().has(connection.id)" />
+              </div>
+            }
             <div class="row-primary ih-catalog-row-primary">
               <div class="row-avatar ih-catalog-row-avatar" [class]="presentation(connection.connectionType).toneClass">
                 <ih-icon [name]="presentation(connection.connectionType).icon" [size]="20" />
@@ -46,7 +62,7 @@
             </div>
 
             <div class="row-status" [class.row-status--inactive]="!connection.active">
-              <span class="status-dot"></span>
+              <span class="status-dot" aria-hidden="true"></span>
               {{ connection.active ? i18n.t('status.active') : i18n.t('status.inactive') }}
             </div>
           </button>
@@ -55,7 +71,8 @@
         }
       </div>
 
-      <mat-paginator
+      @if (totalLength() > 0) {
+        <mat-paginator
         class="list-paginator ih-catalog-paginator"
         [length]="totalLength()"
         [pageIndex]="pageIndex()"
@@ -65,4 +82,5 @@
         [showFirstLastButtons]="false"
         (page)="onPageChange($event)"
       />
+      }
     </div>

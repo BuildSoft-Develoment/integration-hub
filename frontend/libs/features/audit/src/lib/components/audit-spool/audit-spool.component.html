@@ -1,4 +1,6 @@
 <section class="spool audit-page">
+      <ih-audit-workspace-nav />
+
       <div class="spool__toolbar">
         <div>
           <h2 class="ih-section-title">{{ i18n.t('audit.spool.title') }}</h2>
@@ -23,6 +25,19 @@
           <span class="spool__health-dot"></span>{{ healthLabel() }}
         </div>
       }
+      @if (lastRefresh(); as ts) {
+        <p class="spool__last-refresh">{{ i18n.t('audit.spool.lastRefresh') }}: {{ ts | ihTime:'absolute' }}</p>
+      }
+
+      @if (canAuditAdmin()) {
+        <div class="spool__risk" role="note" [attr.aria-label]="i18n.t('audit.risk.title')">
+          <div>
+            <strong>{{ i18n.t(cleanupRisk.labelKey) }}</strong>
+            <span>{{ i18n.t(cleanupRisk.summaryKey) }}</span>
+          </div>
+          <small>{{ i18n.t('audit.risk.requiredCapability') }}: {{ cleanupRisk.requiredCapability }} · {{ i18n.t('audit.risk.evidence') }}: {{ evidenceText(cleanupRisk) }}</small>
+        </div>
+      }
 
       @if (summary()) {
         <div class="spool__summary">
@@ -40,20 +55,24 @@
             <mat-label>{{ i18n.t('audit.spool.deadLimit') }}</mat-label>
             <input matInput type="number" min="1" max="1000" [(ngModel)]="deadLimit" />
           </mat-form-field>
-          <mat-form-field subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('audit.spool.retentionDays') }}</mat-label>
-            <input matInput type="number" min="1" [(ngModel)]="retentionDays" />
-          </mat-form-field>
-          <mat-form-field subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('audit.spool.cleanupLimit') }}</mat-label>
-            <input matInput type="number" min="1" [(ngModel)]="cleanupLimit" />
-          </mat-form-field>
+          @if (canAuditAdmin()) {
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('audit.spool.retentionDays') }}</mat-label>
+              <input matInput type="number" min="1" [(ngModel)]="retentionDays" />
+            </mat-form-field>
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('audit.spool.cleanupLimit') }}</mat-label>
+              <input matInput type="number" min="1" [(ngModel)]="cleanupLimit" />
+            </mat-form-field>
+          }
         </div>
         <div class="spool__actions">
           <button mat-stroked-button type="button" (click)="loadDead()" [disabled]="loading()">{{ i18n.t('audit.spool.viewDead') }}</button>
-          <button mat-stroked-button type="button" [class.spool__danger--armed]="armed() === 'cleanup'" (click)="confirmCleanup()" [disabled]="loading()">
-            {{ armed() === 'cleanup' ? i18n.t('audit.spool.cleanupConfirm') : i18n.t('audit.spool.cleanup') }}
-          </button>
+          @if (canAuditAdmin()) {
+            <button mat-stroked-button type="button" [class.spool__danger--armed]="actions.armed() === 'spool:cleanup'" (click)="confirmCleanup()" [disabled]="loading()">
+              {{ actions.armed() === 'spool:cleanup' ? i18n.t('audit.spool.cleanupConfirm') : i18n.t('audit.spool.cleanup') }}
+            </button>
+          }
         </div>
       </div>
 
@@ -77,7 +96,9 @@
                 <th scope="col">{{ i18n.t('audit.spool.col.attempts') }}</th>
                 <th scope="col">{{ i18n.t('audit.spool.col.error') }}</th>
                 <th scope="col">{{ i18n.t('audit.spool.col.deadAt') }}</th>
-                <th scope="col"><span class="ih-visually-hidden">{{ i18n.t('audit.common.actions') }}</span></th>
+                @if (canAuditAdmin()) {
+                  <th scope="col"><span class="ih-visually-hidden">{{ i18n.t('audit.common.actions') }}</span></th>
+                }
               </tr>
             </thead>
             <tbody>
@@ -94,12 +115,15 @@
                   <td>{{ row.deadReason || row.lastError || '-' }}</td>
                   <td>
                     @if (row.deadAt) {
-                      <time [attr.datetime]="row.deadAt" [title]="row.deadAt | ihTime:'absolute'">{{ row.deadAt | ihTime }}</time>
+                      <time [attr.datetime]="row.deadAt" [title]="row.deadAt | ihTime:'absolute'" [attr.aria-label]="row.deadAt | ihTime:'absolute'">{{ row.deadAt | ihTime }}</time>
                     } @else { - }
                   </td>
-                  <td>
-                    <button mat-stroked-button type="button" [class.spool__danger--armed]="armed() === 'retry:' + row.id" (click)="confirmRetry(row)" [disabled]="loading()" [attr.aria-label]="i18n.t('audit.spool.retryAria', { id: row.id })">{{ armed() === 'retry:' + row.id ? i18n.t('audit.common.confirmShort') : i18n.t('audit.spool.retry') }}</button>
-                  </td>
+                  @if (canAuditAdmin()) {
+                    <td>
+                      <span class="spool__risk-inline" [title]="i18n.t(retryRisk.summaryKey)">{{ i18n.t(retryRisk.labelKey) }}</span>
+                      <button mat-stroked-button type="button" [class.spool__danger--armed]="actions.armed() === 'spool:retry:' + row.id" (click)="confirmRetry(row)" [disabled]="loading()" [attr.aria-label]="i18n.t('audit.spool.retryAria', { id: row.id })">{{ actions.armed() === 'spool:retry:' + row.id ? i18n.t('audit.common.confirmShort') : i18n.t('audit.spool.retry') }}</button>
+                    </td>
+                  }
                 </tr>
               }
             </tbody>

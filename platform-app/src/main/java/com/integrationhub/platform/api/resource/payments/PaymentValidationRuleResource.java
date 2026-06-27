@@ -21,6 +21,10 @@ import jakarta.ws.rs.core.MediaType;
 
 import java.util.List;
 
+import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+
 @Path("/api/payment-validation-rules")
 @Produces(MediaType.APPLICATION_JSON)
 public class PaymentValidationRuleResource {
@@ -35,7 +39,7 @@ public class PaymentValidationRuleResource {
     }
 
     @GET
-    @RolesAllowed({"platform-admin", "integration-admin", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public PageResponse<PaymentValidationRuleResponse> list(
             @QueryParam("ruleSet") String ruleSet,
             @QueryParam("q") String queryText,
@@ -51,14 +55,14 @@ public class PaymentValidationRuleResource {
 
     @GET
     @Path("/export")
-    @RolesAllowed({"platform-admin", "integration-admin", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public List<PaymentValidationRuleResponse> exportRuleSet(@QueryParam("ruleSet") String ruleSet) {
         return service.exportRuleSet(ruleSet).stream().map(mapper::toResponse).toList();
     }
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public PaymentValidationRuleResponse create(PaymentValidationRuleRequest request) {
         return mapper.toResponse(service.create(request));
     }
@@ -66,7 +70,7 @@ public class PaymentValidationRuleResource {
     @PUT
     @Path("/{ruleId}")
     @Consumes(MediaType.APPLICATION_JSON)
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public PaymentValidationRuleResponse update(@PathParam("ruleId") Long ruleId,
                                                 PaymentValidationRuleRequest request) {
         return mapper.toResponse(service.update(ruleId, request));
@@ -74,7 +78,7 @@ public class PaymentValidationRuleResource {
 
     @POST
     @Path("/{ruleId}/activation/{active}")
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public PaymentValidationRuleResponse setActive(@PathParam("ruleId") Long ruleId,
                                                    @PathParam("active") boolean active) {
         return mapper.toResponse(service.setActive(ruleId, active));
@@ -83,7 +87,7 @@ public class PaymentValidationRuleResource {
     @POST
     @Path("/import")
     @Consumes(MediaType.APPLICATION_JSON)
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public PaymentValidationRuleImportResponse importRules(PaymentValidationRuleImportRequest request) {
         var result = service.importRules(request);
         return new PaymentValidationRuleImportResponse(

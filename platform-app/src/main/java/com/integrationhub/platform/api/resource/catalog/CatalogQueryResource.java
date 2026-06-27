@@ -18,6 +18,12 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 
+import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.api.security.PlatformRoles.OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PAYMENTS_OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+
 @Path("/api/query")
 @Produces(MediaType.APPLICATION_JSON)
 public class CatalogQueryResource {
@@ -39,7 +45,7 @@ public class CatalogQueryResource {
 
     @GET
     @Path("/source-definitions")
-    @RolesAllowed({"platform-admin", "integration-admin", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public PageResponse<SourceDefinitionResponse> listSources(
             @QueryParam("q") String queryText,
             @QueryParam("type") String sourceType,
@@ -52,7 +58,7 @@ public class CatalogQueryResource {
 
     @GET
     @Path("/reader-definitions")
-    @RolesAllowed({"platform-admin", "integration-admin", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public PageResponse<ReaderDefinitionResponse> listReaders(
             @QueryParam("q") String queryText,
             @QueryParam("type") String readerType,
@@ -65,7 +71,7 @@ public class CatalogQueryResource {
 
     @GET
     @Path("/connection-definitions")
-    @RolesAllowed({"platform-admin", "integration-admin", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public PageResponse<ConnectionDefinitionResponse> listConnections(
             @QueryParam("q") String queryText,
             @QueryParam("type") String connectionType,
@@ -78,7 +84,7 @@ public class CatalogQueryResource {
 
     @GET
     @Path("/process-definitions")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public PageResponse<ProcessDefinitionResponse> listProcesses(
             @QueryParam("q") String queryText,
             @QueryParam("mode") String mode,
@@ -91,7 +97,7 @@ public class CatalogQueryResource {
 
     @GET
     @Path("/process-schedules")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public PageResponse<ProcessScheduleResponse> listSchedules(
             @QueryParam("q") String queryText,
             @QueryParam("mode") String mode,

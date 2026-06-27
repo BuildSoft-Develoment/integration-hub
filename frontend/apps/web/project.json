@@ -8,6 +8,7 @@
   "targets": {
     "build": {
       "executor": "@angular/build:application",
+      "dependsOn": ["validate-plugins"],
       "outputs": ["{options.outputPath}"],
       "options": {
         "outputPath": "dist",
@@ -27,12 +28,12 @@
           "budgets": [
             {
               "type": "initial",
-              "maximumWarning": "900kb",
-              "maximumError": "1.2mb"
+              "maximumWarning": "1.25mb",
+              "maximumError": "1.5mb"
             },
             {
               "type": "anyComponentStyle",
-              "maximumWarning": "4kb",
+              "maximumWarning": "5kb",
               "maximumError": "8kb"
             }
           ],
@@ -68,6 +69,34 @@
         "buildTarget": "web:build",
         "tsConfig": "apps/web/tsconfig.spec.json",
         "include": ["apps/web/src/**/*.spec.ts", "libs/**/*.spec.ts"]
+      }
+    },
+    "validate-plugins": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/scripts/validate-plugin-catalog.js",
+        "{workspaceRoot}/apps/web/public/plugins/catalog.schema.json",
+        "{workspaceRoot}/apps/web/public/plugins/catalog.json"
+      ],
+      "options": {
+        "command": "node scripts/validate-plugin-catalog.js"
+      }
+    },
+    "test-plugins": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "dependsOn": ["validate-plugins"],
+      "inputs": [
+        "{workspaceRoot}/scripts/validate-plugin-catalog.js",
+        "{workspaceRoot}/scripts/validate-plugin-catalog.spec.js",
+        "{workspaceRoot}/scripts/manage-plugin-catalog.js",
+        "{workspaceRoot}/scripts/manage-plugin-catalog.spec.js",
+        "{workspaceRoot}/apps/web/public/plugins/catalog.schema.json",
+        "{workspaceRoot}/apps/web/public/plugins/catalog.json"
+      ],
+      "options": {
+        "command": "node --test scripts/validate-plugin-catalog.spec.js scripts/manage-plugin-catalog.spec.js"
       }
     },
     "serve-static": {

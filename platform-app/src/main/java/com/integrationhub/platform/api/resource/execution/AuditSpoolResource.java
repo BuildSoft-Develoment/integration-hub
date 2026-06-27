@@ -17,6 +17,12 @@ import jakarta.ws.rs.core.MediaType;
 
 import java.util.List;
 
+import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.api.security.PlatformRoles.OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PAYMENTS_OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+
 /** Operacion del spool/outbox de auditoria asincrona. */
 @Path("/api/query/audit-spool")
 @Produces(MediaType.APPLICATION_JSON)
@@ -30,7 +36,7 @@ public class AuditSpoolResource {
 
     @GET
     @Path("/summary")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public AuditSpoolSummaryResponse summary() {
         var summary = service.summary();
         return new AuditSpoolSummaryResponse(
@@ -43,21 +49,21 @@ public class AuditSpoolResource {
 
     @GET
     @Path("/dead")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public List<AuditSpoolEntryResponse> dead(@QueryParam("limit") @DefaultValue("100") int limit) {
         return service.deadEvents(limit).stream().map(this::toResponse).toList();
     }
 
     @POST
     @Path("/{id}/retry")
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public void retry(@PathParam("id") Long id) {
         service.retryDead(id);
     }
 
     @DELETE
     @Path("/sent")
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public CleanupResponse cleanupSent(@QueryParam("retentionDays") @DefaultValue("7") int retentionDays,
                                        @QueryParam("limit") @DefaultValue("10000") int limit) {
         return new CleanupResponse(service.cleanupSent(retentionDays, limit));
@@ -65,7 +71,7 @@ public class AuditSpoolResource {
 
     @DELETE
     @Path("/dead-letters")
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public CleanupResponse cleanupDeadLetters(@QueryParam("retentionDays") @DefaultValue("30") int retentionDays,
                                               @QueryParam("limit") @DefaultValue("10000") int limit) {
         return new CleanupResponse(service.cleanupDeadLetters(retentionDays, limit));

@@ -31,6 +31,7 @@ Codigo existente -> SDD (spec-tecnica) -> Trazabilidad -> QA (evidencia GREEN re
 | RF-007 | - | - | - | GET /api/query/record-lineage | audit_record_event | RecordLineageResource, PostgresColdStore | PostgresColdStoreTest | Implementado | tdd-evidence.md | record-lineage | audit-api.service.ts |
 | RF-008 | - | - | - | GET/POST/DELETE /api/query/audit-spool/* | audit_spool | AuditSpoolResource, AuditSpoolOperationsService, AuditSpoolRepository | compilacion platform-app + audit-consumer | Implementado | tdd-evidence.md | audit-spool | web build |
 | RF-009 | - | - | - | GET /api/query/mt101-fragments/source-row | mt101_build_fragment | Mt101FragmentLookupResource, Mt101FragmentLookupService, Mt101FragmentRepository | compilacion platform-app | Implementado | tdd-evidence.md | mt101-fragment-lookup | web build |
+| RF-010 | - | - | - | - | - | audit-operation-risk + audit-workspace-nav + audit-spool + mt101-quarantine | audit-operation-risk.spec.ts, audit-workspace-nav.component.spec.ts, audit-spool.component.spec.ts, mt101-quarantine.component.spec.ts | Implementado | qa/fase-6-qa/evidencias/frontend-visual-a11y-git-2026-06-26.md | audit, record-lineage, mt101-fragments, audit-spool, mt101-quarantine | nx test web |
 
 ## Gates
 > Fase 2 N/A por reingenieria: `gate-spdd-approved` y `gate-prototype-ready` no aplican.

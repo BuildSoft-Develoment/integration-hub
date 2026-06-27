@@ -20,10 +20,15 @@ Mapear las rutas reales del frontend y su responsabilidad UX dentro del producto
 | `sources` | catalogo de fuentes | administrar origenes de entrada | crear, editar, probar, activar | `Platform Admin`, `Integration Admin` |
 | `connections` | catalogo de conexiones | administrar destinos o conectores auxiliares | crear, editar, probar, activar | `Platform Admin`, `Integration Admin` |
 | `readers` | catalogo de readers | configurar parsing por formato | crear, editar, activar | `Platform Admin`, `Integration Admin` |
-| `processes` | catalogo y editor de procesos | disenar definiciones y ejecutar manualmente | crear, editar, activar, ejecutar | `Integration Admin`, `Operator` |
-| `executions` | catalogo de ejecuciones | revisar corridas, tareas y archivos | abrir detalle, navegar hijos, ejecutar acciones sobre archivos | `Operator`, `Auditor` |
-| `schedules` | agenda operativa | revisar procesos programados y dispararlos | filtrar, refrescar, ejecutar | `Operator`, `Integration Admin` |
-| `audit` | auditoria de eventos | revisar trazabilidad funcional y tecnica | filtrar, inspeccionar eventos | `Auditor`, `Operator` |
+| `processes` | catalogo y editor de procesos | disenar definiciones y ejecutar manualmente | crear, editar, activar, ejecutar | `Platform Admin`, `Integration Admin`, `Operator`, `Payments Operator` |
+| `payment-rules` | reglas de validacion de pagos | gestionar perfiles bancarios SWIFT/MT101 por ambiente | crear, editar, activar, importar/exportar | `Platform Admin`, `Integration Admin` |
+| `executions` | catalogo de ejecuciones | revisar corridas, tareas y archivos | abrir detalle, navegar hijos, ejecutar acciones sobre archivos | `Operator`, `Payments Operator`, `Auditor` |
+| `schedules` | agenda operativa | revisar procesos programados y dispararlos | filtrar, refrescar, ejecutar | `Operator`, `Payments Operator`, `Integration Admin` |
+| `audit` | auditoria de eventos | revisar trazabilidad funcional y tecnica | filtrar, inspeccionar eventos | `Auditor`, `Operator`, `Payments Operator` |
+| `audit/record-lineage` | linaje por registro | reconstruir la linea de tiempo por hash/fila, `recordId` o `traceId` | buscar, navegar a lote/fragmentos | `Auditor`, `Operator`, `Payments Operator` |
+| `audit/spool` | spool de auditoria | monitorear cola asincronica y eventos muertos | refrescar, listar dead letters, reintentar/limpiar solo admin | `Auditor`, `Operator`, `Payments Operator`, `Platform Admin`, `Integration Admin` |
+| `audit/mt101-fragments` | lookup de fragmentos MT101 | ubicar fragmentos generados desde una fila origen | buscar por hash/fila, abrir cuarentena | `Auditor`, `Operator`, `Payments Operator` |
+| `audit/mt101-quarantine` | cuarentena MT101 | corregir filas, reconstruir correctivos y supervisar PAY correctivo | listar, corregir, solicitar/ejecutar rebuild, aprobar solo admin | `Auditor`, `Operator`, `Payments Operator`, `Platform Admin`, `Integration Admin` |
 
 ## Patron de navegacion
 
@@ -38,6 +43,12 @@ Mapear las rutas reales del frontend y su responsabilidad UX dentro del producto
 - `processes` depende de la existencia previa de `sources`, `connections` y `readers`.
 - `schedules` se entiende como vista operativa de procesos ya definidos.
 - `executions` y `audit` cierran el recorrido de trazabilidad y soporte.
+- Las rutas `audit/spool` y `audit/mt101-quarantine` son operacion gobernada:
+  deben diferenciar consulta de mutacion y exponer severidad, permiso requerido
+  y evidencia esperada para acciones como `retry`, `cleanup`, rebuild y PAY.
+- El bloque `/audit/*` se presenta como workspace interno: eventos, linaje y
+  fragmentos son superficies de consulta; spool y cuarentena son superficies de
+  operacion gobernada.
 
 ## Regla documental
 

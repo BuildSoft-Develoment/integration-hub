@@ -33,6 +33,15 @@
   `execution-files-panel`, `execution-lineage` (linaje/reproceso), `execution-toolbar`;
   `audit-list`, `audit-editor`, `audit-toolbar`, `record-lineage`,
   `audit-spool`, `mt101-fragment-lookup`. Correlacion por `processExecutionId`.
+- Contrato UI de riesgo operacional: las pantallas con mutaciones auditables
+  consumen un registro tipado de operaciones (`severity`, `requiredCapability`,
+  `evidence`, `labelKey`, `summaryKey`) para separar consulta de operacion
+  gobernada. El contrato no sustituye permisos ni validaciones backend; solo
+  normaliza la presentacion y reduce ambiguedad UX.
+- Workspace audit: las rutas `/audit/*` comparten navegacion interna standalone
+  que clasifica cada superficie como `query` u `operation`, sin conocer APIs ni
+  permisos. La navegacion es un componente de presentacion reutilizable para
+  sostener el mapa mental del operador.
 
 ## Modelo de datos
 
@@ -119,6 +128,9 @@ Indices operativos: `ix_audit_spool_due` (`spool_status`, `next_attempt_at`,
 - endpoint `GET /api/query/mt101-fragments/source-row` por `recordNumber`,
   `sourceTable`, `processExecutionId`, `fragmentSetId` y `connectionRef`
 - resumen operativo en `GET /api/query/overview-summary`
+- las operaciones sensibles de UI deben declararse mediante contratos puros y
+  testeables para respetar SOLID/SPI: el componente presenta, el contrato
+  clasifica, y el backend conserva la autoridad de negocio
 
 ## Pruebas tecnicas sugeridas
 
@@ -128,3 +140,8 @@ Indices operativos: `ix_audit_spool_due` (`spool_status`, `next_attempt_at`,
 - consumer batch/DLQ: mezcla de PROCESS, RECORD y poison en un mismo lote
 - spool: retry de `DEAD`, limpieza `SENT`, lease/backoff
 - MT101 lookup: fila origen -> fragmento y `:20:` generado
+- UI riesgo operacional: registry de operaciones, exposicion en `audit-spool`
+  y `mt101-quarantine`, y evidencia visual/a11y para todas las subrutas
+  `/audit/*`
+- UI workspace audit: componente de navegacion interna con rutas y modo
+  consulta/operacion cubierto por prueba unitaria y evidencia visual autenticada

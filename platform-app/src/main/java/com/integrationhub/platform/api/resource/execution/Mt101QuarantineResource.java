@@ -28,6 +28,12 @@ import jakarta.ws.rs.core.SecurityContext;
 import java.util.List;
 import java.util.Map;
 
+import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.api.security.PlatformRoles.OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PAYMENTS_OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+
 /**
  * Cuarentena por fila de MT101: construye la cola de filas fallidas (con su fila
  * exacta del archivo) desde los issues de validacion, y la lista para que el
@@ -62,7 +68,7 @@ public class Mt101QuarantineResource {
     @PATCH
     @Path("/staging-row")
     @Consumes(MediaType.APPLICATION_JSON)
-    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
     public Mt101StagingCorrectionService.CorrectionResult correctRow(@QueryParam("connectionRef") String connectionRef,
                                                                      @QueryParam("fragmentSetId") String fragmentSetId,
                                                                      @QueryParam("sourceFileHash") String sourceFileHash,
@@ -99,7 +105,7 @@ public class Mt101QuarantineResource {
      */
     @GET
     @Path("/staging-row")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public Response stagingRow(@QueryParam("connectionRef") String connectionRef,
                                @QueryParam("fragmentSetId") String fragmentSetId,
                                @QueryParam("sourceFileHash") String sourceFileHash,
@@ -125,7 +131,7 @@ public class Mt101QuarantineResource {
      */
     @GET
     @Path("/lote")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public Mt101LoteService.LoteHeader lote(@QueryParam("connectionRef") String connectionRef,
                                             @QueryParam("fragmentSetId") String fragmentSetId,
                                             @QueryParam("processExecutionId") Long processExecutionId) {
@@ -139,7 +145,7 @@ public class Mt101QuarantineResource {
     /** Encola las filas fallidas de un set resolviendo cada :21: a su fila exacta. Mutacion. */
     @POST
     @Path("/build")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
     public Map<String, Object> build(@QueryParam("connectionRef") String connectionRef,
                                      @QueryParam("fragmentSetId") String fragmentSetId,
                                      @QueryParam("issueTable") String issueTable) {
@@ -153,7 +159,7 @@ public class Mt101QuarantineResource {
 
     /** Lista las filas en cuarentena de un set (la fila exacta que fallo, regla, :20:/:21:). */
     @GET
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public List<Mt101FailedRecordResponse> list(@QueryParam("connectionRef") String connectionRef,
                                                 @QueryParam("fragmentSetId") String fragmentSetId,
                                                 @QueryParam("status") String status,
@@ -177,7 +183,7 @@ public class Mt101QuarantineResource {
 
     @POST
     @Path("/rebuild-runs/request")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
     public Mt101RebuildService.RebuildRunSummary requestRebuild(@QueryParam("connectionRef") String connectionRef,
                                                                 @QueryParam("fragmentSetId") String fragmentSetId,
                                                                 @QueryParam("reason") String reason,
@@ -193,7 +199,7 @@ public class Mt101QuarantineResource {
 
     @POST
     @Path("/rebuild-runs/request-child")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
     public Mt101RebuildService.RebuildRunSummary requestChildCorrective(
             @QueryParam("connectionRef") String connectionRef,
             @QueryParam("parentRebuildRunId") String parentRebuildRunId,
@@ -209,7 +215,7 @@ public class Mt101QuarantineResource {
 
     @GET
     @Path("/rebuild-runs")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public List<Mt101RebuildService.RebuildRunSummary> rebuildRuns(@QueryParam("connectionRef") String connectionRef,
                                                                     @QueryParam("fragmentSetId") String fragmentSetId,
                                                                     @QueryParam("limit") @DefaultValue("20") int limit) {
@@ -222,7 +228,7 @@ public class Mt101QuarantineResource {
 
     @GET
     @Path("/rebuild-runs/detail")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public Mt101RebuildService.RebuildRunSummary rebuildRun(@QueryParam("connectionRef") String connectionRef,
                                                             @QueryParam("rebuildRunId") String rebuildRunId) {
         try {
@@ -234,7 +240,7 @@ public class Mt101QuarantineResource {
 
     @POST
     @Path("/rebuild-runs/approve")
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public Mt101RebuildService.RebuildRunSummary approveRebuild(@QueryParam("connectionRef") String connectionRef,
                                                                 @QueryParam("rebuildRunId") String rebuildRunId,
                                                                 @QueryParam("reason") String reason,
@@ -248,7 +254,7 @@ public class Mt101QuarantineResource {
 
     @POST
     @Path("/rebuild-runs/execute")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
     public Mt101RebuildService.RebuildResult executeRebuild(@QueryParam("connectionRef") String connectionRef,
                                                             @QueryParam("rebuildRunId") String rebuildRunId,
                                                             @Context SecurityContext securityContext) {
@@ -262,7 +268,7 @@ public class Mt101QuarantineResource {
     /** B2': avanza el correctivo BUILT -> VALIDATED -> ARCHIVED (sin enviar; no mueve dinero). */
     @POST
     @Path("/rebuild-runs/advance-corrective")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
     public Mt101CorrectiveLifecycleService.CorrectiveLifecycleResult advanceCorrective(
             @QueryParam("connectionRef") String connectionRef,
             @QueryParam("rebuildRunId") String rebuildRunId,
@@ -277,7 +283,7 @@ public class Mt101QuarantineResource {
     /** B2': el maker solicita el envio (PAY) del correctivo, que ya esta ARCHIVED. */
     @POST
     @Path("/rebuild-runs/request-pay")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
     public Mt101CorrectiveLifecycleService.CorrectiveLifecycleResult requestCorrectivePay(
             @QueryParam("connectionRef") String connectionRef,
             @QueryParam("rebuildRunId") String rebuildRunId,
@@ -295,7 +301,7 @@ public class Mt101QuarantineResource {
     /** B2': el checker (distinto del maker) aprueba y ejecuta el envio del correctivo (PAY real). */
     @POST
     @Path("/rebuild-runs/approve-pay")
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public Mt101CorrectiveLifecycleService.CorrectiveLifecycleResult approveCorrectivePay(
             @QueryParam("connectionRef") String connectionRef,
             @QueryParam("rebuildRunId") String rebuildRunId,
@@ -310,7 +316,7 @@ public class Mt101QuarantineResource {
     /** Resuelve PAY_UNCERTAIN consultando MT101_STATUS. No reenvia MT101_PAY. */
     @POST
     @Path("/rebuild-runs/resolve-uncertain-pay")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
     public Mt101CorrectiveLifecycleService.CorrectiveLifecycleResult resolveUncertainPay(
             @QueryParam("connectionRef") String connectionRef,
             @QueryParam("rebuildRunId") String rebuildRunId,
@@ -327,7 +333,7 @@ public class Mt101QuarantineResource {
     /** v24: historial append-only completo de acciones PAY del run (trazabilidad operativa E2E). */
     @GET
     @Path("/rebuild-runs/pay-actions")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
     public List<Mt101RebuildRepository.PayAction> payActions(
             @QueryParam("connectionRef") String connectionRef,
             @QueryParam("rebuildRunId") String rebuildRunId) {

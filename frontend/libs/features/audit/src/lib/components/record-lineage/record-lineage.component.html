@@ -1,4 +1,6 @@
 <section class="lineage audit-page">
+      <ih-audit-workspace-nav />
+
       <div class="lineage__search">
         <mat-button-toggle-group [value]="mode()" (change)="setMode($event.value)" [attr.aria-label]="i18n.t('audit.lineage.mode')" hideSingleSelectionIndicator>
           @for (m of modes; track m.value) {
@@ -69,7 +71,7 @@
                 <div class="lineage__head">
                   <span class="lineage__stage">{{ entry.stage }}</span>
                   <span class="lineage__status lineage__status--{{ entry.status }}">{{ entry.status }}</span>
-                  <time class="lineage__ts" [attr.datetime]="entry.eventTs" [title]="entry.eventTs | ihTime:'absolute'">{{ entry.eventTs | ihTime }}</time>
+                  <time class="lineage__ts" [attr.datetime]="entry.eventTs" [title]="entry.eventTs | ihTime:'absolute'" [attr.aria-label]="entry.eventTs | ihTime:'absolute'">{{ entry.eventTs | ihTime }}</time>
                 </div>
                 @if (durationAt(i); as dur) {
                   <span class="lineage__dur"><ih-icon name="clock" /> {{ dur }} {{ i18n.t('audit.lineage.durationFromPrev') }}</span>

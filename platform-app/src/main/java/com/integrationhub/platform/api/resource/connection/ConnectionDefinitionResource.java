@@ -26,6 +26,10 @@ import jakarta.ws.rs.core.MediaType;
 
 import java.util.List;
 
+import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+
 @Path("/api/connection-definitions")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -44,7 +48,7 @@ public class ConnectionDefinitionResource {
     }
 
     @GET
-    @RolesAllowed({"platform-admin", "integration-admin", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public List<ConnectionDefinitionResponse> list() {
         return connectionCatalogService.listAll().stream()
                 .map(connectionApiMapper::toResponse)
@@ -52,7 +56,7 @@ public class ConnectionDefinitionResource {
     }
 
     @POST
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public ConnectionDefinitionResponse create(ConnectionDefinitionRequest request) {
         return connectionApiMapper.toResponse(
                 connectionCatalogService.create(request.name(), request.connectionType(), request.active(), request.configurationJson())
@@ -61,14 +65,14 @@ public class ConnectionDefinitionResource {
 
     @POST
     @Path("/test")
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public ConnectionTestResponse test(ConnectionDefinitionRequest request) {
         return connectionCatalogService.test(request.name(), request.connectionType(), request.configurationJson());
     }
 
     @PUT
     @Path("/{connectionDefinitionId}")
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public ConnectionDefinitionResponse update(@PathParam("connectionDefinitionId") Long connectionDefinitionId,
                                                ConnectionDefinitionRequest request) {
         return connectionApiMapper.toResponse(
@@ -78,7 +82,7 @@ public class ConnectionDefinitionResource {
 
     @POST
     @Path("/{connectionDefinitionId}/activation/{active}")
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public ConnectionDefinitionResponse setActive(@PathParam("connectionDefinitionId") Long connectionDefinitionId,
                                                   @PathParam("active") boolean active) {
         return connectionApiMapper.toResponse(connectionCatalogService.setActive(connectionDefinitionId, active));
@@ -86,14 +90,14 @@ public class ConnectionDefinitionResource {
 
     @GET
     @Path("/{connectionDefinitionId}/jdbc-metadata/schemas")
-    @RolesAllowed({"platform-admin", "integration-admin", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public List<ConnectionSchemaResponse> listSchemas(@PathParam("connectionDefinitionId") Long connectionDefinitionId) {
         return connectionMetadataService.listSchemas(connectionDefinitionId);
     }
 
     @GET
     @Path("/{connectionDefinitionId}/jdbc-metadata/tables")
-    @RolesAllowed({"platform-admin", "integration-admin", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public List<ConnectionTableResponse> listTables(@PathParam("connectionDefinitionId") Long connectionDefinitionId,
                                                     @QueryParam("schema") String schema,
                                                     @QueryParam("q") String query) {
@@ -102,7 +106,7 @@ public class ConnectionDefinitionResource {
 
     @GET
     @Path("/{connectionDefinitionId}/jdbc-metadata/columns")
-    @RolesAllowed({"platform-admin", "integration-admin", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public List<ConnectionColumnResponse> listColumns(@PathParam("connectionDefinitionId") Long connectionDefinitionId,
                                                       @QueryParam("schema") String schema,
                                                       @QueryParam("table") String table) {
@@ -111,7 +115,7 @@ public class ConnectionDefinitionResource {
 
     @GET
     @Path("/{connectionDefinitionId}/jdbc-metadata/procedures")
-    @RolesAllowed({"platform-admin", "integration-admin", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public List<ConnectionRoutineResponse> listProcedures(@PathParam("connectionDefinitionId") Long connectionDefinitionId,
                                                           @QueryParam("schema") String schema,
                                                           @QueryParam("q") String query) {
@@ -120,7 +124,7 @@ public class ConnectionDefinitionResource {
 
     @GET
     @Path("/{connectionDefinitionId}/jdbc-metadata/procedure-parameters")
-    @RolesAllowed({"platform-admin", "integration-admin", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public List<ConnectionRoutineParameterResponse> listProcedureParameters(@PathParam("connectionDefinitionId") Long connectionDefinitionId,
                                                                             @QueryParam("schema") String schema,
                                                                             @QueryParam("procedure") String procedure) {
@@ -129,7 +133,7 @@ public class ConnectionDefinitionResource {
 
     @GET
     @Path("/{connectionDefinitionId}/jdbc-metadata/functions")
-    @RolesAllowed({"platform-admin", "integration-admin", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public List<ConnectionRoutineResponse> listFunctions(@PathParam("connectionDefinitionId") Long connectionDefinitionId,
                                                          @QueryParam("schema") String schema,
                                                          @QueryParam("q") String query) {
@@ -138,11 +142,10 @@ public class ConnectionDefinitionResource {
 
     @GET
     @Path("/{connectionDefinitionId}/jdbc-metadata/function-parameters")
-    @RolesAllowed({"platform-admin", "integration-admin", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public List<ConnectionRoutineParameterResponse> listFunctionParameters(@PathParam("connectionDefinitionId") Long connectionDefinitionId,
                                                                            @QueryParam("schema") String schema,
                                                                            @QueryParam("function") String function) {
         return connectionMetadataService.listFunctionParameters(connectionDefinitionId, schema, function);
     }
 }
-

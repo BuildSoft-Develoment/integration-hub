@@ -16,6 +16,7 @@ export class ManagedEditorFormActionsComponent {
 
   readonly readonly = input(false);
   readonly saving = input(false);
+  readonly dirty = input(true);
   readonly entityExists = input(false);
   readonly showTest = input(false);
   readonly testing = input(false);

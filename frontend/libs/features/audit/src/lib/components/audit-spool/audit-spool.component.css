@@ -15,6 +15,11 @@
     .spool__health--ok { color:var(--ih-status-success); background:var(--ih-status-success-bg); border-color:var(--ih-status-success); }
     .spool__health--warn { color:var(--ih-status-warning); background:var(--ih-status-warning-bg); border-color:var(--ih-status-warning); }
     .spool__health--error { color:var(--ih-status-error); background:var(--ih-status-error-bg); border-color:var(--ih-status-error); }
+    .spool__risk { display:grid; gap:.25rem; padding:.65rem .75rem; border:1px solid var(--ih-status-warning); border-left-width:4px; border-radius:8px; background:var(--ih-status-warning-bg); }
+    .spool__risk div { display:flex; gap:.5rem; flex-wrap:wrap; align-items:baseline; }
+    .spool__risk strong { color:var(--ih-status-warning); font-size:.86rem; }
+    .spool__risk span,.spool__risk small { color:var(--ih-text-soft); font-size:.8rem; }
+    .spool__risk-inline { display:block; margin-bottom:.25rem; color:var(--ih-text-soft); font-size:.72rem; font-weight:600; }
     .spool__table { overflow:auto; border:1px solid var(--ih-border); border-radius:8px; }
     table { width:100%; border-collapse:collapse; min-width:58rem; }
     th, td { padding:.55rem .65rem; border-bottom:1px solid var(--ih-border); text-align:left; vertical-align:top; }
@@ -24,3 +29,4 @@
     .spool__error { color:var(--ih-status-error); }
     .spool__ok { color:var(--ih-status-success); }
     .spool__empty { color:var(--ih-text-soft); padding:.75rem; }
+.spool__last-refresh { font-size:.75rem; color:var(--ih-text-soft); text-align:right; margin:0; }

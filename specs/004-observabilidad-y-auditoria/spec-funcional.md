@@ -36,6 +36,11 @@ Dar visibilidad operativa y trazabilidad completa sobre procesos, tareas y archi
   `DEAD`, reprocesar eventos fallidos y limpiar eventos `SENT` por retencion.
 - RF-009 ubicar el fragmento MT101 generado a partir de una fila origen de
   archivo/staging para diagnostico E2E de pagos masivos.
+- RF-010 diferenciar en UI las operaciones auditables criticas de las vistas de
+  consulta, mostrando severidad, permiso requerido y evidencia operacional
+  esperada antes de acciones sobre spool, cuarentena, rebuild y PAY; las
+  subrutas `/audit/*` deben compartir una navegacion de workspace que separe
+  consulta de operacion gobernada.
 
 ## Reglas de negocio
 
@@ -50,6 +55,11 @@ Dar visibilidad operativa y trazabilidad completa sobre procesos, tareas y archi
   limpiar `SENT`; `operator`/`auditor` solo consultan
 - la consulta de fragmentos MT101 por fila origen debe usar indices por
   `source_table`, rango de filas y ejecucion cuando aplique
+- las acciones de operacion gobernada (`retry`, `cleanup`, correccion de
+  staging, rebuild y PAY) deben declarar su riesgo operacional en la UI; las
+  acciones de consulta no deben compartir el mismo tratamiento visual
+- las acciones PAY y rebuild mantienen segregacion maker-checker; la UI debe
+  exponer esa expectativa sin reemplazar la validacion backend
 
 ## Criterios de aceptacion
 
@@ -63,6 +73,13 @@ Dar visibilidad operativa y trazabilidad completa sobre procesos, tareas y archi
   editar datos manualmente
 - desde una fila origen se puede identificar `fragmentSetId`, `:20:`, rango,
   indice/total y estado del MT101 generado
+- las rutas `/audit/spool` y `/audit/mt101-quarantine` muestran el contrato de
+  riesgo operativo de las acciones sensibles: severidad, permiso requerido y
+  evidencia como motivo, ticket, confirmacion doble, locking optimista o
+  historial append-only segun corresponda
+- las rutas `/audit`, `/audit/record-lineage`, `/audit/mt101-fragments`,
+  `/audit/spool` y `/audit/mt101-quarantine` comparten navegacion interna y
+  etiquetan cada superficie como consulta u operacion gobernada
 - (UI) hay vistas de listado/filtro (`execution-list`/`audit-list` + toolbars), detalle por tarea y
   archivo (`execution-editor` + `execution-task-list`/`execution-files-panel`), linaje de reproceso
   (`execution-lineage`) y resumen operativo (`overview-metric-card`/`overview-table-card`)

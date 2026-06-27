@@ -143,6 +143,26 @@ Lookup MT101 por fila origen.
 - Resultado GREEN frontend: PASS real (2026-06-14).
 - Verificado por: compilacion backend + build frontend.
 
+## RF-010 / T-012
+
+Contrato UI de riesgo operacional para acciones auditables criticas.
+
+- Comando RED: `cmd.exe /c npx nx test web --skip-nx-cache`
+- Resultado RED: No recapturable sin revertir codigo funcional; antes no existia
+  un contrato tipado de riesgo operacional ni pruebas dedicadas para spool y
+  cuarentena MT101.
+- Comando GREEN frontend: `cmd.exe /c npx nx test web --skip-nx-cache`
+- Resultado GREEN frontend: PASS real (2026-06-26), 63 archivos y 279 tests.
+  Incluye `audit-operation-risk.spec.ts`, `audit-workspace-nav.component.spec.ts`,
+  `audit-spool.component.spec.ts` y `mt101-quarantine.component.spec.ts`.
+- Comando GREEN build: `cmd.exe /c npx nx build web --skip-nx-cache`
+- Resultado GREEN build: PASS real (2026-06-26), initial total `1.22 MB`,
+  sin warnings de budget.
+- Verificacion visual/a11y: `cmd.exe /c "cd frontend && node scripts\\lh-screenshots.js"`
+  PASS real (2026-06-26) en 13 rutas, incluidas `/audit/record-lineage`,
+  `/audit/spool`, `/audit/mt101-fragments` y `/audit/mt101-quarantine`; las
+  subrutas audit comparten navegacion interna consulta/operacion gobernada.
+
 ## Spec 008 / MT101_PAY accepted()
 
 - Comando GREEN: `mvn -q -pl platform-app -am "-Dtest=Mt101PayTaskProviderTest,Mt101PayFragmentReprocessTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`

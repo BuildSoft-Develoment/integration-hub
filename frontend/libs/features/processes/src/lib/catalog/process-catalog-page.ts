@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit } from '@angular/core';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { providePaymentsSwiftForms, provideProcessTaskProviders } from '@integration-hub/core/providers';
 import { provideMotorProcessForms } from '../processes.providers';
@@ -63,6 +63,7 @@ import { ProcessToolbarComponent } from '../components/process-toolbar/process-t
   imports: [CommonModule, MatSidenavModule, ProcessToolbarComponent, ProcessListComponent, ProcessEditorComponent],
   templateUrl: './process-catalog-page.html',
   styleUrl: './process-catalog-page.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProcessCatalogPageComponent implements OnInit {
   readonly store = inject(ProcessCatalogStore);
@@ -89,6 +90,7 @@ export class ProcessCatalogPageComponent implements OnInit {
       titleKey: this.store.formTitle(),
       saving: this.store.saving(),
       executing: this.store.executing(),
+      dirty: this.store.dirty(),
       readonly: this.store.viewMode() !== 'edit',
       canEdit: this.store.canEdit(),
       canOperate: this.store.canOperate(),

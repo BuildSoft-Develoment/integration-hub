@@ -18,6 +18,11 @@ import jakarta.ws.rs.core.Response;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.api.security.PlatformRoles.OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PAYMENTS_OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+
 /**
  * Callback endpoint para reanudar tareas suspendidas (M-2).
  *
@@ -61,7 +66,7 @@ public class ProcessExecutionResumeResource {
 
     @POST
     @Path("/{token}")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "payments-operator"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
     public Response resume(@PathParam("token") String token,
                            @HeaderParam("X-Signature") String signature,
                            String rawBody) {

@@ -42,6 +42,7 @@
         <ih-managed-editor-form-actions
           [readonly]="readonly()"
           [saving]="saving()"
+          [dirty]="dirty()"
           [entityExists]="!!form().id"
           (cancel)="cancel.emit()"
         />

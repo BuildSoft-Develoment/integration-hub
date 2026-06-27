@@ -20,11 +20,12 @@ Conectar el control de integracion y despliegue con la ejecucion operativa paso 
 ## Flujo esperado
 
 1. construir backend y frontend
-2. validar pruebas minimas
-3. desplegar a `DEV`
-4. promover a `PRE`
-5. ejecutar smoke tests
-6. promover a `PRO`
+2. validar catalogo frontend extensible con `web:test-plugins`
+3. validar pruebas minimas
+4. desplegar a `DEV`
+5. promover a `PRE`
+6. ejecutar smoke tests
+7. promover a `PRO`
 
 ## Regla operativa
 

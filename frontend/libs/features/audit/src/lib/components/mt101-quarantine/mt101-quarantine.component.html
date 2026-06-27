@@ -1,4 +1,6 @@
 <section class="q audit-page">
+      <ih-audit-workspace-nav />
+
       @if (lote(); as l) {
         <div class="q__lote">
           <div class="q__lote-title"><ih-icon name="list" /> {{ i18n.t('audit.quarantine.titleLote', { set: l.fragmentSetId }) }}</div>
@@ -22,6 +24,15 @@
         </div>
       }
 
+      <div class="q__risk-strip" role="note" [attr.aria-label]="i18n.t('audit.risk.title')">
+        @for (risk of governedRisks; track risk.id) {
+          <span class="q__chip q__risk-pill q__risk-pill--{{ risk.severity }}" [title]="i18n.t(risk.summaryKey) + ' · ' + evidenceText(risk)">
+            <strong>{{ i18n.t(risk.labelKey) }}</strong>
+            <small>{{ risk.requiredCapability }}</small>
+          </span>
+        }
+      </div>
+
       <div class="q__search">
         <mat-form-field subscriptSizing="dynamic">
           <mat-label>{{ i18n.t('audit.quarantine.fieldExecution') }}</mat-label>
@@ -35,17 +46,23 @@
           <mat-label>{{ i18n.t('audit.common.connection') }}</mat-label>
           <input matInput [(ngModel)]="connectionRef" placeholder="default" />
         </mat-form-field>
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('audit.quarantine.fieldRequestReason') }}</mat-label>
-          <input matInput [(ngModel)]="rebuildRequestReason" placeholder="INC-123" />
-        </mat-form-field>
+        @if (canAuditOperate()) {
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('audit.quarantine.fieldRequestReason') }}</mat-label>
+            <input matInput [(ngModel)]="rebuildRequestReason" placeholder="INC-123" />
+          </mat-form-field>
+        }
         <div class="q__actions">
           <button mat-flat-button color="primary" type="button" (click)="loadLote()" [disabled]="loading() || (!fragmentSetId.trim() && !processExecutionId.trim())">{{ i18n.t('audit.quarantine.loadLote') }}</button>
-          <button mat-stroked-button type="button" [class.q__danger--armed]="armed() === 'build'" (click)="confirmBuild()" [disabled]="loading() || !fragmentSetId.trim()">
-            {{ armed() === 'build' ? i18n.t('audit.quarantine.buildConfirm') : i18n.t('audit.quarantine.build') }}
-          </button>
+          @if (canAuditOperate()) {
+            <button mat-stroked-button type="button" [class.q__danger--armed]="actions.armed() === 'quarantine:build'" (click)="confirmBuild()" [disabled]="loading() || !fragmentSetId.trim()">
+              {{ actions.armed() === 'quarantine:build' ? i18n.t('audit.quarantine.buildConfirm') : i18n.t('audit.quarantine.build') }}
+            </button>
+          }
           <button mat-stroked-button type="button" (click)="list()" [disabled]="loading() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.list') }}</button>
-          <button mat-flat-button color="primary" type="button" (click)="requestRebuild()" [disabled]="loading() || !!rebuildRun() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.runRequest') }}</button>
+          @if (canAuditOperate()) {
+            <button mat-flat-button color="primary" type="button" (click)="requestRebuild()" [disabled]="loading() || !!rebuildRun() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.runRequest') }}</button>
+          }
         </div>
       </div>
 
@@ -83,23 +100,24 @@
       @if (rebuildRun(); as run) {
         <div class="q__confirm" role="status">
           <div class="q__confirm-title"><ih-icon name="alert-triangle" /> {{ i18n.t('audit.quarantine.runTitle') }} · {{ run.status }}</div>
+          <p class="q__risk-detail">{{ i18n.t(executeRisk.labelKey) }}: {{ i18n.t(executeRisk.summaryKey) }} {{ i18n.t('audit.risk.evidence') }}: {{ evidenceText(executeRisk) }}</p>
           <ul class="q__confirm-list">
             <li>{{ i18n.t('audit.quarantine.runImpact', { rows: run.selectedRows, fragments: run.affectedFragments }) }}</li>
             <li>{{ i18n.t('audit.quarantine.confirmSet', { set: run.correctiveSetId }) }}</li>
             <li class="q__muted">PAY: {{ run.payStatus || 'NOT_REQUESTED' }}</li>
             <li class="q__muted">{{ i18n.t('audit.quarantine.runMakerChecker') }}</li>
           </ul>
-          @if (run.status === 'REQUESTED') {
+          @if (canAuditAdmin() && run.status === 'REQUESTED') {
             <mat-form-field subscriptSizing="dynamic" class="q__reason">
               <mat-label>{{ i18n.t('audit.quarantine.fieldApprovalReason') }}</mat-label>
               <input matInput [(ngModel)]="rebuildApprovalReason" placeholder="Aprobado por control operativo" />
             </mat-form-field>
           }
           <div class="q__actions">
-            @if (run.status === 'REQUESTED') {
+            @if (canAuditAdmin() && run.status === 'REQUESTED') {
               <button mat-flat-button color="primary" type="button" (click)="approveRun()" [disabled]="loading()">{{ i18n.t('audit.quarantine.runApprove') }}</button>
             }
-            @if (run.status === 'APPROVED') {
+            @if (canAuditOperate() && run.status === 'APPROVED') {
               <button mat-flat-button color="warn" type="button" (click)="executeRun()" [disabled]="loading()">{{ i18n.t('audit.quarantine.runExecute') }}</button>
             }
             <button mat-stroked-button type="button" (click)="cancelRebuild()" [disabled]="loading()">{{ i18n.t('audit.common.cancel') }}</button>
@@ -121,7 +139,7 @@
               <li class="q__muted" [class.q__error]="corr.reconciliationStatus === 'FAILED'">{{ i18n.t('audit.quarantine.correctiveReconcile', { status: corr.reconciliationStatus }) }}</li>
             }
           </ul>
-          @if (corr.status === 'ARCHIVED' && ['NOT_REQUESTED', 'FAILED', 'INVALIDATED'].includes(payStatusFor(corr.rebuildRunId))) {
+          @if (canAuditOperate() && corr.status === 'ARCHIVED' && ['NOT_REQUESTED', 'FAILED', 'INVALIDATED'].includes(payStatusFor(corr.rebuildRunId))) {
             <div class="q__pay-fields">
               <mat-form-field subscriptSizing="dynamic">
                 <mat-label>{{ i18n.t('audit.quarantine.payRequestReason') }}</mat-label>
@@ -133,7 +151,7 @@
               </mat-form-field>
             </div>
           }
-          @if (payStatusFor(corr.rebuildRunId) === 'UNCERTAIN') {
+          @if (canAuditOperate() && payStatusFor(corr.rebuildRunId) === 'UNCERTAIN') {
             <div class="q__pay-fields">
               <mat-form-field subscriptSizing="dynamic">
                 <mat-label>{{ i18n.t('audit.quarantine.payResolutionReason') }}</mat-label>
@@ -142,14 +160,17 @@
             </div>
           }
           <div class="q__actions">
-            @if (corr.status === 'BUILT' || corr.status === 'VALIDATED') {
+            @if (canAuditOperate() && (corr.status === 'BUILT' || corr.status === 'VALIDATED')) {
               <button mat-flat-button color="primary" type="button" (click)="advanceCorrective()" [disabled]="loading()">{{ i18n.t('audit.quarantine.correctiveAdvance') }}</button>
             }
-            @if (corr.status === 'ARCHIVED') {
+            @if (canAuditOperate() && corr.status === 'ARCHIVED') {
               <button mat-stroked-button type="button" (click)="requestCorrectivePay()" [disabled]="loading() || !['NOT_REQUESTED', 'FAILED', 'INVALIDATED'].includes(payStatusFor(corr.rebuildRunId))">{{ i18n.t('audit.quarantine.correctiveRequestPay') }}</button>
+            }
+            @if (canAuditAdmin() && corr.status === 'ARCHIVED') {
               <button mat-flat-button color="warn" type="button" (click)="approveCorrectivePay()" [disabled]="loading() || payStatusFor(corr.rebuildRunId) !== 'REQUESTED'">{{ i18n.t('audit.quarantine.correctiveApprovePay') }}</button>
             }
-            @if (payStatusFor(corr.rebuildRunId) === 'UNCERTAIN') {
+            @if (canAuditOperate() && payStatusFor(corr.rebuildRunId) === 'UNCERTAIN') {
+              <span class="q__risk-detail">{{ i18n.t(uncertainPayRisk.labelKey) }}: {{ i18n.t(uncertainPayRisk.summaryKey) }}</span>
               <button mat-stroked-button type="button" (click)="resolveUncertainPay()" [disabled]="loading()">{{ i18n.t('audit.quarantine.resolveUncertainPay') }}</button>
             }
             <button mat-stroked-button type="button" (click)="loadPayActions()" [disabled]="loading()">{{ i18n.t('audit.quarantine.payHistory') }}</button>
@@ -235,15 +256,17 @@
                       <button mat-button type="button" (click)="toggleTimeline(row)">
                         {{ selectedRow() === row.id ? i18n.t('audit.quarantine.hide') : i18n.t('audit.quarantine.timeline') }}
                       </button>
-                      <button mat-button type="button" (click)="toggleCorrect(row)">{{ i18n.t('audit.quarantine.correct') }}</button>
-                      @if (row.status === 'REBUILD_REJECTED') {
+                      @if (canAuditOperate()) {
+                        <button mat-button type="button" (click)="toggleCorrect(row)">{{ i18n.t('audit.quarantine.correct') }}</button>
+                      }
+                      @if (canAuditOperate() && row.status === 'REBUILD_REJECTED') {
                         <button mat-button type="button" (click)="reopenRejected(row)" [disabled]="loading()">{{ i18n.t('audit.quarantine.reopen') }}</button>
                       }
                         <a class="q__link" [routerLink]="['/audit/record-lineage']" [queryParams]="{ sourceFileHash: row.sourceFileHash, recordNumber: row.sourceRecordNumber }" [title]="i18n.t('audit.quarantine.traceAria', { row: row.sourceRecordNumber })" [attr.aria-label]="i18n.t('audit.quarantine.traceAria', { row: row.sourceRecordNumber })">{{ i18n.t('audit.quarantine.traceLink') }} ↗</a>
                     }
                   </td>
                 </tr>
-                @if (correctingRow() === row.id) {
+                @if (canAuditOperate() && correctingRow() === row.id) {
                   <tr class="q__tl-row">
                     <td colspan="9">
                       <div class="q__correct">
@@ -251,6 +274,7 @@
                           <mat-label>{{ i18n.t('audit.quarantine.correctLabel', { row: row.sourceRecordNumber ?? '' }) }}</mat-label>
                           <textarea matInput [(ngModel)]="correctionPayload" rows="3" placeholder='{&quot;cargos&quot;:&quot;OUR&quot;, ...}'></textarea>
                         </mat-form-field>
+                        <p class="q__risk-detail">{{ i18n.t(correctionRisk.labelKey) }}: {{ i18n.t(correctionRisk.summaryKey) }} {{ i18n.t('audit.risk.evidence') }}: {{ evidenceText(correctionRisk) }}</p>
                         <mat-form-field subscriptSizing="dynamic">
                           <mat-label>{{ i18n.t('audit.quarantine.correctReason') }}</mat-label>
                           <input matInput [(ngModel)]="correctionReason" placeholder="Corrección validada" />

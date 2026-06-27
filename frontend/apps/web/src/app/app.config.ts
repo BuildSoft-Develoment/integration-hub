@@ -2,10 +2,11 @@ import {
   ApplicationConfig,
   provideAppInitializer,
   provideBrowserGlobalErrorListeners,
+  provideZonelessChangeDetection,
   inject,
 } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { provideRouter, withHashLocation } from '@angular/router';
+import { provideRouter, withHashLocation, TitleStrategy } from '@angular/router';
 import { MAT_FORM_FIELD_DEFAULT_OPTIONS } from '@angular/material/form-field';
 import { MatPaginatorIntl } from '@angular/material/paginator';
 import { MatSnackBarModule } from '@angular/material/snack-bar';
@@ -16,11 +17,16 @@ import {
   provideReaderProviders,
   provideSourceProviders,
 } from '@integration-hub/core/providers';
+import {
+  provideAppPluginRegistryValidation,
+  provideExternalAppPluginManifestCatalog,
+} from '@integration-hub/shared/ui';
 import { appRoutes } from './app.routes';
 import {
   authInterceptor,
   AuthService,
   httpErrorInterceptor,
+  I18nTitleStrategy,
   PaginatorIntlService,
 } from '@integration-hub/core/services';
 
@@ -29,14 +35,18 @@ import { appNavigationProvider } from './core/app-navigation.providers';
 export const appConfig: ApplicationConfig = {
   providers: [
     provideAnimationsAsync(),
+    provideZonelessChangeDetection(),
     importProvidersFrom(MatSnackBarModule),
     provideBrowserGlobalErrorListeners(),
     provideHttpClient(withInterceptors([authInterceptor, httpErrorInterceptor])),
     provideRouter(appRoutes, withHashLocation()),
+    { provide: TitleStrategy, useExisting: I18nTitleStrategy },
     provideSourceProviders(),
     provideReaderProviders(),
     provideConnectionProviders(),
-    appNavigationProvider,
+    ...appNavigationProvider,
+    provideAppPluginRegistryValidation(),
+    provideExternalAppPluginManifestCatalog(),
     {
       provide: MAT_FORM_FIELD_DEFAULT_OPTIONS,
       useValue: {

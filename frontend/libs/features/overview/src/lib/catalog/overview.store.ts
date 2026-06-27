@@ -1,5 +1,7 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { AppFeedbackService } from '@integration-hub/core/services';
 import { OverviewApiService } from '../api/overview-api.service';
 import { OverviewMetric, OverviewSummaryRecord } from '../models/overview.models';
 import { OverviewTableRow } from '../models/overview-row.model';
@@ -7,8 +9,10 @@ import { OverviewTableRow } from '../models/overview-row.model';
 @Injectable()
 export class OverviewStore {
   private readonly api = inject(OverviewApiService);
+  private readonly feedback = inject(AppFeedbackService);
 
   readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
   readonly summary = signal<OverviewSummaryRecord | null>(null);
 
   readonly metrics = computed<OverviewMetric[]>(() => {
@@ -95,10 +99,18 @@ export class OverviewStore {
 
   async load(): Promise<void> {
     this.loading.set(true);
+    this.error.set(null);
     try {
       this.summary.set(await firstValueFrom(this.api.getSummary()));
+    } catch (err) {
+      this.error.set('overview.loadError');
+      this.feedback.handleHttpError(err as HttpErrorResponse);
     } finally {
       this.loading.set(false);
     }
+  }
+
+  async refresh(): Promise<void> {
+    await this.load();
   }
 }

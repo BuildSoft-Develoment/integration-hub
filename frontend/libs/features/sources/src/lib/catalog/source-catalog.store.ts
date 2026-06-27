@@ -42,6 +42,7 @@ export class SourceCatalogStore {
   readonly testResult = this.editor.testResult;
   readonly form = this.editor.form;
   readonly draft = this.editor.draft;
+  readonly dirty = this.editor.dirty;
 
   readonly canEdit = computed(() => this.access.canAdmin());
   readonly pagedSources = this.query.pagedSources;

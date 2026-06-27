@@ -1,18 +1,20 @@
 // @trace SWIFT-MT101: cuarentena por fila + rebuild selectivo (reprocesar solo lo necesario)
 import { ClipboardModule } from '@angular/cdk/clipboard';
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, HostListener, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { ActivatedRoute, RouterLink } from '@angular/router';
-import { BreadcrumbService, I18nService } from '@integration-hub/core/services';
-import { IconComponent } from '@integration-hub/shared/ui';
+import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
+import { ActionDispatcherService, IconComponent } from '@integration-hub/shared/ui';
 import { Observable } from 'rxjs';
 import { AuditApiService } from '../../api/audit-api.service';
 import { Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101PayAction, Mt101RebuildRunSummary, Mt101RowTimelineEntry } from '../../models/audit.models';
+import { AuditOperationRisk, auditEvidenceLabelKey, auditOperationRisk } from '../../utils/audit-operation-risk';
 import { durationBetween, timelineStatusIcon, timelineStatusKind } from '../../utils/timeline-format';
+import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspace-nav.component';
 
 @Component({
   selector: 'ih-mt101-quarantine',
@@ -26,6 +28,7 @@ import { durationBetween, timelineStatusIcon, timelineStatusKind } from '../../u
     MatInputModule,
     ClipboardModule,
     IconComponent,
+    AuditWorkspaceNavComponent,
   ],
   styleUrl: './mt101-quarantine.component.css',
   templateUrl: './mt101-quarantine.component.html',
@@ -34,7 +37,10 @@ export class Mt101QuarantineComponent {
   private readonly api = inject(AuditApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly breadcrumb = inject(BreadcrumbService);
+  private readonly access = inject(AuthAccessService);
   readonly i18n = inject(I18nService);
+  readonly canAuditAdmin = this.access.canAuditAdmin;
+  readonly canAuditOperate = this.access.canAuditOperate;
 
   protected readonly statusKind = timelineStatusKind;
   protected readonly statusIcon = timelineStatusIcon;
@@ -146,42 +152,48 @@ export class Mt101QuarantineComponent {
     }, 1500);
   }
 
-  // Confirmación de acciones críticas: armado 2-pasos para "construir" y panel de
-  // impacto para el rebuild (genera lote SWIFT nuevo + supersede de los originales).
-  readonly armed = signal<string | null>(null);
+  readonly actions = inject(ActionDispatcherService);
+  readonly governedRisks = [
+    auditOperationRisk('mt101-quarantine-build'),
+    auditOperationRisk('mt101-rebuild-request'),
+    auditOperationRisk('mt101-rebuild-approve'),
+    auditOperationRisk('mt101-corrective-pay-request'),
+    auditOperationRisk('mt101-corrective-pay-approve'),
+  ] as const;
+  readonly correctionRisk = auditOperationRisk('mt101-correction-save');
+  readonly executeRisk = auditOperationRisk('mt101-rebuild-execute');
+  readonly uncertainPayRisk = auditOperationRisk('mt101-pay-uncertain-resolve');
   // Flujo gobernado del rebuild (maker-checker): REQUESTED -> APPROVED -> ejecutado.
   // Solicitar no ejecuta; aprobar lo hace un usuario distinto; ejecutar genera el lote.
   readonly rebuildRun = signal<Mt101RebuildRunSummary | null>(null);
   readonly rebuildRuns = signal<Mt101RebuildRunSummary[]>([]);
-  private armTimer?: ReturnType<typeof setTimeout>;
 
-  private arm(id: string, run: () => void): void {
-    if (this.armed() === id) {
-      this.disarm();
-      run();
-      return;
-    }
-    this.armed.set(id);
-    if (this.armTimer) {
-      clearTimeout(this.armTimer);
-    }
-    this.armTimer = setTimeout(() => this.armed.set(null), 5000);
-  }
-
-  private disarm(): void {
-    this.armed.set(null);
-    if (this.armTimer) {
-      clearTimeout(this.armTimer);
-      this.armTimer = undefined;
-    }
+  evidenceText(risk: AuditOperationRisk): string {
+    return risk.evidence.map((item) => this.i18n.t(auditEvidenceLabelKey(item))).join(' · ');
   }
 
   confirmBuild(): void {
-    this.arm('build', () => this.buildQuarantine());
+    if (!this.canAuditOperate()) {
+      return;
+    }
+    if (this.actions.dispatch({ id: 'quarantine:build', severity: 'danger' })) {
+      this.buildQuarantine();
+    }
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('ih-mt101-quarantine')) {
+      this.actions.disarm();
+    }
   }
 
   /** Paso 1: solicita el rebuild (no ejecuta). Queda REQUESTED para que otro lo apruebe. */
   requestRebuild(): void {
+    if (!this.canAuditOperate()) {
+      return;
+    }
     if (!this.fragmentSetId.trim()) {
       return;
     }
@@ -211,6 +223,9 @@ export class Mt101QuarantineComponent {
 
   /** B1': reabre una fila REBUILD_REJECTED para corregir y reconstruir de nuevo. */
   reopenRejected(row: Mt101FailedRecord): void {
+    if (!this.canAuditOperate()) {
+      return;
+    }
     const sourceFileHash = row.sourceFileHash?.trim();
     if (row.sourceRecordNumber === null || row.stagingId === null || !sourceFileHash) {
       return;
@@ -239,6 +254,9 @@ export class Mt101QuarantineComponent {
 
   /** Paso 2: aprueba el run. El backend rechaza si el aprobador es el mismo solicitante. */
   approveRun(): void {
+    if (!this.canAuditAdmin()) {
+      return;
+    }
     const run = this.rebuildRun();
     if (!run) {
       return;
@@ -262,6 +280,9 @@ export class Mt101QuarantineComponent {
   }
 
   toggleCorrect(row: Mt101FailedRecord): void {
+    if (!this.canAuditOperate()) {
+      return;
+    }
     if (this.correctingRow() === row.id) {
       this.correctingRow.set(null);
       return;
@@ -301,6 +322,9 @@ export class Mt101QuarantineComponent {
   }
 
   saveCorrection(row: Mt101FailedRecord): void {
+    if (!this.canAuditOperate()) {
+      return;
+    }
     const sourceFileHash = row.sourceFileHash?.trim();
     if (row.sourceRecordNumber === null || row.stagingId === null || !sourceFileHash || !this.correctionPayload.trim()) {
       return;
@@ -450,6 +474,9 @@ export class Mt101QuarantineComponent {
   }
 
   buildQuarantine(): void {
+    if (!this.canAuditOperate()) {
+      return;
+    }
     if (!this.fragmentSetId.trim()) {
       return;
     }
@@ -473,6 +500,9 @@ export class Mt101QuarantineComponent {
 
   /** Paso 3: ejecuta el run aprobado (genera el lote correctivo y resuelve la cuarentena del run). */
   executeRun(): void {
+    if (!this.canAuditOperate()) {
+      return;
+    }
     const run = this.rebuildRun();
     if (!run) {
       return;
@@ -528,6 +558,9 @@ export class Mt101QuarantineComponent {
 
   /** B2': avanza el correctivo BUILT -> VALIDATED -> ARCHIVED (no envía). */
   advanceCorrective(): void {
+    if (!this.canAuditOperate()) {
+      return;
+    }
     const run = this.correctiveRun();
     if (!run) {
       return;
@@ -537,6 +570,9 @@ export class Mt101QuarantineComponent {
 
   /** B2': el maker solicita el envío del correctivo (ya ARCHIVED). Motivo + ticket obligatorios. */
   requestCorrectivePay(): void {
+    if (!this.canAuditOperate()) {
+      return;
+    }
     const run = this.correctiveRun();
     if (!run) {
       return;
@@ -555,6 +591,9 @@ export class Mt101QuarantineComponent {
 
   /** B2': resuelve un PAY_UNCERTAIN consultando STATUS (no reenvía). Motivo de negocio obligatorio. */
   resolveUncertainPay(): void {
+    if (!this.canAuditOperate()) {
+      return;
+    }
     const run = this.correctiveRun();
     if (!run) {
       return;
@@ -572,6 +611,9 @@ export class Mt101QuarantineComponent {
 
   /** B2': el checker (distinto del maker) aprueba y ejecuta el envío (PAY real). */
   approveCorrectivePay(): void {
+    if (!this.canAuditAdmin()) {
+      return;
+    }
     const run = this.correctiveRun();
     if (!run) {
       return;

@@ -18,6 +18,10 @@ import jakarta.ws.rs.core.MediaType;
 
 import java.util.List;
 
+import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+
 @Path("/api/reader-definitions")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -32,7 +36,7 @@ public class ReaderDefinitionResource {
     }
 
     @GET
-    @RolesAllowed({"platform-admin", "integration-admin", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public List<ReaderDefinitionResponse> list() {
         return readerCatalogService.listAll().stream()
                 .map(readerApiMapper::toResponse)
@@ -40,7 +44,7 @@ public class ReaderDefinitionResource {
     }
 
     @POST
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public ReaderDefinitionResponse create(ReaderDefinitionRequest request) {
         return readerApiMapper.toResponse(
                 readerCatalogService.create(request.name(), request.readerType(), request.active(), request.configurationJson())
@@ -49,7 +53,7 @@ public class ReaderDefinitionResource {
 
     @PUT
     @Path("/{readerDefinitionId}")
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public ReaderDefinitionResponse update(@PathParam("readerDefinitionId") Long readerDefinitionId, ReaderDefinitionRequest request) {
         return readerApiMapper.toResponse(
                 readerCatalogService.update(readerDefinitionId, request.name(), request.readerType(), request.active(), request.configurationJson())
@@ -58,7 +62,7 @@ public class ReaderDefinitionResource {
 
     @POST
     @Path("/{readerDefinitionId}/activation/{active}")
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public ReaderDefinitionResponse setActive(@PathParam("readerDefinitionId") Long readerDefinitionId, @PathParam("active") boolean active) {
         return readerApiMapper.toResponse(readerCatalogService.setActive(readerDefinitionId, active));
     }

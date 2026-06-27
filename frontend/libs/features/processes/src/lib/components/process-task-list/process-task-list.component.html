@@ -80,6 +80,11 @@
                   [fNodeId]="node.id"
                   [fNodePosition]="node.position"
                   [fNodeSize]="node.size"
+                  tabindex="0"
+                  role="button"
+                  [attr.aria-label]="taskTypeLabel(node.type) + ' — ' + taskOrdinal(node.taskRef)"
+                  (keydown.enter)="openTask(node.taskRef); $event.preventDefault()"
+                  (keydown.delete)="handleAction('delete-selection'); $event.preventDefault()"
                 >
                   <div
                     class="task-node__port task-node__port--in"

@@ -31,6 +31,7 @@ export class ReaderCatalogStore {
   readonly viewMode = this.editor.viewMode;
   readonly form = this.editor.form;
   readonly draft = this.editor.draft;
+  readonly dirty = this.editor.dirty;
 
   readonly canEdit = computed(() => this.access.canAdmin());
   readonly pagedReaders = this.query.pagedReaders;

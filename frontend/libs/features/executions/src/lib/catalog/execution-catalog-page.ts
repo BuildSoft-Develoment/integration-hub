@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit } from '@angular/core';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSidenavModule } from '@angular/material/sidenav';
 
 import { ExecutionModeFilter } from '../api/execution-api.service';
@@ -32,6 +33,7 @@ import { ExecutionToolbarComponent } from '../components/execution-toolbar/execu
   ],
   imports: [
     CommonModule,
+    MatProgressBarModule,
     MatSidenavModule,
     ExecutionToolbarComponent,
     ExecutionListComponent,
@@ -39,6 +41,7 @@ import { ExecutionToolbarComponent } from '../components/execution-toolbar/execu
   ],
   templateUrl: './execution-catalog-page.html',
   styleUrl: './execution-catalog-page.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ExecutionCatalogPageComponent implements OnInit {
   readonly store = inject(ExecutionCatalogStore);
@@ -47,6 +50,7 @@ export class ExecutionCatalogPageComponent implements OnInit {
       search: this.store.search(),
       modeFilter: this.store.modeFilter(),
       statusFilter: this.store.statusFilter(),
+      loading: this.store.loading(),
     },
     list: {
       executions: this.store.pagedExecutions(),
@@ -112,5 +116,9 @@ export class ExecutionCatalogPageComponent implements OnInit {
 
   runFileAction(request: ExecutionFileActionRequest): void {
     void this.store.runFileAction(request);
+  }
+
+  refresh(): void {
+    void this.store.load();
   }
 }

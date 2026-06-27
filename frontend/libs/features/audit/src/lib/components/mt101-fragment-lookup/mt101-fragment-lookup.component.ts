@@ -10,6 +10,7 @@ import { BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { RelativeTimePipe } from '@integration-hub/shared/ui';
 import { AuditApiService } from '../../api/audit-api.service';
 import { Mt101FragmentLink } from '../../models/audit.models';
+import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspace-nav.component';
 
 @Component({
   selector: 'ih-mt101-fragment-lookup',
@@ -21,6 +22,7 @@ import { Mt101FragmentLink } from '../../models/audit.models';
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
+    AuditWorkspaceNavComponent,
     RelativeTimePipe,
   ],
   styleUrl: './mt101-fragment-lookup.component.css',

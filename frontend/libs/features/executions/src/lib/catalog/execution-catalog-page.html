@@ -6,10 +6,16 @@
           [search]="viewModel().toolbar.search"
           [modeFilter]="viewModel().toolbar.modeFilter"
           [statusFilter]="viewModel().toolbar.statusFilter"
+          [loading]="viewModel().toolbar.loading"
           (searchChange)="updateSearch($event)"
           (modeFilterChange)="updateModeFilter($event)"
           (statusFilterChange)="updateStatusFilter($event)"
+          (refresh)="refresh()"
         />
+
+        @if (viewModel().toolbar.loading) {
+          <mat-progress-bar mode="indeterminate" />
+        }
 
         <section class="executions-list-shell ih-catalog-list-shell">
           <ih-execution-list

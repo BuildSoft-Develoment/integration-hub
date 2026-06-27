@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { AuthAccessService } from '@integration-hub/core/services';
 import { of } from 'rxjs';
 
 import { AuditApiService } from '../../api/audit-api.service';
@@ -13,10 +14,12 @@ describe('AuditSpoolComponent', () => {
   let component: AuditSpoolComponent;
   let cleanupCalls: number;
   let retryCalls: number;
+  let canAuditAdmin: boolean;
 
   beforeEach(() => {
     cleanupCalls = 0;
     retryCalls = 0;
+    canAuditAdmin = true;
     const api = {
       auditSpoolSummary: () => of(summary({})),
       auditSpoolDead: () => of([] as AuditSpoolEntry[]),
@@ -29,9 +32,15 @@ describe('AuditSpoolComponent', () => {
         return of(void 0);
       },
     } as unknown as AuditApiService;
+    const access = {
+      canAuditAdmin: () => canAuditAdmin,
+    } as unknown as AuthAccessService;
 
     TestBed.configureTestingModule({
-      providers: [{ provide: AuditApiService, useValue: api }],
+      providers: [
+        { provide: AuditApiService, useValue: api },
+        { provide: AuthAccessService, useValue: access },
+      ],
     });
     component = TestBed.runInInjectionContext(() => new AuditSpoolComponent());
   });
@@ -67,9 +76,15 @@ describe('AuditSpoolComponent', () => {
   });
 
   describe('confirmación 2-pasos', () => {
+    it('expone riesgo operativo de cleanup/retry con permiso admin', () => {
+      expect(component.cleanupRisk.requiredCapability).toBe('audit-admin');
+      expect(component.cleanupRisk.evidence).toContain('two-step-confirmation');
+      expect(component.retryRisk.requiredCapability).toBe('audit-admin');
+    });
+
     it('el primer clic en limpiar arma sin ejecutar', () => {
       component.confirmCleanup();
-      expect(component.armed()).toBe('cleanup');
+      expect(component.actions.armed()).toBe('spool:cleanup');
       expect(cleanupCalls).toBe(0);
     });
 
@@ -77,28 +92,37 @@ describe('AuditSpoolComponent', () => {
       component.confirmCleanup();
       component.confirmCleanup();
       expect(cleanupCalls).toBe(1);
-      expect(component.armed()).toBeNull();
+      expect(component.actions.armed()).toBeNull();
     });
 
     it('el retry se arma por id de fila (no afecta a otras)', () => {
       const row = { id: 42 } as AuditSpoolEntry;
       component.confirmRetry(row);
-      expect(component.armed()).toBe('retry:42');
+      expect(component.actions.armed()).toBe('spool:retry:42');
       expect(retryCalls).toBe(0);
       component.confirmRetry(row);
       expect(retryCalls).toBe(1);
-      expect(component.armed()).toBeNull();
+      expect(component.actions.armed()).toBeNull();
+    });
+
+    it('no arma acciones destructivas sin permiso admin', () => {
+      canAuditAdmin = false;
+      component.confirmCleanup();
+      component.confirmRetry({ id: 42 } as AuditSpoolEntry);
+      expect(component.actions.armed()).toBeNull();
+      expect(cleanupCalls).toBe(0);
+      expect(retryCalls).toBe(0);
     });
   });
 
   describe('auto-refresh', () => {
     it('alterna el flag y limpia sin lanzar en destroy', () => {
       component.setAutoRefresh(true);
-      expect(component.autoRefresh).toBe(true);
+      expect(component.autoRefresh()).toBe(true);
       component.setRefreshMs(60000);
-      expect(component.refreshMs).toBe(60000);
+      expect(component.refreshMs()).toBe(60000);
       component.setAutoRefresh(false);
-      expect(component.autoRefresh).toBe(false);
+      expect(component.autoRefresh()).toBe(false);
       expect(() => component.ngOnDestroy()).not.toThrow();
     });
   });

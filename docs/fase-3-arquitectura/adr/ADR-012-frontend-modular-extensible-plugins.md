@@ -1,0 +1,165 @@
+# ADR-012 Frontend modular extensible por contribuciones
+
+[README principal](../../../README.md) | [Indice docs](../../README.md) | [Volver a ADR](README.md)
+
+## Estado
+
+Aceptado e implementado parcialmente.
+
+## Contexto
+
+La consola `frontend/` debe crecer con modulos internos y, a futuro, con
+extensiones o plugins instalables desde fuera. Si cada modulo modifica el shell,
+la navegacion, los permisos o los formularios directamente, la plataforma pierde
+gobernanza y aumenta el riesgo de colisiones entre equipos o proveedores.
+
+La arquitectura actual ya usa Angular/Nx, rutas lazy, guards y librerias
+compartidas. El siguiente paso es exponer contratos estables para que los
+modulos se registren como contribuciones, igual que haria un plugin externo.
+
+## Decision
+
+El frontend adopta un modelo de **contribuciones declarativas validadas**.
+
+Las extensiones no deben acoplarse al shell ni manipular navegacion global de
+forma imperativa. Deben declarar contratos:
+
+- `AppPluginManifest`: identidad, version, version de plataforma, capabilities y
+  contribuciones.
+- `AppNavigationContribution`: entradas de navegacion con `id`, `route`,
+  `labelKey`, `requiredCapability`, `source`, `group` y `order`.
+- `AppRouteContribution`: rutas exponibles por un modulo/plugin.
+- `AppWorkspaceContribution`: superficies internas de un workspace, clasificadas
+  como `query`, `operation` o `configuration`.
+
+La primera implementacion real aplica al shell de navegacion:
+
+- `APP_PLUGIN_MANIFESTS` registra manifiestos internos o externos.
+- `provideAppPluginManifests(...)` registra el manifiesto y traduce sus
+  contribuciones de navegacion al SPI vigente.
+- `buildAppPluginRegistry(...)` valida identidad, version de plataforma,
+  duplicados de rutas/workspaces y colisiones de navegacion.
+- `buildAppRoutesFromPluginManifests(...)` materializa rutas Angular desde los
+  manifests validados y conserva `pluginSource`/`pluginRouteId` en `data`.
+- `APP_WORKSPACE_CONTRIBUTIONS` registra superficies internas de workspaces y
+  `normalizeWorkspaceContributions(...)` valida/ordena esas superficies.
+- `AppPluginRuntimeRegistry` centraliza manifests estaticos y manifests externos
+  metadata-only cargados en runtime.
+- `provideExternalAppPluginManifestCatalog(...)` carga
+  `/plugins/catalog.json` durante el bootstrap. El catalogo externo no puede
+  declarar rutas Angular ejecutables; solo puede aportar metadata hacia rutas ya
+  instaladas.
+- `/plugins/catalog.schema.json` publica el contrato JSON Schema del catalogo
+  metadata-only para proveedores externos y tooling de edicion.
+- `npm run validate:plugins` valida el catalogo externo antes de publicar:
+  identidad, version compatible, capabilities conocidas, duplicados y enlaces
+  solamente hacia rutas instaladas del shell.
+- El validador rechaza propiedades fuera del contrato publico para evitar
+  errores silenciosos por typos o campos no gobernados.
+- `web:build` depende de `web:validate-plugins`, por lo que el build productivo
+  falla antes de compilar si el catalogo externo rompe el contrato.
+- `web:test-plugins` valida el catalogo real y ejecuta pruebas del validador
+  contra casos de rutas remotas, rutas desconocidas, duplicados y permisos.
+- Las pruebas del gate verifican que las rutas y capabilities del JSON Schema
+  permanezcan sincronizadas con el validador.
+- `scripts/manage-plugin-catalog.js` permite instalar, reemplazar, listar y
+  retirar manifests metadata-only con validacion antes de escribir el catalogo.
+- `provideAppPluginRegistryValidation(...)` ejecuta la validacion en bootstrap
+  para fallar temprano ante un plugin incompatible.
+- `APP_NAVIGATION_CONTRIBUTIONS` es un multi-provider.
+- `provideAppNavigationContributions(...)` registra contribuciones internas o de
+  plugins.
+- `normalizeNavigationContributions(...)` ordena y valida duplicados por `id` y
+  `route`.
+- `AppNavigationComponent` consume contribuciones y filtra por capability.
+- La navegacion existente de la plataforma se registra como manifest interno
+  `platform`.
+- Las rutas internas de la plataforma tambien se declaran en el manifest
+  `platform`; `app.routes.ts` ya no define rutas de negocio a mano.
+- El workspace `/audit/*` consume superficies desde el manifest `platform` en
+  vez de mantener una lista hardcodeada en el componente.
+
+## Consecuencias
+
+- Los modulos internos empiezan a comportarse como plugins instalados.
+- Un plugin externo no puede sobrescribir silenciosamente una ruta o entrada de
+  menu existente: la normalizacion falla por duplicado.
+- Un plugin incompatible por version de plataforma no debe iniciar dentro del
+  shell.
+- El shell conserva control de permisos, orden y navegacion.
+- El router conserva lazy loading y guards por capability, pero la fuente de
+  verdad pasa a ser el manifest.
+- Los workspaces funcionales pueden extenderse por contribuciones de plugin,
+  filtradas por `group` y capability.
+- Los manifests JSON externos quedan limitados a metadata. Un plugin con codigo
+  Angular debe registrarse mediante provider estatico y pasar por build/release.
+- El contrato queda preparado para extender el mismo patron a rutas, workspaces,
+  acciones, formularios y validadores.
+- La instalacion runtime/remota de codigo aun no queda implementada; esta ADR
+  establece la base de SPI frontend, runtime registry metadata-only y los
+  primeros puntos de extension.
+
+## Reglas
+
+- Toda extension debe declarar `id`, `version`, `platformVersion` y `source`.
+- El `platformVersion` debe ser exacto o compatible por major version con la
+  version de extension soportada por el shell.
+- Toda contribucion visible debe tener `labelKey` i18n.
+- Toda contribucion sensible debe declarar `requiredCapability`.
+- Las rutas y ids deben ser unicos.
+- El shell no importa componentes de plugins directamente; consume contratos.
+- Los plugins no acceden a servicios internos salvo mediante facades publicas.
+- Un manifest externo cargado desde JSON no puede declarar `loadChildren`,
+  `loadComponent` ni rutas nuevas; sus enlaces deben apuntar a rutas conocidas
+  del shell.
+- Todo cambio en `frontend/apps/web/public/plugins/catalog.json` debe pasar
+  `npm run validate:plugins` o `npx nx run web:validate-plugins` antes de
+  build/release.
+- El catalogo versionado debe referenciar `./catalog.schema.json` mediante
+  `$schema`; un `$schema` distinto falla en el gate local.
+
+## Flujo de instalacion metadata-only
+
+1. El proveedor entrega un manifest JSON con `id`, `version`,
+   `platformVersion`, `displayName`, `navigation` y/o `workspaces`.
+2. El proveedor valida/autocompleta el archivo con
+   `frontend/apps/web/public/plugins/catalog.schema.json`.
+3. El equipo de plataforma revisa que el manifest apunte a rutas ya instaladas
+   por un modulo estatico del shell.
+4. Se instala con `npm run plugins:install -- <manifest.json>` o se prueba con
+   `--dry-run`.
+5. Se ejecuta `npm run validate:plugins` desde `frontend/`.
+6. Si el catalogo pasa, se ejecutan build, pruebas y publicacion del frontend.
+
+Este flujo no habilita carga remota de codigo. Un plugin con componentes,
+rutas Angular o dependencias propias debe entrar como artefacto de build
+controlado y provider estatico, con ADR o ampliacion explicita del contrato.
+
+## Evidencia
+
+- Contratos y registries:
+  `frontend/libs/shared/ui/src/lib/app-layout/navigation/*` y
+  `frontend/libs/shared/ui/src/lib/app-layout/plugins/*`.
+- Provider de la plataforma: `frontend/apps/web/src/app/core/app-navigation.providers.ts`.
+- Pruebas: `app-navigation.registry.spec.ts` y `app-plugin.registry.spec.ts`.
+- Rutas desde manifest: `app-plugin.routes.spec.ts` y
+  `frontend/apps/web/src/app/core/platform-plugin.manifest.ts`.
+- Workspaces desde manifest: `app-workspace.registry.spec.ts` y
+  `audit-workspace-nav.component.spec.ts`.
+- Runtime metadata-only: `app-plugin-runtime.registry.spec.ts` y
+  `frontend/apps/web/public/plugins/catalog.json`.
+- Schema publico:
+  `frontend/apps/web/public/plugins/catalog.schema.json`.
+- Gate de publicacion de catalogo:
+  `frontend/scripts/validate-plugin-catalog.js`.
+- Target Nx y CI: `frontend/apps/web/project.json` (`web:validate-plugins`) y
+  `.github/workflows/ci.yml` (`Plugin catalog gate`).
+- Pruebas del gate:
+  `frontend/scripts/validate-plugin-catalog.spec.js`.
+- Gestor de catalogo:
+  `frontend/scripts/manage-plugin-catalog.js` y
+  `frontend/scripts/manage-plugin-catalog.spec.js`.
+- Guia de instalacion metadata-only:
+  `docs/fase-5-construccion/modulos/frontend-plugin-catalog.md`.
+- Build/test frontend registrados en
+  `qa/fase-6-qa/evidencias/frontend-extensible-plugins-2026-06-26.md`.

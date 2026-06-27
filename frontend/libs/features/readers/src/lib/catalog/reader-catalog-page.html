@@ -42,6 +42,7 @@
         [providerOptions]="providerOptions()"
         [titleKey]="store.formTitle()"
         [saving]="store.saving()"
+        [dirty]="store.dirty()"
         [readonly]="store.viewMode() !== 'edit'"
         [canEdit]="store.canEdit()"
         (patchForm)="store.patchForm($event)"

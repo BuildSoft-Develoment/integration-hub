@@ -36,7 +36,19 @@ export type IhIconName =
   | 'bell'
   | 'shield'
   | 'git-branch'
-  | 'banknote';
+  | 'banknote'
+  | 'search'
+  | 'trash'
+  | 'refresh'
+  | 'chevron-down'
+  | 'chevron-right'
+  | 'filter'
+  | 'menu'
+  | 'eye'
+  | 'more-vertical'
+  | 'calendar'
+  | 'zap'
+  | 'lock';
 
 @Component({
   selector: 'ih-icon',

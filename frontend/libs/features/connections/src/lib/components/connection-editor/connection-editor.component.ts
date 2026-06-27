@@ -42,6 +42,7 @@ export class ConnectionEditorComponent {
   readonly titleKey = input.required<string>();
   readonly saving = input(false);
   readonly testing = input(false);
+  readonly dirty = input(true);
   readonly readonly = input(false);
   readonly canEdit = input(false);
   readonly testResult = input<ConnectionTestResult | null>(null);

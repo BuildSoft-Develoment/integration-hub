@@ -1,6 +1,7 @@
 import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { TablePreferencesService, sortData, SortState } from '@integration-hub/core/services';
+import { AppFeedbackService, TablePreferencesService, sortData, SortState } from '@integration-hub/core/services';
 import { AuditApiService } from '../api/audit-api.service';
 import { AuditRecord } from '../models/audit.models';
 
@@ -12,11 +13,13 @@ const TABLE_ID = 'audit';
 export class AuditStore implements OnDestroy {
   private readonly api = inject(AuditApiService);
   private readonly prefs = inject(TablePreferencesService);
+  private readonly feedback = inject(AppFeedbackService);
   private readonly searchDebounceMs = 300;
   private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
   private requestSequence = 0;
 
   readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
   readonly events = signal<AuditRecord[]>([]);
   readonly totalLength = signal(0);
   readonly eventTypeOptions = signal<string[]>([]);
@@ -125,6 +128,12 @@ export class AuditStore implements OnDestroy {
       this.totalLength.set(response.total);
       this.eventTypeOptions.set(response.eventTypeOptions);
       this.syncSelectedEvent(response.items);
+      this.error.set(null);
+    } catch (err) {
+      if (requestId === this.requestSequence) {
+        this.error.set('audit.loadError');
+        this.feedback.handleHttpError(err as HttpErrorResponse);
+      }
     } finally {
       if (requestId === this.requestSequence) {
         this.loading.set(false);

@@ -21,6 +21,7 @@
 - [ADR-009 Vertical de mensajeria de pagos](ADR-009-vertical-mensajeria-pagos.md)
 - [ADR-010 Auditoria asincrona multi-broker y lineage por registro](ADR-010-auditoria-asincrona-multi-broker-lineage-registro.md)
 - [ADR-011 Patron repository para el acceso a datos](ADR-011-patron-repository-acceso-datos.md)
+- [ADR-012 Frontend modular extensible por contribuciones](ADR-012-frontend-modular-extensible-plugins.md)
 
 ## Regla
 

@@ -2,11 +2,25 @@
       :host .table-row {
         grid-template-columns: minmax(200px, 1.5fr) 0.9fr 0.8fr;
       }
+      :host .table-head--selectable,
+      :host .table-row--selectable {
+        grid-template-columns: 3rem minmax(200px, 1.5fr) 0.9fr 0.8fr;
+      }
       :host .table-head {
         padding-left: 0.5rem;
       }
       :host .table-row {
         padding-left: 0.5rem;
+      }
+      .row-checkbox {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .ih-checkbox-all {
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
       .row-type,

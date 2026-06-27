@@ -35,6 +35,7 @@ export class ProcessEditorComponent {
   readonly connections = input.required<readonly ConnectionRef[]>();
   readonly saving = input(false);
   readonly executing = input(false);
+  readonly dirty = input(true);
   readonly titleKey = input.required<string>();
   readonly readonly = input(false);
   readonly canEdit = input(false);

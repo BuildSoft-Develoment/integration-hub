@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { ReaderManagerService, I18nService } from '@integration-hub/core/services';
@@ -14,7 +14,8 @@ export type SortDir = 'asc' | 'desc';
   standalone: true,
   imports: [CommonModule, MatChipsModule, MatPaginatorModule, IconComponent],
     templateUrl: './reader-list.component.html',
-    styleUrl: './reader-list.component.css'
+    styleUrl: './reader-list.component.css',
+    changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ReaderListComponent {
   readonly i18n = inject(I18nService);
@@ -22,6 +23,14 @@ export class ReaderListComponent {
 
   presentation(type: ReaderProviderType): ResourcePresentation {
     return this.readerManager.presentation(type);
+  }
+
+  providerLabel(type: ReaderProviderType): string {
+    const descriptor = this.readerManager.availableProviders().find((d) => d.type === type);
+    if (!descriptor) {
+      throw new Error(`No reader provider registered for type: ${type}`);
+    }
+    return descriptor.label;
   }
 
   readonly readers = input.required<readonly ReaderRecord[]>();

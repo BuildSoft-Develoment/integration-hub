@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, input, output, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -17,7 +17,8 @@ import { I18nService } from '@integration-hub/core/services';
       .create-button { justify-self: start; }
     `,
   ],
-    templateUrl: './reader-toolbar.component.html'
+    templateUrl: './reader-toolbar.component.html',
+    changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ReaderToolbarComponent {
   readonly i18n = inject(I18nService);

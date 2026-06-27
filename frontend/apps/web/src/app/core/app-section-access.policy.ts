@@ -21,9 +21,9 @@ export const APP_SECTION_CAPABILITIES: Record<
   sources: 'admin',
   connections: 'admin',
   readers: 'admin',
-  processes: 'admin',
+  processes: 'operate',
   paymentRules: 'admin',
   executions: 'operate',
-  schedules: 'audit',
-  audit: 'audit',
+  schedules: 'audit-read',
+  audit: 'audit-read',
 };

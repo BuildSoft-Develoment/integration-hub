@@ -49,6 +49,26 @@ En `platform-app/src/main/resources/application.properties`:
 
 El patron favorece providers y managers en infraestructura, stores y command services en aplicacion, y pages/components en presentacion.
 
+## Extension modular frontend
+
+- El shell registra modulos mediante manifests declarativos de plugin.
+- Las contribuciones soportadas hoy son `navigation`, `routes` y `workspaces`.
+- El catalogo externo `apps/web/public/plugins/catalog.json` es metadata-only:
+  puede apuntar a rutas ya instaladas, pero no declarar rutas Angular ni codigo
+  remoto.
+- El contrato para proveedores vive en
+  `apps/web/public/plugins/catalog.schema.json` y el catalogo real lo referencia
+  con `$schema`.
+- El target `web:validate-plugins` valida ese catalogo y `web:build` depende de
+  el para bloquear releases con plugins incompatibles, campos desconocidos o
+  rutas no instaladas.
+- El target `web:test-plugins` ejecuta pruebas del validador y depende de
+  `web:validate-plugins`.
+- Los comandos `plugins:install`, `plugins:remove` y `plugins:list` gestionan el
+  catalogo metadata-only con validacion previa.
+- La guia de instalacion metadata-only vive en
+  [frontend-plugin-catalog](frontend-plugin-catalog.md).
+
 ## Convenciones actuales
 
 ### Nomenclatura de pages
@@ -90,6 +110,8 @@ Usar `page` simple en features de:
 
 ## Testing y verificacion
 
+- `npm run validate:plugins`
+- `npm run test:plugins`
 - `npm run build`
 - `npm run test -- --watch=false`
 - `npm run e2e`

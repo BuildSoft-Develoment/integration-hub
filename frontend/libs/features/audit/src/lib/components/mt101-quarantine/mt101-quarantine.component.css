@@ -3,6 +3,12 @@
 .q__lote-title { font-size:1.15rem; font-weight:600; display:flex; align-items:center; gap:.4rem; }
 .q__lote-chips { display:flex; gap:.4rem; flex-wrap:wrap; }
 .q__chip { font-size:.78rem; color:var(--ih-text-soft); background:var(--ih-surface-alt); border:1px solid var(--ih-border); padding:2px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:.3rem; }
+.q__risk-strip { display:flex; gap:.4rem; flex-wrap:wrap; }
+.q__risk-pill strong { font-size:.75rem; }
+.q__risk-pill small { font-size:.68rem; }
+.q__risk-pill--high { color:var(--ih-status-warning); border-color:var(--ih-status-warning); }
+.q__risk-pill--critical { color:var(--ih-status-error); border-color:var(--ih-status-error); }
+.q__risk-detail { margin:0; color:var(--ih-text-soft); font-size:.78rem; }
 .q__search { display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; }
 .q__search mat-form-field { width:13rem; }
 .q__filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(11rem,1fr)); gap:.6rem; align-items:center; }

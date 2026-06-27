@@ -49,12 +49,12 @@
         </div>
       }
 
-      <div class="shell-route-body">
+      <main class="shell-route-body">
         @if (breadcrumb.items().length) {
           <ih-breadcrumb [items]="breadcrumb.items()" [backLabel]="breadcrumb.backLabel()" />
         }
         <router-outlet></router-outlet>
-      </div>
+      </main>
     </section>
   </mat-sidenav-content>
 </mat-sidenav-container>

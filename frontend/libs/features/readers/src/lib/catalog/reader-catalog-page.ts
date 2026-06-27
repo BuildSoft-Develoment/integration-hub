@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit } from '@angular/core';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { ReaderProviderType } from '@integration-hub/core/providers';
 import { I18nService, ReaderManagerService } from '@integration-hub/core/services';
@@ -23,6 +23,7 @@ import { ReaderEditorStateService } from '../editor/reader-editor-state.service'
   imports: [CommonModule, MatSidenavModule, ReaderToolbarComponent, ReaderListComponent, ReaderEditorComponent],
   templateUrl: './reader-catalog-page.html',
   styleUrl: './reader-catalog-page.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ReaderCatalogPageComponent implements OnInit {
   readonly i18n = inject(I18nService);

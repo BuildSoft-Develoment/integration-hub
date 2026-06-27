@@ -5,6 +5,9 @@
       </div>
 
       <div class="toolbar-filters ih-catalog-toolbar__filters">
+        <button mat-stroked-button type="button" class="ih-catalog-action" (click)="refresh.emit()" [disabled]="loading()">
+          {{ i18n.t('common.refresh') }}
+        </button>
         <mat-form-field class="toolbar-search">
           <mat-label>{{ i18n.t('executions.search') }}</mat-label>
           <input matInput [ngModel]="search()" (ngModelChange)="searchChange.emit($event)" />

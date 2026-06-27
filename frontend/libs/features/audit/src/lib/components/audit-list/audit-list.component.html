@@ -38,16 +38,18 @@
 
             <div class="row-type ih-catalog-row-meta">
               <mat-chip-set>
-                <mat-chip>{{ statusLabel(event.status) }}</mat-chip>
+                <mat-chip [class]="statusChipClass(event.status)">{{ statusLabel(event.status) }}</mat-chip>
               </mat-chip-set>
             </div>
 
-            <div class="row-status ih-catalog-row-meta"><time [attr.datetime]="event.createdAt" [title]="event.createdAt | ihTime:'absolute'">{{ event.createdAt | ihTime }}</time></div>
+            <div class="row-status ih-catalog-row-meta"><time [attr.datetime]="event.createdAt" [title]="event.createdAt | ihTime:'absolute'" [attr.aria-label]="event.createdAt | ihTime:'absolute'">{{ event.createdAt | ihTime }}</time></div>
           </button>
         } @empty {
           <div class="empty-state ih-catalog-empty-state ih-muted">{{ i18n.t('audit.noData') }}</div>
         }
       </div>
 
-      <mat-paginator class="list-paginator ih-catalog-paginator" [length]="totalLength()" [pageIndex]="pageIndex()" [pageSize]="pageSize()" [pageSizeOptions]="pageSizeOptions()" [hidePageSize]="false" [showFirstLastButtons]="false" (page)="onPageChange($event)" />
+      @if (totalLength() > 0) {
+        <mat-paginator class="list-paginator ih-catalog-paginator" [length]="totalLength()" [pageIndex]="pageIndex()" [pageSize]="pageSize()" [pageSizeOptions]="pageSizeOptions()" [hidePageSize]="false" [showFirstLastButtons]="false" (page)="onPageChange($event)" />
+      }
     </div>

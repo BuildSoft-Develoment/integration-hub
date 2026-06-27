@@ -4,7 +4,7 @@ import { MatListModule } from '@angular/material/list';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthAccessService, I18nService } from '@integration-hub/core/services';
 
-import { APP_NAVIGATION_ITEMS } from './app-navigation.token';
+import { AppPluginRuntimeRegistry } from '../plugins/app-plugin-runtime.registry';
 
 @Component({
   selector: 'ih-app-navigation',
@@ -16,9 +16,9 @@ import { APP_NAVIGATION_ITEMS } from './app-navigation.token';
 export class AppNavigationComponent {
   readonly i18n = inject(I18nService);
   readonly access = inject(AuthAccessService);
-  private readonly navigationItems = inject(APP_NAVIGATION_ITEMS);
+  private readonly plugins = inject(AppPluginRuntimeRegistry);
   readonly items = computed(() =>
-    this.navigationItems.filter(
+    this.plugins.navigation().filter(
       (item) =>
         item.requiredCapability == null ||
         this.access.hasCapability(item.requiredCapability)

@@ -16,6 +16,12 @@ import jakarta.ws.rs.core.MediaType;
 import java.util.List;
 import java.util.Map;
 
+import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.api.security.PlatformRoles.OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PAYMENTS_OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+
 @Path("/api/query/mt101-fragments")
 @Produces(MediaType.APPLICATION_JSON)
 public class Mt101FragmentLookupResource {
@@ -31,7 +37,7 @@ public class Mt101FragmentLookupResource {
 
     @GET
     @Path("/source-row")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public List<Mt101FragmentLinkResponse> bySourceRow(@QueryParam("connectionRef") String connectionRef,
                                                        @QueryParam("recordNumber") Long recordNumber,
                                                        @QueryParam("sourceFileHash") String sourceFileHash,
@@ -53,7 +59,7 @@ public class Mt101FragmentLookupResource {
     /** Resumen del lote: total de fragmentos + conteo por estado (para el panel de cuarentena). */
     @GET
     @Path("/summary")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public Map<String, Object> summary(@QueryParam("connectionRef") String connectionRef,
                                        @QueryParam("fragmentSetId") String fragmentSetId) {
         try {
@@ -77,7 +83,7 @@ public class Mt101FragmentLookupResource {
      */
     @GET
     @Path("/row-timeline")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public List<Mt101RowTimelineService.Milestone> rowTimeline(@QueryParam("connectionRef") String connectionRef,
                                                                @QueryParam("fragmentSetId") String fragmentSetId,
                                                                @QueryParam("sourceFileHash") String sourceFileHash,

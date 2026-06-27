@@ -14,9 +14,27 @@
 }
 
 .overview-header {
-  display: grid;
-  gap: 0.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   padding-bottom: 0.3rem;
+}
+
+.overview-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.overview-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 3rem 1rem;
+  text-align: center;
+  color: var(--ih-text-soft);
 }
 
 .overview-copy p {

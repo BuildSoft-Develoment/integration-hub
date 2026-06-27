@@ -1,9 +1,17 @@
 <div class="task-modal-backdrop" (click)="close.emit()"></div>
 
-    <section class="task-modal-card" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+    <section
+      class="task-modal-card"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="task-modal-title"
+      cdkTrapFocus
+      cdkTrapFocusAutoCapture
+      (click)="$event.stopPropagation()"
+    >
       <header class="task-modal-header">
         <div class="task-modal-copy">
-          <h3>{{ i18n.t('ui.task', { index: index() + 1 }) }}</h3>
+          <h3 id="task-modal-title">{{ i18n.t('ui.task', { index: index() + 1 }) }}</h3>
           <p class="task-modal-summary">{{ taskTypeLabel(task().taskType) }}</p>
         </div>
 

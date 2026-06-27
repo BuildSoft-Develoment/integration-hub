@@ -1,4 +1,6 @@
 <section class="lookup audit-page">
+      <ih-audit-workspace-nav />
+
       <div>
         <h2 class="ih-section-title">{{ i18n.t('audit.lookup.title') }}</h2>
         <p class="ih-muted">{{ i18n.t('audit.lookup.subtitle') }}</p>
@@ -72,7 +74,7 @@
                   <td>{{ row.errorMessage || '-' }}</td>
                   <td>
                     @if (row.updatedAt || row.createdAt; as ts) {
-                      <time [attr.datetime]="ts" [title]="ts | ihTime:'absolute'">{{ ts | ihTime }}</time>
+                      <time [attr.datetime]="ts" [title]="ts | ihTime:'absolute'" [attr.aria-label]="ts | ihTime:'absolute'">{{ ts | ihTime }}</time>
                     } @else { - }
                   </td>
                   <td>

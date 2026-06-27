@@ -1,6 +1,6 @@
 // @trace RF-003 (procesos: activar/desactivar proceso para habilitar ejecucion)
 import { CommonModule } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -20,7 +20,8 @@ type StatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
       .create-button { justify-self: start; }
     `,
   ],
-    templateUrl: './process-toolbar.component.html'
+    templateUrl: './process-toolbar.component.html',
+    changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProcessToolbarComponent {
   readonly i18n = inject(I18nService);

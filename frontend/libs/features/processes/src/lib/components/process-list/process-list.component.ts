@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { I18nService } from '@integration-hub/core/services';
@@ -13,7 +13,8 @@ export type SortDir = 'asc' | 'desc';
   standalone: true,
   imports: [CommonModule, MatChipsModule, MatPaginatorModule, IconComponent],
     templateUrl: './process-list.component.html',
-    styleUrl: './process-list.component.css'
+    styleUrl: './process-list.component.css',
+    changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProcessListComponent {
   readonly i18n = inject(I18nService);

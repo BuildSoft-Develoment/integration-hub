@@ -53,8 +53,8 @@
 
             <div class="row-status ih-catalog-row-meta">
               <div class="row-dates">
-                <time [attr.datetime]="execution.finishedAt || execution.startedAt" [title]="(execution.finishedAt || execution.startedAt) | ihTime:'absolute'">{{ (execution.finishedAt || execution.startedAt) | ihTime }}</time>
-                <small>{{ i18n.t('executions.startedAt') }} <time [attr.datetime]="execution.startedAt" [title]="execution.startedAt | ihTime:'absolute'">{{ execution.startedAt | ihTime }}</time></small>
+                <time [attr.datetime]="execution.finishedAt || execution.startedAt" [title]="(execution.finishedAt || execution.startedAt) | ihTime:'absolute'" [attr.aria-label]="(execution.finishedAt || execution.startedAt) | ihTime:'absolute'">{{ (execution.finishedAt || execution.startedAt) | ihTime }}</time>
+                <small>{{ i18n.t('executions.startedAt') }} <time [attr.datetime]="execution.startedAt" [title]="execution.startedAt | ihTime:'absolute'" [attr.aria-label]="execution.startedAt | ihTime:'absolute'">{{ execution.startedAt | ihTime }}</time></small>
               </div>
             </div>
           </button>
@@ -63,5 +63,7 @@
         }
       </div>
 
-      <mat-paginator class="list-paginator ih-catalog-paginator" [length]="totalLength()" [pageIndex]="pageIndex()" [pageSize]="pageSize()" [pageSizeOptions]="pageSizeOptions()" [hidePageSize]="false" [showFirstLastButtons]="false" (page)="onPageChange($event)" />
+      @if (totalLength() > 0) {
+        <mat-paginator class="list-paginator ih-catalog-paginator" [length]="totalLength()" [pageIndex]="pageIndex()" [pageSize]="pageSize()" [pageSizeOptions]="pageSizeOptions()" [hidePageSize]="false" [showFirstLastButtons]="false" (page)="onPageChange($event)" />
+      }
     </div>

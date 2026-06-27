@@ -1,5 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { ConnectionProviderDescriptor, ConnectionProviderType } from '@integration-hub/core/providers';
@@ -12,9 +14,10 @@ export type SortDir = 'asc' | 'desc';
 @Component({
   selector: 'ih-connection-list',
   standalone: true,
-  imports: [CommonModule, MatChipsModule, MatPaginatorModule, IconComponent],
+  imports: [CommonModule, FormsModule, MatCheckboxModule, MatChipsModule, MatPaginatorModule, IconComponent],
     templateUrl: './connection-list.component.html',
-    styleUrl: './connection-list.component.css'
+    styleUrl: './connection-list.component.css',
+    changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ConnectionListComponent {
   readonly i18n = inject(I18nService);
@@ -29,10 +32,15 @@ export class ConnectionListComponent {
   readonly pageIndex = input(0);
   readonly pageSize = input(8);
   readonly pageSizeOptions = input<readonly number[]>([8, 16, 24]);
+  readonly canEdit = input(false);
 
   readonly selectConnection = output<ConnectionRecord>();
   readonly toggleSort = output<string>();
   readonly pageChange = output<PageEvent>();
+  readonly selectedIds = input<Set<number>>(new Set());
+  readonly isAllSelected = input(false);
+  readonly toggleSelection = output<number>();
+  readonly toggleSelectAll = output<void>();
 
   onPageChange(event: PageEvent): void {
     this.pageChange.emit(event);

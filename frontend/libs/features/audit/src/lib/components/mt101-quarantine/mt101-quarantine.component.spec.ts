@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { AuthAccessService } from '@integration-hub/core/services';
 import { ActivatedRoute } from '@angular/router';
 import { of } from 'rxjs';
 
@@ -35,6 +36,8 @@ describe('Mt101QuarantineComponent', () => {
   let executeCalls: number;
   let correctCalls: number;
   let lastCorrectionVersion: number | undefined;
+  let canAuditAdmin: boolean;
+  let canAuditOperate: boolean;
 
   beforeEach(() => {
     requestCalls = 0;
@@ -42,6 +45,8 @@ describe('Mt101QuarantineComponent', () => {
     executeCalls = 0;
     correctCalls = 0;
     lastCorrectionVersion = undefined;
+    canAuditAdmin = true;
+    canAuditOperate = true;
     const api = {
       mt101RequestRebuildRun: () => {
         requestCalls++;
@@ -74,11 +79,16 @@ describe('Mt101QuarantineComponent', () => {
       },
     } as unknown as AuditApiService;
     const route = { snapshot: { queryParamMap: { get: () => null } } } as unknown as ActivatedRoute;
+    const access = {
+      canAuditAdmin: () => canAuditAdmin,
+      canAuditOperate: () => canAuditOperate,
+    } as unknown as AuthAccessService;
 
     TestBed.configureTestingModule({
       providers: [
         { provide: AuditApiService, useValue: api },
         { provide: ActivatedRoute, useValue: route },
+        { provide: AuthAccessService, useValue: access },
       ],
     });
     component = TestBed.runInInjectionContext(() => new Mt101QuarantineComponent());
@@ -96,6 +106,13 @@ describe('Mt101QuarantineComponent', () => {
   });
 
   describe('flujo gobernado del rebuild (maker-checker)', () => {
+    it('expone riesgos operativos para rebuild y PAY', () => {
+      expect(component.governedRisks.map((risk) => risk.id)).toContain('mt101-rebuild-approve');
+      expect(component.governedRisks.map((risk) => risk.id)).toContain('mt101-corrective-pay-approve');
+      expect(component.executeRisk.severity).toBe('critical');
+      expect(component.correctionRisk.evidence).toContain('optimistic-lock');
+    });
+
     it('requestRebuild crea el run REQUESTED sin ejecutar', () => {
       component.fragmentSetId = 'S';
       component.requestRebuild();
@@ -131,13 +148,27 @@ describe('Mt101QuarantineComponent', () => {
       expect(component.rebuildRun()).toBeNull();
       expect(executeCalls).toBe(0);
     });
+
+    it('no solicita ni aprueba sin la capacidad requerida', () => {
+      component.fragmentSetId = 'S';
+
+      canAuditOperate = false;
+      component.requestRebuild();
+      expect(requestCalls).toBe(0);
+
+      canAuditOperate = true;
+      component.requestRebuild();
+      canAuditAdmin = false;
+      component.approveRun();
+      expect(approveCalls).toBe(0);
+    });
   });
 
   describe('construir cuarentena (2-pasos)', () => {
     it('arma en el primer clic', () => {
       component.fragmentSetId = 'S';
       component.confirmBuild();
-      expect(component.armed()).toBe('build');
+      expect(component.actions.armed()).toBe('quarantine:build');
     });
   });
 

@@ -1,5 +1,16 @@
 import { ProcessTaskType } from '../models/process.models';
 
+export type TaskCategory = 'motor' | 'swift-mt101';
+
+export function taskCategory(type: ProcessTaskType): TaskCategory {
+  return type.startsWith('MT101_') ? 'swift-mt101' : 'motor';
+}
+
+export const CATEGORY_LABELS: Record<TaskCategory, string> = {
+  motor: 'Motor',
+  'swift-mt101': 'SWIFT MT101',
+};
+
 export interface ProcessFlowNodePresentation {
   badge: string;
   toneClass: string;

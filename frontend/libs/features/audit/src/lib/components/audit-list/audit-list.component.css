@@ -1,6 +1,6 @@
 :host .table-head,
 :host .table-row {
-  grid-template-columns: 2.5rem minmax(200px, 1.5fr) 0.9fr 0.8fr;
+  grid-template-columns: minmax(200px, 1.5fr) 0.9fr 0.8fr;
 }
 :host .table-head {
   padding-left: 0.5rem;
@@ -20,14 +20,6 @@
 }
 .row-task {
   color: var(--ih-text-soft);
-}
-
-.col-check {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  flex-shrink: 0;
 }
 
 .col-sortable {
@@ -51,4 +43,19 @@
 .sort-arrow {
   font-size: 0.6rem;
   line-height: 1;
+}
+
+.audit-status-ch--ok {
+  --mdc-chip-elevated-container-color: var(--ih-status-success-bg);
+  --mdc-chip-label-text-color: var(--ih-status-success);
+}
+
+.audit-status-ch--error {
+  --mdc-chip-elevated-container-color: var(--ih-status-error-bg);
+  --mdc-chip-label-text-color: var(--ih-status-error);
+}
+
+.audit-status-ch--pending {
+  --mdc-chip-elevated-container-color: var(--ih-status-warning-bg);
+  --mdc-chip-label-text-color: var(--ih-status-warning);
 }

@@ -36,6 +36,13 @@ export class ProcessEditorStore {
   readonly viewMode = signal<ViewMode>('details');
   readonly form = signal<ProcessFormModel>(this.formFactory.create());
 
+  private formSnapshot = '';
+
+  readonly dirty = computed(() => {
+    if (this.viewMode() !== 'edit') { return false; }
+    return JSON.stringify(this.form()) !== this.formSnapshot;
+  });
+
   readonly canEdit = computed(() => this.access.canAdmin());
   readonly canOperate = computed(() => this.access.canOperate());
   readonly formTitle = computed(() =>
@@ -45,6 +52,10 @@ export class ProcessEditorStore {
         : 'processes.create'
       : 'processes.detail'
   );
+
+  canDiscard(): boolean {
+    return !this.dirty();
+  }
 
   selectProcess(process: ProcessRecord): void {
     this.selectedProcessId.set(process.id);
@@ -56,6 +67,7 @@ export class ProcessEditorStore {
 
   startCreate(): void {
     this.form.set(this.formFactory.create());
+    this.formSnapshot = JSON.stringify(this.form());
     this.viewMode.set('edit');
     this.drawerOpen.set(true);
   }
@@ -64,6 +76,7 @@ export class ProcessEditorStore {
     this.selectedProcessId.set(process.id);
     this.selectedProcess.set(process);
     this.form.set(this.formFactory.fromRecord(process));
+    this.formSnapshot = JSON.stringify(this.form());
     this.viewMode.set('edit');
     this.drawerOpen.set(true);
   }

@@ -1,12 +1,13 @@
 // @trace RF-001 (observabilidad: consultar eventos de auditoria por filtros)
 import { CommonModule } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { I18nService } from '@integration-hub/core/services';
 import { IconComponent, RelativeTimePipe } from '@integration-hub/shared/ui';
 
 import { AuditPresentationService } from '../../utils/audit-presentation.service';
+import { timelineStatusKind } from '../../utils/timeline-format';
 import { AuditRecord } from '../../models/audit.models';
 
 export type SortDir = 'asc' | 'desc';
@@ -16,7 +17,8 @@ export type SortDir = 'asc' | 'desc';
   standalone: true,
   imports: [CommonModule, MatChipsModule, MatPaginatorModule, IconComponent, RelativeTimePipe],
   templateUrl: './audit-list.component.html',
-  styleUrl: './audit-list.component.css'
+  styleUrl: './audit-list.component.css',
+    changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AuditListComponent {
   readonly i18n = inject(I18nService);
@@ -41,6 +43,17 @@ export class AuditListComponent {
 
   statusLabel(status: string): string {
     return this.presentation.statusLabel(status);
+  }
+
+  statusChipClass(status: string): string {
+    switch (timelineStatusKind(status)) {
+      case 'ok':
+        return 'audit-status-ch--ok';
+      case 'error':
+        return 'audit-status-ch--error';
+      default:
+        return 'audit-status-ch--pending';
+    }
   }
 
   eventLabel(event: AuditRecord): string {

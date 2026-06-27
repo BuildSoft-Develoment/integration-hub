@@ -5,7 +5,25 @@
         <h2 class="ih-section-title">{{ i18n.t('overview.title') }}</h2>
         <p class="ih-muted">{{ i18n.t('overview.subtitle') }}</p>
       </div>
+      <div class="overview-actions">
+        <button mat-stroked-button type="button" (click)="store.refresh()" [disabled]="store.loading()">
+          <ih-icon name="refresh" [size]="16" />
+          {{ i18n.t('common.refresh') }}
+        </button>
+      </div>
     </header>
+
+    @if (store.loading()) {
+      <ih-loading variant="skeleton" [rows]="4" />
+    } @else if (store.error()) {
+      <div class="overview-error" role="alert">
+        <p>{{ i18n.t(store.error()!) }}</p>
+        <button mat-stroked-button type="button" (click)="store.refresh()">
+          <ih-icon name="refresh" [size]="16" />
+          {{ i18n.t('common.retry') }}
+        </button>
+      </div>
+    } @else {
 
     <section class="metrics-grid">
       @for (metric of store.metrics(); track metric.key) {
@@ -37,5 +55,6 @@
         [rows]="store.recentAuditRows()"
       />
     </section>
+    }
   </section>
 </section>

@@ -27,6 +27,13 @@ export class ConnectionCatalogQueryStore implements OnDestroy {
   readonly selectedConnectionId = signal<number | null>(null);
   readonly selectedConnection = signal<ConnectionRecord | null>(null);
   readonly drawerOpen = signal(false);
+  readonly selectedIds = signal<Set<number>>(new Set());
+
+  readonly isAllSelected = computed(() => {
+    const ids = this.selectedIds();
+    const items = this.connections();
+    return items.length > 0 && items.every((item) => ids.has(item.id));
+  });
   readonly currentPage = signal(0);
   readonly pageSize = signal(8);
 
@@ -64,6 +71,26 @@ export class ConnectionCatalogQueryStore implements OnDestroy {
 
   closeDrawer(): void {
     this.drawerOpen.set(false);
+  }
+
+  toggleSelection(id: number): void {
+    this.selectedIds.update((ids) => {
+      const next = new Set(ids);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
+      return next;
+    });
+  }
+
+  toggleSelectAll(): void {
+    if (this.isAllSelected()) {
+      this.selectedIds.set(new Set());
+    } else {
+      this.selectedIds.set(new Set(this.connections().map((c) => c.id)));
+    }
+  }
+
+  clearSelection(): void {
+    this.selectedIds.set(new Set());
   }
 
   updatePagination(pageIndex: number, pageSize: number): void {

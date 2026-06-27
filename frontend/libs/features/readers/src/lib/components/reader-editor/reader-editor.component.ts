@@ -47,6 +47,7 @@ export class ReaderEditorComponent {
   readonly draft = input.required<ReaderDraft>();
   readonly providerOptions = input.required<readonly ReaderProviderDescriptor[]>();
   readonly saving = input(false);
+  readonly dirty = input(true);
   readonly titleKey = input.required<string>();
   readonly readonly = input(false);
   readonly canEdit = input(false);

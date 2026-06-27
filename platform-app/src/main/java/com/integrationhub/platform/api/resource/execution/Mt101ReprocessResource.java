@@ -17,6 +17,11 @@ import jakarta.ws.rs.core.SecurityContext;
 
 import java.util.List;
 
+import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.api.security.PlatformRoles.OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PAYMENTS_OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+
 /**
  * Reproceso quirurgico de fragmentos MT101. Mutación: excluye el rol auditor
  * (solo lectura). Permite revalidar por estado o reprocesar solo las filas
@@ -38,7 +43,7 @@ public class Mt101ReprocessResource {
      */
     @POST
     @Path("/status")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
     public Mt101ReprocessResponse byStatus(@QueryParam("connectionRef") String connectionRef,
                                            @QueryParam("fragmentSetId") String fragmentSetId,
                                            @QueryParam("fromStatus") String fromStatus,
@@ -62,7 +67,7 @@ public class Mt101ReprocessResource {
      */
     @POST
     @Path("/source-rows")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
     public List<Mt101FragmentLinkResponse> bySourceRows(@QueryParam("connectionRef") String connectionRef,
                                                         @QueryParam("fragmentSetId") String fragmentSetId,
                                                         @QueryParam("recordFrom") Long recordFrom,
@@ -96,7 +101,7 @@ public class Mt101ReprocessResource {
      */
     @POST
     @Path("/reopen-rejected")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
     public Mt101ReprocessResponse reopenRejected(@QueryParam("connectionRef") String connectionRef,
                                                  @QueryParam("fragmentSetId") String fragmentSetId,
                                                  @QueryParam("sourceFileHash") String sourceFileHash,

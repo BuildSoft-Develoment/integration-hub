@@ -1,17 +1,19 @@
 // @trace observabilidad: operacion del spool asincronico de auditoria
 import { CommonModule } from '@angular/common';
-import { Component, effect, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, effect, OnInit, computed, HostListener, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
-import { BreadcrumbService, I18nService } from '@integration-hub/core/services';
-import { RelativeTimePipe } from '@integration-hub/shared/ui';
+import { ActionDispatcherService, RelativeTimePipe } from '@integration-hub/shared/ui';
+import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { forkJoin } from 'rxjs';
 import { AuditApiService } from '../../api/audit-api.service';
 import { AuditSpoolEntry, AuditSpoolSummary } from '../../models/audit.models';
+import { AuditOperationRisk, auditEvidenceLabelKey, auditOperationRisk } from '../../utils/audit-operation-risk';
+import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspace-nav.component';
 
 @Component({
   selector: 'ih-audit-spool',
@@ -24,6 +26,7 @@ import { AuditSpoolEntry, AuditSpoolSummary } from '../../models/audit.models';
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    AuditWorkspaceNavComponent,
     RelativeTimePipe,
   ],
   styleUrl: './audit-spool.component.css',
@@ -32,17 +35,19 @@ import { AuditSpoolEntry, AuditSpoolSummary } from '../../models/audit.models';
 export class AuditSpoolComponent implements OnInit {
   private readonly api = inject(AuditApiService);
   private readonly breadcrumb = inject(BreadcrumbService);
+  private readonly access = inject(AuthAccessService);
   readonly i18n = inject(I18nService);
+  readonly actions = inject(ActionDispatcherService);
+  readonly canAuditAdmin = this.access.canAuditAdmin;
+  readonly cleanupRisk = auditOperationRisk('audit-spool-cleanup-sent');
+  readonly retryRisk = auditOperationRisk('audit-spool-retry-dead');
 
   readonly summary = signal<AuditSpoolSummary | null>(null);
   readonly deadRows = signal<AuditSpoolEntry[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly message = signal<string | null>(null);
-
-  // Confirmación 2-pasos para acciones irreversibles (limpiar SENT, retry de un DEAD).
-  readonly armed = signal<string | null>(null);
-  private armTimer?: ReturnType<typeof setTimeout>;
+  readonly lastRefresh = signal<string | null>(null);
 
   deadLimit = 100;
   retentionDays = 7;
@@ -102,10 +107,20 @@ export class AuditSpoolComponent implements OnInit {
     this.load();
   }
 
-  ngOnDestroy(): void {
-    if (this.armTimer) {
-      clearTimeout(this.armTimer);
+  @HostListener('document:click', ['$event'])
+  onDocClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement | null;
+    if (!target?.closest('ih-audit-spool')) {
+      this.actions.disarm();
     }
+  }
+
+  ngOnDestroy(): void {
+    this.actions.disarm();
+  }
+
+  evidenceText(risk: AuditOperationRisk): string {
+    return risk.evidence.map((item) => this.i18n.t(auditEvidenceLabelKey(item))).join(' · ');
   }
 
   setAutoRefresh(on: boolean): void {
@@ -134,6 +149,7 @@ export class AuditSpoolComponent implements OnInit {
       next: ({ summary, deadRows }) => {
         this.summary.set(summary);
         this.deadRows.set(deadRows);
+        this.lastRefresh.set(new Date().toISOString());
         this.loading.set(false);
       },
       error: () => {
@@ -158,33 +174,22 @@ export class AuditSpoolComponent implements OnInit {
     });
   }
 
-  private arm(id: string, run: () => void): void {
-    if (this.armed() === id) {
-      this.disarm();
-      run();
+  confirmCleanup(): void {
+    if (!this.canAuditAdmin()) {
       return;
     }
-    this.armed.set(id);
-    if (this.armTimer) {
-      clearTimeout(this.armTimer);
+    if (this.actions.dispatch({ id: 'spool:cleanup', severity: 'danger' })) {
+      this.cleanupSent();
     }
-    this.armTimer = setTimeout(() => this.armed.set(null), 5000);
-  }
-
-  private disarm(): void {
-    this.armed.set(null);
-    if (this.armTimer) {
-      clearTimeout(this.armTimer);
-      this.armTimer = undefined;
-    }
-  }
-
-  confirmCleanup(): void {
-    this.arm('cleanup', () => this.cleanupSent());
   }
 
   confirmRetry(row: AuditSpoolEntry): void {
-    this.arm(`retry:${row.id}`, () => this.retry(row));
+    if (!this.canAuditAdmin()) {
+      return;
+    }
+    if (this.actions.dispatch({ id: `spool:retry:${row.id}`, severity: 'danger' })) {
+      this.retry(row);
+    }
   }
 
   retry(row: AuditSpoolEntry): void {

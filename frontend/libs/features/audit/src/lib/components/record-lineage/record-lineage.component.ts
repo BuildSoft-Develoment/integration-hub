@@ -13,6 +13,7 @@ import { IconComponent, RelativeTimePipe } from '@integration-hub/shared/ui';
 import { AuditApiService } from '../../api/audit-api.service';
 import { RecordLineageEntry } from '../../models/audit.models';
 import { durationBetween, timelineStatusIcon, timelineStatusKind } from '../../utils/timeline-format';
+import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspace-nav.component';
 
 type SearchMode = 'record' | 'trace' | 'key' | 'sourceRow';
 
@@ -35,6 +36,7 @@ type SearchMode = 'record' | 'trace' | 'key' | 'sourceRow';
     MatSelectModule,
     RelativeTimePipe,
     IconComponent,
+    AuditWorkspaceNavComponent,
   ],
   styleUrl: './record-lineage.component.css',
   templateUrl: './record-lineage.component.html',

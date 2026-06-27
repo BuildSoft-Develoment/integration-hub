@@ -91,6 +91,49 @@
   width: 100%;
 }
 
+.code-textarea {
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.validation-hint--error {
+  color: var(--ih-status-error);
+  font-weight: 500;
+  font-size: 0.78rem;
+}
+
+.validation-hint--ok {
+  color: var(--ih-status-success);
+  font-weight: 500;
+  font-size: 0.78rem;
+}
+
+.predicate-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.export-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.severity-ch--error {
+  --mdc-chip-elevated-container-color: var(--ih-status-error-bg);
+  --mdc-chip-label-text-color: var(--ih-status-error);
+}
+
+.severity-ch--warn {
+  --mdc-chip-elevated-container-color: var(--ih-status-warning-bg);
+  --mdc-chip-label-text-color: var(--ih-status-warning);
+}
+
+.severity-ch--info {
+  --mdc-chip-elevated-container-color: var(--ih-status-info-bg);
+  --mdc-chip-label-text-color: var(--ih-status-info);
+}
+
 .bulk-panel {
   display: flex;
   flex-direction: column;

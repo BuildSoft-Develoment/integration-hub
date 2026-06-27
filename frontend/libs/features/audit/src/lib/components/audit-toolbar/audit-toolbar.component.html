@@ -5,6 +5,15 @@
       </div>
 
       <div class="toolbar-filters ih-catalog-toolbar__filters">
+        <button mat-stroked-button type="button" class="ih-catalog-action" (click)="refresh.emit()" [disabled]="loading()">
+          {{ i18n.t('common.refresh') }}
+        </button>
+        <button mat-stroked-button type="button" class="ih-catalog-action" (click)="exportCsv.emit()" [disabled]="loading()">
+          {{ i18n.t('audit.exportCsv') }}
+        </button>
+        <button mat-stroked-button type="button" class="ih-catalog-action" (click)="exportJson.emit()" [disabled]="loading()">
+          {{ i18n.t('audit.exportJson') }}
+        </button>
         <mat-form-field class="toolbar-search">
           <mat-label>{{ i18n.t('audit.search') }}</mat-label>
           <input matInput [ngModel]="search()" (ngModelChange)="searchChange.emit($event)" />

@@ -37,7 +37,7 @@ Consolidar los requisitos no funcionales y riesgos arquitectonicos que condicion
 ### Seguridad
 
 - autenticacion y autorizacion delegadas a `Keycloak`
-- acceso por roles `platform-admin`, `integration-admin`, `operator`, `auditor`
+- acceso por roles `platform-admin`, `integration-admin`, `operator`, `payments-operator`, `auditor`
 - secretos fuera del codigo y de archivos locales de despliegue
 - TLS segun politica corporativa
 - trazabilidad de accesos y ejecuciones
@@ -59,6 +59,7 @@ Consolidar los requisitos no funcionales y riesgos arquitectonicos que condicion
 
 - las vistas `LikeC4` deben mantenerse alineadas con el codigo
 - nuevas capacidades deben documentarse en `ADR` o documento tecnico equivalente
+- las extensiones frontend deben registrarse mediante contratos explicitos de contribucion y no por acoplamiento directo al shell
 - la documentacion no debe derivar hacia una arquitectura paralela desconectada del repo real
 
 ## Riesgos principales
@@ -98,3 +99,9 @@ Consolidar los requisitos no funcionales y riesgos arquitectonicos que condicion
 - impacto: medio
 - descripcion: la arquitectura puede desalinearse del producto real si no se actualizan vistas y documentos
 - mitigacion: revision documental por release, `LikeC4` como fuente viva y `ADR` para cambios importantes
+
+### R-07 Plugins frontend externos sin gobierno
+
+- impacto: alto
+- descripcion: permitir extensiones instalables desde fuera puede introducir colisiones de rutas, permisos inconsistentes, incompatibilidad de version o dependencias no controladas
+- mitigacion: manifiesto versionado, SPI por contribuciones, JSON Schema publico del catalogo, validacion temprana de identificadores/rutas/workspaces/campos desconocidos, compatibilidad por `platformVersion`, filtrado por capabilities, catalogo runtime metadata-only sin ejecucion de codigo remoto, gate `npm run validate:plugins` antes de publicar catalogos externos y ADR para nuevas superficies de extension

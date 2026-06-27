@@ -127,6 +127,42 @@ $ih-dark-theme: mat.define-theme((
   --ih-tone-integration: var(--ih-accent-strong);
   --ih-tone-cloud: var(--ih-status-info);
   --ih-tone-payment: var(--ih-status-warning);
+  /* Tipografia */
+  --ih-font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ih-font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  --ih-font-size-xs: 0.72rem;
+  --ih-font-size-sm: 0.82rem;
+  --ih-font-size-md: 0.9rem;
+  --ih-font-size-lg: 1rem;
+  --ih-font-size-xl: 1.25rem;
+  --ih-font-size-2xl: 1.5rem;
+  --ih-line-height-tight: 1.25;
+  --ih-line-height-normal: 1.45;
+  --ih-line-height-loose: 1.7;
+  --ih-font-weight-normal: 400;
+  --ih-font-weight-medium: 500;
+  --ih-font-weight-strong: 700;
+  /* Spacing scale */
+  --ih-space-1: 0.25rem;
+  --ih-space-2: 0.5rem;
+  --ih-space-3: 0.75rem;
+  --ih-space-4: 1rem;
+  --ih-space-5: 1.5rem;
+  --ih-space-6: 2rem;
+  --ih-space-7: 3rem;
+  --ih-space-8: 4rem;
+  /* Radios */
+  --ih-radius-sm: 8px;
+  --ih-radius-md: 16px;
+  --ih-radius-pill: 999px;
+  /* Breakpoints (referencia — CSS no puede usarlas en media queries nativas,
+     pero unifican el valor para JS y documentacion) */
+  --ih-bp-mobile: 760px;
+  --ih-bp-tablet: 1080px;
+  --ih-bp-desktop: 1180px;
+  /* Transiciones */
+  --ih-transition-fast: 160ms ease;
+  --ih-transition-normal: 240ms ease;
   --mat-sys-primary: var(--ih-accent);
   --mat-sys-secondary: var(--ih-accent-strong);
   --mat-sys-error: var(--ih-error);
@@ -967,6 +1003,10 @@ select {
 
 .ih-catalog-table-row:last-child {
   border-bottom: 0;
+}
+
+.ih-catalog-table-row:nth-child(even) {
+  background: color-mix(in srgb, var(--ih-surface) 50%, var(--ih-surface-alt));
 }
 
 .ih-catalog-table-row:hover,
