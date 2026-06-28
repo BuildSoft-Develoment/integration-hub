@@ -26,7 +26,7 @@ if errorlevel 1 goto :fail
 
 echo [3/4] Esperando health check de la app...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$deadline = (Get-Date).AddMinutes(2); $ok = $false; while ((Get-Date) -lt $deadline) { try { $response = Invoke-WebRequest -Uri '%HEALTH_URL%' -UseBasicParsing -TimeoutSec 5; if ($response.StatusCode -eq 200) { $ok = $true; break } } catch { Start-Sleep -Seconds 2 } }; if (-not $ok) { exit 1 }"
+  "$deadline = (Get-Date).AddMinutes(5); $ok = $false; while ((Get-Date) -lt $deadline) { try { $response = Invoke-WebRequest -Uri '%HEALTH_URL%' -UseBasicParsing -TimeoutSec 5; if ($response.StatusCode -eq 200) { $ok = $true; break } } catch { Start-Sleep -Seconds 2 } }; if (-not $ok) { exit 1 }"
 if errorlevel 1 goto :health_fail
 
 echo [4/4] Esperando health check del audit-consumer...
