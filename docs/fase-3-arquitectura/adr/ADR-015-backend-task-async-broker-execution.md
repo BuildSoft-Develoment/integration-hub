@@ -82,6 +82,9 @@ publica un envelope al broker; un consumer ejecuta la tarea y reanuda el proceso
 - `TaskDispatchPlanner` + `TaskDispatch`: decision sync/async + transport (Kafka
   default), unit-tested.
 - `TaskIdempotency`: clave determinista por unidad de trabajo, unit-tested.
+- `AsyncTaskMessageCodec`: wire-format `AsyncTaskEnvelope` -> `OutboundMessage`
+  (topic `tasks.<type>`, key = `idempotencyKey`, headers `traceId`/`attempt`).
+- `TaskDispatchPublisher`: publica el envelope al `MessageBrokerProvider` resuelto.
 
 ## Alcance pendiente
 
