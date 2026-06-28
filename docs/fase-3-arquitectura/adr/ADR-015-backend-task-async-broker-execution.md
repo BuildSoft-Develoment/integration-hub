@@ -85,10 +85,14 @@ publica un envelope al broker; un consumer ejecuta la tarea y reanuda el proceso
 - `AsyncTaskMessageCodec`: wire-format `AsyncTaskEnvelope` -> `OutboundMessage`
   (topic `tasks.<type>`, key = `idempotencyKey`, headers `traceId`/`attempt`).
 - `TaskDispatchPublisher`: publica el envelope al `MessageBrokerProvider` resuelto.
+- `TaskOutboxRelay` + `TaskOutboxRetryPolicy` + puertos `TaskOutboxStore` y
+  `BrokerResolver`: drena el outbox, publica, y ante fallo aplica backoff/reintento
+  o dead-letter sin propagar. Logica unit-tested con fakes (sin DB ni broker).
 
 ## Alcance pendiente
 
-- Outbox de despacho de tareas (tabla + relay) reusando el patron `audit_spool`.
+- Adaptador JPA de `TaskOutboxStore` (tabla `task_dispatch_outbox` + Flyway +
+  scheduler de drenado), reusando el patron `audit_spool` (integracion).
 - Consumer de tareas + reanudacion del proceso (`SuspendableTaskProvider`/resume).
 - Deduplicacion por `idempotencyKey` en el consumer + DLQ por tarea.
 - Cableado de `TaskDispatchPlanner` en `ProcessTaskRuntimeService` (rama async).
