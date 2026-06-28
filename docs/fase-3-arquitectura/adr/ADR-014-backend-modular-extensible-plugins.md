@@ -4,7 +4,8 @@
 
 ## Estado
 
-Propuesto.
+Propuesto; base implementada (descriptor, registry, seam de invocacion y
+`RemoteTaskProvider` con limite de error/estado `degraded`).
 
 Contraparte backend de [ADR-012](ADR-012-frontend-modular-extensible-plugins.md) y
 [ADR-013](ADR-013-frontend-module-federation-remote-plugins.md). El frontend ya
@@ -154,14 +155,26 @@ verticales de primera parte siguen como modulos de build.
   estan activos; rollback = editar el catalogo.
 - La compilacion nativa del core no depende de codigo de plugin.
 
+## Alcance implementado (base)
+
+- Contrato compartido `AsyncTaskEnvelope` (`platform-contract`) que cruza el broker
+  y la frontera del plugin ([ADR-015](ADR-015-backend-task-async-broker-execution.md)).
+- `RemotePluginDescriptor` (id, version, spiVersion, providedTypes, transport,
+  `trusted`) y `RemotePluginRegistry` (resolucion por tipo + estado `degraded`).
+- `RemotePluginInvoker` (seam de transporte, analogo a `REMOTE_MODULE_LOADER` del
+  frontend) y `RemoteTaskProvider` con limite de error: invocacion fallida o
+  descriptor no confiable marcan `degraded` y devuelven `TaskResult.failure` sin
+  tumbar el motor.
+- Verde: unit tests de `RemotePluginRegistry` y `RemoteTaskProvider`.
+
 ## Alcance pendiente (implementacion)
 
-- Definir el `spiVersion` y el contrato serializado de `TaskProvider`
-  (TaskContext + config + records -> TaskResult) y su IDL (gRPC proto).
-- `RemoteTaskProvider` + `RemoteTaskProviderTransport` (seam) y su default gRPC.
+- IDL gRPC del contrato serializado (`AsyncTaskEnvelope` -> `TaskResult`) y la impl
+  por defecto de `RemotePluginInvoker` (gRPC; alternativa broker).
 - Verificacion de firma/integridad del descriptor y allowlist de origenes/claves.
-- Tabla/catalogo `plugin_descriptor` + extension de `TaskProviderRegistry` y
-  `TaskTypeRegistry` a providers remotos.
-- Estado `degraded` por plugin + superficie de administracion.
+- Tabla/catalogo `plugin_descriptor` + extension de `TaskProviderRegistry`/
+  `TaskTypeRegistry` para delegar tipos no locales en `RemoteTaskProvider`.
+- Circuit breaker/timeout en el invoker (reusa el patron `ResilientHttpSender`).
+- Superficie de administracion del estado `degraded` por plugin.
 - Plugin de ejemplo (sidecar) que aporte un `type()` y prueba e2e de la cadena.
 - Extension del mismo patron a `SourceProvider`/`ReaderProvider` segun necesidad.
