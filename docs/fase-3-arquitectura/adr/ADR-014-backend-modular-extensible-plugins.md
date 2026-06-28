@@ -20,7 +20,12 @@ El motor ya es **extensible por SPI**, pero en build-time:
   `ValidationRuleProvider`, `MessageBrokerProvider`.
 - Resolucion por CDI: `TaskProviderRegistry` inyecta `Instance<TaskProvider>` y
   resuelve por `type()`; `TaskTypeRegistry` une los tipos builtin con los aportados
-  por providers. Las verticales (MT101, PAIN001) se compilan como modulos Maven.
+  por providers.
+- Estructura actual: las verticales (SWIFT/MT101 en `provider/.../swift`, ISO20022/
+  PAIN001 en `provider/.../iso20022`) son **paquetes compilados dentro de
+  `platform-app`**, no modulos separados. El reactor Maven tiene tres modulos:
+  `platform-contract` (contratos SPI compartidos, p.ej. `MessageBrokerProvider`),
+  `platform-app` y `audit-consumer`.
 
 Limitacion: anadir un proveedor nuevo exige recompilar/empaquetar el core. No hay
 forma de **instalar una extension desde fuera** sin reconstruir `platform-app`.
@@ -43,10 +48,11 @@ verticales de primera parte siguen como modulos de build.
 
 ### Opciones evaluadas
 
-1. **Modulo de build (estado actual, formalizado).** El plugin es un modulo Maven /
-   extension Quarkus ensamblada en una distribucion. "Instalar" = reconstruir.
-   Seguro y compatible con nativo, pero NO instalable en runtime. Se conserva para
-   verticales de confianza (primera parte).
+1. **Modulo de build.** Formaliza el estado actual: hoy las verticales son paquetes
+   en `platform-app`; este modelo las extraeria a modulos Maven / extensiones
+   Quarkus ensambladas en una distribucion. "Instalar" = reconstruir. Seguro y
+   compatible con nativo, pero NO instalable en runtime. Se conserva para verticales
+   de confianza (primera parte).
 2. **Out-of-process (sidecar) [RECOMENDADO].** Cada plugin es un proceso/contenedor
    propio que expone el contrato SPI por un transporte estable. El core delega la
    ejecucion y nunca carga su codigo. Encaja con el modelo closed-world/nativo de
@@ -71,6 +77,9 @@ verticales de primera parte siguen como modulos de build.
   `RemoteTaskProviderTransport`. Default recomendado **gRPC** (contrato tipado,
   streaming para lotes); alternativa asincrona sobre el broker ya existente
   (`MessageBrokerProvider`) para tareas largas.
+- El contrato (SPI serializado + IDL) reside en `platform-contract`, el modulo
+  compartido ya existente (donde hoy vive `MessageBrokerProvider`), para que el core
+  y los autores de plugins dependan del mismo artefacto versionado.
 
 ### Procedencia, firma e integridad
 
