@@ -35,6 +35,7 @@ public class PluginDescriptorCatalogMapper {
                 descriptor.spiVersion,
                 providedTypes,
                 descriptor.transport,
+                descriptor.endpoint,
                 descriptor.trusted
         );
     }

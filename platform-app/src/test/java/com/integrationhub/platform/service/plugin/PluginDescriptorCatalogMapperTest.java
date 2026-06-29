@@ -22,6 +22,7 @@ class PluginDescriptorCatalogMapperTest {
         assertEquals("1.0.0", remote.version());
         assertEquals("1", remote.spiVersion());
         assertEquals("GRPC", remote.transport());
+        assertEquals("http://localhost:9090", remote.endpoint());
         assertTrue(remote.trusted());
         assertTrue(remote.covers("ACME_DO"));
         assertTrue(remote.covers("ACME_CHECK"));
@@ -48,6 +49,7 @@ class PluginDescriptorCatalogMapperTest {
         descriptor.spiVersion = "1";
         descriptor.providedTypesJson = providedTypesJson;
         descriptor.transport = "GRPC";
+        descriptor.endpoint = "http://localhost:9090";
         descriptor.trusted = true;
         descriptor.active = true;
         return descriptor;

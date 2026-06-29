@@ -42,5 +42,9 @@
   formato valido cuando `trusted=true`.
 - Los descriptores rechazados no se publican como tipos remotos y quedan visibles
   como `degraded` en `GET /api/plugins`.
+- La invocacion de un plugin pasa por `ResilientRemotePluginInvoker`: timeout de
+  60s y circuit breaker comun antes del transporte concreto. Si no existe un
+  `RemotePluginTransport` compatible con el descriptor, la ejecucion falla de
+  forma controlada y el plugin queda `degraded`.
 - Rollback declarativo inicial: desactivar el descriptor (`active=false`) y
   reiniciar la app para recargar el catalogo.

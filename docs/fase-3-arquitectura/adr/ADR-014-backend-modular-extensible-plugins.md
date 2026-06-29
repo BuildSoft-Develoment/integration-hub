@@ -162,7 +162,7 @@ verticales de primera parte siguen como modulos de build.
 - Contrato compartido `AsyncTaskEnvelope` (`platform-contract`) que cruza el broker
   y la frontera del plugin ([ADR-015](ADR-015-backend-task-async-broker-execution.md)).
 - `RemotePluginDescriptor` (id, version, spiVersion, providedTypes, transport,
-  `trusted`) y `RemotePluginRegistry` (resolucion por tipo, listado de
+  endpoint, `trusted`) y `RemotePluginRegistry` (resolucion por tipo, listado de
   descriptores, tipos disponibles, rechazo de duplicados, recarga atomica del
   catalogo y estado `degraded`).
 - Tabla persistente `plugin_descriptor` (`V70`) con identidad, version, version SPI,
@@ -177,10 +177,13 @@ verticales de primera parte siguen como modulos de build.
   `integrationhub.plugins.backend.allowed-origins`, e integridad/firma en formato
   declarativo cuando `trusted=true`. Los rechazados se exponen como `degraded` y
   no quedan disponibles para resolucion.
-- `RemotePluginInvoker` (seam de transporte, analogo a `REMOTE_MODULE_LOADER` del
-  frontend) y `RemoteTaskProvider` con limite de error: invocacion fallida o
-  descriptor no confiable marcan `degraded` y devuelven `TaskResult.failure` sin
-  tumbar el motor.
+- `RemotePluginInvoker` (seam de invocacion, analogo a `REMOTE_MODULE_LOADER` del
+  frontend), `RemotePluginTransport` (SPI de transporte instalable) y
+  `ResilientRemotePluginInvoker` con timeout/circuit breaker comun antes del
+  transporte concreto.
+- `RemoteTaskProvider` con limite de error: invocacion fallida o descriptor no
+  confiable marcan `degraded` y devuelven `TaskResult.failure` sin tumbar el
+  motor.
 - `TaskProviderRegistry` conserva prioridad de providers CDI locales y delega a
   `RemoteTaskProvider` cuando un tipo no local esta cubierto por un descriptor
   remoto; si no existe `RemotePluginInvoker`, falla rapido con diagnostico claro.
@@ -196,7 +199,7 @@ verticales de primera parte siguen como modulos de build.
 ## Alcance pendiente (implementacion)
 
 - IDL gRPC del contrato serializado (`AsyncTaskEnvelope` -> `TaskResult`) y la impl
-  por defecto de `RemotePluginInvoker` (gRPC; alternativa broker).
+  por defecto de `RemotePluginTransport` (gRPC; alternativa broker).
 - Verificacion criptografica real de firma/integridad contra claves de confianza
   (la base actual valida presencia/formato y allowlist de origenes antes de
   activar).
@@ -204,6 +207,5 @@ verticales de primera parte siguen como modulos de build.
   `plugin_descriptor`; por ahora la carga se realiza al arranque desde la tabla.
 - Union explicita en `TaskTypeRegistry`/catalogos administrativos si se requiere
   exponer tipos remotos fuera de la resolucion de ejecucion.
-- Circuit breaker/timeout en el invoker (reusa el patron `ResilientHttpSender`).
 - Plugin de ejemplo (sidecar) que aporte un `type()` y prueba e2e de la cadena.
 - Extension del mismo patron a `SourceProvider`/`ReaderProvider` segun necesidad.

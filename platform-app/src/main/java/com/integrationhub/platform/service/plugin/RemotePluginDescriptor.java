@@ -15,6 +15,7 @@ import java.util.Set;
  * @param spiVersion   version del contrato SPI que implementa
  * @param providedTypes tipos de tarea que aporta ({@code MT101_*}, custom, ...)
  * @param transport    transporte de invocacion ({@code GRPC}, {@code KAFKA}, ...)
+ * @param endpoint     endpoint del plugin cuando el transporte lo requiere
  * @param trusted      si su firma/procedencia fue verificada (ver ADR-013/014)
  */
 public record RemotePluginDescriptor(
@@ -23,10 +24,22 @@ public record RemotePluginDescriptor(
         String spiVersion,
         Set<String> providedTypes,
         String transport,
+        String endpoint,
         boolean trusted) {
 
     public RemotePluginDescriptor {
         providedTypes = providedTypes == null ? Set.of() : Set.copyOf(providedTypes);
+        endpoint = endpoint == null || endpoint.isBlank() ? null : endpoint.trim();
+    }
+
+    public RemotePluginDescriptor(
+            String id,
+            String version,
+            String spiVersion,
+            Set<String> providedTypes,
+            String transport,
+            boolean trusted) {
+        this(id, version, spiVersion, providedTypes, transport, null, trusted);
     }
 
     public boolean covers(String taskType) {

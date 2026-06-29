@@ -15,6 +15,9 @@ observable y presupuesto de build frontend.
   metadatos de firma/integridad cuando `trusted=true`).
 - Backend: los descriptores rechazados por politica quedan visibles como
   `degraded` despues de la recarga atomica del registry.
+- Backend: `RemotePluginDescriptor` conserva el `endpoint` validado y
+  `ResilientRemotePluginInvoker` selecciona un `RemotePluginTransport` compatible
+  detras de timeout/circuit breaker.
 - Backend: `GET /api/plugins` expone diagnostico de plugins backend con RBAC.
 - Frontend: `/plugins` consume `/api/plugins` y muestra diagnostico backend junto
   al diagnostico de runtime frontend.
@@ -39,13 +42,13 @@ Resultado:
 ### Backend trust-policy slice
 
 ```powershell
-mvn -pl platform-app -am "-Dtest=BackendPluginCatalogServiceTest,TaskProviderRegistryTest,RemotePluginRegistryTest,RemoteTaskProviderTest,PluginDiagnosticsResourceTest,PluginDescriptorCatalogMapperTest,PluginDescriptorTrustPolicyTest" "-Dsurefire.failIfNoSpecifiedTests=false" test
+mvn -pl platform-app -am "-Dtest=BackendPluginCatalogServiceTest,TaskProviderRegistryTest,RemotePluginRegistryTest,RemoteTaskProviderTest,PluginDiagnosticsResourceTest,PluginDescriptorCatalogMapperTest,PluginDescriptorTrustPolicyTest,ResilientRemotePluginInvokerTest" "-Dsurefire.failIfNoSpecifiedTests=false" test
 ```
 
 Resultado:
 
 - PASS.
-- Tests: 28 ejecutados, 0 fallos, 0 errores, 0 omitidos.
+- Tests: 30 ejecutados, 0 fallos, 0 errores, 0 omitidos.
 - Cobertura puntual agregada:
   - plugin `GRPC` local trusted permitido para dev;
   - `integrity` y `signature` requeridos/formateados cuando `trusted=true`;
@@ -56,6 +59,9 @@ Resultado:
   - descriptor `KAFKA` permitido sin endpoint;
   - recarga con catalogo mixto conserva el plugin valido y expone el invalido como
     `degraded` despues de `replaceDescriptors`.
+  - invoker resiliente delega al transporte compatible;
+  - invoker resiliente falla de forma controlada cuando no hay transporte
+    compatible.
 - Notas no bloqueantes: warnings de Mockito dynamic agent y JBoss LogManager en
   test; el reactor termino `BUILD SUCCESS`.
 
@@ -134,8 +140,8 @@ Resultado:
 
 ## Riesgos residuales
 
-- Falta implementacion productiva del transporte `RemotePluginInvoker` (gRPC o
-  broker) y sus timeouts/circuit breaker.
+- Falta implementacion productiva del transporte `RemotePluginTransport` (gRPC o
+  broker). El seam resiliente ya existe; falta el transporte concreto.
 - Falta verificacion criptografica real de firma/integridad contra claves de
   confianza; ya existe validacion de formato y allowlist de origen antes de
   activar.
