@@ -2,11 +2,15 @@ package com.integrationhub.platform.api.resource.plugin;
 
 import com.integrationhub.platform.api.response.plugin.BackendPluginDescriptorResponse;
 import com.integrationhub.platform.api.response.plugin.BackendPluginDiagnosticsResponse;
+import com.integrationhub.platform.service.plugin.BackendPluginAdminService;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
 import jakarta.annotation.security.RolesAllowed;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 
@@ -24,14 +28,40 @@ import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_AD
 public class PluginDiagnosticsResource {
 
     private final RemotePluginRegistry remotePlugins;
+    private final BackendPluginAdminService adminService;
 
-    public PluginDiagnosticsResource(RemotePluginRegistry remotePlugins) {
+    public PluginDiagnosticsResource(
+            RemotePluginRegistry remotePlugins,
+            BackendPluginAdminService adminService) {
         this.remotePlugins = remotePlugins;
+        this.adminService = adminService;
     }
 
     @GET
     @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public BackendPluginDiagnosticsResponse diagnostics() {
+        return currentDiagnostics();
+    }
+
+    @POST
+    @Path("/reload")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
+    public BackendPluginDiagnosticsResponse reload() {
+        adminService.reload();
+        return currentDiagnostics();
+    }
+
+    @POST
+    @Path("/{id}/deactivate")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
+    public BackendPluginDiagnosticsResponse deactivate(@PathParam("id") String id) {
+        if (!adminService.deactivate(id)) {
+            throw new NotFoundException("Plugin " + id + " not found");
+        }
+        return currentDiagnostics();
+    }
+
+    private BackendPluginDiagnosticsResponse currentDiagnostics() {
         var degraded = remotePlugins.degraded();
         return new BackendPluginDiagnosticsResponse(
                 remotePlugins.descriptors().stream()

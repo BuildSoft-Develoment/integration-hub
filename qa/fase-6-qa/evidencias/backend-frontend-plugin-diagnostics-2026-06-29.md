@@ -18,6 +18,8 @@ observable y presupuesto de build frontend.
 - Backend: `RemotePluginDescriptor` conserva el `endpoint` validado y
   `ResilientRemotePluginInvoker` selecciona un `RemotePluginTransport` compatible
   detras de timeout/circuit breaker.
+- Backend: `POST /api/plugins/reload` y `POST /api/plugins/{id}/deactivate`
+  agregan recarga/rollback administrativo inicial sobre `plugin_descriptor`.
 - Backend: `GET /api/plugins` expone diagnostico de plugins backend con RBAC.
 - Frontend: `/plugins` consume `/api/plugins` y muestra diagnostico backend junto
   al diagnostico de runtime frontend.
@@ -42,13 +44,13 @@ Resultado:
 ### Backend trust-policy slice
 
 ```powershell
-mvn -pl platform-app -am "-Dtest=BackendPluginCatalogServiceTest,TaskProviderRegistryTest,RemotePluginRegistryTest,RemoteTaskProviderTest,PluginDiagnosticsResourceTest,PluginDescriptorCatalogMapperTest,PluginDescriptorTrustPolicyTest,ResilientRemotePluginInvokerTest" "-Dsurefire.failIfNoSpecifiedTests=false" test
+mvn -pl platform-app -am "-Dtest=BackendPluginAdminServiceTest,BackendPluginCatalogServiceTest,TaskProviderRegistryTest,RemotePluginRegistryTest,RemoteTaskProviderTest,PluginDiagnosticsResourceTest,PluginDescriptorCatalogMapperTest,PluginDescriptorTrustPolicyTest,ResilientRemotePluginInvokerTest" "-Dsurefire.failIfNoSpecifiedTests=false" test
 ```
 
 Resultado:
 
 - PASS.
-- Tests: 30 ejecutados, 0 fallos, 0 errores, 0 omitidos.
+- Tests: 36 ejecutados, 0 fallos, 0 errores, 0 omitidos.
 - Cobertura puntual agregada:
   - plugin `GRPC` local trusted permitido para dev;
   - `integrity` y `signature` requeridos/formateados cuando `trusted=true`;
@@ -62,6 +64,10 @@ Resultado:
   - invoker resiliente delega al transporte compatible;
   - invoker resiliente falla de forma controlada cuando no hay transporte
     compatible.
+  - recurso admin delega `reload` y `deactivate`;
+  - servicio admin marca descriptor inactivo, actualiza timestamp y recarga
+    catalogo;
+  - repositorio de `plugin_descriptor` usa ID `String` (`PanacheRepositoryBase`).
 - Notas no bloqueantes: warnings de Mockito dynamic agent y JBoss LogManager en
   test; el reactor termino `BUILD SUCCESS`.
 
@@ -145,8 +151,8 @@ Resultado:
 - Falta verificacion criptografica real de firma/integridad contra claves de
   confianza; ya existe validacion de formato y allowlist de origen antes de
   activar.
-- Falta flujo administrativo de instalacion/activacion/rollback sobre
-  `plugin_descriptor`; por ahora la carga se realiza al arrancar.
+- Falta flujo administrativo de instalacion/activacion sobre `plugin_descriptor`;
+  rollback/desactivacion y recarga ya tienen API inicial.
 - Falta automatizar como e2e la navegacion autenticada `/plugins`; la evidencia
   visual manual ya fue capturada.
 - El log de ambiente local muestra un fallo no relacionado del scheduler MT101

@@ -46,5 +46,7 @@
   60s y circuit breaker comun antes del transporte concreto. Si no existe un
   `RemotePluginTransport` compatible con el descriptor, la ejecucion falla de
   forma controlada y el plugin queda `degraded`.
-- Rollback declarativo inicial: desactivar el descriptor (`active=false`) y
-  reiniciar la app para recargar el catalogo.
+- Recarga operativa: `POST /api/plugins/reload` (roles `PLATFORM_ADMIN` o
+  `INTEGRATION_ADMIN`) recarga el registry desde `plugin_descriptor`.
+- Rollback declarativo inicial: `POST /api/plugins/{id}/deactivate` marca el
+  descriptor `active=false`, actualiza `updated_at` y recarga el catalogo.

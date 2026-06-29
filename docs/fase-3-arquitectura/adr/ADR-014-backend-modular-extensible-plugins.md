@@ -190,6 +190,9 @@ verticales de primera parte siguen como modulos de build.
 - Endpoint `GET /api/plugins` con RBAC (`PLATFORM_ADMIN`, `INTEGRATION_ADMIN`,
   `AUDITOR`) que expone plugins backend instalados, tipos aportados, transporte,
   confianza, estado y razon de degradacion.
+- Endpoints administrativos iniciales `POST /api/plugins/reload` y
+  `POST /api/plugins/{id}/deactivate` con RBAC administrativo para recargar el
+  catalogo persistente y ejecutar rollback declarativo sin reinicio manual.
 - La vista frontend `/plugins` consume `/api/plugins` y muestra el diagnostico
   backend junto con instalados/cuarentena/degradados del runtime frontend.
 - Verde: unit tests de `RemotePluginRegistry`, `RemoteTaskProvider`,
@@ -203,8 +206,8 @@ verticales de primera parte siguen como modulos de build.
 - Verificacion criptografica real de firma/integridad contra claves de confianza
   (la base actual valida presencia/formato y allowlist de origenes antes de
   activar).
-- Flujo administrativo de instalacion/activacion/rollback sobre
-  `plugin_descriptor`; por ahora la carga se realiza al arranque desde la tabla.
+- Flujo administrativo de instalacion/activacion sobre `plugin_descriptor`; la
+  recarga y desactivacion/rollback inicial ya estan disponibles via API.
 - Union explicita en `TaskTypeRegistry`/catalogos administrativos si se requiere
   exponer tipos remotos fuera de la resolucion de ejecucion.
 - Plugin de ejemplo (sidecar) que aporte un `type()` y prueba e2e de la cadena.
