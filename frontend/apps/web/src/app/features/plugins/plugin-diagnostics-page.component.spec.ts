@@ -1,4 +1,6 @@
 import { TestBed } from '@angular/core/testing';
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import {
   AppPluginManifest,
   AppPluginRuntimeRegistry,
@@ -8,9 +10,13 @@ import {
 import { PluginDiagnosticsPageComponent } from './plugin-diagnostics-page.component';
 
 describe('PluginDiagnosticsPageComponent', () => {
-  it('renders installed plugins and quarantined plugins with their reasons', () => {
+  it('renders installed plugins and quarantined plugins with their reasons', async () => {
     TestBed.configureTestingModule({
-      providers: [...provideAppPluginManifests([platformManifest()])],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
     });
 
     const registry = TestBed.inject(AppPluginRuntimeRegistry);
@@ -21,12 +27,54 @@ describe('PluginDiagnosticsPageComponent', () => {
 
     const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
     fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    await fixture.whenStable();
+    fixture.detectChanges();
     const text = fixture.nativeElement.textContent as string;
 
     expect(text).toContain('platform');
     expect(text).toContain('Good Plugin');
     // Quarantined plugin id surfaces even though the manifest was rejected.
     expect(text).toContain('future');
+    http.verify();
+  });
+
+  it('renders backend plugin diagnostics', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({
+      installed: [
+        {
+          id: 'acme',
+          version: '1.0.0',
+          spiVersion: '1',
+          providedTypes: ['ACME_DO'],
+          transport: 'GRPC',
+          trusted: true,
+          status: 'ACTIVE',
+          degradedReason: null,
+        },
+      ],
+      degraded: {},
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+
+    expect(text).toContain('acme');
+    expect(text).toContain('ACME_DO');
+    http.verify();
   });
 });
 

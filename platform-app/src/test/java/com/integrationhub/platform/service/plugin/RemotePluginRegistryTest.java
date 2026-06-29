@@ -2,9 +2,11 @@ package com.integrationhub.platform.service.plugin;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Set;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
@@ -39,5 +41,34 @@ class RemotePluginRegistryTest {
         registry.markDegraded("acme", "invocacion fallida: boom");
 
         assertEquals("invocacion fallida: boom", registry.degraded().get("acme"));
+    }
+
+    @Test
+    void listsDescriptorsAndAvailableTypesForDiagnostics() {
+        registry.register(descriptor());
+
+        assertEquals("acme", registry.descriptors().getFirst().id());
+        assertEquals(Set.of("ACME_DO", "ACME_CHECK"), Set.copyOf(registry.availableTaskTypes()));
+    }
+
+    @Test
+    void rejectsDuplicateTaskTypesAcrossPlugins() {
+        registry.register(descriptor());
+        var duplicate = new RemotePluginDescriptor("other", "1.0.0", "1", Set.of("acme_do"), "GRPC", true);
+
+        assertThrows(IllegalArgumentException.class, () -> registry.register(duplicate));
+    }
+
+    @Test
+    void replaceDescriptorsKeepsPreviousStateWhenCatalogHasDuplicates() {
+        registry.register(descriptor());
+        var replacement = new RemotePluginDescriptor("replacement", "1.0.0", "1", Set.of("NEW_TYPE"), "GRPC", true);
+        var duplicate = new RemotePluginDescriptor("duplicate", "1.0.0", "1", Set.of("new_type"), "GRPC", true);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> registry.replaceDescriptors(List.of(replacement, duplicate)));
+
+        assertTrue(registry.covers("ACME_DO"));
+        assertFalse(registry.covers("NEW_TYPE"));
     }
 }

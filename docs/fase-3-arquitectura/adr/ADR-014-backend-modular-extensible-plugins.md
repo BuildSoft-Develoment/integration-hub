@@ -4,8 +4,10 @@
 
 ## Estado
 
-Propuesto; base implementada (descriptor, registry, seam de invocacion y
-`RemoteTaskProvider` con limite de error/estado `degraded`).
+Aceptado; base implementada (descriptor, registry, seam de invocacion,
+`RemoteTaskProvider`, catalogo persistente `plugin_descriptor`, resolucion desde
+`TaskProviderRegistry`, politica inicial de confianza/procedencia y diagnostico
+administrativo `/api/plugins`).
 
 Contraparte backend de [ADR-012](ADR-012-frontend-modular-extensible-plugins.md) y
 [ADR-013](ADR-013-frontend-module-federation-remote-plugins.md). El frontend ya
@@ -160,21 +162,48 @@ verticales de primera parte siguen como modulos de build.
 - Contrato compartido `AsyncTaskEnvelope` (`platform-contract`) que cruza el broker
   y la frontera del plugin ([ADR-015](ADR-015-backend-task-async-broker-execution.md)).
 - `RemotePluginDescriptor` (id, version, spiVersion, providedTypes, transport,
-  `trusted`) y `RemotePluginRegistry` (resolucion por tipo + estado `degraded`).
+  `trusted`) y `RemotePluginRegistry` (resolucion por tipo, listado de
+  descriptores, tipos disponibles, rechazo de duplicados, recarga atomica del
+  catalogo y estado `degraded`).
+- Tabla persistente `plugin_descriptor` (`V70`) con identidad, version, version SPI,
+  tipos aportados, transporte, endpoint, estado activo, confianza e integridad.
+- `PluginDescriptorRepository`, `PluginDescriptorCatalogMapper` y
+  `BackendPluginCatalogService`: al arrancar, el core hidrata
+  `RemotePluginRegistry` desde descriptores activos y marca como degradados los
+  descriptores malformados sin tumbar el motor.
+- `PluginDescriptorTrustPolicy`: antes de publicar un descriptor activo en el
+  registry valida identidad/version/SPI, transporte soportado (`GRPC`, `KAFKA`),
+  endpoint `GRPC`, HTTPS obligatorio fuera de local dev, origen no local en
+  `integrationhub.plugins.backend.allowed-origins`, e integridad/firma en formato
+  declarativo cuando `trusted=true`. Los rechazados se exponen como `degraded` y
+  no quedan disponibles para resolucion.
 - `RemotePluginInvoker` (seam de transporte, analogo a `REMOTE_MODULE_LOADER` del
   frontend) y `RemoteTaskProvider` con limite de error: invocacion fallida o
   descriptor no confiable marcan `degraded` y devuelven `TaskResult.failure` sin
   tumbar el motor.
-- Verde: unit tests de `RemotePluginRegistry` y `RemoteTaskProvider`.
+- `TaskProviderRegistry` conserva prioridad de providers CDI locales y delega a
+  `RemoteTaskProvider` cuando un tipo no local esta cubierto por un descriptor
+  remoto; si no existe `RemotePluginInvoker`, falla rapido con diagnostico claro.
+- Endpoint `GET /api/plugins` con RBAC (`PLATFORM_ADMIN`, `INTEGRATION_ADMIN`,
+  `AUDITOR`) que expone plugins backend instalados, tipos aportados, transporte,
+  confianza, estado y razon de degradacion.
+- La vista frontend `/plugins` consume `/api/plugins` y muestra el diagnostico
+  backend junto con instalados/cuarentena/degradados del runtime frontend.
+- Verde: unit tests de `RemotePluginRegistry`, `RemoteTaskProvider`,
+  `TaskProviderRegistry`, `PluginDescriptorCatalogMapper`,
+  `PluginDiagnosticsResource` y `PluginDiagnosticsPage`.
 
 ## Alcance pendiente (implementacion)
 
 - IDL gRPC del contrato serializado (`AsyncTaskEnvelope` -> `TaskResult`) y la impl
   por defecto de `RemotePluginInvoker` (gRPC; alternativa broker).
-- Verificacion de firma/integridad del descriptor y allowlist de origenes/claves.
-- Tabla/catalogo `plugin_descriptor` + extension de `TaskProviderRegistry`/
-  `TaskTypeRegistry` para delegar tipos no locales en `RemoteTaskProvider`.
+- Verificacion criptografica real de firma/integridad contra claves de confianza
+  (la base actual valida presencia/formato y allowlist de origenes antes de
+  activar).
+- Flujo administrativo de instalacion/activacion/rollback sobre
+  `plugin_descriptor`; por ahora la carga se realiza al arranque desde la tabla.
+- Union explicita en `TaskTypeRegistry`/catalogos administrativos si se requiere
+  exponer tipos remotos fuera de la resolucion de ejecucion.
 - Circuit breaker/timeout en el invoker (reusa el patron `ResilientHttpSender`).
-- Superficie de administracion del estado `degraded` por plugin.
 - Plugin de ejemplo (sidecar) que aporte un `type()` y prueba e2e de la cadena.
 - Extension del mismo patron a `SourceProvider`/`ReaderProvider` segun necesidad.

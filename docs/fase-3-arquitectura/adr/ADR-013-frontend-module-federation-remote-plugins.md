@@ -177,6 +177,9 @@ Ver `qa/fase-6-qa/evidencias/native-federation-wiring-2026-06-27.md`.
 - Gate `validate-plugins` restaurado en el target `build`.
 - Host conectado: `provideAppPluginRemoteModuleLoader(...)` enlaza
   `REMOTE_MODULE_LOADER` con `loadRemoteModule` de Native Federation.
+- El host no declara remotos demo por defecto en `federation.manifest.json`; los
+  remotos instalables entran por catalogo firmado/allowlist para evitar que un
+  remoto de ejemplo no levantado genere ruido de consola o degrade el arranque.
 - Herramienta de firma `scripts/sign-plugin-remote.js` (genkey + sign con el
   payload canonico del verifier) y e2e headless de la cadena completa
   (`app-plugin-remote.e2e.spec.ts`): firma real -> descarga -> verificacion ->
