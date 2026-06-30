@@ -17,6 +17,7 @@ export class ReaderCatalogStore {
 
   readonly saving = signal(false);
   readonly loading = this.query.loading;
+  readonly error = this.query.error;
   readonly readers = this.query.readers;
   readonly totalLength = this.query.totalLength;
   readonly search = this.query.search;

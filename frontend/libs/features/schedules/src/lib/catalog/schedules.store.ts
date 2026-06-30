@@ -26,6 +26,7 @@ export class SchedulesStore implements OnDestroy {
   private requestSequence = 0;
 
   readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
   readonly executing = signal(false);
   readonly schedules = signal<ScheduleRecord[]>([]);
   readonly totalLength = signal(0);
@@ -151,6 +152,11 @@ export class SchedulesStore implements OnDestroy {
       this.schedules.set(response.items);
       this.totalLength.set(response.total);
       this.syncSelectedSchedule(response.items);
+      this.error.set(null);
+    } catch {
+      if (requestId === this.requestSequence) {
+        this.error.set('schedules.loadError');
+      }
     } finally {
       if (requestId === this.requestSequence) {
         this.loading.set(false);

@@ -20,6 +20,7 @@ export class ProcessCatalogQueryStore implements OnDestroy {
   private requestSequence = 0;
 
   readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
   readonly processes = signal<ProcessRecord[]>([]);
   readonly totalLength = signal(0);
   readonly search = signal('');
@@ -114,6 +115,7 @@ export class ProcessCatalogQueryStore implements OnDestroy {
 
       this.processes.set(response.items);
       this.totalLength.set(response.total);
+      this.error.set(null);
 
       const selectedId = this.editor.selectedProcessId();
       if (selectedId != null) {
@@ -121,6 +123,10 @@ export class ProcessCatalogQueryStore implements OnDestroy {
         if (refreshed) {
           this.editor.refreshSelectedProcess(refreshed);
         }
+      }
+    } catch {
+      if (requestId === this.requestSequence) {
+        this.error.set('processes.loadError');
       }
     } finally {
       if (requestId === this.requestSequence) {

@@ -174,16 +174,37 @@ verticales de primera parte siguen como modulos de build.
 - `PluginDescriptorTrustPolicy`: antes de publicar un descriptor activo en el
   registry valida identidad/version/SPI, transporte soportado (`GRPC`, `KAFKA`),
   endpoint `GRPC`, HTTPS obligatorio fuera de local dev, origen no local en
-  `integrationhub.plugins.backend.allowed-origins`, e integridad/firma en formato
-  declarativo cuando `trusted=true`. Los rechazados se exponen como `degraded` y
-  no quedan disponibles para resolucion.
+  `integrationhub.plugins.backend.allowed-origins`, integridad/firma en formato
+  declarativo y firma ECDSA P-256/SHA-256 valida contra una clave publica
+  configurada en `integrationhub.plugins.backend.trusted-public-keys` cuando
+  `trusted=true`. La clave puede declarar expiracion (`expiresAtUtc`) y puede
+  revocarse de inmediato con `integrationhub.plugins.backend.revoked-key-ids`.
+  Los rechazados se exponen como `degraded` y no quedan disponibles para
+  resolucion.
 - `RemotePluginInvoker` (seam de invocacion, analogo a `REMOTE_MODULE_LOADER` del
   frontend), `RemotePluginTransport` (SPI de transporte instalable) y
   `ResilientRemotePluginInvoker` con timeout/circuit breaker comun antes del
   transporte concreto.
-- `RemoteTaskProvider` con limite de error: invocacion fallida o descriptor no
-  confiable marcan `degraded` y devuelven `TaskResult.failure` sin tumbar el
-  motor.
+- `BrokerRemotePluginTransport`: implementacion productiva asincrona para
+  descriptores `KAFKA`/broker; publica `AsyncTaskEnvelope` via
+  `MessageBrokerProvider` + `TaskDispatchPublisher` y devuelve
+  `TaskResult.suspended` con `traceId`, `idempotencyKey` y referencia del broker.
+- `RemoteTaskProvider` implementa `SuspendableTaskProvider`: invocacion fallida o
+  descriptor no confiable marcan `degraded`; cuando el transporte broker deja la
+  tarea suspendida, el callback del sidecar se transforma en `TaskResult`
+  validando `pluginId`, `taskType` e `idempotencyKey`.
+- Contrato compartido para sidecars: `RemoteTaskResumePayload` define el JSON
+  canonico de resultado remoto y `ResumeCallbackSignature` firma/verifica
+  `X-Signature` HMAC-SHA256 sobre el body crudo del callback.
+- Sidecar backend de referencia en `ejemplos/backend-plugin-sidecar`: ejemplo
+  Maven autonomo que depende solo de `platform-contract`, consume
+  `AsyncTaskEnvelope`, ejecuta un handler externo (`ACME_ECHO`), genera
+  `RemoteTaskResumePayload`, firma `X-Signature` y conserva `idempotencyKey`.
+- Catalogo administrativo `GET /api/task-types`: expone tipos builtin, providers
+  CDI locales y tipos remotos aportados por plugins con origen, provider/plugin,
+  transporte, estado (`AVAILABLE`, `DEGRADED`, `UNTRUSTED`,
+  `SHADOWED_BY_LOCAL`) y razon. Esto hace visible cuando un plugin remoto esta
+  instalado pero no toma prioridad porque existe un tipo local/builtin.
 - `TaskProviderRegistry` conserva prioridad de providers CDI locales y delega a
   `RemoteTaskProvider` cuando un tipo no local esta cubierto por un descriptor
   remoto; si no existe `RemotePluginInvoker`, falla rapido con diagnostico claro.
@@ -191,8 +212,10 @@ verticales de primera parte siguen como modulos de build.
   `AUDITOR`) que expone plugins backend instalados, tipos aportados, transporte,
   confianza, estado y razon de degradacion.
 - Endpoints administrativos iniciales `POST /api/plugins/reload` y
-  `POST /api/plugins/{id}/deactivate` con RBAC administrativo para recargar el
-  catalogo persistente y ejecutar rollback declarativo sin reinicio manual.
+  `POST /api/plugins/install` y `POST /api/plugins/{id}/activate|deactivate`
+  con RBAC administrativo para instalar/actualizar descriptores, recargar el
+  catalogo persistente, activar descriptores existentes y ejecutar rollback
+  declarativo sin reinicio manual.
 - La vista frontend `/plugins` consume `/api/plugins` y muestra el diagnostico
   backend junto con instalados/cuarentena/degradados del runtime frontend.
 - Verde: unit tests de `RemotePluginRegistry`, `RemoteTaskProvider`,
@@ -202,13 +225,13 @@ verticales de primera parte siguen como modulos de build.
 ## Alcance pendiente (implementacion)
 
 - IDL gRPC del contrato serializado (`AsyncTaskEnvelope` -> `TaskResult`) y la impl
-  por defecto de `RemotePluginTransport` (gRPC; alternativa broker).
-- Verificacion criptografica real de firma/integridad contra claves de confianza
-  (la base actual valida presencia/formato y allowlist de origenes antes de
-  activar).
-- Flujo administrativo de instalacion/activacion sobre `plugin_descriptor`; la
-  recarga y desactivacion/rollback inicial ya estan disponibles via API.
-- Union explicita en `TaskTypeRegistry`/catalogos administrativos si se requiere
-  exponer tipos remotos fuera de la resolucion de ejecucion.
-- Plugin de ejemplo (sidecar) que aporte un `type()` y prueba e2e de la cadena.
+  `RemotePluginTransport` gRPC para plugins sin broker.
+- E2E con broker real que conecte `BrokerRemotePluginTransport` ->
+  `ejemplos/backend-plugin-sidecar` -> callback HMAC contra
+  `/api/process-executions/resume/{token}`.
+- Distribucion de claves desde un trust store/secret manager. La verificacion
+  ECDSA, expiracion declarativa y revocacion por `keyId` ya existen por config.
+- Flujo administrativo avanzado de marketplace/version pinning; instalacion
+  declarativa, activacion, recarga y desactivacion/rollback inicial ya estan
+  disponibles via API.
 - Extension del mismo patron a `SourceProvider`/`ReaderProvider` segun necesidad.

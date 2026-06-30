@@ -1,4 +1,4 @@
-<section class="page-grid audit-page ih-catalog-grid">
+<section class="page-grid audit-page ih-catalog-grid ih-no-hint">
   @let vm = viewModel();
   <mat-drawer-container class="audit-drawer-container ih-catalog-drawer-container">
     <mat-drawer-content>
@@ -32,9 +32,12 @@
             [sortDirection]="vm.sortDirection"
             [pageIndex]="vm.pageIndex"
             [pageSize]="vm.pageSize"
+            [loading]="vm.loading"
+            [error]="vm.error"
             (selectEvent)="selectEvent($event)"
             (toggleSort)="store.toggleSort($event)"
             (pageChange)="updatePagination($event)"
+            (retry)="refresh()"
           />
         </section>
       </section>

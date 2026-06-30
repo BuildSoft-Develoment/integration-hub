@@ -46,6 +46,8 @@ import { ExecutionToolbarComponent } from '../components/execution-toolbar/execu
 export class ExecutionCatalogPageComponent implements OnInit {
   readonly store = inject(ExecutionCatalogStore);
   readonly viewModel = computed(() => ({
+    loading: this.store.loading(),
+    error: this.store.error(),
     toolbar: {
       search: this.store.search(),
       modeFilter: this.store.modeFilter(),

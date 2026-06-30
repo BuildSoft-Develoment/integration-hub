@@ -60,12 +60,16 @@ describe('AppActionQueryService', () => {
         labelKey: 'connections.open',
         icon: 'arrow-right',
         danger: false,
+        requiresConfirmation: false,
+        confirmationLabelKey: undefined,
       },
       {
         id: 'connections-activate',
         labelKey: 'connections.activate',
         icon: 'toggle-on',
         danger: false,
+        requiresConfirmation: false,
+        confirmationLabelKey: undefined,
       },
     ]);
   });
@@ -89,6 +93,8 @@ describe('AppActionQueryService', () => {
         labelKey: 'connections.delete',
         icon: 'trash',
         danger: true,
+        requiresConfirmation: true,
+        confirmationLabelKey: undefined,
       },
     ]);
   });

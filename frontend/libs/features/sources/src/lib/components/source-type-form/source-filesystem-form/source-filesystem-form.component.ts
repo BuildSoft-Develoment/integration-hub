@@ -11,13 +11,7 @@ import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
   selector: 'ih-source-filesystem-form',
   standalone: true,
   imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule],
-  styles: [
-    `
-      .form-grid { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .full { grid-column: 1 / -1; }
-      @media (max-width: 900px) { .form-grid { grid-template-columns: 1fr; } }
-    `,
-  ],
+  styleUrl: './source-filesystem-form.component.css',
     templateUrl: './source-filesystem-form.component.html'
 })
 export class SourceFilesystemFormComponent extends SourceTypeFormComponentBase {}

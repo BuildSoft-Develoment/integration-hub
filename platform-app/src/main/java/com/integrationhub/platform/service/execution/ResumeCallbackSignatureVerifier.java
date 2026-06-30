@@ -1,17 +1,10 @@
 package com.integrationhub.platform.service.execution;
 
+import com.integrationhub.platform.task.ResumeCallbackSignature;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
-import java.security.InvalidKeyException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
-import java.util.Locale;
 import java.util.Optional;
 
 /**
@@ -38,9 +31,6 @@ import java.util.Optional;
  */
 @ApplicationScoped
 public class ResumeCallbackSignatureVerifier {
-
-    private static final String ALGORITHM = "HmacSHA256";
-    private static final String SIGNATURE_PREFIX = "sha256=";
 
     private final boolean enabled;
     private final Optional<String> secret;
@@ -69,27 +59,6 @@ public class ResumeCallbackSignatureVerifier {
         var key = secret.map(String::trim).filter(value -> !value.isEmpty())
                 .orElseThrow(() -> new IllegalStateException(
                         "integrationhub.resume.hmac.enabled=true but integrationhub.resume.hmac.secret is not set"));
-        var provided = signatureHeader.trim();
-        if (provided.toLowerCase(Locale.ROOT).startsWith(SIGNATURE_PREFIX)) {
-            provided = provided.substring(SIGNATURE_PREFIX.length());
-        }
-        byte[] providedBytes;
-        try {
-            providedBytes = HexFormat.of().parseHex(provided);
-        } catch (IllegalArgumentException invalidHex) {
-            return false;
-        }
-        var expected = hmac(key, rawBody == null ? "" : rawBody);
-        return MessageDigest.isEqual(expected, providedBytes);
-    }
-
-    private byte[] hmac(String key, String body) {
-        try {
-            var mac = Mac.getInstance(ALGORITHM);
-            mac.init(new SecretKeySpec(key.getBytes(StandardCharsets.UTF_8), ALGORITHM));
-            return mac.doFinal(body.getBytes(StandardCharsets.UTF_8));
-        } catch (NoSuchAlgorithmException | InvalidKeyException error) {
-            throw new IllegalStateException("Cannot compute resume callback HMAC", error);
-        }
+        return ResumeCallbackSignature.verifyHeader(key, rawBody, signatureHeader);
     }
 }

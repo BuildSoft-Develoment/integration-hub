@@ -1,4 +1,4 @@
-<section class="page-grid process-page">
+<section class="page-grid process-page ih-no-hint">
   <mat-drawer-container class="processes-drawer-container">
     <mat-drawer-content [class.processes-content-hidden]="viewModel().drawerOpen">
       <section class="processes-workspace">
@@ -22,9 +22,12 @@
             [sortDirection]="store.sortDirection()"
             [pageIndex]="viewModel().list.pageIndex"
             [pageSize]="viewModel().list.pageSize"
+            [loading]="store.loading()"
+            [error]="store.error()"
             (selectProcess)="selectProcess($event)"
             (toggleSort)="store.toggleSort($event)"
             (pageChange)="updatePagination($event)"
+            (retry)="retryLoad()"
           />
         </section>
       </section>
@@ -61,4 +64,3 @@
     </mat-drawer>
   </mat-drawer-container>
 </section>
-

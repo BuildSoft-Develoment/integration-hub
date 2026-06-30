@@ -126,6 +126,10 @@ export class ProcessCatalogPageComponent implements OnInit {
     this.store.updatePagination(event.pageIndex, event.pageSize);
   }
 
+  retryLoad(): void {
+    void this.store.load();
+  }
+
   patchForm(patch: Partial<ProcessFormModel>): void {
     this.store.patchForm(patch);
   }

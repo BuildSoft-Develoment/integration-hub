@@ -21,12 +21,23 @@
       </div>
 
       <div class="table-body ih-catalog-table-body ih-thin-scroll">
-        @for (schedule of schedules(); track schedule.id) {
+        @if (error(); as err) {
+          <div class="ih-catalog-error" role="alert">
+            <p class="ih-catalog-error__message">{{ i18n.t(err) }}</p>
+            <button mat-stroked-button type="button" (click)="retry.emit()">{{ i18n.t('common.retry') }}</button>
+          </div>
+        }
+        @if (loading()) {
+          <ih-loading variant="skeleton" [rows]="pageSize()" />
+        } @for (schedule of schedules(); track schedule.id) {
           <button
             type="button"
             class="table-row ih-catalog-table-row"
             [class.table-row--selected]="selectedScheduleId() === schedule.id"
             [class.ih-catalog-table-row--selected]="selectedScheduleId() === schedule.id"
+            [attr.aria-label]="schedule.name + ' #' + schedule.id"
+            [attr.tabindex]="$index === 0 ? 0 : -1"
+            [attr.data-row-index]="$index"
             (click)="selectSchedule.emit(schedule)"
           >
             <div class="row-primary ih-catalog-row-primary">
@@ -51,7 +62,10 @@
             </div>
           </button>
         } @empty {
-          <div class="empty-state ih-catalog-empty-state ih-muted">{{ i18n.t('schedules.noData') }}</div>
+          <div class="empty-state ih-catalog-empty-state">
+            <ih-icon name="calendar" [size]="32" />
+            <p class="ih-muted">{{ i18n.t('schedules.noData') }}</p>
+          </div>
         }
       </div>
 

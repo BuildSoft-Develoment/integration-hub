@@ -19,6 +19,7 @@ export class SourceCatalogQueryStore implements OnDestroy {
   private requestSequence = 0;
 
   readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
   readonly sources = signal<SourceRecord[]>([]);
   readonly totalLength = signal(0);
   readonly search = signal('');
@@ -136,6 +137,7 @@ export class SourceCatalogQueryStore implements OnDestroy {
 
       this.sources.set(response.items);
       this.totalLength.set(response.total);
+      this.error.set(null);
 
       const selectedId = this.selectedSourceId();
       if (selectedId != null) {
@@ -143,6 +145,10 @@ export class SourceCatalogQueryStore implements OnDestroy {
         if (refreshed) {
           this.selectedSource.set(refreshed);
         }
+      }
+    } catch {
+      if (requestId === this.requestSequence) {
+        this.error.set('sources.loadError');
       }
     } finally {
       if (requestId === this.requestSequence) {

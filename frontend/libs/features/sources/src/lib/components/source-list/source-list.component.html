@@ -21,6 +21,13 @@
       </div>
 
       <div class="table-body ih-catalog-table-body ih-thin-scroll">
+        @if (error(); as err) {
+          <div class="ih-catalog-error" role="alert">
+            <p class="ih-catalog-error__message">{{ i18n.t(err) }}</p>
+            <button mat-stroked-button type="button" (click)="retry.emit()">{{ i18n.t('common.retry') }}</button>
+          </div>
+        }
+        @if (loading()) { <ih-loading variant="skeleton" [rows]="pageSize()" /> }
         @for (source of sources(); track source.id) {
           <button
             type="button"
@@ -28,6 +35,8 @@
             [class.table-row--selected]="selectedSourceId() === source.id"
             [class.ih-catalog-table-row--selected]="selectedSourceId() === source.id"
             [attr.aria-label]="i18n.t('common.selectItem', { name: source.name })"
+            [attr.tabindex]="$index === 0 ? 0 : -1"
+            [attr.data-row-index]="$index"
             (click)="selectSource.emit(source)"
           >
             <div class="row-primary ih-catalog-row-primary">
@@ -52,7 +61,10 @@
             </div>
           </button>
         } @empty {
-          <div class="empty-state ih-catalog-empty-state ih-muted">{{ i18n.t('sources.noData') }}</div>
+          <div class="empty-state ih-catalog-empty-state">
+            <ih-icon name="folder" [size]="32" />
+            <p class="ih-muted">{{ i18n.t('sources.noData') }}</p>
+          </div>
         }
       </div>
 

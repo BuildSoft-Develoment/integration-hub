@@ -1,5 +1,6 @@
 package com.integrationhub.platform.api.resource.plugin;
 
+import com.integrationhub.platform.api.request.plugin.PluginInstallRequest;
 import com.integrationhub.platform.api.response.plugin.BackendPluginDescriptorResponse;
 import com.integrationhub.platform.api.response.plugin.BackendPluginDiagnosticsResponse;
 import com.integrationhub.platform.service.plugin.BackendPluginAdminService;
@@ -7,6 +8,7 @@ import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.NotFoundException;
+import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -48,6 +50,25 @@ public class PluginDiagnosticsResource {
     @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public BackendPluginDiagnosticsResponse reload() {
         adminService.reload();
+        return currentDiagnostics();
+    }
+
+    @POST
+    @Path("/install")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
+    public BackendPluginDiagnosticsResponse install(PluginInstallRequest request) {
+        adminService.install(request.toCommand());
+        return currentDiagnostics();
+    }
+
+    @POST
+    @Path("/{id}/activate")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
+    public BackendPluginDiagnosticsResponse activate(@PathParam("id") String id) {
+        if (!adminService.activate(id)) {
+            throw new NotFoundException("Plugin " + id + " not found");
+        }
         return currentDiagnostics();
     }
 

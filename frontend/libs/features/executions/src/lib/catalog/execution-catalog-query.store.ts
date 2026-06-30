@@ -26,6 +26,7 @@ export class ExecutionCatalogQueryStore implements OnDestroy {
   private requestSequence = 0;
 
   readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
   readonly executions = signal<ProcessExecutionRecord[]>([]);
   readonly totalLength = signal(0);
   readonly search = signal('');
@@ -121,6 +122,7 @@ export class ExecutionCatalogQueryStore implements OnDestroy {
 
       this.executions.set(response.items);
       this.totalLength.set(response.total);
+      this.error.set(null);
 
       const selectedId = this.detail.selectedExecutionId();
       if (selectedId != null) {
@@ -128,6 +130,10 @@ export class ExecutionCatalogQueryStore implements OnDestroy {
         if (refreshed) {
           this.detail.refreshSelectedExecution(refreshed);
         }
+      }
+    } catch {
+      if (requestId === this.requestSequence) {
+        this.error.set('executions.loadError');
       }
     } finally {
       if (requestId === this.requestSequence) {

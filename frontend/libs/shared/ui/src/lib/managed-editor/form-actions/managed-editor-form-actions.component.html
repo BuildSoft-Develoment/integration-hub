@@ -10,7 +10,7 @@
       {{ entityExists() ? i18n.t('common.saveChanges') : i18n.t('common.create') }}
     </button>
 
-    <button mat-stroked-button type="button" (click)="cancel.emit()">
+    <button mat-stroked-button type="button" (click)="attemptCancel()">
       {{ i18n.t('common.cancel') }}
     </button>
   </div>

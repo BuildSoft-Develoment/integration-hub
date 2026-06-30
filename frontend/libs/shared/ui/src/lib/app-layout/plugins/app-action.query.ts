@@ -44,6 +44,8 @@ export class AppActionQueryService {
       labelKey: action.labelKey,
       icon: action.icon ?? defaultIcon(action),
       danger: action.confirmation?.severity === 'danger',
+      requiresConfirmation: action.confirmation != null,
+      confirmationLabelKey: action.confirmation?.labelKey,
     }));
   }
 }

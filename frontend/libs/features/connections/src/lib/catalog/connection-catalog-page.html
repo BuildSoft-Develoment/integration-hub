@@ -1,4 +1,4 @@
-<section class="page-grid connection-page">
+<section class="page-grid connection-page ih-no-hint">
   <mat-drawer-container class="connections-drawer-container">
     <mat-drawer-content>
       <section class="connections-workspace">
@@ -25,6 +25,8 @@
             [pageIndex]="store.currentPage()"
             [pageSize]="store.pageSize()"
             [canEdit]="store.canEdit()"
+            [loading]="store.loading()"
+            [error]="store.error()"
             [selectedIds]="store.selectedIds()"
             [isAllSelected]="store.isAllSelected()"
             (selectConnection)="store.selectConnection($event)"
@@ -32,6 +34,7 @@
             (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
             (toggleSelection)="store.toggleSelection($event)"
             (toggleSelectAll)="store.toggleSelectAll()"
+            (retry)="store.load()"
           />
         </section>
       </section>

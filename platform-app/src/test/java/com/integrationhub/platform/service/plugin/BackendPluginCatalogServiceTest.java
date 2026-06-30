@@ -26,8 +26,8 @@ class BackendPluginCatalogServiceTest {
                 registry);
 
         when(repository.listActive()).thenReturn(List.of(
-                descriptor("acme", "http://localhost:9090", true),
-                descriptor("unsafe", "https://plugins.example.com:9443", true)));
+                descriptor("acme", "http://localhost:9090", false),
+                descriptor("unsafe", "https://plugins.example.com:9443", false)));
 
         var loaded = service.reloadInstalledPlugins();
 

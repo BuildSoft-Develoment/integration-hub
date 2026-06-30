@@ -19,7 +19,7 @@
         </div>
       } @else {
         <div>
-          <h2 class="ih-section-title">{{ i18n.t('audit.quarantine.title') }}</h2>
+          <h1 class="ih-section-title">{{ i18n.t('audit.quarantine.title') }}</h1>
           <p class="ih-muted">{{ i18n.t('audit.quarantine.subtitle') }}</p>
         </div>
       }
@@ -55,7 +55,7 @@
         <div class="q__actions">
           <button mat-flat-button color="primary" type="button" (click)="loadLote()" [disabled]="loading() || (!fragmentSetId.trim() && !processExecutionId.trim())">{{ i18n.t('audit.quarantine.loadLote') }}</button>
           @if (canAuditOperate()) {
-            <button mat-stroked-button type="button" [class.q__danger--armed]="actions.armed() === 'quarantine:build'" (click)="confirmBuild()" [disabled]="loading() || !fragmentSetId.trim()">
+            <button mat-stroked-button type="button" [class.q__danger--armed]="actions.armed() === 'quarantine:build'" [attr.aria-pressed]="actions.armed() === 'quarantine:build'" (click)="confirmBuild()" [disabled]="loading() || !fragmentSetId.trim()">
               {{ actions.armed() === 'quarantine:build' ? i18n.t('audit.quarantine.buildConfirm') : i18n.t('audit.quarantine.build') }}
             </button>
           }

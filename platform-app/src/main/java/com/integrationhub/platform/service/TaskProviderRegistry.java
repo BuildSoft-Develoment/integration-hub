@@ -12,7 +12,10 @@ import jakarta.inject.Inject;
 import org.jboss.logging.Logger;
 
 import java.util.LinkedHashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -90,9 +93,24 @@ public class TaskProviderRegistry {
      */
     public Set<String> availableTaskTypes() {
         var types = new LinkedHashSet<String>();
-        providers.forEach(provider -> types.add(provider.type()));
+        types.addAll(localTaskTypeProviders().keySet());
         types.addAll(remotePlugins.availableTaskTypes());
         return types;
+    }
+
+    /**
+     * Tipos aportados por providers CDI locales y la clase que los publica.
+     * No incluye plugins remotos; se usa para diagnostico y para detectar shadowing.
+     */
+    public Map<String, String> localTaskTypeProviders() {
+        var types = new LinkedHashMap<String, String>();
+        providers.forEach(provider -> {
+            var type = provider.type();
+            if (type != null && !type.isBlank()) {
+                types.putIfAbsent(type, provider.getClass().getSimpleName());
+            }
+        });
+        return Collections.unmodifiableMap(types);
     }
 
     private String availableProviders() {

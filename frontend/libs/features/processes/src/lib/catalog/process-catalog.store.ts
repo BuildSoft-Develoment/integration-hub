@@ -19,6 +19,7 @@ export class ProcessCatalogStore {
   private readonly references = inject(ProcessReferenceStore);
 
   readonly loading = this.query.loading;
+  readonly error = this.query.error;
   readonly processes = this.query.processes;
   readonly totalLength = this.query.totalLength;
   readonly search = this.query.search;

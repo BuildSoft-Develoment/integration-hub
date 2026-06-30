@@ -1,4 +1,4 @@
-<section class="page-grid source-page ih-catalog-grid">
+<section class="page-grid source-page ih-catalog-grid ih-no-hint">
   <mat-drawer-container class="sources-drawer-container ih-catalog-drawer-container">
     <mat-drawer-content>
       <section class="sources-workspace ih-catalog-workspace">
@@ -23,9 +23,12 @@
             [sortDirection]="store.sortDirection()"
             [pageIndex]="store.currentPage()"
             [pageSize]="store.pageSize()"
+            [loading]="store.loading()"
+            [error]="store.error()"
             (selectSource)="store.selectSource($event)"
             (toggleSort)="store.toggleSort($event)"
             (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
+            (retry)="store.load()"
           />
         </section>
       </section>

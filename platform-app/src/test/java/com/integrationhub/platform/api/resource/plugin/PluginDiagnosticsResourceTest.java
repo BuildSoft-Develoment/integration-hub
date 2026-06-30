@@ -1,5 +1,6 @@
 package com.integrationhub.platform.api.resource.plugin;
 
+import com.integrationhub.platform.api.request.plugin.PluginInstallRequest;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
 import com.integrationhub.platform.service.plugin.BackendPluginAdminService;
@@ -55,6 +56,29 @@ class PluginDiagnosticsResourceTest {
     }
 
     @Test
+    void installDelegatesToAdminServiceAndReturnsDiagnostics() {
+        var registry = new RemotePluginRegistry();
+        var admin = mock(BackendPluginAdminService.class);
+        var resource = new PluginDiagnosticsResource(registry, admin);
+        var request = new PluginInstallRequest(
+                "acme",
+                "1.0.0",
+                "1",
+                Set.of("ACME_DO"),
+                "KAFKA",
+                null,
+                false,
+                true,
+                null,
+                null);
+
+        var diagnostics = resource.install(request);
+
+        verify(admin).install(request.toCommand());
+        assertEquals(0, diagnostics.installed().size());
+    }
+
+    @Test
     void deactivateDelegatesToAdminServiceAndReturnsDiagnostics() {
         var registry = new RemotePluginRegistry();
         var admin = mock(BackendPluginAdminService.class);
@@ -68,11 +92,33 @@ class PluginDiagnosticsResourceTest {
     }
 
     @Test
+    void activateDelegatesToAdminServiceAndReturnsDiagnostics() {
+        var registry = new RemotePluginRegistry();
+        var admin = mock(BackendPluginAdminService.class);
+        when(admin.activate("acme")).thenReturn(true);
+        var resource = new PluginDiagnosticsResource(registry, admin);
+
+        var diagnostics = resource.activate("acme");
+
+        verify(admin).activate("acme");
+        assertEquals(0, diagnostics.installed().size());
+    }
+
+    @Test
     void deactivateReturnsNotFoundWhenDescriptorDoesNotExist() {
         var registry = new RemotePluginRegistry();
         var admin = mock(BackendPluginAdminService.class);
         var resource = new PluginDiagnosticsResource(registry, admin);
 
         assertThrows(jakarta.ws.rs.NotFoundException.class, () -> resource.deactivate("missing"));
+    }
+
+    @Test
+    void activateReturnsNotFoundWhenDescriptorDoesNotExist() {
+        var registry = new RemotePluginRegistry();
+        var admin = mock(BackendPluginAdminService.class);
+        var resource = new PluginDiagnosticsResource(registry, admin);
+
+        assertThrows(jakarta.ws.rs.NotFoundException.class, () -> resource.activate("missing"));
     }
 }

@@ -25,4 +25,11 @@ export class ManagedEditorFormActionsComponent {
 
   readonly test = output<void>();
   readonly cancel = output<void>();
+
+  attemptCancel(): void {
+    if (this.dirty() && !confirm(this.i18n.t('common.discardConfirm'))) {
+      return;
+    }
+    this.cancel.emit();
+  }
 }

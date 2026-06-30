@@ -1,11 +1,8 @@
 package com.integrationhub.platform.service.execution;
 
+import com.integrationhub.platform.task.ResumeCallbackSignature;
 import org.junit.jupiter.api.Test;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
-import java.util.HexFormat;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -21,19 +18,19 @@ class ResumeCallbackSignatureVerifierTest {
     private static final String BODY = "{\"confirmations\":[{\"sendersReference\":\"P1\",\"status\":\"ACCP\"}]}";
 
     @Test
-    void acceptsValidSignature() throws Exception {
+    void acceptsValidSignature() {
         var verifier = new ResumeCallbackSignatureVerifier(true, Optional.of(SECRET));
         assertTrue(verifier.verify(BODY, sign(SECRET, BODY)));
     }
 
     @Test
-    void acceptsGithubStylePrefix() throws Exception {
+    void acceptsGithubStylePrefix() {
         var verifier = new ResumeCallbackSignatureVerifier(true, Optional.of(SECRET));
-        assertTrue(verifier.verify(BODY, "sha256=" + sign(SECRET, BODY)));
+        assertTrue(verifier.verify(BODY, ResumeCallbackSignature.headerValue(SECRET, BODY)));
     }
 
     @Test
-    void rejectsTamperedBody() throws Exception {
+    void rejectsTamperedBody() {
         var verifier = new ResumeCallbackSignatureVerifier(true, Optional.of(SECRET));
         var signature = sign(SECRET, BODY);
         assertFalse(verifier.verify(BODY.replace("ACCP", "RJCT"), signature),
@@ -41,7 +38,7 @@ class ResumeCallbackSignatureVerifierTest {
     }
 
     @Test
-    void rejectsWrongSecret() throws Exception {
+    void rejectsWrongSecret() {
         var verifier = new ResumeCallbackSignatureVerifier(true, Optional.of(SECRET));
         assertFalse(verifier.verify(BODY, sign("other-secret", BODY)));
     }
@@ -67,9 +64,7 @@ class ResumeCallbackSignatureVerifierTest {
         assertFalse(verifier.enabled());
     }
 
-    private String sign(String secret, String body) throws Exception {
-        var mac = Mac.getInstance("HmacSHA256");
-        mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-        return HexFormat.of().formatHex(mac.doFinal(body.getBytes(StandardCharsets.UTF_8)));
+    private String sign(String secret, String body) {
+        return ResumeCallbackSignature.signHex(secret, body);
     }
 }

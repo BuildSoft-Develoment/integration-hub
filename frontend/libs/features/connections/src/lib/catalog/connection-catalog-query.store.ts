@@ -19,6 +19,7 @@ export class ConnectionCatalogQueryStore implements OnDestroy {
   private requestSequence = 0;
 
   readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
   readonly connections = signal<ConnectionRecord[]>([]);
   readonly totalLength = signal(0);
   readonly search = signal('');
@@ -162,6 +163,7 @@ export class ConnectionCatalogQueryStore implements OnDestroy {
 
       this.connections.set(response.items);
       this.totalLength.set(response.total);
+      this.error.set(null);
 
       const selectedId = this.selectedConnectionId();
       if (selectedId != null) {
@@ -169,6 +171,10 @@ export class ConnectionCatalogQueryStore implements OnDestroy {
         if (refreshed) {
           this.selectedConnection.set(refreshed);
         }
+      }
+    } catch {
+      if (requestId === this.requestSequence) {
+        this.error.set('connections.loadError');
       }
     } finally {
       if (requestId === this.requestSequence) {

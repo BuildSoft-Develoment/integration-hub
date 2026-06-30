@@ -10,6 +10,8 @@ export interface ActionBarAction {
   labelKey: string;
   icon: string;
   danger?: boolean;
+  requiresConfirmation?: boolean;
+  confirmationLabelKey?: string;
 }
 
 @Component({
@@ -28,4 +30,21 @@ export class FloatingActionBarComponent {
 
   readonly clearSelection = output<void>();
   readonly action = output<string>();
+
+  onAction(act: ActionBarAction): void {
+    if (this.requiresConfirmation(act)) {
+      const message = act.confirmationLabelKey
+        ? this.i18n.t(act.confirmationLabelKey)
+        : `${this.i18n.t(act.labelKey)}?`;
+      const confirmed = window.confirm(message);
+      if (!confirmed) {
+        return;
+      }
+    }
+    this.action.emit(act.id);
+  }
+
+  private requiresConfirmation(act: ActionBarAction): boolean {
+    return act.requiresConfirmation === true || act.danger === true;
+  }
 }

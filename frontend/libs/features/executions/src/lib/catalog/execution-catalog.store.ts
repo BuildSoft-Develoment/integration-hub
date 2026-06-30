@@ -19,6 +19,7 @@ export class ExecutionCatalogStore {
   private readonly query = inject(ExecutionCatalogQueryStore);
 
   readonly loading = this.query.loading;
+  readonly error = this.query.error;
   readonly loadingDetails = this.detail.loadingDetails;
   readonly actionRunning = this.detail.actionRunning;
   readonly executions = this.query.executions;

@@ -88,12 +88,17 @@ publica un envelope al broker; un consumer ejecuta la tarea y reanuda el proceso
 - `TaskOutboxRelay` + `TaskOutboxRetryPolicy` + puertos `TaskOutboxStore` y
   `BrokerResolver`: drena el outbox, publica, y ante fallo aplica backoff/reintento
   o dead-letter sin propagar. Logica unit-tested con fakes (sin DB ni broker).
+- Para plugins out-of-process (ADR-014), existe sidecar backend de referencia en
+  `ejemplos/backend-plugin-sidecar`: consume el contrato `AsyncTaskEnvelope` y
+  construye el callback HMAC de resume con `RemoteTaskResumePayload`.
 
 ## Alcance pendiente
 
 - Adaptador JPA de `TaskOutboxStore` (tabla `task_dispatch_outbox` + Flyway +
   scheduler de drenado), reusando el patron `audit_spool` (integracion).
-- Consumer de tareas + reanudacion del proceso (`SuspendableTaskProvider`/resume).
+- Consumer productivo de tareas internas + reanudacion del proceso
+  (`SuspendableTaskProvider`/resume). El sidecar de referencia para plugins
+  externos ya esta disponible como ejemplo compilable.
 - Deduplicacion por `idempotencyKey` en el consumer + DLQ por tarea.
 - Cableado de `TaskDispatchPlanner` en `ProcessTaskRuntimeService` (rama async).
 - Pruebas de integracion con Kafka (devservices/testcontainers).

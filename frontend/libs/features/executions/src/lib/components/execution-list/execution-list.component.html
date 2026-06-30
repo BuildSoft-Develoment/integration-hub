@@ -21,12 +21,23 @@
       </div>
 
       <div class="table-body ih-catalog-table-body ih-thin-scroll">
-        @for (execution of executions(); track execution.id) {
+        @if (error(); as err) {
+          <div class="ih-catalog-error" role="alert">
+            <p class="ih-catalog-error__message">{{ i18n.t(err) }}</p>
+            <button mat-stroked-button type="button" (click)="retry.emit()">{{ i18n.t('common.retry') }}</button>
+          </div>
+        }
+        @if (loading()) {
+          <ih-loading variant="skeleton" [rows]="pageSize()" />
+        } @for (execution of executions(); track execution.id) {
           <button
             type="button"
             class="table-row ih-catalog-table-row"
             [class.table-row--selected]="selectedExecutionId() === execution.id"
             [class.ih-catalog-table-row--selected]="selectedExecutionId() === execution.id"
+            [attr.aria-label]="execution.processName + ' #' + execution.id"
+            [attr.tabindex]="$index === 0 ? 0 : -1"
+            [attr.data-row-index]="$index"
             (click)="selectExecution.emit(execution)"
           >
             <div class="row-primary ih-catalog-row-primary">
@@ -59,7 +70,10 @@
             </div>
           </button>
         } @empty {
-          <div class="empty-state ih-catalog-empty-state ih-muted">{{ i18n.t('executions.noData') }}</div>
+          <div class="empty-state ih-catalog-empty-state">
+            <ih-icon name="play" [size]="32" />
+            <p class="ih-muted">{{ i18n.t('executions.noData') }}</p>
+          </div>
         }
       </div>
 

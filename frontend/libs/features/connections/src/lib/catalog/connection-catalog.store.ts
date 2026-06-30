@@ -25,6 +25,7 @@ export class ConnectionCatalogStore {
   readonly saving = signal(false);
   readonly testing = signal(false);
   readonly loading = this.query.loading;
+  readonly error = this.query.error;
   readonly connections = this.query.connections;
   readonly totalLength = this.query.totalLength;
   readonly search = this.query.search;

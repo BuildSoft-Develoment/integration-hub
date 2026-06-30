@@ -26,19 +26,7 @@ import { SourceTypeFormHostComponent } from '../source-type-form/source-type-for
     ManagedEditorTestResultComponent,
     SourceTypeFormHostComponent,
   ],
-  styles: [`
-    .editor-form {
-      display: grid;
-      gap: 0.9rem;
-      min-width: 0;
-    }
-
-    @media (max-height: 700px) and (min-width: 761px) {
-      .editor-form {
-        gap: 0.7rem;
-      }
-    }
-  `],
+  styleUrl: './source-editor.component.css',
     templateUrl: './source-editor.component.html'
 })
 export class SourceEditorComponent {

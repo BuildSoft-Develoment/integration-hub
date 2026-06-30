@@ -180,3 +180,21 @@
     top: 6px;
   }
 }
+
+.ih-skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 10000;
+  padding: 0.5rem 1rem;
+  background: var(--ih-surface);
+  border: 1px solid var(--ih-border);
+  border-radius: 0 0 8px 0;
+  font-size: 0.86rem;
+  color: var(--ih-text);
+  text-decoration: none;
+}
+
+.ih-skip-link:focus {
+  left: 0;
+}

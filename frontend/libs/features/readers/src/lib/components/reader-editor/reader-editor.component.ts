@@ -25,19 +25,7 @@ import { ReaderTypeFormHostComponent } from '../reader-type-form/reader-type-for
     ManagedEditorShellComponent,
     ReaderTypeFormHostComponent,
   ],
-  styles: [`
-    .editor-form {
-      display: grid;
-      gap: 0.9rem;
-      min-width: 0;
-    }
-
-    @media (max-height: 700px) and (min-width: 761px) {
-      .editor-form {
-        gap: 0.7rem;
-      }
-    }
-  `],
+  styleUrl: './reader-editor.component.css',
     templateUrl: './reader-editor.component.html'
 })
 export class ReaderEditorComponent {

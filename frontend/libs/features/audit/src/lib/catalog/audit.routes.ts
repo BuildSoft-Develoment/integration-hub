@@ -11,6 +11,11 @@ export const auditRoutes: Route[] = [
     component: AuditPageComponent,
   },
   {
+    path: 'events',
+    redirectTo: '',
+    pathMatch: 'full',
+  },
+  {
     path: 'record-lineage',
     component: RecordLineageComponent,
   },

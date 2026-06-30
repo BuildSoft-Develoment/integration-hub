@@ -26,6 +26,7 @@ export class SourceCatalogStore {
   readonly saving = signal(false);
   readonly testing = signal(false);
   readonly loading = this.query.loading;
+  readonly error = this.query.error;
   readonly sources = this.query.sources;
   readonly totalLength = this.query.totalLength;
   readonly search = this.query.search;

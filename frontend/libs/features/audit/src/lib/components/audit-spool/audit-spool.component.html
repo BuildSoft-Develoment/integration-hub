@@ -3,7 +3,7 @@
 
       <div class="spool__toolbar">
         <div>
-          <h2 class="ih-section-title">{{ i18n.t('audit.spool.title') }}</h2>
+          <h1 class="ih-section-title">{{ i18n.t('audit.spool.title') }}</h1>
           <p class="ih-muted">{{ i18n.t('audit.spool.subtitle') }}</p>
         </div>
         <div class="spool__actions">
@@ -69,7 +69,7 @@
         <div class="spool__actions">
           <button mat-stroked-button type="button" (click)="loadDead()" [disabled]="loading()">{{ i18n.t('audit.spool.viewDead') }}</button>
           @if (canAuditAdmin()) {
-            <button mat-stroked-button type="button" [class.spool__danger--armed]="actions.armed() === 'spool:cleanup'" (click)="confirmCleanup()" [disabled]="loading()">
+            <button mat-stroked-button type="button" [class.spool__danger--armed]="actions.armed() === 'spool:cleanup'" [attr.aria-pressed]="actions.armed() === 'spool:cleanup'" (click)="confirmCleanup()" [disabled]="loading()">
               {{ actions.armed() === 'spool:cleanup' ? i18n.t('audit.spool.cleanupConfirm') : i18n.t('audit.spool.cleanup') }}
             </button>
           }
@@ -121,7 +121,7 @@
                   @if (canAuditAdmin()) {
                     <td>
                       <span class="spool__risk-inline" [title]="i18n.t(retryRisk.summaryKey)">{{ i18n.t(retryRisk.labelKey) }}</span>
-                      <button mat-stroked-button type="button" [class.spool__danger--armed]="actions.armed() === 'spool:retry:' + row.id" (click)="confirmRetry(row)" [disabled]="loading()" [attr.aria-label]="i18n.t('audit.spool.retryAria', { id: row.id })">{{ actions.armed() === 'spool:retry:' + row.id ? i18n.t('audit.common.confirmShort') : i18n.t('audit.spool.retry') }}</button>
+                      <button mat-stroked-button type="button" [class.spool__danger--armed]="actions.armed() === 'spool:retry:' + row.id" [attr.aria-pressed]="actions.armed() === 'spool:retry:' + row.id" (click)="confirmRetry(row)" [disabled]="loading()" [attr.aria-label]="i18n.t('audit.spool.retryAria', { id: row.id })">{{ actions.armed() === 'spool:retry:' + row.id ? i18n.t('audit.common.confirmShort') : i18n.t('audit.spool.retry') }}</button>
                     </td>
                   }
                 </tr>

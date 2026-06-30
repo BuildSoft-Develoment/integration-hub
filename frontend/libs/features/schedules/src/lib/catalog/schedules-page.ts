@@ -32,6 +32,8 @@ export class SchedulesPageComponent implements OnInit {
     drawerOpen: this.store.drawerOpen(),
     pageIndex: this.store.currentPage(),
     pageSize: this.store.pageSize(),
+    loading: this.store.loading(),
+    error: this.store.error(),
     executing: this.store.executing(),
     canOperate: this.store.canOperate(),
   }));

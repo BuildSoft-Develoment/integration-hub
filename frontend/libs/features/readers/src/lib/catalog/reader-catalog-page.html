@@ -1,4 +1,4 @@
-<section class="page-grid reader-page">
+<section class="page-grid reader-page ih-no-hint">
   <mat-drawer-container class="readers-drawer-container">
     <mat-drawer-content>
       <section class="readers-workspace">
@@ -21,9 +21,12 @@
             [sortDirection]="store.sortDirection()"
             [pageIndex]="store.currentPage()"
             [pageSize]="store.pageSize()"
+            [loading]="store.loading()"
+            [error]="store.error()"
             (selectReader)="store.selectReader($event)"
             (toggleSort)="store.toggleSort($event)"
             (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
+            (retry)="store.load()"
           />
         </section>
       </section>

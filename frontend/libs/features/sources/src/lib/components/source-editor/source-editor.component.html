@@ -1,4 +1,4 @@
-<ih-managed-editor-shell (close)="close.emit()">
+<ih-managed-editor-shell [dirty]="dirty()" (close)="close.emit()">
       <ih-managed-editor-header
         editor-header
         [titleKey]="titleKey()"

@@ -35,6 +35,7 @@ export class AuditPageComponent implements OnInit {
     pageIndex: this.store.currentPage(),
     pageSize: this.store.pageSize(),
     loading: this.store.loading(),
+    error: this.store.error(),
   }));
 
   ngOnInit(): void {

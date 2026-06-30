@@ -1,4 +1,4 @@
-<section class="page-grid execution-page ih-catalog-grid">
+<section class="page-grid execution-page ih-catalog-grid ih-no-hint">
   <mat-drawer-container class="executions-drawer-container ih-catalog-drawer-container">
     <mat-drawer-content>
       <section class="executions-workspace ih-catalog-workspace">
@@ -26,9 +26,12 @@
             [sortDirection]="viewModel().list.sortDirection"
             [pageIndex]="viewModel().list.pageIndex"
             [pageSize]="viewModel().list.pageSize"
+            [loading]="viewModel().loading"
+            [error]="viewModel().error"
             (selectExecution)="selectExecution($event)"
             (toggleSort)="toggleSort($event)"
             (pageChange)="updatePagination($event.pageIndex, $event.pageSize)"
+            (retry)="refresh()"
           />
         </section>
       </section>

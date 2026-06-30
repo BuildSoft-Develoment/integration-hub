@@ -21,6 +21,13 @@
       </div>
 
       <div class="table-body ih-catalog-table-body ih-thin-scroll">
+        @if (error(); as err) {
+          <div class="ih-catalog-error" role="alert">
+            <p class="ih-catalog-error__message">{{ i18n.t(err) }}</p>
+            <button mat-stroked-button type="button" (click)="retry.emit()">{{ i18n.t('common.retry') }}</button>
+          </div>
+        }
+        @if (loading()) { <ih-loading variant="skeleton" [rows]="pageSize()" /> }
         @for (process of processes(); track process.id) {
           <button
             type="button"
@@ -28,6 +35,8 @@
             [class.table-row--selected]="selectedProcessId() === process.id"
             [class.ih-catalog-table-row--selected]="selectedProcessId() === process.id"
             [attr.aria-label]="i18n.t('common.selectItem', { name: process.name })"
+            [attr.tabindex]="$index === 0 ? 0 : -1"
+            [attr.data-row-index]="$index"
             (click)="selectProcess.emit(process)"
           >
             <div class="row-primary ih-catalog-row-primary">
@@ -52,7 +61,10 @@
             </div>
           </button>
         } @empty {
-          <div class="empty-state ih-catalog-empty-state ih-muted">{{ i18n.t('processes.noData') }}</div>
+          <div class="empty-state ih-catalog-empty-state">
+            <ih-icon name="git-branch" [size]="32" />
+            <p class="ih-muted">{{ i18n.t('processes.noData') }}</p>
+          </div>
         }
       </div>
 
