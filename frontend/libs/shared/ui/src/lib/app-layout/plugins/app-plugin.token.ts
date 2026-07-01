@@ -70,3 +70,15 @@ export function provideExternalAppPluginManifestCatalog(
     );
   });
 }
+
+/**
+ * Loads and merges several external manifest catalogs at boot (e.g. a static file plus a
+ * runtime, backend-managed catalog). Every source is optional and non-fatal.
+ */
+export function provideExternalAppPluginManifestCatalogs(
+  sources: readonly { readonly url: string; readonly optional?: boolean }[]
+): EnvironmentProviders {
+  return provideAppInitializer(async () => {
+    await inject(AppPluginRuntimeRegistry).loadExternalManifestCatalogs(sources);
+  });
+}

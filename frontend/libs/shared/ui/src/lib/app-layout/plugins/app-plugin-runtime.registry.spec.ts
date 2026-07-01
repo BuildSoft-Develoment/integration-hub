@@ -440,6 +440,53 @@ describe('AppPluginRuntimeRegistry', () => {
     expect(registry.diagnostics().quarantined).toEqual([]);
   });
 
+  function commandManifest(id: string, ns: string): AppPluginManifest {
+    return {
+      id,
+      version: '1.0.0',
+      platformVersion: '1.0.0',
+      displayName: id,
+      i18nNamespaces: [ns],
+      actions: [{ id: `${id}-run`, group: 'g', labelKey: `${ns}.run`, command: `${ns}.run` }],
+    };
+  }
+
+  it('merges multiple external catalogs into a single install', async () => {
+    const registry = configure();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ manifests: [commandManifest('cat-a', 'catA')] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ manifests: [commandManifest('cat-b', 'catB')] }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await registry.loadExternalManifestCatalogs([
+      { url: '/plugins/catalog.json' },
+      { url: '/api/plugins/ui-catalog' },
+    ]);
+
+    const ids = registry.diagnostics().installed.map((plugin) => plugin.id);
+    expect(ids).toContain('cat-a');
+    expect(ids).toContain('cat-b');
+    vi.unstubAllGlobals();
+  });
+
+  it('keeps merging when an optional catalog source fails', async () => {
+    const registry = configure();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ manifests: [commandManifest('cat-b', 'catB')] }) });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await registry.loadExternalManifestCatalogs([
+      { url: '/plugins/catalog.json' },
+      { url: '/api/plugins/ui-catalog' },
+    ]);
+
+    expect(registry.diagnostics().installed.map((plugin) => plugin.id)).toContain('cat-b');
+    vi.unstubAllGlobals();
+  });
+
   it('previews the quarantine reason for an untrusted manifest', () => {
     const registry = configure();
 

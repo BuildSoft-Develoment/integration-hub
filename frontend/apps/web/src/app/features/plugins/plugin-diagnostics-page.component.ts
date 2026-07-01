@@ -396,12 +396,44 @@ interface FrontendPluginRow {
               <span class="plugin-badge" data-status="active">{{ i18n.t('plugins.ui.acceptedBadge') }}</span>
               {{ i18n.t('plugins.ui.accepted', { id: result.id }) }}
             </p>
+            <button type="button" class="plugins-btn" [disabled]="busy()" (click)="installToCatalog()">
+              {{ i18n.t('plugins.ui.install') }}
+            </button>
           } @else {
             <p class="ih-muted" role="alert">
               <span class="plugin-badge" data-status="degraded">{{ i18n.t('plugins.ui.rejectedBadge') }}</span>
               {{ i18n.t('plugins.ui.rejected', { reason: result.reason }) }}
             </p>
           }
+        }
+
+        <h4 class="ih-section-subtitle">
+          {{ i18n.t('plugins.ui.installed') }} ({{ uiCatalog().length }})
+        </h4>
+        @if (uiCatalog().length === 0) {
+          <p class="ih-muted">{{ i18n.t('plugins.ui.empty') }}</p>
+        } @else {
+          <table class="ih-table">
+            <caption class="sr-only">{{ i18n.t('plugins.ui.installed') }}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{{ i18n.t('plugins.col.id') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.actions') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (entry of uiCatalog(); track entry.id) {
+                <tr>
+                  <td>{{ entry.id }}</td>
+                  <td>
+                    <button type="button" class="plugins-btn plugins-btn--danger" (click)="removeFromCatalog(entry.id)">
+                      {{ i18n.t('plugins.ui.remove') }}
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
         }
       </section>
     </section>
@@ -500,9 +532,61 @@ export class PluginDiagnosticsPageComponent implements OnInit {
   readonly canaryError = signal(false);
   readonly canaryMetrics = signal<readonly BackendCanaryMetric[]>([]);
 
+  readonly uiCatalog = signal<readonly { id: string }[]>([]);
+
   ngOnInit(): void {
     void this.loadBackendDiagnostics();
     void this.loadCanaryMetrics();
+    void this.loadUiCatalog();
+  }
+
+  private async loadUiCatalog(): Promise<void> {
+    try {
+      const response = await firstValueFrom(
+        this.http.get<{ manifests?: { id?: string }[] }>('/api/plugins/ui-catalog', {
+          context: new HttpContext().set(SKIP_GLOBAL_ERROR_FEEDBACK, true),
+        })
+      );
+      this.uiCatalog.set(
+        (response.manifests ?? [])
+          .filter((manifest): manifest is { id: string } => !!manifest?.id)
+          .map((manifest) => ({ id: manifest.id }))
+      );
+    } catch {
+      this.uiCatalog.set([]);
+    }
+  }
+
+  async installToCatalog(): Promise<void> {
+    const result = this.uiPreviewResult();
+    const raw = this.uiManifestJson().trim();
+    if (!result?.accepted || !raw) {
+      return;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      this.uiInvalidJson.set(true);
+      return;
+    }
+    await firstValueFrom(
+      this.http.post('/api/plugins/ui-catalog', parsed, {
+        context: new HttpContext().set(SKIP_GLOBAL_ERROR_FEEDBACK, true),
+      })
+    );
+    this.uiPreviewResult.set(null);
+    this.uiManifestJson.set('');
+    await this.loadUiCatalog();
+  }
+
+  async removeFromCatalog(id: string): Promise<void> {
+    await firstValueFrom(
+      this.http.delete(`/api/plugins/ui-catalog/${encodeURIComponent(id)}`, {
+        context: new HttpContext().set(SKIP_GLOBAL_ERROR_FEEDBACK, true),
+      })
+    );
+    await this.loadUiCatalog();
   }
 
   refreshCanary(): void {

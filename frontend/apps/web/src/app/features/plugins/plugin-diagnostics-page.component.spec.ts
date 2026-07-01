@@ -38,6 +38,7 @@ describe('PluginDiagnosticsPageComponent', () => {
     // Quarantined plugin id surfaces even though the manifest was rejected.
     expect(text).toContain('future');
     http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
+    http.match('/api/plugins/ui-catalog').forEach((req) => req.flush({ manifests: [] }));
     http.verify();
   });
 
@@ -78,6 +79,7 @@ describe('PluginDiagnosticsPageComponent', () => {
     expect(installed.every((row) => row.status === 'installed')).toBe(true);
     expect(installed.some((row) => row.id === 'good')).toBe(true);
     http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
+    http.match('/api/plugins/ui-catalog').forEach((req) => req.flush({ manifests: [] }));
     http.verify();
   });
 
@@ -106,6 +108,7 @@ describe('PluginDiagnosticsPageComponent', () => {
     fixture.detectChanges();
     expect(root.getAttribute('aria-busy')).toBe('true');
     http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
+    http.match('/api/plugins/ui-catalog').forEach((req) => req.flush({ manifests: [] }));
     http.verify();
   });
 
@@ -137,6 +140,7 @@ describe('PluginDiagnosticsPageComponent', () => {
       degraded: {},
     });
     http.expectOne('/api/plugins/canary/metrics').flush([]);
+    http.expectOne('/api/plugins/ui-catalog').flush({ manifests: [] });
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -187,6 +191,7 @@ describe('PluginDiagnosticsPageComponent', () => {
     expect(text).toContain('acme');
     expect(text).toContain('ACME_DO');
     http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
+    http.match('/api/plugins/ui-catalog').forEach((req) => req.flush({ manifests: [] }));
     http.verify();
   });
 
@@ -218,6 +223,7 @@ describe('PluginDiagnosticsPageComponent', () => {
         trend: [0, 0.1, 0.3, 0.2],
       },
     ]);
+    http.expectOne('/api/plugins/ui-catalog').flush({ manifests: [] });
     await fixture.whenStable();
     fixture.detectChanges();
 
@@ -279,6 +285,7 @@ describe('PluginDiagnosticsPageComponent', () => {
 
     http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
     http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
+    http.match('/api/plugins/ui-catalog').forEach((req) => req.flush({ manifests: [] }));
     http.verify();
   });
 
@@ -303,6 +310,7 @@ describe('PluginDiagnosticsPageComponent', () => {
 
     http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
     http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
+    http.match('/api/plugins/ui-catalog').forEach((req) => req.flush({ manifests: [] }));
     http.verify();
   });
 
@@ -331,6 +339,7 @@ describe('PluginDiagnosticsPageComponent', () => {
     await fixture.whenStable();
     http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
     http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
+    http.match('/api/plugins/ui-catalog').forEach((req) => req.flush({ manifests: [] }));
     http.verify();
   });
 
@@ -355,6 +364,7 @@ describe('PluginDiagnosticsPageComponent', () => {
 
     expect(component.confirmingDeactivate()).toBeNull();
     http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
+    http.match('/api/plugins/ui-catalog').forEach((req) => req.flush({ manifests: [] }));
     http.verify();
   });
 
@@ -399,6 +409,7 @@ describe('PluginDiagnosticsPageComponent', () => {
 
     expect(component.marketplacePreview()?.id).toBe('acme');
     http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
+    http.match('/api/plugins/ui-catalog').forEach((req) => req.flush({ manifests: [] }));
     http.verify();
   });
 
@@ -440,6 +451,7 @@ describe('PluginDiagnosticsPageComponent', () => {
 
     expect(component.marketplacePreview()).toBeNull();
     http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
+    http.match('/api/plugins/ui-catalog').forEach((req) => req.flush({ manifests: [] }));
     http.verify();
   });
 
@@ -465,6 +477,7 @@ describe('PluginDiagnosticsPageComponent', () => {
     await fixture.whenStable();
     http.expectOne('/api/plugins').flush({ installed: [], versions: [], degraded: {} });
     http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
+    http.match('/api/plugins/ui-catalog').forEach((req) => req.flush({ manifests: [] }));
     http.verify();
   });
 
@@ -500,6 +513,40 @@ describe('PluginDiagnosticsPageComponent', () => {
     ).map((b) => (b.textContent ?? '').trim());
     expect(labels.some((l) => /Activar version|Activate version/.test(l))).toBe(true);
     http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
+    http.match('/api/plugins/ui-catalog').forEach((req) => req.flush({ manifests: [] }));
+    http.verify();
+  });
+
+  it('lists persisted frontend catalog entries and removes one', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    http.expectOne('/api/plugins/canary/metrics').flush([]);
+    http.expectOne('/api/plugins/ui-catalog').flush({ manifests: [{ id: 'sample-plugin' }] });
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    expect(component.uiCatalog()).toEqual([{ id: 'sample-plugin' }]);
+
+    void component.removeFromCatalog('sample-plugin');
+    http
+      .expectOne((r) => r.method === 'DELETE' && r.url === '/api/plugins/ui-catalog/sample-plugin')
+      .flush({ manifests: [] });
+    await fixture.whenStable();
+    http.expectOne('/api/plugins/ui-catalog').flush({ manifests: [] });
+    await fixture.whenStable();
+
+    expect(component.uiCatalog()).toEqual([]);
     http.verify();
   });
 

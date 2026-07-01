@@ -230,6 +230,44 @@ export class AppPluginRuntimeRegistry {
     this.installExternalManifests(manifests);
   }
 
+  /**
+   * Loads and MERGES several external manifest catalogs (e.g. a static file plus a
+   * backend-managed catalog) into a single resilient install. Every source is optional
+   * and non-fatal, so a missing or failing source never blocks the others or the shell.
+   */
+  async loadExternalManifestCatalogs(
+    sources: readonly { readonly url: string; readonly optional?: boolean }[]
+  ): Promise<void> {
+    const manifests: AppPluginManifest[] = [];
+    for (const source of sources) {
+      manifests.push(...(await this.fetchCatalogManifests(source.url, source.optional ?? true)));
+    }
+    this.installExternalManifests(manifests);
+  }
+
+  private async fetchCatalogManifests(
+    url: string,
+    optional: boolean
+  ): Promise<AppPluginManifest[]> {
+    let response: Response;
+    try {
+      response = await fetch(url, { cache: 'no-store', headers: { Accept: 'application/json' } });
+    } catch (error) {
+      if (optional) {
+        return [];
+      }
+      throw error;
+    }
+    if (!response.ok) {
+      if (optional) {
+        return [];
+      }
+      throw new Error(`Unable to load plugin manifest catalog "${url}": HTTP ${response.status}.`);
+    }
+    const catalog = (await response.json()) as AppPluginManifestCatalog | AppPluginManifest[];
+    return Array.isArray(catalog) ? [...catalog] : [...(catalog.manifests ?? [])];
+  }
+
   private assertExternalRoutesAreMetadataOnly(manifests: readonly AppPluginManifest[]): void {
     for (const manifest of manifests) {
       if ((manifest.routes ?? []).length) {

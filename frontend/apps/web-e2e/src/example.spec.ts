@@ -231,6 +231,49 @@ test.describe('Integration Hub shell', () => {
     await expect(page.getByText(/not in the allowed plugin origins/)).toBeVisible({ timeout: 15_000 });
   });
 
+  test('installs a previewed frontend plugin into the runtime catalog', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    const json = (body: unknown) => ({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+    // Stateful mock of the runtime frontend catalog: GET lists, POST persists.
+    let catalog: { id: string }[] = [];
+    await page.route('**/api/plugins/ui-catalog', (route) => {
+      if (route.request().method() === 'POST') {
+        const body = JSON.parse(route.request().postData() || '{}');
+        catalog = [{ id: body.id }];
+        return route.fulfill(json({ manifests: catalog }));
+      }
+      return route.fulfill(json({ manifests: catalog }));
+    });
+
+    await gotoAuthenticated(page, '/#/plugins');
+
+    // Preview an acceptable metadata-only manifest, then add it to the catalog.
+    const manifestBox = page.getByPlaceholder(/Manifiesto \(JSON\)|Manifest \(JSON\)/);
+    await manifestBox.fill(
+      JSON.stringify({
+        id: 'preview-demo',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Preview Demo',
+        i18nNamespaces: ['previewDemo'],
+        actions: [
+          { id: 'preview-demo-run', group: 'overview', labelKey: 'previewDemo.run', command: 'previewDemo.run' },
+        ],
+      })
+    );
+    await page.getByRole('button', { name: /Previsualizar|Preview/ }).last().click();
+    await page.getByRole('button', { name: /Anadir al catalogo|Add to catalog/ }).click();
+
+    // The persisted entry appears in the catalog list with a Remove action.
+    await expect(page.getByRole('cell', { name: 'preview-demo' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: /Quitar|Remove/ }).first()).toBeVisible();
+  });
+
   test('shows the plugin health card on the overview dashboard', async ({ page }) => {
     test.setTimeout(90_000);
 

@@ -21,7 +21,7 @@ import { loadRemoteModule } from '@angular-architects/native-federation';
 import {
   provideAppPluginRegistryValidation,
   provideAppPluginRemoteModuleLoader,
-  provideExternalAppPluginManifestCatalog,
+  provideExternalAppPluginManifestCatalogs,
 } from '@integration-hub/shared/ui';
 import { appRoutes } from './app.routes';
 import {
@@ -48,7 +48,11 @@ export const appConfig: ApplicationConfig = {
     provideConnectionProviders(),
     ...appNavigationProvider,
     provideAppPluginRegistryValidation(),
-    provideExternalAppPluginManifestCatalog(),
+    // Static defaults plus the runtime, backend-managed catalog (both optional/non-fatal).
+    provideExternalAppPluginManifestCatalogs([
+      { url: '/plugins/catalog.json' },
+      { url: '/api/plugins/ui-catalog' },
+    ]),
     provideAppPluginRemoteModuleLoader((request) =>
       loadRemoteModule({
         remoteEntry: request.remoteEntry,
