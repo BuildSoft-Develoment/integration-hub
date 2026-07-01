@@ -49,7 +49,7 @@ interface FrontendPluginRow {
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <section class="page-grid plugin-diagnostics-page">
+    <section class="page-grid plugin-diagnostics-page" [attr.aria-busy]="busy()">
       <header>
         <h2 class="ih-section-title">{{ i18n.t('plugins.title') }}</h2>
         <p class="ih-muted">{{ i18n.t('plugins.subtitle') }}</p>
@@ -253,7 +253,7 @@ interface FrontendPluginRow {
           <p class="ih-muted" role="alert">{{ i18n.t('plugins.marketplace.error') }}</p>
         }
         @if (marketplacePreview(); as preview) {
-          <table class="ih-table">
+          <table class="ih-table" role="status" aria-live="polite">
             <tbody>
               <tr>
                 <td>{{ preview.id }}</td>
@@ -284,6 +284,9 @@ interface FrontendPluginRow {
       .plugins-chip { padding: 0.2rem 0.7rem; border: 1px solid var(--ih-border-strong); border-radius: var(--ih-radius-pill); background: transparent; color: var(--ih-text-soft); cursor: pointer; font-size: var(--ih-font-size-xs); font-weight: var(--ih-font-weight-medium); }
       .plugins-chip:hover { border-color: var(--ih-accent); color: var(--ih-text); }
       .plugins-chip--active { background: var(--ih-status-info-bg); border-color: var(--ih-accent); color: var(--ih-accent-strong); }
+      .plugins-chip:focus-visible,
+      .plugins-btn:focus-visible,
+      .plugins-input:focus-visible { outline: 2px solid var(--ih-accent); outline-offset: 2px; }
       .plugins-btn { padding: 0.25rem 0.6rem; border: 1px solid var(--ih-border-strong); border-radius: var(--ih-radius-sm); background: var(--ih-surface-alt); color: inherit; cursor: pointer; font-size: var(--ih-font-size-sm); }
       .plugins-btn:disabled { opacity: 0.5; cursor: not-allowed; }
       .plugins-btn--danger { border-color: var(--ih-status-error); color: var(--ih-status-error); font-weight: var(--ih-font-weight-medium); }

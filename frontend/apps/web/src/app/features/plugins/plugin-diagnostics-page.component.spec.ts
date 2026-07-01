@@ -79,6 +79,33 @@ describe('PluginDiagnosticsPageComponent', () => {
     http.verify();
   });
 
+  it('exposes aria-busy on the view while an action is in progress', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement.querySelector(
+      '.plugin-diagnostics-page'
+    ) as HTMLElement;
+    expect(root.getAttribute('aria-busy')).toBe('false');
+
+    fixture.componentInstance.busy.set(true);
+    fixture.detectChanges();
+    expect(root.getAttribute('aria-busy')).toBe('true');
+    http.verify();
+  });
+
   it('renders backend plugin diagnostics', async () => {
     TestBed.configureTestingModule({
       providers: [

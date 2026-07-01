@@ -46,10 +46,18 @@ test.describe('Integration Hub shell', () => {
     ).toBeVisible({ timeout: 15_000 });
     const filterGroup = page.getByRole('group', { name: /Registro frontend|Frontend registry/ });
     await expect(filterGroup).toBeVisible();
-    // Filter chips toggle aria-pressed; clicking "Installed" activates it.
+    // a11y: filter chips are keyboard-operable native buttons. Focusing and pressing
+    // Enter activates the "Installed" filter (aria-pressed toggles to true).
     const installedChip = filterGroup.getByRole('button', { name: /Instalados|Installed/ });
-    await installedChip.click();
+    await installedChip.focus();
+    await expect(installedChip).toBeFocused();
+    await page.keyboard.press('Enter');
     await expect(installedChip).toHaveAttribute('aria-pressed', 'true');
+    // a11y: keyboard focus shows a visible outline (focus-visible ring).
+    const outlineWidth = await installedChip.evaluate(
+      (el) => getComputedStyle(el).outlineWidth
+    );
+    expect(parseFloat(outlineWidth)).toBeGreaterThan(0);
     // Management controls over the backend lifecycle API (refresh + reload).
     await expect(
       page.getByRole('button', { name: /Refrescar|Refresh/ }).first()
