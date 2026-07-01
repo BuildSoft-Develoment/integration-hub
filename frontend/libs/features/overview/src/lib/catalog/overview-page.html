@@ -36,6 +36,9 @@
           [actionLabelKey]="metric.actionLabelKey"
         />
       }
+      @if (store.pluginHealth(); as health) {
+        <ih-overview-plugin-health-card [health]="health" />
+      }
     </section>
 
     <section class="tables-grid">

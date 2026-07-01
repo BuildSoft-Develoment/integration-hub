@@ -57,6 +57,19 @@ describe('OverviewStore', () => {
                   },
                 ],
               }),
+            getPluginDiagnostics: () =>
+              of({
+                installed: [
+                  { id: 'a', status: 'ACTIVE' },
+                  { id: 'b', status: 'DEGRADED' },
+                  { id: 'c', status: 'ACTIVE' },
+                ],
+              }),
+            getPluginCanaryMetrics: () =>
+              of([
+                { pluginId: 'a', version: '1.0.0', promotable: true },
+                { pluginId: 'c', version: '2.0.0', promotable: false },
+              ]),
           },
         },
       ],
@@ -92,6 +105,13 @@ describe('OverviewStore', () => {
     // métricas sanas sin alerta ni acción
     expect(byKey('sources')?.alertLevel).toBeNull();
     expect(byKey('sources')?.actionLink).toBeNull();
+  });
+
+  it('aggregates backend plugin diagnostics and canary metrics into plugin health', async () => {
+    await store.load();
+
+    // installed: 2 ACTIVE + 1 DEGRADED; canary: 1 not promotable -> blocked.
+    expect(store.pluginHealth()).toEqual({ active: 2, degraded: 1, blocked: 1 });
   });
 
   it('should expose recent rows for cards', async () => {

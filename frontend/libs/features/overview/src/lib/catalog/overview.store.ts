@@ -5,6 +5,7 @@ import { AppFeedbackService } from '@integration-hub/core/services';
 import { OverviewApiService } from '../api/overview-api.service';
 import { OverviewMetric, OverviewSummaryRecord } from '../models/overview.models';
 import { OverviewTableRow } from '../models/overview-row.model';
+import { PluginHealth } from '../models/overview-plugin-health.model';
 
 @Injectable()
 export class OverviewStore {
@@ -14,6 +15,7 @@ export class OverviewStore {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly summary = signal<OverviewSummaryRecord | null>(null);
+  readonly pluginHealth = signal<PluginHealth | null>(null);
 
   readonly metrics = computed<OverviewMetric[]>(() => {
     const summary = this.summary();
@@ -100,13 +102,36 @@ export class OverviewStore {
   async load(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
+    // Plugin health is a secondary, non-fatal signal: load it in parallel and never
+    // let its failure surface the page-level error or block the summary.
+    await Promise.all([this.loadSummary(), this.loadPluginHealth()]);
+    this.loading.set(false);
+  }
+
+  private async loadSummary(): Promise<void> {
     try {
       this.summary.set(await firstValueFrom(this.api.getSummary()));
     } catch (err) {
       this.error.set('overview.loadError');
       this.feedback.handleHttpError(err as HttpErrorResponse);
-    } finally {
-      this.loading.set(false);
+    }
+  }
+
+  private async loadPluginHealth(): Promise<void> {
+    try {
+      const [diagnostics, canary] = await Promise.all([
+        firstValueFrom(this.api.getPluginDiagnostics()),
+        firstValueFrom(this.api.getPluginCanaryMetrics()),
+      ]);
+      const installed = diagnostics.installed ?? [];
+      this.pluginHealth.set({
+        active: installed.filter((plugin) => plugin.status === 'ACTIVE').length,
+        degraded: installed.filter((plugin) => plugin.status !== 'ACTIVE').length,
+        blocked: (canary ?? []).filter((metric) => !metric.promotable).length,
+      });
+    } catch {
+      // Endpoint unavailable or forbidden (non-admin): hide the card, don't error out.
+      this.pluginHealth.set(null);
     }
   }
 

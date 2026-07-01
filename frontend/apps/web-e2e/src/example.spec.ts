@@ -187,6 +187,43 @@ test.describe('Integration Hub shell', () => {
     await expect(page.getByText('demo-remote')).toBeVisible({ timeout: 15_000 });
   });
 
+  test('shows the plugin health card on the overview dashboard', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    const json = (body: unknown) => ({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+    // Deterministic plugin health: 2 ACTIVE + 1 DEGRADED, 1 blocked canary.
+    await page.route('**/api/plugins', (route) =>
+      route.fulfill(
+        json({
+          installed: [
+            { id: 'a', status: 'ACTIVE' },
+            { id: 'b', status: 'ACTIVE' },
+            { id: 'c', status: 'DEGRADED' },
+          ],
+          degraded: { c: 'boom' },
+        })
+      )
+    );
+    await page.route('**/api/plugins/canary/metrics', (route) =>
+      route.fulfill(json([{ pluginId: 'c', version: '2.0.0', promotable: false }]))
+    );
+
+    await gotoAuthenticated(page, '/#/overview');
+
+    const card = page.locator('ih-overview-plugin-health-card');
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    await expect(card.getByText(/Salud de plugins|Plugin health/)).toBeVisible();
+    // active=2, degraded=1, blocked=1 rendered.
+    await expect(card.locator('.plugin-health-value--active')).toHaveText('2');
+    await expect(card.locator('.plugin-health-value--degraded')).toHaveText('1');
+    await expect(card.locator('.plugin-health-value--blocked')).toHaveText('1');
+    await expect(card.getByRole('link', { name: /Ver plugins|View plugins/ })).toBeVisible();
+  });
+
   test('quarantines an untrusted external frontend plugin from the catalog', async ({ page }) => {
     test.setTimeout(90_000);
 
