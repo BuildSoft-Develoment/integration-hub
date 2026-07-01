@@ -23,8 +23,11 @@ respetaba el tema ni el modo oscuro. Los badges usaban hex fijos (#dcfce7, #fee2
   - Botones/inputs: bordes `--ih-border-strong`, superficie `--ih-surface-alt`,
     radios `--ih-radius-sm`/`--ih-radius-pill`, tipografia `--ih-font-size-*`,
     peso `--ih-font-weight-medium`; boton peligro con `--ih-status-error`.
-  - Todos los tokens tienen override en `[data-theme='dark']`, por lo que la vista
-    ahora se adapta al modo oscuro.
+  - `:root[data-theme-mode='dark']` sobreescribe `--ih-surface-alt`,
+    `--ih-border-strong` y `--ih-text-soft` (que alimenta `--ih-status-neutral`),
+    por lo que botones/inputs/badge-inactivo se adaptan al modo oscuro. Los colores
+    de estado success/warning mantienen su hue vibrante y sus variantes `-bg`
+    (color-mix sobre transparente) tintan correctamente sobre la superficie oscura.
 
 ## Pruebas unitarias frontend
 
