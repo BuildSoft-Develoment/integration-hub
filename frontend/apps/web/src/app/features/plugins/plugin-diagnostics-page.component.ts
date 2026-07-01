@@ -140,9 +140,9 @@ interface BackendPluginDiagnostics {
           </div>
         </div>
         @if (backendLoading()) {
-          <p class="ih-muted">{{ i18n.t('plugins.backend.loading') }}</p>
+          <p class="ih-muted" role="status" aria-live="polite">{{ i18n.t('plugins.backend.loading') }}</p>
         } @else if (backendError()) {
-          <p class="ih-muted">{{ i18n.t('plugins.backend.error') }}</p>
+          <p class="ih-muted" role="alert">{{ i18n.t('plugins.backend.error') }}</p>
         } @else if (backendInstalled().length === 0) {
           <p class="ih-muted">{{ i18n.t('plugins.empty.backend') }}</p>
         } @else {
@@ -267,7 +267,7 @@ interface BackendPluginDiagnostics {
           </button>
         </div>
         @if (marketplaceError()) {
-          <p class="ih-muted">{{ i18n.t('plugins.marketplace.error') }}</p>
+          <p class="ih-muted" role="alert">{{ i18n.t('plugins.marketplace.error') }}</p>
         }
         @if (marketplacePreview(); as preview) {
           <table class="ih-table">

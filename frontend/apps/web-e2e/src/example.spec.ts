@@ -59,6 +59,74 @@ test.describe('Integration Hub shell', () => {
       page.getByRole('button', { name: /Previsualizar|Preview/ }).first()
     ).toBeVisible();
   });
+
+  test('runs backend plugin actions end-to-end (mocked backend)', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    const diagnostics = {
+      installed: [
+        {
+          id: 'acme',
+          version: '1.0.0',
+          spiVersion: '1',
+          providedTypes: ['ACME_DO'],
+          transport: 'GRPC',
+          trusted: true,
+          status: 'ACTIVE',
+          degradedReason: null,
+        },
+      ],
+      versions: [
+        { id: 'acme', version: '1.0.0', spiVersion: '1', transport: 'GRPC', trusted: true, active: true, channel: 'stable', pinned: false },
+        { id: 'acme', version: '2.0.0', spiVersion: '1', transport: 'GRPC', trusted: true, active: false, channel: 'canary', pinned: false },
+      ],
+      degraded: {},
+    };
+    let activateCalled = false;
+    let previewCalled = false;
+    const json = (body: unknown) => ({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+
+    await page.route('**/api/plugins', (route) => route.fulfill(json(diagnostics)));
+    await page.route('**/api/plugins/acme/versions/2.0.0/activate', (route) => {
+      activateCalled = true;
+      return route.fulfill(json(diagnostics));
+    });
+    await page.route('**/api/plugins/marketplace/preview', (route) => {
+      previewCalled = true;
+      return route.fulfill(
+        json({
+          id: 'demo-remote',
+          version: '1.0.0',
+          spiVersion: '1',
+          providedTypes: ['DEMO'],
+          transport: 'GRPC',
+          trusted: true,
+          status: 'ACTIVE',
+          degradedReason: null,
+        })
+      );
+    });
+
+    await gotoAuthenticated(page, '/#/plugins');
+
+    // Version rollback/promote action calls the activate endpoint.
+    await page
+      .getByRole('button', { name: /Activar version|Activate version/ })
+      .first()
+      .click();
+    await expect.poll(() => activateCalled, { timeout: 15_000 }).toBe(true);
+
+    // Marketplace preview action returns and renders the previewed descriptor.
+    await page.getByPlaceholder(/URL del catalogo|Catalog URL/).fill('https://market.example.com/catalog.json');
+    await page.getByPlaceholder(/Id del plugin|Plugin id/).fill('demo-remote');
+    await page.getByRole('button', { name: /Previsualizar|Preview/ }).first().click();
+    await expect.poll(() => previewCalled, { timeout: 15_000 }).toBe(true);
+    await expect(page.getByText('demo-remote')).toBeVisible({ timeout: 15_000 });
+  });
 });
 
 async function gotoAuthenticated(page: Page, path: string): Promise<void> {
