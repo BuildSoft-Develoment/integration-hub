@@ -186,6 +186,48 @@ test.describe('Integration Hub shell', () => {
     await expect.poll(() => previewCalled, { timeout: 15_000 }).toBe(true);
     await expect(page.getByText('demo-remote')).toBeVisible({ timeout: 15_000 });
   });
+
+  test('quarantines an untrusted external frontend plugin from the catalog', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    // Serve the sample-plugin manifest (mirrors apps/sample-plugin/manifest.json) via the
+    // external plugin catalog the shell loads at boot. With the default (empty) origin/key
+    // allowlists, the fail-safe gate must quarantine it without breaking the shell.
+    await page.route('**/plugins/catalog.json', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          manifests: [
+            {
+              id: 'sample-plugin',
+              version: '1.0.0',
+              platformVersion: '1.0.0',
+              displayName: 'Sample Plugin',
+              remote: {
+                url: 'https://plugins.example.com/remoteEntry.json',
+                exposedModule: './Widget',
+                integrity: `sha384-${'A'.repeat(64)}`,
+                signature: `sample-plugin-key-1:${'A'.repeat(43)}=`,
+              },
+            },
+          ],
+        }),
+      })
+    );
+
+    await gotoAuthenticated(page, '/#/plugins');
+
+    // The plugin surfaces in the frontend registry, filtered to quarantined.
+    const filterGroup = page.getByRole('group', { name: /Registro frontend|Frontend registry/ });
+    await filterGroup.getByRole('button', { name: /En cuarentena|Quarantined/ }).click();
+    await expect(page.getByRole('cell', { name: 'sample-plugin' }).first()).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(
+      page.getByText(/not in the allowed plugin origins/).first()
+    ).toBeVisible();
+  });
 });
 
 async function gotoAuthenticated(page: Page, path: string): Promise<void> {

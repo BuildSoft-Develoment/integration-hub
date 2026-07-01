@@ -372,6 +372,49 @@ describe('AppPluginRuntimeRegistry', () => {
     expect(report.rejected[0].reason).toMatch(/missing "signature"/);
   });
 
+  // Mirrors apps/sample-plugin/manifest.json (the author reference remote).
+  function samplePluginManifest(): AppPluginManifest {
+    return {
+      id: 'sample-plugin',
+      version: '1.0.0',
+      platformVersion: '1.0.0',
+      displayName: 'Sample Plugin',
+      remote: {
+        url: 'https://plugins.example.com/remoteEntry.json',
+        exposedModule: './Widget',
+        integrity: `sha384-${'A'.repeat(64)}`,
+        signature: `sample-plugin-key-1:${'A'.repeat(43)}=`,
+      },
+    };
+  }
+
+  it('accepts the sample-plugin remote when its origin and key are allowlisted', () => {
+    const registry = configure(platformManifest(), [
+      provideAppPluginRemoteOrigins(['https://plugins.example.com']),
+      provideAppPluginRemoteTrustedKeys(['sample-plugin-key-1']),
+    ]);
+
+    const report = registry.installExternalManifests([samplePluginManifest()]);
+
+    expect(report.accepted).toEqual(['sample-plugin']);
+    expect(report.rejected).toEqual([]);
+    expect(
+      registry.diagnostics().installed.some(
+        (plugin) => plugin.id === 'sample-plugin' && plugin.origin === 'external'
+      )
+    ).toBe(true);
+  });
+
+  it('quarantines the sample-plugin remote under the default fail-safe allowlists', () => {
+    const registry = configure();
+
+    const report = registry.installExternalManifests([samplePluginManifest()]);
+
+    expect(report.accepted).toEqual([]);
+    expect(report.rejected[0].id).toBe('sample-plugin');
+    expect(report.rejected[0].reason).toMatch(/not in the allowed plugin origins/);
+  });
+
   it('quarantines a remote with a malformed SRI integrity hash', () => {
     const registry = configure(platformManifest(), [
       provideAppPluginRemoteOrigins(['https://plugins.example.com']),
