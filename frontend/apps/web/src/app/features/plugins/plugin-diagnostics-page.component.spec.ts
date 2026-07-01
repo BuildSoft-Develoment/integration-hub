@@ -76,6 +76,52 @@ describe('PluginDiagnosticsPageComponent', () => {
     expect(text).toContain('ACME_DO');
     http.verify();
   });
+
+  it('reloads backend plugins via the API and refetches diagnostics', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    await fixture.whenStable();
+
+    fixture.componentInstance.reloadBackend();
+    http.expectOne((req) => req.method === 'POST' && req.url === '/api/plugins/reload').flush({});
+    await fixture.whenStable();
+
+    http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    http.verify();
+  });
+
+  it('deactivates a backend plugin via the API and refetches diagnostics', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    await fixture.whenStable();
+
+    fixture.componentInstance.deactivate('acme');
+    http.expectOne((req) => req.method === 'POST' && req.url === '/api/plugins/acme/deactivate').flush({});
+    await fixture.whenStable();
+
+    http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    http.verify();
+  });
 });
 
 function platformManifest(): AppPluginManifest {

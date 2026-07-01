@@ -2,7 +2,7 @@ import { HttpClient, HttpContext } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { I18nService, SKIP_GLOBAL_ERROR_FEEDBACK } from '@integration-hub/core/services';
 import { AppPluginRuntimeRegistry } from '@integration-hub/shared/ui';
-import { firstValueFrom } from 'rxjs';
+import { Observable, firstValueFrom } from 'rxjs';
 
 interface BackendPluginDescriptor {
   readonly id: string;
@@ -114,9 +114,19 @@ interface BackendPluginDiagnostics {
       </section>
 
       <section>
-        <h3 class="ih-section-title">
-          {{ i18n.t('plugins.backend') }} ({{ backendInstalled().length }})
-        </h3>
+        <div class="plugins-section-head">
+          <h3 class="ih-section-title">
+            {{ i18n.t('plugins.backend') }} ({{ backendInstalled().length }})
+          </h3>
+          <div class="plugins-actions">
+            <button type="button" class="plugins-btn" [disabled]="busy()" (click)="refreshBackend()">
+              {{ i18n.t('plugins.refresh') }}
+            </button>
+            <button type="button" class="plugins-btn" [disabled]="busy()" (click)="reloadBackend()">
+              {{ i18n.t('plugins.reload') }}
+            </button>
+          </div>
+        </div>
         @if (backendLoading()) {
           <p class="ih-muted">{{ i18n.t('plugins.backend.loading') }}</p>
         } @else if (backendError()) {
@@ -133,6 +143,7 @@ interface BackendPluginDiagnostics {
                 <th>{{ i18n.t('plugins.col.types') }}</th>
                 <th>{{ i18n.t('plugins.col.status') }}</th>
                 <th>{{ i18n.t('plugins.col.reason') }}</th>
+                <th>{{ i18n.t('plugins.col.actions') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -142,8 +153,23 @@ interface BackendPluginDiagnostics {
                   <td>{{ plugin.version }} / SPI {{ plugin.spiVersion }}</td>
                   <td>{{ plugin.transport }}</td>
                   <td>{{ plugin.providedTypes.join(', ') }}</td>
-                  <td>{{ i18n.t('plugins.status.' + plugin.status.toLowerCase()) }}</td>
+                  <td>
+                    <span class="plugin-badge" [attr.data-status]="plugin.status.toLowerCase()">
+                      {{ i18n.t('plugins.status.' + plugin.status.toLowerCase()) }}
+                    </span>
+                  </td>
                   <td>{{ plugin.degradedReason ?? '-' }}</td>
+                  <td class="plugins-row-actions">
+                    @if (plugin.status === 'ACTIVE') {
+                      <button type="button" class="plugins-btn" [disabled]="busy()" (click)="deactivate(plugin.id)">
+                        {{ i18n.t('plugins.deactivate') }}
+                      </button>
+                    } @else {
+                      <button type="button" class="plugins-btn" [disabled]="busy()" (click)="activate(plugin.id)">
+                        {{ i18n.t('plugins.activate') }}
+                      </button>
+                    }
+                  </td>
                 </tr>
               }
             </tbody>
@@ -152,6 +178,18 @@ interface BackendPluginDiagnostics {
       </section>
     </section>
   `,
+  styles: [
+    `
+      .plugins-section-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+      .plugins-actions { display: flex; gap: 0.5rem; }
+      .plugins-btn { padding: 0.25rem 0.6rem; border: 1px solid var(--border, #cbd5e1); border-radius: 6px; background: var(--surface-1, #fff); color: inherit; cursor: pointer; font-size: 0.85rem; }
+      .plugins-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .plugin-badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.78rem; font-weight: 500; }
+      .plugin-badge[data-status='active'] { background: #dcfce7; color: #166534; }
+      .plugin-badge[data-status='degraded'] { background: #fee2e2; color: #991b1b; }
+      .plugin-badge[data-status='untrusted'] { background: #fef9c3; color: #854d0e; }
+    `,
+  ],
 })
 export class PluginDiagnosticsPageComponent implements OnInit {
   private readonly registry = inject(AppPluginRuntimeRegistry);
@@ -165,9 +203,39 @@ export class PluginDiagnosticsPageComponent implements OnInit {
   readonly backendError = signal(false);
   readonly backendDiagnostics = signal<BackendPluginDiagnostics | null>(null);
   readonly backendInstalled = computed(() => this.backendDiagnostics()?.installed ?? []);
+  readonly busy = signal(false);
 
   ngOnInit(): void {
     void this.loadBackendDiagnostics();
+  }
+
+  refreshBackend(): void {
+    void this.loadBackendDiagnostics();
+  }
+
+  reloadBackend(): void {
+    void this.runAction(() => this.http.post('/api/plugins/reload', {}));
+  }
+
+  activate(id: string): void {
+    void this.runAction(() => this.http.post(`/api/plugins/${encodeURIComponent(id)}/activate`, {}));
+  }
+
+  deactivate(id: string): void {
+    void this.runAction(() => this.http.post(`/api/plugins/${encodeURIComponent(id)}/deactivate`, {}));
+  }
+
+  private async runAction(action: () => Observable<unknown>): Promise<void> {
+    if (this.busy()) {
+      return;
+    }
+    this.busy.set(true);
+    try {
+      await firstValueFrom(action());
+      await this.loadBackendDiagnostics();
+    } finally {
+      this.busy.set(false);
+    }
   }
 
   private async loadBackendDiagnostics(): Promise<void> {
