@@ -369,6 +369,41 @@ interface FrontendPluginRow {
           </table>
         }
       </section>
+
+      <section>
+        <h3 class="ih-section-title">{{ i18n.t('plugins.ui.title') }}</h3>
+        <p class="ih-muted">{{ i18n.t('plugins.ui.hint') }}</p>
+        <div class="plugins-ui-form">
+          <textarea
+            #uiManifest
+            class="plugins-input plugins-textarea"
+            rows="6"
+            [value]="uiManifestJson()"
+            (input)="uiManifestJson.set(uiManifest.value)"
+            [attr.aria-label]="i18n.t('plugins.ui.manifest')"
+            [placeholder]="i18n.t('plugins.ui.manifest')"
+          ></textarea>
+          <button type="button" class="plugins-btn" (click)="previewUiManifest()">
+            {{ i18n.t('plugins.ui.preview') }}
+          </button>
+        </div>
+        @if (uiInvalidJson()) {
+          <p class="ih-muted" role="alert">{{ i18n.t('plugins.ui.invalidJson') }}</p>
+        }
+        @if (uiPreviewResult(); as result) {
+          @if (result.accepted) {
+            <p class="ih-muted" role="status" aria-live="polite">
+              <span class="plugin-badge" data-status="active">{{ i18n.t('plugins.ui.acceptedBadge') }}</span>
+              {{ i18n.t('plugins.ui.accepted', { id: result.id }) }}
+            </p>
+          } @else {
+            <p class="ih-muted" role="alert">
+              <span class="plugin-badge" data-status="degraded">{{ i18n.t('plugins.ui.rejectedBadge') }}</span>
+              {{ i18n.t('plugins.ui.rejected', { reason: result.reason }) }}
+            </p>
+          }
+        }
+      </section>
     </section>
   `,
   styles: [
@@ -388,6 +423,8 @@ interface FrontendPluginRow {
       .plugins-btn--danger { border-color: var(--ih-status-error); color: var(--ih-status-error); font-weight: var(--ih-font-weight-medium); }
       .plugins-market-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
       .plugins-input { padding: 0.3rem 0.5rem; border: 1px solid var(--ih-border-strong); border-radius: var(--ih-radius-sm); background: var(--ih-surface-alt); color: inherit; min-width: 14rem; }
+      .plugins-ui-form { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.5rem; }
+      .plugins-textarea { width: 100%; max-width: 46rem; font-family: var(--ih-font-mono); font-size: var(--ih-font-size-xs); resize: vertical; }
       .canary-spark { display: inline-block; width: 90px; height: 22px; vertical-align: middle; }
       .plugin-badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: var(--ih-radius-pill); font-size: var(--ih-font-size-xs); font-weight: var(--ih-font-weight-medium); }
       .plugin-badge[data-status='active'] { background: var(--ih-status-success-bg); color: var(--ih-status-success); }
@@ -551,6 +588,27 @@ export class PluginDiagnosticsPageComponent implements OnInit {
     } catch {
       this.marketplaceError.set(true);
     }
+  }
+
+  readonly uiManifestJson = signal('');
+  readonly uiPreviewResult = signal<{ id: string; accepted: boolean; reason: string } | null>(null);
+  readonly uiInvalidJson = signal(false);
+
+  previewUiManifest(): void {
+    const raw = this.uiManifestJson().trim();
+    if (!raw) {
+      return;
+    }
+    this.uiInvalidJson.set(false);
+    this.uiPreviewResult.set(null);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      this.uiInvalidJson.set(true);
+      return;
+    }
+    this.uiPreviewResult.set(this.registry.previewExternalManifest(parsed as never));
   }
 
   installMarketplace(): void {

@@ -187,6 +187,50 @@ test.describe('Integration Hub shell', () => {
     await expect(page.getByText('demo-remote')).toBeVisible({ timeout: 15_000 });
   });
 
+  test('previews a frontend plugin manifest in the console', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    await gotoAuthenticated(page, '/#/plugins');
+
+    const manifestBox = page.getByPlaceholder(/Manifiesto \(JSON\)|Manifest \(JSON\)/);
+    await expect(manifestBox).toBeVisible({ timeout: 15_000 });
+    const previewButton = page.getByRole('button', { name: /Previsualizar|Preview/ }).last();
+
+    // Acceptable metadata-only manifest (no remote, command action within namespace).
+    await manifestBox.fill(
+      JSON.stringify({
+        id: 'preview-demo',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Preview Demo',
+        i18nNamespaces: ['previewDemo'],
+        actions: [
+          { id: 'preview-demo-run', group: 'overview', labelKey: 'previewDemo.run', command: 'previewDemo.run' },
+        ],
+      })
+    );
+    await previewButton.click();
+    await expect(page.getByText(/Se aceptaria|Would be accepted/)).toBeVisible({ timeout: 15_000 });
+
+    // Untrusted remote -> would be quarantined with the origin reason.
+    await manifestBox.fill(
+      JSON.stringify({
+        id: 'sample-plugin',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Sample Plugin',
+        remote: {
+          url: 'https://plugins.example.com/remoteEntry.json',
+          exposedModule: './Widget',
+          integrity: `sha384-${'A'.repeat(64)}`,
+          signature: `sample-plugin-key-1:${'A'.repeat(43)}=`,
+        },
+      })
+    );
+    await previewButton.click();
+    await expect(page.getByText(/not in the allowed plugin origins/)).toBeVisible({ timeout: 15_000 });
+  });
+
   test('shows the plugin health card on the overview dashboard', async ({ page }) => {
     test.setTimeout(90_000);
 

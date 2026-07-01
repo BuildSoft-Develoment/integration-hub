@@ -415,6 +415,42 @@ describe('AppPluginRuntimeRegistry', () => {
     expect(report.rejected[0].reason).toMatch(/not in the allowed plugin origins/);
   });
 
+  it('previews an acceptable manifest without mutating the registry', () => {
+    const registry = configure();
+
+    const result = registry.previewExternalManifest({
+      id: 'preview-demo',
+      version: '1.0.0',
+      platformVersion: '1.0.0',
+      displayName: 'Preview Demo',
+      i18nNamespaces: ['previewDemo'],
+      actions: [
+        {
+          id: 'preview-demo-run',
+          group: 'overview',
+          labelKey: 'previewDemo.run',
+          command: 'previewDemo.run',
+        },
+      ],
+    });
+
+    expect(result.accepted).toBe(true);
+    // Non-mutating: nothing was installed.
+    expect(registry.diagnostics().installed.some((p) => p.id === 'preview-demo')).toBe(false);
+    expect(registry.diagnostics().quarantined).toEqual([]);
+  });
+
+  it('previews the quarantine reason for an untrusted manifest', () => {
+    const registry = configure();
+
+    const result = registry.previewExternalManifest(samplePluginManifest());
+
+    expect(result.accepted).toBe(false);
+    expect(result.reason).toMatch(/not in the allowed plugin origins/);
+    // Non-mutating: the failed preview did not quarantine anything either.
+    expect(registry.diagnostics().quarantined).toEqual([]);
+  });
+
   it('quarantines a remote with a malformed SRI integrity hash', () => {
     const registry = configure(platformManifest(), [
       provideAppPluginRemoteOrigins(['https://plugins.example.com']),

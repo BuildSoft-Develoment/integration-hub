@@ -186,6 +186,29 @@ export class AppPluginRuntimeRegistry {
     return { accepted: accepted.map((manifest) => manifest.id), rejected };
   }
 
+  /**
+   * Validates a candidate external manifest against every gate WITHOUT installing it or
+   * mutating the registry, for an admin "preview" surface (symmetric to the backend
+   * marketplace preview). Reports whether it would be accepted or the quarantine reason.
+   */
+  previewExternalManifest(candidate: AppPluginManifest): RejectedPluginManifest & { accepted: boolean } {
+    const id = candidate?.id?.trim() || '(unknown)';
+    try {
+      const sanitized = sanitizeExternalManifest(candidate);
+      this.assertExternalRoutesAreMetadataOnly([sanitized]);
+      this.assertExternalLinksTargetKnownRoutes([sanitized]);
+      this.assertExternalActionLinksAreSafe([sanitized]);
+      this.assertContributedKeysWithinDeclaredNamespaces([sanitized]);
+      this.assertExternalRemoteIsTrusted([sanitized]);
+      buildAppPluginRegistry([...this.staticManifests, ...this.externalManifests(), sanitized], {
+        platformVersion: FRONTEND_EXTENSION_PLATFORM_VERSION,
+      });
+      return { id, accepted: true, reason: '' };
+    } catch (error) {
+      return { id, accepted: false, reason: errorMessage(error) };
+    }
+  }
+
   async loadExternalManifestCatalog(url: string, optional = true): Promise<void> {
     const response = await fetch(url, {
       cache: 'no-store',

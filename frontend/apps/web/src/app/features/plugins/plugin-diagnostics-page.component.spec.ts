@@ -502,6 +502,61 @@ describe('PluginDiagnosticsPageComponent', () => {
     http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
     http.verify();
   });
+
+  it('previews a frontend plugin manifest (accepted / rejected / invalid JSON)', () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    // No detectChanges(): avoids ngOnInit HTTP; the preview is pure client-side logic.
+    const component = TestBed.createComponent(PluginDiagnosticsPageComponent).componentInstance;
+
+    // Invalid JSON.
+    component.uiManifestJson.set('{ not json');
+    component.previewUiManifest();
+    expect(component.uiInvalidJson()).toBe(true);
+    expect(component.uiPreviewResult()).toBeNull();
+
+    // Acceptable metadata-only manifest (no remote, command action within namespace).
+    component.uiManifestJson.set(
+      JSON.stringify({
+        id: 'preview-demo',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Preview Demo',
+        i18nNamespaces: ['previewDemo'],
+        actions: [
+          { id: 'preview-demo-run', group: 'overview', labelKey: 'previewDemo.run', command: 'previewDemo.run' },
+        ],
+      })
+    );
+    component.previewUiManifest();
+    expect(component.uiInvalidJson()).toBe(false);
+    expect(component.uiPreviewResult()?.accepted).toBe(true);
+
+    // Untrusted remote (empty allowlists) -> would be quarantined with a reason.
+    component.uiManifestJson.set(
+      JSON.stringify({
+        id: 'sample-plugin',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Sample Plugin',
+        remote: {
+          url: 'https://plugins.example.com/remoteEntry.json',
+          exposedModule: './Widget',
+          integrity: `sha384-${'A'.repeat(64)}`,
+          signature: `sample-plugin-key-1:${'A'.repeat(43)}=`,
+        },
+      })
+    );
+    component.previewUiManifest();
+    expect(component.uiPreviewResult()?.accepted).toBe(false);
+    expect(component.uiPreviewResult()?.reason).toMatch(/not in the allowed plugin origins/);
+  });
 });
 
 function platformManifest(): AppPluginManifest {
