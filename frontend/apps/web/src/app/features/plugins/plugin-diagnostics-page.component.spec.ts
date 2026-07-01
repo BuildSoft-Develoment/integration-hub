@@ -122,6 +122,56 @@ describe('PluginDiagnosticsPageComponent', () => {
     http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
     http.verify();
   });
+
+  it('requires two-step confirmation before deactivating', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    await fixture.whenStable();
+    const component = fixture.componentInstance;
+
+    component.requestDeactivate('acme');
+    expect(component.confirmingDeactivate()).toBe('acme');
+
+    component.confirmDeactivate('acme');
+    expect(component.confirmingDeactivate()).toBeNull();
+    http.expectOne((req) => req.method === 'POST' && req.url === '/api/plugins/acme/deactivate').flush({});
+    await fixture.whenStable();
+    http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    http.verify();
+  });
+
+  it('cancels a pending deactivation without calling the API', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    await fixture.whenStable();
+    const component = fixture.componentInstance;
+
+    component.requestDeactivate('acme');
+    component.cancelDeactivate();
+
+    expect(component.confirmingDeactivate()).toBeNull();
+    http.verify();
+  });
 });
 
 function platformManifest(): AppPluginManifest {

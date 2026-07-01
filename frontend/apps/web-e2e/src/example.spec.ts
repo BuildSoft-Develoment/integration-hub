@@ -30,6 +30,24 @@ test.describe('Integration Hub shell', () => {
       });
     }
   });
+
+  test('shows the plugin management console with backend controls', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    await gotoAuthenticated(page, '/#/plugins');
+
+    // The plugins page renders its sections (frontend installed/quarantined/degraded + backend).
+    await expect(page.getByRole('heading', { name: /Plugins/ }).first()).toBeVisible({
+      timeout: 15_000,
+    });
+    // Management controls over the backend lifecycle API (refresh + reload).
+    await expect(
+      page.getByRole('button', { name: /Refrescar|Refresh/ }).first()
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByRole('button', { name: /Recargar|Reload/ }).first()
+    ).toBeVisible();
+  });
 });
 
 async function gotoAuthenticated(page: Page, path: string): Promise<void> {

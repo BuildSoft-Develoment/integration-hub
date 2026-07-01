@@ -161,9 +161,18 @@ interface BackendPluginDiagnostics {
                   <td>{{ plugin.degradedReason ?? '-' }}</td>
                   <td class="plugins-row-actions">
                     @if (plugin.status === 'ACTIVE') {
-                      <button type="button" class="plugins-btn" [disabled]="busy()" (click)="deactivate(plugin.id)">
-                        {{ i18n.t('plugins.deactivate') }}
-                      </button>
+                      @if (confirmingDeactivate() === plugin.id) {
+                        <button type="button" class="plugins-btn plugins-btn--danger" [disabled]="busy()" (click)="confirmDeactivate(plugin.id)">
+                          {{ i18n.t('plugins.confirm') }}
+                        </button>
+                        <button type="button" class="plugins-btn" [disabled]="busy()" (click)="cancelDeactivate()">
+                          {{ i18n.t('plugins.cancel') }}
+                        </button>
+                      } @else {
+                        <button type="button" class="plugins-btn" [disabled]="busy()" (click)="requestDeactivate(plugin.id)">
+                          {{ i18n.t('plugins.deactivate') }}
+                        </button>
+                      }
                     } @else {
                       <button type="button" class="plugins-btn" [disabled]="busy()" (click)="activate(plugin.id)">
                         {{ i18n.t('plugins.activate') }}
@@ -184,6 +193,7 @@ interface BackendPluginDiagnostics {
       .plugins-actions { display: flex; gap: 0.5rem; }
       .plugins-btn { padding: 0.25rem 0.6rem; border: 1px solid var(--border, #cbd5e1); border-radius: 6px; background: var(--surface-1, #fff); color: inherit; cursor: pointer; font-size: 0.85rem; }
       .plugins-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+      .plugins-btn--danger { border-color: #ef4444; color: #991b1b; font-weight: 500; }
       .plugin-badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.78rem; font-weight: 500; }
       .plugin-badge[data-status='active'] { background: #dcfce7; color: #166534; }
       .plugin-badge[data-status='degraded'] { background: #fee2e2; color: #991b1b; }
@@ -204,9 +214,23 @@ export class PluginDiagnosticsPageComponent implements OnInit {
   readonly backendDiagnostics = signal<BackendPluginDiagnostics | null>(null);
   readonly backendInstalled = computed(() => this.backendDiagnostics()?.installed ?? []);
   readonly busy = signal(false);
+  readonly confirmingDeactivate = signal<string | null>(null);
 
   ngOnInit(): void {
     void this.loadBackendDiagnostics();
+  }
+
+  requestDeactivate(id: string): void {
+    this.confirmingDeactivate.set(id);
+  }
+
+  cancelDeactivate(): void {
+    this.confirmingDeactivate.set(null);
+  }
+
+  confirmDeactivate(id: string): void {
+    this.confirmingDeactivate.set(null);
+    this.deactivate(id);
   }
 
   refreshBackend(): void {

@@ -38,6 +38,8 @@ export const es = {
   'plugins.reload': 'Recargar',
   'plugins.activate': 'Activar',
   'plugins.deactivate': 'Desactivar',
+  'plugins.confirm': '¿Confirmar?',
+  'plugins.cancel': 'Cancelar',
   'plugins.origin.static': 'Plataforma',
   'plugins.origin.external': 'Externo',
   'plugins.status.active': 'Activo',

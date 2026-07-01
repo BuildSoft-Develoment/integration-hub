@@ -37,6 +37,8 @@ export const en = {
   'plugins.reload': 'Reload',
   'plugins.activate': 'Activate',
   'plugins.deactivate': 'Deactivate',
+  'plugins.confirm': 'Confirm?',
+  'plugins.cancel': 'Cancel',
   'plugins.origin.static': 'Platform',
   'plugins.origin.external': 'External',
   'plugins.status.active': 'Active',
