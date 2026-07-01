@@ -24,14 +24,19 @@ import java.util.stream.StreamSupport;
 public class ResilientRemotePluginInvoker implements RemotePluginInvoker {
 
     private final Iterable<RemotePluginTransport> transports;
+    private final PluginRuntimeMetricsRecorder metricsRecorder;
 
     @Inject
-    public ResilientRemotePluginInvoker(Instance<RemotePluginTransport> transports) {
-        this((Iterable<RemotePluginTransport>) transports);
+    public ResilientRemotePluginInvoker(
+            Instance<RemotePluginTransport> transports,
+            PluginRuntimeMetricsRecorder metricsRecorder) {
+        this((Iterable<RemotePluginTransport>) transports, metricsRecorder);
     }
 
-    ResilientRemotePluginInvoker(Iterable<RemotePluginTransport> transports) {
+    ResilientRemotePluginInvoker(Iterable<RemotePluginTransport> transports,
+                                 PluginRuntimeMetricsRecorder metricsRecorder) {
         this.transports = transports == null ? List.of() : transports;
+        this.metricsRecorder = metricsRecorder;
     }
 
     @Override
@@ -42,7 +47,15 @@ public class ResilientRemotePluginInvoker implements RemotePluginInvoker {
             String taskType,
             TaskContext context,
             Map<String, Object> configuration) {
-        return resolveTransport(descriptor).invoke(descriptor, taskType, context, configuration);
+        var started = System.nanoTime();
+        try {
+            var result = resolveTransport(descriptor).invoke(descriptor, taskType, context, configuration);
+            record(descriptor, taskType, result.success(), outcome(result), started, null);
+            return result;
+        } catch (RuntimeException error) {
+            record(descriptor, taskType, false, "ERROR", started, error.getMessage());
+            throw error;
+        }
     }
 
     private RemotePluginTransport resolveTransport(RemotePluginDescriptor descriptor) {
@@ -51,5 +64,31 @@ public class ResilientRemotePluginInvoker implements RemotePluginInvoker {
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException(
                         "No RemotePluginTransport configured for " + descriptor.transport()));
+    }
+
+    private void record(
+            RemotePluginDescriptor descriptor,
+            String taskType,
+            boolean success,
+            String outcome,
+            long started,
+            String errorMessage) {
+        metricsRecorder.record(new PluginInvocationMetricCommand(
+                descriptor.id(),
+                descriptor.version(),
+                taskType,
+                descriptor.transport(),
+                success,
+                outcome,
+                (System.nanoTime() - started) / 1_000_000L,
+                errorMessage,
+                null));
+    }
+
+    private String outcome(TaskResult result) {
+        if (result.suspended()) {
+            return "SUSPENDED";
+        }
+        return result.success() ? "SUCCESS" : "FAILURE";
     }
 }

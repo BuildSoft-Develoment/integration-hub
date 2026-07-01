@@ -5,5 +5,6 @@ import java.util.Map;
 
 public record BackendPluginDiagnosticsResponse(
         List<BackendPluginDescriptorResponse> installed,
+        List<BackendPluginVersionResponse> versions,
         Map<String, String> degraded) {
 }

@@ -164,9 +164,27 @@ verticales de primera parte siguen como modulos de build.
 - `RemotePluginDescriptor` (id, version, spiVersion, providedTypes, transport,
   endpoint, `trusted`) y `RemotePluginRegistry` (resolucion por tipo, listado de
   descriptores, tipos disponibles, rechazo de duplicados, recarga atomica del
-  catalogo y estado `degraded`).
+  catalogo y estado `degraded`). Desde `V71`, el registry tambien indexa
+  capacidades remotas declaradas de fuente y reader mediante
+  `descriptorForSource`, `descriptorForReader`, `availableSourceTypes` y
+  `availableReaderTypes`.
 - Tabla persistente `plugin_descriptor` (`V70`) con identidad, version, version SPI,
   tipos aportados, transporte, endpoint, estado activo, confianza e integridad.
+  `V71` extiende el descriptor con capacidades separadas para
+  `providedSourceTypes`/`providedReaderTypes`, metadata de marketplace
+  (`marketplaceUrl`, `channel`) y version pinning declarativo
+  (`pinnedVersion`, `pinned`).
+- Tabla persistente `plugin_marketplace_catalog_cache` (`V72`) para auditoria/cache
+  del catalogo marketplace firmado: URL, body verificado, integridad, firma,
+  estado, error, fecha de descarga, expiracion y ultimo uso.
+- Tabla persistente `plugin_descriptor_version` (`V73`) para conservar multiples
+  versiones instaladas por plugin. `plugin_descriptor` queda como proyeccion activa
+  usada por el runtime, y una version instalada puede promoverse con activacion
+  explicita.
+- Tabla persistente `plugin_invocation_metric` (`V74`) para conservar muestras de
+  invocacion/canary por `pluginId`, version, tipo, transporte, resultado,
+  duracion, error y fecha. La promocion de versiones activas consulta estas
+  metricas; no existe ruta legacy que active una version saltando el gate.
 - `PluginDescriptorRepository`, `PluginDescriptorCatalogMapper` y
   `BackendPluginCatalogService`: al arrancar, el core hidrata
   `RemotePluginRegistry` desde descriptores activos y marca como degradados los
@@ -180,15 +198,33 @@ verticales de primera parte siguen como modulos de build.
   `trusted=true`. La clave puede declarar expiracion (`expiresAtUtc`) y puede
   revocarse de inmediato con `integrationhub.plugins.backend.revoked-key-ids`.
   Los rechazados se exponen como `degraded` y no quedan disponibles para
-  resolucion.
+  resolucion. La obtencion del material de confianza esta desacoplada por
+  `PluginTrustMaterialProvider`: la implementacion base conserva claves inline,
+  anade carga desde trust store (`integrationhub.plugins.backend.trust-store.*`)
+  con password directo o referencia `${source:reference}`, y puede resolver claves
+  confiables/revocaciones desde secret manager mediante
+  `integrationhub.plugins.backend.trusted-public-keys-ref` y
+  `integrationhub.plugins.backend.revoked-key-ids-ref`, apoyado en
+  `SecretResolver`.
 - `RemotePluginInvoker` (seam de invocacion, analogo a `REMOTE_MODULE_LOADER` del
   frontend), `RemotePluginTransport` (SPI de transporte instalable) y
   `ResilientRemotePluginInvoker` con timeout/circuit breaker comun antes del
-  transporte concreto.
+  transporte concreto. Cada invocacion remota registra una
+  `PluginInvocationMetric`; si el registro de la metrica falla, la invocacion no
+  se oculta ni se degrada por fallback silencioso.
 - `BrokerRemotePluginTransport`: implementacion productiva asincrona para
   descriptores `KAFKA`/broker; publica `AsyncTaskEnvelope` via
   `MessageBrokerProvider` + `TaskDispatchPublisher` y devuelve
   `TaskResult.suspended` con `traceId`, `idempotencyKey` y referencia del broker.
+  El value Kafka es el payload JSON de trabajo y la metadata canónica viaja en
+  headers (`traceId`, `taskType`, `attempt`, `idempotencyKey`, `pluginId`,
+  `pluginVersion`, `spiVersion`) para que un sidecar reconstruya el contexto sin
+  depender de parseos laterales.
+- `GrpcRemotePluginTransport`: implementacion sin broker para descriptores `GRPC`.
+  El contrato IDL vive en `platform-app/src/main/proto/remote_plugin.proto`; el
+  core serializa `TaskContext`, atributos y configuracion como JSON dentro del
+  request gRPC y mapea la respuesta a `TaskResult` (`success`, `failure` o
+  `suspended`).
 - `RemoteTaskProvider` implementa `SuspendableTaskProvider`: invocacion fallida o
   descriptor no confiable marcan `degraded`; cuando el transporte broker deja la
   tarea suspendida, el callback del sidecar se transforma en `TaskResult`
@@ -200,6 +236,9 @@ verticales de primera parte siguen como modulos de build.
   Maven autonomo que depende solo de `platform-contract`, consume
   `AsyncTaskEnvelope`, ejecuta un handler externo (`ACME_ECHO`), genera
   `RemoteTaskResumePayload`, firma `X-Signature` y conserva `idempotencyKey`.
+  El ejemplo forma parte del reactor como artefacto de referencia y se usa en
+  pruebas E2E del core solo en scope test; el runtime productivo de
+  `platform-app` no depende del codigo del sidecar.
 - Catalogo administrativo `GET /api/task-types`: expone tipos builtin, providers
   CDI locales y tipos remotos aportados por plugins con origen, provider/plugin,
   transporte, estado (`AVAILABLE`, `DEGRADED`, `UNTRUSTED`,
@@ -208,6 +247,20 @@ verticales de primera parte siguen como modulos de build.
 - `TaskProviderRegistry` conserva prioridad de providers CDI locales y delega a
   `RemoteTaskProvider` cuando un tipo no local esta cubierto por un descriptor
   remoto; si no existe `RemotePluginInvoker`, falla rapido con diagnostico claro.
+- `SourceDefinition` y `ReaderDefinition` usan identificadores `String` para
+  `sourceType`/`readerType`; los enums cerrados fueron retirados del flujo
+  productivo. `SourceProviderRegistry` y `ReaderProviderRegistry` conservan
+  prioridad local y, si no hay provider CDI, resuelven `RemoteSourceProvider` o
+  `RemoteReaderProvider` desde las capabilities activas del plugin. Estos adapters
+  exigen resultado inmediato; una respuesta `suspended` falla y degrada el plugin,
+  sin fallback a providers locales.
+- Contrato remoto source/reader base:
+  - Source `SOURCE_SELECT:{type}` devuelve `outputs.files`.
+  - Source `SOURCE_OPEN:{type}` devuelve `outputs.contentBase64` y opcionalmente
+    `outputs.mediaType`.
+  - Reader `READER_READ:{type}` recibe `contentBase64`, `sourceFile`,
+    `configuration` y `batchSize`, y devuelve `outputs.records` y
+    `outputs.skippedRows`.
 - Endpoint `GET /api/plugins` con RBAC (`PLATFORM_ADMIN`, `INTEGRATION_ADMIN`,
   `AUDITOR`) que expone plugins backend instalados, tipos aportados, transporte,
   confianza, estado y razon de degradacion.
@@ -215,7 +268,41 @@ verticales de primera parte siguen como modulos de build.
   `POST /api/plugins/install` y `POST /api/plugins/{id}/activate|deactivate`
   con RBAC administrativo para instalar/actualizar descriptores, recargar el
   catalogo persistente, activar descriptores existentes y ejecutar rollback
-  declarativo sin reinicio manual.
+  declarativo sin reinicio manual. El request/response de instalacion ya transporta
+  capacidades task/source/reader y metadata de marketplace/version pinning.
+- `POST /api/plugins/marketplace/install`: instala desde un catalogo JSON remoto
+  usando `catalogUrl`, `pluginId`, `channel` y `pinnedVersion`. Si el catalogo
+  contiene multiples versiones compatibles y no se envia `pinnedVersion`, selecciona
+  automaticamente la version semantica mas alta del plugin/canal; si se envia
+  `pinnedVersion`, selecciona esa version exacta. El descriptor seleccionado vuelve
+  a pasar por la misma politica de confianza antes de persistir.
+  El catalogo se verifica con firma detached en headers
+  `X-Plugin-Catalog-Integrity` y `X-Plugin-Catalog-Signature` antes de parsear el
+  JSON, y se cachea en memoria por URL segun
+  `integrationhub.plugins.marketplace.catalog-cache-ttl-seconds`. El mismo
+  catalogo verificado queda persistido en `plugin_marketplace_catalog_cache` para
+  reuso operativo y auditoria tecnica.
+- `POST /api/plugins/marketplace/preview`: preflight administrativo para
+  aprobacion/canary. Resuelve la misma entrada de marketplace, valida
+  integridad/confianza/capabilities y devuelve el descriptor que se instalaria,
+  sin persistir version ni recargar el registry. Permite separar revision humana o
+  pipeline de aprobacion de la instalacion/activacion efectiva.
+- `POST /api/plugins/{id}/versions/{version}/activate`: promueve una version
+  instalada desde `plugin_descriptor_version` a la proyeccion activa
+  `plugin_descriptor`, validando nuevamente confianza/capabilities y el gate
+  canary de metricas antes de recargar el registry. `GET /api/plugins` expone
+  tambien las versiones instaladas y marca cual coincide con la version activa.
+- `PluginPromotionGate` desacopla la politica de promocion. La implementacion
+  `MetricsPluginPromotionGate` exige por defecto al menos 3 muestras canary en las
+  ultimas 24 horas y ratio de fallo 0.0
+  (`integrationhub.plugins.canary.min-samples`,
+  `integrationhub.plugins.canary.window-hours`,
+  `integrationhub.plugins.canary.max-failure-ratio`). La misma regla aplica a
+  `install(active=true)`, `activate` y `activateVersion`.
+- `POST /api/plugins/{id}/versions/{version}/canary/metrics`: endpoint
+  administrativo para registrar muestras canary externas/preflight antes de
+  promover una version. El runtime tambien alimenta la misma tabla en invocaciones
+  reales.
 - La vista frontend `/plugins` consume `/api/plugins` y muestra el diagnostico
   backend junto con instalados/cuarentena/degradados del runtime frontend.
 - Verde: unit tests de `RemotePluginRegistry`, `RemoteTaskProvider`,
@@ -224,14 +311,18 @@ verticales de primera parte siguen como modulos de build.
 
 ## Alcance pendiente (implementacion)
 
-- IDL gRPC del contrato serializado (`AsyncTaskEnvelope` -> `TaskResult`) y la impl
-  `RemotePluginTransport` gRPC para plugins sin broker.
-- E2E con broker real que conecte `BrokerRemotePluginTransport` ->
-  `ejemplos/backend-plugin-sidecar` -> callback HMAC contra
-  `/api/process-executions/resume/{token}`.
-- Distribucion de claves desde un trust store/secret manager. La verificacion
-  ECDSA, expiracion declarativa y revocacion por `keyId` ya existen por config.
-- Flujo administrativo avanzado de marketplace/version pinning; instalacion
-  declarativa, activacion, recarga y desactivacion/rollback inicial ya estan
-  disponibles via API.
-- Extension del mismo patron a `SourceProvider`/`ReaderProvider` segun necesidad.
+- E2E core -> Kafka real -> sidecar de referencia -> callback HTTP HMAC ->
+  `RemoteTaskProvider.resume()` cubierto por `RemotePluginSidecarHttpE2EIT`. El
+  descriptor usado en el E2E se instala como `trusted=true` con firma ECDSA valida;
+  no existe ruta de ejecucion para plugins no confiables.
+- Adapter productivo a secret manager corporativo administrado. El seam,
+  `SecretResolver`, refs secretas y trust store ya estan implementados; falta
+  elegir/probar proveedor real administrado (Vault/AWS/GCP/Azure) por ambiente.
+- Marketplace avanzado: el canary con metricas historicas y gate de promocion ya
+  existe como base. Queda pendiente orquestacion progresiva de trafico por
+  porcentaje/segmento, politicas por canal y aprobacion automatizada desde un
+  marketplace corporativo.
+- Streaming remoto avanzado para `SourceProvider`/`ReaderProvider`: la base
+  sincronica ya resuelve plugins externos y procesa payloads por contrato. Queda
+  pendiente streaming/chunking nativo para archivos grandes y canary dedicado por
+  operacion source/reader.

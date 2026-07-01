@@ -26,6 +26,11 @@ class PluginDescriptorCatalogMapperTest {
         assertTrue(remote.trusted());
         assertTrue(remote.covers("ACME_DO"));
         assertTrue(remote.covers("ACME_CHECK"));
+        assertTrue(remote.coversSource("REMOTE_FS"));
+        assertTrue(remote.coversReader("REMOTE_CSV"));
+        assertEquals("stable", remote.channel());
+        assertEquals("1.0.0", remote.pinnedVersion());
+        assertTrue(remote.pinned());
     }
 
     @Test
@@ -38,6 +43,8 @@ class PluginDescriptorCatalogMapperTest {
     @Test
     void rejectsEmptyProvidedTypes() {
         var persisted = descriptor("[]");
+        persisted.providedSourceTypesJson = "[]";
+        persisted.providedReaderTypesJson = "[]";
 
         assertThrows(IllegalArgumentException.class, () -> mapper.toRemoteDescriptor(persisted));
     }
@@ -48,10 +55,16 @@ class PluginDescriptorCatalogMapperTest {
         descriptor.version = "1.0.0";
         descriptor.spiVersion = "1";
         descriptor.providedTypesJson = providedTypesJson;
+        descriptor.providedSourceTypesJson = "[\"REMOTE_FS\"]";
+        descriptor.providedReaderTypesJson = "[\"REMOTE_CSV\"]";
         descriptor.transport = "GRPC";
         descriptor.endpoint = "http://localhost:9090";
         descriptor.trusted = true;
         descriptor.active = true;
+        descriptor.marketplaceUrl = "https://plugins.example.com/catalog/acme.json";
+        descriptor.channel = "stable";
+        descriptor.pinnedVersion = "1.0.0";
+        descriptor.pinned = true;
         return descriptor;
     }
 }

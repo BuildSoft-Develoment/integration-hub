@@ -19,6 +19,12 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>com.integrationhub</groupId>
+            <artifactId>backend-plugin-sidecar-example</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-arc</artifactId>
         </dependency>
@@ -69,6 +75,10 @@
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-messaging-kafka</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-grpc</artifactId>
         </dependency>
         <!-- Conectores MQ adicionales (SPI): clientes raw con conexion lazy; solo el
              broker seleccionado por audit.broker.type conecta. Abierto/enchufable. -->
@@ -305,7 +315,5 @@
         </plugins>
     </build>
 </project>
-
-
 
 

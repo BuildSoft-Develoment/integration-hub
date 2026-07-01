@@ -8,6 +8,7 @@ import io.smallrye.reactive.messaging.MutinyEmitter;
 import io.smallrye.reactive.messaging.kafka.api.OutgoingKafkaRecordMetadata;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.apache.kafka.common.header.internals.RecordHeaders;
 import org.eclipse.microprofile.reactive.messaging.Channel;
 import org.eclipse.microprofile.reactive.messaging.Message;
 
@@ -98,8 +99,17 @@ public class KafkaMessageBrokerProvider implements MessageBrokerProvider {
         var metadata = OutgoingKafkaRecordMetadata.<String>builder()
                 .withTopic(outbound.topic())
                 .withKey(outbound.key())
+                .withHeaders(headers(outbound))
                 .build();
         return Message.of(outbound.payload()).addMetadata(metadata);
+    }
+
+    private RecordHeaders headers(OutboundMessage outbound) {
+        var headers = new RecordHeaders();
+        outbound.headers().forEach((key, value) -> headers.add(key, value == null
+                ? new byte[0]
+                : value.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        return headers;
     }
 
     private String rootMessage(Throwable error) {

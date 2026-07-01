@@ -9,12 +9,18 @@ public record PluginInstallRequest(
         String version,
         String spiVersion,
         Set<String> providedTypes,
+        Set<String> providedSourceTypes,
+        Set<String> providedReaderTypes,
         String transport,
         String endpoint,
         boolean trusted,
         boolean active,
         String integrity,
-        String signature) {
+        String signature,
+        String marketplaceUrl,
+        String channel,
+        String pinnedVersion,
+        boolean pinned) {
 
     public PluginDescriptorInstallCommand toCommand() {
         return new PluginDescriptorInstallCommand(
@@ -22,11 +28,17 @@ public record PluginInstallRequest(
                 version,
                 spiVersion,
                 providedTypes,
+                providedSourceTypes,
+                providedReaderTypes,
                 transport,
                 endpoint,
                 trusted,
                 active,
                 integrity,
-                signature);
+                signature,
+                marketplaceUrl,
+                channel,
+                pinnedVersion,
+                pinned);
     }
 }

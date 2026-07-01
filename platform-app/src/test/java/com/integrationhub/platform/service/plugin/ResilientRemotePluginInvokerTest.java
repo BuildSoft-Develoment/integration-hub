@@ -11,6 +11,9 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class ResilientRemotePluginInvokerTest {
 
@@ -18,18 +21,22 @@ class ResilientRemotePluginInvokerTest {
 
     @Test
     void delegatesToMatchingTransport() {
-        var invoker = new ResilientRemotePluginInvoker(List.of(new FakeTransport("GRPC")));
+        var recorder = mock(PluginRuntimeMetricsRecorder.class);
+        var invoker = new ResilientRemotePluginInvoker(List.of(new FakeTransport("GRPC")), recorder);
         var descriptor = descriptor("GRPC");
 
         var result = invoker.invoke(descriptor, "ACME_DO", context, Map.of("x", 1));
 
         assertTrue(result.success());
         assertEquals("GRPC:ACME_DO:http://localhost:9090", result.details());
+        verify(recorder).record(any(PluginInvocationMetricCommand.class));
     }
 
     @Test
     void rejectsWhenNoTransportSupportsDescriptor() {
-        var invoker = new ResilientRemotePluginInvoker(List.of(new FakeTransport("KAFKA")));
+        var invoker = new ResilientRemotePluginInvoker(
+                List.of(new FakeTransport("KAFKA")),
+                mock(PluginRuntimeMetricsRecorder.class));
         var descriptor = descriptor("GRPC");
 
         assertThrows(IllegalStateException.class,

@@ -289,10 +289,10 @@ public class ProcessExecutionStateService {
                 task.configurationJson,
                 task.sourceDefinition == null ? null : task.sourceDefinition.id,
                 task.sourceDefinition == null ? null : task.sourceDefinition.name,
-                task.sourceDefinition == null ? null : task.sourceDefinition.sourceType.name(),
+                task.sourceDefinition == null ? null : task.sourceDefinition.sourceType,
                 task.sourceDefinition == null ? null : task.sourceDefinition.configurationJson,
                 task.readerDefinition == null ? null : task.readerDefinition.id,
-                task.readerDefinition == null ? null : task.readerDefinition.readerType.name(),
+                task.readerDefinition == null ? null : task.readerDefinition.readerType,
                 task.readerDefinition == null ? null : task.readerDefinition.configurationJson
         );
     }
@@ -323,4 +323,3 @@ public class ProcessExecutionStateService {
     ) {
     }
 }
-

@@ -26,23 +26,35 @@ public class PluginDescriptorCatalogMapper {
             throw new IllegalArgumentException("Plugin descriptor is required");
         }
         var providedTypes = parseProvidedTypes(descriptor);
-        if (providedTypes.isEmpty()) {
-            throw new IllegalArgumentException("Plugin " + descriptor.id + " does not declare provided types");
+        var providedSourceTypes = parseTypeSet(descriptor.id, descriptor.providedSourceTypesJson, "providedSourceTypes");
+        var providedReaderTypes = parseTypeSet(descriptor.id, descriptor.providedReaderTypesJson, "providedReaderTypes");
+        if (providedTypes.isEmpty() && providedSourceTypes.isEmpty() && providedReaderTypes.isEmpty()) {
+            throw new IllegalArgumentException("Plugin " + descriptor.id + " does not declare provided capabilities");
         }
         return new RemotePluginDescriptor(
                 descriptor.id,
                 descriptor.version,
                 descriptor.spiVersion,
                 providedTypes,
+                providedSourceTypes,
+                providedReaderTypes,
                 descriptor.transport,
                 descriptor.endpoint,
-                descriptor.trusted
+                descriptor.trusted,
+                descriptor.marketplaceUrl,
+                descriptor.channel,
+                descriptor.pinnedVersion,
+                descriptor.pinned
         );
     }
 
     private Set<String> parseProvidedTypes(PluginDescriptor descriptor) {
+        return parseTypeSet(descriptor.id, descriptor.providedTypesJson, "providedTypes");
+    }
+
+    private Set<String> parseTypeSet(String pluginId, String rawJson, String fieldName) {
         try {
-            var rawTypes = objectMapper.readValue(descriptor.providedTypesJson, STRING_SET);
+            var rawTypes = objectMapper.readValue(rawJson == null || rawJson.isBlank() ? "[]" : rawJson, STRING_SET);
             var normalized = new LinkedHashSet<String>();
             for (var type : rawTypes) {
                 if (type != null && !type.isBlank()) {
@@ -52,7 +64,7 @@ public class PluginDescriptorCatalogMapper {
             return normalized;
         } catch (JsonProcessingException error) {
             throw new IllegalArgumentException(
-                    "Plugin " + descriptor.id + " has invalid providedTypes JSON", error);
+                    "Plugin " + pluginId + " has invalid " + fieldName + " JSON", error);
         }
     }
 }

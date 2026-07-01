@@ -2,6 +2,7 @@ package com.integrationhub.platform.service.plugin;
 
 import com.integrationhub.platform.entity.PluginDescriptor;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
@@ -15,6 +16,7 @@ import java.security.spec.X509EncodedKeySpec;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -48,14 +50,11 @@ public class PluginDescriptorTrustPolicy {
     public PluginDescriptorTrustPolicy(
             @ConfigProperty(name = "integrationhub.plugins.backend.allowed-origins")
             Optional<String> allowedOrigins,
-            @ConfigProperty(name = "integrationhub.plugins.backend.trusted-public-keys")
-            Optional<String> trustedPublicKeys,
-            @ConfigProperty(name = "integrationhub.plugins.backend.revoked-key-ids")
-            Optional<String> revokedKeyIds) {
+            Instance<PluginTrustMaterialProvider> trustMaterialProviders) {
         this(
                 parseAllowedOrigins(allowedOrigins.orElse("")),
-                parseTrustedPublicKeys(trustedPublicKeys.orElse("")),
-                parseRevokedKeyIds(revokedKeyIds.orElse("")),
+                trustedPublicKeysFrom(trustMaterialProviders),
+                revokedKeyIdsFrom(trustMaterialProviders),
                 java.time.Clock.systemUTC(),
                 true);
     }
@@ -102,6 +101,7 @@ public class PluginDescriptorTrustPolicy {
         requireText(descriptor.id, "Plugin id is required");
         requireText(descriptor.version, "Plugin " + descriptor.id + " version is required");
         requireText(descriptor.spiVersion, "Plugin " + descriptor.id + " spiVersion is required");
+        validateVersionPinning(descriptor);
 
         var transport = normalizeTransport(descriptor.transport, descriptor.id);
         if ("GRPC".equals(transport)) {
@@ -140,6 +140,17 @@ public class PluginDescriptorTrustPolicy {
 
         if (!local && !allowedOrigins.contains(originOf(uri))) {
             throw new IllegalArgumentException("Plugin " + pluginId + " endpoint origin is not allowlisted");
+        }
+    }
+
+    private void validateVersionPinning(PluginDescriptor descriptor) {
+        if (!descriptor.pinned) {
+            return;
+        }
+        requireText(descriptor.pinnedVersion, "Plugin " + descriptor.id + " pinnedVersion is required when pinned");
+        if (!descriptor.version.trim().equals(descriptor.pinnedVersion.trim())) {
+            throw new IllegalArgumentException(
+                    "Plugin " + descriptor.id + " pinnedVersion must match installed version");
         }
     }
 
@@ -273,6 +284,31 @@ public class PluginDescriptorTrustPolicy {
                 .collect(Collectors.toUnmodifiableMap(
                         entry -> entry.getKey().trim(),
                         entry -> new TrustedPublicKey(entry.getValue(), null)));
+    }
+
+    private static Map<String, TrustedPublicKey> trustedPublicKeysFrom(
+            Instance<PluginTrustMaterialProvider> providers) {
+        if (providers == null) {
+            return Map.of();
+        }
+        var keys = new LinkedHashMap<String, TrustedPublicKey>();
+        for (var provider : providers) {
+            provider.trustedPublicKeys().forEach((keyId, material) -> {
+                if (keys.putIfAbsent(keyId, new TrustedPublicKey(material.publicKey(), material.expiresAt())) != null) {
+                    throw new IllegalArgumentException("Backend plugin trust material has duplicate key: " + keyId);
+                }
+            });
+        }
+        return Map.copyOf(keys);
+    }
+
+    private static Set<String> revokedKeyIdsFrom(Instance<PluginTrustMaterialProvider> providers) {
+        if (providers == null) {
+            return Set.of();
+        }
+        return providers.stream()
+                .flatMap(provider -> provider.revokedKeyIds().stream())
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     private static String normalizeOrigin(String rawOrigin) {

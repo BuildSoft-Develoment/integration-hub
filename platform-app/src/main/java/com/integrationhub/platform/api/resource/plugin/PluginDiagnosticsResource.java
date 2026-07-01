@@ -1,9 +1,14 @@
 package com.integrationhub.platform.api.resource.plugin;
 
+import com.integrationhub.platform.api.request.plugin.PluginCanaryMetricRequest;
 import com.integrationhub.platform.api.request.plugin.PluginInstallRequest;
+import com.integrationhub.platform.api.request.plugin.PluginMarketplaceInstallRequest;
 import com.integrationhub.platform.api.response.plugin.BackendPluginDescriptorResponse;
 import com.integrationhub.platform.api.response.plugin.BackendPluginDiagnosticsResponse;
+import com.integrationhub.platform.api.response.plugin.BackendPluginVersionResponse;
+import com.integrationhub.platform.entity.PluginDescriptorVersion;
 import com.integrationhub.platform.service.plugin.BackendPluginAdminService;
+import com.integrationhub.platform.service.plugin.PluginRuntimeMetricsRecorder;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
 import jakarta.annotation.security.RolesAllowed;
@@ -31,12 +36,15 @@ public class PluginDiagnosticsResource {
 
     private final RemotePluginRegistry remotePlugins;
     private final BackendPluginAdminService adminService;
+    private final PluginRuntimeMetricsRecorder metricsRecorder;
 
     public PluginDiagnosticsResource(
             RemotePluginRegistry remotePlugins,
-            BackendPluginAdminService adminService) {
+            BackendPluginAdminService adminService,
+            PluginRuntimeMetricsRecorder metricsRecorder) {
         this.remotePlugins = remotePlugins;
         this.adminService = adminService;
+        this.metricsRecorder = metricsRecorder;
     }
 
     @GET
@@ -63,12 +71,53 @@ public class PluginDiagnosticsResource {
     }
 
     @POST
+    @Path("/marketplace/install")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
+    public BackendPluginDiagnosticsResponse installFromMarketplace(PluginMarketplaceInstallRequest request) {
+        adminService.installFromMarketplace(request.toCommand());
+        return currentDiagnostics();
+    }
+
+    @POST
+    @Path("/marketplace/preview")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
+    public BackendPluginDescriptorResponse previewFromMarketplace(PluginMarketplaceInstallRequest request) {
+        return toResponse(adminService.previewFromMarketplace(request.toCommand()), Map.of());
+    }
+
+    @POST
     @Path("/{id}/activate")
     @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public BackendPluginDiagnosticsResponse activate(@PathParam("id") String id) {
         if (!adminService.activate(id)) {
             throw new NotFoundException("Plugin " + id + " not found");
         }
+        return currentDiagnostics();
+    }
+
+    @POST
+    @Path("/{id}/versions/{version}/activate")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
+    public BackendPluginDiagnosticsResponse activateVersion(
+            @PathParam("id") String id,
+            @PathParam("version") String version) {
+        if (!adminService.activateVersion(id, version)) {
+            throw new NotFoundException("Plugin " + id + " version " + version + " not found");
+        }
+        return currentDiagnostics();
+    }
+
+    @POST
+    @Path("/{id}/versions/{version}/canary/metrics")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
+    public BackendPluginDiagnosticsResponse recordCanaryMetric(
+            @PathParam("id") String id,
+            @PathParam("version") String version,
+            PluginCanaryMetricRequest request) {
+        metricsRecorder.record(request.toCommand(id, version));
         return currentDiagnostics();
     }
 
@@ -88,8 +137,16 @@ public class PluginDiagnosticsResource {
                 remotePlugins.descriptors().stream()
                         .map(descriptor -> toResponse(descriptor, degraded))
                         .toList(),
+                versions().stream()
+                        .map(this::toVersionResponse)
+                        .toList(),
                 degraded
         );
+    }
+
+    private List<PluginDescriptorVersion> versions() {
+        var versions = adminService.listVersions();
+        return versions == null ? List.of() : versions;
     }
 
     private BackendPluginDescriptorResponse toResponse(
@@ -100,16 +157,22 @@ public class PluginDiagnosticsResource {
                 descriptor.id(),
                 descriptor.version(),
                 descriptor.spiVersion(),
-                sortedTypes(descriptor),
+                sorted(descriptor.providedTypes()),
+                sorted(descriptor.providedSourceTypes()),
+                sorted(descriptor.providedReaderTypes()),
                 descriptor.transport(),
                 descriptor.trusted(),
                 status(descriptor, reason),
-                reason
+                reason,
+                descriptor.marketplaceUrl(),
+                descriptor.channel(),
+                descriptor.pinnedVersion(),
+                descriptor.pinned()
         );
     }
 
-    private List<String> sortedTypes(RemotePluginDescriptor descriptor) {
-        var types = new ArrayList<>(descriptor.providedTypes());
+    private List<String> sorted(java.util.Collection<String> rawTypes) {
+        var types = new ArrayList<>(rawTypes);
         types.sort(Comparator.naturalOrder());
         return types;
     }
@@ -119,5 +182,43 @@ public class PluginDiagnosticsResource {
             return "DEGRADED";
         }
         return descriptor.trusted() ? "ACTIVE" : "UNTRUSTED";
+    }
+
+    private BackendPluginVersionResponse toVersionResponse(PluginDescriptorVersion version) {
+        return new BackendPluginVersionResponse(
+                version.pluginId,
+                version.version,
+                version.spiVersion,
+                parse(version.providedTypesJson),
+                parse(version.providedSourceTypesJson),
+                parse(version.providedReaderTypesJson),
+                version.transport,
+                version.trusted,
+                isActive(version),
+                version.marketplaceUrl,
+                version.channel,
+                version.pinnedVersion,
+                version.pinned
+        );
+    }
+
+    private boolean isActive(PluginDescriptorVersion version) {
+        return remotePlugins.descriptors().stream()
+                .anyMatch(descriptor -> descriptor.id().equals(version.pluginId)
+                        && descriptor.version().equals(version.version));
+    }
+
+    private List<String> parse(String rawJson) {
+        if (rawJson == null || rawJson.isBlank() || "[]".equals(rawJson.trim())) {
+            return List.of();
+        }
+        try {
+            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            var types = mapper.readValue(rawJson, new com.fasterxml.jackson.core.type.TypeReference<List<String>>() {
+            });
+            return sorted(types);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException ignored) {
+            return List.of();
+        }
     }
 }

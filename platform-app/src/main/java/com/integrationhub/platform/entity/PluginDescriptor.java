@@ -31,6 +31,12 @@ public class PluginDescriptor {
     @Column(name = "provided_types_json", nullable = false, columnDefinition = "text")
     public String providedTypesJson;
 
+    @Column(name = "provided_source_types_json", nullable = false, columnDefinition = "text")
+    public String providedSourceTypesJson = "[]";
+
+    @Column(name = "provided_reader_types_json", nullable = false, columnDefinition = "text")
+    public String providedReaderTypesJson = "[]";
+
     @Column(nullable = false, length = 20)
     public String transport;
 
@@ -48,6 +54,18 @@ public class PluginDescriptor {
 
     @Column(length = 500)
     public String signature;
+
+    @Column(name = "marketplace_url", length = 500)
+    public String marketplaceUrl;
+
+    @Column(length = 80)
+    public String channel;
+
+    @Column(name = "pinned_version", length = 40)
+    public String pinnedVersion;
+
+    @Column(nullable = false)
+    public boolean pinned = false;
 
     @Column(name = "installed_at", nullable = false)
     public LocalDateTime installedAt = LocalDateTime.now();

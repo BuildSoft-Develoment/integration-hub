@@ -15,7 +15,16 @@ class RemotePluginRegistryTest {
     private final RemotePluginRegistry registry = new RemotePluginRegistry();
 
     private RemotePluginDescriptor descriptor() {
-        return new RemotePluginDescriptor("acme", "1.0.0", "1", Set.of("ACME_DO", "ACME_CHECK"), "GRPC", true);
+        return new RemotePluginDescriptor(
+                "acme",
+                "1.0.0",
+                "1",
+                Set.of("ACME_DO", "ACME_CHECK"),
+                Set.of("REMOTE_FS"),
+                Set.of("REMOTE_CSV"),
+                "GRPC",
+                null,
+                true);
     }
 
     @Test
@@ -25,6 +34,8 @@ class RemotePluginRegistryTest {
         assertTrue(registry.covers("ACME_DO"));
         assertTrue(registry.covers("acme_check"));
         assertEquals("acme", registry.descriptorFor("ACME_DO").orElseThrow().id());
+        assertEquals("acme", registry.descriptorForSource("remote_fs").orElseThrow().id());
+        assertEquals("acme", registry.descriptorForReader("remote_csv").orElseThrow().id());
     }
 
     @Test
@@ -49,6 +60,8 @@ class RemotePluginRegistryTest {
 
         assertEquals("acme", registry.descriptors().getFirst().id());
         assertEquals(Set.of("ACME_DO", "ACME_CHECK"), Set.copyOf(registry.availableTaskTypes()));
+        assertEquals(Set.of("REMOTE_FS"), Set.copyOf(registry.availableSourceTypes()));
+        assertEquals(Set.of("REMOTE_CSV"), Set.copyOf(registry.availableReaderTypes()));
     }
 
     @Test

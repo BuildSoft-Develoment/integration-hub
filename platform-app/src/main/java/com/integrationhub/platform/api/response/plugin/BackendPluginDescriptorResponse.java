@@ -7,8 +7,14 @@ public record BackendPluginDescriptorResponse(
         String version,
         String spiVersion,
         List<String> providedTypes,
+        List<String> providedSourceTypes,
+        List<String> providedReaderTypes,
         String transport,
         boolean trusted,
         String status,
-        String degradedReason) {
+        String degradedReason,
+        String marketplaceUrl,
+        String channel,
+        String pinnedVersion,
+        boolean pinned) {
 }

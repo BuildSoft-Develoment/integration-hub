@@ -12,11 +12,16 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Base64;
+import java.util.Iterator;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class PluginDescriptorTrustPolicyTest {
 
@@ -149,6 +154,35 @@ class PluginDescriptorTrustPolicyTest {
                 "",
                 "dev-key:" + encoded + ":2999-01-01T00:00:00Z",
                 "");
+        var descriptor = descriptor("http://localhost:9090", keyPair);
+
+        assertDoesNotThrow(() -> policy.validate(descriptor));
+    }
+
+    @Test
+    void rejectsPinnedDescriptorWhenPinnedVersionDoesNotMatchInstalledVersion() throws Exception {
+        var fixture = signedFixture(Set.of());
+        var descriptor = fixture.descriptor("http://localhost:9090");
+        descriptor.pinned = true;
+        descriptor.pinnedVersion = "0.9.0";
+
+        assertThrows(IllegalArgumentException.class, () -> fixture.policy().validate(descriptor));
+    }
+
+    @Test
+    void consumesTrustedKeysFromMaterialProviderSpi() throws Exception {
+        var keyPair = keyPair();
+        var provider = mock(PluginTrustMaterialProvider.class);
+        when(provider.trustedPublicKeys()).thenReturn(Map.of(
+                "dev-key",
+                new PluginTrustMaterial("dev-key", keyPair.getPublic(), Instant.parse("2999-01-01T00:00:00Z"))));
+        when(provider.revokedKeyIds()).thenReturn(Set.of());
+
+        @SuppressWarnings("unchecked")
+        var providers = (jakarta.enterprise.inject.Instance<PluginTrustMaterialProvider>) mock(jakarta.enterprise.inject.Instance.class);
+        when(providers.iterator()).thenReturn((Iterator<PluginTrustMaterialProvider>) Set.of(provider).iterator());
+        when(providers.stream()).thenReturn(Stream.of(provider));
+        var policy = new PluginDescriptorTrustPolicy(Optional.empty(), providers);
         var descriptor = descriptor("http://localhost:9090", keyPair);
 
         assertDoesNotThrow(() -> policy.validate(descriptor));

@@ -1,12 +1,17 @@
 package com.integrationhub.platform.api.resource.plugin;
 
+import com.integrationhub.platform.api.request.plugin.PluginCanaryMetricRequest;
 import com.integrationhub.platform.api.request.plugin.PluginInstallRequest;
+import com.integrationhub.platform.api.request.plugin.PluginMarketplaceInstallRequest;
+import com.integrationhub.platform.entity.PluginDescriptorVersion;
+import com.integrationhub.platform.service.plugin.PluginRuntimeMetricsRecorder;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
 import com.integrationhub.platform.service.plugin.BackendPluginAdminService;
 import org.junit.jupiter.api.Test;
 
 import java.util.Set;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -20,7 +25,7 @@ class PluginDiagnosticsResourceTest {
     void returnsInstalledBackendPluginsWithStatus() {
         var registry = new RemotePluginRegistry();
         registry.register(new RemotePluginDescriptor("acme", "1.0.0", "1", Set.of("ACME_DO"), "GRPC", true));
-        var resource = new PluginDiagnosticsResource(registry, mock(BackendPluginAdminService.class));
+        var resource = resource(registry, mock(BackendPluginAdminService.class));
 
         var diagnostics = resource.diagnostics();
 
@@ -34,7 +39,7 @@ class PluginDiagnosticsResourceTest {
         var registry = new RemotePluginRegistry();
         registry.register(new RemotePluginDescriptor("acme", "1.0.0", "1", Set.of("ACME_DO"), "GRPC", true));
         registry.markDegraded("acme", "invocacion fallida");
-        var resource = new PluginDiagnosticsResource(registry, mock(BackendPluginAdminService.class));
+        var resource = resource(registry, mock(BackendPluginAdminService.class));
 
         var diagnostics = resource.diagnostics();
 
@@ -47,7 +52,7 @@ class PluginDiagnosticsResourceTest {
     void reloadDelegatesToAdminServiceAndReturnsDiagnostics() {
         var registry = new RemotePluginRegistry();
         var admin = mock(BackendPluginAdminService.class);
-        var resource = new PluginDiagnosticsResource(registry, admin);
+        var resource = resource(registry, admin);
 
         var diagnostics = resource.reload();
 
@@ -59,18 +64,24 @@ class PluginDiagnosticsResourceTest {
     void installDelegatesToAdminServiceAndReturnsDiagnostics() {
         var registry = new RemotePluginRegistry();
         var admin = mock(BackendPluginAdminService.class);
-        var resource = new PluginDiagnosticsResource(registry, admin);
+        var resource = resource(registry, admin);
         var request = new PluginInstallRequest(
                 "acme",
                 "1.0.0",
                 "1",
                 Set.of("ACME_DO"),
+                Set.of("REMOTE_FS"),
+                Set.of("REMOTE_CSV"),
                 "KAFKA",
                 null,
                 false,
                 true,
                 null,
-                null);
+                null,
+                "https://plugins.example.com/catalog/acme.json",
+                "stable",
+                "1.0.0",
+                true);
 
         var diagnostics = resource.install(request);
 
@@ -83,7 +94,7 @@ class PluginDiagnosticsResourceTest {
         var registry = new RemotePluginRegistry();
         var admin = mock(BackendPluginAdminService.class);
         when(admin.deactivate("acme")).thenReturn(true);
-        var resource = new PluginDiagnosticsResource(registry, admin);
+        var resource = resource(registry, admin);
 
         var diagnostics = resource.deactivate("acme");
 
@@ -92,11 +103,65 @@ class PluginDiagnosticsResourceTest {
     }
 
     @Test
+    void marketplaceInstallDelegatesToAdminServiceAndReturnsDiagnostics() {
+        var registry = new RemotePluginRegistry();
+        var admin = mock(BackendPluginAdminService.class);
+        var resource = resource(registry, admin);
+        var request = new PluginMarketplaceInstallRequest(
+                "https://plugins.example.com/catalog.json",
+                "acme",
+                "1.0.0",
+                "stable",
+                true);
+
+        var diagnostics = resource.installFromMarketplace(request);
+
+        verify(admin).installFromMarketplace(request.toCommand());
+        assertEquals(0, diagnostics.installed().size());
+    }
+
+    @Test
+    void marketplacePreviewDelegatesToAdminServiceAndReturnsDescriptor() {
+        var registry = new RemotePluginRegistry();
+        var admin = mock(BackendPluginAdminService.class);
+        var resource = resource(registry, admin);
+        var request = new PluginMarketplaceInstallRequest(
+                "https://plugins.example.com/catalog.json",
+                "acme",
+                null,
+                "stable",
+                false);
+        when(admin.previewFromMarketplace(request.toCommand())).thenReturn(new RemotePluginDescriptor(
+                "acme",
+                "1.2.0",
+                "1",
+                Set.of("ACME_DO"),
+                Set.of("REMOTE_FS"),
+                Set.of("REMOTE_CSV"),
+                "KAFKA",
+                null,
+                false,
+                "https://plugins.example.com/catalog.json",
+                "stable",
+                null,
+                false));
+
+        var preview = resource.previewFromMarketplace(request);
+
+        verify(admin).previewFromMarketplace(request.toCommand());
+        assertEquals("acme", preview.id());
+        assertEquals("1.2.0", preview.version());
+        assertEquals(List.of("ACME_DO"), preview.providedTypes());
+        assertEquals(List.of("REMOTE_FS"), preview.providedSourceTypes());
+        assertEquals("UNTRUSTED", preview.status());
+    }
+
+    @Test
     void activateDelegatesToAdminServiceAndReturnsDiagnostics() {
         var registry = new RemotePluginRegistry();
         var admin = mock(BackendPluginAdminService.class);
         when(admin.activate("acme")).thenReturn(true);
-        var resource = new PluginDiagnosticsResource(registry, admin);
+        var resource = resource(registry, admin);
 
         var diagnostics = resource.activate("acme");
 
@@ -105,10 +170,44 @@ class PluginDiagnosticsResourceTest {
     }
 
     @Test
+    void activateVersionDelegatesToAdminServiceAndReturnsDiagnostics() {
+        var registry = new RemotePluginRegistry();
+        var admin = mock(BackendPluginAdminService.class);
+        when(admin.activateVersion("acme", "1.1.0")).thenReturn(true);
+        var resource = resource(registry, admin);
+
+        var diagnostics = resource.activateVersion("acme", "1.1.0");
+
+        verify(admin).activateVersion("acme", "1.1.0");
+        assertEquals(0, diagnostics.installed().size());
+    }
+
+    @Test
+    void diagnosticsIncludesInstalledVersions() {
+        var registry = new RemotePluginRegistry();
+        var admin = mock(BackendPluginAdminService.class);
+        var version = new PluginDescriptorVersion();
+        version.pluginId = "acme";
+        version.version = "1.0.0";
+        version.spiVersion = "1";
+        version.providedTypesJson = "[\"ACME_DO\"]";
+        version.providedSourceTypesJson = "[]";
+        version.providedReaderTypesJson = "[]";
+        version.transport = "KAFKA";
+        when(admin.listVersions()).thenReturn(List.of(version));
+        var resource = resource(registry, admin);
+
+        var diagnostics = resource.diagnostics();
+
+        assertEquals(1, diagnostics.versions().size());
+        assertEquals("acme", diagnostics.versions().getFirst().id());
+    }
+
+    @Test
     void deactivateReturnsNotFoundWhenDescriptorDoesNotExist() {
         var registry = new RemotePluginRegistry();
         var admin = mock(BackendPluginAdminService.class);
-        var resource = new PluginDiagnosticsResource(registry, admin);
+        var resource = resource(registry, admin);
 
         assertThrows(jakarta.ws.rs.NotFoundException.class, () -> resource.deactivate("missing"));
     }
@@ -117,8 +216,26 @@ class PluginDiagnosticsResourceTest {
     void activateReturnsNotFoundWhenDescriptorDoesNotExist() {
         var registry = new RemotePluginRegistry();
         var admin = mock(BackendPluginAdminService.class);
-        var resource = new PluginDiagnosticsResource(registry, admin);
+        var resource = resource(registry, admin);
 
         assertThrows(jakarta.ws.rs.NotFoundException.class, () -> resource.activate("missing"));
+    }
+
+    @Test
+    void recordCanaryMetricDelegatesToMetricsRecorder() {
+        var registry = new RemotePluginRegistry();
+        var admin = mock(BackendPluginAdminService.class);
+        var recorder = mock(PluginRuntimeMetricsRecorder.class);
+        var resource = new PluginDiagnosticsResource(registry, admin, recorder);
+        var request = new PluginCanaryMetricRequest("ACME_DO", "KAFKA", true, "SUCCESS", 25, null);
+
+        var diagnostics = resource.recordCanaryMetric("acme", "1.1.0", request);
+
+        verify(recorder).record(request.toCommand("acme", "1.1.0"));
+        assertEquals(0, diagnostics.installed().size());
+    }
+
+    private PluginDiagnosticsResource resource(RemotePluginRegistry registry, BackendPluginAdminService admin) {
+        return new PluginDiagnosticsResource(registry, admin, mock(PluginRuntimeMetricsRecorder.class));
     }
 }

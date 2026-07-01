@@ -7,10 +7,16 @@ public record PluginDescriptorInstallCommand(
         String version,
         String spiVersion,
         Set<String> providedTypes,
+        Set<String> providedSourceTypes,
+        Set<String> providedReaderTypes,
         String transport,
         String endpoint,
         boolean trusted,
         boolean active,
         String integrity,
-        String signature) {
+        String signature,
+        String marketplaceUrl,
+        String channel,
+        String pinnedVersion,
+        boolean pinned) {
 }
