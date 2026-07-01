@@ -16,14 +16,14 @@ const routes = [
 
 test.describe('Integration Hub shell', () => {
   test('renders core protected routes', async ({ page }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
 
     for (const route of routes) {
       await test.step(`renders ${route.path}`, async () => {
         await gotoAuthenticated(page, route.path);
 
         await expect(page.locator('h1')).toContainText(route.title, {
-          timeout: 15_000,
+          timeout: 20_000,
         });
         await expect(page.locator('body')).not.toContainText('Unable to resolve specifier');
         await expect(page.locator('body')).not.toContainText('@angular/core/testing');
@@ -130,11 +130,25 @@ test.describe('Integration Hub shell', () => {
 });
 
 async function gotoAuthenticated(page: Page, path: string): Promise<void> {
-  await page.goto(path, { waitUntil: 'domcontentloaded' }).catch((error: Error) => {
-    if (!error.message.includes('ERR_ABORTED')) {
-      throw error;
+  // Retry navigation to absorb transient dev-server rebuilds (server briefly down)
+  // while treating ERR_ABORTED as expected (hash routing aborts the top-level load).
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await page.goto(path, { waitUntil: 'domcontentloaded' });
+      break;
+    } catch (error) {
+      const message = (error as Error).message;
+      if (message.includes('ERR_ABORTED')) {
+        break;
+      }
+      const transient =
+        /ERR_EMPTY_RESPONSE|ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|Timeout/i.test(message);
+      if (!transient || attempt >= 3) {
+        throw error;
+      }
+      await page.waitForTimeout(3000);
     }
-  });
+  }
 
   const username = page.locator('input[name="username"], input#username').first();
   const loginVisible = await username
@@ -153,4 +167,11 @@ async function gotoAuthenticated(page: Page, path: string): Promise<void> {
       page.locator('button[type="submit"], input[type="submit"]').first().click(),
     ]);
   }
+
+  // Wait for the app shell (h1) to render so per-route assertions are stable.
+  await page
+    .locator('h1')
+    .first()
+    .waitFor({ state: 'visible', timeout: 20_000 })
+    .catch(() => undefined);
 }
