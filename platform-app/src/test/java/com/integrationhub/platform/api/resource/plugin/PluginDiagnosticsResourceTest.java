@@ -4,6 +4,8 @@ import com.integrationhub.platform.api.request.plugin.PluginCanaryMetricRequest;
 import com.integrationhub.platform.api.request.plugin.PluginInstallRequest;
 import com.integrationhub.platform.api.request.plugin.PluginMarketplaceInstallRequest;
 import com.integrationhub.platform.entity.PluginDescriptorVersion;
+import com.integrationhub.platform.service.plugin.MetricsPluginPromotionGate;
+import com.integrationhub.platform.service.plugin.PluginCanaryStatus;
 import com.integrationhub.platform.service.plugin.PluginRuntimeMetricsRecorder;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
@@ -226,7 +228,8 @@ class PluginDiagnosticsResourceTest {
         var registry = new RemotePluginRegistry();
         var admin = mock(BackendPluginAdminService.class);
         var recorder = mock(PluginRuntimeMetricsRecorder.class);
-        var resource = new PluginDiagnosticsResource(registry, admin, recorder);
+        var resource = new PluginDiagnosticsResource(
+                registry, admin, recorder, mock(MetricsPluginPromotionGate.class));
         var request = new PluginCanaryMetricRequest("ACME_DO", "KAFKA", true, "SUCCESS", 25, null);
 
         var diagnostics = resource.recordCanaryMetric("acme", "1.1.0", request);
@@ -235,7 +238,34 @@ class PluginDiagnosticsResourceTest {
         assertEquals(0, diagnostics.installed().size());
     }
 
+    @Test
+    void canaryMetricsEvaluatesEachInstalledVersion() {
+        var registry = new RemotePluginRegistry();
+        var admin = mock(BackendPluginAdminService.class);
+        var version = new PluginDescriptorVersion();
+        version.pluginId = "acme";
+        version.version = "2.0.0";
+        when(admin.listVersions()).thenReturn(List.of(version));
+        var gate = mock(MetricsPluginPromotionGate.class);
+        when(gate.evaluate("acme", "2.0.0")).thenReturn(new PluginCanaryStatus(
+                "acme", "2.0.0", 5, 1, 0.2, 24, 3, 0.0, false, "FAILURE_RATIO_EXCEEDED"));
+        var resource = new PluginDiagnosticsResource(
+                registry, admin, mock(PluginRuntimeMetricsRecorder.class), gate);
+
+        var metrics = resource.canaryMetrics();
+
+        verify(gate).evaluate("acme", "2.0.0");
+        assertEquals(1, metrics.size());
+        assertEquals("acme", metrics.getFirst().pluginId());
+        assertEquals("2.0.0", metrics.getFirst().version());
+        assertEquals(5, metrics.getFirst().totalSamples());
+        assertEquals(1, metrics.getFirst().failures());
+        assertEquals(false, metrics.getFirst().promotable());
+        assertEquals("FAILURE_RATIO_EXCEEDED", metrics.getFirst().blockReason());
+    }
+
     private PluginDiagnosticsResource resource(RemotePluginRegistry registry, BackendPluginAdminService admin) {
-        return new PluginDiagnosticsResource(registry, admin, mock(PluginRuntimeMetricsRecorder.class));
+        return new PluginDiagnosticsResource(
+                registry, admin, mock(PluginRuntimeMetricsRecorder.class), mock(MetricsPluginPromotionGate.class));
     }
 }

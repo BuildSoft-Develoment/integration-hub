@@ -37,6 +37,7 @@ describe('PluginDiagnosticsPageComponent', () => {
     expect(text).toContain('Good Plugin');
     // Quarantined plugin id surfaces even though the manifest was rejected.
     expect(text).toContain('future');
+    http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
     http.verify();
   });
 
@@ -76,6 +77,7 @@ describe('PluginDiagnosticsPageComponent', () => {
     const installed = component.filteredFrontendRows();
     expect(installed.every((row) => row.status === 'installed')).toBe(true);
     expect(installed.some((row) => row.id === 'good')).toBe(true);
+    http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
     http.verify();
   });
 
@@ -103,6 +105,7 @@ describe('PluginDiagnosticsPageComponent', () => {
     fixture.componentInstance.busy.set(true);
     fixture.detectChanges();
     expect(root.getAttribute('aria-busy')).toBe('true');
+    http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
     http.verify();
   });
 
@@ -140,6 +143,50 @@ describe('PluginDiagnosticsPageComponent', () => {
 
     expect(text).toContain('acme');
     expect(text).toContain('ACME_DO');
+    http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
+    http.verify();
+  });
+
+  it('renders the read-only canary metrics dashboard', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    http.expectOne('/api/plugins/canary/metrics').flush([
+      {
+        pluginId: 'acme',
+        version: '2.0.0',
+        totalSamples: 5,
+        failures: 1,
+        failureRatio: 0.2,
+        windowHours: 24,
+        minSamples: 3,
+        maxFailureRatio: 0.0,
+        promotable: false,
+        blockReason: 'FAILURE_RATIO_EXCEEDED',
+      },
+    ]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const component = fixture.componentInstance;
+    expect(component.canaryMetrics().length).toBe(1);
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('acme');
+    expect(text).toContain('2.0.0');
+    // Failure ratio rendered as a percentage and the blocked status/reason.
+    expect(text).toContain('20.0%');
+    expect(text).toMatch(/Bloqueado|Blocked/);
+    expect(text).toMatch(/Ratio de fallo superado|Failure ratio exceeded/);
     http.verify();
   });
 
@@ -163,6 +210,7 @@ describe('PluginDiagnosticsPageComponent', () => {
     await fixture.whenStable();
 
     http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
     http.verify();
   });
 
@@ -186,6 +234,7 @@ describe('PluginDiagnosticsPageComponent', () => {
     await fixture.whenStable();
 
     http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
     http.verify();
   });
 
@@ -213,6 +262,7 @@ describe('PluginDiagnosticsPageComponent', () => {
     http.expectOne((req) => req.method === 'POST' && req.url === '/api/plugins/acme/deactivate').flush({});
     await fixture.whenStable();
     http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
     http.verify();
   });
 
@@ -236,6 +286,7 @@ describe('PluginDiagnosticsPageComponent', () => {
     component.cancelDeactivate();
 
     expect(component.confirmingDeactivate()).toBeNull();
+    http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
     http.verify();
   });
 
@@ -279,6 +330,7 @@ describe('PluginDiagnosticsPageComponent', () => {
     await previewPromise;
 
     expect(component.marketplacePreview()?.id).toBe('acme');
+    http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
     http.verify();
   });
 
@@ -319,6 +371,7 @@ describe('PluginDiagnosticsPageComponent', () => {
     http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
 
     expect(component.marketplacePreview()).toBeNull();
+    http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
     http.verify();
   });
 
@@ -343,6 +396,7 @@ describe('PluginDiagnosticsPageComponent', () => {
       .flush({ installed: [], versions: [], degraded: {} });
     await fixture.whenStable();
     http.expectOne('/api/plugins').flush({ installed: [], versions: [], degraded: {} });
+    http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
     http.verify();
   });
 
@@ -377,6 +431,7 @@ describe('PluginDiagnosticsPageComponent', () => {
       fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>
     ).map((b) => (b.textContent ?? '').trim());
     expect(labels.some((l) => /Activar version|Activate version/.test(l))).toBe(true);
+    http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
     http.verify();
   });
 });

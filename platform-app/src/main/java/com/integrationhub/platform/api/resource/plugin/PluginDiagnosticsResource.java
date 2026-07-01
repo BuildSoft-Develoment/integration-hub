@@ -6,8 +6,10 @@ import com.integrationhub.platform.api.request.plugin.PluginMarketplaceInstallRe
 import com.integrationhub.platform.api.response.plugin.BackendPluginDescriptorResponse;
 import com.integrationhub.platform.api.response.plugin.BackendPluginDiagnosticsResponse;
 import com.integrationhub.platform.api.response.plugin.BackendPluginVersionResponse;
+import com.integrationhub.platform.api.response.plugin.PluginCanaryMetricsResponse;
 import com.integrationhub.platform.entity.PluginDescriptorVersion;
 import com.integrationhub.platform.service.plugin.BackendPluginAdminService;
+import com.integrationhub.platform.service.plugin.MetricsPluginPromotionGate;
 import com.integrationhub.platform.service.plugin.PluginRuntimeMetricsRecorder;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
@@ -37,20 +39,34 @@ public class PluginDiagnosticsResource {
     private final RemotePluginRegistry remotePlugins;
     private final BackendPluginAdminService adminService;
     private final PluginRuntimeMetricsRecorder metricsRecorder;
+    private final MetricsPluginPromotionGate promotionGate;
 
     public PluginDiagnosticsResource(
             RemotePluginRegistry remotePlugins,
             BackendPluginAdminService adminService,
-            PluginRuntimeMetricsRecorder metricsRecorder) {
+            PluginRuntimeMetricsRecorder metricsRecorder,
+            MetricsPluginPromotionGate promotionGate) {
         this.remotePlugins = remotePlugins;
         this.adminService = adminService;
         this.metricsRecorder = metricsRecorder;
+        this.promotionGate = promotionGate;
     }
 
     @GET
     @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public BackendPluginDiagnosticsResponse diagnostics() {
         return currentDiagnostics();
+    }
+
+    @GET
+    @Path("/canary/metrics")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
+    public List<PluginCanaryMetricsResponse> canaryMetrics() {
+        return versions().stream()
+                .map(version -> toCanaryResponse(promotionGate.evaluate(version.pluginId, version.version)))
+                .sorted(Comparator.comparing(PluginCanaryMetricsResponse::pluginId)
+                        .thenComparing(PluginCanaryMetricsResponse::version))
+                .toList();
     }
 
     @POST
@@ -142,6 +158,21 @@ public class PluginDiagnosticsResource {
                         .toList(),
                 degraded
         );
+    }
+
+    private PluginCanaryMetricsResponse toCanaryResponse(
+            com.integrationhub.platform.service.plugin.PluginCanaryStatus status) {
+        return new PluginCanaryMetricsResponse(
+                status.pluginId(),
+                status.version(),
+                status.totalSamples(),
+                status.failures(),
+                status.failureRatio(),
+                status.windowHours(),
+                status.minSamples(),
+                status.maxFailureRatio(),
+                status.promotable(),
+                status.blockReason());
     }
 
     private List<PluginDescriptorVersion> versions() {

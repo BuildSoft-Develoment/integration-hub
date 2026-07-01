@@ -32,6 +32,19 @@ interface BackendPluginDiagnostics {
   readonly degraded: Record<string, string>;
 }
 
+interface BackendCanaryMetric {
+  readonly pluginId: string;
+  readonly version: string;
+  readonly totalSamples: number;
+  readonly failures: number;
+  readonly failureRatio: number;
+  readonly windowHours: number;
+  readonly minSamples: number;
+  readonly maxFailureRatio: number;
+  readonly promotable: boolean;
+  readonly blockReason?: string | null;
+}
+
 type FrontendPluginStatus = 'installed' | 'quarantined' | 'degraded';
 type FrontendPluginFilter = 'all' | FrontendPluginStatus;
 
@@ -226,6 +239,57 @@ interface FrontendPluginRow {
       </section>
 
       <section>
+        <div class="plugins-section-head">
+          <h3 class="ih-section-title">
+            {{ i18n.t('plugins.canary') }} ({{ canaryMetrics().length }})
+          </h3>
+          <div class="plugins-actions">
+            <button type="button" class="plugins-btn" [disabled]="canaryLoading()" (click)="refreshCanary()">
+              {{ i18n.t('plugins.refresh') }}
+            </button>
+          </div>
+        </div>
+        @if (canaryLoading()) {
+          <p class="ih-muted" role="status" aria-live="polite">{{ i18n.t('plugins.canary.loading') }}</p>
+        } @else if (canaryError()) {
+          <p class="ih-muted" role="alert">{{ i18n.t('plugins.canary.error') }}</p>
+        } @else if (canaryMetrics().length === 0) {
+          <p class="ih-muted">{{ i18n.t('plugins.empty.canary') }}</p>
+        } @else {
+          <table class="ih-table">
+            <thead>
+              <tr>
+                <th>{{ i18n.t('plugins.col.id') }}</th>
+                <th>{{ i18n.t('plugins.col.version') }}</th>
+                <th>{{ i18n.t('plugins.col.samples') }}</th>
+                <th>{{ i18n.t('plugins.col.failures') }}</th>
+                <th>{{ i18n.t('plugins.col.failureRatio') }}</th>
+                <th>{{ i18n.t('plugins.col.status') }}</th>
+                <th>{{ i18n.t('plugins.col.reason') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (m of canaryMetrics(); track m.pluginId + ':' + m.version) {
+                <tr>
+                  <td>{{ m.pluginId }}</td>
+                  <td>{{ m.version }}</td>
+                  <td>{{ m.totalSamples }} / {{ m.minSamples }}</td>
+                  <td>{{ m.failures }}</td>
+                  <td>{{ (m.failureRatio * 100).toFixed(1) }}%</td>
+                  <td>
+                    <span class="plugin-badge" [attr.data-status]="m.promotable ? 'active' : 'inactive'">
+                      {{ i18n.t(m.promotable ? 'plugins.canary.promotable' : 'plugins.canary.blocked') }}
+                    </span>
+                  </td>
+                  <td>{{ m.blockReason ? i18n.t('plugins.canary.reason.' + m.blockReason) : '-' }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </section>
+
+      <section>
         <h3 class="ih-section-title">{{ i18n.t('plugins.marketplace') }}</h3>
         <div class="plugins-market-form">
           <input
@@ -362,9 +426,35 @@ export class PluginDiagnosticsPageComponent implements OnInit {
   readonly backendVersions = computed(() => this.backendDiagnostics()?.versions ?? []);
   readonly busy = signal(false);
   readonly confirmingDeactivate = signal<string | null>(null);
+  readonly canaryLoading = signal(false);
+  readonly canaryError = signal(false);
+  readonly canaryMetrics = signal<readonly BackendCanaryMetric[]>([]);
 
   ngOnInit(): void {
     void this.loadBackendDiagnostics();
+    void this.loadCanaryMetrics();
+  }
+
+  refreshCanary(): void {
+    void this.loadCanaryMetrics();
+  }
+
+  private async loadCanaryMetrics(): Promise<void> {
+    this.canaryLoading.set(true);
+    this.canaryError.set(false);
+    try {
+      this.canaryMetrics.set(
+        await firstValueFrom(
+          this.http.get<readonly BackendCanaryMetric[]>('/api/plugins/canary/metrics', {
+            context: new HttpContext().set(SKIP_GLOBAL_ERROR_FEEDBACK, true),
+          })
+        )
+      );
+    } catch {
+      this.canaryError.set(true);
+    } finally {
+      this.canaryLoading.set(false);
+    }
   }
 
   requestDeactivate(id: string): void {

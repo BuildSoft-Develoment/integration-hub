@@ -69,6 +69,10 @@ test.describe('Integration Hub shell', () => {
     await expect(
       page.getByRole('heading', { name: /Versiones|Versions/ }).first()
     ).toBeVisible();
+    // Canary metrics: read-only dashboard of the promotion window.
+    await expect(
+      page.getByRole('heading', { name: /Metricas de canary|Canary metrics/ }).first()
+    ).toBeVisible();
     // Marketplace section: install-from-outside a backend plugin (preview + install).
     await expect(
       page.getByRole('heading', { name: /Marketplace/ }).first()
@@ -108,7 +112,27 @@ test.describe('Integration Hub shell', () => {
       body: JSON.stringify(body),
     });
 
+    // Generic diagnostics route first; more specific routes are registered after so
+    // they take priority (Playwright uses the most recently registered matching route).
     await page.route('**/api/plugins', (route) => route.fulfill(json(diagnostics)));
+    await page.route('**/api/plugins/canary/metrics', (route) =>
+      route.fulfill(
+        json([
+          {
+            pluginId: 'acme',
+            version: '2.0.0',
+            totalSamples: 5,
+            failures: 1,
+            failureRatio: 0.2,
+            windowHours: 24,
+            minSamples: 3,
+            maxFailureRatio: 0.0,
+            promotable: false,
+            blockReason: 'FAILURE_RATIO_EXCEEDED',
+          },
+        ])
+      )
+    );
     await page.route('**/api/plugins/acme/versions/2.0.0/activate', (route) => {
       activateCalled = true;
       return route.fulfill(json(diagnostics));
@@ -130,6 +154,13 @@ test.describe('Integration Hub shell', () => {
     });
 
     await gotoAuthenticated(page, '/#/plugins');
+
+    // Read-only canary dashboard renders the mocked metric: failure ratio as a
+    // percentage and the blocked status/reason.
+    await expect(page.getByText('20.0%')).toBeVisible({ timeout: 15_000 });
+    await expect(
+      page.getByText(/Ratio de fallo superado|Failure ratio exceeded/).first()
+    ).toBeVisible();
 
     // Version rollback/promote action calls the activate endpoint.
     await page
