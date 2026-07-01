@@ -73,6 +73,10 @@ test.describe('Integration Hub shell', () => {
     await expect(
       page.getByRole('heading', { name: /Metricas de canary|Canary metrics/ }).first()
     ).toBeVisible();
+    // a11y (WCAG 1.3.1): data tables expose column headers via scope and are named
+    // by a visually-hidden caption.
+    await expect(page.locator('table th[scope="col"]').first()).toBeAttached();
+    await expect(page.locator('table caption').first()).toBeAttached();
     // Marketplace section: install-from-outside a backend plugin (preview + install).
     await expect(
       page.getByRole('heading', { name: /Marketplace/ }).first()

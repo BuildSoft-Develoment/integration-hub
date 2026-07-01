@@ -97,11 +97,12 @@ interface FrontendPluginRow {
           </p>
         } @else {
           <table class="ih-table">
+            <caption class="sr-only">{{ i18n.t('plugins.registry') }}</caption>
             <thead>
               <tr>
-                <th>{{ i18n.t('plugins.col.id') }}</th>
-                <th>{{ i18n.t('plugins.col.status') }}</th>
-                <th>{{ i18n.t('plugins.col.detail') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.id') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.status') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.detail') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -143,15 +144,16 @@ interface FrontendPluginRow {
           <p class="ih-muted">{{ i18n.t('plugins.empty.backend') }}</p>
         } @else {
           <table class="ih-table">
+            <caption class="sr-only">{{ i18n.t('plugins.backend') }}</caption>
             <thead>
               <tr>
-                <th>{{ i18n.t('plugins.col.id') }}</th>
-                <th>{{ i18n.t('plugins.col.version') }}</th>
-                <th>{{ i18n.t('plugins.col.transport') }}</th>
-                <th>{{ i18n.t('plugins.col.types') }}</th>
-                <th>{{ i18n.t('plugins.col.status') }}</th>
-                <th>{{ i18n.t('plugins.col.reason') }}</th>
-                <th>{{ i18n.t('plugins.col.actions') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.id') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.version') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.transport') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.types') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.status') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.reason') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.actions') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -202,13 +204,14 @@ interface FrontendPluginRow {
           <p class="ih-muted">{{ i18n.t('plugins.empty.versions') }}</p>
         } @else {
           <table class="ih-table">
+            <caption class="sr-only">{{ i18n.t('plugins.versions') }}</caption>
             <thead>
               <tr>
-                <th>{{ i18n.t('plugins.col.id') }}</th>
-                <th>{{ i18n.t('plugins.col.version') }}</th>
-                <th>{{ i18n.t('plugins.col.channel') }}</th>
-                <th>{{ i18n.t('plugins.col.status') }}</th>
-                <th>{{ i18n.t('plugins.col.actions') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.id') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.version') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.channel') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.status') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.actions') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -257,15 +260,16 @@ interface FrontendPluginRow {
           <p class="ih-muted">{{ i18n.t('plugins.empty.canary') }}</p>
         } @else {
           <table class="ih-table">
+            <caption class="sr-only">{{ i18n.t('plugins.canary') }}</caption>
             <thead>
               <tr>
-                <th>{{ i18n.t('plugins.col.id') }}</th>
-                <th>{{ i18n.t('plugins.col.version') }}</th>
-                <th>{{ i18n.t('plugins.col.samples') }}</th>
-                <th>{{ i18n.t('plugins.col.failures') }}</th>
-                <th>{{ i18n.t('plugins.col.failureRatio') }}</th>
-                <th>{{ i18n.t('plugins.col.status') }}</th>
-                <th>{{ i18n.t('plugins.col.reason') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.id') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.version') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.samples') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.failures') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.failureRatio') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.status') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.reason') }}</th>
               </tr>
             </thead>
             <tbody>
@@ -342,6 +346,7 @@ interface FrontendPluginRow {
   `,
   styles: [
     `
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
       .plugins-section-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
       .plugins-actions { display: flex; gap: 0.5rem; }
       .plugins-filters { display: flex; flex-wrap: wrap; gap: 0.375rem; }

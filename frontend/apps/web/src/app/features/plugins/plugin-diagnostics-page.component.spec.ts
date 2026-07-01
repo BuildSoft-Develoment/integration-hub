@@ -109,6 +109,49 @@ describe('PluginDiagnosticsPageComponent', () => {
     http.verify();
   });
 
+  it('gives data tables accessible semantics (scope + caption)', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({
+      installed: [
+        {
+          id: 'acme',
+          version: '1.0.0',
+          spiVersion: '1',
+          providedTypes: ['ACME_DO'],
+          transport: 'GRPC',
+          trusted: true,
+          status: 'ACTIVE',
+          degradedReason: null,
+        },
+      ],
+      degraded: {},
+    });
+    http.expectOne('/api/plugins/canary/metrics').flush([]);
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const el = fixture.nativeElement as HTMLElement;
+    const headers = Array.from(el.querySelectorAll('th')) as HTMLTableCellElement[];
+    expect(headers.length).toBeGreaterThan(0);
+    // WCAG 1.3.1: every header cell associates its column via scope.
+    expect(headers.every((th) => th.getAttribute('scope') === 'col')).toBe(true);
+    // Each rendered data table has an accessible name via a visually-hidden caption.
+    const captions = Array.from(el.querySelectorAll('table caption')) as HTMLElement[];
+    expect(captions.length).toBeGreaterThan(0);
+    expect(captions.every((c) => (c.textContent ?? '').trim().length > 0)).toBe(true);
+    http.verify();
+  });
+
   it('renders backend plugin diagnostics', async () => {
     TestBed.configureTestingModule({
       providers: [
