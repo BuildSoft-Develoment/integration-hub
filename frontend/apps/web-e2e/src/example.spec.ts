@@ -40,6 +40,16 @@ test.describe('Integration Hub shell', () => {
     await expect(page.getByRole('heading', { name: /Plugins/ }).first()).toBeVisible({
       timeout: 15_000,
     });
+    // Unified, filterable frontend registry view.
+    await expect(
+      page.getByRole('heading', { name: /Registro frontend|Frontend registry/ }).first()
+    ).toBeVisible({ timeout: 15_000 });
+    const filterGroup = page.getByRole('group', { name: /Registro frontend|Frontend registry/ });
+    await expect(filterGroup).toBeVisible();
+    // Filter chips toggle aria-pressed; clicking "Installed" activates it.
+    const installedChip = filterGroup.getByRole('button', { name: /Instalados|Installed/ });
+    await installedChip.click();
+    await expect(installedChip).toHaveAttribute('aria-pressed', 'true');
     // Management controls over the backend lifecycle API (refresh + reload).
     await expect(
       page.getByRole('button', { name: /Refrescar|Refresh/ }).first()

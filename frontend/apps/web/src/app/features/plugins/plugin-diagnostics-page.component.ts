@@ -32,6 +32,18 @@ interface BackendPluginDiagnostics {
   readonly degraded: Record<string, string>;
 }
 
+type FrontendPluginStatus = 'installed' | 'quarantined' | 'degraded';
+type FrontendPluginFilter = 'all' | FrontendPluginStatus;
+
+interface FrontendPluginRow {
+  readonly key: string;
+  readonly id: string;
+  readonly status: FrontendPluginStatus;
+  readonly badge: string;
+  readonly statusLabel: string;
+  readonly detail: string;
+}
+
 @Component({
   selector: 'app-plugin-diagnostics-page',
   standalone: true,
@@ -44,80 +56,51 @@ interface BackendPluginDiagnostics {
       </header>
 
       <section>
-        <h3 class="ih-section-title">
-          {{ i18n.t('plugins.installed') }} ({{ installed().length }})
-        </h3>
-        @if (installed().length === 0) {
-          <p class="ih-muted">{{ i18n.t('plugins.empty.installed') }}</p>
+        <div class="plugins-section-head">
+          <h3 class="ih-section-title">
+            {{ i18n.t('plugins.registry') }} ({{ frontendRows().length }})
+          </h3>
+          <div class="plugins-filters" role="group" [attr.aria-label]="i18n.t('plugins.registry')">
+            @for (chip of frontendFilters; track chip.value) {
+              <button
+                type="button"
+                class="plugins-chip"
+                [class.plugins-chip--active]="frontendFilter() === chip.value"
+                [attr.aria-pressed]="frontendFilter() === chip.value"
+                (click)="frontendFilter.set(chip.value)"
+              >
+                {{ i18n.t(chip.label) }} ({{ chip.count() }})
+              </button>
+            }
+          </div>
+        </div>
+        @if (filteredFrontendRows().length === 0) {
+          <p class="ih-muted">
+            {{
+              frontendRows().length === 0
+                ? i18n.t('plugins.empty.installed')
+                : i18n.t('plugins.empty.filtered')
+            }}
+          </p>
         } @else {
           <table class="ih-table">
             <thead>
               <tr>
                 <th>{{ i18n.t('plugins.col.id') }}</th>
-                <th>{{ i18n.t('plugins.col.name') }}</th>
-                <th>{{ i18n.t('plugins.col.version') }}</th>
-                <th>{{ i18n.t('plugins.col.origin') }}</th>
+                <th>{{ i18n.t('plugins.col.status') }}</th>
+                <th>{{ i18n.t('plugins.col.detail') }}</th>
               </tr>
             </thead>
             <tbody>
-              @for (plugin of installed(); track plugin.id) {
+              @for (row of filteredFrontendRows(); track row.key) {
                 <tr>
-                  <td>{{ plugin.id }}</td>
-                  <td>{{ plugin.displayName }}</td>
-                  <td>{{ plugin.version }}</td>
-                  <td>{{ i18n.t('plugins.origin.' + plugin.origin) }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        }
-      </section>
-
-      <section>
-        <h3 class="ih-section-title">
-          {{ i18n.t('plugins.quarantined') }} ({{ quarantined().length }})
-        </h3>
-        @if (quarantined().length === 0) {
-          <p class="ih-muted">{{ i18n.t('plugins.empty.quarantined') }}</p>
-        } @else {
-          <table class="ih-table">
-            <thead>
-              <tr>
-                <th>{{ i18n.t('plugins.col.id') }}</th>
-                <th>{{ i18n.t('plugins.col.reason') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (plugin of quarantined(); track plugin.id) {
-                <tr>
-                  <td>{{ plugin.id }}</td>
-                  <td>{{ plugin.reason }}</td>
-                </tr>
-              }
-            </tbody>
-          </table>
-        }
-      </section>
-
-      <section>
-        <h3 class="ih-section-title">
-          {{ i18n.t('plugins.degraded') }} ({{ degraded().length }})
-        </h3>
-        @if (degraded().length === 0) {
-          <p class="ih-muted">{{ i18n.t('plugins.empty.degraded') }}</p>
-        } @else {
-          <table class="ih-table">
-            <thead>
-              <tr>
-                <th>{{ i18n.t('plugins.col.id') }}</th>
-                <th>{{ i18n.t('plugins.col.reason') }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (plugin of degraded(); track plugin.id) {
-                <tr>
-                  <td>{{ plugin.id }}</td>
-                  <td>{{ plugin.reason }}</td>
+                  <td>{{ row.id }}</td>
+                  <td>
+                    <span class="plugin-badge" [attr.data-status]="row.badge">
+                      {{ i18n.t(row.statusLabel) }}
+                    </span>
+                  </td>
+                  <td>{{ row.detail }}</td>
                 </tr>
               }
             </tbody>
@@ -295,8 +278,12 @@ interface BackendPluginDiagnostics {
   `,
   styles: [
     `
-      .plugins-section-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+      .plugins-section-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
       .plugins-actions { display: flex; gap: 0.5rem; }
+      .plugins-filters { display: flex; flex-wrap: wrap; gap: 0.375rem; }
+      .plugins-chip { padding: 0.2rem 0.7rem; border: 1px solid var(--ih-border-strong); border-radius: var(--ih-radius-pill); background: transparent; color: var(--ih-text-soft); cursor: pointer; font-size: var(--ih-font-size-xs); font-weight: var(--ih-font-weight-medium); }
+      .plugins-chip:hover { border-color: var(--ih-accent); color: var(--ih-text); }
+      .plugins-chip--active { background: var(--ih-status-info-bg); border-color: var(--ih-accent); color: var(--ih-accent-strong); }
       .plugins-btn { padding: 0.25rem 0.6rem; border: 1px solid var(--ih-border-strong); border-radius: var(--ih-radius-sm); background: var(--ih-surface-alt); color: inherit; cursor: pointer; font-size: var(--ih-font-size-sm); }
       .plugins-btn:disabled { opacity: 0.5; cursor: not-allowed; }
       .plugins-btn--danger { border-color: var(--ih-status-error); color: var(--ih-status-error); font-weight: var(--ih-font-weight-medium); }
@@ -318,6 +305,53 @@ export class PluginDiagnosticsPageComponent implements OnInit {
   readonly installed = computed(() => this.registry.diagnostics().installed);
   readonly quarantined = computed(() => this.registry.diagnostics().quarantined);
   readonly degraded = computed(() => this.registry.diagnostics().degraded);
+
+  readonly frontendFilter = signal<FrontendPluginFilter>('all');
+
+  readonly frontendRows = computed<readonly FrontendPluginRow[]>(() => {
+    const installed = this.installed().map<FrontendPluginRow>((p) => ({
+      key: `installed:${p.id}`,
+      id: p.id,
+      status: 'installed',
+      badge: 'active',
+      statusLabel: 'plugins.installed',
+      detail: `${p.displayName} · ${p.version} · ${this.i18n.t('plugins.origin.' + p.origin)}`,
+    }));
+    const quarantined = this.quarantined().map<FrontendPluginRow>((p) => ({
+      key: `quarantined:${p.id}`,
+      id: p.id,
+      status: 'quarantined',
+      badge: 'degraded',
+      statusLabel: 'plugins.quarantined',
+      detail: p.reason,
+    }));
+    const degraded = this.degraded().map<FrontendPluginRow>((p) => ({
+      key: `degraded:${p.id}`,
+      id: p.id,
+      status: 'degraded',
+      badge: 'untrusted',
+      statusLabel: 'plugins.degraded',
+      detail: p.reason,
+    }));
+    return [...installed, ...quarantined, ...degraded];
+  });
+
+  readonly filteredFrontendRows = computed<readonly FrontendPluginRow[]>(() => {
+    const filter = this.frontendFilter();
+    const rows = this.frontendRows();
+    return filter === 'all' ? rows : rows.filter((row) => row.status === filter);
+  });
+
+  readonly frontendFilters: ReadonlyArray<{
+    value: FrontendPluginFilter;
+    label: string;
+    count: () => number;
+  }> = [
+    { value: 'all', label: 'plugins.filter.all', count: () => this.frontendRows().length },
+    { value: 'installed', label: 'plugins.installed', count: () => this.installed().length },
+    { value: 'quarantined', label: 'plugins.quarantined', count: () => this.quarantined().length },
+    { value: 'degraded', label: 'plugins.degraded', count: () => this.degraded().length },
+  ];
   readonly backendLoading = signal(false);
   readonly backendError = signal(false);
   readonly backendDiagnostics = signal<BackendPluginDiagnostics | null>(null);

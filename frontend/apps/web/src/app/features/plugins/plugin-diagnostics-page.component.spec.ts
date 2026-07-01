@@ -40,6 +40,45 @@ describe('PluginDiagnosticsPageComponent', () => {
     http.verify();
   });
 
+  it('filters the unified registry view by status', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    const registry = TestBed.inject(AppPluginRuntimeRegistry);
+    registry.installExternalManifests([
+      { id: 'good', version: '1.0.0', platformVersion: '1.0.0', displayName: 'Good Plugin' },
+      { id: 'future', version: '1.0.0', platformVersion: '2.0.0', displayName: 'Future Plugin' },
+    ]);
+
+    const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    await fixture.whenStable();
+    const component = fixture.componentInstance;
+
+    // 'all' shows installed (platform + good) and quarantined (future).
+    expect(component.filteredFrontendRows().length).toBe(component.frontendRows().length);
+    expect(component.frontendRows().length).toBeGreaterThanOrEqual(3);
+
+    component.frontendFilter.set('quarantined');
+    const quarantined = component.filteredFrontendRows();
+    expect(quarantined.every((row) => row.status === 'quarantined')).toBe(true);
+    expect(quarantined.some((row) => row.id === 'future')).toBe(true);
+    expect(quarantined.some((row) => row.id === 'good')).toBe(false);
+
+    component.frontendFilter.set('installed');
+    const installed = component.filteredFrontendRows();
+    expect(installed.every((row) => row.status === 'installed')).toBe(true);
+    expect(installed.some((row) => row.id === 'good')).toBe(true);
+    http.verify();
+  });
+
   it('renders backend plugin diagnostics', async () => {
     TestBed.configureTestingModule({
       providers: [
