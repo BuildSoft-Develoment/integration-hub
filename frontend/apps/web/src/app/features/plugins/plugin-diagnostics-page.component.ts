@@ -15,8 +15,20 @@ interface BackendPluginDescriptor {
   readonly degradedReason?: string | null;
 }
 
+interface BackendPluginVersion {
+  readonly id: string;
+  readonly version: string;
+  readonly spiVersion: string;
+  readonly transport: string;
+  readonly trusted: boolean;
+  readonly active: boolean;
+  readonly channel?: string | null;
+  readonly pinned: boolean;
+}
+
 interface BackendPluginDiagnostics {
   readonly installed: readonly BackendPluginDescriptor[];
+  readonly versions?: readonly BackendPluginVersion[];
   readonly degraded: Record<string, string>;
 }
 
@@ -187,6 +199,50 @@ interface BackendPluginDiagnostics {
       </section>
 
       <section>
+        <h3 class="ih-section-title">
+          {{ i18n.t('plugins.versions') }} ({{ backendVersions().length }})
+        </h3>
+        @if (backendVersions().length === 0) {
+          <p class="ih-muted">{{ i18n.t('plugins.empty.versions') }}</p>
+        } @else {
+          <table class="ih-table">
+            <thead>
+              <tr>
+                <th>{{ i18n.t('plugins.col.id') }}</th>
+                <th>{{ i18n.t('plugins.col.version') }}</th>
+                <th>{{ i18n.t('plugins.col.channel') }}</th>
+                <th>{{ i18n.t('plugins.col.status') }}</th>
+                <th>{{ i18n.t('plugins.col.actions') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (v of backendVersions(); track v.id + ':' + v.version) {
+                <tr>
+                  <td>{{ v.id }}</td>
+                  <td>{{ v.version }} / SPI {{ v.spiVersion }}</td>
+                  <td>{{ v.channel ?? '-' }}</td>
+                  <td>
+                    <span class="plugin-badge" [attr.data-status]="v.active ? 'active' : 'inactive'">
+                      {{ i18n.t(v.active ? 'plugins.version.active' : 'plugins.version.inactive') }}
+                    </span>
+                  </td>
+                  <td>
+                    @if (!v.active) {
+                      <button type="button" class="plugins-btn" [disabled]="busy()" (click)="activateVersion(v.id, v.version)">
+                        {{ i18n.t('plugins.activateVersion') }}
+                      </button>
+                    } @else {
+                      -
+                    }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </section>
+
+      <section>
         <h3 class="ih-section-title">{{ i18n.t('plugins.marketplace') }}</h3>
         <div class="plugins-market-form">
           <input
@@ -250,6 +306,7 @@ interface BackendPluginDiagnostics {
       .plugin-badge[data-status='active'] { background: #dcfce7; color: #166534; }
       .plugin-badge[data-status='degraded'] { background: #fee2e2; color: #991b1b; }
       .plugin-badge[data-status='untrusted'] { background: #fef9c3; color: #854d0e; }
+      .plugin-badge[data-status='inactive'] { background: #e5e7eb; color: #374151; }
     `,
   ],
 })
@@ -265,6 +322,7 @@ export class PluginDiagnosticsPageComponent implements OnInit {
   readonly backendError = signal(false);
   readonly backendDiagnostics = signal<BackendPluginDiagnostics | null>(null);
   readonly backendInstalled = computed(() => this.backendDiagnostics()?.installed ?? []);
+  readonly backendVersions = computed(() => this.backendDiagnostics()?.versions ?? []);
   readonly busy = signal(false);
   readonly confirmingDeactivate = signal<string | null>(null);
 
@@ -339,6 +397,15 @@ export class PluginDiagnosticsPageComponent implements OnInit {
 
   deactivate(id: string): void {
     void this.runAction(() => this.http.post(`/api/plugins/${encodeURIComponent(id)}/deactivate`, {}));
+  }
+
+  activateVersion(id: string, version: string): void {
+    void this.runAction(() =>
+      this.http.post(
+        `/api/plugins/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}/activate`,
+        {}
+      )
+    );
   }
 
   private async runAction(action: () => Observable<unknown>): Promise<void> {

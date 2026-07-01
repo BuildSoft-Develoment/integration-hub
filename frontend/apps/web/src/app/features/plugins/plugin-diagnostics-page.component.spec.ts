@@ -255,6 +255,64 @@ describe('PluginDiagnosticsPageComponent', () => {
     expect(component.marketplacePreview()).toBeNull();
     http.verify();
   });
+
+  it('activates a plugin version via the API and refetches diagnostics', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({ installed: [], versions: [], degraded: {} });
+    await fixture.whenStable();
+
+    fixture.componentInstance.activateVersion('acme', '2.0.0');
+    http
+      .expectOne((r) => r.method === 'POST' && r.url === '/api/plugins/acme/versions/2.0.0/activate')
+      .flush({ installed: [], versions: [], degraded: {} });
+    await fixture.whenStable();
+    http.expectOne('/api/plugins').flush({ installed: [], versions: [], degraded: {} });
+    http.verify();
+  });
+
+  it('renders backend plugin versions with an activate action for inactive ones', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({
+      installed: [],
+      versions: [
+        { id: 'acme', version: '1.0.0', spiVersion: '1', transport: 'GRPC', trusted: true, active: true, channel: 'stable', pinned: false },
+        { id: 'acme', version: '2.0.0', spiVersion: '1', transport: 'GRPC', trusted: true, active: false, channel: 'canary', pinned: false },
+      ],
+      degraded: {},
+    });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('2.0.0');
+    expect(text).toContain('canary');
+
+    const labels = Array.from(
+      fixture.nativeElement.querySelectorAll('button') as NodeListOf<HTMLButtonElement>
+    ).map((b) => (b.textContent ?? '').trim());
+    expect(labels.some((l) => /Activar version|Activate version/.test(l))).toBe(true);
+    http.verify();
+  });
 });
 
 function platformManifest(): AppPluginManifest {

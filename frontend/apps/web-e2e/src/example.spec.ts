@@ -47,6 +47,10 @@ test.describe('Integration Hub shell', () => {
     await expect(
       page.getByRole('button', { name: /Recargar|Reload/ }).first()
     ).toBeVisible();
+    // Versions section: activate/rollback a specific plugin version.
+    await expect(
+      page.getByRole('heading', { name: /Versiones|Versions/ }).first()
+    ).toBeVisible();
     // Marketplace section: install-from-outside a backend plugin (preview + install).
     await expect(
       page.getByRole('heading', { name: /Marketplace/ }).first()
