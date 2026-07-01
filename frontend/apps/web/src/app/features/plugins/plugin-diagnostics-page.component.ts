@@ -297,16 +297,16 @@ interface BackendPluginDiagnostics {
     `
       .plugins-section-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
       .plugins-actions { display: flex; gap: 0.5rem; }
-      .plugins-btn { padding: 0.25rem 0.6rem; border: 1px solid var(--border, #cbd5e1); border-radius: 6px; background: var(--surface-1, #fff); color: inherit; cursor: pointer; font-size: 0.85rem; }
+      .plugins-btn { padding: 0.25rem 0.6rem; border: 1px solid var(--ih-border-strong); border-radius: var(--ih-radius-sm); background: var(--ih-surface-alt); color: inherit; cursor: pointer; font-size: var(--ih-font-size-sm); }
       .plugins-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-      .plugins-btn--danger { border-color: #ef4444; color: #991b1b; font-weight: 500; }
+      .plugins-btn--danger { border-color: var(--ih-status-error); color: var(--ih-status-error); font-weight: var(--ih-font-weight-medium); }
       .plugins-market-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
-      .plugins-input { padding: 0.3rem 0.5rem; border: 1px solid var(--border, #cbd5e1); border-radius: 6px; background: var(--surface-2, #fff); color: inherit; min-width: 14rem; }
-      .plugin-badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.78rem; font-weight: 500; }
-      .plugin-badge[data-status='active'] { background: #dcfce7; color: #166534; }
-      .plugin-badge[data-status='degraded'] { background: #fee2e2; color: #991b1b; }
-      .plugin-badge[data-status='untrusted'] { background: #fef9c3; color: #854d0e; }
-      .plugin-badge[data-status='inactive'] { background: #e5e7eb; color: #374151; }
+      .plugins-input { padding: 0.3rem 0.5rem; border: 1px solid var(--ih-border-strong); border-radius: var(--ih-radius-sm); background: var(--ih-surface-alt); color: inherit; min-width: 14rem; }
+      .plugin-badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: var(--ih-radius-pill); font-size: var(--ih-font-size-xs); font-weight: var(--ih-font-weight-medium); }
+      .plugin-badge[data-status='active'] { background: var(--ih-status-success-bg); color: var(--ih-status-success); }
+      .plugin-badge[data-status='degraded'] { background: var(--ih-status-error-bg); color: var(--ih-status-error); }
+      .plugin-badge[data-status='untrusted'] { background: var(--ih-status-warning-bg); color: var(--ih-status-warning); }
+      .plugin-badge[data-status='inactive'] { background: color-mix(in srgb, var(--ih-status-neutral) 14%, transparent); color: var(--ih-status-neutral); }
     `,
   ],
 })
