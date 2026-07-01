@@ -57,6 +57,7 @@ export const es = {
   'plugins.col.samples': 'Muestras / min',
   'plugins.col.failures': 'Fallos',
   'plugins.col.failureRatio': 'Ratio de fallo',
+  'plugins.col.trend': 'Tendencia',
   'plugins.canary.promotable': 'Promocionable',
   'plugins.canary.blocked': 'Bloqueado',
   'plugins.canary.reason.INSUFFICIENT_SAMPLES': 'Muestras insuficientes',

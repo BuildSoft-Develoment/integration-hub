@@ -1,7 +1,10 @@
 package com.integrationhub.platform.api.response.plugin;
 
+import java.util.List;
+
 /**
  * Read-only canary metrics for a plugin version, exposed to admin/auditor dashboards.
+ * {@code trend} is the per-bucket failure ratio across the window (oldest first).
  */
 public record PluginCanaryMetricsResponse(
         String pluginId,
@@ -13,5 +16,6 @@ public record PluginCanaryMetricsResponse(
         int minSamples,
         double maxFailureRatio,
         boolean promotable,
-        String blockReason) {
+        String blockReason,
+        List<Double> trend) {
 }

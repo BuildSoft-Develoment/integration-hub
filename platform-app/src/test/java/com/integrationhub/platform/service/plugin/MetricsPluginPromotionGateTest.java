@@ -51,6 +51,8 @@ class MetricsPluginPromotionGateTest {
         var repository = mock(PluginInvocationMetricRepository.class);
         when(repository.summarize(eq("acme"), eq("1.1.0"), any()))
                 .thenReturn(new PluginInvocationMetricRepository.PluginMetricSummary(4, 0));
+        when(repository.summarizeBetween(eq("acme"), eq("1.1.0"), any(), any()))
+                .thenReturn(new PluginInvocationMetricRepository.PluginMetricSummary(1, 0));
         var gate = new MetricsPluginPromotionGate(repository, 3, 0.0, 24);
 
         var status = gate.evaluate("acme", "1.1.0");
@@ -64,6 +66,8 @@ class MetricsPluginPromotionGateTest {
         assertEquals(24, status.windowHours());
         assertTrue(status.promotable());
         assertNull(status.blockReason());
+        // 12 equal-width buckets across the window (oldest first).
+        assertEquals(12, status.trend().size());
     }
 
     @Test
@@ -71,6 +75,8 @@ class MetricsPluginPromotionGateTest {
         var repository = mock(PluginInvocationMetricRepository.class);
         when(repository.summarize(eq("acme"), eq("1.1.0"), any()))
                 .thenReturn(new PluginInvocationMetricRepository.PluginMetricSummary(1, 0));
+        when(repository.summarizeBetween(eq("acme"), eq("1.1.0"), any(), any()))
+                .thenReturn(new PluginInvocationMetricRepository.PluginMetricSummary(0, 0));
         var gate = new MetricsPluginPromotionGate(repository, 3, 0.0, 24);
 
         var status = gate.evaluate("acme", "1.1.0");
@@ -84,6 +90,8 @@ class MetricsPluginPromotionGateTest {
         var repository = mock(PluginInvocationMetricRepository.class);
         when(repository.summarize(eq("acme"), eq("1.1.0"), any()))
                 .thenReturn(new PluginInvocationMetricRepository.PluginMetricSummary(4, 2));
+        when(repository.summarizeBetween(eq("acme"), eq("1.1.0"), any(), any()))
+                .thenReturn(new PluginInvocationMetricRepository.PluginMetricSummary(2, 1));
         var gate = new MetricsPluginPromotionGate(repository, 3, 0.0, 24);
 
         var status = gate.evaluate("acme", "1.1.0");
@@ -91,5 +99,21 @@ class MetricsPluginPromotionGateTest {
         assertFalse(status.promotable());
         assertEquals(0.5, status.failureRatio());
         assertEquals("FAILURE_RATIO_EXCEEDED", status.blockReason());
+    }
+
+    @Test
+    void evaluateBuildsTwelveBucketTrendOldestFirst() {
+        var repository = mock(PluginInvocationMetricRepository.class);
+        when(repository.summarize(eq("acme"), eq("1.1.0"), any()))
+                .thenReturn(new PluginInvocationMetricRepository.PluginMetricSummary(6, 1));
+        // Each bucket reports a 25% failure ratio (1 failure out of 4).
+        when(repository.summarizeBetween(eq("acme"), eq("1.1.0"), any(), any()))
+                .thenReturn(new PluginInvocationMetricRepository.PluginMetricSummary(4, 1));
+        var gate = new MetricsPluginPromotionGate(repository, 3, 0.0, 24);
+
+        var trend = gate.evaluate("acme", "1.1.0").trend();
+
+        assertEquals(12, trend.size());
+        assertTrue(trend.stream().allMatch(ratio -> ratio == 0.25));
     }
 }

@@ -43,6 +43,7 @@ interface BackendCanaryMetric {
   readonly maxFailureRatio: number;
   readonly promotable: boolean;
   readonly blockReason?: string | null;
+  readonly trend?: readonly number[] | null;
 }
 
 type FrontendPluginStatus = 'installed' | 'quarantined' | 'degraded';
@@ -268,6 +269,7 @@ interface FrontendPluginRow {
                 <th scope="col">{{ i18n.t('plugins.col.samples') }}</th>
                 <th scope="col">{{ i18n.t('plugins.col.failures') }}</th>
                 <th scope="col">{{ i18n.t('plugins.col.failureRatio') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.trend') }}</th>
                 <th scope="col">{{ i18n.t('plugins.col.status') }}</th>
                 <th scope="col">{{ i18n.t('plugins.col.reason') }}</th>
               </tr>
@@ -280,6 +282,31 @@ interface FrontendPluginRow {
                   <td>{{ m.totalSamples }} / {{ m.minSamples }}</td>
                   <td>{{ m.failures }}</td>
                   <td>{{ (m.failureRatio * 100).toFixed(1) }}%</td>
+                  <td>
+                    @if (m.trend && m.trend.length > 1) {
+                      <svg
+                        class="canary-spark"
+                        viewBox="0 0 100 24"
+                        preserveAspectRatio="none"
+                        role="img"
+                        [style.color]="m.promotable ? 'var(--ih-status-success)' : 'var(--ih-status-error)'"
+                        [attr.aria-label]="
+                          i18n.t('plugins.col.trend') + ': ' + (m.failureRatio * 100).toFixed(1) + '%'
+                        "
+                      >
+                        <polyline
+                          [attr.points]="sparkline(m.trend)"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="1.5"
+                          stroke-linejoin="round"
+                          stroke-linecap="round"
+                        />
+                      </svg>
+                    } @else {
+                      <span class="ih-muted">-</span>
+                    }
+                  </td>
                   <td>
                     <span class="plugin-badge" [attr.data-status]="m.promotable ? 'active' : 'inactive'">
                       {{ i18n.t(m.promotable ? 'plugins.canary.promotable' : 'plugins.canary.blocked') }}
@@ -361,6 +388,7 @@ interface FrontendPluginRow {
       .plugins-btn--danger { border-color: var(--ih-status-error); color: var(--ih-status-error); font-weight: var(--ih-font-weight-medium); }
       .plugins-market-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
       .plugins-input { padding: 0.3rem 0.5rem; border: 1px solid var(--ih-border-strong); border-radius: var(--ih-radius-sm); background: var(--ih-surface-alt); color: inherit; min-width: 14rem; }
+      .canary-spark { display: inline-block; width: 90px; height: 22px; vertical-align: middle; }
       .plugin-badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: var(--ih-radius-pill); font-size: var(--ih-font-size-xs); font-weight: var(--ih-font-weight-medium); }
       .plugin-badge[data-status='active'] { background: var(--ih-status-success-bg); color: var(--ih-status-success); }
       .plugin-badge[data-status='degraded'] { background: var(--ih-status-error-bg); color: var(--ih-status-error); }
@@ -442,6 +470,29 @@ export class PluginDiagnosticsPageComponent implements OnInit {
 
   refreshCanary(): void {
     void this.loadCanaryMetrics();
+  }
+
+  /**
+   * Builds the `points` for a failure-ratio sparkline polyline in a 100x24 viewBox.
+   * The domain is fixed to [0, 1] (0% at the bottom, 100% at the top) so the line is a
+   * faithful, comparable view of the ratio, oldest sample on the left.
+   */
+  sparkline(trend: readonly number[]): string {
+    const width = 100;
+    const height = 24;
+    const pad = 2;
+    const n = trend.length;
+    if (n === 0) {
+      return '';
+    }
+    return trend
+      .map((raw, i) => {
+        const value = Math.min(1, Math.max(0, raw));
+        const x = n === 1 ? width / 2 : pad + (i * (width - 2 * pad)) / (n - 1);
+        const y = height - pad - value * (height - 2 * pad);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(' ');
   }
 
   private async loadCanaryMetrics(): Promise<void> {

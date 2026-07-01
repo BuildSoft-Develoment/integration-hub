@@ -215,6 +215,7 @@ describe('PluginDiagnosticsPageComponent', () => {
         maxFailureRatio: 0.0,
         promotable: false,
         blockReason: 'FAILURE_RATIO_EXCEEDED',
+        trend: [0, 0.1, 0.3, 0.2],
       },
     ]);
     await fixture.whenStable();
@@ -230,7 +231,31 @@ describe('PluginDiagnosticsPageComponent', () => {
     expect(text).toContain('20.0%');
     expect(text).toMatch(/Bloqueado|Blocked/);
     expect(text).toMatch(/Ratio de fallo superado|Failure ratio exceeded/);
+    // The trend sparkline renders as an accessible SVG polyline.
+    const spark = fixture.nativeElement.querySelector('svg.canary-spark') as SVGElement | null;
+    expect(spark).not.toBeNull();
+    expect(spark?.getAttribute('role')).toBe('img');
+    const polyline = spark?.querySelector('polyline');
+    expect((polyline?.getAttribute('points') ?? '').split(' ').length).toBe(4);
     http.verify();
+  });
+
+  it('maps a trend series to sparkline points in a fixed [0,1] domain', () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+    const component = TestBed.createComponent(PluginDiagnosticsPageComponent).componentInstance;
+
+    const points = component.sparkline([0, 1]).split(' ');
+    expect(points.length).toBe(2);
+    // Ratio 0 sits at the bottom (max y), ratio 1 at the top (min y).
+    const y0 = Number(points[0].split(',')[1]);
+    const y1 = Number(points[1].split(',')[1]);
+    expect(y0).toBeGreaterThan(y1);
   });
 
   it('reloads backend plugins via the API and refetches diagnostics', async () => {

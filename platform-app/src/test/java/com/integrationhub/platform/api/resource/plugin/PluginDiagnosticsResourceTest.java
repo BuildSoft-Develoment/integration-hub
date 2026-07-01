@@ -248,7 +248,8 @@ class PluginDiagnosticsResourceTest {
         when(admin.listVersions()).thenReturn(List.of(version));
         var gate = mock(MetricsPluginPromotionGate.class);
         when(gate.evaluate("acme", "2.0.0")).thenReturn(new PluginCanaryStatus(
-                "acme", "2.0.0", 5, 1, 0.2, 24, 3, 0.0, false, "FAILURE_RATIO_EXCEEDED"));
+                "acme", "2.0.0", 5, 1, 0.2, 24, 3, 0.0, false, "FAILURE_RATIO_EXCEEDED",
+                List.of(0.0, 0.5, 0.2)));
         var resource = new PluginDiagnosticsResource(
                 registry, admin, mock(PluginRuntimeMetricsRecorder.class), gate);
 
@@ -262,6 +263,7 @@ class PluginDiagnosticsResourceTest {
         assertEquals(1, metrics.getFirst().failures());
         assertEquals(false, metrics.getFirst().promotable());
         assertEquals("FAILURE_RATIO_EXCEEDED", metrics.getFirst().blockReason());
+        assertEquals(List.of(0.0, 0.5, 0.2), metrics.getFirst().trend());
     }
 
     private PluginDiagnosticsResource resource(RemotePluginRegistry registry, BackendPluginAdminService admin) {

@@ -172,7 +172,8 @@ public class PluginDiagnosticsResource {
                 status.minSamples(),
                 status.maxFailureRatio(),
                 status.promotable(),
-                status.blockReason());
+                status.blockReason(),
+                status.trend());
     }
 
     private List<PluginDescriptorVersion> versions() {

@@ -133,6 +133,7 @@ test.describe('Integration Hub shell', () => {
             maxFailureRatio: 0.0,
             promotable: false,
             blockReason: 'FAILURE_RATIO_EXCEEDED',
+            trend: [0, 0.1, 0.2, 0.15, 0.3, 0.2],
           },
         ])
       )
@@ -165,6 +166,11 @@ test.describe('Integration Hub shell', () => {
     await expect(
       page.getByText(/Ratio de fallo superado|Failure ratio exceeded/).first()
     ).toBeVisible();
+    // Temporal trend sparkline: an accessible SVG polyline with one point per bucket.
+    const spark = page.locator('svg.canary-spark[role="img"]').first();
+    await expect(spark).toBeAttached();
+    const points = await spark.locator('polyline').getAttribute('points');
+    expect((points ?? '').trim().split(/\s+/).length).toBe(6);
 
     // Version rollback/promote action calls the activate endpoint.
     await page

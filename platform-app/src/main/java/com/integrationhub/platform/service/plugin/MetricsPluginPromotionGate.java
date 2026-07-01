@@ -4,10 +4,15 @@ import com.integrationhub.platform.repository.PluginInvocationMetricRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @ApplicationScoped
 public class MetricsPluginPromotionGate implements PluginPromotionGate {
+
+    private static final int TREND_BUCKETS = 12;
 
     private final PluginInvocationMetricRepository repository;
     private final int minSamples;
@@ -56,7 +61,8 @@ public class MetricsPluginPromotionGate implements PluginPromotionGate {
         }
         var id = pluginId.trim();
         var ver = version.trim();
-        var since = LocalDateTime.now().minusHours(windowHours);
+        var now = LocalDateTime.now();
+        var since = now.minusHours(windowHours);
         var summary = repository.summarize(id, ver, since);
         boolean enoughSamples = summary.total() >= minSamples;
         boolean withinFailureRatio = summary.failureRatio() <= maxFailureRatio;
@@ -77,6 +83,22 @@ public class MetricsPluginPromotionGate implements PluginPromotionGate {
                 minSamples,
                 maxFailureRatio,
                 promotable,
-                blockReason);
+                blockReason,
+                trend(id, ver, since, now));
+    }
+
+    /**
+     * Failure ratio per equal-width time bucket across the window (oldest first), for a
+     * sparkline of how the canary ratio evolved. Empty buckets report a ratio of 0.
+     */
+    private List<Double> trend(String pluginId, String version, LocalDateTime start, LocalDateTime end) {
+        var series = new ArrayList<Double>(TREND_BUCKETS);
+        long windowSeconds = Math.max(1, Duration.between(start, end).getSeconds());
+        for (int i = 0; i < TREND_BUCKETS; i++) {
+            var from = start.plusSeconds(windowSeconds * i / TREND_BUCKETS);
+            var to = i == TREND_BUCKETS - 1 ? end : start.plusSeconds(windowSeconds * (i + 1) / TREND_BUCKETS);
+            series.add(repository.summarizeBetween(pluginId, version, from, to).failureRatio());
+        }
+        return series;
     }
 }

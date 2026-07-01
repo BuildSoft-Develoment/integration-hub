@@ -16,6 +16,16 @@ public class PluginInvocationMetricRepository implements PanacheRepositoryBase<P
         return new PluginMetricSummary(total, failures);
     }
 
+    public PluginMetricSummary summarizeBetween(
+            String pluginId, String version, LocalDateTime from, LocalDateTime to) {
+        var total = count("pluginId = ?1 and version = ?2 and recordedAt >= ?3 and recordedAt < ?4",
+                pluginId, version, from, to);
+        var failures = count(
+                "pluginId = ?1 and version = ?2 and recordedAt >= ?3 and recordedAt < ?4 and success = false",
+                pluginId, version, from, to);
+        return new PluginMetricSummary(total, failures);
+    }
+
     public record PluginMetricSummary(long total, long failures) {
         public double failureRatio() {
             return total == 0 ? 0.0 : (double) failures / (double) total;
