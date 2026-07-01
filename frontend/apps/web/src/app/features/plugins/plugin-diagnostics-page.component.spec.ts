@@ -172,6 +172,89 @@ describe('PluginDiagnosticsPageComponent', () => {
     expect(component.confirmingDeactivate()).toBeNull();
     http.verify();
   });
+
+  it('previews a marketplace plugin via the API', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    await fixture.whenStable();
+    const component = fixture.componentInstance;
+
+    component.marketplaceCatalogUrl.set('https://market.example.com/catalog.json');
+    component.marketplacePluginId.set('acme');
+    const previewPromise = component.previewMarketplace();
+
+    const req = http.expectOne(
+      (r) => r.method === 'POST' && r.url === '/api/plugins/marketplace/preview'
+    );
+    expect(req.request.body).toEqual({
+      catalogUrl: 'https://market.example.com/catalog.json',
+      pluginId: 'acme',
+    });
+    req.flush({
+      id: 'acme',
+      version: '1.0.0',
+      spiVersion: '1',
+      providedTypes: ['ACME_DO'],
+      transport: 'GRPC',
+      trusted: true,
+      status: 'ACTIVE',
+      degradedReason: null,
+    });
+    await previewPromise;
+
+    expect(component.marketplacePreview()?.id).toBe('acme');
+    http.verify();
+  });
+
+  it('installs a previewed marketplace plugin and refetches diagnostics', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    await fixture.whenStable();
+    const component = fixture.componentInstance;
+
+    component.marketplaceCatalogUrl.set('https://market.example.com/catalog.json');
+    component.marketplacePluginId.set('acme');
+    component.marketplacePreview.set({
+      id: 'acme',
+      version: '1.0.0',
+      spiVersion: '1',
+      providedTypes: [],
+      transport: 'GRPC',
+      trusted: true,
+      status: 'ACTIVE',
+      degradedReason: null,
+    });
+
+    component.installMarketplace();
+    http
+      .expectOne((r) => r.method === 'POST' && r.url === '/api/plugins/marketplace/install')
+      .flush({ installed: [], versions: [], degraded: {} });
+    await fixture.whenStable();
+    http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+
+    expect(component.marketplacePreview()).toBeNull();
+    http.verify();
+  });
 });
 
 function platformManifest(): AppPluginManifest {

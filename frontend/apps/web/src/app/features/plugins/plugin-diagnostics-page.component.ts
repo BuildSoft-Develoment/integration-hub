@@ -185,6 +185,56 @@ interface BackendPluginDiagnostics {
           </table>
         }
       </section>
+
+      <section>
+        <h3 class="ih-section-title">{{ i18n.t('plugins.marketplace') }}</h3>
+        <div class="plugins-market-form">
+          <input
+            #catUrl
+            type="url"
+            class="plugins-input"
+            [value]="marketplaceCatalogUrl()"
+            (input)="marketplaceCatalogUrl.set(catUrl.value)"
+            [attr.aria-label]="i18n.t('plugins.marketplace.url')"
+            [placeholder]="i18n.t('plugins.marketplace.url')"
+          />
+          <input
+            #plgId
+            class="plugins-input"
+            [value]="marketplacePluginId()"
+            (input)="marketplacePluginId.set(plgId.value)"
+            [attr.aria-label]="i18n.t('plugins.marketplace.plugin')"
+            [placeholder]="i18n.t('plugins.marketplace.plugin')"
+          />
+          <button type="button" class="plugins-btn" [disabled]="busy()" (click)="previewMarketplace()">
+            {{ i18n.t('plugins.marketplace.preview') }}
+          </button>
+        </div>
+        @if (marketplaceError()) {
+          <p class="ih-muted">{{ i18n.t('plugins.marketplace.error') }}</p>
+        }
+        @if (marketplacePreview(); as preview) {
+          <table class="ih-table">
+            <tbody>
+              <tr>
+                <td>{{ preview.id }}</td>
+                <td>{{ preview.version }} / SPI {{ preview.spiVersion }}</td>
+                <td>{{ preview.transport }}</td>
+                <td>
+                  <span class="plugin-badge" [attr.data-status]="preview.status.toLowerCase()">
+                    {{ i18n.t('plugins.status.' + preview.status.toLowerCase()) }}
+                  </span>
+                </td>
+                <td>
+                  <button type="button" class="plugins-btn" [disabled]="busy()" (click)="installMarketplace()">
+                    {{ i18n.t('plugins.marketplace.install') }}
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        }
+      </section>
     </section>
   `,
   styles: [
@@ -194,6 +244,8 @@ interface BackendPluginDiagnostics {
       .plugins-btn { padding: 0.25rem 0.6rem; border: 1px solid var(--border, #cbd5e1); border-radius: 6px; background: var(--surface-1, #fff); color: inherit; cursor: pointer; font-size: 0.85rem; }
       .plugins-btn:disabled { opacity: 0.5; cursor: not-allowed; }
       .plugins-btn--danger { border-color: #ef4444; color: #991b1b; font-weight: 500; }
+      .plugins-market-form { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem; }
+      .plugins-input { padding: 0.3rem 0.5rem; border: 1px solid var(--border, #cbd5e1); border-radius: 6px; background: var(--surface-2, #fff); color: inherit; min-width: 14rem; }
       .plugin-badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.78rem; font-weight: 500; }
       .plugin-badge[data-status='active'] { background: #dcfce7; color: #166534; }
       .plugin-badge[data-status='degraded'] { background: #fee2e2; color: #991b1b; }
@@ -231,6 +283,46 @@ export class PluginDiagnosticsPageComponent implements OnInit {
   confirmDeactivate(id: string): void {
     this.confirmingDeactivate.set(null);
     this.deactivate(id);
+  }
+
+  readonly marketplaceCatalogUrl = signal('');
+  readonly marketplacePluginId = signal('');
+  readonly marketplacePreview = signal<BackendPluginDescriptor | null>(null);
+  readonly marketplaceError = signal(false);
+
+  async previewMarketplace(): Promise<void> {
+    const catalogUrl = this.marketplaceCatalogUrl().trim();
+    const pluginId = this.marketplacePluginId().trim();
+    if (!catalogUrl || !pluginId) {
+      return;
+    }
+    this.marketplaceError.set(false);
+    this.marketplacePreview.set(null);
+    try {
+      const preview = await firstValueFrom(
+        this.http.post<BackendPluginDescriptor>(
+          '/api/plugins/marketplace/preview',
+          { catalogUrl, pluginId },
+          { context: new HttpContext().set(SKIP_GLOBAL_ERROR_FEEDBACK, true) }
+        )
+      );
+      this.marketplacePreview.set(preview);
+    } catch {
+      this.marketplaceError.set(true);
+    }
+  }
+
+  installMarketplace(): void {
+    const preview = this.marketplacePreview();
+    if (!preview) {
+      return;
+    }
+    const catalogUrl = this.marketplaceCatalogUrl().trim();
+    const pluginId = this.marketplacePluginId().trim();
+    this.marketplacePreview.set(null);
+    void this.runAction(() =>
+      this.http.post('/api/plugins/marketplace/install', { catalogUrl, pluginId, active: true })
+    );
   }
 
   refreshBackend(): void {
