@@ -38,6 +38,18 @@ class GrpcRemotePluginTransportTest {
     }
 
     @Test
+    void appliesTheConfiguredMaxMessageSizeAboveTheGrpcDefault() {
+        // Default raises the 4 MiB gRPC ceiling to 16 MiB.
+        assertEquals(16 * 1024 * 1024, transport.maxMessageBytes());
+        // Explicit larger value is honoured.
+        assertEquals(64 * 1024 * 1024,
+                new GrpcRemotePluginTransport(new ObjectMapper(), 64 * 1024 * 1024).maxMessageBytes());
+        // Absurdly small values are clamped to a safe floor.
+        assertEquals(64 * 1024,
+                new GrpcRemotePluginTransport(new ObjectMapper(), 10).maxMessageBytes());
+    }
+
+    @Test
     void mapsSuspendedGrpcResultToTaskResult() {
         var result = transport.toTaskResult(GrpcRemoteTaskResult.newBuilder()
                 .setSuccess(true)

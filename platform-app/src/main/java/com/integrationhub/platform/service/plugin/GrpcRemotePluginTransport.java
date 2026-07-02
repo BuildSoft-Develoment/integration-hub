@@ -12,6 +12,7 @@ import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.net.URI;
 import java.util.Map;
@@ -20,14 +21,32 @@ import java.util.concurrent.TimeUnit;
 @ApplicationScoped
 public class GrpcRemotePluginTransport implements RemotePluginTransport {
 
+    /** 16 MiB: raises the 4 MiB gRPC default so larger Source/Reader payloads fit. */
+    private static final int DEFAULT_MAX_MESSAGE_BYTES = 16 * 1024 * 1024;
+    private static final int MIN_MAX_MESSAGE_BYTES = 64 * 1024;
+
     private static final TypeReference<Map<String, Object>> OBJECT_MAP = new TypeReference<>() {
     };
 
     private final ObjectMapper objectMapper;
+    private final int maxMessageBytes;
 
     @Inject
-    public GrpcRemotePluginTransport(ObjectMapper objectMapper) {
+    public GrpcRemotePluginTransport(
+            ObjectMapper objectMapper,
+            @ConfigProperty(name = "integrationhub.plugins.grpc.max-message-bytes",
+                    defaultValue = "16777216") int maxMessageBytes) {
         this.objectMapper = objectMapper;
+        this.maxMessageBytes = Math.max(MIN_MAX_MESSAGE_BYTES, maxMessageBytes);
+    }
+
+    public GrpcRemotePluginTransport(ObjectMapper objectMapper) {
+        this(objectMapper, DEFAULT_MAX_MESSAGE_BYTES);
+    }
+
+    /** Configured maximum inbound gRPC message size, in bytes. */
+    int maxMessageBytes() {
+        return maxMessageBytes;
     }
 
     @Override
@@ -66,7 +85,8 @@ public class GrpcRemotePluginTransport implements RemotePluginTransport {
         if (port < 0) {
             port = "https".equalsIgnoreCase(endpoint.getScheme()) ? 443 : 80;
         }
-        var builder = ManagedChannelBuilder.forAddress(host, port);
+        var builder = ManagedChannelBuilder.forAddress(host, port)
+                .maxInboundMessageSize(maxMessageBytes);
         if ("http".equalsIgnoreCase(endpoint.getScheme())) {
             builder.usePlaintext();
         } else {
