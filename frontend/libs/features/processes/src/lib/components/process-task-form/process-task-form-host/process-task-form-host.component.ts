@@ -9,9 +9,16 @@ import {
   ProcessTaskFormBridgeService,
   ProcessTaskFormRegistration,
 } from '@integration-hub/core/providers';
-import { SchemaFormComponent, SchemaFormSchema, SchemaFormValue } from '@integration-hub/shared/ui';
+import {
+  SchemaFormComponent,
+  SchemaFormSchema,
+  SchemaFormValue,
+  provideSchemaFieldRenderers,
+} from '@integration-hub/shared/ui';
 import { PluginConfigSchemaService } from '../../../api/plugin-config-schema.service';
+import { ProcessSchemaFieldContextService } from '../../../forms/process-schema-field-context.service';
 import { ConnectionRef, ProcessTaskFormModel, ReaderRef, SourceRef } from '../../../models/process.models';
+import { ProcessTokenFieldComponent } from '../process-token-field/process-token-field.component';
 
 /**
  * Host del formulario de configuracion de tarea.
@@ -32,7 +39,12 @@ import { ConnectionRef, ProcessTaskFormModel, ReaderRef, SourceRef } from '../..
     '[class.task-form-host--workspace]': 'usesWorkspaceLayout()',
   },
   imports: [CommonModule, SchemaFormComponent],
-  providers: [ProcessTaskFormBridgeService],
+  providers: [
+    ProcessTaskFormBridgeService,
+    // El campo custom `token-text` (autocompletado de tokens) queda disponible para el
+    // ih-schema-form que renderiza el host (tipos de plugin / config schema-driven).
+    ...provideSchemaFieldRenderers([{ type: 'token-text', component: ProcessTokenFieldComponent }]),
+  ],
   templateUrl: './process-task-form-host.component.html',
   styleUrl: './process-task-form-host.component.css',
 })
@@ -43,6 +55,7 @@ export class ProcessTaskFormHostComponent {
   private readonly bridge = inject(ProcessTaskFormBridgeService);
   private readonly configSchemas = inject(PluginConfigSchemaService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly fieldContext = inject(ProcessSchemaFieldContextService);
 
   // --- Inputs / Outputs signal-based ---
   readonly task = input.required<ProcessTaskFormModel>();
@@ -100,6 +113,14 @@ export class ProcessTaskFormHostComponent {
   });
 
   constructor() {
+    // Publica el contexto de binding para los renderers de campo `token-text` del schema-form.
+    effect(() => {
+      const task = this.task();
+      const tasks = this.tasks();
+      const readers = this.readers();
+      untracked(() => this.fieldContext.set(task, tasks, readers));
+    });
+
     // Reenvia los patches del puente como output propio del host. {@code untracked}
     // evita que el effect se autoinvalide por leer otras signals dentro del emit.
     effect(() => {

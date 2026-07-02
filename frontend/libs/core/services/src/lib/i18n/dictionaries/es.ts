@@ -205,6 +205,7 @@ export const es = {
   'schemaForm.invalid': 'Revisa este valor.',
   'schemaForm.secretRef': 'Referencia a un secreto gestionado (no el valor en claro).',
   'schemaForm.unsupported': 'Tipo de campo no soportado',
+  'schemaForm.insertToken': 'Insertar token',
   'tasks.notification.channel': 'Canal',
   'tasks.notification.message': 'Mensaje',
   'tasks.notification.url': 'URL del webhook',

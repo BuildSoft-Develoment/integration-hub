@@ -1,0 +1,20 @@
+:host {
+  display: block;
+}
+
+.token-field {
+  width: 100%;
+}
+
+.token-field__actions {
+  margin-top: -0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.token-field__group-label {
+  font-size: var(--ih-font-size-xs);
+  color: var(--ih-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 1;
+}

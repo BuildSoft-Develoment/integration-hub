@@ -1,0 +1,20 @@
+<mat-form-field appearance="outline" class="token-field">
+  <mat-label>{{ label() }}</mat-label>
+  <textarea #area matInput rows="4" [formControl]="control()"></textarea>
+</mat-form-field>
+
+@if (groups().length) {
+  <div class="token-field__actions">
+    <button type="button" mat-stroked-button [matMenuTriggerFor]="menu" [disabled]="readonly()">
+      {{ i18n.t('schemaForm.insertToken') }}
+    </button>
+    <mat-menu #menu="matMenu">
+      @for (group of groups(); track group.key) {
+        <div class="token-field__group-label" mat-menu-item disabled>{{ group.key }}</div>
+        @for (option of group.items; track option.key) {
+          <button type="button" mat-menu-item (click)="insert(option.key)">{{ option.label }}</button>
+        }
+      }
+    </mat-menu>
+  </div>
+}
