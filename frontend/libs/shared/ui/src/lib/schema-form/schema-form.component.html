@@ -1,5 +1,11 @@
 <form [formGroup]="form()" class="schema-form">
   @for (field of schema().fields; track field.key) {
+    @if (customRenderer(field.type); as renderer) {
+      <ng-container
+        [ngComponentOutlet]="renderer"
+        [ngComponentOutletInputs]="rendererInputs(field)"
+      />
+    } @else {
     @switch (field.type) {
 
       @case ('boolean') {
@@ -84,6 +90,7 @@
           }
         </mat-form-field>
       }
+    }
     }
   }
 </form>

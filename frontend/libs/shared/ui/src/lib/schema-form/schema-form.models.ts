@@ -24,7 +24,11 @@ export interface SchemaFieldOption {
 
 export interface SchemaFieldDescriptor {
   readonly key: string;
-  readonly type: SchemaFieldType;
+  /**
+   * Tipo built-in, o un `type` custom registrado con `provideSchemaFieldRenderers`
+   * (p.ej. `token-text`). El `string & {}` preserva el autocompletado de los built-in.
+   */
+  readonly type: SchemaFieldType | (string & {});
   /** Clave i18n de la etiqueta; si falta se usa `label` o el `key`. */
   readonly labelKey?: string;
   readonly label?: string;

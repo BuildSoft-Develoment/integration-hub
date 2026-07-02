@@ -8,6 +8,7 @@ import {
   input,
   output,
   signal,
+  Type,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
@@ -23,6 +24,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { I18nService } from '@integration-hub/core/services';
 
+import { SchemaFieldRendererRegistry } from './schema-field-renderer';
 import {
   SchemaFieldDescriptor,
   SchemaFormSchema,
@@ -55,6 +57,7 @@ import {
 export class SchemaFormComponent {
   readonly i18n = inject(I18nService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly renderers = inject(SchemaFieldRendererRegistry);
 
   readonly schema = input.required<SchemaFormSchema>();
   readonly value = input<SchemaFormValue>({});
@@ -110,6 +113,16 @@ export class SchemaFormComponent {
 
   protected control(key: string): FormControl {
     return this.form().controls[key];
+  }
+
+  /** Renderer custom registrado para un `type`, o `null` si es built-in. */
+  protected customRenderer(type: string): Type<unknown> | null {
+    return this.renderers.rendererFor(type);
+  }
+
+  /** Inputs para el renderer custom (via NgComponentOutlet). */
+  protected rendererInputs(field: SchemaFieldDescriptor): Record<string, unknown> {
+    return { field, control: this.control(field.key), readonly: this.readonly() };
   }
 
   private buildForm(schema: SchemaFormSchema): void {

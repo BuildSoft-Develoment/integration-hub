@@ -1,7 +1,23 @@
+import { Component, input } from '@angular/core';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { TestBed } from '@angular/core/testing';
 
+import { provideSchemaFieldRenderers } from './schema-field-renderer';
 import { SchemaFormComponent } from './schema-form.component';
-import { SchemaFormSchema, SchemaFormValue } from './schema-form.models';
+import { SchemaFieldDescriptor, SchemaFormSchema, SchemaFormValue } from './schema-form.models';
+
+// Renderer de campo custom de prueba para el tipo 'token-text'.
+@Component({
+  selector: 'ih-test-token-field',
+  standalone: true,
+  imports: [ReactiveFormsModule],
+  template: `<input class="token-field" [formControl]="control()" [attr.data-key]="field().key" />`,
+})
+class TestTokenFieldComponent {
+  readonly field = input.required<SchemaFieldDescriptor>();
+  readonly control = input.required<FormControl>();
+  readonly readonly = input(false);
+}
 
 const schema: SchemaFormSchema = {
   fields: [
@@ -106,6 +122,34 @@ describe('SchemaFormComponent', () => {
   it('disables every control when readonly', () => {
     const { form } = setup({}, true);
     expect(form.disabled).toBe(true);
+  });
+
+  it('delegates custom field types to a registered renderer (extensibility)', () => {
+    const customSchema: SchemaFormSchema = {
+      fields: [
+        { key: 'host', type: 'text', label: 'Host', required: true },
+        { key: 'message', type: 'token-text', label: 'Message' },
+      ],
+    };
+    TestBed.configureTestingModule({
+      imports: [SchemaFormComponent],
+      providers: [
+        provideSchemaFieldRenderers([{ type: 'token-text', component: TestTokenFieldComponent }]),
+      ],
+    });
+    const fixture = TestBed.createComponent(SchemaFormComponent);
+    fixture.componentRef.setInput('schema', customSchema);
+    fixture.componentRef.setInput('value', { message: 'seed' });
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // The custom type renders the registered component, wired to its FormControl.
+    const custom = el.querySelector('input.token-field') as HTMLInputElement;
+    expect(custom).toBeTruthy();
+    expect(custom.getAttribute('data-key')).toBe('message');
+    expect(custom.value).toBe('seed');
+    // The built-in 'text' field still renders natively as a mat-form-field.
+    expect(el.querySelector('mat-form-field')).toBeTruthy();
   });
 
   it('enforces number min/max validators from the descriptor', () => {
