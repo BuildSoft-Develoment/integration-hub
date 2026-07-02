@@ -15,7 +15,7 @@ public class PluginMarketplaceCatalogCache {
     @Column(name = "catalog_url", length = 500)
     public String catalogUrl;
 
-    @Column(nullable = false, columnDefinition = "text")
+    @Column(name = "body_json", nullable = false, columnDefinition = "text")
     public String bodyJson;
 
     @Column(nullable = false, length = 120)
