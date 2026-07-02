@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, input } from '@angular/core';
 import { I18nService } from '@integration-hub/core/services';
-import { IconComponent, IhIconName } from '../../icon/icon.component';
+import { IconComponent, IhIconName } from '@integration-hub/plugin-ui-kit';
 import { inject } from '@angular/core';
 
 @Component({

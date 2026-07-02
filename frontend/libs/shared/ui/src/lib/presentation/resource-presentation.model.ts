@@ -1,4 +1,4 @@
-import { IhIconName } from '../icon/icon.component';
+import { IhIconName } from '@integration-hub/plugin-ui-kit';
 
 /**
  * Contrato visual transversal para representar un tipo de recurso (conexion,

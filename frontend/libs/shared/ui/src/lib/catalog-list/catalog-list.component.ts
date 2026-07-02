@@ -13,8 +13,8 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { I18nService } from '@integration-hub/core/services';
-import { LoadingComponent } from '../loading/loading.component';
-import { EmptyStateComponent } from '../empty-state/empty-state.component';
+import { LoadingComponent } from '@integration-hub/plugin-ui-kit';
+import { EmptyStateComponent } from '@integration-hub/plugin-ui-kit';
 
 /** A sortable column header of the catalog list. */
 export interface CatalogListColumn {

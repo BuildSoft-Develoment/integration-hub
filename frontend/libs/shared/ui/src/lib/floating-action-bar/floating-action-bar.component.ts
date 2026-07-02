@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
-import { IconComponent } from '../icon/icon.component';
+import { IconComponent } from '@integration-hub/plugin-ui-kit';
 import { I18nService } from '@integration-hub/core/services';
 import { inject } from '@angular/core';
 

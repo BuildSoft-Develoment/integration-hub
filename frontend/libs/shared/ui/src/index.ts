@@ -21,13 +21,13 @@ export * from './lib/app-layout/plugins/app-workspace.token';
 export * from './lib/app-layout/preferences/app-preferences.facade';
 export * from './lib/breadcrumb/breadcrumb.component';
 export * from './lib/catalog-list/catalog-list.component';
-export * from './lib/status-badge/status-badge.component';
-export * from './lib/empty-state/empty-state.component';
+// Primitivas presentacionales: viven en el paquete publicable @integration-hub/plugin-ui-kit
+// y se re-exportan aquí para que el barrel interno de la app no cambie (status-badge,
+// empty-state, icon, loading + tipos StatusBadgeKind/IhIconName).
+export * from '@integration-hub/plugin-ui-kit';
 export * from './lib/floating-action-bar/floating-action-bar.component';
 export type { ActionBarAction } from './lib/floating-action-bar/floating-action-bar.component';
-export * from './lib/icon/icon.component';
 export * from './lib/info-tile/info-tile.component';
-export * from './lib/loading/loading.component';
 export * from './lib/managed-editor/form-actions/managed-editor-form-actions.component';
 export * from './lib/managed-editor/header/managed-editor-header.component';
 export * from './lib/managed-editor/managed-editor.models';

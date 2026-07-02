@@ -1,7 +1,7 @@
 import { CommonModule, Location } from '@angular/common';
 import { Component, inject, input } from '@angular/core';
 import { Params, RouterLink } from '@angular/router';
-import { IconComponent } from '../icon/icon.component';
+import { IconComponent } from '@integration-hub/plugin-ui-kit';
 
 export interface IhBreadcrumbItem {
   /** Texto ya traducido (el consumidor resuelve i18n). */

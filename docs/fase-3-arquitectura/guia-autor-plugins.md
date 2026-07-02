@@ -41,37 +41,34 @@ Campos y reglas (validadas por `AppPluginRuntimeRegistry`):
 
 ## 2b. UI kit del plugin (look-and-feel nativo)
 
-Un remote consigue la apariencia nativa importando el **UI kit** de la plataforma desde
-`@integration-hub/shared/ui`. La apariencia es nativa porque los **design tokens son CSS
-global** (`:root`), así que los componentes los leen aunque vengan empaquetados.
+Un autor externo instala el **paquete versionado** `@integration-hub/plugin-ui-kit`
+(`npm install`) e importa de ahí las primitivas presentacionales. Es **autocontenido** (solo
+peer deps `@angular/*`), por eso es publicable e instalable desde fuera. La apariencia es nativa
+porque los **design tokens son CSS global** (`:root`), que los componentes leen.
 
-> Nota de sharing: un plugin que dependa del kit como **paquete publicado y versionado**
-> (p.ej. `@integration-hub/plugin-ui-kit`) puede compartirlo como **singleton** del host
-> (reusa la instancia e `I18nService`). Un remote que lo importe por el path de workspace
-> (sin versión) lo **empaqueta** (Native Federation no dedupe libs de workspace). Ambos se
-> ven nativos; el singleton solo evita duplicar el bundle.
-
-Primitivas disponibles (entre otras):
+Primitivas del paquete `@integration-hub/plugin-ui-kit`:
 
 | Import | Uso |
 |---|---|
-| `CatalogListComponent` (`ih-catalog-list`) | catálogo con header sortable, estados, paginación, teclado y a11y; proyecta las filas. |
 | `StatusBadgeComponent` (`ih-status-badge`) | badge de estado (`success`/`error`/`warning`/`info`/`neutral`) con tokens. |
 | `EmptyStateComponent` (`ih-empty-state`), `LoadingComponent` (`ih-loading`), `IconComponent` (`ih-icon`) | estados e iconografía. |
-| Design tokens (`--ih-*`) e `I18nService` (`registerMessages`) | color/tipografía/espaciado y traducciones. |
+| Tipos `StatusBadgeKind`, `IhIconName` | tipado de las props. |
 
-Compártelas en `federation.config.js`:
+> `CatalogListComponent` (`ih-catalog-list`) y las traducciones (`I18nService`) **no** están en
+> el paquete: dependen del grafo de servicios de la plataforma. Se ven en la galería in-app.
+
+Compártelo como **singleton** en `federation.config.js` (una instancia + un set de tokens entre
+host y remotos, sin empaquetarlo por remote):
 
 ```js
 shared: {
   ...shareAll({ singleton: true, strictVersion: true, requiredVersion: 'auto' }),
-  '@integration-hub/shared/ui': { singleton: true, strictVersion: false, requiredVersion: false },
-  '@integration-hub/core/services': { singleton: true, strictVersion: false, requiredVersion: false },
+  '@integration-hub/plugin-ui-kit': { singleton: true, strictVersion: false, requiredVersion: false },
 }
 ```
 
-Ejemplo: `apps/sample-plugin/src/app/widget.component.ts` renderiza con `ih-icon` +
-`ih-status-badge` + tokens.
+Ejemplo: `apps/sample-plugin/src/app/widget.component.ts` importa de
+`@integration-hub/plugin-ui-kit` y renderiza `ih-icon` + `ih-status-badge` + tokens.
 
 > **Referencias del kit** (dos, complementarias):
 > - **Storybook** (`npm run storybook`, :4400): componentes presentacionales aislados

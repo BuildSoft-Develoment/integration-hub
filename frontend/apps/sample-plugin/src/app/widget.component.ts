@@ -1,11 +1,12 @@
 import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { IconComponent, StatusBadgeComponent } from '@integration-hub/shared/ui';
+import { IconComponent, StatusBadgeComponent } from '@integration-hub/plugin-ui-kit';
 
 /**
- * Exposed remote widget. Consumes the platform UI kit (`@integration-hub/shared/ui`):
- * `ih-status-badge`, `ih-icon` and the design tokens, so an externally installed plugin
- * renders with the native look-and-feel (the tokens are global CSS, read even when the
- * kit is bundled). See federation.config.js for the singleton-sharing caveat.
+ * Exposed remote widget. Consumes the versioned UI kit package
+ * (`@integration-hub/plugin-ui-kit`): `ih-status-badge`, `ih-icon` and the design tokens, so
+ * an externally installed plugin renders with the native look-and-feel. Because the kit is a
+ * published, versioned package, it can be shared as a host singleton (see federation.config.js)
+ * instead of being bundled per-remote.
  */
 @Component({
   selector: 'app-sample-plugin-widget',

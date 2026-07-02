@@ -11,13 +11,10 @@ module.exports = withNativeFederation({
 
   shared: {
     ...shareAll({ singleton: true, strictVersion: true, requiredVersion: 'auto' }),
-    // Platform UI kit. NOTE: in-workspace these are tsconfig-path libraries without a
-    // published version, so Native Federation bundles them into this remote (they are NOT
-    // deduplicated as host singletons). The rendered look is still native because the
-    // design tokens are global CSS. To truly share the kit as a host singleton, publish it
-    // as a versioned package (e.g. @integration-hub/plugin-ui-kit) and share by that name.
-    '@integration-hub/shared/ui': { singleton: true, strictVersion: false, requiredVersion: false },
-    '@integration-hub/core/services': { singleton: true, strictVersion: false, requiredVersion: false },
+    // Versioned, publishable UI kit package: an external author installs it and it is shared
+    // as a host singleton (one instance + one set of design tokens across host and remotes),
+    // instead of being bundled per-remote like an unversioned workspace lib.
+    '@integration-hub/plugin-ui-kit': { singleton: true, strictVersion: false, requiredVersion: false },
   },
 
   skip: [

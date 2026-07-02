@@ -1,0 +1,11 @@
+{
+  "name": "@integration-hub/plugin-ui-kit",
+  "version": "0.0.1",
+  "description": "Primitivas presentacionales del UI kit de Integration Hub para autores de plugins.",
+  "peerDependencies": {
+    "@angular/common": "^21.2.0",
+    "@angular/core": "^21.2.0",
+    "@angular/material": "^21.2.0"
+  },
+  "sideEffects": false
+}

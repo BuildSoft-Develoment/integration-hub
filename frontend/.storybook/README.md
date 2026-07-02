@@ -1,7 +1,8 @@
 # UI kit — dos visores, roles distintos
 
-El kit compartido (`@integration-hub/shared/ui`) tiene **dos visores complementarios**. No es
-duplicación: cada uno cubre algo que el otro no puede. Elige según la tarea.
+El UI kit tiene **dos visores complementarios**. No es duplicación: cada uno cubre algo que el
+otro no puede. Elige según la tarea. (Las primitivas presentacionales viven en el paquete
+publicable `@integration-hub/plugin-ui-kit`; `catalog-list` y demás en `@integration-hub/shared/ui`.)
 
 | | **Storybook** (esta carpeta) | **Galería in-app** (`/#/ui-kit`) |
 |---|---|---|

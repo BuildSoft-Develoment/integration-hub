@@ -3,6 +3,6 @@
   "compilerOptions": {
     "types": ["node"]
   },
-  "include": ["../libs/shared/ui/src/**/*.stories.ts", "*.ts"],
-  "exclude": ["../libs/shared/ui/src/**/*.spec.ts"]
+  "include": ["../libs/plugin-ui-kit/src/**/*.stories.ts", "*.ts"],
+  "exclude": ["../libs/plugin-ui-kit/src/**/*.spec.ts"]
 }

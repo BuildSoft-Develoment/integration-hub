@@ -19,15 +19,32 @@
       "@integration-hub/core/providers": ["libs/core/providers/src/index.ts"],
       "@integration-hub/core/services": ["libs/core/services/src/index.ts"],
       "@integration-hub/shared/ui": ["libs/shared/ui/src/index.ts"],
-      "@integration-hub/features/sources": ["libs/features/sources/src/index.ts"],
-      "@integration-hub/features/connections": ["libs/features/connections/src/index.ts"],
-      "@integration-hub/features/readers": ["libs/features/readers/src/index.ts"],
-      "@integration-hub/features/processes": ["libs/features/processes/src/index.ts"],
-      "@integration-hub/features/payments": ["libs/features/payments/src/index.ts"],
-      "@integration-hub/features/executions": ["libs/features/executions/src/index.ts"],
-      "@integration-hub/features/overview": ["libs/features/overview/src/index.ts"],
-      "@integration-hub/features/schedules": ["libs/features/schedules/src/index.ts"],
-      "@integration-hub/features/audit": ["libs/features/audit/src/index.ts"]
+      "@integration-hub/features/sources": [
+        "libs/features/sources/src/index.ts"
+      ],
+      "@integration-hub/features/connections": [
+        "libs/features/connections/src/index.ts"
+      ],
+      "@integration-hub/features/readers": [
+        "libs/features/readers/src/index.ts"
+      ],
+      "@integration-hub/features/processes": [
+        "libs/features/processes/src/index.ts"
+      ],
+      "@integration-hub/features/payments": [
+        "libs/features/payments/src/index.ts"
+      ],
+      "@integration-hub/features/executions": [
+        "libs/features/executions/src/index.ts"
+      ],
+      "@integration-hub/features/overview": [
+        "libs/features/overview/src/index.ts"
+      ],
+      "@integration-hub/features/schedules": [
+        "libs/features/schedules/src/index.ts"
+      ],
+      "@integration-hub/features/audit": ["libs/features/audit/src/index.ts"],
+      "@integration-hub/plugin-ui-kit": ["libs/plugin-ui-kit/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]

@@ -6,7 +6,7 @@ import type { StorybookConfig } from '@storybook/angular';
  * `preview.ts`. Addon `a11y` (axe) para auditar accesibilidad en cada story.
  */
 const config: StorybookConfig = {
-  stories: ['../libs/shared/ui/src/**/*.stories.@(ts|mdx)'],
+  stories: ['../libs/plugin-ui-kit/src/**/*.stories.@(ts|mdx)'],
   addons: ['@storybook/addon-a11y'],
   framework: {
     name: '@storybook/angular',
