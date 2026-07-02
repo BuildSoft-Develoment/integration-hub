@@ -16,7 +16,10 @@ import { CatalogListColumn, CatalogListComponent } from './catalog-list.componen
       [loading]="loading()"
       [error]="error()"
       [total]="rows().length"
+      [selectable]="selectable()"
+      [allSelected]="true"
       (toggleSort)="lastSort = $event"
+      (toggleSelectAll)="selectAllToggled = true"
       (retry)="retried = true"
     >
       @for (row of rows(); track row) {
@@ -34,8 +37,10 @@ class HostComponent {
   readonly sortField = signal<string | null>('name');
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
+  readonly selectable = signal(false);
   lastSort: string | null = null;
   retried = false;
+  selectAllToggled = false;
 }
 
 describe('CatalogListComponent', () => {
@@ -96,6 +101,19 @@ describe('CatalogListComponent', () => {
     expect(alert).not.toBeNull();
     (alert.querySelector('button') as HTMLButtonElement).click();
     expect(fixture.componentInstance.retried).toBe(true);
+  });
+
+  it('renders a select-all checkbox only when selectable and emits on toggle', () => {
+    const fixture = setup();
+    expect(fixture.nativeElement.querySelector('.ih-checkbox-all')).toBeNull();
+
+    fixture.componentInstance.selectable.set(true);
+    fixture.detectChanges();
+    const checkbox = fixture.nativeElement.querySelector('.ih-checkbox-all') as HTMLElement;
+    expect(checkbox).not.toBeNull();
+
+    (checkbox.querySelector('input') as HTMLInputElement).click();
+    expect(fixture.componentInstance.selectAllToggled).toBe(true);
   });
 
   it('moves roving focus across rows with ArrowDown/ArrowUp', () => {

@@ -1,105 +1,67 @@
-<div class="list-card ih-catalog-list">
-      <div class="table-head ih-catalog-table-head" [class.table-head--selectable]="canEdit()">
-        @if (canEdit()) {
-          <mat-checkbox
-            class="ih-checkbox-all"
-            [checked]="isAllSelected()"
-            [indeterminate]="selectedIds().size > 0 && !isAllSelected()"
-            (change)="toggleSelectAll.emit()"
-            [attr.aria-label]="i18n.t('common.selectAll')"
-          />
-        }
-        <button type="button" class="col-sortable" (click)="toggleSort.emit('name')">
-          {{ i18n.t('common.name') }}
-          @if (sortField() === 'name') {
-            <span class="sort-arrow">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
-          }
-        </button>
-        <button type="button" class="col-sortable" (click)="toggleSort.emit('connectionType')">
-          {{ i18n.t('common.type') }}
-          @if (sortField() === 'connectionType') {
-            <span class="sort-arrow">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
-          }
-        </button>
-        <button type="button" class="col-sortable" (click)="toggleSort.emit('active')">
-          {{ i18n.t('common.status') }}
-          @if (sortField() === 'active') {
-            <span class="sort-arrow">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
-          }
-        </button>
-      </div>
-
-      <div class="table-body ih-catalog-table-body ih-thin-scroll">
-        @if (error(); as err) {
-          <div class="ih-catalog-error" role="alert">
-            <p class="ih-catalog-error__message">{{ i18n.t(err) }}</p>
-            <button mat-stroked-button type="button" (click)="retry.emit()">{{ i18n.t('common.retry') }}</button>
-          </div>
-        }
-        @if (loading()) { <ih-loading variant="skeleton" [rows]="pageSize()" /> }
-        @for (connection of connections(); track connection.id) {
-          <button
-            type="button"
-            class="table-row ih-catalog-table-row"
-            [class.table-row--selectable]="canEdit()"
-            [class.table-row--selected]="selectedConnectionId() === connection.id"
-            [class.ih-catalog-table-row--selected]="selectedConnectionId() === connection.id"
-            [attr.aria-label]="i18n.t('common.selectItem', { name: connection.name })"
-            [attr.aria-pressed]="selectedConnectionId() === connection.id"
-            [attr.tabindex]="$index === 0 ? 0 : -1"
-            [attr.data-row-index]="$index"
-            (click)="selectConnection.emit(connection)"
-          >
-            @if (canEdit()) {
-              <mat-checkbox
-                [checked]="selectedIds().has(connection.id)"
-                (change)="toggleSelection.emit(connection.id)"
-                [attr.aria-label]="i18n.t('common.selectItem', { name: connection.name })"
-                (click)="$event.stopPropagation()"
-              />
-            }
-            <div class="row-primary ih-catalog-row-primary">
-              <div class="row-avatar ih-catalog-row-avatar" [class]="presentation(connection.connectionType).toneClass">
-                <ih-icon [name]="presentation(connection.connectionType).icon" [size]="20" />
-              </div>
-              <div class="row-copy ih-catalog-row-copy">
-                <strong>{{ connection.name }}</strong>
-                <small>ID {{ connection.id }}</small>
-              </div>
-            </div>
-
-            <div class="row-type ih-catalog-row-meta">
-              <mat-chip-set>
-                <mat-chip>{{ providerLabel(connection.connectionType) }}</mat-chip>
-              </mat-chip-set>
-            </div>
-
-            <div class="row-status" [class.row-status--inactive]="!connection.active">
-              <span class="status-dot" aria-hidden="true"></span>
-              {{ connection.active ? i18n.t('status.active') : i18n.t('status.inactive') }}
-            </div>
-          </button>
-        } @empty {
-          <div class="empty-state ih-catalog-empty-state">
-            <ih-icon name="database" [size]="32" />
-            <p class="ih-muted">{{ i18n.t('connections.noData') }}</p>
-            @if (canEdit()) {
-              <p class="ih-muted ih-empty-hint">{{ i18n.t('connections.noDataHint') }}</p>
-            }
-          </div>
-        }
-      </div>
-
-      @if (totalLength() > 0) {
-        <mat-paginator
-        class="list-paginator ih-catalog-paginator"
-        [length]="totalLength()"
-        [pageIndex]="pageIndex()"
-        [pageSize]="pageSize()"
-        [pageSizeOptions]="pageSizeOptions()"
-        [hidePageSize]="false"
-        [showFirstLastButtons]="false"
-        (page)="onPageChange($event)"
-      />
+<ih-catalog-list
+  class="list-card"
+  [columns]="columns"
+  [gridColumns]="gridColumns()"
+  [selectable]="canEdit()"
+  [allSelected]="isAllSelected()"
+  [someSelected]="someSelected()"
+  [sortField]="sortField()"
+  [sortDirection]="sortDirection()"
+  [rowCount]="connections().length"
+  [loading]="loading()"
+  [error]="error()"
+  emptyKey="connections.noData"
+  emptyIcon="database"
+  [total]="totalLength()"
+  [pageIndex]="pageIndex()"
+  [pageSize]="pageSize()"
+  [pageSizeOptions]="pageSizeOptions()"
+  (toggleSort)="toggleSort.emit($event)"
+  (toggleSelectAll)="toggleSelectAll.emit()"
+  (pageChange)="onPageChange($event)"
+  (retry)="retry.emit()"
+>
+  @for (connection of connections(); track connection.id) {
+    <button
+      type="button"
+      class="table-row ih-catalog-table-row"
+      [class.table-row--selectable]="canEdit()"
+      [class.table-row--selected]="selectedConnectionId() === connection.id"
+      [class.ih-catalog-table-row--selected]="selectedConnectionId() === connection.id"
+      [attr.aria-label]="i18n.t('common.selectItem', { name: connection.name })"
+      [attr.aria-pressed]="selectedConnectionId() === connection.id"
+      [attr.tabindex]="$index === 0 ? 0 : -1"
+      [attr.data-row-index]="$index"
+      (click)="selectConnection.emit(connection)"
+    >
+      @if (canEdit()) {
+        <mat-checkbox
+          [checked]="selectedIds().has(connection.id)"
+          (change)="toggleSelection.emit(connection.id)"
+          [attr.aria-label]="i18n.t('common.selectItem', { name: connection.name })"
+          (click)="$event.stopPropagation()"
+        />
       }
-    </div>
+      <div class="row-primary ih-catalog-row-primary">
+        <div class="row-avatar ih-catalog-row-avatar" [class]="presentation(connection.connectionType).toneClass">
+          <ih-icon [name]="presentation(connection.connectionType).icon" [size]="20" />
+        </div>
+        <div class="row-copy ih-catalog-row-copy">
+          <strong>{{ connection.name }}</strong>
+          <small>ID {{ connection.id }}</small>
+        </div>
+      </div>
+
+      <div class="row-type ih-catalog-row-meta">
+        <mat-chip-set>
+          <mat-chip>{{ providerLabel(connection.connectionType) }}</mat-chip>
+        </mat-chip-set>
+      </div>
+
+      <div class="row-status" [class.row-status--inactive]="!connection.active">
+        <span class="status-dot" aria-hidden="true"></span>
+        {{ connection.active ? i18n.t('status.active') : i18n.t('status.inactive') }}
+      </div>
+    </button>
+  }
+</ih-catalog-list>

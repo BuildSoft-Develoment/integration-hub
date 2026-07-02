@@ -225,7 +225,7 @@ test.describe('Integration Hub shell', () => {
     });
   });
 
-  for (const route of ['sources', 'processes', 'schedules', 'executions', 'audit'] as const) {
+  for (const route of ['sources', 'processes', 'schedules', 'executions', 'audit', 'connections'] as const) {
     test(`renders the ${route} catalog on the shared catalog-list shell`, async ({ page }) => {
       test.setTimeout(90_000);
 

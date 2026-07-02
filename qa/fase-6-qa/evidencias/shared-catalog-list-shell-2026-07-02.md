@@ -44,9 +44,20 @@ navegación por teclado (`HostListener`/ArrowUp-Down/focusedIndex).
 - Nuevo test "renders the readers catalog on the shared catalog-list shell": en `/#/readers`
   verifica `ih-catalog-list`, los `columnheader` (Nombre/Tipo) y el frame del catálogo.
 
-## Estado y siguientes (roadmap P1→P3→P2)
+## Estado: P1 COMPLETO
 
-- Entregado: el shell + **1 feature migrada** (readers) como prueba.
-- Follow-up incremental: migrar los otros 8 `*-list` al shell (cada uno validado).
-- Después: **P3** empaquetar el shell + form-kit + tokens como `plugin-ui-kit` para autores
-  externos; **P2** sistema de *slots/outlets* para que los plugins enriquezcan páginas existentes.
+Los **7 catálogos** están migrados al shell (commits sucesivos):
+readers, sources, processes, schedules, executions, audit y connections.
+
+- `connections` requirió extender el shell con un **slot de bulk-select** (checkbox
+  "seleccionar todo" en el header + `selectable`/`allSelected`/`someSelected`/`toggleSelectAll`);
+  la fila conserva su checkbox por elemento. La columna se inserta ajustando `gridColumns`.
+- `execution-task`/`process-task` no son el patrón de catálogo (listas anidadas) — fuera de alcance.
+- Validación acumulada: **unit 392/392** (shell +8), **build de producción OK**, **e2e catálogos 7/7**
+  (readers/sources/processes/schedules/executions/audit/connections contra el app real).
+
+## Siguientes (roadmap P1→P3→P2)
+
+- **P3**: empaquetar el shell + form-kit (`managed-editor`) + design tokens como un
+  `plugin-ui-kit` para que los plugins remotos externos consigan el look-and-feel nativo.
+- **P2**: sistema de *slots/outlets* para que los plugins enriquezcan páginas existentes.

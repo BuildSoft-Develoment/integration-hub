@@ -10,6 +10,7 @@ import {
   signal,
 } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { I18nService } from '@integration-hub/core/services';
 import { LoadingComponent } from '../loading/loading.component';
@@ -40,7 +41,14 @@ export type CatalogSortDirection = 'asc' | 'desc';
   selector: 'ih-catalog-list',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, MatButtonModule, MatPaginatorModule, LoadingComponent, EmptyStateComponent],
+  imports: [
+    CommonModule,
+    MatButtonModule,
+    MatCheckboxModule,
+    MatPaginatorModule,
+    LoadingComponent,
+    EmptyStateComponent,
+  ],
   templateUrl: './catalog-list.component.html',
   styleUrl: './catalog-list.component.css',
 })
@@ -64,7 +72,13 @@ export class CatalogListComponent {
   readonly pageSize = input(8);
   readonly pageSizeOptions = input<readonly number[]>([8, 16, 24]);
 
+  /** Renders a leading select-all checkbox column in the header for bulk selection. */
+  readonly selectable = input(false);
+  readonly allSelected = input(false);
+  readonly someSelected = input(false);
+
   readonly toggleSort = output<string>();
+  readonly toggleSelectAll = output<void>();
   readonly pageChange = output<PageEvent>();
   readonly retry = output<void>();
 

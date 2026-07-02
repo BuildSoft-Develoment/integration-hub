@@ -1,5 +1,14 @@
 <div class="list-card ih-catalog-list" [style.--ih-catalog-columns]="gridColumns()">
-  <div class="table-head ih-catalog-table-head" role="row">
+  <div class="table-head ih-catalog-table-head" [class.table-head--selectable]="selectable()" role="row">
+    @if (selectable()) {
+      <mat-checkbox
+        class="ih-checkbox-all"
+        [checked]="allSelected()"
+        [indeterminate]="someSelected()"
+        (change)="toggleSelectAll.emit()"
+        [attr.aria-label]="i18n.t('common.selectAll')"
+      />
+    }
     @for (col of columns(); track col.labelKey) {
       @if (col.sortKey; as sortKey) {
         <button

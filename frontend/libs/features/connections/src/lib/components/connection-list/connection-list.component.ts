@@ -1,13 +1,16 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, inject, input, output, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { MatButtonModule } from '@angular/material/button';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatChipsModule } from '@angular/material/chips';
-import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { PageEvent } from '@angular/material/paginator';
 import { ConnectionProviderDescriptor, ConnectionProviderType } from '@integration-hub/core/providers';
 import { ConnectionManagerService, I18nService } from '@integration-hub/core/services';
-import { IconComponent, LoadingComponent, ResourcePresentation } from '@integration-hub/shared/ui';
+import {
+  CatalogListColumn,
+  CatalogListComponent,
+  IconComponent,
+  ResourcePresentation,
+} from '@integration-hub/shared/ui';
 import { ConnectionRecord } from '../../models/connection.models';
 
 export type SortDir = 'asc' | 'desc';
@@ -15,15 +18,20 @@ export type SortDir = 'asc' | 'desc';
 @Component({
   selector: 'ih-connection-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatButtonModule, MatCheckboxModule, MatChipsModule, MatPaginatorModule, IconComponent, LoadingComponent],
-    templateUrl: './connection-list.component.html',
-    styleUrl: './connection-list.component.css',
-    changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [CommonModule, MatCheckboxModule, MatChipsModule, IconComponent, CatalogListComponent],
+  templateUrl: './connection-list.component.html',
+  styleUrl: './connection-list.component.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ConnectionListComponent {
   readonly i18n = inject(I18nService);
   private readonly connectionManager = inject(ConnectionManagerService);
-  private readonly host = inject(ElementRef<HTMLElement>);
+
+  readonly columns: readonly CatalogListColumn[] = [
+    { labelKey: 'common.name', sortKey: 'name' },
+    { labelKey: 'common.type', sortKey: 'connectionType' },
+    { labelKey: 'common.status', sortKey: 'active' },
+  ];
 
   readonly connections = input.required<readonly ConnectionRecord[]>();
   readonly totalLength = input.required<number>();
@@ -47,6 +55,15 @@ export class ConnectionListComponent {
   readonly toggleSelection = output<number>();
   readonly toggleSelectAll = output<void>();
 
+  /** Columns shift right by a checkbox column when bulk selection is enabled. */
+  readonly gridColumns = computed(() =>
+    this.canEdit()
+      ? '3rem minmax(200px, 1.5fr) 0.9fr 0.8fr'
+      : 'minmax(200px, 1.5fr) 0.9fr 0.8fr'
+  );
+
+  readonly someSelected = computed(() => this.selectedIds().size > 0 && !this.isAllSelected());
+
   onPageChange(event: PageEvent): void {
     this.pageChange.emit(event);
   }
@@ -58,30 +75,4 @@ export class ConnectionListComponent {
   presentation(type: ConnectionProviderType): ResourcePresentation {
     return this.connectionManager.presentation(type);
   }
-
-  readonly focusedIndex = signal(0);
-
-  itemsList(): readonly ConnectionRecord[] {
-    return this.connections();
-  }
-
-  @HostListener('keydown', ['$event'])
-  onKeyDown(event: KeyboardEvent): void {
-    const items = this.itemsList();
-    if (items.length === 0) { return; }
-    let idx = this.focusedIndex();
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      idx = Math.min(idx + 1, items.length - 1);
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      idx = Math.max(idx - 1, 0);
-    } else {
-      return;
-    }
-    this.focusedIndex.set(idx);
-    const row = this.host.nativeElement.querySelector(`[data-row-index="${idx}"]`) as HTMLElement | null;
-    row?.focus();
-  }
-
 }

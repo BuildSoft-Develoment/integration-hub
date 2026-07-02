@@ -1,26 +1,6 @@
-:host .table-head,
-      :host .table-row {
-        grid-template-columns: minmax(200px, 1.5fr) 0.9fr 0.8fr;
-      }
-      :host .table-head--selectable,
-      :host .table-row--selectable {
-        grid-template-columns: 3rem minmax(200px, 1.5fr) 0.9fr 0.8fr;
-      }
-      :host .table-head {
+:host .table-row {
+        grid-template-columns: var(--ih-catalog-columns);
         padding-left: 0.5rem;
-      }
-      :host .table-row {
-        padding-left: 0.5rem;
-      }
-      .row-checkbox {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .ih-checkbox-all {
-        display: flex;
-        align-items: center;
-        justify-content: center;
       }
 
       .row-type,
@@ -42,29 +22,6 @@
         height: 0.52rem;
         border-radius: 999px;
         background: currentColor;
-      }
-
-      .col-sortable {
-        background: none;
-        border: none;
-        color: inherit;
-        font: inherit;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.3rem;
-        padding: 0;
-      }
-
-      .col-sortable:hover {
-        color: var(--ih-text);
-      }
-
-      .sort-arrow {
-        font-size: 0.6rem;
-        line-height: 1;
       }
 
       @media (max-height: 700px) and (min-width: 761px) {

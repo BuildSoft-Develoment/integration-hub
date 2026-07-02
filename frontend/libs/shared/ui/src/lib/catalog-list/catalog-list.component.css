@@ -52,6 +52,12 @@
   text-transform: uppercase;
 }
 
+.ih-checkbox-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .sort-arrow {
   font-size: 0.6rem;
   line-height: 1;
