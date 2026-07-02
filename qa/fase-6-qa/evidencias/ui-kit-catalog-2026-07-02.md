@@ -1,32 +1,40 @@
 # Evidencia P4: catálogo vivo del UI kit (rol de Storybook) - 2026-07-02
 
-## Contexto y decisión (Storybook bloqueado en Angular 21)
+## Contexto y decisión (por qué in-app y no Storybook — corregido)
 
 El objetivo de P4 era **descubribilidad del UI kit** para autores de plugins (lo que aporta
-Storybook: un catálogo navegable de componentes en sus estados). Se intentó Storybook y se
-descartó por un **bloqueo real de compatibilidad**, no por preferencia:
+Storybook: un catálogo navegable de componentes en sus estados).
 
-```
-$ npm install --save-dev --dry-run storybook@latest @storybook/angular@latest @storybook/addon-a11y@latest
-npm error code ERESOLVE
-npm error   peer @angular/common@"20.0.7" from @angular/platform-browser-dynamic@20.0.7
-npm error   node_modules/@angular/platform-browser-dynamic
-npm error     peer ... from @storybook/angular@10.4.6
-Found: @angular/common@21.2.17
-```
+> **Corrección importante.** Una versión anterior de este doc afirmó que "Storybook no
+> soporta Angular 21". **Es falso.** `@storybook/angular@10.4.6` declara peers Angular
+> `>=18.0.0 < 22.0.0` (incluye 21), y `@angular/platform-browser-dynamic@21.2.x` existe.
+> Storybook 10 **es compatible** con Angular 21.
 
-`@storybook/angular@10.4.6` (última) arrastra `@angular/platform-browser-dynamic@20.0.7`
-(Angular **20**), incompatible con el `@angular/common@21.2.17` del proyecto. Forzarlo
-(`--legacy-peer-deps`) metería Angular 20 en el `node_modules` que **comparte el dev en
-marcha** (Quinoa/Nx) → riesgo de romper la stack, y produciría un Storybook frágil.
+El bloqueo real, comprobado empíricamente, es **del propio proyecto**, no de Storybook:
 
-**Solución equivalente sin dependencias nuevas:** un catálogo del UI kit **dentro de la app**
-(ruta `/ui-kit`), que renderiza cada primitiva de `@integration-hub/shared/ui` en sus estados
-con los **tokens `--ih-*` reales**. Ventajas frente a Storybook aquí:
+1. La familia Angular del workspace está en **patches mezclados**: `@angular/core@21.2.7`,
+   `@angular/common@21.2.17`, `@angular/forms@21.2.7`, `@angular/material`/`cdk@21.2.5`.
+2. Storybook necesita `@angular/platform-browser-dynamic`, un paquete **interno de Angular
+   con peers de versión exacta**. Añadirlo a cualquier patch choca con algún paquete Angular
+   fijado en otro → `ERESOLVE` en un `npm install` normal.
+3. El atajo `--legacy-peer-deps` es **destructivo aquí**: al ignorar peers, npm **poda**
+   dependencias peer-only reales — se probó y **eliminó `@foblex/mediator`/`2d`/`platform`**
+   (usados por el diagrama de flujo), y el build de la app falló con
+   `Could not resolve "@foblex/mediator"`. Revertido; app de nuevo verde (400/400, salud 200).
 
-- Cero deps nuevas, cero riesgo de compat, cero disrupción del `node_modules` compartido.
+Instalar Storybook limpio exige **primero alinear toda la familia Angular a un único patch**
+(core/common/forms/compiler/animations/platform-browser/material/cdk…): una tarea de
+mantenimiento aparte con su propia superficie de regresión, no algo para colar en un setup de
+Storybook sobre el stack en marcha. Queda como follow-up explícito (idealmente en su propio PR).
+
+**Solución entregada (equivalente, sin tocar dependencias):** un catálogo del UI kit **dentro
+de la app** (ruta `/ui-kit`), que renderiza cada primitiva de `@integration-hub/shared/ui` en
+sus estados con los **tokens `--ih-*` reales**. Ventajas en este contexto:
+
+- Cero deps nuevas, cero disrupción del `node_modules` compartido con el dev en marcha.
 - Usa los tokens globales reales → el **modo oscuro** sale gratis (toggle de tema del shell).
 - Es una referencia **viva** que el autor ve dentro del propio producto.
+- Cuando se alinee la familia Angular, estos mismos componentes se reutilizan como *stories*.
 
 ## Qué se entregó
 
@@ -61,10 +69,12 @@ con los **tokens `--ih-*` reales**. Ventajas frente a Storybook aquí:
 
 - Entregado: el catálogo del UI kit + ruta + estados + a11y de las propias primitivas
   (ya cubierta por P1/P3: headers `columnheader`, teclado, focus-visible).
-- El addon `axe` de Storybook no aplica (Storybook descartado); la a11y de las piezas se
-  valida por sus specs y por los e2e de P1 (`columnheader`, roving-tabindex, outline).
-- Cuando `@storybook/angular` soporte Angular 21 limpiamente, este catálogo puede migrarse a
-  Storybook reutilizando estos mismos componentes como stories.
+- El addon `axe` de Storybook queda pendiente del follow-up de Storybook (ver contexto); la
+  a11y de las piezas se valida entretanto por sus specs y por los e2e de P1 (`columnheader`,
+  roving-tabindex, outline).
+- **Follow-up Storybook**: alinear la familia Angular a un patch único y luego instalar
+  `storybook` + `@storybook/angular` + `@angular/platform-browser-dynamic` (todo 21.2.x) con
+  un `npm install` normal; reutilizar estos componentes como *stories* + addon `a11y`.
 - Documentado en `guia-autor-plugins.md` (sección 2b).
 
 ## Doble check + cierre (dogfooding y descubribilidad)

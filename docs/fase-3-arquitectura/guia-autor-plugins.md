@@ -75,8 +75,9 @@ Ejemplo: `apps/sample-plugin/src/app/widget.component.ts` renderiza con `ih-icon
 
 > **Catálogo vivo**: la ruta `/#/ui-kit` (gated a `admin`) muestra cada primitiva del kit en
 > sus estados con los tokens reales — la referencia de autor. Cumple el rol de Storybook
-> in-app; Storybook aún no soporta Angular 21 limpiamente (ver
-> `qa/fase-6-qa/evidencias/ui-kit-catalog-2026-07-02.md`).
+> in-app. Storybook 10 **sí** es compatible con Angular 21; instalarlo en este workspace
+> requiere antes alinear la familia Angular (patches mezclados) para no podar peers reales —
+> ver el follow-up en `qa/fase-6-qa/evidencias/ui-kit-catalog-2026-07-02.md`.
 
 ## 2c. Slots/outlets (enriquecer páginas existentes)
 
