@@ -3,6 +3,7 @@ package com.integrationhub.platform.service.plugin;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.entity.PluginDescriptor;
 import com.integrationhub.platform.repository.PluginDescriptorRepository;
+import com.integrationhub.platform.repository.PluginDescriptorVersionRepository;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -18,9 +19,12 @@ class BackendPluginCatalogServiceTest {
     @Test
     void reloadKeepsInvalidDescriptorsVisibleAsDegradedAfterRegistryReplacement() {
         var repository = mock(PluginDescriptorRepository.class);
+        var versionRepository = mock(PluginDescriptorVersionRepository.class);
+        when(versionRepository.listVersions()).thenReturn(List.of());
         var registry = new RemotePluginRegistry();
         var service = new BackendPluginCatalogService(
                 repository,
+                versionRepository,
                 new PluginDescriptorCatalogMapper(new ObjectMapper()),
                 new PluginDescriptorTrustPolicy(Set.of()),
                 registry);

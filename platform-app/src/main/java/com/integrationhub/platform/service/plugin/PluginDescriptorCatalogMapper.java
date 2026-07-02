@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.entity.PluginDescriptor;
+import com.integrationhub.platform.entity.PluginDescriptorVersion;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.util.LinkedHashSet;
@@ -19,6 +20,28 @@ public class PluginDescriptorCatalogMapper {
 
     public PluginDescriptorCatalogMapper(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
+    }
+
+    /** Builds a remote descriptor from a stored plugin version (used for canary rollout). */
+    public RemotePluginDescriptor toRemoteDescriptor(PluginDescriptorVersion version) {
+        if (version == null) {
+            throw new IllegalArgumentException("Plugin descriptor version is required");
+        }
+        var descriptor = new PluginDescriptor();
+        descriptor.id = version.pluginId;
+        descriptor.version = version.version;
+        descriptor.spiVersion = version.spiVersion;
+        descriptor.providedTypesJson = version.providedTypesJson;
+        descriptor.providedSourceTypesJson = version.providedSourceTypesJson;
+        descriptor.providedReaderTypesJson = version.providedReaderTypesJson;
+        descriptor.transport = version.transport;
+        descriptor.endpoint = version.endpoint;
+        descriptor.trusted = version.trusted;
+        descriptor.marketplaceUrl = version.marketplaceUrl;
+        descriptor.channel = version.channel;
+        descriptor.pinnedVersion = version.pinnedVersion;
+        descriptor.pinned = version.pinned;
+        return toRemoteDescriptor(descriptor);
     }
 
     public RemotePluginDescriptor toRemoteDescriptor(PluginDescriptor descriptor) {

@@ -72,6 +72,65 @@ class RemotePluginRegistryTest {
         assertThrows(IllegalArgumentException.class, () -> registry.register(duplicate));
     }
 
+    private RemotePluginDescriptor canaryDescriptor() {
+        return new RemotePluginDescriptor(
+                "acme",
+                "2.0.0",
+                "1",
+                Set.of("ACME_DO", "ACME_CHECK"),
+                Set.of("REMOTE_FS"),
+                Set.of("REMOTE_CSV"),
+                "GRPC",
+                null,
+                true);
+    }
+
+    @Test
+    void invocationResolvesStableWhenNoCanaryIsRegistered() {
+        registry.replaceDescriptors(List.of(descriptor()));
+
+        for (int i = 0; i < 20; i++) {
+            assertEquals("1.0.0", registry.descriptorForInvocation("ACME_DO").orElseThrow().version());
+        }
+    }
+
+    @Test
+    void invocationRoutesAllTrafficToCanaryAtFullWeight() {
+        registry.replaceDescriptors(List.of(descriptor()),
+                List.of(new RemotePluginRegistry.CanaryCandidate(canaryDescriptor(), 100)));
+
+        // Stable/diagnostic resolution is unchanged; only invocation splits.
+        assertEquals("1.0.0", registry.descriptorFor("ACME_DO").orElseThrow().version());
+        for (int i = 0; i < 20; i++) {
+            assertEquals("2.0.0", registry.descriptorForInvocation("ACME_DO").orElseThrow().version());
+            assertEquals("2.0.0", registry.descriptorForSourceInvocation("REMOTE_FS").orElseThrow().version());
+            assertEquals("2.0.0", registry.descriptorForReaderInvocation("REMOTE_CSV").orElseThrow().version());
+        }
+    }
+
+    @Test
+    void invocationIgnoresCanaryWithNonPositiveWeight() {
+        registry.replaceDescriptors(List.of(descriptor()),
+                List.of(new RemotePluginRegistry.CanaryCandidate(canaryDescriptor(), 0)));
+
+        for (int i = 0; i < 20; i++) {
+            assertEquals("1.0.0", registry.descriptorForInvocation("ACME_DO").orElseThrow().version());
+        }
+    }
+
+    @Test
+    void invocationSplitsTrafficAtPartialWeight() {
+        registry.replaceDescriptors(List.of(descriptor()),
+                List.of(new RemotePluginRegistry.CanaryCandidate(canaryDescriptor(), 50)));
+
+        var versionsSeen = new java.util.HashSet<String>();
+        for (int i = 0; i < 300; i++) {
+            versionsSeen.add(registry.descriptorForInvocation("ACME_DO").orElseThrow().version());
+        }
+        // Over many draws both the stable and the canary version are exercised.
+        assertEquals(Set.of("1.0.0", "2.0.0"), versionsSeen);
+    }
+
     @Test
     void replaceDescriptorsKeepsPreviousStateWhenCatalogHasDuplicates() {
         registry.register(descriptor());

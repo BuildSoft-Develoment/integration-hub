@@ -43,7 +43,7 @@ public class ReaderProviderRegistry {
         if (local.isPresent()) {
             return local.get();
         }
-        var remote = remotePlugins.descriptorForReader(type);
+        var remote = remotePlugins.descriptorForReaderInvocation(type);
         if (remote.isPresent()) {
             var invoker = remoteInvoker.get().orElseThrow(() -> new IllegalStateException(
                     "Remote reader provider " + type + " is registered by plugin "

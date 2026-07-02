@@ -1,6 +1,7 @@
 package com.integrationhub.platform.service.plugin;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import java.util.Comparator;
 import java.util.Collection;
@@ -8,6 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -27,6 +29,26 @@ public class RemotePluginRegistry {
     private final Map<String, RemotePluginDescriptor> bySourceType = new ConcurrentHashMap<>();
     private final Map<String, RemotePluginDescriptor> byReaderType = new ConcurrentHashMap<>();
     private final Map<String, String> degradedById = new ConcurrentHashMap<>();
+
+    // Canary candidates (a non-active version + its rollout weight) indexed by capability.
+    private final Map<String, CanaryCandidate> canaryByType = new ConcurrentHashMap<>();
+    private final Map<String, CanaryCandidate> canaryBySourceType = new ConcurrentHashMap<>();
+    private final Map<String, CanaryCandidate> canaryByReaderType = new ConcurrentHashMap<>();
+
+    private final CanaryRolloutSelector rolloutSelector;
+
+    public RemotePluginRegistry() {
+        this(new CanaryRolloutSelector());
+    }
+
+    @Inject
+    public RemotePluginRegistry(CanaryRolloutSelector rolloutSelector) {
+        this.rolloutSelector = rolloutSelector;
+    }
+
+    /** A non-active plugin version eligible to receive a share of traffic. */
+    public record CanaryCandidate(RemotePluginDescriptor descriptor, int weight) {
+    }
 
     public void register(RemotePluginDescriptor descriptor) {
         for (var type : descriptor.providedTypes()) {
@@ -66,6 +88,12 @@ public class RemotePluginRegistry {
     }
 
     public void replaceDescriptors(Collection<RemotePluginDescriptor> descriptors) {
+        replaceDescriptors(descriptors, List.of());
+    }
+
+    public void replaceDescriptors(
+            Collection<RemotePluginDescriptor> descriptors,
+            Collection<CanaryCandidate> canaries) {
         var nextById = new ConcurrentHashMap<String, RemotePluginDescriptor>();
         var nextByType = new ConcurrentHashMap<String, RemotePluginDescriptor>();
         var nextBySourceType = new ConcurrentHashMap<String, RemotePluginDescriptor>();
@@ -76,15 +104,32 @@ public class RemotePluginRegistry {
             indexCapabilities(nextBySourceType, descriptor, descriptor.providedSourceTypes(), "source");
             indexCapabilities(nextByReaderType, descriptor, descriptor.providedReaderTypes(), "reader");
         }
+        var nextCanaryType = new ConcurrentHashMap<String, CanaryCandidate>();
+        var nextCanarySourceType = new ConcurrentHashMap<String, CanaryCandidate>();
+        var nextCanaryReaderType = new ConcurrentHashMap<String, CanaryCandidate>();
+        for (var canary : canaries) {
+            if (canary == null || canary.weight() <= 0) {
+                continue;
+            }
+            indexCanary(nextCanaryType, canary, canary.descriptor().providedTypes());
+            indexCanary(nextCanarySourceType, canary, canary.descriptor().providedSourceTypes());
+            indexCanary(nextCanaryReaderType, canary, canary.descriptor().providedReaderTypes());
+        }
         byId.clear();
         byType.clear();
         bySourceType.clear();
         byReaderType.clear();
         degradedById.clear();
+        canaryByType.clear();
+        canaryBySourceType.clear();
+        canaryByReaderType.clear();
         byId.putAll(nextById);
         byType.putAll(nextByType);
         bySourceType.putAll(nextBySourceType);
         byReaderType.putAll(nextByReaderType);
+        canaryByType.putAll(nextCanaryType);
+        canaryBySourceType.putAll(nextCanarySourceType);
+        canaryByReaderType.putAll(nextCanaryReaderType);
     }
 
     public Optional<RemotePluginDescriptor> descriptorFor(String taskType) {
@@ -110,6 +155,41 @@ public class RemotePluginRegistry {
             return Optional.empty();
         }
         return Optional.ofNullable(byReaderType.get(normalize(readerType)));
+    }
+
+    /**
+     * Resolves the descriptor to invoke for a task type, applying canary rollout: when a
+     * canary candidate is registered for the type, a share of invocations (its weight %)
+     * is routed to it, the rest to the active/stable descriptor. Falls back to the stable
+     * path when no canary is registered, so behaviour is unchanged unless a rollout is set.
+     */
+    public Optional<RemotePluginDescriptor> descriptorForInvocation(String taskType) {
+        return resolveWeighted(byType, canaryByType, taskType);
+    }
+
+    public Optional<RemotePluginDescriptor> descriptorForSourceInvocation(String sourceType) {
+        return resolveWeighted(bySourceType, canaryBySourceType, sourceType);
+    }
+
+    public Optional<RemotePluginDescriptor> descriptorForReaderInvocation(String readerType) {
+        return resolveWeighted(byReaderType, canaryByReaderType, readerType);
+    }
+
+    private Optional<RemotePluginDescriptor> resolveWeighted(
+            Map<String, RemotePluginDescriptor> stableIndex,
+            Map<String, CanaryCandidate> canaryIndex,
+            String type) {
+        if (type == null || type.isBlank()) {
+            return Optional.empty();
+        }
+        var key = normalize(type);
+        var stable = Optional.ofNullable(stableIndex.get(key));
+        var canary = canaryIndex.get(key);
+        if (canary != null
+                && rolloutSelector.routesToCanary(canary.weight(), UUID.randomUUID().toString())) {
+            return Optional.of(canary.descriptor());
+        }
+        return stable.isPresent() ? stable : Optional.ofNullable(canary == null ? null : canary.descriptor());
     }
 
     public List<RemotePluginDescriptor> descriptors() {
@@ -156,6 +236,15 @@ public class RemotePluginRegistry {
                 throw new IllegalArgumentException(
                         "Remote " + capabilityName + " type " + type + " already provided by plugin " + previous.id());
             }
+        }
+    }
+
+    private static void indexCanary(
+            Map<String, CanaryCandidate> target,
+            CanaryCandidate canary,
+            Collection<String> types) {
+        for (var type : types) {
+            target.putIfAbsent(normalize(type), canary);
         }
     }
 }

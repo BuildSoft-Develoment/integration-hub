@@ -72,7 +72,7 @@ public class TaskProviderRegistry {
             return local.get();
         }
 
-        var remote = remotePlugins.descriptorFor(type);
+        var remote = remotePlugins.descriptorForInvocation(type);
         if (remote.isPresent()) {
             var invoker = remoteInvoker.get().orElseThrow(() -> new IllegalStateException(
                     "Remote task provider " + type + " is registered by plugin "
