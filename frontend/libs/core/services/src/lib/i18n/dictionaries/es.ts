@@ -201,6 +201,7 @@ export const es = {
   'common.retry': 'Reintentar',
   'common.error': 'Algo salió mal.',
   'common.empty': 'Aún no hay elementos.',
+  'common.unsupportedType': 'Tipo no soportado',
   'schemaForm.required': 'Este campo es obligatorio.',
   'schemaForm.invalid': 'Revisa este valor.',
   'schemaForm.secretRef': 'Referencia a un secreto gestionado (no el valor en claro).',

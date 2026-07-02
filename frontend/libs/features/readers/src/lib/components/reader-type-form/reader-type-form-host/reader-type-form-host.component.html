@@ -17,7 +17,13 @@
       @case ('SWIFT_MT') {
         <ih-reader-swift-mt-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" />
       }
-      @default {
+      @case ('JSON') {
         <ih-reader-json-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" />
+      }
+      @default {
+        <!-- Sin fallback silencioso a JSON para tipos desconocidos. -->
+        <p class="reader-type-form-host__unsupported" role="alert">
+          {{ i18n.t('common.unsupportedType') }}: <code>{{ readerType() }}</code>
+        </p>
       }
     }

@@ -201,6 +201,7 @@ export const en = {
   'common.retry': 'Retry',
   'common.error': 'Something went wrong.',
   'common.empty': 'No items yet.',
+  'common.unsupportedType': 'Unsupported type',
   'schemaForm.required': 'This field is required.',
   'schemaForm.invalid': 'Check this value.',
   'schemaForm.secretRef': 'Reference to a managed secret (not the plaintext value).',
