@@ -41,8 +41,14 @@ Campos y reglas (validadas por `AppPluginRuntimeRegistry`):
 ## 2b. UI kit del plugin (look-and-feel nativo)
 
 Un remote consigue la apariencia nativa importando el **UI kit** de la plataforma desde
-`@integration-hub/shared/ui`, compartido como **singleton** por Native Federation (reusa la
-instancia, el tema y el `I18nService` del host en vez de duplicarlos).
+`@integration-hub/shared/ui`. La apariencia es nativa porque los **design tokens son CSS
+global** (`:root`), así que los componentes los leen aunque vengan empaquetados.
+
+> Nota de sharing: un plugin que dependa del kit como **paquete publicado y versionado**
+> (p.ej. `@integration-hub/plugin-ui-kit`) puede compartirlo como **singleton** del host
+> (reusa la instancia e `I18nService`). Un remote que lo importe por el path de workspace
+> (sin versión) lo **empaqueta** (Native Federation no dedupe libs de workspace). Ambos se
+> ven nativos; el singleton solo evita duplicar el bundle.
 
 Primitivas disponibles (entre otras):
 

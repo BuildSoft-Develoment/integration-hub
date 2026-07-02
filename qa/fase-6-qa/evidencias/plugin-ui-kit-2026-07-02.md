@@ -1,9 +1,15 @@
 # Evidencia P3: UI kit para plugins externos - 2026-07-02
 
 Habilita que un plugin remoto instalado desde fuera consiga el **look-and-feel nativo**
-consumiendo el UI kit de la plataforma (`@integration-hub/shared/ui`) compartido como
-singleton por Native Federation. Cierra el objetivo "instalar plugins de fuera" con
-plugins que se ven como parte del producto, no ajenos.
+consumiendo el UI kit de la plataforma (`@integration-hub/shared/ui`). Cierra el objetivo
+"instalar plugins de fuera" con plugins que se ven como parte del producto, no ajenos.
+
+> **Corrección tras doble check:** el `remoteEntry` del sample-plugin comparte los `@angular/*`
+> pero **no** `@integration-hub/shared/ui` — Native Federation **empaqueta** los libs de
+> workspace (path de tsconfig, sin versión) en vez de compartirlos como singleton. El plugin
+> **sí consume el kit** y se ve nativo (los design tokens son CSS global en `:root`), pero la
+> primitiva va **bundled**, no como singleton del host. El sharing singleton real requiere
+> publicar el kit como paquete versionado (`@integration-hub/plugin-ui-kit`) — follow-up.
 
 ## Cambios
 

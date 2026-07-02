@@ -4,8 +4,8 @@ import { IconComponent, StatusBadgeComponent } from '@integration-hub/shared/ui'
 /**
  * Exposed remote widget. Consumes the platform UI kit (`@integration-hub/shared/ui`):
  * `ih-status-badge`, `ih-icon` and the design tokens, so an externally installed plugin
- * renders with the native look-and-feel. The kit is shared as a singleton via Native
- * Federation (see federation.config.js), so it reuses the host's instance and theme.
+ * renders with the native look-and-feel (the tokens are global CSS, read even when the
+ * kit is bundled). See federation.config.js for the singleton-sharing caveat.
  */
 @Component({
   selector: 'app-sample-plugin-widget',
