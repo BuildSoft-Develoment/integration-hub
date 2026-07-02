@@ -38,6 +38,34 @@ Campos y reglas (validadas por `AppPluginRuntimeRegistry`):
 - **`remote`**: `url` `https://`, `exposedModule`, `integrity` (SRI `sha256|384|512`),
   `signature` (`keyId:base64`).
 
+## 2b. UI kit del plugin (look-and-feel nativo)
+
+Un remote consigue la apariencia nativa importando el **UI kit** de la plataforma desde
+`@integration-hub/shared/ui`, compartido como **singleton** por Native Federation (reusa la
+instancia, el tema y el `I18nService` del host en vez de duplicarlos).
+
+Primitivas disponibles (entre otras):
+
+| Import | Uso |
+|---|---|
+| `CatalogListComponent` (`ih-catalog-list`) | catálogo con header sortable, estados, paginación, teclado y a11y; proyecta las filas. |
+| `StatusBadgeComponent` (`ih-status-badge`) | badge de estado (`success`/`error`/`warning`/`info`/`neutral`) con tokens. |
+| `EmptyStateComponent` (`ih-empty-state`), `LoadingComponent` (`ih-loading`), `IconComponent` (`ih-icon`) | estados e iconografía. |
+| Design tokens (`--ih-*`) e `I18nService` (`registerMessages`) | color/tipografía/espaciado y traducciones. |
+
+Compártelas en `federation.config.js`:
+
+```js
+shared: {
+  ...shareAll({ singleton: true, strictVersion: true, requiredVersion: 'auto' }),
+  '@integration-hub/shared/ui': { singleton: true, strictVersion: false, requiredVersion: false },
+  '@integration-hub/core/services': { singleton: true, strictVersion: false, requiredVersion: false },
+}
+```
+
+Ejemplo: `apps/sample-plugin/src/app/widget.component.ts` renderiza con `ih-icon` +
+`ih-status-badge` + tokens.
+
 ## 3. Modelo de seguridad (fail-safe)
 
 1. **Allowlist de origen**: el `origin` del `remote.url` debe estar en

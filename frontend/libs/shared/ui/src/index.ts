@@ -19,6 +19,7 @@ export * from './lib/app-layout/plugins/app-workspace.token';
 export * from './lib/app-layout/preferences/app-preferences.facade';
 export * from './lib/breadcrumb/breadcrumb.component';
 export * from './lib/catalog-list/catalog-list.component';
+export * from './lib/status-badge/status-badge.component';
 export * from './lib/empty-state/empty-state.component';
 export * from './lib/floating-action-bar/floating-action-bar.component';
 export type { ActionBarAction } from './lib/floating-action-bar/floating-action-bar.component';

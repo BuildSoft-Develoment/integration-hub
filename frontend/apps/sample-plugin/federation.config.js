@@ -11,6 +11,10 @@ module.exports = withNativeFederation({
 
   shared: {
     ...shareAll({ singleton: true, strictVersion: true, requiredVersion: 'auto' }),
+    // Platform UI kit shared as singletons so the remote reuses the host's components,
+    // theme tokens and I18nService instead of bundling its own copy.
+    '@integration-hub/shared/ui': { singleton: true, strictVersion: false, requiredVersion: false },
+    '@integration-hub/core/services': { singleton: true, strictVersion: false, requiredVersion: false },
   },
 
   skip: [
