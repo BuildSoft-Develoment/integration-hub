@@ -108,6 +108,17 @@ export const PLATFORM_ROUTE_CONTRIBUTIONS: readonly AppRouteContribution[] = [
         (module) => module.PluginDiagnosticsPageComponent
       ),
   },
+  {
+    // Live catalog of the shared UI kit (author reference). Not in the nav; gated to admins.
+    id: 'ui-kit',
+    path: '/ui-kit',
+    titleKey: 'uiKit.title',
+    requiredCapability: APP_SECTION_CAPABILITIES.plugins,
+    loadComponent: () =>
+      import('../features/ui-kit/ui-kit-gallery.component').then(
+        (module) => module.UiKitGalleryComponent
+      ),
+  },
 ];
 
 export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {

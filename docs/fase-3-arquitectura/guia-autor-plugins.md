@@ -73,6 +73,11 @@ shared: {
 Ejemplo: `apps/sample-plugin/src/app/widget.component.ts` renderiza con `ih-icon` +
 `ih-status-badge` + tokens.
 
+> **Catálogo vivo**: la ruta `/#/ui-kit` (gated a `admin`) muestra cada primitiva del kit en
+> sus estados con los tokens reales — la referencia de autor. Cumple el rol de Storybook
+> in-app; Storybook aún no soporta Angular 21 limpiamente (ver
+> `qa/fase-6-qa/evidencias/ui-kit-catalog-2026-07-02.md`).
+
 ## 2c. Slots/outlets (enriquecer páginas existentes)
 
 Además de añadir pantallas, un plugin puede **inyectar un widget dentro de una página

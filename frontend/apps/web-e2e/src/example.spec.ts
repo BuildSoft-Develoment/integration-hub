@@ -352,6 +352,28 @@ test.describe('Integration Hub shell', () => {
     await expect(page.locator('ih-slot').first()).toBeAttached({ timeout: 20_000 });
   });
 
+  test('renders the UI kit catalog with the shared primitives', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    await gotoAuthenticated(page, '/#/ui-kit');
+
+    // The author-facing catalog of @integration-hub/shared/ui.
+    await expect(page.getByRole('heading', { name: /^UI kit$/ }).first()).toBeVisible({
+      timeout: 20_000,
+    });
+    // One badge per kind (5) plus the badges inside the demo catalog rows.
+    await expect(page.locator('ih-status-badge').first()).toBeVisible();
+    expect(await page.locator('ih-status-badge').count()).toBeGreaterThanOrEqual(5);
+    // The live catalog-list shell renders with sample rows by default.
+    const list = page.locator('ih-catalog-list').first();
+    await expect(list).toBeVisible();
+    await expect(list.locator('[data-row-index]')).toHaveCount(3);
+    // Toggling to the empty state clears the rows and shows the empty-state component.
+    await page.getByRole('button', { name: 'empty' }).click();
+    await expect(list.locator('[data-row-index]')).toHaveCount(0);
+    await expect(list.locator('ih-empty-state')).toBeVisible();
+  });
+
   test('shows the plugin health card on the overview dashboard', async ({ page }) => {
     test.setTimeout(90_000);
 
