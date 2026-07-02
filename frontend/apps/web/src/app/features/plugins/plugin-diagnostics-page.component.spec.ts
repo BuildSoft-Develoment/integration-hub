@@ -481,6 +481,34 @@ describe('PluginDiagnosticsPageComponent', () => {
     http.verify();
   });
 
+  it('sets a canary rollout weight via the API and refetches diagnostics', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({ installed: [], versions: [], degraded: {} });
+    await fixture.whenStable();
+
+    fixture.componentInstance.setCanaryWeight('acme', '2.0.0', '25');
+    const req = http.expectOne(
+      (r) => r.method === 'POST' && r.url === '/api/plugins/acme/versions/2.0.0/canary-weight'
+    );
+    expect(req.request.body).toEqual({ weight: 25 });
+    req.flush({ installed: [], versions: [], degraded: {} });
+    await fixture.whenStable();
+    http.expectOne('/api/plugins').flush({ installed: [], versions: [], degraded: {} });
+    http.match('/api/plugins/canary/metrics').forEach((r) => r.flush([]));
+    http.match('/api/plugins/ui-catalog').forEach((r) => r.flush({ manifests: [] }));
+    http.verify();
+  });
+
   it('renders backend plugin versions with an activate action for inactive ones', async () => {
     TestBed.configureTestingModule({
       providers: [

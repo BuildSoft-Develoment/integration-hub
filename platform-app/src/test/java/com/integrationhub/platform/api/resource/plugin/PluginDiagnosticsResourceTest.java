@@ -1,9 +1,11 @@
 package com.integrationhub.platform.api.resource.plugin;
 
 import com.integrationhub.platform.api.request.plugin.PluginCanaryMetricRequest;
+import com.integrationhub.platform.api.request.plugin.PluginCanaryWeightRequest;
 import com.integrationhub.platform.api.request.plugin.PluginInstallRequest;
 import com.integrationhub.platform.api.request.plugin.PluginMarketplaceInstallRequest;
 import com.integrationhub.platform.entity.PluginDescriptorVersion;
+import com.integrationhub.platform.service.plugin.CanaryRolloutSelector;
 import com.integrationhub.platform.service.plugin.MetricsPluginPromotionGate;
 import com.integrationhub.platform.service.plugin.PluginCanaryStatus;
 import com.integrationhub.platform.service.plugin.PluginRuntimeMetricsRecorder;
@@ -229,7 +231,7 @@ class PluginDiagnosticsResourceTest {
         var admin = mock(BackendPluginAdminService.class);
         var recorder = mock(PluginRuntimeMetricsRecorder.class);
         var resource = new PluginDiagnosticsResource(
-                registry, admin, recorder, mock(MetricsPluginPromotionGate.class));
+                registry, admin, recorder, mock(MetricsPluginPromotionGate.class), new CanaryRolloutSelector());
         var request = new PluginCanaryMetricRequest("ACME_DO", "KAFKA", true, "SUCCESS", 25, null);
 
         var diagnostics = resource.recordCanaryMetric("acme", "1.1.0", request);
@@ -251,7 +253,7 @@ class PluginDiagnosticsResourceTest {
                 "acme", "2.0.0", 5, 1, 0.2, 24, 3, 0.0, false, "FAILURE_RATIO_EXCEEDED",
                 List.of(0.0, 0.5, 0.2)));
         var resource = new PluginDiagnosticsResource(
-                registry, admin, mock(PluginRuntimeMetricsRecorder.class), gate);
+                registry, admin, mock(PluginRuntimeMetricsRecorder.class), gate, new CanaryRolloutSelector());
 
         var metrics = resource.canaryMetrics();
 
@@ -266,8 +268,67 @@ class PluginDiagnosticsResourceTest {
         assertEquals(List.of(0.0, 0.5, 0.2), metrics.getFirst().trend());
     }
 
+    @Test
+    void setCanaryWeightDelegatesToAdminServiceAndReturnsDiagnostics() {
+        var registry = new RemotePluginRegistry();
+        var admin = mock(BackendPluginAdminService.class);
+        when(admin.setCanaryWeight("acme", "2.0.0", 25)).thenReturn(true);
+        var resource = resource(registry, admin);
+
+        var diagnostics = resource.setCanaryWeight("acme", "2.0.0", new PluginCanaryWeightRequest(25));
+
+        verify(admin).setCanaryWeight("acme", "2.0.0", 25);
+        assertEquals(0, diagnostics.installed().size());
+    }
+
+    @Test
+    void setCanaryWeightReturnsNotFoundForUnknownVersion() {
+        var registry = new RemotePluginRegistry();
+        var admin = mock(BackendPluginAdminService.class);
+        var resource = resource(registry, admin);
+
+        assertThrows(
+                jakarta.ws.rs.NotFoundException.class,
+                () -> resource.setCanaryWeight("missing", "9.9.9", new PluginCanaryWeightRequest(10)));
+    }
+
+    @Test
+    void canaryRouteReportsTheRoutingDecisionForASegment() {
+        var registry = new RemotePluginRegistry();
+        registry.register(new RemotePluginDescriptor("acme", "1.0.0", "1", Set.of("ACME_DO"), "GRPC", true));
+        var admin = mock(BackendPluginAdminService.class);
+        var canary = new PluginDescriptorVersion();
+        canary.pluginId = "acme";
+        canary.version = "2.0.0";
+        canary.channel = "canary";
+        canary.canaryWeight = 100; // route everything to canary
+        when(admin.listVersions()).thenReturn(List.of(canary));
+        var resource = resource(registry, admin);
+
+        var decision = resource.canaryRoute("acme", "tenant-42");
+
+        assertEquals("acme", decision.pluginId());
+        assertEquals(true, decision.routesToCanary());
+        assertEquals("2.0.0", decision.version());
+    }
+
+    @Test
+    void canaryRouteFallsBackToStableWhenNoCanaryVersion() {
+        var registry = new RemotePluginRegistry();
+        registry.register(new RemotePluginDescriptor("acme", "1.0.0", "1", Set.of("ACME_DO"), "GRPC", true));
+        var admin = mock(BackendPluginAdminService.class);
+        when(admin.listVersions()).thenReturn(List.of());
+        var resource = resource(registry, admin);
+
+        var decision = resource.canaryRoute("acme", "tenant-42");
+
+        assertEquals(false, decision.routesToCanary());
+        assertEquals("1.0.0", decision.version());
+    }
+
     private PluginDiagnosticsResource resource(RemotePluginRegistry registry, BackendPluginAdminService admin) {
         return new PluginDiagnosticsResource(
-                registry, admin, mock(PluginRuntimeMetricsRecorder.class), mock(MetricsPluginPromotionGate.class));
+                registry, admin, mock(PluginRuntimeMetricsRecorder.class),
+                mock(MetricsPluginPromotionGate.class), new CanaryRolloutSelector());
     }
 }

@@ -187,6 +187,44 @@ test.describe('Integration Hub shell', () => {
     await expect(page.getByText('demo-remote')).toBeVisible({ timeout: 15_000 });
   });
 
+  test('sets a canary rollout weight from the versions table', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    const json = (body: unknown) => ({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+    let weight: number | null = null;
+    const diagnostics = () => ({
+      installed: [],
+      versions: [
+        { id: 'acme', version: '1.0.0', spiVersion: '1', transport: 'GRPC', trusted: true, active: true, channel: 'stable', pinned: false, canaryWeight: null },
+        { id: 'acme', version: '2.0.0', spiVersion: '1', transport: 'GRPC', trusted: true, active: false, channel: 'canary', pinned: false, canaryWeight: weight },
+      ],
+      degraded: {},
+    });
+
+    await page.route('**/api/plugins', (route) => route.fulfill(json(diagnostics())));
+    await page.route('**/api/plugins/canary/metrics', (route) => route.fulfill(json([])));
+    await page.route('**/api/plugins/acme/versions/2.0.0/canary-weight', (route) => {
+      weight = JSON.parse(route.request().postData() || '{}').weight;
+      return route.fulfill(json(diagnostics()));
+    });
+
+    await gotoAuthenticated(page, '/#/plugins');
+
+    const weightInput = page.locator('input.plugins-input--num').first();
+    await expect(weightInput).toBeVisible({ timeout: 15_000 });
+    await weightInput.fill('40');
+    await page.getByRole('button', { name: /Fijar peso|Set weight/ }).first().click();
+
+    // After the refetch the persisted weight is reflected.
+    await expect(page.locator('[data-testid="canary-weight"]').first()).toHaveText('40%', {
+      timeout: 15_000,
+    });
+  });
+
   test('previews a frontend plugin manifest in the console', async ({ page }) => {
     test.setTimeout(90_000);
 

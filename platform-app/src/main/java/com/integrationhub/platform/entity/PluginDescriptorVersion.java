@@ -60,6 +60,10 @@ public class PluginDescriptorVersion {
     @Column(nullable = false)
     public boolean pinned = false;
 
+    /** Percentage (0-100) of traffic a canary version should receive; null when unset. */
+    @Column(name = "canary_weight")
+    public Integer canaryWeight;
+
     @Column(name = "installed_at", nullable = false)
     public LocalDateTime installedAt = LocalDateTime.now();
 

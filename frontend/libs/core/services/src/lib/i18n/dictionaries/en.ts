@@ -46,6 +46,8 @@ export const en = {
   'plugins.versions': 'Versions',
   'plugins.empty.versions': 'No plugin versions registered.',
   'plugins.col.channel': 'Channel',
+  'plugins.col.canaryWeight': 'Canary weight',
+  'plugins.setWeight': 'Set weight',
   'plugins.version.active': 'Active',
   'plugins.version.inactive': 'Inactive',
   'plugins.activateVersion': 'Activate version',

@@ -1,14 +1,17 @@
 package com.integrationhub.platform.api.resource.plugin;
 
 import com.integrationhub.platform.api.request.plugin.PluginCanaryMetricRequest;
+import com.integrationhub.platform.api.request.plugin.PluginCanaryWeightRequest;
 import com.integrationhub.platform.api.request.plugin.PluginInstallRequest;
 import com.integrationhub.platform.api.request.plugin.PluginMarketplaceInstallRequest;
 import com.integrationhub.platform.api.response.plugin.BackendPluginDescriptorResponse;
 import com.integrationhub.platform.api.response.plugin.BackendPluginDiagnosticsResponse;
 import com.integrationhub.platform.api.response.plugin.BackendPluginVersionResponse;
 import com.integrationhub.platform.api.response.plugin.PluginCanaryMetricsResponse;
+import com.integrationhub.platform.api.response.plugin.PluginCanaryRouteResponse;
 import com.integrationhub.platform.entity.PluginDescriptorVersion;
 import com.integrationhub.platform.service.plugin.BackendPluginAdminService;
+import com.integrationhub.platform.service.plugin.CanaryRolloutSelector;
 import com.integrationhub.platform.service.plugin.MetricsPluginPromotionGate;
 import com.integrationhub.platform.service.plugin.PluginRuntimeMetricsRecorder;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
@@ -20,6 +23,7 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 
@@ -40,16 +44,19 @@ public class PluginDiagnosticsResource {
     private final BackendPluginAdminService adminService;
     private final PluginRuntimeMetricsRecorder metricsRecorder;
     private final MetricsPluginPromotionGate promotionGate;
+    private final CanaryRolloutSelector rolloutSelector;
 
     public PluginDiagnosticsResource(
             RemotePluginRegistry remotePlugins,
             BackendPluginAdminService adminService,
             PluginRuntimeMetricsRecorder metricsRecorder,
-            MetricsPluginPromotionGate promotionGate) {
+            MetricsPluginPromotionGate promotionGate,
+            CanaryRolloutSelector rolloutSelector) {
         this.remotePlugins = remotePlugins;
         this.adminService = adminService;
         this.metricsRecorder = metricsRecorder;
         this.promotionGate = promotionGate;
+        this.rolloutSelector = rolloutSelector;
     }
 
     @GET
@@ -123,6 +130,45 @@ public class PluginDiagnosticsResource {
             throw new NotFoundException("Plugin " + id + " version " + version + " not found");
         }
         return currentDiagnostics();
+    }
+
+    @POST
+    @Path("/{id}/versions/{version}/canary-weight")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
+    public BackendPluginDiagnosticsResponse setCanaryWeight(
+            @PathParam("id") String id,
+            @PathParam("version") String version,
+            PluginCanaryWeightRequest request) {
+        var weight = request == null ? null : request.weight();
+        if (!adminService.setCanaryWeight(id, version, weight)) {
+            throw new NotFoundException("Plugin " + id + " version " + version + " not found");
+        }
+        return currentDiagnostics();
+    }
+
+    @GET
+    @Path("/{id}/canary/route")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
+    public PluginCanaryRouteResponse canaryRoute(
+            @PathParam("id") String id,
+            @QueryParam("key") String key) {
+        var canary = versions().stream()
+                .filter(version -> id.equals(version.pluginId)
+                        && version.channel != null
+                        && version.channel.toLowerCase().contains("canary"))
+                .findFirst();
+        var stableVersion = remotePlugins.descriptors().stream()
+                .filter(descriptor -> descriptor.id().equals(id))
+                .map(RemotePluginDescriptor::version)
+                .findFirst()
+                .orElse(null);
+        if (canary.isEmpty()) {
+            return new PluginCanaryRouteResponse(id, key, false, stableVersion);
+        }
+        var toCanary = rolloutSelector.routesToCanary(canary.get().canaryWeight, key);
+        return new PluginCanaryRouteResponse(
+                id, key, toCanary, toCanary ? canary.get().version : stableVersion);
     }
 
     @POST
@@ -230,7 +276,8 @@ public class PluginDiagnosticsResource {
                 version.marketplaceUrl,
                 version.channel,
                 version.pinnedVersion,
-                version.pinned
+                version.pinned,
+                version.canaryWeight
         );
     }
 

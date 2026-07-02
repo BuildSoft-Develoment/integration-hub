@@ -24,6 +24,7 @@ interface BackendPluginVersion {
   readonly active: boolean;
   readonly channel?: string | null;
   readonly pinned: boolean;
+  readonly canaryWeight?: number | null;
 }
 
 interface BackendPluginDiagnostics {
@@ -211,6 +212,7 @@ interface FrontendPluginRow {
                 <th scope="col">{{ i18n.t('plugins.col.id') }}</th>
                 <th scope="col">{{ i18n.t('plugins.col.version') }}</th>
                 <th scope="col">{{ i18n.t('plugins.col.channel') }}</th>
+                <th scope="col">{{ i18n.t('plugins.col.canaryWeight') }}</th>
                 <th scope="col">{{ i18n.t('plugins.col.status') }}</th>
                 <th scope="col">{{ i18n.t('plugins.col.actions') }}</th>
               </tr>
@@ -221,6 +223,25 @@ interface FrontendPluginRow {
                   <td>{{ v.id }}</td>
                   <td>{{ v.version }} / SPI {{ v.spiVersion }}</td>
                   <td>{{ v.channel ?? '-' }}</td>
+                  <td>
+                    @if ((v.channel ?? '').toLowerCase().includes('canary')) {
+                      <span class="plugins-weight" data-testid="canary-weight">{{ v.canaryWeight ?? 0 }}%</span>
+                      <input
+                        #wt
+                        type="number"
+                        min="0"
+                        max="100"
+                        class="plugins-input plugins-input--num"
+                        [value]="v.canaryWeight ?? 0"
+                        [attr.aria-label]="i18n.t('plugins.col.canaryWeight')"
+                      />
+                      <button type="button" class="plugins-btn" [disabled]="busy()" (click)="setCanaryWeight(v.id, v.version, wt.value)">
+                        {{ i18n.t('plugins.setWeight') }}
+                      </button>
+                    } @else {
+                      -
+                    }
+                  </td>
                   <td>
                     <span class="plugin-badge" [attr.data-status]="v.active ? 'active' : 'inactive'">
                       {{ i18n.t(v.active ? 'plugins.version.active' : 'plugins.version.inactive') }}
@@ -457,6 +478,8 @@ interface FrontendPluginRow {
       .plugins-input { padding: 0.3rem 0.5rem; border: 1px solid var(--ih-border-strong); border-radius: var(--ih-radius-sm); background: var(--ih-surface-alt); color: inherit; min-width: 14rem; }
       .plugins-ui-form { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.5rem; }
       .plugins-textarea { width: 100%; max-width: 46rem; font-family: var(--ih-font-mono); font-size: var(--ih-font-size-xs); resize: vertical; }
+      .plugins-input--num { min-width: 4rem; width: 4.5rem; }
+      .plugins-weight { display: inline-block; margin-right: 0.4rem; font-weight: var(--ih-font-weight-medium); }
       .canary-spark { display: inline-block; width: 90px; height: 22px; vertical-align: middle; }
       .plugin-badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: var(--ih-radius-pill); font-size: var(--ih-font-size-xs); font-weight: var(--ih-font-weight-medium); }
       .plugin-badge[data-status='active'] { background: var(--ih-status-success-bg); color: var(--ih-status-success); }
@@ -722,6 +745,16 @@ export class PluginDiagnosticsPageComponent implements OnInit {
 
   deactivate(id: string): void {
     void this.runAction(() => this.http.post(`/api/plugins/${encodeURIComponent(id)}/deactivate`, {}));
+  }
+
+  setCanaryWeight(id: string, version: string, raw: string): void {
+    const weight = Math.max(0, Math.min(100, Math.trunc(Number(raw)) || 0));
+    void this.runAction(() =>
+      this.http.post(
+        `/api/plugins/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}/canary-weight`,
+        { weight }
+      )
+    );
   }
 
   activateVersion(id: string, version: string): void {

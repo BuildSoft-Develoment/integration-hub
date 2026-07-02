@@ -15,5 +15,6 @@ public record BackendPluginVersionResponse(
         String marketplaceUrl,
         String channel,
         String pinnedVersion,
-        boolean pinned) {
+        boolean pinned,
+        Integer canaryWeight) {
 }

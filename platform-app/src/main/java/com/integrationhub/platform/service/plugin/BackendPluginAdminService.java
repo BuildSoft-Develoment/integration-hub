@@ -157,6 +157,20 @@ public class BackendPluginAdminService {
     }
 
     @Transactional
+    public boolean setCanaryWeight(String pluginId, String version, Integer weight) {
+        if (versionRepository == null) {
+            return false;
+        }
+        var installed = versionRepository.findVersion(pluginId, version);
+        if (installed.isEmpty()) {
+            return false;
+        }
+        installed.get().canaryWeight = weight == null ? null : Math.max(0, Math.min(100, weight));
+        installed.get().updatedAt = LocalDateTime.now();
+        return true;
+    }
+
+    @Transactional
     public boolean deactivate(String pluginId) {
         return setActive(pluginId, false);
     }
