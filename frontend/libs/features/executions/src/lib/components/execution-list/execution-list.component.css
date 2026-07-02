@@ -1,12 +1,7 @@
 :host { display:block; min-height:0; height:100%; }
-:host .table-head,
+:host ih-catalog-list { display:block; height:100%; }
 :host .table-row {
-  grid-template-columns: minmax(200px, 1.5fr) 0.9fr 0.8fr;
-}
-:host .table-head {
-  padding-left: 0.5rem;
-}
-:host .table-row {
+  grid-template-columns: var(--ih-catalog-columns);
   padding-left: 0.5rem;
 }
 .row-status {
@@ -25,26 +20,6 @@
 .row-dates small,
 .row-linkage {
   color: var(--ih-text-soft);
-}
-.col-sortable {
-  background: none;
-  border: none;
-  color: inherit;
-  font: inherit;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0;
-}
-.col-sortable:hover {
-  color: var(--ih-text);
-}
-.sort-arrow {
-  font-size: 0.6rem;
-  line-height: 1;
 }
 @media (max-height: 700px) and (min-width: 761px) {
   .row-copy small,

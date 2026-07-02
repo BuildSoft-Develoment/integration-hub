@@ -1,11 +1,5 @@
-:host .table-head,
 :host .table-row {
-  grid-template-columns: minmax(200px, 1.5fr) 0.9fr 0.8fr;
-}
-:host .table-head {
-  padding-left: 0.5rem;
-}
-:host .table-row {
+  grid-template-columns: var(--ih-catalog-columns);
   padding-left: 0.5rem;
 }
 
@@ -20,29 +14,6 @@
 }
 .row-task {
   color: var(--ih-text-soft);
-}
-
-.col-sortable {
-  background: none;
-  border: none;
-  color: inherit;
-  font: inherit;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  padding: 0;
-}
-
-.col-sortable:hover {
-  color: var(--ih-text);
-}
-
-.sort-arrow {
-  font-size: 0.6rem;
-  line-height: 1;
 }
 
 .audit-status-ch--ok {

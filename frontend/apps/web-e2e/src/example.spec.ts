@@ -225,7 +225,7 @@ test.describe('Integration Hub shell', () => {
     });
   });
 
-  for (const route of ['sources', 'processes', 'schedules'] as const) {
+  for (const route of ['sources', 'processes', 'schedules', 'executions', 'audit'] as const) {
     test(`renders the ${route} catalog on the shared catalog-list shell`, async ({ page }) => {
       test.setTimeout(90_000);
 
@@ -233,7 +233,8 @@ test.describe('Integration Hub shell', () => {
 
       const list = page.locator('ih-catalog-list').first();
       await expect(list).toBeVisible({ timeout: 20_000 });
-      await expect(list.getByRole('columnheader', { name: /Nombre|Name/ }).first()).toBeVisible();
+      // Sortable column headers rendered by the shell from the columns config.
+      await expect(list.getByRole('columnheader').first()).toBeVisible();
       await expect(list.locator('.table-body')).toBeVisible();
     });
   }
