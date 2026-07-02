@@ -80,12 +80,24 @@ instala peers → **no** poda `@foblex/*`). Resultado: **foblex intacto, app com
 
 - Entregado: el catálogo del UI kit + ruta + estados + a11y de las propias primitivas
   (ya cubierta por P1/P3: headers `columnheader`, teclado, focus-visible).
-### Storybook (`ng run ui-kit-storybook:build-storybook`)
+### Storybook (`ng run ui-kit-storybook:build-storybook`) — con corrección
 
-- **Build completado con éxito** (`dist/storybook/index.html` generado). 4 stories detectadas y
-  compiladas vía el builder Angular: `status-badge` (5 kinds + AllKinds), `empty-state`
-  (default/cta/no-icon), `loading` (bar/skeleton), `icon` (single + galería). Tokens `--ih-*` +
-  Material cargados desde `apps/web/src/styles.scss` en `.storybook/preview.ts`; addon `a11y`.
+> **Falso positivo corregido.** El primer intento reportó "build OK", pero al **revisar en el
+> navegador** (preview MCP) las stories NO renderizaban: `MissingStoryFromCsfFileError`. El
+> bundle compilado de cada story eran **172 bytes con el módulo vacío** (`...stories.ts(){}`):
+> el `.storybook/tsconfig.json` tenía `"noEmit": true`, así que el compilador **no emitía** los
+> exports CSF. "Build completado" ≠ "stories renderizan"; la verificación anterior fue incompleta.
+
+- **Fix**: (1) quitar `noEmit` del tsconfig de Storybook; (2) dar al builder un **target de build
+  Angular real** (`ui-kit-storybook:build`, `@angular-devkit/build-angular:browser`, `aot:false`
+  `optimization:false`) referenciado por `browserTarget` — esto además habilita el **dev server**
+  (`start-storybook` lo exige); (3) cargar los estilos vía el array `styles` de ese target
+  (Angular procesa el SCSS de `apps/web/src/styles.scss` nativamente).
+- **Verificado en navegador** tras el fix: el bundle de `empty-state` pasa a **12.9 KB** con
+  `Default`/`WithCta`/`NoIcon`/`__namedExportsOrder`; la story `empty-state--default` renderiza
+  el icono + "No hay elementos todavía." con la tipografía/colores del tema; `status-badge
+  --all-kinds` pinta los **5** badges con los colores de `--ih-status-*`. Sin errores en consola.
+- 4 stories: `status-badge` (5 kinds + AllKinds), `empty-state`, `loading`, `icon`; addon `a11y`.
 - Scripts: `npm run storybook` (dev, :4400) y `npm run build-storybook` (estático).
 - Regresión Nx verificada: `nx show projects` = `[sample-plugin, web-e2e, web]`, `nx build web`
   y `nx test web` (400/400) verdes con el `angular.json` presente.

@@ -1,7 +1,7 @@
 import type { Preview } from '@storybook/angular';
 
-// Global design tokens (--ih-*) + Angular Material theme, so the kit renders natively.
-import '../apps/web/src/styles.scss';
+// Los tokens globales (--ih-*) + tema Material se cargan vía el array `styles` del build
+// target `ui-kit-storybook:build` en angular.json (Angular procesa el SCSS de forma nativa).
 
 const preview: Preview = {
   parameters: {
