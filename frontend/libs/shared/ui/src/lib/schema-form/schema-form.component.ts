@@ -7,6 +7,7 @@ import {
   inject,
   input,
   output,
+  signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
@@ -62,8 +63,8 @@ export class SchemaFormComponent {
   readonly valueChange = output<SchemaFormValue>();
   readonly validChange = output<boolean>();
 
-  /** FormGroup construido desde el schema; se reconstruye si el schema cambia. */
-  protected form = new FormGroup<Record<string, FormControl>>({});
+  /** FormGroup construido desde el schema; signal para que el template reaccione al reconstruirlo. */
+  protected readonly form = signal(new FormGroup<Record<string, FormControl>>({}));
   private currentSchema: SchemaFormSchema | null = null;
 
   constructor() {
@@ -108,7 +109,7 @@ export class SchemaFormComponent {
   }
 
   protected control(key: string): FormControl {
-    return this.form.controls[key];
+    return this.form().controls[key];
   }
 
   private buildForm(schema: SchemaFormSchema): void {
@@ -119,21 +120,23 @@ export class SchemaFormComponent {
         validators: this.validatorsFor(field),
       });
     }
-    this.form = new FormGroup(controls);
+    const group = new FormGroup(controls);
+    this.form.set(group);
 
     // Reemite el valor + validez ante cualquier cambio del usuario.
-    this.form.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
-      this.valueChange.emit({ ...this.form.getRawValue() } as SchemaFormValue);
-      this.validChange.emit(this.form.valid);
+    group.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
+      this.valueChange.emit({ ...group.getRawValue() } as SchemaFormValue);
+      this.validChange.emit(group.valid);
     });
     // Validez inicial (el form recién construido puede ser inválido por `required`).
-    this.validChange.emit(this.form.valid);
+    this.validChange.emit(group.valid);
   }
 
   private applyIncomingValue(value: SchemaFormValue): void {
     if (!this.currentSchema) {
       return;
     }
+    const form = this.form();
     const patch: Record<string, unknown> = {};
     for (const field of this.currentSchema.fields) {
       if (value && Object.prototype.hasOwnProperty.call(value, field.key)) {
@@ -141,15 +144,16 @@ export class SchemaFormComponent {
       }
     }
     // `emitEvent: false`: aplicar el valor externo no debe disparar `valueChange` (evita bucles).
-    this.form.patchValue(patch, { emitEvent: false });
-    this.validChange.emit(this.form.valid);
+    form.patchValue(patch, { emitEvent: false });
+    this.validChange.emit(form.valid);
   }
 
   private applyReadonly(readonly: boolean): void {
-    if (readonly && this.form.enabled) {
-      this.form.disable({ emitEvent: false });
-    } else if (!readonly && this.form.disabled) {
-      this.form.enable({ emitEvent: false });
+    const form = this.form();
+    if (readonly && form.enabled) {
+      form.disable({ emitEvent: false });
+    } else if (!readonly && form.disabled) {
+      form.enable({ emitEvent: false });
     }
   }
 

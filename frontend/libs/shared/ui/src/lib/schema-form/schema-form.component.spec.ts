@@ -29,7 +29,7 @@ function setup(value: SchemaFormValue = {}, readonly = false) {
   fixture.componentRef.setInput('readonly', readonly);
   fixture.detectChanges();
   // Access the protected reactive form for assertions.
-  const form = (fixture.componentInstance as unknown as { form: import('@angular/forms').FormGroup }).form;
+  const form = (fixture.componentInstance as unknown as { form: () => import('@angular/forms').FormGroup }).form();
   return { fixture, form };
 }
 
@@ -79,11 +79,28 @@ describe('SchemaFormComponent', () => {
     fixture.componentRef.setInput('value', { host: 'seed', port: 1234 });
     fixture.detectChanges();
 
-    const form = (fixture.componentInstance as unknown as { form: import('@angular/forms').FormGroup }).form;
+    const form = (fixture.componentInstance as unknown as { form: () => import('@angular/forms').FormGroup }).form();
     expect(form.controls['host'].value).toBe('seed');
     expect(form.controls['port'].value).toBe(1234);
     // Applying the external value must not fire valueChange (would cause feedback loops).
     expect(emissions).toBe(0);
+  });
+
+  it('rebuilds the form and re-renders the template when the schema input changes', () => {
+    const { fixture } = setup();
+    // Switch to a different schema on the SAME component instance.
+    const schema2: SchemaFormSchema = {
+      fields: [{ key: 'onlyField', type: 'text', label: 'Only', required: true }],
+    };
+    fixture.componentRef.setInput('schema', schema2);
+    fixture.detectChanges();
+
+    const form = (fixture.componentInstance as unknown as { form: () => import('@angular/forms').FormGroup }).form();
+    expect(Object.keys(form.controls)).toEqual(['onlyField']);
+    // The template reflects the new schema (one field, no toggle from the previous schema).
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelectorAll('mat-form-field').length).toBe(1);
+    expect(el.querySelector('mat-slide-toggle')).toBeNull();
   });
 
   it('disables every control when readonly', () => {
