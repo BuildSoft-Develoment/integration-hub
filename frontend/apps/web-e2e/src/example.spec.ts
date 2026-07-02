@@ -40,6 +40,10 @@ test.describe('Integration Hub shell', () => {
     await expect(page.getByRole('heading', { name: /Plugins/ }).first()).toBeVisible({
       timeout: 15_000,
     });
+    // Discoverable entry point to the live UI-kit catalog (author reference).
+    const uiKitLink = page.getByRole('link', { name: /^UI kit$/ });
+    await expect(uiKitLink).toBeVisible({ timeout: 15_000 });
+    await expect(uiKitLink).toHaveAttribute('href', '#/ui-kit');
     // Unified, filterable frontend registry view.
     await expect(
       page.getByRole('heading', { name: /Registro frontend|Frontend registry/ }).first()

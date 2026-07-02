@@ -83,6 +83,45 @@ describe('PluginDiagnosticsPageComponent', () => {
     http.verify();
   });
 
+  it('dogfoods the shared ih-status-badge and maps domain statuses to badge kinds', async () => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        ...provideAppPluginManifests([platformManifest()]),
+      ],
+    });
+
+    const registry = TestBed.inject(AppPluginRuntimeRegistry);
+    registry.installExternalManifests([
+      { id: 'good', version: '1.0.0', platformVersion: '1.0.0', displayName: 'Good Plugin' },
+    ]);
+
+    const fixture = TestBed.createComponent(PluginDiagnosticsPageComponent);
+    fixture.detectChanges();
+    const http = TestBed.inject(HttpTestingController);
+    http.expectOne('/api/plugins').flush({ installed: [], degraded: {} });
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    // The status column now renders the shared kit component, not a bespoke badge span.
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('ih-status-badge')).toBeTruthy();
+    expect(el.querySelector('.plugin-badge')).toBeNull();
+
+    // The status -> kind mapping is exhaustive and falls back to neutral.
+    const component = fixture.componentInstance;
+    expect(component.badgeKind('active')).toBe('success');
+    expect(component.badgeKind('degraded')).toBe('error');
+    expect(component.badgeKind('untrusted')).toBe('warning');
+    expect(component.badgeKind('inactive')).toBe('neutral');
+    expect(component.badgeKind('anything-else')).toBe('neutral');
+
+    http.match('/api/plugins/canary/metrics').forEach((req) => req.flush([]));
+    http.match('/api/plugins/ui-catalog').forEach((req) => req.flush({ manifests: [] }));
+    http.verify();
+  });
+
   it('exposes aria-busy on the view while an action is in progress', async () => {
     TestBed.configureTestingModule({
       providers: [

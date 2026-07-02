@@ -67,7 +67,28 @@ con los **tokens `--ih-*` reales**. Ventajas frente a Storybook aquí:
   Storybook reutilizando estos mismos componentes como stories.
 - Documentado en `guia-autor-plugins.md` (sección 2b).
 
+## Doble check + cierre (dogfooding y descubribilidad)
+
+El doble check destapó dos huecos reales, ya cerrados:
+
+1. **Descubribilidad**: `/ui-kit` estaba gated sin entrada de nav → indescubrible, justo lo
+   que P4 debía resolver. Añadido un **enlace "UI kit"** en la cabecera de `/plugins`
+   (`href="#/ui-kit"`), la página de autor/operador.
+2. **Dogfooding del kit**: la consola `/plugins` usaba un badge propio (`.plugin-badge` con
+   `[data-status]`), una **reimplementación paralela** de `ih-status-badge`. Migrados los **7**
+   badges a `ih-status-badge` con un helper `badgeKind()` (active→success, degraded→error,
+   untrusted→warning, resto→neutral) y **eliminado** el CSS duplicado. La plataforma ahora
+   consume su propio kit → prueba de que es infraestructura de verdad.
+
+Verificación del cierre:
+
+- Unit: **400/400** (+1): renderiza `ih-status-badge` (no `.plugin-badge`) y `badgeKind()`
+  mapea exhaustivamente con fallback `neutral`.
+- e2e (chromium, :8080): **7 passed** (consola de plugins + acciones backend + preview/install
+  + salud + cuarentena + catálogo UI kit) sin regresión por el cambio de markup, y **enlace
+  descubrible** verificado (`link "UI kit"` visible con `href="#/ui-kit"`).
+
 ## Estado del roadmap UI/UX
 
 - **P1** (shell `ih-catalog-list`, 7 catálogos) ✅ · **P3** (UI kit para plugins) ✅ ·
-  **P2** (slots/outlets) ✅ · **P4** (catálogo vivo del UI kit, rol de Storybook) ✅.
+  **P2** (slots/outlets) ✅ · **P4** (catálogo vivo del UI kit + dogfood en `/plugins`) ✅.

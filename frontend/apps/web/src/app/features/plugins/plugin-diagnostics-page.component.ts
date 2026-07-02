@@ -1,7 +1,11 @@
 import { HttpClient, HttpContext } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { I18nService, SKIP_GLOBAL_ERROR_FEEDBACK } from '@integration-hub/core/services';
-import { AppPluginRuntimeRegistry } from '@integration-hub/shared/ui';
+import {
+  AppPluginRuntimeRegistry,
+  StatusBadgeComponent,
+  StatusBadgeKind,
+} from '@integration-hub/shared/ui';
 import { Observable, firstValueFrom } from 'rxjs';
 
 interface BackendPluginDescriptor {
@@ -63,11 +67,16 @@ interface FrontendPluginRow {
   selector: 'app-plugin-diagnostics-page',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [StatusBadgeComponent],
   template: `
     <section class="page-grid plugin-diagnostics-page" [attr.aria-busy]="busy()">
-      <header>
-        <h2 class="ih-section-title">{{ i18n.t('plugins.title') }}</h2>
-        <p class="ih-muted">{{ i18n.t('plugins.subtitle') }}</p>
+      <header class="plugins-header">
+        <div>
+          <h2 class="ih-section-title">{{ i18n.t('plugins.title') }}</h2>
+          <p class="ih-muted">{{ i18n.t('plugins.subtitle') }}</p>
+        </div>
+        <!-- Discoverable entry point to the live UI-kit catalog (author reference). -->
+        <a class="plugins-btn" href="#/ui-kit">{{ i18n.t('uiKit.title') }}</a>
       </header>
 
       <section>
@@ -112,9 +121,9 @@ interface FrontendPluginRow {
                 <tr>
                   <td>{{ row.id }}</td>
                   <td>
-                    <span class="plugin-badge" [attr.data-status]="row.badge">
+                    <ih-status-badge [status]="badgeKind(row.badge)">
                       {{ i18n.t(row.statusLabel) }}
-                    </span>
+                    </ih-status-badge>
                   </td>
                   <td>{{ row.detail }}</td>
                 </tr>
@@ -166,9 +175,9 @@ interface FrontendPluginRow {
                   <td>{{ plugin.transport }}</td>
                   <td>{{ plugin.providedTypes.join(', ') }}</td>
                   <td>
-                    <span class="plugin-badge" [attr.data-status]="plugin.status.toLowerCase()">
+                    <ih-status-badge [status]="badgeKind(plugin.status.toLowerCase())">
                       {{ i18n.t('plugins.status.' + plugin.status.toLowerCase()) }}
-                    </span>
+                    </ih-status-badge>
                   </td>
                   <td>{{ plugin.degradedReason ?? '-' }}</td>
                   <td class="plugins-row-actions">
@@ -243,9 +252,9 @@ interface FrontendPluginRow {
                     }
                   </td>
                   <td>
-                    <span class="plugin-badge" [attr.data-status]="v.active ? 'active' : 'inactive'">
+                    <ih-status-badge [status]="v.active ? 'success' : 'neutral'">
                       {{ i18n.t(v.active ? 'plugins.version.active' : 'plugins.version.inactive') }}
-                    </span>
+                    </ih-status-badge>
                   </td>
                   <td>
                     @if (!v.active) {
@@ -329,9 +338,9 @@ interface FrontendPluginRow {
                     }
                   </td>
                   <td>
-                    <span class="plugin-badge" [attr.data-status]="m.promotable ? 'active' : 'inactive'">
+                    <ih-status-badge [status]="m.promotable ? 'success' : 'neutral'">
                       {{ i18n.t(m.promotable ? 'plugins.canary.promotable' : 'plugins.canary.blocked') }}
-                    </span>
+                    </ih-status-badge>
                   </td>
                   <td>{{ m.blockReason ? i18n.t('plugins.canary.reason.' + m.blockReason) : '-' }}</td>
                 </tr>
@@ -376,9 +385,9 @@ interface FrontendPluginRow {
                 <td>{{ preview.version }} / SPI {{ preview.spiVersion }}</td>
                 <td>{{ preview.transport }}</td>
                 <td>
-                  <span class="plugin-badge" [attr.data-status]="preview.status.toLowerCase()">
+                  <ih-status-badge [status]="badgeKind(preview.status.toLowerCase())">
                     {{ i18n.t('plugins.status.' + preview.status.toLowerCase()) }}
-                  </span>
+                  </ih-status-badge>
                 </td>
                 <td>
                   <button type="button" class="plugins-btn" [disabled]="busy()" (click)="installMarketplace()">
@@ -414,7 +423,7 @@ interface FrontendPluginRow {
         @if (uiPreviewResult(); as result) {
           @if (result.accepted) {
             <p class="ih-muted" role="status" aria-live="polite">
-              <span class="plugin-badge" data-status="active">{{ i18n.t('plugins.ui.acceptedBadge') }}</span>
+              <ih-status-badge status="success">{{ i18n.t('plugins.ui.acceptedBadge') }}</ih-status-badge>
               {{ i18n.t('plugins.ui.accepted', { id: result.id }) }}
             </p>
             <button type="button" class="plugins-btn" [disabled]="busy()" (click)="installToCatalog()">
@@ -422,7 +431,7 @@ interface FrontendPluginRow {
             </button>
           } @else {
             <p class="ih-muted" role="alert">
-              <span class="plugin-badge" data-status="degraded">{{ i18n.t('plugins.ui.rejectedBadge') }}</span>
+              <ih-status-badge status="error">{{ i18n.t('plugins.ui.rejectedBadge') }}</ih-status-badge>
               {{ i18n.t('plugins.ui.rejected', { reason: result.reason }) }}
             </p>
           }
@@ -481,11 +490,7 @@ interface FrontendPluginRow {
       .plugins-input--num { min-width: 4rem; width: 4.5rem; }
       .plugins-weight { display: inline-block; margin-right: 0.4rem; font-weight: var(--ih-font-weight-medium); }
       .canary-spark { display: inline-block; width: 90px; height: 22px; vertical-align: middle; }
-      .plugin-badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: var(--ih-radius-pill); font-size: var(--ih-font-size-xs); font-weight: var(--ih-font-weight-medium); }
-      .plugin-badge[data-status='active'] { background: var(--ih-status-success-bg); color: var(--ih-status-success); }
-      .plugin-badge[data-status='degraded'] { background: var(--ih-status-error-bg); color: var(--ih-status-error); }
-      .plugin-badge[data-status='untrusted'] { background: var(--ih-status-warning-bg); color: var(--ih-status-warning); }
-      .plugin-badge[data-status='inactive'] { background: color-mix(in srgb, var(--ih-status-neutral) 14%, transparent); color: var(--ih-status-neutral); }
+      .plugins-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
     `,
   ],
 })
@@ -493,6 +498,20 @@ export class PluginDiagnosticsPageComponent implements OnInit {
   private readonly registry = inject(AppPluginRuntimeRegistry);
   private readonly http = inject(HttpClient);
   readonly i18n = inject(I18nService);
+
+  /** Maps the domain status strings used across the page to the shared badge kinds. */
+  badgeKind(status: string): StatusBadgeKind {
+    switch (status) {
+      case 'active':
+        return 'success';
+      case 'degraded':
+        return 'error';
+      case 'untrusted':
+        return 'warning';
+      default:
+        return 'neutral';
+    }
+  }
 
   readonly installed = computed(() => this.registry.diagnostics().installed);
   readonly quarantined = computed(() => this.registry.diagnostics().quarantined);
