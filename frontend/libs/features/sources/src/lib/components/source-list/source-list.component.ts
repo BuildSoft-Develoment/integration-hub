@@ -1,11 +1,15 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, inject, input, output, signal } from '@angular/core';
-import { MatButtonModule } from '@angular/material/button';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { MatChipsModule } from '@angular/material/chips';
-import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { PageEvent } from '@angular/material/paginator';
 import { SourceManagerService, I18nService } from '@integration-hub/core/services';
 import { SourceProviderType } from '@integration-hub/core/providers';
-import { IconComponent, LoadingComponent, ResourcePresentation } from '@integration-hub/shared/ui';
+import {
+  CatalogListColumn,
+  CatalogListComponent,
+  IconComponent,
+  ResourcePresentation,
+} from '@integration-hub/shared/ui';
 import { SourceRecord } from '../../models/source.models';
 
 export type SortDir = 'asc' | 'desc';
@@ -13,15 +17,20 @@ export type SortDir = 'asc' | 'desc';
 @Component({
   selector: 'ih-source-list',
   standalone: true,
-  imports: [CommonModule, MatButtonModule, MatChipsModule, MatPaginatorModule, IconComponent, LoadingComponent],
-    templateUrl: './source-list.component.html',
-    styleUrl: './source-list.component.css',
-    changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [CommonModule, MatChipsModule, IconComponent, CatalogListComponent],
+  templateUrl: './source-list.component.html',
+  styleUrl: './source-list.component.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SourceListComponent {
   readonly i18n = inject(I18nService);
   private readonly sourceManager = inject(SourceManagerService);
-  private readonly host = inject(ElementRef<HTMLElement>);
+
+  readonly columns: readonly CatalogListColumn[] = [
+    { labelKey: 'common.name', sortKey: 'name' },
+    { labelKey: 'common.type', sortKey: 'sourceType' },
+    { labelKey: 'common.status', sortKey: 'active' },
+  ];
 
   presentation(type: SourceProviderType): ResourcePresentation {
     return this.sourceManager.presentation(type);
@@ -53,30 +62,5 @@ export class SourceListComponent {
 
   onPageChange(event: PageEvent): void {
     this.pageChange.emit(event);
-  }
-
-  readonly focusedIndex = signal(0);
-
-  itemsList(): readonly SourceRecord[] {
-    return this.sources();
-  }
-
-  @HostListener('keydown', ['$event'])
-  onKeyDown(event: KeyboardEvent): void {
-    const items = this.itemsList();
-    if (items.length === 0) { return; }
-    let idx = this.focusedIndex();
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      idx = Math.min(idx + 1, items.length - 1);
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      idx = Math.max(idx - 1, 0);
-    } else {
-      return;
-    }
-    this.focusedIndex.set(idx);
-    const row = this.host.nativeElement.querySelector(`[data-row-index="${idx}"]`) as HTMLElement | null;
-    row?.focus();
   }
 }
