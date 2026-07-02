@@ -1,4 +1,4 @@
-package com.integrationhub.platform.spi.task;
+package com.integrationhub.platform.spi.config;
 
 import java.util.List;
 

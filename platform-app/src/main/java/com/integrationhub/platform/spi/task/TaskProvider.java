@@ -1,5 +1,6 @@
 package com.integrationhub.platform.spi.task;
 
+import com.integrationhub.platform.spi.config.PluginConfigSchema;
 import java.util.Map;
 
 public interface TaskProvider {

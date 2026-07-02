@@ -1,7 +1,7 @@
 package com.integrationhub.platform.provider.task.notification;
 
-import com.integrationhub.platform.spi.task.PluginConfigField;
-import com.integrationhub.platform.spi.task.PluginConfigSchema;
+import com.integrationhub.platform.spi.config.PluginConfigField;
+import com.integrationhub.platform.spi.config.PluginConfigSchema;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;

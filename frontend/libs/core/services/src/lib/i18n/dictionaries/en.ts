@@ -208,6 +208,8 @@ export const en = {
   'tasks.notification.message': 'Message',
   'tasks.notification.url': 'Webhook URL',
   'tasks.notification.bodyTemplate': 'Body template',
+  'readers.csv.delimiter': 'Delimiter',
+  'readers.csv.encoding': 'Encoding',
   'common.close': 'Close',
   'common.previous': 'Previous',
   'common.next': 'Next',
