@@ -74,6 +74,8 @@ export class SchemaFormComponent {
 
   /** FormGroup construido desde el schema; signal para que el template reaccione al reconstruirlo. */
   protected readonly form = signal(new FormGroup<Record<string, FormControl>>({}));
+  /** Valor actual del formulario (signal) → dirige la visibilidad condicional de los campos. */
+  protected readonly formValue = signal<SchemaFormValue>({});
   private currentSchema: SchemaFormSchema | null = null;
 
   constructor() {
@@ -85,7 +87,9 @@ export class SchemaFormComponent {
         this.buildForm(schema);
       }
       this.applyIncomingValue(this.value());
-      this.applyReadonly(this.readonly());
+      // Leer readonly() para que el effect re-evalúe cuando cambie.
+      this.readonly();
+      this.updateFormState(this.form());
     });
   }
 
@@ -131,6 +135,18 @@ export class SchemaFormComponent {
     return { field, control: this.control(field.key), readonly: this.readonly() };
   }
 
+  /** ¿El campo es visible según su `visibleWhen` y el valor actual del formulario? */
+  protected isVisible(field: SchemaFieldDescriptor): boolean {
+    return this.isVisibleFor(field, this.formValue());
+  }
+
+  private isVisibleFor(field: SchemaFieldDescriptor, value: SchemaFormValue): boolean {
+    if (!field.visibleWhen) {
+      return true;
+    }
+    return value[field.visibleWhen.field] === field.visibleWhen.equals;
+  }
+
   private buildForm(schema: SchemaFormSchema): void {
     const controls: Record<string, FormControl> = {};
     for (const field of schema.fields) {
@@ -142,13 +158,11 @@ export class SchemaFormComponent {
     const group = new FormGroup(controls);
     this.form.set(group);
 
-    // Reemite el valor + validez ante cualquier cambio del usuario.
+    // Reemite el valor ante cualquier cambio del usuario y re-sincroniza visibilidad/validez.
     group.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.valueChange.emit({ ...group.getRawValue() } as SchemaFormValue);
-      this.validChange.emit(group.valid);
+      this.updateFormState(group);
     });
-    // Validez inicial (el form recién construido puede ser inválido por `required`).
-    this.validChange.emit(group.valid);
   }
 
   private applyIncomingValue(value: SchemaFormValue): void {
@@ -164,16 +178,30 @@ export class SchemaFormComponent {
     }
     // `emitEvent: false`: aplicar el valor externo no debe disparar `valueChange` (evita bucles).
     form.patchValue(patch, { emitEvent: false });
-    this.validChange.emit(form.valid);
   }
 
-  private applyReadonly(readonly: boolean): void {
-    const form = this.form();
-    if (readonly && form.enabled) {
-      form.disable({ emitEvent: false });
-    } else if (!readonly && form.disabled) {
-      form.enable({ emitEvent: false });
+  /**
+   * Actualiza el estado derivado del formulario: el signal `formValue`, la habilitación de cada
+   * control (deshabilitado si es readonly o está oculto por `visibleWhen`, así no afecta a la
+   * validez) y reemite `validChange`.
+   */
+  private updateFormState(group: FormGroup): void {
+    const raw = { ...group.getRawValue() } as SchemaFormValue;
+    this.formValue.set(raw);
+    const readonly = this.readonly();
+    for (const field of this.currentSchema?.fields ?? []) {
+      const control = group.controls[field.key];
+      if (!control) {
+        continue;
+      }
+      const shouldDisable = readonly || !this.isVisibleFor(field, raw);
+      if (shouldDisable && control.enabled) {
+        control.disable({ emitEvent: false });
+      } else if (!shouldDisable && control.disabled) {
+        control.enable({ emitEvent: false });
+      }
     }
+    this.validChange.emit(group.valid);
   }
 
   private validatorsFor(field: SchemaFieldDescriptor): ValidatorFn[] {

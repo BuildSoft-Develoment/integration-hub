@@ -1,5 +1,6 @@
 <form [formGroup]="form()" class="schema-form">
   @for (field of schema().fields; track field.key) {
+    @if (isVisible(field)) {
     @if (customRenderer(field.type); as renderer) {
       <ng-container
         [ngComponentOutlet]="renderer"
@@ -90,6 +91,7 @@
           }
         </mat-form-field>
       }
+    }
     }
     }
   }

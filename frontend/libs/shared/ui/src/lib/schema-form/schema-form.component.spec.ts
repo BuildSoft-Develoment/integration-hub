@@ -124,6 +124,50 @@ describe('SchemaFormComponent', () => {
     expect(form.disabled).toBe(true);
   });
 
+  it('shows a field only when its visibleWhen matches and excludes hidden fields from validity', () => {
+    const conditional: SchemaFormSchema = {
+      fields: [
+        {
+          key: 'channel',
+          type: 'select',
+          label: 'Channel',
+          options: [
+            { value: 'log', label: 'Log' },
+            { value: 'webhook', label: 'Webhook' },
+          ],
+          default: 'log',
+        },
+        {
+          key: 'url',
+          type: 'text',
+          label: 'URL',
+          required: true,
+          visibleWhen: { field: 'channel', equals: 'webhook' },
+        },
+      ],
+    };
+    TestBed.configureTestingModule({ imports: [SchemaFormComponent] });
+    const fixture = TestBed.createComponent(SchemaFormComponent);
+    fixture.componentRef.setInput('schema', conditional);
+    fixture.detectChanges();
+    const form = (fixture.componentInstance as unknown as { form: () => import('@angular/forms').FormGroup }).form();
+    const el = fixture.nativeElement as HTMLElement;
+
+    // channel='log' -> url hidden (only the select renders) + disabled -> form valid despite required.
+    expect(el.querySelectorAll('mat-form-field').length).toBe(1);
+    expect(form.controls['url'].disabled).toBe(true);
+    expect(form.valid).toBe(true);
+
+    // Switch to webhook -> url becomes visible, enabled and required -> invalid until filled.
+    form.controls['channel'].setValue('webhook');
+    fixture.detectChanges();
+    expect(el.querySelectorAll('mat-form-field').length).toBe(2);
+    expect(form.controls['url'].enabled).toBe(true);
+    expect(form.valid).toBe(false);
+    form.controls['url'].setValue('https://hook.example');
+    expect(form.valid).toBe(true);
+  });
+
   it('delegates custom field types to a registered renderer (extensibility)', () => {
     const customSchema: SchemaFormSchema = {
       fields: [

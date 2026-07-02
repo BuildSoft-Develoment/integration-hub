@@ -199,6 +199,13 @@ export class UiKitGalleryComponent {
       },
       { key: 'ssl', type: 'boolean', label: 'Usar TLS', default: true },
       { key: 'password', type: 'secret', label: 'Contraseña', required: true },
+      // Campo condicional: solo aparece si el motor es Oracle (visibleWhen).
+      {
+        key: 'serviceName',
+        type: 'text',
+        label: 'Service name (Oracle)',
+        visibleWhen: { field: 'engine', equals: 'oracle' },
+      },
     ],
   };
   readonly schemaValue = signal<SchemaFormValue>({});

@@ -48,6 +48,14 @@ export interface SchemaFieldDescriptor {
   readonly pattern?: string;
   /** Valor por defecto al construir el formulario. */
   readonly default?: unknown;
+  /**
+   * Visibilidad condicional: el campo solo se muestra (y se valida) cuando el campo referenciado
+   * tiene el valor indicado. Los campos ocultos se deshabilitan (no afectan a la validez).
+   */
+  readonly visibleWhen?: {
+    readonly field: string;
+    readonly equals: unknown;
+  };
 }
 
 export interface SchemaFormSchema {
