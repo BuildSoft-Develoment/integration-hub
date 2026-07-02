@@ -24,7 +24,10 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { I18nService } from '@integration-hub/core/services';
 
-import { SchemaFieldRendererRegistry } from './schema-field-renderer';
+import {
+  SCHEMA_FIELD_RENDERERS,
+  indexFieldRenderers,
+} from './schema-field-renderer';
 import {
   SchemaFieldDescriptor,
   SchemaFormSchema,
@@ -57,7 +60,10 @@ import {
 export class SchemaFormComponent {
   readonly i18n = inject(I18nService);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly renderers = inject(SchemaFieldRendererRegistry);
+  // Resuelto del injector propio → ve renderers registrados en cualquier ancestro (root/feature/ruta).
+  private readonly fieldRenderers = indexFieldRenderers(
+    inject(SCHEMA_FIELD_RENDERERS, { optional: true })
+  );
 
   readonly schema = input.required<SchemaFormSchema>();
   readonly value = input<SchemaFormValue>({});
@@ -117,7 +123,7 @@ export class SchemaFormComponent {
 
   /** Renderer custom registrado para un `type`, o `null` si es built-in. */
   protected customRenderer(type: string): Type<unknown> | null {
-    return this.renderers.rendererFor(type);
+    return this.fieldRenderers.get(type) ?? null;
   }
 
   /** Inputs para el renderer custom (via NgComponentOutlet). */

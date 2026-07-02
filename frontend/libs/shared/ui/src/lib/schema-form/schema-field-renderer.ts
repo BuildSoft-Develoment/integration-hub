@@ -1,10 +1,4 @@
-import {
-  InjectionToken,
-  Injectable,
-  Provider,
-  Type,
-  inject,
-} from '@angular/core';
+import { InjectionToken, Provider, Type } from '@angular/core';
 import { FormControl } from '@angular/forms';
 
 import { SchemaFieldDescriptor } from './schema-form.models';
@@ -36,7 +30,11 @@ export const SCHEMA_FIELD_RENDERERS = new InjectionToken<
   readonly SchemaFieldRendererRegistration[]
 >('SCHEMA_FIELD_RENDERERS');
 
-/** Registra uno o más renderers de campo custom (multi-provider). */
+/**
+ * Registra uno o más renderers de campo custom (multi-provider). Provéelo donde tenga sentido
+ * (root, o el injector de un feature/ruta): `ih-schema-form` resuelve los renderers de su propio
+ * injector, así que ve los registrados en cualquier ancestro.
+ */
 export function provideSchemaFieldRenderers(
   registrations: SchemaFieldRendererRegistration[]
 ): Provider[] {
@@ -47,16 +45,9 @@ export function provideSchemaFieldRenderers(
   }));
 }
 
-@Injectable({ providedIn: 'root' })
-export class SchemaFieldRendererRegistry {
-  private readonly byType = new Map<string, Type<unknown>>(
-    (inject(SCHEMA_FIELD_RENDERERS, { optional: true }) ?? []).map(
-      (registration) => [registration.type, registration.component]
-    )
-  );
-
-  /** Componente custom para un `type`, o `null` si es un tipo built-in del schema-form. */
-  rendererFor(type: string): Type<unknown> | null {
-    return this.byType.get(type) ?? null;
-  }
+/** Construye el índice `type → component` desde las registraciones inyectadas. */
+export function indexFieldRenderers(
+  registrations: readonly SchemaFieldRendererRegistration[] | null
+): Map<string, Type<unknown>> {
+  return new Map((registrations ?? []).map((r) => [r.type, r.component]));
 }
