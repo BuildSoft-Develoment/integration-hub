@@ -39,6 +39,8 @@
       @if (store.pluginHealth(); as health) {
         <ih-overview-plugin-health-card [health]="health" />
       }
+      <!-- Extension point: plugins/features can register widgets into this slot. -->
+      <ih-slot name="overview.widgets" />
     </section>
 
     <section class="tables-grid">

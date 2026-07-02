@@ -3,6 +3,8 @@ export * from './lib/app-layout/navigation/app-navigation.models';
 export * from './lib/app-layout/navigation/app-navigation.registry';
 export * from './lib/app-layout/navigation/app-navigation.token';
 export * from './lib/app-layout/plugins/app-action.command';
+export * from './lib/app-layout/plugins/app-slot.token';
+export * from './lib/app-layout/plugins/slot-outlet.component';
 export * from './lib/app-layout/plugins/app-action.confirmation';
 export * from './lib/app-layout/plugins/app-action.executor';
 export * from './lib/app-layout/plugins/app-action.query';

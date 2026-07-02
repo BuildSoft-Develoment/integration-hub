@@ -343,6 +343,15 @@ test.describe('Integration Hub shell', () => {
     await expect(page.getByRole('button', { name: /Quitar|Remove/ }).first()).toBeVisible();
   });
 
+  test('exposes the overview.widgets extension slot on the dashboard', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    await gotoAuthenticated(page, '/#/overview');
+
+    // The slot outlet is wired into the overview so plugins/features can register widgets.
+    await expect(page.locator('ih-slot').first()).toBeAttached({ timeout: 20_000 });
+  });
+
   test('shows the plugin health card on the overview dashboard', async ({ page }) => {
     test.setTimeout(90_000);
 

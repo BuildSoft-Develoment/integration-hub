@@ -17,6 +17,7 @@ Ejemplo funcional de referencia: [frontend/apps/sample-plugin](../../frontend/ap
 | Vista/UI | `remote` (Native Federation) | — |
 | Navegación / workspaces | `navigation`, `workspaces` (a rutas existentes) | — |
 | Acciones + comando | `actions` con `command` + handler (`provideAppActionCommandHandlers`) | — |
+| Widget en página existente (**slot**) | `provideAppSlotContributions([{ slot, component, requiredCapability? }])` | — |
 | Traducciones | `i18nNamespaces` + `I18nService.registerMessages` en runtime | — |
 | Tipos de tarea / fuentes / lectores | vía el remote | `providedTypes` en el descriptor |
 | RBAC | `requiredCapability` en cada contribución | `@RolesAllowed` en el sidecar |
@@ -71,6 +72,24 @@ shared: {
 
 Ejemplo: `apps/sample-plugin/src/app/widget.component.ts` renderiza con `ih-icon` +
 `ih-status-badge` + tokens.
+
+## 2c. Slots/outlets (enriquecer páginas existentes)
+
+Además de añadir pantallas, un plugin puede **inyectar un widget dentro de una página
+existente** en un *slot* con nombre. El host expone el punto de inserción con
+`<ih-slot name="overview.widgets" />` y el plugin registra su componente:
+
+```ts
+provideAppSlotContributions([
+  { slot: 'overview.widgets', component: MyWidgetComponent, order: 10, requiredCapability: 'ops' },
+])
+```
+
+- Las contribuciones se resuelven ordenadas (`order`) y **filtradas por RBAC**
+  (`requiredCapability` vía `AuthAccessService`).
+- Se registran en el **injector raíz** (`AppSlotRegistry` es `providedIn: 'root'`).
+- Slots disponibles hoy: `overview.widgets` (dashboard). Añadir más es colocar otro
+  `<ih-slot name="...">` en la página anfitriona.
 
 ## 3. Modelo de seguridad (fail-safe)
 
