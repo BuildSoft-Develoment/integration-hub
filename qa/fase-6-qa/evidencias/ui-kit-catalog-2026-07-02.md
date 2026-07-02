@@ -22,19 +22,30 @@ El bloqueo real, comprobado empíricamente, es **del propio proyecto**, no de St
    (usados por el diagrama de flujo), y el build de la app falló con
    `Could not resolve "@foblex/mediator"`. Revertido; app de nuevo verde (400/400, salud 200).
 
-Instalar Storybook limpio exige **primero alinear toda la familia Angular a un único patch**
-(core/common/forms/compiler/animations/platform-browser/material/cdk…): una tarea de
-mantenimiento aparte con su propia superficie de regresión, no algo para colar en un setup de
-Storybook sobre el stack en marcha. Queda como follow-up explícito (idealmente en su propio PR).
+Se resolvió el bloqueo **alineando toda la familia Angular a un único patch** (`21.2.17`
+framework; `21.2.14` material/cdk) editando los rangos de `package.json` a versión exacta y
+reconciliando con `npm install --force` (a diferencia de `--legacy-peer-deps`, `--force` **sí**
+instala peers → **no** poda `@foblex/*`). Resultado: **foblex intacto, app compila, unit 400/400**.
 
-**Solución entregada (equivalente, sin tocar dependencias):** un catálogo del UI kit **dentro
-de la app** (ruta `/ui-kit`), que renderiza cada primitiva de `@integration-hub/shared/ui` en
-sus estados con los **tokens `--ih-*` reales**. Ventajas en este contexto:
+**Entregado (dos piezas complementarias):**
 
-- Cero deps nuevas, cero disrupción del `node_modules` compartido con el dev en marcha.
-- Usa los tokens globales reales → el **modo oscuro** sale gratis (toggle de tema del shell).
-- Es una referencia **viva** que el autor ve dentro del propio producto.
-- Cuando se alinee la familia Angular, estos mismos componentes se reutilizan como *stories*.
+1. **Storybook real** (`@storybook/angular@10.4.6`) para los **componentes presentacionales de
+   hoja** del kit — `status-badge`, `empty-state`, `loading`, `icon` — con tokens `--ih-*` +
+   tema Material cargados y **addon `a11y` (axe)**. Es el punto fuerte de Storybook: componentes
+   aislados con auditoría de accesibilidad.
+2. **Catálogo in-app** (`/ui-kit`) para el componente insignia **`catalog-list`** (y el resto),
+   donde su **DI/servicios** (`I18nService`) se resuelve de verdad. `catalog-list` se deja fuera
+   de Storybook a propósito: importa el barrel `@integration-hub/core/services`, que arrastra
+   todo el grafo de servicios de la app; bajo la AOT estricta de Storybook eso destapa un error
+   de tipo **latente y preexistente** en `core/providers` (`rest-call-task.provider.ts:53`,
+   `string`→`ProcessTaskExecutionMode`), ajeno a P4. No se toca código de app para forzar una
+   story; el grafo con DI se cubre mejor en la galería in-app.
+
+> **Nota Storybook 10 + Nx:** Storybook 10 eliminó `storybook build` directo para Angular;
+> exige el **builder de Angular CLI**. Como el workspace es Nx (sin `angular.json`), se añadió
+> un `angular.json` mínimo con el proyecto `ui-kit-storybook` (targets `storybook` /
+> `build-storybook`, `tsConfig` = `.storybook/tsconfig.json`). Nx lo ignora: `nx show projects`
+> sigue devolviendo `[sample-plugin, web-e2e, web]` y `nx build web` queda verde.
 
 ## Qué se entregó
 
@@ -69,12 +80,21 @@ sus estados con los **tokens `--ih-*` reales**. Ventajas en este contexto:
 
 - Entregado: el catálogo del UI kit + ruta + estados + a11y de las propias primitivas
   (ya cubierta por P1/P3: headers `columnheader`, teclado, focus-visible).
-- El addon `axe` de Storybook queda pendiente del follow-up de Storybook (ver contexto); la
-  a11y de las piezas se valida entretanto por sus specs y por los e2e de P1 (`columnheader`,
-  roving-tabindex, outline).
-- **Follow-up Storybook**: alinear la familia Angular a un patch único y luego instalar
-  `storybook` + `@storybook/angular` + `@angular/platform-browser-dynamic` (todo 21.2.x) con
-  un `npm install` normal; reutilizar estos componentes como *stories* + addon `a11y`.
+### Storybook (`ng run ui-kit-storybook:build-storybook`)
+
+- **Build completado con éxito** (`dist/storybook/index.html` generado). 4 stories detectadas y
+  compiladas vía el builder Angular: `status-badge` (5 kinds + AllKinds), `empty-state`
+  (default/cta/no-icon), `loading` (bar/skeleton), `icon` (single + galería). Tokens `--ih-*` +
+  Material cargados desde `apps/web/src/styles.scss` en `.storybook/preview.ts`; addon `a11y`.
+- Scripts: `npm run storybook` (dev, :4400) y `npm run build-storybook` (estático).
+- Regresión Nx verificada: `nx show projects` = `[sample-plugin, web-e2e, web]`, `nx build web`
+  y `nx test web` (400/400) verdes con el `angular.json` presente.
+
+### Follow-up
+
+- Meter `catalog-list` en Storybook exigiría sanear el error de tipo latente de `core/providers`
+  (y posibles cascadas bajo AOT estricta) o desacoplar su import del barrel de servicios; hoy
+  se cubre en la galería in-app.
 - Documentado en `guia-autor-plugins.md` (sección 2b).
 
 ## Doble check + cierre (dogfooding y descubribilidad)
@@ -101,4 +121,5 @@ Verificación del cierre:
 ## Estado del roadmap UI/UX
 
 - **P1** (shell `ih-catalog-list`, 7 catálogos) ✅ · **P3** (UI kit para plugins) ✅ ·
-  **P2** (slots/outlets) ✅ · **P4** (catálogo vivo del UI kit + dogfood en `/plugins`) ✅.
+  **P2** (slots/outlets) ✅ · **P4** (Storybook real + catálogo in-app + dogfood en `/plugins`) ✅.
+- Bonus: **familia Angular alineada a 21.2.17** (antes en patches mezclados 21.2.5/.7/.17).

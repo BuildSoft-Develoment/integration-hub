@@ -1,0 +1,9 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noEmit": true
+  },
+  "include": ["../libs/shared/ui/src/**/*.stories.ts", "*.ts"],
+  "exclude": ["../libs/shared/ui/src/**/*.spec.ts"]
+}
