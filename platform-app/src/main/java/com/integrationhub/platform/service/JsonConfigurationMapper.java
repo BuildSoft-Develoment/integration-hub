@@ -25,7 +25,8 @@ import java.util.regex.Pattern;
 @ApplicationScoped
 public class JsonConfigurationMapper {
 
-    private static final Pattern SECRET_PATTERN = Pattern.compile("\\$\\{(env|config|secret|vault|vaultkv):([^}]+)}");
+    private static final Pattern SECRET_PATTERN =
+            Pattern.compile("\\$\\{(env|config|secret|vault|vaultkv|awssecret):([^}]+)}");
 
     ObjectMapper objectMapper;
     private final SecretResolver secretResolver;

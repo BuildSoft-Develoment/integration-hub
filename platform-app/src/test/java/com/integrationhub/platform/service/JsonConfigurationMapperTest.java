@@ -7,6 +7,8 @@ import com.integrationhub.platform.service.secret.FileVaultSecretClient;
 import com.integrationhub.platform.service.secret.FileVaultSecretLocationMapper;
 import com.integrationhub.platform.service.secret.FileVaultSecretValueProvider;
 import com.integrationhub.platform.service.secret.SecretLocationMapper;
+import com.integrationhub.platform.service.secret.AwsSecretClient;
+import com.integrationhub.platform.service.secret.AwsSecretManagerValueProvider;
 import com.integrationhub.platform.service.secret.SecretResolver;
 import com.integrationhub.platform.service.secret.SecretValueProvider;
 import com.integrationhub.platform.service.secret.VaultSecretClient;
@@ -81,6 +83,23 @@ class JsonConfigurationMapperTest {
     }
 
     @Test
+    void resolvesAwsSecretsManagerReferencesThroughTheMapper() {
+        // Proves SECRET_PATTERN captures "awssecret" and routes to the AWS provider,
+        // coexisting with vaultkv and the file-vault without collision.
+        System.setProperty("integrationhub.secrets.file-vault.default-provider", "dev");
+
+        Map<String, Object> result = mapper.toMap("""
+                {
+                  "aws": "${awssecret:payments/acme-bank/apiKey}",
+                  "vault": "${vaultkv:payments/acme-bank/apiKey}"
+                }
+                """);
+
+        assertEquals("aws-secret", result.get("aws"));
+        assertEquals("kv-secret", result.get("vault"));
+    }
+
+    @Test
     void rejectsReferenceWithoutLogicalPathAndField() {
         System.setProperty("integrationhub.secrets.file-vault.default-provider", "dev");
         var error = assertThrows(IllegalArgumentException.class,
@@ -104,8 +123,11 @@ class JsonConfigurationMapperTest {
         VaultSecretClient vaultKvClient = path ->
                 "payments/acme-bank".equals(path) ? Optional.of(Map.of("apiKey", "kv-secret")) : Optional.empty();
         SecretValueProvider vaultKvProvider = new VaultSecretValueProvider(vaultKvClient);
-        SecretResolver secretResolver =
-                new SecretResolver(List.of(envProvider, configProvider, vaultProvider, vaultKvProvider));
+        AwsSecretClient awsClient = secretId ->
+                "payments/acme-bank".equals(secretId) ? Optional.of(Map.of("apiKey", "aws-secret")) : Optional.empty();
+        SecretValueProvider awsProvider = new AwsSecretManagerValueProvider(awsClient);
+        SecretResolver secretResolver = new SecretResolver(
+                List.of(envProvider, configProvider, vaultProvider, vaultKvProvider, awsProvider));
         return new JsonConfigurationMapper(new ObjectMapper(), secretResolver, true);
     }
 }
