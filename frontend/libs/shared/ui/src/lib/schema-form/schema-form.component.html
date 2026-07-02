@@ -1,0 +1,89 @@
+<form [formGroup]="form" class="schema-form">
+  @for (field of schema().fields; track field.key) {
+    @switch (field.type) {
+
+      @case ('boolean') {
+        <div class="schema-form__toggle">
+          <mat-slide-toggle [formControlName]="field.key">{{ fieldLabel(field) }}</mat-slide-toggle>
+          @if (fieldHint(field); as hint) {
+            <small class="schema-form__hint">{{ hint }}</small>
+          }
+        </div>
+      }
+
+      @case ('select') {
+        <mat-form-field appearance="outline" class="schema-form__field">
+          <mat-label>{{ fieldLabel(field) }}</mat-label>
+          <mat-select [formControlName]="field.key" [required]="!!field.required">
+            @for (opt of field.options ?? []; track opt.value) {
+              <mat-option [value]="opt.value">{{ optionLabel(opt) }}</mat-option>
+            }
+          </mat-select>
+          @if (fieldHint(field); as hint) { <mat-hint>{{ hint }}</mat-hint> }
+          @if (control(field.key).invalid && control(field.key).touched) {
+            <mat-error>{{ i18n.t('schemaForm.required') }}</mat-error>
+          }
+        </mat-form-field>
+      }
+
+      @case ('textarea') {
+        <mat-form-field appearance="outline" class="schema-form__field">
+          <mat-label>{{ fieldLabel(field) }}</mat-label>
+          <textarea
+            matInput
+            rows="4"
+            [formControlName]="field.key"
+            [placeholder]="fieldPlaceholder(field)"
+          ></textarea>
+          @if (fieldHint(field); as hint) { <mat-hint>{{ hint }}</mat-hint> }
+          @if (control(field.key).invalid && control(field.key).touched) {
+            <mat-error>{{ i18n.t('schemaForm.invalid') }}</mat-error>
+          }
+        </mat-form-field>
+      }
+
+      @case ('number') {
+        <mat-form-field appearance="outline" class="schema-form__field">
+          <mat-label>{{ fieldLabel(field) }}</mat-label>
+          <input
+            matInput
+            type="number"
+            [formControlName]="field.key"
+            [placeholder]="fieldPlaceholder(field)"
+            [min]="field.min ?? null"
+            [max]="field.max ?? null"
+          />
+          @if (fieldHint(field); as hint) { <mat-hint>{{ hint }}</mat-hint> }
+          @if (control(field.key).invalid && control(field.key).touched) {
+            <mat-error>{{ i18n.t('schemaForm.invalid') }}</mat-error>
+          }
+        </mat-form-field>
+      }
+
+      @default {
+        <mat-form-field appearance="outline" class="schema-form__field">
+          <mat-label>
+            {{ fieldLabel(field) }}
+            @if (field.type === 'secret') {
+              <span class="schema-form__secret" [attr.aria-label]="i18n.t('schemaForm.secretRef')">🔒</span>
+            }
+          </mat-label>
+          <input
+            matInput
+            [type]="field.type === 'password' || field.type === 'secret' ? 'password' : 'text'"
+            [formControlName]="field.key"
+            [placeholder]="fieldPlaceholder(field)"
+          />
+          @if (field.type === 'secret') {
+            <mat-hint>{{ i18n.t('schemaForm.secretRef') }}</mat-hint>
+          } @else if (fieldHint(field); as hint) {
+            <mat-hint>{{ hint }}</mat-hint>
+          }
+          @if (control(field.key).invalid && control(field.key).touched) {
+            <mat-error>{{ i18n.t('schemaForm.required') }}</mat-error>
+          }
+        </mat-form-field>
+      }
+    }
+  }
+</form>

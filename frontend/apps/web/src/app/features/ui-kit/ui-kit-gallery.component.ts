@@ -1,10 +1,13 @@
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 import {
   CatalogListColumn,
   CatalogListComponent,
   EmptyStateComponent,
   IconComponent,
   LoadingComponent,
+  SchemaFormComponent,
+  SchemaFormSchema,
+  SchemaFormValue,
   StatusBadgeComponent,
   StatusBadgeKind,
 } from '@integration-hub/shared/ui';
@@ -33,6 +36,7 @@ interface DemoRow {
     EmptyStateComponent,
     LoadingComponent,
     IconComponent,
+    SchemaFormComponent,
   ],
   template: `
     <section class="page-grid ui-kit">
@@ -76,6 +80,30 @@ interface DemoRow {
       <section class="ui-kit__block">
         <h3 class="ih-section-title">Empty state</h3>
         <ih-empty-state icon="folder" message="No hay elementos todavía." />
+      </section>
+
+      <section class="ui-kit__block">
+        <h3 class="ih-section-title">Schema form (config dirigida por schema)</h3>
+        <p class="ih-muted">
+          Renderiza la configuración de un tipo a partir de su schema — así un plugin backend
+          declara sus campos y el operador los configura sin formulario hardcoded.
+        </p>
+        <div class="ui-kit__schema">
+          <ih-schema-form
+            [schema]="demoSchema"
+            [value]="schemaValue()"
+            (valueChange)="schemaValue.set($event)"
+            (validChange)="schemaValid.set($event)"
+          />
+          <div class="ui-kit__schema-out">
+            <div class="ui-kit__row">
+              <ih-status-badge [status]="schemaValid() ? 'success' : 'warning'">
+                {{ schemaValid() ? 'válido' : 'incompleto' }}
+              </ih-status-badge>
+            </div>
+            <pre class="ui-kit__json">{{ schemaValueJson() }}</pre>
+          </div>
+        </div>
       </section>
 
       <section class="ui-kit__block">
@@ -124,6 +152,10 @@ interface DemoRow {
       .ui-kit__catalog { height: 20rem; border: 1px solid var(--ih-border); border-radius: var(--ih-radius-lg, 18px); overflow: hidden; }
       .ui-kit__btn { padding: 0.2rem 0.6rem; border: 1px solid var(--ih-border-strong); border-radius: var(--ih-radius-sm); background: var(--ih-surface-alt); color: inherit; cursor: pointer; font-size: var(--ih-font-size-xs); }
       .table-row { display: grid; grid-template-columns: var(--ih-catalog-columns); align-items: center; gap: 0.75rem; }
+      .ui-kit__schema { display: grid; grid-template-columns: minmax(280px, 24rem) 1fr; gap: 1.5rem; align-items: start; }
+      @media (max-width: 760px) { .ui-kit__schema { grid-template-columns: 1fr; } }
+      .ui-kit__schema-out { display: grid; gap: 0.5rem; }
+      .ui-kit__json { margin: 0; padding: 0.75rem; background: var(--ih-surface-alt); border: 1px solid var(--ih-border); border-radius: var(--ih-radius-md, 12px); font-size: var(--ih-font-size-xs); overflow: auto; }
     `,
   ],
 })
@@ -148,4 +180,28 @@ export class UiKitGalleryComponent {
   visibleRows(): readonly DemoRow[] {
     return this.state() === 'data' ? this.rows : [];
   }
+
+  // Demo del schema-form: el tipo de config que un plugin backend declararía.
+  readonly demoSchema: SchemaFormSchema = {
+    fields: [
+      { key: 'host', type: 'text', label: 'Host', required: true, placeholder: 'db.internal' },
+      { key: 'port', type: 'number', label: 'Puerto', min: 1, max: 65535, default: 5432 },
+      {
+        key: 'engine',
+        type: 'select',
+        label: 'Motor',
+        required: true,
+        options: [
+          { value: 'postgres', label: 'PostgreSQL' },
+          { value: 'mysql', label: 'MySQL' },
+          { value: 'oracle', label: 'Oracle' },
+        ],
+      },
+      { key: 'ssl', type: 'boolean', label: 'Usar TLS', default: true },
+      { key: 'password', type: 'secret', label: 'Contraseña', required: true },
+    ],
+  };
+  readonly schemaValue = signal<SchemaFormValue>({});
+  readonly schemaValid = signal(false);
+  readonly schemaValueJson = computed(() => JSON.stringify(this.schemaValue(), null, 2));
 }

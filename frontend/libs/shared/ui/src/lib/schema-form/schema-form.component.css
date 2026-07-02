@@ -1,0 +1,25 @@
+.schema-form {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.schema-form__field {
+  width: 100%;
+}
+
+.schema-form__toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.25rem 0;
+}
+
+.schema-form__hint {
+  color: var(--ih-text-soft);
+  font-size: var(--ih-font-size-xs);
+}
+
+.schema-form__secret {
+  margin-left: 0.25rem;
+  font-size: 0.85em;
+}
