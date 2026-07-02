@@ -225,16 +225,18 @@ test.describe('Integration Hub shell', () => {
     });
   });
 
-  test('renders the sources catalog on the shared catalog-list shell', async ({ page }) => {
-    test.setTimeout(90_000);
+  for (const route of ['sources', 'processes', 'schedules'] as const) {
+    test(`renders the ${route} catalog on the shared catalog-list shell`, async ({ page }) => {
+      test.setTimeout(90_000);
 
-    await gotoAuthenticated(page, '/#/sources');
+      await gotoAuthenticated(page, `/#/${route}`);
 
-    const list = page.locator('ih-catalog-list').first();
-    await expect(list).toBeVisible({ timeout: 20_000 });
-    await expect(list.getByRole('columnheader', { name: /Nombre|Name/ }).first()).toBeVisible();
-    await expect(list.locator('.table-body')).toBeVisible();
-  });
+      const list = page.locator('ih-catalog-list').first();
+      await expect(list).toBeVisible({ timeout: 20_000 });
+      await expect(list.getByRole('columnheader', { name: /Nombre|Name/ }).first()).toBeVisible();
+      await expect(list.locator('.table-body')).toBeVisible();
+    });
+  }
 
   test('renders the readers catalog on the shared catalog-list shell', async ({ page }) => {
     test.setTimeout(90_000);

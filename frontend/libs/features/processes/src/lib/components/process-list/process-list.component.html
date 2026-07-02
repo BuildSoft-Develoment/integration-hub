@@ -1,83 +1,53 @@
-<div class="list-card ih-catalog-list">
-      <div class="table-head ih-catalog-table-head">
-        <button type="button" class="col-sortable" (click)="toggleSort.emit('name')">
-          {{ i18n.t('common.name') }}
-          @if (sortField() === 'name') {
-            <span class="sort-arrow">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
-          }
-        </button>
-        <button type="button" class="col-sortable" (click)="toggleSort.emit('mode')">
-          {{ i18n.t('processes.mode') }}
-          @if (sortField() === 'mode') {
-            <span class="sort-arrow">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
-          }
-        </button>
-        <button type="button" class="col-sortable" (click)="toggleSort.emit('active')">
-          {{ i18n.t('common.status') }}
-          @if (sortField() === 'active') {
-            <span class="sort-arrow">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
-          }
-        </button>
+<ih-catalog-list
+  class="list-card"
+  [columns]="columns"
+  gridColumns="minmax(200px, 1.5fr) 0.9fr 0.8fr"
+  [sortField]="sortField()"
+  [sortDirection]="sortDirection()"
+  [rowCount]="processes().length"
+  [loading]="loading()"
+  [error]="error()"
+  emptyKey="processes.noData"
+  emptyIcon="git-branch"
+  [total]="totalLength()"
+  [pageIndex]="pageIndex()"
+  [pageSize]="pageSize()"
+  [pageSizeOptions]="pageSizeOptions()"
+  (toggleSort)="toggleSort.emit($event)"
+  (pageChange)="onPageChange($event)"
+  (retry)="retry.emit()"
+>
+  @for (process of processes(); track process.id) {
+    <button
+      type="button"
+      class="table-row ih-catalog-table-row"
+      [class.table-row--selected]="selectedProcessId() === process.id"
+      [class.ih-catalog-table-row--selected]="selectedProcessId() === process.id"
+      [attr.aria-label]="i18n.t('common.selectItem', { name: process.name })"
+      [attr.tabindex]="$index === 0 ? 0 : -1"
+      [attr.data-row-index]="$index"
+      (click)="selectProcess.emit(process)"
+    >
+      <div class="row-primary ih-catalog-row-primary">
+        <div class="row-avatar ih-catalog-row-avatar ih-tone-integration">
+          <ih-icon name="git-branch" [size]="20" />
+        </div>
+        <div class="row-copy ih-catalog-row-copy">
+          <strong>{{ process.name }}</strong>
+          <small>ID {{ process.id }}</small>
+        </div>
       </div>
 
-      <div class="table-body ih-catalog-table-body ih-thin-scroll">
-        @if (error(); as err) {
-          <div class="ih-catalog-error" role="alert">
-            <p class="ih-catalog-error__message">{{ i18n.t(err) }}</p>
-            <button mat-stroked-button type="button" (click)="retry.emit()">{{ i18n.t('common.retry') }}</button>
-          </div>
-        }
-        @if (loading()) { <ih-loading variant="skeleton" [rows]="pageSize()" /> }
-        @for (process of processes(); track process.id) {
-          <button
-            type="button"
-            class="table-row ih-catalog-table-row"
-            [class.table-row--selected]="selectedProcessId() === process.id"
-            [class.ih-catalog-table-row--selected]="selectedProcessId() === process.id"
-            [attr.aria-label]="i18n.t('common.selectItem', { name: process.name })"
-            [attr.tabindex]="$index === 0 ? 0 : -1"
-            [attr.data-row-index]="$index"
-            (click)="selectProcess.emit(process)"
-          >
-            <div class="row-primary ih-catalog-row-primary">
-              <div class="row-avatar ih-catalog-row-avatar ih-tone-integration">
-                <ih-icon name="git-branch" [size]="20" />
-              </div>
-              <div class="row-copy ih-catalog-row-copy">
-                <strong>{{ process.name }}</strong>
-                <small>ID {{ process.id }}</small>
-              </div>
-            </div>
-
-            <div class="row-type ih-catalog-row-meta">
-              <mat-chip-set>
-                <mat-chip>{{ process.scheduled ? i18n.t('status.scheduled') : i18n.t('status.manual') }}</mat-chip>
-              </mat-chip-set>
-            </div>
-
-            <div class="row-status" [class.row-status--inactive]="!process.active">
-              <span class="status-dot" aria-hidden="true"></span>
-              {{ process.active ? i18n.t('status.active') : i18n.t('status.inactive') }}
-            </div>
-          </button>
-        } @empty {
-          <div class="empty-state ih-catalog-empty-state">
-            <ih-icon name="git-branch" [size]="32" />
-            <p class="ih-muted">{{ i18n.t('processes.noData') }}</p>
-          </div>
-        }
+      <div class="row-type ih-catalog-row-meta">
+        <mat-chip-set>
+          <mat-chip>{{ process.scheduled ? i18n.t('status.scheduled') : i18n.t('status.manual') }}</mat-chip>
+        </mat-chip-set>
       </div>
 
-      @if (totalLength() > 0) {
-        <mat-paginator
-          class="list-paginator ih-catalog-paginator"
-          [length]="totalLength()"
-          [pageIndex]="pageIndex()"
-          [pageSize]="pageSize()"
-          [pageSizeOptions]="pageSizeOptions()"
-          [hidePageSize]="false"
-          [showFirstLastButtons]="false"
-          (page)="onPageChange($event)"
-        />
-      }
-    </div>
+      <div class="row-status" [class.row-status--inactive]="!process.active">
+        <span class="status-dot" aria-hidden="true"></span>
+        {{ process.active ? i18n.t('status.active') : i18n.t('status.inactive') }}
+      </div>
+    </button>
+  }
+</ih-catalog-list>
