@@ -47,14 +47,20 @@ npx nx test web --skip-nx-cache
   hace `POST .../canary-weight` con `{weight:25}` y refetch).
 - Build de producción: **OK** (`npx nx build web` compila limpio, incluido el chunk de plugins).
 
-## Prueba e2e (Playwright) — PENDIENTE de entorno
+## Prueba e2e (Playwright) — VALIDADO
 
-- Test **escrito**: "sets a canary rollout weight from the versions table" (mock con estado
-  de `/api/plugins` + `/canary-weight`; fija 40 en la UI y verifica que el peso se refleja).
-- **No ejecutado en esta sesión**: a mitad del trabajo **Docker Desktop se cayó**, dejando
-  Postgres y Keycloak indisponibles → la app responde health 500 y el e2e no puede autenticar
-  (Keycloak) ni servir con DB. Es un fallo de entorno, ajeno al cambio. Se ejecutará al
-  restaurar la stack. El test unitario `setCanaryWeight` cubre el mismo flujo POST y pasa.
+- Test: "sets a canary rollout weight from the versions table" (mock con estado de
+  `/api/plugins` + `/canary-weight`; fija 40 en la UI y verifica que el peso se refleja).
+- **Ejecutado tras restaurar Docker** (Postgres+Keycloak+Kafka arriba, V76 aplicada,
+  `GET /api/plugins/{id}/canary/route` y `POST .../canary-weight` → 401 sin auth):
+  suite completa **8 passed (1.9m)**, incluido este test. La validación e2e que quedó
+  pendiente por la caída de Docker está ahora **verde** contra la stack real.
+
+```bash
+BASE_URL=http://localhost:8080 npx playwright test \
+  --config=apps/web-e2e/playwright.config.ts --project=chromium
+# 8 passed
+```
 
 ## Siguiente paso (documentado)
 
