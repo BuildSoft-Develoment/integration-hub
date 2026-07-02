@@ -9,6 +9,8 @@ import com.integrationhub.platform.service.secret.FileVaultSecretValueProvider;
 import com.integrationhub.platform.service.secret.SecretLocationMapper;
 import com.integrationhub.platform.service.secret.SecretResolver;
 import com.integrationhub.platform.service.secret.SecretValueProvider;
+import com.integrationhub.platform.service.secret.VaultSecretClient;
+import com.integrationhub.platform.service.secret.VaultSecretValueProvider;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -61,6 +63,24 @@ class JsonConfigurationMapperTest {
     }
 
     @Test
+    void resolvesVaultKvCorporateSecretReferencesThroughTheMapper() {
+        // Proves the SECRET_PATTERN captures the "vaultkv" scheme (not just "vault") and
+        // that the full chain routes to the corporate Vault provider.
+        System.setProperty("integrationhub.secrets.file-vault.default-provider", "dev");
+
+        Map<String, Object> result = mapper.toMap("""
+                {
+                  "apiKey": "${vaultkv:payments/acme-bank/apiKey}",
+                  "fileVault": "${secret:connections/db/conexion1/password}"
+                }
+                """);
+
+        assertEquals("kv-secret", result.get("apiKey"));
+        // The pre-existing file-vault scheme still resolves independently.
+        assertEquals("token-file-vault", result.get("fileVault"));
+    }
+
+    @Test
     void rejectsReferenceWithoutLogicalPathAndField() {
         System.setProperty("integrationhub.secrets.file-vault.default-provider", "dev");
         var error = assertThrows(IllegalArgumentException.class,
@@ -81,7 +101,11 @@ class JsonConfigurationMapperTest {
         };
         SecretLocationMapper<FileVaultSecretLocationMapper.FileVaultLocation> mapper = new FileVaultSecretLocationMapper(config, true);
         SecretValueProvider vaultProvider = new FileVaultSecretValueProvider(fileVaultSecretClient, mapper, true);
-        SecretResolver secretResolver = new SecretResolver(List.of(envProvider, configProvider, vaultProvider));
+        VaultSecretClient vaultKvClient = path ->
+                "payments/acme-bank".equals(path) ? Optional.of(Map.of("apiKey", "kv-secret")) : Optional.empty();
+        SecretValueProvider vaultKvProvider = new VaultSecretValueProvider(vaultKvClient);
+        SecretResolver secretResolver =
+                new SecretResolver(List.of(envProvider, configProvider, vaultProvider, vaultKvProvider));
         return new JsonConfigurationMapper(new ObjectMapper(), secretResolver, true);
     }
 }
