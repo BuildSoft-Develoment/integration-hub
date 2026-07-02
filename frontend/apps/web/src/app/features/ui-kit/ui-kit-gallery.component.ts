@@ -42,6 +42,11 @@ interface DemoRow {
           Componentes de <code>&#64;integration-hub/shared/ui</code> — la referencia viva para
           autores de plugins. Cambia el tema para ver el modo oscuro.
         </p>
+        <p class="ih-muted ui-kit__hint">
+          Para desarrollar un componente aislado, tocar sus inputs y auditar accesibilidad,
+          usa Storybook (<code>npm run storybook</code>). Aquí ves el kit completo en producto,
+          incluido <code>catalog-list</code> con su DI real.
+        </p>
       </header>
 
       <section class="ui-kit__block">
