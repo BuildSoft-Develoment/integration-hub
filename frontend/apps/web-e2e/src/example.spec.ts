@@ -225,6 +225,23 @@ test.describe('Integration Hub shell', () => {
     });
   });
 
+  test('renders the readers catalog on the shared catalog-list shell', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    await gotoAuthenticated(page, '/#/readers');
+
+    // The readers list now renders through the shared ih-catalog-list shell.
+    const list = page.locator('ih-catalog-list').first();
+    await expect(list).toBeVisible({ timeout: 20_000 });
+    // Sortable column headers provided by the shell (from the columns config).
+    await expect(
+      list.getByRole('columnheader', { name: /Nombre|Name/ }).first()
+    ).toBeVisible();
+    await expect(list.getByRole('columnheader', { name: /Tipo|Type/ }).first()).toBeVisible();
+    // The shell renders either rows or its empty state, never the old duplicated markup.
+    await expect(list.locator('.table-body')).toBeVisible();
+  });
+
   test('previews a frontend plugin manifest in the console', async ({ page }) => {
     test.setTimeout(90_000);
 
