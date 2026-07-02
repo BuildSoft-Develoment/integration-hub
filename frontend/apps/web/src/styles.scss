@@ -6,6 +6,7 @@
   @include mat.core-theme($theme);
   @include mat.autocomplete-theme($theme);
   @include mat.button-theme($theme);
+  @include mat.button-toggle-theme($theme);
   @include mat.card-theme($theme);
   @include mat.checkbox-theme($theme);
   @include mat.chips-theme($theme);
@@ -30,6 +31,7 @@
   @include mat.core-color($theme);
   @include mat.autocomplete-color($theme);
   @include mat.button-color($theme);
+  @include mat.button-toggle-color($theme);
   @include mat.card-color($theme);
   @include mat.checkbox-color($theme);
   @include mat.chips-color($theme);
@@ -105,6 +107,62 @@ $ih-dark-theme: mat.define-theme((
   --ih-theme-neutral: #8b8d98;
   --ih-error: var(--ih-theme-error);
   --ih-neutral: var(--ih-theme-neutral);
+  /* Tokens semanticos de estado: un solo lugar para los colores de dominio.
+     Reusan la identidad visual existente (no introducen colores nuevos). */
+  --ih-status-error: var(--ih-error);
+  --ih-status-success: #2f9e44;
+  --ih-status-warning: #e8590c;
+  --ih-status-info: var(--ih-accent-strong);
+  --ih-status-neutral: var(--ih-text-soft);
+  --ih-status-error-bg: color-mix(in srgb, var(--ih-status-error) 14%, transparent);
+  --ih-status-warning-bg: color-mix(in srgb, var(--ih-status-warning) 12%, transparent);
+  --ih-status-success-bg: color-mix(in srgb, var(--ih-status-success) 12%, transparent);
+  --ih-status-info-bg: color-mix(in srgb, var(--ih-status-info) 14%, transparent);
+  /* Tonos de presentacion de recursos (avatares/chips por tipo).
+     Derivan de la identidad existente; no introducen colores literales. */
+  --ih-tone-database: var(--ih-accent-strong);
+  --ih-tone-document: var(--ih-text-soft);
+  --ih-tone-storage: var(--ih-accent);
+  --ih-tone-network: var(--ih-status-info);
+  --ih-tone-integration: var(--ih-accent-strong);
+  --ih-tone-cloud: var(--ih-status-info);
+  --ih-tone-payment: var(--ih-status-warning);
+  /* Tipografia */
+  --ih-font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ih-font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  --ih-font-size-xs: 0.72rem;
+  --ih-font-size-sm: 0.82rem;
+  --ih-font-size-md: 0.9rem;
+  --ih-font-size-lg: 1rem;
+  --ih-font-size-xl: 1.25rem;
+  --ih-font-size-2xl: 1.5rem;
+  --ih-line-height-tight: 1.25;
+  --ih-line-height-normal: 1.45;
+  --ih-line-height-loose: 1.7;
+  --ih-font-weight-normal: 400;
+  --ih-font-weight-medium: 500;
+  --ih-font-weight-strong: 700;
+  /* Spacing scale */
+  --ih-space-1: 0.25rem;
+  --ih-space-2: 0.5rem;
+  --ih-space-3: 0.75rem;
+  --ih-space-4: 1rem;
+  --ih-space-5: 1.5rem;
+  --ih-space-6: 2rem;
+  --ih-space-7: 3rem;
+  --ih-space-8: 4rem;
+  /* Radios */
+  --ih-radius-sm: 8px;
+  --ih-radius-md: 16px;
+  --ih-radius-pill: 999px;
+  /* Breakpoints (referencia — CSS no puede usarlas en media queries nativas,
+     pero unifican el valor para JS y documentacion) */
+  --ih-bp-mobile: 760px;
+  --ih-bp-tablet: 1080px;
+  --ih-bp-desktop: 1180px;
+  /* Transiciones */
+  --ih-transition-fast: 160ms ease;
+  --ih-transition-normal: 240ms ease;
   --mat-sys-primary: var(--ih-accent);
   --mat-sys-secondary: var(--ih-accent-strong);
   --mat-sys-error: var(--ih-error);
@@ -216,6 +274,43 @@ select {
 
 .mat-mdc-row:hover {
   background: color-mix(in srgb, var(--ih-accent) 7%, transparent);
+}
+
+.mat-button-toggle-group {
+  border: 1px solid var(--ih-border-strong);
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--ih-surface-alt);
+  --mat-standard-button-toggle-text-color: var(--ih-text-soft);
+  --mat-standard-button-toggle-background-color: transparent;
+  --mat-standard-button-toggle-state-layer-color: color-mix(in srgb, var(--ih-accent) 14%, transparent);
+  --mat-standard-button-toggle-selected-state-text-color: var(--ih-accent-strong);
+  --mat-standard-button-toggle-selected-state-background-color: color-mix(in srgb, var(--ih-accent) 16%, transparent);
+  --mat-standard-button-toggle-divider-color: var(--ih-border);
+}
+
+.mat-button-toggle {
+  color: var(--ih-text-soft);
+  background: transparent;
+}
+
+.mat-button-toggle .mat-button-toggle-label-content {
+  line-height: 2.2rem;
+  padding: 0 1rem;
+}
+
+.mat-button-toggle:hover .mat-button-toggle-label-content,
+.mat-button-toggle.cdk-keyboard-focused .mat-button-toggle-label-content {
+  color: var(--ih-accent-strong);
+}
+
+.mat-button-toggle-checked {
+  background: color-mix(in srgb, var(--ih-accent) 16%, transparent);
+}
+
+.mat-button-toggle-checked .mat-button-toggle-label-content {
+  color: var(--ih-accent-strong);
+  font-weight: 600;
 }
 
 .mat-mdc-list-item,
@@ -345,6 +440,39 @@ select {
 
 .ih-muted {
   color: var(--ih-text-soft);
+}
+
+/* Texto solo para lectores de pantalla (WCAG 2.2 AA): captions, contexto de iconos. */
+.ih-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Tablas densas: zebra + hover sobre tablas semanticas no-Material (audit). */
+.ih-dense-table tbody tr:nth-child(even) td {
+  background: color-mix(in srgb, var(--ih-surface-alt) 55%, transparent);
+}
+
+.ih-dense-table tbody tr:hover td {
+  background: color-mix(in srgb, var(--ih-accent) 6%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .ih-panel-surface {
@@ -877,6 +1005,10 @@ select {
   border-bottom: 0;
 }
 
+.ih-catalog-table-row:nth-child(even) {
+  background: color-mix(in srgb, var(--ih-surface) 50%, var(--ih-surface-alt));
+}
+
 .ih-catalog-table-row:hover,
 .ih-catalog-table-row--selected {
   background: color-mix(in srgb, var(--ih-accent) 7%, var(--ih-surface-alt));
@@ -902,6 +1034,27 @@ select {
   color: var(--ih-accent-strong);
   font-weight: 800;
 }
+
+/* Tonos de presentacion por tipo de recurso (avatar/chip). El color se toma
+   del token tonal; el fondo es una mezcla translucida del mismo tono. */
+.ih-tone-database,
+.ih-tone-document,
+.ih-tone-storage,
+.ih-tone-network,
+.ih-tone-integration,
+.ih-tone-cloud,
+.ih-tone-payment {
+  color: var(--ih-tone);
+  background: color-mix(in srgb, var(--ih-tone) 15%, transparent);
+}
+
+.ih-tone-database { --ih-tone: var(--ih-tone-database); }
+.ih-tone-document { --ih-tone: var(--ih-tone-document); }
+.ih-tone-storage { --ih-tone: var(--ih-tone-storage); }
+.ih-tone-network { --ih-tone: var(--ih-tone-network); }
+.ih-tone-integration { --ih-tone: var(--ih-tone-integration); }
+.ih-tone-cloud { --ih-tone: var(--ih-tone-cloud); }
+.ih-tone-payment { --ih-tone: var(--ih-tone-payment); }
 
 .ih-catalog-row-copy {
   display: grid;
@@ -930,6 +1083,18 @@ select {
   place-items: center;
   padding: 1.5rem 1.15rem;
   text-align: center;
+  gap: 0.5rem;
+}
+
+.ih-catalog-empty-state ih-icon {
+  color: var(--ih-text-soft);
+  opacity: 0.5;
+  margin-bottom: 0.5rem;
+}
+
+.ih-empty-hint {
+  font-size: 0.82rem;
+  opacity: 0.8;
 }
 
 .ih-catalog-paginator {
@@ -1467,14 +1632,7 @@ select {
   width: 100%;
 }
 
-.source-page .mat-mdc-form-field-subscript-wrapper,
-.audit-page .mat-mdc-form-field-subscript-wrapper,
-.schedule-page .mat-mdc-form-field-subscript-wrapper,
-.reader-page .mat-mdc-form-field-subscript-wrapper,
-.connection-page .mat-mdc-form-field-subscript-wrapper,
-.overview-page .mat-mdc-form-field-subscript-wrapper,
-.execution-page .mat-mdc-form-field-subscript-wrapper,
-.process-page .mat-mdc-form-field-subscript-wrapper {
+.ih-no-hint .mat-mdc-form-field-subscript-wrapper {
   display: none;
 }
 
@@ -1919,4 +2077,18 @@ select {
   overflow: visible !important;
   text-overflow: clip !important;
   transform-origin: left top !important;
+}
+
+.ih-catalog-error {
+  min-height: 20rem;
+  display: grid;
+  place-items: center;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  text-align: center;
+}
+.ih-catalog-error__message {
+  color: var(--ih-status-error);
+  font-size: 0.9rem;
+  margin: 0;
 }

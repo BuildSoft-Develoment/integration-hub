@@ -24,6 +24,7 @@ public class ProcessExecutionService {
     private final Tracer tracer;
     private final SuspensionTokenGenerator suspensionTokenGenerator;
     private final SuspendedStateMarshaller suspendedStateMarshaller;
+    private final SuspensionContinuation suspensionContinuation;
 
     public ProcessExecutionService(
             ProcessExecutionStateService processExecutionStateService,
@@ -33,7 +34,8 @@ public class ProcessExecutionService {
             TaskOutputRegistry taskOutputRegistry,
             Tracer tracer,
             SuspensionTokenGenerator suspensionTokenGenerator,
-            SuspendedStateMarshaller suspendedStateMarshaller
+            SuspendedStateMarshaller suspendedStateMarshaller,
+            SuspensionContinuation suspensionContinuation
     ) {
         this.processExecutionStateService = processExecutionStateService;
         this.processTaskRuntimeService = processTaskRuntimeService;
@@ -43,6 +45,7 @@ public class ProcessExecutionService {
         this.tracer = tracer;
         this.suspensionTokenGenerator = suspensionTokenGenerator;
         this.suspendedStateMarshaller = suspendedStateMarshaller;
+        this.suspensionContinuation = suspensionContinuation;
     }
 
     public com.integrationhub.platform.entity.ProcessExecution execute(Long processDefinitionId) {
@@ -93,17 +96,53 @@ public class ProcessExecutionService {
         return executeLoadedPlan(plan, processExecutionId, normalizedExecutionVariables, normalizedSelectedFiles, normalizedTriggerSource, processSpan);
     }
 
+    /**
+     * Continuacion M-2.1: tras un resume exitoso con tareas downstream, rehidrata
+     * el contexto del pipeline (capturado al suspender) y ejecuta las tareas con
+     * {@code taskOrder > afterTaskOrder} con la misma semantica del loop normal
+     * (fast-paths, suspension anidada, fallo de proceso).
+     */
+    public com.integrationhub.platform.entity.ProcessExecution continueAfterResume(
+            Long processExecutionId,
+            Long processDefinitionId,
+            int afterTaskOrder,
+            java.util.LinkedHashMap<String, Object> taskOutputs,
+            Map<String, String> executionVariables,
+            String triggerSource) {
+        var normalizedVariables = executionVariables == null ? Map.<String, String>of() : Map.copyOf(executionVariables);
+        var normalizedTriggerSource = triggerSource == null || triggerSource.isBlank() ? "RESUME" : triggerSource;
+        var processSpan = tracer.spanBuilder("process.execute.continuation").startSpan();
+        processSpan.setAttribute("process.execution.id", processExecutionId);
+        processSpan.setAttribute("process.continuation.after-order", afterTaskOrder);
+
+        var plan = processExecutionStateService.loadExecutionPlan(processDefinitionId);
+        var remaining = plan.tasks().stream()
+                .filter(taskPlan -> taskPlan.taskOrder() != null && taskPlan.taskOrder() > afterTaskOrder)
+                .toList();
+        return executeTasks(remaining, processExecutionId, normalizedVariables, List.of(),
+                normalizedTriggerSource, processSpan, taskOutputs);
+    }
+
     private com.integrationhub.platform.entity.ProcessExecution executeLoadedPlan(ProcessExecutionStateService.ExecutionPlan plan,
                                                                                   Long processExecutionId,
                                                                                   Map<String, String> executionVariables,
                                                                                   List<String> selectedFiles,
                                                                                   String triggerSource,
                                                                                   io.opentelemetry.api.trace.Span processSpan) {
+        return executeTasks(plan.tasks(), processExecutionId, executionVariables, selectedFiles,
+                triggerSource, processSpan, new java.util.LinkedHashMap<>());
+    }
+
+    private com.integrationhub.platform.entity.ProcessExecution executeTasks(List<ProcessExecutionStateService.TaskPlan> tasks,
+                                                                              Long processExecutionId,
+                                                                              Map<String, String> executionVariables,
+                                                                              List<String> selectedFiles,
+                                                                              String triggerSource,
+                                                                              io.opentelemetry.api.trace.Span processSpan,
+                                                                              java.util.LinkedHashMap<String, Object> taskOutputs) {
         try {
             SourcePayload sourcePayload = null;
             ReadResult readResult = null;
-            var taskOutputs = new java.util.LinkedHashMap<String, Object>();
-            var tasks = plan.tasks();
 
             for (int index = 0; index < tasks.size(); index++) {
                 var taskPlan = tasks.get(index);
@@ -144,12 +183,17 @@ public class ProcessExecutionService {
                                 "taskType", taskPlan.taskType(),
                                 "resumeToken", token,
                                 "suspendedState", runResult.suspendedState());
+                        // M-2.1: capturamos el contexto del pipeline para que el
+                        // resume pueda continuar las tareas downstream.
+                        var continuationJson = suspensionContinuation.marshal(
+                                taskOutputs, executionVariables, triggerSource);
                         processExecutionStateService.suspendTask(
                                 processExecutionId,
                                 taskExecutionId,
                                 stateJson,
                                 token,
-                                null,
+                                SuspensionExpiry.expiresAt(runResult.suspendedState()),
+                                continuationJson,
                                 details,
                                 payload);
                         taskSpan.setAttribute("task.suspended", true);
@@ -167,9 +211,33 @@ public class ProcessExecutionService {
                     } else {
                         taskDetails = auditMapper.buildTaskDetails(taskPlan, runResult.details());
                         if (runResult.outputs() != null && !runResult.outputs().isEmpty()) {
+                            // Los outputs se registran incluso en failure: contienen los
+                            // errors que una NOTIFICATION downstream (con continueOnFailure)
+                            // necesita para alertar.
                             taskOutputRegistry.registerTaskResult(taskOutputs, taskPlan, taskConfiguration, runResult.outputs());
                         }
                         taskPayload = Map.of("taskType", taskPlan.taskType(), "outputs", runResult.outputs());
+                    }
+
+                    // TaskResult.failure() es un fallo de negocio (validacion con errores,
+                    // pagos rechazados): por defecto detiene el proceso. En pagos, una
+                    // validacion fallida nunca debe quedar como tarea "completada".
+                    // configuration.continueOnFailure=true es la politica explicita para
+                    // flujos que siguen con los elementos validos (e.g. masivo donde el
+                    // gate de fragmentos VALIDATED/REJECTED ya aisla los invalidos).
+                    if (!runResult.suspended() && !runResult.fileRead() && !runResult.success()) {
+                        if (boolValue(taskConfiguration.get("continueOnFailure"), false)) {
+                            processExecutionStateService.completeTaskWithErrors(
+                                    processExecutionId, taskExecutionId, taskDetails, taskPayload);
+                            taskSpan.setAttribute("task.completed.with.errors", true);
+                            continue;
+                        }
+                        processExecutionStateService.failTask(processExecutionId, taskExecutionId, taskDetails,
+                                auditMapper.buildTaskFailurePayload(taskPlan, executionVariables, triggerSource));
+                        processExecutionStateService.failProcess(processExecutionId,
+                                "Task " + taskPlan.taskType() + " failed: " + runResult.details());
+                        taskSpan.setStatus(StatusCode.ERROR, runResult.details());
+                        return processExecutionStateService.getExecution(processExecutionId);
                     }
 
                     processExecutionStateService.completeTask(processExecutionId, taskExecutionId, taskDetails, taskPayload);
@@ -195,6 +263,13 @@ public class ProcessExecutionService {
         } finally {
             processSpan.end();
         }
+    }
+
+    private boolean boolValue(Object raw, boolean defaultValue) {
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return defaultValue;
+        }
+        return Boolean.parseBoolean(String.valueOf(raw));
     }
 
     private ExecutionFastPath resolveFastPath(ProcessExecutionStateService.TaskPlan current,

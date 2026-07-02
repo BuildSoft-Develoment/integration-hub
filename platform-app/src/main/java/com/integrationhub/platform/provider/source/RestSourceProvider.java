@@ -61,16 +61,23 @@ public class RestSourceProvider implements SourceProvider {
         };
 
         try {
-            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
-            int status = response.statusCode();
-            if (status < 200 || status >= 300) {
-                throw new IllegalStateException("REST source returned status " + status);
-            }
-            String responseMediaType = response.headers().firstValue("Content-Type").orElse(mediaType != null ? mediaType : "application/octet-stream");
-            return SourcePayload.fromBytes(selectedFile.name(), response.body(), responseMediaType);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("REST source request was interrupted", e);
+            // Streaming directo a archivo temporal (BodyHandlers.ofFile, no
+            // ofByteArray): una respuesta de varios GB no se materializa en heap.
+            return TempFileSourcePayload.fromDownloadedTemp(selectedFile.name(), selectedFile.location(), tempFile -> {
+                HttpResponse<java.nio.file.Path> response;
+                try {
+                    response = httpClient.send(request, HttpResponse.BodyHandlers.ofFile(tempFile));
+                } catch (InterruptedException error) {
+                    Thread.currentThread().interrupt();
+                    throw new IOException("REST source request was interrupted", error);
+                }
+                int status = response.statusCode();
+                if (status < 200 || status >= 300) {
+                    throw new IOException("REST source returned status " + status);
+                }
+                return response.headers().firstValue("Content-Type")
+                        .orElse(mediaType != null ? mediaType : "application/octet-stream");
+            });
         } catch (IOException e) {
             throw new IllegalStateException("Cannot fetch payload from REST source", e);
         }

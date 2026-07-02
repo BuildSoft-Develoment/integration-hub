@@ -1,5 +1,5 @@
 ﻿import { CommonModule } from '@angular/common';
-import { Component, computed, inject, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -39,6 +39,7 @@ import { SourceEditorStateService } from '../editor/source-editor-state.service'
   ],
   templateUrl: './source-catalog-page.html',
   styleUrl: './source-catalog-page.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SourceCatalogPageComponent implements OnInit {
   readonly i18n = inject(I18nService);

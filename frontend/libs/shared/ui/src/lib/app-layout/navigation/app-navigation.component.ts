@@ -1,10 +1,10 @@
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, output } from '@angular/core';
 import { MatListModule } from '@angular/material/list';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthAccessService, I18nService } from '@integration-hub/core/services';
 
-import { APP_NAVIGATION_ITEMS } from './app-navigation.token';
+import { AppPluginRuntimeRegistry } from '../plugins/app-plugin-runtime.registry';
 
 @Component({
   selector: 'ih-app-navigation',
@@ -16,9 +16,10 @@ import { APP_NAVIGATION_ITEMS } from './app-navigation.token';
 export class AppNavigationComponent {
   readonly i18n = inject(I18nService);
   readonly access = inject(AuthAccessService);
-  private readonly navigationItems = inject(APP_NAVIGATION_ITEMS);
+  private readonly plugins = inject(AppPluginRuntimeRegistry);
+  private readonly router = inject(Router);
   readonly items = computed(() =>
-    this.navigationItems.filter(
+    this.plugins.navigation().filter(
       (item) =>
         item.requiredCapability == null ||
         this.access.hasCapability(item.requiredCapability)
@@ -28,5 +29,10 @@ export class AppNavigationComponent {
 
   onItemSelected(): void {
     this.itemSelected.emit();
+  }
+
+  activeRoute(route: string): boolean {
+    const url = this.router.url;
+    return url === route || url.startsWith(route + '/');
   }
 }

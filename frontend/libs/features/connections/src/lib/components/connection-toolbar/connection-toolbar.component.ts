@@ -1,6 +1,6 @@
 // @trace RF-002 (conexiones: probar conectividad + activar/desactivar)
 import { CommonModule } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -23,7 +23,8 @@ type ConnectionStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
       .create-button { justify-self: start; }
     `,
   ],
-    templateUrl: './connection-toolbar.component.html'
+    templateUrl: './connection-toolbar.component.html',
+    changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ConnectionToolbarComponent {
   readonly i18n = inject(I18nService);

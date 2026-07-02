@@ -17,6 +17,7 @@ Explicar como las specs se materializan en codigo, pruebas y trazabilidad dentro
 - [05.00-estructura-construccion-actual](05.00-estructura-construccion-actual.md)
 - [modulos/mapa-construccion-backend-frontend](modulos/mapa-construccion-backend-frontend.md)
 - [modulos/frontend-nx-angular](modulos/frontend-nx-angular.md)
+- [modulos/frontend-plugin-catalog](modulos/frontend-plugin-catalog.md)
 - [verificacion/verificacion-tecnica-y-trazabilidad](verificacion/verificacion-tecnica-y-trazabilidad.md)
 
 ## Adopcion real de la fase

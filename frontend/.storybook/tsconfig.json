@@ -1,0 +1,8 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["../libs/plugin-ui-kit/src/**/*.stories.ts", "*.ts"],
+  "exclude": ["../libs/plugin-ui-kit/src/**/*.spec.ts"]
+}

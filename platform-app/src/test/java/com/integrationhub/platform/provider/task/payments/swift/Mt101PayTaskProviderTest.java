@@ -1,8 +1,11 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
-import com.integrationhub.platform.provider.task.payments.spi.PaymentMessageTransport;
-import com.integrationhub.platform.provider.task.payments.spi.TransportResult;
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.audit.AuditLevel;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
+import com.integrationhub.platform.spi.task.payments.TransportResult;
+import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.integrationhub.platform.spi.task.TaskContext;
 import jakarta.enterprise.inject.Instance;
 import org.junit.jupiter.api.Test;
@@ -10,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +46,7 @@ class Mt101PayTaskProviderTest {
         ));
 
         assertTrue(result.success());
+        assertEquals(2, result.outputs().get("dispatchCount"));
         assertEquals(2, result.outputs().get("sentCount"));
         assertEquals(2, result.outputs().get("acceptedCount"));
         assertEquals(0, result.outputs().get("rejectedCount"));
@@ -58,15 +63,74 @@ class Mt101PayTaskProviderTest {
     }
 
     @Test
+    void emitsRecordLevelAuditPerDispatch() {
+        // Fase 3: trazabilidad E2E por registro -> una trama RECORD por fragmento
+        // despachado (recordId = :20:), emitida en lote fuera de la TX de negocio.
+        var transport = new StubTransport("REST", List.of(
+                TransportResult.accepted("GW-1", 1, 100L),
+                TransportResult.accepted("GW-2", 1, 100L)
+        ));
+        var captured = new ArrayList<AuditEnvelope>();
+        RecordAuditEmitter emitter = captured::addAll;
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), null, null, emitter);
+        var context = contextWith(List.of(sampleMessage("PROC-1"), sampleMessage("PROC-2")));
+
+        provider.execute(context, Map.of(
+                "transport", "REST",
+                "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records"),
+                "rest", Map.of("url", "https://test.example/mt101")
+        ));
+
+        assertEquals(2, captured.size());
+        assertEquals(AuditLevel.RECORD, captured.get(0).level());
+        assertEquals("RECORD_SENT", captured.get(0).stage());
+        assertEquals("PROC-1", captured.get(0).recordId());
+        assertEquals("PROC-2", captured.get(1).recordId());
+    }
+
+    @Test
+    void capsRecordsSampleButKeepsExactCounts() {
+        // H6: con maxRecordsInOutput=2 y 5 mensajes, el sample queda en 2 pero
+        // los conteos (sentCount/acceptedCount) son exactos y recordsSampled=true.
+        var transport = new StubTransport("REST", List.of(
+                TransportResult.accepted("GW-1", 1, 10L),
+                TransportResult.accepted("GW-2", 1, 10L),
+                TransportResult.accepted("GW-3", 1, 10L),
+                TransportResult.accepted("GW-4", 1, 10L),
+                TransportResult.accepted("GW-5", 1, 10L)
+        ));
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
+        var context = contextWith(List.of(
+                sampleMessage("P1"), sampleMessage("P2"), sampleMessage("P3"),
+                sampleMessage("P4"), sampleMessage("P5")));
+
+        var result = provider.execute(context, Map.of(
+                "transport", "REST",
+                "maxRecordsInOutput", 2,
+                "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records"),
+                "rest", Map.of("url", "https://test.example/mt101")));
+
+        assertEquals(5, result.outputs().get("dispatchCount"), "conteo exacto");
+        assertEquals(5, result.outputs().get("sentCount"), "enviados aceptados");
+        assertEquals(5, result.outputs().get("acceptedCount"));
+        assertEquals(Boolean.TRUE, result.outputs().get("recordsSampled"));
+        @SuppressWarnings("unchecked")
+        var records = (List<Map<String, Object>>) result.outputs().get("records");
+        assertEquals(2, records.size(), "el sample respeta maxRecordsInOutput");
+    }
+
+    @Test
     void dispatchesMessagesEmbeddedInArchiveRecords() {
         var transport = new StubTransport("REST", List.of(
                 TransportResult.accepted("GW-ARCHIVE", 1, 25L)
         ));
-        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
+        var archiveStatusUpdater = new RecordingArchiveStatusUpdater();
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), null, archiveStatusUpdater);
         var message = sampleMessage("PROC-ARCH");
         var context = contextWith(List.of(Map.of(
                 "archiveId", 10L,
                 "envelopeId", 20L,
+                "connectionRef", "payments-db",
                 "message", message
         )));
 
@@ -79,6 +143,15 @@ class Mt101PayTaskProviderTest {
         assertTrue(result.success());
         assertEquals(1, result.outputs().get("sentCount"));
         assertEquals(1, transport.callsReceived());
+        @SuppressWarnings("unchecked")
+        var records = (List<Map<String, Object>>) result.outputs().get("records");
+        assertEquals(10L, records.get(0).get("archiveId"));
+        assertEquals(20L, records.get(0).get("envelopeId"));
+        assertEquals(1, archiveStatusUpdater.calls.size());
+        assertEquals("payments-db", archiveStatusUpdater.calls.get(0).connectionRef());
+        assertEquals("mt101_archive", archiveStatusUpdater.calls.get(0).table());
+        assertEquals("SENT", archiveStatusUpdater.calls.get(0).status());
+        assertEquals(List.of(10L), archiveStatusUpdater.calls.get(0).archiveIds());
     }
 
     @Test
@@ -95,6 +168,8 @@ class Mt101PayTaskProviderTest {
         ));
 
         assertFalse(result.success());
+        assertEquals(2, result.outputs().get("dispatchCount"));
+        assertEquals(1, result.outputs().get("sentCount"));
         assertEquals(1, result.outputs().get("acceptedCount"));
         assertEquals(1, result.outputs().get("rejectedCount"));
 
@@ -106,11 +181,35 @@ class Mt101PayTaskProviderTest {
     }
 
     @Test
-    void capturesTransportExceptionAsRejection() {
+    void treatsNotAcceptedWithoutErrorAsRejected() {
+        var transport = new StubTransport("REST", List.of(
+                new TransportResult(false, false, null, 1, 25L, null)
+        ));
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
+        var context = contextWith(List.of(sampleMessage("PROC-NACK")));
+
+        var result = provider.execute(context, Map.of(
+                "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records")
+        ));
+
+        assertFalse(result.success());
+        assertEquals(1, result.outputs().get("dispatchCount"));
+        assertEquals(0, result.outputs().get("sentCount"));
+        assertEquals(0, result.outputs().get("acceptedCount"));
+        assertEquals(1, result.outputs().get("rejectedCount"));
+        @SuppressWarnings("unchecked")
+        var records = (List<Map<String, Object>>) result.outputs().get("records");
+        assertEquals("REJECTED", records.get(0).get("status"));
+    }
+
+    @Test
+    void capturesUnexpectedTransportExceptionAsUncertain() {
+        // P0 v26: una excepcion INESPERADA del transporte (no IllegalArgumentException de config) se
+        // clasifica INCIERTO, nunca REJECTED reusable: no se puede demostrar que no salio al banco.
         var transport = new StubTransport("REST", null) {
             @Override
             public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
-                throw new IllegalStateException("DNS lookup failed");
+                throw new IllegalStateException("connection dropped mid-send");
             }
         };
         var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
@@ -122,9 +221,83 @@ class Mt101PayTaskProviderTest {
 
         assertFalse(result.success());
         @SuppressWarnings("unchecked")
+        var records = (List<Map<String, Object>>) result.outputs().get("uncertain");
+        assertEquals("UNCERTAIN", records.get(0).get("status"));
+        assertTrue(((String) records.get(0).get("lastError")).contains("unexpected transport error"));
+    }
+
+    @Test
+    void capturesTypedPreDispatchConfigErrorAsRejection() {
+        // v27 P1: un error de pre-dispatch TIPADO (PreDispatchTransportException, antes de cualquier I/O)
+        // si es rechazo seguro: el mensaje no salio. Re-solicitable tras corregir la config.
+        var transport = new StubTransport("REST", null) {
+            @Override
+            public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
+                throw new com.integrationhub.platform.spi.task.payments.PreDispatchTransportException(
+                        "missing rest.url");
+            }
+        };
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
+        var context = contextWith(List.of(sampleMessage("PROC-CFG")));
+
+        var result = provider.execute(context, Map.of(
+                "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records")
+        ));
+
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
         var records = (List<Map<String, Object>>) result.outputs().get("records");
         assertEquals("REJECTED", records.get(0).get("status"));
-        assertTrue(((String) records.get(0).get("lastError")).contains("DNS"));
+        assertTrue(((String) records.get(0).get("lastError")).contains("config error"));
+    }
+
+    @Test
+    void capturesRawIllegalArgumentExceptionAsUncertainNotRejection() {
+        // v27 P1: una IllegalArgumentException CRUDA (no tipada como pre-dispatch) NO se asume pre-I/O:
+        // un transporte de terceros o un bug podria lanzarla tras iniciar la llamada. Regla bancaria: si
+        // no se puede demostrar que no salio, es INCIERTA, nunca REJECTED reusable.
+        var transport = new StubTransport("REST", null) {
+            @Override
+            public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
+                throw new IllegalArgumentException("ambiguous failure after remote call started");
+            }
+        };
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
+        var context = contextWith(List.of(sampleMessage("PROC-AMB")));
+
+        var result = provider.execute(context, Map.of(
+                "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records")
+        ));
+
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
+        var uncertain = (List<Map<String, Object>>) result.outputs().get("uncertain");
+        assertEquals("UNCERTAIN", uncertain.get(0).get("status"));
+    }
+
+    @Test
+    void classifiesUncertainTransportResultSeparatelyFromRejected() {
+        // Timeout/conexion tras enviar: el transporte devuelve UNCERTAIN (no rechazo).
+        var transport = new StubTransport("REST", List.of(
+                TransportResult.uncertain(2, 50L, "timeout: read timed out")));
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
+        var context = contextWith(List.of(sampleMessage("PROC-UNC")));
+
+        var result = provider.execute(context, Map.of(
+                "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records")
+        ));
+
+        assertFalse(result.success());
+        assertEquals(1, result.outputs().get("uncertainCount"));
+        assertEquals(0, result.outputs().get("rejectedCount"));
+        assertEquals(0, result.outputs().get("acceptedCount"));
+        @SuppressWarnings("unchecked")
+        var errors = (List<Map<String, Object>>) result.outputs().get("errors");
+        assertTrue(errors.isEmpty(), "el incierto NO se reporta como rechazo");
+        @SuppressWarnings("unchecked")
+        var uncertain = (List<Map<String, Object>>) result.outputs().get("uncertain");
+        assertEquals(1, uncertain.size());
+        assertEquals("UNCERTAIN", uncertain.get(0).get("status"));
     }
 
     @Test
@@ -223,6 +396,25 @@ class Mt101PayTaskProviderTest {
         int callsReceived() {
             return received.size();
         }
+    }
+
+    private static final class RecordingArchiveStatusUpdater extends Mt101ArchiveStatusUpdater {
+        private final List<Call> calls = new ArrayList<>();
+
+        private RecordingArchiveStatusUpdater() {
+            super((javax.sql.DataSource) null);
+        }
+
+        @Override
+        public void updateStatusByArchiveIds(String connectionRef,
+                                             String table,
+                                             Collection<Long> archiveIds,
+                                             String status) {
+            calls.add(new Call(connectionRef, table, List.copyOf(archiveIds), status));
+        }
+    }
+
+    private record Call(String connectionRef, String table, List<Long> archiveIds, String status) {
     }
 
     private static final class InstanceOfOne<T> implements Instance<T> {

@@ -7,8 +7,16 @@ import com.integrationhub.platform.service.secret.FileVaultSecretClient;
 import com.integrationhub.platform.service.secret.FileVaultSecretLocationMapper;
 import com.integrationhub.platform.service.secret.FileVaultSecretValueProvider;
 import com.integrationhub.platform.service.secret.SecretLocationMapper;
+import com.integrationhub.platform.service.secret.AwsSecretClient;
+import com.integrationhub.platform.service.secret.AwsSecretManagerValueProvider;
+import com.integrationhub.platform.service.secret.AzureKeyVaultValueProvider;
+import com.integrationhub.platform.service.secret.AzureSecretClient;
+import com.integrationhub.platform.service.secret.GcpSecretClient;
+import com.integrationhub.platform.service.secret.GcpSecretManagerValueProvider;
 import com.integrationhub.platform.service.secret.SecretResolver;
 import com.integrationhub.platform.service.secret.SecretValueProvider;
+import com.integrationhub.platform.service.secret.VaultSecretClient;
+import com.integrationhub.platform.service.secret.VaultSecretValueProvider;
 import org.eclipse.microprofile.config.ConfigProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -61,6 +69,57 @@ class JsonConfigurationMapperTest {
     }
 
     @Test
+    void resolvesVaultKvCorporateSecretReferencesThroughTheMapper() {
+        // Proves the SECRET_PATTERN captures the "vaultkv" scheme (not just "vault") and
+        // that the full chain routes to the corporate Vault provider.
+        System.setProperty("integrationhub.secrets.file-vault.default-provider", "dev");
+
+        Map<String, Object> result = mapper.toMap("""
+                {
+                  "apiKey": "${vaultkv:payments/acme-bank/apiKey}",
+                  "fileVault": "${secret:connections/db/conexion1/password}"
+                }
+                """);
+
+        assertEquals("kv-secret", result.get("apiKey"));
+        // The pre-existing file-vault scheme still resolves independently.
+        assertEquals("token-file-vault", result.get("fileVault"));
+    }
+
+    @Test
+    void resolvesAwsSecretsManagerReferencesThroughTheMapper() {
+        // Proves SECRET_PATTERN captures "awssecret" and routes to the AWS provider,
+        // coexisting with vaultkv and the file-vault without collision.
+        System.setProperty("integrationhub.secrets.file-vault.default-provider", "dev");
+
+        Map<String, Object> result = mapper.toMap("""
+                {
+                  "aws": "${awssecret:payments/acme-bank/apiKey}",
+                  "vault": "${vaultkv:payments/acme-bank/apiKey}"
+                }
+                """);
+
+        assertEquals("aws-secret", result.get("aws"));
+        assertEquals("kv-secret", result.get("vault"));
+    }
+
+    @Test
+    void resolvesGcpAndAzureSecretReferencesThroughTheMapper() {
+        // Proves SECRET_PATTERN captures gcpsecret/azuresecret and routes to each provider.
+        System.setProperty("integrationhub.secrets.file-vault.default-provider", "dev");
+
+        Map<String, Object> result = mapper.toMap("""
+                {
+                  "gcp": "${gcpsecret:acme-bank/apiKey}",
+                  "azure": "${azuresecret:acme-bank/apiKey}"
+                }
+                """);
+
+        assertEquals("gcp-secret", result.get("gcp"));
+        assertEquals("azure-secret", result.get("azure"));
+    }
+
+    @Test
     void rejectsReferenceWithoutLogicalPathAndField() {
         System.setProperty("integrationhub.secrets.file-vault.default-provider", "dev");
         var error = assertThrows(IllegalArgumentException.class,
@@ -81,7 +140,20 @@ class JsonConfigurationMapperTest {
         };
         SecretLocationMapper<FileVaultSecretLocationMapper.FileVaultLocation> mapper = new FileVaultSecretLocationMapper(config, true);
         SecretValueProvider vaultProvider = new FileVaultSecretValueProvider(fileVaultSecretClient, mapper, true);
-        SecretResolver secretResolver = new SecretResolver(List.of(envProvider, configProvider, vaultProvider));
+        VaultSecretClient vaultKvClient = path ->
+                "payments/acme-bank".equals(path) ? Optional.of(Map.of("apiKey", "kv-secret")) : Optional.empty();
+        SecretValueProvider vaultKvProvider = new VaultSecretValueProvider(vaultKvClient);
+        AwsSecretClient awsClient = secretId ->
+                "payments/acme-bank".equals(secretId) ? Optional.of(Map.of("apiKey", "aws-secret")) : Optional.empty();
+        SecretValueProvider awsProvider = new AwsSecretManagerValueProvider(awsClient);
+        GcpSecretClient gcpClient = secretId ->
+                "acme-bank".equals(secretId) ? Optional.of(Map.of("apiKey", "gcp-secret")) : Optional.empty();
+        SecretValueProvider gcpProvider = new GcpSecretManagerValueProvider(gcpClient);
+        AzureSecretClient azureClient = secretName ->
+                "acme-bank".equals(secretName) ? Optional.of(Map.of("apiKey", "azure-secret")) : Optional.empty();
+        SecretValueProvider azureProvider = new AzureKeyVaultValueProvider(azureClient);
+        SecretResolver secretResolver = new SecretResolver(List.of(
+                envProvider, configProvider, vaultProvider, vaultKvProvider, awsProvider, gcpProvider, azureProvider));
         return new JsonConfigurationMapper(new ObjectMapper(), secretResolver, true);
     }
 }

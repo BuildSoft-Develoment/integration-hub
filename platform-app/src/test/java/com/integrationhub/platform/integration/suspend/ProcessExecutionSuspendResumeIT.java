@@ -51,7 +51,7 @@ class ProcessExecutionSuspendResumeIT {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.execute(
-                    "TRUNCATE TABLE audit_event, staging_record, process_task_execution, "
+                    "TRUNCATE TABLE audit_spool, audit_event, staging_record, process_task_execution, "
                             + "process_execution, process_task_definition, process_definition, "
                             + "source_definition, reader_definition RESTART IDENTITY CASCADE");
         }
@@ -121,12 +121,84 @@ class ProcessExecutionSuspendResumeIT {
                 "el segundo resume debe fallar (token ya consumido)");
     }
 
+    @Test
+    @TestSecurity(user = "admin", roles = {"platform-admin"})
+    void reSuspendedTokenRemainsResumable() throws Exception {
+        // Regresion: al re-suspender, resumed_at debe limpiarse o el nuevo token
+        // queda inubicable (findActiveByResumeToken filtra resumedAt is null).
+        var processDefinitionId = insertProcessWithTask(SuspendTwiceTaskProvider.TASK_TYPE, "suspend-twice-it");
+        processExecutionService.execute(processDefinitionId, Map.of(), "MANUAL");
+
+        var firstToken = readSingleString(
+                "select resume_token from process_task_execution order by id desc limit 1");
+        var first = resumeService.resume(firstToken, Map.of());
+        assertEquals(ProcessExecutionResumeService.Outcome.RE_SUSPENDED, first.outcome());
+        assertNotNull(first.nextResumeToken(), "re-suspension debe emitir token nuevo");
+
+        var second = resumeService.resume(first.nextResumeToken(), Map.of());
+        assertEquals(ProcessExecutionResumeService.Outcome.COMPLETED, second.outcome(),
+                "el token re-emitido debe ser ubicable y completar el ciclo");
+        assertEquals("2",
+                readSingleString("select resume_count from process_task_execution order by id desc limit 1"));
+        assertEquals("COMPLETED",
+                readSingleString("select status from process_execution order by id desc limit 1"));
+    }
+
+    @Test
+    @TestSecurity(user = "admin", roles = {"platform-admin"})
+    void resumeContinuesDownstreamTasksAutomatically() throws Exception {
+        // M-2.1: tras el resume, la tarea downstream debe ejecutarse sola (sin
+        // re-drive manual) y ver los outputs de la tarea suspendida rehidratados.
+        RecordingFollowUpTaskProvider.resetRecording();
+        var processDefinitionId = insertProcessWithTask(
+                SuspendThenCompleteTaskProvider.TASK_TYPE, "suspend-continuation-it");
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate(
+                    "insert into process_task_definition "
+                            + "(process_definition_id, task_order, task_type, active, configuration_json) "
+                            + "values (" + processDefinitionId + ", 2, '"
+                            + RecordingFollowUpTaskProvider.TASK_TYPE
+                            + "', true, '{\"taskRef\":\"task-2\",\"executionMode\":\"once\"}')");
+        }
+
+        var execution = processExecutionService.execute(processDefinitionId, Map.of(), "MANUAL");
+        assertEquals(ExecutionStatus.SUSPENDED, execution.status);
+        assertEquals(0, RecordingFollowUpTaskProvider.EXECUTIONS.get(),
+                "la tarea downstream no debe ejecutarse antes del resume");
+        assertNotNull(readSingleString(
+                        "select suspended_continuation from process_task_execution order by id desc limit 1"),
+                "el envelope de continuacion debe persistirse al suspender");
+
+        var token = readSingleString(
+                "select resume_token from process_task_execution order by id desc limit 1");
+        var outcome = resumeService.resume(token, Map.of("bankRef", "BANK-CONT"));
+
+        assertEquals(ProcessExecutionResumeService.Outcome.COMPLETED, outcome.outcome(),
+                () -> "la continuacion debe completar el proceso: " + outcome.details());
+        assertTrue(outcome.processCompleted());
+        assertEquals(1, RecordingFollowUpTaskProvider.EXECUTIONS.get(),
+                "la tarea downstream debe haberse ejecutado exactamente una vez");
+        assertEquals("COMPLETED", RecordingFollowUpTaskProvider.SEEN_UPSTREAM_STATUS.get(),
+                "el follow-up debe ver task-1.status rehidratado del envelope + outputs del resume");
+
+        assertEquals("COMPLETED",
+                readSingleString("select status from process_execution order by id desc limit 1"));
+        assertEquals(2L, ((Number) readSingleObject(
+                        "select count(*) from process_task_execution where status = 'COMPLETED'")).longValue(),
+                "ambas tareas deben quedar COMPLETED");
+    }
+
     private Long insertProcessWithSuspendableTask() throws Exception {
+        return insertProcessWithTask(SuspendThenCompleteTaskProvider.TASK_TYPE, "suspend-it");
+    }
+
+    private Long insertProcessWithTask(String taskType, String processName) throws Exception {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.executeUpdate(
                     "insert into process_definition (name, description, active, scheduled) "
-                            + "values ('suspend-it', 'm-2 suspend test', true, false)");
+                            + "values ('" + processName + "', 'm-2 suspend test', true, false)");
             try (var rs = statement.executeQuery(
                     "select id from process_definition order by id desc limit 1")) {
                 rs.next();
@@ -134,11 +206,19 @@ class ProcessExecutionSuspendResumeIT {
                 statement.executeUpdate(
                         "insert into process_task_definition "
                                 + "(process_definition_id, task_order, task_type, active, configuration_json) "
-                                + "values (" + processDefinitionId + ", 1, '"
-                                + SuspendThenCompleteTaskProvider.TASK_TYPE
+                                + "values (" + processDefinitionId + ", 1, '" + taskType
                                 + "', true, '{\"taskRef\":\"task-1\",\"executionMode\":\"once\"}')");
                 return processDefinitionId;
             }
+        }
+    }
+
+    private Object readSingleObject(String query) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             var rs = statement.executeQuery(query)) {
+            if (!rs.next()) return null;
+            return rs.getObject(1);
         }
     }
 

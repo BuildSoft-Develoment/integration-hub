@@ -1,7 +1,7 @@
 @if (execution()) {
       <div class="profile-stack">
         <div class="profile-header">
-          <div class="profile-avatar">{{ execution()!.processName.slice(0, 1).toUpperCase() }}</div>
+          <div class="profile-avatar ih-tone-integration"><ih-icon name="play" [size]="22" /></div>
           <div class="profile-copy">
             <h3 class="profile-name">{{ execution()!.processName }}</h3>
             <p class="profile-subtitle">#{{ execution()!.id }} · {{ statusLabel(execution()!.status) }}</p>

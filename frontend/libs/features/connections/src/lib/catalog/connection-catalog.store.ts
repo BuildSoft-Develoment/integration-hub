@@ -25,6 +25,7 @@ export class ConnectionCatalogStore {
   readonly saving = signal(false);
   readonly testing = signal(false);
   readonly loading = this.query.loading;
+  readonly error = this.query.error;
   readonly connections = this.query.connections;
   readonly totalLength = this.query.totalLength;
   readonly search = this.query.search;
@@ -32,13 +33,22 @@ export class ConnectionCatalogStore {
   readonly statusFilter = this.query.statusFilter;
   readonly selectedConnectionId = this.query.selectedConnectionId;
   readonly selectedConnection = this.query.selectedConnection;
+  readonly sortField = this.query.sortField;
+  readonly sortDirection = this.query.sortDirection;
   readonly drawerOpen = this.query.drawerOpen;
   readonly currentPage = this.query.currentPage;
   readonly pageSize = this.query.pageSize;
+  readonly selectedIds = this.query.selectedIds;
+  readonly isAllSelected = this.query.isAllSelected;
+  readonly selectedConnections = computed(() => {
+    const ids = this.selectedIds();
+    return this.connections().filter((connection) => ids.has(connection.id));
+  });
   readonly viewMode = this.editor.viewMode;
   readonly testResult = this.editor.testResult;
   readonly form = this.editor.form;
   readonly draft = this.editor.draft;
+  readonly dirty = this.editor.dirty;
 
   readonly canEdit = computed(() => this.access.canAdmin());
   readonly pagedConnections = this.query.pagedConnections;
@@ -68,6 +78,30 @@ export class ConnectionCatalogStore {
     this.editor.clearTestResult();
   }
 
+  toggleSelection(id: number): void {
+    this.query.toggleSelection(id);
+  }
+
+  toggleSelectAll(): void {
+    this.query.toggleSelectAll();
+  }
+
+  clearSelection(): void {
+    this.query.clearSelection();
+  }
+
+  async setSelectedActive(active: boolean): Promise<void> {
+    const ids = this.selectedConnections()
+      .filter((connection) => connection.active !== active)
+      .map((connection) => connection.id);
+    if (ids.length === 0) {
+      this.clearSelection();
+      return;
+    }
+    await this.commands.setActiveMany(ids, active);
+    this.clearSelection();
+  }
+
   updatePagination(pageIndex: number, pageSize: number): void {
     this.query.updatePagination(pageIndex, pageSize);
   }
@@ -82,6 +116,10 @@ export class ConnectionCatalogStore {
 
   updateStatusFilter(value: ConnectionStatusFilter): void {
     this.query.updateStatusFilter(value);
+  }
+
+  toggleSort(field: string): void {
+    this.query.toggleSort(field);
   }
 
   startCreate(): void {

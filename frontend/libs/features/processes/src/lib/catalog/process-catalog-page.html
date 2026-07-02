@@ -1,4 +1,4 @@
-<section class="page-grid process-page">
+<section class="page-grid process-page ih-no-hint">
   <mat-drawer-container class="processes-drawer-container">
     <mat-drawer-content [class.processes-content-hidden]="viewModel().drawerOpen">
       <section class="processes-workspace">
@@ -18,10 +18,16 @@
             [processes]="viewModel().list.processes"
             [totalLength]="viewModel().list.totalLength"
             [selectedProcessId]="viewModel().list.selectedProcessId"
+            [sortField]="store.sortField()"
+            [sortDirection]="store.sortDirection()"
             [pageIndex]="viewModel().list.pageIndex"
             [pageSize]="viewModel().list.pageSize"
+            [loading]="store.loading()"
+            [error]="store.error()"
             (selectProcess)="selectProcess($event)"
+            (toggleSort)="store.toggleSort($event)"
             (pageChange)="updatePagination($event)"
+            (retry)="retryLoad()"
           />
         </section>
       </section>
@@ -36,6 +42,7 @@
         [titleKey]="viewModel().editor.titleKey"
         [saving]="viewModel().editor.saving"
         [executing]="viewModel().editor.executing"
+        [dirty]="viewModel().editor.dirty"
         [readonly]="viewModel().editor.readonly"
         [canEdit]="viewModel().editor.canEdit"
         [canOperate]="viewModel().editor.canOperate"
@@ -43,6 +50,7 @@
         (flowLayoutChange)="applyFlowLayout($event)"
         (addTask)="addTask($event)"
         (addTaskAt)="addTaskAt($event)"
+        (applyMassiveTemplate)="applyMassiveTemplate()"
         (patchTask)="patchTask($event)"
         (flowStateChange)="applyFlowState($event)"
         (removeTask)="removeTask($event)"
@@ -56,4 +64,3 @@
     </mat-drawer>
   </mat-drawer-container>
 </section>
-

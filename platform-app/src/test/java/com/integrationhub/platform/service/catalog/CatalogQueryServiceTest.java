@@ -2,8 +2,6 @@ package com.integrationhub.platform.service.catalog;
 
 import com.integrationhub.platform.api.mapper.process.ProcessDefinitionApiMapper;
 import com.integrationhub.platform.domain.ConnectionType;
-import com.integrationhub.platform.domain.ReaderType;
-import com.integrationhub.platform.domain.SourceType;
 import com.integrationhub.platform.entity.ConnectionDefinition;
 import com.integrationhub.platform.entity.ProcessDefinition;
 import com.integrationhub.platform.entity.ReaderDefinition;
@@ -68,7 +66,7 @@ class CatalogQueryServiceTest {
         assertTrue(hql.contains("e.sourceType = :sourceType"), hql);
         assertTrue(hql.contains("e.active = :active"), hql);
         assertTrue(hql.contains("order by e.name"), hql);
-        assertEquals(SourceType.FILESYSTEM, params.get("sourceType"));
+        assertEquals("FILESYSTEM", params.get("sourceType"));
         assertEquals(true, params.get("active"));
         assertEquals("%clientes%", params.get("queryText"));
     }
@@ -90,7 +88,7 @@ class CatalogQueryServiceTest {
     }
 
     @Test
-    void listReadersParsesReaderTypeEnum() {
+    void listReadersNormalizesReaderTypeString() {
         var emptyQuery = pagedQuery(0L, List.<ReaderDefinition>of());
         when(readerRepository.find(any(String.class), any(Map.class))).thenReturn(emptyQuery);
         var paramsCaptor = ArgumentCaptor.forClass(Map.class);
@@ -98,7 +96,7 @@ class CatalogQueryServiceTest {
         service.listReaders(null, "csv", "INACTIVE", 0, 10);
 
         verify(readerRepository).find(any(String.class), paramsCaptor.capture());
-        assertEquals(ReaderType.CSV, paramsCaptor.getValue().get("readerType"));
+        assertEquals("CSV", paramsCaptor.getValue().get("readerType"));
         assertEquals(false, paramsCaptor.getValue().get("active"));
     }
 

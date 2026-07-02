@@ -1,0 +1,40 @@
+:host { display:block; min-height:0; height:100%; }
+:host ih-catalog-list { display:block; height:100%; }
+
+:host .table-row {
+  grid-template-columns: var(--ih-catalog-columns);
+  padding-left: 0.5rem;
+}
+
+.row-type,
+.row-status {
+  display: flex;
+  align-items: center;
+}
+
+.row-status {
+  gap: 0.45rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--ih-status-success);
+}
+.row-status--inactive {
+  color: var(--ih-status-warning);
+}
+.status-dot {
+  width: 0.52rem;
+  height: 0.52rem;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.row-copy small {
+  color: var(--ih-text-soft);
+}
+
+@media (max-height: 700px) and (min-width: 761px) {
+  .row-copy small,
+  .row-status {
+    font-size: 0.8rem;
+  }
+}

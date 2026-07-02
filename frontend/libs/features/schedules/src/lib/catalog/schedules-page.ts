@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, OnInit } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit } from '@angular/core';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { PageEvent } from '@angular/material/paginator';
 import { Router } from '@angular/router';
@@ -15,6 +15,7 @@ import { SchedulesStore } from './schedules.store';
   imports: [CommonModule, MatSidenavModule, SchedulesToolbarComponent, SchedulesListComponent, SchedulesEditorComponent],
   templateUrl: './schedules-page.html',
   styleUrl: './schedules-page.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SchedulesPageComponent implements OnInit {
   readonly store = inject(SchedulesStore);
@@ -26,9 +27,13 @@ export class SchedulesPageComponent implements OnInit {
     schedules: this.store.pagedSchedules(),
     totalLength: this.store.totalLength(),
     selectedSchedule: this.store.selectedSchedule(),
+    sortField: this.store.sortField(),
+    sortDirection: this.store.sortDirection(),
     drawerOpen: this.store.drawerOpen(),
     pageIndex: this.store.currentPage(),
     pageSize: this.store.pageSize(),
+    loading: this.store.loading(),
+    error: this.store.error(),
     executing: this.store.executing(),
     canOperate: this.store.canOperate(),
   }));

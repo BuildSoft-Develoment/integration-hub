@@ -28,6 +28,12 @@ _frontend_git_backup/
 # Bundles distribuibles regenerables
 dist/
 
+# Evidencia local regenerable / sensible de Lighthouse y sesiones browser
+lighthouse-report/
+lighthouse-bearer.txt
+lighthouse-cookies.txt
+lighthouse-headers.json
+
 # git worktrees creados por agent:start (sandboxes locales por T-NNN)
 worktrees/
 .worktrees/

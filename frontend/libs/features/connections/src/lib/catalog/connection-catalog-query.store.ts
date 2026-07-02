@@ -2,20 +2,24 @@ import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
 import { ConnectionProviderType } from '@integration-hub/core/providers';
+import { TablePreferencesService, sortData, SortState } from '@integration-hub/core/services';
 
 import { ConnectionApiService } from '../api/connection-api.service';
 import { ConnectionRecord } from '../models/connection.models';
 
 export type ConnectionStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
+const TABLE_ID = 'connections';
 
 @Injectable()
 export class ConnectionCatalogQueryStore implements OnDestroy {
   private readonly api = inject(ConnectionApiService);
+  private readonly prefs = inject(TablePreferencesService);
   private readonly searchDebounceMs = 300;
   private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
   private requestSequence = 0;
 
   readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
   readonly connections = signal<ConnectionRecord[]>([]);
   readonly totalLength = signal(0);
   readonly search = signal('');
@@ -24,10 +28,29 @@ export class ConnectionCatalogQueryStore implements OnDestroy {
   readonly selectedConnectionId = signal<number | null>(null);
   readonly selectedConnection = signal<ConnectionRecord | null>(null);
   readonly drawerOpen = signal(false);
+  readonly selectedIds = signal<Set<number>>(new Set());
+
+  readonly isAllSelected = computed(() => {
+    const ids = this.selectedIds();
+    const items = this.connections();
+    return items.length > 0 && items.every((item) => ids.has(item.id));
+  });
   readonly currentPage = signal(0);
   readonly pageSize = signal(8);
 
-  readonly pagedConnections = computed(() => this.connections());
+  readonly sortField = signal<string | null>(this.prefs.getSort(TABLE_ID)?.field ?? null);
+  readonly sortDirection = signal<'asc' | 'desc'>(this.prefs.getSort(TABLE_ID)?.direction ?? 'asc');
+
+  private readonly sort = computed<SortState | null>(() => {
+    const field = this.sortField();
+    return field ? { field, direction: this.sortDirection() } : null;
+  });
+
+  readonly pagedConnections = computed(() => {
+    const data = this.connections();
+    const s = this.sort();
+    return s ? sortData(data, s) : data;
+  });
 
   async load(): Promise<void> {
     await this.loadConnections(true);
@@ -49,6 +72,26 @@ export class ConnectionCatalogQueryStore implements OnDestroy {
 
   closeDrawer(): void {
     this.drawerOpen.set(false);
+  }
+
+  toggleSelection(id: number): void {
+    this.selectedIds.update((ids) => {
+      const next = new Set(ids);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); }
+      return next;
+    });
+  }
+
+  toggleSelectAll(): void {
+    if (this.isAllSelected()) {
+      this.selectedIds.set(new Set());
+    } else {
+      this.selectedIds.set(new Set(this.connections().map((c) => c.id)));
+    }
+  }
+
+  clearSelection(): void {
+    this.selectedIds.set(new Set());
   }
 
   updatePagination(pageIndex: number, pageSize: number): void {
@@ -80,6 +123,18 @@ export class ConnectionCatalogQueryStore implements OnDestroy {
     this.selectedConnection.set(connection);
   }
 
+  toggleSort(field: string): void {
+    if (this.sortField() === field) {
+      const dir = this.sortDirection() === 'asc' ? 'desc' : 'asc';
+      this.sortDirection.set(dir);
+      this.prefs.setSort(TABLE_ID, { field, direction: dir });
+    } else {
+      this.sortField.set(field);
+      this.sortDirection.set('asc');
+      this.prefs.setSort(TABLE_ID, { field, direction: 'asc' });
+    }
+  }
+
   async reload(): Promise<void> {
     await this.loadConnections(false);
   }
@@ -108,6 +163,7 @@ export class ConnectionCatalogQueryStore implements OnDestroy {
 
       this.connections.set(response.items);
       this.totalLength.set(response.total);
+      this.error.set(null);
 
       const selectedId = this.selectedConnectionId();
       if (selectedId != null) {
@@ -115,6 +171,10 @@ export class ConnectionCatalogQueryStore implements OnDestroy {
         if (refreshed) {
           this.selectedConnection.set(refreshed);
         }
+      }
+    } catch {
+      if (requestId === this.requestSequence) {
+        this.error.set('connections.loadError');
       }
     } finally {
       if (requestId === this.requestSequence) {

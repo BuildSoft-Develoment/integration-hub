@@ -19,6 +19,8 @@ import static io.restassured.RestAssured.given;
  *   <li><b>PUEDE</b> ejecutar procesos via {@code POST /api/process-executions/&lt;id&gt;}.
  *       El test no requiere que el proceso exista (acepta 4xx que no sea 403):
  *       lo unico que importa es que el filtro de seguridad permita la llamada.</li>
+ *   <li><b>PUEDE</b> leer vistas operativas que el frontend necesita para listar procesos,
+ *       ejecuciones, programaciones y auditoria.</li>
  *   <li><b>NO PUEDE</b> editar catalogos del motor: el endpoint de creacion de
  *       sources retorna 403 cuando el caller solo tiene {@code payments-operator}.</li>
  * </ul>
@@ -47,10 +49,21 @@ class PaymentsOperatorRoleIT {
                         .extract()
                         .statusCode();
 
-        org.junit.jupiter.api.Assertions.assertNotEquals(401, statusCode,
-                "payments-operator no debe recibir 401 en el endpoint de ejecucion");
-        org.junit.jupiter.api.Assertions.assertNotEquals(403, statusCode,
-                "payments-operator no debe recibir 403 en el endpoint de ejecucion");
+        assertNotAuthzDenied(statusCode, "POST /api/process-executions/{processDefinitionId}");
+    }
+
+    @Test
+    @TestSecurity(user = "payments-operator", roles = {"payments-operator"})
+    void paymentsOperatorCanReachOperationalReadEndpoints() {
+        assertNotAuthzDenied(get("/api/process-definitions"), "GET /api/process-definitions");
+        assertNotAuthzDenied(get("/api/process-schedules"), "GET /api/process-schedules");
+        assertNotAuthzDenied(get("/api/query/process-definitions"), "GET /api/query/process-definitions");
+        assertNotAuthzDenied(get("/api/query/process-schedules"), "GET /api/query/process-schedules");
+        assertNotAuthzDenied(get("/api/query/overview-summary"), "GET /api/query/overview-summary");
+        assertNotAuthzDenied(get("/api/query/process-executions"), "GET /api/query/process-executions");
+        assertNotAuthzDenied(get("/api/query/audit-events"), "GET /api/query/audit-events");
+        assertNotAuthzDenied(get("/api/query/audit-spool/summary"), "GET /api/query/audit-spool/summary");
+        assertNotAuthzDenied(get("/api/query/record-lineage?recordId=missing"), "GET /api/query/record-lineage");
     }
 
     @Test
@@ -73,6 +86,17 @@ class PaymentsOperatorRoleIT {
     }
 
     @Test
+    @TestSecurity(user = "payments-operator", roles = {"payments-operator"})
+    void paymentsOperatorCannotPerformAdminOnlyAuditSpoolActions() {
+        given()
+                .contentType(ContentType.JSON)
+                .when()
+                .post("/api/query/audit-spool/{id}/retry", 1L)
+                .then()
+                .statusCode(403);
+    }
+
+    @Test
     @TestSecurity(user = "operator", roles = {"operator"})
     void existingOperatorRoleStillWorksAfterAddingPaymentsOperator() {
         // Regresion: el rol operator legacy NO debe romper al agregar payments-operator.
@@ -86,7 +110,22 @@ class PaymentsOperatorRoleIT {
                         .extract()
                         .statusCode();
 
-        org.junit.jupiter.api.Assertions.assertNotEquals(401, statusCode);
-        org.junit.jupiter.api.Assertions.assertNotEquals(403, statusCode);
+        assertNotAuthzDenied(statusCode, "POST /api/process-executions/{processDefinitionId}");
+    }
+
+    private static int get(String path) {
+        return given()
+                .when()
+                .get(path)
+                .then()
+                .extract()
+                .statusCode();
+    }
+
+    private static void assertNotAuthzDenied(int statusCode, String endpoint) {
+        org.junit.jupiter.api.Assertions.assertNotEquals(401, statusCode,
+                "payments-operator no debe recibir 401 en " + endpoint);
+        org.junit.jupiter.api.Assertions.assertNotEquals(403, statusCode,
+                "payments-operator no debe recibir 403 en " + endpoint);
     }
 }

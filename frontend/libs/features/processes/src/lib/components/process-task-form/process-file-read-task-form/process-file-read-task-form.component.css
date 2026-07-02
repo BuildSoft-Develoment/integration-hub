@@ -20,8 +20,8 @@
         background: color-mix(in srgb, var(--ih-surface-alt) 76%, transparent);
       }
       .task-note--warning {
-        border-color: color-mix(in srgb, var(--ih-warning, #d97706) 35%, var(--ih-border));
-        color: color-mix(in srgb, var(--ih-warning, #d97706) 78%, var(--ih-text));
+        border-color: color-mix(in srgb, var(--ih-status-warning) 35%, var(--ih-border));
+        color: color-mix(in srgb, var(--ih-status-warning) 78%, var(--ih-text));
       }
       textarea {
         min-height: 8rem;

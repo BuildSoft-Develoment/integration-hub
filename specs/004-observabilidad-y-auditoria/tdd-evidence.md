@@ -67,3 +67,105 @@ Frontend (Angular): UI de observabilidad. Componentes anotados `@trace` (recogid
 - Hueco conocido: las vistas de `audit`/`overview` se ejercitan via sus propios stores
   (`audit.store.spec.ts`, `overview.store.spec.ts`); cobertura por componente es candidata a
   ampliacion (plan de tests frontend).
+
+## RF-006 / T-007
+
+Auditoria asincrona multi-broker y DLQ persistida.
+
+- Comando RED: `mvn -pl audit-consumer -Dtest=AuditEventConsumerTest test`
+- Resultado RED: No recapturable por reingenieria incremental; antes del cambio el consumer
+  descartaba poison message con log y no persistia DLQ.
+- Comando GREEN: `mvn -q -pl audit-consumer -am test`
+- Resultado GREEN: GREEN real (2026-06-14) con `AuditEventConsumerTest`,
+  `AuditEventWriterTest` y `PostgresColdStoreTest` pasando. La primera corrida sin
+  `-am` fallo por usar `platform-contract` viejo del repositorio local; se corrigio
+  ejecutando con reactor completo.
+- Verificado por: corrida Maven con Testcontainers PostgreSQL.
+
+## RF-007 / T-008
+
+Trazabilidad E2E por registro con claves operativas.
+
+- Comando RED: `mvn -pl audit-consumer -Dtest=PostgresColdStoreTest test`
+- Resultado RED: No recapturable sin revertir codigo funcional; antes del cambio
+  `audit_record_event` no tenia columnas para `paymentReference`, `transactionReference`,
+  UETR, archivo/fila ni gateway.
+- Comando GREEN backend: `mvn -q -pl platform-app -am "-Dtest=Mt101BuildTaskProviderTest,Mt101ParseTaskProviderTest,Mt101SplitTaskProviderTest,Mt101RouteTaskProviderTest,Mt101RepairTaskProviderTest,Mt101StatusTaskProviderTest,Mt101ReconcileTaskProviderTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+- Resultado GREEN backend: GREEN real (2026-06-14), pruebas MT101 enfocadas pasando.
+- Comando GREEN frontend: `cmd.exe /c npx nx test web --skip-nx-cache`
+- Resultado GREEN frontend: GREEN real (2026-06-14), 50 archivos de test y 169 tests pasando.
+- Verificado por: Maven + Nx/Vitest.
+
+## RF-006 / T-009
+
+Spool asincronico endurecido, relay con lifecycle `PENDING -> IN_FLIGHT ->
+SENT|DEAD`, particion estable y consumer batch.
+
+- Comando RED: `mvn -pl platform-app,audit-consumer -DskipTests compile`
+- Resultado RED: No recapturable sin revertir codigo funcional; antes del cambio
+  no existian `IN_FLIGHT`/`DEAD`, lease, backoff ni `AuditSpoolWriter` fuera de
+  la transaccion de negocio.
+- Comando GREEN compilacion: `mvn -q -pl platform-contract,platform-app,audit-consumer -DskipTests compile`
+- Resultado GREEN compilacion: PASS real (2026-06-14).
+- Comando GREEN consumer: `mvn -q -pl audit-consumer -am test`
+- Resultado GREEN consumer: PASS real (2026-06-14), incluye `AuditEventConsumerTest`,
+  `AuditEventWriterTest` y `PostgresColdStoreTest`; se agrego cobertura batch
+  con mezcla `PROCESS`/`RECORD`/poison.
+- Comando GREEN broker SPI: `mvn -q -pl platform-app -am "-Dtest=RawBrokerProvidersTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+- Resultado GREEN broker SPI: PASS real (2026-06-14).
+- Verificado por: Maven + Testcontainers PostgreSQL.
+
+## RF-008 / T-010
+
+Operacion del spool desde API/UI.
+
+- Comando RED: `cmd.exe /c npx nx build web --configuration=development --skip-nx-cache`
+- Resultado RED: RED real durante implementacion (2026-06-14), templates inline de
+  `audit-spool`/`mt101-fragment-lookup` cerrados con sintaxis incorrecta.
+- Comando GREEN build: `cmd.exe /c npx nx build web --configuration=development --skip-nx-cache`
+- Resultado GREEN build: PASS real (2026-06-14).
+- Comando GREEN frontend: `cmd.exe /c npx nx test web --skip-nx-cache`
+- Resultado GREEN frontend: PASS real (2026-06-14), 50 archivos de test y 169 tests.
+- Verificacion browser: intento de abrir `http://localhost:8080/audit/spool`
+  devolvio `ERR_CONNECTION_REFUSED`; no habia runtime local levantado en 8080.
+
+## RF-009 / T-011
+
+Lookup MT101 por fila origen.
+
+- Comando RED: `mvn -pl platform-app -DskipTests compile`
+- Resultado RED: No recapturable sin revertir codigo funcional; antes no existia
+  endpoint `mt101-fragments/source-row`, servicio de lookup ni indices por rango
+  de fila.
+- Comando GREEN backend: `mvn -q -pl platform-contract,platform-app,audit-consumer -DskipTests compile`
+- Resultado GREEN backend: PASS real (2026-06-14).
+- Comando GREEN frontend: `cmd.exe /c npx nx build web --configuration=development --skip-nx-cache`
+- Resultado GREEN frontend: PASS real (2026-06-14).
+- Verificado por: compilacion backend + build frontend.
+
+## RF-010 / T-012
+
+Contrato UI de riesgo operacional para acciones auditables criticas.
+
+- Comando RED: `cmd.exe /c npx nx test web --skip-nx-cache`
+- Resultado RED: No recapturable sin revertir codigo funcional; antes no existia
+  un contrato tipado de riesgo operacional ni pruebas dedicadas para spool y
+  cuarentena MT101.
+- Comando GREEN frontend: `cmd.exe /c npx nx test web --skip-nx-cache`
+- Resultado GREEN frontend: PASS real (2026-06-26), 63 archivos y 279 tests.
+  Incluye `audit-operation-risk.spec.ts`, `audit-workspace-nav.component.spec.ts`,
+  `audit-spool.component.spec.ts` y `mt101-quarantine.component.spec.ts`.
+- Comando GREEN build: `cmd.exe /c npx nx build web --skip-nx-cache`
+- Resultado GREEN build: PASS real (2026-06-26), initial total `1.22 MB`,
+  sin warnings de budget.
+- Verificacion visual/a11y: `cmd.exe /c "cd frontend && node scripts\\lh-screenshots.js"`
+  PASS real (2026-06-26) en 13 rutas, incluidas `/audit/record-lineage`,
+  `/audit/spool`, `/audit/mt101-fragments` y `/audit/mt101-quarantine`; las
+  subrutas audit comparten navegacion interna consulta/operacion gobernada.
+
+## Spec 008 / MT101_PAY accepted()
+
+- Comando GREEN: `mvn -q -pl platform-app -am "-Dtest=Mt101PayTaskProviderTest,Mt101PayFragmentReprocessTest" "-Dsurefire.failIfNoSpecifiedTests=false" test`
+- Resultado GREEN: PASS real (2026-06-14). Se agrego caso donde
+  `TransportResult.accepted=false` y `lastError=null`; la tarea cuenta rechazo,
+  `sentCount=0` y marca `REJECTED`.

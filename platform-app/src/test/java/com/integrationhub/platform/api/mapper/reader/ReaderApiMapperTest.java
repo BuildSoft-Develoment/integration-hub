@@ -1,6 +1,5 @@
 package com.integrationhub.platform.api.mapper.reader;
 
-import com.integrationhub.platform.domain.ReaderType;
 import com.integrationhub.platform.entity.ReaderDefinition;
 import org.junit.jupiter.api.Test;
 
@@ -17,7 +16,7 @@ class ReaderApiMapperTest {
         var definition = new ReaderDefinition();
         definition.id = 5L;
         definition.name = "csv-clientes";
-        definition.readerType = ReaderType.CSV;
+        definition.readerType = "CSV";
         definition.active = true;
         definition.configurationJson = "{\"delimiter\":\",\"}";
 
@@ -25,7 +24,7 @@ class ReaderApiMapperTest {
 
         assertEquals(5L, response.id());
         assertEquals("csv-clientes", response.name());
-        assertEquals(ReaderType.CSV, response.readerType());
+        assertEquals("CSV", response.readerType());
         assertTrue(response.active());
         assertEquals("{\"delimiter\":\",\"}", response.configurationJson());
     }
@@ -35,13 +34,13 @@ class ReaderApiMapperTest {
         var definition = new ReaderDefinition();
         definition.id = 8L;
         definition.name = "xlsx-inventario";
-        definition.readerType = ReaderType.XLSX;
+        definition.readerType = "XLSX";
         definition.active = false;
         definition.configurationJson = "{}";
 
         var response = mapper.toResponse(definition);
 
-        assertEquals(ReaderType.XLSX, response.readerType());
+        assertEquals("XLSX", response.readerType());
         assertEquals(false, response.active());
     }
 }

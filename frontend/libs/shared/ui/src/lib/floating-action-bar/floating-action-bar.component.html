@@ -1,0 +1,22 @@
+@if (visible()) {
+  <div class="fab-overlay" role="presentation" (click)="clearSelection.emit()"></div>
+  <div class="fab-bar" role="toolbar" [attr.aria-label]="i18n.t('common.bulkActions')">
+    <span class="fab-bar__count">{{ i18n.t('common.itemsSelected', { count: selectedCount() }) }}</span>
+    <div class="fab-bar__actions">
+      @for (act of actions(); track act.id) {
+        <button
+          mat-stroked-button
+          type="button"
+          [class.fab-bar__action--danger]="act.danger"
+          (click)="onAction(act)"
+        >
+          <ih-icon [name]="act.icon" [size]="16" />
+          {{ i18n.t(act.labelKey) }}
+        </button>
+      }
+    </div>
+    <button mat-stroked-button type="button" class="fab-bar__close" (click)="clearSelection.emit()" [attr.aria-label]="i18n.t('common.clearSelection')">
+      <ih-icon name="x" [size]="16" />
+    </button>
+  </div>
+}

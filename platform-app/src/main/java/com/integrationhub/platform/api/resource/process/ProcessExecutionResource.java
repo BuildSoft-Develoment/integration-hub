@@ -13,6 +13,11 @@ import jakarta.ws.rs.core.MediaType;
 
 import java.util.Map;
 
+import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.api.security.PlatformRoles.OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PAYMENTS_OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+
 @Path("/api/process-executions")
 @Produces(MediaType.APPLICATION_JSON)
 public class ProcessExecutionResource {
@@ -32,7 +37,7 @@ public class ProcessExecutionResource {
     // catalogos. La restriccion de edicion se aplica por @RolesAllowed faltando en los
     // resources de catalogo (ProcessDefinition, Source, Reader, Connection); aqui basta
     // sumar el rol a la lista de roles habilitados para POST de ejecucion.
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "payments-operator"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
     public ProcessExecutionStartResponse execute(@PathParam("processDefinitionId") Long processDefinitionId, ProcessExecutionRequest request) {
         Map<String, String> executionVariables = request == null || request.executionVariables() == null
                 ? Map.of()

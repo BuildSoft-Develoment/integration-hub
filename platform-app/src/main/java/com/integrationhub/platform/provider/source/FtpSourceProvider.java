@@ -8,7 +8,6 @@ import org.apache.commons.net.ftp.FTP;
 import org.apache.commons.net.ftp.FTPClient;
 import org.apache.commons.net.ftp.FTPFile;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Arrays;
@@ -92,13 +91,17 @@ public class FtpSourceProvider implements SourceProvider {
             }
             ftpClient.setFileType(FTP.BINARY_FILE_TYPE);
 
-            try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-                boolean retrieved = ftpClient.retrieveFile(selectedFile.location(), outputStream);
-                if (!retrieved) {
-                    throw new IllegalStateException("Cannot retrieve FTP file: " + selectedFile.location());
+            // Streaming a archivo temporal (no byte[]) para no presionar el heap
+            // con archivos grandes; el reader lo lee por lotes desde disco.
+            return TempFileSourcePayload.fromDownloadedTemp(selectedFile.name(), selectedFile.location(), tempFile -> {
+                try (var fileOut = java.nio.file.Files.newOutputStream(tempFile)) {
+                    boolean retrieved = ftpClient.retrieveFile(selectedFile.location(), fileOut);
+                    if (!retrieved) {
+                        throw new IOException("Cannot retrieve FTP file: " + selectedFile.location());
+                    }
                 }
-                return SourcePayload.fromBytes(selectedFile.name(), outputStream.toByteArray(), selectedFile.mediaType());
-            }
+                return selectedFile.mediaType();
+            });
         } catch (IOException e) {
             throw new IllegalStateException("Cannot read file from FTP source", e);
         } finally {

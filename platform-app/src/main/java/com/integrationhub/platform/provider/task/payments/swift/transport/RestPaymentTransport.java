@@ -2,13 +2,16 @@ package com.integrationhub.platform.provider.task.payments.swift.transport;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.provider.task.payments.spi.PaymentMessageTransport;
-import com.integrationhub.platform.provider.task.payments.spi.TransportResult;
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.provider.task.payments.swift.Mt101PaymentCorrelation;
+import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
+import com.integrationhub.platform.spi.task.payments.PreDispatchTransportException;
+import com.integrationhub.platform.spi.task.payments.TransportResult;
+import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import java.io.IOException;
+import java.net.ConnectException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -68,26 +71,19 @@ public class RestPaymentTransport implements PaymentMessageTransport {
     public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
         var restCfg = mapValue(configuration.get("rest"));
         if (restCfg.isEmpty()) {
-            throw new IllegalArgumentException("MT101_PAY transport=REST requires configuration.rest");
+            throw new PreDispatchTransportException("MT101_PAY transport=REST requires configuration.rest");
         }
         var urlTemplate = stringValue(restCfg.get("url"), "");
         if (urlTemplate.isBlank()) {
-            throw new IllegalArgumentException("MT101_PAY transport=REST requires configuration.rest.url");
+            throw new PreDispatchTransportException("MT101_PAY transport=REST requires configuration.rest.url");
         }
         var url = resolveTemplate(urlTemplate, message);
         var method = stringValue(restCfg.get("method"), "POST").toUpperCase();
-        var contentType = stringValue(restCfg.get("contentType"), "application/json");
+        var contentType = resolveContentType(restCfg.get("contentType"), message);
         var timeoutSeconds = intValue(restCfg.get("timeoutSeconds"), DEFAULT_TIMEOUT_SECONDS);
         // Idempotency-Key: si la clave NO esta en config, usamos el default ${sendersReference}.
         // Si la clave SI esta pero vacia, el caller pidio explicitamente "no emitir header".
-        String idempotencyTemplate;
-        if (configuration.containsKey("idempotencyKeyTemplate")) {
-            var raw = configuration.get("idempotencyKeyTemplate");
-            idempotencyTemplate = raw == null ? "" : String.valueOf(raw);
-        } else {
-            idempotencyTemplate = "${sendersReference}";
-        }
-        var idempotencyKey = resolveTemplate(idempotencyTemplate, message);
+        var idempotencyKey = Mt101PaymentCorrelation.restIdempotencyKey(configuration, message);
         var extraHeaders = configuredHeaders(restCfg.get("extraHeaders"), restCfg.get("extraHeadersJson"));
         var retry = retryPolicy(configuration.get("retryPolicy"));
         var expected = mapValue(configuration.get("expectedGatewayResponse"));
@@ -106,6 +102,27 @@ public class RestPaymentTransport implements PaymentMessageTransport {
         return attemptWithRetry(method, url, headers, message.rawPayload(), timeoutSeconds, retry, expected);
     }
 
+    /**
+     * Content-Type explicito en config manda. Si esta vacio o es {@code auto},
+     * se deriva del formato del mensaje: un FIN enviado como
+     * {@code application/json} suele ser rechazado o malinterpretado por el
+     * gateway bancario.
+     */
+    private String resolveContentType(Object configured, Mt101Message message) {
+        var value = stringValue(configured, "");
+        if (!value.isBlank() && !"auto".equalsIgnoreCase(value)) {
+            return value;
+        }
+        var format = message == null || message.format() == null ? "" : message.format().toUpperCase();
+        if (format.startsWith("FIN")) {
+            return "text/plain; charset=utf-8";
+        }
+        if (format.startsWith("XML") || format.startsWith("PAIN001")) {
+            return "application/xml";
+        }
+        return "application/json";
+    }
+
     private String resolveAuthorizationHeader(Map<String, Object> restCfg, int timeoutSeconds) {
         var authType = stringValue(restCfg.get("authType"), "").toLowerCase();
         if (authType.isBlank()) {
@@ -116,12 +133,12 @@ public class RestPaymentTransport implements PaymentMessageTransport {
             return token.isBlank() ? "" : "Bearer " + token;
         }
         if (!"login-request".equals(authType)) {
-            throw new IllegalArgumentException("Unsupported MT101_PAY REST authType: " + authType);
+            throw new PreDispatchTransportException("Unsupported MT101_PAY REST authType: " + authType);
         }
 
         var loginUrl = stringValue(restCfg.get("loginUrl"), "");
         if (loginUrl.isBlank()) {
-            throw new IllegalArgumentException("MT101_PAY REST authType=login-request requires rest.loginUrl");
+            throw new PreDispatchTransportException("MT101_PAY REST authType=login-request requires rest.loginUrl");
         }
         var loginMethod = stringValue(restCfg.get("loginMethod"), "POST").toUpperCase();
         var loginBody = stringValue(restCfg.get("loginBodyTemplate"), "");
@@ -180,6 +197,8 @@ public class RestPaymentTransport implements PaymentMessageTransport {
                                              Map<String, Object> expected) {
         var startedAt = System.currentTimeMillis();
         String lastError = null;
+        // Marca si el ultimo fallo dejo el envio en estado INCIERTO (pudo llegar al gateway).
+        boolean lastUncertain = false;
         for (int attempt = 1; attempt <= retry.maxRetries() + 1; attempt++) {
             try {
                 var request = buildRequest(method, url, headers, body, timeoutSeconds);
@@ -208,24 +227,39 @@ public class RestPaymentTransport implements PaymentMessageTransport {
                 }
             } catch (java.net.http.HttpTimeoutException timeoutException) {
                 // HttpTimeoutException extiende IOException; va PRIMERO para que el catch
-                // generico de IO no lo capture.
+                // generico de IO no lo capture. Timeout de lectura = INCIERTO: la peticion ya
+                // salio y el gateway pudo recibirla; no es un rechazo.
                 lastError = "timeout: " + timeoutException.getMessage();
+                lastUncertain = true;
                 if (!retry.shouldRetry("TIMEOUT")) {
-                    return TransportResult.rejected(attempt, System.currentTimeMillis() - startedAt, lastError);
+                    return TransportResult.uncertain(attempt, System.currentTimeMillis() - startedAt, lastError);
                 }
-            } catch (IOException ioException) {
-                lastError = "IO error: " + ioException.getMessage();
+            } catch (ConnectException connectException) {
+                // Conexion rechazada ANTES de enviar: fallo DEFINITIVO, seguro reintentar/reenviar.
+                lastError = "connection refused: " + connectException.getMessage();
+                lastUncertain = false;
                 if (!retry.shouldRetry("CONNECTION_REFUSED")) {
                     return TransportResult.rejected(attempt, System.currentTimeMillis() - startedAt, lastError);
                 }
+            } catch (IOException ioException) {
+                // Otro IO (p.ej. conexion cortada tras enviar) = INCIERTO: no sabemos si llego.
+                lastError = "IO error: " + ioException.getMessage();
+                lastUncertain = true;
+                if (!retry.shouldRetry("CONNECTION_REFUSED")) {
+                    return TransportResult.uncertain(attempt, System.currentTimeMillis() - startedAt, lastError);
+                }
             } catch (InterruptedException interruptedException) {
                 Thread.currentThread().interrupt();
-                return TransportResult.rejected(attempt, System.currentTimeMillis() - startedAt,
+                // Interrumpido a mitad: no sabemos si el envio se completo -> INCIERTO.
+                return TransportResult.uncertain(attempt, System.currentTimeMillis() - startedAt,
                         "interrupted: " + interruptedException.getMessage());
             }
             sleepBackoff(retry, attempt);
         }
-        return TransportResult.rejected(retry.maxRetries() + 1, System.currentTimeMillis() - startedAt, lastError);
+        // Reintentos agotados: si el ultimo fallo fue incierto, NO lo reportamos como rechazo.
+        return lastUncertain
+                ? TransportResult.uncertain(retry.maxRetries() + 1, System.currentTimeMillis() - startedAt, lastError)
+                : TransportResult.rejected(retry.maxRetries() + 1, System.currentTimeMillis() - startedAt, lastError);
     }
 
     private HttpRequest buildRequest(String method, String url, Map<String, String> headers,
@@ -294,11 +328,7 @@ public class RestPaymentTransport implements PaymentMessageTransport {
         if (template == null || template.isBlank()) {
             return template;
         }
-        var sendersReference = message.sequenceA() != null ? message.sequenceA().sendersReference() : "";
-        var uetr = message.envelope() != null ? message.envelope().uetr() : "";
-        return template
-                .replace("${sendersReference}", sendersReference == null ? "" : sendersReference)
-                .replace("${uetr}", uetr == null ? "" : uetr);
+        return Mt101PaymentCorrelation.resolveTemplate(template, message);
     }
 
     @SuppressWarnings("unchecked")
@@ -359,7 +389,7 @@ public class RestPaymentTransport implements PaymentMessageTransport {
             node.fields().forEachRemaining(entry -> result.put(entry.getKey(), entry.getValue().asText()));
             return result;
         } catch (IOException error) {
-            throw new IllegalArgumentException("Invalid JSON in MT101_PAY REST headersJson", error);
+            throw new PreDispatchTransportException("Invalid JSON in MT101_PAY REST headersJson", error);
         }
     }
 

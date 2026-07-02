@@ -1,0 +1,43 @@
+{
+  "ci": {
+    "collect": {
+      "url": [
+        "http://localhost:4200",
+        "http://localhost:4200/connections",
+        "http://localhost:4200/sources",
+        "http://localhost:4200/readers",
+        "http://localhost:4200/processes",
+        "http://localhost:4200/schedules",
+        "http://localhost:4200/executions",
+        "http://localhost:4200/audit",
+        "http://localhost:4200/payment-rules",
+        "http://localhost:4200/overview"
+      ],
+      "numberOfRuns": 1,
+      "settings": {
+        "preset": "desktop",
+        "throttling": {
+          "cpu": 4,
+          "rttMs": 40,
+          "downloadThroughputKbps": 10240,
+          "uploadThroughputKbps": 10240
+        }
+      }
+    },
+    "assert": {
+      "assertions": {
+        "categories:performance": ["warn", { "minScore": 0.8 }],
+        "categories:accessibility": ["error", { "minScore": 0.9 }],
+        "categories:best-practices": ["warn", { "minScore": 0.85 }],
+        "categories:seo": ["warn", { "minScore": 0.8 }]
+      }
+    },
+    "upload": {
+      "target": "temporary-public-storage"
+    },
+    "output": {
+      "format": ["html", "json"],
+      "outputDir": "lighthouse-report"
+    }
+  }
+}

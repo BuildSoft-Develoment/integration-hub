@@ -8,6 +8,7 @@ import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import com.integrationhub.platform.provider.task.http.HttpRequestSupport;
+import com.integrationhub.platform.provider.task.http.ResilientHttpSender;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -27,6 +28,9 @@ public class RestCallTaskProvider implements BatchTaskProvider {
 
     @Inject
     ObjectMapper objectMapper;
+
+    @Inject
+    ResilientHttpSender httpSender;
 
     @Override
     public String type() {
@@ -95,7 +99,7 @@ public class RestCallTaskProvider implements BatchTaskProvider {
 
     private void send(HttpRequest request) {
         try {
-            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = httpSender.send(request);
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new IllegalStateException(
                         "REST task returned status " + response.statusCode() + " with body: " + response.body());

@@ -9,7 +9,7 @@
         @if (schedule()) {
           <div class="profile-stack">
             <div class="profile-header">
-              <div class="profile-avatar">{{ modeLabel().slice(0, 1).toUpperCase() }}</div>
+              <div class="profile-avatar ih-tone-document"><ih-icon name="clock" [size]="22" /></div>
               <div class="profile-copy">
                 <h3 class="profile-name">{{ i18n.t('schedules.detail') }}</h3>
                 <p class="profile-subtitle">{{ modeLabel() }}</p>

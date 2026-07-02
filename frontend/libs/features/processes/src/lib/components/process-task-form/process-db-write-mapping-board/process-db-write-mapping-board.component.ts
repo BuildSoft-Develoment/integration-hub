@@ -30,6 +30,7 @@ export class ProcessDbWriteMappingBoardComponent {
   readonly keyChange = output<{ columnName: string; value: boolean }>();
   readonly clear = output<string>();
   readonly hoveredColumn = signal<string | null>(null);
+  readonly trashHover = signal(false);
 
   mappingFor(columnName: string): DbWriteMappingDraft {
     return this.mappings().find((row) => row.targetColumn === columnName) ?? {
@@ -93,6 +94,16 @@ export class ProcessDbWriteMappingBoardComponent {
       return;
     }
     this.sourceDrop.emit({ columnName, source });
+  }
+
+  handleTrashDrop(event: DragEvent): void {
+    event.preventDefault();
+    this.trashHover.set(false);
+    const columnName = this.hoveredColumn();
+    this.hoveredColumn.set(null);
+    if (columnName) {
+      this.clear.emit(columnName);
+    }
   }
 
   describeColumn(column: DbWriteColumnRef): string {

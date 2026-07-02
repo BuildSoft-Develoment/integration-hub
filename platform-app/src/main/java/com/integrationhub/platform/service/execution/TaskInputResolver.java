@@ -1,16 +1,15 @@
 package com.integrationhub.platform.service.execution;
 
 import com.integrationhub.platform.provider.task.dbwrite.DbTaskSupport;
+import com.integrationhub.platform.repository.TaskInputRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.source.SourcePayload;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -30,10 +29,19 @@ public class TaskInputResolver {
 
     private final DataSource dataSource;
     private final ConnectionPoolManager connectionPoolManager;
+    private final TaskInputRepository taskInputRepository;
 
-    public TaskInputResolver(DataSource dataSource, ConnectionPoolManager connectionPoolManager) {
+    @Inject
+    public TaskInputResolver(DataSource dataSource,
+                            ConnectionPoolManager connectionPoolManager,
+                            TaskInputRepository taskInputRepository) {
         this.dataSource = dataSource;
         this.connectionPoolManager = connectionPoolManager;
+        this.taskInputRepository = taskInputRepository;
+    }
+
+    public TaskInputResolver(DataSource dataSource, ConnectionPoolManager connectionPoolManager) {
+        this(dataSource, connectionPoolManager, new TaskInputRepository());
     }
 
     public ResolvedInput resolve(Map<String, Object> configuration,
@@ -148,78 +156,13 @@ public class TaskInputResolver {
     }
 
     private List<ReadRecord> readTableBatch(TableInput tableInput, int batchSize, Object lastKey) {
-        var tableName = DbTaskSupport.sanitizeQualifiedIdentifier(tableInput.tableName());
-        var orderByColumn = DbTaskSupport.sanitizeQualifiedIdentifier(tableInput.orderBy());
-        var filters = tableInput.filters();
-
-        try (var connection = resolveDataSource(tableInput.connectionRef()).getConnection()) {
-            var dialect = paginationDialect(connection);
-            var conditions = new ArrayList<String>();
-            for (var column : filters.keySet()) {
-                conditions.add(DbTaskSupport.sanitizeIdentifier(column) + " = ?");
-            }
-            if (lastKey != null) {
-                conditions.add(orderByColumn + " > ?");
-            }
-            var sql = new StringBuilder("select * from ").append(tableName);
-            if (!conditions.isEmpty()) {
-                sql.append(" where ").append(String.join(" and ", conditions));
-            }
-            sql.append(" order by ").append(orderByColumn).append(" asc");
-            sql.append(limitClause(dialect));
-
-            try (var statement = connection.prepareStatement(sql.toString())) {
-                var parameterIndex = 1;
-                for (var value : filters.values()) {
-                    statement.setObject(parameterIndex++, value);
-                }
-                if (lastKey != null) {
-                    statement.setObject(parameterIndex++, lastKey);
-                }
-                statement.setInt(parameterIndex, batchSize);
-                try (var resultSet = statement.executeQuery()) {
-                    return readRecords(resultSet);
-                }
-            }
-        } catch (SQLException error) {
-            throw new IllegalStateException("Cannot read task input table " + tableName, error);
-        }
-    }
-
-    /**
-     * Dialecto de paginacion por motor. SQL Server NO admite `FETCH FIRST ... ROWS ONLY` suelto:
-     * exige `OFFSET 0 ROWS FETCH NEXT ? ROWS ONLY` (con ORDER BY). Oracle 12c+ si admite
-     * `FETCH FIRST ... ROWS ONLY`. El resto (postgresql/mysql/mariadb/h2) usa `LIMIT`.
-     */
-    PaginationDialect paginationDialect(Connection connection) {
-        try {
-            var product = connection.getMetaData().getDatabaseProductName();
-            var normalized = product == null ? "" : product.toLowerCase();
-            if (normalized.contains("sql server") || normalized.contains("sqlserver")) {
-                return PaginationDialect.OFFSET_FETCH;
-            }
-            if (normalized.contains("oracle")) {
-                return PaginationDialect.FETCH_FIRST;
-            }
-            return PaginationDialect.LIMIT;
-        } catch (SQLException error) {
-            return PaginationDialect.LIMIT; // default seguro (mysql/postgresql/h2/mariadb)
-        }
-    }
-
-    /** Sufijo de limite parametrizado (`?` = tamano de lote) segun dialecto. */
-    String limitClause(PaginationDialect dialect) {
-        return switch (dialect) {
-            case OFFSET_FETCH -> " offset 0 rows fetch next ? rows only";
-            case FETCH_FIRST -> " fetch first ? rows only";
-            case LIMIT -> " limit ?";
-        };
-    }
-
-    enum PaginationDialect {
-        LIMIT,
-        FETCH_FIRST,
-        OFFSET_FETCH
+        return taskInputRepository.readBatch(
+                resolveDataSource(tableInput.connectionRef()),
+                tableInput.tableName(),
+                tableInput.orderBy(),
+                tableInput.filters(),
+                lastKey,
+                batchSize);
     }
 
     private Object cursorValue(List<ReadRecord> records, String orderBy) {
@@ -236,20 +179,6 @@ public class TaskInputResolver {
             }
         }
         return null;
-    }
-
-    private List<ReadRecord> readRecords(ResultSet resultSet) throws SQLException {
-        var metadata = resultSet.getMetaData();
-        var columnCount = metadata.getColumnCount();
-        var records = new ArrayList<ReadRecord>();
-        while (resultSet.next()) {
-            var values = new LinkedHashMap<String, Object>();
-            for (var index = 1; index <= columnCount; index++) {
-                values.put(metadata.getColumnLabel(index), resultSet.getObject(index));
-            }
-            records.add(new ReadRecord(values));
-        }
-        return records;
     }
 
     private DataSource resolveDataSource(String connectionRef) {
@@ -377,6 +306,7 @@ public class TaskInputResolver {
     public static final class TaskExecutionAccumulator {
         private int batchCount;
         private int recordCount;
+        private boolean success = true;
         private String details = "Task completed";
         private final Map<String, Object> outputs = new LinkedHashMap<>();
 
@@ -389,11 +319,18 @@ public class TaskInputResolver {
         void add(com.integrationhub.platform.spi.task.TaskResult result) {
             batchCount++;
             if (result != null) {
+                // Un batch fallido marca la tarea completa: el engine decide si
+                // aborta el proceso o continua segun continueOnFailure.
+                success = success && result.success();
                 details = result.details();
                 if (result.outputs() != null) {
                     mergeOutputs(result.outputs());
                 }
             }
+        }
+
+        public boolean success() {
+            return success;
         }
 
         void addRecords(int count) {

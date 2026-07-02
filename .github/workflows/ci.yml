@@ -52,6 +52,9 @@ jobs:
       - name: Lint
         working-directory: frontend
         run: npx nx lint web
+      - name: Plugin catalog gate
+        working-directory: frontend
+        run: npx nx run web:test-plugins
       - name: Unit tests
         working-directory: frontend
         run: npx nx test web

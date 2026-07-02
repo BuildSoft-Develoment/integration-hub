@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, ElementRef, input, output, signal, viewChild } from '@angular/core';
+import { Component, computed, ElementRef, inject, input, output, signal, viewChild } from '@angular/core';
+import { I18nService } from '@integration-hub/core/services';
 import { ProcessFlowNode } from '../../models/process-flow.models';
 import { getProcessFlowNodePresentation } from '../../flow/process-flow.presentation';
 
@@ -16,6 +17,8 @@ interface ProcessFlowNodeExpandedChange {
     styleUrl: './process-flow-node.component.css'
 })
 export class ProcessFlowNodeComponent {
+  protected readonly i18n = inject(I18nService);
+
   private readonly baseHeight = 120;
   private readonly expandedHeightGap = 10;
 

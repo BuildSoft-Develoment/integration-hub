@@ -35,6 +35,7 @@ export class ProcessEditorComponent {
   readonly connections = input.required<readonly ConnectionRef[]>();
   readonly saving = input(false);
   readonly executing = input(false);
+  readonly dirty = input(true);
   readonly titleKey = input.required<string>();
   readonly readonly = input(false);
   readonly canEdit = input(false);
@@ -45,6 +46,7 @@ export class ProcessEditorComponent {
   readonly flowStateChange = output<{ layout: ProcessFlowLayout; tasks: ProcessTaskFormModel[] }>();
   readonly addTask = output<ProcessTaskType>();
   readonly addTaskAt = output<{ taskType: ProcessTaskType; position?: { x: number; y: number } }>();
+  readonly applyMassiveTemplate = output<void>();
   readonly patchTask = output<{ clientId: string; patch: Partial<ProcessTaskFormModel> }>();
   readonly removeTask = output<string>();
   readonly save = output<void>();

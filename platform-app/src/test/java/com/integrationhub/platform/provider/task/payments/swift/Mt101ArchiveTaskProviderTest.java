@@ -1,7 +1,7 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.secret.SecretResolver;
 import com.integrationhub.platform.service.secret.SecretValueProvider;
@@ -73,6 +73,7 @@ class Mt101ArchiveTaskProviderTest {
                     "create table mt101_archive (" +
                     " id bigserial primary key," +
                     " envelope_id bigint references swift_message_envelope(id)," +
+                    " sender_lt char(12)," +
                     " senders_reference varchar(16) not null," +
                     " customer_specified_reference varchar(16)," +
                     " message_index integer," +
@@ -87,7 +88,9 @@ class Mt101ArchiveTaskProviderTest {
                     " account_servicing_value text," +
                     " status varchar(20) not null default 'PENDING'," +
                     " format char(4)," +
+                    " process_execution_id bigint," +
                     " created_at timestamp not null default current_timestamp," +
+                    " updated_at timestamp not null default current_timestamp," +
                     " retention_until date)");
             statement.executeUpdate(
                     "create table mt101_transaction (" +

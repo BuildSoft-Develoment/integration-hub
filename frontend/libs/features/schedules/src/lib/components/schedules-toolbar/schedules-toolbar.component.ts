@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -12,7 +12,8 @@ import { I18nService } from '@integration-hub/core/services';
   standalone: true,
   imports: [CommonModule, FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule],
     templateUrl: './schedules-toolbar.component.html',
-    styleUrl: './schedules-toolbar.component.css'
+    styleUrl: './schedules-toolbar.component.css',
+    changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class SchedulesToolbarComponent {
   readonly i18n = inject(I18nService);

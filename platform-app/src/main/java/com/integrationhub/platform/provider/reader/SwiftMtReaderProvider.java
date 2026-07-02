@@ -80,24 +80,52 @@ public class SwiftMtReaderProvider implements ReaderProvider {
             return new ReadResult(List.of(), 0);
         }
 
-        var records = new ArrayList<ReadRecord>();
         var batch = new ArrayList<ReadRecord>();
         var effectiveBatchSize = Math.max(batchSize, 1);
         var batchNumber = 1;
+        var total = 0;
 
-        // Un archivo puede contener varios mensajes SWIFT concatenados (separados por
-        // delimiter del proveedor). Para slice 2.3 asumimos 1 mensaje por archivo, que
-        // es lo comun en sftp del banco. La extension a multi-mensaje es trivial.
-        var record = parseMessage(content);
-        if (record != null) {
-            records.add(record);
-            batch.add(record);
-            if (batch.size() >= effectiveBatchSize) {
-                flushBatch(payload, batch, batchNumber++, consumer);
+        // Un archivo FIN puede contener varios mensajes SWIFT concatenados (cada uno
+        // inicia con "{1:"). Se parsea mensaje a mensaje y se emite en lotes via el
+        // consumer: asi la normalizacion (replace/split del block 4) opera sobre cada
+        // mensaje (<=10KB en SWIFT valido) y no sobre todo el archivo, y la ingestion
+        // multi-mensaje escala (muchos MT101 <=100 tx por archivo).
+        for (var messageContent : splitMessages(content)) {
+            var record = parseMessage(messageContent);
+            if (record != null) {
+                batch.add(record);
+                total++;
+                if (batch.size() >= effectiveBatchSize) {
+                    flushBatch(payload, batch, batchNumber++, consumer);
+                }
             }
         }
         flushBatch(payload, batch, batchNumber, consumer);
-        return new ReadResult(List.of(), records.size());
+        return new ReadResult(List.of(), total);
+    }
+
+    /**
+     * Separa un archivo FIN en mensajes SWIFT individuales. Cada mensaje inicia con el
+     * basic header block {@code {1:}}; el contenido entre dos {@code {1:} consecutivos
+     * (o hasta el fin) es un mensaje. Si no hay block 1 se trata todo como un mensaje
+     * (compatibilidad con payloads sin cabecera).
+     */
+    private List<String> splitMessages(String content) {
+        var start = content.indexOf("{1:");
+        if (start < 0) {
+            return List.of(content);
+        }
+        var messages = new ArrayList<String>();
+        while (start >= 0) {
+            var next = content.indexOf("{1:", start + 3);
+            if (next < 0) {
+                messages.add(content.substring(start));
+                break;
+            }
+            messages.add(content.substring(start, next));
+            start = next;
+        }
+        return messages;
     }
 
     /** Parsea un unico mensaje SWIFT (raw FIN) a un {@link ReadRecord} estructurado. */

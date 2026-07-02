@@ -3,7 +3,7 @@ package com.integrationhub.platform.provider.task.payments.swift.transport;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -17,6 +17,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.any;
 import static com.github.tomakehurst.wiremock.client.WireMock.anyUrl;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalToIgnoreCase;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalToJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.getAllServeEvents;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
@@ -107,6 +108,28 @@ class RestPaymentTransportTest {
         assertTrue(result.accepted());
         verify(postRequestedFor(urlEqualTo("/v1/swift/mt101"))
                 .withHeader("Authorization", equalTo("Bearer token-123")));
+    }
+
+    @Test
+    void readTimeoutYieldsUncertainNotRejected(WireMockRuntimeInfo wm) {
+        // El gateway tarda mas que el timeout: la peticion salio pero no hubo respuesta clara.
+        stubFor(any(anyUrl()).willReturn(aResponse()
+                .withFixedDelay(3000)
+                .withStatus(200)
+                .withBody("{\"accepted\":true}")));
+
+        var configuration = new LinkedHashMap<String, Object>();
+        configuration.put("transport", "REST");
+        configuration.put("rest", Map.of(
+                "url", wm.getHttpBaseUrl() + "/v1/swift/mt101",
+                "timeoutSeconds", 1));
+        configuration.put("retryPolicy", Map.of("maxRetries", 0));
+
+        var result = transport.send(sampleMessage("PROC-TO", "u"), configuration);
+
+        assertFalse(result.accepted());
+        assertTrue(result.uncertain(), "un timeout de lectura es INCIERTO, no un rechazo");
+        assertTrue(result.lastError().contains("timeout"));
     }
 
     @Test
@@ -266,6 +289,38 @@ class RestPaymentTransportTest {
         configuration.put("rest", Map.of("url", url));
         configuration.put("retryPolicy", retryOverride != null ? retryOverride : Map.of("maxRetries", 0));
         return configuration;
+    }
+
+    @Test
+    void derivesContentTypeFromFinFormatWhenNotConfigured(WireMockRuntimeInfo wm) {
+        stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200).withBody("{\"accepted\":true}")));
+
+        var finMessage = sampleMessage("PROC-FIN", "u-fin")
+                .withRawPayload("{1:F01SGOBFRPPAXXX0000000000}{4:\r\n:20:PROC-FIN\r\n-}", "FIN");
+        var configuration = new LinkedHashMap<String, Object>();
+        configuration.put("transport", "REST");
+        configuration.put("rest", Map.of("url", wm.getHttpBaseUrl() + "/v1/swift/mt101"));
+        transport.send(finMessage, configuration);
+
+        verify(postRequestedFor(urlEqualTo("/v1/swift/mt101"))
+                .withHeader("Content-Type", equalToIgnoreCase("text/plain; charset=utf-8")));
+    }
+
+    @Test
+    void explicitContentTypeOverridesFormatDerivation(WireMockRuntimeInfo wm) {
+        stubFor(any(anyUrl()).willReturn(aResponse().withStatus(200).withBody("{\"accepted\":true}")));
+
+        var finMessage = sampleMessage("PROC-FIN2", "u-fin2")
+                .withRawPayload("{1:F01SGOBFRPPAXXX0000000000}{4:\r\n:20:PROC-FIN2\r\n-}", "FIN");
+        var configuration = new LinkedHashMap<String, Object>();
+        configuration.put("transport", "REST");
+        configuration.put("rest", Map.of(
+                "url", wm.getHttpBaseUrl() + "/v1/swift/mt101",
+                "contentType", "application/x-swift-mt"));
+        transport.send(finMessage, configuration);
+
+        verify(postRequestedFor(urlEqualTo("/v1/swift/mt101"))
+                .withHeader("Content-Type", equalTo("application/x-swift-mt")));
     }
 
     private Mt101Message sampleMessage(String sendersReference, String uetr) {

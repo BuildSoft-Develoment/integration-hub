@@ -37,6 +37,17 @@ export abstract class ManagedEditorStateBase<
       : this.adapter.detailTitleKey
   );
 
+  private formSnapshot = '';
+  private draftSnapshot = '';
+
+  readonly dirty = computed(() => {
+    if (this.viewMode() !== 'edit') {
+      return false;
+    }
+    return JSON.stringify(this.form()) !== this.formSnapshot
+      || JSON.stringify(this.draft()) !== this.draftSnapshot;
+  });
+
   protected constructor(
     protected readonly adapter: ManagedEditorStateAdapter<
       TType,
@@ -57,6 +68,7 @@ export abstract class ManagedEditorStateBase<
   startCreate(type: TType): void {
     this.form.set(this.adapter.createForm(type));
     this.draft.set(this.adapter.createDraftFor(type));
+    this.captureSnapshot();
     this.viewMode.set('edit');
     this.resetTransientState();
   }
@@ -69,13 +81,20 @@ export abstract class ManagedEditorStateBase<
         record.configurationJson
       )
     );
+    this.captureSnapshot();
     this.viewMode.set('edit');
     this.resetTransientState();
   }
 
   cancelEdit(): void {
     this.viewMode.set('details');
+    this.formSnapshot = '';
+    this.draftSnapshot = '';
     this.resetTransientState();
+  }
+
+  canDiscard(): boolean {
+    return !this.dirty();
   }
 
   updateFormField<K extends keyof TForm>(field: K, value: TForm[K]): void {
@@ -130,4 +149,9 @@ export abstract class ManagedEditorStateBase<
   }
 
   protected resetTransientState(): void {}
+
+  private captureSnapshot(): void {
+    this.formSnapshot = JSON.stringify(this.form());
+    this.draftSnapshot = JSON.stringify(this.draft());
+  }
 }

@@ -59,18 +59,6 @@ export interface ProcessFormModel {
   tasks: ProcessTaskFormModel[];
 }
 
-/**
- * Lista hardcoded de tipos del motor — DEPRECADA tras M-1a (T-015 spec 003).
- *
- * La fuente unica ahora es {@code ProcessTaskManagerService.availableProviders()}
- * que descubre dinamicamente via DI tanto los tipos del motor como los
- * aportados por verticales (mensajeria de pagos 008, futuras: ISO 20022,
- * HL7, etc.). El flow palette y los formularios consumen el manager.
- *
- * Esta constante se conserva temporalmente para tests legados de
- * createTaskForm/defaultTaskConfig que no inyectan el manager. Verticales
- * NO deben agregarse aqui.
- */
 export const processTaskTypes: readonly ProcessTaskType[] = [
   'FILE_READ',
   'DB_WRITE',
@@ -81,32 +69,6 @@ export const processTaskTypes: readonly ProcessTaskType[] = [
 ];
 
 let nextTaskClientId = 1;
-
-interface DefaultTaskInput {
-  sourceTaskRef: string;
-  sourceOutput: ProcessTaskOutputKind;
-}
-
-export function defaultTaskConfig(taskType: ProcessTaskType, taskRef = '', input?: DefaultTaskInput): string {
-  const runtime = taskRef ? { taskRef } : {};
-  const taskInput = input?.sourceTaskRef
-    ? { input: { source: 'task-output', sourceTaskRef: input.sourceTaskRef, sourceOutput: input.sourceOutput } }
-    : {};
-  switch (taskType) {
-    case 'DB_WRITE':
-      return JSON.stringify({ ...runtime, executionMode: 'batch', ...taskInput, mode: 'insert', targetTable: 'staging_record', batchSize: 1000 }, null, 2);
-    case 'DB_EXECUTE_SP':
-      return JSON.stringify({ ...runtime, executionMode: 'once', ...taskInput, procedureName: 'public.sp_procesar', timeoutSeconds: 30, parameters: [] }, null, 2);
-    case 'DB_EXECUTE_FN':
-      return JSON.stringify({ ...runtime, executionMode: 'once', ...taskInput, functionName: 'public.fn_obtener_resumen', timeoutSeconds: 30, resultAlias: 'resultado_fn', parameters: [] }, null, 2);
-    case 'REST_CALL':
-      return JSON.stringify({ ...runtime, executionMode: 'per-record', ...taskInput, method: 'POST', url: 'https://api.example.com/resource', timeoutSeconds: 20 }, null, 2);
-    case 'NOTIFICATION':
-      return JSON.stringify({ ...runtime, executionMode: 'once', ...taskInput, channel: 'log', message: 'Proceso ${processExecutionId} finalizado con ${recordCount} registros' }, null, 2);
-    default:
-      return JSON.stringify({ ...runtime, executionMode: 'batch' }, null, 2);
-  }
-}
 
 export function createTaskForm(
   taskType: ProcessTaskType = 'FILE_READ',
@@ -122,10 +84,11 @@ export function createTaskForm(
     active: true,
     sourceDefinitionId: null,
     readerDefinitionId: null,
-    // Si el caller (ProcessEditorStore) pasa el config derivado del provider
-    // registrado (M-1a), lo usamos. Si no, caemos al switch para los 6 motor
-    // types o un placeholder {executionMode: 'batch'} para los desconocidos.
-    configurationJson: configurationJson ?? defaultTaskConfig(taskType, clientId),
+    // El caller (ProcessEditorStore) pasa el config derivado del provider
+    // registrado via ProcessTaskManagerService.defaultConfigurationJson().
+    // Si no hay config, se usa un placeholder vacio (politica no-fallback:
+    // la ausencia de provider es error, no debe caer a defaultTaskConfig).
+    configurationJson: configurationJson ?? '{}',
   };
 }
 

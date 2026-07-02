@@ -1,11 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { Component, input, output } from '@angular/core';
+import { Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   ReaderDraft,
   ReaderProviderDescriptor,
   ReaderProviderType,
 } from '@integration-hub/core/providers';
+import { ReaderManagerService } from '@integration-hub/core/services';
 import { ManagedEditorFormActionsComponent, ManagedEditorHeaderComponent, ManagedEditorOverviewComponent, ManagedEditorReadonlyActionsComponent, ManagedEditorSectionComponent, ManagedEditorShellComponent } from '@integration-hub/shared/ui';
 import { ReaderFormModel } from '../../models/reader.models';
 import { ReaderTypeFormHostComponent } from '../reader-type-form/reader-type-form-host/reader-type-form-host.component';
@@ -24,26 +25,17 @@ import { ReaderTypeFormHostComponent } from '../reader-type-form/reader-type-for
     ManagedEditorShellComponent,
     ReaderTypeFormHostComponent,
   ],
-  styles: [`
-    .editor-form {
-      display: grid;
-      gap: 0.9rem;
-      min-width: 0;
-    }
-
-    @media (max-height: 700px) and (min-width: 761px) {
-      .editor-form {
-        gap: 0.7rem;
-      }
-    }
-  `],
+  styleUrl: './reader-editor.component.css',
     templateUrl: './reader-editor.component.html'
 })
 export class ReaderEditorComponent {
+  private readonly readerManager = inject(ReaderManagerService);
+
   readonly form = input.required<ReaderFormModel>();
   readonly draft = input.required<ReaderDraft>();
   readonly providerOptions = input.required<readonly ReaderProviderDescriptor[]>();
   readonly saving = input(false);
+  readonly dirty = input(true);
   readonly titleKey = input.required<string>();
   readonly readonly = input(false);
   readonly canEdit = input(false);
@@ -62,6 +54,10 @@ export class ReaderEditorComponent {
       this.providerOptions().find((provider) => provider.type === this.form().readerType)
         ?.label ?? this.form().readerType
     );
+  }
+
+  presentation() {
+    return this.readerManager.presentation(this.form().readerType);
   }
 
   changeReaderType(value: string): void {

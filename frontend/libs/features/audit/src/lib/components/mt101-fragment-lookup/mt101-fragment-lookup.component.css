@@ -1,0 +1,14 @@
+.lookup { display:flex; flex-direction:column; gap:1rem; }
+    .lookup__search { display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; }
+    .lookup__search mat-form-field { width:12rem; }
+    .lookup__actions { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+    .lookup__table { overflow:auto; border:1px solid var(--ih-border); border-radius:8px; }
+    table { width:100%; border-collapse:collapse; min-width:58rem; }
+    th, td { padding:.55rem .65rem; border-bottom:1px solid var(--ih-border); text-align:left; vertical-align:top; }
+    th { font-size:.75rem; color:var(--ih-text-soft); font-weight:600; }
+    td { font-size:.86rem; }
+    .lookup__mono { font-family:ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap:anywhere; }
+    .lookup__empty,.lookup__error { color:var(--ih-text-soft); padding:.75rem; }
+    .lookup__error { color:var(--ih-status-error); }
+    .lookup__status--SENT,.lookup__status--ARCHIVED,.lookup__status--COMPOSED { color:var(--ih-status-success); }
+    .lookup__status--REJECTED,.lookup__status--ERROR { color:var(--ih-status-error); }

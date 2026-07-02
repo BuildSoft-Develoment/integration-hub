@@ -1,7 +1,10 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, OnInit } from '@angular/core';
+import { MatButtonModule } from '@angular/material/button';
 import { I18nService } from '@integration-hub/core/services';
+import { IconComponent, LoadingComponent, SlotOutletComponent } from '@integration-hub/shared/ui';
 import { OverviewMetricCardComponent } from '../components/overview-metric-card/overview-metric-card.component';
+import { OverviewPluginHealthCardComponent } from '../components/overview-plugin-health-card/overview-plugin-health-card.component';
 import { OverviewTableCardComponent } from '../components/overview-table-card/overview-table-card.component';
 import { OverviewStore } from './overview.store';
 
@@ -9,7 +12,7 @@ import { OverviewStore } from './overview.store';
   selector: 'ih-overview-page',
   standalone: true,
   providers: [OverviewStore],
-  imports: [CommonModule, OverviewMetricCardComponent, OverviewTableCardComponent],
+  imports: [CommonModule, MatButtonModule, IconComponent, LoadingComponent, SlotOutletComponent, OverviewMetricCardComponent, OverviewPluginHealthCardComponent, OverviewTableCardComponent],
   templateUrl: './overview-page.html',
   styleUrl: './overview-page.css',
 })

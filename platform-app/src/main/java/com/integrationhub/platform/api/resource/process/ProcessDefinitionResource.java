@@ -17,6 +17,12 @@ import jakarta.ws.rs.core.MediaType;
 
 import java.util.List;
 
+import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.api.security.PlatformRoles.OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PAYMENTS_OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+
 @Path("/api/process-definitions")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -29,27 +35,27 @@ public class ProcessDefinitionResource {
     }
 
     @GET
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public List<ProcessDefinitionResponse> list() {
         return processCatalogService.listAll();
     }
 
     @POST
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public ProcessDefinitionResponse create(ProcessDefinitionRequest request) {
         return processCatalogService.create(request);
     }
 
     @PUT
     @Path("/{processDefinitionId}")
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public ProcessDefinitionResponse update(@PathParam("processDefinitionId") Long processDefinitionId, ProcessDefinitionRequest request) {
         return processCatalogService.update(processDefinitionId, request);
     }
 
     @POST
     @Path("/{processDefinitionId}/activation/{active}")
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public ProcessDefinitionResponse setActive(@PathParam("processDefinitionId") Long processDefinitionId, @PathParam("active") boolean active) {
         return processCatalogService.setActive(processDefinitionId, active);
     }

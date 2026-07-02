@@ -116,6 +116,28 @@
         </mat-form-field>
 
         <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101.sequenceA.instructingPartyOption') }}</mat-label>
+          <mat-select
+            [ngModel]="draft().sequenceA.instructingPartyOption"
+            (ngModelChange)="updateSequenceA({ instructingPartyOption: $event })"
+            [disabled]="readonly() || draft().debitAccountMode !== 'subsidiary'">
+            @for (option of instructingOptions; track option) {
+              <mat-option [value]="option">{{ option || '-' }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field class="mt101-build__col-2" subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101.sequenceA.instructingPartyIdentifier') }}</mat-label>
+          <textarea
+            matInput
+            rows="2"
+            [ngModel]="draft().sequenceA.instructingPartyIdentifier"
+            (ngModelChange)="updateSequenceA({ instructingPartyIdentifier: $event })"
+            [disabled]="readonly() || draft().debitAccountMode !== 'subsidiary'"></textarea>
+        </mat-form-field>
+
+        <mat-form-field subscriptSizing="dynamic">
           <mat-label>{{ i18n.t('mt101.sequenceA.orderingCustomerOption') }}</mat-label>
           <mat-select
             [ngModel]="draft().sequenceA.orderingCustomerOption"
@@ -203,6 +225,18 @@
             (ngModelChange)="updateMappings({ orderingCustomerOption: $event })"
             [disabled]="readonly() || !usesTransactionDebit()">
             @for (option of transactionOrderingOptions; track option) {
+              <mat-option [value]="option">{{ option || '-' }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101.mappings.accountServicingOption') }}</mat-label>
+          <mat-select
+            [ngModel]="draft().transactionMappings.accountServicingOption"
+            (ngModelChange)="updateMappings({ accountServicingOption: $event })"
+            [disabled]="readonly()">
+            @for (option of servicingOptions; track option) {
               <mat-option [value]="option">{{ option || '-' }}</mat-option>
             }
           </mat-select>

@@ -83,6 +83,25 @@ export class ConnectionCatalogCommandService {
     );
   }
 
+  async setActiveMany(connectionDefinitionIds: readonly number[], active: boolean): Promise<void> {
+    const uniqueIds = Array.from(new Set(connectionDefinitionIds));
+    if (uniqueIds.length === 0) {
+      return;
+    }
+
+    await Promise.all(
+      uniqueIds.map((connectionDefinitionId) =>
+        firstValueFrom(this.api.setActive(connectionDefinitionId, active))
+      )
+    );
+
+    this.editor.clearTestResult();
+    await this.query.reload();
+    this.feedback.info(active ? 'connections.bulkActivated' : 'connections.bulkDeactivated', {
+      count: uniqueIds.length,
+    });
+  }
+
   private resolveErrorMessage(error: unknown): string {
     if (error instanceof HttpErrorResponse) {
       const payload = error.error as Record<string, unknown> | string | null;

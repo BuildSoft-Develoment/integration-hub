@@ -1,8 +1,10 @@
-<ih-managed-editor-shell (close)="close.emit()">
+<ih-managed-editor-shell [dirty]="dirty()" (close)="close.emit()">
       <ih-managed-editor-header
         editor-header
         [titleKey]="titleKey()"
         [subtitle]="providerLabel()"
+        [icon]="presentation().icon"
+        [toneClass]="presentation().toneClass"
       />
 
       <ih-managed-editor-readonly-actions
@@ -55,6 +57,7 @@
         <ih-managed-editor-form-actions
           [readonly]="readonly()"
           [saving]="saving()"
+          [dirty]="dirty()"
           [entityExists]="!!form().id"
           [showTest]="true"
           [testing]="testing()"

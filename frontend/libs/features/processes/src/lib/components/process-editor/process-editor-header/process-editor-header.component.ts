@@ -2,11 +2,12 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { I18nService } from '@integration-hub/core/services';
+import { IconComponent } from '@integration-hub/shared/ui';
 
 @Component({
   selector: 'ih-process-editor-header',
   standalone: true,
-  imports: [CommonModule, MatButtonModule],
+  imports: [CommonModule, MatButtonModule, IconComponent],
     templateUrl: './process-editor-header.component.html',
     styleUrl: './process-editor-header.component.css'
 })

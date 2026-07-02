@@ -1,0 +1,21 @@
+<div class="ih-breadcrumb-bar">
+  @if (backLabel(); as label) {
+    @if (canGoBack) {
+      <button type="button" class="ih-breadcrumb__back" (click)="goBack()"><ih-icon name="arrow-left" /> {{ label }}</button>
+    }
+  }
+  <nav class="ih-breadcrumb" [attr.aria-label]="ariaLabel()">
+  <ol class="ih-breadcrumb__list">
+    @for (item of items(); track $index; let last = $last) {
+      <li class="ih-breadcrumb__item">
+        @if (item.link && !last) {
+          <a class="ih-breadcrumb__link" [routerLink]="item.link" [queryParams]="item.queryParams">{{ item.label }}</a>
+        } @else {
+          <span class="ih-breadcrumb__current" [attr.aria-current]="last ? 'page' : null">{{ item.label }}</span>
+        }
+        @if (!last) { <span class="ih-breadcrumb__sep" aria-hidden="true">/</span> }
+      </li>
+    }
+  </ol>
+  </nav>
+</div>

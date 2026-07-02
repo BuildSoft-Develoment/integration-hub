@@ -1,6 +1,6 @@
 export type ProcessTaskExecutionMode = 'once' | 'per-record' | 'batch';
 
-export type ProcessTaskOutputKind = 'metadata' | 'summary' | 'records' | 'table' | 'errors' | 'out';
+export type ProcessTaskOutputKind = 'metadata' | 'summary' | 'records' | 'table' | 'errors' | 'out' | 'fragments';
 
 export type ProcessTaskBindingKind = 'field' | 'variable' | ProcessTaskOutputKind | 'expression';
 

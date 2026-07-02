@@ -22,6 +22,7 @@ Consolidar la experiencia operativa real del frontend del producto: usuarios, jo
 - [pantallas/pantalla-diseno-operacion-y-trazabilidad](pantallas/pantalla-diseno-operacion-y-trazabilidad.md)
 - [wireframes/criterios-wireframes-y-componentes](wireframes/criterios-wireframes-y-componentes.md)
 - [validaciones/validacion-ux-con-operacion](validaciones/validacion-ux-con-operacion.md)
+- [02.17-plan-implementacion-ux-ui](02.17-plan-implementacion-ux-ui.md)
 
 ## Adopcion real de la fase
 

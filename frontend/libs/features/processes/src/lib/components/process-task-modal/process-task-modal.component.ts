@@ -1,7 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { Component, HostListener, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { A11yModule } from '@angular/cdk/a11y';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { ConnectionRef, ProcessTaskFormModel, ProcessTaskType, ReaderRef, SourceRef } from '../../models/process.models';
 import { ProcessTaskFormHostComponent } from '../process-task-form/process-task-form-host/process-task-form-host.component';
@@ -13,6 +14,7 @@ import { ProcessTaskFormHostComponent } from '../process-task-form/process-task-
     CommonModule,
     FormsModule,
     MatButtonModule,
+    A11yModule,
     ProcessTaskFormHostComponent,
   ],
     templateUrl: './process-task-modal.component.html',
@@ -33,11 +35,16 @@ export class ProcessTaskModalComponent {
   readonly patchTask = output<Partial<ProcessTaskFormModel>>();
   readonly close = output<void>();
 
+  @HostListener('keydown.escape')
+  onEscape(): void {
+    this.close.emit();
+  }
+
   taskTypeLabel(taskType: ProcessTaskType): string {
     return this.manager.label(taskType);
   }
 
-  modalLayout(): 'workspace' | 'rest' | 'default' {
+  modalLayout(): 'workspace' | 'rest' | undefined {
     return this.manager.modalLayout(this.task().taskType);
   }
 }

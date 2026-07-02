@@ -17,18 +17,22 @@ export class ReaderCatalogStore {
 
   readonly saving = signal(false);
   readonly loading = this.query.loading;
+  readonly error = this.query.error;
   readonly readers = this.query.readers;
   readonly totalLength = this.query.totalLength;
   readonly search = this.query.search;
   readonly typeFilter = this.query.typeFilter;
   readonly selectedReaderId = this.query.selectedReaderId;
   readonly selectedReader = this.query.selectedReader;
+  readonly sortField = this.query.sortField;
+  readonly sortDirection = this.query.sortDirection;
   readonly drawerOpen = this.query.drawerOpen;
   readonly currentPage = this.query.currentPage;
   readonly pageSize = this.query.pageSize;
   readonly viewMode = this.editor.viewMode;
   readonly form = this.editor.form;
   readonly draft = this.editor.draft;
+  readonly dirty = this.editor.dirty;
 
   readonly canEdit = computed(() => this.access.canAdmin());
   readonly pagedReaders = this.query.pagedReaders;
@@ -66,6 +70,10 @@ export class ReaderCatalogStore {
 
   updateTypeFilter(value: 'ALL' | ReaderProviderType): void {
     this.query.updateTypeFilter(value);
+  }
+
+  toggleSort(field: string): void {
+    this.query.toggleSort(field);
   }
 
   startCreate(): void {

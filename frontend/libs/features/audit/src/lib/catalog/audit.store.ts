@@ -1,18 +1,25 @@
 import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
+import { AppFeedbackService, TablePreferencesService, sortData, SortState } from '@integration-hub/core/services';
 import { AuditApiService } from '../api/audit-api.service';
 import { AuditRecord } from '../models/audit.models';
 
 type StatusFilter = 'ALL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'PENDING' | 'COMPLETED_WITH_ERRORS';
 
+const TABLE_ID = 'audit';
+
 @Injectable()
 export class AuditStore implements OnDestroy {
   private readonly api = inject(AuditApiService);
+  private readonly prefs = inject(TablePreferencesService);
+  private readonly feedback = inject(AppFeedbackService);
   private readonly searchDebounceMs = 300;
   private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
   private requestSequence = 0;
 
   readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
   readonly events = signal<AuditRecord[]>([]);
   readonly totalLength = signal(0);
   readonly eventTypeOptions = signal<string[]>([]);
@@ -24,7 +31,19 @@ export class AuditStore implements OnDestroy {
   readonly currentPage = signal(0);
   readonly pageSize = signal(8);
 
-  readonly pagedEvents = computed(() => this.events());
+  readonly sortField = signal<string | null>(this.prefs.getSort(TABLE_ID)?.field ?? null);
+  readonly sortDirection = signal<'asc' | 'desc'>(this.prefs.getSort(TABLE_ID)?.direction ?? 'asc');
+
+  private readonly sort = computed<SortState | null>(() => {
+    const field = this.sortField();
+    return field ? { field, direction: this.sortDirection() } : null;
+  });
+
+  readonly pagedEvents = computed(() => {
+    const data = this.events();
+    const s = this.sort();
+    return s ? sortData(data, s) : data;
+  });
 
   async load(): Promise<void> {
     await this.loadEvents(true);
@@ -71,6 +90,18 @@ export class AuditStore implements OnDestroy {
     void this.loadEvents(false);
   }
 
+  toggleSort(field: string): void {
+    if (this.sortField() === field) {
+      const dir = this.sortDirection() === 'asc' ? 'desc' : 'asc';
+      this.sortDirection.set(dir);
+      this.prefs.setSort(TABLE_ID, { field, direction: dir });
+    } else {
+      this.sortField.set(field);
+      this.sortDirection.set('asc');
+      this.prefs.setSort(TABLE_ID, { field, direction: 'asc' });
+    }
+  }
+
   private async loadEvents(resetPage: boolean): Promise<void> {
     if (resetPage) {
       this.currentPage.set(0);
@@ -97,6 +128,12 @@ export class AuditStore implements OnDestroy {
       this.totalLength.set(response.total);
       this.eventTypeOptions.set(response.eventTypeOptions);
       this.syncSelectedEvent(response.items);
+      this.error.set(null);
+    } catch (err) {
+      if (requestId === this.requestSequence) {
+        this.error.set('audit.loadError');
+        this.feedback.handleHttpError(err as HttpErrorResponse);
+      }
     } finally {
       if (requestId === this.requestSequence) {
         this.loading.set(false);

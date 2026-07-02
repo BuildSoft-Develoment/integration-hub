@@ -23,10 +23,13 @@ Hacer visible la cobertura actual de QA sobre las features formalizadas en `spec
 | `005-catalogo-conexiones` | `qa/fase-6-qa/casos/005-catalogo-conexiones.md` (plantilla) | `qa/fase-6-qa/evidencias/005-catalogo-conexiones.md` (pendiente) |
 | `006-programacion-procesos` | `qa/fase-6-qa/casos/006-programacion-procesos.md` (plantilla) | `qa/fase-6-qa/evidencias/006-programacion-procesos.md` (pendiente) |
 | `007-tema-del-sistema` | `qa/fase-6-qa/casos/007-tema-del-sistema.md` (plantilla) | `qa/fase-6-qa/evidencias/007-tema-del-sistema.md` (pendiente) |
+| `008-mensajeria-pagos` | `qa/fase-6-qa/casos/008-mensajeria-pagos.md` | `qa/fase-6-qa/evidencias/008-mensajeria-pagos.md` |
 
-> Estado: `001`–`004` formalizados (evidencias pendientes de capturas/salidas reales);
-> `005`–`007` con plantilla pendiente. Fase 6 esta **parcial** hasta cerrar evidencias y
-> firmar `gate-qa-passed` (ver `docs/transversal/90.11-checklist-entregables.md`).
+> Estado: `001`-`004` formalizados (evidencias pendientes de capturas/salidas reales);
+> `005`-`007` con plantilla pendiente; `008` cuenta con evidencia web, backend y
+> frontend, pero mantiene brechas de certificacion bancaria, transporte real y
+> reproceso selectivo. Fase 6 esta **parcial** hasta cerrar evidencias, brechas
+> y firmar `gate-qa-passed` (ver `docs/transversal/90.11-checklist-entregables.md`).
 
 ## Regla de mantenimiento
 

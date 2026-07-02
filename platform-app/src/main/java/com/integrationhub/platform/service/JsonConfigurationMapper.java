@@ -25,7 +25,8 @@ import java.util.regex.Pattern;
 @ApplicationScoped
 public class JsonConfigurationMapper {
 
-    private static final Pattern SECRET_PATTERN = Pattern.compile("\\$\\{(env|config|secret|vault):([^}]+)}");
+    private static final Pattern SECRET_PATTERN = Pattern.compile(
+            "\\$\\{(env|config|secret|vault|vaultkv|awssecret|gcpsecret|azuresecret):([^}]+)}");
 
     ObjectMapper objectMapper;
     private final SecretResolver secretResolver;
@@ -64,6 +65,28 @@ public class JsonConfigurationMapper {
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("Cannot serialize configuration", e);
         }
+    }
+
+    /**
+     * v27 P0.2: parsea el JSON SIN resolver los {@code ${secret:...}}: deja las referencias intactas para
+     * poder persistir un snapshot sin secretos resueltos y re-resolver desde Vault al ejecutar.
+     */
+    public Map<String, Object> toMapUnresolved(String json) {
+        if (json == null || json.isBlank()) {
+            return Collections.emptyMap();
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<>() {
+            });
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("Invalid configuration JSON", e);
+        }
+    }
+
+    /** v27 P0.2: resuelve los {@code ${secret:...}} de un mapa ya parseado (re-resolucion al ejecutar). */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> resolveSecretsIn(Map<String, Object> raw) {
+        return raw == null ? null : (Map<String, Object>) resolveValue(raw);
     }
 
     @SuppressWarnings("unchecked")

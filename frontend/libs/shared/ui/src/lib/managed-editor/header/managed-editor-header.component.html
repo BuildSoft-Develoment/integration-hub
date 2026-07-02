@@ -1,6 +1,8 @@
 <div class="profile-stack">
   <div class="profile-header">
-    <div class="profile-avatar">{{ avatarText() }}</div>
+    <div class="profile-avatar" [class]="toneClass()">
+      <ih-icon [name]="icon()" [size]="22" />
+    </div>
     <div class="profile-copy">
       <h3 class="profile-name">{{ i18n.t(titleKey()) }}</h3>
       <p class="profile-subtitle">{{ subtitle() }}</p>

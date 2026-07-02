@@ -1,6 +1,12 @@
-<nav class="nav-block">
+<nav class="nav-block" [attr.aria-label]="i18n.t('shell.navigation')">
   @for (item of items(); track item.id) {
-    <a mat-list-item [routerLink]="item.route" routerLinkActive="is-active" (click)="onItemSelected()">
+    <a
+      mat-list-item
+      [routerLink]="item.route"
+      routerLinkActive="is-active"
+      [attr.aria-current]="activeRoute(item.route) ? 'page' : null"
+      (click)="onItemSelected()"
+    >
       {{ i18n.t(item.labelKey) }}
     </a>
   }

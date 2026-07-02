@@ -14,10 +14,20 @@ import { ConnectionEditorStateService } from '../editor/connection-editor-state.
 describe('ConnectionCatalogCommandService', () => {
   let service: ConnectionCatalogCommandService;
   let reload: ReturnType<typeof vi.fn>;
+  let setActive: ReturnType<typeof vi.fn>;
   let feedbackCalls: string[];
 
   beforeEach(() => {
     reload = vi.fn().mockResolvedValue(undefined);
+    setActive = vi.fn((_id: number, active: boolean) =>
+      of({
+        id: 5,
+        name: 'connection-b',
+        connectionType: 'POSTGRESQL',
+        active,
+        configurationJson: '{}',
+      })
+    );
     feedbackCalls = [];
 
     TestBed.configureTestingModule({
@@ -43,14 +53,7 @@ describe('ConnectionCatalogCommandService', () => {
                 active: true,
                 configurationJson: '{}',
               }),
-            setActive: () =>
-              of({
-                id: 5,
-                name: 'connection-b',
-                connectionType: 'POSTGRESQL',
-                active: false,
-                configurationJson: '{}',
-              }),
+            setActive,
             test: () => of({ success: true, message: 'ok' }),
           },
         },
@@ -66,6 +69,8 @@ describe('ConnectionCatalogCommandService', () => {
           provide: AppFeedbackService,
           useValue: {
             created: () => feedbackCalls.push('created'),
+            info: (messageKey: string, vars?: Record<string, string | number>) =>
+              feedbackCalls.push(`${messageKey}:${vars?.['count'] ?? ''}`),
             testSuccess: () => feedbackCalls.push('testSuccess'),
           },
         },
@@ -80,5 +85,15 @@ describe('ConnectionCatalogCommandService', () => {
 
     expect(reload).toHaveBeenCalled();
     expect(feedbackCalls).toEqual(['created']);
+  });
+
+  it('should activate selected connections logically and reload the query', async () => {
+    await service.setActiveMany([2, 3, 2], true);
+
+    expect(setActive).toHaveBeenCalledTimes(2);
+    expect(setActive).toHaveBeenNthCalledWith(1, 2, true);
+    expect(setActive).toHaveBeenNthCalledWith(2, 3, true);
+    expect(reload).toHaveBeenCalled();
+    expect(feedbackCalls).toEqual(['connections.bulkActivated:2']);
   });
 });

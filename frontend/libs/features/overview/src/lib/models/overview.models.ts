@@ -3,6 +3,19 @@ export interface OverviewMetricRecord {
   active: number;
 }
 
+export type OverviewAlertLevel = 'ok' | 'warn' | 'error';
+
+/** Card de métrica enriquecida del overview (valor + alerta + acción directa). */
+export interface OverviewMetric {
+  key: string;
+  titleKey: string;
+  value: number;
+  detail: number | null;
+  alertLevel: OverviewAlertLevel | null;
+  actionLink: string[] | null;
+  actionLabelKey: string | null;
+}
+
 export interface OverviewExecutionRecord {
   id: number;
   processDefinitionId: number;

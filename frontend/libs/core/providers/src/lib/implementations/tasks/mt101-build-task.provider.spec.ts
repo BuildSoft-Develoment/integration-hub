@@ -54,6 +54,8 @@ describe('Mt101BuildTaskProvider', () => {
         sequenceA: {
           sendersReferenceTemplate: 'PROC-${_processExecutionId}',
           requestedExecutionDate: '${today+1bd}',
+          instructingPartyOption: '',
+          instructingPartyIdentifier: '',
           orderingCustomerOption: 'H',
           orderingCustomerAccount: '001-10200200',
           orderingCustomerNameAddress: 'ACME SAC\nLIMA PE',
@@ -165,6 +167,8 @@ describe('Mt101BuildTaskProvider', () => {
         sequenceA: {
           sendersReferenceTemplate: 'PROC-X',
           requestedExecutionDate: '2026-06-09',
+          instructingPartyOption: '',
+          instructingPartyIdentifier: '',
           orderingCustomerOption: 'H',
           orderingCustomerAccount: '',
           orderingCustomerNameAddress: '',
@@ -179,6 +183,9 @@ describe('Mt101BuildTaskProvider', () => {
           orderingCustomerAccountField: 'cuenta_ordenante',
           orderingCustomerBicField: 'bic_ord',
           orderingCustomerNameAddressFields: 'nombre_ordenante\ndni_ordenante',
+          accountServicingOption: 'A',
+          accountServicingAccountField: '',
+          accountServicingBicField: 'bic_servicing',
           beneficiaryOption: 'F',
           beneficiaryAccountField: 'cuenta',
           beneficiaryBicField: 'bic_ben',
@@ -206,6 +213,45 @@ describe('Mt101BuildTaskProvider', () => {
       expect(rehydrated.transactionMappings).toEqual(initialDraft.transactionMappings);
       expect(rehydrated.splitStrategy).toBe('debitAccount');
       expect(rehydrated.maxTransactionsPerMessage).toBe(100);
+    });
+  });
+
+  describe('subsidiary and transaction servicing mappings', () => {
+    it('serializes instructing party and per-transaction servicing bank', () => {
+      const provider = new Mt101BuildTaskProvider();
+      const draft: Mt101BuildTaskDraft = {
+        ...provider.createDraft(),
+        taskRef: 'build-subs',
+        debitAccountMode: 'subsidiary',
+        sequenceA: {
+          ...provider.createDraft().sequenceA,
+          instructingPartyOption: 'L',
+          instructingPartyIdentifier: 'GRUPO MATRIZ',
+          orderingCustomerAccount: 'SHOULD-NOT-BE-SERIALIZED',
+        },
+        transactionMappings: {
+          ...provider.createDraft().transactionMappings,
+          amountCurrencyField: 'moneda',
+          amountValueField: 'monto',
+          orderingCustomerOption: 'H',
+          orderingCustomerAccountField: 'cuenta_subsidiaria',
+          orderingCustomerNameAddressFields: 'nombre_subsidiaria',
+          accountServicingOption: 'A',
+          accountServicingBicField: 'bic_banco_debito',
+          beneficiaryAccountField: 'cuenta_beneficiario',
+        },
+      };
+
+      const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+      expect(config.sequenceA.instructingParty).toEqual({
+        option: 'L',
+        nameAndAddress: ['GRUPO MATRIZ'],
+      });
+      expect(config.sequenceA.orderingCustomer).toBeUndefined();
+      expect(config.transactionMappings.accountServicingInstitution).toEqual({
+        option: 'A',
+        bicField: 'bic_banco_debito',
+      });
     });
   });
 

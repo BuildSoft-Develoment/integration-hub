@@ -1,4 +1,4 @@
-<section class="page-grid schedule-page ih-catalog-grid">
+<section class="page-grid schedule-page ih-catalog-grid ih-no-hint">
   @let vm = viewModel();
   <mat-drawer-container class="schedules-drawer-container ih-catalog-drawer-container">
     <mat-drawer-content>
@@ -18,10 +18,16 @@
             [schedules]="vm.schedules"
             [totalLength]="vm.totalLength"
             [selectedScheduleId]="vm.selectedSchedule?.id ?? null"
+            [sortField]="vm.sortField"
+            [sortDirection]="vm.sortDirection"
             [pageIndex]="vm.pageIndex"
             [pageSize]="vm.pageSize"
+            [loading]="vm.loading"
+            [error]="vm.error"
             (selectSchedule)="selectSchedule($event)"
+            (toggleSort)="store.toggleSort($event)"
             (pageChange)="updatePagination($event)"
+            (retry)="refresh()"
           />
         </section>
       </section>

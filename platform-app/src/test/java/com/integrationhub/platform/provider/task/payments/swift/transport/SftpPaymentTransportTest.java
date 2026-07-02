@@ -1,6 +1,6 @@
 package com.integrationhub.platform.provider.task.payments.swift.transport;
 
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
@@ -12,8 +12,10 @@ import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,7 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  *
  * <p>Usa Testcontainers con la imagen {@code atmoz/sftp} para tener un servidor SFTP
  * real en un contenedor efimero. Verifica que el transporte sube el archivo via
- * upload-with-rename y produce {@link com.integrationhub.platform.provider.task.payments.spi.TransportResult}
+ * upload-with-rename y produce {@link com.integrationhub.platform.spi.task.payments.TransportResult}
  * exitoso.</p>
  */
 @Testcontainers
@@ -76,6 +78,102 @@ class SftpPaymentTransportTest {
         assertEquals(message.rawPayload(), content);
         // Verifica que NO existe el .part residual.
         assertThrows(Exception.class, () -> readFile("/upload/mt101-PROC-SFTP-001.json.part"));
+    }
+
+    @Test
+    void skipsReuploadWhenRemoteFileSameSize() throws Exception {
+        // Idempotencia: primer envio sube; segundo envio (mismo payload) detecta
+        // el archivo remoto con el mismo tamano y lo trata como aceptado sin
+        // re-subir (default SKIP_IF_SAME_HASH). Simula crash-post-rename + retry.
+        var message = sampleMessage("PROC-IDEM");
+        var configuration = configurationFor("/upload/idem-${sendersReference}.json");
+
+        var first = transport.send(message, configuration);
+        assertTrue(first.accepted());
+        var firstContent = readFile("/upload/idem-PROC-IDEM.json");
+
+        var second = transport.send(message, configuration);
+        assertTrue(second.accepted(), "re-envio idempotente debe aceptarse");
+        // El archivo no cambio (mismo contenido, no se re-subio uno corrupto).
+        assertEquals(firstContent, readFile("/upload/idem-PROC-IDEM.json"));
+    }
+
+    @Test
+    void rejectsReuploadWhenRemoteFileSameSizeButDifferentHash() throws Exception {
+        var message = sampleMessage("PROC-HASH");
+        var configuration = configurationFor("/upload/hash-${sendersReference}.json");
+        configuration.put("retryPolicy", Map.of("maxRetries", 0));
+        var remoteContent = sameLengthDifferent(message.rawPayload());
+        writeFile("/upload/hash-PROC-HASH.json", remoteContent);
+
+        var result = transport.send(message, configuration);
+
+        assertFalse(result.accepted(), "mismo tamano con hash distinto debe rechazarse");
+        assertTrue(result.lastError().contains("different hash"),
+                () -> "mensaje inesperado: " + result.lastError());
+        assertEquals(remoteContent, readFile("/upload/hash-PROC-HASH.json"),
+                "el archivo remoto no debe sobrescribirse bajo SKIP_IF_SAME_HASH");
+    }
+
+    @Test
+    void failPolicyRejectsWhenRemoteFileExists() throws Exception {
+        var message = sampleMessage("PROC-FAIL");
+        var configuration = configurationFor("/upload/fail-${sendersReference}.json");
+        transport.send(message, configuration); // primer envio crea el archivo
+
+        @SuppressWarnings("unchecked")
+        var sftpCfg = (Map<String, Object>) configuration.get("sftp");
+        ((LinkedHashMap<String, Object>) sftpCfg).put("remoteDuplicatePolicy", "FAIL");
+        configuration.put("retryPolicy", Map.of("maxRetries", 0));
+
+        var result = transport.send(message, configuration);
+        assertFalse(result.accepted(), "FAIL debe rechazar si el remoto ya existe");
+        assertTrue(result.lastError().contains("already exists"),
+                () -> "mensaje inesperado: " + result.lastError());
+    }
+
+    @Test
+    void networkOrServerErrorAfterUploadStartedIsUncertainNotRejected() throws Exception {
+        // P0 v23 (seguridad de dinero): si el despacho del archivo final ya comenzo y el
+        // rename/servidor falla, el resultado debe ser INCIERTO, nunca REJECTED reusable: el banco
+        // pudo recibir el archivo y reenviar a ciegas duplicaria el pago. Forzamos el fallo creando
+        // un DIRECTORIO en la ruta final: el put del .part se completa pero el rename al destino falla.
+        makeRemoteDir("/upload/collide.json");
+        var message = sampleMessage("COLLIDE");
+        var cfg = configurationFor("/upload/collide.json");
+        @SuppressWarnings("unchecked")
+        var sftpCfg = new LinkedHashMap<>((Map<String, Object>) cfg.get("sftp"));
+        // OVERWRITE para no cortar antes del put por el stat del directorio existente.
+        sftpCfg.put("remoteDuplicatePolicy", "OVERWRITE");
+        cfg.put("sftp", sftpCfg);
+        cfg.put("retryPolicy", Map.of("maxRetries", 0));
+
+        var result = transport.send(message, cfg);
+
+        assertFalse(result.accepted(), "el rename fallido no es aceptado");
+        assertTrue(result.uncertain(),
+                () -> "error tras iniciar el despacho debe ser INCIERTO, no rechazo: " + result.lastError());
+        assertNotNull(result.lastError());
+    }
+
+    @Test
+    void connectionFailureBeforeDispatchIsRejectedNotUncertain() {
+        // Contraparte: un fallo ANTES de iniciar el despacho (puerto cerrado) es un rechazo seguro
+        // (reusable), no incierto: el archivo final nunca se toco.
+        var configuration = new LinkedHashMap<String, Object>();
+        configuration.put("sftp", Map.of(
+                "host", "127.0.0.1",
+                "port", 1,
+                "username", "x",
+                "password", "y",
+                "dropPathTemplate", "/x",
+                "timeoutMillis", 300));
+        configuration.put("retryPolicy", Map.of("maxRetries", 0));
+
+        var result = transport.send(sampleMessage("PRE"), configuration);
+
+        assertFalse(result.accepted());
+        assertFalse(result.uncertain(), "fallo de conexion previo al despacho es REJECTED, no INCIERTO");
     }
 
     @Test
@@ -126,11 +224,34 @@ class SftpPaymentTransportTest {
                 "password", "y",
                 "dropPathTemplate", "/x",
                 "timeoutMillis", 500));
+        configuration.put("retryPolicy", Map.of("maxRetries", 0));
         var result = transport.send(sampleMessage("BAD"), configuration);
         assertFalse(result.accepted());
         assertNotNull(result.lastError());
         assertTrue(result.lastError().toLowerCase().contains("sftp")
                 || result.lastError().toLowerCase().contains("jschexception"));
+    }
+
+    @Test
+    void retriesUploadAccordingToRetryPolicy() {
+        // Puerto cerrado: cada intento falla rapido; con maxRetries=2 el
+        // transporte debe reportar 3 intentos (paridad con el retry de REST).
+        var configuration = new LinkedHashMap<String, Object>();
+        configuration.put("sftp", Map.of(
+                "host", "127.0.0.1",
+                "port", 1,
+                "username", "x",
+                "password", "y",
+                "dropPathTemplate", "/x",
+                "timeoutMillis", 300));
+        configuration.put("retryPolicy", Map.of(
+                "maxRetries", 2,
+                "backoffStrategy", "constant",
+                "initialBackoffSeconds", 0));
+        var result = transport.send(sampleMessage("RETRY"), configuration);
+        assertFalse(result.accepted());
+        assertEquals(3, result.attempts(), "maxRetries=2 => 3 intentos en total");
+        assertNotNull(result.lastError());
     }
 
     @Test
@@ -192,5 +313,54 @@ class SftpPaymentTransportTest {
             if (channel != null && channel.isConnected()) channel.disconnect();
             if (session != null && session.isConnected()) session.disconnect();
         }
+    }
+
+    private void writeFile(String path, String content) throws Exception {
+        Session session = null;
+        ChannelSftp channel = null;
+        try {
+            var jsch = new JSch();
+            session = jsch.getSession(SFTP_USER, SFTP.getHost(), SFTP.getMappedPort(22));
+            session.setPassword(SFTP_PASSWORD);
+            var props = new Properties();
+            props.put("StrictHostKeyChecking", "no");
+            session.setConfig(props);
+            session.connect(5000);
+            channel = (ChannelSftp) session.openChannel("sftp");
+            channel.connect(5000);
+            try (var input = new ByteArrayInputStream(content.getBytes(StandardCharsets.UTF_8))) {
+                channel.put(input, path, ChannelSftp.OVERWRITE);
+            }
+        } finally {
+            if (channel != null && channel.isConnected()) channel.disconnect();
+            if (session != null && session.isConnected()) session.disconnect();
+        }
+    }
+
+    private void makeRemoteDir(String path) throws Exception {
+        Session session = null;
+        ChannelSftp channel = null;
+        try {
+            var jsch = new JSch();
+            session = jsch.getSession(SFTP_USER, SFTP.getHost(), SFTP.getMappedPort(22));
+            session.setPassword(SFTP_PASSWORD);
+            var props = new Properties();
+            props.put("StrictHostKeyChecking", "no");
+            session.setConfig(props);
+            session.connect(5000);
+            channel = (ChannelSftp) session.openChannel("sftp");
+            channel.connect(5000);
+            channel.mkdir(path);
+        } finally {
+            if (channel != null && channel.isConnected()) channel.disconnect();
+            if (session != null && session.isConnected()) session.disconnect();
+        }
+    }
+
+    private String sameLengthDifferent(String rawPayload) {
+        var chars = rawPayload.toCharArray();
+        var index = Math.max(chars.length - 2, 0);
+        chars[index] = chars[index] == '0' ? '1' : '0';
+        return new String(chars);
     }
 }

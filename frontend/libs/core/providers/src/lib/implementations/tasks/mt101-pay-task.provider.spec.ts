@@ -22,7 +22,7 @@ describe('Mt101PayTaskProvider', () => {
 
   it('createDraft returns sensible defaults for REST', () => {
     const draft = new Mt101PayTaskProvider().createDraft();
-    expect(draft.executionMode).toBe('per-record');
+    expect(draft.executionMode).toBe('once');
     expect(draft.transport).toBe('REST');
     expect(draft.rest.method).toBe('POST');
     expect(draft.rest.extraHeadersJson).toBe('');
@@ -138,7 +138,7 @@ describe('Mt101PayTaskProvider', () => {
     const fromArray = provider.hydrateDraft({
       ...baseTask,
       configurationJson: JSON.stringify({
-        taskRef: 'p', executionMode: 'per-record', transport: 'REST',
+        taskRef: 'p', executionMode: 'once', transport: 'REST',
         retryPolicy: { retryOn: ['5xx', 'TIMEOUT'] },
       }),
     });
@@ -147,7 +147,7 @@ describe('Mt101PayTaskProvider', () => {
     const fromString = provider.hydrateDraft({
       ...baseTask,
       configurationJson: JSON.stringify({
-        taskRef: 'p', executionMode: 'per-record', transport: 'REST',
+        taskRef: 'p', executionMode: 'once', transport: 'REST',
         retryPolicy: { retryOn: '5xx,TIMEOUT' },
       }),
     });
@@ -159,7 +159,7 @@ describe('Mt101PayTaskProvider', () => {
     const draft = provider.hydrateDraft({
       ...baseTask,
       configurationJson: JSON.stringify({
-        taskRef: 'p', executionMode: 'per-record',
+        taskRef: 'p', executionMode: 'once',
         transport: 'WHATEVER',
         confirmationMode: 'bogus',
         retryPolicy: { backoffStrategy: 'rocket' },
@@ -176,7 +176,7 @@ describe('Mt101PayTaskProvider', () => {
       ...baseTask,
       configurationJson: JSON.stringify({
         taskRef: 'p',
-        executionMode: 'per-record',
+        executionMode: 'once',
         transport: 'MQ',
       }),
     });

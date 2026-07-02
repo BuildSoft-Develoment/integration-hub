@@ -3,7 +3,6 @@ package com.integrationhub.platform.service.source;
 // @trace RF-001, RF-002 (reingenieria: clase que implementa el/los RF en produccion)
 
 import com.integrationhub.platform.api.response.source.SourceTestResponse;
-import com.integrationhub.platform.domain.SourceType;
 import com.integrationhub.platform.entity.SourceDefinition;
 import com.integrationhub.platform.repository.SourceDefinitionRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
@@ -30,7 +29,7 @@ public class SourceCatalogService {
     }
 
     @Transactional
-    public SourceDefinition create(String name, SourceType sourceType, boolean active, String configurationJson) {
+    public SourceDefinition create(String name, String sourceType, boolean active, String configurationJson) {
         var definition = new SourceDefinition();
         apply(definition, name, sourceType, active, configurationJson);
         sourceDefinitionRepository.persist(definition);
@@ -38,7 +37,7 @@ public class SourceCatalogService {
     }
 
     @Transactional
-    public SourceDefinition update(Long sourceDefinitionId, String name, SourceType sourceType, boolean active, String configurationJson) {
+    public SourceDefinition update(Long sourceDefinitionId, String name, String sourceType, boolean active, String configurationJson) {
         var definition = sourceDefinitionRepository.findRequired(sourceDefinitionId);
         apply(definition, name, sourceType, active, configurationJson);
         return definition;
@@ -55,20 +54,24 @@ public class SourceCatalogService {
         return sourceDefinitionRepository.listAllOrdered();
     }
 
-    public SourceTestResponse test(String name, SourceType sourceType, String configurationJson) {
-        if (sourceType == null) {
-            throw new IllegalArgumentException("Source type is required");
-        }
-
+    public SourceTestResponse test(String name, String sourceType, String configurationJson) {
+        var normalizedType = requireType(sourceType, "Source type is required");
         var configuration = jsonConfigurationMapper.toMap(configurationJson);
-        sourceProviderRegistry.resolve(sourceType.name()).selectFiles(configuration);
+        sourceProviderRegistry.resolve(normalizedType).selectFiles(configuration);
         return new SourceTestResponse(true, "Source configuration validated successfully");
     }
 
-    private void apply(SourceDefinition definition, String name, SourceType sourceType, boolean active, String configurationJson) {
+    private void apply(SourceDefinition definition, String name, String sourceType, boolean active, String configurationJson) {
         definition.name = name;
-        definition.sourceType = sourceType;
+        definition.sourceType = requireType(sourceType, "Source type is required");
         definition.active = active;
         definition.configurationJson = configurationJson;
+    }
+
+    private static String requireType(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(message);
+        }
+        return value.trim().toUpperCase(java.util.Locale.ROOT);
     }
 }

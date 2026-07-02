@@ -1,11 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { Component, input, output } from '@angular/core';
+import { Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
   SourceDraft,
   SourceProviderDescriptor,
   SourceProviderType,
 } from '@integration-hub/core/providers';
+import { SourceManagerService } from '@integration-hub/core/services';
 import { ManagedEditorFormActionsComponent, ManagedEditorHeaderComponent, ManagedEditorOverviewComponent, ManagedEditorReadonlyActionsComponent, ManagedEditorSectionComponent, ManagedEditorShellComponent, ManagedEditorTestResultComponent } from '@integration-hub/shared/ui';
 import { SourceFormModel, SourceTestResult } from '../../models/source.models';
 import { SourceTypeFormHostComponent } from '../source-type-form/source-type-form-host/source-type-form-host.component';
@@ -25,27 +26,18 @@ import { SourceTypeFormHostComponent } from '../source-type-form/source-type-for
     ManagedEditorTestResultComponent,
     SourceTypeFormHostComponent,
   ],
-  styles: [`
-    .editor-form {
-      display: grid;
-      gap: 0.9rem;
-      min-width: 0;
-    }
-
-    @media (max-height: 700px) and (min-width: 761px) {
-      .editor-form {
-        gap: 0.7rem;
-      }
-    }
-  `],
+  styleUrl: './source-editor.component.css',
     templateUrl: './source-editor.component.html'
 })
 export class SourceEditorComponent {
+  private readonly sourceManager = inject(SourceManagerService);
+
   readonly form = input.required<SourceFormModel>();
   readonly draft = input.required<SourceDraft>();
   readonly providerOptions = input.required<readonly SourceProviderDescriptor[]>();
   readonly saving = input(false);
   readonly testing = input(false);
+  readonly dirty = input(true);
   readonly titleKey = input.required<string>();
   readonly readonly = input(false);
   readonly canEdit = input(false);
@@ -66,6 +58,10 @@ export class SourceEditorComponent {
       this.providerOptions().find((provider) => provider.type === this.form().sourceType)
         ?.label ?? this.form().sourceType
     );
+  }
+
+  presentation() {
+    return this.sourceManager.presentation(this.form().sourceType);
   }
 
   changeSourceType(value: string): void {

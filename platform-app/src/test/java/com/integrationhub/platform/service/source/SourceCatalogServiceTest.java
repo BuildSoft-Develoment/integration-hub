@@ -2,7 +2,6 @@ package com.integrationhub.platform.service.source;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.api.response.source.SourceTestResponse;
-import com.integrationhub.platform.domain.SourceType;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.secret.ConfigSecretValueProvider;
 import com.integrationhub.platform.service.secret.EnvironmentSecretValueProvider;
@@ -60,7 +59,7 @@ class SourceCatalogServiceTest {
 
         SourceTestResponse response = service.test(
                 "Clientes",
-                SourceType.FILESYSTEM,
+                "filesystem",
                 """
                 {
                   \"path\": \"/dropzone/clientes\",
@@ -70,6 +69,17 @@ class SourceCatalogServiceTest {
         );
 
         assertEquals(new SourceTestResponse(true, "Source configuration validated successfully"), response);
+    }
+
+    @Test
+    void createNormalizesExternalSourceTypeAsString() {
+        var repository = org.mockito.Mockito.mock(com.integrationhub.platform.repository.SourceDefinitionRepository.class);
+        var service = new SourceCatalogService(repository, new StubSourceProviderRegistry(new NoopSourceProvider()), mapper());
+
+        var definition = service.create("Remota", "remote_fs", true, "{}");
+
+        assertEquals("REMOTE_FS", definition.sourceType);
+        org.mockito.Mockito.verify(repository).persist(definition);
     }
 
     @Test

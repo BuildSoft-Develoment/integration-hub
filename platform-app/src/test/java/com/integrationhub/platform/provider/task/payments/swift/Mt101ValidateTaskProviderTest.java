@@ -1,9 +1,9 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
-import com.integrationhub.platform.provider.task.payments.spi.ValidationIssue;
-import com.integrationhub.platform.provider.task.payments.spi.ValidationPredicate;
-import com.integrationhub.platform.provider.task.payments.spi.ValidationRuleProvider;
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.spi.task.payments.ValidationIssue;
+import com.integrationhub.platform.spi.task.payments.ValidationPredicate;
+import com.integrationhub.platform.spi.task.payments.ValidationRuleProvider;
+import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.integrationhub.platform.provider.task.payments.swift.validation.Mt101StructuralRules;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -48,7 +48,15 @@ class Mt101ValidateTaskProviderTest {
                 new Mt101StructuralRules.TransactionReferenceUniqueRule(),
                 new Mt101StructuralRules.RequestedDateRequiredRule(),
                 new Mt101StructuralRules.BicFormatRule(),
-                new Mt101StructuralRules.SwiftXTextRule()
+                new Mt101StructuralRules.SwiftXTextRule(),
+                new Mt101StructuralRules.MessageMaxLengthRule(),
+                new Mt101StructuralRules.PartyLengthRule(),
+                new Mt101StructuralRules.RemittanceInformationLengthRule(),
+                new Mt101StructuralRules.RegulatoryReportingLengthRule(),
+                new Mt101StructuralRules.AmountFormatRule(),
+                new Mt101StructuralRules.DetailsOfChargesFormatRule(),
+                new Mt101StructuralRules.MessageIndexTotalFormatRule(),
+                new Mt101StructuralRules.EnvelopeLtFormatRule()
         );
         var ruleProvider = new SingleRuleProvider((rs, std, app) -> {
             return structuralPredicates.stream()
@@ -208,6 +216,55 @@ class Mt101ValidateTaskProviderTest {
     }
 
     @Test
+    void invalidMessageIndexTotalFailsWith28dFormat() {
+        // index 3 de total 2 es imposible: rompe el reensamblado del receptor.
+        var base = validMessage();
+        var broken = new Mt101Message(
+                base.envelope(),
+                new Mt101Message.SequenceA("PROC-1", null, 3, 2, LocalDate.of(2026, 6, 9),
+                        null,
+                        new Mt101Message.Party("H", "001", null, List.of("ACME")),
+                        null, null),
+                base.transactions(), base.controlTotals(), null, null);
+        var result = provider.execute(contextWithMessage(broken), Map.of(
+                "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")
+        ));
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
+        var issues = (List<ValidationIssue>) result.outputs().get("errors");
+        assertTrue(issues.stream().anyMatch(i -> "STRUCT.FIELD_28D_FORMAT".equals(i.code())),
+                () -> "issues: " + issues);
+    }
+
+    @Test
+    void invalidEnvelopeLtFailsWithLtFormat() {
+        var base = validMessage();
+        var broken = new Mt101Message(
+                new Mt101Message.Envelope("SHORT", "BCPLPEPLXXXX", null, "N"),
+                base.sequenceA(), base.transactions(), base.controlTotals(), null, null);
+        var result = provider.execute(contextWithMessage(broken), Map.of(
+                "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")
+        ));
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
+        var issues = (List<ValidationIssue>) result.outputs().get("errors");
+        assertTrue(issues.stream().anyMatch(i -> "STRUCT.ENVELOPE_LT_FORMAT".equals(i.code())),
+                () -> "issues: " + issues);
+    }
+
+    @Test
+    void validTwelveCharLtPassesLtFormat() {
+        var base = validMessage();
+        var withEnvelope = new Mt101Message(
+                new Mt101Message.Envelope("SGOBFRPPAXXX", "BCPLPEPLXXXX", null, "N"),
+                base.sequenceA(), base.transactions(), base.controlTotals(), null, null);
+        var result = provider.execute(contextWithMessage(withEnvelope), Map.of(
+                "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")
+        ));
+        assertTrue(result.success(), () -> "expected success, got: " + result.details());
+    }
+
+    @Test
     void reportsCorrectInvalidCountForMultipleMessages() {
         var context = new TaskContext(1L, 1L);
         context.attributes().put("taskOutputs", Map.of(
@@ -217,9 +274,11 @@ class Mt101ValidateTaskProviderTest {
                 "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")
         ));
         assertFalse(result.success());
-        // Heuristica slice 2: si hay >=1 blocking issue, todos los mensajes cuentan como invalidos.
-        // Aceptable mientras el mapping mensaje<->issue no este explicito (slice 3+).
-        assertEquals(2, result.outputs().get("invalidCount"));
+        // Mapping mensaje<->issue explicito: cada mensaje se evalua individualmente,
+        // asi que solo el mensaje con monto negativo cuenta como invalido. Necesario
+        // para el gate de fragmentos (un fragmento invalido no contamina al resto).
+        assertEquals(1, result.outputs().get("invalidCount"));
+        assertEquals(1, result.outputs().get("validCount"));
     }
 
     @Test
@@ -258,6 +317,161 @@ class Mt101ValidateTaskProviderTest {
         @SuppressWarnings("unchecked")
         var issues = (List<ValidationIssue>) result.outputs().get("errors");
         assertTrue(issues.stream().anyMatch(i -> "STRUCT.ORDERING_CUSTOMER_PLACEMENT".equals(i.code())));
+    }
+
+    @Test
+    void failsWhenBicIsNotUppercaseOrLength8Or11() {
+        var ok = validMessage();
+        var tx = ok.transactions().get(0);
+        var brokenTx = new Mt101Message.Transaction(
+                tx.sequenceNumber(), tx.transactionReference(), tx.fxDealReference(), tx.instructionCode(),
+                tx.amount(), tx.orderingCustomer(), tx.accountServicingInstitution(), tx.intermediary(),
+                tx.accountWithInstitution(), new Mt101Message.Party("", "0072-1", "bcplpepl", List.of("BENE")),
+                tx.remittanceInformation(), tx.regulatoryReporting(), tx.originalAmount(), tx.detailsOfCharges(),
+                tx.chargesAccount(), tx.exchangeRate());
+
+        var result = provider.execute(contextWithMessage(new Mt101Message(ok.envelope(), ok.sequenceA(), List.of(brokenTx),
+                ok.controlTotals(), null, null)), Map.of(
+                        "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")
+                ));
+
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
+        var issues = (List<ValidationIssue>) result.outputs().get("errors");
+        assertTrue(issues.stream().anyMatch(i -> "STRUCT.BIC_FORMAT".equals(i.code())),
+                () -> "issues: " + issues);
+    }
+
+    @Test
+    void failsWhenRawFinPayloadExceedsTenKilobytes() {
+        var message = validMessage().withRawPayload("X".repeat(10_001), "FIN");
+
+        var result = provider.execute(contextWithMessage(message), Map.of(
+                "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")
+        ));
+
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
+        var issues = (List<ValidationIssue>) result.outputs().get("errors");
+        assertTrue(issues.stream().anyMatch(i -> "STRUCT.MESSAGE_MAX_LENGTH_10000".equals(i.code())),
+                () -> "issues: " + issues);
+    }
+
+    @Test
+    void failsWhenBeneficiaryAccountExceedsThirtyFourCharacters() {
+        var ok = validMessage();
+        var tx = ok.transactions().get(0);
+        var brokenTx = new Mt101Message.Transaction(
+                tx.sequenceNumber(), tx.transactionReference(), tx.fxDealReference(), tx.instructionCode(),
+                tx.amount(), tx.orderingCustomer(), tx.accountServicingInstitution(), tx.intermediary(),
+                tx.accountWithInstitution(), new Mt101Message.Party("", "1".repeat(35), null, List.of("BENE")),
+                tx.remittanceInformation(), tx.regulatoryReporting(), tx.originalAmount(), tx.detailsOfCharges(),
+                tx.chargesAccount(), tx.exchangeRate());
+
+        var result = provider.execute(contextWithMessage(new Mt101Message(ok.envelope(), ok.sequenceA(), List.of(brokenTx),
+                ok.controlTotals(), null, null)), Map.of(
+                        "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")
+                ));
+
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
+        var issues = (List<ValidationIssue>) result.outputs().get("errors");
+        assertTrue(issues.stream().anyMatch(i -> "STRUCT.FIELD_50_52_57_59_LENGTH".equals(i.code())),
+                () -> "issues: " + issues);
+    }
+
+    @Test
+    void failsWhenRemittanceInformationExceedsFourLinesOrThirtyFiveCharacters() {
+        var ok = validMessage();
+        var tx = ok.transactions().get(0);
+        var brokenTx = new Mt101Message.Transaction(
+                tx.sequenceNumber(), tx.transactionReference(), tx.fxDealReference(), tx.instructionCode(),
+                tx.amount(), tx.orderingCustomer(), tx.accountServicingInstitution(), tx.intermediary(),
+                tx.accountWithInstitution(), tx.beneficiary(), "L1\nL2\nL3\nL4\nL5",
+                tx.regulatoryReporting(), tx.originalAmount(), tx.detailsOfCharges(),
+                tx.chargesAccount(), tx.exchangeRate());
+
+        var result = provider.execute(contextWithMessage(new Mt101Message(ok.envelope(), ok.sequenceA(), List.of(brokenTx),
+                ok.controlTotals(), null, null)), Map.of(
+                        "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")
+                ));
+
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
+        var issues = (List<ValidationIssue>) result.outputs().get("errors");
+        assertTrue(issues.stream().anyMatch(i -> "STRUCT.FIELD_70_4X35".equals(i.code())),
+                () -> "issues: " + issues);
+    }
+
+    @Test
+    void failsWhenRegulatoryReportingExceedsThreeLines() {
+        var ok = validMessage();
+        var tx = ok.transactions().get(0);
+        var brokenTx = new Mt101Message.Transaction(
+                tx.sequenceNumber(), tx.transactionReference(), tx.fxDealReference(), tx.instructionCode(),
+                tx.amount(), tx.orderingCustomer(), tx.accountServicingInstitution(), tx.intermediary(),
+                tx.accountWithInstitution(), tx.beneficiary(), tx.remittanceInformation(),
+                "R1\nR2\nR3\nR4", tx.originalAmount(), tx.detailsOfCharges(),
+                tx.chargesAccount(), tx.exchangeRate());
+
+        var result = provider.execute(contextWithMessage(new Mt101Message(ok.envelope(), ok.sequenceA(), List.of(brokenTx),
+                ok.controlTotals(), null, null)), Map.of(
+                        "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")
+                ));
+
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
+        var issues = (List<ValidationIssue>) result.outputs().get("errors");
+        assertTrue(issues.stream().anyMatch(i -> "STRUCT.FIELD_77B_3X35".equals(i.code())),
+                () -> "issues: " + issues);
+    }
+
+    @Test
+    void failsWhenAmountExceedsFifteenSignificantDigits() {
+        var result = provider.execute(contextWithMessage(messageWithAmount(new BigDecimal("1234567890123456.00"))),
+                Map.of("input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")));
+
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
+        var issues = (List<ValidationIssue>) result.outputs().get("errors");
+        assertTrue(issues.stream().anyMatch(i -> "STRUCT.FIELD_32B_FORMAT".equals(i.code())),
+                () -> "issues: " + issues);
+    }
+
+    @Test
+    void failsWhenDetailsOfChargesIsNotThreeUppercaseLetters() {
+        var result = provider.execute(contextWithMessage(messageWithCharges("O1R")),
+                Map.of("input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")));
+
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
+        var issues = (List<ValidationIssue>) result.outputs().get("errors");
+        assertTrue(issues.stream().anyMatch(i -> "STRUCT.FIELD_71A_FORMAT".equals(i.code())),
+                () -> "issues: " + issues);
+    }
+
+    @Test
+    void failsWhenTransactionReferenceIsDuplicatedInsideMessage() {
+        var ok = validMessage();
+        var tx = ok.transactions().get(0);
+        var second = new Mt101Message.Transaction(
+                2, tx.transactionReference(), tx.fxDealReference(), tx.instructionCode(),
+                tx.amount(), tx.orderingCustomer(), tx.accountServicingInstitution(), tx.intermediary(),
+                tx.accountWithInstitution(), tx.beneficiary(), tx.remittanceInformation(),
+                tx.regulatoryReporting(), tx.originalAmount(), tx.detailsOfCharges(), tx.chargesAccount(),
+                tx.exchangeRate());
+
+        var result = provider.execute(contextWithMessage(new Mt101Message(ok.envelope(), ok.sequenceA(),
+                List.of(tx, second), new Mt101Message.ControlTotals(2, Map.of("PEN", new BigDecimal("200.00"))),
+                null, null)), Map.of(
+                        "input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "records")
+                ));
+
+        assertFalse(result.success());
+        @SuppressWarnings("unchecked")
+        var issues = (List<ValidationIssue>) result.outputs().get("errors");
+        assertTrue(issues.stream().anyMatch(i -> "STRUCT.TX_REF_UNIQUE".equals(i.code())),
+                () -> "issues: " + issues);
     }
 
     // --- helpers ---

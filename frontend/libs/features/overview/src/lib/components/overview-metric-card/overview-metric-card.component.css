@@ -1,0 +1,12 @@
+.metric-card { display:grid; gap:0.35rem; padding:1rem; border:1px solid var(--ih-border); border-radius:18px; background:color-mix(in srgb, var(--ih-surface-alt) 94%, transparent); min-width:0; }
+.metric-card--warn { border-color:var(--ih-status-warning); background:var(--ih-status-warning-bg); }
+.metric-card--error { border-color:var(--ih-status-error); background:var(--ih-status-error-bg); }
+.metric-label { margin:0; color:var(--ih-text-soft); font-size:0.75rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; display:flex; align-items:center; gap:0.3rem; }
+.metric-alert-icon { font-style:normal; }
+.metric-card--warn .metric-alert-icon { color:var(--ih-status-warning); }
+.metric-card--error .metric-alert-icon { color:var(--ih-status-error); }
+.metric-value { font-size:2rem; font-weight:800; letter-spacing:-0.05em; }
+.metric-card--error .metric-value { color:var(--ih-status-error); }
+.metric-card--warn .metric-value { color:var(--ih-status-warning); }
+.metric-detail { margin:0; font-size:0.88rem; }
+.metric-action { justify-self:start; margin-top:0.1rem; }

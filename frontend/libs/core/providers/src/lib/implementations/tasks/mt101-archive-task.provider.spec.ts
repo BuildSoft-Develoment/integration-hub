@@ -22,7 +22,7 @@ describe('Mt101ArchiveTaskProvider', () => {
 
   it('createDraft returns sensible defaults (no encryption)', () => {
     const draft = new Mt101ArchiveTaskProvider().createDraft();
-    expect(draft.executionMode).toBe('batch');
+    expect(draft.executionMode).toBe('once');
     expect(draft.table).toBe('mt101_archive');
     expect(draft.hashAlgorithm).toBe('SHA-256');
     expect(draft.encryptionEnabled).toBe(false);
@@ -69,7 +69,7 @@ describe('Mt101ArchiveTaskProvider', () => {
       ...baseTask,
       configurationJson: JSON.stringify({
         taskRef: 'a',
-        executionMode: 'batch',
+        executionMode: 'once',
         connectionRef: '1',
         table: 't',
         encryptColumn: 'raw_payload',
@@ -82,7 +82,7 @@ describe('Mt101ArchiveTaskProvider', () => {
       ...baseTask,
       configurationJson: JSON.stringify({
         taskRef: 'a',
-        executionMode: 'batch',
+        executionMode: 'once',
         connectionRef: '1',
         table: 't',
       }),

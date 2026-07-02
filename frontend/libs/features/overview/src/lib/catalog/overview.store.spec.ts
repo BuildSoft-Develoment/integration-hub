@@ -57,6 +57,19 @@ describe('OverviewStore', () => {
                   },
                 ],
               }),
+            getPluginDiagnostics: () =>
+              of({
+                installed: [
+                  { id: 'a', status: 'ACTIVE' },
+                  { id: 'b', status: 'DEGRADED' },
+                  { id: 'c', status: 'ACTIVE' },
+                ],
+              }),
+            getPluginCanaryMetrics: () =>
+              of([
+                { pluginId: 'a', version: '1.0.0', promotable: true },
+                { pluginId: 'c', version: '2.0.0', promotable: false },
+              ]),
           },
         },
       ],
@@ -70,14 +83,35 @@ describe('OverviewStore', () => {
 
     expect(store.summary()?.sources.total).toBe(5);
     expect(store.metrics()).toEqual([
-      { key: 'sources', titleKey: 'overview.metric.sources', value: 5, detail: 4 },
-      { key: 'readers', titleKey: 'overview.metric.readers', value: 4, detail: 3 },
-      { key: 'processes', titleKey: 'overview.metric.processes', value: 6, detail: 5 },
-      { key: 'running', titleKey: 'overview.metric.running', value: 3, detail: 1 },
-      { key: 'retry', titleKey: 'overview.metric.retries', value: 1, detail: 2 },
-      { key: 'files', titleKey: 'overview.metric.fileHealth', value: 7, detail: 9 },
-      { key: 'scheduled', titleKey: 'overview.metric.scheduled', value: 2, detail: null },
+      { key: 'sources', titleKey: 'overview.metric.sources', value: 5, detail: 4, alertLevel: null, actionLink: null, actionLabelKey: null },
+      { key: 'readers', titleKey: 'overview.metric.readers', value: 4, detail: 3, alertLevel: null, actionLink: null, actionLabelKey: null },
+      { key: 'processes', titleKey: 'overview.metric.processes', value: 6, detail: 5, alertLevel: null, actionLink: null, actionLabelKey: null },
+      { key: 'running', titleKey: 'overview.metric.running', value: 3, detail: 1, alertLevel: 'error', actionLink: ['/executions'], actionLabelKey: 'overview.action.viewExecutions' },
+      { key: 'retry', titleKey: 'overview.metric.retries', value: 1, detail: 2, alertLevel: 'warn', actionLink: null, actionLabelKey: null },
+      { key: 'files', titleKey: 'overview.metric.fileHealth', value: 7, detail: 9, alertLevel: 'error', actionLink: ['/audit'], actionLabelKey: 'overview.action.viewAudit' },
+      { key: 'scheduled', titleKey: 'overview.metric.scheduled', value: 2, detail: null, alertLevel: null, actionLink: null, actionLabelKey: null },
     ]);
+  });
+
+  it('marca alerta y acción solo cuando hay fallos', async () => {
+    await store.load();
+    const byKey = (k: string) => store.metrics().find((m) => m.key === k);
+    // failedExecutions=1 -> running en alerta con enlace a ejecuciones
+    expect(byKey('running')?.alertLevel).toBe('error');
+    expect(byKey('running')?.actionLink).toEqual(['/executions']);
+    // failedProcessedFiles=7 -> files en alerta con enlace a auditoría
+    expect(byKey('files')?.alertLevel).toBe('error');
+    expect(byKey('files')?.actionLink).toEqual(['/audit']);
+    // métricas sanas sin alerta ni acción
+    expect(byKey('sources')?.alertLevel).toBeNull();
+    expect(byKey('sources')?.actionLink).toBeNull();
+  });
+
+  it('aggregates backend plugin diagnostics and canary metrics into plugin health', async () => {
+    await store.load();
+
+    // installed: 2 ACTIVE + 1 DEGRADED; canary: 1 not promotable -> blocked.
+    expect(store.pluginHealth()).toEqual({ active: 2, degraded: 1, blocked: 1 });
   });
 
   it('should expose recent rows for cards', async () => {

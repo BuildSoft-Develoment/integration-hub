@@ -20,6 +20,12 @@ import jakarta.ws.rs.core.MediaType;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.api.security.PlatformRoles.OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PAYMENTS_OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+
 @Path("/api/query")
 @Produces(MediaType.APPLICATION_JSON)
 public class ExecutionQueryResource {
@@ -32,14 +38,14 @@ public class ExecutionQueryResource {
 
     @GET
     @Path("/overview-summary")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public OverviewSummaryResponse overviewSummary() {
         return executionQueryService.overviewSummary();
     }
 
     @GET
     @Path("/process-executions")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public PageResponse<ProcessExecutionResponse> listExecutions(
             @QueryParam("processDefinitionId") Long processDefinitionId,
             @QueryParam("status") String status,
@@ -53,28 +59,28 @@ public class ExecutionQueryResource {
 
     @GET
     @Path("/process-executions/{processExecutionId}")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public ProcessExecutionResponse getExecution(@PathParam("processExecutionId") Long processExecutionId) {
         return executionQueryService.getExecution(processExecutionId);
     }
 
     @GET
     @Path("/process-executions/{processExecutionId}/children")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public List<ProcessExecutionResponse> listExecutionChildren(@PathParam("processExecutionId") Long processExecutionId) {
         return executionQueryService.getExecutionChildren(processExecutionId);
     }
 
     @GET
     @Path("/process-executions/{processExecutionId}/tasks")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public List<ProcessTaskExecutionResponse> listTaskExecutions(@PathParam("processExecutionId") Long processExecutionId) {
         return executionQueryService.listTaskExecutions(processExecutionId);
     }
 
     @GET
     @Path("/audit-events")
-    @RolesAllowed({"platform-admin", "integration-admin", "operator", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public AuditEventPageResponse listAuditEvents(
             @QueryParam("processExecutionId") Long processExecutionId,
             @QueryParam("taskDefinitionId") Long taskDefinitionId,

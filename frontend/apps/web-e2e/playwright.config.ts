@@ -4,6 +4,7 @@ import { workspaceRoot } from '@nx/devkit';
 
 // For CI, you may want to set BASE_URL to the deployed application.
 const baseURL = process.env['BASE_URL'] || 'http://localhost:4200';
+const usesExternalBaseURL = Boolean(process.env['BASE_URL']);
 
 /**
  * Read environment variables from file.
@@ -22,13 +23,15 @@ export default defineConfig({
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
   },
-  /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'npx nx run web:serve',
-    url: 'http://localhost:4200',
-    reuseExistingServer: true,
-    cwd: workspaceRoot,
-  },
+  /* Run your local dev server before starting the tests unless BASE_URL points to a deployed stack. */
+  webServer: usesExternalBaseURL
+    ? undefined
+    : {
+        command: 'npx nx run web:serve',
+        url: 'http://localhost:4200',
+        reuseExistingServer: true,
+        cwd: workspaceRoot,
+      },
   projects: [
     {
       name: 'chromium',

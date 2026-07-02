@@ -8,7 +8,10 @@ import {
   provideProcessTaskForms,
 } from '../../tasks/process-task-form-registry';
 import { Mt101ArchiveTaskProvider } from './mt101-archive-task.provider';
+import { Mt101BuildFromTableTaskProvider } from './mt101-build-from-table-task.provider';
 import { Mt101BuildTaskProvider } from './mt101-build-task.provider';
+import { Mt101InboundDeliverTaskProvider } from './mt101-inbound-deliver-task.provider';
+import { Mt101ParseFromTableTaskProvider } from './mt101-parse-from-table-task.provider';
 import { Mt101ParseTaskProvider } from './mt101-parse-task.provider';
 import { Mt101PayTaskProvider } from './mt101-pay-task.provider';
 import { Mt101ReconcileTaskProvider } from './mt101-reconcile-task.provider';
@@ -45,6 +48,7 @@ export interface PaymentsSwiftFormComponents {
 export function providePaymentsSwiftForms(components: PaymentsSwiftFormComponents): Provider[] {
   const taskProviderClasses = [
     Mt101BuildTaskProvider,
+    Mt101BuildFromTableTaskProvider,
     Mt101ValidateTaskProvider,
     Mt101ArchiveTaskProvider,
     Mt101PayTaskProvider,
@@ -54,6 +58,8 @@ export function providePaymentsSwiftForms(components: PaymentsSwiftFormComponent
     Mt101ParseTaskProvider,
     Mt101SplitTaskProvider,
     Mt101RepairTaskProvider,
+    Mt101ParseFromTableTaskProvider,
+    Mt101InboundDeliverTaskProvider,
   ];
   return [
     // Servicio puente para outputs de formularios dinamicos.
@@ -68,6 +74,7 @@ export function providePaymentsSwiftForms(components: PaymentsSwiftFormComponent
     // Componentes de formulario (UI) - todos con layout workspace.
     ...provideProcessTaskForms(
       { type: 'MT101_BUILD',     component: components.mt101Build,     layout: 'workspace' },
+      { type: 'MT101_BUILD_FROM_TABLE', component: components.mt101Build, layout: 'workspace' },
       { type: 'MT101_VALIDATE',  component: components.mt101Validate,  layout: 'workspace' },
       { type: 'MT101_ARCHIVE',   component: components.mt101Archive,   layout: 'workspace' },
       { type: 'MT101_PAY',       component: components.mt101Pay,       layout: 'workspace' },
@@ -77,6 +84,10 @@ export function providePaymentsSwiftForms(components: PaymentsSwiftFormComponent
       { type: 'MT101_PARSE',     component: components.mt101Parse,     layout: 'workspace' },
       { type: 'MT101_SPLIT',     component: components.mt101Split,     layout: 'workspace' },
       { type: 'MT101_REPAIR',    component: components.mt101Repair,    layout: 'workspace' },
+      // Inbound a escala: reusan el form de PARSE / PAY respectivamente (el config
+      // table-driven / transporte lo gestiona el backend; aqui basta render + binding).
+      { type: 'MT101_PARSE_FROM_TABLE', component: components.mt101Parse, layout: 'workspace' },
+      { type: 'MT101_INBOUND_DELIVER',  component: components.mt101Pay,   layout: 'workspace' },
     ),
   ];
 }

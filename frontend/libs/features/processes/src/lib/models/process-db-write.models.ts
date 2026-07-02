@@ -18,7 +18,7 @@ export interface DbWriteColumnRef {
   scale: number | null;
 }
 
-export type DbWriteSourceKind = 'field' | 'variable' | 'metadata' | 'summary' | 'records' | 'table' | 'errors' | 'out' | 'expression';
+export type DbWriteSourceKind = 'field' | 'variable' | 'metadata' | 'summary' | 'records' | 'table' | 'errors' | 'out' | 'fragments' | 'expression';
 
 export interface DbWriteSourceItem {
   key: string;

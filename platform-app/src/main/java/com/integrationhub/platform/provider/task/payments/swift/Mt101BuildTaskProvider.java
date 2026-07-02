@@ -1,9 +1,12 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.provider.task.common.StoredProcedureRuntimeSupport;
 import com.integrationhub.platform.provider.task.common.TaskOutputSupport;
-import com.integrationhub.platform.provider.task.payments.spi.PaymentMessageFormatter;
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.task.payments.PaymentMessageFormatter;
+import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.source.SourcePayload;
@@ -12,14 +15,17 @@ import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.UUID;
 
 /**
  * Task provider {@code MT101_BUILD}: compone uno o varios MT101 a partir de un
@@ -53,9 +59,18 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
     private static final String DEFAULT_PRIORITY = "N";
 
     private final Instance<PaymentMessageFormatter> formatters;
+    private final RecordAuditEmitter recordAuditEmitter;
+
+    @Inject
+    public Mt101BuildTaskProvider(Instance<PaymentMessageFormatter> formatters,
+                                  RecordAuditEmitter recordAuditEmitter) {
+        this.formatters = formatters;
+        this.recordAuditEmitter = recordAuditEmitter;
+    }
 
     public Mt101BuildTaskProvider(Instance<PaymentMessageFormatter> formatters) {
         this.formatters = formatters;
+        this.recordAuditEmitter = null;
     }
 
     @Override
@@ -87,12 +102,13 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         }
 
         var effectiveRecords = enrichRecordsWithRuntime(context, records, sourcePayload);
-        var messageIndex = 1;
-        var messageTotal = 1;
+        var messageIndex = intAttribute(context, "mt101MessageIndex", 1);
+        var messageTotal = intAttribute(context, "mt101MessageTotal", 1);
+        var recordOffset = intAttribute(context, "mt101RecordOffset", 0);
         var sendersReference = resolveSendersReference(sequenceACfg, context, messageIndex);
 
         var envelope = buildEnvelope(envelopeCfg);
-        var transactions = buildTransactions(effectiveRecords, mappingsCfg, context);
+        var transactions = buildTransactions(effectiveRecords, mappingsCfg, context, recordOffset);
         var controlTotals = computeControlTotals(transactions);
         var sequenceA = buildSequenceA(sequenceACfg, sendersReference, messageIndex, messageTotal);
         validateDebitAccountMode(debitAccountMode, sequenceA, transactions);
@@ -108,10 +124,60 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         outputs.put("totalsByCurrency", controlTotals.totalsByCurrency());
         outputs.put("records", List.of(formatted));
 
+        emitRecordAudit(List.of(recordEnvelope(context, formatted, sourcePayload, recordOffset, transactions.size())));
+
         return TaskResult.success(
                 "MT101_BUILD composed 1 message with " + transactions.size() + " transactions in " + format,
                 outputs
         );
+    }
+
+    private AuditEnvelope recordEnvelope(TaskContext context,
+                                         Mt101Message message,
+                                         SourcePayload sourcePayload,
+                                         long recordOffset,
+                                         int transactionCount) {
+        var reference = message.sequenceA() == null ? null : message.sequenceA().sendersReference();
+        var firstTxRef = message.transactions().size() == 1
+                ? message.transactions().get(0).transactionReference()
+                : null;
+        var attrs = new LinkedHashMap<String, String>();
+        attrs.put("transactionCount", String.valueOf(transactionCount));
+        if (message.format() != null) {
+            attrs.put("format", message.format());
+        }
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
+                reference,
+                AuditLevel.RECORD,
+                "PAYMENT_MESSAGE_BUILT",
+                "BUILT",
+                context.processExecutionId(),
+                context.taskDefinitionId(),
+                null,
+                null,
+                attrs,
+                "SWIFT",
+                "MT101",
+                sourcePayload == null ? null : sourcePayload.name(),
+                null,
+                recordOffset,
+                null,
+                null,
+                reference,
+                firstTxRef,
+                message.envelope() == null ? null : message.envelope().uetr(),
+                null,
+                null,
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
+    }
+
+    private void emitRecordAudit(List<AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && envelopes != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
+        }
     }
 
     @SuppressWarnings("unchecked")
@@ -224,11 +290,29 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         }
         var resolved = template
                 .replace("${_processExecutionId}", String.valueOf(context.processExecutionId()))
+                .replace("${batchCode}", batchCode(context))
                 .replace("${messageIndex}", String.valueOf(messageIndex));
         if (resolved.length() > 16) {
             throw new IllegalArgumentException("MT101_BUILD sendersReference exceeds 16 characters: " + resolved);
         }
         return resolved;
+    }
+
+    /**
+     * Codigo de lote unico por ejecucion: base36 del {@code processExecutionId}
+     * en mayusculas (charset SWIFT-X valido, ~4-7 chars). Garantiza que dos
+     * ejecuciones distintas con la misma {@code requested_execution_date} no
+     * colisionen en el indice de idempotencia
+     * {@code (senders_reference, requested_execution_date)}: cada lote produce
+     * referencias {@code <batchCode><index>} distintas, mientras que un re-run
+     * de la MISMA ejecucion reproduce el mismo codigo (idempotencia real).
+     */
+    private String batchCode(TaskContext context) {
+        var executionId = context.processExecutionId();
+        if (executionId == null) {
+            return "0";
+        }
+        return Long.toString(executionId, 36).toUpperCase(java.util.Locale.ROOT);
     }
 
     private LocalDate resolveDate(Object raw) {
@@ -262,12 +346,14 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
 
     private List<Mt101Message.Transaction> buildTransactions(List<ReadRecord> records,
                                                              Map<String, Object> mappings,
-                                                             TaskContext context) {
+                                                             TaskContext context,
+                                                             int recordOffset) {
         var result = new ArrayList<Mt101Message.Transaction>(records.size());
         var amountCfg = mapValue(mappings.get("amount"));
         var beneficiaryCfg = mapValue(mappings.get("beneficiary"));
         var accountWithCfg = mapValue(mappings.get("accountWithInstitution"));
         var orderingCustomerCfg = mapValue(mappings.get("orderingCustomer"));
+        var accountServicingCfg = mapValue(mappings.get("accountServicingInstitution"));
         var txRefTemplate = stringValue(mappings.get("transactionReferenceTemplate"),
                 "TX-${_processExecutionId}-${recordNumber}");
         var remittanceField = stringOrNull(mappings.get("remittanceInformationField"));
@@ -276,7 +362,7 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         for (int i = 0; i < records.size(); i++) {
             var record = records.get(i);
             var values = record == null || record.values() == null ? Map.<String, Object>of() : record.values();
-            var sequenceNumber = i + 1;
+            var sequenceNumber = recordOffset + i + 1;
             var transactionReference = renderTransactionReference(txRefTemplate, context, sequenceNumber, values);
 
             result.add(new Mt101Message.Transaction(
@@ -286,7 +372,7 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
                     null,
                     buildAmount(amountCfg, values),
                     buildPartyFromMapping(orderingCustomerCfg, values),
-                    null,
+                    buildPartyFromMapping(accountServicingCfg, values),
                     null,
                     buildPartyFromMapping(accountWithCfg, values),
                     buildPartyFromMapping(beneficiaryCfg, values),
@@ -369,9 +455,9 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
                                           Mt101Message.SequenceA sequenceA,
                                           List<Mt101Message.Transaction> transactions) {
         var normalized = mode == null ? "singleDebit" : mode.trim();
-        var hasSequenceADebit = sequenceA != null && sequenceA.orderingCustomer() != null;
+        var hasSequenceADebit = sequenceA != null && hasPartyValue(sequenceA.orderingCustomer());
         var transactionsWithDebit = transactions.stream()
-                .filter(tx -> tx.orderingCustomer() != null)
+                .filter(tx -> hasPartyValue(tx.orderingCustomer()))
                 .count();
         switch (normalized) {
             case "singleDebit" -> {
@@ -458,10 +544,17 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
     }
 
     private boolean isEmptyParty(String option, String account, String bic, List<String> nameAndAddress) {
-        return (option == null || option.isBlank())
-                && (account == null || account.isBlank())
+        return (account == null || account.isBlank())
                 && (bic == null || bic.isBlank())
                 && (nameAndAddress == null || nameAndAddress.isEmpty());
+    }
+
+    private boolean hasPartyValue(Mt101Message.Party party) {
+        return party != null && !isEmptyParty(
+                party.option(),
+                party.account(),
+                party.bic(),
+                party.nameAndAddress());
     }
 
     private Mt101Message.ControlTotals computeControlTotals(List<Mt101Message.Transaction> transactions) {
@@ -513,5 +606,16 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         }
         var value = String.valueOf(raw).trim();
         return value.isEmpty() ? null : value;
+    }
+
+    private int intAttribute(TaskContext context, String key, int defaultValue) {
+        if (context == null || !context.attributes().containsKey(key)) {
+            return defaultValue;
+        }
+        var raw = context.attributes().get(key);
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return defaultValue;
+        }
+        return Integer.parseInt(String.valueOf(raw));
     }
 }

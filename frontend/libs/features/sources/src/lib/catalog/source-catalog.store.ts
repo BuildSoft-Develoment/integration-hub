@@ -26,6 +26,7 @@ export class SourceCatalogStore {
   readonly saving = signal(false);
   readonly testing = signal(false);
   readonly loading = this.query.loading;
+  readonly error = this.query.error;
   readonly sources = this.query.sources;
   readonly totalLength = this.query.totalLength;
   readonly search = this.query.search;
@@ -33,6 +34,8 @@ export class SourceCatalogStore {
   readonly statusFilter = this.query.statusFilter;
   readonly selectedSourceId = this.query.selectedSourceId;
   readonly selectedSource = this.query.selectedSource;
+  readonly sortField = this.query.sortField;
+  readonly sortDirection = this.query.sortDirection;
   readonly drawerOpen = this.query.drawerOpen;
   readonly currentPage = this.query.currentPage;
   readonly pageSize = this.query.pageSize;
@@ -40,6 +43,7 @@ export class SourceCatalogStore {
   readonly testResult = this.editor.testResult;
   readonly form = this.editor.form;
   readonly draft = this.editor.draft;
+  readonly dirty = this.editor.dirty;
 
   readonly canEdit = computed(() => this.access.canAdmin());
   readonly pagedSources = this.query.pagedSources;
@@ -99,6 +103,10 @@ export class SourceCatalogStore {
 
   updateStatusFilter(value: SourceStatusFilter): void {
     this.query.updateStatusFilter(value);
+  }
+
+  toggleSort(field: string): void {
+    this.query.toggleSort(field);
   }
 
   startCreate(): void {

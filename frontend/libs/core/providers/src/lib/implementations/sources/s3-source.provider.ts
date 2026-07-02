@@ -45,7 +45,7 @@ export class S3SourceProvider extends SourceProvider {
       fileNameTemplate: String(configuration['fileNameTemplate'] ?? ''),
       selectionMode: (configuration['selectionMode'] as SourceDraft['selectionMode']) ?? defaults.selectionMode,
       fileErrorPolicy: (configuration['fileErrorPolicy'] as SourceDraft['fileErrorPolicy']) ?? defaults.fileErrorPolicy,
-      authMode: (configuration['authMode'] as SourceDraft['authMode']) ?? 'default',
+      authMode: configuration['authMode'] as SourceDraft['authMode'] | undefined,
       accessKeyId: String(configuration['accessKeyId'] ?? ''),
       secretAccessKey: String(configuration['secretAccessKey'] ?? ''),
       roleArn: String(configuration['roleArn'] ?? ''),

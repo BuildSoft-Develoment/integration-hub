@@ -19,11 +19,14 @@ export class ProcessCatalogStore {
   private readonly references = inject(ProcessReferenceStore);
 
   readonly loading = this.query.loading;
+  readonly error = this.query.error;
   readonly processes = this.query.processes;
   readonly totalLength = this.query.totalLength;
   readonly search = this.query.search;
   readonly scheduleFilter = this.query.scheduleFilter;
   readonly statusFilter = this.query.statusFilter;
+  readonly sortField = this.query.sortField;
+  readonly sortDirection = this.query.sortDirection;
   readonly currentPage = this.query.currentPage;
   readonly pageSize = this.query.pageSize;
   readonly referencesLoading = this.references.loading;
@@ -37,6 +40,7 @@ export class ProcessCatalogStore {
   readonly drawerOpen = this.editor.drawerOpen;
   readonly viewMode = this.editor.viewMode;
   readonly form = this.editor.form;
+  readonly dirty = this.editor.dirty;
   readonly canEdit = this.editor.canEdit;
   readonly canOperate = this.editor.canOperate;
   readonly pagedProcesses = computed(() => this.query.pagedProcesses());
@@ -71,6 +75,10 @@ export class ProcessCatalogStore {
     this.query.updateStatusFilter(value);
   }
 
+  toggleSort(field: string): void {
+    this.query.toggleSort(field);
+  }
+
   async startCreate(): Promise<void> {
     await this.prepareEditor();
     this.editor.startCreate();
@@ -103,6 +111,10 @@ export class ProcessCatalogStore {
 
   addTaskAt(taskType: ProcessTaskType, position?: ProcessFlowNodePosition): void {
     this.editor.addTaskAt(taskType, position);
+  }
+
+  applyMassiveMt101Template(): void {
+    this.editor.applyMassiveMt101Template();
   }
 
   updateTask(clientId: string, patch: Partial<ProcessTaskFormModel>): void {

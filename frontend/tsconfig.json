@@ -10,6 +10,7 @@
       "@integration-hub/features/connections": ["libs/features/connections/src/index.ts"],
       "@integration-hub/features/readers": ["libs/features/readers/src/index.ts"],
       "@integration-hub/features/processes": ["libs/features/processes/src/index.ts"],
+      "@integration-hub/features/payments": ["libs/features/payments/src/index.ts"],
       "@integration-hub/features/executions": ["libs/features/executions/src/index.ts"],
       "@integration-hub/features/overview": ["libs/features/overview/src/index.ts"],
       "@integration-hub/features/schedules": ["libs/features/schedules/src/index.ts"],

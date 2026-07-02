@@ -5,8 +5,6 @@ import com.integrationhub.platform.api.response.common.PageResponse;
 import com.integrationhub.platform.api.response.process.ProcessDefinitionResponse;
 import com.integrationhub.platform.api.response.process.ProcessScheduleResponse;
 import com.integrationhub.platform.domain.ConnectionType;
-import com.integrationhub.platform.domain.ReaderType;
-import com.integrationhub.platform.domain.SourceType;
 import com.integrationhub.platform.entity.ConnectionDefinition;
 import com.integrationhub.platform.entity.ReaderDefinition;
 import com.integrationhub.platform.entity.SourceDefinition;
@@ -50,7 +48,7 @@ public class CatalogQueryService {
         applyCatalogSearch(query, parameters, queryText, List.of("lower(e.name) like :queryText"));
         if (sourceType != null && !sourceType.isBlank()) {
             query.append(" and e.sourceType = :sourceType");
-            parameters.put("sourceType", SourceType.valueOf(sourceType.trim().toUpperCase()));
+            parameters.put("sourceType", sourceType.trim().toUpperCase(java.util.Locale.ROOT));
         }
         applyActiveStatus(query, parameters, status);
         query.append(" order by e.name");
@@ -66,7 +64,7 @@ public class CatalogQueryService {
         applyCatalogSearch(query, parameters, queryText, List.of("lower(e.name) like :queryText"));
         if (readerType != null && !readerType.isBlank()) {
             query.append(" and e.readerType = :readerType");
-            parameters.put("readerType", ReaderType.valueOf(readerType.trim().toUpperCase()));
+            parameters.put("readerType", readerType.trim().toUpperCase(java.util.Locale.ROOT));
         }
         applyActiveStatus(query, parameters, status);
         query.append(" order by e.name");

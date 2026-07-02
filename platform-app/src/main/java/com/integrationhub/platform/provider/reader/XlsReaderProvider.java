@@ -10,7 +10,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import java.util.Map;
 
 @ApplicationScoped
-@UnlessBuildProperty(name = "integrationhub.native.disable.xls", stringValue = "true")
+@UnlessBuildProperty(name = "integrationhub.native.disable.xls", stringValue = "true", enableIfMissing = true)
 public class XlsReaderProvider implements ReaderProvider {
 
     @Override

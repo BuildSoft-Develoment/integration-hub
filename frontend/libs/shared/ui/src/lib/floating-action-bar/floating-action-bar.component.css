@@ -1,0 +1,7 @@
+:host { display:contents; }
+.fab-overlay { position:fixed; inset:0; background:rgba(0,0,0,.15); z-index:999; }
+.fab-bar { position:fixed; bottom:0; left:0; right:0; display:flex; align-items:center; gap:1rem; padding:.75rem 1.5rem; background:var(--ih-surface); border-top:1px solid var(--ih-border); box-shadow:0 -2px 8px rgba(0,0,0,.08); z-index:1000; }
+.fab-bar__count { font-weight:600; font-size:.86rem; color:var(--ih-text); white-space:nowrap; }
+.fab-bar__actions { display:flex; gap:.5rem; flex:1; }
+.fab-bar__action--danger { --mdc-outlined-button-label-text-color:var(--ih-status-error); --mdc-outlined-button-outline-color:var(--ih-status-error); }
+.fab-bar__close { margin-left:auto; }

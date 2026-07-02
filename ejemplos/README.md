@@ -9,6 +9,8 @@ Activos tecnicos de apoyo para configuraciones reutilizables del proyecto.
 - `connection-jdbc-file-vault.json`
 - `connection-rest-file-vault.json`
 - `connection-sftp-file-vault.json`
+- `backend-plugin-sidecar/`: sidecar backend de referencia para plugins
+  out-of-process (ADR-014).
 
 ## Regla de uso
 

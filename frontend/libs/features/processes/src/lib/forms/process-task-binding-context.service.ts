@@ -64,14 +64,19 @@ export class ProcessTaskBindingContextService {
       case 'MT101_PARSE':
       case 'MT101_SPLIT':
       case 'MT101_REPAIR':
-      case 'MT101_ARCHIVE':
       case 'MT101_PAY':
       case 'MT101_ROUTE':
       case 'MT101_RECONCILE':
       case 'MT101_STATUS':
         return ['metadata', 'summary', 'records', 'errors'];
+      // Flujo masivo (RNF-04): el fragment source pasa de tarea en tarea
+      // por referencia, sin cargar los mensajes en los outputs.
+      case 'MT101_BUILD_FROM_TABLE':
+        return ['metadata', 'summary', 'fragments'];
+      case 'MT101_ARCHIVE':
+        return ['metadata', 'summary', 'records', 'fragments', 'errors'];
       case 'MT101_VALIDATE':
-        return ['metadata', 'summary', 'errors'];
+        return ['metadata', 'summary', 'fragments', 'errors'];
       case 'REST_CALL':
       case 'NOTIFICATION':
         return ['metadata', 'summary', 'errors'];
@@ -90,6 +95,9 @@ export class ProcessTaskBindingContextService {
       case 'DB_EXECUTE_SP':
       case 'DB_EXECUTE_FN':
         return 'out';
+      // En el flujo masivo el encadenamiento natural es por fragment source.
+      case 'MT101_BUILD_FROM_TABLE':
+        return 'fragments';
       case 'FILE_READ':
       case 'MT101_BUILD':
       case 'MT101_PARSE':
@@ -281,6 +289,15 @@ export class ProcessTaskBindingContextService {
           kind: 'errors' as const,
           groupKey: 'ui.dbWriteGroup.errors',
         }));
+      case 'fragments':
+        // Referencia al set persistido en mt101_build_fragment; las tareas
+        // downstream lo consumen completo, estos campos son informativos.
+        return ['fragmentSetId', 'fragmentCount', 'connectionRef'].map((name) => ({
+          key: name,
+          label: name,
+          kind: 'fragments' as const,
+          groupKey: 'ui.dbWriteGroup.summary',
+        }));
       default:
         return [];
     }
@@ -343,13 +360,14 @@ export class ProcessTaskBindingContextService {
       MT101_BUILD: ['builtCount', 'messageCount', 'transactionCount'],
       MT101_VALIDATE: ['validCount', 'invalidCount', 'issueCount'],
       MT101_ARCHIVE: ['archivedCount', 'targetTable'],
-      MT101_PAY: ['sentCount', 'acceptedCount', 'rejectedCount', 'retriedCount', 'transport'],
+      MT101_PAY: ['dispatchCount', 'sentCount', 'acceptedCount', 'rejectedCount', 'retriedCount', 'transport'],
       MT101_ROUTE: ['routedCount', 'manualReviewCount'],
       MT101_RECONCILE: ['matchedCount', 'unmatchedCount', 'mismatchCount'],
       MT101_STATUS: ['updatedCount', 'pendingCount'],
       MT101_PARSE: ['parsedCount', 'messageCount', 'transactionCount'],
       MT101_SPLIT: ['inputMessageCount', 'splitMessageCount', 'passthroughCount', 'outputFragmentCount'],
       MT101_REPAIR: ['inputMessageCount', 'repairedMessageCount', 'totalChanges', 'repairAttempt'],
+      MT101_BUILD_FROM_TABLE: ['fragmentSetId', 'fragmentCount', 'transactionCount', 'totalBytes', 'format'],
     };
     return (byType[task.taskType] ?? ['batchCount']).map((name) => ({
       key: name,
@@ -382,6 +400,7 @@ export class ProcessTaskBindingContextService {
       || normalized === 'table'
       || normalized === 'errors'
       || normalized === 'out'
+      || normalized === 'fragments'
       ? normalized
       : 'records';
   }

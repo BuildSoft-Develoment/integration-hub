@@ -131,6 +131,11 @@
         border-radius: 18px;
         box-shadow: 0 18px 34px rgba(15, 23, 42, 0.16);
       }
+      [fNode]:focus-visible {
+        outline: 2px solid var(--ih-accent-strong);
+        outline-offset: 4px;
+        border-radius: 18px;
+      }
       :host ::ng-deep .f-node-selected .task-node,
       .task-node-host--active .task-node {
         border-color: color-mix(in srgb, var(--ih-accent) 48%, var(--ih-border));

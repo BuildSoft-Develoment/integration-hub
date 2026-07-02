@@ -5,7 +5,8 @@
 ### Backend (`platform-app`)
 
 - Providers de task types (sub-paquete `provider/task/payments/`):
-  - `swift/Mt101BuildTaskProvider`, `Mt101ValidateTaskProvider`,
+  - `swift/Mt101BuildTaskProvider`, `Mt101BuildFromTableTaskProvider`,
+    `Mt101FragmentStore`, `Mt101ValidateTaskProvider`,
     `Mt101ArchiveTaskProvider`, `Mt101PayTaskProvider`, `Mt101StatusTaskProvider`,
     `Mt101ReconcileTaskProvider`, `Mt101RouteTaskProvider`, `Mt101ParseTaskProvider`,
     `Mt101SplitTaskProvider`, `Mt101RepairTaskProvider`.
@@ -27,6 +28,9 @@
   spec 003.
 - `MT101_BUILD` debe exponer una paleta de fuentes compatible con `FILE_READ`,
   metadata, variables y outputs previos, y un tablero de mapping por campos SWIFT.
+- `MT101_BUILD_FROM_TABLE` reutiliza el formulario de `MT101_BUILD`, pero orientado
+  al flujo `FILE_READ -> DB_WRITE(staging) -> build`, con controles de tamano de
+  fragmento y salida persistida.
 - `MT101_PAY` solo debe ofrecer transportes soportados por backend.
 
 ## Contrato `configuration_json` por task type
@@ -121,6 +125,129 @@ El fast-path de streaming `FILE_READ -> sink` no debe capturar `MT101_BUILD`,
 porque esta tarea produce outputs materiales (`records` con mensajes) que tareas
 posteriores consumen.
 
+### MT101_BUILD_FROM_TABLE
+
+```jsonc
+{
+  "taskRef": "build-mt101-massive",
+  "taskType": "MT101_BUILD_FROM_TABLE",
+  "executionMode": "once",
+  "input": {
+    "source": "task-output",
+    "sourceTaskRef": "db-write-staging"
+  },
+  "source": {
+    "table": "staging_record",
+    "payloadColumn": "payload_json",
+    "idColumn": "id",
+    "processExecutionId": "${db-write-staging.processExecutionId}",
+    "taskDefinitionId": "${db-write-staging.taskDefinitionId}",
+    "connectionRef": "${db-write-staging.table.connectionRef}"
+  },
+  "maxTransactionsPerMessage": 100,
+  "maxBytesPerMessage": 10000,
+  "fragmentSetIdTemplate": "MT101-${_processExecutionId}-${_taskDefinitionId}",
+  "replaceExisting": true,
+  "format": "FIN",
+  "debitAccountMode": "multipleDebit",
+  "sequenceA": {
+    "sendersReferenceTemplate": "P${_processExecutionId}${messageIndex}",
+    "requestedExecutionDate": "${today+1bd}",
+    "accountServicingInstitution": { "option": "A", "bic": "BCPLPEPLXXX" }
+  },
+  "transactionMappings": {
+    "transactionReferenceTemplate": "TX-${recordNumber}",
+    "amount": { "currencyField": "moneda", "valueField": "monto" },
+    "orderingCustomer": {
+      "option": "H",
+      "accountField": "cuenta",
+      "nameAndAddressFields": ["nombre"]
+    },
+    "beneficiary": {
+      "option": "",
+      "accountField": "cuenta_beneficiario",
+      "nameAndAddressFields": ["nombre_beneficiario"]
+    },
+    "accountWithInstitution": { "option": "A", "bicField": "bic" },
+    "remittanceInformationField": "concepto"
+  }
+}
+```
+
+Contrato operativo:
+
+- `MT101_BUILD_FROM_TABLE` lee `staging_record.payload_json` por paginas ordenadas
+  por `id`; no carga el archivo completo ni el set completo de mensajes en memoria.
+- Cada pagina produce un MT101 y se persiste en `mt101_build_fragment` con
+  `fragmentSetId`, rango de filas origen, hash, `raw_payload`, `message_json` y
+  estado inicial `BUILT`.
+- Si `replaceExisting=true`, un reproceso con el mismo `fragmentSetId` reemplaza
+  los fragmentos previos antes de reconstruirlos. Si es `false`, el constraint por
+  `fragmentSetId + fragmentIndex` impide sobrescrituras accidentales.
+- Las tareas posteriores consumen la salida `fragments` como referencia persistida:
+  `{table: "mt101_build_fragment", fragmentSetId, fragmentCount, connectionRef?}`.
+- La ruta recomendada para archivos mayores a 1,000,000 registros es
+  `FILE_READ -> DB_WRITE(staging_record) -> MT101_BUILD_FROM_TABLE ->
+  MT101_VALIDATE -> MT101_ARCHIVE -> MT101_PAY -> NOTIFICATION`.
+- La plantilla UI `MT101 masivo desde archivo` debe crear esa ruta base y dejar
+  defaults seguros para volumen/reproceso: `DB_WRITE.jdbcBatchSize=5000`,
+  `fragmentSetIdTemplate=MT101-${_processExecutionId}`, `replaceExisting=true`,
+  `maxTransactionsPerMessage=100`, `maxBytesPerMessage=10000`, `pageSize=200`
+  en tareas downstream y muestras acotadas (`maxRecordsInOutput`/
+  `maxIssuesInOutput`). `MT101_STATUS` y `MT101_RECONCILE` no forman parte de
+  la plantilla base porque suelen correr como seguimiento programado/callback
+  despues del pago.
+
+**Cadena de bindings en modo masivo (fragments → fragments)**: en el flujo
+masivo el `fragment source` se pasa de tarea en tarea por REFERENCIA (no carga
+los mensajes en los outputs). El binding debe ser homogeneo:
+
+```
+MT101_BUILD_FROM_TABLE.output = fragments
+MT101_VALIDATE.input  = <build>.fragments   ;  marca VALIDATED/REJECTED por fragmento
+MT101_ARCHIVE.input   = <build>.fragments   ;  consume VALIDATED -> ARCHIVED
+MT101_PAY.input       = <build>.fragments   ;  consume ARCHIVED  -> SENT
+```
+
+El frontend ya defaultea `MT101_BUILD_FROM_TABLE` a output `fragments` y expone
+`fragments` como output de `MT101_VALIDATE`/`MT101_ARCHIVE`, de modo que el
+auto-binding de la UI encadena `fragments` sin elegir `records`/`summary` por
+error. Cada etapa lee SOLO los estados que su gate permite
+(`VALIDATE←BUILT`, `ARCHIVE←VALIDATED`, `PAY←ARCHIVED`), garantizando
+`BUILT → VALIDATED → ARCHIVED → SENT`.
+
+**Estado durable y muestreo de outputs**:
+- `mt101_archive.status` se sincroniza a lo largo del pipeline (`ARCHIVED` →
+  `SENT`/`REJECTED` por PAY → `CONFIRMED`/`REJECTED` por STATUS → `RECONCILED`
+  por RECONCILE), no queda en `COMPOSED`.
+- En flujo no fragmentado, `MT101_ARCHIVE.records` publica `archiveId`,
+  `envelopeId`, `connectionRef` y el `message`; `MT101_PAY` conserva esos ids
+  en su output y sincroniza `mt101_archive.status` por `archiveId`, no solo por
+  `:20:`.
+- La sincronizacion durable se separa por capas: PAY, STATUS y RECONCILE llaman
+  a `Mt101ArchiveStatusUpdater` como servicio de dominio, y el SQL de lifecycle
+  vive en `Mt101ArchiveStatusRepository`. Sin fallback: toda tabla MT101 usada
+  para lifecycle debe cumplir el contrato migrado (`status`, `updated_at`);
+  si falta `updated_at`, la tarea falla rapido y debe corregirse la tabla.
+- `MT101_ARCHIVE`/`MT101_PAY` publican una MUESTRA acotada en `records`/`errors`
+  (`maxRecordsInOutput`, default 1000) con `recordsSampled` cuando hay recorte;
+  los conteos (`archivedCount`/`dispatchCount`/`sentCount`/...) son siempre
+  exactos. En `MT101_PAY`, `dispatchCount` representa mensajes procesados por el
+  transporte y `sentCount` representa mensajes aceptados por el canal. El detalle
+  completo se consulta en `mt101_build_fragment`/`mt101_archive`.
+- `:20:` por defecto es `${batchCode}${messageIndex}` (batchCode = base36 del
+  processExecutionId): unico por ejecucion Y por fragmento, evitando colision
+  con el indice de idempotencia `(sender_lt, senders_reference, year_of_execution)`.
+- `MT101_BUILD_FROM_TABLE` falla temprano si el set excederia 99999 fragmentos
+  (limite 5n de `:28D:`).
+
+Outputs:
+
+- `build-mt101-massive.fragmentSetId`: identificador reprocesable del lote.
+- `build-mt101-massive.fragmentCount`: cantidad de mensajes MT101 generados.
+- `build-mt101-massive.transactionCount`: cantidad de filas de staging procesadas.
+- `build-mt101-massive.fragments`: referencia persistida consumible por tareas MT101.
+
 ### MT101_VALIDATE
 
 ```jsonc
@@ -134,19 +261,26 @@ posteriores consumen.
     "ruleSet": "swift-fin-uat-2024-q4",    // identificador del set
     "businessCalendar": "PE",
     "failOn": "ERROR",
-    "publishIssuesTo": "table:12:mt101_validation_issue"
+    "publishIssuesTo": "table:mt101_validation_issue",
+    "maxIssuesInOutput": 1000
   }
 }
 ```
 
 Outputs:
 
-- `validate-mt101.summary`: `{validCount, invalidCount, issuesBySeverity, ruleSet}`.
-- `validate-mt101.errors`: lista de issues `{ruleCode, severity, transactionRef, message}`.
-- `validate-mt101.table`: nombre tabla de issues persistidos.
+- `validate-mt101.summary`: `{validCount, invalidCount, issueCount, issuesBySeverity, ruleSet}`.
+- `validate-mt101.errors`: muestra acotada de issues `{ruleCode, severity, transactionRef, message}`.
+- `validate-mt101.issuesTruncated`: `true` cuando `errors` es una muestra y no el total.
+- `validate-mt101.fragments`: referencia persistida cuando consume `mt101_build_fragment`.
 
 Las reglas concretas NO se enumeran en este spec (ver RF-011). El catalogo se carga
 via SPI `ValidationRuleProvider`.
+
+`publishIssuesTo` soporta `table:mt101_validation_issue`,
+`table:<connectionRef>:mt101_validation_issue` y objeto
+`{"connectionRef":"<ref>","table":"mt101_validation_issue"}`. La tabla soportada
+queda restringida a `mt101_validation_issue` para evitar SQL dinamico arbitrario.
 
 ### MT101_ARCHIVE
 
@@ -154,8 +288,8 @@ via SPI `ValidationRuleProvider`.
 {
   "taskRef": "archive-mt101",
   "taskType": "MT101_ARCHIVE",
-  "executionMode": "batch",
-  "input": { "source": "task-output", "sourceTaskRef": "build-mt101", "sourceOutput": "records", "batchSize": 100 },
+  "executionMode": "once",
+  "input": { "source": "task-output", "sourceTaskRef": "build-mt101", "sourceOutput": "records" },
   "configuration": {
     "connectionRef": "12",
     "table": "mt101_archive",
@@ -179,7 +313,7 @@ Outputs:
 {
   "taskRef": "pay-mt101",
   "taskType": "MT101_PAY",
-  "executionMode": "per-record",
+  "executionMode": "once",
   "input": { "source": "task-output", "sourceTaskRef": "archive-mt101", "sourceOutput": "records" },
   "configuration": {
     "transport": "REST",                   // REST | SFTP
@@ -200,11 +334,23 @@ Outputs:
       "password": "${secret:sftp_pass}",
       "dropPathTemplate": "/in/mt101/${sendersReference}.xml",
       "tmpExtension": ".part",
+      "remoteDuplicatePolicy": "SKIP_IF_SAME_HASH",
       "strictHostKeyChecking": true,
       "knownHostsPath": "/etc/ssh/ssh_known_hosts",
       "timeoutMillis": 15000
     },
     "idempotencyKeyTemplate": "${sendersReference}",
+    "routeTransports": {
+      "REST_MAIN": {
+        "transport": "REST",
+        "rest": { "url": "${env:GATEWAY_MT101_REST_MAIN_URL}" },
+        "idempotencyKeyTemplate": "rest-main-${sendersReference}"
+      },
+      "SFTP_SECONDARY": {
+        "transport": "SFTP",
+        "sftp": { "dropPathTemplate": "/in/mt101/${sendersReference}.fin" }
+      }
+    },
     "retryPolicy": {
       "maxRetries": 5,
       "backoffStrategy": "exponential",
@@ -224,38 +370,106 @@ Outputs:
 
 Outputs:
 
-- `pay-mt101.summary`: `{sentCount, acceptedCount, rejectedCount, retriedCount, totalDurationMs}`.
-- `pay-mt101.records`: por mensaje `{sendersReference, uetr, status, gatewayReference, attempts, lastError}`.
+- `pay-mt101.summary`: `{dispatchCount, sentCount, acceptedCount, rejectedCount, retriedCount, totalDurationMs}`.
+  `dispatchCount` es el total procesado por el transporte; `sentCount` equivale
+  a mensajes aceptados por el canal/gateway (`acceptedCount`).
+- `pay-mt101.records`: por mensaje `{sendersReference, archiveId?, envelopeId?, uetr, status, gatewayReference, attempts, lastError}`.
 - `pay-mt101.errors`: mensajes fallidos definitivamente.
 
-### MT101_STATUS (fase 2)
+Cuando `configuration.routeTransports` existe, `MT101_PAY` no usa un transporte
+global: cada fragmento persistido debe tener `routed_as` generado por
+`MT101_ROUTE`, y esa clave debe existir en `routeTransports`. Si falta la ruta,
+existe `route_error`, o la ruta no define `transport`, el provider falla antes de
+llamar al gateway/SFTP. El `endpoint_ref` del ledger corresponde al
+`Idempotency-Key` REST o al `dropPath` SFTP ya resuelto para esa ruta.
+
+Regla de aceptacion del transporte:
+
+- `MT101_PAY` considera enviado solo cuando `TransportResult.accepted()` es
+  `true`. La ausencia de `lastError` no equivale a aceptacion. Si el transporte
+  responde `accepted=false`, el fragmento/archivo se marca `REJECTED` aunque no
+  exista mensaje de error legible.
+
+### PAY correctivo gobernado
+
+El PAY de un rebuild correctivo usa maker-checker y no reusa ciegamente el estado
+del archivo original:
+
+- `requestPay` solo aplica a rebuilds `ARCHIVED` y persiste el hash deterministico
+  del payload archivado por fragmento y el hash canonico de la configuracion
+  efectiva de `MT101_PAY` (transporte, rutas, destinos y correlacion).
+- `approveAndPay` recalcula ambos hashes antes de enviar; si cualquiera no
+  coincide, el request queda `INVALIDATED` y no hay llamada al transporte.
+- el claim de ejecucion es atomico y guarda `pay_claimed_payload_hash` +
+  `pay_claimed_config_hash` + `pay_lease_until` para impedir doble envio por
+  checkers concurrentes o cambios de destino entre maker y checker.
+- si el proceso se cae o vence el lease con `pay_status=EXECUTING`, el scheduler
+  lo marca `UNCERTAIN`; no se reintenta automaticamente.
+- un `pay_status=UNCERTAIN` solo puede cerrarse con una resolucion explicita:
+  `MT101_STATUS` consulta el ledger con `pay_status=UNCERTAIN`, interpreta
+  estados finales aceptados/rechazados y actualiza el ledger sin reenviar
+  `MT101_PAY`.
+- el resultado se persiste por fragmento en `mt101_corrective_pay_fragment`.
+  Si hay aceptados y rechazados en el mismo run, el estado global es
+  `PARTIALLY_SENT`; si todos fallan, queda `FAILED`; si todos aceptan, `SENT`.
+- si un run queda `PARTIALLY_SENT`, los fragmentos `SENT` son inmutables y un
+  correctivo hijo solo puede seleccionarse sobre los fragmentos correctivos
+  `REJECTED`, conservando lineage padre-hijo.
+- luego de PAY, el flujo correctivo ejecuta `MT101_STATUS` y `MT101_RECONCILE`
+  cuando esas tareas existen en el proceso. La ausencia de esas tareas no revierte
+  un PAY ya enviado.
+
+### MT101_STATUS
+
+Primer consumidor productivo del SPI M-2 (`SuspendableTaskProvider`). Tres modos:
 
 ```jsonc
 {
   "taskRef": "status-mt101",
   "taskType": "MT101_STATUS",
   "executionMode": "once",
-  "input": { "source": "task-output", "sourceTaskRef": "pay-mt101", "sourceOutput": "records" },
   "configuration": {
-    "mode": "poll",                        // poll | callback
-    "poll": {
+    "mode": "poll",                        // query | callback | poll
+    "input": { "sourceTaskRef": "pay-mt101", "sourceOutput": "records" },
+    "query": {
       "url": "https://gateway-pagos.banco.local/v1/swift/status/${gatewayReference}",
-      "intervalSeconds": 60,
-      "maxAttempts": 1440,
-      "successStatuses": ["CONFIRMED", "SETTLED"],
-      "failureStatuses": ["REJECTED", "RETURNED"]
+      "method": "GET",
+      "timeoutSeconds": 30
     },
-    "callback": {
-      "endpointPath": "/api/payments/swift/status-callback",
-      "matchByHeader": "X-Senders-Reference",
-      "timeoutHours": 72
+    "expectedGatewayResponse": {
+      "statusField": "$.status",
+      "referenceField": "$.gatewayReference"
     },
-    "publishTo": "table:12:mt101_confirmation"
+    "poll": {
+      "intervalSeconds": 300,              // vencimiento de la suspension (auto-despertar)
+      "maxAttempts": 10,
+      "finalStatuses": ["ACCEPTED", "REJECTED"]
+    },
+    "callback": { "completeOnPartial": false },
+    "connectionRef": "12",
+    "confirmationTable": "mt101_confirmation"
   }
 }
 ```
 
-Requiere gap M-2 del motor (tareas long-running).
+- **`query`**: single-shot, sin suspension (tipico bajo scheduler de spec 006).
+- **`callback`**: la tarea se suspende; el gateway invoca
+  `POST /api/process-executions/resume/{token}` con body
+  `{"confirmations":[{"sendersReference":"...","status":"ACCP","gatewayReference":"...","raw":"..."}]}`.
+  El resume persiste a `mt101_confirmation` (type `CALLBACK`) y re-suspende con
+  token nuevo si quedan pendientes. Con HMAC habilitado
+  (`integrationhub.resume.hmac.enabled`), el caller firma el body crudo en el
+  header `X-Signature` (HMAC-SHA256 hex, prefijo `sha256=` opcional).
+- **`poll`**: primera consulta en execute; lo no-final queda suspendido con
+  vencimiento `poll.intervalSeconds`; el `SuspensionExpiryScheduler` (property
+  `integrationhub.suspension.expiry-check-every`, default 60s) re-invoca el
+  resume al vencer. Solo estados de `finalStatuses` se persisten (type `POLL`);
+  failure al agotar `maxAttempts`.
+
+**Continuacion M-2.1**: si hay tareas con `taskOrder` mayor despues de
+`MT101_STATUS`, al completar el resume el engine rehidrata el contexto del
+pipeline (capturado al suspender en `suspended_continuation`, V16) y las
+ejecuta automaticamente — sin re-drive manual.
 
 ### MT101_RECONCILE (fase 2)
 
@@ -386,6 +600,7 @@ INDEX `(message_type, parsed_at)`.
 |---|---|---|
 | `id` | bigserial | PK |
 | `envelope_id` | bigint | FK -> swift_message_envelope.id |
+| `sender_lt` | char(12) | copia operacional del LT emisor para idempotencia |
 | `senders_reference` | varchar(16) | `:20:` |
 | `customer_specified_reference` | varchar(16) | `:21R:` |
 | `message_index` | integer | `:28D:` numerador |
@@ -403,7 +618,7 @@ INDEX `(message_type, parsed_at)`.
 | `created_at` | timestamp | |
 | `retention_until` | date | derivado de `retentionDays` |
 
-Indices: PK; UNIQUE `(sender_lt_via_envelope, senders_reference, year_of_execution)`
+Indices: PK; UNIQUE `(sender_lt, senders_reference, year_of_execution)`
 para idempotencia operacional; INDEX `(status, created_at)`.
 
 ### Tabla `mt101_transaction`
@@ -438,10 +653,13 @@ INDEX `(amount_currency)`.
 | `id` | bigserial | PK |
 | `archive_id` | bigint | FK NULL (puede ser pre-archive) |
 | `transaction_id` | bigint | FK NULL |
-| `rule_code` | varchar(20) | del catalogo NVR cargado |
+| `rule_code` | varchar(80) | del catalogo NVR cargado |
 | `rule_set` | varchar(50) | identificador del set de reglas |
 | `severity` | char(1) | E/W/I |
 | `message` | text | |
+| `fragment_set_id` | varchar(80) | lote masivo origen, si aplica |
+| `senders_reference` | varchar(16) | `:20:` del fragmento/mensaje |
+| `fragment_index` | integer | indice `:28D:` del fragmento, si aplica |
 | `detected_at` | timestamp | |
 
 ### Tabla `mt101_confirmation`
@@ -474,15 +692,137 @@ INDEX `(amount_currency)`.
 |---|---|---|
 | `id` | bigserial | PK |
 | `rule_set` | varchar(50) | identificador del set (`swift-fin-uat-2024-q4`, etc.) |
-| `code` | varchar(20) | codigo de regla |
+| `code` | varchar(80) | codigo de regla |
 | `standard` | varchar(20) | SWIFT/ISO20022/OPENBANKING |
 | `applies_to` | varchar(50) | MT101/MT103/PAIN001/... |
 | `severity` | char(1) | E/W/I |
-| `predicate_kind` | varchar(20) | SQL/JS/JAVA_CLASS |
+| `predicate_kind` | varchar(20) | FIELD_REQUIRED/FIELD_FORBIDDEN/OPTION_ALLOWED/MAX_LENGTH/CURRENCY_ALLOWED/AMOUNT_MAX/CHARGES_ALLOWED/JEXL |
 | `predicate_body` | text | |
 | `active` | boolean | default true |
 
 UNIQUE `(rule_set, code, applies_to)`.
+
+### API `payment_validation_rule`
+
+Contrato REST del catalogo:
+
+- `GET /api/payment-validation-rules`: pagina reglas con filtros `ruleSet`, `q`,
+  `standard`, `appliesTo`, `status`, `page`, `size`.
+- `POST /api/payment-validation-rules`: crea una regla.
+- `PUT /api/payment-validation-rules/{ruleId}`: reemplaza una regla.
+- `POST /api/payment-validation-rules/{ruleId}/activation/{active}`: activa o
+  desactiva sin borrar historico.
+- `GET /api/payment-validation-rules/export?ruleSet=<id>`: exporta reglas de un
+  set para promocion entre ambientes.
+- `POST /api/payment-validation-rules/import`: importa reglas, con
+  `replaceExisting` opcional para onboarding/certificacion.
+
+Roles: lectura para `platform-admin`, `integration-admin`, `auditor`; escritura
+solo para `platform-admin` e `integration-admin`.
+
+### Tabla `mt101_build_fragment`
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `id` | bigserial | PK |
+| `fragment_set_id` | varchar(80) | lote reprocesable generado por `MT101_BUILD_FROM_TABLE` |
+| `process_execution_id` | bigint | FK NULL -> `process_execution.id` |
+| `task_definition_id` | bigint | tarea que genero el fragmento |
+| `source_table` | varchar(255) | tabla staging origen |
+| `source_row_from` | bigint | primera fila origen incluida |
+| `source_row_to` | bigint | ultima fila origen incluida |
+| `fragment_index` | integer | indice 1..N del mensaje |
+| `fragment_total` | integer | total N del lote |
+| `senders_reference` | varchar(16) | `:20:` |
+| `payload_hash` | char(64) | SHA-256 del `raw_payload` |
+| `raw_payload` | text | FIN/XML/JSON generado |
+| `message_json` | text | representacion canonica para validar, archivar y pagar |
+| `status` | varchar(20) | BUILT/VALIDATED/ARCHIVED/SENT/REJECTED/CONFIRMED/RECONCILED |
+| `error_message` | text | ultimo error operacional del fragmento |
+| `routed_as` | varchar(80) | ruta decidida por `MT101_ROUTE` para el fragmento persistido |
+| `route_error` | text | error de evaluacion de ruta, si aplica |
+| `routed_at` | timestamp | instante de clasificacion |
+| `created_at` | timestamp | |
+| `updated_at` | timestamp | |
+
+Indices: UNIQUE `(fragment_set_id, fragment_index)`, UNIQUE
+`(fragment_set_id, senders_reference)`, INDEX `(fragment_set_id, status)`,
+INDEX `(process_execution_id, task_definition_id)`.
+
+El estado de fragmento es operacional. El archivo bancario oficial sigue siendo
+`mt101_archive`; `mt101_build_fragment` habilita volumen alto, reintentos y
+reconstruccion controlada antes y despues de archivo/pago.
+
+### Tabla `mt101_rebuild_run`
+
+Columnas relevantes para PAY correctivo:
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `pay_status` | varchar(20) | NOT_REQUESTED/REQUESTED/EXECUTING/SENT/PARTIALLY_SENT/FAILED/INVALIDATED/UNCERTAIN |
+| `pay_requested_payload_hash` | char(64) | hash aprobado por maker antes del envio |
+| `pay_claimed_payload_hash` | char(64) | hash reclamado por checker al iniciar PAY |
+| `pay_requested_config_hash` | char(64) | hash canonico de configuracion `MT101_PAY` aprobado por maker |
+| `pay_claimed_config_hash` | char(64) | hash canonico reclamado por checker al iniciar PAY |
+| `pay_lease_until` | timestamp | limite para declarar ejecucion incierta |
+| `pay_uncertain_reason` | text | razon operativa cuando queda `UNCERTAIN` |
+| `parent_rebuild_run_id` | varchar(80) | run padre cuando el correctivo nace de un parcial |
+| `parent_corrective_set_id` | varchar(80) | set correctivo padre usado como origen |
+| `corrective_generation` | integer | generacion del correctivo, default 1 |
+
+### Tabla `mt101_corrective_pay_fragment`
+
+Detalle auditable del PAY correctivo por fragmento:
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `rebuild_run_id` | varchar(80) | run correctivo |
+| `corrective_set_id` | varchar(80) | lote correctivo generado |
+| `corrective_senders_reference` | varchar(16) | `:20:` del fragmento correctivo |
+| `source_file_hash` | varchar(64) | archivo origen de la fila corregida, si aplica |
+| `source_record_number` | bigint | fila origen corregida, si aplica |
+| `staging_id` | bigint | staging exacto corregido, si aplica |
+| `payload_hash` | char(64) | hash del payload enviado |
+| `idempotency_key` | varchar(180) | clave real enviada al transporte |
+| `transport` | varchar(20) | REST/SFTP u otro transporte soportado |
+| `endpoint_ref` | varchar(512) | idempotency key REST o drop path SFTP resuelto |
+| `gateway_reference` | varchar(120) | referencia devuelta por gateway |
+| `pay_status` | varchar(30) | PREPARED/DISPATCHING/SENT/REJECTED/UNCERTAIN |
+| `attempts` | integer | intentos registrados |
+| `error_message` | text | ultimo error operacional |
+| `prepared_at` | timestamp | intencion durable creada antes del transporte |
+| `dispatched_at` | timestamp | instante previo a llamar al transporte externo |
+| `resolved_at` | timestamp | instante en que `STATUS` resolvio un estado incierto |
+| `resolution_source` | varchar(40) | origen de resolucion, por ejemplo `STATUS_API` |
+
+Contrato correctivo:
+
+- `MT101_ROUTE` acepta una fuente persistida `{fragmentSetId, connectionRef}` y
+  persiste `routed_as`/`route_error` por `:20:` sin cambiar el gate de estado
+  del fragmento.
+- `MT101_PAY` correctivo recibe `{fragmentSetId, correctivePayRunId}`. Antes
+  de invocar el transporte debe existir una fila `PREPARED` por fragmento y,
+  justo antes de la llamada externa, esa fila pasa a `DISPATCHING`.
+- Si el proceso define `routeTransports`, `MT101_PAY` lee `routed_as`/`route_error`
+  desde `mt101_build_fragment` y prepara/envia cada fragmento con el transporte
+  de esa ruta; no usa el transporte global para fragmentos ruteados.
+- La clave de correlacion se resuelve una sola vez: para REST es el
+  `Idempotency-Key`; para SFTP es el `dropPath` final. Esa misma clave se
+  persiste y se entrega al transporte.
+- `MT101_STATUS` correctivo no consume el output muestral de `MT101_PAY`; lee
+  paginadamente `mt101_corrective_pay_fragment`. Por defecto consulta
+  `pay_status='SENT'`; para resolucion operativa de incertidumbre recibe
+  `correctivePayStatuses=["UNCERTAIN"]` y `resolveCorrectivePay=true`.
+- La resolucion de incertidumbre mapea estados de `acceptedStatuses` a `SENT`
+  y estados de `rejectedStatuses` a `REJECTED`; cualquier estado no final queda
+  pendiente y el run conserva `pay_status=UNCERTAIN`.
+- `MT101_RECONCILE` correctivo opera con scope explicito por `rebuildRunId`
+  y solo puede reconciliar referencias incluidas en ese ledger.
+- API operativa:
+  `POST /api/query/mt101-quarantine/rebuild-runs/resolve-uncertain-pay` resuelve
+  incertidumbre con `MT101_STATUS`, sin reenviar pagos; y
+  `POST /api/query/mt101-quarantine/rebuild-runs/request-child` crea un run hijo desde
+  los fragmentos rechazados de un padre `PARTIALLY_SENT`.
 
 ## Variables de entorno y secretos
 
@@ -507,20 +847,53 @@ Metricas:
   `mt101_pay_latency_seconds{transport}` (histograma),
   `mt101_archive_bytes_total`.
 
+### Auditoria E2E por registro/pago
+
+Las tareas SWIFT/MT101 publican eventos `RECORD` hacia el contrato de auditoria
+asincrona de ADR-010:
+
+- `DB_WRITE` / staging: `RECORD_INGESTED` con archivo/fila cuando existe.
+- `MT101_BUILD` / `MT101_BUILD_FROM_TABLE`: `PAYMENT_MESSAGE_BUILT` /
+  `RECORD_BUILT`, con `paymentReference` (`:20:`), rango de filas y conteos.
+- `MT101_PARSE`: `PAYMENT_MESSAGE_PARSED`.
+- `MT101_SPLIT`: `PAYMENT_MESSAGE_SPLIT`.
+- `MT101_ROUTE`: `PAYMENT_MESSAGE_ROUTED`.
+- `MT101_REPAIR`: `PAYMENT_MESSAGE_REPAIRED`.
+- `MT101_VALIDATE`: `RECORD_VALIDATED` o `RECORD_REJECTED`.
+- `MT101_ARCHIVE`: `RECORD_ARCHIVED`.
+- `MT101_PAY`: `RECORD_SENT` o `RECORD_REJECTED`.
+- `MT101_STATUS`: `PAYMENT_STATUS_CONFIRMED`.
+- `MT101_RECONCILE`: `PAYMENT_RECONCILIATION_EXCEPTION`.
+
+El read-model de consulta es `audit_record_event`, indexado por `traceId`,
+`recordId`, `sourceFileHash+recordNumber`, `paymentReference`, `transactionReference`,
+`uetr`, `archiveId`, `gatewayReference` y `businessKeyHash`. La UI consume
+`GET /api/query/record-lineage`; no se conecta al broker.
+
+Para flujo masivo desde staging, la UI de observabilidad tambien consume
+`GET /api/query/mt101-fragments/source-row`. El endpoint recibe `recordNumber`
+y opcionalmente `sourceTable`, `processExecutionId`, `fragmentSetId` y
+`connectionRef`; devuelve `fragmentSetId`, rango de filas, `fragmentIndex`,
+`fragmentTotal`, `sendersReference` (`:20:`), estado y error. La tabla
+`mt101_build_fragment` debe tener indices por `source_table`/rango de filas y
+por `process_execution_id` para soportar diagnostico sobre lotes de millones de
+registros.
+
 ## Consideraciones tecnicas
 
 - El sub-catalogo `iso20022/` y `openbanking/` quedan reservados; sus task types
   se especificaran cuando entren al roadmap.
 - El reader `swift-mt` se registra en el catalogo 002 (RF-005 spec 002) pero su
   codigo vive bajo ownership del modulo de pagos.
-- `MT101_STATUS` mode `poll` depende del gap M-2 del motor (tareas long-running);
-  hasta que exista, se usa `MT101_STATUS` mode `callback` o un scheduler externo.
+- `MT101_STATUS` modes `poll` y `callback` corren sobre el SPI M-2 del motor
+  (suspend/resume con token de un solo uso, auto-despertar por
+  `SuspensionExpiryScheduler` y continuacion downstream M-2.1).
 - `MT101_PARSE` con multi-output depende del gap M-3 del motor; hasta que exista,
   publica un solo `summary` con campos anidados (`summary.envelope`,
   `summary.header`, `summary.transactions`).
-- El frontend `features/payments-swift/` depende del gap M-1b del motor; hasta que
-  exista, se registran los formularios editando `process-form-factory.service.ts`
-  directamente (deuda temporal).
+- Los formularios MT101 ya se registran sobre el mecanismo existente del motor.
+  El catalogo de perfiles bancarios vive en `features/payments` y no en spec 003:
+  es configuracion propia de la vertical SWIFT/pagos.
 
 ## Pruebas tecnicas sugeridas
 

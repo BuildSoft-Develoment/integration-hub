@@ -1,10 +1,7 @@
 package com.integrationhub.platform.entity;
 
-import com.integrationhub.platform.domain.ReaderType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -21,9 +18,8 @@ public class ReaderDefinition {
     @Column(nullable = false, unique = true, length = 120)
     public String name;
 
-    @Enumerated(EnumType.STRING)
     @Column(name = "reader_type", nullable = false, length = 40)
-    public ReaderType readerType;
+    public String readerType;
 
     @Column(nullable = false)
     public boolean active = true;

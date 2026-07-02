@@ -1,10 +1,19 @@
 <section class="toolbar-shell ih-catalog-toolbar">
       <div class="toolbar-copy ih-catalog-toolbar__copy">
-        <h2 class="ih-section-title">{{ i18n.t('audit.title') }}</h2>
+        <h1 class="ih-section-title">{{ i18n.t('audit.title') }}</h1>
         <p class="ih-muted">{{ i18n.t('audit.subtitle') }}</p>
       </div>
 
       <div class="toolbar-filters ih-catalog-toolbar__filters">
+        <button mat-stroked-button type="button" class="ih-catalog-action" (click)="refresh.emit()" [disabled]="loading()">
+          {{ i18n.t('common.refresh') }}
+        </button>
+        <button mat-stroked-button type="button" class="ih-catalog-action" (click)="exportCsv.emit()" [disabled]="loading()">
+          {{ i18n.t('audit.exportCsv') }}
+        </button>
+        <button mat-stroked-button type="button" class="ih-catalog-action" (click)="exportJson.emit()" [disabled]="loading()">
+          {{ i18n.t('audit.exportJson') }}
+        </button>
         <mat-form-field class="toolbar-search">
           <mat-label>{{ i18n.t('audit.search') }}</mat-label>
           <input matInput [ngModel]="search()" (ngModelChange)="searchChange.emit($event)" />

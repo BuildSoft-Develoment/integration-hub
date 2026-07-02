@@ -1,11 +1,29 @@
-<section class="page-grid overview-page">
+<section class="page-grid overview-page ih-no-hint">
   <section class="overview-shell">
     <header class="overview-header">
       <div class="overview-copy">
-        <h2 class="ih-section-title">{{ i18n.t('overview.title') }}</h2>
+        <h1 class="ih-section-title">{{ i18n.t('overview.title') }}</h1>
         <p class="ih-muted">{{ i18n.t('overview.subtitle') }}</p>
       </div>
+      <div class="overview-actions">
+        <button mat-stroked-button type="button" (click)="store.refresh()" [disabled]="store.loading()">
+          <ih-icon name="refresh" [size]="16" />
+          {{ i18n.t('common.refresh') }}
+        </button>
+      </div>
     </header>
+
+    @if (store.loading()) {
+      <ih-loading variant="skeleton" [rows]="4" />
+    } @else if (store.error()) {
+      <div class="overview-error" role="alert">
+        <p>{{ i18n.t(store.error()!) }}</p>
+        <button mat-stroked-button type="button" (click)="store.refresh()">
+          <ih-icon name="refresh" [size]="16" />
+          {{ i18n.t('common.retry') }}
+        </button>
+      </div>
+    } @else {
 
     <section class="metrics-grid">
       @for (metric of store.metrics(); track metric.key) {
@@ -13,8 +31,16 @@
           [titleKey]="metric.titleKey"
           [value]="metric.value"
           [detail]="metric.detail"
+          [alertLevel]="metric.alertLevel"
+          [actionLink]="metric.actionLink"
+          [actionLabelKey]="metric.actionLabelKey"
         />
       }
+      @if (store.pluginHealth(); as health) {
+        <ih-overview-plugin-health-card [health]="health" />
+      }
+      <!-- Extension point: plugins/features can register widgets into this slot. -->
+      <ih-slot name="overview.widgets" />
     </section>
 
     <section class="tables-grid">
@@ -34,5 +60,6 @@
         [rows]="store.recentAuditRows()"
       />
     </section>
+    }
   </section>
 </section>

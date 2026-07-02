@@ -1,0 +1,100 @@
+<section class="lineage audit-page">
+      <ih-audit-workspace-nav />
+
+      <div class="lineage__search">
+        <mat-button-toggle-group [value]="mode()" (change)="setMode($event.value)" [attr.aria-label]="i18n.t('audit.lineage.mode')" hideSingleSelectionIndicator>
+          @for (m of modes; track m.value) {
+            <mat-button-toggle [value]="m.value">{{ i18n.t(m.labelKey) }}</mat-button-toggle>
+          }
+        </mat-button-toggle-group>
+
+        <div class="lineage__inputs">
+          @switch (mode()) {
+            @case ('record') {
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('audit.lineage.fieldRecord') }}</mat-label>
+                <input matInput [(ngModel)]="recordId" placeholder="archivo:linea o :20:" (keyup.enter)="search()" />
+              </mat-form-field>
+            }
+            @case ('trace') {
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('audit.lineage.fieldTrace') }}</mat-label>
+                <input matInput [(ngModel)]="traceId" placeholder="exec-123" (keyup.enter)="search()" />
+              </mat-form-field>
+            }
+            @case ('key') {
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('audit.lineage.fieldKeyType') }}</mat-label>
+                <mat-select [(ngModel)]="key">
+                  @for (option of keyOptions; track option.value) {
+                    <mat-option [value]="option.value">{{ option.label }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('audit.lineage.fieldValue') }}</mat-label>
+                <input matInput [(ngModel)]="value" placeholder=":20:, :21:, UETR, hash..." (keyup.enter)="search()" />
+              </mat-form-field>
+            }
+            @case ('sourceRow') {
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('audit.lineage.fieldHash') }}</mat-label>
+                <input matInput [(ngModel)]="sourceFileHash" placeholder="SHA-256" (keyup.enter)="search()" />
+              </mat-form-field>
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('audit.lineage.fieldRow') }}</mat-label>
+                <input matInput [(ngModel)]="recordNumber" placeholder="1002" (keyup.enter)="search()" />
+              </mat-form-field>
+            }
+          }
+          <button mat-flat-button color="primary" type="button" (click)="search()" [disabled]="loading() || !canSearch()">{{ i18n.t('audit.common.search') }}</button>
+        </div>
+      </div>
+
+      @if (loading()) {
+        <p class="lineage__empty" role="status">{{ i18n.t('audit.lineage.loading') }}</p>
+      } @else if (error()) {
+        <p class="lineage__error" role="alert">{{ error() }}</p>
+      } @else if (entries().length === 0) {
+        <p class="lineage__empty">{{ i18n.t('audit.lineage.empty') }}</p>
+      } @else {
+        @if (truncated()) {
+          <p class="lineage__notice" role="status"><ih-icon name="alert-triangle" /> {{ i18n.t('audit.lineage.truncated', { count: entries().length }) }}</p>
+        }
+        <div class="lineage__tl">
+          @for (entry of entries(); track $index; let i = $index) {
+            <div class="lineage__row lineage__row--{{ statusKind(entry.status) }}">
+              <div class="lineage__rail">
+                <span class="lineage__dot"><ih-icon [name]="statusIcon(entry.status)" /></span>
+              </div>
+              <div class="lineage__body">
+                <div class="lineage__head">
+                  <span class="lineage__stage">{{ entry.stage }}</span>
+                  <span class="lineage__status lineage__status--{{ entry.status }}">{{ entry.status }}</span>
+                  <time class="lineage__ts" [attr.datetime]="entry.eventTs" [title]="entry.eventTs | ihTime:'absolute'" [attr.aria-label]="entry.eventTs | ihTime:'absolute'">{{ entry.eventTs | ihTime }}</time>
+                </div>
+                @if (durationAt(i); as dur) {
+                  <span class="lineage__dur"><ih-icon name="clock" /> {{ dur }} {{ i18n.t('audit.lineage.durationFromPrev') }}</span>
+                }
+                <span class="lineage__keys">
+                  <span>{{ entry.message || entry.paymentReference || entry.recordId || entry.traceId }}</span>
+                  @if (entry.paymentReference) { <button type="button" class="lineage__key lineage__key--btn" [title]="i18n.t('audit.lineage.pivotHint')" (click)="pivotKey('paymentReference', entry.paymentReference)">:20: {{ entry.paymentReference }}</button> }
+                  @if (entry.transactionReference) { <button type="button" class="lineage__key lineage__key--btn" [title]="i18n.t('audit.lineage.pivotHint')" (click)="pivotKey('transactionReference', entry.transactionReference)">:21: {{ entry.transactionReference }}</button> }
+                  @if (entry.uetr) { <button type="button" class="lineage__key lineage__key--btn" [title]="i18n.t('audit.lineage.pivotHint')" (click)="pivotKey('uetr', entry.uetr)">UETR {{ entry.uetr }}</button> }
+                  @if (entry.archiveId) { <button type="button" class="lineage__key lineage__key--btn" [title]="i18n.t('audit.lineage.pivotHint')" (click)="pivotKey('archiveId', entry.archiveId)">archive {{ entry.archiveId }}</button> }
+                  @if (entry.gatewayReference) { <button type="button" class="lineage__key lineage__key--btn" [title]="i18n.t('audit.lineage.pivotHint')" (click)="pivotKey('gatewayReference', entry.gatewayReference)">gateway {{ entry.gatewayReference }}</button> }
+                  @if (entry.sourceFileHash && entry.recordNumber !== null) {
+                    <button type="button" class="lineage__key lineage__key--btn" [title]="i18n.t('audit.lineage.pivotHint')" (click)="pivotSourceRow(entry.sourceFileHash, entry.recordNumber)">{{ entry.sourceFileName || entry.sourceFileHash }} #{{ entry.recordNumber }}</button>
+                  } @else if (entry.sourceFileName || entry.recordNumber !== null) {
+                    <span class="lineage__key">{{ entry.sourceFileName || entry.sourceFileHash }} #{{ entry.recordNumber }}</span>
+                  }
+                  @if (entry.sourceFileHash && entry.recordNumber !== null) {
+                    <a class="lineage__link" [routerLink]="['/audit/mt101-fragments']" [queryParams]="{ sourceFileHash: entry.sourceFileHash, recordNumber: entry.recordNumber }">{{ i18n.t('audit.lineage.viewFragment') }}</a>
+                  }
+                </span>
+              </div>
+            </div>
+          }
+        </div>
+      }
+    </section>

@@ -2,10 +2,15 @@ package com.integrationhub.platform.provider.task.dbwrite;
 
 // @trace RF-002 (reingenieria: clase que implementa el/los RF en produccion)
 
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.provider.task.common.StoredProcedureRuntimeSupport;
 import com.integrationhub.platform.provider.task.common.TaskOutputSupport;
+import com.integrationhub.platform.repository.DbWriteRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.service.source.SourceFingerprintService;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.source.SourcePayload;
@@ -14,13 +19,14 @@ import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 import javax.sql.DataSource;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @ApplicationScoped
 public class DbWriteTaskProvider implements BatchTaskProvider {
@@ -30,13 +36,45 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
     private final DataSource dataSource;
     private final JsonConfigurationMapper jsonConfigurationMapper;
     private final ConnectionPoolManager connectionPoolManager;
+    private final RecordAuditEmitter recordAuditEmitter;
+    private final DbWriteRepository dbWriteRepository;
+    private final SourceFingerprintService sourceFingerprintService;
+
+    @Inject
+    public DbWriteTaskProvider(DataSource dataSource,
+                               JsonConfigurationMapper jsonConfigurationMapper,
+                               ConnectionPoolManager connectionPoolManager,
+                               RecordAuditEmitter recordAuditEmitter,
+                               DbWriteRepository dbWriteRepository,
+                               SourceFingerprintService sourceFingerprintService) {
+        this.dataSource = dataSource;
+        this.jsonConfigurationMapper = jsonConfigurationMapper;
+        this.connectionPoolManager = connectionPoolManager;
+        this.recordAuditEmitter = recordAuditEmitter;
+        this.dbWriteRepository = dbWriteRepository;
+        this.sourceFingerprintService = sourceFingerprintService;
+    }
+
+    public DbWriteTaskProvider(DataSource dataSource,
+                               JsonConfigurationMapper jsonConfigurationMapper,
+                               ConnectionPoolManager connectionPoolManager,
+                               RecordAuditEmitter recordAuditEmitter,
+                               DbWriteRepository dbWriteRepository) {
+        this(dataSource, jsonConfigurationMapper, connectionPoolManager, recordAuditEmitter,
+                dbWriteRepository, new SourceFingerprintService());
+    }
+
+    public DbWriteTaskProvider(DataSource dataSource,
+                               JsonConfigurationMapper jsonConfigurationMapper,
+                               ConnectionPoolManager connectionPoolManager,
+                               RecordAuditEmitter recordAuditEmitter) {
+        this(dataSource, jsonConfigurationMapper, connectionPoolManager, recordAuditEmitter, new DbWriteRepository());
+    }
 
     public DbWriteTaskProvider(DataSource dataSource,
                                JsonConfigurationMapper jsonConfigurationMapper,
                                ConnectionPoolManager connectionPoolManager) {
-        this.dataSource = dataSource;
-        this.jsonConfigurationMapper = jsonConfigurationMapper;
-        this.connectionPoolManager = connectionPoolManager;
+        this(dataSource, jsonConfigurationMapper, connectionPoolManager, null, new DbWriteRepository());
     }
 
     @Override
@@ -75,10 +113,14 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
         }
 
         var keyColumns = DbTaskSupport.keyColumns(configuration);
+        var batchSize = DbTaskSupport.jdbcBatchSize(configuration);
         var affected = switch (mode) {
-            case "insert", "jdbc-batch" -> insertDynamic(targetDataSource, targetTable, effectiveRecords, assignments, DbTaskSupport.jdbcBatchSize(configuration));
-            case "update", "batch-update" -> updateDynamic(targetDataSource, targetTable, effectiveRecords, assignments, keyColumns, DbTaskSupport.jdbcBatchSize(configuration));
-            case "upsert" -> upsertDynamic(targetDataSource, targetTable, effectiveRecords, assignments, keyColumns, DbTaskSupport.jdbcBatchSize(configuration));
+            case "insert", "jdbc-batch" ->
+                    dbWriteRepository.insertDynamic(targetDataSource, targetTable, effectiveRecords, assignments, batchSize);
+            case "update", "batch-update" ->
+                    dbWriteRepository.updateDynamic(targetDataSource, targetTable, effectiveRecords, assignments, keyColumns, batchSize);
+            case "upsert" ->
+                    dbWriteRepository.upsertDynamic(targetDataSource, targetTable, effectiveRecords, assignments, keyColumns, batchSize);
             default -> throw new IllegalArgumentException("Unsupported DB_WRITE mode: " + mode);
         };
         return TaskResult.success(
@@ -150,157 +192,123 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
                                   SourcePayload sourcePayload,
                                   List<ReadRecord> records,
                                   int batchSize) {
-        var sql = "insert into staging_record (process_execution_id, task_definition_id, source_name, record_index, payload_json) values (?, ?, ?, ?, ?)";
-        try (Connection connection = targetDataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            var index = 0;
-            for (var record : records) {
-                statement.setLong(1, context.processExecutionId());
-                statement.setLong(2, context.taskDefinitionId());
-                statement.setString(3, sourcePayload != null ? sourcePayload.name() : null);
-                statement.setInt(4, index);
-                statement.setString(5, jsonConfigurationMapper.toJson(record.values()));
-                statement.addBatch();
-                index++;
-                if (index % batchSize == 0) {
-                    statement.executeBatch();
-                }
+        // El provider resuelve indice global + payload + auditoria (su responsabilidad);
+        var sourceName = sourcePayload != null ? sourcePayload.name() : null;
+        var sourceFileHash = sourceFileHash(context, sourcePayload);
+        // record_index es por archivo/hash, no global de la ejecucion. Esa es la fila
+        // visible que el operador usa junto a source_file_hash: archivo B fila 1 debe
+        // seguir siendo 1 aunque antes se haya procesado archivo A con 1M filas.
+        var fileIndex = stagingIndexCounter(context, sourceFileHash, sourcePayload);
+        var rows = new ArrayList<DbWriteRepository.StagingRow>(records.size());
+        var audit = new ArrayList<AuditEnvelope>(records.size());
+        for (var record : records) {
+            var index = fileIndex.getAndIncrement();
+            rows.add(new DbWriteRepository.StagingRow(
+                    context.processExecutionId(),
+                    context.taskDefinitionId(),
+                    sourceName,
+                    sourceFileHash,
+                    index,
+                    jsonConfigurationMapper.toJson(record.values())));
+            // INGESTED: primer punto donde una fila origen (xls/csv/txt/...) se vuelve trazable.
+            audit.add(ingestedEnvelope(context, sourceName, sourceFileHash, index));
+        }
+        var written = dbWriteRepository.insertStagingBatch(targetDataSource, rows, batchSize);
+        emitRecordAudit(audit);
+        return written;
+    }
+
+    /**
+     * Emite el evento INGESTED con la identidad estable de fila: numero de fila
+     * <b>1-based</b> (el operador busca "fila 1" = primera fila de datos, no fila 0)
+     * y hash del archivo origen para ubicar el archivo exacto. El {@code record_index}
+     * interno sigue siendo 0-based; aqui se convierte solo para presentacion.
+     */
+    private AuditEnvelope ingestedEnvelope(TaskContext context, String sourceName, String sourceFileHash, long index) {
+        var recordNumber = index + 1;
+        var recordId = (sourceName == null ? "" : sourceName + ":") + recordNumber;
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
+                recordId,
+                AuditLevel.RECORD,
+                "RECORD_INGESTED",
+                "INGESTED",
+                context.processExecutionId(),
+                context.taskDefinitionId(),
+                sourceName,
+                null,
+                Map.of(),
+                null,
+                null,
+                sourceName,
+                sourceFileHash,
+                recordNumber,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
+    }
+
+    /**
+     * Hash del archivo origen calculado una sola vez por fuente y cacheado en el
+     * {@code TaskContext}: el fast-path invoca este task una vez por batch, asi que
+     * sin cache se releeria el archivo en cada batch. El streaming del hash es O(bytes)
+     * pero solo se paga una vez por archivo (csv/txt/excel/fin/...).
+     */
+    private String sourceFileHash(TaskContext context, SourcePayload sourcePayload) {
+        // Sin archivo origen no hay hash que computar (DB_WRITE a staging desde una
+        // fuente que no es un archivo); con archivo, el hash es obligatorio y se
+        // computa una sola vez por fuente.
+        if (sourcePayload == null) {
+            return null;
+        }
+        // Clave por location+size+lastModified (no solo name): dos archivos con el
+        // mismo nombre desde rutas distintas no comparten cache ni hash.
+        var file = sourcePayload.file();
+        var cacheKey = "_sourceFileHash:" + sourcePayload.location()
+                + ":" + (file == null ? "" : file.size())
+                + ":" + (file == null || file.lastModified() == null ? "" : file.lastModified());
+        synchronized (context.attributes()) {
+            var cached = context.attributes().get(cacheKey);
+            if (cached instanceof String hash) {
+                return hash;
             }
-            statement.executeBatch();
-            return index;
-        } catch (SQLException e) {
-            throw new IllegalStateException("Cannot batch insert staging records", e);
+            var hash = sourceFingerprintService.fileHash(sourcePayload);
+            context.attributes().put(cacheKey, hash);
+            return hash;
         }
     }
 
-    private int insertDynamic(DataSource targetDataSource, String targetTable, List<ReadRecord> records,
-                              List<DbTaskSupport.ColumnAssignment> assignments, int batchSize) {
-        var columns = DbTaskSupport.insertColumns(assignments);
-        var valuesClause = String.join(", ", assignments.stream().map(this::insertExpression).toList());
-        var sql = "insert into " + targetTable + " (" + String.join(", ", columns) + ") values (" + valuesClause + ")";
-        try (Connection connection = targetDataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            var count = 0;
-            for (var record : records) {
-                bindInsertValues(statement, record, assignments);
-                statement.addBatch();
-                count++;
-                if (count % batchSize == 0) {
-                    statement.executeBatch();
-                }
-            }
-            statement.executeBatch();
-            return count;
-        } catch (SQLException e) {
-            throw new IllegalStateException("Cannot insert records into " + targetTable, e);
+    private void emitRecordAudit(List<AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
         }
     }
 
-    private int updateDynamic(DataSource targetDataSource, String targetTable, List<ReadRecord> records,
-                              List<DbTaskSupport.ColumnAssignment> assignments, List<String> keyColumns, int batchSize) {
-        if (keyColumns.isEmpty()) {
-            throw new IllegalArgumentException("DB_WRITE update mode requires keyColumns");
+    /**
+     * Contador compartido en el TaskContext por archivo: el fast-path reusa el mismo
+     * contexto para batches de un mismo archivo, y puede intercalar archivos distintos.
+     * La clave incluye hash/location para evitar mezclar posiciones visibles.
+     */
+    private java.util.concurrent.atomic.AtomicLong stagingIndexCounter(TaskContext context,
+                                                                       String sourceFileHash,
+                                                                       SourcePayload sourcePayload) {
+        var key = "_stagingRecordIndex:" + (sourceFileHash == null || sourceFileHash.isBlank()
+                ? "no-file"
+                : sourceFileHash.trim());
+        if (sourcePayload != null && sourcePayload.location() != null) {
+            key += ":" + sourcePayload.location();
         }
-        var updateAssignments = DbTaskSupport.updateAssignments(assignments, keyColumns);
-        if (updateAssignments.isEmpty()) {
-            throw new IllegalArgumentException("DB_WRITE update mode requires non-key columns to update");
-        }
-        var assignmentsByColumn = DbTaskSupport.assignmentIndex(assignments);
-        validateKeyColumns(assignmentsByColumn, keyColumns);
-        var setClause = String.join(", ", updateAssignments.stream().map(assignment -> assignment.column() + " = " + insertExpression(assignment)).toList());
-        var whereClause = String.join(" and ", keyColumns.stream().map(column -> column + " = ?").toList());
-        var sql = "update " + targetTable + " set " + setClause + " where " + whereClause;
-        try (Connection connection = targetDataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            var count = 0;
-            for (var record : records) {
-                bindUpdateValues(statement, record, updateAssignments, keyColumns, assignmentsByColumn);
-                statement.addBatch();
-                count++;
-                if (count % batchSize == 0) {
-                    statement.executeBatch();
-                }
-            }
-            statement.executeBatch();
-            return count;
-        } catch (SQLException e) {
-            throw new IllegalStateException("Cannot update records in " + targetTable, e);
-        }
-    }
-
-    private int upsertDynamic(DataSource targetDataSource, String targetTable, List<ReadRecord> records,
-                              List<DbTaskSupport.ColumnAssignment> assignments, List<String> keyColumns, int batchSize) {
-        if (keyColumns.isEmpty()) {
-            throw new IllegalArgumentException("DB_WRITE upsert mode requires keyColumns");
-        }
-        var assignmentsByColumn = DbTaskSupport.assignmentIndex(assignments);
-        validateKeyColumns(assignmentsByColumn, keyColumns);
-        var insertColumns = DbTaskSupport.insertColumns(assignments);
-        var updateAssignments = DbTaskSupport.updateAssignments(assignments, keyColumns);
-        var valuesClause = String.join(", ", assignments.stream().map(this::insertExpression).toList());
-        var conflictClause = String.join(", ", keyColumns);
-        var updateClause = updateAssignments.isEmpty()
-                ? " do nothing"
-                : " do update set " + String.join(", ", updateAssignments.stream().map(assignment -> assignment.column() + " = excluded." + assignment.column()).toList());
-        var sql = "insert into " + targetTable + " (" + String.join(", ", insertColumns) + ") values (" + valuesClause + ") on conflict (" + conflictClause + ")" + updateClause;
-        try (Connection connection = targetDataSource.getConnection();
-             PreparedStatement statement = connection.prepareStatement(sql)) {
-            var count = 0;
-            for (var record : records) {
-                bindInsertValues(statement, record, assignments);
-                statement.addBatch();
-                count++;
-                if (count % batchSize == 0) {
-                    statement.executeBatch();
-                }
-            }
-            statement.executeBatch();
-            return count;
-        } catch (SQLException e) {
-            throw new IllegalStateException("Cannot upsert records in " + targetTable, e);
-        }
-    }
-
-    private String insertExpression(DbTaskSupport.ColumnAssignment assignment) {
-        return assignment.isDbFunction() ? assignment.dbFunction() : "?";
-    }
-
-    private void bindInsertValues(PreparedStatement statement, ReadRecord record, List<DbTaskSupport.ColumnAssignment> assignments) throws SQLException {
-        var parameterIndex = 1;
-        for (var assignment : assignments) {
-            if (assignment.isDbFunction()) {
-                continue;
-            }
-            statement.setObject(parameterIndex++, DbTaskSupport.value(record, assignment.sourceField()));
-        }
-    }
-
-    private void bindUpdateValues(PreparedStatement statement, ReadRecord record,
-                                  List<DbTaskSupport.ColumnAssignment> updateAssignments,
-                                  List<String> keyColumns,
-                                  Map<String, DbTaskSupport.ColumnAssignment> assignmentsByColumn) throws SQLException {
-        var parameterIndex = 1;
-        for (var assignment : updateAssignments) {
-            if (assignment.isDbFunction()) {
-                continue;
-            }
-            statement.setObject(parameterIndex++, DbTaskSupport.value(record, assignment.sourceField()));
-        }
-        for (var keyColumn : keyColumns) {
-            var keyAssignment = assignmentsByColumn.get(keyColumn);
-            if (keyAssignment == null || keyAssignment.isDbFunction() || keyAssignment.sourceField() == null) {
-                throw new IllegalArgumentException("Missing source mapping for key column: " + keyColumn);
-            }
-            statement.setObject(parameterIndex++, DbTaskSupport.value(record, keyAssignment.sourceField()));
-        }
-    }
-
-    private void validateKeyColumns(Map<String, DbTaskSupport.ColumnAssignment> assignmentsByColumn, List<String> keyColumns) {
-        for (var keyColumn : keyColumns) {
-            var assignment = assignmentsByColumn.get(keyColumn);
-            if (assignment == null || assignment.isDbFunction() || assignment.sourceField() == null) {
-                throw new IllegalArgumentException("Key columns must map to reader fields: " + keyColumn);
-            }
+        synchronized (context.attributes()) {
+            return (java.util.concurrent.atomic.AtomicLong) context.attributes()
+                    .computeIfAbsent(key,
+                            ignored -> new java.util.concurrent.atomic.AtomicLong(0));
         }
     }
 }

@@ -1,0 +1,335 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "/plugins/catalog.schema.json",
+  "title": "Integration Hub frontend plugin catalog",
+  "description": "Metadata-only catalog for externally installed frontend plugin contributions. JSON catalogs cannot declare Angular routes or execute remote code.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["manifests"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "manifests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/pluginManifest"
+      }
+    }
+  },
+  "$defs": {
+    "capability": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "operate",
+        "audit",
+        "audit-read",
+        "audit-operate",
+        "audit-admin"
+      ]
+    },
+    "knownShellRoute": {
+      "type": "string",
+      "enum": [
+        "/overview",
+        "/sources",
+        "/connections",
+        "/readers",
+        "/processes",
+        "/payment-rules",
+        "/executions",
+        "/schedules",
+        "/audit",
+        "/audit/record-lineage",
+        "/audit/mt101-fragments",
+        "/audit/spool",
+        "/audit/mt101-quarantine"
+      ]
+    },
+    "pluginManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "platformVersion", "displayName"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "platformVersion": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "capabilities": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capability"
+          },
+          "uniqueItems": true
+        },
+        "i18nNamespaces": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "navigation": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/navigationContribution"
+          }
+        },
+        "routes": {
+          "type": "array",
+          "maxItems": 0,
+          "description": "Runtime JSON catalogs are metadata-only. Register Angular routes through a static provider/build artifact."
+        },
+        "workspaces": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/workspaceContribution"
+          }
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/actionContribution"
+          }
+        },
+        "remote": {
+          "$ref": "#/$defs/pluginRemote"
+        }
+      }
+    },
+    "pluginRemote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "exposedModule", "integrity", "signature"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "exposedModule": {
+          "type": "string",
+          "minLength": 1
+        },
+        "integrity": {
+          "type": "string",
+          "minLength": 1
+        },
+        "signature": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sharedDependencies": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "navigationContribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "route", "labelKey"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "route": {
+          "$ref": "#/$defs/knownShellRoute"
+        },
+        "labelKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requiredCapability": {
+          "$ref": "#/$defs/capability"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "order": {
+          "type": "number"
+        },
+        "group": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "workspaceContribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "route", "labelKey"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "route": {
+          "$ref": "#/$defs/knownShellRoute"
+        },
+        "labelKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "descriptionKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "group": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["query", "operation", "configuration"]
+        },
+        "order": {
+          "type": "number"
+        },
+        "requiredCapability": {
+          "$ref": "#/$defs/capability"
+        }
+      }
+    },
+    "actionKind": {
+      "type": "string",
+      "enum": ["command", "navigation", "external-link"]
+    },
+    "actionPlacement": {
+      "type": "string",
+      "enum": ["global", "workspace", "record", "toolbar"]
+    },
+    "actionConfirmation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "labelKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["danger", "warning"]
+        }
+      }
+    },
+    "actionContribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "labelKey"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "labelKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "order": {
+          "type": "number"
+        },
+        "group": {
+          "type": "string",
+          "minLength": 1
+        },
+        "placement": {
+          "$ref": "#/$defs/actionPlacement"
+        },
+        "kind": {
+          "$ref": "#/$defs/actionKind"
+        },
+        "route": {
+          "$ref": "#/$defs/knownShellRoute"
+        },
+        "href": {
+          "type": "string",
+          "pattern": "^https://"
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1
+        },
+        "icon": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requiredCapability": {
+          "$ref": "#/$defs/capability"
+        },
+        "confirmation": {
+          "$ref": "#/$defs/actionConfirmation"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "navigation"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": ["route"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "external-link"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": ["href"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "command"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "required": ["command"]
+          }
+        }
+      ]
+    }
+  }
+}

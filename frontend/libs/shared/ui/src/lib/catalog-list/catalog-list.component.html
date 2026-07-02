@@ -1,0 +1,57 @@
+<div class="list-card ih-catalog-list" [style.--ih-catalog-columns]="gridColumns()">
+  <div class="table-head ih-catalog-table-head" [class.table-head--selectable]="selectable()" role="row">
+    @if (selectable()) {
+      <mat-checkbox
+        class="ih-checkbox-all"
+        [checked]="allSelected()"
+        [indeterminate]="someSelected()"
+        (change)="toggleSelectAll.emit()"
+        [attr.aria-label]="i18n.t('common.selectAll')"
+      />
+    }
+    @for (col of columns(); track col.labelKey) {
+      @if (col.sortKey; as sortKey) {
+        <button
+          type="button"
+          class="col-sortable"
+          role="columnheader"
+          [attr.aria-sort]="ariaSort(sortKey)"
+          (click)="toggleSort.emit(sortKey)"
+        >
+          {{ i18n.t(col.labelKey) }}
+          @if (sortField() === sortKey) {
+            <span class="sort-arrow" aria-hidden="true">{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
+          }
+        </button>
+      } @else {
+        <span class="col-static" role="columnheader">{{ i18n.t(col.labelKey) }}</span>
+      }
+    }
+  </div>
+
+  <div class="table-body ih-catalog-table-body ih-thin-scroll">
+    @if (error(); as err) {
+      <div class="ih-catalog-error" role="alert">
+        <p class="ih-catalog-error__message">{{ i18n.t(err) }}</p>
+        <button mat-stroked-button type="button" (click)="retry.emit()">{{ i18n.t('common.retry') }}</button>
+      </div>
+    } @else if (loading()) {
+      <ih-loading variant="skeleton" [rows]="pageSize()" />
+    } @else if (rowCount() === 0) {
+      <div class="ih-catalog-empty-state">
+        <ih-empty-state [icon]="emptyIcon()" [message]="i18n.t(emptyKey())" />
+      </div>
+    } @else {
+      <ng-content></ng-content>
+    }
+  </div>
+
+  <mat-paginator
+    class="ih-catalog-paginator"
+    [length]="total()"
+    [pageIndex]="pageIndex()"
+    [pageSize]="pageSize()"
+    [pageSizeOptions]="pageSizeOptions()"
+    (page)="onPageChange($event)"
+  />
+</div>

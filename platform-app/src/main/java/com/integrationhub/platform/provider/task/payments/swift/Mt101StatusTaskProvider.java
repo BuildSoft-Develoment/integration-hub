@@ -1,91 +1,125 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.audit.AuditLevel;
+import com.integrationhub.platform.repository.payments.swift.Mt101ConfirmationRepository;
+import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.task.SuspendableTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
-import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import javax.sql.DataSource;
-import java.io.IOException;
-import java.net.URI;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Types;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.TreeMap;
+import java.time.Instant;
+import java.util.UUID;
 
 /**
- * Task provider {@code MT101_STATUS}: consulta el estado actual de mensajes
+ * Task provider {@code MT101_STATUS}: consulta/recibe el estado de mensajes
  * enviados al gateway y persiste la confirmacion a {@code mt101_confirmation}.
  *
- * <p><b>Modos soportados (slice 2.2)</b>:</p>
+ * <p><b>Primer consumidor productivo del SPI M-2</b>
+ * ({@link SuspendableTaskProvider}, T-017 spec 003). Modos:</p>
  * <ul>
- *   <li>{@code query}: GET HTTP por mensaje, single-shot. Tipicamente invocado
- *       por scheduler (spec 006) para correr periodicamente sin necesidad de
- *       tareas long-running.</li>
- *   <li>{@code poll}: requiere M-2 (tareas long-running con resumption) -
- *       deferido hasta que el motor lo soporte.</li>
- *   <li>{@code callback}: endpoint inbound recibe push del gateway - tambien
- *       deferido (forma parte de la integracion con scheduler/eventos).</li>
+ *   <li>{@code query}: GET HTTP por mensaje, single-shot (sin suspension).
+ *       Tipico bajo scheduler de spec 006.</li>
+ *   <li>{@code callback}: la tarea se suspende esperando el push del gateway
+ *       (MT900/MT910, pacs.002, JSON propietario). El banco invoca
+ *       {@code POST /api/process-executions/resume/{token}} con body
+ *       {@code {"confirmations":[{"sendersReference":"P1","status":"ACCP",
+ *       "gatewayReference":"GW-1","raw":"..."}]}}. El resume persiste las
+ *       confirmaciones y re-suspende (nuevo token) si quedan pendientes,
+ *       salvo {@code callback.completeOnPartial=true}.</li>
+ *   <li>{@code poll}: primera consulta en {@code execute}; lo no-final queda
+ *       suspendido. Cada resume (scheduler periodico o POST manual sin body)
+ *       re-consulta los pendientes. Termina success cuando todos alcanzan un
+ *       estado de {@code poll.finalStatuses} (default ACCEPTED/REJECTED), o
+ *       failure al agotar {@code poll.maxAttempts} (default 10).</li>
  * </ul>
  *
- * <p><b>Configuracion</b>:</p>
+ * <p><b>Configuracion</b> (query/poll comparten {@code query.*} y
+ * {@code expectedGatewayResponse.*}):</p>
  * <pre>{@code
  * {
- *   "mode": "query",
- *   "executionMode": "per-record",
+ *   "mode": "query" | "callback" | "poll",
  *   "input": { "sourceTaskRef": "pay-mt101", "sourceOutput": "records" },
- *   "query": {
- *     "url": "https://gateway.banco/v1/swift/status/${gatewayReference}",
- *     "method": "GET",
- *     "timeoutSeconds": 30
- *   },
- *   "expectedGatewayResponse": {
- *     "statusField": "$.status",
- *     "referenceField": "$.gatewayReference",
- *     "errorMessageField": "$.error.message"
- *   },
+ *   "query": { "url": "https://gw/st/${gatewayReference}", "method": "GET", "timeoutSeconds": 30 },
+ *   "expectedGatewayResponse": { "statusField": "$.status", "referenceField": "$.gatewayReference" },
+ *   "poll": { "finalStatuses": ["ACCEPTED", "REJECTED"], "maxAttempts": 10 },
+ *   "callback": { "completeOnPartial": false },
  *   "connectionRef": "12",
  *   "confirmationTable": "mt101_confirmation"
  * }
  * }</pre>
  *
- * <p>Cada {@code record} de entrada debe traer {@code gatewayReference} y/o
- * {@code sendersReference}. La URL se templeta con ambas.</p>
+ * <p>El {@code suspendedState} es JSON-friendly: {@code {mode, pending[], attempt}}
+ * donde cada pending es el record original (sendersReference, gatewayReference,
+ * archiveId, ...) necesario para re-templear la URL o casar el callback.</p>
  *
- * @trace spec 008-mensajeria-pagos RF-005, T-013
- * @trace ADR-009
+ * @trace spec 008-mensajeria-pagos RF-005, RF-019, T-013
+ * @trace spec 003 T-017 (M-2), ADR-009
  */
 @ApplicationScoped
-public class Mt101StatusTaskProvider implements TaskProvider {
+public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
 
     private static final int DEFAULT_TIMEOUT_SECONDS = 30;
     private static final String DEFAULT_CONFIRMATION_TABLE = "mt101_confirmation";
     private static final String DEFAULT_STATUS_PATH = "$.status";
     private static final String DEFAULT_REFERENCE_PATH = "$.gatewayReference";
+    private static final int DEFAULT_POLL_MAX_ATTEMPTS = 10;
+    private static final int DEFAULT_POLL_INTERVAL_SECONDS = 300;
+    private static final List<String> DEFAULT_FINAL_STATUSES = List.of("ACCEPTED", "REJECTED");
+
+    private static final List<String> DEFAULT_ACCEPTED_STATUSES =
+            List.of("ACCEPTED", "CONFIRMED", "SETTLED", "ACSC", "ACCP");
+    private static final List<String> DEFAULT_REJECTED_STATUSES =
+            List.of("REJECTED", "FAILED", "DECLINED", "RJCT");
+    /** Muestra de records/errors en el output; los conteos son siempre exactos. */
+    private static final int DEFAULT_MAX_RECORDS_IN_OUTPUT = 1000;
+    /** Flush de confirmaciones a BD cada N para no retener todos los rawBody. */
+    private static final int PERSIST_BATCH_SIZE = 500;
 
     private final ObjectMapper objectMapper;
-    private final HttpClient httpClient;
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
+    private final Mt101ArchiveStatusUpdater archiveStatusUpdater;
+    private final Mt101ConfirmationRepository confirmationRepository;
+    private final Mt101RebuildRepository rebuildRepository;
+    private final Mt101StatusGateway gateway;
+    private final Mt101StatusSftpGateway sftpGateway = new Mt101StatusSftpGateway();
+    private final RecordAuditEmitter recordAuditEmitter;
 
     @Inject
     public Mt101StatusTaskProvider(ObjectMapper objectMapper,
                                    DataSource defaultDataSource,
-                                   ConnectionPoolManager connectionPoolManager) {
-        this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager);
+                                   ConnectionPoolManager connectionPoolManager,
+                                   Mt101ArchiveStatusUpdater archiveStatusUpdater,
+                                   Mt101ConfirmationRepository confirmationRepository,
+                                   Mt101RebuildRepository rebuildRepository,
+                                   RecordAuditEmitter recordAuditEmitter) {
+        this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager,
+                archiveStatusUpdater, confirmationRepository, rebuildRepository, recordAuditEmitter);
+    }
+
+    public Mt101StatusTaskProvider(ObjectMapper objectMapper,
+                                   DataSource defaultDataSource,
+                                   ConnectionPoolManager connectionPoolManager,
+                                   Mt101ArchiveStatusUpdater archiveStatusUpdater,
+                                   Mt101ConfirmationRepository confirmationRepository) {
+        this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager,
+                archiveStatusUpdater, confirmationRepository, new Mt101RebuildRepository(), null);
     }
 
     /** Constructor de test: permite inyectar un HttpClient custom. */
@@ -93,10 +127,46 @@ public class Mt101StatusTaskProvider implements TaskProvider {
                             HttpClient httpClient,
                             DataSource defaultDataSource,
                             ConnectionPoolManager connectionPoolManager) {
+        this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
+                new Mt101ArchiveStatusUpdater(defaultDataSource, connectionPoolManager),
+                new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null);
+    }
+
+    Mt101StatusTaskProvider(ObjectMapper objectMapper,
+                            HttpClient httpClient,
+                            DataSource defaultDataSource,
+                            ConnectionPoolManager connectionPoolManager,
+                            Mt101ArchiveStatusUpdater archiveStatusUpdater) {
+        this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
+                archiveStatusUpdater, new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null);
+    }
+
+    Mt101StatusTaskProvider(ObjectMapper objectMapper,
+                            HttpClient httpClient,
+                            DataSource defaultDataSource,
+                            ConnectionPoolManager connectionPoolManager,
+                            Mt101ArchiveStatusUpdater archiveStatusUpdater,
+                            Mt101ConfirmationRepository confirmationRepository) {
+        this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
+                archiveStatusUpdater, confirmationRepository, new Mt101RebuildRepository(), null);
+    }
+
+    Mt101StatusTaskProvider(ObjectMapper objectMapper,
+                            HttpClient httpClient,
+                            DataSource defaultDataSource,
+                            ConnectionPoolManager connectionPoolManager,
+                            Mt101ArchiveStatusUpdater archiveStatusUpdater,
+                            Mt101ConfirmationRepository confirmationRepository,
+                            Mt101RebuildRepository rebuildRepository,
+                            RecordAuditEmitter recordAuditEmitter) {
         this.objectMapper = objectMapper;
-        this.httpClient = httpClient;
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
+        this.archiveStatusUpdater = archiveStatusUpdater;
+        this.confirmationRepository = confirmationRepository;
+        this.rebuildRepository = rebuildRepository == null ? new Mt101RebuildRepository() : rebuildRepository;
+        this.gateway = new Mt101StatusGateway(httpClient, objectMapper);
+        this.recordAuditEmitter = recordAuditEmitter;
     }
 
     @Override
@@ -106,12 +176,265 @@ public class Mt101StatusTaskProvider implements TaskProvider {
 
     @Override
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
-        var mode = stringValue(configuration.get("mode"), "query");
-        if (!"query".equals(mode)) {
-            throw new IllegalArgumentException(
-                    "MT101_STATUS mode '" + mode + "' requires M-2 (long-running tasks); not yet supported");
+        var mode = stringValue(configuration.get("mode"), "query").toLowerCase(Locale.ROOT);
+        return switch (mode) {
+            case "query" -> executeQuery(context, configuration);
+            case "callback" -> suspendForCallback(context, configuration);
+            case "poll" -> pollRound(context, configuration, readRecords(context, configuration), 0);
+            default -> throw new IllegalArgumentException(
+                    "Unsupported MT101_STATUS mode '" + mode + "'; expected query, callback or poll");
+        };
+    }
+
+    @Override
+    public TaskResult resume(TaskContext context,
+                             Map<String, Object> configuration,
+                             Map<String, Object> suspendedState) {
+        var mode = stringValue(suspendedState.get("mode"), "").toLowerCase(Locale.ROOT);
+        return switch (mode) {
+            case "callback" -> resumeCallback(context, configuration, suspendedState);
+            case "poll" -> pollRound(context, configuration, pendingFromState(suspendedState),
+                    intValue(suspendedState.get("attempt"), 0));
+            default -> throw new IllegalStateException(
+                    "MT101_STATUS cannot resume: suspendedState.mode is '" + mode + "'");
+        };
+    }
+
+    // ------------------------------------------------------------------
+    // mode=callback
+    // ------------------------------------------------------------------
+
+    private TaskResult suspendForCallback(TaskContext context, Map<String, Object> configuration) {
+        var records = readRecords(context, configuration);
+        if (records.isEmpty()) {
+            return TaskResult.success("MT101_STATUS skipped because there are no messages to confirm");
+        }
+        var state = new LinkedHashMap<String, Object>();
+        state.put("mode", "callback");
+        state.put("pending", records);
+        return TaskResult.suspended(
+                "MT101_STATUS waiting for gateway callback (" + records.size() + " pending)", state);
+    }
+
+    private TaskResult resumeCallback(TaskContext context, Map<String, Object> configuration, Map<String, Object> suspendedState) {
+        var pending = pendingFromState(suspendedState);
+        var confirmations = callbackConfirmations(suspendedState);
+        if (confirmations.isEmpty()) {
+            // Callback vacio o malformado: seguimos esperando (re-suspension con
+            // los mismos pendientes; el caller recibe un nuevo token).
+            var state = new LinkedHashMap<String, Object>();
+            state.put("mode", "callback");
+            state.put("pending", pending);
+            return TaskResult.suspended("MT101_STATUS callback contained no confirmations; still waiting ("
+                    + pending.size() + " pending)", state);
         }
 
+        var matched = new ArrayList<ConfirmationRow>();
+        var matchedEntries = new ArrayList<Map<String, Object>>();
+        var byStatus = new TreeMap<String, Integer>();
+        var remaining = new ArrayList<Map<String, Object>>(pending);
+        for (var confirmation : confirmations) {
+            var sendersReference = stringOrNull(confirmation.get("sendersReference"));
+            var gatewayReference = stringOrNull(confirmation.get("gatewayReference"));
+            var record = removeMatching(remaining, sendersReference, gatewayReference);
+            if (record == null) {
+                continue; // confirmacion de algo que no esta pendiente: la ignoramos
+            }
+            var status = stringValue(confirmation.get("status"), "UNKNOWN");
+            var raw = stringOrNull(confirmation.get("raw"));
+            matched.add(new ConfirmationRow(readArchiveId(record), "CALLBACK",
+                    gatewayReference != null ? gatewayReference
+                            : stringOrNull(record.get("gatewayReference")),
+                    status, raw));
+            var entry = new LinkedHashMap<String, Object>();
+            entry.put("sendersReference", sendersReference != null ? sendersReference
+                    : record.get("sendersReference"));
+            entry.put("gatewayReference", gatewayReference != null ? gatewayReference
+                    : record.get("gatewayReference"));
+            entry.put("status", status);
+            matchedEntries.add(entry);
+            byStatus.merge(status, 1, Integer::sum);
+        }
+
+        persistConfirmations(context, configuration, matched, matchedEntries);
+
+        var outputs = new LinkedHashMap<String, Object>();
+        outputs.put("confirmedCount", matchedEntries.size());
+        outputs.put("pendingCount", remaining.size());
+        outputs.put("countByStatus", byStatus);
+        outputs.put("records", matchedEntries);
+
+        if (remaining.isEmpty()) {
+            return TaskResult.success("MT101_STATUS callback confirmed all "
+                    + matchedEntries.size() + " messages", outputs);
+        }
+        if (boolValue(callbackConfig(configuration).get("completeOnPartial"), false)) {
+            return TaskResult.success("MT101_STATUS callback confirmed " + matchedEntries.size()
+                    + " messages; " + remaining.size() + " left unconfirmed (completeOnPartial)", outputs);
+        }
+        var state = new LinkedHashMap<String, Object>();
+        state.put("mode", "callback");
+        state.put("pending", remaining);
+        return TaskResult.suspended("MT101_STATUS confirmed " + matchedEntries.size()
+                + ", still waiting for " + remaining.size() + " messages", state);
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> callbackConfirmations(Map<String, Object> suspendedState) {
+        if (!(suspendedState.get("externalEvent") instanceof Map<?, ?> event)) {
+            return List.of();
+        }
+        if (!(event.get("confirmations") instanceof List<?> rawList)) {
+            return List.of();
+        }
+        var result = new ArrayList<Map<String, Object>>(rawList.size());
+        for (var item : rawList) {
+            if (item instanceof Map<?, ?> map) {
+                var entry = new LinkedHashMap<String, Object>();
+                map.forEach((key, value) -> entry.put(String.valueOf(key), value));
+                result.add(entry);
+            }
+        }
+        return result;
+    }
+
+    private Map<String, Object> removeMatching(List<Map<String, Object>> remaining,
+                                               String sendersReference,
+                                               String gatewayReference) {
+        for (var iterator = remaining.iterator(); iterator.hasNext(); ) {
+            var record = iterator.next();
+            var recordSenders = stringOrNull(record.get("sendersReference"));
+            var recordGateway = stringOrNull(record.get("gatewayReference"));
+            var matchesSenders = sendersReference != null && sendersReference.equals(recordSenders);
+            var matchesGateway = gatewayReference != null && gatewayReference.equals(recordGateway);
+            if (matchesSenders || matchesGateway) {
+                iterator.remove();
+                return record;
+            }
+        }
+        return null;
+    }
+
+    // ------------------------------------------------------------------
+    // mode=poll
+    // ------------------------------------------------------------------
+
+    private TaskResult pollRound(TaskContext context,
+                                 Map<String, Object> configuration,
+                                 List<Map<String, Object>> pending,
+                                 int previousAttempts) {
+        if (pending.isEmpty()) {
+            return TaskResult.success("MT101_STATUS skipped because there are no messages to poll");
+        }
+        var queryCfg = mapValue(configuration.get("query"));
+        var urlTemplate = stringRequired(queryCfg.get("url"), "query.url");
+        var httpMethod = stringValue(queryCfg.get("method"), "GET").toUpperCase(Locale.ROOT);
+        var timeoutSeconds = intValue(queryCfg.get("timeoutSeconds"), DEFAULT_TIMEOUT_SECONDS);
+        var expected = mapValue(configuration.get("expectedGatewayResponse"));
+        var statusPath = stringValue(expected.get("statusField"), DEFAULT_STATUS_PATH);
+        var pollCfg = mapValue(configuration.get("poll"));
+        var finalStatuses = finalStatuses(pollCfg.get("finalStatuses"));
+        var maxAttempts = intValue(pollCfg.get("maxAttempts"), DEFAULT_POLL_MAX_ATTEMPTS);
+
+        var confirmed = new ArrayList<ConfirmationRow>();
+        var confirmedEntries = new ArrayList<Map<String, Object>>();
+        var byStatus = new TreeMap<String, Integer>();
+        var stillPending = new ArrayList<Map<String, Object>>();
+        var errors = new ArrayList<Map<String, Object>>();
+
+        for (var record : pending) {
+            var url = resolveTemplate(urlTemplate, record);
+            var queryResult = gateway.query(httpMethod, url, timeoutSeconds);
+            if (queryResult.error() != null) {
+                stillPending.add(record);
+                var entry = new LinkedHashMap<String, Object>();
+                entry.put("sendersReference", record.get("sendersReference"));
+                entry.put("gatewayReference", record.get("gatewayReference"));
+                entry.put("error", queryResult.error());
+                errors.add(entry);
+                continue;
+            }
+            var status = gateway.extractField(queryResult.body(), statusPath);
+            if (status != null && finalStatuses.contains(status.toUpperCase(Locale.ROOT))) {
+                confirmed.add(new ConfirmationRow(readArchiveId(record), "POLL",
+                        stringOrNull(record.get("gatewayReference")), status, queryResult.body()));
+                var entry = new LinkedHashMap<String, Object>();
+                entry.put("sendersReference", record.get("sendersReference"));
+                entry.put("gatewayReference", record.get("gatewayReference"));
+                entry.put("status", status);
+                confirmedEntries.add(entry);
+                byStatus.merge(status, 1, Integer::sum);
+            } else {
+                stillPending.add(record);
+            }
+        }
+
+        persistConfirmations(context, configuration, confirmed, confirmedEntries);
+
+        var attempt = previousAttempts + 1;
+        var outputs = new LinkedHashMap<String, Object>();
+        outputs.put("confirmedCount", confirmedEntries.size());
+        outputs.put("pendingCount", stillPending.size());
+        outputs.put("attempt", attempt);
+        outputs.put("countByStatus", byStatus);
+        outputs.put("records", confirmedEntries);
+        outputs.put("errors", errors);
+
+        if (stillPending.isEmpty()) {
+            return TaskResult.success("MT101_STATUS poll confirmed all messages on attempt "
+                    + attempt, outputs);
+        }
+        if (attempt >= maxAttempts) {
+            return TaskResult.failure("MT101_STATUS poll exhausted " + maxAttempts
+                    + " attempts with " + stillPending.size() + " messages unconfirmed", outputs);
+        }
+        var state = new LinkedHashMap<String, Object>();
+        state.put("mode", "poll");
+        state.put("attempt", attempt);
+        state.put("pending", stillPending);
+        // Auto-despertar (SuspensionExpiryScheduler): el engine fija
+        // suspend_expires_at = now + intervalSeconds y re-invoca resume al vencer.
+        state.put("_resumeAfterSeconds", intValue(pollCfg.get("intervalSeconds"), DEFAULT_POLL_INTERVAL_SECONDS));
+        return TaskResult.suspended("MT101_STATUS poll attempt " + attempt + "/" + maxAttempts
+                + ": " + stillPending.size() + " messages still pending", state);
+    }
+
+    private List<String> finalStatuses(Object raw) {
+        if (!(raw instanceof List<?> rawList) || rawList.isEmpty()) {
+            return DEFAULT_FINAL_STATUSES;
+        }
+        var result = new ArrayList<String>(rawList.size());
+        for (var item : rawList) {
+            result.add(String.valueOf(item).toUpperCase(Locale.ROOT));
+        }
+        return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<Map<String, Object>> pendingFromState(Map<String, Object> suspendedState) {
+        if (!(suspendedState.get("pending") instanceof List<?> rawList)) {
+            return List.of();
+        }
+        var result = new ArrayList<Map<String, Object>>(rawList.size());
+        for (var item : rawList) {
+            if (item instanceof Map<?, ?> map) {
+                var entry = new LinkedHashMap<String, Object>();
+                map.forEach((key, value) -> entry.put(String.valueOf(key), value));
+                result.add(entry);
+            }
+        }
+        return result;
+    }
+
+    // ------------------------------------------------------------------
+    // mode=query (single-shot, comportamiento original)
+    // ------------------------------------------------------------------
+
+    private TaskResult executeQuery(TaskContext context, Map<String, Object> configuration) {
+        var corrective = correctivePaySource(context, configuration);
+        if (!corrective.isEmpty()) {
+            return executeCorrectiveQuery(context, configuration, corrective);
+        }
         var records = readRecords(context, configuration);
         if (records.isEmpty()) {
             return TaskResult.success("MT101_STATUS skipped because there are no messages to query");
@@ -119,132 +442,593 @@ public class Mt101StatusTaskProvider implements TaskProvider {
 
         var queryCfg = mapValue(configuration.get("query"));
         var urlTemplate = stringRequired(queryCfg.get("url"), "query.url");
-        var httpMethod = stringValue(queryCfg.get("method"), "GET").toUpperCase();
+        var httpMethod = stringValue(queryCfg.get("method"), "GET").toUpperCase(Locale.ROOT);
         var timeoutSeconds = intValue(queryCfg.get("timeoutSeconds"), DEFAULT_TIMEOUT_SECONDS);
         var expected = mapValue(configuration.get("expectedGatewayResponse"));
         var statusPath = stringValue(expected.get("statusField"), DEFAULT_STATUS_PATH);
         var referencePath = stringValue(expected.get("referenceField"), DEFAULT_REFERENCE_PATH);
-        var connectionRef = stringOrNull(configuration.get("connectionRef"));
-        var dataSource = resolveDataSource(connectionRef);
-        var confirmationTable = sanitize(stringValue(configuration.get("confirmationTable"),
-                DEFAULT_CONFIRMATION_TABLE));
 
-        var confirmations = new ArrayList<Map<String, Object>>(records.size());
-        var byStatus = new TreeMap<String, Integer>();
+        var maxRecordsInOutput = intValue(configuration.get("maxRecordsInOutput"), DEFAULT_MAX_RECORDS_IN_OUTPUT);
+        // Muestras acotadas para el output; conteos exactos.
+        var confirmations = new ArrayList<Map<String, Object>>();
         var errors = new ArrayList<Map<String, Object>>();
+        var byStatus = new TreeMap<String, Integer>();
+        // Buffer de filas a persistir, flush por lotes para no retener todos los
+        // rawBody (KB c/u) en memoria.
+        var pendingRows = new ArrayList<ConfirmationRow>(PERSIST_BATCH_SIZE);
+        var pendingAuditEntries = new ArrayList<Map<String, Object>>(PERSIST_BATCH_SIZE);
         int queriedCount = 0;
+        int confirmedCount = 0;
+        int errorCount = 0;
 
-        try (Connection connection = dataSource.getConnection()) {
-            var insertSql = "insert into " + confirmationTable
-                    + " (archive_id, confirmation_type, gateway_reference, confirmed_status, raw_payload)"
-                    + " values (?, ?, ?, ?, ?)";
-            try (PreparedStatement insert = connection.prepareStatement(insertSql)) {
-                for (var record : records) {
-                    queriedCount++;
-                    var url = resolveTemplate(urlTemplate, record);
-                    var queryResult = queryGateway(httpMethod, url, timeoutSeconds);
-                    if (queryResult.error() != null) {
-                        var entry = new LinkedHashMap<String, Object>();
-                        entry.put("sendersReference", record.get("sendersReference"));
-                        entry.put("gatewayReference", record.get("gatewayReference"));
-                        entry.put("status", "ERROR");
-                        entry.put("error", queryResult.error());
-                        errors.add(entry);
-                        byStatus.merge("ERROR", 1, Integer::sum);
-                        continue;
-                    }
-                    var rawBody = queryResult.body();
-                    var confirmedStatus = extractField(rawBody, statusPath);
-                    var gatewayReference = extractField(rawBody, referencePath);
-                    if (gatewayReference == null) {
-                        gatewayReference = String.valueOf(record.getOrDefault("gatewayReference", ""));
-                    }
-                    var archiveId = readArchiveId(record);
-
-                    insert.clearParameters();
-                    if (archiveId == null) {
-                        insert.setNull(1, Types.BIGINT);
-                    } else {
-                        insert.setLong(1, archiveId);
-                    }
-                    insert.setString(2, "STATUS_API");
-                    insert.setString(3, gatewayReference);
-                    insert.setString(4, confirmedStatus);
-                    insert.setString(5, rawBody);
-                    insert.executeUpdate();
-
+        for (var record : records) {
+            queriedCount++;
+            var url = resolveTemplate(urlTemplate, record);
+            var queryResult = gateway.query(httpMethod, url, timeoutSeconds);
+            if (queryResult.error() != null) {
+                errorCount++;
+                byStatus.merge("ERROR", 1, Integer::sum);
+                if (errors.size() < maxRecordsInOutput) {
                     var entry = new LinkedHashMap<String, Object>();
                     entry.put("sendersReference", record.get("sendersReference"));
-                    entry.put("gatewayReference", gatewayReference);
-                    entry.put("status", confirmedStatus);
-                    confirmations.add(entry);
-                    byStatus.merge(confirmedStatus == null ? "UNKNOWN" : confirmedStatus, 1, Integer::sum);
+                    entry.put("gatewayReference", record.get("gatewayReference"));
+                    entry.put("status", "ERROR");
+                    entry.put("error", queryResult.error());
+                    errors.add(entry);
                 }
+                continue;
             }
-        } catch (SQLException error) {
-            throw new IllegalStateException("MT101_STATUS DB error: " + error.getMessage(), error);
+            var rawBody = queryResult.body();
+            var confirmedStatus = gateway.extractField(rawBody, statusPath);
+            var gatewayReference = gateway.extractField(rawBody, referencePath);
+            if (gatewayReference == null) {
+                gatewayReference = String.valueOf(record.getOrDefault("gatewayReference", ""));
+            }
+            pendingRows.add(new ConfirmationRow(readArchiveId(record), "STATUS_API",
+                    gatewayReference, confirmedStatus, rawBody));
+            var auditEntry = new LinkedHashMap<String, Object>();
+            auditEntry.put("sendersReference", record.get("sendersReference"));
+            auditEntry.put("gatewayReference", gatewayReference);
+            auditEntry.put("status", confirmedStatus);
+            auditEntry.put("archiveId", record.get("archiveId"));
+            pendingAuditEntries.add(auditEntry);
+            if (pendingRows.size() >= PERSIST_BATCH_SIZE) {
+                persistConfirmations(context, configuration, pendingRows, pendingAuditEntries);
+                pendingRows.clear();
+                pendingAuditEntries.clear();
+            }
+            confirmedCount++;
+            byStatus.merge(confirmedStatus == null ? "UNKNOWN" : confirmedStatus, 1, Integer::sum);
+            if (confirmations.size() < maxRecordsInOutput) {
+                var entry = new LinkedHashMap<String, Object>();
+                entry.put("sendersReference", record.get("sendersReference"));
+                entry.put("gatewayReference", gatewayReference);
+                entry.put("status", confirmedStatus);
+                confirmations.add(entry);
+            }
         }
+        persistConfirmations(context, configuration, pendingRows, pendingAuditEntries);
 
         var outputs = new LinkedHashMap<String, Object>();
         outputs.put("queriedCount", queriedCount);
-        outputs.put("confirmedCount", confirmations.size());
-        outputs.put("errorCount", errors.size());
+        outputs.put("confirmedCount", confirmedCount);
+        outputs.put("errorCount", errorCount);
         outputs.put("countByStatus", byStatus);
         outputs.put("records", confirmations);
         outputs.put("errors", errors);
+        outputs.put("recordsSampled", confirmedCount > confirmations.size() || errorCount > errors.size());
 
         var summary = "MT101_STATUS queried=" + queriedCount
-                + " confirmed=" + confirmations.size()
-                + " errors=" + errors.size();
-        return errors.isEmpty()
+                + " confirmed=" + confirmedCount
+                + " errors=" + errorCount;
+        return errorCount == 0
                 ? TaskResult.success(summary, outputs)
                 : TaskResult.failure(summary, outputs);
     }
 
-    private QueryResult queryGateway(String method, String url, int timeoutSeconds) {
+    private TaskResult executeCorrectiveQuery(TaskContext context,
+                                              Map<String, Object> configuration,
+                                              Map<String, Object> corrective) {
+        var runId = stringRequired(corrective.get("correctivePayRunId"), "input.correctivePayRunId");
+        var connectionRef = stringOrNull(corrective.get("connectionRef"));
+        var effectiveConfiguration = new LinkedHashMap<String, Object>(configuration);
+        if (!effectiveConfiguration.containsKey("connectionRef") && connectionRef != null) {
+            effectiveConfiguration.put("connectionRef", connectionRef);
+        }
+        var queryCfg = mapValue(configuration.get("query"));
+        // STATUS por ruta (P2 v22): si se declara routeQuery (override por ruta REST/SFTP/...),
+        // cada fragmento se consulta contra el endpoint de SU ruta. Sin routeQuery, todas las
+        // rutas comparten query.url (caso aceptado por el v22). Sin fallback: en modo route-aware,
+        // una ruta sin entrada en routeQuery es error ruidoso (no se consulta contra otro endpoint).
+        var routeQuery = mapValue(configuration.get("routeQuery"));
+        var routeAware = !routeQuery.isEmpty();
+        var urlTemplate = routeAware
+                ? stringOrNull(queryCfg.get("url"))
+                : stringRequired(queryCfg.get("url"), "query.url");
+        var httpMethod = stringValue(queryCfg.get("method"), "GET").toUpperCase(Locale.ROOT);
+        var timeoutSeconds = intValue(queryCfg.get("timeoutSeconds"), DEFAULT_TIMEOUT_SECONDS);
+        var expected = mapValue(configuration.get("expectedGatewayResponse"));
+        var statusPath = stringValue(expected.get("statusField"), DEFAULT_STATUS_PATH);
+        var referencePath = stringValue(expected.get("referenceField"), DEFAULT_REFERENCE_PATH);
+        var pageSize = intValue(configuration.get("pageSize"), 500);
+        var maxRecordsInOutput = intValue(configuration.get("maxRecordsInOutput"), DEFAULT_MAX_RECORDS_IN_OUTPUT);
+        var payStatuses = correctivePayStatuses(configuration.get("correctivePayStatuses"));
+        var resolveCorrectivePay = boolValue(configuration.get("resolveCorrectivePay"), false);
+
+        var confirmations = new ArrayList<Map<String, Object>>();
+        var errors = new ArrayList<Map<String, Object>>();
+        var byStatus = new TreeMap<String, Integer>();
+        var pendingRows = new ArrayList<ConfirmationRow>(PERSIST_BATCH_SIZE);
+        var pendingAuditEntries = new ArrayList<Map<String, Object>>(PERSIST_BATCH_SIZE);
+        var pendingPayResults = new ArrayList<Mt101RebuildRepository.PayFragmentResult>(PERSIST_BATCH_SIZE);
+        // v35: archiveId por sendersReference del lote, para excluir del sync de archive los refs que el
+        // ledger marque en conflicto (no volcar el archive a un terminal contradictorio con el ledger).
+        var archiveIdByRef = new LinkedHashMap<String, Long>();
+        var dataSource = resolveDataSource(connectionRef);
+        var afterId = 0L;
+        int queriedCount = 0;
+        int confirmedCount = 0;
+        int errorCount = 0;
+        int resolvedPayCount = 0;
         try {
-            var request = HttpRequest.newBuilder()
-                    .uri(URI.create(url))
-                    .timeout(Duration.ofSeconds(timeoutSeconds))
-                    .method(method, HttpRequest.BodyPublishers.noBody())
-                    .build();
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            var status = response.statusCode();
-            if (status >= 200 && status < 300) {
-                return new QueryResult(response.body(), null);
+            while (true) {
+                var page = rebuildRepository.correctivePayStatusRecords(dataSource, runId, payStatuses, afterId, pageSize);
+                if (page.isEmpty()) {
+                    break;
+                }
+                for (var record : page) {
+                    queriedCount++;
+                    var statusQuery = resolveStatusQuery(record, routeAware, routeQuery,
+                            urlTemplate, httpMethod, timeoutSeconds, statusPath, referencePath);
+                    if (statusQuery.error() != null) {
+                        // Ruta sin endpoint declarado: error ruidoso, no se consulta a ciegas.
+                        errorCount++;
+                        byStatus.merge("ERROR", 1, Integer::sum);
+                        if (errors.size() < maxRecordsInOutput) {
+                            var entry = new LinkedHashMap<String, Object>();
+                            entry.put("sendersReference", record.get("sendersReference"));
+                            entry.put("gatewayReference", record.get("gatewayReference"));
+                            entry.put("route", record.get("route"));
+                            entry.put("status", "ERROR");
+                            entry.put("error", statusQuery.error());
+                            errors.add(entry);
+                        }
+                        continue;
+                    }
+                    String rawBody;
+                    String confirmedStatus;
+                    String gatewayReference;
+                    if ("SFTP".equals(statusQuery.transport())) {
+                        // STATUS por SFTP: se lee el archivo de respuesta ACK/NACK del banco. Si aun no
+                        // existe, el fragmento queda pendiente (no es error): se reintenta en otra corrida.
+                        var responsePath = resolveTemplate(statusQuery.responseFileTemplate(), record);
+                        var sftpResult = sftpGateway.fetchResponse(statusQuery.sftp(), responsePath);
+                        if (sftpResult.error() != null) {
+                            errorCount++;
+                            byStatus.merge("ERROR", 1, Integer::sum);
+                            if (errors.size() < maxRecordsInOutput) {
+                                var entry = new LinkedHashMap<String, Object>();
+                                entry.put("sendersReference", record.get("sendersReference"));
+                                entry.put("gatewayReference", record.get("gatewayReference"));
+                                entry.put("route", record.get("route"));
+                                entry.put("status", "ERROR");
+                                entry.put("error", sftpResult.error());
+                                errors.add(entry);
+                            }
+                            continue;
+                        }
+                        if (!sftpResult.found()) {
+                            // El banco aun no dejo el ACK/NACK: pendiente, se mantiene el estado actual.
+                            continue;
+                        }
+                        rawBody = sftpResult.body();
+                        confirmedStatus = statusQuery.acceptedTokens().isEmpty()
+                                ? gateway.extractField(rawBody, statusQuery.statusPath())
+                                : sftpGateway.classifyByTokens(rawBody, statusQuery.acceptedTokens(),
+                                        statusQuery.rejectedTokens());
+                        gatewayReference = String.valueOf(record.getOrDefault("gatewayReference", ""));
+                    } else {
+                        var url = resolveTemplate(statusQuery.url(), record);
+                        var queryResult = gateway.query(statusQuery.method(), url, statusQuery.timeoutSeconds());
+                        if (queryResult.error() != null) {
+                            errorCount++;
+                            byStatus.merge("ERROR", 1, Integer::sum);
+                            if (errors.size() < maxRecordsInOutput) {
+                                var entry = new LinkedHashMap<String, Object>();
+                                entry.put("sendersReference", record.get("sendersReference"));
+                                entry.put("gatewayReference", record.get("gatewayReference"));
+                                entry.put("status", "ERROR");
+                                entry.put("error", queryResult.error());
+                                errors.add(entry);
+                            }
+                            continue;
+                        }
+                        rawBody = queryResult.body();
+                        confirmedStatus = gateway.extractField(rawBody, statusQuery.statusPath());
+                        gatewayReference = gateway.extractField(rawBody, statusQuery.referencePath());
+                        if (gatewayReference == null) {
+                            gatewayReference = String.valueOf(record.getOrDefault("gatewayReference", ""));
+                        }
+                    }
+                    pendingRows.add(new ConfirmationRow(readArchiveId(record), "STATUS_API",
+                            gatewayReference, confirmedStatus, rawBody));
+                    var auditEntry = new LinkedHashMap<String, Object>();
+                    auditEntry.put("sendersReference", record.get("sendersReference"));
+                    auditEntry.put("gatewayReference", gatewayReference);
+                    auditEntry.put("status", confirmedStatus);
+                    auditEntry.put("archiveId", record.get("archiveId"));
+                    pendingAuditEntries.add(auditEntry);
+                    if (resolveCorrectivePay) {
+                        var resolvedPayStatus = correctivePayResolution(confirmedStatus, configuration);
+                        if (resolvedPayStatus != null) {
+                            var payRef = String.valueOf(record.get("sendersReference"));
+                            pendingPayResults.add(new Mt101RebuildRepository.PayFragmentResult(
+                                    payRef,
+                                    resolvedPayStatus,
+                                    gatewayReference,
+                                    0,
+                                    "REJECTED".equals(resolvedPayStatus) ? "confirmed by MT101_STATUS as " + confirmedStatus : null));
+                            archiveIdByRef.put(payRef, readArchiveId(record));
+                        }
+                    }
+                    if (pendingRows.size() >= PERSIST_BATCH_SIZE) {
+                        // v35: resuelve el ledger PRIMERO para conocer los conflictos, y excluye sus archiveId
+                        // del sync de archive (la confirmacion del banco se conserva como evidencia).
+                        resolvedPayCount += flushPayResolutionAndConfirmations(context, effectiveConfiguration,
+                                dataSource, runId, pendingRows, pendingAuditEntries, pendingPayResults, archiveIdByRef);
+                        pendingRows.clear();
+                        pendingAuditEntries.clear();
+                        pendingPayResults.clear();
+                        archiveIdByRef.clear();
+                    }
+                    confirmedCount++;
+                    byStatus.merge(confirmedStatus == null ? "UNKNOWN" : confirmedStatus, 1, Integer::sum);
+                    if (confirmations.size() < maxRecordsInOutput) {
+                        var entry = new LinkedHashMap<String, Object>();
+                        entry.put("sendersReference", record.get("sendersReference"));
+                        entry.put("gatewayReference", gatewayReference);
+                        entry.put("status", confirmedStatus);
+                        confirmations.add(entry);
+                    }
+                }
+                var last = page.get(page.size() - 1).get("ledgerId");
+                afterId = last instanceof Number number ? number.longValue() : afterId + page.size();
+                if (page.size() < pageSize) {
+                    break;
+                }
             }
-            return new QueryResult(response.body(),
-                    "HTTP " + status + ": " + truncate(response.body(), 200));
-        } catch (IOException error) {
-            return new QueryResult(null, "IO error: " + error.getMessage());
-        } catch (InterruptedException error) {
-            Thread.currentThread().interrupt();
-            return new QueryResult(null, "interrupted: " + error.getMessage());
+            resolvedPayCount += flushPayResolutionAndConfirmations(context, effectiveConfiguration,
+                    dataSource, runId, pendingRows, pendingAuditEntries, pendingPayResults, archiveIdByRef);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot read corrective PAY status records for run " + runId, error);
+        }
+
+        if (queriedCount == 0) {
+            return TaskResult.success("MT101_STATUS skipped because there are no corrective PAY records to query");
+        }
+        var outputs = new LinkedHashMap<String, Object>();
+        outputs.put("queriedCount", queriedCount);
+        outputs.put("confirmedCount", confirmedCount);
+        outputs.put("errorCount", errorCount);
+        outputs.put("countByStatus", byStatus);
+        outputs.put("records", confirmations);
+        outputs.put("errors", errors);
+        outputs.put("recordsSampled", confirmedCount > confirmations.size() || errorCount > errors.size());
+        outputs.put("correctivePayRunId", runId);
+        outputs.put("resolvedPayCount", resolvedPayCount);
+
+        var summary = "MT101_STATUS correctiveRun=" + runId
+                + " queried=" + queriedCount
+                + " confirmed=" + confirmedCount
+                + " errors=" + errorCount;
+        return errorCount == 0
+                ? TaskResult.success(summary, outputs)
+                : TaskResult.failure(summary, outputs);
+    }
+
+    /**
+     * Plan de consulta efectivo para un fragmento (resuelto por ruta), por transporte REST o SFTP, o
+     * {@code error} si la ruta no tiene endpoint declarado.
+     */
+    private record StatusQuery(String transport, String url, String method, int timeoutSeconds,
+                               String statusPath, String referencePath,
+                               Map<String, Object> sftp, String responseFileTemplate,
+                               List<String> acceptedTokens, List<String> rejectedTokens, String error) {
+        static StatusQuery rest(String url, String method, int timeout, String statusPath, String refPath) {
+            return new StatusQuery("REST", url, method, timeout, statusPath, refPath,
+                    null, null, List.of(), List.of(), null);
+        }
+
+        static StatusQuery sftp(Map<String, Object> sftp, String responseFileTemplate, String statusPath,
+                                List<String> acceptedTokens, List<String> rejectedTokens) {
+            return new StatusQuery("SFTP", null, null, 0, statusPath, null,
+                    sftp, responseFileTemplate, acceptedTokens, rejectedTokens, null);
+        }
+
+        static StatusQuery error(String message) {
+            return new StatusQuery(null, null, null, 0, null, null, null, null, List.of(), List.of(), message);
         }
     }
 
-    private String extractField(String body, String jsonPath) {
-        if (body == null || body.isBlank() || jsonPath == null || !jsonPath.startsWith("$.")) {
-            return null;
+    /**
+     * Resuelve el plan de STATUS para un fragmento correctivo. Sin {@code routeQuery} usa el endpoint
+     * REST compartido (caso aceptado por el v22). Con {@code routeQuery} es estricto y por transporte:
+     * cada fragmento se consulta contra el endpoint de SU ruta (REST por HTTP, SFTP leyendo el archivo
+     * de respuesta ACK/NACK); una ruta sin endpoint declarado es error ruidoso, sin fallback.
+     */
+    private StatusQuery resolveStatusQuery(Map<String, Object> record,
+                                           boolean routeAware,
+                                           Map<String, Object> routeQuery,
+                                           String sharedUrl, String sharedMethod, int sharedTimeout,
+                                           String sharedStatusPath, String sharedReferencePath) {
+        if (!routeAware) {
+            return StatusQuery.rest(sharedUrl, sharedMethod, sharedTimeout, sharedStatusPath, sharedReferencePath);
+        }
+        var route = stringOrNull(record.get("route"));
+        if (route == null) {
+            return StatusQuery.error("corrective fragment has no route (routed_as) but routeQuery is "
+                    + "configured; refusing to pick a STATUS endpoint by fallback");
+        }
+        var override = mapValue(routeQuery.get(route));
+        var routeTransport = stringValue(override.get("transport"), "REST").toUpperCase(Locale.ROOT);
+        if ("SFTP".equals(routeTransport)) {
+            var sftp = mapValue(override.get("sftp"));
+            var responseFileTemplate = stringOrNull(override.get("responseFileTemplate"));
+            if (sftp.isEmpty() || responseFileTemplate == null) {
+                return StatusQuery.error("SFTP STATUS route '" + route + "' requires routeQuery." + route
+                        + ".sftp and .responseFileTemplate (the bank ACK/NACK file path)");
+            }
+            var accepted = stringList(override.get("acceptedTokens"));
+            var rejected = stringList(override.get("rejectedTokens"));
+            if (accepted.isEmpty() && stringOrNull(override.get("statusField")) == null) {
+                return StatusQuery.error("SFTP STATUS route '" + route + "' requires acceptedTokens "
+                        + "(and rejectedTokens) or a statusField to classify the response file");
+            }
+            return StatusQuery.sftp(sftp, responseFileTemplate,
+                    stringValue(override.get("statusField"), sharedStatusPath), accepted, rejected);
+        }
+        var routeUrl = stringOrNull(override.get("url"));
+        if (routeUrl == null) {
+            return StatusQuery.error("no routeQuery entry with url for route '" + route
+                    + "'; refusing to query it against another route's STATUS endpoint");
+        }
+        return StatusQuery.rest(
+                routeUrl,
+                stringValue(override.get("method"), sharedMethod).toUpperCase(Locale.ROOT),
+                intValue(override.get("timeoutSeconds"), sharedTimeout),
+                stringValue(override.get("statusField"), sharedStatusPath),
+                stringValue(override.get("referenceField"), sharedReferencePath));
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<String> stringList(Object raw) {
+        if (!(raw instanceof List<?> rawList)) {
+            return List.of();
+        }
+        var result = new ArrayList<String>(rawList.size());
+        for (var item : rawList) {
+            if (item != null) {
+                result.add(String.valueOf(item));
+            }
+        }
+        return result;
+    }
+
+    // ------------------------------------------------------------------
+    // Persistencia compartida
+    // ------------------------------------------------------------------
+
+    /** Fila a insertar en {@code mt101_confirmation}. */
+    private record ConfirmationRow(Long archiveId,
+                                   String confirmationType,
+                                   String gatewayReference,
+                                   String confirmedStatus,
+                                   String rawPayload) {
+    }
+
+    /**
+     * v35: resuelve el ledger PAY ANTES de tocar el archive para conocer los conflictos terminales y excluir
+     * sus archiveId del sync de archive (no volcar el archive a un terminal contradictorio con el ledger; la
+     * confirmacion del banco se conserva como evidencia en mt101_confirmation). Devuelve filas resueltas.
+     */
+    private int flushPayResolutionAndConfirmations(TaskContext context, Map<String, Object> configuration,
+                                                   DataSource dataSource, String runId,
+                                                   List<ConfirmationRow> rows, List<Map<String, Object>> auditEntries,
+                                                   List<Mt101RebuildRepository.PayFragmentResult> payResults,
+                                                   Map<String, Long> archiveIdByRef) throws SQLException {
+        var conflictArchiveIds = new java.util.HashSet<Long>();
+        var resolved = 0;
+        if (payResults != null && !payResults.isEmpty()) {
+            var result = rebuildRepository.resolvePayFragmentResults(dataSource, runId, payResults, "STATUS_API");
+            resolved = result.updated();
+            for (var reference : result.conflictReferences()) {
+                var archiveId = archiveIdByRef.get(reference);
+                if (archiveId != null) {
+                    conflictArchiveIds.add(archiveId);
+                }
+            }
+        }
+        persistConfirmations(context, configuration, rows, auditEntries, conflictArchiveIds);
+        return resolved;
+    }
+
+    private void persistConfirmations(TaskContext context,
+                                      Map<String, Object> configuration,
+                                      List<ConfirmationRow> rows,
+                                      List<Map<String, Object>> auditEntries) {
+        persistConfirmations(context, configuration, rows, auditEntries, java.util.Set.of());
+    }
+
+    private void persistConfirmations(TaskContext context,
+                                      Map<String, Object> configuration,
+                                      List<ConfirmationRow> rows,
+                                      List<Map<String, Object>> auditEntries,
+                                      java.util.Set<Long> conflictArchiveIds) {
+        if (rows.isEmpty()) {
+            return;
+        }
+        var connectionRef = stringOrNull(configuration.get("connectionRef"));
+        var confirmationTable = sanitize(stringValue(configuration.get("confirmationTable"),
+                DEFAULT_CONFIRMATION_TABLE));
+        try (Connection connection = resolveDataSource(connectionRef).getConnection()) {
+            var repositoryRows = new ArrayList<Mt101ConfirmationRepository.ConfirmationRow>(rows.size());
+            for (var row : rows) {
+                repositoryRows.add(new Mt101ConfirmationRepository.ConfirmationRow(
+                        row.archiveId(),
+                        row.confirmationType(),
+                        row.gatewayReference(),
+                        row.confirmedStatus(),
+                        row.rawPayload()));
+            }
+            confirmationRepository.insertConfirmations(connection, confirmationTable, repositoryRows);
+            // H5: avanza el estado durable en mt101_archive (CONFIRMED/REJECTED)
+            // por archive_id. Mismo connection que la insercion de confirmacion.
+            // v35: salvo los archiveId en conflicto terminal con el ledger (no se vuelca un estado
+            // contradictorio; el conflicto queda en el ledger: pay_conflict + PAY_CONFLICT + run UNCERTAIN).
+            syncArchiveStatus(connection, configuration, rows, conflictArchiveIds);
+            emitRecordAudit(statusEnvelopes(context, rows, auditEntries,
+                    acceptedStatuses(configuration.get("acceptedStatuses"))));
+        } catch (SQLException error) {
+            throw new IllegalStateException("MT101_STATUS DB error: " + error.getMessage(), error);
+        }
+    }
+
+    private List<AuditEnvelope> statusEnvelopes(TaskContext context,
+                                                List<ConfirmationRow> rows,
+                                                List<Map<String, Object>> auditEntries,
+                                                List<String> acceptedStatuses) {
+        var result = new ArrayList<AuditEnvelope>(rows.size());
+        for (int i = 0; i < rows.size(); i++) {
+            var row = rows.get(i);
+            var entry = auditEntries != null && i < auditEntries.size() ? auditEntries.get(i) : Map.<String, Object>of();
+            var sendersReference = stringOrNull(entry.get("sendersReference"));
+            var status = row.confirmedStatus() == null ? "UNKNOWN" : row.confirmedStatus();
+            var accepted = acceptedStatuses.contains(status.toUpperCase(Locale.ROOT));
+            result.add(new AuditEnvelope(
+                    UUID.randomUUID().toString(),
+                    context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
+                    sendersReference,
+                    AuditLevel.RECORD,
+                    "PAYMENT_STATUS_CONFIRMED",
+                    accepted ? "CONFIRMED" : "REJECTED",
+                    context.processExecutionId(),
+                    context.taskDefinitionId(),
+                    status,
+                    null,
+                    Map.of("confirmationType", row.confirmationType()),
+                    "SWIFT",
+                    "MT101",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    sendersReference,
+                    null,
+                    null,
+                    row.archiveId(),
+                    row.gatewayReference(),
+                    Instant.now(),
+                    AuditEnvelope.CURRENT_SCHEMA_VERSION));
+        }
+        return result;
+    }
+
+    private void emitRecordAudit(List<AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && envelopes != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
+        }
+    }
+
+    private void syncArchiveStatus(Connection connection, Map<String, Object> configuration,
+                                   List<ConfirmationRow> rows, java.util.Set<Long> conflictArchiveIds) {
+        if (!boolValue(configuration.get("archiveStatusSync"), true)) {
+            return;
+        }
+        var table = sanitize(stringValue(configuration.get("archiveStatusTable"), "mt101_archive"));
+        var accepted = acceptedStatuses(configuration.get("acceptedStatuses"));
+        var updates = new ArrayList<Mt101ArchiveStatusUpdater.ArchiveStatusUpdate>(rows.size());
+        for (var row : rows) {
+            if (row.archiveId() == null) {
+                continue;
+            }
+            // v35: no se vuelca el archive a un terminal contradictorio con el ledger (conflicto detectado
+            // al resolver el ledger). La confirmacion del banco ya quedo registrada como evidencia.
+            if (conflictArchiveIds != null && conflictArchiveIds.contains(row.archiveId())) {
+                continue;
+            }
+            var confirmed = row.confirmedStatus() != null
+                    && accepted.contains(row.confirmedStatus().toUpperCase(Locale.ROOT));
+            updates.add(new Mt101ArchiveStatusUpdater.ArchiveStatusUpdate(
+                    row.archiveId(), confirmed ? "CONFIRMED" : "REJECTED"));
         }
         try {
-            var node = objectMapper.readTree(body);
-            return navigate(node, jsonPath.substring(2));
-        } catch (IOException error) {
-            return null;
+            archiveStatusUpdater.updateArchiveStatus(connection, table, updates);
+        } catch (SQLException error) {
+            // 42P01 = tabla inexistente; 42703 = columna inexistente: flujo sin
+            // archivo o tabla custom (no hay nada durable que sincronizar).
+            if (!"42P01".equals(error.getSQLState()) && !"42703".equals(error.getSQLState())) {
+                throw new IllegalStateException("MT101_STATUS archive sync error: " + error.getMessage(), error);
+            }
         }
     }
 
-    private String navigate(JsonNode node, String path) {
-        if (node == null || node.isMissingNode() || node.isNull()) {
+    private List<String> acceptedStatuses(Object raw) {
+        if (!(raw instanceof List<?> rawList) || rawList.isEmpty()) {
+            return DEFAULT_ACCEPTED_STATUSES;
+        }
+        var result = new ArrayList<String>(rawList.size());
+        for (var item : rawList) {
+            result.add(String.valueOf(item).toUpperCase(Locale.ROOT));
+        }
+        return result;
+    }
+
+    private List<String> rejectedStatuses(Object raw) {
+        if (!(raw instanceof List<?> rawList) || rawList.isEmpty()) {
+            return DEFAULT_REJECTED_STATUSES;
+        }
+        var result = new ArrayList<String>(rawList.size());
+        for (var item : rawList) {
+            result.add(String.valueOf(item).toUpperCase(Locale.ROOT));
+        }
+        return result;
+    }
+
+    private List<String> correctivePayStatuses(Object raw) {
+        if (!(raw instanceof List<?> rawList) || rawList.isEmpty()) {
+            return List.of("SENT");
+        }
+        var result = new ArrayList<String>(rawList.size());
+        for (var item : rawList) {
+            if (item != null && !String.valueOf(item).isBlank()) {
+                result.add(String.valueOf(item).trim().toUpperCase(Locale.ROOT));
+            }
+        }
+        return result.isEmpty() ? List.of("SENT") : result;
+    }
+
+    private String correctivePayResolution(String confirmedStatus, Map<String, Object> configuration) {
+        if (confirmedStatus == null || confirmedStatus.isBlank()) {
             return null;
         }
-        var dot = path.indexOf('.');
-        var head = dot < 0 ? path : path.substring(0, dot);
-        var tail = dot < 0 ? null : path.substring(dot + 1);
-        var next = node.path(head);
-        return tail == null ? (next.isValueNode() ? next.asText() : null) : navigate(next, tail);
+        var normalized = confirmedStatus.trim().toUpperCase(Locale.ROOT);
+        if (acceptedStatuses(configuration.get("acceptedStatuses")).contains(normalized)) {
+            return "SENT";
+        }
+        if (rejectedStatuses(configuration.get("rejectedStatuses")).contains(normalized)) {
+            return "REJECTED";
+        }
+        return null;
     }
+
+    private Map<String, Object> callbackConfig(Map<String, Object> configuration) {
+        return mapValue(configuration.get("callback"));
+    }
+
+    // ------------------------------------------------------------------
+    // Helpers de orquestacion (HTTP/JSON viven en Mt101StatusGateway)
+    // ------------------------------------------------------------------
 
     private String resolveTemplate(String template, Map<String, Object> record) {
         var resolved = template;
@@ -273,6 +1057,31 @@ public class Mt101StatusTaskProvider implements TaskProvider {
 
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> readRecords(TaskContext context, Map<String, Object> configuration) {
+        var corrective = correctivePaySource(context, configuration);
+        if (!corrective.isEmpty()) {
+            var dataSource = resolveDataSource(stringOrNull(corrective.get("connectionRef")));
+            var runId = stringOrNull(corrective.get("correctivePayRunId"));
+            var pageSize = intValue(configuration.get("pageSize"), 500);
+            var payStatuses = correctivePayStatuses(configuration.get("correctivePayStatuses"));
+            var afterId = 0L;
+            var result = new ArrayList<Map<String, Object>>();
+            try {
+                while (true) {
+                    var page = rebuildRepository.correctivePayStatusRecords(dataSource, runId, payStatuses, afterId, pageSize);
+                    if (page.isEmpty()) {
+                        return result;
+                    }
+                    result.addAll(page);
+                    var last = page.get(page.size() - 1).get("ledgerId");
+                    afterId = last instanceof Number number ? number.longValue() : afterId + page.size();
+                    if (page.size() < pageSize) {
+                        return result;
+                    }
+                }
+            } catch (SQLException error) {
+                throw new IllegalStateException("Cannot read corrective PAY status records for run " + runId, error);
+            }
+        }
         var rawTaskOutputs = context.attributes().get("taskOutputs");
         if (!(rawTaskOutputs instanceof Map<?, ?> taskOutputs) || taskOutputs.isEmpty()) {
             return List.of();
@@ -305,16 +1114,32 @@ public class Mt101StatusTaskProvider implements TaskProvider {
         return result;
     }
 
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> correctivePaySource(TaskContext context, Map<String, Object> configuration) {
+        var rawTaskOutputs = context.attributes().get("taskOutputs");
+        if (!(rawTaskOutputs instanceof Map<?, ?> taskOutputs) || taskOutputs.isEmpty()
+                || !(configuration.get("input") instanceof Map<?, ?> rawInput)) {
+            return Map.of();
+        }
+        var sourceTaskRef = stringValue(((Map<String, Object>) rawInput).get("sourceTaskRef"), "");
+        if (sourceTaskRef.isBlank()) {
+            return Map.of();
+        }
+        var sourceOutput = stringValue(((Map<String, Object>) rawInput).get("sourceOutput"), "records");
+        var raw = taskOutputs.get(sourceTaskRef + "." + sourceOutput);
+        if (!(raw instanceof Map<?, ?> rawMap) || !rawMap.containsKey("correctivePayRunId")) {
+            return Map.of();
+        }
+        var source = new LinkedHashMap<String, Object>();
+        rawMap.forEach((key, value) -> source.put(String.valueOf(key), value));
+        return source;
+    }
+
     private DataSource resolveDataSource(String connectionRef) {
         if (connectionRef == null || connectionRef.isBlank() || connectionPoolManager == null) {
             return defaultDataSource;
         }
         return connectionPoolManager.resolveJdbcDataSource(connectionRef);
-    }
-
-    private String truncate(String value, int max) {
-        if (value == null || value.length() <= max) return value;
-        return value.substring(0, max) + "...";
     }
 
     @SuppressWarnings("unchecked")
@@ -358,6 +1183,13 @@ public class Mt101StatusTaskProvider implements TaskProvider {
         return Integer.parseInt(String.valueOf(raw));
     }
 
+    private boolean boolValue(Object raw, boolean defaultValue) {
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return defaultValue;
+        }
+        return Boolean.parseBoolean(String.valueOf(raw));
+    }
+
     private String sanitize(String identifier) {
         if (identifier == null || identifier.isBlank()) {
             throw new IllegalArgumentException("Identifier cannot be blank");
@@ -366,9 +1198,5 @@ public class Mt101StatusTaskProvider implements TaskProvider {
             throw new IllegalArgumentException("Unsafe identifier: " + identifier);
         }
         return identifier;
-    }
-
-    /** Resultado interno de la consulta HTTP al gateway. */
-    private record QueryResult(String body, String error) {
     }
 }

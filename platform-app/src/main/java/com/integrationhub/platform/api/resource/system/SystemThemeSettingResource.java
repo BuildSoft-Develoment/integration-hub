@@ -13,6 +13,10 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 
+import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+
 @Path("/api/system/theme")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
@@ -25,13 +29,13 @@ public class SystemThemeSettingResource {
     }
 
     @GET
-    @RolesAllowed({"platform-admin", "integration-admin", "auditor"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
     public SystemThemeSettingResponse get() {
         return systemThemeSettingService.get();
     }
 
     @PUT
-    @RolesAllowed({"platform-admin", "integration-admin"})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public SystemThemeSettingResponse update(SystemThemeSettingRequest request) {
         return systemThemeSettingService.update(request);
     }

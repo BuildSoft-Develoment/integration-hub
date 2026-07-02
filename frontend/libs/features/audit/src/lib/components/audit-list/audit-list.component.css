@@ -1,0 +1,32 @@
+:host .table-row {
+  grid-template-columns: var(--ih-catalog-columns);
+  padding-left: 0.5rem;
+}
+
+.row-type,
+.row-status {
+  display: flex;
+  align-items: center;
+}
+.row-status {
+  font-size: 0.86rem;
+  color: var(--ih-text-soft);
+}
+.row-task {
+  color: var(--ih-text-soft);
+}
+
+.audit-status-ch--ok {
+  --mdc-chip-elevated-container-color: var(--ih-status-success-bg);
+  --mdc-chip-label-text-color: var(--ih-status-success);
+}
+
+.audit-status-ch--error {
+  --mdc-chip-elevated-container-color: var(--ih-status-error-bg);
+  --mdc-chip-label-text-color: var(--ih-status-error);
+}
+
+.audit-status-ch--pending {
+  --mdc-chip-elevated-container-color: var(--ih-status-warning-bg);
+  --mdc-chip-label-text-color: var(--ih-status-warning);
+}

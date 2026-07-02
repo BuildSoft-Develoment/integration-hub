@@ -1,10 +1,12 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
+import { ResourcePresentation } from '@integration-hub/shared/ui';
 import {
   CONNECTION_PROVIDERS,
   ConnectionDraft,
   ConnectionProvider,
   ConnectionProviderType,
 } from '@integration-hub/core/providers';
+import { CONNECTION_PRESENTATION } from '../presentation/resource-presentation.maps';
 
 @Injectable({ providedIn: 'root' })
 export class ConnectionManagerService {
@@ -32,6 +34,15 @@ export class ConnectionManagerService {
 
   resolve(type: ConnectionProviderType): ConnectionProvider | null {
     return this.providers.find((provider) => provider.supports(type)) ?? null;
+  }
+
+  /**
+   * Presentacion visual (icono + tono) del tipo de conexion. Resolucion total
+   * via {@link CONNECTION_PRESENTATION}: siempre devuelve una presentacion
+   * concreta, sin fallback en runtime.
+   */
+  presentation(type: ConnectionProviderType): ResourcePresentation {
+    return CONNECTION_PRESENTATION[type];
   }
 
   createDraftFor(type: ConnectionProviderType): ConnectionDraft {

@@ -1,4 +1,4 @@
-<section class="page-grid execution-page ih-catalog-grid">
+<section class="page-grid execution-page ih-catalog-grid ih-no-hint">
   <mat-drawer-container class="executions-drawer-container ih-catalog-drawer-container">
     <mat-drawer-content>
       <section class="executions-workspace ih-catalog-workspace">
@@ -6,20 +6,32 @@
           [search]="viewModel().toolbar.search"
           [modeFilter]="viewModel().toolbar.modeFilter"
           [statusFilter]="viewModel().toolbar.statusFilter"
+          [loading]="viewModel().toolbar.loading"
           (searchChange)="updateSearch($event)"
           (modeFilterChange)="updateModeFilter($event)"
           (statusFilterChange)="updateStatusFilter($event)"
+          (refresh)="refresh()"
         />
+
+        @if (viewModel().toolbar.loading) {
+          <mat-progress-bar mode="indeterminate" />
+        }
 
         <section class="executions-list-shell ih-catalog-list-shell">
           <ih-execution-list
             [executions]="viewModel().list.executions"
             [totalLength]="viewModel().list.totalLength"
             [selectedExecutionId]="viewModel().list.selectedExecutionId"
+            [sortField]="viewModel().list.sortField"
+            [sortDirection]="viewModel().list.sortDirection"
             [pageIndex]="viewModel().list.pageIndex"
             [pageSize]="viewModel().list.pageSize"
+            [loading]="viewModel().loading"
+            [error]="viewModel().error"
             (selectExecution)="selectExecution($event)"
+            (toggleSort)="toggleSort($event)"
             (pageChange)="updatePagination($event.pageIndex, $event.pageSize)"
+            (retry)="refresh()"
           />
         </section>
       </section>

@@ -7,8 +7,95 @@
   "tags": [],
   "targets": {
     "build": {
+      "executor": "@angular-architects/native-federation:build",
+      "dependsOn": ["validate-plugins"],
+      "options": {},
+      "configurations": {
+        "production": {
+          "target": "web:esbuild:production"
+        },
+        "development": {
+          "target": "web:esbuild:development",
+          "dev": true
+        }
+      },
+      "defaultConfiguration": "production"
+    },
+    "serve": {
+      "executor": "@angular-architects/native-federation:build",
+      "options": {
+        "target": "web:serve-original:development",
+        "rebuildDelay": 500,
+        "dev": true,
+        "cacheExternalArtifacts": false,
+        "port": 0
+      },
+      "continuous": true
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    },
+    "test": {
+      "executor": "@angular/build:unit-test",
+      "options": {
+        "buildTarget": "web:test-build",
+        "tsConfig": "apps/web/tsconfig.spec.json",
+        "include": [
+          "apps/web/src/**/*.spec.ts",
+          "libs/**/*.spec.ts"
+        ]
+      }
+    },
+    "validate-plugins": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{workspaceRoot}/scripts/validate-plugin-catalog.js",
+        "{workspaceRoot}/apps/web/public/plugins/catalog.schema.json",
+        "{workspaceRoot}/apps/web/public/plugins/catalog.json"
+      ],
+      "options": {
+        "command": "node scripts/validate-plugin-catalog.js"
+      }
+    },
+    "test-plugins": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "dependsOn": [
+        "validate-plugins"
+      ],
+      "inputs": [
+        "{workspaceRoot}/scripts/validate-plugin-catalog.js",
+        "{workspaceRoot}/scripts/validate-plugin-catalog.spec.js",
+        "{workspaceRoot}/scripts/manage-plugin-catalog.js",
+        "{workspaceRoot}/scripts/manage-plugin-catalog.spec.js",
+        "{workspaceRoot}/scripts/sign-plugin-remote.js",
+        "{workspaceRoot}/scripts/sign-plugin-remote.spec.js",
+        "{workspaceRoot}/apps/web/public/plugins/catalog.schema.json",
+        "{workspaceRoot}/apps/web/public/plugins/catalog.json"
+      ],
+      "options": {
+        "command": "node --test scripts/validate-plugin-catalog.spec.js scripts/manage-plugin-catalog.spec.js scripts/sign-plugin-remote.spec.js"
+      }
+    },
+    "serve-static": {
+      "continuous": true,
+      "executor": "@nx/web:file-server",
+      "options": {
+        "buildTarget": "web:build",
+        "port": 4200,
+        "staticFilePath": "dist/browser",
+        "spa": true
+      }
+    },
+    "esbuild": {
       "executor": "@angular/build:application",
-      "outputs": ["{options.outputPath}"],
+      "dependsOn": [
+        "validate-plugins"
+      ],
+      "outputs": [
+        "{options.outputPath}"
+      ],
       "options": {
         "outputPath": "dist",
         "browser": "apps/web/src/main.ts",
@@ -20,19 +107,25 @@
             "input": "apps/web/public"
           }
         ],
-        "styles": ["apps/web/src/tailwind.css", "apps/web/src/styles.scss"]
+        "styles": [
+          "apps/web/src/tailwind.css",
+          "apps/web/src/styles.scss"
+        ],
+        "polyfills": [
+          "es-module-shims"
+        ]
       },
       "configurations": {
         "production": {
           "budgets": [
             {
               "type": "initial",
-              "maximumWarning": "900kb",
-              "maximumError": "1.2mb"
+              "maximumWarning": "1.25mb",
+              "maximumError": "1.5mb"
             },
             {
               "type": "anyComponentStyle",
-              "maximumWarning": "4kb",
+              "maximumWarning": "5kb",
               "maximumError": "8kb"
             }
           ],
@@ -46,38 +139,32 @@
       },
       "defaultConfiguration": "production"
     },
-    "serve": {
+    "test-build": {
+      "executor": "@angular/build:application",
+      "outputs": ["{options.outputPath}"],
+      "options": {
+        "outputPath": "dist-test",
+        "browser": "apps/web/src/bootstrap.ts",
+        "index": "apps/web/src/index.html",
+        "tsConfig": "apps/web/tsconfig.app.json",
+        "assets": [{ "glob": "**/*", "input": "apps/web/public" }],
+        "styles": ["apps/web/src/tailwind.css", "apps/web/src/styles.scss"]
+      }
+    },
+    "serve-original": {
       "continuous": true,
       "executor": "@angular/build:dev-server",
       "configurations": {
         "production": {
-          "buildTarget": "web:build:production"
+          "buildTarget": "web:esbuild:production"
         },
         "development": {
-          "buildTarget": "web:build:development"
+          "buildTarget": "web:esbuild:development"
         }
       },
-      "defaultConfiguration": "development"
-    },
-    "lint": {
-      "executor": "@nx/eslint:lint"
-    },
-    "test": {
-      "executor": "@angular/build:unit-test",
+      "defaultConfiguration": "development",
       "options": {
-        "buildTarget": "web:build",
-        "tsConfig": "apps/web/tsconfig.spec.json",
-        "include": ["apps/web/src/**/*.spec.ts", "libs/**/*.spec.ts"]
-      }
-    },
-    "serve-static": {
-      "continuous": true,
-      "executor": "@nx/web:file-server",
-      "options": {
-        "buildTarget": "web:build",
-        "port": 4200,
-        "staticFilePath": "dist/browser",
-        "spa": true
+        "port": 4200
       }
     }
   }

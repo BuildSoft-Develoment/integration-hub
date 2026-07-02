@@ -50,13 +50,6 @@ import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
       <mat-form-field class="full"><mat-label>{{ i18n.t('ui.templateVariablesText') }}</mat-label><textarea matInput [disabled]="readonly()" rows="4" [ngModel]="draft().templateVariablesText" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('templateVariablesText', $event)"></textarea></mat-form-field>
     </div>
   `,
-  styles: [
-    `
-      .form-grid { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .full { grid-column: 1 / -1; }
-      .toggle-wrap { display: flex; align-items: center; }
-      @media (max-width: 900px) { .form-grid { grid-template-columns: 1fr; } }
-    `,
-  ],
+  styleUrl: './source-s3-form.component.css',
 })
 export class SourceS3FormComponent extends SourceTypeFormComponentBase {}

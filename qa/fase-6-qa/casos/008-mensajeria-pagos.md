@@ -110,6 +110,52 @@ Cubre las tareas QA T-022 (sprint 2 inbound + reconciliación) y T-028
 - rechazo de acción no soportada
 - `totalChanges` cuenta solo cambios reales (no records sin cambio)
 
+## Hardening correctivo y reproceso sin fallback
+
+### Identidad estricta por fila
+- corregir fila exige `stagingId` junto con `fragmentSetId`, `sourceFileHash` y `recordNumber`
+- timeline de fila exige `stagingId` y no busca por hash+fila solamente
+- reabrir rechazo exige `stagingId`
+- dos archivos con misma fila/hash pero distinto origen no se mezclan
+
+### Lifecycle correctivo
+- rebuild desde cuarentena crea seleccion con `stagingId`
+- correctivo con algunos fragmentos rechazados queda `PARTIALLY_FAILED`
+- `PARTIALLY_FAILED` actualiza solo las selecciones rechazadas, no todo el run
+- runs correctivos exponen `payStatus`, requester y checker para UI
+- scheduler revisa runs activos en la base por defecto y conexiones JDBC activas
+- PAY correctivo vencido en `EXECUTING` pasa a `UNCERTAIN` sin reintento automatico
+
+### PAY correctivo
+- request PAY solo aplica a runs `ARCHIVED`
+- checker no puede ser el mismo requester
+- claim atomico evita doble envio cuando dos checkers compiten
+- fallo de transporte deja `pay_status=FAILED` para reintento gobernado
+- request PAY guarda el hash del payload archivado y el checker lo revalida antes de enviar
+- si el payload archivado cambia entre request y approve, PAY queda `INVALIDATED`
+- envio parcial deja `pay_status=PARTIALLY_SENT` y detalle por fragmento
+- despues de PAY se ejecutan `MT101_STATUS` y `MT101_RECONCILE` cuando existen en el proceso
+
+### Cierre P0 correctivo pre-homologacion
+- `MT101_ROUTE` acepta fuente persistida `{fragmentSetId}` y persiste `routed_as` por fragmento
+- `MT101_PAY` correctivo crea ledger `PREPARED` antes de invocar el transporte
+- `MT101_PAY` marca el fragmento `DISPATCHING` antes de llamar al gateway/SFTP
+- la clave persistida en el ledger coincide con la clave entregada al transporte
+- `MT101_PAY` consume `routed_as` y selecciona REST/SFTP desde `routeTransports`
+- un cambio en configuracion `MT101_PAY` entre maker y checker invalida el request antes del dispatch
+- `MT101_STATUS` correctivo lee todos los `SENT` del ledger paginado, no el sample de PAY
+- `MT101_RECONCILE` correctivo usa scope por `rebuildRunId` y no reconcilia archivos ajenos
+- `PAY_UNCERTAIN` requiere conciliacion/operacion explicita; no hay reenvio ciego automatico
+
+### Resolucion de incertidumbre y correctivo hijo
+- `resolve-uncertain-pay` consulta `MT101_STATUS` sobre ledger `UNCERTAIN` y no invoca `MT101_PAY`
+- estados aceptados del banco cierran fragmentos inciertos como `SENT`
+- estados rechazados del banco cierran fragmentos inciertos como `REJECTED`
+- estados no finales mantienen el run en `pay_status=UNCERTAIN`
+- un padre `PARTIALLY_SENT` permite crear correctivo hijo solo con fragmentos `REJECTED`
+- fragmentos `SENT` del padre parcial no se seleccionan ni se sobrescriben
+- el run hijo registra lineage `parent_rebuild_run_id` y `parent_corrective_set_id`
+
 ## Frontend (sprint 1 + 2 + 3)
 
 ### M-1b registry
@@ -133,9 +179,21 @@ Cubre las tareas QA T-022 (sprint 2 inbound + reconciliación) y T-028
 | Caso | Test automatizado |
 |------|-------------------|
 | BUILD/VALIDATE/ARCHIVE/PAY/ROUTE/RECONCILE/STATUS/PARSE/SPLIT/REPAIR | tests unitarios backend (113 tests) |
+| Correctivo/reproceso sin fallback | `Mt101CorrectiveLifecycleServiceTest`, `Mt101RebuildServiceTest`, `Mt101StagingCorrectionServiceTest`, `Mt101RowTimelineServiceTest`, `Mt101ReprocessServiceTest`, `Mt101MultiSourceLineageTest`, `Mt101QuarantineServiceTest`, `Mt101LargeVolumeLineageRebuildTest`, `Mt101ArchiveTaskProviderTest`, `Mt101BuildFromTableTaskProviderTest` |
+| PAY correctivo gobernado V44 | `Mt101CorrectiveLifecycleServiceTest`, `Mt101RebuildServiceTest`, `Mt101StagingCorrectionServiceTest`, `Mt101MillionFileProcessE2EIT` |
+| Cierre P0 correctivo V45 | `Mt101RoutePersistedFragmentTest`, `Mt101PayFragmentReprocessTest`, `Mt101StatusTaskProviderTest`, `Mt101ReconcileTaskProviderTest`, `Mt101CorrectiveLifecycleServiceTest` |
+| Resolucion PAY incierto y correctivo hijo V46 | `Mt101StatusTaskProviderTest`, `Mt101CorrectiveLifecycleServiceTest` |
 | RBAC payments-operator | `PaymentsOperatorRoleIT` |
 | Pipeline end-to-end | `Mt101OutboundEndToEndIT` |
 | Forms TS providers | vitest specs (10 providers × ~5 tests) |
 | M-1b registry | `process-task-form-registry.spec.ts` |
+
+Ejecucion correctiva 2026-06-21: `mvn -pl platform-app "-Dtest=Mt101CorrectiveLifecycleServiceTest,Mt101RebuildServiceTest,Mt101StagingCorrectionServiceTest,Mt101RowTimelineServiceTest,Mt101ReprocessServiceTest,Mt101MultiSourceLineageTest,Mt101QuarantineServiceTest,Mt101LargeVolumeLineageRebuildTest,Mt101ArchiveTaskProviderTest,Mt101BuildFromTableTaskProviderTest" test` (59 tests PASS).
+
+Ejecucion V44 2026-06-21: `mvn -pl platform-app "-Dtest=Mt101CorrectiveLifecycleServiceTest,Mt101StagingCorrectionServiceTest" test` (13 tests PASS), `mvn -pl platform-app "-Dtest=Mt101RebuildServiceTest" test` (8 tests PASS, incluye scheduler sobre conexion JDBC no-default) y `mvn -pl platform-app "-Dtest=Mt101MillionFileProcessE2EIT" "-De2e.rows=1000" "-De2e.negativeRows=200" "-De2e.ncRows=200" test` (3 tests PASS).
+
+Ejecucion V45 2026-06-21: `mvn -pl platform-app "-Dtest=Mt101CorrectiveLifecycleServiceTest,Mt101StatusTaskProviderTest,Mt101ReconcileTaskProviderTest,Mt101PayFragmentReprocessTest,Mt101RoutePersistedFragmentTest" test` (32 tests PASS).
+
+Ejecucion V46 2026-06-21: `mvn -pl platform-app "-Dtest=Mt101CorrectiveLifecycleServiceTest,Mt101StatusTaskProviderTest" test` (26 tests PASS).
 
 Ejecución: `mvn -pl platform-app test` (backend) + `npx nx run web:test` (frontend).

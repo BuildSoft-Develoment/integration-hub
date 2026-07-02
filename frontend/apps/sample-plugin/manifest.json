@@ -1,0 +1,12 @@
+{
+  "id": "sample-plugin",
+  "version": "1.0.0",
+  "platformVersion": "1.0.0",
+  "displayName": "Sample Plugin",
+  "remote": {
+    "url": "https://plugins.example.com/remoteEntry.json",
+    "exposedModule": "./Widget",
+    "integrity": "sha384-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "signature": "sample-plugin-key-1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+  }
+}

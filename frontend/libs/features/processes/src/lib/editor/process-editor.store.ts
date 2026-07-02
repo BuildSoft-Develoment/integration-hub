@@ -8,7 +8,6 @@ import { ProcessFlowSyncService } from '../flow/process-flow-sync.service';
 import { ProcessFormFactoryService } from '../forms/process-form-factory.service';
 import {
   createTaskForm,
-  defaultTaskConfig,
   normalizeTaskOrders,
   ProcessFormModel,
   ProcessRecord,
@@ -25,10 +24,8 @@ export class ProcessEditorStore {
   private readonly formFactory = inject(ProcessFormFactoryService);
   private readonly flowApi = inject(ProcessFlowApiService);
   private readonly flowSync = inject(ProcessFlowSyncService);
-  // M-1a: para que createTaskForm respete los defaults del provider registrado
-  // (motor o vertical), pasamos el config derivado via el manager.
-  // {@code optional: true} para que tests con TestBed sin providers no quiebren;
-  // si no esta disponible, createTaskForm usa el switch hardcoded de fallback.
+  // M-1a: el config inicial sale del provider registrado via el manager.
+  // Optional: true para tests que no proveen el servicio.
   private readonly taskManager = inject(ProcessTaskManagerService, { optional: true });
 
   readonly saving = signal(false);
@@ -38,6 +35,13 @@ export class ProcessEditorStore {
   readonly drawerOpen = signal(false);
   readonly viewMode = signal<ViewMode>('details');
   readonly form = signal<ProcessFormModel>(this.formFactory.create());
+
+  private formSnapshot = '';
+
+  readonly dirty = computed(() => {
+    if (this.viewMode() !== 'edit') { return false; }
+    return JSON.stringify(this.form()) !== this.formSnapshot;
+  });
 
   readonly canEdit = computed(() => this.access.canAdmin());
   readonly canOperate = computed(() => this.access.canOperate());
@@ -49,6 +53,10 @@ export class ProcessEditorStore {
       : 'processes.detail'
   );
 
+  canDiscard(): boolean {
+    return !this.dirty();
+  }
+
   selectProcess(process: ProcessRecord): void {
     this.selectedProcessId.set(process.id);
     this.selectedProcess.set(process);
@@ -59,6 +67,7 @@ export class ProcessEditorStore {
 
   startCreate(): void {
     this.form.set(this.formFactory.create());
+    this.formSnapshot = JSON.stringify(this.form());
     this.viewMode.set('edit');
     this.drawerOpen.set(true);
   }
@@ -67,6 +76,7 @@ export class ProcessEditorStore {
     this.selectedProcessId.set(process.id);
     this.selectedProcess.set(process);
     this.form.set(this.formFactory.fromRecord(process));
+    this.formSnapshot = JSON.stringify(this.form());
     this.viewMode.set('edit');
     this.drawerOpen.set(true);
   }
@@ -123,9 +133,6 @@ export class ProcessEditorStore {
     position?: ProcessFlowNodePosition
   ): void {
     this.form.update((current) => {
-      // M-1a: el config inicial sale del provider registrado para este
-      // taskType (motor o vertical). Si no hay provider, createTaskForm cae
-      // al switch hardcoded de los 6 motor types o un placeholder.
       const nextOrder = current.tasks.length + 1;
       const provisionalRef = `task-${nextOrder}`;
       const tasks = normalizeTaskOrders([
@@ -149,6 +156,81 @@ export class ProcessEditorStore {
         flowLayout,
       };
     });
+  }
+
+  /**
+   * Plantilla "MT101 masivo desde archivo": scaffolda la cadena completa con
+   * los bindings de fragments PRE-CABLEADOS, evitando que el auto-binding elija
+   * records/summary cuando corresponde fragments (hallazgo H2). Todas las tareas
+   * MT101 downstream consumen `<build>.fragments` (la referencia al set
+   * persistido); cada etapa filtra por su gate de estado.
+   */
+  applyMassiveMt101Template(): void {
+    const buildRef = 'build-mt101-masivo';
+    const fragmentsInput = {
+      source: 'task-output' as const,
+      sourceTaskRef: buildRef,
+      sourceOutput: 'fragments' as const,
+    };
+    const specs: Array<{ taskType: ProcessTaskType; ref: string; overrides: Record<string, unknown> }> = [
+      { taskType: 'FILE_READ', ref: 'leer-archivo', overrides: { executionMode: 'batch' } },
+      { taskType: 'DB_WRITE', ref: 'staging', overrides: {
+          executionMode: 'batch',
+          mode: 'insert',
+          targetTable: 'staging_record',
+          jdbcBatchSize: 5000,
+          input: { source: 'task-output', sourceTaskRef: 'leer-archivo', sourceOutput: 'records' },
+        } },
+      { taskType: 'MT101_BUILD_FROM_TABLE', ref: buildRef, overrides: {
+          executionMode: 'once',
+          input: { source: 'task-output', sourceTaskRef: 'staging', sourceOutput: 'table' },
+          fragmentSetIdTemplate: 'MT101-${_processExecutionId}',
+          replaceExisting: true,
+          maxTransactionsPerMessage: 100,
+          maxBytesPerMessage: 10000,
+          maxRecordsInOutput: 1000,
+        } },
+      { taskType: 'MT101_VALIDATE', ref: 'validar', overrides: {
+          executionMode: 'once',
+          input: fragmentsInput,
+          pageSize: 200,
+          publishIssuesTo: 'table:mt101_validation_issue',
+          maxIssuesInOutput: 1000,
+        } },
+      { taskType: 'MT101_ARCHIVE', ref: 'archivar', overrides: {
+          executionMode: 'once',
+          input: fragmentsInput,
+          pageSize: 200,
+          maxRecordsInOutput: 1000,
+        } },
+      { taskType: 'MT101_PAY', ref: 'pagar', overrides: {
+          executionMode: 'once',
+          input: fragmentsInput,
+          pageSize: 200,
+          maxRecordsInOutput: 1000,
+        } },
+    ];
+
+    const tasks = normalizeTaskOrders(specs.map((spec, index) => {
+      const base = this.defaultConfigurationJson(spec.taskType, spec.ref);
+      let config: Record<string, unknown>;
+      try {
+        config = JSON.parse(base || '{}');
+      } catch {
+        config = {};
+      }
+      config = { ...config, taskRef: spec.ref, ...spec.overrides };
+      return createTaskForm(spec.taskType, index + 1, JSON.stringify(config, null, 2));
+    }));
+    // Reusa applyFlowState: sincroniza el layout creando nodos para las nuevas
+    // tareas. Parte de un layout vacio (mismo viewport/version actual) para
+    // reemplazar el contenido del editor con la cadena masiva completa.
+    const emptyLayout = {
+      ...this.form().flowLayout,
+      nodes: [],
+      edges: [],
+    };
+    this.applyFlowState(emptyLayout, tasks);
   }
 
   updateTask(
@@ -226,17 +308,13 @@ export class ProcessEditorStore {
         }, null, 2),
       };
     } catch {
-      // Fallback conservador para configs invalidas: mantiene el comportamiento previo.
+      // Si el JSON es invalido, se queda con la config actual.
     }
-    return {
-      ...task,
-      configurationJson: defaultTaskConfig(task.taskType, task.clientId, suggested),
-    };
+    return task;
   }
 
   private defaultConfigurationJson(taskType: ProcessTaskType, taskRef: string): string {
-    return this.taskManager?.defaultConfigurationJson(taskType, taskRef)
-      ?? defaultTaskConfig(taskType, taskRef);
+    return this.taskManager?.defaultConfigurationJson(taskType, taskRef) ?? '{}';
   }
 
   private suggestedInput(taskType: ProcessTaskType, previousTasks: readonly ProcessTaskFormModel[]): { sourceTaskRef: string; sourceOutput: ProcessTaskOutputKind } | undefined {

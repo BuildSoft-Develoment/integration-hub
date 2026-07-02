@@ -15,3 +15,7 @@ export * from './lib/ui/system-theme-config.service';
 export * from './lib/i18n/i18n.service';
 export * from './lib/infrastructure/paginator-intl.service';
 export * from './lib/ui/ui-message.service';
+export * from './lib/ui/breadcrumb.service';
+export * from './lib/ui/i18n-title.strategy';
+export * from './lib/ui/table-preferences.service';
+export * from './lib/ui/sort-utils';

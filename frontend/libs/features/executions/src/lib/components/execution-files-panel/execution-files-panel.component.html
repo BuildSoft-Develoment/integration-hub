@@ -94,48 +94,50 @@
           </mat-form-field>
         </div>
 
-        <div class="files-selection">
-          <div class="files-selection__copy">
-            <strong>{{ i18n.t('executions.selectedFiles') }}: {{ store.selectedRows().length }}</strong>
-            <span class="ih-muted">
-              {{ i18n.t('executions.processedFiles') }}: {{ store.allFiles().length }} ·
-              {{ i18n.t('executions.exportCompletedCsv') }} {{ store.completedFiles().length }} ·
-              {{ i18n.t('executions.exportFailedCsv') }} {{ store.failedFiles().length }} ·
-              {{ i18n.t('executions.exportPendingCsv') }} {{ store.pendingFiles().length }}
-            </span>
-          </div>
+        @if (store.selectedRows().length > 0) {
+          <div class="files-selection">
+            <div class="files-selection__copy">
+              <strong>{{ i18n.t('executions.selectedFiles') }}: {{ store.selectedRows().length }}</strong>
+              <span class="ih-muted">
+                {{ i18n.t('executions.processedFiles') }}: {{ store.allFiles().length }} ·
+                {{ i18n.t('executions.exportCompletedCsv') }} {{ store.completedFiles().length }} ·
+                {{ i18n.t('executions.exportFailedCsv') }} {{ store.failedFiles().length }} ·
+                {{ i18n.t('executions.exportPendingCsv') }} {{ store.pendingFiles().length }}
+              </span>
+            </div>
 
-          <div class="files-selection__actions">
-            <button
-              mat-stroked-button
-              type="button"
-              [disabled]="actionBusy() || !store.failedFiles().length || !execution()?.processDefinitionId"
-              (click)="emitAction('retryFailed', store.failedFiles())"
-            >
-              {{ i18n.t('executions.retryFailedFiles') }}
-            </button>
-            <button
-              mat-stroked-button
-              type="button"
-              [disabled]="actionBusy() || !store.pendingFiles().length || !execution()?.processDefinitionId"
-              (click)="emitAction('processPending', store.pendingFiles())"
-            >
-              {{ i18n.t('executions.processPendingFiles') }}
-            </button>
-            <button
-              mat-flat-button
-              type="button"
-              color="primary"
-              [disabled]="actionBusy() || !store.selectedRows().length || !execution()?.processDefinitionId"
-              (click)="emitAction('reprocessSelected', store.selectedRows())"
-            >
-              {{ i18n.t('executions.reprocessSelectedFiles') }}
-            </button>
-            <button mat-button type="button" (click)="store.clearFiltersAndSelection()">
-              {{ i18n.t('executions.clearFileFilters') }}
-            </button>
+            <div class="files-selection__actions">
+              <button
+                mat-stroked-button
+                type="button"
+                [disabled]="actionBusy() || !store.failedFiles().length || !execution()?.processDefinitionId"
+                (click)="emitAction('retryFailed', store.failedFiles())"
+              >
+                {{ i18n.t('executions.retryFailedFiles') }}
+              </button>
+              <button
+                mat-stroked-button
+                type="button"
+                [disabled]="actionBusy() || !store.pendingFiles().length || !execution()?.processDefinitionId"
+                (click)="emitAction('processPending', store.pendingFiles())"
+              >
+                {{ i18n.t('executions.processPendingFiles') }}
+              </button>
+              <button
+                mat-flat-button
+                type="button"
+                color="primary"
+                [disabled]="actionBusy() || !store.selectedRows().length || !execution()?.processDefinitionId"
+                (click)="emitAction('reprocessSelected', store.selectedRows())"
+              >
+                {{ i18n.t('executions.reprocessSelectedFiles') }}
+              </button>
+              <button mat-button type="button" (click)="store.clearFiltersAndSelection()">
+                {{ i18n.t('executions.clearFileFilters') }}
+              </button>
+            </div>
           </div>
-        </div>
+        }
 
         @if (!store.allFiles().length) {
           <div class="empty-state ih-muted">{{ i18n.t('executions.sourceFilesEmpty') }}</div>

@@ -6,9 +6,11 @@ export type AppSectionKey =
   | 'connections'
   | 'readers'
   | 'processes'
+  | 'paymentRules'
   | 'executions'
   | 'schedules'
-  | 'audit';
+  | 'audit'
+  | 'plugins';
 
 export type AppSectionCapability = AuthCapability | null;
 
@@ -20,8 +22,10 @@ export const APP_SECTION_CAPABILITIES: Record<
   sources: 'admin',
   connections: 'admin',
   readers: 'admin',
-  processes: 'admin',
+  processes: 'operate',
+  paymentRules: 'admin',
   executions: 'operate',
-  schedules: 'audit',
-  audit: 'audit',
+  schedules: 'audit-read',
+  audit: 'audit-read',
+  plugins: 'admin',
 };

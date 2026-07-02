@@ -1,5 +1,6 @@
 package com.integrationhub.platform.service.execution;
 
+import com.integrationhub.platform.repository.TaskInputRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import org.junit.jupiter.api.Test;
 
@@ -33,16 +34,16 @@ class TaskInputResolverTest {
 
     @Test
     void buildsDialectSpecificLimitClause() {
-        var resolver = new TaskInputResolver(null, new ConnectionPoolManager(null, null));
+        var repository = new TaskInputRepository();
 
         // SQL Server NO admite `FETCH FIRST ... ROWS ONLY` suelto: exige OFFSET ... FETCH NEXT (P2.b).
         assertEquals(" offset 0 rows fetch next ? rows only",
-                resolver.limitClause(TaskInputResolver.PaginationDialect.OFFSET_FETCH));
+                repository.limitClause(TaskInputRepository.PaginationDialect.OFFSET_FETCH));
         // Oracle 12c+ si admite FETCH FIRST.
         assertEquals(" fetch first ? rows only",
-                resolver.limitClause(TaskInputResolver.PaginationDialect.FETCH_FIRST));
+                repository.limitClause(TaskInputRepository.PaginationDialect.FETCH_FIRST));
         // postgresql/mysql/mariadb/h2.
         assertEquals(" limit ?",
-                resolver.limitClause(TaskInputResolver.PaginationDialect.LIMIT));
+                repository.limitClause(TaskInputRepository.PaginationDialect.LIMIT));
     }
 }

@@ -7,11 +7,12 @@ Describir un pipeline minimo para el estado actual del proyecto.
 ## Etapas sugeridas
 
 1. checkout
-2. build de frontend
-3. build y test de backend
-4. empaquetado del artefacto Quarkus con Quinoa
-5. smoke tests
-6. promocion por ambiente
+2. validacion de catalogo frontend extensible
+3. build de frontend
+4. build y test de backend
+5. empaquetado del artefacto Quarkus con Quinoa
+6. smoke tests
+7. promocion por ambiente
 
 ## Entradas reales del repositorio
 
@@ -24,5 +25,7 @@ Describir un pipeline minimo para el estado actual del proyecto.
 
 - pruebas Java
 - pruebas frontend
+- `npx nx run web:test-plugins` o `npm run test:plugins`
+- `npx nx run web:validate-plugins` o `npm run validate:plugins`
 - artefacto construible
 - evidencias de release

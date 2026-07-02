@@ -14,6 +14,10 @@
             <div><strong>{{ i18n.t('executions.startedAt') }}</strong>: {{ formatDate(execution()!.startedAt) }}</div>
             <div><strong>{{ i18n.t('executions.finishedAt') }}</strong>: {{ formatDate(execution()!.finishedAt) }}</div>
           </div>
+
+          <a class="traceability-link" [routerLink]="['/audit/mt101-quarantine']" [queryParams]="{ processExecutionId: execution()!.id }">
+            {{ i18n.t('executions.viewTraceability') }}
+          </a>
         </section>
 
         @if (failedExecutionSummary()) {

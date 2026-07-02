@@ -2,20 +2,24 @@ import { computed, inject, Injectable, OnDestroy, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
 import { SourceProviderType } from '@integration-hub/core/providers';
+import { TablePreferencesService, sortData, SortState } from '@integration-hub/core/services';
 
 import { SourceApiService } from '../api/source-api.service';
 import { SourceRecord } from '../models/source.models';
 
 export type SourceStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
+const TABLE_ID = 'sources';
 
 @Injectable()
 export class SourceCatalogQueryStore implements OnDestroy {
   private readonly api = inject(SourceApiService);
+  private readonly prefs = inject(TablePreferencesService);
   private readonly searchDebounceMs = 300;
   private searchDebounceHandle: ReturnType<typeof setTimeout> | null = null;
   private requestSequence = 0;
 
   readonly loading = signal(false);
+  readonly error = signal<string | null>(null);
   readonly sources = signal<SourceRecord[]>([]);
   readonly totalLength = signal(0);
   readonly search = signal('');
@@ -27,7 +31,19 @@ export class SourceCatalogQueryStore implements OnDestroy {
   readonly currentPage = signal(0);
   readonly pageSize = signal(8);
 
-  readonly pagedSources = computed(() => this.sources());
+  readonly sortField = signal<string | null>(this.prefs.getSort(TABLE_ID)?.field ?? null);
+  readonly sortDirection = signal<'asc' | 'desc'>(this.prefs.getSort(TABLE_ID)?.direction ?? 'asc');
+
+  private readonly sort = computed<SortState | null>(() => {
+    const field = this.sortField();
+    return field ? { field, direction: this.sortDirection() } : null;
+  });
+
+  readonly pagedSources = computed(() => {
+    const data = this.sources();
+    const s = this.sort();
+    return s ? sortData(data, s) : data;
+  });
 
   async load(): Promise<void> {
     await this.loadSources(true);
@@ -80,6 +96,18 @@ export class SourceCatalogQueryStore implements OnDestroy {
     this.selectedSource.set(source);
   }
 
+  toggleSort(field: string): void {
+    if (this.sortField() === field) {
+      const dir = this.sortDirection() === 'asc' ? 'desc' : 'asc';
+      this.sortDirection.set(dir);
+      this.prefs.setSort(TABLE_ID, { field, direction: dir });
+    } else {
+      this.sortField.set(field);
+      this.sortDirection.set('asc');
+      this.prefs.setSort(TABLE_ID, { field, direction: 'asc' });
+    }
+  }
+
   async reload(): Promise<void> {
     await this.loadSources(false);
   }
@@ -109,6 +137,7 @@ export class SourceCatalogQueryStore implements OnDestroy {
 
       this.sources.set(response.items);
       this.totalLength.set(response.total);
+      this.error.set(null);
 
       const selectedId = this.selectedSourceId();
       if (selectedId != null) {
@@ -116,6 +145,10 @@ export class SourceCatalogQueryStore implements OnDestroy {
         if (refreshed) {
           this.selectedSource.set(refreshed);
         }
+      }
+    } catch {
+      if (requestId === this.requestSequence) {
+        this.error.set('sources.loadError');
       }
     } finally {
       if (requestId === this.requestSequence) {

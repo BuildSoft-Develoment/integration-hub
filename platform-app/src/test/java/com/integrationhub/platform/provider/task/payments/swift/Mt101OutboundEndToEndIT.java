@@ -3,14 +3,14 @@ package com.integrationhub.platform.provider.task.payments.swift;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
-import com.integrationhub.platform.provider.task.payments.spi.PaymentMessageFormatter;
-import com.integrationhub.platform.provider.task.payments.spi.PaymentMessageTransport;
-import com.integrationhub.platform.provider.task.payments.spi.ValidationPredicate;
-import com.integrationhub.platform.provider.task.payments.spi.ValidationRuleProvider;
+import com.integrationhub.platform.spi.task.payments.PaymentMessageFormatter;
+import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
+import com.integrationhub.platform.spi.task.payments.ValidationPredicate;
+import com.integrationhub.platform.spi.task.payments.ValidationRuleProvider;
 import com.integrationhub.platform.provider.task.payments.swift.format.FinMt101Formatter;
 import com.integrationhub.platform.provider.task.payments.swift.format.JsonMt101Formatter;
 import com.integrationhub.platform.provider.task.payments.swift.format.XmlMt101Formatter;
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.integrationhub.platform.provider.task.payments.swift.transport.RestPaymentTransport;
 import com.integrationhub.platform.provider.task.payments.swift.validation.Mt101StructuralRules;
 import com.integrationhub.platform.spi.reader.ReadRecord;
@@ -127,7 +127,8 @@ class Mt101OutboundEndToEndIT {
         // PAY con RestPaymentTransport apuntando a WireMock.
         var transports = List.<PaymentMessageTransport>of(
                 new RestPaymentTransport(new ObjectMapper()));
-        payProvider = new Mt101PayTaskProvider(new ListInstance<>(transports));
+        payProvider = new Mt101PayTaskProvider(
+                new ListInstance<>(transports), null, new Mt101ArchiveStatusUpdater(dataSource));
     }
 
     @AfterAll
@@ -203,6 +204,8 @@ class Mt101OutboundEndToEndIT {
         assertEquals(1, payResult.outputs().get("sentCount"));
         assertEquals(1, payResult.outputs().get("acceptedCount"));
         assertEquals(0, payResult.outputs().get("rejectedCount"));
+        assertEquals(1, countRowsWhere("mt101_archive", "status = 'SENT'"),
+                "PAY debe sincronizar mt101_archive.status en flujo no fragmentado");
 
         // 6. Verifica que el gateway recibio el POST con la senders_reference como
         //    idempotency key.
@@ -339,6 +342,7 @@ class Mt101OutboundEndToEndIT {
                     "create table mt101_archive (" +
                     " id bigserial primary key," +
                     " envelope_id bigint references swift_message_envelope(id)," +
+                    " sender_lt char(12), process_execution_id bigint," +
                     " senders_reference varchar(16) not null," +
                     " customer_specified_reference varchar(16)," +
                     " message_index integer, message_total integer," +
@@ -350,6 +354,7 @@ class Mt101OutboundEndToEndIT {
                     " status varchar(20) not null default 'PENDING'," +
                     " format char(4)," +
                     " created_at timestamp not null default current_timestamp," +
+                    " updated_at timestamp not null default current_timestamp," +
                     " retention_until date)");
             statement.executeUpdate(
                     "create table mt101_transaction (" +
@@ -373,9 +378,13 @@ class Mt101OutboundEndToEndIT {
     }
 
     private int countRows(String table) throws SQLException {
+        return countRowsWhere(table, "true");
+    }
+
+    private int countRowsWhere(String table, String whereClause) throws SQLException {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement();
-             var rs = statement.executeQuery("select count(*) from " + table)) {
+             var rs = statement.executeQuery("select count(*) from " + table + " where " + whereClause)) {
             rs.next();
             return rs.getInt(1);
         }

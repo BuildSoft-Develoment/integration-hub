@@ -1,6 +1,6 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.integrationhub.platform.spi.task.TaskContext;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

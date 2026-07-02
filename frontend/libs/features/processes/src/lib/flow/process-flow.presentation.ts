@@ -1,5 +1,16 @@
 import { ProcessTaskType } from '../models/process.models';
 
+export type TaskCategory = 'motor' | 'swift-mt101';
+
+export function taskCategory(type: ProcessTaskType): TaskCategory {
+  return type.startsWith('MT101_') ? 'swift-mt101' : 'motor';
+}
+
+export const CATEGORY_LABELS: Record<TaskCategory, string> = {
+  motor: 'Motor',
+  'swift-mt101': 'SWIFT MT101',
+};
+
 export interface ProcessFlowNodePresentation {
   badge: string;
   toneClass: string;
@@ -40,6 +51,11 @@ const NODE_PRESENTATION: Record<ProcessTaskType, ProcessFlowNodePresentation> = 
   // --- Vertical mensajeria de pagos sub-catalogo swift/ (spec 008, ADR-009) ---
   MT101_BUILD: {
     badge: 'BUILD',
+    toneClass: 'task-node--payment',
+    iconPath: 'M4 6h16M4 10h10M4 14h16M4 18h10M18 8l3 3-3 3M18 16l3-3',
+  },
+  MT101_BUILD_FROM_TABLE: {
+    badge: 'BUILD DB',
     toneClass: 'task-node--payment',
     iconPath: 'M4 6h16M4 10h10M4 14h16M4 18h10M18 8l3 3-3 3M18 16l3-3',
   },
@@ -89,6 +105,17 @@ const NODE_PRESENTATION: Record<ProcessTaskType, ProcessFlowNodePresentation> = 
     badge: 'REPAIR',
     toneClass: 'task-node--payment-repair',
     iconPath: 'M14 3l7 7-11 11H3v-7zM14 3l-3 3 7 7 3-3z',
+  },
+  // --- Inbound a escala (table-backed) ---
+  MT101_PARSE_FROM_TABLE: {
+    badge: 'PARSE',
+    toneClass: 'task-node--payment-parse',
+    iconPath: 'M4 4h16v6H4zM4 14h16v6H4zM8 7h2M8 17h2M14 7h2M14 17h2',
+  },
+  MT101_INBOUND_DELIVER: {
+    badge: 'DELIVER',
+    toneClass: 'task-node--payment-dispatch',
+    iconPath: 'M3 10h18M3 14h18M5 7h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM16 14h2',
   },
 };
 

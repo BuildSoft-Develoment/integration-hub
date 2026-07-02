@@ -31,19 +31,7 @@ import { ExecutionFilesPanelStore } from './execution-files-panel.store';
     MatSelectModule,
     ExecutionFilesTableComponent,
   ],
-  styles: [`
-    .files-shell { display:grid; gap:1rem; padding-top:0.25rem; }
-    .files-toolbar, .files-selection { display:flex; gap:0.75rem; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; }
-    .files-toolbar__chips, .files-toolbar__actions, .files-selection__actions { display:flex; flex-wrap:wrap; gap:0.55rem; }
-    .files-toolbar__chip--active { border-color:var(--ih-accent); color:var(--ih-accent-strong); }
-    .files-filters { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:0.75rem; }
-    .files-selection { padding:0.95rem; border:1px solid var(--ih-border); border-radius:18px; background:color-mix(in srgb, var(--ih-surface-alt) 92%, transparent); }
-    .files-selection__copy { display:grid; gap:0.25rem; }
-    .empty-state, .empty-inline { min-height:12rem; display:grid; place-items:center; text-align:center; }
-    .empty-inline { min-height:8rem; }
-    @media (max-width: 1280px) { .files-filters { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 980px) { .files-filters { grid-template-columns:1fr; } }
-  `],
+  styleUrl: './execution-files-panel.component.css',
     templateUrl: './execution-files-panel.component.html'
 })
 export class ExecutionFilesPanelComponent {

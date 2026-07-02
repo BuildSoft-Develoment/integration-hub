@@ -12,7 +12,6 @@ import com.jcraft.jsch.SftpException;
 import io.quarkus.arc.properties.UnlessBuildProperty;
 import jakarta.enterprise.context.ApplicationScoped;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -22,7 +21,7 @@ import java.util.Map;
 import java.util.Properties;
 
 @ApplicationScoped
-@UnlessBuildProperty(name = "integrationhub.native.disable.sftp", stringValue = "true")
+@UnlessBuildProperty(name = "integrationhub.native.disable.sftp", stringValue = "true", enableIfMissing = true)
 public class SftpSourceProvider implements SourceProvider {
 
     @Override
@@ -42,20 +41,14 @@ public class SftpSourceProvider implements SourceProvider {
         String privateKeyPath = SourceConfigurationSupport.optionalString(configuration, "privateKeyPath", null);
         String passphrase = SourceConfigurationSupport.optionalString(configuration, "passphrase", null);
         int timeoutMillis = SourceConfigurationSupport.optionalInt(configuration, "timeoutMillis", 15000);
-        boolean strictHostKeyChecking = SourceConfigurationSupport.optionalBoolean(configuration, "strictHostKeyChecking", false);
+        boolean strictHostKeyChecking = SourceConfigurationSupport.optionalBoolean(configuration, "strictHostKeyChecking", true);
+        String knownHostsPath = SourceConfigurationSupport.optionalString(configuration, "knownHostsPath", null);
         String mediaType = SourceConfigurationSupport.optionalString(configuration, "mediaType", null);
 
         Session session = null;
         ChannelSftp channel = null;
         try {
-            JSch jsch = new JSch();
-            if (privateKeyPath != null) {
-                if (passphrase != null) {
-                    jsch.addIdentity(privateKeyPath, passphrase);
-                } else {
-                    jsch.addIdentity(privateKeyPath);
-                }
-            }
+            JSch jsch = createJsch(privateKeyPath, passphrase, knownHostsPath);
 
             session = jsch.getSession(username, host, port);
             if (password != null) {
@@ -96,20 +89,13 @@ public class SftpSourceProvider implements SourceProvider {
         String privateKeyPath = SourceConfigurationSupport.optionalString(configuration, "privateKeyPath", null);
         String passphrase = SourceConfigurationSupport.optionalString(configuration, "passphrase", null);
         int timeoutMillis = SourceConfigurationSupport.optionalInt(configuration, "timeoutMillis", 15000);
-        boolean strictHostKeyChecking = SourceConfigurationSupport.optionalBoolean(configuration, "strictHostKeyChecking", false);
+        boolean strictHostKeyChecking = SourceConfigurationSupport.optionalBoolean(configuration, "strictHostKeyChecking", true);
+        String knownHostsPath = SourceConfigurationSupport.optionalString(configuration, "knownHostsPath", null);
 
         Session session = null;
         ChannelSftp channel = null;
-        ByteArrayOutputStream outputStream = null;
         try {
-            JSch jsch = new JSch();
-            if (privateKeyPath != null) {
-                if (passphrase != null) {
-                    jsch.addIdentity(privateKeyPath, passphrase);
-                } else {
-                    jsch.addIdentity(privateKeyPath);
-                }
-            }
+            JSch jsch = createJsch(privateKeyPath, passphrase, knownHostsPath);
 
             session = jsch.getSession(username, host, port);
             if (password != null) {
@@ -124,18 +110,18 @@ public class SftpSourceProvider implements SourceProvider {
             channel = (ChannelSftp) session.openChannel("sftp");
             channel.connect(timeoutMillis);
 
-            outputStream = new ByteArrayOutputStream();
-            channel.get(selectedFile.location(), outputStream);
-            return SourcePayload.fromBytes(selectedFile.name(), outputStream.toByteArray(), selectedFile.mediaType());
-        } catch (JSchException | SftpException e) {
+            // Streaming a archivo temporal (no byte[]): un CSV de varios GB por
+            // SFTP no presiona el heap; el reader lo lee por lotes desde disco.
+            ChannelSftp downloadChannel = channel;
+            return TempFileSourcePayload.fromDownloadedTemp(selectedFile.name(), selectedFile.location(), tempFile -> {
+                try (var fileOut = java.nio.file.Files.newOutputStream(tempFile)) {
+                    downloadChannel.get(selectedFile.location(), fileOut);
+                }
+                return selectedFile.mediaType();
+            });
+        } catch (JSchException | IOException e) {
             throw new IllegalStateException("Cannot read file from SFTP source", e);
         } finally {
-            if (outputStream != null) {
-                try {
-                    outputStream.close();
-                } catch (IOException ignored) {
-                }
-            }
             if (channel != null && channel.isConnected()) {
                 channel.disconnect();
             }
@@ -143,6 +129,21 @@ public class SftpSourceProvider implements SourceProvider {
                 session.disconnect();
             }
         }
+    }
+
+    private JSch createJsch(String privateKeyPath, String passphrase, String knownHostsPath) throws JSchException {
+        JSch jsch = new JSch();
+        if (knownHostsPath != null) {
+            jsch.setKnownHosts(knownHostsPath);
+        }
+        if (privateKeyPath != null) {
+            if (passphrase != null) {
+                jsch.addIdentity(privateKeyPath, passphrase);
+            } else {
+                jsch.addIdentity(privateKeyPath);
+            }
+        }
+        return jsch;
     }
 
     @SuppressWarnings("unchecked")

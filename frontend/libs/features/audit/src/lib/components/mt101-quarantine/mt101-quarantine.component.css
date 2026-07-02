@@ -1,0 +1,58 @@
+.q { display:flex; flex-direction:column; gap:1rem; }
+.q__lote { display:flex; flex-direction:column; gap:.4rem; }
+.q__lote-title { font-size:1.15rem; font-weight:600; display:flex; align-items:center; gap:.4rem; }
+.q__lote-chips { display:flex; gap:.4rem; flex-wrap:wrap; }
+.q__chip { font-size:.78rem; color:var(--ih-text-soft); background:var(--ih-surface-alt); border:1px solid var(--ih-border); padding:2px 8px; border-radius:6px; display:inline-flex; align-items:center; gap:.3rem; }
+.q__risk-strip { display:flex; gap:.4rem; flex-wrap:wrap; }
+.q__risk-pill strong { font-size:.75rem; }
+.q__risk-pill small { font-size:.68rem; }
+.q__risk-pill--high { color:var(--ih-status-warning); border-color:var(--ih-status-warning); }
+.q__risk-pill--critical { color:var(--ih-status-error); border-color:var(--ih-status-error); }
+.q__risk-detail { margin:0; color:var(--ih-text-soft); font-size:.78rem; }
+.q__search { display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; }
+.q__search mat-form-field { width:13rem; }
+.q__filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(11rem,1fr)); gap:.6rem; align-items:center; }
+.q__actions { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+.q__reason { max-width:28rem; width:100%; }
+.q__danger--armed { --mdc-outlined-button-label-text-color:var(--ih-status-error); --mdc-outlined-button-outline-color:var(--ih-status-error); }
+.q__confirm { border:1px solid var(--ih-status-error); background:var(--ih-status-error-bg); border-radius:8px; padding:.75rem .9rem; display:flex; flex-direction:column; gap:.5rem; }
+.q__confirm-title { font-weight:600; color:var(--ih-status-error); display:flex; align-items:center; gap:.4rem; }
+.q__confirm-list { margin:0; padding-left:1.1rem; display:flex; flex-direction:column; gap:.2rem; font-size:.86rem; }
+.q__confirm-list .q__muted { color:var(--ih-text-soft); list-style:none; margin-left:-1.1rem; }
+.q__muted { color:var(--ih-text-soft); font-size:.78rem; }
+.q__table { overflow:auto; border:1px solid var(--ih-border); border-radius:8px; }
+table { width:100%; border-collapse:collapse; min-width:60rem; }
+th, td { padding:.55rem .65rem; border-bottom:1px solid var(--ih-border); text-align:left; vertical-align:top; }
+th { font-size:.75rem; color:var(--ih-text-soft); font-weight:600; }
+td { font-size:.86rem; }
+.q__mono { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; overflow-wrap:anywhere; }
+.q__row { font-weight:600; color:var(--ih-status-warning); }
+.q__link { color:var(--ih-accent); text-decoration:none; white-space:nowrap; margin-left:.4rem; }
+.q__link:hover { text-decoration:underline; }
+.q__copy { display:inline-flex; align-items:center; gap:.25rem; border:0; background:transparent; color:var(--ih-accent-strong); cursor:pointer; padding:1px .35rem; margin-left:.25rem; font:inherit; font-size:.72rem; font-weight:600; vertical-align:middle; }
+.q__copy:hover,.q__copy:focus-visible { color:var(--ih-accent); text-decoration:underline; }
+.q__tl-row td { background:var(--ih-surface-alt); padding:.5rem .75rem; }
+.q__timeline { display:flex; flex-direction:column; gap:5px; }
+.q__tl-title { font-size:.78rem; color:var(--ih-text-soft); margin-bottom:.25rem; }
+.q__tl-note { font-size:.72rem; color:var(--ih-text-soft); }
+.q__tl-entry { display:grid; grid-template-columns:minmax(8rem,12rem) 6.5rem 1fr minmax(8rem,11rem); gap:.6rem; align-items:center; padding:.4rem .6rem; border-left:3px solid var(--ih-border); background:var(--ih-surface); }
+.q__tl-entry--REJECTED { border-left-color:var(--ih-status-error); }
+.q__tl-entry--SENT,.q__tl-entry--ARCHIVED,.q__tl-entry--VALIDATED,.q__tl-entry--INGESTED,.q__tl-entry--BUILT { border-left-color:var(--ih-status-success); }
+.q__tl-stage { font-weight:600; overflow-wrap:anywhere; }
+.q__tl-ts { color:var(--ih-text-soft); font-size:.8rem; }
+.q__tl-dur { color:var(--ih-text-soft); font-size:.72rem; }
+.q__correct { display:flex; flex-direction:column; gap:.4rem; }
+.q__correct-field { width:100%; }
+.q__correct-field textarea { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.82rem; }
+.q__pager { display:flex; justify-content:flex-end; gap:.5rem; margin-top:.6rem; }
+.q__cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(7rem,1fr)); gap:.6rem; }
+.q__card { background:var(--ih-surface-alt); border:1px solid var(--ih-border); border-radius:8px; padding:.6rem .7rem; display:flex; flex-direction:column; gap:.15rem; }
+.q__card small { font-size:.72rem; color:var(--ih-text-soft); }
+.q__card strong { font-size:1.35rem; font-weight:600; }
+.q__empty,.q__error,.q__ok { padding:.75rem; }
+.q__empty,.q__card--SUPERSEDED strong,.q__status--DISCARDED { color:var(--ih-text-soft); }
+.q__error,.q__card--REJECTED strong,.q__status--REBUILD_REJECTED,.q__tl-icon--error { color:var(--ih-status-error); }
+.q__ok,.q__status--RESOLVED,.q__status--REBUILD_VALIDATED,.q__status--REBUILD_SENT,.q__status--REBUILD_CONFIRMED,.q__tl-icon--ok,.q__card--SENT strong,.q__card--ARCHIVED strong,.q__card--VALIDATED strong { color:var(--ih-status-success); }
+.q__status--QUARANTINED,.q__card--QUARANTINED strong { color:var(--ih-status-warning); }
+.q__status--REBUILD_PENDING_VALIDATION,.q__status--REBUILD_ARCHIVED,.q__status--PARTIALLY_SENT { color:var(--ih-status-warning); }
+.q__tl-icon--pending { color:var(--ih-status-neutral); }

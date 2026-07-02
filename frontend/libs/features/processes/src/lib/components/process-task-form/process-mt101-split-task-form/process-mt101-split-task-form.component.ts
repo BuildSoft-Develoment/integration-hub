@@ -87,46 +87,7 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
       </section>
     </div>
   `,
-  styles: [`
-    :host { display: block; height: 100%; min-height: 0; overflow: hidden; }
-    .mt101-split {
-      display: flex;
-      flex-direction: column;
-      gap: 1rem;
-      height: 100%;
-      min-height: 0;
-      overflow: auto;
-      padding: 0 0.25rem 0.25rem 0;
-    }
-    .mt101-split__header {
-      padding-bottom: 0.5rem;
-      border-bottom: 1px solid var(--ih-border-subtle, var(--color-border, #e2e8f0));
-    }
-    .mt101-split__header h3 { margin: 0; font-size: 1.05rem; font-weight: 600; }
-    .mt101-split__description {
-      margin: 0;
-      color: var(--ih-text-soft, var(--color-text-muted, #475569));
-      font-size: 0.85rem;
-    }
-    .mt101-split__section { display: flex; flex-direction: column; gap: 0.6rem; }
-    .mt101-split__section h4 {
-      margin: 0; font-size: 0.9rem; font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0;
-      color: var(--ih-text-soft, var(--color-text-muted, #475569));
-    }
-    .mt101-split__grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 0.75rem 1rem;
-      min-width: 0;
-    }
-    .mt101-split__grid mat-form-field,
-    .mt101-split__full {
-      width: 100%;
-      min-width: 0;
-    }
-    @media (max-width: 720px) { .mt101-split__grid { grid-template-columns: 1fr; } }
-  `],
+  styleUrl: './process-mt101-split-task-form.component.css',
 })
 export class ProcessMt101SplitTaskFormComponent {
   readonly i18n = inject(I18nService);

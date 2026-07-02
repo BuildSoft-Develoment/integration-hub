@@ -1,51 +1,53 @@
-<div class="list-card ih-catalog-list">
-      <div class="table-head ih-catalog-table-head">
-        <span>{{ i18n.t('common.name') }}</span>
-        <span>{{ i18n.t('common.type') }}</span>
-        <span>{{ i18n.t('common.status') }}</span>
+<ih-catalog-list
+  class="list-card"
+  [columns]="columns"
+  gridColumns="minmax(200px, 1.5fr) 0.9fr 0.8fr"
+  [sortField]="sortField()"
+  [sortDirection]="sortDirection()"
+  [rowCount]="readers().length"
+  [loading]="loading()"
+  [error]="error()"
+  emptyKey="readers.noData"
+  emptyIcon="file-text"
+  [total]="totalLength()"
+  [pageIndex]="pageIndex()"
+  [pageSize]="pageSize()"
+  [pageSizeOptions]="pageSizeOptions()"
+  (toggleSort)="toggleSort.emit($event)"
+  (pageChange)="onPageChange($event)"
+  (retry)="retry.emit()"
+>
+  @for (reader of readers(); track reader.id) {
+    <button
+      type="button"
+      class="table-row ih-catalog-table-row"
+      [class.table-row--selected]="selectedReaderId() === reader.id"
+      [class.ih-catalog-table-row--selected]="selectedReaderId() === reader.id"
+      [attr.aria-label]="i18n.t('common.selectItem', { name: reader.name })"
+      [attr.tabindex]="$index === 0 ? 0 : -1"
+      [attr.data-row-index]="$index"
+      (click)="selectReader.emit(reader)"
+    >
+      <div class="row-primary ih-catalog-row-primary">
+        <div class="row-avatar ih-catalog-row-avatar" [class]="presentation(reader.readerType).toneClass">
+          <ih-icon [name]="presentation(reader.readerType).icon" [size]="20" />
+        </div>
+        <div class="row-copy ih-catalog-row-copy">
+          <strong>{{ reader.name }}</strong>
+          <small>ID {{ reader.id }}</small>
+        </div>
       </div>
 
-      <div class="table-body ih-catalog-table-body ih-thin-scroll">
-        @for (reader of readers(); track reader.id) {
-          <button
-            type="button"
-            class="table-row ih-catalog-table-row"
-            [class.table-row--selected]="selectedReaderId() === reader.id"
-            [class.ih-catalog-table-row--selected]="selectedReaderId() === reader.id"
-            (click)="selectReader.emit(reader)"
-          >
-            <div class="row-primary ih-catalog-row-primary">
-              <div class="row-avatar ih-catalog-row-avatar">{{ reader.name.slice(0, 1).toUpperCase() }}</div>
-              <div class="row-copy ih-catalog-row-copy">
-                <strong>{{ reader.name }}</strong>
-                <small>ID {{ reader.id }}</small>
-              </div>
-            </div>
-
-            <div class="row-type ih-catalog-row-meta">
-              <mat-chip-set>
-                <mat-chip>{{ reader.readerType }}</mat-chip>
-              </mat-chip-set>
-            </div>
-
-            <div class="row-status" [class.row-status--inactive]="!reader.active">
-              <span class="status-dot"></span>
-              {{ reader.active ? i18n.t('status.active') : i18n.t('status.inactive') }}
-            </div>
-          </button>
-        } @empty {
-          <div class="empty-state ih-catalog-empty-state ih-muted">{{ i18n.t('readers.noData') }}</div>
-        }
+      <div class="row-type ih-catalog-row-meta">
+        <mat-chip-set>
+          <mat-chip>{{ providerLabel(reader.readerType) }}</mat-chip>
+        </mat-chip-set>
       </div>
 
-      <mat-paginator
-        class="list-paginator ih-catalog-paginator"
-        [length]="totalLength()"
-        [pageIndex]="pageIndex()"
-        [pageSize]="pageSize()"
-        [pageSizeOptions]="pageSizeOptions()"
-        [hidePageSize]="false"
-        [showFirstLastButtons]="false"
-        (page)="onPageChange($event)"
-      />
-    </div>
+      <div class="row-status" [class.row-status--inactive]="!reader.active">
+        <span class="status-dot" aria-hidden="true"></span>
+        {{ reader.active ? i18n.t('status.active') : i18n.t('status.inactive') }}
+      </div>
+    </button>
+  }
+</ih-catalog-list>

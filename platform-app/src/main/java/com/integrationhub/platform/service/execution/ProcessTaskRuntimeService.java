@@ -39,7 +39,7 @@ public class ProcessTaskRuntimeService {
         this.taskInputResolver = taskInputResolver;
     }
 
-    @Transactional
+    @Transactional(Transactional.TxType.NOT_SUPPORTED)
     public TaskRunResult runTask(Long processExecutionId,
                                  ProcessExecutionStateService.TaskPlan taskPlan,
                                  SourcePayload sourcePayload,
@@ -91,7 +91,8 @@ public class ProcessTaskRuntimeService {
                         return provider.execute(taskContext, configuration);
                     }
             );
-            return TaskRunResult.generic(accumulator.details(), sourcePayload, readResult, accumulator.outputs());
+            return TaskRunResult.generic(accumulator.success(), accumulator.details(),
+                    sourcePayload, readResult, accumulator.outputs());
         }
 
         var taskContext = taskContext(
@@ -111,7 +112,7 @@ public class ProcessTaskRuntimeService {
         if (result.suspended()) {
             return TaskRunResult.suspended(result.details(), result.suspendedState());
         }
-        return TaskRunResult.generic(result.details(), sourcePayload, readResult, result.outputs());
+        return TaskRunResult.generic(result.success(), result.details(), sourcePayload, readResult, result.outputs());
     }
 
     private boolean requiresRecordInput(String executionMode) {
@@ -206,6 +207,7 @@ public class ProcessTaskRuntimeService {
     }
 
     public record TaskRunResult(
+            boolean success,
             String details,
             SourcePayload sourcePayload,
             ReadResult readResult,
@@ -215,11 +217,11 @@ public class ProcessTaskRuntimeService {
             Map<String, Object> suspendedState
     ) {
         static TaskRunResult fileRead(SourcePayload sourcePayload, ReadResult readResult) {
-            return new TaskRunResult(null, sourcePayload, readResult, Map.of(), true, false, Map.of());
+            return new TaskRunResult(true, null, sourcePayload, readResult, Map.of(), true, false, Map.of());
         }
 
-        static TaskRunResult generic(String details, SourcePayload sourcePayload, ReadResult readResult, Map<String, Object> outputs) {
-            return new TaskRunResult(details, sourcePayload, readResult,
+        static TaskRunResult generic(boolean success, String details, SourcePayload sourcePayload, ReadResult readResult, Map<String, Object> outputs) {
+            return new TaskRunResult(success, details, sourcePayload, readResult,
                     outputs == null ? Map.of() : new LinkedHashMap<>(outputs),
                     false, false, Map.of());
         }
@@ -232,7 +234,7 @@ public class ProcessTaskRuntimeService {
          * @trace spec 003 T-017 (M-2 suspension engine), ADR-009
          */
         static TaskRunResult suspended(String details, Map<String, Object> suspendedState) {
-            return new TaskRunResult(details, null, null, Map.of(), false, true,
+            return new TaskRunResult(true, details, null, null, Map.of(), false, true,
                     suspendedState == null ? Map.of() : new LinkedHashMap<>(suspendedState));
         }
     }

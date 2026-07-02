@@ -1,0 +1,32 @@
+.lineage { display:flex; flex-direction:column; gap:1rem; }
+    .lineage__search { display:flex; flex-direction:column; gap:.75rem; }
+    .lineage__inputs { display:flex; gap:.75rem; flex-wrap:wrap; align-items:center; }
+    .lineage__inputs mat-form-field { width:15rem; }
+    .lineage__tl { display:flex; flex-direction:column; }
+    .lineage__row { display:grid; grid-template-columns:1.7rem minmax(0,1fr); gap:.65rem; }
+    .lineage__rail { position:relative; display:flex; justify-content:center; }
+    .lineage__rail::before { content:''; position:absolute; top:1.75rem; bottom:-.35rem; width:2px; background:var(--ih-border-strong); }
+    .lineage__row:last-child .lineage__rail::before { display:none; }
+    .lineage__dot { width:1.6rem; height:1.6rem; border-radius:50%; display:grid; place-items:center; font-size:.85rem; z-index:1; border:2px solid var(--ih-border-strong); background:var(--ih-surface); }
+    .lineage__row--ok .lineage__dot { color:var(--ih-status-success); border-color:var(--ih-status-success); }
+    .lineage__row--error .lineage__dot { color:var(--ih-status-error); border-color:var(--ih-status-error); }
+    .lineage__row--pending .lineage__dot { color:var(--ih-status-neutral); }
+    .lineage__body { padding:0 0 .9rem .1rem; display:flex; flex-direction:column; gap:.2rem; min-width:0; }
+    .lineage__head { display:flex; gap:.6rem; align-items:baseline; flex-wrap:wrap; }
+    .lineage__stage { font-weight:600; overflow-wrap:anywhere; }
+    .lineage__ts { color:var(--ih-text-soft); font-size:.8rem; margin-left:auto; }
+    .lineage__dur { font-size:.72rem; color:var(--ih-text-soft); display:inline-flex; align-items:center; gap:.25rem; }
+    .lineage__status--REJECTED,.lineage__status--ERROR,.lineage__status--DEAD,.lineage__status--VALIDATION_ISSUE { color:var(--ih-status-error); }
+    .lineage__status--SENT,.lineage__status--ARCHIVED,.lineage__status--VALIDATED,.lineage__status--CONFIRMED,.lineage__status--RECONCILED,.lineage__status--BUILT,.lineage__status--INGESTED { color:var(--ih-status-success); }
+    .lineage__keys { display:flex; flex-direction:column; gap:.15rem; font-size:.82rem; overflow-wrap:anywhere; }
+    .lineage__key { color:var(--ih-text-soft); }
+    .lineage__key--btn { font:inherit; color:var(--ih-accent-strong); background:color-mix(in srgb, var(--ih-accent) 8%, transparent); border:1px solid color-mix(in srgb, var(--ih-accent) 25%, var(--ih-border)); border-radius:6px; padding:1px 6px; cursor:pointer; text-align:left; width:fit-content; }
+    .lineage__key--btn:hover,.lineage__key--btn:focus-visible { background:color-mix(in srgb, var(--ih-accent) 16%, transparent); }
+    .lineage__link { font-size:.78rem; color:var(--ih-accent); text-decoration:none; width:fit-content; }
+    .lineage__link:hover { text-decoration:underline; }
+    .lineage__empty,.lineage__error { color:var(--ih-text-soft); padding:.75rem; }
+    .lineage__error { color:var(--ih-status-error); }
+    .lineage__notice { display:flex; align-items:center; gap:.4rem; padding:.5rem .75rem; border-radius:8px; font-size:.82rem; color:var(--ih-status-warning); background:var(--ih-status-warning-bg); border:1px solid var(--ih-status-warning); }
+    @media (max-width: 760px) {
+      .lineage__ts { margin-left:0; }
+    }

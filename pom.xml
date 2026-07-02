@@ -9,7 +9,10 @@
     <packaging>pom</packaging>
 
     <modules>
+        <module>platform-contract</module>
+        <module>ejemplos/backend-plugin-sidecar</module>
         <module>platform-app</module>
+        <module>audit-consumer</module>
     </modules>
 
     <properties>
@@ -17,7 +20,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
-        <quarkus.platform.version>3.32.4</quarkus.platform.version>
+        <quarkus.platform.version>3.33.2</quarkus.platform.version>
         <surefire-plugin.version>3.5.4</surefire-plugin.version>
         <testcontainers.version>1.20.4</testcontainers.version>
         <quarkus-amazon-services.version>3.19.0</quarkus-amazon-services.version>
@@ -72,5 +75,4 @@
         </profile>
     </profiles>
 </project>
-
 

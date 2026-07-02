@@ -10,7 +10,7 @@
       <div class="brand-block ih-shell-brand">
         <div class="brand-mark">IH</div>
         <div class="brand-copy">
-          <h1 class="brand-title">{{ i18n.t('shell.title') }}</h1>
+          <p class="brand-title">{{ i18n.t('shell.title') }}</p>
         </div>
         <div class="brand-actions ih-shell-actions">
           <ih-app-session-action></ih-app-session-action>
@@ -27,6 +27,7 @@
       <mat-progress-bar mode="indeterminate"></mat-progress-bar>
     }
 
+    <a class="ih-skip-link" href="#main-content" [attr.aria-label]="i18n.t('shell.skipToMain')">{{ i18n.t('shell.skipToMain') }}</a>
     <section class="shell-content">
       @if (!desktopMode()) {
         <div class="mobile-toolbar">
@@ -49,9 +50,12 @@
         </div>
       }
 
-      <div class="shell-route-body">
+      <main id="main-content" class="shell-route-body" tabindex="-1">
+        @if (breadcrumb.items().length) {
+          <ih-breadcrumb [items]="breadcrumb.items()" [backLabel]="breadcrumb.backLabel()" />
+        }
         <router-outlet></router-outlet>
-      </div>
+      </main>
     </section>
   </mat-sidenav-content>
 </mat-sidenav-container>

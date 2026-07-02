@@ -18,7 +18,16 @@ import java.util.Set;
 @ApplicationScoped
 public class FileReadTaskFastPath implements ExecutionFastPath {
 
-    private static final Set<String> SUPPORTED_READERS = Set.of("TXT", "CSV", "XLS", "XLSX");
+    // SWIFT_MT emite mensajes por lotes via consumer (multi-mensaje): el fast path lo
+    // streamea a DB_WRITE sin materializar todos los mensajes -> staging inbound a escala.
+    private static final Set<String> SUPPORTED_READERS = Set.of("TXT", "CSV", "XLS", "XLSX", "SWIFT_MT");
+
+    // Transforms que publican un output `records` consumido por tareas downstream
+    // (p.ej. MT101_PARSE -> MT101_ROUTE, MT101_BUILD -> MT101_SPLIT). El fast path solo
+    // materializa un summary (processedCount), no la lista de records, asi que fusionarlos
+    // romperia la resolucion de `<taskRef>.records` aguas abajo. Su sink natural en el
+    // fast path es DB_WRITE (staging), que no produce records consumibles.
+    private static final Set<String> RECORDS_PRODUCING_SINKS = Set.of("MT101_BUILD", "MT101_PARSE");
 
     private final StreamingPipelineService pipelineService;
     private final ProcessExecutionStateService stateService;
@@ -48,7 +57,7 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
         if (current.readerType() == null || !SUPPORTED_READERS.contains(current.readerType().toUpperCase())) return false;
         if (!declaresCurrentReadRecordsInput(current, next)) return false;
 
-        if ("MT101_BUILD".equalsIgnoreCase(next.taskType())) {
+        if (next.taskType() != null && RECORDS_PRODUCING_SINKS.contains(next.taskType().toUpperCase())) {
             return false;
         }
 
@@ -102,7 +111,10 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
                     ? selectedSourceFiles.get(0)
                     : null;
             taskOutputRegistry.registerFileRead(taskOutputs, current, currentConfiguration, sourceFile, pipelineResult.readResult());
-            taskOutputRegistry.registerTaskResult(taskOutputs, next, nextConfiguration, taskOutputRegistry.pipelineSinkOutputs(next, pipelineResult.processedCount()));
+            var sinkOutputs = taskOutputRegistry.pipelineSinkOutputs(next, pipelineResult.processedCount());
+            sinkOutputs.put("processExecutionId", processExecutionId);
+            sinkOutputs.put("taskDefinitionId", next.taskDefinitionId());
+            taskOutputRegistry.registerTaskResult(taskOutputs, next, nextConfiguration, sinkOutputs);
 
             stateService.completeTask(
                     processExecutionId,

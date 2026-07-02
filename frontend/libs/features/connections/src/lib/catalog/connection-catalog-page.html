@@ -1,4 +1,4 @@
-<section class="page-grid connection-page">
+<section class="page-grid connection-page ih-no-hint">
   <mat-drawer-container class="connections-drawer-container">
     <mat-drawer-content>
       <section class="connections-workspace">
@@ -19,14 +19,32 @@
             [connections]="store.pagedConnections()"
             [totalLength]="store.totalLength()"
             [selectedConnectionId]="store.selectedConnection()?.id ?? null"
+            [sortField]="store.sortField()"
+            [sortDirection]="store.sortDirection()"
             [providerOptions]="providerOptions()"
             [pageIndex]="store.currentPage()"
             [pageSize]="store.pageSize()"
+            [canEdit]="store.canEdit()"
+            [loading]="store.loading()"
+            [error]="store.error()"
+            [selectedIds]="store.selectedIds()"
+            [isAllSelected]="store.isAllSelected()"
             (selectConnection)="store.selectConnection($event)"
+            (toggleSort)="store.toggleSort($event)"
             (pageChange)="store.updatePagination($event.pageIndex, $event.pageSize)"
+            (toggleSelection)="store.toggleSelection($event)"
+            (toggleSelectAll)="store.toggleSelectAll()"
+            (retry)="store.load()"
           />
         </section>
       </section>
+      <ih-floating-action-bar
+        [selectedCount]="store.selectedIds().size"
+        [visible]="store.canEdit() && store.selectedIds().size > 0"
+        [actions]="bulkActions()"
+        (clearSelection)="store.clearSelection()"
+        (action)="onBulkAction($event)"
+      />
     </mat-drawer-content>
 
     <mat-drawer
@@ -43,6 +61,7 @@
         [titleKey]="store.formTitle()"
         [saving]="store.saving()"
         [testing]="store.testing()"
+        [dirty]="store.dirty()"
         [testResult]="store.testResult()"
         [readonly]="store.viewMode() !== 'edit'"
         [canEdit]="store.canEdit()"

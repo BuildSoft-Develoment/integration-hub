@@ -13,6 +13,8 @@ export interface UiMessageOptions {
   messageKey?: string;
   vars?: Record<string, string | number>;
   durationMs?: number;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -37,6 +39,8 @@ export class UiMessageService {
       message: trimmed,
       severityLabel:
         severityLabel === `feedback.kind.${kind}` ? kind.toUpperCase() : severityLabel,
+      actionLabel: options.actionLabel,
+      onAction: options.onAction,
     };
 
     this.snackBar.openFromComponent(UiMessageSnackbarComponent, {

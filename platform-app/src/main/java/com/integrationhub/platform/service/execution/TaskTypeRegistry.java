@@ -18,7 +18,7 @@ import java.util.Set;
  *   <li><b>{@link TaskType#BUILTIN}</b>: 6 tipos del motor (FILE_READ, DB_*,
  *       REST_CALL, NOTIFICATION).</li>
  *   <li><b>{@code TaskProviderRegistry}</b>: tipos aportados por providers
- *       registrados via CDI (MT101_*, PAIN001_*, futuros).</li>
+ *       registrados via CDI (MT101_*, PAIN001_*) y plugins remotos (ADR-014).</li>
  * </ul>
  *
  * <p>API util para validacion (rechazar configuraciones con tipos desconocidos)
@@ -34,8 +34,9 @@ public class TaskTypeRegistry {
     }
 
     /**
-     * Catalogo completo: tipos del motor + tipos aportados por providers.
-     * Orden estable: builtin primero (insercion), luego providers (descubrimiento CDI).
+     * Catalogo completo: tipos del motor + tipos aportados por providers locales
+     * y plugins remotos. Orden estable: builtin primero (insercion), luego
+     * providers (descubrimiento CDI / catalogo remoto).
      */
     public Set<String> all() {
         var result = new LinkedHashSet<String>(TaskType.BUILTIN);

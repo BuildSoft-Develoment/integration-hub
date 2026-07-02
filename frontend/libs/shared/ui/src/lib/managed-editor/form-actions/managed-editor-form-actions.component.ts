@@ -16,6 +16,7 @@ export class ManagedEditorFormActionsComponent {
 
   readonly readonly = input(false);
   readonly saving = input(false);
+  readonly dirty = input(true);
   readonly entityExists = input(false);
   readonly showTest = input(false);
   readonly testing = input(false);
@@ -24,4 +25,11 @@ export class ManagedEditorFormActionsComponent {
 
   readonly test = output<void>();
   readonly cancel = output<void>();
+
+  attemptCancel(): void {
+    if (this.dirty() && !confirm(this.i18n.t('common.discardConfirm'))) {
+      return;
+    }
+    this.cancel.emit();
+  }
 }

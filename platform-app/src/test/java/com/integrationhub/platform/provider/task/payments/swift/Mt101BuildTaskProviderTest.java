@@ -1,9 +1,9 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.provider.task.payments.spi.PaymentMessageFormatter;
+import com.integrationhub.platform.spi.task.payments.PaymentMessageFormatter;
 import com.integrationhub.platform.provider.task.payments.swift.format.JsonMt101Formatter;
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.task.TaskContext;
@@ -252,6 +252,39 @@ class Mt101BuildTaskProviderTest {
     }
 
     @Test
+    void resolvesBatchCodeUniquePerExecution() {
+        // ${batchCode} = base36(processExecutionId) en mayusculas: charset SWIFT-X,
+        // unico por ejecucion. Dos ejecuciones distintas dan referencias distintas
+        // aun con el mismo messageIndex -> no chocan en el indice de idempotencia.
+        var first = buildSenders(1_000_000L);
+        var second = buildSenders(1_000_001L);
+        var expectedFirst = Long.toString(1_000_000L, 36).toUpperCase() + "1";
+        assertEquals(expectedFirst, first, "batchCode = base36(execId) en mayusculas + messageIndex");
+        org.junit.jupiter.api.Assertions.assertNotEquals(first, second,
+                "ejecuciones distintas deben dar referencias distintas");
+        assertTrue(first.matches("[0-9A-Z]+"), "solo charset SWIFT-X");
+    }
+
+    private String buildSenders(long executionId) {
+        var context = new TaskContext(executionId, 7L);
+        context.attributes().put("readResult", new ReadResult(
+                List.of(new ReadRecord(Map.of("moneda", "PEN", "monto", "1", "cuenta_beneficiario", "B"))), 1));
+        var result = provider.execute(context, Map.of(
+                "sequenceA", Map.of(
+                        "sendersReferenceTemplate", "${batchCode}${messageIndex}",
+                        "orderingCustomer", Map.of("option", "H", "account", "001")
+                ),
+                "transactionMappings", Map.of(
+                        "amount", Map.of("currencyField", "moneda", "valueField", "monto"),
+                        "beneficiary", Map.of("option", "", "accountField", "cuenta_beneficiario")
+                )
+        ));
+        @SuppressWarnings("unchecked")
+        var records = (List<com.integrationhub.platform.spi.task.payments.Mt101Message>) result.outputs().get("records");
+        return records.get(0).sequenceA().sendersReference();
+    }
+
+    @Test
     void rejectsSendersReferenceLongerThanSixteenChars() {
         var context = new TaskContext(99999999L, 1L);
         context.attributes().put("readResult", new ReadResult(
@@ -310,6 +343,75 @@ class Mt101BuildTaskProviderTest {
         assertNull(message.sequenceA().orderingCustomer());
         assertEquals("001-AAA", message.transactions().get(0).orderingCustomer().account());
         assertEquals(new BigDecimal("1.25"), message.transactions().get(0).amount().value());
+    }
+
+    @Test
+    void usesFragmentRuntimeIndexesAndMapsTransactionServicingInstitution() {
+        var context = new TaskContext(42L, 1L);
+        context.attributes().put("mt101MessageIndex", 3);
+        context.attributes().put("mt101MessageTotal", 10);
+        context.attributes().put("mt101RecordOffset", 200);
+        context.attributes().put("readResult", new ReadResult(List.of(
+                new ReadRecord(Map.of(
+                        "moneda", "PEN",
+                        "monto", "1.00",
+                        "cuenta_beneficiario", "B1",
+                        "bic_servicing", "BCPLPEPLXXX",
+                        "cargos", "OUR"
+                ))
+        ), 1));
+
+        var result = provider.execute(context, Map.of(
+                "sequenceA", Map.of(
+                        "sendersReferenceTemplate", "P${messageIndex}",
+                        "requestedExecutionDate", "2026-06-09",
+                        "orderingCustomer", Map.of("option", "H", "account", "001")
+                ),
+                "transactionMappings", Map.of(
+                        "transactionReferenceTemplate", "TX-${recordNumber}",
+                        "amount", Map.of("currencyField", "moneda", "valueField", "monto"),
+                        "beneficiary", Map.of("option", "", "accountField", "cuenta_beneficiario"),
+                        "accountServicingInstitution", Map.of("option", "A", "bicField", "bic_servicing"),
+                        "detailsOfChargesField", "cargos"
+                )
+        ));
+
+        @SuppressWarnings("unchecked")
+        var records = (List<Mt101Message>) result.outputs().get("records");
+        var message = records.get(0);
+        assertEquals("P3", message.sequenceA().sendersReference());
+        assertEquals(3, message.sequenceA().messageIndex());
+        assertEquals(10, message.sequenceA().messageTotal());
+        assertEquals(201, message.transactions().get(0).sequenceNumber());
+        assertEquals("TX-201", message.transactions().get(0).transactionReference());
+        assertEquals("BCPLPEPLXXX", message.transactions().get(0).accountServicingInstitution().bic());
+    }
+
+    @Test
+    void rejectsSingleDebitWhenOrderingCustomerHasOnlyOptionNoValue() {
+        var context = new TaskContext(1L, 1L);
+        context.attributes().put("readResult", new ReadResult(List.of(
+                new ReadRecord(Map.of(
+                        "moneda", "PEN",
+                        "monto", "1.00",
+                        "cuenta_beneficiario", "B1",
+                        "cargos", "OUR"
+                ))
+        ), 1));
+
+        var error = assertThrows(IllegalArgumentException.class, () -> provider.execute(context, Map.of(
+                "sequenceA", Map.of(
+                        "sendersReferenceTemplate", "PROC-${_processExecutionId}",
+                        "orderingCustomer", Map.of("option", "H")
+                ),
+                "transactionMappings", Map.of(
+                        "amount", Map.of("currencyField", "moneda", "valueField", "monto"),
+                        "beneficiary", Map.of("option", "", "accountField", "cuenta_beneficiario"),
+                        "detailsOfChargesField", "cargos"
+                )
+        )));
+
+        assertTrue(error.getMessage().contains("singleDebit requires sequenceA.orderingCustomer"));
     }
 
     @Test

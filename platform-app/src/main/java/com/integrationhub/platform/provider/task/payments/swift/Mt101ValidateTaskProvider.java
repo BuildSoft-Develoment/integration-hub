@@ -1,30 +1,48 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
-import com.integrationhub.platform.provider.task.payments.spi.ValidationIssue;
-import com.integrationhub.platform.provider.task.payments.spi.ValidationPredicate;
-import com.integrationhub.platform.provider.task.payments.spi.ValidationRuleProvider;
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.spi.task.payments.ValidationIssue;
+import com.integrationhub.platform.spi.task.payments.ValidationPredicate;
+import com.integrationhub.platform.spi.task.payments.ValidationRuleProvider;
+import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.audit.AuditLevel;
+import com.integrationhub.platform.repository.payments.swift.Mt101ValidationIssueRepository;
+import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 
+import javax.sql.DataSource;
+import java.sql.SQLException;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.UUID;
 
 /**
  * Task provider {@code MT101_VALIDATE}: aplica los predicados activos del
  * {@code ruleSet} configurado sobre cada {@link Mt101Message} producido por la tarea
- * anterior (tipicamente {@code MT101_BUILD}).
+ * anterior (tipicamente {@code MT101_BUILD} o {@code MT101_BUILD_FROM_TABLE}).
  *
  * <p>{@code executionMode} esperado: {@code once}. Bypassa el
  * {@code TaskInputResolver} (que solo sabe convertir {@code ReadRecord}/{@code Map})
  * leyendo {@code Mt101Message} directo del mapa {@code taskOutputs}.</p>
+ *
+ * <p><b>Flujo masivo (fragment source)</b>: lee fragmentos {@code BUILT} por
+ * paginas (memoria O(pageSize)) y marca cada fragmento {@code VALIDATED} o
+ * {@code REJECTED} individualmente. Esto habilita el gate de estados: un
+ * fragmento invalido no contamina al resto y {@code MT101_PAY} (que por defecto
+ * solo lee {@code ARCHIVED}) nunca despacha mensajes sin validar.</p>
  *
  * <p><b>Outputs publicados</b>:</p>
  * <ul>
@@ -48,11 +66,59 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
     private static final String DEFAULT_STANDARD = "SWIFT";
     private static final String DEFAULT_APPLIES_TO = "MT101";
     private static final String DEFAULT_FAIL_ON = "ERROR";
+    private static final String DEFAULT_ISSUE_TABLE = "mt101_validation_issue";
+    private static final int DEFAULT_MAX_ISSUES_IN_OUTPUT = 1000;
+    /** Estado de fragmentos que VALIDATE consume por defecto (gate de entrada). */
+    private static final List<String> FRAGMENT_READ_STATUSES = List.of("BUILT");
 
     private final Instance<ValidationRuleProvider> ruleProviders;
+    private final Mt101FragmentStore fragmentStore;
+    private final DataSource defaultDataSource;
+    private final ConnectionPoolManager connectionPoolManager;
+    private final Mt101ValidationIssueRepository issueRepository;
+    private final RecordAuditEmitter recordAuditEmitter;
+    private final SwiftInboundStore inboundStore;
+
+    @Inject
+    public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
+                                     Mt101FragmentStore fragmentStore,
+                                     DataSource defaultDataSource,
+                                     ConnectionPoolManager connectionPoolManager,
+                                     Mt101ValidationIssueRepository issueRepository,
+                                     RecordAuditEmitter recordAuditEmitter,
+                                     SwiftInboundStore inboundStore) {
+        this.ruleProviders = ruleProviders;
+        this.fragmentStore = fragmentStore;
+        this.defaultDataSource = defaultDataSource;
+        this.connectionPoolManager = connectionPoolManager;
+        this.issueRepository = issueRepository;
+        this.recordAuditEmitter = recordAuditEmitter;
+        this.inboundStore = inboundStore;
+    }
+
+    public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
+                                     Mt101FragmentStore fragmentStore,
+                                     DataSource defaultDataSource,
+                                     ConnectionPoolManager connectionPoolManager,
+                                     Mt101ValidationIssueRepository issueRepository) {
+        this(ruleProviders, fragmentStore, defaultDataSource, connectionPoolManager, issueRepository, null, null);
+    }
+
+    public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
+                                     Mt101FragmentStore fragmentStore,
+                                     DataSource defaultDataSource,
+                                     ConnectionPoolManager connectionPoolManager) {
+        this(ruleProviders, fragmentStore, defaultDataSource, connectionPoolManager,
+                new Mt101ValidationIssueRepository(), null, null);
+    }
+
+    public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
+                                     Mt101FragmentStore fragmentStore) {
+        this(ruleProviders, fragmentStore, null, null);
+    }
 
     public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders) {
-        this.ruleProviders = ruleProviders;
+        this(ruleProviders, null);
     }
 
     @Override
@@ -60,39 +126,187 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
         return "MT101_VALIDATE";
     }
 
-    @Override
-    public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
-        var messages = Mt101MessageInputResolver.readMessages(context, configuration, type());
-        if (messages.isEmpty()) {
-            return TaskResult.success("MT101_VALIDATE skipped because there are no messages to validate");
-        }
+    /** Trama RECORD de validacion por fragmento (traceId=ejecucion, recordId=:20:). */
+    private AuditEnvelope recordEnvelope(TaskContext context, String reference, boolean valid, String error) {
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
+                reference,
+                AuditLevel.RECORD,
+                valid ? "RECORD_VALIDATED" : "RECORD_REJECTED",
+                valid ? "VALIDATED" : "REJECTED",
+                context.processExecutionId(),
+                context.taskDefinitionId(),
+                error,
+                null,
+                Map.of(),
+                "SWIFT",
+                "MT101",
+                null,
+                null,
+                null,
+                null,
+                null,
+                reference,
+                null,
+                null,
+                null,
+                null,
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
+    }
 
+    private void emitRecordAudit(List<AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
+        }
+    }
+
+    @Override
+    @Transactional(Transactional.TxType.NOT_SUPPORTED)
+    public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
         var ruleSet = stringValue(configuration.get("ruleSet"), DEFAULT_RULE_SET);
         var standard = stringValue(configuration.get("standard"), DEFAULT_STANDARD);
         var appliesTo = stringValue(configuration.get("appliesTo"), DEFAULT_APPLIES_TO);
         var failOn = severityValue(configuration.get("failOn"), ValidationIssue.Severity.ERROR);
-
+        var issueSink = IssueSink.from(configuration.get("publishIssuesTo"));
+        var maxIssuesInOutput = intValue(configuration.get("maxIssuesInOutput"), DEFAULT_MAX_ISSUES_IN_OUTPUT);
         var predicates = resolveRules(ruleSet, standard, appliesTo);
-        var issues = applyPredicates(predicates, messages);
-        var bySeverity = countBySeverity(issues);
 
-        var invalidMessageCount = countInvalidMessages(messages, issues, failOn);
-        var validMessageCount = messages.size() - invalidMessageCount;
+        var accumulator = new ValidationAccumulator(maxIssuesInOutput);
+        var fragmentSource = Mt101MessageInputResolver.fragmentSource(context, configuration, type());
+        var inboundSource = Mt101MessageInputResolver.inboundSource(context, configuration, type());
+
+        if (!inboundSource.isEmpty() && inboundStore != null) {
+            // Flujo inbound a escala: lee PARSED del store por paginas y marca
+            // VALIDATED/REJECTED por id (memoria O(pageSize)). Espeja la rama fragment.
+            var pageSize = intValue(configuration.get("pageSize"), SwiftInboundStore.DEFAULT_PAGE_SIZE);
+            inboundStore.forEachPage(inboundSource, SwiftInboundStore.READ_PARSED, pageSize, page -> {
+                var validatedIds = new ArrayList<Long>(page.size());
+                var rejectedById = new LinkedHashMap<Long, String>();
+                var pageIssues = issueSink.enabled() ? new ArrayList<IssueRow>() : null;
+                var pageAudit = new ArrayList<AuditEnvelope>(page.size());
+                for (var item : page) {
+                    var message = item.message();
+                    var messageIssues = evaluateMessage(predicates, message);
+                    var blocking = accumulator.add(messageIssues, failOn);
+                    if (pageIssues != null) {
+                        for (var issue : messageIssues) {
+                            pageIssues.add(inboundIssueRow(inboundSource, message, issue));
+                        }
+                    }
+                    var reference = message.sequenceA() == null ? null : message.sequenceA().sendersReference();
+                    if (blocking) {
+                        rejectedById.put(item.id(), summarizeIssues(messageIssues));
+                        pageAudit.add(recordEnvelope(context, reference, false, summarizeIssues(messageIssues)));
+                    } else {
+                        validatedIds.add(item.id());
+                        pageAudit.add(recordEnvelope(context, reference, true, null));
+                    }
+                }
+                persistIssueRows(issueSink, pageIssues);
+                emitRecordAudit(pageAudit);
+                inboundStore.markStatusBatch(inboundSource, validatedIds, "VALIDATED", null);
+                inboundStore.markStatusBatch(inboundSource, rejectedById, "REJECTED", null);
+            });
+            context.attributes().put("mt101InboundSource", inboundSource);
+        } else if (!fragmentSource.isEmpty() && fragmentStore != null) {
+            var pageSize = intValue(configuration.get("pageSize"), Mt101FragmentStore.DEFAULT_PAGE_SIZE);
+            fragmentStore.forEachPage(fragmentSource, FRAGMENT_READ_STATUSES, pageSize, page -> {
+                // Marcado por lote al cierre de cada pagina (1-2 round-trips por
+                // pagina en vez de 1 UPDATE por fragmento).
+                var validatedRefs = new ArrayList<String>(page.size());
+                var rejectedByRef = new LinkedHashMap<String, String>();
+                var pageIssues = issueSink.enabled() ? new ArrayList<IssueRow>() : null;
+                var pageAudit = new ArrayList<AuditEnvelope>(page.size());
+                for (var message : page) {
+                    var messageIssues = evaluateMessage(predicates, message);
+                    var blocking = accumulator.add(messageIssues, failOn);
+                    if (pageIssues != null) {
+                        for (var issue : messageIssues) {
+                            pageIssues.add(issueRow(fragmentSource, message, issue));
+                        }
+                    }
+                    var reference = message.sequenceA() == null ? null
+                            : message.sequenceA().sendersReference();
+                    if (reference == null) {
+                        continue;
+                    }
+                    if (blocking) {
+                        rejectedByRef.put(reference, summarizeIssues(messageIssues));
+                        pageAudit.add(recordEnvelope(context, reference, false, summarizeIssues(messageIssues)));
+                    } else {
+                        validatedRefs.add(reference);
+                        pageAudit.add(recordEnvelope(context, reference, true, null));
+                    }
+                }
+                persistIssueRows(issueSink, pageIssues);
+                emitRecordAudit(pageAudit);
+                fragmentStore.markStatusBatch(fragmentSource, validatedRefs, "VALIDATED");
+                fragmentStore.markStatusBatch(fragmentSource, rejectedByRef, "REJECTED");
+            });
+            // Propaga el fragment source para que ARCHIVE/PAY sigan leyendo del store.
+            context.attributes().put("mt101FragmentSource", fragmentSource);
+        } else {
+            var messages = Mt101MessageInputResolver.readMessages(context, configuration, type(), fragmentStore);
+            for (var message : messages) {
+                var messageIssues = evaluateMessage(predicates, message);
+                accumulator.add(messageIssues, failOn);
+                persistIssues(issueSink, messageIssues);
+            }
+        }
+
+        if (accumulator.totalMessages == 0) {
+            return TaskResult.success("MT101_VALIDATE skipped because there are no messages to validate");
+        }
 
         var outputs = new LinkedHashMap<String, Object>();
-        outputs.put("validCount", validMessageCount);
-        outputs.put("invalidCount", invalidMessageCount);
+        outputs.put("validCount", accumulator.totalMessages - accumulator.invalidMessages);
+        outputs.put("invalidCount", accumulator.invalidMessages);
         outputs.put("ruleSet", ruleSet);
-        outputs.put("issuesBySeverity", bySeverity);
-        outputs.put("errors", issues);
+        outputs.put("issuesBySeverity", accumulator.bySeverity());
+        outputs.put("issueCount", accumulator.issueCount);
+        outputs.put("issuesTruncated", accumulator.issuesTruncated());
+        outputs.put("errors", accumulator.issues);
+        if (!fragmentSource.isEmpty()) {
+            outputs.put("fragments", fragmentSource);
+        }
 
         var summary = "MT101_VALIDATE ruleSet=" + ruleSet
-                + " messages=" + messages.size()
-                + " invalid=" + invalidMessageCount
-                + " issues=" + issues.size();
+                + " messages=" + accumulator.totalMessages
+                + " invalid=" + accumulator.invalidMessages
+                + " issues=" + accumulator.issueCount;
 
-        var hasFailure = issues.stream().anyMatch(issue -> issue.severity().reaches(failOn));
-        return hasFailure ? TaskResult.failure(summary, outputs) : TaskResult.success(summary, outputs);
+        return accumulator.invalidMessages > 0
+                ? TaskResult.failure(summary, outputs)
+                : TaskResult.success(summary, outputs);
+    }
+
+    private List<ValidationIssue> evaluateMessage(List<ValidationPredicate> predicates, Mt101Message message) {
+        var issues = new ArrayList<ValidationIssue>();
+        for (var predicate : predicates) {
+            var found = predicate.evaluate(message);
+            if (found != null && !found.isEmpty()) {
+                issues.addAll(found);
+            }
+        }
+        return issues;
+    }
+
+    private String summarizeIssues(List<ValidationIssue> issues) {
+        var sb = new StringBuilder();
+        for (var issue : issues) {
+            if (sb.length() > 0) {
+                sb.append("; ");
+            }
+            sb.append(issue.code()).append(": ").append(issue.message());
+            if (sb.length() > 500) {
+                sb.setLength(500);
+                sb.append("...");
+                break;
+            }
+        }
+        return sb.toString();
     }
 
     private List<ValidationPredicate> resolveRules(String ruleSet, String standard, String appliesTo) {
@@ -108,57 +322,184 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
         return aggregated;
     }
 
-    private List<ValidationIssue> applyPredicates(List<ValidationPredicate> predicates,
-                                                  List<Mt101Message> messages) {
-        var issues = new ArrayList<ValidationIssue>();
-        for (var message : messages) {
-            for (var predicate : predicates) {
-                var found = predicate.evaluate(message);
-                if (found != null && !found.isEmpty()) {
-                    issues.addAll(found);
+    private void persistIssues(IssueSink issueSink, List<ValidationIssue> issues) {
+        if (issues == null || issues.isEmpty()) {
+            return;
+        }
+        var issueRows = new ArrayList<IssueRow>(issues.size());
+        for (var issue : issues) {
+            issueRows.add(new IssueRow(issue, null, null, null));
+        }
+        persistIssueRows(issueSink, issueRows);
+    }
+
+    private IssueRow issueRow(Map<String, Object> fragmentSource,
+                              Mt101Message message,
+                              ValidationIssue issue) {
+        var sequenceA = message.sequenceA();
+        return new IssueRow(
+                issue,
+                stringValue(fragmentSource.get("fragmentSetId"), null),
+                sequenceA == null ? null : sequenceA.sendersReference(),
+                sequenceA == null ? null : sequenceA.messageIndex());
+    }
+
+    private IssueRow inboundIssueRow(Map<String, Object> inboundSource,
+                                     Mt101Message message,
+                                     ValidationIssue issue) {
+        var sequenceA = message.sequenceA();
+        return new IssueRow(
+                issue,
+                stringValue(inboundSource.get("inboundSetId"), null),
+                sequenceA == null ? null : sequenceA.sendersReference(),
+                sequenceA == null ? null : sequenceA.messageIndex());
+    }
+
+    private void persistIssueRows(IssueSink issueSink, List<IssueRow> issues) {
+        if (!issueSink.enabled() || issues == null || issues.isEmpty()) {
+            return;
+        }
+        var dataSource = resolveDataSource(issueSink.connectionRef());
+        if (dataSource == null) {
+            return;
+        }
+        var rows = new ArrayList<Mt101ValidationIssueRepository.IssueRow>(issues.size());
+        for (var row : issues) {
+            var issue = row.issue();
+            rows.add(new Mt101ValidationIssueRepository.IssueRow(
+                    stringValue(issue.code(), "UNKNOWN"),
+                    stringValue(issue.ruleSet(), "unknown"),
+                    severityCode(issue.severity()),
+                    issue.message(),
+                    row.fragmentSetId(),
+                    row.sendersReference(),
+                    row.fragmentIndex(),
+                    stringValue(issue.transactionReference(), null)));
+        }
+        try {
+            issueRepository.insertIssues(dataSource, issueSink.table(), rows);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot persist MT101 validation issues", error);
+        }
+    }
+
+    private record IssueRow(ValidationIssue issue,
+                            String fragmentSetId,
+                            String sendersReference,
+                            Integer fragmentIndex) {
+    }
+
+    private DataSource resolveDataSource(String connectionRef) {
+        if (connectionRef == null || connectionRef.isBlank() || connectionPoolManager == null) {
+            return defaultDataSource;
+        }
+        return connectionPoolManager.resolveJdbcDataSource(connectionRef);
+    }
+
+    private String severityCode(ValidationIssue.Severity severity) {
+        if (severity == ValidationIssue.Severity.WARNING) {
+            return "W";
+        }
+        if (severity == ValidationIssue.Severity.INFO) {
+            return "I";
+        }
+        return "E";
+    }
+
+    /** Acumula resultados por mensaje sin retener los mensajes en memoria. */
+    private static final class ValidationAccumulator {
+        int totalMessages;
+        int invalidMessages;
+        int issueCount;
+        private final int maxIssuesInOutput;
+        final List<ValidationIssue> issues = new ArrayList<>();
+        final EnumMap<ValidationIssue.Severity, Integer> bySeverity =
+                new EnumMap<>(ValidationIssue.Severity.class);
+
+        ValidationAccumulator(int maxIssuesInOutput) {
+            this.maxIssuesInOutput = Math.max(maxIssuesInOutput, 0);
+            bySeverity.put(ValidationIssue.Severity.ERROR, 0);
+            bySeverity.put(ValidationIssue.Severity.WARNING, 0);
+            bySeverity.put(ValidationIssue.Severity.INFO, 0);
+        }
+
+        boolean add(List<ValidationIssue> messageIssues, ValidationIssue.Severity failOn) {
+            totalMessages++;
+            issueCount += messageIssues.size();
+            for (var issue : messageIssues) {
+                bySeverity.merge(issue.severity(), 1, Integer::sum);
+                if (issues.size() < maxIssuesInOutput) {
+                    issues.add(issue);
                 }
             }
+            var blocking = messageIssues.stream().anyMatch(issue -> issue.severity().reaches(failOn));
+            if (blocking) {
+                invalidMessages++;
+            }
+            return blocking;
         }
-        return issues;
+
+        boolean issuesTruncated() {
+            return issueCount > issues.size();
+        }
+
+        Map<String, Integer> bySeverity() {
+            var counts = new TreeMap<String, Integer>();
+            bySeverity.forEach((severity, count) -> counts.put(severity.name(), count));
+            return counts;
+        }
     }
 
-    private Map<String, Integer> countBySeverity(List<ValidationIssue> issues) {
-        var counts = new TreeMap<String, Integer>();
-        counts.put(ValidationIssue.Severity.ERROR.name(), 0);
-        counts.put(ValidationIssue.Severity.WARNING.name(), 0);
-        counts.put(ValidationIssue.Severity.INFO.name(), 0);
-        for (var issue : issues) {
-            counts.merge(issue.severity().name(), 1, Integer::sum);
+    private record IssueSink(boolean enabled, String connectionRef, String table) {
+        static IssueSink disabled() {
+            return new IssueSink(false, null, DEFAULT_ISSUE_TABLE);
         }
-        return counts;
+
+        static IssueSink from(Object raw) {
+            if (raw == null || String.valueOf(raw).isBlank()) {
+                return disabled();
+            }
+            if (raw instanceof Map<?, ?> map) {
+                var table = stringValue(map.get("table"), DEFAULT_ISSUE_TABLE);
+                return enabled(stringValue(map.get("connectionRef"), null), table);
+            }
+            var value = String.valueOf(raw).trim();
+            if ("false".equalsIgnoreCase(value) || "none".equalsIgnoreCase(value)) {
+                return disabled();
+            }
+            if (value.startsWith("table:")) {
+                var parts = value.substring("table:".length()).split(":", 2);
+                if (parts.length == 2) {
+                    return enabled(parts[0], parts[1]);
+                }
+                return enabled(null, parts[0]);
+            }
+            return enabled(null, value);
+        }
+
+        private static IssueSink enabled(String connectionRef, String table) {
+            var normalizedTable = stringValue(table, DEFAULT_ISSUE_TABLE);
+            if (!DEFAULT_ISSUE_TABLE.equals(normalizedTable)) {
+                throw new IllegalArgumentException("MT101_VALIDATE only supports publishing issues to "
+                        + DEFAULT_ISSUE_TABLE);
+            }
+            return new IssueSink(true, connectionRef, normalizedTable);
+        }
     }
 
-    /**
-     * Cuenta cuantos mensajes tienen al menos un issue que alcanza el umbral
-     * {@code failOn}. Un mensaje invalido lo es por tener al menos un issue, no por
-     * "cuantos" issues; evita contar dos veces.
-     */
-    private int countInvalidMessages(List<Mt101Message> messages,
-                                     List<ValidationIssue> issues,
-                                     ValidationIssue.Severity failOn) {
-        if (issues.isEmpty()) {
-            return 0;
-        }
-        // Sin un mapping explicito message->issue, usamos la referencia de mensaje
-        // (sendersReference) y la de transaccion. Para slice 2 con un solo mensaje
-        // por ejecucion, el caso comun es 0 o 1; cubrimos N usando heuristica de
-        // "al menos un issue blocking sobre el conjunto" (false-positive seguro:
-        // todos los mensajes se consideran invalidos si hay un solo issue blocking).
-        var anyBlocking = issues.stream().anyMatch(issue -> issue.severity().reaches(failOn));
-        return anyBlocking ? messages.size() : 0;
-    }
-
-    private String stringValue(Object raw, String defaultValue) {
+    private static String stringValue(Object raw, String defaultValue) {
         if (raw == null) {
             return defaultValue;
         }
         var value = String.valueOf(raw).trim();
         return value.isEmpty() ? defaultValue : value;
+    }
+
+    private int intValue(Object raw, int defaultValue) {
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return defaultValue;
+        }
+        return Integer.parseInt(String.valueOf(raw));
     }
 
     private ValidationIssue.Severity severityValue(Object raw, ValidationIssue.Severity defaultValue) {

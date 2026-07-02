@@ -1,29 +1,33 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.provider.task.payments.swift.archive.AesGcmPayloadEncryptor;
 import com.integrationhub.platform.provider.task.payments.swift.archive.PayloadEncryptor;
-import com.integrationhub.platform.provider.task.payments.swift.model.Mt101Message;
+import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.platform.repository.payments.swift.Mt101ArchiveRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 
 import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
 import java.sql.SQLException;
-import java.sql.Statement;
-import java.sql.Types;
-import java.time.LocalDate;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Task provider {@code MT101_ARCHIVE}: persiste cada {@link Mt101Message} de la
@@ -42,14 +46,44 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
 
     private static final String DEFAULT_TABLE = "mt101_archive";
     private static final int DEFAULT_RETENTION_DAYS = 3650;
+    /** Muestra de records en el output; archivedCount es siempre exacto. */
+    private static final int DEFAULT_MAX_RECORDS_IN_OUTPUT = 1000;
 
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
+    private final Mt101FragmentStore fragmentStore;
+    private final Mt101ArchiveRepository archiveRepository;
+    private final RecordAuditEmitter recordAuditEmitter;
+
+    @Inject
+    public Mt101ArchiveTaskProvider(DataSource defaultDataSource,
+                                    ConnectionPoolManager connectionPoolManager,
+                                    Mt101FragmentStore fragmentStore,
+                                    Mt101ArchiveRepository archiveRepository,
+                                    RecordAuditEmitter recordAuditEmitter) {
+        this.defaultDataSource = defaultDataSource;
+        this.connectionPoolManager = connectionPoolManager;
+        this.fragmentStore = fragmentStore;
+        this.archiveRepository = archiveRepository;
+        this.recordAuditEmitter = recordAuditEmitter;
+    }
+
+    public Mt101ArchiveTaskProvider(DataSource defaultDataSource,
+                                    ConnectionPoolManager connectionPoolManager,
+                                    Mt101FragmentStore fragmentStore,
+                                    Mt101ArchiveRepository archiveRepository) {
+        this(defaultDataSource, connectionPoolManager, fragmentStore, archiveRepository, null);
+    }
+
+    public Mt101ArchiveTaskProvider(DataSource defaultDataSource,
+                                    ConnectionPoolManager connectionPoolManager,
+                                    Mt101FragmentStore fragmentStore) {
+        this(defaultDataSource, connectionPoolManager, fragmentStore, new Mt101ArchiveRepository(), null);
+    }
 
     public Mt101ArchiveTaskProvider(DataSource defaultDataSource,
                                     ConnectionPoolManager connectionPoolManager) {
-        this.defaultDataSource = defaultDataSource;
-        this.connectionPoolManager = connectionPoolManager;
+        this(defaultDataSource, connectionPoolManager, null);
     }
 
     @Override
@@ -57,21 +91,133 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
         return "MT101_ARCHIVE";
     }
 
-    @Override
-    public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
-        var messages = Mt101MessageInputResolver.readMessages(context, configuration, type());
-        if (messages.isEmpty()) {
-            return TaskResult.success("MT101_ARCHIVE skipped because there are no messages to archive");
+    /** Trama RECORD de archivado por fragmento (traceId=ejecucion, recordId=:20:). */
+    private AuditEnvelope recordEnvelope(TaskContext context, String reference) {
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
+                reference,
+                AuditLevel.RECORD,
+                "RECORD_ARCHIVED",
+                "ARCHIVED",
+                context.processExecutionId(),
+                context.taskDefinitionId(),
+                null,
+                null,
+                Map.of(),
+                "SWIFT",
+                "MT101",
+                null,
+                null,
+                null,
+                null,
+                null,
+                reference,
+                null,
+                null,
+                null,
+                null,
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
+    }
+
+    private void emitRecordAudit(List<AuditEnvelope> envelopes) {
+        if (recordAuditEmitter != null && !envelopes.isEmpty()) {
+            recordAuditEmitter.emitRecords(envelopes);
         }
+    }
+
+    /**
+     * Gate de estados: por defecto ARCHIVE consume SOLO fragmentos
+     * {@code VALIDATED}. Un pipeline mal configurado que salte
+     * {@code MT101_VALIDATE} no debe poder archivar (y por tanto enviar)
+     * mensajes sin validar — flujo seguro: BUILT -> VALIDATED -> ARCHIVED ->
+     * SENT. Archivar {@code BUILT} directo requiere fijar
+     * {@code fragmentSource.statuses} explicitamente (decision consciente,
+     * no accidente de configuracion).
+     */
+    private static final java.util.List<String> FRAGMENT_READ_STATUSES = java.util.List.of("VALIDATED");
+
+    @Override
+    @Transactional(Transactional.TxType.NOT_SUPPORTED)
+    public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
+        var fragmentSource = Mt101MessageInputResolver.fragmentSource(context, configuration, type());
 
         var connectionRef = stringValue(configuration.get("connectionRef"), null);
         var dataSource = resolveDataSource(connectionRef);
         var encryptor = resolveEncryptor(configuration);
         var retentionDays = intValue(configuration.get("retentionDays"), DEFAULT_RETENTION_DAYS);
 
-        var archived = new ArrayList<Map<String, Object>>(messages.size());
-        var totalBytes = 0L;
+        var accumulator = new ArchiveAccumulator(
+                intValue(configuration.get("maxRecordsInOutput"), DEFAULT_MAX_RECORDS_IN_OUTPUT));
+        if (!fragmentSource.isEmpty() && fragmentStore != null) {
+            // Flujo masivo: una transaccion por pagina (un fragmento fallido
+            // revierte solo su pagina) y entradas SIN el Mt101Message embebido:
+            // PAY lee del fragment store, no de los outputs, y retener 10k+
+            // mensajes en outputs anula la ganancia de memoria de la paginacion.
+            var pageSize = intValue(configuration.get("pageSize"), Mt101FragmentStore.DEFAULT_PAGE_SIZE);
+            fragmentStore.forEachPage(fragmentSource, FRAGMENT_READ_STATUSES, pageSize, page -> {
+                archiveBatch(dataSource, encryptor, retentionDays, context, connectionRef,
+                        page, false, accumulator);
+                // Marcado por lote: 1 round-trip por pagina en vez de 1 UPDATE
+                // por fragmento.
+                var archivedRefs = new ArrayList<String>(page.size());
+                var pageAudit = new ArrayList<AuditEnvelope>(page.size());
+                for (var message : page) {
+                    if (message.sequenceA() != null && message.sequenceA().sendersReference() != null) {
+                        var reference = message.sequenceA().sendersReference();
+                        archivedRefs.add(reference);
+                        pageAudit.add(recordEnvelope(context, reference));
+                    }
+                }
+                fragmentStore.markStatusBatch(fragmentSource, archivedRefs, "ARCHIVED");
+                emitRecordAudit(pageAudit);
+            });
+        } else {
+            var messages = Mt101MessageInputResolver.readMessages(context, configuration, type(), fragmentStore);
+            if (!messages.isEmpty()) {
+                archiveBatch(dataSource, encryptor, retentionDays, context, connectionRef,
+                        messages, true, accumulator);
+                var audit = new ArrayList<AuditEnvelope>(messages.size());
+                for (var message : messages) {
+                    if (message.sequenceA() != null && message.sequenceA().sendersReference() != null) {
+                        audit.add(recordEnvelope(context, message.sequenceA().sendersReference()));
+                    }
+                }
+                emitRecordAudit(audit);
+            }
+        }
 
+        if (accumulator.archivedCount == 0) {
+            return TaskResult.success("MT101_ARCHIVE skipped because there are no messages to archive");
+        }
+
+        var outputs = new LinkedHashMap<String, Object>();
+        outputs.put("archivedCount", accumulator.archivedCount);
+        outputs.put("totalBytes", accumulator.totalBytes);
+        outputs.put("targetTable", DEFAULT_TABLE);
+        // records es una MUESTRA acotada (maxRecordsInOutput); el detalle completo
+        // esta en mt101_archive / mt101_build_fragment.
+        outputs.put("records", accumulator.archived);
+        outputs.put("recordsSampled", accumulator.archivedCount > accumulator.archived.size());
+        if (!fragmentSource.isEmpty()) {
+            outputs.put("fragments", fragmentSource);
+        }
+
+        return TaskResult.success(
+                "MT101_ARCHIVE archived " + accumulator.archivedCount
+                        + " messages (" + accumulator.totalBytes + " bytes)",
+                outputs);
+    }
+
+    private void archiveBatch(DataSource dataSource,
+                              PayloadEncryptor encryptor,
+                              int retentionDays,
+                              TaskContext context,
+                              String connectionRef,
+                              java.util.List<Mt101Message> messages,
+                              boolean includeMessageInEntry,
+                              ArchiveAccumulator accumulator) {
         try (Connection connection = dataSource.getConnection()) {
             var previousAutoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
@@ -81,27 +227,35 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
                     if (raw == null) {
                         throw new IllegalStateException("Mt101Message.rawPayload is required for archiving");
                     }
-                    totalBytes += raw.getBytes(StandardCharsets.UTF_8).length;
+                    accumulator.totalBytes += raw.getBytes(StandardCharsets.UTF_8).length;
                     var stored = encryptor != null ? encryptor.encrypt(raw) : raw;
                     var hash = sha256Hex(raw);
 
-                    var envelopeId = insertEnvelope(connection, message, hash, context, stored);
-                    var archiveId = insertArchive(connection, message, envelopeId, stored, retentionDays);
-                    insertTransactions(connection, archiveId, message);
+                    var insert = archiveRepository.insertArchivedMessage(connection, message,
+                            context.processExecutionId(), stored, hash, retentionDays);
 
                     var entry = new LinkedHashMap<String, Object>();
-                    entry.put("archiveId", archiveId);
-                    entry.put("envelopeId", envelopeId);
+                    entry.put("archiveId", insert.archiveId());
+                    entry.put("envelopeId", insert.envelopeId());
                     entry.put("sendersReference", message.sequenceA() == null ? null
                             : message.sequenceA().sendersReference());
+                    if (connectionRef != null && !connectionRef.isBlank()) {
+                        entry.put("connectionRef", connectionRef);
+                    }
                     entry.put("hash", hash);
                     entry.put("encrypted", encryptor != null);
-                    entry.put("message", message);
-                    archived.add(entry);
+                    if (includeMessageInEntry) {
+                        entry.put("message", message);
+                    }
+                    accumulator.add(entry);
                 }
                 connection.commit();
             } catch (SQLException | RuntimeException error) {
-                connection.rollback();
+                try {
+                    connection.rollback();
+                } catch (SQLException rollbackError) {
+                    error.addSuppressed(rollbackError);
+                }
                 throw error;
             } finally {
                 connection.setAutoCommit(previousAutoCommit);
@@ -109,157 +263,24 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot archive MT101 messages", error);
         }
-
-        var outputs = new LinkedHashMap<String, Object>();
-        outputs.put("archivedCount", archived.size());
-        outputs.put("totalBytes", totalBytes);
-        outputs.put("targetTable", DEFAULT_TABLE);
-        outputs.put("records", archived);
-
-        return TaskResult.success(
-                "MT101_ARCHIVE archived " + archived.size() + " messages (" + totalBytes + " bytes)",
-                outputs);
     }
 
-    private long insertEnvelope(Connection connection,
-                                Mt101Message message,
-                                String hash,
-                                TaskContext context,
-                                String storedPayload) throws SQLException {
-        var sql = "insert into swift_message_envelope "
-                + "(message_type, sender_lt, receiver_lt, uetr, priority, raw_payload, payload_hash, source_file_name, process_execution_id) "
-                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            var envelope = message.envelope();
-            statement.setString(1, "101");
-            statement.setString(2, envelope == null ? null : envelope.senderLt());
-            statement.setString(3, envelope == null ? null : envelope.receiverLt());
-            statement.setString(4, envelope == null ? null : envelope.uetr());
-            statement.setString(5, envelope == null ? null : envelope.priority());
-            statement.setString(6, storedPayload);
-            statement.setString(7, hash);
-            statement.setNull(8, Types.VARCHAR);
-            if (context.processExecutionId() == null) {
-                statement.setNull(9, Types.BIGINT);
-            } else {
-                statement.setLong(9, context.processExecutionId());
-            }
-            statement.executeUpdate();
-            try (var keys = statement.getGeneratedKeys()) {
-                if (keys.next()) {
-                    return keys.getLong(1);
-                }
-                throw new SQLException("No generated key returned for swift_message_envelope");
-            }
-        }
-    }
+    /** Acumula archivo con sample acotado (memoria O(maxRecords)); conteo exacto. */
+    private static final class ArchiveAccumulator {
+        final ArrayList<Map<String, Object>> archived = new ArrayList<>();
+        final int maxRecordsInOutput;
+        int archivedCount;
+        long totalBytes;
 
-    private long insertArchive(Connection connection,
-                               Mt101Message message,
-                               long envelopeId,
-                               String storedPayload,
-                               int retentionDays) throws SQLException {
-        var sql = "insert into mt101_archive "
-                + "(envelope_id, senders_reference, customer_specified_reference, message_index, message_total, "
-                + " requested_execution_date, instructing_party_kind, instructing_party_value, "
-                + " ordering_customer_kind, ordering_customer_account, ordering_customer_name_addr, "
-                + " account_servicing_kind, account_servicing_value, status, format, retention_until) "
-                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
-            var sequenceA = message.sequenceA();
-            statement.setLong(1, envelopeId);
-            statement.setString(2, sequenceA == null ? null : sequenceA.sendersReference());
-            statement.setString(3, sequenceA == null ? null : sequenceA.customerSpecifiedReference());
-            if (sequenceA == null) {
-                statement.setNull(4, Types.INTEGER);
-                statement.setNull(5, Types.INTEGER);
-            } else {
-                statement.setInt(4, sequenceA.messageIndex());
-                statement.setInt(5, sequenceA.messageTotal());
-            }
-            statement.setObject(6, sequenceA == null ? null : sequenceA.requestedExecutionDate(), Types.DATE);
-            var instructingParty = sequenceA == null ? null : sequenceA.instructingParty();
-            statement.setString(7, instructingParty == null ? null : instructingParty.option());
-            statement.setString(8, partyValue(instructingParty));
-            var orderingCustomer = sequenceA == null ? null : sequenceA.orderingCustomer();
-            statement.setString(9, orderingCustomer == null ? null : orderingCustomer.option());
-            statement.setString(10, orderingCustomer == null ? null : orderingCustomer.account());
-            statement.setString(11, orderingCustomer == null ? null
-                    : String.join("\n", orderingCustomer.nameAndAddress()));
-            var accountServicing = sequenceA == null ? null : sequenceA.accountServicingInstitution();
-            statement.setString(12, accountServicing == null ? null : accountServicing.option());
-            statement.setString(13, partyValue(accountServicing));
-            statement.setString(14, "COMPOSED");
-            statement.setString(15, message.format());
-            statement.setObject(16, LocalDate.now().plusDays(retentionDays), Types.DATE);
-            statement.executeUpdate();
-            try (var keys = statement.getGeneratedKeys()) {
-                if (keys.next()) {
-                    return keys.getLong(1);
-                }
-                throw new SQLException("No generated key returned for mt101_archive");
-            }
+        ArchiveAccumulator(int maxRecordsInOutput) {
+            this.maxRecordsInOutput = Math.max(maxRecordsInOutput, 0);
         }
-    }
 
-    private void insertTransactions(Connection connection, long archiveId, Mt101Message message) throws SQLException {
-        if (message.transactions() == null || message.transactions().isEmpty()) {
-            return;
-        }
-        var sql = "insert into mt101_transaction "
-                + "(archive_id, sequence_number, transaction_reference, fx_deal_reference, instruction_code, "
-                + " amount_currency, amount_value, ordering_customer_kind, ordering_customer_account, "
-                + " ordering_customer_name_addr, account_servicing_kind, account_servicing_value, intermediary, "
-                + " account_with_institution, beneficiary_kind, beneficiary_account, beneficiary_name_addr, "
-                + " remittance_information, regulatory_reporting, original_amount_currency, original_amount_value, "
-                + " details_of_charges, charges_account, exchange_rate) "
-                + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-        try (PreparedStatement statement = connection.prepareStatement(sql)) {
-            for (var tx : message.transactions()) {
-                statement.setLong(1, archiveId);
-                statement.setInt(2, tx.sequenceNumber());
-                statement.setString(3, tx.transactionReference());
-                statement.setString(4, tx.fxDealReference());
-                statement.setString(5, tx.instructionCode());
-                statement.setString(6, tx.amount() == null ? null : tx.amount().currency());
-                if (tx.amount() == null || tx.amount().value() == null) {
-                    statement.setNull(7, Types.NUMERIC);
-                } else {
-                    statement.setBigDecimal(7, tx.amount().value());
-                }
-                var orderingCustomer = tx.orderingCustomer();
-                statement.setString(8, orderingCustomer == null ? null : orderingCustomer.option());
-                statement.setString(9, orderingCustomer == null ? null : orderingCustomer.account());
-                statement.setString(10, orderingCustomer == null ? null
-                        : String.join("\n", orderingCustomer.nameAndAddress()));
-                var accountServicing = tx.accountServicingInstitution();
-                statement.setString(11, accountServicing == null ? null : accountServicing.option());
-                statement.setString(12, partyValue(accountServicing));
-                statement.setString(13, partyValue(tx.intermediary()));
-                statement.setString(14, partyValue(tx.accountWithInstitution()));
-                var beneficiary = tx.beneficiary();
-                statement.setString(15, beneficiary == null ? null : beneficiary.option());
-                statement.setString(16, beneficiary == null ? null : beneficiary.account());
-                statement.setString(17, beneficiary == null ? null
-                        : String.join("\n", beneficiary.nameAndAddress()));
-                statement.setString(18, tx.remittanceInformation());
-                statement.setString(19, tx.regulatoryReporting());
-                statement.setString(20, tx.originalAmount() == null ? null : tx.originalAmount().currency());
-                if (tx.originalAmount() == null || tx.originalAmount().value() == null) {
-                    statement.setNull(21, Types.NUMERIC);
-                } else {
-                    statement.setBigDecimal(21, tx.originalAmount().value());
-                }
-                statement.setString(22, tx.detailsOfCharges());
-                statement.setString(23, tx.chargesAccount());
-                if (tx.exchangeRate() == null) {
-                    statement.setNull(24, Types.NUMERIC);
-                } else {
-                    statement.setBigDecimal(24, tx.exchangeRate());
-                }
-                statement.addBatch();
+        void add(Map<String, Object> entry) {
+            archivedCount++;
+            if (archived.size() < maxRecordsInOutput) {
+                archived.add(entry);
             }
-            statement.executeBatch();
         }
     }
 
@@ -299,22 +320,6 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
         } catch (NoSuchAlgorithmException error) {
             throw new IllegalStateException("SHA-256 not available", error);
         }
-    }
-
-    private String partyValue(Mt101Message.Party party) {
-        if (party == null) {
-            return null;
-        }
-        if (party.bic() != null && !party.bic().isBlank()) {
-            return party.bic();
-        }
-        if (party.account() != null && !party.account().isBlank()) {
-            return party.account();
-        }
-        if (party.nameAndAddress() != null && !party.nameAndAddress().isEmpty()) {
-            return String.join("\n", party.nameAndAddress());
-        }
-        return null;
     }
 
     private String stringValue(Object raw, String defaultValue) {
