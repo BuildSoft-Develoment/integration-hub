@@ -5,9 +5,11 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.entity.PluginDescriptor;
 import com.integrationhub.platform.entity.PluginDescriptorVersion;
+import com.integrationhub.platform.spi.config.PluginConfigSchema;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.util.LinkedHashSet;
+import java.util.Map;
 import java.util.Set;
 
 @ApplicationScoped
@@ -67,8 +69,24 @@ public class PluginDescriptorCatalogMapper {
                 descriptor.marketplaceUrl,
                 descriptor.channel,
                 descriptor.pinnedVersion,
-                descriptor.pinned
+                descriptor.pinned,
+                parseConfigSchemas(descriptor.id, descriptor.configSchemasJson)
         );
+    }
+
+    /** Parsea el JSON `{ "<type>": { "fields": [...] } }`; vacío si falta o es inválido. */
+    private Map<String, PluginConfigSchema> parseConfigSchemas(String pluginId, String json) {
+        if (json == null || json.isBlank()) {
+            return Map.of();
+        }
+        try {
+            Map<String, PluginConfigSchema> parsed =
+                    objectMapper.readValue(json, new TypeReference<Map<String, PluginConfigSchema>>() {});
+            return parsed == null ? Map.of() : parsed;
+        } catch (JsonProcessingException ex) {
+            // Un config-schema inválido no debe tumbar el catálogo: se ignora para ese plugin.
+            return Map.of();
+        }
     }
 
     private Set<String> parseProvidedTypes(PluginDescriptor descriptor) {
