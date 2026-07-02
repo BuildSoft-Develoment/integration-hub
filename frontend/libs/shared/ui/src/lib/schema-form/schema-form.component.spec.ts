@@ -168,6 +168,22 @@ describe('SchemaFormComponent', () => {
     expect(form.valid).toBe(true);
   });
 
+  it('shows an explicit message for an unknown field type with no renderer (no silent text fallback)', () => {
+    const unknownSchema: SchemaFormSchema = {
+      fields: [{ key: 'weird', type: 'quantum-widget', label: 'Weird' }],
+    };
+    TestBed.configureTestingModule({ imports: [SchemaFormComponent] });
+    const fixture = TestBed.createComponent(SchemaFormComponent);
+    fixture.componentRef.setInput('schema', unknownSchema);
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+
+    expect(el.querySelector('.schema-form__unsupported')).toBeTruthy();
+    // No silent fallback: an unknown type does NOT render as a text input.
+    expect(el.querySelector('input')).toBeNull();
+    expect(el.querySelector('mat-form-field')).toBeNull();
+  });
+
   it('delegates custom field types to a registered renderer (extensibility)', () => {
     const customSchema: SchemaFormSchema = {
       fields: [

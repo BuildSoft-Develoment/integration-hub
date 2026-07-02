@@ -204,6 +204,7 @@ export const es = {
   'schemaForm.required': 'Este campo es obligatorio.',
   'schemaForm.invalid': 'Revisa este valor.',
   'schemaForm.secretRef': 'Referencia a un secreto gestionado (no el valor en claro).',
+  'schemaForm.unsupported': 'Tipo de campo no soportado',
   'tasks.notification.channel': 'Canal',
   'tasks.notification.message': 'Mensaje',
   'tasks.notification.url': 'URL del webhook',

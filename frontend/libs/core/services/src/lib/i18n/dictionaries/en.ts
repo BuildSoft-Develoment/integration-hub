@@ -204,6 +204,7 @@ export const en = {
   'schemaForm.required': 'This field is required.',
   'schemaForm.invalid': 'Check this value.',
   'schemaForm.secretRef': 'Reference to a managed secret (not the plaintext value).',
+  'schemaForm.unsupported': 'Unsupported field type',
   'tasks.notification.channel': 'Channel',
   'tasks.notification.message': 'Message',
   'tasks.notification.url': 'Webhook URL',
