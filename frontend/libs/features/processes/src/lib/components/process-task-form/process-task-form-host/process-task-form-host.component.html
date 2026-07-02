@@ -1,6 +1,14 @@
 <div class="task-form-shell" [class.task-form-shell--workspace]="usesWorkspaceLayout()">
   @if (registered(); as reg) {
     <ng-container *ngComponentOutlet="reg.component; inputs: registeredInputs()" />
+  } @else if (schema(); as sc) {
+    <!-- Tipo aportado por un plugin (sin editor propio) pero con config-schema backend. -->
+    <ih-schema-form
+      [schema]="sc"
+      [value]="schemaValue()"
+      [readonly]="readonly()"
+      (valueChange)="onSchemaValue($event)"
+    />
   } @else {
     <p class="task-form-shell__missing">
       {{ 'processTask.formNotRegistered' | uppercase }}: <code>{{ task().taskType }}</code>
