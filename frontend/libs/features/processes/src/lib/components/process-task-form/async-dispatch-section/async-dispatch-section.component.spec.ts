@@ -50,17 +50,15 @@ describe('AsyncDispatchSectionComponent', () => {
     expect(fixture.componentInstance.modeHint()).toBe(fixture.componentInstance.i18n.t('ui.asyncModeScatter'));
   });
 
-  it('emits changes for each control', () => {
+  it('emits async and transport changes', () => {
     const fixture = setup({ async: false });
     const emitted: Record<string, unknown> = {};
     fixture.componentInstance.asyncChange.subscribe((v) => (emitted['async'] = v));
     fixture.componentInstance.transportChange.subscribe((v) => (emitted['transport'] = v));
-    fixture.componentInstance.continueOnFailureChange.subscribe((v) => (emitted['continueOnFailure'] = v));
 
     fixture.componentInstance.asyncChange.emit(true);
     fixture.componentInstance.transportChange.emit('RABBITMQ');
-    fixture.componentInstance.continueOnFailureChange.emit(true);
 
-    expect(emitted).toEqual({ async: true, transport: 'RABBITMQ', continueOnFailure: true });
+    expect(emitted).toEqual({ async: true, transport: 'RABBITMQ' });
   });
 });

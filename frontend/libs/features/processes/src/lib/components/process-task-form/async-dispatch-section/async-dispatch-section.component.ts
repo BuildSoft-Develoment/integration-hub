@@ -8,14 +8,17 @@ import { I18nService } from '@integration-hub/core/services';
 /**
  * Sección de configuración del <b>despacho async</b> de una tarea (ADR-015). Presentacional: recibe
  * los valores actuales y emite cambios; el form host los persiste en la config de la tarea
- * (`async`, `transport`, `continueOnFailure`).
+ * (`async`, `asyncTransport`).
  *
  * <p>El significado del flag depende del `executionMode`:</p>
  * <ul>
  *   <li><b>once</b> + async → offload de la tarea como una unidad (per-task).</li>
  *   <li><b>batch/per-record</b> + async → reparto en slices, procesado <b>distribuido</b> entre
- *       workers (scatter-gather, Opción B). Ahí aplica `continueOnFailure`.</li>
+ *       workers (scatter-gather, Opción B).</li>
  * </ul>
+ *
+ * <p><b>Nota</b>: {@code continueOnFailure} NO vive aquí — es una política de ejecución de tarea
+ * general (aplica también a batch síncrono), expuesta por {@code TaskContinueOnFailureComponent}.</p>
  */
 @Component({
   selector: 'ih-async-dispatch-section',
@@ -44,15 +47,6 @@ import { I18nService } from '@integration-hub/core/services';
             }
           </mat-select>
         </mat-form-field>
-
-        @if (distributed()) {
-          <mat-slide-toggle
-            [checked]="continueOnFailure()"
-            [disabled]="readonly()"
-            (change)="continueOnFailureChange.emit($event.checked)">
-            {{ i18n.t('ui.asyncContinueOnFailure') }}
-          </mat-slide-toggle>
-        }
 
         <p class="async-dispatch__hint" [class.async-dispatch__hint--distributed]="distributed()">
           {{ modeHint() }}
@@ -84,14 +78,12 @@ export class AsyncDispatchSectionComponent {
 
   readonly async = input(false);
   readonly transport = input('KAFKA');
-  readonly continueOnFailure = input(false);
   readonly executionMode = input('once');
   readonly transports = input<readonly string[]>(['KAFKA']);
   readonly readonly = input(false);
 
   readonly asyncChange = output<boolean>();
   readonly transportChange = output<string>();
-  readonly continueOnFailureChange = output<boolean>();
 
   /** batch/per-record + async ⇒ reparto distribuido (scatter); once + async ⇒ offload de una unidad. */
   readonly distributed = computed(
