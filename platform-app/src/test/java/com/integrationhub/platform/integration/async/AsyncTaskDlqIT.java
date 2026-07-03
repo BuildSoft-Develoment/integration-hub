@@ -42,7 +42,7 @@ class AsyncTaskDlqIT {
     @BeforeEach
     void clean() throws Exception {
         RecordingFollowUpTaskProvider.resetRecording();
-        exec("TRUNCATE TABLE task_inbox, task_dispatch_outbox, audit_spool, audit_event, "
+        exec("TRUNCATE TABLE task_async_dispatch, task_inbox, task_dispatch_outbox, audit_spool, audit_event, "
                 + "process_task_execution, process_execution, process_task_definition, process_definition "
                 + "RESTART IDENTITY CASCADE");
     }
@@ -85,6 +85,21 @@ class AsyncTaskDlqIT {
         assertEquals(1, count("select count(*) from task_dispatch_outbox where idempotency_key = '" + key + "'"));
         assertEquals(1, count("select count(*) from task_dispatch_outbox where status = 'PENDING' and idempotency_key = '" + key + "'"));
         assertEquals(0, count("select count(*) from task_inbox where idempotency_key = '" + key + "'"));
+    }
+
+    @Test
+    @TestSecurity(user = "admin", roles = {"platform-admin"})
+    void requeueRefusesScatterSuspensionToAvoidCompletingWithoutProcessing() throws Exception {
+        var processDefinitionId = insertAsyncTask();
+        processExecutionService.execute(processDefinitionId, Map.of(), "MANUAL");
+        var processExecutionId = count("select id from process_execution order by id desc limit 1");
+        var taskDefinitionId = count("select id from process_task_definition order by id desc limit 1");
+        // Marca la suspensión como un scatter (tracker presente): el requeue per-task la corrompería.
+        exec("insert into task_async_dispatch (process_execution_id, task_definition_id, total_slices) values ("
+                + processExecutionId + ", " + taskDefinitionId + ", 3)");
+
+        assertFalse(dlqService.requeueSuspension(processExecutionId, taskDefinitionId),
+                "un scatter no se re-encola como per-task");
     }
 
     private Long insertAsyncTask() throws Exception {

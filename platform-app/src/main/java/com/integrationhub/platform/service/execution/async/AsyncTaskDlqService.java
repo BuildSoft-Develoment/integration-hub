@@ -3,6 +3,7 @@ package com.integrationhub.platform.service.execution.async;
 import com.integrationhub.platform.entity.TaskDispatchOutbox;
 import com.integrationhub.platform.entity.TaskInbox;
 import com.integrationhub.platform.repository.ProcessTaskExecutionRepository;
+import com.integrationhub.platform.repository.TaskAsyncDispatchRepository;
 import com.integrationhub.platform.repository.TaskDispatchOutboxRepository;
 import com.integrationhub.platform.repository.TaskInboxRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
@@ -30,6 +31,7 @@ public class AsyncTaskDlqService {
 
     private final TaskDispatchOutboxRepository outboxRepository;
     private final TaskInboxRepository inboxRepository;
+    private final TaskAsyncDispatchRepository scatterTracker;
     private final ProcessTaskExecutionRepository taskExecutionRepository;
     private final JsonConfigurationMapper configurationMapper;
     private final TaskDispatchPlanner planner;
@@ -39,6 +41,7 @@ public class AsyncTaskDlqService {
     @Inject
     public AsyncTaskDlqService(TaskDispatchOutboxRepository outboxRepository,
                               TaskInboxRepository inboxRepository,
+                              TaskAsyncDispatchRepository scatterTracker,
                               ProcessTaskExecutionRepository taskExecutionRepository,
                               JsonConfigurationMapper configurationMapper,
                               TaskDispatchPlanner planner,
@@ -46,6 +49,7 @@ public class AsyncTaskDlqService {
                               TaskOutboxStore outboxStore) {
         this.outboxRepository = outboxRepository;
         this.inboxRepository = inboxRepository;
+        this.scatterTracker = scatterTracker;
         this.taskExecutionRepository = taskExecutionRepository;
         this.configurationMapper = configurationMapper;
         this.planner = planner;
@@ -81,6 +85,13 @@ public class AsyncTaskDlqService {
         var taskExecution = taskExecutionRepository.findActiveSuspendedByExecutionAndTask(
                 processExecutionId, taskDefinitionId);
         if (taskExecution == null || taskExecution.taskDefinition == null) {
+            return false;
+        }
+        // Una tarea scatter (Opción B) no se re-encola como per-task: eso completaría la tarea sin
+        // procesar sus records. Su recuperación es redrive de las slices muertas (outbox/inbox).
+        if (scatterTracker.findByExecutionAndTask(processExecutionId, taskDefinitionId).isPresent()) {
+            LOG.warnf("Async DLQ: exec=%d task=%d es un scatter; usar redrive de slices, no requeue per-task",
+                    processExecutionId, taskDefinitionId);
             return false;
         }
         var definition = taskExecution.taskDefinition;
