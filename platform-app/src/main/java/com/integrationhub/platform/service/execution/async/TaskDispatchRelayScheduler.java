@@ -20,7 +20,7 @@ public class TaskDispatchRelayScheduler {
 
     private static final Logger LOG = Logger.getLogger(TaskDispatchRelayScheduler.class);
 
-    private final JpaTaskOutboxStore store;
+    private final TaskOutboxStore store;
     private final TaskOutboxRelay relay;
     private final MessageBrokerRegistry brokers;
     private final boolean enabled;
@@ -28,7 +28,7 @@ public class TaskDispatchRelayScheduler {
 
     @Inject
     public TaskDispatchRelayScheduler(
-            JpaTaskOutboxStore store,
+            TaskOutboxStore store,
             TaskOutboxRelay relay,
             MessageBrokerRegistry brokers,
             @ConfigProperty(name = "tasks.dispatch.enabled", defaultValue = "false") boolean enabled,
