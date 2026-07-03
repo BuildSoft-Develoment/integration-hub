@@ -1196,4 +1196,6 @@ export const es = {
   'ui.asyncModeSync': 'Se ejecuta en el motor de forma síncrona.',
   'ui.asyncModeOffload': 'Se offloada al broker y se ejecuta como una unidad (per-task).',
   'ui.asyncModeScatter': 'Se reparte en slices y se procesa distribuido entre workers (scatter-gather).',
+  'ui.asyncNotSupported': 'Este tipo de tarea no admite ejecución asíncrona: depende de contexto en vivo que no viaja al broker.',
+  'ui.asyncScatterOnly': 'Este tipo solo admite async en modo distribuido (por lote / por registro), donde los registros viajan en los slices.',
 };

@@ -9,8 +9,11 @@ import com.integrationhub.platform.service.source.SourceProviderRegistry;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.source.SourcePayload;
+import com.integrationhub.platform.spi.task.AsyncOffloadSupport;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
+import com.integrationhub.platform.spi.task.SuspendableTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
+import com.integrationhub.platform.spi.task.TaskProvider;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 
@@ -75,6 +78,7 @@ public class ProcessTaskRuntimeService {
         var asyncEnvelope = asyncTaskDispatchService.prepare(
                 processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(), configuration);
         if (asyncEnvelope.isPresent()) {
+            guardAsyncOffloadable(provider, taskPlan.taskType(), executionMode);
             var envelope = asyncEnvelope.get();
             if (requiresRecordInput(executionMode)) {
                 // Opción B (scatter): reparte los records en N slices (N work-items) en vez de offloadar
@@ -164,6 +168,35 @@ public class ProcessTaskRuntimeService {
 
     private boolean requiresRecordInput(String executionMode) {
         return "batch".equals(executionMode) || "per-record".equals(executionMode);
+    }
+
+    /**
+     * ADR-015: verifica que el provider soporte offload async para el {@code executionMode} pedido.
+     * Si no lo soporta, <b>lanza</b> (no degrada a síncrono en silencio ni deja que el consumer marque
+     * DEAD/no-op): async es opt-in por capacidad ({@link AsyncOffloadSupport}) y un tipo marcado async
+     * que no la soporta es un error de configuración que debe fallar fuerte y visible.
+     */
+    private void guardAsyncOffloadable(TaskProvider provider, String taskType, String executionMode) {
+        if (provider instanceof SuspendableTaskProvider) {
+            throw new IllegalStateException("La tarea '" + taskType + "' es suspendible (espera un evento "
+                    + "externo) y no soporta ejecución async: el consumer la marcaría DEAD y la tarea quedaría "
+                    + "colgada. Quite 'async' de su configuración o ejecútela síncrona.");
+        }
+        var support = provider.asyncOffloadSupport();
+        var scatter = requiresRecordInput(executionMode);
+        var allowed = switch (support) {
+            case SUPPORTED -> true;
+            case SLICE_ONLY -> scatter;
+            case UNSUPPORTED -> false;
+        };
+        if (!allowed) {
+            var detail = support == AsyncOffloadSupport.SLICE_ONLY
+                    ? " en modo '" + executionMode + "': solo es offloadable como scatter (executionMode "
+                            + "batch/per-record, donde los records viajan en los slices)."
+                    : ": depende de contexto en vivo no propagable por el broker (readResult/taskOutputs/"
+                            + "executionVariables/sourcePayload). Ejecútela síncrona.";
+            throw new IllegalStateException("La tarea '" + taskType + "' no soporta ejecución async" + detail);
+        }
     }
 
     private TaskContext taskContext(Long processExecutionId,

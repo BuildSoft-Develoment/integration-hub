@@ -12,7 +12,7 @@ import {
 } from '@integration-hub/core/providers';
 import { I18nService } from '@integration-hub/core/services';
 import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
-import { MessagingTransportsService } from '../../../api/messaging-transports.service';
+import { AsyncOffloadSupport, MessagingTransportsService } from '../../../api/messaging-transports.service';
 import { ProcessTaskFormModel } from '../../../models/process.models';
 import { AsyncDispatchSectionComponent } from '../async-dispatch-section/async-dispatch-section.component';
 import { TaskContinueOnFailureComponent } from '../task-continue-on-failure/task-continue-on-failure.component';
@@ -56,6 +56,17 @@ export class ProcessTaskRuntimePanelComponent {
   readonly transports = signal<readonly string[]>(['KAFKA']);
   /** Si el despacho async está activo en el entorno (para avisar que `async:true` correría síncrono). */
   readonly asyncFeatureEnabled = signal(true);
+  /** Capacidad de offload async por tipo de tarea (del catálogo backend). */
+  private readonly asyncCapabilities = signal<Record<string, AsyncOffloadSupport>>({});
+
+  /**
+   * Capacidad del tipo de la tarea actual. Mientras no cargue el catálogo (o el tipo no aparezca) se
+   * asume `SUPPORTED` (permisivo): la UI no oculta el toggle por una lectura fallida — el guard del
+   * backend es la barrera real. Cuando el catálogo dice `UNSUPPORTED`/`SLICE_ONLY`, la sección gatea.
+   */
+  readonly asyncOffloadSupport = computed<AsyncOffloadSupport>(
+    () => this.asyncCapabilities()[String(this.task().taskType ?? '').toUpperCase()] ?? 'SUPPORTED'
+  );
 
   constructor() {
     this.transportsApi
@@ -78,6 +89,15 @@ export class ProcessTaskRuntimePanelComponent {
         next: (status) => this.asyncFeatureEnabled.set(status.executionEnabled),
         error: () => {
           /* asume habilitado ante error para no alarmar de mas */
+        },
+      });
+    this.transportsApi
+      .asyncCapabilities()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (capabilities) => this.asyncCapabilities.set(capabilities),
+        error: () => {
+          /* asume SUPPORTED ante error: no gatea por una lectura fallida (el backend igual guarda) */
         },
       });
   }

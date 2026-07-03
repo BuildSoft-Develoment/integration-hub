@@ -4,6 +4,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { I18nService } from '@integration-hub/core/services';
+import { AsyncOffloadSupport } from '../../../api/messaging-transports.service';
 
 /**
  * Sección de configuración del <b>despacho async</b> de una tarea (ADR-015). Presentacional: recibe
@@ -28,12 +29,18 @@ import { I18nService } from '@integration-hub/core/services';
     <div class="async-dispatch">
       <div class="task-section-header">{{ i18n.t('ui.asyncDispatchOptions') }}</div>
 
-      <mat-slide-toggle
-        [checked]="async()"
-        [disabled]="readonly()"
-        (change)="asyncChange.emit($event.checked)">
-        {{ i18n.t('ui.asyncDispatch') }}
-      </mat-slide-toggle>
+      @if (toggleShown()) {
+        <mat-slide-toggle
+          [checked]="async()"
+          [disabled]="toggleDisabled()"
+          (change)="asyncChange.emit($event.checked)">
+          {{ i18n.t('ui.asyncDispatch') }}
+        </mat-slide-toggle>
+      }
+
+      @if (!available()) {
+        <p class="async-dispatch__hint async-dispatch__hint--unavailable">{{ unavailableReason() }}</p>
+      }
 
       @if (async()) {
         <mat-form-field appearance="outline">
@@ -74,6 +81,10 @@ import { I18nService } from '@integration-hub/core/services';
         font-weight: 600;
         opacity: 0.9;
       }
+      .async-dispatch__hint--unavailable {
+        opacity: 0.9;
+        font-style: italic;
+      }
       .async-dispatch__warning {
         margin: 0;
         font-size: 0.85rem;
@@ -92,6 +103,12 @@ export class AsyncDispatchSectionComponent {
   readonly readonly = input(false);
   /** Si el feature de despacho async está activo en el entorno; si no, se avisa que correrá síncrono. */
   readonly featureEnabled = input(true);
+  /**
+   * Capacidad de offload async del tipo de tarea (del catálogo backend, ADR-015). Gatea el toggle:
+   * `UNSUPPORTED` no lo ofrece; `SLICE_ONLY` solo en modos distribuidos (batch/per-record). Default
+   * `SUPPORTED` (permisivo) para no gatear cuando el host no provee la capacidad.
+   */
+  readonly offloadSupport = input<AsyncOffloadSupport>('SUPPORTED');
 
   readonly asyncChange = output<boolean>();
   readonly transportChange = output<string>();
@@ -100,6 +117,39 @@ export class AsyncDispatchSectionComponent {
   readonly distributed = computed(
     () => this.async() && (this.executionMode() === 'batch' || this.executionMode() === 'per-record')
   );
+
+  /** Si el modo actual reparte records en slices (donde REST_CALL/SLICE_ONLY sí es offloadable). */
+  private readonly scatterMode = computed(
+    () => this.executionMode() === 'batch' || this.executionMode() === 'per-record'
+  );
+
+  /** Si el tipo (en el modo actual) admite async, según su capacidad declarada. */
+  readonly available = computed(() => {
+    switch (this.offloadSupport()) {
+      case 'SUPPORTED':
+        return true;
+      case 'SLICE_ONLY':
+        return this.scatterMode();
+      default:
+        return false;
+    }
+  });
+
+  /** Motivo por el que async no está disponible (para el hint). */
+  readonly unavailableReason = computed(() => {
+    if (this.available()) {
+      return '';
+    }
+    return this.offloadSupport() === 'SLICE_ONLY'
+      ? this.i18n.t('ui.asyncScatterOnly')
+      : this.i18n.t('ui.asyncNotSupported');
+  });
+
+  /** El toggle se muestra si async es admisible, o si ya está activo (para poder desactivarlo). */
+  readonly toggleShown = computed(() => this.available() || this.async());
+
+  /** Deshabilitado en readonly, o cuando no es admisible y no está ya activo (no se puede activar). */
+  readonly toggleDisabled = computed(() => this.readonly() || (!this.available() && !this.async()));
 
   readonly modeHint = computed(() => {
     if (!this.async()) {

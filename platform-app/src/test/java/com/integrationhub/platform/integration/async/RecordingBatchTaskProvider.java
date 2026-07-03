@@ -2,6 +2,7 @@ package com.integrationhub.platform.integration.async;
 
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.source.SourcePayload;
+import com.integrationhub.platform.spi.task.AsyncOffloadSupport;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -32,6 +33,12 @@ public class RecordingBatchTaskProvider implements BatchTaskProvider {
     @Override
     public String type() {
         return TASK_TYPE;
+    }
+
+    // Trabaja sobre los records del slice (que viajan en scatter) ⇒ SLICE_ONLY.
+    @Override
+    public AsyncOffloadSupport asyncOffloadSupport() {
+        return AsyncOffloadSupport.SLICE_ONLY;
     }
 
     @Override

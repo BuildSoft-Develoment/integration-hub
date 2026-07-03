@@ -4,6 +4,10 @@ import com.integrationhub.platform.domain.TaskType;
 import com.integrationhub.platform.service.TaskProviderRegistry;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
+import com.integrationhub.platform.spi.task.AsyncOffloadSupport;
+import com.integrationhub.platform.spi.task.TaskContext;
+import com.integrationhub.platform.spi.task.TaskProvider;
+import com.integrationhub.platform.spi.task.TaskResult;
 import org.junit.jupiter.api.Test;
 
 import java.util.LinkedHashMap;
@@ -83,6 +87,32 @@ class TaskTypeCatalogServiceTest {
 
         assertEquals(TaskTypeCatalogService.STATUS_SHADOWED_BY_LOCAL,
                 find(catalog, TaskType.FILE_READ, "REMOTE").status());
+    }
+
+    @Test
+    void catalogExposesProviderAsyncOffloadCapability() {
+        var providerRegistry = mock(TaskProviderRegistry.class);
+        when(providerRegistry.localTaskTypeProviders())
+                .thenReturn(new LinkedHashMap<>(Map.of("SLICE_LOCAL", "SliceOnlyProvider")));
+        when(providerRegistry.resolve("SLICE_LOCAL")).thenReturn(new SliceOnlyProvider());
+        var remotePlugins = new RemotePluginRegistry();
+        remotePlugins.register(new RemotePluginDescriptor(
+                "acme", "1.0.0", "1", Set.of("ACME_DO"), "KAFKA", true));
+
+        var catalog = new TaskTypeCatalogService(providerRegistry, remotePlugins).catalog();
+
+        // El catálogo refleja la capacidad declarada por el provider...
+        assertEquals("SLICE_ONLY", find(catalog, "SLICE_LOCAL", "LOCAL").asyncOffload());
+        // ...los remotos son UNSUPPORTED para el async genérico (ya son async vía su transporte)...
+        assertEquals("UNSUPPORTED", find(catalog, "ACME_DO", "REMOTE").asyncOffload());
+        // ...y los tipos sin capacidad resoluble degradan a UNSUPPORTED (conservador).
+        assertEquals("UNSUPPORTED", find(catalog, TaskType.FILE_READ, "BUILTIN").asyncOffload());
+    }
+
+    private static final class SliceOnlyProvider implements TaskProvider {
+        @Override public String type() { return "SLICE_LOCAL"; }
+        @Override public TaskResult execute(TaskContext c, Map<String, Object> cfg) { return TaskResult.success("ok"); }
+        @Override public AsyncOffloadSupport asyncOffloadSupport() { return AsyncOffloadSupport.SLICE_ONLY; }
     }
 
     private TaskTypeCatalogEntry find(Iterable<TaskTypeCatalogEntry> entries, String type, String origin) {

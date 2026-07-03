@@ -8,5 +8,6 @@ public record TaskTypeResponse(
         String pluginVersion,
         String transport,
         String status,
-        String reason) {
+        String reason,
+        String asyncOffload) {
 }

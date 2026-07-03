@@ -33,6 +33,7 @@
     [executionMode]="draft().executionMode"
     [transports]="transports()"
     [featureEnabled]="asyncFeatureEnabled()"
+    [offloadSupport]="asyncOffloadSupport()"
     [readonly]="readonly()"
     (asyncChange)="updateAsync($event)"
     (transportChange)="runtimeChange.emit({ asyncTransport: $event })"

@@ -1196,4 +1196,6 @@ export const en = {
   'ui.asyncModeSync': 'Runs in the engine synchronously.',
   'ui.asyncModeOffload': 'Offloaded to the broker and executed as a single unit (per-task).',
   'ui.asyncModeScatter': 'Split into slices and processed distributed across workers (scatter-gather).',
+  'ui.asyncNotSupported': 'This task type does not support asynchronous execution: it relies on live context that does not travel to the broker.',
+  'ui.asyncScatterOnly': 'This type only supports async in distributed mode (per-batch / per-record), where records travel in the slices.',
 };

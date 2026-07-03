@@ -4,19 +4,30 @@ import { TestBed } from '@angular/core/testing';
 
 import { ProcessTaskRuntimePanelComponent } from './process-task-runtime-panel.component';
 
-function setup(draft: Record<string, unknown>, asyncEnabled = true) {
+function setup(
+  draft: Record<string, unknown>,
+  asyncEnabled = true,
+  options: { taskType?: string; capabilities?: Array<{ type: string; asyncOffload: string }> } = {}
+) {
   TestBed.configureTestingModule({
     imports: [ProcessTaskRuntimePanelComponent],
     providers: [provideHttpClient(), provideHttpClientTesting()],
   });
   const fixture = TestBed.createComponent(ProcessTaskRuntimePanelComponent);
-  fixture.componentRef.setInput('task', { clientId: 'c1', taskType: 'DB_WRITE', configurationJson: '{}' });
+  fixture.componentRef.setInput('task', {
+    clientId: 'c1',
+    taskType: options.taskType ?? 'DB_WRITE',
+    configurationJson: '{}',
+  });
   fixture.componentRef.setInput('tasks', []);
   fixture.componentRef.setInput('draft', draft);
   const http = TestBed.inject(HttpTestingController);
-  // El panel consulta al iniciar los transportes y el estado del feature async.
+  // El panel consulta al iniciar los transportes, el estado del feature async y las capacidades por tipo.
   http.match('/api/messaging/transports').forEach((req) => req.flush(['KAFKA', 'RABBITMQ']));
   http.match('/api/messaging/async-status').forEach((req) => req.flush({ executionEnabled: asyncEnabled }));
+  http
+    .match('/api/task-types')
+    .forEach((req) => req.flush({ taskTypes: options.capabilities ?? [] }));
   return { fixture, http };
 }
 
@@ -59,6 +70,24 @@ describe('ProcessTaskRuntimePanelComponent (async dispatch)', () => {
   it('reflects the async feature disabled', () => {
     const { fixture, http } = setup({ taskRef: 't', executionMode: 'once' }, false);
     expect(fixture.componentInstance.asyncFeatureEnabled()).toBe(false);
+    http.verify();
+  });
+
+  it('exposes the async capability for the current task type from the catalog', () => {
+    const { fixture, http } = setup({ taskRef: 't', executionMode: 'batch' }, true, {
+      taskType: 'REST_CALL',
+      capabilities: [{ type: 'REST_CALL', asyncOffload: 'SLICE_ONLY' }],
+    });
+    expect(fixture.componentInstance.asyncOffloadSupport()).toBe('SLICE_ONLY');
+    http.verify();
+  });
+
+  it('defaults capability to SUPPORTED when the type is absent from the catalog', () => {
+    const { fixture, http } = setup({ taskRef: 't', executionMode: 'once' }, true, {
+      taskType: 'MT101_PARSE',
+      capabilities: [{ type: 'REST_CALL', asyncOffload: 'SLICE_ONLY' }],
+    });
+    expect(fixture.componentInstance.asyncOffloadSupport()).toBe('SUPPORTED');
     http.verify();
   });
 });

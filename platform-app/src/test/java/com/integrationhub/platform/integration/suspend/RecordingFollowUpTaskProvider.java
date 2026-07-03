@@ -1,5 +1,6 @@
 package com.integrationhub.platform.integration.suspend;
 
+import com.integrationhub.platform.spi.task.AsyncOffloadSupport;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -33,6 +34,12 @@ public class RecordingFollowUpTaskProvider implements TaskProvider {
     @Override
     public String type() {
         return TASK_TYPE;
+    }
+
+    // Config-only (taskOutputs es opcional): offloadable en cualquier modo, incl. once async (E2E).
+    @Override
+    public AsyncOffloadSupport asyncOffloadSupport() {
+        return AsyncOffloadSupport.SUPPORTED;
     }
 
     @Override

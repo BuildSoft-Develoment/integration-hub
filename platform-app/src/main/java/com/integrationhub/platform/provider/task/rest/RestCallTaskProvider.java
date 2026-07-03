@@ -3,6 +3,7 @@ package com.integrationhub.platform.provider.task.rest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
+import com.integrationhub.platform.spi.task.AsyncOffloadSupport;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskProvider;
@@ -35,6 +36,16 @@ public class RestCallTaskProvider implements BatchTaskProvider {
     @Override
     public String type() {
         return "REST_CALL";
+    }
+
+    /**
+     * Solo lee {@code processExecutionId}/{@code taskDefinitionId} (presentes en el context
+     * reconstruido) y los {@code records}; estos únicamente viajan como slices ⇒ offloadable como
+     * scatter (batch/per-record), no en {@code once}.
+     */
+    @Override
+    public AsyncOffloadSupport asyncOffloadSupport() {
+        return AsyncOffloadSupport.SLICE_ONLY;
     }
 
     @Override
