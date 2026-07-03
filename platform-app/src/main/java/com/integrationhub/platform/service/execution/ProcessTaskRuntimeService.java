@@ -2,6 +2,7 @@ package com.integrationhub.platform.service.execution;
 
 import com.integrationhub.platform.domain.TaskType;
 import com.integrationhub.platform.service.TaskProviderRegistry;
+import com.integrationhub.platform.service.execution.async.AsyncTaskDispatchService;
 import com.integrationhub.platform.service.reader.ReaderProviderRegistry;
 import com.integrationhub.platform.service.source.SourceProviderRegistry;
 import com.integrationhub.platform.spi.reader.ReadResult;
@@ -24,19 +25,22 @@ public class ProcessTaskRuntimeService {
     private final FileReadRuntimeSupport fileReadRuntimeSupport;
     private final TaskOutputRegistry taskOutputRegistry;
     private final TaskInputResolver taskInputResolver;
+    private final AsyncTaskDispatchService asyncTaskDispatchService;
 
     public ProcessTaskRuntimeService(SourceProviderRegistry sourceProviderRegistry,
                                      ReaderProviderRegistry readerProviderRegistry,
                                      TaskProviderRegistry taskProviderRegistry,
                                      FileReadRuntimeSupport fileReadRuntimeSupport,
                                      TaskOutputRegistry taskOutputRegistry,
-                                     TaskInputResolver taskInputResolver) {
+                                     TaskInputResolver taskInputResolver,
+                                     AsyncTaskDispatchService asyncTaskDispatchService) {
         this.sourceProviderRegistry = sourceProviderRegistry;
         this.readerProviderRegistry = readerProviderRegistry;
         this.taskProviderRegistry = taskProviderRegistry;
         this.fileReadRuntimeSupport = fileReadRuntimeSupport;
         this.taskOutputRegistry = taskOutputRegistry;
         this.taskInputResolver = taskInputResolver;
+        this.asyncTaskDispatchService = asyncTaskDispatchService;
     }
 
     @Transactional(Transactional.TxType.NOT_SUPPORTED)
@@ -62,6 +66,25 @@ public class ProcessTaskRuntimeService {
             throw new IllegalArgumentException("Task " + taskOutputRegistry.taskRef(taskPlan, configuration)
                     + " requires input for executionMode " + executionMode);
         }
+
+        // ADR-015 Etapa 3: si la tarea está marcada async (y el feature está activo), se offloada al
+        // broker en vez de ejecutarse in-process. Gated OFF por defecto → sin cambio de comportamiento.
+        var asyncDispatch = asyncTaskDispatchService.dispatch(
+                processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(), configuration);
+        if (asyncDispatch.isPresent()) {
+            if (requiresRecordInput(executionMode)) {
+                // No se degrada a síncrono en silencio: el offload async por lotes aún no existe.
+                throw new IllegalStateException("El despacho async aún no soporta executionMode '"
+                        + executionMode + "' (tarea " + taskPlan.taskType() + ")");
+            }
+            var suspension = asyncDispatch.get();
+            return TaskRunResult.suspended(
+                    "Tarea " + taskPlan.taskType() + " despachada async por " + suspension.transport(),
+                    Map.of("asyncDispatch", true,
+                            "idempotencyKey", suspension.idempotencyKey(),
+                            "transport", suspension.transport()));
+        }
+
         var resolvedInput = taskInputResolver.resolve(configuration, taskOutputs);
 
         if ("batch".equals(executionMode) || "per-record".equals(executionMode)) {

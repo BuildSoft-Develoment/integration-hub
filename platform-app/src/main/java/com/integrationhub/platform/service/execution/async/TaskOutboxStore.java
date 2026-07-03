@@ -12,6 +12,9 @@ import java.util.List;
  */
 public interface TaskOutboxStore {
 
+    /** Encola un work-item (idempotente por {@code idempotencyKey}); lado productor. */
+    void enqueue(AsyncTaskEnvelope envelope);
+
     /** Reclama hasta {@code batchSize} work-items pendientes (con lease). */
     List<PendingTask> claimPending(int batchSize);
 

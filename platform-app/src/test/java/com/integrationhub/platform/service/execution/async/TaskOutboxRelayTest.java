@@ -101,6 +101,11 @@ class TaskOutboxRelayTest {
         }
 
         @Override
+        public void enqueue(com.integrationhub.platform.task.AsyncTaskEnvelope envelope) {
+            // El relay no encola; irrelevante para este test.
+        }
+
+        @Override
         public List<PendingTask> claimPending(int batchSize) {
             return pending;
         }

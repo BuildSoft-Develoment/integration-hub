@@ -39,6 +39,7 @@ public class JpaTaskOutboxStore implements TaskOutboxStore {
     }
 
     /** Encola un work-item (idempotente por {@code idempotencyKey}). */
+    @Override
     @Transactional
     public void enqueue(AsyncTaskEnvelope envelope) {
         if (repository.existsByIdempotencyKey(envelope.idempotencyKey())) {
