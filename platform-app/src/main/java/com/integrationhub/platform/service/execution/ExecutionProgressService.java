@@ -1,0 +1,61 @@
+package com.integrationhub.platform.service.execution;
+
+import com.integrationhub.platform.entity.TaskAsyncDispatch;
+import com.integrationhub.platform.repository.TaskAsyncDispatchRepository;
+import com.integrationhub.platform.service.execution.async.AsyncTaskDlqService;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.transaction.Transactional;
+
+import java.util.List;
+
+/**
+ * Progreso de ejecución para la UI de monitoreo a escala (ADR-015): agrega el tracker
+ * {@code task_async_dispatch} por tarea (scatter) y la salud del pipeline async. La UI la puede pollear
+ * (auto-refresh) para mostrar avance de un proceso de 1M registros en vez de solo el estado terminal.
+ *
+ * <p><b>Alcance</b>: el progreso granular existe para tareas <b>scatter</b> (que abren un tracker N→1 o
+ * page-chain). Las tareas <b>sync</b> y <b>once-async</b> no tienen tracker por-slice; su progreso es el
+ * estado de la tarea (running/done) más el contador persistido del loop sync (pieza aparte).</p>
+ */
+@ApplicationScoped
+public class ExecutionProgressService {
+
+    private final TaskAsyncDispatchRepository scatterTracker;
+    private final AsyncTaskDlqService dlqService;
+
+    public ExecutionProgressService(TaskAsyncDispatchRepository scatterTracker, AsyncTaskDlqService dlqService) {
+        this.scatterTracker = scatterTracker;
+        this.dlqService = dlqService;
+    }
+
+    @Transactional
+    public ExecutionProgress progress(Long processExecutionId) {
+        var scatterTasks = scatterTracker.findByExecution(processExecutionId).stream()
+                .map(this::toTaskProgress)
+                .toList();
+        return new ExecutionProgress(processExecutionId, scatterTasks, dlqService.summary());
+    }
+
+    private TaskScatterProgress toTaskProgress(TaskAsyncDispatch t) {
+        var streaming = t.totalSlices == null; // page-chain aún sin sellar → total desconocido
+        var percent = (streaming || t.totalSlices == 0)
+                ? null
+                : Math.min(100, (int) Math.round(100.0 * (t.completedSlices + t.failedSlices) / t.totalSlices));
+        return new TaskScatterProgress(t.taskDefinitionId, t.completedSlices, t.failedSlices,
+                t.totalSlices, streaming, percent, t.status, t.lastProgressAt);
+    }
+
+    /** Progreso agregado de una ejecución: tareas scatter + salud del pipeline. */
+    public record ExecutionProgress(Long executionId, List<TaskScatterProgress> scatterTasks,
+                                    AsyncTaskDlqService.DlqSummary pipeline) {
+    }
+
+    /**
+     * Progreso de una tarea scatter. {@code total=null}/{@code streaming=true} ⇒ page-chain sin sellar
+     * (mostrar indeterminado, sin % ni ETA falsos); {@code percent} solo cuando el total se conoce.
+     */
+    public record TaskScatterProgress(Long taskDefinitionId, int completed, int failed, Integer total,
+                                      boolean streaming, Integer percent, String status,
+                                      java.time.LocalDateTime lastProgressAt) {
+    }
+}

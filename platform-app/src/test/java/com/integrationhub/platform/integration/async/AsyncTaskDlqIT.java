@@ -39,6 +39,9 @@ class AsyncTaskDlqIT {
     @Inject
     AsyncTaskDlqService dlqService;
 
+    @Inject
+    com.integrationhub.platform.service.execution.ExecutionProgressService progressService;
+
     @BeforeEach
     void clean() throws Exception {
         RecordingFollowUpTaskProvider.resetRecording();
@@ -128,6 +131,27 @@ class AsyncTaskDlqIT {
         assertEquals(1, stalled.size());
         assertEquals(10L, stalled.get(0).processExecutionId());
         assertEquals(2, stalled.get(0).lastPageIndex());
+    }
+
+    @Test
+    void progressAggregatesScatterTrackersPerTaskWithStreamingFlag() throws Exception {
+        // Tarea materializada (total conocido → %) y tarea streaming (total NULL → indeterminado).
+        exec("insert into task_async_dispatch (process_execution_id, task_definition_id, total_slices, "
+                + "completed_slices, failed_slices, last_progress_at) values (70, 71, 4, 2, 1, current_timestamp)");
+        exec("insert into task_async_dispatch (process_execution_id, task_definition_id, total_slices, "
+                + "completed_slices, last_page_index, last_page_json, last_progress_at) "
+                + "values (70, 72, null, 5, 5, '{}', current_timestamp)");
+
+        var progress = progressService.progress(70L);
+
+        assertEquals(2, progress.scatterTasks().size());
+        var materialized = progress.scatterTasks().stream().filter(p -> p.taskDefinitionId() == 71L).findFirst().orElseThrow();
+        assertEquals(75, materialized.percent(), "2+1 de 4 = 75%");
+        assertFalse(materialized.streaming());
+        var streaming = progress.scatterTasks().stream().filter(p -> p.taskDefinitionId() == 72L).findFirst().orElseThrow();
+        assertTrue(streaming.streaming());
+        assertEquals(null, streaming.percent(), "streaming sin sellar: sin % falso");
+        assertEquals(5, streaming.completed());
     }
 
     private Long insertAsyncTask() throws Exception {

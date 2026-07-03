@@ -180,6 +180,11 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
                 .firstResultOptional();
     }
 
+    /** Trackers de scatter de una ejecución (para el progreso por tarea en la UI de monitoreo). */
+    public java.util.List<TaskAsyncDispatch> findByExecution(Long processExecutionId) {
+        return list("processExecutionId = ?1 order by taskDefinitionId", processExecutionId);
+    }
+
     /**
      * Scatters en <b>streaming</b> ({@code lastPageJson != null}) aún PENDING cuya última actividad es
      * anterior a {@code cutoff}: candidatos a <b>estancados</b> (la cadena se rompió) para auto-recuperar.
