@@ -1185,4 +1185,11 @@ export const es = {
   'audit.lookup.col.error': 'Error',
   'audit.lookup.col.updated': 'Actualizado',
   'audit.lookup.goQuarantine': 'Cuarentena',
+  'ui.asyncDispatchOptions': 'Despacho asíncrono',
+  'ui.asyncDispatch': 'Ejecución asíncrona (offload a broker)',
+  'ui.asyncTransport': 'Transporte',
+  'ui.asyncContinueOnFailure': 'Continuar ante fallos de slice (completar con errores)',
+  'ui.asyncModeSync': 'Se ejecuta en el motor de forma síncrona.',
+  'ui.asyncModeOffload': 'Se offloada al broker y se ejecuta como una unidad (per-task).',
+  'ui.asyncModeScatter': 'Se reparte en slices y se procesa distribuido entre workers (scatter-gather).',
 };

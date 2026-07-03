@@ -1185,4 +1185,11 @@ export const en = {
   'audit.lookup.col.error': 'Error',
   'audit.lookup.col.updated': 'Updated',
   'audit.lookup.goQuarantine': 'Quarantine',
+  'ui.asyncDispatchOptions': 'Async dispatch',
+  'ui.asyncDispatch': 'Asynchronous execution (offload to broker)',
+  'ui.asyncTransport': 'Transport',
+  'ui.asyncContinueOnFailure': 'Continue on slice failure (complete with errors)',
+  'ui.asyncModeSync': 'Runs in the engine synchronously.',
+  'ui.asyncModeOffload': 'Offloaded to the broker and executed as a single unit (per-task).',
+  'ui.asyncModeScatter': 'Split into slices and processed distributed across workers (scatter-gather).',
 };
