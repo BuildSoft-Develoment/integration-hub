@@ -45,7 +45,8 @@ class FileReadTaskFastPathTest {
                 auditMapper,
                 processedSourceFileService,
                 taskProviderRegistry,
-                new TaskOutputRegistry(new JsonConfigurationMapper())
+                new TaskOutputRegistry(new JsonConfigurationMapper()),
+                new com.integrationhub.platform.service.execution.async.TaskDispatchPlanner()
         );
 
         var result = fastPath.execute(
@@ -73,7 +74,8 @@ class FileReadTaskFastPathTest {
                 new ProcessExecutionAuditMapper(new JsonConfigurationMapper()),
                 new RecordingProcessedSourceFileService(),
                 new BatchTaskProviderRegistry(),
-                new TaskOutputRegistry(new JsonConfigurationMapper())
+                new TaskOutputRegistry(new JsonConfigurationMapper()),
+                new com.integrationhub.platform.service.execution.async.TaskDispatchPlanner()
         );
 
         assertFalse(fastPath.supports(fileReadPlan("fail"), mt101BuildPlan()));
@@ -81,6 +83,41 @@ class FileReadTaskFastPathTest {
         // el fast path no lo materializa, por eso no debe fusionarlo.
         assertFalse(fastPath.supports(fileReadPlan("fail"), mt101ParsePlan()));
         assertTrue(fastPath.supports(fileReadPlan("fail"), sinkPlan()));
+    }
+
+    @Test
+    void doesNotSupportAsyncSinkSoItFallsToRunTaskWhichRejectsIt() {
+        // ADR-015: una tarea async no debe fusionarse al fast path (se ejecutaria sincrona en
+        // silencio, ignorando el flag). Al no soportarla, cae a runTask, que lanza el error explicito.
+        var fastPath = new FileReadTaskFastPath(
+                new FailingStreamingPipelineService(),
+                new RecordingStateService(new ProcessExecution()),
+                new ProcessExecutionAuditMapper(new JsonConfigurationMapper()),
+                new RecordingProcessedSourceFileService(),
+                new BatchTaskProviderRegistry(),
+                new TaskOutputRegistry(new JsonConfigurationMapper()),
+                new com.integrationhub.platform.service.execution.async.TaskDispatchPlanner()
+        );
+
+        assertFalse(fastPath.supports(fileReadPlan("fail"), asyncSinkPlan()));
+        // control: el mismo sink sin async si es elegible.
+        assertTrue(fastPath.supports(fileReadPlan("fail"), sinkPlan()));
+    }
+
+    private ProcessExecutionStateService.TaskPlan asyncSinkPlan() {
+        return new ProcessExecutionStateService.TaskPlan(
+                20L,
+                2,
+                TaskType.DB_WRITE,
+                "{\"taskRef\":\"task-2-db-write\",\"executionMode\":\"batch\",\"async\":true,\"input\":{\"source\":\"task-output\",\"sourceTaskRef\":\"task-1-file-read\",\"sourceOutput\":\"records\"},\"targetTable\":\"public.cliente_target\",\"mode\":\"insert\"}",
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
     }
 
     private ProcessExecutionStateService.TaskPlan mt101ParsePlan() {
