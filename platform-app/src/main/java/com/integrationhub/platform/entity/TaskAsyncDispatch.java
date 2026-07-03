@@ -40,8 +40,9 @@ public class TaskAsyncDispatch {
     @Column(name = "task_definition_id", nullable = false)
     public Long taskDefinitionId;
 
-    @Column(name = "total_slices", nullable = false)
-    public int totalSlices;
+    /** Total de slices. {@code null} = aún despachando (streaming/page-chain, "unsealed"). */
+    @Column(name = "total_slices")
+    public Integer totalSlices;
 
     @Column(name = "completed_slices", nullable = false)
     public int completedSlices = 0;

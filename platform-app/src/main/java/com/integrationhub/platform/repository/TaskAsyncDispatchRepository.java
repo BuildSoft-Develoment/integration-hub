@@ -34,6 +34,52 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
     }
 
     /**
+     * Abre un scatter <b>en streaming</b> (page-chain): {@code total_slices = NULL} porque el total se
+     * descubre incrementalmente y se fija con {@link #seal}. Idempotente. Mientras esté unsealed, la
+     * condición terminal (que compara con {@code total_slices}) es NULL en SQL → nunca cierra, evitando
+     * el cierre prematuro con slices que completan antes del seal.
+     */
+    @Transactional
+    public void openStreaming(Long processExecutionId, Long taskDefinitionId) {
+        getEntityManager().createNativeQuery("""
+                insert into task_async_dispatch
+                    (process_execution_id, task_definition_id, total_slices, created_at)
+                values (?1, ?2, null, current_timestamp)
+                on conflict (process_execution_id, task_definition_id) do nothing
+                """)
+                .setParameter(1, processExecutionId)
+                .setParameter(2, taskDefinitionId)
+                .executeUpdate();
+    }
+
+    /**
+     * <b>Sella</b> un scatter en streaming fijando su {@code total_slices} (page-chain: la última página
+     * conoce el total = índice+1). Atómico: solo aplica si sigue unsealed ({@code total_slices IS NULL})
+     * y PENDING, y reclama el terminal si las slices ya contadas alcanzan el total —caso en que ningún
+     * evento de slice-completada futuro dispararía la reanudación—. Devuelve el progreso <b>solo si este
+     * seal cerró el scatter</b> (para disparar la reanudación una vez); vacío si aún faltan slices, si ya
+     * estaba sellado (reentrega de la última página) o si ya cerró.
+     */
+    @Transactional
+    public Optional<SliceProgress> seal(Long processExecutionId, Long taskDefinitionId, int totalSlices) {
+        var rows = getEntityManager().createNativeQuery("""
+                update task_async_dispatch
+                   set total_slices = ?3,
+                       status = case when completed_slices + failed_slices >= ?3 then 'COMPLETED' else status end,
+                       completed_at = case when completed_slices + failed_slices >= ?3 then current_timestamp else completed_at end
+                 where process_execution_id = ?1 and task_definition_id = ?2
+                       and status = 'PENDING' and total_slices is null
+                returning completed_slices, failed_slices, total_slices, status
+                """)
+                .setParameter(1, processExecutionId)
+                .setParameter(2, taskDefinitionId)
+                .setParameter(3, Math.max(totalSlices, 0))
+                .getResultList();
+        // terminal solo si ESTE seal transicionó a COMPLETED (lo evalúa mapProgress por el status).
+        return mapProgress(rows, false);
+    }
+
+    /**
      * Incrementa atómicamente las slices completadas. Devuelve el progreso si había un scatter activo
      * (PENDING); vacío si no existe o ya cerró (COMPLETED/FAILED) — en cuyo caso el caller no debe
      * disparar la reanudación (dedup de la agregación).
@@ -96,7 +142,8 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
         var row = (Object[]) rows.get(0);
         var completed = ((Number) row[0]).intValue();
         var failed = ((Number) row[1]).intValue();
-        var total = ((Number) row[2]).intValue();
+        // total puede ser NULL si el scatter en streaming aún no fue sellado; -1 lo señala como desconocido.
+        var total = row[2] == null ? -1 : ((Number) row[2]).intValue();
         var status = String.valueOf(row[3]);
         var terminal = terminalIfPresent
                 || TaskAsyncDispatch.COMPLETED.equals(status)

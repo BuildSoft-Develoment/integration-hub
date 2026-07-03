@@ -99,6 +99,54 @@ class TaskAsyncDispatchRepositoryIT {
         assertEquals(TaskAsyncDispatchEntityStatus.COMPLETED, statusOf(9L, 10L));
     }
 
+    // --- streaming / page-chain (open-ended + seal) ---------------------------
+
+    @Test
+    void streamingSealAfterAllSlicesCompletedFiresTerminal() throws Exception {
+        repository.openStreaming(20L, 21L);
+        // Slices completan ANTES del seal: cuentan pero NO cierran (total desconocido → NULL).
+        assertFalse(repository.recordSliceCompleted(20L, 21L).orElseThrow().terminal());
+        assertFalse(repository.recordSliceCompleted(20L, 21L).orElseThrow().terminal());
+        assertEquals("PENDING", statusOf(20L, 21L));
+
+        // El seal (última página: total=2) reclama el terminal, porque ninguna slice futura lo hará.
+        var sealed = repository.seal(20L, 21L, 2).orElseThrow();
+        assertTrue(sealed.terminal(), "el seal cierra cuando las slices ya contadas alcanzan el total");
+        assertEquals(TaskAsyncDispatchEntityStatus.COMPLETED, statusOf(20L, 21L));
+    }
+
+    @Test
+    void streamingSealBeforeAllCompletedIsNotTerminalThenLastSliceCloses() throws Exception {
+        repository.openStreaming(22L, 23L);
+        assertFalse(repository.recordSliceCompleted(22L, 23L).orElseThrow().terminal()); // 1 de (aún NULL)
+
+        // Seal con una slice todavía en vuelo: fija total=2 pero NO cierra (1 < 2) → present, no terminal.
+        assertFalse(repository.seal(22L, 23L, 2).orElseThrow().terminal(), "seal no cierra si faltan slices");
+        assertEquals("PENDING", statusOf(22L, 23L));
+
+        // La slice pendiente cierra el scatter por la vía normal (ya sellado, total=2).
+        assertTrue(repository.recordSliceCompleted(22L, 23L).orElseThrow().terminal());
+        assertEquals(TaskAsyncDispatchEntityStatus.COMPLETED, statusOf(22L, 23L));
+    }
+
+    @Test
+    void streamingSealEmptyIsImmediatelyTerminal() throws Exception {
+        repository.openStreaming(24L, 25L);
+        // Tabla vacía: la primera página no trae records → seal(0) cierra de inmediato.
+        var sealed = repository.seal(24L, 25L, 0).orElseThrow();
+        assertTrue(sealed.terminal());
+        assertEquals(TaskAsyncDispatchEntityStatus.COMPLETED, statusOf(24L, 25L));
+    }
+
+    @Test
+    void streamingSealIsIdempotent() {
+        repository.openStreaming(26L, 27L);
+        // Primer seal (0 de 2): sella (present) pero no cierra (terminal=false).
+        assertFalse(repository.seal(26L, 27L, 2).orElseThrow().terminal(), "seal(0 de 2) no cierra");
+        // Reentrega de la última página → segundo seal: ya no está unsealed → sin efecto.
+        assertTrue(repository.seal(26L, 27L, 2).isEmpty(), "un segundo seal no reabre ni recierra");
+    }
+
     private String statusOf(long peId, long tdId) throws Exception {
         // SQL crudo (no la entidad): los UPDATE nativos del tracker bypassan el cache L1 de Hibernate,
         // así que un find podría devolver un estado stale dentro del mismo contexto de test.
