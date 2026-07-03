@@ -7,6 +7,7 @@ import {
   ProcessFlowLayout,
   ProcessFlowNode,
   ProcessFlowNodePosition,
+  ProcessNodeDispatch,
 } from '../models/process-flow.models';
 
 @Injectable({ providedIn: 'root' })
@@ -109,7 +110,22 @@ export class ProcessFlowMapper {
         y: this.startY,
       },
       size: { ...DEFAULT_PROCESS_FLOW_NODE_SIZE },
+      dispatch: this.dispatchFor(task),
     };
+  }
+
+  /** Deriva el badge de despacho del config (ADR-015): async + batch/per-record = scatter distribuido. */
+  private dispatchFor(task: ProcessTaskFormModel): ProcessNodeDispatch | undefined {
+    try {
+      const config = JSON.parse(task.configurationJson || '{}');
+      if (!config || typeof config !== 'object' || config.async !== true) {
+        return undefined;
+      }
+      const mode = String(config.executionMode || 'once');
+      return mode === 'batch' || mode === 'per-record' ? 'scatter' : 'async';
+    } catch {
+      return undefined;
+    }
   }
 
   createEdges(nodes: readonly ProcessFlowNode[]): ProcessFlowEdge[] {

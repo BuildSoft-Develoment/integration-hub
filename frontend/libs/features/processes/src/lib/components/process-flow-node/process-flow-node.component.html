@@ -15,6 +15,18 @@
           </svg>
         </span>
         <span class="task-node__badge">{{ presentation().badge }}</span>
+        @if (node().dispatch; as dispatch) {
+          <span
+            class="task-node__dispatch"
+            [class.task-node__dispatch--scatter]="dispatch === 'scatter'"
+            [attr.title]="dispatchTooltip()"
+            [attr.aria-label]="dispatchTooltip()"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" />
+            </svg>
+          </span>
+        }
       </div>
 
       <div class="task-node__title-row">

@@ -33,6 +33,15 @@ export class ProcessFlowNodeComponent {
   readonly presentation = input.required<ReturnType<typeof getProcessFlowNodePresentation>>();
   readonly expanded = signal(false);
   readonly hasSummary = computed(() => this.summary().trim().length > 0);
+
+  /** Tooltip del badge de despacho (ADR-015): async offload vs scatter distribuido. */
+  readonly dispatchTooltip = computed(() => {
+    const dispatch = this.node().dispatch;
+    if (dispatch === 'scatter') {
+      return this.i18n.t('flow.dispatchScatter');
+    }
+    return dispatch === 'async' ? this.i18n.t('flow.dispatchAsync') : '';
+  });
   readonly showSummary = computed(() => this.expanded() && this.hasSummary());
   private readonly card = viewChild<ElementRef<HTMLDivElement>>('card');
 

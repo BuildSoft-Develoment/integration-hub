@@ -1188,6 +1188,8 @@ export const en = {
   'ui.asyncDispatchOptions': 'Async dispatch',
   'ui.asyncDispatch': 'Asynchronous execution (offload to broker)',
   'ui.asyncTransport': 'Transport',
+  'flow.dispatchAsync': 'Asynchronous execution: offloaded to the broker (deferred processing).',
+  'flow.dispatchScatter': 'Distributed async execution: split into slices across workers (scatter-gather).',
   'ui.continueOnFailure': 'Continue if the task fails (complete with errors)',
   'ui.continueOnFailureHint': 'If the task returns failure, the process continues and marks it completed with errors; otherwise it aborts.',
   'ui.asyncModeSync': 'Runs in the engine synchronously.',

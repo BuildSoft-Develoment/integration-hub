@@ -172,3 +172,19 @@
       .task-node--notification {
         --task-node-accent: #b45309;
       }
+
+/* Badge de despacho async (ADR-015): rayo = offload al broker; tono distinto = scatter distribuido. */
+.task-node__dispatch {
+  display: inline-flex;
+  align-items: center;
+  margin-inline-start: 0.25rem;
+  color: var(--ih-warning, #b45309);
+}
+.task-node__dispatch svg {
+  width: 0.95rem;
+  height: 0.95rem;
+  fill: currentColor;
+}
+.task-node__dispatch--scatter {
+  color: var(--ih-info, #2563eb);
+}
