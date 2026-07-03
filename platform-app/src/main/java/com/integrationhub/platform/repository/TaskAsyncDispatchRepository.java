@@ -53,6 +53,26 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
     }
 
     /**
+     * Registra la <b>última página despachada</b> de un scatter en streaming (su work-item JSON + índice),
+     * para poder re-inyectarla si la cadena se rompe. <b>Monótono</b>: solo avanza si el índice es mayor
+     * al registrado (una reentrega/procesado fuera de orden no regresa el progreso).
+     */
+    @Transactional
+    public void recordDispatchedPage(Long processExecutionId, Long taskDefinitionId, int pageIndex, String pageJson) {
+        getEntityManager().createNativeQuery("""
+                update task_async_dispatch
+                   set last_page_index = ?3, last_page_json = ?4
+                 where process_execution_id = ?1 and task_definition_id = ?2
+                       and (last_page_index is null or last_page_index < ?3)
+                """)
+                .setParameter(1, processExecutionId)
+                .setParameter(2, taskDefinitionId)
+                .setParameter(3, pageIndex)
+                .setParameter(4, pageJson)
+                .executeUpdate();
+    }
+
+    /**
      * <b>Sella</b> un scatter en streaming fijando su {@code total_slices} (page-chain: la última página
      * conoce el total = índice+1). Atómico: solo aplica si sigue unsealed ({@code total_slices IS NULL})
      * y PENDING, y reclama el terminal si las slices ya contadas alcanzan el total —caso en que ningún

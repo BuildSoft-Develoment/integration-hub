@@ -44,6 +44,9 @@ class AsyncStreamingScatterE2EIT {
     @Inject
     AsyncTaskConsumer consumer;
 
+    @Inject
+    com.integrationhub.platform.service.execution.async.AsyncTaskDlqService dlqService;
+
     @BeforeEach
     void clean() throws Exception {
         RecordingBatchTaskProvider.reset();
@@ -100,6 +103,55 @@ class AsyncStreamingScatterE2EIT {
     }
 
     @Test
+    void brokenChainIsRecoveredByRequeueingTheLastPage() throws Exception {
+        // 5 filas / batch 2 → páginas [1,2] [3,4] [5]. Simulamos que la página 1 se pierde (DLQ) tras
+        // que la página 0 la encoló: la cadena se rompe (la sucesora nunca se encola) → scatter atascado.
+        for (var i = 1; i <= 5; i++) {
+            exec("insert into stream_src (id, payload) values (" + i + ", 'p" + i + "')");
+        }
+        var ids = seedRunningTask();
+        seedStreamingScatter(ids, 2);
+
+        // Consume solo la página semilla (page-0): encola page-1 y registra last_page=1.
+        var consumed = new HashSet<Long>();
+        consumeFirstUnconsumed(consumed);
+        // Simula la pérdida de page-1 (murió/DLQ): borra su fila del outbox.
+        exec("delete from task_dispatch_outbox where id = (select max(id) from task_dispatch_outbox)");
+
+        // Atascado: tracker PENDING con last_page_index=1, proceso aún SUSPENDED (la cadena no sigue).
+        assertEquals("PENDING", readString(
+                "select status from task_async_dispatch where process_execution_id = " + ids[0]));
+        assertEquals("1", readString(
+                "select last_page_index from task_async_dispatch where process_execution_id = " + ids[0]));
+        assertEquals("SUSPENDED", readString("select status from process_execution where id = " + ids[0]));
+
+        // Recuperación DLQ: re-inyecta la última página despachada (page-1) → la cadena reanuda.
+        assertTrue(dlqService.requeueSuspension(ids[0], ids[1]), "requeue debe re-inyectar la página del streaming");
+        drainOutbox(consumed);
+
+        // La cadena completó: los 5 records se procesaron y el proceso cerró.
+        assertEquals("COMPLETED", readString("select status from process_execution where id = " + ids[0]));
+        assertTrue(RecordingBatchTaskProvider.SEEN_IDS.containsAll(java.util.List.of("1", "2", "3", "4", "5")),
+                "tras recuperar, la cadena procesó todos los records");
+    }
+
+    /** Consume la fila de outbox de menor id aún no consumida (para entregar solo la semilla). */
+    private void consumeFirstUnconsumed(HashSet<Long> consumed) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             var rs = statement.executeQuery("select id, envelope_json from task_dispatch_outbox order by id asc")) {
+            while (rs.next()) {
+                var outboxId = rs.getLong(1);
+                if (!consumed.contains(outboxId)) {
+                    consumed.add(outboxId);
+                    consumer.consume(rs.getString(2), "KAFKA", "tasks.test_scatter_batch");
+                    return;
+                }
+            }
+        }
+    }
+
+    @Test
     void emptyTableSealsImmediatelyAndCompletes() throws Exception {
         var ids = seedRunningTask(); // stream_src vacía
 
@@ -123,7 +175,10 @@ class AsyncStreamingScatterE2EIT {
 
     /** Entrega las páginas del outbox al consumer; como cada una encola la siguiente, itera hasta agotar. */
     private void drainOutbox() throws Exception {
-        var consumed = new HashSet<Long>();
+        drainOutbox(new HashSet<>());
+    }
+
+    private void drainOutbox(HashSet<Long> consumed) throws Exception {
         boolean progressed = true;
         while (progressed) {
             progressed = false;

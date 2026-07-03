@@ -53,6 +53,14 @@ public class TaskAsyncDispatch {
     @Column(nullable = false, length = 16)
     public String status = PENDING;
 
+    /** Índice de la última página despachada (streaming/page-chain); {@code null} si materializado. */
+    @Column(name = "last_page_index")
+    public Integer lastPageIndex;
+
+    /** Work-item JSON de la última página despachada, para re-inyectar si la cadena se rompe. */
+    @Column(name = "last_page_json", columnDefinition = "text")
+    public String lastPageJson;
+
     @Column(name = "created_at", nullable = false)
     public LocalDateTime createdAt = LocalDateTime.now();
 

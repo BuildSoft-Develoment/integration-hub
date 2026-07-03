@@ -96,6 +96,7 @@ public class AsyncPageChainService {
                              AsyncPageWorkItem page) {
         var traceId = "exec-" + processExecutionId;
         var idempotencyKey = TaskIdempotency.key(processExecutionId, taskDefinitionId, "page-" + page.pageIndex());
+        var json = serialize(page);
         var envelope = new AsyncTaskEnvelope(
                 traceId,
                 processExecutionId,
@@ -104,9 +105,11 @@ public class AsyncPageChainService {
                 transport,
                 idempotencyKey,
                 1,
-                serialize(page),
+                json,
                 Map.of("traceId", traceId, "kind", "PAGE", "pageIndex", String.valueOf(page.pageIndex())));
         outboxStore.enqueue(envelope); // idempotente por idempotencyKey (reentrega no duplica la cadena)
+        // Registra esta página como la última despachada, para poder re-inyectarla si la cadena se rompe.
+        tracker.recordDispatchedPage(processExecutionId, taskDefinitionId, page.pageIndex(), json);
     }
 
     private DataSource resolveDataSource(String connectionRef) {

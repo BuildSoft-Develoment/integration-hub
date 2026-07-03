@@ -147,6 +147,28 @@ class TaskAsyncDispatchRepositoryIT {
         assertTrue(repository.seal(26L, 27L, 2).isEmpty(), "un segundo seal no reabre ni recierra");
     }
 
+    @Test
+    void recordDispatchedPageIsMonotonic() throws Exception {
+        repository.openStreaming(30L, 31L);
+        repository.recordDispatchedPage(30L, 31L, 0, "{\"pageIndex\":0}");
+        repository.recordDispatchedPage(30L, 31L, 2, "{\"pageIndex\":2}");
+        // Reentrega/procesado fuera de orden con índice menor: NO regresa el progreso.
+        repository.recordDispatchedPage(30L, 31L, 1, "{\"pageIndex\":1}");
+
+        assertEquals("2", readValue(30L, 31L, "last_page_index"));
+        assertEquals("{\"pageIndex\":2}", readValue(30L, 31L, "last_page_json"));
+    }
+
+    private String readValue(long peId, long tdId, String column) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement();
+             var rs = statement.executeQuery("select " + column + " from task_async_dispatch where "
+                     + "process_execution_id = " + peId + " and task_definition_id = " + tdId)) {
+            rs.next();
+            return rs.getString(1);
+        }
+    }
+
     private String statusOf(long peId, long tdId) throws Exception {
         // SQL crudo (no la entidad): los UPDATE nativos del tracker bypassan el cache L1 de Hibernate,
         // así que un find podría devolver un estado stale dentro del mismo contexto de test.

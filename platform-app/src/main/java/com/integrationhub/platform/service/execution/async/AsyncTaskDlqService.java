@@ -7,10 +7,13 @@ import com.integrationhub.platform.repository.TaskAsyncDispatchRepository;
 import com.integrationhub.platform.repository.TaskDispatchOutboxRepository;
 import com.integrationhub.platform.repository.TaskInboxRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
+import com.integrationhub.platform.task.AsyncTaskEnvelope;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import org.jboss.logging.Logger;
+
+import java.util.Map;
 
 /**
  * Operaciones de DLQ y recuperación del pipeline async (ADR-015, grupo 3: 3c + 3a). Da visibilidad de
@@ -87,17 +90,27 @@ public class AsyncTaskDlqService {
         if (taskExecution == null || taskExecution.taskDefinition == null) {
             return false;
         }
-        // Una tarea scatter (Opción B) no se re-encola como per-task: eso completaría la tarea sin
-        // procesar sus records. Su recuperación es redrive de las slices muertas (outbox/inbox).
-        if (scatterTracker.findByExecutionAndTask(processExecutionId, taskDefinitionId).isPresent()) {
-            LOG.warnf("Async DLQ: exec=%d task=%d es un scatter; usar redrive de slices, no requeue per-task",
-                    processExecutionId, taskDefinitionId);
-            return false;
-        }
         var definition = taskExecution.taskDefinition;
         var configuration = configurationMapper.toMap(definition.configurationJson);
         var plan = planner.plan(configuration);
         var transport = plan.isAsync() ? plan.transport() : TaskDispatchPlanner.DEFAULT_TRANSPORT;
+
+        var scatter = scatterTracker.findByExecutionAndTask(processExecutionId, taskDefinitionId);
+        if (scatter.isPresent()) {
+            var tracker = scatter.get();
+            if (tracker.lastPageJson != null) {
+                // Scatter en streaming (page-chain): la cadena se rompe si una página muere sin encolar su
+                // sucesora. Se re-inyecta la ÚLTIMA página despachada (persistida en el tracker) → al
+                // re-correr, encola su sucesora y la cadena reanuda. Idempotente por su idempotencyKey.
+                return requeueStreamingPage(processExecutionId, taskDefinitionId, definition.taskType, transport,
+                        tracker.lastPageIndex, tracker.lastPageJson);
+            }
+            // Scatter materializado (Opción B): no se re-encola como per-task (completaría sin procesar los
+            // records). Su recuperación es redrive de las slices muertas (outbox/inbox).
+            LOG.warnf("Async DLQ: exec=%d task=%d es un scatter materializado; usar redrive de slices",
+                    processExecutionId, taskDefinitionId);
+            return false;
+        }
         var envelope = dispatchService.buildEnvelope(
                 processExecutionId, taskDefinitionId, definition.taskType, transport, configuration);
 
@@ -108,6 +121,24 @@ public class AsyncTaskDlqService {
         outboxStore.enqueue(envelope);
         LOG.infof("Async DLQ: re-encolada suspensión exec=%d task=%d (key=%s)",
                 processExecutionId, taskDefinitionId, envelope.idempotencyKey());
+        return true;
+    }
+
+    /** Re-inyecta la última página despachada de un scatter en streaming, limpiando su dedup. */
+    private boolean requeueStreamingPage(Long processExecutionId, Long taskDefinitionId, String taskType,
+                                         String transport, Integer pageIndex, String pageJson) {
+        var idx = pageIndex == null ? 0 : pageIndex;
+        var idempotencyKey = TaskIdempotency.key(processExecutionId, taskDefinitionId, "page-" + idx);
+        // Limpia el dedup para permitir el reproceso (una fila previa bloquearía el enqueue/consumo).
+        outboxRepository.deleteByIdempotencyKey(idempotencyKey);
+        inboxRepository.deleteByIdempotencyKey(idempotencyKey);
+        var traceId = "exec-" + processExecutionId;
+        var envelope = new AsyncTaskEnvelope(traceId, processExecutionId, taskDefinitionId, taskType, transport,
+                idempotencyKey, 1, pageJson,
+                Map.of("traceId", traceId, "kind", "PAGE", "pageIndex", String.valueOf(idx)));
+        outboxStore.enqueue(envelope);
+        LOG.infof("Async DLQ: re-inyectada página %d del scatter streaming exec=%d task=%d (la cadena reanuda)",
+                idx, processExecutionId, taskDefinitionId);
         return true;
     }
 
