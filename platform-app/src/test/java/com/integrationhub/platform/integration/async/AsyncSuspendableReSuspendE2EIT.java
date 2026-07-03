@@ -20,6 +20,8 @@ import java.sql.Statement;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
@@ -75,6 +77,11 @@ class AsyncSuspendableReSuspendE2EIT {
         assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED, outcome);
         assertEquals(1, RecordingSuspendableTaskProvider.EXECUTIONS.get(), "el primer intento corrió en el consumer");
         assertEquals(0, RecordingSuspendableTaskProvider.RESUMES.get());
+        // El contexto capturado al suspender (taskOutputs) se rehidrató para el provider en el consumer.
+        assertInstanceOf(Map.class, RecordingSuspendableTaskProvider.SEEN_TASK_OUTPUTS.get(),
+                "el provider recibió el taskOutputs rehidratado desde la continuación");
+        assertFalse(((Map<?, ?>) RecordingSuspendableTaskProvider.SEEN_TASK_OUTPUTS.get()).isEmpty(),
+                "el taskOutputs rehidratado no está vacío (metadata de la tarea capturada al suspender)");
         assertEquals("PROCESSED", readSingleString("select status from task_inbox order by id desc limit 1"));
         // La tarea sigue SUSPENDED (re-suspendida), el proceso NO completó, y hay un token de callback.
         assertEquals("SUSPENDED", readSingleString("select status from process_task_execution order by id desc limit 1"));

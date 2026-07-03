@@ -63,6 +63,20 @@ re-suspende con otro token. Documentado; benigno para status-checks idempotentes
 - **Regresión 34/34**: `ProcessExecutionSuspendResumeIT` 5, `Mt101StatusTaskProviderTest` 20, y todos los
   async ITs (execution 3, scatter 1, dlq 4, kafka 1) — sin cambios.
 
+## Doble check
+
+- **`MT101_STATUS = SUPPORTED` verificado (riesgo clase-REST_CALL descartado)**: `execute` lee del
+  contexto **solo** `taskOutputs` (líneas 1096/1130), vía `input.sourceTaskRef`/`sourceOutput` de la
+  config; no usa `sourcePayload`, `readResult` ni helpers (`Mt101MessageInputResolver`/`TaskOutputSupport`).
+  Y `readRecords`/`correctivePaySource` procesan cada valor con `instanceof Map` → **Map-tolerantes**, por
+  lo que el round-trip JSON de la continuación (que degrada objetos tipados a Maps) es compatible (el path
+  síncrono ya requería Maps). ⇒ la capacidad es correcta.
+- **Flujo `completeTransactional` limpio**: un solo `markResumed` por rama; `reSuspend` usa el
+  `suspendTask` <b>plano</b> (sin async/scatter dispatch) → no re-encola un work-item (sin loop de offload).
+- **Brecha de cobertura cerrada**: el E2E se reforzó para que el suspendible **lea** el `taskOutputs`
+  rehidratado y el test **asserte** que llegó no vacío — probando juntos contexto + re-suspensión (el caso
+  real de `MT101_STATUS`), no por separado.
+
 ## Estado
 
 Los suspendibles (`MT101_STATUS`) son async-capaces en once: el offload ejecuta el primer intento y, si

@@ -44,9 +44,9 @@ public class RecordingSuspendableTaskProvider implements SuspendableTaskProvider
     @Override
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
         EXECUTIONS.incrementAndGet();
-        if (context.attributes().get("taskOutputs") instanceof Map<?, ?> outputs) {
-            SEEN_TASK_OUTPUTS.set(outputs.get("task-1.ref"));
-        }
+        // Captura el taskOutputs rehidratado (Nivel 3, Approach B): prueba que el contexto capturado al
+        // suspender por async llegó al provider en el consumer, incluso al re-suspender.
+        SEEN_TASK_OUTPUTS.set(context.attributes().get("taskOutputs"));
         // Primer intento (en el consumer): no puede completarse aún → suspende esperando confirmación.
         return TaskResult.suspended("esperando confirmación externa", Map.of("attempt", 1));
     }
