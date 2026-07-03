@@ -74,6 +74,25 @@ public class AsyncTaskDlqService {
                 inboxRepository.countByStatus(TaskInbox.POISON));
     }
 
+    /** Filas muertas del consumer (DEAD/POISON) para la consola de DLQ. */
+    @Transactional
+    public java.util.List<DeadTask> listDead(int limit) {
+        return inboxRepository.findDead(limit).stream()
+                .map(r -> new DeadTask(r.id, r.idempotencyKey, r.taskType, r.processExecutionId,
+                        r.taskDefinitionId, r.status, r.error))
+                .toList();
+    }
+
+    /** Scatters en streaming estancados (candidatos a re-inyección) para la consola de DLQ. */
+    @Transactional
+    public java.util.List<StalledScatter> listStalled(java.time.Duration stallThreshold, int limit) {
+        var cutoff = java.time.LocalDateTime.now().minus(stallThreshold);
+        return scatterTracker.findStalledStreaming(cutoff, limit).stream()
+                .map(t -> new StalledScatter(t.processExecutionId, t.taskDefinitionId, t.completedSlices,
+                        t.failedSlices, t.lastPageIndex, t.lastProgressAt))
+                .toList();
+    }
+
     /** Reanima hasta {@code limit} filas DEAD del outbox a PENDING para que el relay reintente. */
     @Transactional
     public long redriveOutboxDead(int limit) {
@@ -188,5 +207,15 @@ public class AsyncTaskDlqService {
     }
 
     public record DlqSummary(long outboxDead, long inboxDead, long inboxPoison) {
+    }
+
+    /** Fila muerta del consumer para la consola de DLQ (dedup por idempotencyKey). */
+    public record DeadTask(Long id, String idempotencyKey, String taskType, Long processExecutionId,
+                           Long taskDefinitionId, String status, String error) {
+    }
+
+    /** Scatter en streaming estancado (sin progreso por &gt; umbral): candidato a re-inyección. */
+    public record StalledScatter(Long processExecutionId, Long taskDefinitionId, int completed, int failed,
+                                 Integer lastPageIndex, java.time.LocalDateTime lastProgressAt) {
     }
 }

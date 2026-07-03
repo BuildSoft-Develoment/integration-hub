@@ -26,6 +26,17 @@ public class TaskInboxRepository implements PanacheRepository<TaskInbox> {
     }
 
     /**
+     * Filas terminadas mal ({@code DEAD}/{@code POISON}), más recientes primero, para la consola de DLQ.
+     */
+    public java.util.List<com.integrationhub.platform.entity.TaskInbox> findDead(int limit) {
+        return find("status in ?1 order by id desc",
+                java.util.List.of(com.integrationhub.platform.entity.TaskInbox.DEAD,
+                        com.integrationhub.platform.entity.TaskInbox.POISON))
+                .page(0, Math.max(1, limit))
+                .list();
+    }
+
+    /**
      * Borra el registro de dedup de una clave (redrive de un {@code DEAD}): tras corregir la causa
      * raíz (tipo/config), quitar la fila libera la idempotencyKey para que un re-encolado se procese.
      */

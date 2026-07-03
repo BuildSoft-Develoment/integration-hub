@@ -102,6 +102,34 @@ class AsyncTaskDlqIT {
                 "un scatter no se re-encola como per-task");
     }
 
+    @Test
+    void listDeadReturnsInboxDeadAndPoisonNewestFirst() throws Exception {
+        exec("insert into task_inbox (idempotency_key, task_type, status, error) values "
+                + "('k1','REST_CALL','DEAD','boom'),('k2','MT101_PARSE','POISON','trama'),"
+                + "('ok','REST_CALL','PROCESSED',null)");
+
+        var dead = dlqService.listDead(100);
+
+        assertEquals(2, dead.size(), "DEAD + POISON, no PROCESSED");
+        assertEquals("k2", dead.get(0).idempotencyKey(), "más recientes primero (id desc)");
+        assertEquals("boom", dead.get(1).error());
+    }
+
+    @Test
+    void listStalledReturnsStalledStreamingScatters() throws Exception {
+        exec("insert into task_async_dispatch (process_execution_id, task_definition_id, total_slices, "
+                + "last_page_index, last_page_json, last_progress_at) values "
+                + "(10, 11, null, 2, '{}', current_timestamp - interval '10 minutes')");        // streaming estancado
+        exec("insert into task_async_dispatch (process_execution_id, task_definition_id, total_slices, "
+                + "last_progress_at) values (12, 13, 3, current_timestamp)");                     // materializado: no aplica
+
+        var stalled = dlqService.listStalled(java.time.Duration.ofMinutes(5), 100);
+
+        assertEquals(1, stalled.size());
+        assertEquals(10L, stalled.get(0).processExecutionId());
+        assertEquals(2, stalled.get(0).lastPageIndex());
+    }
+
     private Long insertAsyncTask() throws Exception {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
