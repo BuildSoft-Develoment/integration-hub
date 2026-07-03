@@ -33,6 +33,9 @@ public class RecordingBatchTaskProvider implements BatchTaskProvider {
     public static final Set<String> SEEN_IDS = ConcurrentHashMap.newKeySet();
     /** Si un batch contiene este id, el provider falla (para probar fail-fast en streaming); null = nunca. */
     public static volatile String FAIL_ON_RECORD_ID = null;
+    /** Si un batch contiene este id, el provider LANZA (transitorio) mientras THROW_REMAINING>0. */
+    public static volatile String THROW_ON_RECORD_ID = null;
+    public static final AtomicInteger THROW_REMAINING = new AtomicInteger(0);
 
     public static void reset() {
         SLICE_EXECUTIONS.set(0);
@@ -40,6 +43,8 @@ public class RecordingBatchTaskProvider implements BatchTaskProvider {
         SEEN_TASK_OUTPUTS.set(null);
         SEEN_IDS.clear();
         FAIL_ON_RECORD_ID = null;
+        THROW_ON_RECORD_ID = null;
+        THROW_REMAINING.set(0);
     }
 
     @Override
@@ -56,6 +61,14 @@ public class RecordingBatchTaskProvider implements BatchTaskProvider {
     @Override
     public TaskResult executeRecords(TaskContext context, Map<String, Object> configuration,
                                      List<ReadRecord> records, SourcePayload sourcePayload) {
+        // Throw transitorio ANTES de contar: re-lanza mientras THROW_REMAINING>0 (para probar el retry
+        // in-app; una vez agotados los throws, el intento normal cuenta una sola vez).
+        for (var record : records) {
+            var id = String.valueOf(record.values().get("id"));
+            if (THROW_ON_RECORD_ID != null && THROW_ON_RECORD_ID.equals(id) && THROW_REMAINING.getAndDecrement() > 0) {
+                throw new IllegalStateException("transitorio (BD caída) en id " + id);
+            }
+        }
         SLICE_EXECUTIONS.incrementAndGet();
         TOTAL_RECORDS.addAndGet(records.size());
         SEEN_TASK_OUTPUTS.set(context.attributes().get("taskOutputs"));

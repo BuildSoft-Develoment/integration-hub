@@ -79,6 +79,26 @@ class AsyncStreamingScatterE2EIT {
     }
 
     @Test
+    void transientPageFailureIsRiddenOutByInAppRetry() throws Exception {
+        // 5 filas / batch 2 → páginas [1,2] [3,4] [5]. La página [3,4] LANZA (transitorio) 2 veces y a la
+        // 3ra completa: el retry in-app (consumeWithRetries) lo absorbe sin romper la cadena ni haltear.
+        for (var i = 1; i <= 5; i++) {
+            exec("insert into stream_src (id, payload) values (" + i + ", 'p" + i + "')");
+        }
+        RecordingBatchTaskProvider.THROW_ON_RECORD_ID = "3";
+        RecordingBatchTaskProvider.THROW_REMAINING.set(2);
+        var ids = seedRunningTask();
+
+        seedStreamingScatter(ids, 2);
+        drainOutbox();
+
+        assertEquals("COMPLETED", readString("select status from process_execution where id = " + ids[0]));
+        assertEquals(3, RecordingBatchTaskProvider.SLICE_EXECUTIONS.get(),
+                "3 páginas contadas una vez cada una (los reintentos no inflan el conteo)");
+        assertTrue(RecordingBatchTaskProvider.SEEN_IDS.containsAll(java.util.List.of("1", "2", "3", "4", "5")));
+    }
+
+    @Test
     void failFastMidChainStopsTheChainAndSkipsRemainingPages() throws Exception {
         // 7 filas, batchSize 2 → páginas [1,2] [3,4] [5,6] [7]. Falla en el id 3 (página 1), fail-fast.
         for (var i = 1; i <= 7; i++) {
@@ -149,7 +169,7 @@ class AsyncStreamingScatterE2EIT {
                 var outboxId = rs.getLong(1);
                 if (!consumed.contains(outboxId)) {
                     consumed.add(outboxId);
-                    consumer.consume(rs.getString(2), "KAFKA", "tasks.test_scatter_batch");
+                    consumer.consumeWithRetries(rs.getString(2), "KAFKA", "tasks.test_scatter_batch");
                     return;
                 }
             }
@@ -198,7 +218,8 @@ class AsyncStreamingScatterE2EIT {
                     var outboxId = rs.getLong(1);
                     var payload = rs.getString(2);
                     if (consumed.add(outboxId)) {
-                        consumer.consume(payload, "KAFKA", "tasks.test_scatter_batch");
+                        // Camino real de producción: con retry in-app del transitorio antes del nack.
+                        consumer.consumeWithRetries(payload, "KAFKA", "tasks.test_scatter_batch");
                         progressed = true;
                     }
                 }
