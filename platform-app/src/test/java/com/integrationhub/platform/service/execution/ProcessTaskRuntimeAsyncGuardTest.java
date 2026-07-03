@@ -58,7 +58,8 @@ class ProcessTaskRuntimeAsyncGuardTest {
                 fileReadRuntimeSupport,
                 taskOutputRegistry,
                 taskInputResolver,
-                asyncTaskDispatchService);
+                asyncTaskDispatchService,
+                mock(com.integrationhub.platform.repository.ProcessTaskExecutionRepository.class));
 
         when(fileReadRuntimeSupport.configuration(any())).thenReturn(new HashMap<>());
         // Un envelope presente ⇒ se pidió async y el feature está activo: el guard debe decidir.

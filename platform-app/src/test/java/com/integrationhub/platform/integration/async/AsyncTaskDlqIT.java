@@ -42,6 +42,9 @@ class AsyncTaskDlqIT {
     @Inject
     com.integrationhub.platform.service.execution.ExecutionProgressService progressService;
 
+    @Inject
+    com.integrationhub.platform.repository.ProcessTaskExecutionRepository taskExecutionRepository;
+
     @BeforeEach
     void clean() throws Exception {
         RecordingFollowUpTaskProvider.resetRecording();
@@ -152,6 +155,32 @@ class AsyncTaskDlqIT {
         assertTrue(streaming.streaming());
         assertEquals(null, streaming.percent(), "streaming sin sellar: sin % falso");
         assertEquals(5, streaming.completed());
+    }
+
+    @Test
+    void syncProgressPersistsOnlyForRunningTaskAndSurfacesInProgress() throws Exception {
+        exec("insert into process_definition (name, description, active, scheduled) values ('sync-prog','',true,false)");
+        var pdId = count("select id from process_definition order by id desc limit 1");
+        exec("insert into process_task_definition (process_definition_id, task_order, task_type, active, "
+                + "configuration_json) values (" + pdId + ", 1, 'DB_WRITE', true, '{}')");
+        var tdId = count("select id from process_task_definition order by id desc limit 1");
+        exec("insert into process_execution (process_definition_id, status) values (" + pdId + ", 'RUNNING')");
+        var peId = count("select id from process_execution order by id desc limit 1");
+        exec("insert into process_task_execution (process_execution_id, task_definition_id, status) values ("
+                + peId + ", " + tdId + ", 'RUNNING')");
+
+        taskExecutionRepository.updateProcessed(peId, tdId, 420000);
+        assertEquals(420000, count("select records_processed from process_task_execution where process_execution_id = " + peId));
+
+        // Se expone en la API de progreso como sync task.
+        var progress = progressService.progress(peId);
+        assertEquals(1, progress.syncTasks().size());
+        assertEquals(420000L, progress.syncTasks().get(0).recordsProcessed());
+
+        // Una tarea ya COMPLETED no recibe más progreso (where status = RUNNING).
+        exec("update process_task_execution set status = 'COMPLETED' where process_execution_id = " + peId);
+        taskExecutionRepository.updateProcessed(peId, tdId, 999999);
+        assertEquals(420000, count("select records_processed from process_task_execution where process_execution_id = " + peId));
     }
 
     private Long insertAsyncTask() throws Exception {

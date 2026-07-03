@@ -33,6 +33,10 @@ public class ProcessTaskRuntimeService {
     private final TaskOutputRegistry taskOutputRegistry;
     private final TaskInputResolver taskInputResolver;
     private final AsyncTaskDispatchService asyncTaskDispatchService;
+    private final com.integrationhub.platform.repository.ProcessTaskExecutionRepository taskExecutionRepository;
+
+    /** Cada cuántos slices se persiste el progreso sync (throttle: a 1M/batch no se escribe por lote). */
+    private static final int PROGRESS_EVERY_N_SLICES = 10;
 
     public ProcessTaskRuntimeService(SourceProviderRegistry sourceProviderRegistry,
                                      ReaderProviderRegistry readerProviderRegistry,
@@ -40,7 +44,8 @@ public class ProcessTaskRuntimeService {
                                      FileReadRuntimeSupport fileReadRuntimeSupport,
                                      TaskOutputRegistry taskOutputRegistry,
                                      TaskInputResolver taskInputResolver,
-                                     AsyncTaskDispatchService asyncTaskDispatchService) {
+                                     AsyncTaskDispatchService asyncTaskDispatchService,
+                                     com.integrationhub.platform.repository.ProcessTaskExecutionRepository taskExecutionRepository) {
         this.sourceProviderRegistry = sourceProviderRegistry;
         this.readerProviderRegistry = readerProviderRegistry;
         this.taskProviderRegistry = taskProviderRegistry;
@@ -48,6 +53,7 @@ public class ProcessTaskRuntimeService {
         this.taskOutputRegistry = taskOutputRegistry;
         this.taskInputResolver = taskInputResolver;
         this.asyncTaskDispatchService = asyncTaskDispatchService;
+        this.taskExecutionRepository = taskExecutionRepository;
     }
 
     @Transactional(Transactional.TxType.NOT_SUPPORTED)
@@ -156,10 +162,16 @@ public class ProcessTaskRuntimeService {
                         if (slice.records().size() == 1) {
                             taskContext.attributes().put("currentRecord", slice.records().getFirst().values());
                         }
-                        if (provider instanceof BatchTaskProvider batchTaskProvider) {
-                            return batchTaskProvider.executeRecords(taskContext, configuration, slice.records(), resolvedInput.sourcePayload());
+                        var sliceResult = provider instanceof BatchTaskProvider batchTaskProvider
+                                ? batchTaskProvider.executeRecords(taskContext, configuration, slice.records(), resolvedInput.sourcePayload())
+                                : provider.execute(taskContext, configuration);
+                        // Progreso en vivo (throttled): persiste el acumulado (slice.batchTo) cada N slices,
+                        // en tx propia (runTask es NOT_SUPPORTED) → la UI de monitoreo lo ve durante la corrida.
+                        if (slice.batchNumber() % PROGRESS_EVERY_N_SLICES == 0) {
+                            taskExecutionRepository.updateProcessed(
+                                    processExecutionId, taskPlan.taskDefinitionId(), slice.batchTo());
                         }
-                        return provider.execute(taskContext, configuration);
+                        return sliceResult;
                     }
             );
             return TaskRunResult.generic(accumulator.success(), accumulator.details(),

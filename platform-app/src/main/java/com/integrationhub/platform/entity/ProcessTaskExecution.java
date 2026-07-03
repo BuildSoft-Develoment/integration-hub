@@ -34,6 +34,10 @@ public class ProcessTaskExecution {
     @Column(nullable = false, length = 30)
     public ExecutionStatus status = ExecutionStatus.PENDING;
 
+    /** Progreso en vivo de una tarea batch sync (throttled); {@code null} = sin progreso reportado. */
+    @Column(name = "records_processed")
+    public Long recordsProcessed;
+
     @Column(name = "executed_at")
     public LocalDateTime executedAt;
 
