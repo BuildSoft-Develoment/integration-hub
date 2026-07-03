@@ -50,6 +50,16 @@ describe('AsyncDispatchSectionComponent', () => {
     expect(fixture.componentInstance.modeHint()).toBe(fixture.componentInstance.i18n.t('ui.asyncModeScatter'));
   });
 
+  it('warns when async is on but the feature is disabled in the environment', () => {
+    const el = setup({ async: true, featureEnabled: false }).nativeElement as HTMLElement;
+    expect(el.querySelector('.async-dispatch__warning')).toBeTruthy();
+  });
+
+  it('shows no warning when the async feature is enabled', () => {
+    const el = setup({ async: true, featureEnabled: true }).nativeElement as HTMLElement;
+    expect(el.querySelector('.async-dispatch__warning')).toBeNull();
+  });
+
   it('emits async and transport changes', () => {
     const fixture = setup({ async: false });
     const emitted: Record<string, unknown> = {};

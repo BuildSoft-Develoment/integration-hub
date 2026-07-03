@@ -51,6 +51,10 @@ import { I18nService } from '@integration-hub/core/services';
         <p class="async-dispatch__hint" [class.async-dispatch__hint--distributed]="distributed()">
           {{ modeHint() }}
         </p>
+
+        @if (!featureEnabled()) {
+          <p class="async-dispatch__warning">{{ i18n.t('ui.asyncFeatureDisabled') }}</p>
+        }
       }
     </div>
   `,
@@ -70,6 +74,11 @@ import { I18nService } from '@integration-hub/core/services';
         font-weight: 600;
         opacity: 0.9;
       }
+      .async-dispatch__warning {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--ih-warning, #b45309);
+      }
     `,
   ],
 })
@@ -81,6 +90,8 @@ export class AsyncDispatchSectionComponent {
   readonly executionMode = input('once');
   readonly transports = input<readonly string[]>(['KAFKA']);
   readonly readonly = input(false);
+  /** Si el feature de despacho async está activo en el entorno; si no, se avisa que correrá síncrono. */
+  readonly featureEnabled = input(true);
 
   readonly asyncChange = output<boolean>();
   readonly transportChange = output<string>();

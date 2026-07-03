@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 
 import { ProcessTaskRuntimePanelComponent } from './process-task-runtime-panel.component';
 
-function setup(draft: Record<string, unknown>) {
+function setup(draft: Record<string, unknown>, asyncEnabled = true) {
   TestBed.configureTestingModule({
     imports: [ProcessTaskRuntimePanelComponent],
     providers: [provideHttpClient(), provideHttpClientTesting()],
@@ -14,8 +14,9 @@ function setup(draft: Record<string, unknown>) {
   fixture.componentRef.setInput('tasks', []);
   fixture.componentRef.setInput('draft', draft);
   const http = TestBed.inject(HttpTestingController);
-  // El panel consulta los transportes async al iniciar.
+  // El panel consulta al iniciar los transportes y el estado del feature async.
   http.match('/api/messaging/transports').forEach((req) => req.flush(['KAFKA', 'RABBITMQ']));
+  http.match('/api/messaging/async-status').forEach((req) => req.flush({ executionEnabled: asyncEnabled }));
   return { fixture, http };
 }
 
@@ -46,6 +47,18 @@ describe('ProcessTaskRuntimePanelComponent (async dispatch)', () => {
   it('exposes the transports fetched from the broker endpoint', () => {
     const { fixture, http } = setup({ taskRef: 't', executionMode: 'once' });
     expect(fixture.componentInstance.transports()).toEqual(['KAFKA', 'RABBITMQ']);
+    http.verify();
+  });
+
+  it('reflects the async feature enabled', () => {
+    const { fixture, http } = setup({ taskRef: 't', executionMode: 'once' }, true);
+    expect(fixture.componentInstance.asyncFeatureEnabled()).toBe(true);
+    http.verify();
+  });
+
+  it('reflects the async feature disabled', () => {
+    const { fixture, http } = setup({ taskRef: 't', executionMode: 'once' }, false);
+    expect(fixture.componentInstance.asyncFeatureEnabled()).toBe(false);
     http.verify();
   });
 });

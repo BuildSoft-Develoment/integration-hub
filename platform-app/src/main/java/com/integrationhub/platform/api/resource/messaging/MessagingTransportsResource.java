@@ -7,6 +7,7 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.util.List;
 
@@ -15,24 +16,43 @@ import static com.integrationhub.platform.api.security.PlatformRoles.OPERATOR;
 import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
 
 /**
- * Lista los transportes de mensajería disponibles (brokers registrados: Kafka/JMS/RabbitMQ/Redis).
- * Sirve para que la UI pueble el selector de transporte de una tarea asíncrona sin hardcodear la
- * lista. Additivo y de solo lectura.
+ * Endpoints de mensajería para la UI de tareas asíncronas (ADR-015), de solo lectura:
+ * <ul>
+ *   <li>{@code GET /api/messaging/transports} — brokers registrados, para el selector de transporte.</li>
+ *   <li>{@code GET /api/messaging/async-status} — si el despacho async está activo en este entorno,
+ *       para que la UI avise cuando {@code async:true} no tomará efecto (correría síncrono).</li>
+ * </ul>
  */
-@Path("/api/messaging/transports")
+@Path("/api/messaging")
 @Produces(MediaType.APPLICATION_JSON)
 public class MessagingTransportsResource {
 
     private final MessageBrokerRegistry brokers;
+    private final boolean asyncExecutionEnabled;
 
     @Inject
-    public MessagingTransportsResource(MessageBrokerRegistry brokers) {
+    public MessagingTransportsResource(
+            MessageBrokerRegistry brokers,
+            @ConfigProperty(name = "tasks.async.execution.enabled", defaultValue = "false") boolean asyncExecutionEnabled) {
         this.brokers = brokers;
+        this.asyncExecutionEnabled = asyncExecutionEnabled;
     }
 
     @GET
+    @Path("/transports")
     @RolesAllowed({INTEGRATION_ADMIN, PLATFORM_ADMIN, OPERATOR})
     public List<String> transports() {
         return brokers.availableTypes();
+    }
+
+    @GET
+    @Path("/async-status")
+    @RolesAllowed({INTEGRATION_ADMIN, PLATFORM_ADMIN, OPERATOR})
+    public AsyncStatus asyncStatus() {
+        return new AsyncStatus(asyncExecutionEnabled);
+    }
+
+    /** Estado del feature de despacho async en el entorno. */
+    public record AsyncStatus(boolean executionEnabled) {
     }
 }

@@ -1190,6 +1190,7 @@ export const es = {
   'ui.asyncTransport': 'Transporte',
   'flow.dispatchAsync': 'Ejecución asíncrona: se offloada al broker (procesamiento diferido).',
   'flow.dispatchScatter': 'Ejecución asíncrona distribuida: se reparte en slices entre workers (scatter-gather).',
+  'ui.asyncFeatureDisabled': 'El despacho asíncrono está deshabilitado en este entorno: la tarea correrá síncrona hasta que se active.',
   'ui.continueOnFailure': 'Continuar si la tarea falla (completar con errores)',
   'ui.continueOnFailureHint': 'Si la tarea devuelve fallo, el proceso continúa y la marca completada con errores; si no, se aborta.',
   'ui.asyncModeSync': 'Se ejecuta en el motor de forma síncrona.',

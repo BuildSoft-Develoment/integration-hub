@@ -54,6 +54,8 @@ export class ProcessTaskRuntimePanelComponent {
 
   /** Transportes disponibles para el selector async (fallback ['KAFKA'] ante error/403). */
   readonly transports = signal<readonly string[]>(['KAFKA']);
+  /** Si el despacho async está activo en el entorno (para avisar que `async:true` correría síncrono). */
+  readonly asyncFeatureEnabled = signal(true);
 
   constructor() {
     this.transportsApi
@@ -67,6 +69,15 @@ export class ProcessTaskRuntimePanelComponent {
         },
         error: () => {
           /* fallback ['KAFKA'] */
+        },
+      });
+    this.transportsApi
+      .asyncStatus()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (status) => this.asyncFeatureEnabled.set(status.executionEnabled),
+        error: () => {
+          /* asume habilitado ante error para no alarmar de mas */
         },
       });
   }
