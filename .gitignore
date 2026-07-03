@@ -66,3 +66,4 @@ AGENT_BOARD.md
 .claude/commands/
 .claude/protocols/
 .claude/mcp.json
+.claude/launch.json

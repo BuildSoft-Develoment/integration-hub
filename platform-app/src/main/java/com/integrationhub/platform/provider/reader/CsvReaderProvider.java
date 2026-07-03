@@ -7,6 +7,9 @@ import com.integrationhub.platform.spi.reader.ReadBatchConsumer;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.reader.ReadSkip;
+import com.integrationhub.platform.spi.config.PluginConfigField;
+import com.integrationhub.platform.spi.config.PluginConfigOption;
+import com.integrationhub.platform.spi.config.PluginConfigSchema;
 import com.integrationhub.platform.spi.reader.ReaderProvider;
 import com.integrationhub.platform.spi.source.SourcePayload;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -26,6 +29,17 @@ public class CsvReaderProvider implements ReaderProvider {
     @Override
     public String type() {
         return "CSV";
+    }
+
+    /** Schema de config del reader CSV: ejemplo real de config dirigida por schema para readers. */
+    @Override
+    public PluginConfigSchema configSchema() {
+        return PluginConfigSchema.of(
+                PluginConfigField.text("delimiter", "readers.csv.delimiter", false),
+                PluginConfigField.select("encoding", "readers.csv.encoding", false, List.of(
+                        PluginConfigOption.of("UTF-8", "UTF-8"),
+                        PluginConfigOption.of("ISO-8859-1", "ISO-8859-1"),
+                        PluginConfigOption.of("US-ASCII", "US-ASCII"))));
     }
 
     @Override

@@ -187,15 +187,20 @@ public class ProcessExecutionService {
                         // resume pueda continuar las tareas downstream.
                         var continuationJson = suspensionContinuation.marshal(
                                 taskOutputs, executionVariables, triggerSource);
-                        processExecutionStateService.suspendTask(
-                                processExecutionId,
-                                taskExecutionId,
-                                stateJson,
-                                token,
-                                SuspensionExpiry.expiresAt(runResult.suspendedState()),
-                                continuationJson,
-                                details,
-                                payload);
+                        var suspensionExpiry = SuspensionExpiry.expiresAt(runResult.suspendedState());
+                        if (runResult.scatterDispatch() != null) {
+                            // Opción B: abre el tracker N→1 y encola los N work-items de slice en ESTA
+                            // misma transaccion que la suspension (atomico).
+                            processExecutionStateService.suspendTask(
+                                    processExecutionId, taskExecutionId, stateJson, token, suspensionExpiry,
+                                    continuationJson, details, payload, runResult.scatterDispatch());
+                        } else {
+                            // ADR-015: si es despacho async per-task, el work-item se encola en el outbox
+                            // en ESTA misma transaccion (transactional outbox).
+                            processExecutionStateService.suspendTask(
+                                    processExecutionId, taskExecutionId, stateJson, token, suspensionExpiry,
+                                    continuationJson, details, payload, runResult.asyncDispatch());
+                        }
                         taskSpan.setAttribute("task.suspended", true);
                         taskSpan.setAttribute("task.resume.token", token);
                         return processExecutionStateService.getExecution(processExecutionId);

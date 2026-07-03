@@ -3,6 +3,7 @@ package com.integrationhub.platform.provider.task.remote;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginInvoker;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
+import com.integrationhub.platform.spi.config.PluginConfigSchema;
 import com.integrationhub.platform.spi.task.SuspendableTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -42,6 +43,12 @@ public class RemoteTaskProvider implements SuspendableTaskProvider {
     @Override
     public String type() {
         return type;
+    }
+
+    /** Config-schema declarado por el plugin remoto para este tipo (o vacío). */
+    @Override
+    public PluginConfigSchema configSchema() {
+        return descriptor.configSchemaFor(type);
     }
 
     @Override

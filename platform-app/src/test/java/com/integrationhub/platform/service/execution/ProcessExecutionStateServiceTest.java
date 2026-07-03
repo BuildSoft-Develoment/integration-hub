@@ -31,13 +31,19 @@ class ProcessExecutionStateServiceTest {
     private final ProcessExecutionRepository processExecutionRepository = mock(ProcessExecutionRepository.class);
     private final ProcessTaskExecutionRepository processTaskExecutionRepository = mock(ProcessTaskExecutionRepository.class);
     private final AuditService auditService = mock(AuditService.class);
+    private final com.integrationhub.platform.service.execution.async.TaskOutboxStore taskOutboxStore =
+            mock(com.integrationhub.platform.service.execution.async.TaskOutboxStore.class);
+    private final com.integrationhub.platform.service.execution.async.AsyncSliceDispatchService sliceDispatchService =
+            mock(com.integrationhub.platform.service.execution.async.AsyncSliceDispatchService.class);
 
     private final ProcessExecutionStateService service = new ProcessExecutionStateService(
             processDefinitionRepository,
             processTaskDefinitionRepository,
             processExecutionRepository,
             processTaskExecutionRepository,
-            auditService);
+            auditService,
+            taskOutboxStore,
+            sliceDispatchService);
 
     private ProcessExecution pendingExecution(Long id) {
         var definition = new ProcessDefinition();

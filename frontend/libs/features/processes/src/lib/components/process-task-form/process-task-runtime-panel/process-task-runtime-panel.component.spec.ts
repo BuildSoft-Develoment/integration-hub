@@ -1,0 +1,51 @@
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { TestBed } from '@angular/core/testing';
+
+import { ProcessTaskRuntimePanelComponent } from './process-task-runtime-panel.component';
+
+function setup(draft: Record<string, unknown>) {
+  TestBed.configureTestingModule({
+    imports: [ProcessTaskRuntimePanelComponent],
+    providers: [provideHttpClient(), provideHttpClientTesting()],
+  });
+  const fixture = TestBed.createComponent(ProcessTaskRuntimePanelComponent);
+  fixture.componentRef.setInput('task', { clientId: 'c1', taskType: 'DB_WRITE', configurationJson: '{}' });
+  fixture.componentRef.setInput('tasks', []);
+  fixture.componentRef.setInput('draft', draft);
+  const http = TestBed.inject(HttpTestingController);
+  // El panel consulta los transportes async al iniciar.
+  http.match('/api/messaging/transports').forEach((req) => req.flush(['KAFKA', 'RABBITMQ']));
+  return { fixture, http };
+}
+
+describe('ProcessTaskRuntimePanelComponent (async dispatch)', () => {
+  it('enabling async emits { async: true } as a runtime patch', () => {
+    const { fixture, http } = setup({ taskRef: 't', executionMode: 'batch' });
+    let emitted: unknown;
+    fixture.componentInstance.runtimeChange.subscribe((e) => (emitted = e));
+
+    fixture.componentInstance.updateAsync(true);
+
+    expect(emitted).toEqual({ async: true });
+    http.verify();
+  });
+
+  it('disabling async also clears the transport', () => {
+    const { fixture, http } = setup({ taskRef: 't', executionMode: 'batch', async: true, asyncTransport: 'KAFKA' });
+    let emitted: Record<string, unknown> = {};
+    fixture.componentInstance.runtimeChange.subscribe((e) => (emitted = e as Record<string, unknown>));
+
+    fixture.componentInstance.updateAsync(false);
+
+    expect(emitted['async']).toBe(false);
+    expect(emitted['asyncTransport']).toBeUndefined();
+    http.verify();
+  });
+
+  it('exposes the transports fetched from the broker endpoint', () => {
+    const { fixture, http } = setup({ taskRef: 't', executionMode: 'once' });
+    expect(fixture.componentInstance.transports()).toEqual(['KAFKA', 'RABBITMQ']);
+    http.verify();
+  });
+});

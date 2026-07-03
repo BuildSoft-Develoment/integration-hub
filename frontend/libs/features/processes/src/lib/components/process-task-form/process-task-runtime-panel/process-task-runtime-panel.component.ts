@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, input, output } from '@angular/core';
+import { Component, DestroyRef, computed, inject, input, output, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
@@ -11,7 +12,10 @@ import {
 } from '@integration-hub/core/providers';
 import { I18nService } from '@integration-hub/core/services';
 import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
+import { MessagingTransportsService } from '../../../api/messaging-transports.service';
 import { ProcessTaskFormModel } from '../../../models/process.models';
+import { AsyncDispatchSectionComponent } from '../async-dispatch-section/async-dispatch-section.component';
+import { TaskContinueOnFailureComponent } from '../task-continue-on-failure/task-continue-on-failure.component';
 
 /**
  * Panel de runtime por tarea: selecciona `executionMode`, tarea/output de origen y
@@ -22,13 +26,23 @@ import { ProcessTaskFormModel } from '../../../models/process.models';
 @Component({
   selector: 'ih-process-task-runtime-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule],
+  imports: [
+    CommonModule,
+    FormsModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatSelectModule,
+    AsyncDispatchSectionComponent,
+    TaskContinueOnFailureComponent,
+  ],
   templateUrl: './process-task-runtime-panel.component.html',
   styleUrl: './process-task-runtime-panel.component.css',
 })
 export class ProcessTaskRuntimePanelComponent {
   readonly i18n = inject(I18nService);
   private readonly bindingContext = inject(ProcessTaskBindingContextService);
+  private readonly transportsApi = inject(MessagingTransportsService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly task = input.required<ProcessTaskFormModel>();
   readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
@@ -37,6 +51,30 @@ export class ProcessTaskRuntimePanelComponent {
   readonly showInput = input(true);
   readonly executionModes = input<readonly ProcessTaskExecutionMode[]>(['once', 'per-record', 'batch']);
   readonly runtimeChange = output<Partial<ProcessTaskRuntimeDraft>>();
+
+  /** Transportes disponibles para el selector async (fallback ['KAFKA'] ante error/403). */
+  readonly transports = signal<readonly string[]>(['KAFKA']);
+
+  constructor() {
+    this.transportsApi
+      .list()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (list) => {
+          if (list?.length) {
+            this.transports.set(list);
+          }
+        },
+        error: () => {
+          /* fallback ['KAFKA'] */
+        },
+      });
+  }
+
+  /** Al desactivar async se limpia también el transporte. */
+  updateAsync(async: boolean): void {
+    this.runtimeChange.emit(async ? { async: true } : { async: false, asyncTransport: undefined });
+  }
 
   readonly taskOptions = computed(() => this.bindingContext.previousTaskOptions(this.task(), this.tasks()));
   readonly selectedInput = computed(() => this.draft().input ?? this.bindingContext.configuredInput(this.task(), this.tasks()));

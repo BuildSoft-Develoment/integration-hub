@@ -6,6 +6,9 @@ import com.integrationhub.platform.provider.task.http.HttpRequestSupport;
 import com.integrationhub.platform.provider.task.http.ResilientHttpSender;
 import com.integrationhub.platform.service.execution.AuditService;
 import com.integrationhub.platform.spi.reader.ReadResult;
+import com.integrationhub.platform.spi.config.PluginConfigField;
+import com.integrationhub.platform.spi.config.PluginConfigOption;
+import com.integrationhub.platform.spi.config.PluginConfigSchema;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -41,6 +44,22 @@ public class NotificationTaskProvider implements TaskProvider {
     @Override
     public String type() {
         return "NOTIFICATION";
+    }
+
+    /**
+     * Schema de configuración del tipo NOTIFICATION. Ejemplo real de config dirigida por schema:
+     * el operador (o un plugin) configura este tipo con un formulario autogenerado por la UI.
+     */
+    @Override
+    public PluginConfigSchema configSchema() {
+        return PluginConfigSchema.of(
+                PluginConfigField.select("channel", "tasks.notification.channel", true, java.util.List.of(
+                        PluginConfigOption.of("log", "Log"),
+                        PluginConfigOption.of("webhook", "Webhook"),
+                        PluginConfigOption.of("email", "Email"))),
+                PluginConfigField.textarea("message", "tasks.notification.message", false),
+                PluginConfigField.text("url", "tasks.notification.url", false),
+                PluginConfigField.textarea("bodyTemplate", "tasks.notification.bodyTemplate", false));
     }
 
     @Override

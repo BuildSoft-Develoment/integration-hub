@@ -22,10 +22,10 @@ import { ProcessRestCallTaskFormComponent } from './components/process-task-form
  *   ...providePaymentsSwiftForms(ProcessMt101BuildTaskFormComponent),    // vertical 008
  * </pre>
  *
- * <p>El componente {@code ProcessJsonTaskFormComponent} no se registra como
- * fallback: bajo M-1b puro, cada {@code ProcessTaskType} debe tener su propio
- * formulario explicito. {@code JSON} queda disponible como utilidad pero no
- * intercepta resoluciones del registry.</p>
+ * <p>Sin fallback legacy: cada {@code ProcessTaskType} built-in tiene su formulario explícito.
+ * Un tipo sin form registrado pero con config-schema del backend (aportado por un plugin) lo
+ * resuelve el host con {@code ih-schema-form}; uno sin form ni schema falla explícito. No hay
+ * editor JSON crudo genérico.</p>
  */
 export function provideMotorProcessForms(): Provider[] {
   return [

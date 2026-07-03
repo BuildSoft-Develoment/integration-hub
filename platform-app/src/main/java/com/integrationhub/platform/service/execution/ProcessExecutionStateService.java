@@ -9,6 +9,9 @@ import com.integrationhub.platform.repository.ProcessDefinitionRepository;
 import com.integrationhub.platform.repository.ProcessExecutionRepository;
 import com.integrationhub.platform.repository.ProcessTaskDefinitionRepository;
 import com.integrationhub.platform.repository.ProcessTaskExecutionRepository;
+import com.integrationhub.platform.service.execution.async.AsyncSliceDispatchService;
+import com.integrationhub.platform.service.execution.async.TaskOutboxStore;
+import com.integrationhub.platform.task.AsyncTaskEnvelope;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 
@@ -25,19 +28,25 @@ public class ProcessExecutionStateService {
     private final ProcessExecutionRepository processExecutionRepository;
     private final ProcessTaskExecutionRepository processTaskExecutionRepository;
     private final AuditService auditService;
+    private final TaskOutboxStore taskOutboxStore;
+    private final AsyncSliceDispatchService sliceDispatchService;
 
     public ProcessExecutionStateService(
             ProcessDefinitionRepository processDefinitionRepository,
             ProcessTaskDefinitionRepository processTaskDefinitionRepository,
             ProcessExecutionRepository processExecutionRepository,
             ProcessTaskExecutionRepository processTaskExecutionRepository,
-            AuditService auditService
+            AuditService auditService,
+            TaskOutboxStore taskOutboxStore,
+            AsyncSliceDispatchService sliceDispatchService
     ) {
         this.processDefinitionRepository = processDefinitionRepository;
         this.processTaskDefinitionRepository = processTaskDefinitionRepository;
         this.processExecutionRepository = processExecutionRepository;
         this.processTaskExecutionRepository = processTaskExecutionRepository;
         this.auditService = auditService;
+        this.taskOutboxStore = taskOutboxStore;
+        this.sliceDispatchService = sliceDispatchService;
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
@@ -182,6 +191,66 @@ public class ProcessExecutionStateService {
                             String continuationJson,
                             String details,
                             Object auditPayload) {
+        suspendTask(processExecutionId, taskExecutionId, suspendedStateJson, resumeToken,
+                expiresAt, continuationJson, details, auditPayload, (AsyncTaskEnvelope) null);
+    }
+
+    /**
+     * Variante para el <b>despacho async</b> (ADR-015): persiste la suspensión y, si hay
+     * {@code asyncDispatch}, encola el work-item en el outbox <b>en esta misma transacción</b>
+     * (transactional outbox). Así la trama y su suspensión commitean atómicamente: nunca hay una
+     * trama consumible sin su suspensión (evita {@code NOT_FOUND}: efecto huérfano + completación
+     * perdida), ni una suspensión sin su trama (proceso colgado). El {@code enqueue} del store es
+     * {@code @Transactional(REQUIRED)} → se une a esta tx REQUIRES_NEW.
+     */
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public void suspendTask(Long processExecutionId,
+                            Long taskExecutionId,
+                            String suspendedStateJson,
+                            String resumeToken,
+                            LocalDateTime expiresAt,
+                            String continuationJson,
+                            String details,
+                            Object auditPayload,
+                            AsyncTaskEnvelope asyncDispatch) {
+        persistSuspension(processExecutionId, taskExecutionId, suspendedStateJson, resumeToken,
+                expiresAt, continuationJson, details, auditPayload);
+        if (asyncDispatch != null) {
+            taskOutboxStore.enqueue(asyncDispatch);
+        }
+    }
+
+    /**
+     * Variante para el <b>scatter async</b> (Opción B): persiste la suspensión y, en <b>esta misma
+     * transacción</b>, abre el tracker N→1 y encola los N work-items de slice (via
+     * {@code dispatchSlices}, {@code @Transactional(REQUIRED)} → se une). Atómico: nunca hay slices ni
+     * tracker sin su suspensión, ni suspensión sin sus slices.
+     */
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public void suspendTask(Long processExecutionId,
+                            Long taskExecutionId,
+                            String suspendedStateJson,
+                            String resumeToken,
+                            LocalDateTime expiresAt,
+                            String continuationJson,
+                            String details,
+                            Object auditPayload,
+                            AsyncSliceDispatchService.ScatterDispatch scatterDispatch) {
+        persistSuspension(processExecutionId, taskExecutionId, suspendedStateJson, resumeToken,
+                expiresAt, continuationJson, details, auditPayload);
+        if (scatterDispatch != null) {
+            sliceDispatchService.dispatchSlices(scatterDispatch);
+        }
+    }
+
+    private void persistSuspension(Long processExecutionId,
+                                   Long taskExecutionId,
+                                   String suspendedStateJson,
+                                   String resumeToken,
+                                   LocalDateTime expiresAt,
+                                   String continuationJson,
+                                   String details,
+                                   Object auditPayload) {
         var execution = processExecutionRepository.findById(processExecutionId);
         var taskExecution = processTaskExecutionRepository.findById(taskExecutionId);
         taskExecution.status = ExecutionStatus.SUSPENDED;

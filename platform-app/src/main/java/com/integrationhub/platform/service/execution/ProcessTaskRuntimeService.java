@@ -2,8 +2,11 @@ package com.integrationhub.platform.service.execution;
 
 import com.integrationhub.platform.domain.TaskType;
 import com.integrationhub.platform.service.TaskProviderRegistry;
+import com.integrationhub.platform.service.execution.async.AsyncSliceDispatchService;
+import com.integrationhub.platform.service.execution.async.AsyncTaskDispatchService;
 import com.integrationhub.platform.service.reader.ReaderProviderRegistry;
 import com.integrationhub.platform.service.source.SourceProviderRegistry;
+import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.source.SourcePayload;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
@@ -11,6 +14,7 @@ import com.integrationhub.platform.spi.task.TaskContext;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -24,19 +28,22 @@ public class ProcessTaskRuntimeService {
     private final FileReadRuntimeSupport fileReadRuntimeSupport;
     private final TaskOutputRegistry taskOutputRegistry;
     private final TaskInputResolver taskInputResolver;
+    private final AsyncTaskDispatchService asyncTaskDispatchService;
 
     public ProcessTaskRuntimeService(SourceProviderRegistry sourceProviderRegistry,
                                      ReaderProviderRegistry readerProviderRegistry,
                                      TaskProviderRegistry taskProviderRegistry,
                                      FileReadRuntimeSupport fileReadRuntimeSupport,
                                      TaskOutputRegistry taskOutputRegistry,
-                                     TaskInputResolver taskInputResolver) {
+                                     TaskInputResolver taskInputResolver,
+                                     AsyncTaskDispatchService asyncTaskDispatchService) {
         this.sourceProviderRegistry = sourceProviderRegistry;
         this.readerProviderRegistry = readerProviderRegistry;
         this.taskProviderRegistry = taskProviderRegistry;
         this.fileReadRuntimeSupport = fileReadRuntimeSupport;
         this.taskOutputRegistry = taskOutputRegistry;
         this.taskInputResolver = taskInputResolver;
+        this.asyncTaskDispatchService = asyncTaskDispatchService;
     }
 
     @Transactional(Transactional.TxType.NOT_SUPPORTED)
@@ -62,6 +69,46 @@ public class ProcessTaskRuntimeService {
             throw new IllegalArgumentException("Task " + taskOutputRegistry.taskRef(taskPlan, configuration)
                     + " requires input for executionMode " + executionMode);
         }
+
+        // ADR-015 Etapa 3: si la tarea está marcada async (y el feature está activo), se offloada al
+        // broker en vez de ejecutarse in-process. Gated OFF por defecto → sin cambio de comportamiento.
+        var asyncEnvelope = asyncTaskDispatchService.prepare(
+                processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(), configuration);
+        if (asyncEnvelope.isPresent()) {
+            var envelope = asyncEnvelope.get();
+            if (requiresRecordInput(executionMode)) {
+                // Opción B (scatter): reparte los records en N slices (N work-items) en vez de offloadar
+                // la tarea como una unidad. El tracker N→1 los agrega y reanuda la tarea al cerrar.
+                var resolvedInput = taskInputResolver.resolve(configuration, taskOutputs);
+                if (resolvedInput.tableInput() != null) {
+                    throw new IllegalStateException("El scatter async aún no soporta input por table-streaming (tarea "
+                            + taskPlan.taskType() + ")");
+                }
+                var records = resolvedInput.readResult() == null
+                        ? List.<ReadRecord>of()
+                        : resolvedInput.readResult().records();
+                var slices = sliceRecords(records, configuredBatchSize(configuration));
+                if (slices.isEmpty()) {
+                    return TaskRunResult.generic(true, "sin registros para repartir", sourcePayload, readResult, Map.of());
+                }
+                var scatter = new AsyncSliceDispatchService.ScatterDispatch(
+                        processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(),
+                        envelope.transport(), configuration, slices);
+                return TaskRunResult.suspendedScatter(
+                        "Tarea " + taskPlan.taskType() + " repartida en " + slices.size() + " slices async por "
+                                + envelope.transport(),
+                        Map.of("scatterDispatch", true, "totalSlices", slices.size(), "transport", envelope.transport()),
+                        scatter);
+            }
+            // Etapa 3 (per-task once): el enqueue lo hace el motor atómicamente con la suspensión.
+            return TaskRunResult.suspendedAsync(
+                    "Tarea " + taskPlan.taskType() + " despachada async por " + envelope.transport(),
+                    Map.of("asyncDispatch", true,
+                            "idempotencyKey", envelope.idempotencyKey(),
+                            "transport", envelope.transport()),
+                    envelope);
+        }
+
         var resolvedInput = taskInputResolver.resolve(configuration, taskOutputs);
 
         if ("batch".equals(executionMode) || "per-record".equals(executionMode)) {
@@ -145,6 +192,16 @@ public class ProcessTaskRuntimeService {
         return taskContext;
     }
 
+    /** Parte los records en slices de {@code batchSize} para el scatter async (Opción B). */
+    private List<List<ReadRecord>> sliceRecords(List<ReadRecord> records, int batchSize) {
+        var size = Math.max(batchSize, 1);
+        var slices = new ArrayList<List<ReadRecord>>();
+        for (var from = 0; from < records.size(); from += size) {
+            slices.add(List.copyOf(records.subList(from, Math.min(records.size(), from + size))));
+        }
+        return slices;
+    }
+
     @SuppressWarnings("unchecked")
     private int configuredBatchSize(Map<String, Object> configuration) {
         var input = configuration.get("input") instanceof Map<?, ?> rawInput
@@ -214,16 +271,18 @@ public class ProcessTaskRuntimeService {
             Map<String, Object> outputs,
             boolean fileRead,
             boolean suspended,
-            Map<String, Object> suspendedState
+            Map<String, Object> suspendedState,
+            com.integrationhub.platform.task.AsyncTaskEnvelope asyncDispatch,
+            com.integrationhub.platform.service.execution.async.AsyncSliceDispatchService.ScatterDispatch scatterDispatch
     ) {
         static TaskRunResult fileRead(SourcePayload sourcePayload, ReadResult readResult) {
-            return new TaskRunResult(true, null, sourcePayload, readResult, Map.of(), true, false, Map.of());
+            return new TaskRunResult(true, null, sourcePayload, readResult, Map.of(), true, false, Map.of(), null, null);
         }
 
         static TaskRunResult generic(boolean success, String details, SourcePayload sourcePayload, ReadResult readResult, Map<String, Object> outputs) {
             return new TaskRunResult(success, details, sourcePayload, readResult,
                     outputs == null ? Map.of() : new LinkedHashMap<>(outputs),
-                    false, false, Map.of());
+                    false, false, Map.of(), null, null);
         }
 
         /**
@@ -235,7 +294,29 @@ public class ProcessTaskRuntimeService {
          */
         static TaskRunResult suspended(String details, Map<String, Object> suspendedState) {
             return new TaskRunResult(true, details, null, null, Map.of(), false, true,
-                    suspendedState == null ? Map.of() : new LinkedHashMap<>(suspendedState));
+                    suspendedState == null ? Map.of() : new LinkedHashMap<>(suspendedState), null, null);
+        }
+
+        /**
+         * Suspensión por <b>despacho async</b> (ADR-015): la tarea se offloada a un broker. El engine
+         * persiste la suspensión y encola {@code asyncDispatch} en el outbox <b>en la misma
+         * transacción</b> (transactional outbox), para que la trama nunca sea visible sin su suspensión.
+         */
+        static TaskRunResult suspendedAsync(String details, Map<String, Object> suspendedState,
+                                            com.integrationhub.platform.task.AsyncTaskEnvelope asyncDispatch) {
+            return new TaskRunResult(true, details, null, null, Map.of(), false, true,
+                    suspendedState == null ? Map.of() : new LinkedHashMap<>(suspendedState), asyncDispatch, null);
+        }
+
+        /**
+         * Suspensión por <b>scatter async</b> (Opción B): la tarea batch/per-record se reparte en N
+         * slices. El engine abre el tracker N→1 y encola los N work-items <b>en la misma transacción</b>
+         * que la suspensión (atómico: nunca hay slices visibles sin su tracker ni su suspensión).
+         */
+        static TaskRunResult suspendedScatter(String details, Map<String, Object> suspendedState,
+                                              com.integrationhub.platform.service.execution.async.AsyncSliceDispatchService.ScatterDispatch scatterDispatch) {
+            return new TaskRunResult(true, details, null, null, Map.of(), false, true,
+                    suspendedState == null ? Map.of() : new LinkedHashMap<>(suspendedState), null, scatterDispatch);
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.integrationhub.platform.service.plugin;
 
+import com.integrationhub.platform.spi.config.PluginConfigSchema;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -33,7 +35,8 @@ public record RemotePluginDescriptor(
         String marketplaceUrl,
         String channel,
         String pinnedVersion,
-        boolean pinned) {
+        boolean pinned,
+        Map<String, PluginConfigSchema> configSchemas) {
 
     public RemotePluginDescriptor {
         providedTypes = providedTypes == null ? Set.of() : Set.copyOf(providedTypes);
@@ -43,6 +46,31 @@ public record RemotePluginDescriptor(
         marketplaceUrl = marketplaceUrl == null || marketplaceUrl.isBlank() ? null : marketplaceUrl.trim();
         channel = channel == null || channel.isBlank() ? null : channel.trim();
         pinnedVersion = pinnedVersion == null || pinnedVersion.isBlank() ? null : pinnedVersion.trim();
+        configSchemas = configSchemas == null ? Map.of() : Map.copyOf(configSchemas);
+    }
+
+    /** Config-schema declarado por el plugin para un {@code providedType} (o vacío). */
+    public PluginConfigSchema configSchemaFor(String type) {
+        return configSchemas.getOrDefault(type, PluginConfigSchema.empty());
+    }
+
+    /** Compat: firma previa (sin config-schemas) → delega con mapa vacío. */
+    public RemotePluginDescriptor(
+            String id,
+            String version,
+            String spiVersion,
+            Set<String> providedTypes,
+            Set<String> providedSourceTypes,
+            Set<String> providedReaderTypes,
+            String transport,
+            String endpoint,
+            boolean trusted,
+            String marketplaceUrl,
+            String channel,
+            String pinnedVersion,
+            boolean pinned) {
+        this(id, version, spiVersion, providedTypes, providedSourceTypes, providedReaderTypes,
+                transport, endpoint, trusted, marketplaceUrl, channel, pinnedVersion, pinned, Map.of());
     }
 
     public RemotePluginDescriptor(
@@ -56,7 +84,7 @@ public record RemotePluginDescriptor(
             String endpoint,
             boolean trusted) {
         this(id, version, spiVersion, providedTypes, providedSourceTypes, providedReaderTypes,
-                transport, endpoint, trusted, null, null, null, false);
+                transport, endpoint, trusted, null, null, null, false, Map.of());
     }
 
     public RemotePluginDescriptor(

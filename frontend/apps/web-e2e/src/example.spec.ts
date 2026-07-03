@@ -376,6 +376,16 @@ test.describe('Integration Hub shell', () => {
     await page.getByRole('button', { name: 'empty' }).click();
     await expect(list.locator('[data-row-index]')).toHaveCount(0);
     await expect(list.locator('ih-empty-state')).toBeVisible();
+
+    // Schema-driven config form: renders controls from a schema (the mechanism that lets a
+    // backend plugin declare its config and be configured in the UI without a hardcoded form).
+    const schemaForm = page.locator('ih-schema-form');
+    await expect(schemaForm).toBeVisible();
+    // text/number/select/secret render as mat-form-field; the boolean as a slide toggle.
+    expect(await schemaForm.locator('mat-form-field').count()).toBeGreaterThanOrEqual(4);
+    await expect(schemaForm.locator('mat-slide-toggle')).toBeVisible();
+    // The secret field is masked (rendered as a password input).
+    await expect(schemaForm.locator('input[type="password"]')).toBeVisible();
   });
 
   test('shows the plugin health card on the overview dashboard', async ({ page }) => {

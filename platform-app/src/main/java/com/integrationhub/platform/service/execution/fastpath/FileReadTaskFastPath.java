@@ -8,6 +8,7 @@ import com.integrationhub.platform.service.execution.ProcessExecutionAuditMapper
 import com.integrationhub.platform.service.execution.ProcessExecutionStateService;
 import com.integrationhub.platform.service.execution.ProcessedSourceFileService;
 import com.integrationhub.platform.service.execution.TaskOutputRegistry;
+import com.integrationhub.platform.service.execution.async.TaskDispatchPlanner;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -35,19 +36,22 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
     private final ProcessedSourceFileService processedSourceFileService;
     private final TaskProviderRegistry taskProviderRegistry;
     private final TaskOutputRegistry taskOutputRegistry;
+    private final TaskDispatchPlanner dispatchPlanner;
 
     public FileReadTaskFastPath(StreamingPipelineService pipelineService,
                                 ProcessExecutionStateService stateService,
                                 ProcessExecutionAuditMapper auditMapper,
                                 ProcessedSourceFileService processedSourceFileService,
                                 TaskProviderRegistry taskProviderRegistry,
-                                TaskOutputRegistry taskOutputRegistry) {
+                                TaskOutputRegistry taskOutputRegistry,
+                                TaskDispatchPlanner dispatchPlanner) {
         this.pipelineService = pipelineService;
         this.stateService = stateService;
         this.auditMapper = auditMapper;
         this.processedSourceFileService = processedSourceFileService;
         this.taskProviderRegistry = taskProviderRegistry;
         this.taskOutputRegistry = taskOutputRegistry;
+        this.dispatchPlanner = dispatchPlanner;
     }
 
     @Override
@@ -58,6 +62,13 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
         if (!declaresCurrentReadRecordsInput(current, next)) return false;
 
         if (next.taskType() != null && RECORDS_PRODUCING_SINKS.contains(next.taskType().toUpperCase())) {
+            return false;
+        }
+
+        // ADR-015: una tarea async NO puede fusionarse al fast path (el offload por lotes no existe y
+        // el modelo de correlación es por-tarea, no por-record). Se cede a runTask, que lanza el error
+        // explícito en vez de ejecutarse síncrona en silencio (sin fallback).
+        if (dispatchPlanner.plan(taskOutputRegistry.configuration(next.configurationJson())).isAsync()) {
             return false;
         }
 

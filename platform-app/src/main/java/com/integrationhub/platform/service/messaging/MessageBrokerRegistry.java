@@ -4,6 +4,7 @@ import com.integrationhub.platform.spi.messaging.MessageBrokerProvider;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -35,5 +36,14 @@ public class MessageBrokerRegistry {
     public MessageBrokerProvider resolve(String type) {
         return find(type).orElseThrow(
                 () -> new IllegalArgumentException("Unsupported message broker: " + type));
+    }
+
+    /** Tipos de transporte disponibles (brokers registrados), ordenados. Para poblar la UI. */
+    public List<String> availableTypes() {
+        return providers.stream()
+                .map(MessageBrokerProvider::type)
+                .distinct()
+                .sorted()
+                .toList();
     }
 }

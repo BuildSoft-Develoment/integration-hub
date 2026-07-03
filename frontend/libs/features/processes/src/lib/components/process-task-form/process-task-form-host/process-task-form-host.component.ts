@@ -2,13 +2,25 @@
 // @trace spec 008-mensajeria-pagos T-011
 // @trace ADR-009
 import { CommonModule } from '@angular/common';
-import { Component, computed, effect, inject, input, output, untracked } from '@angular/core';
+import { Component, DestroyRef, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import {
   PROCESS_TASK_FORM_REGISTRY,
   ProcessTaskFormBridgeService,
   ProcessTaskFormRegistration,
 } from '@integration-hub/core/providers';
+import {
+  SchemaFormComponent,
+  SchemaFormSchema,
+  SchemaFormValue,
+  provideSchemaFieldRenderers,
+} from '@integration-hub/shared/ui';
+import { PluginConfigSchemaService } from '../../../api/plugin-config-schema.service';
+import { ProcessSchemaFieldContextService } from '../../../forms/process-schema-field-context.service';
 import { ConnectionRef, ProcessTaskFormModel, ReaderRef, SourceRef } from '../../../models/process.models';
+import { ProcessTokenFieldComponent } from '../process-token-field/process-token-field.component';
+import { ProcessHttpRequestFieldComponent } from '../process-http-request-field/process-http-request-field.component';
+import { ProcessRuntimeFieldComponent } from '../process-runtime-field/process-runtime-field.component';
 
 /**
  * Host del formulario de configuracion de tarea.
@@ -28,8 +40,17 @@ import { ConnectionRef, ProcessTaskFormModel, ReaderRef, SourceRef } from '../..
   host: {
     '[class.task-form-host--workspace]': 'usesWorkspaceLayout()',
   },
-  imports: [CommonModule],
-  providers: [ProcessTaskFormBridgeService],
+  imports: [CommonModule, SchemaFormComponent],
+  providers: [
+    ProcessTaskFormBridgeService,
+    // El campo custom `token-text` (autocompletado de tokens) queda disponible para el
+    // ih-schema-form que renderiza el host (tipos de plugin / config schema-driven).
+    ...provideSchemaFieldRenderers([
+      { type: 'token-text', component: ProcessTokenFieldComponent },
+      { type: 'http-request', component: ProcessHttpRequestFieldComponent },
+      { type: 'runtime-panel', component: ProcessRuntimeFieldComponent },
+    ]),
+  ],
   templateUrl: './process-task-form-host.component.html',
   styleUrl: './process-task-form-host.component.css',
 })
@@ -38,6 +59,9 @@ export class ProcessTaskFormHostComponent {
   private readonly registry = inject(PROCESS_TASK_FORM_REGISTRY, { optional: true }) ?? [];
   /** Puente signal-based que recoge patches del componente dinamico. */
   private readonly bridge = inject(ProcessTaskFormBridgeService);
+  private readonly configSchemas = inject(PluginConfigSchemaService);
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly fieldContext = inject(ProcessSchemaFieldContextService);
 
   // --- Inputs / Outputs signal-based ---
   readonly task = input.required<ProcessTaskFormModel>();
@@ -72,7 +96,37 @@ export class ProcessTaskFormHostComponent {
   /** Layout workspace declarado por la propia registracion. */
   readonly usesWorkspaceLayout = computed<boolean>(() => this.registered()?.layout === 'workspace');
 
+  // --- Camino schema-driven para tipos de plugin (sin form registrado) ---
+  // No es un fallback legacy: es el unico camino para un tipo aportado por un plugin backend
+  // que declara su config-schema pero no trae editor frontend propio. Los tipos built-in usan
+  // su form registrado; los tipos sin schema mantienen el "fail fast" explicito.
+  private readonly schemaState = signal<'loading' | 'none' | SchemaFormSchema>('none');
+
+  /** Schema de config si el tipo (no registrado) declara uno con campos. */
+  readonly schema = computed<SchemaFormSchema | null>(() => {
+    const state = this.schemaState();
+    return typeof state === 'object' ? state : null;
+  });
+
+  /** Valor inicial del schema-form desde el {@code configurationJson} de la tarea. */
+  readonly schemaValue = computed<SchemaFormValue>(() => {
+    try {
+      const parsed = JSON.parse(this.task().configurationJson || '{}');
+      return parsed && typeof parsed === 'object' ? (parsed as SchemaFormValue) : {};
+    } catch {
+      return {};
+    }
+  });
+
   constructor() {
+    // Publica el contexto de binding para los renderers de campo `token-text` del schema-form.
+    effect(() => {
+      const task = this.task();
+      const tasks = this.tasks();
+      const readers = this.readers();
+      untracked(() => this.fieldContext.set(task, tasks, readers));
+    });
+
     // Reenvia los patches del puente como output propio del host. {@code untracked}
     // evita que el effect se autoinvalide por leer otras signals dentro del emit.
     effect(() => {
@@ -81,5 +135,31 @@ export class ProcessTaskFormHostComponent {
         untracked(() => this.patchTask.emit(event.patch));
       }
     });
+
+    // Carga el config-schema del backend cuando el tipo no tiene form registrado.
+    effect(() => {
+      const registered = this.isRegistered();
+      const type = this.task().taskType;
+      untracked(() => {
+        if (registered) {
+          this.schemaState.set('none');
+          return;
+        }
+        this.schemaState.set('loading');
+        this.configSchemas
+          .schemaFor(type)
+          .pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe({
+            next: (schema) =>
+              this.schemaState.set(schema?.fields?.length ? schema : 'none'),
+            error: () => this.schemaState.set('none'),
+          });
+      });
+    });
+  }
+
+  /** Persiste el valor del schema-form como {@code configurationJson} de la tarea. */
+  onSchemaValue(value: SchemaFormValue): void {
+    this.patchTask.emit({ configurationJson: JSON.stringify(value) });
   }
 }

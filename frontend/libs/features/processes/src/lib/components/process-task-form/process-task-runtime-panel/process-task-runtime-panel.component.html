@@ -25,4 +25,22 @@
       </mat-form-field>
     }
   }
+
+  <!-- Despacho async (ADR-015): opcion de runtime, junto a executionMode/batchSize. -->
+  <ih-async-dispatch-section
+    [async]="draft().async ?? false"
+    [transport]="draft().asyncTransport ?? 'KAFKA'"
+    [executionMode]="draft().executionMode"
+    [transports]="transports()"
+    [readonly]="readonly()"
+    (asyncChange)="updateAsync($event)"
+    (transportChange)="runtimeChange.emit({ asyncTransport: $event })"
+  />
+
+  <!-- Politica de fallo de la tarea (general, no async). -->
+  <ih-task-continue-on-failure
+    [continueOnFailure]="draft().continueOnFailure ?? false"
+    [readonly]="readonly()"
+    (continueOnFailureChange)="runtimeChange.emit({ continueOnFailure: $event })"
+  />
 </section>

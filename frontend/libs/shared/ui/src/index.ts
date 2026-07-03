@@ -21,6 +21,9 @@ export * from './lib/app-layout/plugins/app-workspace.token';
 export * from './lib/app-layout/preferences/app-preferences.facade';
 export * from './lib/breadcrumb/breadcrumb.component';
 export * from './lib/catalog-list/catalog-list.component';
+export * from './lib/schema-form/schema-form.models';
+export * from './lib/schema-form/schema-field-renderer';
+export * from './lib/schema-form/schema-form.component';
 // Primitivas presentacionales: viven en el paquete publicable @integration-hub/plugin-ui-kit
 // y se re-exportan aquí para que el barrel interno de la app no cambie (status-badge,
 // empty-state, icon, loading + tipos StatusBadgeKind/IhIconName).

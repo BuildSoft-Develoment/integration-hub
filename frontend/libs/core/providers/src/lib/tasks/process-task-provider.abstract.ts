@@ -56,6 +56,12 @@ export abstract class ProcessTaskProvider<TDraft> {
       taskRef: String(config['taskRef'] || task.clientId || `task-${task.taskOrder}`),
       executionMode: this.normalizeExecutionMode(config['executionMode'], defaultExecutionMode),
       input: this.normalizeInput(config['input']),
+      // Solo se incluyen cuando estan activos: un draft sincrono queda identico que antes (roundtrip).
+      ...(config['async'] === true ? { async: true } : {}),
+      ...(config['asyncTransport'] != null && String(config['asyncTransport']).trim()
+        ? { asyncTransport: String(config['asyncTransport']) }
+        : {}),
+      ...(config['continueOnFailure'] === true ? { continueOnFailure: true } : {}),
     };
   }
 
@@ -68,6 +74,18 @@ export abstract class ProcessTaskProvider<TDraft> {
       executionMode,
       ...payload,
     };
+    // Despacho async (ADR-015): solo se escribe cuando esta activo (async=false = sincrono = ausente,
+    // para no ensuciar la config). `transport`/`continueOnFailure` acompañan solo si async.
+    if (draft.async) {
+      next['async'] = true;
+      const asyncTransport = String(draft.asyncTransport || '').trim();
+      if (asyncTransport) {
+        next['asyncTransport'] = asyncTransport;
+      }
+      if (draft.continueOnFailure) {
+        next['continueOnFailure'] = true;
+      }
+    }
     if (input?.sourceTaskRef) {
       next['input'] = {
         source: 'task-output',

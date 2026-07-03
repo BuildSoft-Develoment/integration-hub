@@ -1,0 +1,79 @@
+package com.integrationhub.platform.service.execution.async;
+
+import com.integrationhub.platform.entity.TaskInbox;
+import com.integrationhub.platform.repository.TaskAsyncDispatchRepository;
+import com.integrationhub.platform.repository.TaskAsyncDispatchRepository.SliceProgress;
+import com.integrationhub.platform.repository.TaskInboxRepository;
+import com.integrationhub.platform.task.AsyncTaskEnvelope;
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
+
+import java.util.Optional;
+
+/**
+ * Gather del scatter-gather (ADR-015 Opción B, Etapa B3): registra el resultado de una slice y avanza
+ * la agregación N→1 de forma <b>atómica</b>. El dedup por-slice (inbox) y el incremento del tracker
+ * viven en <b>una sola transacción</b>: así una reentrega no cuenta dos veces, y un crash entre ambos
+ * no deja la slice "procesada pero no contada" (que colgaría el scatter para siempre).
+ */
+@ApplicationScoped
+public class SliceGatherService {
+
+    private final TaskInboxRepository inbox;
+    private final TaskAsyncDispatchRepository tracker;
+
+    @Inject
+    public SliceGatherService(TaskInboxRepository inbox, TaskAsyncDispatchRepository tracker) {
+        this.inbox = inbox;
+        this.tracker = tracker;
+    }
+
+    /**
+     * Cuenta una slice completada: inserta su dedup en el inbox y, solo si es nueva, incrementa el
+     * tracker. Devuelve el progreso si esta entrega fue la que contó la slice; vacío si era duplicada
+     * (o no hay scatter activo) → el caller no debe disparar la reanudación.
+     */
+    @Transactional
+    public Optional<SliceProgress> commitCompletedSlice(AsyncTaskEnvelope envelope, String outputsJson, String details) {
+        var inserted = inbox.insertIfAbsent(envelope.idempotencyKey(), envelope.taskType(),
+                envelope.processExecutionId(), envelope.taskDefinitionId(), TaskInbox.PROCESSED,
+                outputsJson, details, null, null, envelope.transport(), null);
+        if (inserted == 0) {
+            return Optional.empty(); // slice ya contada (reentrega): no re-incrementar
+        }
+        var progress = tracker.recordSliceCompleted(envelope.processExecutionId(), envelope.taskDefinitionId());
+        // Si no incrementó pero el tracker NO existe, el scatter aún no se abrió (carrera): lanzar para
+        // hacer rollback (deshace el dedup del inbox) y reintentar, en vez de dedupar sin contar (que
+        // colgaría el scatter). Si el tracker existe pero ya cerró (COMPLETED/FAILED), es skip legítimo.
+        if (progress.isEmpty()
+                && tracker.findByExecutionAndTask(envelope.processExecutionId(), envelope.taskDefinitionId()).isEmpty()) {
+            throw new IllegalStateException("Tracker scatter ausente para exec="
+                    + envelope.processExecutionId() + " task=" + envelope.taskDefinitionId() + "; reintentar");
+        }
+        return progress;
+    }
+
+    /**
+     * Cuenta una slice fallida: dedup en el inbox y, si es nueva, avanza el scatter (fail-fast → FAILED;
+     * continueOnFailure → cuenta la fallida y cierra cuando todas están contadas). Devuelve el progreso
+     * si esta entrega contó la slice; vacío si era duplicada.
+     */
+    @Transactional
+    public Optional<SliceProgress> failSlice(AsyncTaskEnvelope envelope, String error, boolean continueOnFailure) {
+        var inserted = inbox.insertIfAbsent(envelope.idempotencyKey(), envelope.taskType(),
+                envelope.processExecutionId(), envelope.taskDefinitionId(), TaskInbox.DEAD,
+                null, null, error, null, envelope.transport(), null);
+        if (inserted == 0) {
+            return Optional.empty();
+        }
+        var progress = tracker.recordSliceFailed(envelope.processExecutionId(), envelope.taskDefinitionId(),
+                continueOnFailure);
+        if (progress.isEmpty()
+                && tracker.findByExecutionAndTask(envelope.processExecutionId(), envelope.taskDefinitionId()).isEmpty()) {
+            throw new IllegalStateException("Tracker scatter ausente para exec="
+                    + envelope.processExecutionId() + " task=" + envelope.taskDefinitionId() + "; reintentar");
+        }
+        return progress;
+    }
+}
