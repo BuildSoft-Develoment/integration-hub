@@ -3,6 +3,10 @@ package com.integrationhub.platform.repository;
 import com.integrationhub.platform.entity.TaskInbox;
 import io.quarkus.hibernate.orm.panache.PanacheRepository;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.transaction.Transactional;
+
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
 
 /**
  * Acceso a datos del ledger de idempotencia del consumer de tareas (ADR-015), en el mismo estilo que
@@ -43,6 +47,35 @@ public class TaskInboxRepository implements PanacheRepository<TaskInbox> {
                 .setParameter(9, rawPayload)
                 .setParameter(10, brokerType)
                 .setParameter(11, topic)
+                .executeUpdate();
+    }
+
+    /**
+     * Retención (ADR-015): borra en lotes los registros de éxito/negocio ({@code PROCESSED},
+     * {@code FAILED}) más viejos que el corte. Son el grueso del volumen (una fila por work-item
+     * procesado) y son transitorios (dedup ya consumido), así que borrarlos evita el crecimiento
+     * ilimitado del ledger a 1M+.
+     */
+    @Transactional
+    public long cleanupProcessedOlderThan(LocalDateTime cutoff, int limit) {
+        return deleteByStatusesOlderThan(cutoff, limit, TaskInbox.PROCESSED, TaskInbox.FAILED);
+    }
+
+    /** Retención del DLQ del inbox: borra {@code DEAD}/{@code POISON} muy viejos (forense acotado). */
+    @Transactional
+    public long cleanupDeadOlderThan(LocalDateTime cutoff, int limit) {
+        return deleteByStatusesOlderThan(cutoff, limit, TaskInbox.DEAD, TaskInbox.POISON);
+    }
+
+    private long deleteByStatusesOlderThan(LocalDateTime cutoff, int limit, String statusA, String statusB) {
+        var sql = "delete from task_inbox where id in ("
+                + "select id from task_inbox where status in (?1, ?2) and created_at < ?3 "
+                + "order by created_at asc limit ?4)";
+        return getEntityManager().createNativeQuery(sql)
+                .setParameter(1, statusA)
+                .setParameter(2, statusB)
+                .setParameter(3, Timestamp.valueOf(cutoff))
+                .setParameter(4, Math.max(limit, 1))
                 .executeUpdate();
     }
 }

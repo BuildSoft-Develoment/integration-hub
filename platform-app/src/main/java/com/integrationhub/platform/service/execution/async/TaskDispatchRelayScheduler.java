@@ -25,6 +25,7 @@ public class TaskDispatchRelayScheduler {
     private final MessageBrokerRegistry brokers;
     private final boolean enabled;
     private final int batchSize;
+    private final int maxBatchesPerTick;
 
     @Inject
     public TaskDispatchRelayScheduler(
@@ -32,23 +33,42 @@ public class TaskDispatchRelayScheduler {
             TaskOutboxRelay relay,
             MessageBrokerRegistry brokers,
             @ConfigProperty(name = "tasks.dispatch.enabled", defaultValue = "false") boolean enabled,
-            @ConfigProperty(name = "tasks.relay.batch-size", defaultValue = "100") int batchSize) {
+            @ConfigProperty(name = "tasks.relay.batch-size", defaultValue = "1000") int batchSize,
+            @ConfigProperty(name = "tasks.relay.max-batches-per-tick", defaultValue = "50") int maxBatchesPerTick) {
         this.store = store;
         this.relay = relay;
         this.brokers = brokers;
         this.enabled = enabled;
         this.batchSize = Math.max(batchSize, 1);
+        this.maxBatchesPerTick = Math.max(maxBatchesPerTick, 1);
     }
 
+    /**
+     * Drena en <b>bucle</b> hasta vaciar el outbox o alcanzar {@code max-batches-per-tick} (ADR-015,
+     * F4 del doble check a escala). Un solo tick puede así drenar {@code batchSize × maxBatches}
+     * work-items (p.ej. 1000 × 50 = 50k) en vez de un único lote de 100 → sin cuello de botella a
+     * 1M. Corte: cuando un lote reclama menos de {@code batchSize} filas, ya no quedan vencidas.
+     */
     @Scheduled(every = "{tasks.relay.every}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void drain() {
         if (!enabled) {
             return;
         }
-        var outcome = relay.drain(store, brokers::resolve, batchSize);
-        if (outcome.sent() > 0 || outcome.retried() > 0 || outcome.dead() > 0) {
-            LOG.infof("Task dispatch relay: sent=%d retried=%d dead=%d",
-                    outcome.sent(), outcome.retried(), outcome.dead());
+        int sent = 0;
+        int retried = 0;
+        int dead = 0;
+        for (int batch = 0; batch < maxBatchesPerTick; batch++) {
+            var outcome = relay.drain(store, brokers::resolve, batchSize);
+            var claimed = outcome.sent() + outcome.retried() + outcome.dead();
+            sent += outcome.sent();
+            retried += outcome.retried();
+            dead += outcome.dead();
+            if (claimed < batchSize) {
+                break; // lote incompleto → no quedan filas vencidas: outbox drenado
+            }
+        }
+        if (sent > 0 || retried > 0 || dead > 0) {
+            LOG.infof("Task dispatch relay: sent=%d retried=%d dead=%d", sent, retried, dead);
         }
     }
 }

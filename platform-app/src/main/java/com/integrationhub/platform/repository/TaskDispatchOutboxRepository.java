@@ -67,4 +67,31 @@ public class TaskDispatchOutboxRepository implements PanacheRepository<TaskDispa
         update("status = ?1, lastError = ?2, lockedBy = null, lockedAt = null where id = ?3",
                 TaskDispatchOutbox.DEAD, error, id);
     }
+
+    /**
+     * Retención (ADR-015): borra en lotes filas {@code SENT} más viejas que el corte. El outbox es
+     * transitorio (ya publicadas al broker), así que borrarlas es seguro y evita crecimiento
+     * ilimitado a 1M+. Espejo de {@code AuditSpoolRepository.cleanupSentOlderThan}.
+     */
+    @jakarta.transaction.Transactional
+    public long cleanupSentOlderThan(LocalDateTime cutoff, int limit) {
+        return deleteByStatusOlderThan("sent_at", cutoff, limit, TaskDispatchOutbox.SENT);
+    }
+
+    /** Retención del DLQ del outbox: borra {@code DEAD} muy viejas (evidencia de poison acotada). */
+    @jakarta.transaction.Transactional
+    public long cleanupDeadOlderThan(LocalDateTime cutoff, int limit) {
+        return deleteByStatusOlderThan("created_at", cutoff, limit, TaskDispatchOutbox.DEAD);
+    }
+
+    private long deleteByStatusOlderThan(String timeColumn, LocalDateTime cutoff, int limit, String status) {
+        var sql = "delete from task_dispatch_outbox where id in ("
+                + "select id from task_dispatch_outbox where status = ?1 and " + timeColumn + " < ?2 "
+                + "order by " + timeColumn + " asc limit ?3)";
+        return getEntityManager().createNativeQuery(sql)
+                .setParameter(1, status)
+                .setParameter(2, Timestamp.valueOf(cutoff))
+                .setParameter(3, Math.max(limit, 1))
+                .executeUpdate();
+    }
 }
