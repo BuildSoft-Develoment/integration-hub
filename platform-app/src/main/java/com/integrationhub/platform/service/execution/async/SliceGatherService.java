@@ -42,7 +42,16 @@ public class SliceGatherService {
         if (inserted == 0) {
             return Optional.empty(); // slice ya contada (reentrega): no re-incrementar
         }
-        return tracker.recordSliceCompleted(envelope.processExecutionId(), envelope.taskDefinitionId());
+        var progress = tracker.recordSliceCompleted(envelope.processExecutionId(), envelope.taskDefinitionId());
+        // Si no incrementó pero el tracker NO existe, el scatter aún no se abrió (carrera): lanzar para
+        // hacer rollback (deshace el dedup del inbox) y reintentar, en vez de dedupar sin contar (que
+        // colgaría el scatter). Si el tracker existe pero ya cerró (COMPLETED/FAILED), es skip legítimo.
+        if (progress.isEmpty()
+                && tracker.findByExecutionAndTask(envelope.processExecutionId(), envelope.taskDefinitionId()).isEmpty()) {
+            throw new IllegalStateException("Tracker scatter ausente para exec="
+                    + envelope.processExecutionId() + " task=" + envelope.taskDefinitionId() + "; reintentar");
+        }
+        return progress;
     }
 
     /**

@@ -7,6 +7,7 @@ import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.task.AsyncTaskEnvelope;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 
 import java.util.List;
 import java.util.Map;
@@ -43,7 +44,13 @@ public class AsyncSliceDispatchService {
     /**
      * Despacha las {@code slices} de una tarea como N work-items y abre el tracker. Devuelve el número
      * de slices despachadas. No hace nada (devuelve 0) si no hay slices.
+     *
+     * <p><b>Atómico</b> (una sola transacción): {@code open(N)} + los N {@code enqueue} commitean
+     * juntos, o nada. Sin esto, un crash a mitad dejaría el tracker con {@code total=N} pero menos de
+     * N work-items → el scatter nunca podría cerrar. El caller (motor, B2b) lo invoca dentro de la tx
+     * de la suspensión, con lo que el tracker+work-items commitean atómicos con la suspensión.</p>
      */
+    @Transactional
     public int dispatchSlices(Long processExecutionId,
                               Long taskDefinitionId,
                               String taskType,
