@@ -49,7 +49,7 @@ public class AsyncScatterRecoveryScheduler {
     }
 
     @Scheduled(every = "{tasks.async.recovery.every:120s}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
-    void sweep() {
+    public void sweep() {
         if (!enabled) {
             return;
         }
