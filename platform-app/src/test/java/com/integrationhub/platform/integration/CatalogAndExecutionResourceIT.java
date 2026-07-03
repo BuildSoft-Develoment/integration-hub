@@ -141,14 +141,16 @@ class CatalogAndExecutionResourceIT {
                             .body("[0].status", is("COMPLETED"))
                             .body("[1].status", is("COMPLETED"));
 
-            // El endpoint de progreso responde. (Nota: este proceso FILE_READ→DB_WRITE usa el streaming
-            // fastpath, que no pasa por executeByMode → no reporta progreso sync granular; el progreso
-            // sync via executeByMode se valida en AsyncTaskDlqIT.)
+            // Progreso sync del streaming fastpath (FILE_READ→DB_WRITE): el SyncProgressReporter upsertea
+            // a task_sync_progress bajo la tarea sink; el flush final corre antes de completar la tarea,
+            // así que tras COMPLETED el poll de progreso debe ver los 2 registros escritos.
             given()
                     .when()
                             .get("/api/query/process-executions/{processExecutionId}/progress", executionId.longValue())
                     .then()
-                            .statusCode(200);
+                            .statusCode(200)
+                            .body("syncTasks.size()", is(1))
+                            .body("syncTasks[0].recordsProcessed", is(2));
 
             // Auditoria asincrona: platform-app es el PRODUCTOR. Su responsabilidad es
             // dejar la trama en el spool durable (audit_spool); poblar audit_event es del

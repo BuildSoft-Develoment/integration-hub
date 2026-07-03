@@ -269,7 +269,7 @@ class FileReadTaskFastPathTest {
     @Vetoed
     private static final class FailingStreamingPipelineService extends StreamingPipelineService {
         private FailingStreamingPipelineService() {
-            super(null, null, null, null, null, null);
+            super(null, null, null, null, null, null, null);
         }
 
         @Override

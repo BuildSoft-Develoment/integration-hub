@@ -14,9 +14,10 @@ import java.util.List;
  * (auto-refresh) para mostrar avance de un proceso de 1M registros en vez de solo el estado terminal.
  *
  * <p><b>Alcance</b>: el progreso granular existe para tareas <b>scatter</b> (tracker N→1/page-chain) y
- * para tareas <b>batch sync</b> vía {@code executeByMode} (contador upserteado en {@code task_sync_progress}).
- * <b>Limitación conocida</b>: el <i>streaming fastpath</i> (FILE_READ→DB_WRITE) no pasa por
- * {@code executeByMode}, así que aún no reporta progreso sync granular — instrumentarlo es un follow-up.</p>
+ * para tareas <b>sync</b> por sus dos caminos de ejecución, ambos upserteando (throttled) a
+ * {@code task_sync_progress}: el <i>batch</i> vía {@code executeByMode} (loop en {@code ProcessTaskRuntimeService})
+ * y el <i>streaming fastpath</i> FILE_READ→DB_WRITE vía {@code SyncProgressReporter} en
+ * {@code StreamingPipelineService}.</p>
  */
 @ApplicationScoped
 public class ExecutionProgressService {

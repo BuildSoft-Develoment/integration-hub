@@ -307,13 +307,23 @@ class StreamingPipelineServiceTest {
                 : Executors.newSingleThreadExecutor();
         org.eclipse.microprofile.context.ManagedExecutor executor = managedExecutor(delegate);
 
+        // Repo de progreso no-op: la lógica de throttle/flush del reporter se prueba en SyncProgressReporterTest;
+        // aquí sólo importa que el pipeline no reviente al reportar (no hay EntityManager en este unit test).
+        var noOpSyncProgress = new com.integrationhub.platform.repository.TaskSyncProgressRepository() {
+            @Override
+            public void upsert(Long processExecutionId, Long taskDefinitionId, long processed) {
+                // no-op
+            }
+        };
+
         return new StreamingPipelineService(
                 sourceRegistry,
                 readerRegistry,
                 taskProviderRegistry,
                 runtimeSupport,
                 new StreamingPipelineWorker(runtimeSupport),
-                executor
+                executor,
+                noOpSyncProgress
         );
     }
 

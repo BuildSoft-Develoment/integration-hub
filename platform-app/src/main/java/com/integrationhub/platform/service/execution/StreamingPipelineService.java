@@ -33,19 +33,22 @@ public class StreamingPipelineService {
     private final FileReadRuntimeSupport fileReadRuntimeSupport;
     private final StreamingPipelineWorker pipelineWorker;
     private final ManagedExecutor managedExecutor;
+    private final com.integrationhub.platform.repository.TaskSyncProgressRepository syncProgressRepository;
 
     public StreamingPipelineService(SourceProviderRegistry sourceProviderRegistry,
                                     ReaderProviderRegistry readerProviderRegistry,
                                     TaskProviderRegistry taskProviderRegistry,
                                     FileReadRuntimeSupport fileReadRuntimeSupport,
                                     StreamingPipelineWorker pipelineWorker,
-                                    ManagedExecutor managedExecutor) {
+                                    ManagedExecutor managedExecutor,
+                                    com.integrationhub.platform.repository.TaskSyncProgressRepository syncProgressRepository) {
         this.sourceProviderRegistry = sourceProviderRegistry;
         this.readerProviderRegistry = readerProviderRegistry;
         this.taskProviderRegistry = taskProviderRegistry;
         this.fileReadRuntimeSupport = fileReadRuntimeSupport;
         this.pipelineWorker = pipelineWorker;
         this.managedExecutor = managedExecutor;
+        this.syncProgressRepository = syncProgressRepository;
     }
 
     @Transactional(Transactional.TxType.NOT_SUPPORTED)
@@ -95,21 +98,31 @@ public class StreamingPipelineService {
 
         var fileErrorPolicy = fileReadRuntimeSupport.normalizeFileErrorPolicy(sourceConfiguration.get("fileErrorPolicy"));
 
-        if (parallel && parallelMode == StreamingParallelMode.BATCH) {
-            runParallelByBatch(processExecutionId, sinkTaskPlan, executionVariables, sourceProvider, readerProvider,
-                    sourceConfiguration, readerConfiguration, sinkTaskProvider, sinkConfiguration,
-                    selectedFiles, batchSize, fileSummaries, failedFiles, aggregatedSkips,
-                    totalProcessed, totalValid, totalSkipped, fileErrorPolicy, maxConcurrency);
-        } else if (parallel) {
-            runParallel(processExecutionId, sinkTaskPlan, executionVariables, sourceProvider, readerProvider,
-                    sourceConfiguration, readerConfiguration, sinkTaskProvider, sinkConfiguration,
-                    selectedFiles, batchSize, fileSummaries, failedFiles, aggregatedSkips, 
-                    totalProcessed, totalValid, totalSkipped, fileErrorPolicy, maxConcurrency);
-        } else {
-            runSequential(processExecutionId, sinkTaskPlan, executionVariables, sourceProvider, readerProvider,
-                    sourceConfiguration, readerConfiguration, sinkTaskProvider, sinkConfiguration,
-                    selectedFiles, batchSize, fileSummaries, failedFiles, aggregatedSkips, 
-                    totalProcessed, totalValid, totalSkipped, fileErrorPolicy);
+        // Progreso sync en vivo del fastpath: contador acumulativo del run, upsert throttled a
+        // task_sync_progress bajo la tarea sink (donde aterrizan las escrituras). Best-effort.
+        var progressReporter = new SyncProgressReporter(
+                syncProgressRepository, processExecutionId, sinkTaskPlan.taskDefinitionId());
+
+        try {
+            if (parallel && parallelMode == StreamingParallelMode.BATCH) {
+                runParallelByBatch(processExecutionId, sinkTaskPlan, executionVariables, sourceProvider, readerProvider,
+                        sourceConfiguration, readerConfiguration, sinkTaskProvider, sinkConfiguration,
+                        selectedFiles, batchSize, fileSummaries, failedFiles, aggregatedSkips,
+                        totalProcessed, totalValid, totalSkipped, fileErrorPolicy, maxConcurrency, progressReporter);
+            } else if (parallel) {
+                runParallel(processExecutionId, sinkTaskPlan, executionVariables, sourceProvider, readerProvider,
+                        sourceConfiguration, readerConfiguration, sinkTaskProvider, sinkConfiguration,
+                        selectedFiles, batchSize, fileSummaries, failedFiles, aggregatedSkips,
+                        totalProcessed, totalValid, totalSkipped, fileErrorPolicy, maxConcurrency, progressReporter);
+            } else {
+                runSequential(processExecutionId, sinkTaskPlan, executionVariables, sourceProvider, readerProvider,
+                        sourceConfiguration, readerConfiguration, sinkTaskProvider, sinkConfiguration,
+                        selectedFiles, batchSize, fileSummaries, failedFiles, aggregatedSkips,
+                        totalProcessed, totalValid, totalSkipped, fileErrorPolicy, progressReporter);
+            }
+        } finally {
+            // Flush final aun si el pipeline falló: persiste el avance real logrado hasta el corte.
+            progressReporter.flush();
         }
 
         if (!failedFiles.isEmpty()) {
@@ -146,14 +159,16 @@ public class StreamingPipelineService {
                                AtomicInteger totalProcessed,
                                AtomicInteger totalValid,
                                AtomicInteger totalSkipped,
-                               String fileErrorPolicy) {
-        
+                               String fileErrorPolicy,
+                               SyncProgressReporter progressReporter) {
+
         for (var selectedFile : selectedFiles) {
             try {
                 var sinkTaskContext = createSinkContext(processExecutionId, sinkTaskPlan, executionVariables);
                 pipelineWorker.processSingleFile(selectedFile, sourceProvider, readerProvider, sourceConfiguration,
                         readerConfiguration, sinkTaskProvider, sinkConfiguration, sinkTaskContext,
-                        batchSize, fileSummaries, aggregatedSkips, totalProcessed, totalValid, totalSkipped);
+                        batchSize, fileSummaries, aggregatedSkips, totalProcessed, totalValid, totalSkipped,
+                        progressReporter);
             } catch (Exception e) {
                 handleFileError(selectedFile, e, fileErrorPolicy, failedFiles, fileSummaries, selectedFiles, totalProcessed, totalValid, totalSkipped, aggregatedSkips);
             }
@@ -178,7 +193,8 @@ public class StreamingPipelineService {
                                     AtomicInteger totalValid,
                                     AtomicInteger totalSkipped,
                                     String fileErrorPolicy,
-                                    int maxConcurrency) {
+                                    int maxConcurrency,
+                                    SyncProgressReporter progressReporter) {
 
         for (var selectedFile : selectedFiles) {
             try {
@@ -199,7 +215,8 @@ public class StreamingPipelineService {
                         totalProcessed,
                         totalValid,
                         totalSkipped,
-                        maxConcurrency
+                        maxConcurrency,
+                        progressReporter
                 );
             } catch (Exception e) {
                 handleFileError(selectedFile, e, fileErrorPolicy, failedFiles, fileSummaries, selectedFiles, totalProcessed, totalValid, totalSkipped, aggregatedSkips);
@@ -225,7 +242,8 @@ public class StreamingPipelineService {
                              AtomicInteger totalValid,
                              AtomicInteger totalSkipped,
                              String fileErrorPolicy,
-                             int maxConcurrency) {
+                             int maxConcurrency,
+                             SyncProgressReporter progressReporter) {
 
         var stopRequested = new AtomicBoolean(false);
         var permits = new Semaphore(maxConcurrency);
@@ -250,7 +268,8 @@ public class StreamingPipelineService {
                     var sinkTaskContext = createSinkContext(processExecutionId, sinkTaskPlan, executionVariables);
                     pipelineWorker.processSingleFile(file, sourceProvider, readerProvider, sourceConfiguration,
                             readerConfiguration, sinkTaskProvider, sinkConfiguration, sinkTaskContext,
-                            batchSize, fileSummaries, aggregatedSkips, totalProcessed, totalValid, totalSkipped);
+                            batchSize, fileSummaries, aggregatedSkips, totalProcessed, totalValid, totalSkipped,
+                            progressReporter);
                 } catch (Exception e) {
                     recordParallelFileError(file, e, fileErrorPolicy, failedFiles, stopRequested);
                 } finally {
@@ -332,7 +351,8 @@ public class StreamingPipelineService {
                                                   AtomicInteger totalProcessed,
                                                   AtomicInteger totalValid,
                                                   AtomicInteger totalSkipped,
-                                                  int maxConcurrency) throws Exception {
+                                                  int maxConcurrency,
+                                                  SyncProgressReporter progressReporter) throws Exception {
 
         var payload = sourceProvider.openFile(selectedFile, sourceConfiguration);
         var batchFailure = new java.util.concurrent.atomic.AtomicReference<Throwable>();
@@ -357,7 +377,8 @@ public class StreamingPipelineService {
                 futures.add(CompletableFuture.runAsync(() -> {
                     try {
                         var sinkTaskContext = createSinkContext(processExecutionId, sinkTaskPlan, executionVariables);
-                        pipelineWorker.processBatch(payload, batchRecords, sinkTaskProvider, sinkConfiguration, sinkTaskContext);
+                        pipelineWorker.processBatch(payload, batchRecords, sinkTaskProvider, sinkConfiguration, sinkTaskContext,
+                                progressReporter);
                     } catch (Throwable error) {
                         batchFailure.compareAndSet(null, new IllegalStateException(
                                 "Batch " + batch.batchNumber() + " failed for file " + selectedFile.name() + ": " + describeError(error),

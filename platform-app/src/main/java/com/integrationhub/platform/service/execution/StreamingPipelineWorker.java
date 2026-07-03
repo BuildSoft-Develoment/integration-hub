@@ -39,7 +39,8 @@ public class StreamingPipelineWorker {
                                   ConcurrentLinkedQueue<ReadSkip> aggregatedSkips,
                                   AtomicInteger totalProcessed,
                                   AtomicInteger totalValid,
-                                  AtomicInteger totalSkipped) throws Exception {
+                                  AtomicInteger totalSkipped,
+                                  SyncProgressReporter progressReporter) throws Exception {
 
         var payload = sourceProvider.openFile(selectedFile, sourceConfiguration);
         sinkTaskContext.attributes().put("sourcePayload", payload);
@@ -49,6 +50,9 @@ public class StreamingPipelineWorker {
             var writeResult = sinkTaskProvider.executeRecords(sinkTaskContext, sinkConfiguration, enrichedRecords, payload);
             if (!writeResult.success()) {
                 throw new IllegalStateException(writeResult.details());
+            }
+            if (progressReporter != null) {
+                progressReporter.batchWritten(enrichedRecords.size());
             }
         });
 
@@ -72,12 +76,16 @@ public class StreamingPipelineWorker {
                              List<ReadRecord> records,
                              BatchTaskProvider sinkTaskProvider,
                              Map<String, Object> sinkConfiguration,
-                             TaskContext sinkTaskContext) {
+                             TaskContext sinkTaskContext,
+                             SyncProgressReporter progressReporter) {
         sinkTaskContext.attributes().put("sourcePayload", payload);
         var enrichedRecords = fileReadRuntimeSupport.enrichRecordsWithSourceMetadata(records, payload);
         var writeResult = sinkTaskProvider.executeRecords(sinkTaskContext, sinkConfiguration, enrichedRecords, payload);
         if (!writeResult.success()) {
             throw new IllegalStateException(writeResult.details());
+        }
+        if (progressReporter != null) {
+            progressReporter.batchWritten(enrichedRecords.size());
         }
     }
 }
