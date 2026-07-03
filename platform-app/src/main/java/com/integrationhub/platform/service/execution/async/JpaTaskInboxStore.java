@@ -5,20 +5,20 @@ import com.integrationhub.platform.repository.TaskInboxRepository;
 import com.integrationhub.platform.task.AsyncTaskEnvelope;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
-import org.jboss.logging.Logger;
 
 /**
  * Adaptador JPA del puerto {@link TaskInboxStore} (ADR-015). Responsabilidad única: mapear el
  * dominio ({@link AsyncTaskEnvelope} + resultado) a filas del ledger y delimitar la transacción;
  * el acceso a datos vive en {@link TaskInboxRepository}. El {@link AsyncTaskConsumer} depende solo
  * del puerto (DIP).
+ *
+ * <p>El registro es <b>idempotente</b> ({@code ON CONFLICT DO NOTHING} en el repositorio, igual que
+ * {@code AuditEventWriter}): la carrera de dos consumers sobre la misma clave se degrada a duplicado
+ * sin excepción, sin depender de capturar violaciones de constraint tras el flush.</p>
  */
 @ApplicationScoped
 public class JpaTaskInboxStore implements TaskInboxStore {
-
-    private static final Logger LOG = Logger.getLogger(JpaTaskInboxStore.class);
 
     private final TaskInboxRepository repository;
 
@@ -36,62 +36,42 @@ public class JpaTaskInboxStore implements TaskInboxStore {
     @Override
     @Transactional
     public void recordProcessed(AsyncTaskEnvelope envelope, String outputsJson, String details) {
-        var row = terminal(envelope, TaskInbox.PROCESSED);
-        row.outputsJson = outputsJson;
-        row.details = details;
-        persistDeduped(row, envelope.idempotencyKey());
+        insertTerminal(envelope, TaskInbox.PROCESSED, outputsJson, details, null);
     }
 
     @Override
     @Transactional
     public void recordFailed(AsyncTaskEnvelope envelope, String details) {
-        var row = terminal(envelope, TaskInbox.FAILED);
-        row.details = details;
-        persistDeduped(row, envelope.idempotencyKey());
+        insertTerminal(envelope, TaskInbox.FAILED, null, details, null);
     }
 
     @Override
     @Transactional
     public void recordDead(AsyncTaskEnvelope envelope, String error) {
-        var row = terminal(envelope, TaskInbox.DEAD);
-        row.error = error;
-        persistDeduped(row, envelope.idempotencyKey());
+        insertTerminal(envelope, TaskInbox.DEAD, null, null, error);
     }
 
     @Override
     @Transactional
     public void recordPoison(String rawPayload, String brokerType, String topic, String error) {
-        var row = new TaskInbox();
-        row.status = TaskInbox.POISON;
-        row.rawPayload = rawPayload;
-        row.brokerType = brokerType;
-        row.topic = topic;
-        row.error = error;
-        repository.persist(row);
+        // Sin idempotencyKey → no entra al índice parcial → siempre se inserta (DLQ del consumer).
+        repository.insertIfAbsent(null, null, null, null, TaskInbox.POISON,
+                null, null, error, rawPayload, brokerType, topic);
     }
 
-    private TaskInbox terminal(AsyncTaskEnvelope envelope, String status) {
-        var row = new TaskInbox();
-        row.idempotencyKey = envelope.idempotencyKey();
-        row.taskType = envelope.taskType();
-        row.processExecutionId = envelope.processExecutionId();
-        row.taskDefinitionId = envelope.taskDefinitionId();
-        row.brokerType = envelope.transport();
-        row.status = status;
-        return row;
-    }
-
-    /**
-     * Persiste forzando el flush para que la violación del índice único de idempotencia aflore
-     * <b>aquí</b> (no en el commit): si otro consumer ya registró la misma clave (carrera), se trata
-     * como duplicado y se descarta — el efecto ya quedó asentado una vez.
-     */
-    private void persistDeduped(TaskInbox row, String idempotencyKey) {
-        try {
-            repository.persist(row);
-            repository.flush();
-        } catch (PersistenceException raced) {
-            LOG.debugf("task_inbox: idempotency_key %s ya registrada por otro consumer; descartado", idempotencyKey);
-        }
+    private void insertTerminal(AsyncTaskEnvelope envelope, String status,
+                                String outputsJson, String details, String error) {
+        repository.insertIfAbsent(
+                envelope.idempotencyKey(),
+                envelope.taskType(),
+                envelope.processExecutionId(),
+                envelope.taskDefinitionId(),
+                status,
+                outputsJson,
+                details,
+                error,
+                null,
+                envelope.transport(),
+                null);
     }
 }

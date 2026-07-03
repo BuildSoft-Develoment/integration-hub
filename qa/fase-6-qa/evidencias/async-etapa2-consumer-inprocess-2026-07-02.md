@@ -48,6 +48,20 @@ La carrera del índice único (dos consumers, misma clave) se degrada a **duplic
 - Resto del paquete async sin regresión: codec 4, publisher 1, relay 4, planner 6, idempotency 4,
   retry 3, brokerRemote 4. **Total: 34 unit + 7 IT verdes.**
 
+## Doble check (corrección): dedup por `ON CONFLICT`, no por catch-tras-flush
+
+El primer `JpaTaskInboxStore` deduplicaba con `persist + flush` dentro de un `try/catch
+(PersistenceException)`. Aunque el IT pasaba, es **frágil**: en JTA, una violación de constraint en
+el `flush` marca la transacción como *rollback-only*, y el commit del interceptor `@Transactional`
+puede lanzar `RollbackException` **después** del catch → el swallow no siempre protege. Además
+diverge del patrón ya probado del codebase (`AuditEventWriter`: *escrituras idempotentes
+`ON CONFLICT (event_id) DO NOTHING`*).
+
+**Corrección**: el registro ahora usa `insert ... on conflict (idempotency_key) where idempotency_key
+is not null do nothing` (nativo, en `TaskInboxRepository`). Race-safe por diseño (sin excepción que
+capturar) y consistente con la auditoría. POISON (key null) no entra al índice parcial → siempre
+inserta. IT re-verificado **4/4** contra Postgres (incluye binding de parámetros nulos).
+
 ## Estado
 
 Núcleo del consumer listo y probado, inerte en producción. Pendiente **Etapa 4**: (1) adaptador de
