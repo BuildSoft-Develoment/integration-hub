@@ -24,10 +24,14 @@ public class RecordingBatchTaskProvider implements BatchTaskProvider {
 
     public static final AtomicInteger SLICE_EXECUTIONS = new AtomicInteger();
     public static final AtomicInteger TOTAL_RECORDS = new AtomicInteger();
+    /** taskOutputs rehidratado en la última slice (Nivel 2): prueba la propagación de contexto E2E. */
+    public static final java.util.concurrent.atomic.AtomicReference<Object> SEEN_TASK_OUTPUTS =
+            new java.util.concurrent.atomic.AtomicReference<>();
 
     public static void reset() {
         SLICE_EXECUTIONS.set(0);
         TOTAL_RECORDS.set(0);
+        SEEN_TASK_OUTPUTS.set(null);
     }
 
     @Override
@@ -46,6 +50,7 @@ public class RecordingBatchTaskProvider implements BatchTaskProvider {
                                      List<ReadRecord> records, SourcePayload sourcePayload) {
         SLICE_EXECUTIONS.incrementAndGet();
         TOTAL_RECORDS.addAndGet(records.size());
+        SEEN_TASK_OUTPUTS.set(context.attributes().get("taskOutputs"));
         return TaskResult.success("slice ok", Map.of("count", records.size()));
     }
 }

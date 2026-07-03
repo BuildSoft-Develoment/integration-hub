@@ -57,6 +57,14 @@ de esta etapa (mismo patrón con el que ya se duplicaba `configuration`).
 - **Frontend**: sin cambios — `SLICE_ONLY` ya se gatea (visible en batch/per-record, oculto en once); la
   capacidad de `REST_CALL` fluye por `GET /api/task-types`.
 
+## Doble check E2E (refuerzo)
+
+El `AsyncScatterGatherE2EIT` original despachaba el scatter con `taskOutputs` **vacío** y el
+test-provider solo contaba records → no probaba la propagación de contexto E2E (solo el unit test). Se
+reforzó: el scatter se despacha con `taskOutputs={task-1.ref: R-1}` y `RecordingBatchTaskProvider`
+**captura** el `taskOutputs` rehidratado; el test asserta que el provider recibió `R-1` — probando el
+camino completo **dispatch → wire de slice → outbox → consumer (hydrateSliceContext) → provider**.
+
 ## Estado
 
 `REST_CALL` es el primer provider de producción genuinamente async-capable (scatter). `DB_WRITE` y los

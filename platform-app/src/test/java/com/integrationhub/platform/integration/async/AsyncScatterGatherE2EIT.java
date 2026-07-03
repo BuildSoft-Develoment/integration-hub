@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 /**
  * E2E del lazo scatter-gather completo (Opción B, B1–B4) sin FILE_READ: se inyecta el scatter vía
@@ -62,8 +63,9 @@ class AsyncScatterGatherE2EIT {
                 List.of(rec("a"), rec("b")),
                 List.of(rec("c")),
                 List.of(rec("d"), rec("e")));
+        // Nivel 2: contexto serializable que debe viajar en cada slice hasta el provider.
         var scatter = new ScatterDispatch(peId, tdId, RecordingBatchTaskProvider.TASK_TYPE, "KAFKA", Map.of(), slices,
-                Map.of(), Map.of(), Map.of());
+                Map.of("task-1.ref", "R-1"), Map.of("processName", "P"), Map.of("env", "prod"));
 
         // El motor abre el tracker(3) + encola 3 work-items + suspende, atómico (B2b).
         stateService.suspendTask(peId, teId, "{\"scatter\":true}", "tok-scatter", null, null,
@@ -78,6 +80,12 @@ class AsyncScatterGatherE2EIT {
         // Todas las slices se ejecutaron (5 records repartidos) y el gather cerró el scatter.
         assertEquals(3, RecordingBatchTaskProvider.SLICE_EXECUTIONS.get(), "una ejecución por slice");
         assertEquals(5, RecordingBatchTaskProvider.TOTAL_RECORDS.get(), "los 5 records llegaron completos");
+        // Nivel 2 E2E: el taskOutputs de la tarea origen viajó en la slice hasta el provider.
+        assertInstanceOf(Map.class, RecordingBatchTaskProvider.SEEN_TASK_OUTPUTS.get(),
+                "el provider recibió el taskOutputs propagado en la slice");
+        assertEquals("R-1",
+                ((Map<?, ?>) RecordingBatchTaskProvider.SEEN_TASK_OUTPUTS.get()).get("task-1.ref"),
+                "la variable de la tarea origen se resolvió E2E (dispatch → slice → consumer → provider)");
         assertEquals("COMPLETED", readString(
                 "select status from task_async_dispatch where process_execution_id = " + peId));
         // La tarea suspendida se reanudó y el proceso completó (una sola vez, en la última slice).
