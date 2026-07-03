@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -177,7 +178,7 @@ class AsyncTaskConsumerTest {
     void sliceCountsButDoesNotResumeTaskUntilBatchCloses() throws Exception {
         var provider = new CapturingBatchProvider(TaskResult.success("slice ok"));
         when(registry.resolve("DB_WRITE")).thenReturn(provider);
-        when(gather.commitCompletedSlice(any(), any(), any())).thenReturn(Optional.of(new SliceProgress(1, 3, false)));
+        when(gather.commitCompletedSlice(any(), any(), any())).thenReturn(Optional.of(new SliceProgress(1, 0, 3, false)));
 
         var result = consumer.consume(sliceWire("DB_WRITE", 0, 3, java.util.List.of(Map.of("id", "a"))),
                 "KAFKA", "tasks.db_write");
@@ -190,7 +191,7 @@ class AsyncTaskConsumerTest {
     @Test
     void lastSliceResumesTaskExactlyOnce() throws Exception {
         when(registry.resolve("DB_WRITE")).thenReturn(new CapturingBatchProvider(TaskResult.success("slice ok")));
-        when(gather.commitCompletedSlice(any(), any(), any())).thenReturn(Optional.of(new SliceProgress(3, 3, true)));
+        when(gather.commitCompletedSlice(any(), any(), any())).thenReturn(Optional.of(new SliceProgress(3, 0, 3, true)));
 
         var result = consumer.consume(sliceWire("DB_WRITE", 2, 3, java.util.List.of(Map.of("id", "z"))),
                 "KAFKA", "tasks.db_write");
@@ -203,7 +204,8 @@ class AsyncTaskConsumerTest {
     @Test
     void failedSliceThatTransitionsFailsTheTask() throws Exception {
         when(registry.resolve("DB_WRITE")).thenReturn(new CapturingBatchProvider(TaskResult.failure("boom")));
-        when(gather.failSlice(any(), any())).thenReturn(true); // esta slice transiciona el scatter a FAILED
+        // fail-fast: la slice fallida cierra el scatter como terminal → falla la tarea.
+        when(gather.failSlice(any(), any(), anyBoolean())).thenReturn(Optional.of(new SliceProgress(0, 1, 3, true)));
 
         var result = consumer.consume(sliceWire("DB_WRITE", 1, 3, java.util.List.of(Map.of("id", "b"))),
                 "KAFKA", "tasks.db_write");
@@ -211,6 +213,26 @@ class AsyncTaskConsumerTest {
         assertEquals(AsyncTaskConsumer.ConsumeResult.FAILED, result);
         assertEquals(1, completion.calls.size(), "la primera slice fallida falla la tarea una vez");
         assertFalse(completion.calls.get(0).result().success());
+    }
+
+    @Test
+    void continueOnFailureClosingSliceCompletesWithErrorsNotFailure() throws Exception {
+        when(registry.resolve("DB_WRITE")).thenReturn(new CapturingBatchProvider(TaskResult.failure("bad row")));
+        when(gather.failSlice(any(), any(), anyBoolean())).thenReturn(Optional.of(new SliceProgress(2, 1, 3, true)));
+
+        var workItem = new AsyncSliceWorkItem(Map.of("continueOnFailure", true),
+                java.util.List.of(Map.of("id", "x")), 2, 3);
+        var envelope = new AsyncTaskEnvelope("exec-1", 1L, 2L, "DB_WRITE", "KAFKA",
+                TaskIdempotency.key(1L, 2L, "slice-2"), 1, mapper.writeValueAsString(workItem),
+                Map.of("kind", "SLICE", "sliceIndex", "2"));
+        var payload = AsyncTaskMessageCodec.toMessage(envelope, mapper).payload();
+
+        var result = consumer.consume(payload, "KAFKA", "tasks.db_write");
+
+        assertEquals(AsyncTaskConsumer.ConsumeResult.FAILED, result);
+        assertEquals(1, completion.calls.size());
+        assertTrue(completion.calls.get(0).result().success(),
+                "continueOnFailure: la tarea completa CON errores, no falla el proceso");
     }
 
     // --- fakes -----------------------------------------------------------------

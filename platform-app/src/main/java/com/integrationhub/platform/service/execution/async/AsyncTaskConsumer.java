@@ -148,16 +148,17 @@ public class AsyncTaskConsumer {
             inbox.recordDead(envelope, "slice ilegible: " + badSlice.getOriginalMessage());
             return ConsumeResult.DEAD;
         }
+        var continueOnFailure = asBoolean(item.configuration().get("continueOnFailure"));
 
         TaskProvider provider;
         try {
             provider = providers.resolve(envelope.taskType());
         } catch (IllegalArgumentException unknown) {
-            failSliceAndMaybeFailTask(envelope, unknown.getMessage());
+            failSlice(envelope, unknown.getMessage(), continueOnFailure);
             return ConsumeResult.DEAD;
         }
         if (!(provider instanceof BatchTaskProvider batchProvider)) {
-            failSliceAndMaybeFailTask(envelope, "el tipo '" + envelope.taskType() + "' no es BatchTaskProvider");
+            failSlice(envelope, "el tipo '" + envelope.taskType() + "' no es BatchTaskProvider", continueOnFailure);
             return ConsumeResult.DEAD;
         }
 
@@ -167,30 +168,54 @@ public class AsyncTaskConsumer {
         var result = batchProvider.executeRecords(context, item.configuration(), records, null);
 
         if (result.suspended()) {
-            failSliceAndMaybeFailTask(envelope, "una slice no puede suspenderse en el consumer");
+            failSlice(envelope, "una slice no puede suspenderse en el consumer", continueOnFailure);
             return ConsumeResult.DEAD;
         }
         if (!result.success()) {
-            failSliceAndMaybeFailTask(envelope, result.details());
+            failSlice(envelope, result.details(), continueOnFailure);
             return ConsumeResult.FAILED;
         }
 
         var progress = gather.commitCompletedSlice(envelope, writeOutputs(result.outputs()), result.details());
-        if (progress.filter(TaskAsyncDispatchRepository.SliceProgress::batchCompleted).isPresent()) {
-            // La última slice cerró el conteo: reanudar la tarea UNA vez con el resultado agregado.
-            var total = progress.get().total();
-            completion.completeFromExternalResult(envelope.processExecutionId(), envelope.taskDefinitionId(),
-                    TaskResult.success("scatter completado: " + total + " slices"));
-        }
+        progress.filter(TaskAsyncDispatchRepository.SliceProgress::terminal)
+                .ifPresent(p -> resumeTaskOnTerminal(envelope, p, continueOnFailure));
         return ConsumeResult.PROCESSED;
     }
 
-    /** Cuenta la slice como fallida y, si es la que transiciona el scatter a FAILED, falla la tarea una vez. */
-    private void failSliceAndMaybeFailTask(AsyncTaskEnvelope envelope, String error) {
-        if (gather.failSlice(envelope, error)) {
-            completion.completeFromExternalResult(envelope.processExecutionId(), envelope.taskDefinitionId(),
-                    TaskResult.failure("scatter fallido: " + error));
+    /** Cuenta una slice fallida; si esa slice cierra el scatter, reanuda/falla la tarea una vez. */
+    private void failSlice(AsyncTaskEnvelope envelope, String error, boolean continueOnFailure) {
+        gather.failSlice(envelope, error, continueOnFailure)
+                .filter(TaskAsyncDispatchRepository.SliceProgress::terminal)
+                .ifPresent(p -> resumeTaskOnTerminal(envelope, p, continueOnFailure));
+    }
+
+    /**
+     * Reanuda la tarea suspendida una vez, con el resultado agregado del scatter: éxito si no hubo
+     * fallos; éxito con errores si {@code continueOnFailure} y hubo fallos; failure en fail-fast.
+     */
+    private void resumeTaskOnTerminal(AsyncTaskEnvelope envelope,
+                                      TaskAsyncDispatchRepository.SliceProgress progress,
+                                      boolean continueOnFailure) {
+        TaskResult result;
+        if (progress.failed() == 0) {
+            result = TaskResult.success("scatter completado: " + progress.total() + " slices");
+        } else if (continueOnFailure) {
+            result = TaskResult.success(
+                    "scatter completado con errores: " + progress.completed() + " ok, " + progress.failed()
+                            + " fallidas de " + progress.total(),
+                    Map.of("scatterCompleted", progress.completed(),
+                            "scatterFailed", progress.failed(),
+                            "scatterTotal", progress.total()));
+        } else {
+            result = TaskResult.failure(
+                    "scatter fallido: " + progress.failed() + " slice(s) fallida(s) de " + progress.total());
         }
+        completion.completeFromExternalResult(envelope.processExecutionId(), envelope.taskDefinitionId(), result);
+    }
+
+    private boolean asBoolean(Object value) {
+        return value instanceof Boolean b ? b
+                : value != null && "true".equalsIgnoreCase(String.valueOf(value).trim());
     }
 
     private Map<String, Object> decodeConfiguration(String payload) throws JsonProcessingException {

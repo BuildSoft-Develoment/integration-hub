@@ -43,7 +43,7 @@ class SliceGatherServiceTest {
     @Test
     void countsSliceWhenTrackerActive() {
         inboxInsertReturns(1);
-        when(tracker.recordSliceCompleted(1L, 2L)).thenReturn(Optional.of(new SliceProgress(1, 3, false)));
+        when(tracker.recordSliceCompleted(1L, 2L)).thenReturn(Optional.of(new SliceProgress(1, 0, 3, false)));
 
         var progress = service.commitCompletedSlice(envelope, "{}", "ok");
 

@@ -55,18 +55,25 @@ public class SliceGatherService {
     }
 
     /**
-     * Cuenta una slice fallida (sin recuperación): dedup en el inbox y, si es nueva, transiciona el
-     * scatter a FAILED. Devuelve {@code true} si esta entrega provocó la transición (para que el caller
-     * falle la tarea una sola vez).
+     * Cuenta una slice fallida: dedup en el inbox y, si es nueva, avanza el scatter (fail-fast → FAILED;
+     * continueOnFailure → cuenta la fallida y cierra cuando todas están contadas). Devuelve el progreso
+     * si esta entrega contó la slice; vacío si era duplicada.
      */
     @Transactional
-    public boolean failSlice(AsyncTaskEnvelope envelope, String error) {
+    public Optional<SliceProgress> failSlice(AsyncTaskEnvelope envelope, String error, boolean continueOnFailure) {
         var inserted = inbox.insertIfAbsent(envelope.idempotencyKey(), envelope.taskType(),
                 envelope.processExecutionId(), envelope.taskDefinitionId(), TaskInbox.DEAD,
                 null, null, error, null, envelope.transport(), null);
         if (inserted == 0) {
-            return false;
+            return Optional.empty();
         }
-        return tracker.recordSliceFailed(envelope.processExecutionId(), envelope.taskDefinitionId());
+        var progress = tracker.recordSliceFailed(envelope.processExecutionId(), envelope.taskDefinitionId(),
+                continueOnFailure);
+        if (progress.isEmpty()
+                && tracker.findByExecutionAndTask(envelope.processExecutionId(), envelope.taskDefinitionId()).isEmpty()) {
+            throw new IllegalStateException("Tracker scatter ausente para exec="
+                    + envelope.processExecutionId() + " task=" + envelope.taskDefinitionId() + "; reintentar");
+        }
+        return progress;
     }
 }

@@ -40,41 +40,68 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
      */
     @Transactional
     public Optional<SliceProgress> recordSliceCompleted(Long processExecutionId, Long taskDefinitionId) {
+        // Terminal cuando TODAS las slices están contadas (completadas + fallidas == total). En
+        // fail-fast, failed_slices queda en 0 (un fallo pone FAILED y corta), así equivale a
+        // completed==total. En continueOnFailure, las fallidas cuentan para el cierre.
         var rows = getEntityManager().createNativeQuery("""
                 update task_async_dispatch
                    set completed_slices = completed_slices + 1,
-                       status = case when completed_slices + 1 >= total_slices then 'COMPLETED' else status end,
-                       completed_at = case when completed_slices + 1 >= total_slices then current_timestamp else completed_at end
+                       status = case when completed_slices + 1 + failed_slices >= total_slices then 'COMPLETED' else status end,
+                       completed_at = case when completed_slices + 1 + failed_slices >= total_slices then current_timestamp else completed_at end
                  where process_execution_id = ?1 and task_definition_id = ?2 and status = 'PENDING'
-                returning completed_slices, total_slices, status
+                returning completed_slices, failed_slices, total_slices, status
                 """)
                 .setParameter(1, processExecutionId)
                 .setParameter(2, taskDefinitionId)
                 .getResultList();
+        return mapProgress(rows, false);
+    }
+
+    /**
+     * Marca una slice fallida. En <b>fail-fast</b> ({@code continueOnFailure=false}) el scatter pasa a
+     * {@code FAILED} de inmediato (la tarea fallará). En <b>continueOnFailure</b> la fallida se cuenta y
+     * el scatter cierra ({@code COMPLETED}) cuando todas las slices están contadas — la tarea completa
+     * con errores. Devuelve el progreso si había un scatter activo.
+     */
+    @Transactional
+    public Optional<SliceProgress> recordSliceFailed(Long processExecutionId, Long taskDefinitionId,
+                                                     boolean continueOnFailure) {
+        var sql = continueOnFailure
+                ? """
+                update task_async_dispatch
+                   set failed_slices = failed_slices + 1,
+                       status = case when completed_slices + failed_slices + 1 >= total_slices then 'COMPLETED' else status end,
+                       completed_at = case when completed_slices + failed_slices + 1 >= total_slices then current_timestamp else completed_at end
+                 where process_execution_id = ?1 and task_definition_id = ?2 and status = 'PENDING'
+                returning completed_slices, failed_slices, total_slices, status
+                """
+                : """
+                update task_async_dispatch
+                   set failed_slices = failed_slices + 1, status = 'FAILED', completed_at = current_timestamp
+                 where process_execution_id = ?1 and task_definition_id = ?2 and status = 'PENDING'
+                returning completed_slices, failed_slices, total_slices, status
+                """;
+        var rows = getEntityManager().createNativeQuery(sql)
+                .setParameter(1, processExecutionId)
+                .setParameter(2, taskDefinitionId)
+                .getResultList();
+        // fail-fast: transicionar a FAILED es terminal (la tarea falla). continue: terminal solo al cerrar.
+        return mapProgress(rows, !continueOnFailure);
+    }
+
+    private Optional<SliceProgress> mapProgress(java.util.List<?> rows, boolean terminalIfPresent) {
         if (rows.isEmpty()) {
             return Optional.empty();
         }
         var row = (Object[]) rows.get(0);
         var completed = ((Number) row[0]).intValue();
-        var total = ((Number) row[1]).intValue();
-        var status = String.valueOf(row[2]);
-        return Optional.of(new SliceProgress(completed, total, TaskAsyncDispatch.COMPLETED.equals(status)));
-    }
-
-    /**
-     * Marca una slice fallida sin recuperación: el scatter pasa a {@code FAILED} (no podrá cerrar).
-     * Devuelve {@code true} si transicionó (había un scatter activo).
-     */
-    @Transactional
-    public boolean recordSliceFailed(Long processExecutionId, Long taskDefinitionId) {
-        return getEntityManager().createNativeQuery("""
-                update task_async_dispatch
-                   set failed_slices = failed_slices + 1, status = 'FAILED'
-                 where process_execution_id = ?1 and task_definition_id = ?2 and status = 'PENDING'
-                """)
-                .setParameter(1, processExecutionId)
-                .setParameter(2, taskDefinitionId)
-                .executeUpdate() > 0;
+        var failed = ((Number) row[1]).intValue();
+        var total = ((Number) row[2]).intValue();
+        var status = String.valueOf(row[3]);
+        var terminal = terminalIfPresent
+                || TaskAsyncDispatch.COMPLETED.equals(status)
+                || TaskAsyncDispatch.FAILED.equals(status);
+        return Optional.of(new SliceProgress(completed, failed, total, terminal));
     }
 
     public Optional<TaskAsyncDispatch> findByExecutionAndTask(Long processExecutionId, Long taskDefinitionId) {
@@ -82,7 +109,11 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
                 .firstResultOptional();
     }
 
-    /** Progreso de la agregación tras contar una slice. */
-    public record SliceProgress(int completed, int total, boolean batchCompleted) {
+    /**
+     * Progreso de la agregación tras contar una slice. {@code terminal} = todas las slices contadas
+     * (el que lo ve dispara la reanudación/fallo de la tarea una vez); {@code failed>0} en un cierre
+     * terminal ⇒ completó con errores.
+     */
+    public record SliceProgress(int completed, int failed, int total, boolean terminal) {
     }
 }
