@@ -20,6 +20,8 @@ import java.util.HashSet;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * E2E del scatter por <b>table-streaming</b> (ADR-015, page-chain): una tarea batch async con input por
@@ -71,6 +73,30 @@ class AsyncStreamingScatterE2EIT {
         assertEquals("COMPLETED", readString("select status from process_execution where id = " + ids[0]));
         assertEquals("3", readString("select count(*) from task_inbox where status = 'PROCESSED'"),
                 "dedup por-página: 3 filas PROCESSED (page-0/1/2)");
+    }
+
+    @Test
+    void failFastMidChainStopsTheChainAndSkipsRemainingPages() throws Exception {
+        // 7 filas, batchSize 2 → páginas [1,2] [3,4] [5,6] [7]. Falla en el id 3 (página 1), fail-fast.
+        for (var i = 1; i <= 7; i++) {
+            exec("insert into stream_src (id, payload) values (" + i + ", 'p" + i + "')");
+        }
+        RecordingBatchTaskProvider.FAIL_ON_RECORD_ID = "3";
+        var ids = seedRunningTask();
+
+        seedStreamingScatter(ids, 2);
+        drainOutbox();
+
+        // La tarea/proceso fallan (fail-fast).
+        assertEquals("FAILED", readString(
+                "select status from task_async_dispatch where process_execution_id = " + ids[0]));
+        assertEquals("FAILED", readString("select status from process_execution where id = " + ids[0]));
+        // Se procesaron las páginas 0 y 1 (ids 1-4); las siguientes (5,6,7) NO: la cadena se cortó.
+        assertTrue(RecordingBatchTaskProvider.SEEN_IDS.containsAll(java.util.List.of("1", "2", "3", "4")));
+        assertFalse(RecordingBatchTaskProvider.SEEN_IDS.contains("5"),
+                "la página tras el fail-fast cortocircuita: no ejecuta el provider ni sigue la cadena");
+        assertFalse(RecordingBatchTaskProvider.SEEN_IDS.contains("6"));
+        assertFalse(RecordingBatchTaskProvider.SEEN_IDS.contains("7"));
     }
 
     @Test

@@ -10,6 +10,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -27,11 +29,17 @@ public class RecordingBatchTaskProvider implements BatchTaskProvider {
     /** taskOutputs rehidratado en la última slice (Nivel 2): prueba la propagación de contexto E2E. */
     public static final java.util.concurrent.atomic.AtomicReference<Object> SEEN_TASK_OUTPUTS =
             new java.util.concurrent.atomic.AtomicReference<>();
+    /** ids de los records vistos por el provider (prueba qué páginas se ejecutaron y cuáles no). */
+    public static final Set<String> SEEN_IDS = ConcurrentHashMap.newKeySet();
+    /** Si un batch contiene este id, el provider falla (para probar fail-fast en streaming); null = nunca. */
+    public static volatile String FAIL_ON_RECORD_ID = null;
 
     public static void reset() {
         SLICE_EXECUTIONS.set(0);
         TOTAL_RECORDS.set(0);
         SEEN_TASK_OUTPUTS.set(null);
+        SEEN_IDS.clear();
+        FAIL_ON_RECORD_ID = null;
     }
 
     @Override
@@ -51,6 +59,19 @@ public class RecordingBatchTaskProvider implements BatchTaskProvider {
         SLICE_EXECUTIONS.incrementAndGet();
         TOTAL_RECORDS.addAndGet(records.size());
         SEEN_TASK_OUTPUTS.set(context.attributes().get("taskOutputs"));
+        boolean fail = false;
+        for (var record : records) {
+            var id = record.values().get("id");
+            if (id != null) {
+                SEEN_IDS.add(String.valueOf(id));
+                if (FAIL_ON_RECORD_ID != null && FAIL_ON_RECORD_ID.equals(String.valueOf(id))) {
+                    fail = true;
+                }
+            }
+        }
+        if (fail) {
+            return TaskResult.failure("slice falló en record " + FAIL_ON_RECORD_ID);
+        }
         return TaskResult.success("slice ok", Map.of("count", records.size()));
     }
 }
