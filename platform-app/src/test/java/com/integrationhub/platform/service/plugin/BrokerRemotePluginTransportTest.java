@@ -57,12 +57,19 @@ class BrokerRemotePluginTransportTest {
         assertEquals("offset-1", result.suspendedState().get("brokerReference"));
         assertEquals(AsyncTaskMessageCodec.topicFor("ACME_DO"), captured.get().topic());
         assertEquals("plugin:acme:42:7:ACME_DO", captured.get().key());
-        assertEquals("acme", captured.get().headers().get("pluginId"));
+        // Wire-format = envelope entero como payload (patron audit/sidecar): headers de mensaje
+        // vacios; la correlacion (pluginId, taskType, ids) va DENTRO del envelope.
+        assertTrue(captured.get().headers().isEmpty());
 
-        var payload = new ObjectMapper().readValue(captured.get().payload(), Map.class);
-        assertEquals("acme", payload.get("pluginId"));
-        assertEquals("ACME_DO", payload.get("taskType"));
-        assertEquals(42, payload.get("processExecutionId"));
+        var envelope = AsyncTaskMessageCodec.decode(captured.get().payload(), new ObjectMapper());
+        assertEquals("ACME_DO", envelope.taskType());
+        assertEquals(42L, envelope.processExecutionId());
+        assertEquals("acme", envelope.headers().get("pluginId"));
+
+        var body = new ObjectMapper().readValue(envelope.payload(), Map.class);
+        assertEquals("acme", body.get("pluginId"));
+        assertEquals("ACME_DO", body.get("taskType"));
+        assertEquals(42, body.get("processExecutionId"));
     }
 
     @Test
