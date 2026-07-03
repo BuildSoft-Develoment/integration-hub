@@ -161,6 +161,33 @@ class AsyncStreamingScatterE2EIT {
     }
 
     @Test
+    void sweepRecoversMultipleStalledScattersIndependently() throws Exception {
+        for (var i = 1; i <= 3; i++) {
+            exec("insert into stream_src (id, payload) values (" + i + ", 'p" + i + "')");
+        }
+        // Dos scatters streaming distintos (mismo origen), ambos rotos.
+        var a = seedRunningTask();
+        seedStreamingScatter(a, 2);
+        var b = seedRunningTask();
+        seedStreamingScatter(b, 2);
+
+        var consumed = new HashSet<Long>();
+        consumeFirstUnconsumed(consumed); // seed de A → encola A-page-1
+        consumeFirstUnconsumed(consumed); // seed de B → encola B-page-1
+        // Pierde ambas page-1 (las 2 filas más nuevas): las dos cadenas quedan estancadas.
+        exec("delete from task_dispatch_outbox where id in "
+                + "(select id from task_dispatch_outbox order by id desc limit 2)");
+
+        // Un solo sweep re-inyecta AMBOS (loop multi-item, cada requeue en su tx propia).
+        var recovered = dlqService.recoverStalledStreamingScatters(java.time.Duration.ZERO, 10);
+        assertEquals(2, recovered, "el sweep recupera los dos scatters estancados independientemente");
+        drainOutbox(consumed);
+
+        assertEquals("COMPLETED", readString("select status from process_execution where id = " + a[0]));
+        assertEquals("COMPLETED", readString("select status from process_execution where id = " + b[0]));
+    }
+
+    @Test
     void stalledChainIsAutoRecoveredBySweep() throws Exception {
         for (var i = 1; i <= 5; i++) {
             exec("insert into stream_src (id, payload) values (" + i + ", 'p" + i + "')");
@@ -221,7 +248,8 @@ class AsyncStreamingScatterE2EIT {
         var seed = AsyncPageWorkItem.seed("stream_src", null, "id", Map.of(), batchSize,
                 Map.of(), taskOutputs, Map.of(), Map.of());
         var scatter = ScatterDispatch.streaming(ids[0], ids[1], RecordingBatchTaskProvider.TASK_TYPE, "KAFKA", seed);
-        stateService.suspendTask(ids[0], ids[2], "{\"scatter\":true}", "tok-streaming", null, null,
+        // Token único por tarea (ux_process_task_execution_resume_token) para permitir múltiples scatters.
+        stateService.suspendTask(ids[0], ids[2], "{\"scatter\":true}", "tok-streaming-" + ids[2], null, null,
                 "scatter", Map.of(), scatter);
     }
 
@@ -250,11 +278,14 @@ class AsyncStreamingScatterE2EIT {
         }
     }
 
+    private final java.util.concurrent.atomic.AtomicInteger seedSeq = new java.util.concurrent.atomic.AtomicInteger();
+
     private long[] seedRunningTask() throws Exception {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
+            // Nombre único por llamada (process_definition.name suele ser único) para permitir múltiples seeds.
             statement.executeUpdate("insert into process_definition (name, description, active, scheduled) "
-                    + "values ('streaming-scatter-e2e', '', true, false)");
+                    + "values ('streaming-scatter-e2e-" + seedSeq.incrementAndGet() + "', '', true, false)");
             var pdId = lastId(statement, "process_definition");
             statement.executeUpdate("insert into process_task_definition "
                     + "(process_definition_id, task_order, task_type, active, configuration_json) "
