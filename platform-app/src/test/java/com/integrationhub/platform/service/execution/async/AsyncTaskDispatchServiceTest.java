@@ -60,7 +60,7 @@ class AsyncTaskDispatchServiceTest {
 
     @Test
     void transportOverrideIsHonoredAndUppercased() {
-        var result = service(true).prepare(1L, 2L, "REST_CALL", Map.of("async", true, "transport", "rabbitmq"));
+        var result = service(true).prepare(1L, 2L, "REST_CALL", Map.of("async", true, "asyncTransport", "rabbitmq"));
 
         assertEquals("RABBITMQ", result.get().transport());
     }

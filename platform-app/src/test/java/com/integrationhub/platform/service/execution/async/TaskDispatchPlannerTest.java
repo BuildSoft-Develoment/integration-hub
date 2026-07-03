@@ -36,7 +36,7 @@ class TaskDispatchPlannerTest {
 
     @Test
     void asyncWithExplicitTransportNormalizedToUpperCase() {
-        var dispatch = planner.plan(Map.of("async", true, "transport", "rabbitmq"));
+        var dispatch = planner.plan(Map.of("async", true, "asyncTransport", "rabbitmq"));
         assertTrue(dispatch.isAsync());
         assertEquals("RABBITMQ", dispatch.transport());
     }

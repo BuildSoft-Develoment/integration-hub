@@ -139,4 +139,39 @@ describe('DB task binding serialization (motor ADR-004)', () => {
       expect(row?.sourceKey).toBe('id');
     });
   });
+
+  // Despacho async (ADR-015): campos runtime compartidos en la base ProcessTaskProvider.
+  describe('async dispatch serialization (ADR-015)', () => {
+    const modelFor = (configurationJson: string): any => ({
+      clientId: 'c1',
+      taskOrder: 1,
+      taskType: 'DB_WRITE',
+      configurationJson,
+    });
+
+    it('round-trips async / asyncTransport / continueOnFailure', () => {
+      const p = new DbWriteTaskProvider();
+      const draft: any = { ...p.createDraft(), taskRef: 'task-1', async: true, asyncTransport: 'RABBITMQ', continueOnFailure: true };
+
+      const config = JSON.parse(p.toTaskPatch(draft).configurationJson as string);
+      expect(config.async).toBe(true);
+      expect(config.asyncTransport).toBe('RABBITMQ');
+      expect(config.continueOnFailure).toBe(true);
+
+      const rehydrated: any = p.hydrateDraft(modelFor(JSON.stringify(config)));
+      expect(rehydrated.async).toBe(true);
+      expect(rehydrated.asyncTransport).toBe('RABBITMQ');
+      expect(rehydrated.continueOnFailure).toBe(true);
+    });
+
+    it('omits async keys when sync (config queda limpia, sin colisionar con transport de dominio)', () => {
+      const p = new DbWriteTaskProvider();
+      const config = JSON.parse(p.toTaskPatch({ ...p.createDraft(), taskRef: 'task-1' } as any).configurationJson as string);
+
+      expect(config.async).toBeUndefined();
+      expect(config.asyncTransport).toBeUndefined();
+      expect(config.continueOnFailure).toBeUndefined();
+      expect(config.transport).toBeUndefined();
+    });
+  });
 });

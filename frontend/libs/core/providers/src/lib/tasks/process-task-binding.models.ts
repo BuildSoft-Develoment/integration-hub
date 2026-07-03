@@ -17,6 +17,12 @@ export interface ProcessTaskRuntimeDraft {
   taskRef: string;
   executionMode: ProcessTaskExecutionMode;
   input?: ProcessTaskInputDraft;
+  // Despacho async (ADR-015): offload de la tarea a un broker. `asyncTransport` y `continueOnFailure`
+  // solo aplican con `async=true` (este ultimo, en modo batch/per-record = scatter). Clave propia
+  // `asyncTransport` (no `transport`) para no colisionar con el `transport` de dominio de MT101.
+  async?: boolean;
+  asyncTransport?: string;
+  continueOnFailure?: boolean;
 }
 
 export interface ProcessTaskBindingOption {

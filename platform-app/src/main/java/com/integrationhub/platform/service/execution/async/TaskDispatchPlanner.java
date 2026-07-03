@@ -11,9 +11,10 @@ import java.util.Map;
  * <p>Contrato de configuracion de tarea:</p>
  * <ul>
  *   <li>{@code async: true} -> ASYNC; ausente o {@code false} -> SYNC (default).</li>
- *   <li>{@code transport: <broker>} -> override del broker; por defecto
+ *   <li>{@code asyncTransport: <broker>} -> override del broker; por defecto
  *       {@link #DEFAULT_TRANSPORT} (Kafka). La validez del broker la resuelve
- *       {@code MessageBrokerRegistry} en el despacho.</li>
+ *       {@code MessageBrokerRegistry} en el despacho. Clave propia (no {@code transport})
+ *       para no colisionar con el {@code transport} de dominio de MT101 (ruta de pago).</li>
  * </ul>
  *
  * <p>Logica pura (sin estado ni I/O) para que sea trivialmente testeable.</p>
@@ -29,7 +30,7 @@ public class TaskDispatchPlanner {
             return TaskDispatch.sync();
         }
 
-        var transport = asString(configuration.get("transport"));
+        var transport = asString(configuration.get("asyncTransport"));
         var resolved = (transport == null || transport.isBlank())
                 ? DEFAULT_TRANSPORT
                 : transport.trim().toUpperCase();
