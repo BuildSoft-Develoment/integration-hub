@@ -39,13 +39,17 @@ public class RestCallTaskProvider implements BatchTaskProvider {
     }
 
     /**
-     * Solo lee {@code processExecutionId}/{@code taskDefinitionId} (presentes en el context
-     * reconstruido) y los {@code records}; estos únicamente viajan como slices ⇒ offloadable como
-     * scatter (batch/per-record), no en {@code once}.
+     * <b>UNSUPPORTED</b>: aunque los {@code records} viajan en el slice, las plantillas de URL/body
+     * resuelven variables de las <b>tareas origen elegidas</b> (p.ej. {@code ${task-1.output}}) vía
+     * {@link RestTaskSupport#buildRecordVariables}/{@code buildBatchVariables} →
+     * {@code TaskOutputSupport.mergeTaskOutputs(context)}, que lee {@code taskOutputs} del contexto. Ese
+     * contexto <b>no viaja</b> en el envelope/slice (el consumer arma un {@code TaskContext} vacío), así
+     * que las variables de origen quedarían sin resolver → request malformado. No se ofrece async hasta
+     * propagar el contexto resuelto en el envelope (mejora "Nivel 2").
      */
     @Override
     public AsyncOffloadSupport asyncOffloadSupport() {
-        return AsyncOffloadSupport.SLICE_ONLY;
+        return AsyncOffloadSupport.UNSUPPORTED;
     }
 
     @Override

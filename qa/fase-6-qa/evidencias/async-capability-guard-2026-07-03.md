@@ -72,6 +72,27 @@ Capacidad declarada por el provider + guard que **lanza** (no degrada a síncron
   toggle visible si ya activo) y `process-task-runtime-panel.spec` (+2: expone capacidad del catálogo,
   default SUPPORTED si ausente).
 
+## Corrección (doble check 2 — REST_CALL mal clasificado)
+
+Un segundo doble check (input del usuario: "cada task elige tarea origen y de ahí lee records **y
+variables**, no necesariamente la tarea anterior") destapó que `REST_CALL` **no** es `SLICE_ONLY`-safe:
+
+- Sus plantillas de URL/body resuelven variables de las **tareas origen elegidas** (p.ej.
+  `${task-1.output}`) vía `RestTaskSupport.buildRecordVariables`/`buildBatchVariables` →
+  `TaskOutputSupport.mergeTaskOutputs(context)`, que lee `taskOutputs` del contexto.
+- Ese `taskOutputs` **no viaja** en el `AsyncSliceWorkItem` (solo `configuration` + `records`) y el
+  consumer arma un `TaskContext` vacío → las variables de origen quedan sin resolver → request
+  malformado. Es el mismo patrón de indirección (helper que lee contexto) que ocultó los MT101; el grep
+  de `attributes().get(` directo no lo detecta.
+
+**Fix:** `RestCallTaskProvider.asyncOffloadSupport()` → **`UNSUPPORTED`** (documentado con el porqué).
+Consecuencia honesta: con el envelope actual (config + records) **ningún provider de producción es
+async-safe** — todos leen contexto (directo o vía `TaskOutputSupport`/`Mt101MessageInputResolver`) y
+`taskOutputs`/`metadata`/`executionVariables` no se propagan. La infra async es correcta pero **inerte**
+hasta la mejora "Nivel 2" (propagar el contexto resuelto serializable en el envelope/slice). El tier
+`SLICE_ONLY` queda validado por el test-provider `TEST_SCATTER_BATCH` (que solo usa los records del
+slice, sin contexto de origen).
+
 ## Estado
 
 Cerrado el gap real: un tipo no capaz marcado async (por UI **o** JSON/API crudo) ahora **falla fuerte
