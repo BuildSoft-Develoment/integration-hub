@@ -195,7 +195,10 @@ public class ProcessExecutionService {
                                 SuspensionExpiry.expiresAt(runResult.suspendedState()),
                                 continuationJson,
                                 details,
-                                payload);
+                                payload,
+                                // ADR-015: si es despacho async, el work-item se encola en el outbox
+                                // en ESTA misma transaccion (transactional outbox).
+                                runResult.asyncDispatch());
                         taskSpan.setAttribute("task.suspended", true);
                         taskSpan.setAttribute("task.resume.token", token);
                         return processExecutionStateService.getExecution(processExecutionId);

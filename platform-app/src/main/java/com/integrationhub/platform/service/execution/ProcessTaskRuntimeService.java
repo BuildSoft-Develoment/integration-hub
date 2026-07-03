@@ -69,20 +69,22 @@ public class ProcessTaskRuntimeService {
 
         // ADR-015 Etapa 3: si la tarea está marcada async (y el feature está activo), se offloada al
         // broker en vez de ejecutarse in-process. Gated OFF por defecto → sin cambio de comportamiento.
-        var asyncDispatch = asyncTaskDispatchService.dispatch(
+        var asyncEnvelope = asyncTaskDispatchService.prepare(
                 processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(), configuration);
-        if (asyncDispatch.isPresent()) {
+        if (asyncEnvelope.isPresent()) {
             if (requiresRecordInput(executionMode)) {
                 // No se degrada a síncrono en silencio: el offload async por lotes aún no existe.
                 throw new IllegalStateException("El despacho async aún no soporta executionMode '"
                         + executionMode + "' (tarea " + taskPlan.taskType() + ")");
             }
-            var suspension = asyncDispatch.get();
-            return TaskRunResult.suspended(
-                    "Tarea " + taskPlan.taskType() + " despachada async por " + suspension.transport(),
+            var envelope = asyncEnvelope.get();
+            // El enqueue lo hace el motor atómicamente con la suspensión (transactional outbox).
+            return TaskRunResult.suspendedAsync(
+                    "Tarea " + taskPlan.taskType() + " despachada async por " + envelope.transport(),
                     Map.of("asyncDispatch", true,
-                            "idempotencyKey", suspension.idempotencyKey(),
-                            "transport", suspension.transport()));
+                            "idempotencyKey", envelope.idempotencyKey(),
+                            "transport", envelope.transport()),
+                    envelope);
         }
 
         var resolvedInput = taskInputResolver.resolve(configuration, taskOutputs);
@@ -237,16 +239,17 @@ public class ProcessTaskRuntimeService {
             Map<String, Object> outputs,
             boolean fileRead,
             boolean suspended,
-            Map<String, Object> suspendedState
+            Map<String, Object> suspendedState,
+            com.integrationhub.platform.task.AsyncTaskEnvelope asyncDispatch
     ) {
         static TaskRunResult fileRead(SourcePayload sourcePayload, ReadResult readResult) {
-            return new TaskRunResult(true, null, sourcePayload, readResult, Map.of(), true, false, Map.of());
+            return new TaskRunResult(true, null, sourcePayload, readResult, Map.of(), true, false, Map.of(), null);
         }
 
         static TaskRunResult generic(boolean success, String details, SourcePayload sourcePayload, ReadResult readResult, Map<String, Object> outputs) {
             return new TaskRunResult(success, details, sourcePayload, readResult,
                     outputs == null ? Map.of() : new LinkedHashMap<>(outputs),
-                    false, false, Map.of());
+                    false, false, Map.of(), null);
         }
 
         /**
@@ -258,7 +261,18 @@ public class ProcessTaskRuntimeService {
          */
         static TaskRunResult suspended(String details, Map<String, Object> suspendedState) {
             return new TaskRunResult(true, details, null, null, Map.of(), false, true,
-                    suspendedState == null ? Map.of() : new LinkedHashMap<>(suspendedState));
+                    suspendedState == null ? Map.of() : new LinkedHashMap<>(suspendedState), null);
+        }
+
+        /**
+         * Suspensión por <b>despacho async</b> (ADR-015): la tarea se offloada a un broker. El engine
+         * persiste la suspensión y encola {@code asyncDispatch} en el outbox <b>en la misma
+         * transacción</b> (transactional outbox), para que la trama nunca sea visible sin su suspensión.
+         */
+        static TaskRunResult suspendedAsync(String details, Map<String, Object> suspendedState,
+                                            com.integrationhub.platform.task.AsyncTaskEnvelope asyncDispatch) {
+            return new TaskRunResult(true, details, null, null, Map.of(), false, true,
+                    suspendedState == null ? Map.of() : new LinkedHashMap<>(suspendedState), asyncDispatch);
         }
     }
 }

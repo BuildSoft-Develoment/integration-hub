@@ -9,6 +9,8 @@ import com.integrationhub.platform.repository.ProcessDefinitionRepository;
 import com.integrationhub.platform.repository.ProcessExecutionRepository;
 import com.integrationhub.platform.repository.ProcessTaskDefinitionRepository;
 import com.integrationhub.platform.repository.ProcessTaskExecutionRepository;
+import com.integrationhub.platform.service.execution.async.TaskOutboxStore;
+import com.integrationhub.platform.task.AsyncTaskEnvelope;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 
@@ -25,19 +27,22 @@ public class ProcessExecutionStateService {
     private final ProcessExecutionRepository processExecutionRepository;
     private final ProcessTaskExecutionRepository processTaskExecutionRepository;
     private final AuditService auditService;
+    private final TaskOutboxStore taskOutboxStore;
 
     public ProcessExecutionStateService(
             ProcessDefinitionRepository processDefinitionRepository,
             ProcessTaskDefinitionRepository processTaskDefinitionRepository,
             ProcessExecutionRepository processExecutionRepository,
             ProcessTaskExecutionRepository processTaskExecutionRepository,
-            AuditService auditService
+            AuditService auditService,
+            TaskOutboxStore taskOutboxStore
     ) {
         this.processDefinitionRepository = processDefinitionRepository;
         this.processTaskDefinitionRepository = processTaskDefinitionRepository;
         this.processExecutionRepository = processExecutionRepository;
         this.processTaskExecutionRepository = processTaskExecutionRepository;
         this.auditService = auditService;
+        this.taskOutboxStore = taskOutboxStore;
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
@@ -182,6 +187,28 @@ public class ProcessExecutionStateService {
                             String continuationJson,
                             String details,
                             Object auditPayload) {
+        suspendTask(processExecutionId, taskExecutionId, suspendedStateJson, resumeToken,
+                expiresAt, continuationJson, details, auditPayload, null);
+    }
+
+    /**
+     * Variante para el <b>despacho async</b> (ADR-015): persiste la suspensión y, si hay
+     * {@code asyncDispatch}, encola el work-item en el outbox <b>en esta misma transacción</b>
+     * (transactional outbox). Así la trama y su suspensión commitean atómicamente: nunca hay una
+     * trama consumible sin su suspensión (evita {@code NOT_FOUND}: efecto huérfano + completación
+     * perdida), ni una suspensión sin su trama (proceso colgado). El {@code enqueue} del store es
+     * {@code @Transactional(REQUIRED)} → se une a esta tx REQUIRES_NEW.
+     */
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public void suspendTask(Long processExecutionId,
+                            Long taskExecutionId,
+                            String suspendedStateJson,
+                            String resumeToken,
+                            LocalDateTime expiresAt,
+                            String continuationJson,
+                            String details,
+                            Object auditPayload,
+                            AsyncTaskEnvelope asyncDispatch) {
         var execution = processExecutionRepository.findById(processExecutionId);
         var taskExecution = processTaskExecutionRepository.findById(taskExecutionId);
         taskExecution.status = ExecutionStatus.SUSPENDED;
@@ -198,6 +225,9 @@ public class ProcessExecutionStateService {
         execution.status = ExecutionStatus.SUSPENDED;
         auditService.record(execution, taskExecution.taskDefinition,
                 "TASK_SUSPENDED", "SUSPENDED", details, auditPayload);
+        if (asyncDispatch != null) {
+            taskOutboxStore.enqueue(asyncDispatch);
+        }
     }
 
     /**
