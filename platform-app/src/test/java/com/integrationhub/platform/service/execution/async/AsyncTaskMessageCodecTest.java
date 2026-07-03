@@ -40,4 +40,13 @@ class AsyncTaskMessageCodecTest {
     void unknownTopicForBlankType() {
         assertEquals("tasks.unknown", AsyncTaskMessageCodec.topicFor("  "));
     }
+
+    @Test
+    void decodeIsTheInverseOfToMessage() {
+        var original = envelope("DB_WRITE");
+        var restored = AsyncTaskMessageCodec.decode(AsyncTaskMessageCodec.toMessage(original));
+        // Lossless: el consumer reconstruye el envelope completo (correlacion + payload + headers
+        // de negocio); los headers gestionados por el codec se separan.
+        assertEquals(original, restored);
+    }
 }
