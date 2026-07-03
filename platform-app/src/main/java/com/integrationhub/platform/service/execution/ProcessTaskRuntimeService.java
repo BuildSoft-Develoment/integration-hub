@@ -17,6 +17,7 @@ import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
+import org.jboss.logging.Logger;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -25,6 +26,8 @@ import java.util.Map;
 
 @ApplicationScoped
 public class ProcessTaskRuntimeService {
+
+    private static final Logger LOG = Logger.getLogger(ProcessTaskRuntimeService.class);
 
     private final SourceProviderRegistry sourceProviderRegistry;
     private final ReaderProviderRegistry readerProviderRegistry;
@@ -167,9 +170,16 @@ public class ProcessTaskRuntimeService {
                                 : provider.execute(taskContext, configuration);
                         // Progreso en vivo (throttled): persiste el acumulado (slice.batchTo) cada N slices,
                         // en tx propia (runTask es NOT_SUPPORTED) → la UI de monitoreo lo ve durante la corrida.
+                        // Best-effort: un fallo al persistir el progreso NO debe fallar la tarea (el trabajo
+                        // real ya se hizo); se registra y se sigue.
                         if (slice.batchNumber() % PROGRESS_EVERY_N_SLICES == 0) {
-                            taskExecutionRepository.updateProcessed(
-                                    processExecutionId, taskPlan.taskDefinitionId(), slice.batchTo());
+                            try {
+                                taskExecutionRepository.updateProcessed(
+                                        processExecutionId, taskPlan.taskDefinitionId(), slice.batchTo());
+                            } catch (RuntimeException progressError) {
+                                LOG.debugf(progressError, "No se pudo persistir el progreso sync de exec=%d task=%d",
+                                        processExecutionId, taskPlan.taskDefinitionId());
+                            }
                         }
                         return sliceResult;
                     }
