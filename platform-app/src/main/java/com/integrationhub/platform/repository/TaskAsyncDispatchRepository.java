@@ -23,8 +23,8 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
     public void open(Long processExecutionId, Long taskDefinitionId, int totalSlices) {
         getEntityManager().createNativeQuery("""
                 insert into task_async_dispatch
-                    (process_execution_id, task_definition_id, total_slices, created_at)
-                values (?1, ?2, ?3, current_timestamp)
+                    (process_execution_id, task_definition_id, total_slices, created_at, last_progress_at)
+                values (?1, ?2, ?3, current_timestamp, current_timestamp)
                 on conflict (process_execution_id, task_definition_id) do nothing
                 """)
                 .setParameter(1, processExecutionId)
