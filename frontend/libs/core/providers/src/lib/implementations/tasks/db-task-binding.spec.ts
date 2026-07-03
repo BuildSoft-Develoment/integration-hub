@@ -173,5 +173,15 @@ describe('DB task binding serialization (motor ADR-004)', () => {
       expect(config.continueOnFailure).toBeUndefined();
       expect(config.transport).toBeUndefined();
     });
+
+    it('persists continueOnFailure on a SYNC task (es politica general, no async)', () => {
+      const p = new DbWriteTaskProvider();
+      const config = JSON.parse(
+        p.toTaskPatch({ ...p.createDraft(), taskRef: 'task-1', continueOnFailure: true } as any).configurationJson as string,
+      );
+
+      expect(config.continueOnFailure).toBe(true); // sin async: el motor sincrono la lee igual
+      expect(config.async).toBeUndefined();
+    });
   });
 });
