@@ -159,6 +159,30 @@ class TaskAsyncDispatchRepositoryIT {
         assertEquals("{\"pageIndex\":2}", readValue(30L, 31L, "last_page_json"));
     }
 
+    @Test
+    void findStalledStreamingReturnsOnlyStalledStreamingScatters() throws Exception {
+        repository.openStreaming(40L, 41L);
+        repository.recordDispatchedPage(40L, 41L, 0, "{\"pageIndex\":0}"); // streaming
+        repository.open(42L, 43L, 3); // materializado (last_page_json null): no aplica
+        repository.openStreaming(44L, 45L);
+        repository.recordDispatchedPage(44L, 45L, 0, "{\"pageIndex\":0}"); // streaming pero con progreso reciente
+        // Envejece la actividad del primer streaming → estancado.
+        exec("update task_async_dispatch set last_progress_at = current_timestamp - interval '10 minutes' "
+                + "where process_execution_id = 40");
+
+        var stalled = repository.findStalledStreaming(java.time.LocalDateTime.now().minusMinutes(5), 10);
+
+        assertEquals(1, stalled.size(), "solo el streaming estancado; no el materializado ni el reciente");
+        assertEquals(40L, stalled.get(0).processExecutionId);
+    }
+
+    private void exec(String sql) throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.execute(sql);
+        }
+    }
+
     private String readValue(long peId, long tdId, String column) throws Exception {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement();

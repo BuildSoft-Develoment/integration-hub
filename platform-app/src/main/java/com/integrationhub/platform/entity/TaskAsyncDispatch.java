@@ -64,6 +64,10 @@ public class TaskAsyncDispatch {
     @Column(name = "created_at", nullable = false)
     public LocalDateTime createdAt = LocalDateTime.now();
 
+    /** Última actividad del scatter (open/slice/dispatch/seal); para detectar estancamiento y auto-recuperar. */
+    @Column(name = "last_progress_at")
+    public LocalDateTime lastProgressAt;
+
     @Column(name = "completed_at")
     public LocalDateTime completedAt;
 }

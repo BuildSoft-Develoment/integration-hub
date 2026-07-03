@@ -160,6 +160,29 @@ class AsyncStreamingScatterE2EIT {
                 "el taskOutputs viajó por la cadena y la recuperación lo preservó");
     }
 
+    @Test
+    void stalledChainIsAutoRecoveredBySweep() throws Exception {
+        for (var i = 1; i <= 5; i++) {
+            exec("insert into stream_src (id, payload) values (" + i + ", 'p" + i + "')");
+        }
+        var ids = seedRunningTask();
+        seedStreamingScatter(ids, 2);
+
+        var consumed = new HashSet<Long>();
+        consumeFirstUnconsumed(consumed); // page-0 → encola page-1
+        exec("delete from task_dispatch_outbox where id = (select max(id) from task_dispatch_outbox)"); // pierde page-1
+        assertEquals("SUSPENDED", readString("select status from process_execution where id = " + ids[0]));
+
+        // Auto-resume: el sweep detecta el scatter estancado (umbral 0) y re-inyecta su última página.
+        var recovered = dlqService.recoverStalledStreamingScatters(java.time.Duration.ZERO, 10);
+        assertEquals(1, recovered, "el sweep re-inyectó el scatter estancado");
+        drainOutbox(consumed);
+
+        assertEquals("COMPLETED", readString("select status from process_execution where id = " + ids[0]));
+        assertTrue(RecordingBatchTaskProvider.SEEN_IDS.containsAll(java.util.List.of("1", "2", "3", "4", "5")),
+                "el sweep reanudó la cadena hasta procesar todos los records");
+    }
+
     /** Consume la fila de outbox de menor id aún no consumida (para entregar solo la semilla). */
     private void consumeFirstUnconsumed(HashSet<Long> consumed) throws Exception {
         try (Connection connection = dataSource.getConnection();

@@ -43,8 +43,8 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
     public void openStreaming(Long processExecutionId, Long taskDefinitionId) {
         getEntityManager().createNativeQuery("""
                 insert into task_async_dispatch
-                    (process_execution_id, task_definition_id, total_slices, created_at)
-                values (?1, ?2, null, current_timestamp)
+                    (process_execution_id, task_definition_id, total_slices, created_at, last_progress_at)
+                values (?1, ?2, null, current_timestamp, current_timestamp)
                 on conflict (process_execution_id, task_definition_id) do nothing
                 """)
                 .setParameter(1, processExecutionId)
@@ -61,7 +61,7 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
     public void recordDispatchedPage(Long processExecutionId, Long taskDefinitionId, int pageIndex, String pageJson) {
         getEntityManager().createNativeQuery("""
                 update task_async_dispatch
-                   set last_page_index = ?3, last_page_json = ?4
+                   set last_page_index = ?3, last_page_json = ?4, last_progress_at = current_timestamp
                  where process_execution_id = ?1 and task_definition_id = ?2
                        and (last_page_index is null or last_page_index < ?3)
                 """)
@@ -85,6 +85,7 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
         var rows = getEntityManager().createNativeQuery("""
                 update task_async_dispatch
                    set total_slices = ?3,
+                       last_progress_at = current_timestamp,
                        status = case when completed_slices + failed_slices >= ?3 then 'COMPLETED' else status end,
                        completed_at = case when completed_slices + failed_slices >= ?3 then current_timestamp else completed_at end
                  where process_execution_id = ?1 and task_definition_id = ?2
@@ -112,6 +113,7 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
         var rows = getEntityManager().createNativeQuery("""
                 update task_async_dispatch
                    set completed_slices = completed_slices + 1,
+                       last_progress_at = current_timestamp,
                        status = case when completed_slices + 1 + failed_slices >= total_slices then 'COMPLETED' else status end,
                        completed_at = case when completed_slices + 1 + failed_slices >= total_slices then current_timestamp else completed_at end
                  where process_execution_id = ?1 and task_definition_id = ?2 and status = 'PENDING'
@@ -136,6 +138,7 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
                 ? """
                 update task_async_dispatch
                    set failed_slices = failed_slices + 1,
+                       last_progress_at = current_timestamp,
                        status = case when completed_slices + failed_slices + 1 >= total_slices then 'COMPLETED' else status end,
                        completed_at = case when completed_slices + failed_slices + 1 >= total_slices then current_timestamp else completed_at end
                  where process_execution_id = ?1 and task_definition_id = ?2 and status = 'PENDING'
@@ -143,7 +146,8 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
                 """
                 : """
                 update task_async_dispatch
-                   set failed_slices = failed_slices + 1, status = 'FAILED', completed_at = current_timestamp
+                   set failed_slices = failed_slices + 1, status = 'FAILED',
+                       last_progress_at = current_timestamp, completed_at = current_timestamp
                  where process_execution_id = ?1 and task_definition_id = ?2 and status = 'PENDING'
                 returning completed_slices, failed_slices, total_slices, status
                 """;
@@ -174,6 +178,28 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
     public Optional<TaskAsyncDispatch> findByExecutionAndTask(Long processExecutionId, Long taskDefinitionId) {
         return find("processExecutionId = ?1 and taskDefinitionId = ?2", processExecutionId, taskDefinitionId)
                 .firstResultOptional();
+    }
+
+    /**
+     * Scatters en <b>streaming</b> ({@code lastPageJson != null}) aún PENDING cuya última actividad es
+     * anterior a {@code cutoff}: candidatos a <b>estancados</b> (la cadena se rompió) para auto-recuperar.
+     */
+    public java.util.List<TaskAsyncDispatch> findStalledStreaming(java.time.LocalDateTime cutoff, int limit) {
+        return find("status = 'PENDING' and lastPageJson is not null and lastProgressAt < ?1", cutoff)
+                .page(0, Math.max(1, limit))
+                .list();
+    }
+
+    /** Toca {@code last_progress_at} para que un re-inyecto no vuelva a disparar de inmediato el sweep. */
+    @Transactional
+    public void touchProgress(Long processExecutionId, Long taskDefinitionId) {
+        getEntityManager().createNativeQuery("""
+                update task_async_dispatch set last_progress_at = current_timestamp
+                 where process_execution_id = ?1 and task_definition_id = ?2
+                """)
+                .setParameter(1, processExecutionId)
+                .setParameter(2, taskDefinitionId)
+                .executeUpdate();
     }
 
     /**

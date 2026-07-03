@@ -124,6 +124,29 @@ public class AsyncTaskDlqService {
         return true;
     }
 
+    /**
+     * Auto-recuperación (ADR-015): busca scatters en streaming <b>estancados</b> (PENDING sin progreso por
+     * &gt; {@code stallThreshold}) y re-inyecta su última página vía {@link #requeueSuspension}. Devuelve
+     * cuántos re-inyectó. Idempotente/seguro: si el scatter progresó, completó o falló, {@code
+     * requeueSuspension} no hace nada (o el consumer cortocircuita por {@code isScatterTerminal}).
+     */
+    @Transactional
+    public int recoverStalledStreamingScatters(java.time.Duration stallThreshold, int limit) {
+        var cutoff = java.time.LocalDateTime.now().minus(stallThreshold);
+        var stalled = scatterTracker.findStalledStreaming(cutoff, limit);
+        var recovered = 0;
+        for (var tracker : stalled) {
+            if (requeueSuspension(tracker.processExecutionId, tracker.taskDefinitionId)) {
+                recovered++;
+            }
+        }
+        if (recovered > 0) {
+            LOG.warnf("Async DLQ: auto-recuperados %d scatter(s) streaming estancados (> %s sin progreso)",
+                    recovered, stallThreshold);
+        }
+        return recovered;
+    }
+
     /** Re-inyecta la última página despachada de un scatter en streaming, limpiando su dedup. */
     private boolean requeueStreamingPage(Long processExecutionId, Long taskDefinitionId, String taskType,
                                          String transport, Integer pageIndex, String pageJson) {
@@ -137,6 +160,9 @@ public class AsyncTaskDlqService {
                 idempotencyKey, 1, pageJson,
                 Map.of("traceId", traceId, "kind", "PAGE", "pageIndex", String.valueOf(idx)));
         outboxStore.enqueue(envelope);
+        // Marca actividad: evita que el auto-resume vuelva a disparar antes de que la página re-inyectada
+        // tenga chance de procesarse.
+        scatterTracker.touchProgress(processExecutionId, taskDefinitionId);
         LOG.infof("Async DLQ: re-inyectada página %d del scatter streaming exec=%d task=%d (la cadena reanuda)",
                 idx, processExecutionId, taskDefinitionId);
         return true;
