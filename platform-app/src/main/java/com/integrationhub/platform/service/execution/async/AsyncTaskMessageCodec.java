@@ -36,11 +36,23 @@ public final class AsyncTaskMessageCodec {
         return new OutboundMessage(
                 topicFor(envelope.taskType()),
                 envelope.idempotencyKey(),
-                writeJson(envelope, mapper),
+                encode(envelope, mapper),
                 Map.of());
     }
 
-    /** Inverso de {@link #toMessage}: reconstruye el envelope entero desde el payload JSON. */
+    /**
+     * Serializa el envelope entero a JSON — la única fuente de verdad de la representación
+     * {@code AsyncTaskEnvelope ↔ JSON} (la reusan el wire-format y el outbox, sin duplicar).
+     */
+    public static String encode(AsyncTaskEnvelope envelope, ObjectMapper mapper) {
+        try {
+            return mapper.writeValueAsString(envelope);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalStateException("No se pudo serializar el AsyncTaskEnvelope", ex);
+        }
+    }
+
+    /** Inverso de {@link #encode}: reconstruye el envelope entero desde su JSON. */
     public static AsyncTaskEnvelope decode(String payload, ObjectMapper mapper) {
         try {
             return mapper.readValue(payload, AsyncTaskEnvelope.class);
@@ -54,13 +66,5 @@ public final class AsyncTaskMessageCodec {
                 ? "unknown"
                 : taskType.trim().toLowerCase(Locale.ROOT);
         return TOPIC_PREFIX + suffix;
-    }
-
-    private static String writeJson(AsyncTaskEnvelope envelope, ObjectMapper mapper) {
-        try {
-            return mapper.writeValueAsString(envelope);
-        } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("No se pudo serializar el AsyncTaskEnvelope", ex);
-        }
     }
 }

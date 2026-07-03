@@ -1,6 +1,5 @@
 package com.integrationhub.platform.service.execution.async;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.entity.TaskDispatchOutbox;
 import com.integrationhub.platform.repository.TaskDispatchOutboxRepository;
@@ -15,10 +14,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Adaptador JPA del puerto {@link TaskOutboxStore} (ADR-015). Responsabilidad única: **traducir**
+ * Adaptador JPA del puerto {@link TaskOutboxStore} (ADR-015). Responsabilidad única: **mapear**
  * entre el dominio ({@link AsyncTaskEnvelope}) y las filas del outbox, delimitar la transacción, y
- * derivar la identidad de lease; el acceso a datos (SQL, {@code skip locked}) vive en
- * {@link TaskDispatchOutboxRepository}. El {@link TaskOutboxRelay} depende solo del puerto (DIP).
+ * derivar la identidad de lease. El acceso a datos (SQL, {@code skip locked}) vive en
+ * {@link TaskDispatchOutboxRepository}; la (de)serialización {@code envelope ↔ JSON} se delega al
+ * {@link AsyncTaskMessageCodec} (única fuente de verdad, compartida con el wire-format). El
+ * {@link TaskOutboxRelay} depende solo del puerto (DIP).
  */
 @ApplicationScoped
 public class JpaTaskOutboxStore implements TaskOutboxStore {
@@ -46,7 +47,7 @@ public class JpaTaskOutboxStore implements TaskOutboxStore {
         var row = new TaskDispatchOutbox();
         row.idempotencyKey = envelope.idempotencyKey();
         row.transport = envelope.transport();
-        row.envelopeJson = writeJson(envelope);
+        row.envelopeJson = AsyncTaskMessageCodec.encode(envelope, objectMapper);
         repository.persist(row);
     }
 
@@ -56,7 +57,8 @@ public class JpaTaskOutboxStore implements TaskOutboxStore {
         var claimed = repository.claimDue(batchSize, node, LocalDateTime.now().minus(LEASE_TIMEOUT));
         var pending = new ArrayList<PendingTask>(claimed.size());
         for (var row : claimed) {
-            pending.add(new PendingTask(row.id, row.attempts, readJson(row.envelopeJson)));
+            pending.add(new PendingTask(row.id, row.attempts,
+                    AsyncTaskMessageCodec.decode(row.envelopeJson, objectMapper)));
         }
         return pending;
     }
@@ -78,21 +80,5 @@ public class JpaTaskOutboxStore implements TaskOutboxStore {
     @Transactional
     public void markDead(long outboxId, String error) {
         repository.markDead(outboxId, error);
-    }
-
-    private String writeJson(AsyncTaskEnvelope envelope) {
-        try {
-            return objectMapper.writeValueAsString(envelope);
-        } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("No se pudo serializar el AsyncTaskEnvelope", ex);
-        }
-    }
-
-    private AsyncTaskEnvelope readJson(String json) {
-        try {
-            return objectMapper.readValue(json, AsyncTaskEnvelope.class);
-        } catch (JsonProcessingException ex) {
-            throw new IllegalStateException("AsyncTaskEnvelope corrupto en el outbox", ex);
-        }
     }
 }
