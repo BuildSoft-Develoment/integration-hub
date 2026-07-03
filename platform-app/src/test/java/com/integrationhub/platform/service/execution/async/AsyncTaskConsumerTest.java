@@ -55,7 +55,8 @@ class AsyncTaskConsumerTest {
         completion = new RecordingCompletion();
         gather = mock(SliceGatherService.class);
         pageChain = mock(AsyncPageChainService.class);
-        consumer = new AsyncTaskConsumer(inbox, registry, completion, gather, mapper, pageChain);
+        // maxAttempts=3, backoff=0 (sin sleep en tests).
+        consumer = new AsyncTaskConsumer(inbox, registry, completion, gather, mapper, pageChain, 3, 0);
     }
 
     /** payload de wire = envelope entero (patrón audit/sidecar); config = envelope.payload(). */
@@ -157,6 +158,31 @@ class AsyncTaskConsumerTest {
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.DEAD, result);
         assertEquals("DEAD", inbox.single().status);
+    }
+
+    // --- retry in-app del transitorio -----------------------------------------
+
+    @Test
+    void retriesTransientFailureThenSucceeds() {
+        // Falla 2 veces (transitorio) y a la 3ra completa: consumeWithRetries lo absorbe (maxAttempts=3).
+        var provider = new FlakyProvider(2, TaskResult.success("ok"));
+        when(registry.resolve("DB_WRITE")).thenReturn(provider);
+
+        var result = consumer.consumeWithRetries(wire("DB_WRITE", "idem-flaky", "{}"), "KAFKA", "tasks.db_write");
+
+        assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED, result);
+        assertEquals(3, provider.calls, "reintentó hasta que la BD 'volvió'");
+        assertEquals("PROCESSED", inbox.single().status);
+    }
+
+    @Test
+    void propagatesAfterExhaustingInAppRetries() {
+        // Transitorio persistente: tras agotar los intentos in-app propaga (el adaptador hará nack).
+        when(registry.resolve("DB_WRITE")).thenReturn(new ThrowingProvider());
+
+        assertThrows(RuntimeException.class,
+                () -> consumer.consumeWithRetries(wire("DB_WRITE", "idem-persist", "{}"), "KAFKA", "tasks.db_write"));
+        assertTrue(inbox.records.isEmpty(), "un transitorio persistente no se marca terminal (permite redelivery)");
     }
 
     // --- Nivel 3: re-suspensión de suspendibles en once -----------------------
@@ -434,6 +460,32 @@ class AsyncTaskConsumerTest {
         @Override
         public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
             throw new IllegalStateException("conexión a BD caída");
+        }
+    }
+
+    /** Falla (throw transitorio) las primeras {@code failures} veces y luego devuelve {@code onSuccess}. */
+    private static final class FlakyProvider implements TaskProvider {
+        private final int failures;
+        private final TaskResult onSuccess;
+        int calls = 0;
+
+        FlakyProvider(int failures, TaskResult onSuccess) {
+            this.failures = failures;
+            this.onSuccess = onSuccess;
+        }
+
+        @Override
+        public String type() {
+            return "DB_WRITE";
+        }
+
+        @Override
+        public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
+            calls++;
+            if (calls <= failures) {
+                throw new IllegalStateException("BD caída (intento " + calls + ")");
+            }
+            return onSuccess;
         }
     }
 

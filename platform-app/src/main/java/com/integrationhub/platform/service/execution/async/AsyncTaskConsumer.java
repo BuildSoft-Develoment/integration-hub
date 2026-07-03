@@ -13,6 +13,7 @@ import com.integrationhub.platform.spi.task.TaskResult;
 import com.integrationhub.platform.task.AsyncTaskEnvelope;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
 import java.util.Map;
@@ -51,6 +52,8 @@ public class AsyncTaskConsumer {
     private final SliceGatherService gather;
     private final ObjectMapper objectMapper;
     private final AsyncPageChainService pageChain;
+    private final int maxAttempts;
+    private final long backoffMs;
 
     @Inject
     public AsyncTaskConsumer(TaskInboxStore inbox,
@@ -58,18 +61,63 @@ public class AsyncTaskConsumer {
                              AsyncTaskCompletion completion,
                              SliceGatherService gather,
                              ObjectMapper objectMapper,
-                             AsyncPageChainService pageChain) {
+                             AsyncPageChainService pageChain,
+                             @ConfigProperty(name = "tasks.async.consumer.max-attempts", defaultValue = "3")
+                             int maxAttempts,
+                             @ConfigProperty(name = "tasks.async.consumer.backoff-ms", defaultValue = "200")
+                             long backoffMs) {
         this.inbox = inbox;
         this.providers = providers;
         this.completion = completion;
         this.gather = gather;
         this.objectMapper = objectMapper;
         this.pageChain = pageChain;
+        this.maxAttempts = Math.max(1, maxAttempts);
+        this.backoffMs = Math.max(0, backoffMs);
     }
 
     /**
-     * Procesa un work-item. Devuelve el desenlace (testeable). Solo relanza en fallo transitorio
-     * de {@code execute}, para que el adaptador haga nack → reentrega.
+     * Procesa un work-item con <b>retry in-app</b> del fallo transitorio antes de propagar (ADR-015).
+     * Bajo {@code failure-strategy=fail}, un {@code nack} detiene el canal entero; reintentar unos
+     * intentos con backoff <b>ride-out</b> los blips transitorios (BD/red) sin halt del pipeline. Si se
+     * agotan los intentos, propaga → el adaptador hace {@code nack} → halt+restart redelivera (un fallo
+     * permanente queda como halt <b>visible</b> para ops; para auto-aislar a volumen, {@code
+     * dead-letter-queue}). Los desenlaces terminales (PROCESSED/DEAD/...) NO se reintentan.
+     */
+    public ConsumeResult consumeWithRetries(String payload, String brokerType, String topic) {
+        RuntimeException lastTransient = null;
+        for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return consume(payload, brokerType, topic);
+            } catch (RuntimeException transientFailure) {
+                lastTransient = transientFailure;
+                if (attempt < maxAttempts) {
+                    LOG.warnf(transientFailure, "Async task consumer: fallo transitorio (intento %d/%d) en %s → retry",
+                            attempt, maxAttempts, topic);
+                    backoff(attempt);
+                }
+            }
+        }
+        LOG.errorf(lastTransient, "Async task consumer: agotados %d intentos in-app en %s → propaga (nack)",
+                maxAttempts, topic);
+        throw lastTransient;
+    }
+
+    private void backoff(int attempt) {
+        if (backoffMs <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(backoffMs * attempt); // lineal; suficiente para blips de BD/red
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Retry del consumer interrumpido", interrupted);
+        }
+    }
+
+    /**
+     * Procesa un work-item (<b>un solo intento</b>). Devuelve el desenlace (testeable). Solo relanza en
+     * fallo transitorio de {@code execute}/lectura, para que el caller reintente o el adaptador haga nack.
      */
     public ConsumeResult consume(String payload, String brokerType, String topic) {
         AsyncTaskEnvelope envelope;

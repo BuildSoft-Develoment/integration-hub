@@ -45,10 +45,13 @@ public class AsyncTaskBrokerConsumer {
                 .map(IncomingKafkaRecordMetadata::getTopic)
                 .orElse("tasks");
         try {
-            consumer.consume(message.getPayload(), "KAFKA", topic);
+            // Retry in-app del transitorio (ride-out de blips) antes de nack: bajo failure-strategy=fail
+            // un nack detiene el canal entero, así que solo se nack-ea tras agotar los reintentos.
+            consumer.consumeWithRetries(message.getPayload(), "KAFKA", topic);
             return message.ack();
         } catch (RuntimeException transientFailure) {
-            LOG.warnf(transientFailure, "Async task consumer: fallo transitorio en %s → nack (reentrega)", topic);
+            LOG.warnf(transientFailure, "Async task consumer: transitorio persistente en %s → nack (halt/redelivery)",
+                    topic);
             return message.nack(transientFailure);
         }
     }
