@@ -26,6 +26,14 @@ public class TaskInboxRepository implements PanacheRepository<TaskInbox> {
     }
 
     /**
+     * Borra el registro de dedup de una clave (redrive de un {@code DEAD}): tras corregir la causa
+     * raíz (tipo/config), quitar la fila libera la idempotencyKey para que un re-encolado se procese.
+     */
+    public long deleteByIdempotencyKey(String idempotencyKey) {
+        return idempotencyKey == null ? 0 : delete("idempotencyKey", idempotencyKey);
+    }
+
+    /**
      * Inserta un registro terminal de forma <b>idempotente</b> ({@code ON CONFLICT DO NOTHING}),
      * igual que {@code AuditEventWriter}. Race-safe por diseño: si otro consumer ya asentó la misma
      * clave, la fila se descarta sin excepción (el efecto quedó una sola vez). Las tramas POISON

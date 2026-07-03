@@ -53,9 +53,30 @@ public class TaskDispatchOutboxRepository implements PanacheRepository<TaskDispa
         return count("idempotencyKey", idempotencyKey) > 0;
     }
 
+    /** Borra la fila de una clave (redrive: limpia la previa para poder re-encolar sin chocar el dedup). */
+    public long deleteByIdempotencyKey(String idempotencyKey) {
+        return idempotencyKey == null ? 0 : delete("idempotencyKey", idempotencyKey);
+    }
+
     /** Conteo por estado, para métricas de operabilidad (profundidad de cola, DLQ). */
     public long countByStatus(String status) {
         return count("status", status);
+    }
+
+    /**
+     * Redrive del DLQ del outbox: reanima filas {@code DEAD} a {@code PENDING} (attempts=0, vencidas
+     * ya) para que el relay las reintente publicar. Idempotente aguas abajo: el consumer descarta por
+     * idempotencyKey si ya se habían procesado. En lotes acotados.
+     */
+    public long redriveDead(int limit) {
+        var sql = "update task_dispatch_outbox set status = ?1, attempts = 0, "
+                + "next_attempt_at = current_timestamp, last_error = null, locked_by = null, locked_at = null "
+                + "where id in (select id from task_dispatch_outbox where status = ?2 order by id asc limit ?3)";
+        return getEntityManager().createNativeQuery(sql)
+                .setParameter(1, TaskDispatchOutbox.PENDING)
+                .setParameter(2, TaskDispatchOutbox.DEAD)
+                .setParameter(3, Math.max(limit, 1))
+                .executeUpdate();
     }
 
     public void markSent(Long id, String reference) {

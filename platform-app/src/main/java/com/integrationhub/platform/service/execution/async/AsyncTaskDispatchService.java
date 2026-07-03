@@ -64,6 +64,17 @@ public class AsyncTaskDispatchService {
         if (!plan.isAsync()) {
             return Optional.empty();
         }
+        return Optional.of(buildEnvelope(processExecutionId, taskDefinitionId, taskType,
+                plan.transport(), configuration));
+    }
+
+    /**
+     * Construye el {@link AsyncTaskEnvelope} determinista de una tarea (idempotencyKey por
+     * {@code (peId, tdId)}). Ungated: lo reusa el redrive del DLQ para re-encolar una suspensión
+     * colgada sin depender del flag.
+     */
+    public AsyncTaskEnvelope buildEnvelope(Long processExecutionId, Long taskDefinitionId,
+                                           String taskType, String transport, Map<String, Object> configuration) {
         if (processExecutionId == null || taskDefinitionId == null) {
             throw new IllegalStateException(
                     "El despacho async de '" + taskType + "' requiere processExecutionId y taskDefinitionId "
@@ -71,16 +82,16 @@ public class AsyncTaskDispatchService {
         }
         var traceId = "exec-" + processExecutionId;
         var idempotencyKey = TaskIdempotency.key(processExecutionId, taskDefinitionId, null);
-        return Optional.of(new AsyncTaskEnvelope(
+        return new AsyncTaskEnvelope(
                 traceId,
                 processExecutionId,
                 taskDefinitionId,
                 taskType,
-                plan.transport(),
+                transport,
                 idempotencyKey,
                 1,
                 serialize(configuration),
-                Map.of("traceId", traceId)));
+                Map.of("traceId", traceId));
     }
 
     private String serialize(Map<String, Object> configuration) {
