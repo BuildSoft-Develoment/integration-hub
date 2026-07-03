@@ -31,14 +31,17 @@ public class AsyncSliceDispatchService {
     private final TaskAsyncDispatchRepository tracker;
     private final TaskOutboxStore outboxStore;
     private final ObjectMapper objectMapper;
+    private final AsyncPageChainService pageChain;
 
     @Inject
     public AsyncSliceDispatchService(TaskAsyncDispatchRepository tracker,
                                      TaskOutboxStore outboxStore,
-                                     ObjectMapper objectMapper) {
+                                     ObjectMapper objectMapper,
+                                     AsyncPageChainService pageChain) {
         this.tracker = tracker;
         this.outboxStore = outboxStore;
         this.objectMapper = objectMapper;
+        this.pageChain = pageChain;
     }
 
     /**
@@ -106,9 +109,18 @@ public class AsyncSliceDispatchService {
         return total;
     }
 
-    /** Overload por {@link ScatterDispatch}, para invocarlo desde la tx de la suspensión (B2b). */
+    /**
+     * Overload por {@link ScatterDispatch}, para invocarlo desde la tx de la suspensión (B2b). Si el
+     * request es <b>streaming</b> ({@code seedPage != null}, input por table-streaming), abre el scatter
+     * open-ended y encola la página semilla (page-chain); si es materializado, reparte los N slices.
+     */
     @Transactional
     public int dispatchSlices(ScatterDispatch request) {
+        if (request.seedPage() != null) {
+            pageChain.seed(request.processExecutionId(), request.taskDefinitionId(),
+                    request.taskType(), request.transport(), request.seedPage());
+            return 1; // una página semilla; la cadena se auto-propaga en los consumers
+        }
         return dispatchSlices(request.processExecutionId(), request.taskDefinitionId(), request.taskType(),
                 request.transport(), request.configuration(), request.slices(),
                 request.taskOutputs(), request.metadata(), request.executionVariables());
@@ -116,8 +128,9 @@ public class AsyncSliceDispatchService {
 
     /**
      * Petición de scatter que el motor construye en {@code runTask} y ejecuta atómicamente con la
-     * suspensión de la tarea (dentro de la tx de {@code suspendTask}). Lleva el contexto serializable
-     * ({@code taskOutputs}/{@code metadata}/{@code executionVariables}) para propagarlo a cada slice.
+     * suspensión de la tarea (dentro de la tx de {@code suspendTask}). Materializado: {@code slices} con
+     * el contexto serializable a propagar. Streaming (table-streaming): {@code seedPage} con la primera
+     * página (los demás campos de slices van vacíos).
      */
     public record ScatterDispatch(Long processExecutionId,
                                   Long taskDefinitionId,
@@ -127,7 +140,25 @@ public class AsyncSliceDispatchService {
                                   List<List<ReadRecord>> slices,
                                   Map<String, Object> taskOutputs,
                                   Map<String, Object> metadata,
-                                  Map<String, String> executionVariables) {
+                                  Map<String, String> executionVariables,
+                                  AsyncPageWorkItem seedPage) {
+
+        /** Scatter materializado (N slices conocidos). */
+        public static ScatterDispatch materialized(Long processExecutionId, Long taskDefinitionId, String taskType,
+                                                   String transport, Map<String, Object> configuration,
+                                                   List<List<ReadRecord>> slices, Map<String, Object> taskOutputs,
+                                                   Map<String, Object> metadata,
+                                                   Map<String, String> executionVariables) {
+            return new ScatterDispatch(processExecutionId, taskDefinitionId, taskType, transport, configuration,
+                    slices, taskOutputs, metadata, executionVariables, null);
+        }
+
+        /** Scatter en streaming (page-chain): solo la página semilla. */
+        public static ScatterDispatch streaming(Long processExecutionId, Long taskDefinitionId, String taskType,
+                                                String transport, AsyncPageWorkItem seedPage) {
+            return new ScatterDispatch(processExecutionId, taskDefinitionId, taskType, transport, Map.of(),
+                    List.of(), Map.of(), Map.of(), Map.of(), seedPage);
+        }
     }
 
     private String serialize(AsyncSliceWorkItem workItem) {

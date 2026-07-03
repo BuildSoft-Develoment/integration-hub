@@ -22,10 +22,13 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -42,6 +45,7 @@ class AsyncTaskConsumerTest {
     private TaskProviderRegistry registry;
     private RecordingCompletion completion;
     private SliceGatherService gather;
+    private AsyncPageChainService pageChain;
     private AsyncTaskConsumer consumer;
 
     @BeforeEach
@@ -50,7 +54,8 @@ class AsyncTaskConsumerTest {
         registry = mock(TaskProviderRegistry.class);
         completion = new RecordingCompletion();
         gather = mock(SliceGatherService.class);
-        consumer = new AsyncTaskConsumer(inbox, registry, completion, gather, mapper);
+        pageChain = mock(AsyncPageChainService.class);
+        consumer = new AsyncTaskConsumer(inbox, registry, completion, gather, mapper, pageChain);
     }
 
     /** payload de wire = envelope entero (patrón audit/sidecar); config = envelope.payload(). */
@@ -184,6 +189,60 @@ class AsyncTaskConsumerTest {
                 ((Map<?, ?>) provider.context.attributes().get("taskOutputs")).get("task-1.paymentRef"),
                 "el contexto capturado al suspender se rehidrató para el provider");
         assertEquals("prod", ((Map<?, ?>) provider.context.attributes().get("executionVariables")).get("env"));
+    }
+
+    // --- scatter por table-streaming (page-chain) ------------------------------
+
+    private String pageWire(String taskType, int pageIndex) throws Exception {
+        var item = AsyncPageWorkItem.seed("t", null, "id", Map.of(), 2,
+                Map.of(), Map.of(), Map.of(), Map.of());
+        var envelope = new AsyncTaskEnvelope("exec-1", 1L, 2L, taskType, "KAFKA",
+                TaskIdempotency.key(1L, 2L, "page-" + pageIndex), 1, mapper.writeValueAsString(item),
+                Map.of("kind", "PAGE", "pageIndex", String.valueOf(pageIndex)));
+        return AsyncTaskMessageCodec.toMessage(envelope, mapper).payload();
+    }
+
+    @Test
+    void pageChainLastPageSealsAndResumes() throws Exception {
+        when(registry.resolve("REST_CALL")).thenReturn(new CapturingBatchProvider(TaskResult.success("ok")));
+        when(pageChain.readAndChain(any(), any())).thenReturn(new AsyncPageChainService.Page(
+                java.util.List.of(new ReadRecord(Map.of("id", "1"))), true, 1, true));
+        // La slice cuenta pero no cierra (unsealed); el seal de la última página cierra (terminal).
+        when(gather.commitCompletedSlice(any(), any(), any())).thenReturn(Optional.of(new SliceProgress(1, 0, -1, false)));
+        when(gather.sealScatter(any(), any(), eq(1))).thenReturn(Optional.of(new SliceProgress(1, 0, 1, true)));
+
+        var result = consumer.consume(pageWire("REST_CALL", 0), "KAFKA", "tasks.rest_call");
+
+        assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED, result);
+        assertEquals(1, completion.calls.size(), "el seal de la última página reanuda la tarea una vez");
+    }
+
+    @Test
+    void pageChainMiddlePageEnqueuesNextButDoesNotSeal() throws Exception {
+        when(registry.resolve("REST_CALL")).thenReturn(new CapturingBatchProvider(TaskResult.success("ok")));
+        when(pageChain.readAndChain(any(), any())).thenReturn(new AsyncPageChainService.Page(
+                java.util.List.of(new ReadRecord(Map.of("id", "1"))), false, -1, true));
+        when(gather.commitCompletedSlice(any(), any(), any())).thenReturn(Optional.of(new SliceProgress(1, 0, -1, false)));
+
+        consumer.consume(pageWire("REST_CALL", 0), "KAFKA", "tasks.rest_call");
+
+        verify(gather, never()).sealScatter(any(), any(), anyInt());
+        assertTrue(completion.calls.isEmpty(), "una página intermedia no reanuda la tarea");
+    }
+
+    @Test
+    void pageChainEmptyPageSealsWithoutExecutingProvider() throws Exception {
+        var provider = new CapturingBatchProvider(TaskResult.success("ok"));
+        when(registry.resolve("REST_CALL")).thenReturn(provider);
+        when(pageChain.readAndChain(any(), any())).thenReturn(
+                new AsyncPageChainService.Page(java.util.List.of(), true, 0, false));
+        when(gather.sealScatter(any(), any(), eq(0))).thenReturn(Optional.of(new SliceProgress(0, 0, 0, true)));
+
+        consumer.consume(pageWire("REST_CALL", 0), "KAFKA", "tasks.rest_call");
+
+        assertNull(provider.records, "página vacía: no se ejecuta el provider");
+        verify(gather, never()).commitCompletedSlice(any(), any(), any());
+        assertEquals(1, completion.calls.size(), "seal(0) cierra y reanuda (tabla vacía)");
     }
 
     // --- scatter-gather (Opción B) ---------------------------------------------

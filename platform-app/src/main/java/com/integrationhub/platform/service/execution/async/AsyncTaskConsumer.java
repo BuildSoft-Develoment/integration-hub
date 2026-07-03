@@ -50,18 +50,21 @@ public class AsyncTaskConsumer {
     private final AsyncTaskCompletion completion;
     private final SliceGatherService gather;
     private final ObjectMapper objectMapper;
+    private final AsyncPageChainService pageChain;
 
     @Inject
     public AsyncTaskConsumer(TaskInboxStore inbox,
                              TaskProviderRegistry providers,
                              AsyncTaskCompletion completion,
                              SliceGatherService gather,
-                             ObjectMapper objectMapper) {
+                             ObjectMapper objectMapper,
+                             AsyncPageChainService pageChain) {
         this.inbox = inbox;
         this.providers = providers;
         this.completion = completion;
         this.gather = gather;
         this.objectMapper = objectMapper;
+        this.pageChain = pageChain;
     }
 
     /**
@@ -82,6 +85,11 @@ public class AsyncTaskConsumer {
         // N→1, en vez de completar la tarea de una.
         if ("SLICE".equals(envelope.headers().get("kind"))) {
             return consumeSlice(envelope);
+        }
+
+        // Scatter por table-streaming (page-chain): esta página encola la siguiente y procesa la suya.
+        if ("PAGE".equals(envelope.headers().get("kind"))) {
+            return consumePage(envelope);
         }
 
         if (inbox.isProcessed(envelope.idempotencyKey())) {
@@ -190,6 +198,66 @@ public class AsyncTaskConsumer {
         return ConsumeResult.PROCESSED;
     }
 
+    /**
+     * Procesa una <b>página</b> del scatter por table-streaming (page-chain): lee su página (y encola la
+     * siguiente vía {@link AsyncPageChainService}), ejecuta el {@code BatchTaskProvider} sobre sus
+     * records, cuenta la slice y —si es la última página— <b>sella</b> el scatter. La reanudación la
+     * dispara exactamente uno: la slice/seal que cierra el conteo.
+     */
+    private ConsumeResult consumePage(AsyncTaskEnvelope envelope) {
+        AsyncPageWorkItem item;
+        try {
+            item = objectMapper.readValue(envelope.payload(), AsyncPageWorkItem.class);
+        } catch (JsonProcessingException badPage) {
+            inbox.recordDead(envelope, "página ilegible: " + badPage.getOriginalMessage());
+            return ConsumeResult.DEAD;
+        }
+        var continueOnFailure = asBoolean(item.configuration().get("continueOnFailure"));
+
+        TaskProvider provider;
+        try {
+            provider = providers.resolve(envelope.taskType());
+        } catch (IllegalArgumentException unknown) {
+            failSlice(envelope, unknown.getMessage(), continueOnFailure);
+            return ConsumeResult.DEAD;
+        }
+        if (!(provider instanceof BatchTaskProvider batchProvider)) {
+            failSlice(envelope, "el tipo '" + envelope.taskType() + "' no es BatchTaskProvider", continueOnFailure);
+            return ConsumeResult.DEAD;
+        }
+
+        // Lee esta página y encola la siguiente (auto-propagación). Un throw (BD caída) propaga → reentrega.
+        var page = pageChain.readAndChain(envelope, item);
+
+        var outcome = ConsumeResult.PROCESSED;
+        if (page.isSlice()) {
+            var records = page.records();
+            var context = new TaskContext(envelope.processExecutionId(), envelope.taskDefinitionId());
+            hydrateContext(context, item.taskOutputs(), item.metadata(), item.executionVariables());
+            var result = batchProvider.executeRecords(context, item.configuration(), records, null);
+            if (result.suspended()) {
+                failSlice(envelope, "una página no puede suspenderse en el consumer", continueOnFailure);
+                return ConsumeResult.DEAD;
+            }
+            if (!result.success()) {
+                failSlice(envelope, result.details(), continueOnFailure);
+                outcome = ConsumeResult.FAILED;
+            } else {
+                gather.commitCompletedSlice(envelope, writeOutputs(result.outputs()), result.details())
+                        .filter(TaskAsyncDispatchRepository.SliceProgress::terminal)
+                        .ifPresent(p -> resumeTaskOnTerminal(envelope, p, continueOnFailure));
+            }
+        }
+        if (page.last()) {
+            // Última página: fija el total. Si todas las slices ya están contadas, ESTE seal cierra el
+            // scatter (ningún evento de slice futuro lo haría) → reanuda la tarea una vez.
+            gather.sealScatter(envelope.processExecutionId(), envelope.taskDefinitionId(), page.total())
+                    .filter(TaskAsyncDispatchRepository.SliceProgress::terminal)
+                    .ifPresent(p -> resumeTaskOnTerminal(envelope, p, continueOnFailure));
+        }
+        return outcome;
+    }
+
     /** Cuenta una slice fallida; si esa slice cierra el scatter, reanuda/falla la tarea una vez. */
     private void failSlice(AsyncTaskEnvelope envelope, String error, boolean continueOnFailure) {
         gather.failSlice(envelope, error, continueOnFailure)
@@ -238,14 +306,20 @@ public class AsyncTaskConsumer {
 
     /** Rehidrata en el context el contexto serializable propagado en la slice (Nivel 2). */
     private void hydrateSliceContext(TaskContext context, AsyncSliceWorkItem item) {
-        if (item.taskOutputs() != null && !item.taskOutputs().isEmpty()) {
-            context.attributes().put("taskOutputs", item.taskOutputs());
+        hydrateContext(context, item.taskOutputs(), item.metadata(), item.executionVariables());
+    }
+
+    /** Pone en el context los atributos serializables no nulos/no vacíos (slice y page). */
+    private void hydrateContext(TaskContext context, Map<String, Object> taskOutputs,
+                                Map<String, Object> metadata, Map<String, String> executionVariables) {
+        if (taskOutputs != null && !taskOutputs.isEmpty()) {
+            context.attributes().put("taskOutputs", taskOutputs);
         }
-        if (item.metadata() != null && !item.metadata().isEmpty()) {
-            context.attributes().put("metadata", item.metadata());
+        if (metadata != null && !metadata.isEmpty()) {
+            context.attributes().put("metadata", metadata);
         }
-        if (item.executionVariables() != null && !item.executionVariables().isEmpty()) {
-            context.attributes().put("executionVariables", item.executionVariables());
+        if (executionVariables != null && !executionVariables.isEmpty()) {
+            context.attributes().put("executionVariables", executionVariables);
         }
     }
 

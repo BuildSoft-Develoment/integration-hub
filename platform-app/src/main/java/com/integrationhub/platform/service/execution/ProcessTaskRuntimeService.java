@@ -2,6 +2,7 @@ package com.integrationhub.platform.service.execution;
 
 import com.integrationhub.platform.domain.TaskType;
 import com.integrationhub.platform.service.TaskProviderRegistry;
+import com.integrationhub.platform.service.execution.async.AsyncPageWorkItem;
 import com.integrationhub.platform.service.execution.async.AsyncSliceDispatchService;
 import com.integrationhub.platform.service.execution.async.AsyncTaskDispatchService;
 import com.integrationhub.platform.service.reader.ReaderProviderRegistry;
@@ -84,9 +85,25 @@ public class ProcessTaskRuntimeService {
                 // Opción B (scatter): reparte los records en N slices (N work-items) en vez de offloadar
                 // la tarea como una unidad. El tracker N→1 los agrega y reanuda la tarea al cerrar.
                 var resolvedInput = taskInputResolver.resolve(configuration, taskOutputs);
+                var metadata = taskOutputRegistry.taskMetadata(
+                        processExecutionId, taskPlan, configuration, triggerSource);
                 if (resolvedInput.tableInput() != null) {
-                    throw new IllegalStateException("El scatter async aún no soporta input por table-streaming (tarea "
-                            + taskPlan.taskType() + ")");
+                    // Input por table-streaming (N desconocido): page-chain. Se encola una página semilla
+                    // y cada consumer encola la siguiente (keyset paging) → dispatch distribuido, memoria
+                    // acotada, recuperación por at-least-once. El scatter se abre open-ended y se sella al
+                    // agotar la tabla.
+                    var table = resolvedInput.tableInput();
+                    var seed = AsyncPageWorkItem.seed(table.tableName(), table.connectionRef(), table.orderBy(),
+                            table.filters(), configuredBatchSize(configuration), configuration,
+                            taskOutputs, metadata, executionVariables);
+                    var scatter = AsyncSliceDispatchService.ScatterDispatch.streaming(
+                            processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(),
+                            envelope.transport(), seed);
+                    return TaskRunResult.suspendedScatter(
+                            "Tarea " + taskPlan.taskType() + " en scatter por table-streaming (page-chain) por "
+                                    + envelope.transport(),
+                            Map.of("scatterDispatch", true, "streaming", true, "transport", envelope.transport()),
+                            scatter);
                 }
                 var records = resolvedInput.readResult() == null
                         ? List.<ReadRecord>of()
@@ -97,9 +114,7 @@ public class ProcessTaskRuntimeService {
                 }
                 // Propaga el contexto serializable a cada slice (Nivel 2): outputs de tareas origen,
                 // metadata y variables de ejecución; el consumer reconstruye el TaskContext con ellos.
-                var metadata = taskOutputRegistry.taskMetadata(
-                        processExecutionId, taskPlan, configuration, triggerSource);
-                var scatter = new AsyncSliceDispatchService.ScatterDispatch(
+                var scatter = AsyncSliceDispatchService.ScatterDispatch.materialized(
                         processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(),
                         envelope.transport(), configuration, slices,
                         taskOutputs, metadata, executionVariables);

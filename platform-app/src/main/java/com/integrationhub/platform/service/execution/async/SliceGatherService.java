@@ -55,6 +55,16 @@ public class SliceGatherService {
     }
 
     /**
+     * <b>Sella</b> un scatter en streaming (page-chain) fijando su total al agotar la tabla. Devuelve el
+     * progreso solo si <b>este</b> seal cerró el scatter (para disparar la reanudación una vez); vacío si
+     * aún faltan slices, si ya estaba sellado (reentrega de la última página) o si ya cerró.
+     */
+    @Transactional
+    public Optional<SliceProgress> sealScatter(Long processExecutionId, Long taskDefinitionId, int totalSlices) {
+        return tracker.seal(processExecutionId, taskDefinitionId, totalSlices);
+    }
+
+    /**
      * Cuenta una slice fallida: dedup en el inbox y, si es nueva, avanza el scatter (fail-fast → FAILED;
      * continueOnFailure → cuenta la fallida y cierra cuando todas están contadas). Devuelve el progreso
      * si esta entrega contó la slice; vacío si era duplicada.

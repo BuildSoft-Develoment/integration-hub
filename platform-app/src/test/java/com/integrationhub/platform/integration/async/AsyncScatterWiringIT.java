@@ -58,7 +58,7 @@ class AsyncScatterWiringIT {
                 List.of(new ReadRecord(Map.of("id", "a"))),
                 List.of(new ReadRecord(Map.of("id", "b"))),
                 List.of(new ReadRecord(Map.of("id", "c"))));
-        var scatter = new ScatterDispatch(peId, tdId, "DB_WRITE", "KAFKA", Map.of("targetTable", "t"), slices,
+        var scatter = ScatterDispatch.materialized(peId, tdId, "DB_WRITE", "KAFKA", Map.of("targetTable", "t"), slices,
                 Map.of(), Map.of(), Map.of());
 
         stateService.suspendTask(peId, teId, "{\"scatter\":true}", "tok-scatter", null, null,

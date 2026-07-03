@@ -64,8 +64,8 @@ class AsyncScatterGatherE2EIT {
                 List.of(rec("c")),
                 List.of(rec("d"), rec("e")));
         // Nivel 2: contexto serializable que debe viajar en cada slice hasta el provider.
-        var scatter = new ScatterDispatch(peId, tdId, RecordingBatchTaskProvider.TASK_TYPE, "KAFKA", Map.of(), slices,
-                Map.of("task-1.ref", "R-1"), Map.of("processName", "P"), Map.of("env", "prod"));
+        var scatter = ScatterDispatch.materialized(peId, tdId, RecordingBatchTaskProvider.TASK_TYPE, "KAFKA",
+                Map.of(), slices, Map.of("task-1.ref", "R-1"), Map.of("processName", "P"), Map.of("env", "prod"));
 
         // El motor abre el tracker(3) + encola 3 work-items + suspende, atómico (B2b).
         stateService.suspendTask(peId, teId, "{\"scatter\":true}", "tok-scatter", null, null,
