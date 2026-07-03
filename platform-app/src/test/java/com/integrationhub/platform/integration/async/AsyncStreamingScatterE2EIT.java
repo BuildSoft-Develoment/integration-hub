@@ -110,7 +110,8 @@ class AsyncStreamingScatterE2EIT {
             exec("insert into stream_src (id, payload) values (" + i + ", 'p" + i + "')");
         }
         var ids = seedRunningTask();
-        seedStreamingScatter(ids, 2);
+        // Con contexto: prueba que la propagación por la cadena Y la re-inyección lo preservan.
+        seedStreamingScatter(ids, 2, Map.of("task-1.ref", "R-99"));
 
         // Consume solo la página semilla (page-0): encola page-1 y registra last_page=1.
         var consumed = new HashSet<Long>();
@@ -133,6 +134,10 @@ class AsyncStreamingScatterE2EIT {
         assertEquals("COMPLETED", readString("select status from process_execution where id = " + ids[0]));
         assertTrue(RecordingBatchTaskProvider.SEEN_IDS.containsAll(java.util.List.of("1", "2", "3", "4", "5")),
                 "tras recuperar, la cadena procesó todos los records");
+        // El contexto se propagó por la cadena Y sobrevivió a la re-inyección de la página perdida.
+        assertEquals("R-99",
+                ((Map<?, ?>) RecordingBatchTaskProvider.SEEN_TASK_OUTPUTS.get()).get("task-1.ref"),
+                "el taskOutputs viajó por la cadena y la recuperación lo preservó");
     }
 
     /** Consume la fila de outbox de menor id aún no consumida (para entregar solo la semilla). */
@@ -164,10 +169,14 @@ class AsyncStreamingScatterE2EIT {
         assertEquals("COMPLETED", readString("select status from process_execution where id = " + ids[0]));
     }
 
-    /** Inyecta el scatter streaming vía suspendTask (como el motor en runTask): open + seed + suspensión. */
     private void seedStreamingScatter(long[] ids, int batchSize) {
+        seedStreamingScatter(ids, batchSize, Map.of());
+    }
+
+    /** Inyecta el scatter streaming vía suspendTask (como el motor en runTask): open + seed + suspensión. */
+    private void seedStreamingScatter(long[] ids, int batchSize, Map<String, Object> taskOutputs) {
         var seed = AsyncPageWorkItem.seed("stream_src", null, "id", Map.of(), batchSize,
-                Map.of(), Map.of(), Map.of(), Map.of());
+                Map.of(), taskOutputs, Map.of(), Map.of());
         var scatter = ScatterDispatch.streaming(ids[0], ids[1], RecordingBatchTaskProvider.TASK_TYPE, "KAFKA", seed);
         stateService.suspendTask(ids[0], ids[2], "{\"scatter\":true}", "tok-streaming", null, null,
                 "scatter", Map.of(), scatter);
