@@ -73,7 +73,7 @@ public class AsyncSliceDispatchService {
                     idempotencyKey,
                     1,
                     serialize(workItem),
-                    Map.of("traceId", traceId, "sliceIndex", String.valueOf(i)));
+                    Map.of("traceId", traceId, "kind", "SLICE", "sliceIndex", String.valueOf(i)));
             outboxStore.enqueue(envelope);
         }
         return total;

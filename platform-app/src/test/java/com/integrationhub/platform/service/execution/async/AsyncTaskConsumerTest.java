@@ -1,12 +1,18 @@
 package com.integrationhub.platform.service.execution.async;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.integrationhub.platform.repository.TaskAsyncDispatchRepository.SliceProgress;
 import com.integrationhub.platform.service.TaskProviderRegistry;
 import com.integrationhub.platform.service.execution.ProcessExecutionResumeService;
+import com.integrationhub.platform.spi.reader.ReadRecord;
+import com.integrationhub.platform.spi.source.SourcePayload;
+import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import com.integrationhub.platform.task.AsyncTaskEnvelope;
+
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -18,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -33,6 +40,7 @@ class AsyncTaskConsumerTest {
     private RecordingInbox inbox;
     private TaskProviderRegistry registry;
     private RecordingCompletion completion;
+    private SliceGatherService gather;
     private AsyncTaskConsumer consumer;
 
     @BeforeEach
@@ -40,7 +48,8 @@ class AsyncTaskConsumerTest {
         inbox = new RecordingInbox();
         registry = mock(TaskProviderRegistry.class);
         completion = new RecordingCompletion();
-        consumer = new AsyncTaskConsumer(inbox, registry, completion, mapper);
+        gather = mock(SliceGatherService.class);
+        consumer = new AsyncTaskConsumer(inbox, registry, completion, gather, mapper);
     }
 
     /** payload de wire = envelope entero (patrón audit/sidecar); config = envelope.payload(). */
@@ -153,6 +162,57 @@ class AsyncTaskConsumerTest {
         assertEquals("DEAD", inbox.single().status);
     }
 
+    // --- scatter-gather (Opción B) ---------------------------------------------
+
+    private String sliceWire(String taskType, int idx, int total, java.util.List<Map<String, Object>> records)
+            throws Exception {
+        var workItem = new AsyncSliceWorkItem(Map.of("targetTable", "t"), records, idx, total);
+        var envelope = new AsyncTaskEnvelope("exec-1", 1L, 2L, taskType, "KAFKA",
+                TaskIdempotency.key(1L, 2L, "slice-" + idx), 1, mapper.writeValueAsString(workItem),
+                Map.of("kind", "SLICE", "sliceIndex", String.valueOf(idx)));
+        return AsyncTaskMessageCodec.toMessage(envelope, mapper).payload();
+    }
+
+    @Test
+    void sliceCountsButDoesNotResumeTaskUntilBatchCloses() throws Exception {
+        var provider = new CapturingBatchProvider(TaskResult.success("slice ok"));
+        when(registry.resolve("DB_WRITE")).thenReturn(provider);
+        when(gather.commitCompletedSlice(any(), any(), any())).thenReturn(Optional.of(new SliceProgress(1, 3, false)));
+
+        var result = consumer.consume(sliceWire("DB_WRITE", 0, 3, java.util.List.of(Map.of("id", "a"))),
+                "KAFKA", "tasks.db_write");
+
+        assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED, result);
+        assertEquals("a", provider.records.get(0).values().get("id"), "el provider recibió los records de la slice");
+        assertTrue(completion.calls.isEmpty(), "una slice intermedia NO reanuda la tarea");
+    }
+
+    @Test
+    void lastSliceResumesTaskExactlyOnce() throws Exception {
+        when(registry.resolve("DB_WRITE")).thenReturn(new CapturingBatchProvider(TaskResult.success("slice ok")));
+        when(gather.commitCompletedSlice(any(), any(), any())).thenReturn(Optional.of(new SliceProgress(3, 3, true)));
+
+        var result = consumer.consume(sliceWire("DB_WRITE", 2, 3, java.util.List.of(Map.of("id", "z"))),
+                "KAFKA", "tasks.db_write");
+
+        assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED, result);
+        assertEquals(1, completion.calls.size(), "la última slice reanuda la tarea una vez");
+        assertTrue(completion.calls.get(0).result().success());
+    }
+
+    @Test
+    void failedSliceThatTransitionsFailsTheTask() throws Exception {
+        when(registry.resolve("DB_WRITE")).thenReturn(new CapturingBatchProvider(TaskResult.failure("boom")));
+        when(gather.failSlice(any(), any())).thenReturn(true); // esta slice transiciona el scatter a FAILED
+
+        var result = consumer.consume(sliceWire("DB_WRITE", 1, 3, java.util.List.of(Map.of("id", "b"))),
+                "KAFKA", "tasks.db_write");
+
+        assertEquals(AsyncTaskConsumer.ConsumeResult.FAILED, result);
+        assertEquals(1, completion.calls.size(), "la primera slice fallida falla la tarea una vez");
+        assertFalse(completion.calls.get(0).result().success());
+    }
+
     // --- fakes -----------------------------------------------------------------
 
     private static final class CapturingProvider implements TaskProvider {
@@ -172,6 +232,29 @@ class AsyncTaskConsumerTest {
         @Override
         public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
             this.context = context;
+            this.configuration = configuration;
+            return result;
+        }
+    }
+
+    private static final class CapturingBatchProvider implements BatchTaskProvider {
+        private final TaskResult result;
+        java.util.List<ReadRecord> records;
+        Map<String, Object> configuration;
+
+        CapturingBatchProvider(TaskResult result) {
+            this.result = result;
+        }
+
+        @Override
+        public String type() {
+            return "DB_WRITE";
+        }
+
+        @Override
+        public TaskResult executeRecords(TaskContext context, Map<String, Object> configuration,
+                                         java.util.List<ReadRecord> records, SourcePayload sourcePayload) {
+            this.records = records;
             this.configuration = configuration;
             return result;
         }

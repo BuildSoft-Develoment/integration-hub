@@ -39,10 +39,10 @@ public class TaskInboxRepository implements PanacheRepository<TaskInbox> {
      * clave, la fila se descarta sin excepción (el efecto quedó una sola vez). Las tramas POISON
      * ({@code idempotencyKey == null}) no entran al índice parcial → siempre se insertan.
      */
-    public void insertIfAbsent(String idempotencyKey, String taskType, Long processExecutionId,
+    public long insertIfAbsent(String idempotencyKey, String taskType, Long processExecutionId,
                                Long taskDefinitionId, String status, String outputsJson, String details,
                                String error, String rawPayload, String brokerType, String topic) {
-        getEntityManager().createNativeQuery("""
+        return getEntityManager().createNativeQuery("""
                 insert into task_inbox
                     (idempotency_key, task_type, process_execution_id, task_definition_id, status,
                      outputs_json, details, error, raw_payload, broker_type, topic, created_at)

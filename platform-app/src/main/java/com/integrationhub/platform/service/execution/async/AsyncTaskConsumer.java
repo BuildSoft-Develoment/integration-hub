@@ -3,7 +3,10 @@ package com.integrationhub.platform.service.execution.async;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.integrationhub.platform.repository.TaskAsyncDispatchRepository;
 import com.integrationhub.platform.service.TaskProviderRegistry;
+import com.integrationhub.platform.spi.reader.ReadRecord;
+import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -45,16 +48,19 @@ public class AsyncTaskConsumer {
     private final TaskInboxStore inbox;
     private final TaskProviderRegistry providers;
     private final AsyncTaskCompletion completion;
+    private final SliceGatherService gather;
     private final ObjectMapper objectMapper;
 
     @Inject
     public AsyncTaskConsumer(TaskInboxStore inbox,
                              TaskProviderRegistry providers,
                              AsyncTaskCompletion completion,
+                             SliceGatherService gather,
                              ObjectMapper objectMapper) {
         this.inbox = inbox;
         this.providers = providers;
         this.completion = completion;
+        this.gather = gather;
         this.objectMapper = objectMapper;
     }
 
@@ -70,6 +76,12 @@ public class AsyncTaskConsumer {
             inbox.recordPoison(payload, brokerType, topic, poison.getMessage());
             LOG.warnf(poison, "Async task consumer: trama indecodificable en %s/%s → POISON", brokerType, topic);
             return ConsumeResult.POISON;
+        }
+
+        // Scatter-gather (Opción B): un work-item de slice se procesa por lotes y agrega en el tracker
+        // N→1, en vez de completar la tarea de una.
+        if ("SLICE".equals(envelope.headers().get("kind"))) {
+            return consumeSlice(envelope);
         }
 
         if (inbox.isProcessed(envelope.idempotencyKey())) {
@@ -121,6 +133,64 @@ public class AsyncTaskConsumer {
 
         inbox.recordProcessed(envelope, writeOutputs(result.outputs()), result.details());
         return ConsumeResult.PROCESSED;
+    }
+
+    /**
+     * Procesa un work-item de <b>slice</b> (Opción B): ejecuta el {@code BatchTaskProvider} sobre los
+     * records de la slice y avanza la agregación N→1. La reanudación de la tarea la dispara solo la
+     * slice que cierra el conteo (o la primera que falla); las demás solo cuentan.
+     */
+    private ConsumeResult consumeSlice(AsyncTaskEnvelope envelope) {
+        AsyncSliceWorkItem item;
+        try {
+            item = objectMapper.readValue(envelope.payload(), AsyncSliceWorkItem.class);
+        } catch (JsonProcessingException badSlice) {
+            inbox.recordDead(envelope, "slice ilegible: " + badSlice.getOriginalMessage());
+            return ConsumeResult.DEAD;
+        }
+
+        TaskProvider provider;
+        try {
+            provider = providers.resolve(envelope.taskType());
+        } catch (IllegalArgumentException unknown) {
+            failSliceAndMaybeFailTask(envelope, unknown.getMessage());
+            return ConsumeResult.DEAD;
+        }
+        if (!(provider instanceof BatchTaskProvider batchProvider)) {
+            failSliceAndMaybeFailTask(envelope, "el tipo '" + envelope.taskType() + "' no es BatchTaskProvider");
+            return ConsumeResult.DEAD;
+        }
+
+        var records = item.records().stream().map(ReadRecord::new).toList();
+        var context = new TaskContext(envelope.processExecutionId(), envelope.taskDefinitionId());
+        // Un throw (fallo transitorio) propaga → nack → reentrega de la slice.
+        var result = batchProvider.executeRecords(context, item.configuration(), records, null);
+
+        if (result.suspended()) {
+            failSliceAndMaybeFailTask(envelope, "una slice no puede suspenderse en el consumer");
+            return ConsumeResult.DEAD;
+        }
+        if (!result.success()) {
+            failSliceAndMaybeFailTask(envelope, result.details());
+            return ConsumeResult.FAILED;
+        }
+
+        var progress = gather.commitCompletedSlice(envelope, writeOutputs(result.outputs()), result.details());
+        if (progress.filter(TaskAsyncDispatchRepository.SliceProgress::batchCompleted).isPresent()) {
+            // La última slice cerró el conteo: reanudar la tarea UNA vez con el resultado agregado.
+            var total = progress.get().total();
+            completion.completeFromExternalResult(envelope.processExecutionId(), envelope.taskDefinitionId(),
+                    TaskResult.success("scatter completado: " + total + " slices"));
+        }
+        return ConsumeResult.PROCESSED;
+    }
+
+    /** Cuenta la slice como fallida y, si es la que transiciona el scatter a FAILED, falla la tarea una vez. */
+    private void failSliceAndMaybeFailTask(AsyncTaskEnvelope envelope, String error) {
+        if (gather.failSlice(envelope, error)) {
+            completion.completeFromExternalResult(envelope.processExecutionId(), envelope.taskDefinitionId(),
+                    TaskResult.failure("scatter fallido: " + error));
+        }
     }
 
     private Map<String, Object> decodeConfiguration(String payload) throws JsonProcessingException {
