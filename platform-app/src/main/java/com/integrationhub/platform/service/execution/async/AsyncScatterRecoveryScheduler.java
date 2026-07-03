@@ -20,6 +20,11 @@ import java.time.Duration;
  * defecto ({@code failure-strategy=fail}) ya reanuda por restart+redelivery, así que el auto-resume solo
  * hace falta bajo {@code dead-letter-queue}. Seguro ante falsos positivos: re-inyectar una página de un
  * scatter que en realidad progresó/cerró es idempotente (dedup + cortocircuito por {@code isScatterTerminal}).</p>
+ *
+ * <p><b>Umbral</b>: {@code last_progress_at} solo avanza al COMPLETAR una página, no durante su
+ * procesamiento. {@code stall-threshold} debe superar el tiempo máx. de procesamiento de una página; si
+ * no, una página lenta-pero-sana se detectaría como estancada y se re-inyectaría → ejecución DUPLICADA
+ * del provider (at-least-once: sin corrupción por dedup, pero con side-effects repetidos).</p>
  */
 @ApplicationScoped
 public class AsyncScatterRecoveryScheduler {

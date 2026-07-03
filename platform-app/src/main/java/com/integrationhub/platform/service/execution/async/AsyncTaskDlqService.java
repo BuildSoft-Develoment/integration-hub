@@ -41,6 +41,12 @@ public class AsyncTaskDlqService {
     private final AsyncTaskDispatchService dispatchService;
     private final TaskOutboxStore outboxStore;
 
+    /** Self-referencia (proxy CDI) para invocar {@code requeueSuspension} con su PROPIA transacción por
+     *  item en el sweep — una self-invocation directa bypassaría el interceptor @Transactional y correría
+     *  todo en una sola tx (un fallo rollbackearía todo el barrido). */
+    @Inject
+    AsyncTaskDlqService self;
+
     @Inject
     public AsyncTaskDlqService(TaskDispatchOutboxRepository outboxRepository,
                               TaskInboxRepository inboxRepository,
@@ -130,14 +136,19 @@ public class AsyncTaskDlqService {
      * cuántos re-inyectó. Idempotente/seguro: si el scatter progresó, completó o falló, {@code
      * requeueSuspension} no hace nada (o el consumer cortocircuita por {@code isScatterTerminal}).
      */
-    @Transactional
     public int recoverStalledStreamingScatters(java.time.Duration stallThreshold, int limit) {
         var cutoff = java.time.LocalDateTime.now().minus(stallThreshold);
-        var stalled = scatterTracker.findStalledStreaming(cutoff, limit);
         var recovered = 0;
-        for (var tracker : stalled) {
-            if (requeueSuspension(tracker.processExecutionId, tracker.taskDefinitionId)) {
-                recovered++;
+        // Cada requeue via el proxy (self) → su PROPIA transacción: un scatter que falle no rollbackea el
+        // resto del barrido. Con try/catch per-item la robustez es total (un item malo no bloquea a los otros).
+        for (var pair : self.findStalledStreamingScatters(cutoff, limit)) {
+            try {
+                if (self.requeueSuspension(pair[0], pair[1])) {
+                    recovered++;
+                }
+            } catch (RuntimeException error) {
+                LOG.warnf(error, "Async DLQ: recovery de exec=%d task=%d falló; se reintenta en el próximo sweep",
+                        pair[0], pair[1]);
             }
         }
         if (recovered > 0) {
@@ -145,6 +156,14 @@ public class AsyncTaskDlqService {
                     recovered, stallThreshold);
         }
         return recovered;
+    }
+
+    /** IDs {@code [processExecutionId, taskDefinitionId]} de los scatters streaming estancados. */
+    @Transactional
+    public java.util.List<long[]> findStalledStreamingScatters(java.time.LocalDateTime cutoff, int limit) {
+        return scatterTracker.findStalledStreaming(cutoff, limit).stream()
+                .map(t -> new long[]{t.processExecutionId, t.taskDefinitionId})
+                .toList();
     }
 
     /** Re-inyecta la última página despachada de un scatter en streaming, limpiando su dedup. */
