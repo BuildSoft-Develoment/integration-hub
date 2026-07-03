@@ -31,8 +31,9 @@ import java.util.Map;
  * <i>negocio</i> determinista ({@code TaskResult.failure}) se registra y se ACK-ea (reintentarlo no
  * ayuda); una trama indecodificable o un tipo desconocido van al ledger (POISON/DEAD) y se ACK-ean.</p>
  *
- * <p>La continuación del proceso (reanudar la ejecución con el resultado de la tarea) llega en la
- * Etapa 4 sobre este mismo núcleo — marcada explícitamente abajo, sin camino intermedio silencioso.</p>
+ * <p>Tras ejecutar, aplica el resultado a la tarea suspendida por despacho async y continúa el
+ * pipeline via {@link AsyncTaskCompletion} (Etapa 4), sin re-invocar al provider. La completación es
+ * idempotente (por {@code resumedAt}), así que una reentrega no reanuda dos veces.</p>
  */
 @ApplicationScoped
 public class AsyncTaskConsumer {
@@ -43,14 +44,17 @@ public class AsyncTaskConsumer {
 
     private final TaskInboxStore inbox;
     private final TaskProviderRegistry providers;
+    private final AsyncTaskCompletion completion;
     private final ObjectMapper objectMapper;
 
     @Inject
     public AsyncTaskConsumer(TaskInboxStore inbox,
                              TaskProviderRegistry providers,
+                             AsyncTaskCompletion completion,
                              ObjectMapper objectMapper) {
         this.inbox = inbox;
         this.providers = providers;
+        this.completion = completion;
         this.objectMapper = objectMapper;
     }
 
@@ -96,19 +100,26 @@ public class AsyncTaskConsumer {
         var result = provider.execute(context, configuration);
 
         if (result.suspended()) {
-            // La suspensión dentro del consumer async necesita la continuación externa (Etapa 4);
-            // hasta entonces es no ejecutable → DEAD explícito, sin degradar en silencio.
-            inbox.recordDead(envelope, "el provider se suspendió en el consumer async; requiere continuación (Etapa 4)");
+            // Una tarea offloada no puede volver a suspenderse en el consumer: no hay forma de
+            // reanudarla desde aquí. DEAD explícito, sin degradar en silencio.
+            inbox.recordDead(envelope, "el provider se suspendió en el consumer async; no soportado");
             return ConsumeResult.DEAD;
         }
+
+        // Aplica el resultado a la tarea suspendida por despacho async y continúa el pipeline
+        // (idempotente por resumedAt). Se hace ANTES de registrar el inbox: si hay crash entre
+        // completar y registrar, la reentrega re-ejecuta (at-least-once) y la completación vuelve a
+        // ser idempotente (NOT_FOUND), sin dejar el proceso colgado.
+        var outcome = completion.completeFromExternalResult(
+                envelope.processExecutionId(), envelope.taskDefinitionId(), result);
+        LOG.debugf("Async task consumer: completación de %s → %s", envelope.idempotencyKey(), outcome.outcome());
+
         if (!result.success()) {
             inbox.recordFailed(envelope, result.details());
             return ConsumeResult.FAILED;
         }
 
         inbox.recordProcessed(envelope, writeOutputs(result.outputs()), result.details());
-        // Etapa 4: aquí se disparará la continuación (complete-from-external-result) que reanuda
-        // la ejecución del proceso con el resultado ya calculado.
         return ConsumeResult.PROCESSED;
     }
 

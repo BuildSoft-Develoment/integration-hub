@@ -2,6 +2,7 @@ package com.integrationhub.platform.service.execution.async;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.service.TaskProviderRegistry;
+import com.integrationhub.platform.service.execution.ProcessExecutionResumeService;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -31,13 +32,15 @@ class AsyncTaskConsumerTest {
     private final ObjectMapper mapper = new ObjectMapper();
     private RecordingInbox inbox;
     private TaskProviderRegistry registry;
+    private RecordingCompletion completion;
     private AsyncTaskConsumer consumer;
 
     @BeforeEach
     void setUp() {
         inbox = new RecordingInbox();
         registry = mock(TaskProviderRegistry.class);
-        consumer = new AsyncTaskConsumer(inbox, registry, mapper);
+        completion = new RecordingCompletion();
+        consumer = new AsyncTaskConsumer(inbox, registry, completion, mapper);
     }
 
     /** payload de wire = envelope entero (patrón audit/sidecar); config = envelope.payload(). */
@@ -63,6 +66,11 @@ class AsyncTaskConsumerTest {
         assertEquals("PROCESSED", row.status);
         assertEquals("idem-ok", row.idempotencyKey);
         assertTrue(row.outputsJson.contains("\"rows\":3"));
+        // Continuación: se aplicó el resultado a la tarea suspendida (exec 1, task 2 del wire()).
+        assertEquals(1, completion.calls.size());
+        assertEquals(1L, completion.calls.get(0).processExecutionId());
+        assertEquals(2L, completion.calls.get(0).taskDefinitionId());
+        assertTrue(completion.calls.get(0).result().success());
     }
 
     @Test
@@ -74,6 +82,7 @@ class AsyncTaskConsumerTest {
         assertEquals(AsyncTaskConsumer.ConsumeResult.DUPLICATE, result);
         verify(registry, never()).resolve("DB_WRITE");
         assertTrue(inbox.records.isEmpty(), "un duplicado no registra nada nuevo");
+        assertTrue(completion.calls.isEmpty(), "un duplicado no re-completa el proceso");
     }
 
     @Test
@@ -96,6 +105,9 @@ class AsyncTaskConsumerTest {
         var row = inbox.single();
         assertEquals("FAILED", row.status);
         assertEquals("saldo insuficiente", row.details);
+        // Un fallo de negocio también se propaga a la continuación (falla el proceso suspendido).
+        assertEquals(1, completion.calls.size());
+        assertFalse(completion.calls.get(0).result().success());
     }
 
     @Test
@@ -106,6 +118,7 @@ class AsyncTaskConsumerTest {
                 () -> consumer.consume(wire("DB_WRITE", "idem-transient", "{}"), "KAFKA", "tasks.db_write"));
 
         assertTrue(inbox.records.isEmpty(), "un fallo transitorio no se marca como terminal (permite reentrega)");
+        assertTrue(completion.calls.isEmpty(), "un fallo transitorio no completa el proceso");
     }
 
     @Test
@@ -117,6 +130,7 @@ class AsyncTaskConsumerTest {
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.DEAD, result);
         assertEquals("DEAD", inbox.single().status);
+        assertTrue(completion.calls.isEmpty(), "un resultado suspended no completa el proceso");
     }
 
     @Test
@@ -213,5 +227,21 @@ class AsyncTaskConsumerTest {
 
     private record Recorded(String status, String idempotencyKey, String outputsJson,
                             String details, String error, String rawPayload) {
+    }
+
+    /** Fake del puerto de completación que captura las invocaciones (sin motor). */
+    private static final class RecordingCompletion implements AsyncTaskCompletion {
+        final List<Call> calls = new ArrayList<>();
+
+        @Override
+        public ProcessExecutionResumeService.ResumeOutcome completeFromExternalResult(
+                Long processExecutionId, Long taskDefinitionId, TaskResult result) {
+            calls.add(new Call(processExecutionId, taskDefinitionId, result));
+            return new ProcessExecutionResumeService.ResumeOutcome(
+                    ProcessExecutionResumeService.Outcome.COMPLETED, null, true, "ok");
+        }
+
+        record Call(Long processExecutionId, Long taskDefinitionId, TaskResult result) {
+        }
     }
 }

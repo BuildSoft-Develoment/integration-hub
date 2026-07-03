@@ -4,6 +4,7 @@ import com.integrationhub.platform.repository.ProcessTaskDefinitionRepository;
 import com.integrationhub.platform.repository.ProcessTaskExecutionRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.TaskProviderRegistry;
+import com.integrationhub.platform.service.execution.async.AsyncTaskCompletion;
 import com.integrationhub.platform.spi.task.SuspendableTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -30,7 +31,7 @@ import java.util.Map;
  * @trace spec 008-mensajeria-pagos RF-019
  */
 @ApplicationScoped
-public class ProcessExecutionResumeService {
+public class ProcessExecutionResumeService implements AsyncTaskCompletion {
 
     private final ProcessExecutionStateService stateService;
     private final ProcessTaskExecutionRepository taskExecutionRepository;
@@ -75,7 +76,26 @@ public class ProcessExecutionResumeService {
      * ejecutar HTTP/SFTP/BD largos) corre fuera de esa transaccion.
      */
     public ResumeOutcome resume(String token, Map<String, Object> externalEvent) {
-        var completion = resumeTransactional(token, externalEvent);
+        return runContinuation(resumeTransactional(token, externalEvent));
+    }
+
+    /**
+     * <b>Completación async (ADR-015 Etapa 4)</b>: la tarea ya se ejecutó en el consumer y aquí NO se
+     * re-invoca al provider — se aplica el {@link TaskResult} ya calculado a la tarea suspendida por
+     * despacho async (correlacionada por {@code processExecutionId + taskDefinitionId}) y se continúa
+     * el pipeline. Idempotente: si la suspensión ya fue reanudada por una entrega anterior
+     * (at-least-once), devuelve {@link Outcome#NOT_FOUND} sin efecto.
+     */
+    @Override
+    public ResumeOutcome completeFromExternalResult(Long processExecutionId, Long taskDefinitionId, TaskResult result) {
+        return runContinuation(completeTransactional(processExecutionId, taskDefinitionId, result));
+    }
+
+    /**
+     * Continuación del pipeline fuera de la transacción (compartida por el resume por callback y por
+     * la completación async). Si no hay continuación pendiente, devuelve el outcome terminal tal cual.
+     */
+    private ResumeOutcome runContinuation(ResumeCompletion completion) {
         if (completion.continuation() == null) {
             return completion.outcome();
         }
@@ -105,6 +125,37 @@ public class ProcessExecutionResumeService {
             return new ResumeOutcome(Outcome.FAILED, null, false,
                     "Downstream continuation failed: " + message);
         }
+    }
+
+    /**
+     * Fase transaccional de la completación async: correlaciona la tarea suspendida por ids, la marca
+     * reanudada y aplica el resultado externo compartiendo la misma cola terminal que el resume
+     * (completeTask/failProcess + continuación downstream), pero sin re-invocar al provider.
+     */
+    @Transactional
+    ResumeCompletion completeTransactional(Long processExecutionId, Long taskDefinitionId, TaskResult result) {
+        if (result.suspended()) {
+            throw new IllegalArgumentException("La completación async no acepta resultados suspended");
+        }
+        var taskExecution = taskExecutionRepository.findActiveSuspendedByExecutionAndTask(
+                processExecutionId, taskDefinitionId);
+        if (taskExecution == null) {
+            return ResumeCompletion.terminal(new ResumeOutcome(Outcome.NOT_FOUND, null, false,
+                    "No hay suspensión async activa para exec=" + processExecutionId + " task=" + taskDefinitionId));
+        }
+        var taskDefinition = taskExecution.taskDefinition;
+        if (taskDefinition == null) {
+            throw new IllegalStateException("Suspended task " + taskExecution.id + " has no taskDefinition");
+        }
+        var processExecution = taskExecution.processExecution;
+        var processDefinition = taskDefinition.processDefinition;
+        var configuration = configurationMapper.toMap(taskDefinition.configurationJson);
+        var resolvedProcessExecutionId = processExecution == null ? null : processExecution.id;
+        var taskExecutionId = taskExecution.id;
+
+        stateService.markResumed(taskExecutionId);
+        return finishTerminalResult(taskExecution, taskDefinition, processDefinition,
+                resolvedProcessExecutionId, taskExecutionId, configuration, result, taskExecution.resumeToken);
     }
 
     @Transactional
@@ -181,10 +232,30 @@ public class ProcessExecutionResumeService {
                     new ResumeOutcome(Outcome.RE_SUSPENDED, newToken, false, result.details()));
         }
 
+        return finishTerminalResult(taskExecution, taskDefinition, processDefinition,
+                processExecutionId, taskExecutionId, configuration, result, token);
+    }
+
+    /**
+     * Cola terminal compartida por el resume por callback y la completación async: aplica un
+     * {@link TaskResult} <b>ya terminal</b> (success/failure) a la tarea suspendida —
+     * completeTask/failProcess— y, si hay tareas downstream, prepara la {@link ContinuationRequest}
+     * rehidratando el envelope capturado al suspender. No re-invoca al provider ni maneja re-suspensión
+     * (eso vive antes, en el resume por callback).
+     */
+    private ResumeCompletion finishTerminalResult(
+            com.integrationhub.platform.entity.ProcessTaskExecution taskExecution,
+            com.integrationhub.platform.entity.ProcessTaskDefinition taskDefinition,
+            com.integrationhub.platform.entity.ProcessDefinition processDefinition,
+            Long processExecutionId,
+            Long taskExecutionId,
+            Map<String, Object> configuration,
+            TaskResult result,
+            String token) {
         if (!result.success()) {
             stateService.failTask(processExecutionId, taskExecutionId, result.details(), Map.of(
                     "taskType", taskDefinition.taskType,
-                    "resumeToken", token));
+                    "resumeToken", token == null ? "" : token));
             if (processExecutionId != null) {
                 stateService.failProcess(processExecutionId, "Resume returned failure: " + result.details());
             }
@@ -196,7 +267,7 @@ public class ProcessExecutionResumeService {
         stateService.completeTask(processExecutionId, taskExecutionId, details,
                 Map.of("taskType", taskDefinition.taskType,
                         "outputs", result.outputs(),
-                        "resumeToken", token));
+                        "resumeToken", token == null ? "" : token));
 
         var downstreamCount = processDefinition == null
                 ? 0
@@ -252,7 +323,9 @@ public class ProcessExecutionResumeService {
         /** El provider volvio a suspender; hay un nuevo {@code resumeToken}. */
         RE_SUSPENDED,
         /** El provider retorno failure; el proceso queda FAILED. */
-        FAILED
+        FAILED,
+        /** Completación async idempotente: no había suspensión activa (ya reanudada). */
+        NOT_FOUND
     }
 
     public record ResumeOutcome(Outcome outcome,

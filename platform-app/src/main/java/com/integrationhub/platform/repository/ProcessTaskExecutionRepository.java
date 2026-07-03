@@ -40,6 +40,23 @@ public class ProcessTaskExecutionRepository implements PanacheRepository<Process
     }
 
     /**
+     * Lookup de la suspensión activa por ejecución + definición de tarea (ADR-015 Etapa 4). El
+     * consumer async conoce estos ids desde el {@code AsyncTaskEnvelope} y con ellos correlaciona la
+     * tarea suspendida por despacho async para completarla con el resultado ya calculado. Devuelve
+     * {@code null} si no hay ninguna suspendida activa (p.ej. ya reanudada) → la completación es
+     * idempotente.
+     */
+    public ProcessTaskExecution findActiveSuspendedByExecutionAndTask(Long processExecutionId, Long taskDefinitionId) {
+        if (processExecutionId == null || taskDefinitionId == null) {
+            return null;
+        }
+        return find("processExecution.id = ?1 and taskDefinition.id = ?2 and resumedAt is null and status = ?3 "
+                        + "order by id desc",
+                processExecutionId, taskDefinitionId,
+                com.integrationhub.platform.domain.ExecutionStatus.SUSPENDED).firstResult();
+    }
+
+    /**
      * Suspensiones vencidas para el auto-despertar del scheduler M-2 (modo poll).
      * Soportado por el indice parcial {@code ix_process_task_execution_suspend_expires_at}
      * (V13).
