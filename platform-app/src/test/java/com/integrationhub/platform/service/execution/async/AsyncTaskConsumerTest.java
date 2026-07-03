@@ -231,6 +231,20 @@ class AsyncTaskConsumerTest {
     }
 
     @Test
+    void pageChainShortCircuitsWhenScatterAlreadyTerminal() throws Exception {
+        var provider = new CapturingBatchProvider(TaskResult.success("ok"));
+        when(registry.resolve("REST_CALL")).thenReturn(provider);
+        // El scatter ya cerró (fail-fast de una página previa): esta página tardía no debe hacer nada.
+        when(gather.isScatterTerminal(any(), any())).thenReturn(true);
+
+        var result = consumer.consume(pageWire("REST_CALL", 5), "KAFKA", "tasks.rest_call");
+
+        assertEquals(AsyncTaskConsumer.ConsumeResult.DUPLICATE, result);
+        verify(pageChain, never()).readAndChain(any(), any());
+        assertNull(provider.records, "no ejecuta el provider (evita side-effects tras el fail-fast)");
+    }
+
+    @Test
     void pageChainEmptyPageSealsWithoutExecutingProvider() throws Exception {
         var provider = new CapturingBatchProvider(TaskResult.success("ok"));
         when(registry.resolve("REST_CALL")).thenReturn(provider);

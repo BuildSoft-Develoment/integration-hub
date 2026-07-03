@@ -174,6 +174,12 @@ public class AsyncTaskConsumer {
             return ConsumeResult.DEAD;
         }
 
+        // Si el scatter ya cerró (fail-fast de otra slice), no se ejecuta el provider: evita side-effects
+        // inútiles sobre las slices restantes tras el fallo (su commit sería no-op igual).
+        if (gather.isScatterTerminal(envelope.processExecutionId(), envelope.taskDefinitionId())) {
+            return ConsumeResult.DUPLICATE;
+        }
+
         var records = item.records().stream().map(ReadRecord::new).toList();
         var context = new TaskContext(envelope.processExecutionId(), envelope.taskDefinitionId());
         // Nivel 2: rehidrata el contexto serializable que viajó en la slice (outputs de tareas origen,
@@ -224,6 +230,12 @@ public class AsyncTaskConsumer {
         if (!(provider instanceof BatchTaskProvider batchProvider)) {
             failSlice(envelope, "el tipo '" + envelope.taskType() + "' no es BatchTaskProvider", continueOnFailure);
             return ConsumeResult.DEAD;
+        }
+
+        // Si el scatter ya cerró (p.ej. fail-fast de una página previa), NO se lee/encola/ejecuta: mata la
+        // cadena runaway y evita side-effects del provider sobre el resto de la tabla tras el fallo.
+        if (gather.isScatterTerminal(envelope.processExecutionId(), envelope.taskDefinitionId())) {
+            return ConsumeResult.DUPLICATE;
         }
 
         // Lee esta página y encola la siguiente (auto-propagación). Un throw (BD caída) propaga → reentrega.

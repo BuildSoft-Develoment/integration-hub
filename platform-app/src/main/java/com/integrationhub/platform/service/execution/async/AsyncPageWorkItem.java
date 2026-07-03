@@ -18,7 +18,11 @@ import java.util.Map;
  * @param orderBy            columna de cursor keyset (estable)
  * @param filters            filtros de la consulta
  * @param batchSize          filas por página
- * @param cursor             último key de la página anterior (null = primera página / seed)
+ * @param cursor             último key de la página anterior (null = primera página / seed). <b>Nota</b>:
+ *                           viaja por JSON entre páginas, así que {@code orderBy} debe ser una columna de
+ *                           tipo JSON-estable (entero/bigint/texto). Tipos como timestamp/UUID/binario
+ *                           podrían degradarse en el round-trip y romper el keyset (a diferencia del path
+ *                           síncrono, que mantiene el cursor tipado en memoria).
  * @param pageIndex          índice 0-based de esta página (para sellar total = índice+1 en la última)
  * @param configuration      configuración resuelta de la tarea
  * @param taskOutputs        outputs de las tareas origen (contexto propagado)

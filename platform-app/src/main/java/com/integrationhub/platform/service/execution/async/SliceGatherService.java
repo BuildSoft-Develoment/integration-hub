@@ -1,5 +1,6 @@
 package com.integrationhub.platform.service.execution.async;
 
+import com.integrationhub.platform.entity.TaskAsyncDispatch;
 import com.integrationhub.platform.entity.TaskInbox;
 import com.integrationhub.platform.repository.TaskAsyncDispatchRepository;
 import com.integrationhub.platform.repository.TaskAsyncDispatchRepository.SliceProgress;
@@ -52,6 +53,19 @@ public class SliceGatherService {
                     + envelope.processExecutionId() + " task=" + envelope.taskDefinitionId() + "; reintentar");
         }
         return progress;
+    }
+
+    /**
+     * {@code true} si el scatter de la tarea ya cerró (COMPLETED/FAILED). Lo usa el consumer para
+     * <b>cortocircuitar</b> slices/páginas tardías tras un fail-fast: no ejecuta el provider (evita
+     * side-effects inútiles) y —en streaming— no encola la siguiente página (mata la cadena runaway).
+     * Best-effort: una entrega concurrente antes de que el fallo commitee puede no verlo aún.
+     */
+    @Transactional
+    public boolean isScatterTerminal(Long processExecutionId, Long taskDefinitionId) {
+        return tracker.findByExecutionAndTask(processExecutionId, taskDefinitionId)
+                .map(t -> TaskAsyncDispatch.COMPLETED.equals(t.status) || TaskAsyncDispatch.FAILED.equals(t.status))
+                .orElse(false);
     }
 
     /**
