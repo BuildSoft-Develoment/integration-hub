@@ -167,7 +167,14 @@ class AsyncTaskConsumerTest {
 
     private String sliceWire(String taskType, int idx, int total, java.util.List<Map<String, Object>> records)
             throws Exception {
-        var workItem = new AsyncSliceWorkItem(Map.of("targetTable", "t"), records, idx, total);
+        return sliceWire(taskType, idx, total, records, Map.of(), Map.of(), Map.of());
+    }
+
+    private String sliceWire(String taskType, int idx, int total, java.util.List<Map<String, Object>> records,
+                             Map<String, Object> taskOutputs, Map<String, Object> metadata,
+                             Map<String, String> executionVariables) throws Exception {
+        var workItem = new AsyncSliceWorkItem(Map.of("targetTable", "t"), records, idx, total,
+                taskOutputs, metadata, executionVariables);
         var envelope = new AsyncTaskEnvelope("exec-1", 1L, 2L, taskType, "KAFKA",
                 TaskIdempotency.key(1L, 2L, "slice-" + idx), 1, mapper.writeValueAsString(workItem),
                 Map.of("kind", "SLICE", "sliceIndex", String.valueOf(idx)));
@@ -221,7 +228,7 @@ class AsyncTaskConsumerTest {
         when(gather.failSlice(any(), any(), anyBoolean())).thenReturn(Optional.of(new SliceProgress(2, 1, 3, true)));
 
         var workItem = new AsyncSliceWorkItem(Map.of("continueOnFailure", true),
-                java.util.List.of(Map.of("id", "x")), 2, 3);
+                java.util.List.of(Map.of("id", "x")), 2, 3, Map.of(), Map.of(), Map.of());
         var envelope = new AsyncTaskEnvelope("exec-1", 1L, 2L, "DB_WRITE", "KAFKA",
                 TaskIdempotency.key(1L, 2L, "slice-2"), 1, mapper.writeValueAsString(workItem),
                 Map.of("kind", "SLICE", "sliceIndex", "2"));
@@ -233,6 +240,25 @@ class AsyncTaskConsumerTest {
         assertEquals(1, completion.calls.size());
         assertTrue(completion.calls.get(0).result().success(),
                 "continueOnFailure: la tarea completa CON errores, no falla el proceso");
+    }
+
+    @Test
+    void sliceRehydratesPropagatedContextForTheProvider() throws Exception {
+        var provider = new CapturingBatchProvider(TaskResult.success("slice ok"));
+        when(registry.resolve("REST_CALL")).thenReturn(provider);
+        when(gather.commitCompletedSlice(any(), any(), any())).thenReturn(Optional.of(new SliceProgress(1, 0, 2, false)));
+
+        // Nivel 2: la slice lleva outputs de tarea origen + variables; el consumer los rehidrata.
+        var payload = sliceWire("REST_CALL", 0, 2, java.util.List.of(Map.of("id", "a")),
+                Map.of("task-1.status", "SENT"), Map.of("processName", "P"), Map.of("env", "prod"));
+
+        var result = consumer.consume(payload, "KAFKA", "tasks.rest_call");
+
+        assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED, result);
+        assertEquals("SENT", ((Map<?, ?>) provider.context.attributes().get("taskOutputs")).get("task-1.status"),
+                "los outputs de la tarea origen llegaron al provider");
+        assertEquals("P", ((Map<?, ?>) provider.context.attributes().get("metadata")).get("processName"));
+        assertEquals("prod", ((Map<?, ?>) provider.context.attributes().get("executionVariables")).get("env"));
     }
 
     // --- fakes -----------------------------------------------------------------
@@ -263,6 +289,7 @@ class AsyncTaskConsumerTest {
         private final TaskResult result;
         java.util.List<ReadRecord> records;
         Map<String, Object> configuration;
+        TaskContext context;
 
         CapturingBatchProvider(TaskResult result) {
             this.result = result;
@@ -278,6 +305,7 @@ class AsyncTaskConsumerTest {
                                          java.util.List<ReadRecord> records, SourcePayload sourcePayload) {
             this.records = records;
             this.configuration = configuration;
+            this.context = context;
             return result;
         }
     }

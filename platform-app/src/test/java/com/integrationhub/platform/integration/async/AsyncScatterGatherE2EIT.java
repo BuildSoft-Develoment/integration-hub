@@ -62,7 +62,8 @@ class AsyncScatterGatherE2EIT {
                 List.of(rec("a"), rec("b")),
                 List.of(rec("c")),
                 List.of(rec("d"), rec("e")));
-        var scatter = new ScatterDispatch(peId, tdId, RecordingBatchTaskProvider.TASK_TYPE, "KAFKA", Map.of(), slices);
+        var scatter = new ScatterDispatch(peId, tdId, RecordingBatchTaskProvider.TASK_TYPE, "KAFKA", Map.of(), slices,
+                Map.of(), Map.of(), Map.of());
 
         // El motor abre el tracker(3) + encola 3 work-items + suspende, atómico (B2b).
         stateService.suspendTask(peId, teId, "{\"scatter\":true}", "tok-scatter", null, null,

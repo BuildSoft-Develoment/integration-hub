@@ -57,6 +57,25 @@ public class AsyncSliceDispatchService {
                               String transport,
                               Map<String, Object> configuration,
                               List<List<ReadRecord>> slices) {
+        return dispatchSlices(processExecutionId, taskDefinitionId, taskType, transport, configuration,
+                slices, Map.of(), Map.of(), Map.of());
+    }
+
+    /**
+     * Variante con propagación de contexto (Nivel 2): {@code taskOutputs}/{@code metadata}/
+     * {@code executionVariables} viajan en cada slice para que el consumer reconstruya el
+     * {@code TaskContext} (p.ej. resolución de {@code ${task-N.x}} en plantillas).
+     */
+    @Transactional
+    public int dispatchSlices(Long processExecutionId,
+                              Long taskDefinitionId,
+                              String taskType,
+                              String transport,
+                              Map<String, Object> configuration,
+                              List<List<ReadRecord>> slices,
+                              Map<String, Object> taskOutputs,
+                              Map<String, Object> metadata,
+                              Map<String, String> executionVariables) {
         if (processExecutionId == null || taskDefinitionId == null) {
             throw new IllegalStateException("El scatter async requiere processExecutionId y taskDefinitionId");
         }
@@ -69,7 +88,8 @@ public class AsyncSliceDispatchService {
         var traceId = "exec-" + processExecutionId;
         for (var i = 0; i < total; i++) {
             var records = slices.get(i).stream().map(ReadRecord::values).toList();
-            var workItem = new AsyncSliceWorkItem(configuration, records, i, total);
+            var workItem = new AsyncSliceWorkItem(configuration, records, i, total,
+                    taskOutputs, metadata, executionVariables);
             var idempotencyKey = TaskIdempotency.key(processExecutionId, taskDefinitionId, "slice-" + i);
             var envelope = new AsyncTaskEnvelope(
                     traceId,
@@ -90,19 +110,24 @@ public class AsyncSliceDispatchService {
     @Transactional
     public int dispatchSlices(ScatterDispatch request) {
         return dispatchSlices(request.processExecutionId(), request.taskDefinitionId(), request.taskType(),
-                request.transport(), request.configuration(), request.slices());
+                request.transport(), request.configuration(), request.slices(),
+                request.taskOutputs(), request.metadata(), request.executionVariables());
     }
 
     /**
      * Petición de scatter que el motor construye en {@code runTask} y ejecuta atómicamente con la
-     * suspensión de la tarea (dentro de la tx de {@code suspendTask}).
+     * suspensión de la tarea (dentro de la tx de {@code suspendTask}). Lleva el contexto serializable
+     * ({@code taskOutputs}/{@code metadata}/{@code executionVariables}) para propagarlo a cada slice.
      */
     public record ScatterDispatch(Long processExecutionId,
                                   Long taskDefinitionId,
                                   String taskType,
                                   String transport,
                                   Map<String, Object> configuration,
-                                  List<List<ReadRecord>> slices) {
+                                  List<List<ReadRecord>> slices,
+                                  Map<String, Object> taskOutputs,
+                                  Map<String, Object> metadata,
+                                  Map<String, String> executionVariables) {
     }
 
     private String serialize(AsyncSliceWorkItem workItem) {

@@ -164,6 +164,10 @@ public class AsyncTaskConsumer {
 
         var records = item.records().stream().map(ReadRecord::new).toList();
         var context = new TaskContext(envelope.processExecutionId(), envelope.taskDefinitionId());
+        // Nivel 2: rehidrata el contexto serializable que viajó en la slice (outputs de tareas origen,
+        // metadata, variables) para que el provider resuelva variables como en el motor síncrono. NO se
+        // rehidrata sourcePayload (no serializable): los providers que lo requieren son UNSUPPORTED.
+        hydrateSliceContext(context, item);
         // Un throw (fallo transitorio) propaga → nack → reentrega de la slice.
         var result = batchProvider.executeRecords(context, item.configuration(), records, null);
 
@@ -211,6 +215,19 @@ public class AsyncTaskConsumer {
                     "scatter fallido: " + progress.failed() + " slice(s) fallida(s) de " + progress.total());
         }
         completion.completeFromExternalResult(envelope.processExecutionId(), envelope.taskDefinitionId(), result);
+    }
+
+    /** Rehidrata en el context el contexto serializable propagado en la slice (Nivel 2). */
+    private void hydrateSliceContext(TaskContext context, AsyncSliceWorkItem item) {
+        if (item.taskOutputs() != null && !item.taskOutputs().isEmpty()) {
+            context.attributes().put("taskOutputs", item.taskOutputs());
+        }
+        if (item.metadata() != null && !item.metadata().isEmpty()) {
+            context.attributes().put("metadata", item.metadata());
+        }
+        if (item.executionVariables() != null && !item.executionVariables().isEmpty()) {
+            context.attributes().put("executionVariables", item.executionVariables());
+        }
     }
 
     private boolean asBoolean(Object value) {

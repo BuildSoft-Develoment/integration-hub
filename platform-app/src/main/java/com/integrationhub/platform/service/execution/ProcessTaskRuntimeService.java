@@ -95,9 +95,14 @@ public class ProcessTaskRuntimeService {
                 if (slices.isEmpty()) {
                     return TaskRunResult.generic(true, "sin registros para repartir", sourcePayload, readResult, Map.of());
                 }
+                // Propaga el contexto serializable a cada slice (Nivel 2): outputs de tareas origen,
+                // metadata y variables de ejecución; el consumer reconstruye el TaskContext con ellos.
+                var metadata = taskOutputRegistry.taskMetadata(
+                        processExecutionId, taskPlan, configuration, triggerSource);
                 var scatter = new AsyncSliceDispatchService.ScatterDispatch(
                         processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(),
-                        envelope.transport(), configuration, slices);
+                        envelope.transport(), configuration, slices,
+                        taskOutputs, metadata, executionVariables);
                 return TaskRunResult.suspendedScatter(
                         "Tarea " + taskPlan.taskType() + " repartida en " + slices.size() + " slices async por "
                                 + envelope.transport(),
