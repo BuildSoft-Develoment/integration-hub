@@ -25,8 +25,6 @@ function createHost(taskModel: ProcessTaskFormModel) {
   fixture.componentRef.setInput('connections', []);
   fixture.detectChanges();
   const http = TestBed.inject(HttpTestingController);
-  // El host consulta los transportes async al iniciar; se resuelve aqui para no ensuciar los verify().
-  http.match('/api/messaging/transports').forEach((req) => req.flush(['KAFKA']));
   return { fixture, http };
 }
 
@@ -72,34 +70,6 @@ describe('ProcessTaskFormHostComponent (schema-driven path)', () => {
       endpoint: 'https://acme.example',
       retries: 3,
     });
-    http.verify();
-  });
-
-  it('merges the common execution options (async / continueOnFailure) preserving the rest of the config', () => {
-    const { fixture, http } = createHost(
-      task('ACME_DO', '{"taskRef":"t1","executionMode":"batch","targetTable":"x"}'),
-    );
-    http.expectOne('/api/plugins/config-schema/ACME_DO').flush({ fields: [] });
-
-    const patches: Partial<ProcessTaskFormModel>[] = [];
-    fixture.componentInstance.patchTask.subscribe((p) => patches.push(p));
-    const last = () => JSON.parse(patches[patches.length - 1].configurationJson as string);
-
-    fixture.componentInstance.onAsyncChange(true);
-    expect(last().async).toBe(true);
-    expect(last().targetTable).toBe('x'); // preserva el resto de la config
-
-    fixture.componentInstance.onContinueOnFailureChange(true);
-    expect(last().continueOnFailure).toBe(true);
-    expect(last().taskRef).toBe('t1');
-
-    fixture.componentInstance.onTransportChange('RABBITMQ');
-    expect(last().asyncTransport).toBe('RABBITMQ');
-
-    fixture.componentInstance.onAsyncChange(false); // desactivar limpia async + asyncTransport
-    expect(last().async).toBeUndefined();
-    expect(last().asyncTransport).toBeUndefined();
-
     http.verify();
   });
 });

@@ -1,24 +1,6 @@
 <div class="task-form-shell" [class.task-form-shell--workspace]="usesWorkspaceLayout()">
   @if (registered(); as reg) {
     <ng-container *ngComponentOutlet="reg.component; inputs: registeredInputs()" />
-
-    <!-- Opciones comunes de ejecucion (async + politica de fallo), para cualquier tipo registrado. -->
-    <div class="task-form-shell__common-options">
-      <ih-async-dispatch-section
-        [async]="asyncEnabled()"
-        [transport]="asyncTransport()"
-        [executionMode]="executionMode()"
-        [transports]="transports()"
-        [readonly]="readonly()"
-        (asyncChange)="onAsyncChange($event)"
-        (transportChange)="onTransportChange($event)"
-      />
-      <ih-task-continue-on-failure
-        [continueOnFailure]="continueOnFailure()"
-        [readonly]="readonly()"
-        (continueOnFailureChange)="onContinueOnFailureChange($event)"
-      />
-    </div>
   } @else if (schema(); as sc) {
     <!-- Tipo aportado por un plugin (sin editor propio) pero con config-schema backend. -->
     <ih-schema-form

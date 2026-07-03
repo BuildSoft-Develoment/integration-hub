@@ -16,14 +16,11 @@ import {
   provideSchemaFieldRenderers,
 } from '@integration-hub/shared/ui';
 import { PluginConfigSchemaService } from '../../../api/plugin-config-schema.service';
-import { MessagingTransportsService } from '../../../api/messaging-transports.service';
 import { ProcessSchemaFieldContextService } from '../../../forms/process-schema-field-context.service';
 import { ConnectionRef, ProcessTaskFormModel, ReaderRef, SourceRef } from '../../../models/process.models';
 import { ProcessTokenFieldComponent } from '../process-token-field/process-token-field.component';
 import { ProcessHttpRequestFieldComponent } from '../process-http-request-field/process-http-request-field.component';
 import { ProcessRuntimeFieldComponent } from '../process-runtime-field/process-runtime-field.component';
-import { AsyncDispatchSectionComponent } from '../async-dispatch-section/async-dispatch-section.component';
-import { TaskContinueOnFailureComponent } from '../task-continue-on-failure/task-continue-on-failure.component';
 
 /**
  * Host del formulario de configuracion de tarea.
@@ -43,7 +40,7 @@ import { TaskContinueOnFailureComponent } from '../task-continue-on-failure/task
   host: {
     '[class.task-form-host--workspace]': 'usesWorkspaceLayout()',
   },
-  imports: [CommonModule, SchemaFormComponent, AsyncDispatchSectionComponent, TaskContinueOnFailureComponent],
+  imports: [CommonModule, SchemaFormComponent],
   providers: [
     ProcessTaskFormBridgeService,
     // El campo custom `token-text` (autocompletado de tokens) queda disponible para el
@@ -63,7 +60,6 @@ export class ProcessTaskFormHostComponent {
   /** Puente signal-based que recoge patches del componente dinamico. */
   private readonly bridge = inject(ProcessTaskFormBridgeService);
   private readonly configSchemas = inject(PluginConfigSchemaService);
-  private readonly transportsApi = inject(MessagingTransportsService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly fieldContext = inject(ProcessSchemaFieldContextService);
 
@@ -122,53 +118,6 @@ export class ProcessTaskFormHostComponent {
     }
   });
 
-  // --- Opciones comunes de ejecucion (async + continueOnFailure), renderizadas una vez por el host ---
-  // Cooperan con el form por-tipo: la serializacion de estas claves vive en la base ProcessTaskProvider,
-  // asi que un patch del form las preserva; y el merge del host preserva el resto de la config.
-
-  /** Config parseada de la tarea (para leer las opciones comunes). */
-  private readonly config = computed<Record<string, unknown>>(() => {
-    try {
-      const parsed = JSON.parse(this.task().configurationJson || '{}');
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-    } catch {
-      return {};
-    }
-  });
-
-  readonly asyncEnabled = computed(() => this.config()['async'] === true);
-  readonly asyncTransport = computed(() => String(this.config()['asyncTransport'] ?? 'KAFKA'));
-  readonly continueOnFailure = computed(() => this.config()['continueOnFailure'] === true);
-  readonly executionMode = computed(() => String(this.config()['executionMode'] ?? 'once'));
-
-  /** Transportes disponibles para el selector async (fallback ['KAFKA'] si el endpoint falla/403). */
-  readonly transports = signal<readonly string[]>(['KAFKA']);
-
-  onAsyncChange(value: boolean): void {
-    this.patchConfig(value ? { async: true } : { async: undefined, asyncTransport: undefined });
-  }
-
-  onTransportChange(value: string): void {
-    this.patchConfig({ asyncTransport: value });
-  }
-
-  onContinueOnFailureChange(value: boolean): void {
-    this.patchConfig({ continueOnFailure: value ? true : undefined });
-  }
-
-  /** Mergea las claves comunes en la config actual (undefined = borrar) y persiste. */
-  private patchConfig(patch: Record<string, unknown>): void {
-    const next: Record<string, unknown> = { ...this.config() };
-    for (const [key, value] of Object.entries(patch)) {
-      if (value === undefined) {
-        delete next[key];
-      } else {
-        next[key] = value;
-      }
-    }
-    this.patchTask.emit({ configurationJson: JSON.stringify(next, null, 2) });
-  }
-
   constructor() {
     // Publica el contexto de binding para los renderers de campo `token-text` del schema-form.
     effect(() => {
@@ -207,21 +156,6 @@ export class ProcessTaskFormHostComponent {
           });
       });
     });
-
-    // Transportes disponibles para el selector async (una vez; fallback ['KAFKA'] ante error/403).
-    this.transportsApi
-      .list()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (list) => {
-          if (list?.length) {
-            this.transports.set(list);
-          }
-        },
-        error: () => {
-          /* fallback ['KAFKA'] */
-        },
-      });
   }
 
   /** Persiste el valor del schema-form como {@code configurationJson} de la tarea. */
