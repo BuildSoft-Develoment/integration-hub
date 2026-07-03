@@ -9,6 +9,7 @@ import com.integrationhub.platform.repository.ProcessDefinitionRepository;
 import com.integrationhub.platform.repository.ProcessExecutionRepository;
 import com.integrationhub.platform.repository.ProcessTaskDefinitionRepository;
 import com.integrationhub.platform.repository.ProcessTaskExecutionRepository;
+import com.integrationhub.platform.service.execution.async.AsyncSliceDispatchService;
 import com.integrationhub.platform.service.execution.async.TaskOutboxStore;
 import com.integrationhub.platform.task.AsyncTaskEnvelope;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -28,6 +29,7 @@ public class ProcessExecutionStateService {
     private final ProcessTaskExecutionRepository processTaskExecutionRepository;
     private final AuditService auditService;
     private final TaskOutboxStore taskOutboxStore;
+    private final AsyncSliceDispatchService sliceDispatchService;
 
     public ProcessExecutionStateService(
             ProcessDefinitionRepository processDefinitionRepository,
@@ -35,7 +37,8 @@ public class ProcessExecutionStateService {
             ProcessExecutionRepository processExecutionRepository,
             ProcessTaskExecutionRepository processTaskExecutionRepository,
             AuditService auditService,
-            TaskOutboxStore taskOutboxStore
+            TaskOutboxStore taskOutboxStore,
+            AsyncSliceDispatchService sliceDispatchService
     ) {
         this.processDefinitionRepository = processDefinitionRepository;
         this.processTaskDefinitionRepository = processTaskDefinitionRepository;
@@ -43,6 +46,7 @@ public class ProcessExecutionStateService {
         this.processTaskExecutionRepository = processTaskExecutionRepository;
         this.auditService = auditService;
         this.taskOutboxStore = taskOutboxStore;
+        this.sliceDispatchService = sliceDispatchService;
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
@@ -188,7 +192,7 @@ public class ProcessExecutionStateService {
                             String details,
                             Object auditPayload) {
         suspendTask(processExecutionId, taskExecutionId, suspendedStateJson, resumeToken,
-                expiresAt, continuationJson, details, auditPayload, null);
+                expiresAt, continuationJson, details, auditPayload, (AsyncTaskEnvelope) null);
     }
 
     /**
@@ -209,6 +213,44 @@ public class ProcessExecutionStateService {
                             String details,
                             Object auditPayload,
                             AsyncTaskEnvelope asyncDispatch) {
+        persistSuspension(processExecutionId, taskExecutionId, suspendedStateJson, resumeToken,
+                expiresAt, continuationJson, details, auditPayload);
+        if (asyncDispatch != null) {
+            taskOutboxStore.enqueue(asyncDispatch);
+        }
+    }
+
+    /**
+     * Variante para el <b>scatter async</b> (Opción B): persiste la suspensión y, en <b>esta misma
+     * transacción</b>, abre el tracker N→1 y encola los N work-items de slice (via
+     * {@code dispatchSlices}, {@code @Transactional(REQUIRED)} → se une). Atómico: nunca hay slices ni
+     * tracker sin su suspensión, ni suspensión sin sus slices.
+     */
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public void suspendTask(Long processExecutionId,
+                            Long taskExecutionId,
+                            String suspendedStateJson,
+                            String resumeToken,
+                            LocalDateTime expiresAt,
+                            String continuationJson,
+                            String details,
+                            Object auditPayload,
+                            AsyncSliceDispatchService.ScatterDispatch scatterDispatch) {
+        persistSuspension(processExecutionId, taskExecutionId, suspendedStateJson, resumeToken,
+                expiresAt, continuationJson, details, auditPayload);
+        if (scatterDispatch != null) {
+            sliceDispatchService.dispatchSlices(scatterDispatch);
+        }
+    }
+
+    private void persistSuspension(Long processExecutionId,
+                                   Long taskExecutionId,
+                                   String suspendedStateJson,
+                                   String resumeToken,
+                                   LocalDateTime expiresAt,
+                                   String continuationJson,
+                                   String details,
+                                   Object auditPayload) {
         var execution = processExecutionRepository.findById(processExecutionId);
         var taskExecution = processTaskExecutionRepository.findById(taskExecutionId);
         taskExecution.status = ExecutionStatus.SUSPENDED;
@@ -225,9 +267,6 @@ public class ProcessExecutionStateService {
         execution.status = ExecutionStatus.SUSPENDED;
         auditService.record(execution, taskExecution.taskDefinition,
                 "TASK_SUSPENDED", "SUSPENDED", details, auditPayload);
-        if (asyncDispatch != null) {
-            taskOutboxStore.enqueue(asyncDispatch);
-        }
     }
 
     /**

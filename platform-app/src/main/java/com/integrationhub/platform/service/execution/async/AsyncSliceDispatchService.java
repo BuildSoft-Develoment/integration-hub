@@ -86,6 +86,25 @@ public class AsyncSliceDispatchService {
         return total;
     }
 
+    /** Overload por {@link ScatterDispatch}, para invocarlo desde la tx de la suspensión (B2b). */
+    @Transactional
+    public int dispatchSlices(ScatterDispatch request) {
+        return dispatchSlices(request.processExecutionId(), request.taskDefinitionId(), request.taskType(),
+                request.transport(), request.configuration(), request.slices());
+    }
+
+    /**
+     * Petición de scatter que el motor construye en {@code runTask} y ejecuta atómicamente con la
+     * suspensión de la tarea (dentro de la tx de {@code suspendTask}).
+     */
+    public record ScatterDispatch(Long processExecutionId,
+                                  Long taskDefinitionId,
+                                  String taskType,
+                                  String transport,
+                                  Map<String, Object> configuration,
+                                  List<List<ReadRecord>> slices) {
+    }
+
     private String serialize(AsyncSliceWorkItem workItem) {
         try {
             return objectMapper.writeValueAsString(workItem);
