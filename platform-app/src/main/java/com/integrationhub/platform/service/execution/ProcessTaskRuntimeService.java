@@ -36,7 +36,7 @@ public class ProcessTaskRuntimeService {
     private final TaskOutputRegistry taskOutputRegistry;
     private final TaskInputResolver taskInputResolver;
     private final AsyncTaskDispatchService asyncTaskDispatchService;
-    private final com.integrationhub.platform.repository.ProcessTaskExecutionRepository taskExecutionRepository;
+    private final com.integrationhub.platform.repository.TaskSyncProgressRepository syncProgressRepository;
 
     /** Cada cuántos slices se persiste el progreso sync (throttle: a 1M/batch no se escribe por lote). */
     private static final int PROGRESS_EVERY_N_SLICES = 10;
@@ -48,7 +48,7 @@ public class ProcessTaskRuntimeService {
                                      TaskOutputRegistry taskOutputRegistry,
                                      TaskInputResolver taskInputResolver,
                                      AsyncTaskDispatchService asyncTaskDispatchService,
-                                     com.integrationhub.platform.repository.ProcessTaskExecutionRepository taskExecutionRepository) {
+                                     com.integrationhub.platform.repository.TaskSyncProgressRepository syncProgressRepository) {
         this.sourceProviderRegistry = sourceProviderRegistry;
         this.readerProviderRegistry = readerProviderRegistry;
         this.taskProviderRegistry = taskProviderRegistry;
@@ -56,7 +56,7 @@ public class ProcessTaskRuntimeService {
         this.taskOutputRegistry = taskOutputRegistry;
         this.taskInputResolver = taskInputResolver;
         this.asyncTaskDispatchService = asyncTaskDispatchService;
-        this.taskExecutionRepository = taskExecutionRepository;
+        this.syncProgressRepository = syncProgressRepository;
     }
 
     @Transactional(Transactional.TxType.NOT_SUPPORTED)
@@ -174,7 +174,7 @@ public class ProcessTaskRuntimeService {
                         // real ya se hizo); se registra y se sigue.
                         if (slice.batchNumber() % PROGRESS_EVERY_N_SLICES == 0) {
                             try {
-                                taskExecutionRepository.updateProcessed(
+                                syncProgressRepository.upsert(
                                         processExecutionId, taskPlan.taskDefinitionId(), slice.batchTo());
                             } catch (RuntimeException progressError) {
                                 LOG.debugf(progressError, "No se pudo persistir el progreso sync de exec=%d task=%d",

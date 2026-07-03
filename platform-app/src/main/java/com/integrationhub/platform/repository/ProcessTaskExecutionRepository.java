@@ -1,28 +1,15 @@
 package com.integrationhub.platform.repository;
 
-import com.integrationhub.platform.domain.ExecutionStatus;
 import com.integrationhub.platform.entity.ProcessTaskExecution;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.hibernate.orm.panache.PanacheRepository;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.transaction.Transactional;
 
 @ApplicationScoped
 public class ProcessTaskExecutionRepository implements PanacheRepository<ProcessTaskExecution> {
 
     public PanacheQuery<ProcessTaskExecution> findByProcessExecutionId(Long processExecutionId) {
         return find("from ProcessTaskExecution e where e.processExecution.id = ?1 order by e.id asc", processExecutionId);
-    }
-
-    /**
-     * Persiste el progreso <b>en vivo</b> de la tarea RUNNING (batch sync). En su propia transacción
-     * (el caller {@code runTask} es NOT_SUPPORTED → sin tx ambiente), así el poll de progreso lo ve sin
-     * esperar a que termine la tarea. Solo aplica a la tarea aún en curso.
-     */
-    @Transactional
-    public void updateProcessed(Long processExecutionId, Long taskDefinitionId, long processed) {
-        update("recordsProcessed = ?1 where processExecution.id = ?2 and taskDefinition.id = ?3 and status = ?4",
-                processed, processExecutionId, taskDefinitionId, ExecutionStatus.RUNNING);
     }
 
     /**

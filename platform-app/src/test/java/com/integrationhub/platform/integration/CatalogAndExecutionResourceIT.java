@@ -141,6 +141,15 @@ class CatalogAndExecutionResourceIT {
                             .body("[0].status", is("COMPLETED"))
                             .body("[1].status", is("COMPLETED"));
 
+            // El endpoint de progreso responde. (Nota: este proceso FILE_READ→DB_WRITE usa el streaming
+            // fastpath, que no pasa por executeByMode → no reporta progreso sync granular; el progreso
+            // sync via executeByMode se valida en AsyncTaskDlqIT.)
+            given()
+                    .when()
+                            .get("/api/query/process-executions/{processExecutionId}/progress", executionId.longValue())
+                    .then()
+                            .statusCode(200);
+
             // Auditoria asincrona: platform-app es el PRODUCTOR. Su responsabilidad es
             // dejar la trama en el spool durable (audit_spool); poblar audit_event es del
             // audit-consumer (deployable aparte), no de este proceso. La API /audit-events

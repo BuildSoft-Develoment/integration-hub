@@ -13,22 +13,23 @@ import java.util.List;
  * {@code task_async_dispatch} por tarea (scatter) y la salud del pipeline async. La UI la puede pollear
  * (auto-refresh) para mostrar avance de un proceso de 1M registros en vez de solo el estado terminal.
  *
- * <p><b>Alcance</b>: el progreso granular existe para tareas <b>scatter</b> (que abren un tracker N→1 o
- * page-chain). Las tareas <b>sync</b> y <b>once-async</b> no tienen tracker por-slice; su progreso es el
- * estado de la tarea (running/done) más el contador persistido del loop sync (pieza aparte).</p>
+ * <p><b>Alcance</b>: el progreso granular existe para tareas <b>scatter</b> (tracker N→1/page-chain) y
+ * para tareas <b>batch sync</b> vía {@code executeByMode} (contador upserteado en {@code task_sync_progress}).
+ * <b>Limitación conocida</b>: el <i>streaming fastpath</i> (FILE_READ→DB_WRITE) no pasa por
+ * {@code executeByMode}, así que aún no reporta progreso sync granular — instrumentarlo es un follow-up.</p>
  */
 @ApplicationScoped
 public class ExecutionProgressService {
 
     private final TaskAsyncDispatchRepository scatterTracker;
-    private final com.integrationhub.platform.repository.ProcessTaskExecutionRepository taskExecutionRepository;
+    private final com.integrationhub.platform.repository.TaskSyncProgressRepository syncProgressRepository;
     private final AsyncTaskDlqService dlqService;
 
     public ExecutionProgressService(TaskAsyncDispatchRepository scatterTracker,
-                                    com.integrationhub.platform.repository.ProcessTaskExecutionRepository taskExecutionRepository,
+                                    com.integrationhub.platform.repository.TaskSyncProgressRepository syncProgressRepository,
                                     AsyncTaskDlqService dlqService) {
         this.scatterTracker = scatterTracker;
-        this.taskExecutionRepository = taskExecutionRepository;
+        this.syncProgressRepository = syncProgressRepository;
         this.dlqService = dlqService;
     }
 
@@ -37,11 +38,9 @@ public class ExecutionProgressService {
         var scatterTasks = scatterTracker.findByExecution(processExecutionId).stream()
                 .map(this::toTaskProgress)
                 .toList();
-        // Progreso de tareas SÍNCRONAS: el contador en vivo persistido por el loop batch (records_processed).
-        var syncTasks = taskExecutionRepository.findByProcessExecutionId(processExecutionId).list().stream()
-                .filter(e -> e.recordsProcessed != null)
-                .map(e -> new SyncTaskProgress(e.taskDefinition.id, e.recordsProcessed,
-                        e.status == null ? null : e.status.name()))
+        // Progreso de tareas SÍNCRONAS: el contador en vivo upserteado por el loop batch (tabla dedicada).
+        var syncTasks = syncProgressRepository.findByExecution(processExecutionId).stream()
+                .map(p -> new SyncTaskProgress(p.taskDefinitionId, p.recordsProcessed))
                 .toList();
         return new ExecutionProgress(processExecutionId, scatterTasks, syncTasks, dlqService.summary());
     }
@@ -60,8 +59,8 @@ public class ExecutionProgressService {
                                     List<SyncTaskProgress> syncTasks, AsyncTaskDlqService.DlqSummary pipeline) {
     }
 
-    /** Progreso en vivo de una tarea batch síncrona (records_processed persistido throttled). */
-    public record SyncTaskProgress(Long taskDefinitionId, long recordsProcessed, String status) {
+    /** Progreso en vivo de una tarea batch síncrona (records_processed upserteado throttled). */
+    public record SyncTaskProgress(Long taskDefinitionId, long recordsProcessed) {
     }
 
     /**
