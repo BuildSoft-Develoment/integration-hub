@@ -20,6 +20,11 @@ public class TaskInboxRepository implements PanacheRepository<TaskInbox> {
         return idempotencyKey != null && count("idempotencyKey", idempotencyKey) > 0;
     }
 
+    /** Conteo por estado, para métricas de operabilidad (procesados, fallos, DLQ). */
+    public long countByStatus(String status) {
+        return count("status", status);
+    }
+
     /**
      * Inserta un registro terminal de forma <b>idempotente</b> ({@code ON CONFLICT DO NOTHING}),
      * igual que {@code AuditEventWriter}. Race-safe por diseño: si otro consumer ya asentó la misma

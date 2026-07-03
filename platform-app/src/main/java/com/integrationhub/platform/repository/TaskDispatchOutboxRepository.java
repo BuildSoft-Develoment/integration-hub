@@ -53,6 +53,11 @@ public class TaskDispatchOutboxRepository implements PanacheRepository<TaskDispa
         return count("idempotencyKey", idempotencyKey) > 0;
     }
 
+    /** Conteo por estado, para métricas de operabilidad (profundidad de cola, DLQ). */
+    public long countByStatus(String status) {
+        return count("status", status);
+    }
+
     public void markSent(Long id, String reference) {
         update("status = ?1, sentAt = ?2, reference = ?3, lockedBy = null, lockedAt = null where id = ?4",
                 TaskDispatchOutbox.SENT, LocalDateTime.now(), reference, id);
