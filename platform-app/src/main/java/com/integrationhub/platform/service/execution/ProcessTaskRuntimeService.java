@@ -182,13 +182,15 @@ public class ProcessTaskRuntimeService {
      * que no la soporta es un error de configuración que debe fallar fuerte y visible.
      */
     private void guardAsyncOffloadable(TaskProvider provider, String taskType, String executionMode) {
-        if (provider instanceof SuspendableTaskProvider) {
-            throw new IllegalStateException("La tarea '" + taskType + "' es suspendible (espera un evento "
-                    + "externo) y no soporta ejecución async: el consumer la marcaría DEAD y la tarea quedaría "
-                    + "colgada. Quite 'async' de su configuración o ejecútela síncrona.");
+        var scatter = requiresRecordInput(executionMode);
+        // Nivel 3: un SuspendableTaskProvider SÍ es offloadable en 'once' (el consumer ejecuta el primer
+        // intento y, si suspende, la tarea se re-suspende para callback/scheduler). Pero NO en scatter: la
+        // re-suspensión no aplica a una slice; una slice que suspende va a DEAD. Se bloquea explícito.
+        if (provider instanceof SuspendableTaskProvider && scatter) {
+            throw new IllegalStateException("La tarea suspendible '" + taskType + "' no soporta async en modo "
+                    + "distribuido (scatter): la re-suspensión solo aplica a executionMode 'once'.");
         }
         var support = provider.asyncOffloadSupport();
-        var scatter = requiresRecordInput(executionMode);
         var allowed = switch (support) {
             case SUPPORTED -> true;
             case SLICE_ONLY -> scatter;

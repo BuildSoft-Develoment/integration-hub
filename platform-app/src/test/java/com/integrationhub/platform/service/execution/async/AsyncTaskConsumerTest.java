@@ -131,17 +131,8 @@ class AsyncTaskConsumerTest {
         assertTrue(completion.calls.isEmpty(), "un fallo transitorio no completa el proceso");
     }
 
-    @Test
-    void suspendedInsideConsumerIsDeadUntilContinuationLands() {
-        when(registry.resolve("DB_WRITE"))
-                .thenReturn(new CapturingProvider(TaskResult.suspended("espera callback", Map.of("k", "v"))));
-
-        var result = consumer.consume(wire("DB_WRITE", "idem-susp", "{}"), "KAFKA", "tasks.db_write");
-
-        assertEquals(AsyncTaskConsumer.ConsumeResult.DEAD, result);
-        assertEquals("DEAD", inbox.single().status);
-        assertTrue(completion.calls.isEmpty(), "un resultado suspended no completa el proceso");
-    }
+    // (Nivel 3) El caso "suspended en el consumer" ya NO va a DEAD: se re-suspende. Ver
+    // suspendedResultReSuspendsInsteadOfDeadLettering más abajo.
 
     @Test
     void poisonPayloadIsRecordedInDlqAndAcked() {
@@ -161,6 +152,38 @@ class AsyncTaskConsumerTest {
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.DEAD, result);
         assertEquals("DEAD", inbox.single().status);
+    }
+
+    // --- Nivel 3: re-suspensión de suspendibles en once -----------------------
+
+    @Test
+    void suspendedResultReSuspendsInsteadOfDeadLettering() {
+        var provider = new SuspendingProvider(TaskResult.suspended("esperando callback", Map.of("attempt", 1)));
+        when(registry.resolve("MT101_STATUS")).thenReturn(provider);
+
+        var result = consumer.consume(wire("MT101_STATUS", "idem-susp", "{}"), "KAFKA", "tasks.mt101_status");
+
+        // El provider suspendió → el motor re-suspende (RE_SUSPENDED) y el consumer marca PROCESSED
+        // (el offload cumplió), NO DEAD.
+        assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED, result);
+        assertEquals("PROCESSED", inbox.single().status);
+        assertEquals(1, completion.calls.size());
+        assertTrue(completion.calls.get(0).result().suspended(), "se pasó el resultado suspended a la completación");
+    }
+
+    @Test
+    void onceRehydratesSuspendedContextForTheProvider() {
+        var provider = new CapturingProvider(TaskResult.success("ok"));
+        when(registry.resolve("MT101_STATUS")).thenReturn(provider);
+        completion.suspendedContext = new AsyncTaskCompletion.SuspendedContext(
+                Map.of("task-1.paymentRef", "PMT-9"), Map.of("env", "prod"));
+
+        consumer.consume(wire("MT101_STATUS", "idem-ctx", "{}"), "KAFKA", "tasks.mt101_status");
+
+        assertEquals("PMT-9",
+                ((Map<?, ?>) provider.context.attributes().get("taskOutputs")).get("task-1.paymentRef"),
+                "el contexto capturado al suspender se rehidrató para el provider");
+        assertEquals("prod", ((Map<?, ?>) provider.context.attributes().get("executionVariables")).get("env"));
     }
 
     // --- scatter-gather (Opción B) ---------------------------------------------
@@ -285,6 +308,25 @@ class AsyncTaskConsumerTest {
         }
     }
 
+    /** Suspendible de prueba (Nivel 3): su primer execute en el consumer devuelve suspended. */
+    private static final class SuspendingProvider implements TaskProvider {
+        private final TaskResult result;
+
+        SuspendingProvider(TaskResult result) {
+            this.result = result;
+        }
+
+        @Override
+        public String type() {
+            return "MT101_STATUS";
+        }
+
+        @Override
+        public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
+            return result;
+        }
+    }
+
     private static final class CapturingBatchProvider implements BatchTaskProvider {
         private final TaskResult result;
         java.util.List<ReadRecord> records;
@@ -365,13 +407,25 @@ class AsyncTaskConsumerTest {
     /** Fake del puerto de completación que captura las invocaciones (sin motor). */
     private static final class RecordingCompletion implements AsyncTaskCompletion {
         final List<Call> calls = new ArrayList<>();
+        AsyncTaskCompletion.SuspendedContext suspendedContext = AsyncTaskCompletion.SuspendedContext.empty();
 
         @Override
         public ProcessExecutionResumeService.ResumeOutcome completeFromExternalResult(
                 Long processExecutionId, Long taskDefinitionId, TaskResult result) {
             calls.add(new Call(processExecutionId, taskDefinitionId, result));
+            if (result.suspended()) {
+                // Nivel 3: el provider volvió a suspender → el motor re-suspende (nuevo token).
+                return new ProcessExecutionResumeService.ResumeOutcome(
+                        ProcessExecutionResumeService.Outcome.RE_SUSPENDED, "new-token", false, result.details());
+            }
             return new ProcessExecutionResumeService.ResumeOutcome(
                     ProcessExecutionResumeService.Outcome.COMPLETED, null, true, "ok");
+        }
+
+        @Override
+        public AsyncTaskCompletion.SuspendedContext loadSuspendedContext(
+                Long processExecutionId, Long taskDefinitionId) {
+            return suspendedContext;
         }
 
         record Call(Long processExecutionId, Long taskDefinitionId, TaskResult result) {

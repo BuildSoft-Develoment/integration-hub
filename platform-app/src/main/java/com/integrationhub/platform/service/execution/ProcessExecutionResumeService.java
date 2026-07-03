@@ -132,16 +132,41 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
      * reanudada y aplica el resultado externo compartiendo la misma cola terminal que el resume
      * (completeTask/failProcess + continuación downstream), pero sin re-invocar al provider.
      */
+    /**
+     * <b>Contexto capturado al suspender (Nivel 3, camino once)</b>: lee la continuación persistida de la
+     * tarea suspendida por despacho async y devuelve su {@code taskOutputs}/{@code executionVariables}
+     * para que el consumer rehidrate el {@code TaskContext} del provider. No transacciona ni muta estado.
+     */
+    @Override
+    @Transactional
+    public SuspendedContext loadSuspendedContext(Long processExecutionId, Long taskDefinitionId) {
+        var taskExecution = taskExecutionRepository.findActiveSuspendedByExecutionAndTask(
+                processExecutionId, taskDefinitionId);
+        if (taskExecution == null) {
+            return SuspendedContext.empty();
+        }
+        var envelope = suspensionContinuation.unmarshal(taskExecution.suspendedContinuation);
+        if (envelope == null) {
+            return SuspendedContext.empty();
+        }
+        return new SuspendedContext(
+                envelope.taskOutputs() == null ? Map.of() : envelope.taskOutputs(),
+                envelope.executionVariables() == null ? Map.of() : envelope.executionVariables());
+    }
+
     @Transactional
     ResumeCompletion completeTransactional(Long processExecutionId, Long taskDefinitionId, TaskResult result) {
-        if (result.suspended()) {
-            throw new IllegalArgumentException("La completación async no acepta resultados suspended");
-        }
         var taskExecution = taskExecutionRepository.findActiveSuspendedByExecutionAndTask(
                 processExecutionId, taskDefinitionId);
         if (taskExecution == null) {
             return ResumeCompletion.terminal(new ResumeOutcome(Outcome.NOT_FOUND, null, false,
                     "No hay suspensión async activa para exec=" + processExecutionId + " task=" + taskDefinitionId));
+        }
+        // Nivel 3: un SuspendableTaskProvider que ejecutó su primer intento en el consumer y necesita
+        // esperar un evento externo → re-suspende la tarea (nuevo token/estado/expiry, preservando la
+        // continuación) en vez de completarla, para que el callback/scheduler la reanude normalmente.
+        if (result.suspended()) {
+            return reSuspend(taskExecution, result);
         }
         var taskDefinition = taskExecution.taskDefinition;
         if (taskDefinition == null) {
@@ -234,6 +259,37 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
 
         return finishTerminalResult(taskExecution, taskDefinition, processDefinition,
                 processExecutionId, taskExecutionId, configuration, result, token);
+    }
+
+    /**
+     * Re-suspende una tarea suspendida por despacho async cuyo provider volvió a suspender en el
+     * consumer (Nivel 3, ADR-015). Espeja la re-suspensión del resume por callback (líneas del
+     * {@code resumeTransactional}): marca consumida la suspensión async y crea una nueva (token/estado/
+     * expiry nuevos), preservando la continuación para que el resume posterior siga el downstream.
+     */
+    private ResumeCompletion reSuspend(
+            com.integrationhub.platform.entity.ProcessTaskExecution taskExecution, TaskResult result) {
+        var taskDefinition = taskExecution.taskDefinition;
+        if (taskDefinition == null) {
+            throw new IllegalStateException("Suspended task " + taskExecution.id + " has no taskDefinition");
+        }
+        var processExecution = taskExecution.processExecution;
+        var processExecutionId = processExecution == null ? null : processExecution.id;
+        var taskExecutionId = taskExecution.id;
+
+        stateService.markResumed(taskExecutionId);
+
+        var newToken = tokenGenerator.generate();
+        var stateJson = stateMarshaller.marshal(result.suspendedState());
+        var details = auditMapper.buildTaskDetails(auditTaskPlan(taskDefinition), result.details());
+        stateService.suspendTask(
+                processExecutionId, taskExecutionId, stateJson, newToken,
+                SuspensionExpiry.expiresAt(result.suspendedState()),
+                taskExecution.suspendedContinuation,
+                details,
+                Map.of("taskType", taskDefinition.taskType, "resumeToken", newToken, "rePhase", "async-re-suspended"));
+        return ResumeCompletion.terminal(
+                new ResumeOutcome(Outcome.RE_SUSPENDED, newToken, false, result.details()));
     }
 
     /**

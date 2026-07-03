@@ -86,10 +86,30 @@ class ProcessTaskRuntimeAsyncGuardTest {
     }
 
     @Test
-    void throwsWhenSuspendableProviderIsDispatchedAsync() {
+    void throwsWhenSuspendableProviderWithoutCapabilityIsDispatchedAsync() {
+        // Suspendible con capacidad UNSUPPORTED (p.ej. RemoteTaskProvider): sigue bloqueado.
         stub("once", new SuspendableProvider());
         var ex = assertThrows(IllegalStateException.class, () -> run("once"));
-        assertTrue(ex.getMessage().contains("suspendible"), ex.getMessage());
+        assertTrue(ex.getMessage().contains("no soporta ejecución async"), ex.getMessage());
+    }
+
+    @Test
+    void allowsSupportedSuspendableProviderDispatchedAsyncOnce() {
+        // Nivel 3: un suspendible SUPPORTED en once SÍ se offloada (el motor lo re-suspende si suspende).
+        stub("once", new SupportedSuspendableProvider());
+        var result = assertDoesNotThrow(() -> run("once"));
+        assertNotNull(result);
+    }
+
+    @Test
+    void throwsWhenSuspendableProviderIsDispatchedInScatterMode() {
+        // batch requiere input en la config para llegar al guard (si no, falla antes por "requires input").
+        var config = new HashMap<String, Object>();
+        config.put("input", Map.of("source", "task-output"));
+        when(fileReadRuntimeSupport.configuration(any())).thenReturn(config);
+        stub("batch", new SupportedSuspendableProvider());
+        var ex = assertThrows(IllegalStateException.class, () -> run("batch"));
+        assertTrue(ex.getMessage().contains("scatter"), ex.getMessage());
     }
 
     @Test
@@ -130,5 +150,13 @@ class ProcessTaskRuntimeAsyncGuardTest {
         @Override public String type() { return "ANY_TYPE"; }
         @Override public TaskResult execute(TaskContext c, Map<String, Object> cfg) { return TaskResult.success("ok"); }
         @Override public TaskResult resume(TaskContext c, Map<String, Object> cfg, Map<String, Object> state) { return TaskResult.success("ok"); }
+        // asyncOffloadSupport() default = UNSUPPORTED
+    }
+
+    private static class SupportedSuspendableProvider implements SuspendableTaskProvider {
+        @Override public String type() { return "ANY_TYPE"; }
+        @Override public TaskResult execute(TaskContext c, Map<String, Object> cfg) { return TaskResult.success("ok"); }
+        @Override public TaskResult resume(TaskContext c, Map<String, Object> cfg, Map<String, Object> state) { return TaskResult.success("ok"); }
+        @Override public AsyncOffloadSupport asyncOffloadSupport() { return AsyncOffloadSupport.SUPPORTED; }
     }
 }

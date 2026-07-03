@@ -108,23 +108,27 @@ public class AsyncTaskConsumer {
         }
 
         var context = new TaskContext(envelope.processExecutionId(), envelope.taskDefinitionId());
+        // Nivel 3 (camino once): rehidrata el contexto serializable capturado al suspender (taskOutputs/
+        // executionVariables), para que un provider como MT101_STATUS resuelva qué consultar igual que
+        // en el motor síncrono. NO viaja sourcePayload (no serializable): esos providers son UNSUPPORTED.
+        hydrateOnceContext(context, envelope);
         // Un throw aquí (fallo transitorio) NO se captura: propaga → nack → reentrega (at-least-once).
         var result = provider.execute(context, configuration);
 
-        if (result.suspended()) {
-            // Una tarea offloada no puede volver a suspenderse en el consumer: no hay forma de
-            // reanudarla desde aquí. DEAD explícito, sin degradar en silencio.
-            inbox.recordDead(envelope, "el provider se suspendió en el consumer async; no soportado");
-            return ConsumeResult.DEAD;
-        }
-
-        // Aplica el resultado a la tarea suspendida por despacho async y continúa el pipeline
-        // (idempotente por resumedAt). Se hace ANTES de registrar el inbox: si hay crash entre
-        // completar y registrar, la reentrega re-ejecuta (at-least-once) y la completación vuelve a
-        // ser idempotente (NOT_FOUND), sin dejar el proceso colgado.
+        // Aplica el resultado a la tarea suspendida por despacho async y continúa el pipeline (o, si el
+        // provider volvió a suspender —Nivel 3, suspendible—, re-suspende con token/estado nuevos). Se
+        // hace ANTES de registrar el inbox: si hay crash entre completar y registrar, la reentrega
+        // re-ejecuta (at-least-once) y la completación es idempotente (NOT_FOUND), sin colgar el proceso.
         var outcome = completion.completeFromExternalResult(
                 envelope.processExecutionId(), envelope.taskDefinitionId(), result);
         LOG.debugf("Async task consumer: completación de %s → %s", envelope.idempotencyKey(), outcome.outcome());
+
+        if (result.suspended()) {
+            // Re-suspensión: la tarea quedó SUSPENDED esperando callback/scheduler; el offload cumplió su
+            // trabajo (ejecutó el primer intento). Se marca PROCESSED para deduplicar la reentrega.
+            inbox.recordProcessed(envelope, null, result.details());
+            return ConsumeResult.PROCESSED;
+        }
 
         if (!result.success()) {
             inbox.recordFailed(envelope, result.details());
@@ -215,6 +219,21 @@ public class AsyncTaskConsumer {
                     "scatter fallido: " + progress.failed() + " slice(s) fallida(s) de " + progress.total());
         }
         completion.completeFromExternalResult(envelope.processExecutionId(), envelope.taskDefinitionId(), result);
+    }
+
+    /**
+     * Rehidrata en el context (camino once, Nivel 3) el contexto serializable capturado al suspender la
+     * tarea por despacho async, leído de la continuación persistida vía el puerto de completación.
+     */
+    private void hydrateOnceContext(TaskContext context, AsyncTaskEnvelope envelope) {
+        var suspended = completion.loadSuspendedContext(
+                envelope.processExecutionId(), envelope.taskDefinitionId());
+        if (suspended.taskOutputs() != null && !suspended.taskOutputs().isEmpty()) {
+            context.attributes().put("taskOutputs", suspended.taskOutputs());
+        }
+        if (suspended.executionVariables() != null && !suspended.executionVariables().isEmpty()) {
+            context.attributes().put("executionVariables", suspended.executionVariables());
+        }
     }
 
     /** Rehidrata en el context el contexto serializable propagado en la slice (Nivel 2). */

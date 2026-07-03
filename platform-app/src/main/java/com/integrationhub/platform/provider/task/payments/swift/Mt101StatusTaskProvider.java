@@ -7,6 +7,7 @@ import com.integrationhub.platform.repository.payments.swift.Mt101ConfirmationRe
 import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.task.AsyncOffloadSupport;
 import com.integrationhub.platform.spi.task.SuspendableTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -172,6 +173,16 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     @Override
     public String type() {
         return "MT101_STATUS";
+    }
+
+    /**
+     * <b>SUPPORTED</b> (Nivel 3, ADR-015): offloadable en {@code once}. Lee {@code taskOutputs} (qué pagos
+     * consultar), que el consumer rehidrata desde la continuación persistida; y si suspende esperando el
+     * callback/poll del gateway, el motor la re-suspende (no la mata). No usa {@code sourcePayload}.
+     */
+    @Override
+    public AsyncOffloadSupport asyncOffloadSupport() {
+        return AsyncOffloadSupport.SUPPORTED;
     }
 
     @Override
