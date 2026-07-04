@@ -10,8 +10,11 @@ import {
 } from '../models/execution.models';
 import { ExecutionNavigationService } from './execution-navigation.service';
 
-/** Estados NO terminales: mientras la ejecución esté en uno de estos, el progreso se pollea en vivo. */
-const ACTIVE_STATUSES = new Set(['RUNNING', 'QUEUED', 'PENDING', 'SUSPENDED', 'RETRYING']);
+/**
+ * Estados NO terminales de {@code ExecutionStatus} (backend): mientras la ejecución esté en uno de estos,
+ * el progreso se pollea en vivo. Terminales (paran el poll): COMPLETED, COMPLETED_WITH_ERRORS, FAILED.
+ */
+const ACTIVE_STATUSES = new Set(['PENDING', 'RUNNING', 'SUSPENDED']);
 
 /** Cadencia del poll de progreso (ms). Bajo umbral: refresca sin martillar a escala de 1M. */
 const PROGRESS_POLL_MS = 4000;

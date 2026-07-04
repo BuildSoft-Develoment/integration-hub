@@ -1,4 +1,5 @@
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
 import {
   ExecutionProgress,
@@ -91,5 +92,57 @@ describe('ExecutionTaskListComponent (correlación de progreso)', () => {
     expect(c.syncFor(task(1))).toBeNull();
     expect(c.pipeline()).toBeNull();
     expect(c.pipelineDeadCount()).toBe(0);
+  });
+
+  // Render real del template (detectChanges): confirma que las barras/etiquetas de progreso se pintan
+  // desde el input — la "última milla" que el e2e no pudo validar por la inestabilidad del entorno.
+  describe('render del template', () => {
+    function render(tasks: ProcessTaskExecutionRecord[], prog: ExecutionProgress | null) {
+      TestBed.configureTestingModule({ providers: [provideRouter([])] });
+      const fixture = TestBed.createComponent(ExecutionTaskListComponent);
+      fixture.componentRef.setInput('tasks', tasks);
+      fixture.componentRef.setInput('progress', prog);
+      fixture.detectChanges();
+      return fixture.nativeElement as HTMLElement;
+    }
+
+    it('pinta la barra determinada y la etiqueta % del scatter materializado', () => {
+      const el = render(
+        [task(1, { taskType: 'REST_CALL' })],
+        progress({
+          scatterTasks: [
+            { taskDefinitionId: 1, completed: 3, failed: 0, total: 4, streaming: false, percent: 75, status: 'RUNNING', lastProgressAt: null },
+          ],
+        })
+      );
+      expect(el.textContent).toContain('75%');
+      expect(el.querySelector('mat-progress-bar[mode="determinate"]')).not.toBeNull();
+    });
+
+    it('pinta la barra indeterminada del scatter en streaming (sin % falso)', () => {
+      const el = render(
+        [task(1)],
+        progress({
+          scatterTasks: [
+            { taskDefinitionId: 1, completed: 12, failed: 0, total: null, streaming: true, percent: null, status: 'RUNNING', lastProgressAt: null },
+          ],
+        })
+      );
+      expect(el.querySelector('mat-progress-bar[mode="indeterminate"]')).not.toBeNull();
+      expect(el.textContent).not.toContain('%');
+    });
+
+    it('pinta el contador del sync y el chip de salud del pipeline', () => {
+      const el = render(
+        [task(2)],
+        progress({
+          syncTasks: [{ taskDefinitionId: 2, recordsProcessed: 420000 }],
+          pipeline: { outboxDead: 0, inboxDead: 0, inboxPoison: 0 },
+        })
+      );
+      expect(el.textContent).toContain('420000');
+      // chip de salud (fuera del acordeón) presente cuando hay progreso cargado
+      expect(el.querySelector('.task-pipeline')).not.toBeNull();
+    });
   });
 });
