@@ -43,3 +43,34 @@ del CSV). Antes este assert se había quitado porque el fastpath no reportaba; a
 ## Resultado
 Progreso sync cubierto por **los dos** caminos de ejecución sync (executeByMode + fastpath),
 ambos a `task_sync_progress`. El gap documentado en el doble check anterior queda cerrado.
+
+---
+
+## Doble check (2 bugs reales encontrados)
+
+### Bug A — `records_processed` podía RETROCEDER bajo concurrencia
+El upsert escribía el valor **absoluto** (`set records_processed = ?3`). En los modos paralelos,
+varios hilos cruzan el umbral; el reporter emite valores crecientes por CAS, pero **el orden de
+aplicación de los `upsert()` en la DB no está garantizado**: un `upsert(105000)` podía aplicarse
+antes que un `upsert(51000)` y dejar la fila en 51000 → el contador **regresa** y la UI ve el
+progreso ir hacia atrás.
+- **Fix**: `do update set records_processed = greatest(task_sync_progress.records_processed, ?3)`
+  (+ `updated_at` solo avanza cuando el valor sube). Monotonía garantizada en la DB, indiferente al
+  orden de aplicación. Blinda **ambos** caminos (fastpath + executeByMode con slices en paralelo).
+- **E2E** (`AsyncTaskDlqIT.syncProgressIsMonotonicUnderOutOfOrderUpserts`, Postgres real):
+  `upsert(500k)` seguido de `upsert(200k)` tardío ⇒ queda 500k; luego `upsert(750k)` ⇒ 750k.
+- El unit `SyncProgressReporterTest` se corrigió: su aserción de monotonía por orden-de-llamada era
+  teóricamente flaky (asumía orden de llamada = orden de aplicación). Ahora el repo capturador emula
+  `GREATEST` y se verifica la monotonía del valor **efectivamente almacenado**.
+
+### Bug B — fuga de progreso entre tests (destapada por el fix A)
+`GREATEST` hizo fallar `CatalogAndExecutionResourceIT` (`recordsProcessed` esperado 2, real **5**):
+el `@BeforeEach` truncaba todo **menos `task_sync_progress`** y, con `RESTART IDENTITY`, el `peId`
+reinicia a 1 en cada test → el otro test del fastpath (5 registros, mismo `peId`/tarea sink) dejaba
+`task_sync_progress(1, 2, 5)` y `GREATEST` conservaba el 5 en vez de pisarlo. Antes el overwrite lo
+enmascaraba.
+- **Fix**: `task_sync_progress` agregado al `TRUNCATE` de ambos ITs. (En producción no aplica: los
+  `peId` son únicos/monótonos, no se reutilizan.)
+
+### Regresión tras el doble check
+- `SyncProgressReporterTest` 4/4, `AsyncTaskDlqIT` **9/9** (nuevo test de monotonía), `CatalogAndExecutionResourceIT` 3/3.

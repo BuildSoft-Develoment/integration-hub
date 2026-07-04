@@ -48,7 +48,7 @@ class AsyncTaskDlqIT {
     @BeforeEach
     void clean() throws Exception {
         RecordingFollowUpTaskProvider.resetRecording();
-        exec("TRUNCATE TABLE task_async_dispatch, task_inbox, task_dispatch_outbox, audit_spool, audit_event, "
+        exec("TRUNCATE TABLE task_async_dispatch, task_sync_progress, task_inbox, task_dispatch_outbox, audit_spool, audit_event, "
                 + "process_task_execution, process_execution, process_task_definition, process_definition "
                 + "RESTART IDENTITY CASCADE");
     }
@@ -171,6 +171,22 @@ class AsyncTaskDlqIT {
         assertEquals(2, progress.syncTasks().size());
         var t81 = progress.syncTasks().stream().filter(p -> p.taskDefinitionId() == 81L).findFirst().orElseThrow();
         assertEquals(420000L, t81.recordsProcessed());
+    }
+
+    @Test
+    void syncProgressIsMonotonicUnderOutOfOrderUpserts() throws Exception {
+        // A escala, los modos paralelos emiten upserts que pueden aplicarse FUERA DE ORDEN. El valor es un
+        // contador acumulativo absoluto: un upsert menor tardío NO debe hacer retroceder el progreso visible.
+        syncProgressRepository.upsert(90L, 91L, 500000);
+        syncProgressRepository.upsert(90L, 91L, 200000); // llega tarde y es menor → debe ignorarse (GREATEST)
+
+        assertEquals(500000, count("select records_processed from task_sync_progress where "
+                + "process_execution_id = 90 and task_definition_id = 91"),
+                "el contador no retrocede ante un upsert menor fuera de orden");
+
+        syncProgressRepository.upsert(90L, 91L, 750000); // avance legítimo posterior
+        assertEquals(750000, count("select records_processed from task_sync_progress where "
+                + "process_execution_id = 90 and task_definition_id = 91"));
     }
 
     private Long insertAsyncTask() throws Exception {

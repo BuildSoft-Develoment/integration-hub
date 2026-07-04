@@ -18,12 +18,25 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class SyncProgressReporterTest {
 
-    /** Repo capturador: registra cada valor absoluto upserteado (en orden). */
+    /**
+     * Repo capturador que EMULA la semántica real de la DB (GREATEST): el valor almacenado nunca decrece
+     * aunque los upserts lleguen fuera de orden. {@code upserts} = valores crudos recibidos (para medir el
+     * throttle); {@code storedSequence} = valor efectivo tras cada upsert (para verificar monotonía real).
+     */
     private static final class CapturingRepo extends TaskSyncProgressRepository {
         final List<Long> upserts = new CopyOnWriteArrayList<>();
+        final List<Long> storedSequence = new CopyOnWriteArrayList<>();
+        private long stored = 0;
+
         @Override
-        public void upsert(Long processExecutionId, Long taskDefinitionId, long processed) {
+        public synchronized void upsert(Long processExecutionId, Long taskDefinitionId, long processed) {
             upserts.add(processed);
+            stored = Math.max(stored, processed); // GREATEST, igual que el ON CONFLICT de Postgres
+            storedSequence.add(stored);
+        }
+
+        long stored() {
+            return stored;
         }
     }
 
@@ -86,15 +99,15 @@ class SyncProgressReporterTest {
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
         reporter.flush();
 
-        assertEquals(1_000_000L, repo.upserts.get(repo.upserts.size() - 1),
-                "el último valor persistido es el total exacto");
+        assertEquals(1_000_000L, repo.stored(), "el valor almacenado final es el total exacto");
         // Throttling real: a 50k de umbral sobre 1M, muy por debajo de 200 upserts (uno por lote).
         assertTrue(repo.upserts.size() <= 25,
                 "throttled: " + repo.upserts.size() + " upserts, no uno por lote");
-        // Monotonía: la UI nunca ve el contador retroceder.
+        // Monotonía EFECTIVA (con GREATEST): aunque los valores crudos lleguen fuera de orden bajo
+        // concurrencia, el valor almacenado nunca retrocede — la UI nunca ve el contador ir hacia atrás.
         long prev = -1;
-        for (long v : repo.upserts) {
-            assertTrue(v > prev, "valores monótonos crecientes");
+        for (long v : repo.storedSequence) {
+            assertTrue(v >= prev, "el valor almacenado nunca decrece");
             prev = v;
         }
     }

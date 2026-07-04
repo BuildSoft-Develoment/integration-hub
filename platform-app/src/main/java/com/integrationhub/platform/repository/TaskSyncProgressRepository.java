@@ -21,11 +21,17 @@ public class TaskSyncProgressRepository implements PanacheRepositoryBase<TaskSyn
 
     @Transactional
     public void upsert(Long processExecutionId, Long taskDefinitionId, long processed) {
+        // records_processed = GREATEST(...): el valor es un contador ACUMULATIVO absoluto y los upserts
+        // pueden llegar fuera de orden bajo lotes/slices concurrentes (el reporter throttled emite valores
+        // crecientes por CAS, pero el orden de APLICACIÓN en la DB no está garantizado). GREATEST garantiza
+        // monotonía: el progreso visible al poll nunca retrocede. updated_at solo avanza cuando el valor sube.
         getEntityManager().createNativeQuery("""
                 insert into task_sync_progress (process_execution_id, task_definition_id, records_processed, updated_at)
                 values (?1, ?2, ?3, current_timestamp)
                 on conflict (process_execution_id, task_definition_id)
-                do update set records_processed = ?3, updated_at = current_timestamp
+                do update set records_processed = greatest(task_sync_progress.records_processed, ?3),
+                              updated_at = case when ?3 > task_sync_progress.records_processed
+                                                then current_timestamp else task_sync_progress.updated_at end
                 """)
                 .setParameter(1, processExecutionId)
                 .setParameter(2, taskDefinitionId)

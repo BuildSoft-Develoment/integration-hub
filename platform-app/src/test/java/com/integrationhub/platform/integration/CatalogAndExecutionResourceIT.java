@@ -36,7 +36,9 @@ class CatalogAndExecutionResourceIT {
     void cleanDatabase() throws Exception {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE audit_spool, audit_event, staging_record, process_task_execution, process_execution, process_task_definition, process_definition, source_definition, reader_definition RESTART IDENTITY CASCADE");
+            // task_sync_progress se incluye: con RESTART IDENTITY el peId reinicia a 1 en cada test y,
+            // como el upsert es monótono (GREATEST), progreso de otro test con el mismo (peId, tdId) fugaría.
+            statement.execute("TRUNCATE TABLE audit_spool, audit_event, staging_record, task_sync_progress, process_task_execution, process_execution, process_task_definition, process_definition, source_definition, reader_definition RESTART IDENTITY CASCADE");
         }
     }
 
