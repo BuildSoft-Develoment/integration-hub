@@ -1,0 +1,143 @@
+<section class="dlq">
+  <div class="dlq__toolbar">
+    <div>
+      <h1 class="ih-section-title">{{ i18n.t('executions.dlq.title') }}</h1>
+      <p class="ih-muted">{{ i18n.t('executions.dlq.subtitle') }}</p>
+    </div>
+    <div class="dlq__actions">
+      <mat-checkbox [ngModel]="autoRefresh()" (ngModelChange)="setAutoRefresh($event)">{{ i18n.t('executions.dlq.autoRefresh') }}</mat-checkbox>
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('executions.dlq.refreshInterval') }}</mat-label>
+        <mat-select [ngModel]="refreshMs()" (ngModelChange)="setRefreshMs($event)" [disabled]="!autoRefresh()">
+          <mat-option [value]="30000">30s</mat-option>
+          <mat-option [value]="60000">1 min</mat-option>
+          <mat-option [value]="300000">5 min</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <button mat-flat-button color="primary" type="button" (click)="load()" [disabled]="loading()">{{ i18n.t('executions.dlq.refresh') }}</button>
+    </div>
+  </div>
+
+  @if (health(); as h) {
+    <div class="dlq__health dlq__health--{{ h }}" role="status">
+      <span class="dlq__health-dot"></span>{{ healthLabel() }}
+    </div>
+  }
+  @if (lastRefresh(); as ts) {
+    <p class="dlq__last-refresh">{{ i18n.t('executions.dlq.lastRefresh') }}: {{ ts | ihTime:'absolute' }}</p>
+  }
+
+  @if (summary(); as s) {
+    <div class="dlq__summary">
+      <div class="dlq__metric" [class.dlq__metric--alert]="s.outboxDead > 0"><small>OUTBOX DEAD</small><strong>{{ s.outboxDead }}</strong></div>
+      <div class="dlq__metric" [class.dlq__metric--alert]="s.inboxDead > 0"><small>INBOX DEAD</small><strong>{{ s.inboxDead }}</strong></div>
+      <div class="dlq__metric" [class.dlq__metric--alert]="s.inboxPoison > 0"><small>INBOX POISON</small><strong>{{ s.inboxPoison }}</strong></div>
+      <div class="dlq__metric" [class.dlq__metric--alert]="stalledRows().length > 0"><small>{{ i18n.t('executions.dlq.stalledCount') }}</small><strong>{{ stalledRows().length }}</strong></div>
+    </div>
+  }
+
+  <div class="dlq__toolbar">
+    <div class="dlq__filters">
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('executions.dlq.deadLimit') }}</mat-label>
+        <input matInput type="number" min="1" max="1000" [(ngModel)]="deadLimit" />
+      </mat-form-field>
+      <mat-form-field subscriptSizing="dynamic">
+        <mat-label>{{ i18n.t('executions.dlq.stalledMinutes') }}</mat-label>
+        <input matInput type="number" min="1" [(ngModel)]="stalledMinutes" />
+      </mat-form-field>
+    </div>
+    @if (canAdmin()) {
+      <div class="dlq__actions">
+        <button mat-stroked-button type="button" [class.dlq__danger--armed]="actions.armed() === 'dlq:redrive'" [attr.aria-pressed]="actions.armed() === 'dlq:redrive'" (click)="confirmRedrive()" [disabled]="loading()">
+          {{ actions.armed() === 'dlq:redrive' ? i18n.t('executions.dlq.redriveConfirm') : i18n.t('executions.dlq.redrive') }}
+        </button>
+      </div>
+    }
+  </div>
+
+  @if (message()) { <p class="dlq__ok" role="status">{{ message() }}</p> }
+  @if (error()) { <p class="dlq__error" role="alert">{{ error() }}</p> }
+
+  <!-- Tabla 1: filas muertas del consumer (DEAD/POISON). Recuperación por redrive del outbox. -->
+  <h2 class="dlq__subtitle">{{ i18n.t('executions.dlq.deadTitle') }}</h2>
+  @if (loading()) {
+    <p class="dlq__empty" role="status">{{ i18n.t('executions.dlq.loading') }}</p>
+  } @else if (deadRows().length === 0) {
+    <p class="dlq__empty">{{ i18n.t('executions.dlq.deadEmpty') }}</p>
+  } @else {
+    <div class="dlq__table">
+      <table class="ih-dense-table">
+        <caption class="ih-visually-hidden">{{ i18n.t('executions.dlq.deadTitle') }}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{{ i18n.t('executions.dlq.col.id') }}</th>
+            <th scope="col">{{ i18n.t('executions.dlq.col.key') }}</th>
+            <th scope="col">{{ i18n.t('executions.dlq.col.taskType') }}</th>
+            <th scope="col">{{ i18n.t('executions.dlq.col.execution') }}</th>
+            <th scope="col">{{ i18n.t('executions.dlq.col.status') }}</th>
+            <th scope="col">{{ i18n.t('executions.dlq.col.error') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of deadRows(); track row.id) {
+            <tr>
+              <td>{{ row.id }}</td>
+              <td class="dlq__mono" [title]="row.idempotencyKey">{{ row.idempotencyKey }}</td>
+              <td>{{ row.taskType || '-' }}</td>
+              <td>{{ row.processExecutionId ?? '-' }}<span class="dlq__mono" *ngIf="row.taskDefinitionId != null"> / {{ row.taskDefinitionId }}</span></td>
+              <td><span class="dlq__badge dlq__badge--{{ row.status | lowercase }}">{{ row.status }}</span></td>
+              <td [title]="row.error || ''">{{ row.error || '-' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  <!-- Tabla 2: scatters streaming estancados. Recuperación por requeue (re-inyecta la página y reanuda la cadena). -->
+  <h2 class="dlq__subtitle">{{ i18n.t('executions.dlq.stalledTitle') }}</h2>
+  @if (!loading() && stalledRows().length === 0) {
+    <p class="dlq__empty">{{ i18n.t('executions.dlq.stalledEmpty') }}</p>
+  } @else if (!loading()) {
+    <div class="dlq__table">
+      <table class="ih-dense-table">
+        <caption class="ih-visually-hidden">{{ i18n.t('executions.dlq.stalledTitle') }}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{{ i18n.t('executions.dlq.col.execution') }}</th>
+            <th scope="col">{{ i18n.t('executions.dlq.col.completed') }}</th>
+            <th scope="col">{{ i18n.t('executions.dlq.col.failed') }}</th>
+            <th scope="col">{{ i18n.t('executions.dlq.col.lastPage') }}</th>
+            <th scope="col">{{ i18n.t('executions.dlq.col.lastProgress') }}</th>
+            @if (canAdmin()) {
+              <th scope="col"><span class="ih-visually-hidden">{{ i18n.t('executions.dlq.col.actions') }}</span></th>
+            }
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of stalledRows(); track row.processExecutionId + ':' + row.taskDefinitionId) {
+            <tr>
+              <td>{{ row.processExecutionId }} / {{ row.taskDefinitionId }}</td>
+              <td>{{ row.completed }}</td>
+              <td [class.dlq__cell--alert]="row.failed > 0">{{ row.failed }}</td>
+              <td>{{ row.lastPageIndex ?? '-' }}</td>
+              <td>
+                @if (row.lastProgressAt) {
+                  <time [attr.datetime]="row.lastProgressAt" [title]="row.lastProgressAt | ihTime:'absolute'">{{ row.lastProgressAt | ihTime }}</time>
+                } @else { - }
+              </td>
+              @if (canAdmin()) {
+                <td>
+                  <button mat-stroked-button type="button" [class.dlq__danger--armed]="actions.armed() === requeueArmId(row)" [attr.aria-pressed]="actions.armed() === requeueArmId(row)" (click)="confirmRequeue(row)" [disabled]="loading()" [attr.aria-label]="i18n.t('executions.dlq.requeueAria', { pe: row.processExecutionId })">
+                    {{ actions.armed() === requeueArmId(row) ? i18n.t('executions.dlq.requeueConfirm') : i18n.t('executions.dlq.requeue') }}
+                  </button>
+                </td>
+              }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>
