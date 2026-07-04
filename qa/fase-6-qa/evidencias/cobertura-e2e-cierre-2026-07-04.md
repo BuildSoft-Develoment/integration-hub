@@ -23,6 +23,23 @@ sin test que cubriera el call-site (el upsert del repo sí estaba cubierto en `A
   slice sólo se captura si su índice es múltiplo de 10 (el valor final autoritativo vive en
   `process_task_execution`; esto es progreso en vivo, no el conteo final).
 
+## #2 (reforzado) — E2E de MOTOR COMPLETO del progreso sync por executeByMode
+El unit `ProcessTaskRuntimeSyncProgressTest` STUBEA `executeByMode`, así que valida el call-site *dado*
+un modelo de slices — no la integración real. Para un tema delicado eso no basta; se agrega un IT de
+motor completo contra Postgres real:
+
+- **`SyncProgressExecuteByModeIT`** (@QuarkusTest): proceso FILE_READ → **TEST_FOLLOW_UP** ejecutado por
+  el motor. Con `batchSize=1` y 12 filas hay 12 slices; el motor persiste `records_processed=11` en
+  `task_sync_progress` (upsert en slices 0 y 10, GREATEST) y el sink corre 12 veces. Valida la
+  integración real: semántica de slices de `executeByMode`, el upsert throttled y su persistencia en DB.
+
+- **Hallazgo del doble check (real)**: el fastpath (`FileReadTaskFastPath.supports`) aplica a FILE_READ →
+  **cualquier `BatchTaskProvider`** (línea 76: `provider instanceof BatchTaskProvider`), NO solo DB_WRITE.
+  Un test ingenuo FILE_READ→TEST_SCATTER_BATCH habría bypasseado `executeByMode` en silencio (fastpath) y
+  dado falsa confianza. Por eso el sink del IT es un `TaskProvider` plano (TEST_FOLLOW_UP), forzando el
+  camino `executeByMode`.
+
 ## Estado
-Cobertura e2e/test de la capa async cerrada. Los pendientes restantes son del backbone async (Etapa 4:
-adaptador de broker + complete-from-external-result; puesta en marcha/tuning ops), de mayor alcance.
+Cobertura e2e/test de la capa async cerrada (unit + motor completo). Los pendientes restantes son del
+backbone async (Etapa 4: adaptador de broker + complete-from-external-result; puesta en marcha/tuning
+ops), de mayor alcance.
