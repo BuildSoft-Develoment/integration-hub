@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { ProcessExecutionRecord, ProcessTaskExecutionRecord } from '../models/execution.models';
+import { ExecutionProgress, ProcessExecutionRecord, ProcessTaskExecutionRecord } from '../models/execution.models';
 
 export interface ExecuteProcessRequest {
   executionVariables?: Record<string, string>;
@@ -49,6 +49,11 @@ export class ExecutionApiService {
 
   listTasks(executionId: number): Observable<ProcessTaskExecutionRecord[]> {
     return this.http.get<ProcessTaskExecutionRecord[]>(`${this.baseUrl}/${executionId}/tasks`);
+  }
+
+  /** Progreso en vivo (scatter + sync + salud del pipeline) para el monitoreo a escala (ADR-015). */
+  progress(executionId: number): Observable<ExecutionProgress> {
+    return this.http.get<ExecutionProgress>(`${this.baseUrl}/${executionId}/progress`);
   }
 
   listChildren(executionId: number): Observable<ProcessExecutionRecord[]> {

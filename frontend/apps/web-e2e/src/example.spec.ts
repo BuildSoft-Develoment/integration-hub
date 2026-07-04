@@ -543,6 +543,69 @@ test.describe('Integration Hub shell', () => {
       page.getByRole('button', { name: /Reanudar la cadena del scatter|Resume the scatter chain/ }).first()
     ).toBeVisible();
   });
+
+  test('shows live progress in the execution detail (mocked backend)', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    const json = (body: unknown) => ({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+    const taskRow = (taskDefinitionId: number, taskType: string) => ({
+      id: taskDefinitionId * 10,
+      processExecutionId: 1,
+      taskDefinitionId,
+      taskOrder: taskDefinitionId,
+      taskType,
+      status: 'RUNNING',
+      executedAt: null,
+      startedAt: null,
+      finishedAt: null,
+      details: null,
+      payloadJson: null,
+      processedFiles: [],
+    });
+
+    // Only the detail's tasks + progress are mocked (with known taskDefinitionIds so the progress
+    // correlates); the executions LIST and get/children use the real backend so the catalog-list shell
+    // renders normally and a row is clickable.
+    await page.route('**/api/query/process-executions/*/tasks', (route) =>
+      route.fulfill(json([taskRow(1, 'FILE_READ'), taskRow(2, 'DB_WRITE')]))
+    );
+    await page.route('**/api/query/process-executions/*/progress', (route) =>
+      route.fulfill(
+        json({
+          executionId: 1,
+          scatterTasks: [
+            { taskDefinitionId: 1, completed: 75000, failed: 0, total: 100000, streaming: false, percent: 75, status: 'RUNNING', lastProgressAt: null },
+          ],
+          syncTasks: [{ taskDefinitionId: 2, recordsProcessed: 420000 }],
+          pipeline: { outboxDead: 0, inboxDead: 0, inboxPoison: 0 },
+        })
+      )
+    );
+
+    await gotoAuthenticated(page, '/#/executions');
+
+    // Open the execution detail drawer from the (real) list, then the Tasks tab.
+    const list = page.locator('ih-catalog-list').first();
+    await expect(list).toBeVisible({ timeout: 20_000 });
+    await list.locator('[data-row-index]').first().click();
+    await page.getByRole('tab', { name: /Tareas|Tasks/ }).click();
+
+    // Pipeline health chip renders outside the accordion → proves live progress was fetched.
+    await expect(page.getByText(/Backbone async sano|Async backbone healthy/)).toBeVisible({ timeout: 15_000 });
+
+    // Per-task progress lives inside collapsed expansion panels; expand the first task to reveal it.
+    await page.locator('mat-expansion-panel-header').first().click();
+
+    // Materialized scatter → determinate % bar; the sync counter is on the second task panel.
+    await expect(page.getByText(/Progreso: 75%|Progress: 75%/)).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('mat-progress-bar[mode="determinate"]').first()).toBeAttached();
+    await page.locator('mat-expansion-panel-header').nth(1).click();
+    await expect(page.getByText(/420000 registros procesados|420000 records processed/)).toBeVisible();
+  });
 });
 
 async function gotoAuthenticated(page: Page, path: string): Promise<void> {

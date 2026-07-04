@@ -67,6 +67,7 @@ export class ExecutionCatalogPageComponent implements OnInit {
       execution: this.store.selectedExecution(),
       tasks: this.store.tasks(),
       children: this.store.children(),
+      progress: this.store.progress(),
       navigationStack: this.store.navigationStack(),
       loading: this.store.loadingDetails(),
       actionBusy: this.store.actionRunning(),

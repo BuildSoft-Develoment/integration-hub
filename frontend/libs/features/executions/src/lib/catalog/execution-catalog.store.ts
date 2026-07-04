@@ -26,6 +26,7 @@ export class ExecutionCatalogStore {
   readonly totalLength = this.query.totalLength;
   readonly tasks = this.detail.tasks;
   readonly children = this.detail.children;
+  readonly progress = this.detail.progress;
   readonly search = this.query.search;
   readonly modeFilter = this.query.modeFilter;
   readonly statusFilter = this.query.statusFilter;

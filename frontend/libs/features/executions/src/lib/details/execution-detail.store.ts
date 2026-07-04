@@ -1,15 +1,29 @@
-import { inject, Injectable, signal } from '@angular/core';
+import { effect, inject, Injectable, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 
+import { ExecutionApiService } from '../api/execution-api.service';
 import { ExecutionDetailLoaderService } from './execution-detail-loader.service';
 import {
+  ExecutionProgress,
   ProcessExecutionRecord,
   ProcessTaskExecutionRecord,
 } from '../models/execution.models';
 import { ExecutionNavigationService } from './execution-navigation.service';
 
+/** Estados NO terminales: mientras la ejecución esté en uno de estos, el progreso se pollea en vivo. */
+const ACTIVE_STATUSES = new Set(['RUNNING', 'QUEUED', 'PENDING', 'SUSPENDED', 'RETRYING']);
+
+/** Cadencia del poll de progreso (ms). Bajo umbral: refresca sin martillar a escala de 1M. */
+const PROGRESS_POLL_MS = 4000;
+
+function isActiveStatus(status: string | null | undefined): boolean {
+  return status != null && ACTIVE_STATUSES.has(status.toUpperCase());
+}
+
 @Injectable()
 export class ExecutionDetailStore {
   private readonly detailLoader = inject(ExecutionDetailLoaderService);
+  private readonly api = inject(ExecutionApiService);
   private readonly navigation = inject(ExecutionNavigationService);
 
   readonly loadingDetails = signal(false);
@@ -19,7 +33,26 @@ export class ExecutionDetailStore {
   readonly selectedExecutionId = signal<number | null>(null);
   readonly selectedExecution = signal<ProcessExecutionRecord | null>(null);
   readonly drawerOpen = signal(false);
+  readonly progress = signal<ExecutionProgress | null>(null);
   readonly navigationStack = this.navigation.navigationStack;
+
+  private pollHandle: ReturnType<typeof setInterval> | null = null;
+
+  constructor() {
+    // Polling de progreso: vive en la capa de datos (no en el editor presentacional) para re-apuntar
+    // solo cuando cambia la ejecución seleccionada o la navegación, y parar al cerrar el drawer.
+    effect((onCleanup) => {
+      const executionId = this.selectedExecutionId();
+      const open = this.drawerOpen();
+      this.stopPolling();
+      if (executionId == null || !open) {
+        return;
+      }
+      // El tick se auto-detiene al alcanzar estado terminal (ver pollTick).
+      this.pollHandle = setInterval(() => void this.pollTick(executionId), PROGRESS_POLL_MS);
+      onCleanup(() => this.stopPolling());
+    });
+  }
 
   async selectExecution(execution: ProcessExecutionRecord): Promise<void> {
     this.navigation.reset();
@@ -46,6 +79,7 @@ export class ExecutionDetailStore {
   }
 
   closeDrawer(): void {
+    this.stopPolling();
     this.drawerOpen.set(false);
   }
 
@@ -75,6 +109,7 @@ export class ExecutionDetailStore {
     options: { openDrawer: boolean }
   ): Promise<void> {
     this.selectedExecutionId.set(executionId);
+    this.progress.set(null); // no arrastrar el progreso de la ejecución anterior
     this.loadingDetails.set(true);
     if (options.openDrawer) {
       this.drawerOpen.set(true);
@@ -85,8 +120,54 @@ export class ExecutionDetailStore {
       this.selectedExecution.set(detail);
       this.tasks.set(tasks);
       this.children.set(children);
+      // Progreso inicial best-effort (no bloquea ni rompe el detalle si falla).
+      void this.fetchProgress(executionId);
     } finally {
       this.loadingDetails.set(false);
+    }
+  }
+
+  private async fetchProgress(executionId: number): Promise<void> {
+    try {
+      const progress = await firstValueFrom(this.api.progress(executionId));
+      if (this.selectedExecutionId() === executionId) {
+        this.progress.set(progress);
+      }
+    } catch {
+      // best-effort: la ausencia de progreso no debe romper el detalle.
+    }
+  }
+
+  /** Tick del poll: refresca detalle+tareas+progreso en silencio (sin spinner) y para al terminar. */
+  private async pollTick(executionId: number): Promise<void> {
+    if (this.selectedExecutionId() !== executionId) {
+      this.stopPolling();
+      return;
+    }
+    try {
+      const [bundle, progress] = await Promise.all([
+        this.detailLoader.load(executionId),
+        firstValueFrom(this.api.progress(executionId)),
+      ]);
+      if (this.selectedExecutionId() !== executionId) {
+        return; // el usuario navegó a otra ejecución mientras cargaba
+      }
+      this.selectedExecution.set(bundle.detail);
+      this.tasks.set(bundle.tasks);
+      this.children.set(bundle.children);
+      this.progress.set(progress);
+      if (!isActiveStatus(bundle.detail.status)) {
+        this.stopPolling(); // terminal: esta es la última foto
+      }
+    } catch {
+      // best-effort: un fallo transitorio no detiene el poll; se reintenta en el próximo tick.
+    }
+  }
+
+  private stopPolling(): void {
+    if (this.pollHandle != null) {
+      clearInterval(this.pollHandle);
+      this.pollHandle = null;
     }
   }
 }
