@@ -4,6 +4,7 @@ export const en = {
   'nav.readers': 'Readers',
   'nav.processes': 'Processes',
   'nav.executions': 'Executions',
+  'nav.asyncDlq': 'DLQ operations',
   'nav.connections': 'Connections',
   'nav.schedules': 'Schedules',
   'nav.audit': 'Audit',

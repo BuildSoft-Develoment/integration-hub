@@ -5,6 +5,7 @@ export const es = {
   'nav.processes': 'Procesos',
   'nav.paymentRules': 'Reglas pago',
   'nav.executions': 'Ejecuciones',
+  'nav.asyncDlq': 'Operaciones DLQ',
   'nav.connections': 'Conexiones',
   'nav.schedules': 'Schedules',
   'nav.audit': 'Auditoria',
