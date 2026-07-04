@@ -907,6 +907,7 @@ export const es = {
   'executions.recordsWritten': 'Escritos',
   'executions.writeMode': 'Modo',
   'executions.targetTable': 'Tabla destino',
+  'executions.dlq.link': 'Operaciones DLQ',
   'executions.dlq.title': 'Operaciones DLQ async',
   'executions.dlq.subtitle': 'Salud del backbone asincronico: filas muertas y scatters estancados con recuperacion segura.',
   'executions.dlq.back': 'Volver a ejecuciones',

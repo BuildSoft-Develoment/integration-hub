@@ -33,6 +33,27 @@ capa frontend de observabilidad a escala (1M+).
 - **Build** `nx build web` **OK**: ruta, exports del índice, template AOT e i18n compilan y wire-up.
 - **Backend** (soporte de esta UI): `AsyncTaskDlqResourceAccessIT` 4/4 (gating), `AsyncTaskDlqIT` 9/9.
 
+## Doble check + pruebas e2e (Playwright)
+Hallazgos reales del doble check:
+1. **La consola era inalcanzable desde la UI** (solo por URL): se agregó un enlace "Operaciones DLQ"
+   (`routerLink="/executions/async-dlq"`) en la toolbar de ejecuciones + clave i18n `executions.dlq.link`
+   + la ruta al smoke de rutas protegidas de web-e2e.
+2. **Locator e2e incorrecto**: el botón de requeue tiene `aria-label` descriptivo, así que su nombre
+   accesible NO es el texto visible ("Reanudar cadena") sino el aria-label. `getByRole('button',{name})`
+   matchea el nombre accesible → corregido el locator para matchear el aria-label.
+
+Verificaciones que corren limpio aquí: `AsyncDlqComponent` 11/11 (`nx test web`), `nx build web` OK,
+`nx lint web` y `nx lint web-e2e` limpios (único warning pre-existente en `main.ts`/`gotoAuthenticated`).
+
+**E2E Playwright** (`apps/web-e2e/src/example.spec.ts`, test "operates the async DLQ console"): mockea
+`/api/query/tasks-dlq/**` y valida descubrimiento (link del toolbar), header, banner health=error,
+ambas tablas con filas, y el **redrive 2-pasos** llamando al endpoint; asegura el botón de requeue del
+scatter estancado. En un run local contra el origen Quinoa (`BASE_URL=http://localhost:8080`) el flujo
+completo pasó (fallando solo el locator luego corregido). Runs posteriores cayeron en flakiness de auth
+de Keycloak (el runner por defecto levanta el dev-server en :4200, cuyo `redirect_uri` Keycloak rechaza
+—solo :8080 registrado—; el propio `gotoAuthenticated` ya documenta reintentos por rebuilds transitorios).
+El spec queda para CI (que sirve el front en el mismo origen). No es un defecto de F1.
+
 ## Pendiente (siguientes incrementos)
 - F2: UI de progreso en vivo en el detalle de ejecución (`/progress`).
 - F3: tile de salud async en overview (reutiliza `AsyncDlqApiService`).

@@ -12,6 +12,7 @@ const routes = [
   { path: '/#/audit', title: /Auditoria|Audit/ },
   { path: '/#/audit/spool', title: /Spool de auditoria|Audit spool/ },
   { path: '/#/audit/mt101-quarantine', title: /cuarentena|quarantine/i },
+  { path: '/#/executions/async-dlq', title: /Operaciones DLQ|DLQ operations/ },
 ] as const;
 
 test.describe('Integration Hub shell', () => {
@@ -464,6 +465,82 @@ test.describe('Integration Hub shell', () => {
     });
     await expect(
       page.getByText(/not in the allowed plugin origins/).first()
+    ).toBeVisible();
+  });
+
+  test('operates the async DLQ console end-to-end (mocked backend)', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    const json = (body: unknown) => ({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+    let redriveCalled = false;
+    // Deterministic DLQ state: 1 outbox DEAD (health error), 1 dead consumer row, 1 stalled scatter.
+    await page.route('**/api/query/tasks-dlq/summary', (route) =>
+      route.fulfill(json({ outboxDead: 1, inboxDead: 0, inboxPoison: 0 }))
+    );
+    await page.route('**/api/query/tasks-dlq/dead**', (route) =>
+      route.fulfill(
+        json([
+          {
+            id: 501,
+            idempotencyKey: 'evt-abc-501',
+            taskType: 'REST_CALL',
+            processExecutionId: 42,
+            taskDefinitionId: 7,
+            status: 'DEAD',
+            error: 'boom downstream',
+          },
+        ])
+      )
+    );
+    await page.route('**/api/query/tasks-dlq/stalled**', (route) =>
+      route.fulfill(
+        json([
+          {
+            processExecutionId: 88,
+            taskDefinitionId: 9,
+            completed: 120000,
+            failed: 0,
+            lastPageIndex: 24,
+            lastProgressAt: new Date(Date.now() - 10 * 60_000).toISOString(),
+          },
+        ])
+      )
+    );
+    await page.route('**/api/query/tasks-dlq/outbox/redrive**', (route) => {
+      redriveCalled = true;
+      return route.fulfill(json({ redriven: 1 }));
+    });
+
+    // Discoverability: reach the console from the executions toolbar link (not just by URL).
+    await gotoAuthenticated(page, '/#/executions');
+    await page.getByRole('link', { name: /Operaciones DLQ|DLQ operations/ }).click();
+
+    // Header + health banner (a dead row => critical).
+    await expect(page.getByRole('heading', { name: /Operaciones DLQ|DLQ operations/ }).first()).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.locator('.dlq__health--error')).toBeVisible({ timeout: 15_000 });
+
+    // Both tables render the mocked rows.
+    await expect(page.getByText('evt-abc-501')).toBeVisible();
+    await expect(page.getByText('88 / 9')).toBeVisible();
+
+    // Two-step redrive: the first click arms (no call), the second confirms and calls the endpoint.
+    const redrive = page.getByRole('button', { name: /Redrive outbox DEAD/ });
+    await redrive.click();
+    await expect(page.getByRole('button', { name: /Confirmar redrive|Confirm redrive/ })).toBeVisible();
+    expect(redriveCalled).toBe(false);
+    await page.getByRole('button', { name: /Confirmar redrive|Confirm redrive/ }).click();
+    await expect.poll(() => redriveCalled, { timeout: 15_000 }).toBe(true);
+
+    // The stalled scatter exposes the requeue (resume-chain) recovery action for admins.
+    // The accessible name is the descriptive aria-label (a11y), not the short visible text.
+    await expect(
+      page.getByRole('button', { name: /Reanudar la cadena del scatter|Resume the scatter chain/ }).first()
     ).toBeVisible();
   });
 });
