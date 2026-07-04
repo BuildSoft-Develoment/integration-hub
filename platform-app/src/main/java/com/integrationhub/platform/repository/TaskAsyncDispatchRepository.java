@@ -195,6 +195,11 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
                 .list();
     }
 
+    /** Conteo barato de scatters streaming estancados (para el tile de salud del overview). */
+    public long countStalledStreaming(java.time.LocalDateTime cutoff) {
+        return count("status = 'PENDING' and lastPageJson is not null and lastProgressAt < ?1", cutoff);
+    }
+
     /** Toca {@code last_progress_at} para que un re-inyecto no vuelva a disparar de inmediato el sweep. */
     @Transactional
     public void touchProgress(Long processExecutionId, Long taskDefinitionId) {

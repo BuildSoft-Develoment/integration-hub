@@ -40,6 +40,7 @@ public class ExecutionQueryService {
     private final ProcessDefinitionRepository processDefinitionRepository;
     private final ProcessedSourceFileRepository processedSourceFileRepository;
     private final ExecutionApiMapper executionApiMapper;
+    private final com.integrationhub.platform.service.execution.async.AsyncTaskDlqService asyncTaskDlqService;
 
     public ExecutionQueryService(
             ProcessExecutionRepository processExecutionRepository,
@@ -49,7 +50,8 @@ public class ExecutionQueryService {
             ReaderDefinitionRepository readerDefinitionRepository,
             ProcessDefinitionRepository processDefinitionRepository,
             ProcessedSourceFileRepository processedSourceFileRepository,
-            ExecutionApiMapper executionApiMapper
+            ExecutionApiMapper executionApiMapper,
+            com.integrationhub.platform.service.execution.async.AsyncTaskDlqService asyncTaskDlqService
     ) {
         this.processExecutionRepository = processExecutionRepository;
         this.processTaskExecutionRepository = processTaskExecutionRepository;
@@ -59,6 +61,7 @@ public class ExecutionQueryService {
         this.processDefinitionRepository = processDefinitionRepository;
         this.processedSourceFileRepository = processedSourceFileRepository;
         this.executionApiMapper = executionApiMapper;
+        this.asyncTaskDlqService = asyncTaskDlqService;
     }
 
     @Transactional
@@ -213,6 +216,8 @@ public class ExecutionQueryService {
         var retryExecutions = processExecutionRepository.countByTriggerSource("MANUAL_RETRY_FAILED");
         var failedProcessedFiles = processedSourceFileRepository.countByStatus("FAILED");
         var pendingProcessedFiles = processedSourceFileRepository.countByStatus("PENDING");
+        // Salud del backbone async: mismo umbral de estancamiento (5 min) que la consola DLQ.
+        var asyncHealth = asyncTaskDlqService.health(java.time.Duration.ofMinutes(5));
 
         var recentExecutions = processExecutionRepository.findRecent(0, 5).list().stream()
                 .map(executionApiMapper::toResponse)
@@ -237,6 +242,8 @@ public class ExecutionQueryService {
                 retryExecutions,
                 failedProcessedFiles,
                 pendingProcessedFiles,
+                asyncHealth.dead(),
+                asyncHealth.stalled(),
                 recentExecutions,
                 recentAuditEvents,
                 failedExecutionHighlights

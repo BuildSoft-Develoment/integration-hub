@@ -74,6 +74,19 @@ public class AsyncTaskDlqService {
                 inboxRepository.countByStatus(TaskInbox.POISON));
     }
 
+    /**
+     * Salud agregada del backbone async para el tile del overview: total de filas muertas
+     * (outbox+inbox+poison) y scatters streaming estancados. Contadores baratos (sin cargar filas).
+     */
+    @Transactional
+    public DlqHealth health(java.time.Duration stallThreshold) {
+        var s = summary();
+        var cutoff = java.time.LocalDateTime.now().minus(stallThreshold);
+        return new DlqHealth(
+                s.outboxDead() + s.inboxDead() + s.inboxPoison(),
+                scatterTracker.countStalledStreaming(cutoff));
+    }
+
     /** Filas muertas del consumer (DEAD/POISON) para la consola de DLQ. */
     @Transactional
     public java.util.List<DeadTask> listDead(int limit) {
@@ -207,6 +220,10 @@ public class AsyncTaskDlqService {
     }
 
     public record DlqSummary(long outboxDead, long inboxDead, long inboxPoison) {
+    }
+
+    /** Salud agregada del backbone async para el tile del overview. */
+    public record DlqHealth(long dead, long stalled) {
     }
 
     /** Fila muerta del consumer para la consola de DLQ (dedup por idempotencyKey). */

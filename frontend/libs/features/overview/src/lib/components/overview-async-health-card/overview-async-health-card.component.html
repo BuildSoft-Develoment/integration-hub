@@ -1,0 +1,27 @@
+<article
+  class="plugin-health-card"
+  [class.plugin-health-card--warn]="alert() === 'warn'"
+  [class.plugin-health-card--error]="alert() === 'error'"
+>
+  <p class="metric-label">
+    @if (alert()) {
+      <ih-icon name="alert-triangle" class="metric-alert-icon" />
+    }
+    {{ i18n.t('overview.async.title') }}
+  </p>
+
+  <dl class="plugin-health-stats">
+    <div class="plugin-health-stat">
+      <dt>{{ i18n.t('overview.async.dead') }}</dt>
+      <dd class="plugin-health-value plugin-health-value--degraded">{{ health().dead }}</dd>
+    </div>
+    <div class="plugin-health-stat">
+      <dt>{{ i18n.t('overview.async.stalled') }}</dt>
+      <dd class="plugin-health-value plugin-health-value--blocked">{{ health().stalled }}</dd>
+    </div>
+  </dl>
+
+  <a mat-button class="metric-action" [routerLink]="['/executions/async-dlq']">
+    {{ i18n.t('overview.async.viewConsole') }} →
+  </a>
+</article>

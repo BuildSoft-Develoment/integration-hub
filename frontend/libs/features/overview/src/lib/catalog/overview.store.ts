@@ -6,6 +6,7 @@ import { OverviewApiService } from '../api/overview-api.service';
 import { OverviewMetric, OverviewSummaryRecord } from '../models/overview.models';
 import { OverviewTableRow } from '../models/overview-row.model';
 import { PluginHealth } from '../models/overview-plugin-health.model';
+import { AsyncHealth } from '../models/overview-async-health.model';
 
 @Injectable()
 export class OverviewStore {
@@ -70,6 +71,18 @@ export class OverviewStore {
       },
       plain('scheduled', 'overview.metric.scheduled', summary.scheduledProcesses, null),
     ];
+  });
+
+  /**
+   * Salud del backbone async derivada del summary (ya lo trae `/overview-summary`, sin llamada extra ni
+   * acoplamiento con la feature executions). Null si no hay summary → el card no se muestra.
+   */
+  readonly asyncHealth = computed<AsyncHealth | null>(() => {
+    const summary = this.summary();
+    if (!summary) {
+      return null;
+    }
+    return { dead: summary.asyncDeadLetters, stalled: summary.asyncStalledScatters };
   });
 
   readonly recentExecutionsRows = computed<OverviewTableRow[]>(() =>

@@ -189,6 +189,25 @@ class AsyncTaskDlqIT {
                 + "process_execution_id = 90 and task_definition_id = 91"));
     }
 
+    @Test
+    void healthAggregatesDeadAndStalled() throws Exception {
+        // Filas muertas: 1 outbox DEAD + 1 inbox DEAD + 1 inbox POISON = 3.
+        exec("insert into task_dispatch_outbox (idempotency_key, transport, envelope_json, status) values ('h1','KAFKA','{}','DEAD')");
+        exec("insert into task_inbox (idempotency_key, status) values ('h2','DEAD'),('h3','POISON')");
+        // Scatters streaming: uno estancado (10 min sin progreso) + uno reciente (no cuenta).
+        exec("insert into task_async_dispatch (process_execution_id, task_definition_id, total_slices, "
+                + "last_page_index, last_page_json, last_progress_at) values "
+                + "(30, 31, null, 1, '{}', current_timestamp - interval '10 minutes')");
+        exec("insert into task_async_dispatch (process_execution_id, task_definition_id, total_slices, "
+                + "last_page_index, last_page_json, last_progress_at) values "
+                + "(32, 33, null, 1, '{}', current_timestamp)");
+
+        var health = dlqService.health(java.time.Duration.ofMinutes(5));
+
+        assertEquals(3, health.dead(), "outbox DEAD + inbox DEAD + inbox POISON");
+        assertEquals(1, health.stalled(), "solo el streaming sin progreso por >5 min");
+    }
+
     private Long insertAsyncTask() throws Exception {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
