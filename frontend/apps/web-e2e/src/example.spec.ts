@@ -606,6 +606,52 @@ test.describe('Integration Hub shell', () => {
     await page.locator('mat-expansion-panel-header').nth(1).click();
     await expect(page.getByText(/420000 registros procesados|420000 records processed/)).toBeVisible();
   });
+
+  test('shows the async backbone health tile on the overview (mocked backend)', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    const json = (body: unknown) => ({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+    const metric = { total: 1, active: 1 };
+    // Full overview-summary with an UNHEALTHY async backbone (3 dead, 2 stalled → error tile).
+    await page.route('**/api/query/overview-summary', (route) =>
+      route.fulfill(
+        json({
+          sources: metric,
+          readers: metric,
+          processes: metric,
+          scheduledProcesses: 0,
+          runningExecutions: 0,
+          failedExecutions: 0,
+          completedWithErrorsExecutions: 0,
+          retryExecutions: 0,
+          failedProcessedFiles: 0,
+          pendingProcessedFiles: 0,
+          asyncDeadLetters: 3,
+          asyncStalledScatters: 2,
+          recentExecutions: [],
+          recentAuditEvents: [],
+          failedExecutionHighlights: [],
+        })
+      )
+    );
+
+    await gotoAuthenticated(page, '/#/overview');
+
+    const card = page.locator('ih-overview-async-health-card');
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    await expect(card.getByText(/Salud backbone async|Async backbone health/)).toBeVisible();
+    // dead=3 (error color) and stalled=2 rendered.
+    await expect(card.locator('.plugin-health-value--degraded')).toHaveText('3');
+    await expect(card.locator('.plugin-health-value--blocked')).toHaveText('2');
+    // Dead rows raise the error alert level on the card.
+    await expect(card.locator('.plugin-health-card--error')).toBeVisible();
+    // Link to the DLQ console (F1).
+    await expect(card.getByRole('link', { name: /Ver consola DLQ|View DLQ console/ })).toBeVisible();
+  });
 });
 
 async function gotoAuthenticated(page: Page, path: string): Promise<void> {
