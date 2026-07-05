@@ -219,6 +219,34 @@ public class Mt101FragmentRepository {
         return page;
     }
 
+    /**
+     * v54-fix (cierre de NEEDS_RECONCILIATION): resumen de terminalidad de los fragmentos de una EJECUCION
+     * (por {@code process_execution_id}). {@code nonTerminal} = fragmentos que NO alcanzaron un terminal de despacho
+     * ({@code SENT/CONFIRMED/RECONCILED/REJECTED/SUPERSEDED}) — incluye ARCHIVED sin enviar, UNCERTAIN/DISPATCHING sin
+     * resolver, etc. El cierre solo procede si {@code nonTerminal == 0} (nunca cerrar como completado con pagos
+     * pendientes). {@code rejected} decide COMPLETED vs COMPLETED_WITH_ERRORS.
+     */
+    public ReconciliationSummary reconciliationSummary(DataSource dataSource, Long processExecutionId)
+            throws SQLException {
+        var sql = "select count(*) as total, "
+                + "count(*) filter (where status not in "
+                + "('SENT','CONFIRMED','RECONCILED','REJECTED','SUPERSEDED')) as non_terminal, "
+                + "count(*) filter (where status = 'REJECTED') as rejected "
+                + "from mt101_build_fragment where process_execution_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, processExecutionId);
+            try (var rs = statement.executeQuery()) {
+                rs.next();
+                return new ReconciliationSummary(rs.getLong("total"), rs.getLong("non_terminal"),
+                        rs.getLong("rejected"));
+            }
+        }
+    }
+
+    public record ReconciliationSummary(long total, long nonTerminal, long rejected) {
+    }
+
     public List<RoutedMessageJsonRow> readRoutedPage(DataSource dataSource,
                                                      String fragmentSetId,
                                                      List<String> statuses,

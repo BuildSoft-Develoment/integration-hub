@@ -5,6 +5,7 @@ import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRe
 import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
 import com.integrationhub.platform.service.payments.swift.Mt101CorrectiveLifecycleService;
 import com.integrationhub.platform.service.payments.swift.Mt101PayUncertainResolutionService;
+import com.integrationhub.platform.service.payments.swift.Mt101ReconciliationCloseService;
 import com.integrationhub.platform.service.payments.swift.Mt101LoteService;
 import com.integrationhub.platform.service.payments.swift.Mt101QuarantineService;
 import com.integrationhub.platform.service.payments.swift.Mt101RebuildService;
@@ -50,19 +51,22 @@ public class Mt101QuarantineResource {
     private final Mt101StagingCorrectionService correctionService;
     private final Mt101CorrectiveLifecycleService correctiveLifecycleService;
     private final Mt101PayUncertainResolutionService payUncertainResolutionService;
+    private final Mt101ReconciliationCloseService reconciliationCloseService;
 
     public Mt101QuarantineResource(Mt101QuarantineService service,
                                    Mt101RebuildService rebuildService,
                                    Mt101LoteService loteService,
                                    Mt101StagingCorrectionService correctionService,
                                    Mt101CorrectiveLifecycleService correctiveLifecycleService,
-                                   Mt101PayUncertainResolutionService payUncertainResolutionService) {
+                                   Mt101PayUncertainResolutionService payUncertainResolutionService,
+                                   Mt101ReconciliationCloseService reconciliationCloseService) {
         this.service = service;
         this.rebuildService = rebuildService;
         this.loteService = loteService;
         this.correctionService = correctionService;
         this.correctiveLifecycleService = correctiveLifecycleService;
         this.payUncertainResolutionService = payUncertainResolutionService;
+        this.reconciliationCloseService = reconciliationCloseService;
     }
 
     /**
@@ -350,6 +354,27 @@ public class Mt101QuarantineResource {
         try {
             return payUncertainResolutionService.resolveUncertainNormalPay(
                     connectionRef, fragmentSetId, actor(securityContext), reason);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /**
+     * v54-fix: cierra una ejecucion en NEEDS_RECONCILIATION (marcada por la recuperacion de v53 al recuperar una
+     * huerfana que ya inicio PAY) tras reconciliar sus fragmentos. Solo cierra si TODOS los fragmentos estan en un
+     * terminal de despacho; si queda alguno pendiente (ARCHIVED/UNCERTAIN/DISPATCHING) rechaza. NO reenvia ni re-ejecuta.
+     */
+    @POST
+    @Path("/process-executions/close-reconciled")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
+    public Mt101ReconciliationCloseService.CloseResult closeReconciledExecution(
+            @QueryParam("connectionRef") String connectionRef,
+            @QueryParam("processExecutionId") Long processExecutionId,
+            @QueryParam("reason") String reason,
+            @Context SecurityContext securityContext) {
+        try {
+            return reconciliationCloseService.closeReconciledExecution(
+                    connectionRef, processExecutionId, actor(securityContext), reason);
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }

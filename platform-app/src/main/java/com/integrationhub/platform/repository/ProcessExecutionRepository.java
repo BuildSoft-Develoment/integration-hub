@@ -104,4 +104,15 @@ public class ProcessExecutionRepository implements PanacheRepository<ProcessExec
                         + "where id = ?3 and status = ?4 and executionLeaseUntil is not null and executionLeaseUntil < ?5",
                 toStatus, details, id, ExecutionStatus.RUNNING, now);
     }
+
+    /**
+     * v54-fix: cierra ATOMICAMENTE una ejecucion desde {@code NEEDS_RECONCILIATION} hacia {@code toStatus}
+     * ({@code COMPLETED} o {@code COMPLETED_WITH_ERRORS}). El {@code WHERE status='NEEDS_RECONCILIATION'} evita cerrar
+     * dos veces o desde otro estado. Devuelve 1 si cerro, 0 si no estaba en NEEDS_RECONCILIATION.
+     */
+    public int closeFromNeedsReconciliation(Long id, ExecutionStatus toStatus, String details,
+                                            java.time.LocalDateTime now) {
+        return update("status = ?1, details = ?2, finishedAt = ?3 where id = ?4 and status = ?5",
+                toStatus, details, now, id, ExecutionStatus.NEEDS_RECONCILIATION);
+    }
 }

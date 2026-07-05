@@ -21,6 +21,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 // @covers RF-005 (reingenieria: prueba que cubre el/los RF en produccion)
@@ -106,6 +107,26 @@ class ProcessExecutionStateServiceTest {
 
         assertEquals(1, recovered);
         verify(processExecutionRepository).recoverExpiredRunning(eq(31L), eq(ExecutionStatus.PENDING), any(), any());
+    }
+
+    @Test
+    void closeReconciledClosesAtomicallyFromNeedsReconciliationAndAudits() {
+        var execution = pendingExecution(40L);
+        when(processExecutionRepository.closeFromNeedsReconciliation(eq(40L),
+                eq(ExecutionStatus.COMPLETED_WITH_ERRORS), any(), any())).thenReturn(1);
+        when(processExecutionRepository.findById(40L)).thenReturn(execution);
+
+        assertTrue(service.closeReconciled(40L, true, "reconciled"));
+        verify(auditService).record(eq(execution), isNull(), eq("PROCESS_RECONCILED_CLOSED"),
+                eq("COMPLETED_WITH_ERRORS"), any(), any());
+    }
+
+    @Test
+    void closeReconciledReturnsFalseWhenNotInNeedsReconciliation() {
+        when(processExecutionRepository.closeFromNeedsReconciliation(eq(41L), any(), any(), any())).thenReturn(0);
+
+        assertFalse(service.closeReconciled(41L, false, "reconciled"));
+        verifyNoInteractions(auditService);
     }
 
     @Test

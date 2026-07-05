@@ -368,6 +368,26 @@ public class ProcessExecutionStateService {
         return processExecutionRepository.findById(processExecutionId);
     }
 
+    /**
+     * v54-fix: cierra una ejecucion en {@code NEEDS_RECONCILIATION} (tras reconciliar sus fragmentos) hacia
+     * {@code COMPLETED} o {@code COMPLETED_WITH_ERRORS}. Atomico ({@code WHERE status='NEEDS_RECONCILIATION'}): no
+     * cierra dos veces ni desde otro estado. El guard de terminalidad de fragmentos vive en el caller MT101. NO
+     * re-ejecuta ni reenvia; solo cierra el estado del motor. Devuelve false si ya no estaba en NEEDS_RECONCILIATION.
+     */
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public boolean closeReconciled(Long processExecutionId, boolean withErrors, String details) {
+        var target = withErrors ? ExecutionStatus.COMPLETED_WITH_ERRORS : ExecutionStatus.COMPLETED;
+        if (processExecutionRepository.closeFromNeedsReconciliation(processExecutionId, target, details,
+                LocalDateTime.now()) != 1) {
+            return false;
+        }
+        var execution = processExecutionRepository.findById(processExecutionId);
+        auditService.record(execution, null, "PROCESS_RECONCILED_CLOSED", target.name(), details, Map.of(
+                "processDefinitionId", execution.processDefinition.id,
+                "processName", execution.processDefinition.name));
+        return true;
+    }
+
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     public long countPendingProcesses() {
         return processExecutionRepository.countPendingExecutions();
