@@ -262,6 +262,33 @@ public class Mt101FragmentStore {
     public record RoutedFragmentMessage(Mt101Message message, String routedAs, String routeError) {
     }
 
+    /**
+     * v51-fix (PAY normal durable): claim ATOMICO pre-envio de una pagina de fragmentos no-correctivos
+     * ({@code fromStatuses -> DISPATCHING}), devolviendo SOLO los realmente reclamados. {@code fromStatuses} son
+     * los mismos estados que PAY leyo (por defecto {@code ARCHIVED}; o el override {@code fragmentSource.statuses}).
+     * Delega en {@link Mt101FragmentRepository#claimForDispatch}.
+     */
+    public java.util.Set<String> claimForDispatch(Map<String, Object> fragmentSource,
+                                                  java.util.Collection<String> sendersReferences,
+                                                  List<String> fromStatuses) {
+        if (fragmentSource == null || fragmentSource.isEmpty()
+                || sendersReferences == null || sendersReferences.isEmpty()) {
+            return java.util.Set.of();
+        }
+        var fragmentSetId = stringValue(fragmentSource.get("fragmentSetId"));
+        if (fragmentSetId.isBlank()) {
+            return java.util.Set.of();
+        }
+        var effectiveFrom = statuses(fragmentSource.get("statuses"), fromStatuses);
+        var connectionRef = stringValue(fragmentSource.get("connectionRef"));
+        try {
+            return fragmentRepository.claimForDispatch(resolveDataSource(connectionRef),
+                    fragmentSetId, sendersReferences, effectiveFrom);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot claim MT101 fragments for dispatch in set " + fragmentSetId, error);
+        }
+    }
+
     public void markStatus(Map<String, Object> fragmentSource,
                            String sendersReference,
                            String status,

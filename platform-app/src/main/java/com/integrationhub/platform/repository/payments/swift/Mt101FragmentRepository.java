@@ -211,6 +211,54 @@ public class Mt101FragmentRepository {
         return page;
     }
 
+    /**
+     * v51-fix (PAY normal durable): claim ATOMICO pre-envio de una pagina de fragmentos no-correctivos.
+     * Transiciona {@code -> DISPATCHING} SOLO los que sigan en uno de los estados legibles por PAY
+     * ({@code fromStatuses}: por defecto {@code ARCHIVED}; o el override {@code fragmentSource.statuses}, p.ej.
+     * {@code REJECTED} en un reproceso explicito), en un UPDATE con {@code RETURNING} (una vuelta a BD), y devuelve
+     * el conjunto realmente reclamado. Un fragmento que otro worker ya reclamo/envio, o que ya salio de esos
+     * estados, NO se reclama -> el provider no lo despacha (sin doble envio). Como PAY solo lee {@code fromStatuses},
+     * un fragmento en {@code DISPATCHING} (p.ej. si el worker cae tras enviar y antes de marcar terminal) queda
+     * EXCLUIDO de una nueva seleccion: exige conciliacion, nunca reenvio automatico.
+     */
+    public java.util.Set<String> claimForDispatch(DataSource dataSource,
+                                                  String fragmentSetId,
+                                                  Collection<String> sendersReferences,
+                                                  List<String> fromStatuses) throws SQLException {
+        var refs = new ArrayList<String>();
+        if (sendersReferences != null) {
+            for (var reference : sendersReferences) {
+                if (reference != null && !reference.isBlank()) {
+                    refs.add(reference);
+                }
+            }
+        }
+        if (refs.isEmpty() || fromStatuses == null || fromStatuses.isEmpty()) {
+            return java.util.Set.of();
+        }
+        var sql = "update mt101_build_fragment set status = 'DISPATCHING', updated_at = current_timestamp "
+                + "where fragment_set_id = ? and status in (" + placeholders(fromStatuses.size()) + ") "
+                + "and senders_reference in (" + placeholders(refs.size()) + ") returning senders_reference";
+        var claimed = new java.util.LinkedHashSet<String>(refs.size());
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            statement.setString(parameter++, fragmentSetId);
+            for (var status : fromStatuses) {
+                statement.setString(parameter++, status);
+            }
+            for (var reference : refs) {
+                statement.setString(parameter++, reference);
+            }
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    claimed.add(rs.getString(1));
+                }
+            }
+        }
+        return claimed;
+    }
+
     public void updateStatusBatch(DataSource dataSource,
                                   String fragmentSetId,
                                   Map<String, String> errorBySendersReference,
