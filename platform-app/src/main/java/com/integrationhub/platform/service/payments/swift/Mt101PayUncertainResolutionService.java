@@ -1,7 +1,7 @@
 package com.integrationhub.platform.service.payments.swift;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.provider.task.payments.swift.Mt101StatusGateway;
+import com.integrationhub.platform.provider.task.payments.swift.Mt101StatusQueryExecutor;
 import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -38,7 +38,7 @@ public class Mt101PayUncertainResolutionService {
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
     private final Mt101FragmentRepository fragmentRepository;
-    private final Mt101StatusGateway gateway;
+    private final Mt101StatusQueryExecutor statusQueryExecutor;
 
     private final com.integrationhub.platform.service.payments.swift.Mt101CorrectiveTaskConfigSource taskConfigSource;
 
@@ -51,20 +51,20 @@ public class Mt101PayUncertainResolutionService {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.fragmentRepository = fragmentRepository;
-        this.gateway = new Mt101StatusGateway(java.net.http.HttpClient.newBuilder().build(), objectMapper);
+        this.statusQueryExecutor = new Mt101StatusQueryExecutor(objectMapper);
         this.taskConfigSource = taskConfigSource;
     }
 
-    /** Constructor de test: permite inyectar el gateway (HttpClient stub). */
+    /** Constructor de test: permite inyectar el ejecutor de consulta (con gateways stub). */
     Mt101PayUncertainResolutionService(DataSource defaultDataSource,
                                        ConnectionPoolManager connectionPoolManager,
                                        Mt101FragmentRepository fragmentRepository,
-                                       Mt101StatusGateway gateway,
+                                       Mt101StatusQueryExecutor statusQueryExecutor,
                                        Mt101CorrectiveTaskConfigSource taskConfigSource) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.fragmentRepository = fragmentRepository;
-        this.gateway = gateway;
+        this.statusQueryExecutor = statusQueryExecutor;
         this.taskConfigSource = taskConfigSource;
     }
 
@@ -85,18 +85,26 @@ public class Mt101PayUncertainResolutionService {
                         + " has no MT101_STATUS task; cannot resolve the uncertain PAY status");
             }
             var query = mapValue(config.get("query"));
+            // v55-fix: soporte REST + SFTP + route-aware (via el ejecutor compartido). En modo route-aware
+            // (routeQuery presente) la URL compartida es opcional; si NO hay routeQuery ni query.url, no hay como
+            // consultar -> error claro. Restriccion documentada: en el path normal solo hay ${sendersReference} y
+            // ${route} disponibles en el registro (build_fragment no persiste gatewayReference/idempotencyKey).
+            var routeQuery = mapValue(config.get("routeQuery"));
+            var routeAware = !routeQuery.isEmpty();
             var urlTemplate = stringOrNull(query.get("url"));
-            if (urlTemplate == null || urlTemplate.isBlank()) {
-                throw new IllegalStateException("MT101_STATUS query.url is required to resolve the uncertain PAY "
-                        + "status for set " + set + " (only REST gateway query is supported; SFTP/route-aware is a "
-                        + "documented follow-up)");
+            if (!routeAware && (urlTemplate == null || urlTemplate.isBlank())) {
+                throw new IllegalStateException("MT101_STATUS requires query.url or routeQuery to resolve the "
+                        + "uncertain PAY status for set " + set);
             }
             var method = stringValue(query.get("method"), "GET").toUpperCase(Locale.ROOT);
             var timeout = intValue(query.get("timeoutSeconds"), DEFAULT_TIMEOUT_SECONDS);
             var expected = mapValue(config.get("expectedGatewayResponse"));
             var statusPath = stringValue(expected.get("statusField"), "$.status");
+            var referencePath = stringValue(expected.get("referenceField"), "$.gatewayReference");
             var accepted = upperSet(config.get("acceptedStatuses"), List.of("ACCEPTED", "ACCP", "SENT"));
             var rejected = upperSet(config.get("rejectedStatuses"), List.of("REJECTED", "RJCT"));
+            var planConfig = new Mt101StatusQueryExecutor.QueryPlanConfig(routeAware, routeQuery, urlTemplate,
+                    method, timeout, statusPath, referencePath);
 
             int resolvedSent = 0;
             int resolvedRejected = 0;
@@ -116,13 +124,13 @@ public class Mt101PayUncertainResolutionService {
                     if (reference == null || reference.isBlank()) {
                         continue;
                     }
-                    var url = resolveTemplate(urlTemplate, record);
-                    var response = gateway.query(method, url, timeout);
-                    if (response.error() != null) {
-                        errors++; // gateway no concluyente -> se mantiene UNCERTAIN/DISPATCHING (reintentar luego)
-                        continue;
+                    var result = statusQueryExecutor.query(record, planConfig);
+                    if (result.error() != null || result.pending()) {
+                        errors += result.error() != null ? 1 : 0;
+                        pending += result.pending() ? 1 : 0;
+                        continue; // no concluyente / ACK aun no presente -> se mantiene sin resolver (nunca reenvío)
                     }
-                    var resolution = classify(gateway.extractField(response.body(), statusPath), accepted, rejected);
+                    var resolution = classify(result.confirmedStatus(), accepted, rejected);
                     if ("SENT".equals(resolution)) {
                         sentRefs.add(reference);
                     } else if ("REJECTED".equals(resolution)) {
@@ -157,15 +165,6 @@ public class Mt101PayUncertainResolutionService {
             return "REJECTED";
         }
         return null;
-    }
-
-    private String resolveTemplate(String template, Map<String, Object> record) {
-        var resolved = template;
-        for (var entry : record.entrySet()) {
-            resolved = resolved.replace("${" + entry.getKey() + "}",
-                    entry.getValue() == null ? "" : String.valueOf(entry.getValue()));
-        }
-        return resolved;
     }
 
     private DataSource resolveDataSource(String connectionRef) {

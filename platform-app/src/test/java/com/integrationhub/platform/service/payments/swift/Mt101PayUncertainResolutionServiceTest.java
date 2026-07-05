@@ -3,7 +3,7 @@ package com.integrationhub.platform.service.payments.swift;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
-import com.integrationhub.platform.provider.task.payments.swift.Mt101StatusGateway;
+import com.integrationhub.platform.provider.task.payments.swift.Mt101StatusQueryExecutor;
 import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -13,7 +13,6 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import javax.sql.DataSource;
-import java.net.http.HttpClient;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
@@ -51,7 +50,7 @@ class Mt101PayUncertainResolutionServiceTest {
         repository = new Mt101FragmentRepository();
         baseUrl = wm.getHttpBaseUrl();
         var objectMapper = new ObjectMapper();
-        var gateway = new Mt101StatusGateway(HttpClient.newBuilder().build(), objectMapper);
+        var executor = new Mt101StatusQueryExecutor(objectMapper);
         // La config de MT101_STATUS del set: URL por :20:, tokens de aceptacion/rechazo.
         var statusConfig = Map.<String, Object>of(
                 "query", Map.of("url", baseUrl + "/status/${sendersReference}", "method", "GET"),
@@ -60,7 +59,7 @@ class Mt101PayUncertainResolutionServiceTest {
                 "rejectedStatuses", List.of("REJECTED"));
         Mt101CorrectiveTaskConfigSource configSource = (taskDefinitionId, taskType) ->
                 "MT101_STATUS".equals(taskType) ? statusConfig : null;
-        service = new Mt101PayUncertainResolutionService(dataSource, null, repository, gateway, configSource);
+        service = new Mt101PayUncertainResolutionService(dataSource, null, repository, executor, configSource);
         prepareSchema();
     }
 
@@ -102,7 +101,43 @@ class Mt101PayUncertainResolutionServiceTest {
         assertEquals("UNCERTAIN", statusFor(setId, "E1"), "ante error del gateway el fragmento se mantiene");
     }
 
+    @Test
+    void resolvesRouteAwareViaPerRouteEndpoint() throws Exception {
+        // v55-fix: en modo route-aware (routeQuery), cada fragmento se consulta contra el endpoint de SU ruta
+        // (routed_as). Aqui la ruta REST_A tiene su propia URL y statusField.
+        var setId = "PAY-UNC-ROUTE";
+        seedRouted(setId, "R1", 1, "UNCERTAIN", "REST_A");
+        stubFor(get(urlEqualTo("/route-a/R1")).willReturn(aResponse().withHeader("Content-Type", "application/json")
+                .withBody("{\"state\":\"OK\"}")));
+        var routeConfig = Map.<String, Object>of(
+                "routeQuery", Map.of("REST_A",
+                        Map.of("url", baseUrl + "/route-a/${sendersReference}", "statusField", "$.state")),
+                "acceptedStatuses", List.of("OK"));
+        Mt101CorrectiveTaskConfigSource configSource = (taskDefinitionId, taskType) ->
+                "MT101_STATUS".equals(taskType) ? routeConfig : null;
+        var routeService = new Mt101PayUncertainResolutionService(dataSource, null, repository,
+                new Mt101StatusQueryExecutor(new ObjectMapper()), configSource);
+
+        var result = routeService.resolveUncertainNormalPay(null, setId, "ana", "route-aware");
+
+        assertEquals(1, result.resolvedSent(), "resuelto via el endpoint de la ruta REST_A");
+        assertEquals("SENT", statusFor(setId, "R1"));
+    }
+
     // --- helpers ---
+
+    private void seedRouted(String setId, String reference, int index, String status, String route)
+            throws SQLException {
+        seed(setId, reference, index, status);
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement("update mt101_build_fragment set routed_as = ? "
+                     + "where fragment_set_id = ? and senders_reference = ?")) {
+            statement.setString(1, route);
+            statement.setString(2, setId);
+            statement.setString(3, reference);
+            statement.executeUpdate();
+        }
+    }
 
     private void seed(String setId, String reference, int index, String status) throws SQLException {
         try (Connection connection = dataSource.getConnection();
