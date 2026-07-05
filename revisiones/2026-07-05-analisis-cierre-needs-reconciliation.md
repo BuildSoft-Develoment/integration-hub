@@ -20,16 +20,35 @@ resolver sus fragmentos (por `resolve-uncertain-normal-pay` v52 o el correctivo)
 estado para siempre. Es seguro (no re-ejecuta), pero incompleto operativamente. Es la contraparte natural de v53:
 v53 marca la reconciliación pendiente; falta cerrarla.
 
+## Corrección del doble-check — el guard NO puede ser solo UNCERTAIN/DISPATCHING
+
+La recuperación (v53) marca `NEEDS_RECONCILIATION` si existe un `process_task_execution` de `MT101_PAY` **iniciado**
+(`hasStartedTaskType`). "PAY iniciado" **no** implica "PAY envió". Un PAY que arrancó pero cayó **antes de enviar**
+deja fragmentos en `ARCHIVED` (nunca despachados). Si el guard solo contara `UNCERTAIN`/`DISPATCHING`, esos casos
+darían 0 sin-resolver y el cierre marcaría `COMPLETED` **con pagos jamás enviados** → falso-completado. **Bug evitado.**
+
+Guard correcto: exigir que **todos** los fragmentos de la ejecución estén en un estado **terminal de despacho**
+(`SENT` / `REJECTED` / `SUPERSEDED`), es decir que **ninguno** siga en un estado no-terminal
+(`BUILT` / `VALIDATED` / `ARCHIVED` / `ROUTED` / `DISPATCHING` / `UNCERTAIN`). Un fragmento `ARCHIVED` (pendiente de
+enviar) **bloquea** el cierre: el operador debe completar el envío (re-ejecutar / re-despachar) o resolver el
+incierto antes de cerrar.
+
 ## Diseño propuesto (bounded, sin reenvío)
 
-1. **Guard de resolución** (repositorio): contar fragmentos de la ejecución aún sin resolver
-   (`select count(*) from mt101_build_fragment where process_execution_id = ? and status in ('UNCERTAIN','DISPATCHING')`).
-   0 ⇒ todos los fragmentos alcanzaron un estado terminal.
+1. **Guard de terminalidad** (repositorio): contar fragmentos de la ejecución en estado NO terminal
+   (`select count(*) from mt101_build_fragment where process_execution_id = ? and status not in
+   ('SENT','CONFIRMED','RECONCILED','REJECTED','SUPERSEDED')`). El conjunto terminal coincide con el
+   `NON_REPROCESSABLE` del reproceso (`SENT/CONFIRMED/RECONCILED/SUPERSEDED`) más `REJECTED`. 0 ⇒ todos los fragmentos
+   alcanzaron un terminal; >0 ⇒ hay pendientes (ARCHIVED sin enviar, o UNCERTAIN/DISPATCHING sin resolver) → no se
+   puede cerrar.
+   - Requiere que `mt101_build_fragment.process_execution_id` esté poblado (lo está en el flujo normal;
+     documentar el supuesto).
 2. **Servicio** `closeReconciledExecution(processExecutionId, executedBy, reason)`:
-   - exige `status == NEEDS_RECONCILIATION`;
-   - si aún hay fragmentos `UNCERTAIN`/`DISPATCHING` → **rechaza** (hay que resolverlos primero por STATUS/RECONCILE);
-   - si todos resueltos → cierra: `COMPLETED` si no hubo `REJECTED`, o `COMPLETED_WITH_ERRORS` si hubo algún
-     `REJECTED` (usa las transiciones existentes). Audita el cierre (quién, motivo, conteos).
+   - exige `status == NEEDS_RECONCILIATION` (los métodos de cierre existentes NO asertan estado, así que el guard
+     vive aquí);
+   - si hay fragmentos no-terminales → **rechaza** con el detalle de cuántos y en qué estado;
+   - si todos terminales → cierra: `COMPLETED` si no hubo `REJECTED`, o `COMPLETED_WITH_ERRORS` si hubo algún
+     `REJECTED` (reusa `completeProcess`/`completeProcessWithErrors`). Audita el cierre (quién, motivo, conteos).
    - **nunca** re-ejecuta ni reenvía; solo cierra el estado del motor tras la reconciliación de datos.
 3. **Endpoint** `POST /api/process-executions/{id}/close-reconciled?reason=` (roles operador/admin).
 
