@@ -39,7 +39,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * FILE_READ(CSV) -> DB_WRITE(staging_record) -> MT101_BUILD_FROM_TABLE
  * -> MT101_VALIDATE -> MT101_ARCHIVE -> MT101_PAY(REST local).
  *
- * <p>Ejecutar carga real:</p>
+ * <p>Por defecto corre con 10k filas (rapido para CI/dev). Para la carga real de 1M (opt-in):</p>
  * <pre>
  *   mvn -q -pl platform-app test "-Dtest=Mt101MillionFileProcessE2EIT" \
  *       "-De2e.rows=1000000" "-DargLine=-Xmx768m"
@@ -51,7 +51,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @QuarkusTestResource(PostgresTestResource.class)
 class Mt101MillionFileProcessE2EIT {
 
-    private static final int ROWS = Integer.getInteger("e2e.rows", 1_000_000);
+    // Default 10k para una corrida rapida de CI/dev; la carga real de 1M es opt-in via -De2e.rows=1000000.
+    private static final int ROWS = Integer.getInteger("e2e.rows", 10_000);
     private static final int MAX_TRANSACTIONS_PER_MESSAGE =
             Integer.getInteger("e2e.maxTransactionsPerMessage", 100);
     private static final int MAX_BYTES_PER_MESSAGE =
