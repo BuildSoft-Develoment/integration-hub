@@ -50,6 +50,30 @@ cambiar comportamiento — cubierto por los 20 tests de `Mt101StatusTaskProvider
 **Opción B — replicar en el resolver.** El `Mt101PayUncertainResolutionService` replica `resolveStatusQuery` + SFTP +
 clasificación (~100 líneas duplicadas). Más rápido, pero dos copias que pueden divergir (contra el ethos "sin legacy").
 
+## Corrección del doble-check — el registro normal tiene MENOS campos que el correctivo
+
+El STATUS resuelve las plantillas (`url` REST, `responseFileTemplate` SFTP) con `resolveTemplate(template, record)`
+(reemplaza `${campo}`). Los registros que consume difieren:
+
+| Campo en el registro | Correctivo (`correctivePayStatusRecords`) | Normal (`unresolvedPayStatusRecords`) |
+|---|---|---|
+| `sendersReference` (:20:) | ✅ | ✅ |
+| `route` (`routed_as`) | ✅ | ✅ |
+| `gatewayReference` | ✅ (del ledger) | ❌ **no existe en build_fragment** |
+| `idempotencyKey` | ✅ (del ledger) | ❌ **no existe en build_fragment** |
+| `archiveId` | ✅ (join) | ❌ (v52 lo omitió) |
+
+`mt101_build_fragment` (V14) **no tiene** `gateway_reference` ni `idempotency_key` (viven en el ledger correctivo /
+`mt101_confirmation`). Por tanto, una plantilla de STATUS que referencie `${gatewayReference}`/`${idempotencyKey}`
+quedaría **sin resolver** en el path normal → consulta malformada → el fragmento nunca se resuelve (queda UNCERTAIN).
+
+**Implicación de diseño (corregida):** el soporte SFTP/route-aware del path normal solo es fiable con plantillas que
+referencien los campos **disponibles en `build_fragment`**: `${sendersReference}` (:20:) y `${route}`. Es lo esperado
+para resolver un incierto (un banco consulta por :20:, no por un gateway_reference que — al ser incierto el envío — no
+existe). **Debe documentarse esta restricción** y, si se quiere paridad de campos, enriquecer la fuente durable con lo
+que sí exista (p.ej. `archiveId`/`gateway_reference` vía join a `mt101_confirmation` cuando haya confirmación previa),
+sin inventar los que no persisten.
+
 ## Riesgos / consideraciones
 
 - El refactor (A) toca el `Mt101StatusTaskProvider` (flujo money-path del pipeline y del correctivo). Debe ser
