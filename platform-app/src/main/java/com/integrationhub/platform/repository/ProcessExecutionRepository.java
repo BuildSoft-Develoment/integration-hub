@@ -53,4 +53,55 @@ public class ProcessExecutionRepository implements PanacheRepository<ProcessExec
         query.page(0, Math.max(limit, 1));
         return query.list();
     }
+
+    /**
+     * v53-fix (#8): claim ATOMICO distribuido PENDING -> RUNNING. Devuelve 1 si ESTE nodo gano (el UPDATE afecto la
+     * fila), 0 si otro nodo la tomo antes. Fija owner/token y el lease/heartbeat iniciales; incrementa el intento.
+     */
+    public int claimForRunning(Long id, String owner, String token,
+                               java.time.LocalDateTime leaseUntil, java.time.LocalDateTime now) {
+        return update("status = ?1, executionOwner = ?2, executionToken = ?3, executionLeaseUntil = ?4, "
+                        + "executionHeartbeatAt = ?5, executionAttempt = executionAttempt + 1, "
+                        + "startedAt = coalesce(startedAt, ?5) where id = ?6 and status = ?7",
+                ExecutionStatus.RUNNING, owner, token, leaseUntil, now, id, ExecutionStatus.PENDING);
+    }
+
+    /** v53-fix: renueva el lease/heartbeat SOLO si este nodo sigue siendo el dueño (token) y sigue RUNNING. */
+    public int renewLease(Long id, String token, java.time.LocalDateTime leaseUntil, java.time.LocalDateTime now) {
+        return update("executionLeaseUntil = ?1, executionHeartbeatAt = ?2 "
+                        + "where id = ?3 and executionToken = ?4 and status = ?5",
+                leaseUntil, now, id, token, ExecutionStatus.RUNNING);
+    }
+
+    /** v53-fix: ejecuciones RUNNING con lease vencido (nodo caido) = huerfanas candidatas a recuperacion. */
+    public List<Long> listExpiredRunningIds(java.time.LocalDateTime now, int limit) {
+        var query = find("from ProcessExecution e where e.status = ?1 and e.executionLeaseUntil is not null "
+                + "and e.executionLeaseUntil < ?2 order by e.id asc", ExecutionStatus.RUNNING, now);
+        query.page(0, Math.max(limit, 1));
+        return query.list().stream().map(execution -> execution.id).toList();
+    }
+
+    /** v53-fix: ¿la ejecucion ya inicio (o corrio) una tarea de {@code taskType} (p.ej. MT101_PAY)? */
+    public boolean hasStartedTaskType(Long executionId, String taskType) {
+        var count = getEntityManager().createQuery(
+                        "select count(t) from ProcessTaskExecution t "
+                                + "where t.processExecution.id = ?1 and t.taskDefinition.taskType = ?2", Long.class)
+                .setParameter(1, executionId)
+                .setParameter(2, taskType)
+                .getSingleResult();
+        return count != null && count > 0;
+    }
+
+    /**
+     * v53-fix: recupera ATOMICAMENTE una ejecucion RUNNING huerfana (lease vencido) hacia {@code toStatus}
+     * ({@code PENDING} para re-encolar, o {@code NEEDS_RECONCILIATION} si ya inicio PAY). Limpia owner/token/lease.
+     * Devuelve 1 si la gano (evita doble recuperacion entre nodos).
+     */
+    public int recoverExpiredRunning(Long id, ExecutionStatus toStatus, String details,
+                                     java.time.LocalDateTime now) {
+        return update("status = ?1, details = ?2, executionOwner = null, executionToken = null, "
+                        + "executionLeaseUntil = null "
+                        + "where id = ?3 and status = ?4 and executionLeaseUntil is not null and executionLeaseUntil < ?5",
+                toStatus, details, id, ExecutionStatus.RUNNING, now);
+    }
 }

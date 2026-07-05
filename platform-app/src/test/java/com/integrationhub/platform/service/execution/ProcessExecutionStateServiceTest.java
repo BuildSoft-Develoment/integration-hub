@@ -58,32 +58,54 @@ class ProcessExecutionStateServiceTest {
     }
 
     @Test
-    void markProcessRunningTransitionsPendingToRunning() {
+    void claimProcessForExecutionSucceedsWhenAtomicUpdateAffectsTheRow() {
         var execution = pendingExecution(1L);
+        when(processExecutionRepository.claimForRunning(eq(1L), eq("nodeA"), eq("tok"), any(), any())).thenReturn(1);
         when(processExecutionRepository.findById(1L)).thenReturn(execution);
 
-        var result = service.markProcessRunningIfPending(1L);
+        var result = service.claimProcessForExecution(1L, "nodeA", "tok", 30);
 
         assertTrue(result);
-        assertEquals(ExecutionStatus.RUNNING, execution.status);
-        assertEquals("Process execution started", execution.details);
         verify(auditService).record(eq(execution), isNull(), eq("PROCESS_STARTED"), eq("RUNNING"), any(), any());
     }
 
     @Test
-    void markProcessRunningReturnsFalseWhenNotFound() {
-        when(processExecutionRepository.findById(2L)).thenReturn(null);
+    void claimProcessForExecutionReturnsFalseWhenAnotherNodeWonTheClaim() {
+        // El UPDATE ... WHERE status='PENDING' no afecto ninguna fila -> otro nodo la reclamo antes.
+        when(processExecutionRepository.claimForRunning(eq(2L), any(), any(), any(), any())).thenReturn(0);
 
-        assertFalse(service.markProcessRunningIfPending(2L));
+        assertFalse(service.claimProcessForExecution(2L, "nodeB", "tok2", 30));
     }
 
     @Test
-    void markProcessRunningReturnsFalseWhenNotPending() {
-        var execution = pendingExecution(3L);
-        execution.status = ExecutionStatus.RUNNING;
-        when(processExecutionRepository.findById(3L)).thenReturn(execution);
+    void recoverRoutesAnExpiredExecutionThatStartedPayToNeedsReconciliation() {
+        // Regla de seguridad money-path: una huerfana que YA inicio MT101_PAY NO se re-ejecuta -> NEEDS_RECONCILIATION.
+        var execution = pendingExecution(30L);
+        when(processExecutionRepository.listExpiredRunningIds(any(), eq(50))).thenReturn(java.util.List.of(30L));
+        when(processExecutionRepository.hasStartedTaskType(30L, "MT101_PAY")).thenReturn(true);
+        when(processExecutionRepository.recoverExpiredRunning(eq(30L), eq(ExecutionStatus.NEEDS_RECONCILIATION), any(), any()))
+                .thenReturn(1);
+        when(processExecutionRepository.findById(30L)).thenReturn(execution);
 
-        assertFalse(service.markProcessRunningIfPending(3L));
+        var recovered = service.recoverExpiredExecutions(50, "MT101_PAY");
+
+        assertEquals(1, recovered);
+        verify(processExecutionRepository).recoverExpiredRunning(eq(30L), eq(ExecutionStatus.NEEDS_RECONCILIATION), any(), any());
+    }
+
+    @Test
+    void recoverReQueuesAnExpiredExecutionThatDidNotStartPay() {
+        var execution = pendingExecution(31L);
+        when(processExecutionRepository.listExpiredRunningIds(any(), eq(50))).thenReturn(java.util.List.of(31L));
+        when(processExecutionRepository.hasStartedTaskType(31L, "MT101_PAY")).thenReturn(false);
+        when(processExecutionRepository.recoverExpiredRunning(eq(31L), eq(ExecutionStatus.PENDING), any(), any()))
+                .thenReturn(1);
+        when(processExecutionRepository.findById(31L)).thenReturn(execution);
+
+        var recovered = service.recoverExpiredExecutions(50, "MT101_PAY");
+
+        assertEquals(1, recovered);
+        verify(processExecutionRepository).recoverExpiredRunning(eq(31L), eq(ExecutionStatus.PENDING), any(), any());
     }
 
     @Test

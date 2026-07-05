@@ -104,19 +104,60 @@ public class ProcessExecutionStateService {
         return execution.id;
     }
 
+    /**
+     * v53-fix (#8): claim ATOMICO DISTRIBUIDO PENDING -> RUNNING. Reemplaza el read-then-write anterior por un
+     * {@code UPDATE ... WHERE status='PENDING'}: en cluster, solo el nodo cuyo UPDATE afecta la fila despacha; los
+     * demas ven 0 filas y siguen. Fija owner/token + lease/heartbeat iniciales.
+     */
     @Transactional(Transactional.TxType.REQUIRES_NEW)
-    public boolean markProcessRunningIfPending(Long processExecutionId) {
-        var execution = processExecutionRepository.findById(processExecutionId);
-        if (execution == null || execution.status != ExecutionStatus.PENDING) {
+    public boolean claimProcessForExecution(Long processExecutionId, String owner, String token, int leaseSeconds) {
+        var now = LocalDateTime.now();
+        var leaseUntil = now.plusSeconds(Math.max(leaseSeconds, 1));
+        if (processExecutionRepository.claimForRunning(processExecutionId, owner, token, leaseUntil, now) != 1) {
             return false;
         }
-        execution.status = ExecutionStatus.RUNNING;
-        execution.details = "Process execution started";
-        auditService.record(execution, null, "PROCESS_STARTED", "RUNNING", "Process execution started", Map.of(
-                "processDefinitionId", execution.processDefinition.id,
-                "processName", execution.processDefinition.name
-        ));
+        var execution = processExecutionRepository.findById(processExecutionId);
+        auditService.record(execution, null, "PROCESS_STARTED", "RUNNING",
+                "Process execution claimed by " + owner, Map.of(
+                        "processDefinitionId", execution.processDefinition.id,
+                        "processName", execution.processDefinition.name,
+                        "executionOwner", owner));
         return true;
+    }
+
+    /** v53-fix: renueva el lease/heartbeat mientras el nodo dueño ejecuta (evita falso-reclamo de una sana). */
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public boolean renewExecutionLease(Long processExecutionId, String token, int leaseSeconds) {
+        var now = LocalDateTime.now();
+        return processExecutionRepository.renewLease(processExecutionId, token,
+                now.plusSeconds(Math.max(leaseSeconds, 1)), now) == 1;
+    }
+
+    /**
+     * v53-fix: recupera ejecuciones RUNNING huerfanas (lease vencido = nodo caido). REGLA DE SEGURIDAD: si la
+     * ejecucion YA inicio {@code payTaskType} (efecto no-idempotente) -> {@code NEEDS_RECONCILIATION} (nunca se
+     * re-ejecuta a ciegas; se resuelve por STATUS/RECONCILE); si NO -> {@code PENDING} (re-encolar). Atomico por fila.
+     */
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public int recoverExpiredExecutions(int limit, String payTaskType) {
+        var now = LocalDateTime.now();
+        var expiredIds = processExecutionRepository.listExpiredRunningIds(now, limit);
+        var recovered = 0;
+        for (var id : expiredIds) {
+            var startedPay = processExecutionRepository.hasStartedTaskType(id, payTaskType);
+            var target = startedPay ? ExecutionStatus.NEEDS_RECONCILIATION : ExecutionStatus.PENDING;
+            var detail = startedPay
+                    ? "Recovered orphaned execution (lease expired) that already started " + payTaskType
+                            + "; NEEDS_RECONCILIATION (no blind re-run; resolve via STATUS/RECONCILE)"
+                    : "Recovered orphaned execution (lease expired); re-queued for a fresh atomic claim";
+            if (processExecutionRepository.recoverExpiredRunning(id, target, detail, now) == 1) {
+                recovered++;
+                var execution = processExecutionRepository.findById(id);
+                auditService.record(execution, null, "PROCESS_RECOVERED", target.name(), detail, Map.of(
+                        "processDefinitionId", execution.processDefinition.id, "startedPay", startedPay));
+            }
+        }
+        return recovered;
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
