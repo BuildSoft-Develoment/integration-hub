@@ -179,6 +179,46 @@ public class Mt101FragmentRepository {
         return page;
     }
 
+    /**
+     * v52-fix (resolucion del UNCERTAIN normal): lee, de forma DURABLE y paginada por {@code fragment_index}, los
+     * fragmentos de un set en un estado no resuelto por PAY ({@code statuses}, normalmente
+     * {@code ['UNCERTAIN','DISPATCHING']}), con la forma de registro que consume {@code MT101_STATUS}:
+     * {@code sendersReference} (:20: para la plantilla de consulta al gateway) + {@code route} ({@code routed_as}).
+     * Es el analogo NORMAL de {@code correctivePayStatusRecords} (que lee el ledger correctivo): da al resolver una
+     * FUENTE durable de que consultar al gateway, en vez del hand-off in-memory (solo SENT) del pipeline.
+     */
+    public List<Map<String, Object>> unresolvedPayStatusRecords(DataSource dataSource,
+                                                                String fragmentSetId,
+                                                                List<String> statuses,
+                                                                int afterIndex,
+                                                                int pageSize) throws SQLException {
+        var effectiveStatuses = statuses == null || statuses.isEmpty() ? List.of("UNCERTAIN", "DISPATCHING") : statuses;
+        var sql = "select fragment_index, senders_reference, routed_as from mt101_build_fragment "
+                + "where fragment_set_id = ? and status in (" + placeholders(effectiveStatuses.size()) + ") "
+                + "and fragment_index > ? order by fragment_index asc limit ?";
+        var page = new ArrayList<Map<String, Object>>(Math.max(pageSize, 1));
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            statement.setString(parameter++, fragmentSetId);
+            for (var status : effectiveStatuses) {
+                statement.setString(parameter++, status);
+            }
+            statement.setInt(parameter++, afterIndex);
+            statement.setInt(parameter, pageSize);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    var record = new LinkedHashMap<String, Object>();
+                    record.put("fragmentIndex", rs.getInt("fragment_index"));
+                    record.put("sendersReference", rs.getString("senders_reference"));
+                    record.put("route", rs.getString("routed_as"));
+                    page.add(record);
+                }
+            }
+        }
+        return page;
+    }
+
     public List<RoutedMessageJsonRow> readRoutedPage(DataSource dataSource,
                                                      String fragmentSetId,
                                                      List<String> statuses,
@@ -257,6 +297,49 @@ public class Mt101FragmentRepository {
             }
         }
         return claimed;
+    }
+
+    /**
+     * v52-fix (resolucion del UNCERTAIN normal): transiciona CONDICIONALMENTE los fragmentos indicados de
+     * CUALQUIERA de {@code fromStatuses} (p.ej. {@code UNCERTAIN}/{@code DISPATCHING}) a {@code toStatus}
+     * ({@code SENT}/{@code REJECTED} segun el gateway), en un solo UPDATE por conjunto de refs. Solo cambia lo que
+     * sigue en un estado no resuelto: nunca pisa un terminal ni reenvia (STATUS solo consulta, no despacha).
+     * Devuelve cuantos cambiaron.
+     */
+    public int resolvePayStatus(DataSource dataSource,
+                                String fragmentSetId,
+                                Collection<String> sendersReferences,
+                                List<String> fromStatuses,
+                                String toStatus,
+                                String errorMessage) throws SQLException {
+        var refs = new ArrayList<String>();
+        if (sendersReferences != null) {
+            for (var reference : sendersReferences) {
+                if (reference != null && !reference.isBlank()) {
+                    refs.add(reference);
+                }
+            }
+        }
+        if (refs.isEmpty() || fromStatuses == null || fromStatuses.isEmpty()) {
+            return 0;
+        }
+        var sql = "update mt101_build_fragment set status = ?, error_message = ?, updated_at = current_timestamp "
+                + "where fragment_set_id = ? and status in (" + placeholders(fromStatuses.size()) + ") "
+                + "and senders_reference in (" + placeholders(refs.size()) + ")";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            statement.setString(parameter++, toStatus);
+            statement.setString(parameter++, errorMessage);
+            statement.setString(parameter++, fragmentSetId);
+            for (var status : fromStatuses) {
+                statement.setString(parameter++, status);
+            }
+            for (var reference : refs) {
+                statement.setString(parameter++, reference);
+            }
+            return statement.executeUpdate();
+        }
     }
 
     public void updateStatusBatch(DataSource dataSource,
