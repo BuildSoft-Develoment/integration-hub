@@ -21,11 +21,13 @@ La plataforma **stagea el archivo de entrada** (sube el `SourcePayload` a S3/Min
 cleanup delete-after-use. Reusa el `S3Client`/`S3Presigner` (presignGetObject).
 
 ### 3b — paginación de records (dimensión nueva, HABILITADA por el consumer model)
-**Hallazgo clave (verificado)**: los consumidores del reader de alto volumen —`StreamingPipelineWorker` y
-`StreamingPipelineService`— procesan cada batch en el **callback `ReadBatchConsumer.accept`** y del `ReadResult`
-devuelto usan **solo `recordCount()`/`skippedCount()`/`skippedRows()`, NO `records()`**. → el remote reader puede
-**streamear páginas** por el consumer y devolver un `ReadResult` con **records vacíos** + los totales, sin materializar
-O(todos). (A verificar en la impl: `FileReadRuntimeSupport` tampoco use `.records()` en el path remoto.)
+**Hallazgo clave (verificado, con matiz del doble-check)**: el **streaming pipeline** (`StreamingPipelineWorker`/
+`Service`) procesa cada batch en el **callback `ReadBatchConsumer.accept`** y del `ReadResult` devuelto usa **solo
+`recordCount()`/`skippedCount()`/`skippedRows()`, NO `records()`** → el remote reader puede **streamear páginas** por el
+consumer y devolver un `ReadResult` con **records vacíos**, y ese path queda **bounded**. **PERO** (ver §doble-check) hay
+un segundo path, `collectReadResult` (`ProcessTaskRuntimeService`), que **acumula todos los records** — la paginación no
+lo acota (aunque el `ReadResult` vacío tampoco lo rompe). El beneficio de memoria de la paginación aplica al **streaming
+pipeline**.
 
 Protocolo paginado: `READ(cursor)` → el plugin devuelve una **página** de records + `nextCursor` (+ skips); la plataforma
 hace `consumer.accept(batch)` y repite con `nextCursor` hasta agotar (**cursor + checkpoint**, como el reader local de
@@ -65,10 +67,37 @@ alto volumen). Acota la memoria de la plataforma a **una página**.
 - **Extiende `ArtifactStaging`** con `stageForDownload` (GET) — el contrato de staging crece a ambos sentidos.
 - **No** money-path ni correctitud.
 
-## Veredicto
+## Doble-check — correcciones (self-review, fundamentado en código)
 
-Fase 3 es **factible**, con la buena noticia de que la **paginación es viable a nivel plataforma** (los consumidores del
-reader ya trabajan por callback + counts, no por `ReadResult.records()`). El trabajo: extender `ArtifactStaging`
-(stageForDownload) + reescribir `readInBatches` (input por referencia + loop de páginas con cursor + cleanup + gate
-spiVersion) + tests (unit + E2E MinIO) + retirar el guard v58 del reader. Recomiendo **partir en 3a (input por
-referencia) y 3b (paginación)**, entrando por 3a (análoga a 2b, bajo riesgo). Sigue fuera del money-path.
+1. **CORRECCIÓN al claim de paginación: hay DOS paths de consumo del reader, y uno SÍ materializa.**
+   - **Streaming pipeline** (`StreamingPipelineWorker`/`Service`): procesa por batch en el callback y usa solo
+     `recordCount()`/`skipped` → **bounded**; la paginación realiza su beneficio aquí. ✓
+   - **`FileReadRuntimeSupport.collectReadResult`** (lo usa `ProcessTaskRuntimeService` para leer un archivo):
+     **acumula TODOS los records** en una lista via el callback (`records.addAll(...)`, con `batchSize=Integer.MAX_VALUE`)
+     → **O(todos)**. La paginación **NO** acota memoria en este path (es el caller quien acumula).
+   - **Matiz clave**: devolver `ReadResult` con **records vacíos** es **seguro para AMBOS** (collectReadResult construye
+     su propia lista desde los batches del consumer; el streaming usa counts) → el diseño del remote reader (streamear
+     páginas por el consumer + ReadResult vacío) **funciona sin romper** ninguno. Pero el **beneficio de memoria de la
+     paginación se limita al streaming pipeline**; `collectReadResult` materializa igual (característica **preexistente**,
+     no la introduce 3b). → "acotar del todo el reader" exige que las lecturas grandes vayan por el **streaming
+     pipeline**, no por `collectReadResult` (fuera del alcance de 3b).
+2. **CONFIRMADO: `ReadResult` permite `records` vacío con `recordCount` ≠ 0.** El constructor de 4 args fija
+   `recordCount` independiente (no valida `records.size()==recordCount`) → `new ReadResult(List.of(), total, skipped,
+   skips)` es válido.
+3. **Refinamientos de diseño**:
+   - **`stageForDownload` debe SUBIR por streaming** (`RequestBody.fromInputStream(payload.openStream(), size)`, con
+     `size` del `SelectedSourceFile`) — si no, la plataforma materializaría el archivo al stagearlo, anulando el punto.
+     Si el `size` es desconocido, usar multipart o rechazar.
+   - **Doble-staging cuando source+reader son AMBOS remotos**: el archivo iría source-plugin→S3→plataforma→S3→
+     reader-plugin (dos round-trips). Es un caso de borde (normalmente uno es local); no bloquea, pero se documenta.
+   - **Los records siguen viajando por gRPC** (paginados): 3a saca el **archivo** de gRPC (va por S3); 3b acota la
+     **memoria de records** a una página (los records estructurados aún transitan gRPC, pero de a una página).
+
+## Veredicto (revisado)
+
+Fase 3 es **factible**. La paginación es viable y **segura** (ReadResult vacío no rompe ningún caller), pero su
+**beneficio de memoria se limita al streaming pipeline** — `collectReadResult` materializa igual (preexistente, fuera de
+alcance). El trabajo: extender `ArtifactStaging` (`stageForDownload` con **upload por streaming**) + reescribir
+`readInBatches` (input por referencia + loop de páginas con cursor + cleanup + gate spiVersion) + tests (unit + E2E
+MinIO) + retirar el guard v58 del reader. Recomiendo **3a primero** (input por referencia, análoga a 2b, bajo riesgo),
+luego **3b** (paginación), documentando que su beneficio aplica al path streaming. Sigue fuera del money-path.
