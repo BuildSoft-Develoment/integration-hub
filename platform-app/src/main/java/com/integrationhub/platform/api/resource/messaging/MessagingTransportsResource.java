@@ -1,5 +1,6 @@
 package com.integrationhub.platform.api.resource.messaging;
 
+import com.integrationhub.platform.service.messaging.AsyncAvailabilityService;
 import com.integrationhub.platform.service.messaging.MessageBrokerRegistry;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.inject.Inject;
@@ -7,7 +8,6 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.util.List;
 
@@ -19,8 +19,8 @@ import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_AD
  * Endpoints de mensajería para la UI de tareas asíncronas (ADR-015), de solo lectura:
  * <ul>
  *   <li>{@code GET /api/messaging/transports} — brokers registrados, para el selector de transporte.</li>
- *   <li>{@code GET /api/messaging/async-status} — si el despacho async está activo en este entorno,
- *       para que la UI avise cuando {@code async:true} no tomará efecto (correría síncrono).</li>
+ *   <li>{@code GET /api/messaging/async-status} — estado COMPUESTO de disponibilidad async (execution + relay +
+ *       consumer + broker), para que la UI avise cuando {@code async:true} no se ejecutaría end-to-end.</li>
  * </ul>
  */
 @Path("/api/messaging")
@@ -28,14 +28,13 @@ import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_AD
 public class MessagingTransportsResource {
 
     private final MessageBrokerRegistry brokers;
-    private final boolean asyncExecutionEnabled;
+    private final AsyncAvailabilityService asyncAvailability;
 
     @Inject
-    public MessagingTransportsResource(
-            MessageBrokerRegistry brokers,
-            @ConfigProperty(name = "tasks.async.execution.enabled", defaultValue = "false") boolean asyncExecutionEnabled) {
+    public MessagingTransportsResource(MessageBrokerRegistry brokers,
+                                       AsyncAvailabilityService asyncAvailability) {
         this.brokers = brokers;
-        this.asyncExecutionEnabled = asyncExecutionEnabled;
+        this.asyncAvailability = asyncAvailability;
     }
 
     @GET
@@ -45,14 +44,14 @@ public class MessagingTransportsResource {
         return brokers.availableTypes();
     }
 
+    /**
+     * v59-fix: estado compuesto (DISABLED/DEGRADED/READY) + los flags que lo componen. El borde HTTP solo delega en
+     * {@link AsyncAvailabilityService}. Backward-compatible: conserva {@code executionEnabled}.
+     */
     @GET
     @Path("/async-status")
     @RolesAllowed({INTEGRATION_ADMIN, PLATFORM_ADMIN, OPERATOR})
-    public AsyncStatus asyncStatus() {
-        return new AsyncStatus(asyncExecutionEnabled);
-    }
-
-    /** Estado del feature de despacho async en el entorno. */
-    public record AsyncStatus(boolean executionEnabled) {
+    public AsyncAvailabilityService.AsyncAvailability asyncStatus() {
+        return asyncAvailability.availability();
     }
 }
