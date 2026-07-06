@@ -27,10 +27,26 @@ el banco en la resolución normal.
   a.process_execution_id = f.process_execution_id` — único e indexado.
 - El ejecutor **ya provee** `rawBody`/`gatewayReference`/`confirmedStatus` (diseñado así en v55) → no hay que tocarlo.
 
+## Corrección del doble-check — el índice NO es único: usar SUBCONSULTA ESCALAR, no JOIN
+
+El índice V36 `ix_mt101_archive_senders_execution` es `create index` (**NO único**) sobre
+`(senders_reference, process_execution_id)`. En la práctica es 1:1 por ejecución (un :20: aparece una vez por
+mensaje/ejecución), pero **no está garantizado a nivel de BD**. Un **LEFT JOIN** a `mt101_archive` dentro de
+`unresolvedPayStatusRecords` — que dirige el loop de **consulta al gateway + transición** — podría **multiplicar las
+filas de fragmento** ante una anomalía de datos → el resolver consultaría el gateway y transicionaría el MISMO
+fragmento varias veces. **Riesgo real; mi diseño inicial con "join" era incorrecto.**
+
+Corrección: obtener `archive_id` con una **subconsulta escalar**
+`(select max(a.id) from mt101_archive a where a.senders_reference = f.senders_reference and
+a.process_execution_id = f.process_execution_id)` — devuelve **exactamente un valor** por fragmento (o null), **sin
+multiplicar filas**. Alternativa equivalente: un lookup batch dedup'd separado tras resolver. Se elige la subconsulta
+escalar por simplicidad y por mantener la query durable 1:1.
+
 ## Diseño propuesto (bounded, sin reenvío)
 
-1. **Enriquecer la fuente durable** `unresolvedPayStatusRecords`: añadir `archiveId` al registro vía el join a
-   `mt101_archive` por `(senders_reference, process_execution_id)` (left join → null si no hay archive).
+1. **Enriquecer la fuente durable** `unresolvedPayStatusRecords`: añadir `archiveId` al registro vía la **subconsulta
+   escalar** `max(a.id)` por `(senders_reference, process_execution_id)` (null si no hay archive). **NO** un join
+   (evita multiplicar filas — ver corrección arriba).
 2. **Persistir confirmación en el resolver**: para cada fragmento **resuelto** (SENT/REJECTED), armar
    `ConfirmationRow(archiveId, "STATUS_API", result.gatewayReference(), result.confirmedStatus(), result.rawBody())`
    y batch-insert vía `Mt101ConfirmationRepository` en la conexión de resolución. (El resolver hoy descarta
