@@ -22,19 +22,36 @@ import java.util.Map;
 
 public class RemoteReaderProvider implements ReaderProvider {
 
+    /** Umbral por defecto del contenido remoto (conservador ~4 MB): el server del plugin suele capar a ~4 MB inbound. */
+    public static final long DEFAULT_MAX_CONTENT_BYTES = 4L * 1024 * 1024;
+
     private final String type;
     private final RemotePluginDescriptor descriptor;
     private final RemotePluginInvoker invoker;
     private final RemotePluginRegistry registry;
+    // v58-fix: guard de tamano. El reader empuja el archivo COMPLETO (Base64 dentro de configuration_json) en un
+    // request gRPC unary; para archivos grandes el server del plugin lo rechaza con un RESOURCE_EXHAUSTED cripitico.
+    // Se pre-chequea el tamano Base64 estimado y se rechaza con un mensaje ACCIONABLE (usar reader local). No es
+    // streaming; es un guard de operabilidad hasta que exista un contrato de streaming.
+    private final long maxContentBytes;
 
     public RemoteReaderProvider(String type,
                                 RemotePluginDescriptor descriptor,
                                 RemotePluginInvoker invoker,
                                 RemotePluginRegistry registry) {
+        this(type, descriptor, invoker, registry, DEFAULT_MAX_CONTENT_BYTES);
+    }
+
+    public RemoteReaderProvider(String type,
+                                RemotePluginDescriptor descriptor,
+                                RemotePluginInvoker invoker,
+                                RemotePluginRegistry registry,
+                                long maxContentBytes) {
         this.type = type;
         this.descriptor = descriptor;
         this.invoker = invoker;
         this.registry = registry;
+        this.maxContentBytes = maxContentBytes > 0 ? maxContentBytes : DEFAULT_MAX_CONTENT_BYTES;
     }
 
     @Override
@@ -96,7 +113,17 @@ public class RemoteReaderProvider implements ReaderProvider {
         sourceFile.put("location", payload.location());
         sourceFile.put("mediaType", payload.mediaType());
         request.put("sourceFile", sourceFile);
-        request.put("contentBase64", Base64.getEncoder().encodeToString(bytes(payload)));
+        var content = bytes(payload);
+        // Estimacion del tamano Base64 (~4/3 del binario). Si excede el umbral, se rechaza ANTES de invocar con un
+        // mensaje accionable, en vez de un RESOURCE_EXHAUSTED gRPC crudo del server del plugin.
+        var estimatedBase64 = content.length / 3L * 4;
+        if (estimatedBase64 > maxContentBytes) {
+            throw degraded("el archivo '" + payload.name() + "' (~" + estimatedBase64 + " B en Base64) excede el "
+                    + "maximo del reader remoto (" + maxContentBytes + " B). Los plugins remotos transfieren el "
+                    + "archivo completo en un mensaje gRPC (sin streaming); usa un reader LOCAL para archivos "
+                    + "masivos o sube el limite del plugin y de integrationhub.plugin.remote.reader.max-content-bytes");
+        }
+        request.put("contentBase64", Base64.getEncoder().encodeToString(content));
         return request;
     }
 
