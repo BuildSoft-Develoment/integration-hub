@@ -25,18 +25,32 @@ offline). Es **operabilidad/UX**, no correctitud (no corrompe ni duplica).
 ## Diseño propuesto
 
 ### Paso bounded (recomendado) — agregación de señales baratas
-Extender `AsyncStatus` con lo que ya está disponible en el backend sin probes nuevos:
+
+**Corrección del doble-check — hay TRES gates independientes (no dos):** la ejecución async completa requiere, además
+del broker: (1) `tasks.async.execution.enabled` (offload al outbox), (2) `tasks.dispatch.enabled` (relay outbox→broker),
+y **(3) `mp.messaging.incoming.tasks-in.enabled`** (el canal del **consumer** `AsyncTaskBrokerConsumer` `@Incoming`,
+default `false`). Sin (3), aunque relay y broker entreguen, **nadie consume** → los work-items quedan en el broker sin
+ejecutarse. Mi primer diseño omitía el consumer. Ademas, **verificado que NO hay validación** que acople los flags →
+los estados degradados son misconfiguraciones reales posibles.
+
+Extender `AsyncStatus` con lo disponible sin probes nuevos:
 - `executionEnabled` (`tasks.async.execution.enabled`) — ya está.
-- `dispatchEnabled` (`tasks.dispatch.enabled`) — el gate del relay.
+- `dispatchEnabled` (`tasks.dispatch.enabled`) — gate del relay.
+- `consumerEnabled` (`mp.messaging.incoming.tasks-in.enabled`) — gate del consumer.
 - `brokersRegistered` (`!brokers.availableTypes().isEmpty()`).
 - `state` derivado:
   - **`DISABLED`** si `!executionEnabled` (async off; corre síncrono — el significado actual del flag único).
-  - **`DEGRADED`** si `executionEnabled` pero (`!dispatchEnabled` o sin brokers) → async on pero no entregará
-    (outbox se atascaría). **Fail-closed**: la UI trata DEGRADED como "async no plenamente operativo".
-  - **`READY`** si `executionEnabled && dispatchEnabled && brokersRegistered`.
+  - **`DEGRADED`** si `executionEnabled` pero (`!dispatchEnabled` **o** `!consumerEnabled` **o** sin brokers) → async
+    on pero no se ejecutaría end-to-end (outbox atascado, o work-items sin consumir). **Fail-closed**.
+  - **`READY`** si `executionEnabled && dispatchEnabled && consumerEnabled && brokersRegistered`.
 
-Cierra el "un flag engaña" con coste mínimo (dos flags de config + el registry). No rompe el contrato (campo `state`
-nuevo + los flags; `executionEnabled` se conserva).
+Cierra el "un flag engaña" con coste mínimo (tres flags de config + el registry). No rompe el contrato (`state` + flags
+nuevos; `executionEnabled` se conserva).
+
+**Limitación del READY bounded (honesta):** es **nivel-config**, no end-to-end en vivo. `brokersRegistered` es COARSE
+— el relay resuelve el broker **por tipo** de cada work-item (`brokers::resolve`), así que "algún broker registrado"
+no garantiza que el tipo de una tarea concreta esté disponible **ni conectado**; y `consumerEnabled=true` no garantiza
+que el consumer esté consumiendo en vivo. READY = "configurado para funcionar", no "probado en vivo".
 
 ### Versión completa (diferida) — health en vivo
 Para `BROKER_UNAVAILABLE`/`CONSUMER_OFFLINE` reales hace falta: probe de conectividad del broker (Redis/RabbitMQ/JMS),
