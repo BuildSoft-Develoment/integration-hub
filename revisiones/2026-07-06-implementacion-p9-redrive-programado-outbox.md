@@ -41,6 +41,21 @@ acotado por el intervalo.
   manual) a recuperación automática cuando el broker vuelve. No es correctitud ni money-path.
 - **No implementa** el "fail-closed en dispatch" del review — descartado por el doble-check (rompería el outbox y los tests).
 
+## Doble-check — verificación del wiring real + coherencia (self-review)
+
+Reté los dos puntos débiles (lección #4):
+
+- **Cadena cubierta end-to-end (no solo el mock)**: el `DEAD→PENDING` real ya lo prueba
+  **`AsyncTaskDlqIT.redriveOutboxDeadResetsRowsToPending`** contra Postgres (seed DEAD → `redriveOutboxDead` → 0 DEAD, 2
+  PENDING). El scheduler solo compone (gate + llamar ese método), probado por el unit. → un IT del scheduler sería
+  redundante; la composición es una llamada directa. `AsyncTaskDlqIT` (10) además **bootea el app con el bean nuevo** →
+  confirma el wiring CDI/@Scheduled sin `UnsatisfiedResolution`.
+- **Coherencia de config (hardening del doble-check)**: el relay que drena `PENDING→broker` (`TaskDispatchRelayScheduler`)
+  está gated por `tasks.dispatch.enabled`. Reanimar `DEAD→PENDING` sin ese relay produciría filas que **nadie entrega**.
+  → añadí `&& dispatchEnabled` al gate: el redrive solo actúa si el relay corre. Test nuevo `sweepIsNoOpWhenRelayNotRunning`.
+- **Pruebas**: `AsyncOutboxDeadRedriveSchedulerTest` (4: redrive cuando enabled+relay, no-op sin enable, **no-op sin relay**,
+  no propaga errores) + `AsyncTaskDlqIT` (10, redrive real + boot con el bean). Todo verde.
+
 ## Estado
 
 Backlog del review **cerrado**: P2 y P3 (los P0 reales) implementados + verificados; P5 y P9 descartados/degradados por sus

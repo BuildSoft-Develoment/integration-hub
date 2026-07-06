@@ -19,9 +19,9 @@ class AsyncOutboxDeadRedriveSchedulerTest {
     private final AsyncTaskDlqService dlqService = mock(AsyncTaskDlqService.class);
 
     @Test
-    void sweepRedrivesDeadRowsWhenEnabled() {
+    void sweepRedrivesDeadRowsWhenEnabledAndRelayRunning() {
         when(dlqService.redriveOutboxDead(100)).thenReturn(3L);
-        var scheduler = new AsyncOutboxDeadRedriveScheduler(dlqService, true, 100);
+        var scheduler = new AsyncOutboxDeadRedriveScheduler(dlqService, true, true, 100);
 
         scheduler.sweep();
 
@@ -30,7 +30,17 @@ class AsyncOutboxDeadRedriveSchedulerTest {
 
     @Test
     void sweepIsNoOpWhenDisabled() {
-        var scheduler = new AsyncOutboxDeadRedriveScheduler(dlqService, false, 100);
+        var scheduler = new AsyncOutboxDeadRedriveScheduler(dlqService, false, true, 100);
+
+        scheduler.sweep();
+
+        verify(dlqService, never()).redriveOutboxDead(org.mockito.ArgumentMatchers.anyInt());
+    }
+
+    @Test
+    void sweepIsNoOpWhenRelayNotRunning() {
+        // Coherencia: sin el relay (tasks.dispatch.enabled=false) no se produce PENDING que nadie drena.
+        var scheduler = new AsyncOutboxDeadRedriveScheduler(dlqService, true, false, 100);
 
         scheduler.sweep();
 
@@ -40,7 +50,7 @@ class AsyncOutboxDeadRedriveSchedulerTest {
     @Test
     void sweepSwallowsErrorsSoTheSchedulerSurvives() {
         doThrow(new IllegalStateException("db down")).when(dlqService).redriveOutboxDead(50);
-        var scheduler = new AsyncOutboxDeadRedriveScheduler(dlqService, true, 50);
+        var scheduler = new AsyncOutboxDeadRedriveScheduler(dlqService, true, true, 50);
 
         scheduler.sweep(); // no debe propagar: el próximo tick reintenta
     }

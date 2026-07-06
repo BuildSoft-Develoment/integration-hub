@@ -29,20 +29,25 @@ public class AsyncOutboxDeadRedriveScheduler {
 
     private final AsyncTaskDlqService dlqService;
     private final boolean enabled;
+    private final boolean dispatchEnabled;
     private final int maxPerSweep;
 
     public AsyncOutboxDeadRedriveScheduler(
             AsyncTaskDlqService dlqService,
             @ConfigProperty(name = "tasks.relay.dead-redrive.enabled", defaultValue = "false") boolean enabled,
+            @ConfigProperty(name = "tasks.dispatch.enabled", defaultValue = "false") boolean dispatchEnabled,
             @ConfigProperty(name = "tasks.relay.dead-redrive.max-per-sweep", defaultValue = "100") int maxPerSweep) {
         this.dlqService = dlqService;
         this.enabled = enabled;
+        this.dispatchEnabled = dispatchEnabled;
         this.maxPerSweep = Math.max(1, maxPerSweep);
     }
 
     @Scheduled(every = "{tasks.relay.dead-redrive.every:300s}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     public void sweep() {
-        if (!enabled) {
+        // Coherencia: solo tiene sentido reanimar DEAD→PENDING si el relay (gated por tasks.dispatch.enabled) está
+        // corriendo para drenarlas; si no, se producirían filas PENDING que nadie entrega.
+        if (!enabled || !dispatchEnabled) {
             return;
         }
         try {
