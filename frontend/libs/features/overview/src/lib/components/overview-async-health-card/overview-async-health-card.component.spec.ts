@@ -36,4 +36,15 @@ describe('OverviewAsyncHealthCardComponent', () => {
     expect(el.textContent).toContain('2');
     expect(el.querySelector('a[href="/executions/async-dlq"]')).not.toBeNull();
   });
+
+  // Mapea el dominio async a los tonos del card compartido (lo mismo que asierta el e2e, determinista):
+  // dead → tono error, stalled → tono warn; filas muertas elevan la alerta de error del card.
+  it('mapea dead→error y stalled→warn con las clases del card compartido', () => {
+    const fixture = build({ dead: 3, stalled: 2 });
+    fixture.detectChanges();
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.overview-health-value--error')?.textContent?.trim()).toBe('3');
+    expect(el.querySelector('.overview-health-value--warn')?.textContent?.trim()).toBe('2');
+    expect(el.querySelector('.overview-health-card--error')).not.toBeNull();
+  });
 });
