@@ -419,10 +419,10 @@ test.describe('Integration Hub shell', () => {
     const card = page.locator('ih-overview-plugin-health-card');
     await expect(card).toBeVisible({ timeout: 15_000 });
     await expect(card.getByText(/Salud de plugins|Plugin health/)).toBeVisible();
-    // active=2, degraded=1, blocked=1 rendered.
-    await expect(card.locator('.plugin-health-value--active')).toHaveText('2');
-    await expect(card.locator('.plugin-health-value--degraded')).toHaveText('1');
-    await expect(card.locator('.plugin-health-value--blocked')).toHaveText('1');
+    // active=2 (ok), degraded=1 (error), blocked=1 (warn) rendered via the shared health card.
+    await expect(card.locator('.overview-health-value--ok')).toHaveText('2');
+    await expect(card.locator('.overview-health-value--error')).toHaveText('1');
+    await expect(card.locator('.overview-health-value--warn')).toHaveText('1');
     await expect(card.getByRole('link', { name: /Ver plugins|View plugins/ })).toBeVisible();
   });
 
@@ -644,11 +644,11 @@ test.describe('Integration Hub shell', () => {
     const card = page.locator('ih-overview-async-health-card');
     await expect(card).toBeVisible({ timeout: 20_000 });
     await expect(card.getByText(/Salud backbone async|Async backbone health/)).toBeVisible();
-    // dead=3 (error color) and stalled=2 rendered.
-    await expect(card.locator('.plugin-health-value--degraded')).toHaveText('3');
-    await expect(card.locator('.plugin-health-value--blocked')).toHaveText('2');
+    // dead=3 (error tone) and stalled=2 (warn tone) rendered via the shared health card.
+    await expect(card.locator('.overview-health-value--error')).toHaveText('3');
+    await expect(card.locator('.overview-health-value--warn')).toHaveText('2');
     // Dead rows raise the error alert level on the card.
-    await expect(card.locator('.plugin-health-card--error')).toBeVisible();
+    await expect(card.locator('.overview-health-card--error')).toBeVisible();
     // Link to the DLQ console (F1).
     await expect(card.getByRole('link', { name: /Ver consola DLQ|View DLQ console/ })).toBeVisible();
   });
