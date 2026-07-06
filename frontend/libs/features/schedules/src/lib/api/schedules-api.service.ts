@@ -1,11 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-// Deuda tecnica: ProcessApiService deberia vivir en @integration-hub/core/services (servicio de datos
-// compartido), no en la feature processes. Unica arista feature->feature del monorepo; ver
-// revisiones/2026-07-05-analisis-fronteras-nx-frontend.md.
-// eslint-disable-next-line no-restricted-imports -- grandfather de la deuda documentada arriba
-import { ProcessApiService } from '@integration-hub/features/processes';
 import { ScheduleRecord } from '../models/schedules.models';
 
 export interface SchedulePageResponse {
@@ -24,7 +19,6 @@ export interface ScheduleQueryParams {
 @Injectable({ providedIn: 'root' })
 export class SchedulesApiService {
   private readonly http = inject(HttpClient);
-  private readonly processApi = inject(ProcessApiService);
 
   list(params: ScheduleQueryParams): Observable<SchedulePageResponse> {
     let httpParams = new HttpParams()
@@ -46,7 +40,9 @@ export class SchedulesApiService {
     });
   }
 
+  // schedules dispara la ejecucion de un proceso por id (POST directo, igual que el resto de su superficie
+  // HTTP como list()). No depende de features/processes: cada feature es dueña de sus llamadas HTTP (SRP).
   execute(processDefinitionId: number): Observable<unknown> {
-    return this.processApi.execute(processDefinitionId);
+    return this.http.post(`/api/process-executions/${processDefinitionId}`, {});
   }
 }

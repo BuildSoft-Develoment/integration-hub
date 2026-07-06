@@ -91,8 +91,10 @@ inyección. Sondas eliminadas.
 
 - **No es la solución idiomática Nx**: no hay tags, `depConstraints`, ni caching/`affected` por lib. Para eso hay que
   registrar las libs como proyectos (tarea frontend mayor, ver el análisis).
-- **El grandfather es deuda real**: mover `ProcessApiService` a `@integration-hub/core/services` eliminaría la única
-  excepción y permitiría quitar el `eslint-disable`. Refactor acotado pero fuera del alcance de este guard.
+- **~~El grandfather es deuda real~~ → RESUELTO**: la única excepción `eslint-disable` (schedules→ProcessApiService) se
+  eliminó — `schedules.execute` ahora hace su propio `POST` directo (opción B, no la extracción a core que el
+  doble-check descartó por sobre-diseñada). El guard queda **100% limpio, sin grandfathers**. Ver
+  [implementación](2026-07-05-implementacion-eliminar-grandfather-processapi.md).
 - **Enforcement**: `lint:boundaries` es un script aparte; para que sea barrera efectiva debe correrse en el pipeline de
   CI del frontend (no está en `npm run lint`, que sigue siendo `nx lint web`). Se deja el script listo para engancharlo.
 
