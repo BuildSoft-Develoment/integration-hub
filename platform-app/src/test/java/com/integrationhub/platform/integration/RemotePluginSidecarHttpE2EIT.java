@@ -1,6 +1,5 @@
 package com.integrationhub.platform.integration;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.examples.plugin.sidecar.EchoPluginTaskHandler;
 import com.integrationhub.examples.plugin.sidecar.ReferencePluginSidecar;
@@ -64,8 +63,6 @@ class RemotePluginSidecarHttpE2EIT {
     private static final String SIGNING_KEY_ID = "sidecar-e2e";
     private static final String RESUME_SECRET = "sidecar-http-secret";
     private static final KeyPair SIGNING_KEY_PAIR = signingKeyPair();
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {
-    };
 
     @Inject
     DataSource dataSource;
@@ -157,25 +154,11 @@ class RemotePluginSidecarHttpE2EIT {
                 readSingleString("select resume_count from process_task_execution order by id desc limit 1"));
     }
 
-    private AsyncTaskEnvelope envelopeFrom(ConsumerRecord<String, String> record) throws Exception {
-        var headers = headers(record);
-        var payload = objectMapper.readValue(record.value(), MAP_TYPE);
-        return new AsyncTaskEnvelope(
-                headers.get("traceId"),
-                number(payload.get("processExecutionId")).longValue(),
-                number(payload.get("taskDefinitionId")).longValue(),
-                headers.get("taskType"),
-                "KAFKA",
-                record.key(),
-                Integer.parseInt(headers.getOrDefault("attempt", "1")),
-                record.value(),
-                headers);
-    }
-
-    private Map<String, String> headers(ConsumerRecord<String, String> record) {
-        var copy = new LinkedHashMap<String, String>();
-        record.headers().forEach(header -> copy.put(header.key(), new String(header.value(), StandardCharsets.UTF_8)));
-        return copy;
+    private AsyncTaskEnvelope envelopeFrom(ConsumerRecord<String, String> record) {
+        // El codec (ADR-015) publica el envelope ENTERO como payload y deja los headers de Kafka vacíos (toda la
+        // correlación viaja dentro del envelope). Se decodifica con el inverso del encode — un solo readValue — igual
+        // que un consumer/sidecar real; reconstruirlo a mano desde headers vacíos dejaba traceId/taskType en null.
+        return AsyncTaskMessageCodec.decode(record.value(), objectMapper);
     }
 
     private ConsumerRecord<String, String> pollOne(KafkaConsumer<String, String> consumer) {
@@ -232,13 +215,6 @@ class RemotePluginSidecarHttpE2EIT {
             }
             return rs.getString(1);
         }
-    }
-
-    private Number number(Object value) {
-        if (value instanceof Number number) {
-            return number;
-        }
-        throw new IllegalArgumentException("Expected numeric payload value but got " + value);
     }
 
     private static String trustedPublicKeyConfig() {
