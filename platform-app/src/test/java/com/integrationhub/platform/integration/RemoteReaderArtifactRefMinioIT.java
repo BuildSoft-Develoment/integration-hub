@@ -30,6 +30,8 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -136,6 +138,54 @@ class RemoteReaderArtifactRefMinioIT {
         assertThrows(IllegalStateException.class, () -> provider.readInBatches(payload, Map.of(), 10, batch -> { }));
         // El finally del readInBatches limpia el input aunque el READ falle -> sin leak.
         assertEquals(0, countStagingObjects(), "el input staged se limpia aun si el READ falla (no leak)");
+    }
+
+    @Test
+    void paginatesViaRangeGetAgainstRealMinio() throws Exception {
+        var staging = new S3ArtifactStaging(new S3StagingConfig(BUCKET, REGION, endpoint, ACCESS_KEY, SECRET_KEY, true));
+        var input = "row1\nrow2\n".getBytes(StandardCharsets.UTF_8); // dos líneas de 5 bytes
+        var descriptor = new RemotePluginDescriptor(
+                "acme-reader", "1.0.0", "2", Set.of(), Set.of(), Set.of("REMOTE_CSV"), "GRPC", endpoint, true);
+
+        // El plugin pagina por OFFSET usando un Range GET de la URL presignada (el camino eficiente del doble-check):
+        // devuelve una línea por página + nextCursor = siguiente offset, hasta EOF.
+        RemotePluginInvoker invoker = (desc, taskType, context, payload) -> {
+            try {
+                @SuppressWarnings("unchecked")
+                var reference = ArtifactReference.fromMap((Map<String, Object>) payload.get(ArtifactReference.ARTIFACT_REF));
+                var cursor = payload.get("cursor");
+                int offset = cursor == null ? 0 : Integer.parseInt(cursor.toString());
+                var response = HttpClient.newHttpClient().send(
+                        HttpRequest.newBuilder(URI.create(reference.uri()))
+                                .header("Range", "bytes=" + offset + "-").GET().build(),
+                        HttpResponse.BodyHandlers.ofByteArray());
+                if (response.statusCode() != 206 && response.statusCode() != 200) {
+                    return TaskResult.failure("range GET HTTP " + response.statusCode(), Map.of());
+                }
+                var chunk = new String(response.body(), StandardCharsets.UTF_8);
+                int newline = chunk.indexOf('\n');
+                var line = chunk.substring(0, newline);
+                int nextOffset = offset + newline + 1;
+                var outputs = new HashMap<String, Object>();
+                outputs.put("records", List.of(Map.of("line", line)));
+                if (nextOffset < input.length) {
+                    outputs.put("nextCursor", String.valueOf(nextOffset));
+                }
+                return TaskResult.success("page", outputs);
+            } catch (Exception error) {
+                return TaskResult.failure(error.getMessage(), Map.of());
+            }
+        };
+
+        var provider = new RemoteReaderProvider("REMOTE_CSV", descriptor, invoker, new RemotePluginRegistry(), staging);
+        var payload = SourcePayload.fromBytes("rows.csv", input, "text/csv");
+        var batches = new ArrayList<Integer>();
+
+        var result = provider.readInBatches(payload, Map.of(), 10, batch -> batches.add(batch.records().size()));
+
+        assertEquals(2, result.recordCount(), "dos páginas via Range GET -> dos records");
+        assertEquals(List.of(1, 1), batches, "una página (línea) por invocación, streameada por el consumer");
+        assertEquals(0, countStagingObjects(), "el input staged se limpia tras el loop");
     }
 
     private static int countStagingObjects() {

@@ -50,9 +50,50 @@ class RemoteReaderProviderTest {
 
         var result = provider.readInBatches(payload, Map.of(), 10, batch -> { });
 
-        assertEquals(2, result.records().size());
+        // 3b: records() del ReadResult es VACÍO (se streamea por el consumer); el total va en recordCount().
+        assertEquals(0, result.records().size(), "el reader remoto streamea por el consumer, no por records()");
+        assertEquals(2, result.recordCount());
         assertArrayEquals(input, downloadedByPlugin.get(), "el plugin recibio el input por referencia (descargo el staged)");
         assertEquals(1, staging.deleted.size(), "el input staged se limpia tras el READ");
+    }
+
+    @Test
+    void paginatesRecordsAcrossPagesUntilCursorIsEmpty() {
+        var staging = new FakeArtifactStaging();
+        // El plugin devuelve 2 páginas: la primera con nextCursor, la segunda sin él (fin).
+        RemotePluginInvoker invoker = (desc, taskType, context, payload) -> {
+            var cursor = payload.get("cursor");
+            if (cursor == null) {
+                return TaskResult.success("p1", Map.of(
+                        "records", List.of(Map.of("r", "1"), Map.of("r", "2")),
+                        "nextCursor", "offset-2"));
+            }
+            return TaskResult.success("p2", Map.of("records", List.of(Map.of("r", "3"))));
+        };
+        var provider = new RemoteReaderProvider("MY_READER", descriptor("2"), invoker, new RemotePluginRegistry(), staging);
+        var payload = SourcePayload.fromBytes("big.csv", "data".getBytes(StandardCharsets.UTF_8), "text/csv");
+
+        var batchSizes = new java.util.ArrayList<Integer>();
+        var result = provider.readInBatches(payload, Map.of(), 10, batch -> batchSizes.add(batch.records().size()));
+
+        assertEquals(3, result.recordCount(), "acumula el total de todas las páginas");
+        assertEquals(List.of(2, 1), batchSizes, "el consumer recibe una página por invocación (streaming)");
+        assertEquals(1, staging.deleted.size(), "el input staged se limpia tras el loop");
+    }
+
+    @Test
+    void failsWhenTheCursorDoesNotAdvance() {
+        var staging = new FakeArtifactStaging();
+        // El plugin devuelve SIEMPRE el mismo nextCursor -> no avanza (posible loop).
+        RemotePluginInvoker invoker = (desc, taskType, context, payload) ->
+                TaskResult.success("stuck", Map.of("records", List.of(Map.of("r", "x")), "nextCursor", "stuck-cursor"));
+        var provider = new RemoteReaderProvider("MY_READER", descriptor("2"), invoker, new RemotePluginRegistry(), staging);
+        var payload = SourcePayload.fromBytes("loop.csv", "data".getBytes(StandardCharsets.UTF_8), "text/csv");
+
+        var error = assertThrows(IllegalStateException.class,
+                () -> provider.readInBatches(payload, Map.of(), 10, batch -> { }));
+        assertTrue(error.getMessage().contains("no avanza"), "guard de no-progreso del cursor");
+        assertEquals(1, staging.deleted.size(), "el input staged se limpia aun al cortar por no-progreso");
     }
 
     @Test

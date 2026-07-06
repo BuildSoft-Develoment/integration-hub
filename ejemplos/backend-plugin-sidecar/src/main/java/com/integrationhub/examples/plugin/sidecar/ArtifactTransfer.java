@@ -39,6 +39,27 @@ public final class ArtifactTransfer {
         return response.body();
     }
 
+    /**
+     * Proyecto #3, Fase 3b — descarga desde un OFFSET (Range GET) para paginar sin re-descargar todo. El plugin usa
+     * esto cuando la plataforma le pasa un {@code cursor} (que debería tratar como un offset de byte en una frontera de
+     * record): {@code openRange(ref, cursor)} → stream desde ese offset. Así cada byte se lee una vez en total
+     * (O(archivo)) en vez de re-parsear desde el inicio cada página (O(N²)). S3/MinIO honran {@code Range} en URLs
+     * presignadas (con 206 Partial Content, o 200 si se ignora).
+     */
+    public InputStream openRange(ArtifactReference reference, long startInclusive)
+            throws IOException, InterruptedException {
+        requireMethod(reference, ArtifactReference.GET, "openRange");
+        HttpResponse<InputStream> response = http.send(
+                HttpRequest.newBuilder(URI.create(reference.uri()))
+                        .header("Range", "bytes=" + Math.max(0, startInclusive) + "-")
+                        .GET().build(),
+                HttpResponse.BodyHandlers.ofInputStream());
+        if (response.statusCode() != 200 && response.statusCode() != 206) {
+            throw new IOException("descarga por rango fallida: HTTP " + response.statusCode());
+        }
+        return response.body();
+    }
+
     /** Descarga completa a bytes (conveniencia para artefactos que caben en memoria). */
     public byte[] download(ArtifactReference reference) throws IOException, InterruptedException {
         requireMethod(reference, ArtifactReference.GET, "download");

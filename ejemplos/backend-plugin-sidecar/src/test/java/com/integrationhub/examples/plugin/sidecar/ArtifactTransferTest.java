@@ -149,4 +149,23 @@ class ArtifactTransferTest {
         transfer.upload(putReconstructed, payload);
         assertArrayEquals(payload, uploaded.get());
     }
+
+    @Test
+    void openRangeDownloadsFromTheOffset() throws Exception {
+        var full = "0123456789".getBytes(StandardCharsets.UTF_8);
+        server.createContext("/ranged", exchange -> {
+            var rangeHeader = exchange.getRequestHeaders().getFirst("Range"); // "bytes=3-"
+            int start = Integer.parseInt(rangeHeader.replace("bytes=", "").replace("-", ""));
+            var slice = java.util.Arrays.copyOfRange(full, start, full.length);
+            exchange.sendResponseHeaders(206, slice.length);
+            try (var os = exchange.getResponseBody()) {
+                os.write(slice);
+            }
+        });
+
+        var ref = ArtifactReference.get(baseUrl + "/ranged", "application/octet-stream", full.length, 0L);
+        try (var stream = transfer.openRange(ref, 3)) {
+            assertArrayEquals("3456789".getBytes(StandardCharsets.UTF_8), stream.readAllBytes());
+        }
+    }
 }

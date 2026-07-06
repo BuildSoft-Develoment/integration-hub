@@ -18,10 +18,12 @@ import com.integrationhub.platform.task.ArtifactReference;
 
 import java.io.IOException;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 
 public class RemoteReaderProvider implements ReaderProvider {
 
@@ -32,6 +34,8 @@ public class RemoteReaderProvider implements ReaderProvider {
     static final int REQUIRED_SPI_VERSION = 2;
     /** TTL de la URL presignada de descarga (corta vida; el plugin descarga dentro del READ síncrono). */
     static final Duration DOWNLOAD_TTL = Duration.ofMinutes(15);
+    /** Red de seguridad contra loop infinito de paginación (además del guard de no-progreso del cursor). */
+    static final int MAX_PAGES = 10_000_000;
 
     private final String type;
     private final RemotePluginDescriptor descriptor;
@@ -64,21 +68,45 @@ public class RemoteReaderProvider implements ReaderProvider {
         requireArtifactRefContract();
         var staged = stage(payload);
         try {
-            var result = invoke(staged.reference(), payload, configuration, batchSize);
-            var records = list(result.outputs().get("records"), "Remote reader plugin must return outputs.records")
-                    .stream()
-                    .map(this::record)
-                    .toList();
-            var skips = listOrEmpty(result.outputs().get("skippedRows")).stream()
-                    .map(this::skip)
-                    .toList();
-
+            // 3b: LOOP paginado con cursor (checkpoint por página). Acota la memoria de la plataforma a una página +
+            // los skips acumulados. El plugin devuelve una página + nextCursor; se repite hasta nextCursor vacío. Un
+            // plugin no-paginado (sin nextCursor) hace una sola iteración = comportamiento 3a (backward-compatible).
             var effectiveBatchSize = Math.max(1, batchSize);
-            for (int from = 0, batchNumber = 1; from < records.size(); from += effectiveBatchSize, batchNumber++) {
-                var to = Math.min(from + effectiveBatchSize, records.size());
-                consumer.accept(new ReadBatch(payload.name(), batchNumber, records.subList(from, to)));
+            var allSkips = new ArrayList<ReadSkip>();
+            int total = 0;
+            int batchNumber = 1;
+            String cursor = null;
+            for (int page = 1; ; page++) {
+                if (page > MAX_PAGES) {
+                    throw degraded("el reader remoto excedió " + MAX_PAGES + " páginas: el plugin puede no estar "
+                            + "avanzando el cursor (posible loop)");
+                }
+                var result = invoke(staged.reference(), payload, configuration, batchSize, cursor);
+                var records = list(result.outputs().get("records"), "Remote reader plugin must return outputs.records")
+                        .stream()
+                        .map(this::record)
+                        .toList();
+                allSkips.addAll(listOrEmpty(result.outputs().get("skippedRows")).stream().map(this::skip).toList());
+
+                // Re-batcha la página en trozos de batchSize para el consumer (contrato consistente con readers locales).
+                for (int from = 0; from < records.size(); from += effectiveBatchSize) {
+                    var to = Math.min(from + effectiveBatchSize, records.size());
+                    consumer.accept(new ReadBatch(payload.name(), batchNumber++, records.subList(from, to)));
+                }
+                total += records.size();
+
+                var nextCursor = text(result.outputs().get("nextCursor"));
+                if (nextCursor.isBlank()) {
+                    break; // fin de la paginación (o plugin no-paginado)
+                }
+                if (Objects.equals(nextCursor, cursor)) {
+                    throw degraded("el reader remoto no avanza el cursor ('" + nextCursor + "'): posible loop");
+                }
+                cursor = nextCursor;
             }
-            return new ReadResult(records, records.size(), skips.size(), skips);
+            // records() VACÍO a propósito: la plataforma streameó por el consumer; ningún caller lee records() del
+            // reader remoto (verificado). Acota la memoria en el streaming pipeline.
+            return new ReadResult(List.of(), total, allSkips.size(), allSkips);
         } finally {
             staging.deleteStaged(staged.key());
         }
@@ -95,7 +123,7 @@ public class RemoteReaderProvider implements ReaderProvider {
     }
 
     private TaskResult invoke(ArtifactReference inputReference, SourcePayload payload,
-                              Map<String, Object> configuration, int batchSize) {
+                              Map<String, Object> configuration, int batchSize, String cursor) {
         if (!descriptor.trusted()) {
             throw degraded("descriptor no confiable");
         }
@@ -104,7 +132,7 @@ public class RemoteReaderProvider implements ReaderProvider {
                     descriptor,
                     "READER_READ:" + normalized(type),
                     context(),
-                    request(inputReference, payload, configuration, batchSize));
+                    request(inputReference, payload, configuration, batchSize, cursor));
             if (result.suspended()) {
                 throw degraded("remote reader provider requires immediate result");
             }
@@ -119,7 +147,7 @@ public class RemoteReaderProvider implements ReaderProvider {
     }
 
     private Map<String, Object> request(ArtifactReference inputReference, SourcePayload payload,
-                                        Map<String, Object> configuration, int batchSize) {
+                                        Map<String, Object> configuration, int batchSize, String cursor) {
         var request = new LinkedHashMap<String, Object>();
         request.put("configuration", configuration == null ? Map.of() : configuration);
         request.put("batchSize", batchSize);
@@ -130,6 +158,11 @@ public class RemoteReaderProvider implements ReaderProvider {
         request.put("sourceFile", sourceFile);
         // 3a: el archivo va por referencia (GET presignado), no como contentBase64; el plugin lo descarga por streaming.
         request.put(ArtifactReference.ARTIFACT_REF, inputReference.asMap());
+        // 3b: cursor de paginación (ausente en la primera página). El plugin debería tratarlo como un OFFSET y usar un
+        // Range GET de la URL presignada para reanudar sin re-descargar todo (ver ArtifactTransfer.openRange).
+        if (cursor != null && !cursor.isBlank()) {
+            request.put("cursor", cursor);
+        }
         return request;
     }
 
