@@ -19,8 +19,10 @@ impide el mal comportamiento silencioso. Continúa el [análisis previo](2026-07
 - **Dos transportes**: `GrpcRemotePluginTransport` (unary, cap por `maxInboundMessageSize` ~16 MB) y
   `BrokerRemotePluginTransport` (publica el request como envelope + **callback HTTP/HMAC + resume**; **sin** semántica de
   streaming).
-- **No hay object store** en el stack (`docker-compose.yml` no tiene MinIO/S3) → la opción "artefacto-por-referencia"
-  requiere **infra nueva**.
+- **Object store: integración YA presente** (corregido en el doble-check): el pom tiene `quarkus-amazon-s3` +
+  `quarkus-azure-storage-blob` y existen `S3SourceProvider`/`AzureBlobSourceProvider` funcionando. Lo que falta para
+  "artefacto-por-referencia" es un **bucket + credenciales efímeras** y, para dev, un contenedor MinIO en docker-compose
+  (no una capacidad nueva). Ver §doble-check.
 - **Sí hay SDK/plugin de referencia**: módulo Maven `ejemplos/backend-plugin-sidecar` (`ReferencePluginSidecar`,
   `PluginTaskHandler`, `EchoPluginTaskHandler`) — el lado del **autor del plugin**, que cualquier rediseño debe
   actualizar.
@@ -84,11 +86,39 @@ un extra.
 - **Prioridad: baja** — el guard v58 ya evita el fallo silencioso; solo aporta si hay un **requisito concreto** de
   plugins remotos a escala. Los flujos financieros no lo necesitan (usan local).
 
-## Veredicto
+## Doble-check — correcciones (self-review)
 
-Es un **proyecto real y multi-módulo**, no un cambio incremental: streaming de transporte **+** paginación/checkpoint de
-records **+** SDK/sidecar **+** (en la opción B) infra de object store. **Recomiendo la opción B (artefacto por
-referencia)** como destino arquitectónico —desacopla datos del control y sirve a gRPC y broker por igual— **por fases**
-(contrato/SDK → source → reader → broker), pero **diferir el arranque** salvo requisito concreto de plugins remotos
-masivos: está fuera del money-path y el guard v58 ya contiene el riesgo. Si se prioriza, la **Fase 2 (source
-server-streaming/por-referencia)** es el primer incremento de mayor valor.
+Reté los claims factuales contra el código. Sin bug, pero **tres correcciones materiales** que **abaratan el proyecto
+(sobre todo la opción B) y refuerzan recomendarla**:
+
+1. **"La opción B requiere infra/integración NUEVA de object store" → FALSO.** El pom ya tiene `quarkus-amazon-s3`,
+   `software.amazon.awssdk` y `quarkus-azure-storage-blob`, y **existen providers funcionando**: `S3SourceProvider`
+   (type `"S3"`) y `AzureBlobSourceProvider` (type `"AZURE_BLOB"`), más manejo de credenciales AWS
+   (`SdkAwsSecretClient`). → La plataforma **ya lee de object stores**. La opción B no es "construir integración de object
+   store" sino **reusar la existente como canal de datos del plugin** (stagear el archivo a S3/Azure con los providers
+   ya presentes y pasar al plugin una **referencia** + credencial efímera). Lo único "nuevo" es un **bucket + emisión de
+   credenciales de corta vida** y, para dev local, un contenedor MinIO en docker-compose (trivial). Coste **mucho menor**
+   del que estimé.
+2. **"El source materializa por el contrato" → FALSO; `SourcePayload` YA es stream-backed.** Tiene
+   `Content{ InputStream open() }`, `fromPath` (streamea de disco) y `openStream()`. El contrato del **consumidor** ya
+   streamea; **solo `RemoteSourceProvider` materializa** (usa `fromBytes`). → El rediseño del source es **más fácil**: un
+   `SourcePayload` respaldado por el stream del object store (o del gRPC chunked) encaja **sin cambiar el contrato**.
+3. **"El rediseño debe preservar la restricción 'remoto fuera del money-path'" → matiz: esa restricción NO está
+   enforced en código** (grep no halla barrera; los flujos SWIFT/PAY simplemente se configuran con providers locales).
+   Es disciplina de config/operación. Si se quisiera enforcement real (que un proceso SWIFT no pueda cablear un provider
+   remoto) sería un gap **aparte y pequeño**, independiente del streaming.
+
+**Neto**: el proyecto sigue siendo multi-módulo (contrato/SDK + providers + transporte), pero **la opción B es bastante
+más barata** de lo que dije —reusa S3/Azure ya integrados y el `SourcePayload` ya streamea— así que la recomiendo con
+más fuerza. El único "infra nuevo" real es bucket + credenciales efímeras + MinIO para dev.
+
+## Veredicto (revisado)
+
+Es un **proyecto real y multi-módulo**, no un cambio incremental: streaming/referencia de transporte **+**
+paginación/checkpoint de records **+** SDK/sidecar. **Recomiendo la opción B (artefacto por referencia)** como destino
+—desacopla datos del control, sirve a gRPC y broker por igual, y **reusa la integración S3/Azure ya existente** (coste de
+infra bajo: bucket + credenciales efímeras + MinIO dev)— **por fases** (contrato/SDK → source → reader → broker). Aun
+así, **diferir el arranque** salvo requisito concreto de plugins remotos masivos: está **fuera del money-path** y el
+guard v58 ya contiene el riesgo. Si se prioriza, la **Fase 2 (source por referencia a S3/Azure)** es el primer
+incremento de mayor valor y, con las correcciones, el **más barato** (reusa `S3SourceProvider` + `SourcePayload`
+stream-backed).
