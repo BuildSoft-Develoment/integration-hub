@@ -37,7 +37,8 @@ Frontend/deuda de diseño; cero runtime backend, cero money-path.
 - **`lint:boundaries`** → verde (exit 0): las features importan `@integration-hub/core/services` (feature→core
   permitido); **sin nuevas aristas feature→feature**.
 - **`nx build web`** → **Successfully** (bundle ~10 s): los 3 consumidores compilan con el tipo wide y el core service.
-- **`nx test web`** (cubre libs) → **100 archivos, 491 tests, 0 fallos** (antes 99/489: +1 archivo, +2 tests):
+- **`nx test web`** (cubre libs) → **101 archivos, 492 tests, 0 fallos** (antes 99/489: +2 archivos, +3 tests
+  contando el spec del servicio y el de wiring real):
   - **NUEVO `process-execution-api.service.spec`** (HttpTestingController): `execute(id)` → `POST .../{id}` body `{}`;
     `execute(id, {selectedFiles, sourceExecutionId})` → body con esos campos.
   - **3 specs reestructurados** (el mock de `execute` se movió a un provider de `ProcessExecutionApiService`):
@@ -46,9 +47,23 @@ Frontend/deuda de diseño; cero runtime backend, cero money-path.
   core service, y que **ninguna** llamada `.execute()` queda sobre los api services de feature (los matches `db-execute`
   son task-forms que usan `listConnection*`, no execution).
 
+### Doble-check + e2e de WIRING REAL (extiende la lección de #4)
+El ciclo #4 enseñó que los mocks pueden ocultar un wiring roto (allí, un bean mal inyectado que el E2E real atrapó).
+Para un refactor de DI, la "e2e real" = probar que un consumidor resuelve el `ProcessExecutionApiService` **real** (no
+mockeado) y dispara el HTTP. **Dos consumidores independientes lo validan sin mock**:
+- **`schedules-api.service.spec`** (ya existía, unmocked): `SchedulesApiService` real → `ProcessExecutionApiService` real
+  (resuelto por el barrel + providedIn:'root') → `POST /api/process-executions/3` body `{}`.
+- **`execution-catalog-command.wiring.spec` (NUEVO)**: `ExecutionCatalogCommandService.runFileAction` → resuelve el core
+  service **real** → `POST /api/process-executions/7` body `{selectedFiles, sourceExecutionId}`. No mockea el core
+  service; usa `provideHttpClientTesting`.
+
+**Equivalencia HTTP verificada** (los 3 paths son idénticos a antes): schedules no lee nada del response; executions lee
+`.id`; processes lee `.id/.status` — todos presentes en el tipo wide; mismo método/URL/body en los tres.
+
 ### Nota de arranque
-Cambio 100% frontend (mover un método + DTOs a core, reapuntar 3 consumidores); cero runtime backend. La validación real
-es lint:boundaries + build + unit suite, no el stack.
+Cambio 100% frontend (mover un método + DTOs a core, reapuntar 3 consumidores); cero runtime backend. Sin proxy de
+`nx serve` hacia el backend, un e2e de UI con login no es proporcionado; la validación real es lint:boundaries + build +
+unit suite + los **dos tests de wiring real** (que ejercitan la cadena consumidor→core→HttpClient sin mocks).
 
 ## Conclusión
 
