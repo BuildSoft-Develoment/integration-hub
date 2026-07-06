@@ -139,6 +139,33 @@ services:
         soft: 262144
         hard: 262144
 
+  # Object store S3-compatible para el STAGING de artefactos de plugins remotos
+  # (proyecto #3, opcion B). API en el host 9100 (NO 9000, ocupado por clickhouse
+  # y el grpc del app); consola en 9101.
+  minio:
+    image: minio/minio:RELEASE.2024-01-16T16-07-38Z
+    container_name: integration-hub-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9100:9000"
+      - "9101:9001"
+
+  # Crea el bucket de staging al arrancar (MinIO no lo crea solo).
+  minio-init:
+    image: minio/mc:RELEASE.2024-01-16T16-06-34Z
+    container_name: integration-hub-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 minioadmin minioadmin; do sleep 1; done;
+      mc mb --ignore-existing local/remote-plugin-staging;
+      exit 0;
+      "
+
   # Consumidor de auditoria: deployable independiente (escala/falla aparte del
   # hot-path de pagos). Lee del MQ y registra en audit_event. Requiere
   # `mvn -pl audit-consumer package` previo (layout fast-jar).
