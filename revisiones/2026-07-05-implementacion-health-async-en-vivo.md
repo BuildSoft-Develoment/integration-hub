@@ -53,6 +53,21 @@ incondicionales → siempre presentes, sin importar conectividad).
   `UnsatisfiedResolutionException`, y ejercita el path async real.
 - **Total backend: 8 unit + 3 E2E = 11, 0 fallos** (BUILD SUCCESS). **Frontend**: `nx build web` OK (type actualizado).
 
+## Validación en runtime (app arrancada, localhost:8080)
+
+Con la app dev arriba (`/q/health/ready` → 200 tras ~55 s, sin `UnsatisfiedResolution`), el **HealthReporter real** que
+mi bean lee reporta:
+
+```json
+"SmallRye Reactive Messaging - readiness check": { "status": "UP", "data": { "audit-out": "[OK]" } }
+```
+
+Es la **prueba directa** del diseño: el canal `audit-out` (habilitado) aparece OK, pero **`tasks-in` NO aparece**
+porque `enabled=false` por defecto → `SmallRyeConsumerChannelHealth.ready("tasks-in")` no lo encuentra → devuelve
+`false` (**falla cerrada**), luego `consumerLive=false`. El mecanismo del que depende el fix está **vivo y se comporta
+como se diseñó**. Además: `GET /api/messaging/async-status` sin token → **401** (endpoint protegido, wired); la página
+de login → **200**.
+
 ## Conclusión
 
 `READY` deja de mentir para el consumer: exige el canal `tasks-in` **conectado en vivo** (readiness real de SmallRye),
