@@ -1,36 +1,40 @@
 package com.integrationhub.platform.service.messaging;
 
 import io.smallrye.reactive.messaging.health.HealthReport;
-import io.smallrye.reactive.messaging.health.HealthReporter;
+import io.smallrye.reactive.messaging.providers.extension.HealthCenter;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 
 /**
- * v60-fix (#4 opción a) — readiness EN VIVO de un canal consumer, leída del {@code HealthReporter} de
- * smallrye-reactive-messaging (el mismo que alimenta {@code /q/health/ready}). El canal {@code tasks-in} usa el
- * conector {@code smallrye-kafka}: cuando está habilitado y conectado, aparece OK en la readiness; cuando está
- * deshabilitado (default) o desconectado, no aparece OK.
+ * v60-fix (#4 opción a) — readiness EN VIVO de un canal consumer, leída del {@link HealthCenter} de
+ * smallrye-reactive-messaging (el componente que computa el mismo readiness que alimenta {@code /q/health/ready}).
  *
- * <p><b>SRP</b>: solo traduce la readiness de SmallRye a un booleano por canal. <b>Falla CERRADA</b>: si el reporter
- * no está disponible, el canal no aparece, o la lectura lanza, devuelve {@code false} (no listo) — coherente con
- * "tratar != READY como no operativo".</p>
+ * <p><b>Nota (validada por E2E):</b> se inyecta el bean concreto {@code HealthCenter} (que es {@code @ApplicationScoped}),
+ * NO la interfaz {@code HealthReporter} — esta última NO está registrada como bean en Quarkus (un {@code Instance} de
+ * ella queda <i>unsatisfied</i> y devolvería siempre {@code false}, dejando READY inalcanzable). El
+ * {@code AsyncTaskKafkaConsumerE2EIT} atrapó exactamente ese fallo.</p>
+ *
+ * <p>El canal {@code tasks-in} usa el conector {@code smallrye-kafka}: conectado → readiness OK; deshabilitado
+ * (default) o desconectado → no OK. <b>SRP</b>: solo traduce readiness→boolean por canal. <b>Falla CERRADA</b>: si el
+ * componente no está, el canal no aparece, o la lectura lanza → {@code false} (coherente con "tratar != READY como no
+ * operativo").</p>
  */
 @ApplicationScoped
 public class SmallRyeConsumerChannelHealth implements ConsumerChannelHealth {
 
-    private final Instance<HealthReporter> reporter;
+    private final Instance<HealthCenter> healthCenter;
 
-    public SmallRyeConsumerChannelHealth(Instance<HealthReporter> reporter) {
-        this.reporter = reporter;
+    public SmallRyeConsumerChannelHealth(Instance<HealthCenter> healthCenter) {
+        this.healthCenter = healthCenter;
     }
 
     @Override
     public boolean ready(String channel) {
-        if (channel == null || channel.isBlank() || reporter.isUnsatisfied()) {
+        if (channel == null || channel.isBlank() || healthCenter.isUnsatisfied() || healthCenter.isAmbiguous()) {
             return false;
         }
         try {
-            HealthReport readiness = reporter.get().getReadiness();
+            HealthReport readiness = healthCenter.get().getReadiness();
             if (readiness == null) {
                 return false;
             }

@@ -5,6 +5,7 @@ import com.integrationhub.platform.integration.KafkaTestResource;
 import com.integrationhub.platform.integration.PostgresTestResource;
 import com.integrationhub.platform.integration.suspend.RecordingFollowUpTaskProvider;
 import com.integrationhub.platform.service.execution.ProcessExecutionService;
+import com.integrationhub.platform.service.messaging.AsyncAvailabilityService;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
@@ -26,6 +27,7 @@ import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * E2E del transporte real (ADR-015 Etapa 5): una tarea {@code async:true} suspende el proceso y encola
@@ -44,6 +46,9 @@ class AsyncTaskKafkaConsumerE2EIT {
 
     @Inject
     ProcessExecutionService processExecutionService;
+
+    @Inject
+    AsyncAvailabilityService asyncAvailability;
 
     @BeforeEach
     void reset() throws Exception {
@@ -79,6 +84,26 @@ class AsyncTaskKafkaConsumerE2EIT {
                 readSingleString("select status from task_inbox order by id desc limit 1"));
         assertEquals(1, RecordingFollowUpTaskProvider.EXECUTIONS.get(),
                 "el provider corrió una vez, en el consumer alimentado por Kafka");
+
+        // v60-fix (#4 opción a): tras consumir un mensaje real, el consumer Kafka está indudablemente conectado →
+        // el estado async debe reportar consumerLive=true (readiness del canal tasks-in en el HealthCenter de SmallRye).
+        // Este assert atrapó el bug de inyectar HealthReporter (sin bean) en vez de HealthCenter: consumerLive quedaba
+        // permanentemente false y READY era inalcanzable.
+        assertTrue(awaitConsumerLive(Duration.ofSeconds(20)),
+                "consumerLive debe ser true con el consumer Kafka conectado; si es false, la fuente de readiness es "
+                        + "incorrecta y READY sería inalcanzable");
+    }
+
+    private boolean awaitConsumerLive(Duration timeout) throws Exception {
+        var deadline = System.currentTimeMillis() + timeout.toMillis();
+        while (System.currentTimeMillis() < deadline) {
+            var availability = asyncAvailability.availability();
+            if (availability.consumerEnabled() && availability.consumerLive()) {
+                return true;
+            }
+            Thread.sleep(500);
+        }
+        return false;
     }
 
     private void awaitProcessCompleted(Duration timeout) throws Exception {
