@@ -99,4 +99,38 @@ class AsyncAvailabilityServiceTest {
         assertFalse(status.dispatchLive());
         assertEquals(State.DEGRADED, status.state());
     }
+
+    // ---- §9: gaps del productor para despachar (fail-loud del despacho) ----
+
+    @Test
+    void producerGapsEmptyWhenRelayOnAndBrokerRegistered() {
+        // relay + broker on → despachable, sin gaps. (La liveness NO es parámetro: el método puro solo recibe
+        // los booleanos estructurales del productor, así que un blip transitorio no puede generar un gap.)
+        assertTrue(AsyncAvailabilityService.producerDispatchGaps(true, true).isEmpty());
+    }
+
+    @Test
+    void producerGapsListEachMissingGate() {
+        assertEquals(1, AsyncAvailabilityService.producerDispatchGaps(false, true).size());
+        assertTrue(AsyncAvailabilityService.producerDispatchGaps(false, true).get(0).contains("relay"));
+        assertTrue(AsyncAvailabilityService.producerDispatchGaps(true, false).get(0).contains("broker"));
+        // Ambos apagados → los dos gaps, para que el operador vea el cuadro completo.
+        assertEquals(2, AsyncAvailabilityService.producerDispatchGaps(false, false).size());
+    }
+
+    @Test
+    void producerGapsIgnoreConsumerAndLiveness() {
+        // Alcance productor: el consumer (tasks-in) está DESACOPLADO por el outbox → su estado NO genera gap.
+        // Con relay+broker on, el productor despacha aunque el consumer esté off (vive aguas abajo del broker).
+        var brokers = mock(MessageBrokerRegistry.class);
+        when(brokers.availableTypes()).thenReturn(List.of("KAFKA"));
+        // consumerEnabled=false, y canales no vivos: aún así SIN gaps del productor.
+        var consumerOff = new AsyncAvailabilityService(brokers, channels(false, false), true, true, false);
+        assertTrue(consumerOff.producerDispatchGaps().isEmpty(),
+                "el consumer off no debe bloquear al productor (desacople del outbox)");
+        // relay off → un gap del productor, aunque el broker esté registrado.
+        var relayOff = new AsyncAvailabilityService(brokers, channels(true, true), true, false, true);
+        assertEquals(List.of("relay outbox→broker apagado (tasks.dispatch.enabled)"),
+                relayOff.producerDispatchGaps());
+    }
 }

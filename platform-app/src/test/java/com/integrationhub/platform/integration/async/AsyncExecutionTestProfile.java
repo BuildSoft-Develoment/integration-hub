@@ -16,6 +16,10 @@ public class AsyncExecutionTestProfile extends IntegrationTestProfile {
     public Map<String, String> getConfigOverrides() {
         var overrides = new HashMap<>(super.getConfigOverrides());
         overrides.put("tasks.async.execution.enabled", "true");
+        // §9: declara el relay ON (precondición del productor para despachar). Con quarkus.scheduler.enabled
+        // =false (base IT) el relay NO drena → sin side-effect ni race con el read manual del outbox; estos
+        // E2E simulan la entrega llamando al consumer a mano. Sin esto, el fail-loud §9 abortaría el despacho.
+        overrides.put("tasks.dispatch.enabled", "true");
         return overrides;
     }
 }

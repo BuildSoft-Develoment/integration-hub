@@ -16,6 +16,8 @@ public class AsyncRecoveryTestProfile extends IntegrationTestProfile {
     public Map<String, String> getConfigOverrides() {
         var overrides = new HashMap<>(super.getConfigOverrides());
         overrides.put("tasks.async.execution.enabled", "true");
+        // §9: relay ON como precondición del productor (el scheduler está off en IT → no drena; sin race).
+        overrides.put("tasks.dispatch.enabled", "true");
         overrides.put("tasks.async.recovery.enabled", "true");
         overrides.put("tasks.async.recovery.stall-threshold", "0s");
         overrides.put("tasks.async.recovery.max-per-sweep", "50");

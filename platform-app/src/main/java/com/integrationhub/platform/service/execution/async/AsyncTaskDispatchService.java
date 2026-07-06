@@ -2,6 +2,7 @@ package com.integrationhub.platform.service.execution.async;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.integrationhub.platform.service.messaging.AsyncAvailabilityService;
 import com.integrationhub.platform.task.AsyncTaskEnvelope;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -33,15 +34,18 @@ public class AsyncTaskDispatchService {
 
     private final TaskDispatchPlanner planner;
     private final ObjectMapper objectMapper;
+    private final AsyncAvailabilityService availability;
     private final boolean enabled;
 
     @Inject
     public AsyncTaskDispatchService(TaskDispatchPlanner planner,
                                     ObjectMapper objectMapper,
+                                    AsyncAvailabilityService availability,
                                     @ConfigProperty(name = "tasks.async.execution.enabled",
                                             defaultValue = "false") boolean enabled) {
         this.planner = planner;
         this.objectMapper = objectMapper;
+        this.availability = availability;
         this.enabled = enabled;
     }
 
@@ -51,7 +55,8 @@ public class AsyncTaskDispatchService {
      * motor ejecuta in-process.
      *
      * @throws IllegalStateException si se pide async sin identificadores de ejecución/tarea (no se
-     *         puede derivar una idempotencyKey determinista) — no se degrada a síncrono en silencio.
+     *         puede derivar una idempotencyKey determinista), o si el productor <b>no puede despachar</b>
+     *         (§9: relay apagado o sin broker registrado) — en ningún caso se degrada a síncrono en silencio.
      */
     public Optional<AsyncTaskEnvelope> prepare(Long processExecutionId,
                                                Long taskDefinitionId,
@@ -63,6 +68,17 @@ public class AsyncTaskDispatchService {
         var plan = planner.plan(configuration);
         if (!plan.isAsync()) {
             return Optional.empty();
+        }
+        // §9 fail-loud: async ON pero el productor no puede despachar (relay apagado o sin broker) →
+        // suspender aquí dejaría la tarea con su outbox sin drenar, en no-progreso silencioso que ni el
+        // recovery rescata (depende del mismo relay). Se lanza para que el operador lo vea al despachar, NO
+        // se cae a síncrono. Alcance productor: NO se mira el consumer (desacoplado por el outbox; sus
+        // stalls los expone el tile de salud/DLQ) ni la liveness transitoria (el outbox durable la aguanta).
+        var gaps = availability.producerDispatchGaps();
+        if (!gaps.isEmpty()) {
+            throw new IllegalStateException("Se pidió despacho async para '" + taskType
+                    + "' pero el productor no puede despachar: " + String.join("; ", gaps)
+                    + ". Reactivar el relay/broker o poner tasks.async.execution.enabled=false.");
         }
         return Optional.of(buildEnvelope(processExecutionId, taskDefinitionId, taskType,
                 plan.transport(), configuration));
