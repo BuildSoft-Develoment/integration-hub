@@ -17,6 +17,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Caso de uso <b>puro</b> del consumer de tareas asíncronas (ADR-015), en el mismo estilo que
@@ -210,17 +211,11 @@ public class AsyncTaskConsumer {
         }
         var continueOnFailure = asBoolean(item.configuration().get("continueOnFailure"));
 
-        TaskProvider provider;
-        try {
-            provider = providers.resolve(envelope.taskType());
-        } catch (IllegalArgumentException unknown) {
-            failSlice(envelope, unknown.getMessage(), continueOnFailure);
+        var resolved = resolveBatchProvider(envelope, continueOnFailure);
+        if (resolved.isEmpty()) {
             return ConsumeResult.DEAD;
         }
-        if (!(provider instanceof BatchTaskProvider batchProvider)) {
-            failSlice(envelope, "el tipo '" + envelope.taskType() + "' no es BatchTaskProvider", continueOnFailure);
-            return ConsumeResult.DEAD;
-        }
+        var batchProvider = resolved.get();
 
         // Si el scatter ya cerró (fail-fast de otra slice), no se ejecuta el provider: evita side-effects
         // inútiles sobre las slices restantes tras el fallo (su commit sería no-op igual).
@@ -268,17 +263,11 @@ public class AsyncTaskConsumer {
         }
         var continueOnFailure = asBoolean(item.configuration().get("continueOnFailure"));
 
-        TaskProvider provider;
-        try {
-            provider = providers.resolve(envelope.taskType());
-        } catch (IllegalArgumentException unknown) {
-            failSlice(envelope, unknown.getMessage(), continueOnFailure);
+        var resolved = resolveBatchProvider(envelope, continueOnFailure);
+        if (resolved.isEmpty()) {
             return ConsumeResult.DEAD;
         }
-        if (!(provider instanceof BatchTaskProvider batchProvider)) {
-            failSlice(envelope, "el tipo '" + envelope.taskType() + "' no es BatchTaskProvider", continueOnFailure);
-            return ConsumeResult.DEAD;
-        }
+        var batchProvider = resolved.get();
 
         // Si el scatter ya cerró (p.ej. fail-fast de una página previa), NO se lee/encola/ejecuta: mata la
         // cadena runaway y evita side-effects del provider sobre el resto de la tabla tras el fallo.
@@ -316,6 +305,28 @@ public class AsyncTaskConsumer {
                     .ifPresent(p -> resumeTaskOnTerminal(envelope, p, continueOnFailure));
         }
         return outcome;
+    }
+
+    /**
+     * Resuelve el provider del envelope como {@link BatchTaskProvider} para el camino scatter (slice/page).
+     * Si el tipo no resuelve o no es batch, registra el fallo de la slice (que la lleva a DEAD si cierra el
+     * scatter) y devuelve vacío para que el caller corte con {@code ConsumeResult.DEAD}. Unifica la
+     * resolución que antes estaba duplicada verbatim entre {@code consumeSlice} y {@code consumePage} (DRY).
+     */
+    private Optional<BatchTaskProvider> resolveBatchProvider(AsyncTaskEnvelope envelope,
+                                                             boolean continueOnFailure) {
+        TaskProvider provider;
+        try {
+            provider = providers.resolve(envelope.taskType());
+        } catch (IllegalArgumentException unknown) {
+            failSlice(envelope, unknown.getMessage(), continueOnFailure);
+            return Optional.empty();
+        }
+        if (provider instanceof BatchTaskProvider batchProvider) {
+            return Optional.of(batchProvider);
+        }
+        failSlice(envelope, "el tipo '" + envelope.taskType() + "' no es BatchTaskProvider", continueOnFailure);
+        return Optional.empty();
     }
 
     /** Cuenta una slice fallida; si esa slice cierra el scatter, reanuda/falla la tarea una vez. */
