@@ -86,7 +86,7 @@ describe('ExecutionDetailStore', () => {
   });
 
   afterEach(() => {
-    store.closeDrawer(); // corta cualquier polling pendiente antes del teardown
+    store.closeDrawer();
   });
 
   it('should load execution details and open the drawer', async () => {
@@ -123,6 +123,40 @@ describe('ExecutionDetailStore', () => {
 
     expect(progress).toHaveBeenCalledWith(3);
     expect(store.progress()?.scatterTasks[0].percent).toBe(75);
+  });
+
+  describe('refreshLiveSnapshot (para el poller)', () => {
+    async function selectRunning(id: number) {
+      await store.selectExecution({
+        id, processDefinitionId: 10, processName: `E${id}`, status: 'RUNNING',
+        startedAt: null, finishedAt: null, sourceExecutionId: null, triggerSource: 'MANUAL', details: null,
+      });
+    }
+
+    it('refresca señales y reporta terminal (COMPLETED → active:false)', async () => {
+      await selectRunning(3); // el mock load devuelve status COMPLETED
+      const result = await store.refreshLiveSnapshot(3);
+      expect(result).toEqual({ active: false });
+      expect(store.selectedExecution()?.id).toBe(3);
+      expect(store.progress()).not.toBeNull();
+    });
+
+    it('reporta activo cuando la ejecución sigue en RUNNING', async () => {
+      await selectRunning(3);
+      load.mockImplementationOnce((id: number) =>
+        Promise.resolve({
+          detail: { id, processDefinitionId: 10, processName: `E${id}`, status: 'RUNNING',
+            startedAt: null, finishedAt: null, sourceExecutionId: null, triggerSource: 'MANUAL', details: null },
+          tasks: [], children: [],
+        })
+      );
+      expect(await store.refreshLiveSnapshot(3)).toEqual({ active: true });
+    });
+
+    it('devuelve null si la ejecución objetivo ya no es la seleccionada (navegó)', async () => {
+      await selectRunning(3);
+      expect(await store.refreshLiveSnapshot(999)).toBeNull();
+    });
   });
 
   it('should reset progress when switching executions', async () => {

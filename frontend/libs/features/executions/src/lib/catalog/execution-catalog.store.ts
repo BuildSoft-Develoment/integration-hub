@@ -7,6 +7,7 @@ import {
   ExecutionStatusFilter,
 } from './execution-catalog-query.store';
 import { ExecutionDetailStore } from '../details/execution-detail.store';
+import { ExecutionProgressPoller } from '../details/execution-progress-poller';
 import {
   ExecutionFileActionRequest,
   ProcessExecutionRecord,
@@ -17,6 +18,9 @@ export class ExecutionCatalogStore {
   private readonly commands = inject(ExecutionCatalogCommandService);
   private readonly detail = inject(ExecutionDetailStore);
   private readonly query = inject(ExecutionCatalogQueryStore);
+  // Arranca el scheduler del progreso en vivo (su effect observa el detail store). Se inyecta aquí
+  // —el composition root del detalle— solo para instanciarlo; su lógica es autónoma.
+  private readonly progressPoller = inject(ExecutionProgressPoller);
 
   readonly loading = this.query.loading;
   readonly error = this.query.error;

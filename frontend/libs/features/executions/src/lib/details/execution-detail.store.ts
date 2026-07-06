@@ -1,4 +1,4 @@
-import { effect, inject, Injectable, signal } from '@angular/core';
+import { inject, Injectable, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
 import { ExecutionApiService } from '../api/execution-api.service';
@@ -16,13 +16,15 @@ import { ExecutionNavigationService } from './execution-navigation.service';
  */
 const ACTIVE_STATUSES = new Set(['PENDING', 'RUNNING', 'SUSPENDED']);
 
-/** Cadencia del poll de progreso (ms). Bajo umbral: refresca sin martillar a escala de 1M. */
-const PROGRESS_POLL_MS = 4000;
-
 function isActiveStatus(status: string | null | undefined): boolean {
   return status != null && ACTIVE_STATUSES.has(status.toUpperCase());
 }
 
+/**
+ * Dueño de los datos del detalle de ejecución (SRP): carga detalle/tareas/hijos/progreso y expone las
+ * señales + un {@link refreshLiveSnapshot} para el refresco en vivo. El <b>scheduling</b> del polling
+ * (cuándo/cada-cuánto/hasta-cuándo) vive en {@code ExecutionProgressPoller}, no aquí.
+ */
 @Injectable()
 export class ExecutionDetailStore {
   private readonly detailLoader = inject(ExecutionDetailLoaderService);
@@ -38,24 +40,6 @@ export class ExecutionDetailStore {
   readonly drawerOpen = signal(false);
   readonly progress = signal<ExecutionProgress | null>(null);
   readonly navigationStack = this.navigation.navigationStack;
-
-  private pollHandle: ReturnType<typeof setInterval> | null = null;
-
-  constructor() {
-    // Polling de progreso: vive en la capa de datos (no en el editor presentacional) para re-apuntar
-    // solo cuando cambia la ejecución seleccionada o la navegación, y parar al cerrar el drawer.
-    effect((onCleanup) => {
-      const executionId = this.selectedExecutionId();
-      const open = this.drawerOpen();
-      this.stopPolling();
-      if (executionId == null || !open) {
-        return;
-      }
-      // El tick se auto-detiene al alcanzar estado terminal (ver pollTick).
-      this.pollHandle = setInterval(() => void this.pollTick(executionId), PROGRESS_POLL_MS);
-      onCleanup(() => this.stopPolling());
-    });
-  }
 
   async selectExecution(execution: ProcessExecutionRecord): Promise<void> {
     this.navigation.reset();
@@ -82,7 +66,7 @@ export class ExecutionDetailStore {
   }
 
   closeDrawer(): void {
-    this.stopPolling();
+    // Cerrar el drawer detiene el polling: el poller reacciona a drawerOpen=false.
     this.drawerOpen.set(false);
   }
 
@@ -141,11 +125,14 @@ export class ExecutionDetailStore {
     }
   }
 
-  /** Tick del poll: refresca detalle+tareas+progreso en silencio (sin spinner) y para al terminar. */
-  private async pollTick(executionId: number): Promise<void> {
+  /**
+   * Refresco en vivo (silencioso, sin spinner) de detalle+tareas+progreso para el poller. Devuelve si la
+   * ejecución sigue <b>activa</b> (para que el poller siga o pare), o {@code null} si el usuario ya navegó
+   * a otra ejecución (poller debe parar). Best-effort: un fallo transitorio se reporta como activo (reintenta).
+   */
+  async refreshLiveSnapshot(executionId: number): Promise<{ active: boolean } | null> {
     if (this.selectedExecutionId() !== executionId) {
-      this.stopPolling();
-      return;
+      return null;
     }
     try {
       const [bundle, progress] = await Promise.all([
@@ -153,24 +140,15 @@ export class ExecutionDetailStore {
         firstValueFrom(this.api.progress(executionId)),
       ]);
       if (this.selectedExecutionId() !== executionId) {
-        return; // el usuario navegó a otra ejecución mientras cargaba
+        return null; // el usuario navegó a otra ejecución mientras cargaba
       }
       this.selectedExecution.set(bundle.detail);
       this.tasks.set(bundle.tasks);
       this.children.set(bundle.children);
       this.progress.set(progress);
-      if (!isActiveStatus(bundle.detail.status)) {
-        this.stopPolling(); // terminal: esta es la última foto
-      }
+      return { active: isActiveStatus(bundle.detail.status) };
     } catch {
-      // best-effort: un fallo transitorio no detiene el poll; se reintenta en el próximo tick.
-    }
-  }
-
-  private stopPolling(): void {
-    if (this.pollHandle != null) {
-      clearInterval(this.pollHandle);
-      this.pollHandle = null;
+      return { active: true }; // best-effort: un fallo transitorio no detiene el poll.
     }
   }
 }

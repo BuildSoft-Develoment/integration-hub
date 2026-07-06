@@ -13,6 +13,7 @@ import { ExecutionCatalogQueryStore } from './execution-catalog-query.store';
 import { ExecutionCatalogStore } from './execution-catalog.store';
 import { ExecutionDetailLoaderService } from '../details/execution-detail-loader.service';
 import { ExecutionDetailStore } from '../details/execution-detail.store';
+import { ExecutionProgressPoller } from '../details/execution-progress-poller';
 import { ExecutionFileActionService } from '../details/execution-file-action.service';
 import { ExecutionNavigationService } from '../details/execution-navigation.service';
 
@@ -37,6 +38,7 @@ describe('ExecutionCatalogStore', () => {
         ExecutionCatalogCommandService,
         ExecutionCatalogQueryStore,
         ExecutionDetailStore,
+        ExecutionProgressPoller,
         ExecutionNavigationService,
         ExecutionDetailLoaderService,
         ExecutionFileActionService,
