@@ -8,49 +8,51 @@
 //
 // Reglas (arquitectura):
 //   - Una FEATURE no importa otra FEATURE (bajo acoplamiento) → extraer lo compartido a core/* o shared/*.
-//   - Las capas CORE/SHARED no dependen de FEATURES (la dirección va de features hacia abajo, no al revés).
+//   - Las capas BAJAS (core/*, shared/*, plugin-ui-kit) no dependen de FEATURES (la dirección va de features hacia
+//     abajo, no al revés).
 //
+// Los patrones cubren `@integration-hub/features/*` (barrels de un segmento, los reales hoy) y `.../features/**`
+// (seguro ante entrypoints de subpath futuros). Los `files` incluyen `.ts` y `.tsx`.
 // Extensible: añadir más grupos/paths para nuevas reglas de capa. Ver
 // revisiones/2026-07-05-analisis-fronteras-nx-frontend.md.
 import tsParser from '@typescript-eslint/parser';
+
+const forbidFeatureImports = (message) => ({
+  'no-restricted-imports': [
+    'error',
+    {
+      patterns: [
+        {
+          group: ['@integration-hub/features/*', '@integration-hub/features/**'],
+          message,
+        },
+      ],
+    },
+  ],
+});
 
 export default [
   {
     files: ['libs/features/**/*.ts', 'libs/features/**/*.tsx'],
     languageOptions: { parser: tsParser },
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['@integration-hub/features/*'],
-              message:
-                'Una feature no debe importar otra feature (bajo acoplamiento). Extrae lo compartido a ' +
-                '@integration-hub/core/* o @integration-hub/shared/*.',
-            },
-          ],
-        },
-      ],
-    },
+    rules: forbidFeatureImports(
+      'Una feature no debe importar otra feature (bajo acoplamiento). Extrae lo compartido a ' +
+        '@integration-hub/core/* o @integration-hub/shared/*.'
+    ),
   },
   {
-    files: ['libs/core/**/*.ts', 'libs/core/**/*.tsx', 'libs/shared/**/*.ts', 'libs/shared/**/*.tsx'],
+    files: [
+      'libs/core/**/*.ts',
+      'libs/core/**/*.tsx',
+      'libs/shared/**/*.ts',
+      'libs/shared/**/*.tsx',
+      'libs/plugin-ui-kit/**/*.ts',
+      'libs/plugin-ui-kit/**/*.tsx',
+    ],
     languageOptions: { parser: tsParser },
-    rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          patterns: [
-            {
-              group: ['@integration-hub/features/*'],
-              message:
-                'Las capas core/shared no deben depender de features (dirección de dependencias): las features ' +
-                'dependen de core/shared, no al revés.',
-            },
-          ],
-        },
-      ],
-    },
+    rules: forbidFeatureImports(
+      'Las capas bajas (core/shared/plugin-ui-kit) no deben depender de features (dirección de dependencias): ' +
+        'las features dependen de ellas, no al revés.'
+    ),
   },
 ];

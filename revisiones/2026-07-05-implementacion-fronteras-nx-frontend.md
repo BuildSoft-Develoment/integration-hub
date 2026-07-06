@@ -66,6 +66,27 @@ Por eso el guard vive en una **config dedicada** con **script propio**, no en la
    con "Parsing error" (la regla nunca llegaba a evaluarse). Con `@typescript-eslint/parser` el guard evalúa imports
    reales.
 
+## Doble-check — endurecimiento (v60-fix-2)
+
+El doble-check encontró **3 gaps reales** en la primera versión del guard y los cerró:
+
+1. **`.tsx` sin cubrir**: el script globaba `libs/**/*.ts` pero la config `files` incluía `.tsx`. Un `.tsx` futuro que
+   importara otra feature **no se linteaba**. Corregido: el script ahora usa `libs/**/*.{ts,tsx}`.
+2. **`libs/plugin-ui-kit` sin gobernar**: es UI compartida (capa baja) y no debe importar features, pero no estaba en
+   ninguna regla. Añadido al bloque de capas bajas (junto a core/shared). Riesgo cero: se verificó que hoy **ninguna**
+   capa no-feature importa features (`grep` de `@integration-hub/features/*` fuera de `libs/features/` → vacío).
+3. **Subpaths profundos**: `@integration-hub/features/*` (un segmento) no atraparía un entrypoint tipo
+   `@integration-hub/features/processes/testing`. Añadido `@integration-hub/features/**` al patrón como seguro (hoy
+   todos los aliases son de un segmento, verificado en `tsconfig.base.json`).
+
+Además se verificó que **no hay falso positivo de auto-import**: la única arista feature-alias dentro de `libs/features`
+es la de `schedules→processes` (real, grandfathered), no un import de una feature a su propio barrel.
+
+**E2E del guard (5 sondas temporales, todas atrapadas con el mensaje de capa correcto):** core→feature, feature→feature
+(.ts), feature→feature (.tsx, prueba que el script cubre tsx), plugin-ui-kit→feature, y subpath
+`features/processes/testing`. Base verde antes y después (exit 0); 5 errores `no-restricted-imports` exactos durante la
+inyección. Sondas eliminadas.
+
 ## Limitaciones / deuda documentada
 
 - **No es la solución idiomática Nx**: no hay tags, `depConstraints`, ni caching/`affected` por lib. Para eso hay que
