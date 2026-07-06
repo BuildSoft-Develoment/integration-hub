@@ -82,6 +82,27 @@ describe('ProcessTaskRuntimePanelComponent (async dispatch)', () => {
     http.verify();
   });
 
+  // e2e de cadena completa: respuesta HTTP {state} -> signal del panel -> binding [asyncState] -> sección hija ->
+  // aviso renderizado en el DOM. Ningún otro test cubre HTTP->DOM (los del panel miran el signal; los de la sección,
+  // el input directo). El aviso vive dentro de @if(async()), por eso el draft trae async:true.
+  it('renders the DEGRADED warning end-to-end (HTTP state -> child section DOM)', () => {
+    const { fixture, http } = setup({ taskRef: 't', executionMode: 'once', async: true }, 'DEGRADED');
+    fixture.detectChanges();
+    const warning = (fixture.nativeElement as HTMLElement).querySelector('.async-dispatch__warning');
+    expect(warning).toBeTruthy();
+    expect(warning?.textContent?.trim()).toBe(
+      fixture.componentInstance.i18n.t('ui.asyncFeatureDegraded')
+    );
+    http.verify();
+  });
+
+  it('renders no async warning end-to-end when the state is READY', () => {
+    const { fixture, http } = setup({ taskRef: 't', executionMode: 'once', async: true }, 'READY');
+    fixture.detectChanges();
+    expect((fixture.nativeElement as HTMLElement).querySelector('.async-dispatch__warning')).toBeNull();
+    http.verify();
+  });
+
   it('exposes the async capability for the current task type from the catalog', () => {
     const { fixture, http } = setup({ taskRef: 't', executionMode: 'batch' }, 'READY', {
       taskType: 'REST_CALL',

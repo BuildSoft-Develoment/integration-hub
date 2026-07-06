@@ -35,12 +35,18 @@ del aviso a `state` **no bloquea** el toggle en DEGRADED — el usuario aún pue
   `asyncFeatureDegraded`; READY→sin aviso (`asyncWarningKey()===null`).
 - **`process-task-runtime-panel.component.spec`**: flushea `{ state, executionEnabled }` y cubre READY/DISABLED/DEGRADED.
 - **`dictionary-parity.spec`**: verde → la clave nueva está en en **y** es.
+- **e2e de cadena completa (UI, lección de #4)** — `process-task-runtime-panel.component.spec`: respuesta HTTP
+  `{state:'DEGRADED'}` → signal del panel → binding `[asyncState]` → sección hija → **el aviso DEGRADED se renderiza en
+  el DOM** con el texto correcto (`i18n.t('ui.asyncFeatureDegraded')`); y `state:'READY'` → **sin** aviso en el DOM.
+  Cubre el seam que faltaba (los demás tests miran el signal o el input, no HTTP→DOM).
 - **Test de contrato backend (lección de #4)** — `AsyncTaskExecutionE2EIT.asyncStatusEndpointSerializesStateAsEnumName`
   (`@QuarkusTest` + RestAssured + `@TestSecurity`): GET `/api/messaging/async-status` sobre el **JSON real** y asevera
-  `state ∈ {DISABLED,DEGRADED,READY}` (+ `consumerLive`/`executionEnabled` boolean). **Blinda la serialización del enum**
-  (`name()`): si Jackson la cambiara (ordinal/lowercase), `state === 'READY'` sería siempre falso y la UI avisaría en
-  silencio — el test lo atraparía. Antes NO existía ninguna aserción del JSON serializado.
-- **Totales**: frontend `nx test web` **101 archivos / 494 tests, 0 fallos**; `lint:boundaries` verde; `nx build web` OK.
+  `state ∈ {DISABLED,DEGRADED,READY}` (+ `consumerLive`/`executionEnabled` boolean). En ese perfil
+  (`tasks.async.execution.enabled=true`, dispatch/consumer off) el endpoint devuelve **DEGRADED**, así que el test
+  ejercita y confirma que **DEGRADED serializa como `"DEGRADED"`** — el caso exacto que la UI distingue. **Blinda la
+  serialización del enum** (`name()`): si Jackson la cambiara (ordinal/lowercase), `state === 'READY'` sería siempre
+  falso y la UI avisaría en silencio. Antes NO existía ninguna aserción del JSON serializado.
+- **Totales**: frontend `nx test web` **101 archivos / 496 tests, 0 fallos**; `lint:boundaries` verde; `nx build web` OK.
   Backend `MessagingTransportsResourceTest` 2 + `AsyncAvailabilityServiceTest` 6 + `AsyncTaskExecutionE2EIT` **4** (con
   el contrato), BUILD SUCCESS.
 
