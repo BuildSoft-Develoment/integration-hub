@@ -40,9 +40,22 @@ DTO `ProcessExecutionStartResponse` no lo importa nadie — es interno a `proces
   compilación confirma que `Observable<Object>` (retorno de `http.post` sin type param) tipa contra
   `Observable<unknown>` y que ningún consumidor de `schedules.execute` se rompe.
 
+### Doble-check — pruebas e2e (unit suite completa)
+- **Corrección de un caveat previo (erróneo):** afirmé que `nx test web` no cubría los specs de libs (por analogía con
+  `nx lint web`). **Falso** — el target `web:test` incluye explícitamente `"libs/**/*.spec.ts"` (y su `tsconfig.spec`
+  también). Los specs de libs **sí** corren.
+- **Nuevo spec `schedules-api.service.spec.ts`** (`HttpTestingController`, patrón del repo): verifica la **regresión del
+  refactor** — `execute(3)` emite `POST /api/process-executions/3` con cuerpo `{}` (contrato idéntico al que antes daba
+  `ProcessApiService`); más `list()` construyendo bien los query params (omite `mode=ALL`, aplica paginación default).
+- **Riesgo descartado**: el spec existente `schedules.store.spec.ts` **mockea `SchedulesApiService` entero** (no
+  `ProcessApiService`), así que el store está aislado de las internas del api service → mi cambio no lo afecta (sigue
+  verde).
+- **Suite completa**: `nx test web --skip-nx-cache` → **99 archivos de test, 489 tests, 0 fallos** (vitest-angular),
+  incluidos el nuevo api spec y el store spec de schedules. Confirma que el cambio no rompió **nada** en todo el app.
+
 ### Nota de arranque
 Cambio 100% frontend (una línea HTTP + limpieza de imports); cero runtime backend. La validación real es
-lint:boundaries + build, no el stack en localhost:8080 (que no ejercita nada de esto).
+lint:boundaries + build + unit suite, no el stack en localhost:8080 (que no ejercita nada de esto).
 
 ## Deuda relacionada (documentada, no bundleada)
 
