@@ -2,6 +2,8 @@ package com.integrationhub.platform.service.artifact;
 
 import com.integrationhub.platform.task.ArtifactReference;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
+import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
@@ -47,8 +49,14 @@ public class S3ArtifactStaging implements ArtifactStaging {
 
     public S3ArtifactStaging(S3StagingConfig config) {
         this.bucket = config.bucket();
-        var credentials = StaticCredentialsProvider.create(
-                AwsBasicCredentials.create(config.accessKeyId(), config.secretAccessKey()));
+        // Mismo modelo de credenciales que S3SourceProvider: si hay access-key configurada (MinIO/dev, o AWS con creds
+        // explícitas de Vault) se firma con StaticCredentialsProvider; si no, se usa la cadena por defecto
+        // (DefaultCredentialsProvider) → IAM roles/instance-profile en AWS real, sin exigir creds estáticas en config.
+        AwsCredentialsProvider credentials =
+                config.accessKeyId() == null || config.accessKeyId().isBlank()
+                        ? DefaultCredentialsProvider.create()
+                        : StaticCredentialsProvider.create(
+                                AwsBasicCredentials.create(config.accessKeyId(), config.secretAccessKey()));
         var region = Region.of(config.region());
 
         var clientBuilder = S3Client.builder()
