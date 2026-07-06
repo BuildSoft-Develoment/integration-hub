@@ -2,9 +2,12 @@ import { TestBed } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { of, throwError } from 'rxjs';
 
-import { AppFeedbackService, UiMessageService } from '@integration-hub/core/services';
+import {
+  AppFeedbackService,
+  ProcessExecutionApiService,
+  UiMessageService,
+} from '@integration-hub/core/services';
 
-import { ExecutionApiService } from '../api/execution-api.service';
 import { ExecutionCatalogCommandService } from './execution-catalog-command.service';
 import { ExecutionCatalogQueryStore } from './execution-catalog-query.store';
 import { ExecutionDetailStore } from '../details/execution-detail.store';
@@ -32,7 +35,7 @@ describe('ExecutionCatalogCommandService', () => {
         ExecutionCatalogCommandService,
         ExecutionFileActionService,
         {
-          provide: ExecutionApiService,
+          provide: ProcessExecutionApiService,
           useValue: {
             execute,
           },

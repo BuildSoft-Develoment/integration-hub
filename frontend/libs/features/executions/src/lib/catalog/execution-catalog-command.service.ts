@@ -1,9 +1,12 @@
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
-import { AppFeedbackService, UiMessageService } from '@integration-hub/core/services';
+import {
+  AppFeedbackService,
+  ProcessExecutionApiService,
+  UiMessageService,
+} from '@integration-hub/core/services';
 
-import { ExecutionApiService } from '../api/execution-api.service';
 import { ExecutionCatalogQueryStore } from './execution-catalog-query.store';
 import { ExecutionDetailStore } from '../details/execution-detail.store';
 import { ExecutionFileActionService } from '../details/execution-file-action.service';
@@ -11,7 +14,7 @@ import { ExecutionFileActionRequest } from '../models/execution.models';
 
 @Injectable()
 export class ExecutionCatalogCommandService {
-  private readonly api = inject(ExecutionApiService);
+  private readonly execution = inject(ProcessExecutionApiService);
   private readonly detail = inject(ExecutionDetailStore);
   private readonly fileActions = inject(ExecutionFileActionService);
   private readonly query = inject(ExecutionCatalogQueryStore);
@@ -32,7 +35,7 @@ export class ExecutionCatalogCommandService {
     this.detail.actionRunning.set(true);
     try {
       const result = await firstValueFrom(
-        this.api.execute(execution.processDefinitionId, {
+        this.execution.execute(execution.processDefinitionId, {
           selectedFiles,
           sourceExecutionId: execution.id,
         })

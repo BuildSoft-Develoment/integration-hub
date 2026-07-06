@@ -1,7 +1,7 @@
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
-import { AppFeedbackService } from '@integration-hub/core/services';
+import { AppFeedbackService, ProcessExecutionApiService } from '@integration-hub/core/services';
 
 import { ProcessApiService } from '../api/process-api.service';
 import { ProcessCatalogQueryStore } from './process-catalog-query.store';
@@ -13,6 +13,7 @@ import { normalizeTaskOrders, ProcessRecord } from '../models/process.models';
 @Injectable()
 export class ProcessCatalogCommandService {
   private readonly api = inject(ProcessApiService);
+  private readonly execution = inject(ProcessExecutionApiService);
   private readonly feedback = inject(AppFeedbackService);
   private readonly editor = inject(ProcessEditorStore);
   private readonly query = inject(ProcessCatalogQueryStore);
@@ -64,7 +65,7 @@ export class ProcessCatalogCommandService {
 
   async execute(process: ProcessRecord): Promise<void> {
     await this.editor.trackExecuting(async () => {
-      const execution = await firstValueFrom(this.api.execute(process.id));
+      const execution = await firstValueFrom(this.execution.execute(process.id));
       this.feedback.info('processes.queued', {
         id: execution.id,
         status: execution.status,

@@ -3,16 +3,6 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ExecutionProgress, ProcessExecutionRecord, ProcessTaskExecutionRecord } from '../models/execution.models';
 
-export interface ExecuteProcessRequest {
-  executionVariables?: Record<string, string>;
-  selectedFiles?: string[];
-  sourceExecutionId?: number | null;
-}
-
-export interface ExecuteProcessResponse {
-  id: number;
-}
-
 export interface ExecutionPageResponse {
   total: number;
   items: ProcessExecutionRecord[];
@@ -58,9 +48,5 @@ export class ExecutionApiService {
 
   listChildren(executionId: number): Observable<ProcessExecutionRecord[]> {
     return this.http.get<ProcessExecutionRecord[]>(`${this.baseUrl}/${executionId}/children`);
-  }
-
-  execute(processDefinitionId: number, request: ExecuteProcessRequest): Observable<ExecuteProcessResponse> {
-    return this.http.post<ExecuteProcessResponse>(`/api/process-executions/${processDefinitionId}`, request);
   }
 }

@@ -1,7 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 
-import { AppFeedbackService, UiMessageService } from '@integration-hub/core/services';
+import {
+  AppFeedbackService,
+  ProcessExecutionApiService,
+  UiMessageService,
+} from '@integration-hub/core/services';
 
 import { ExecutionApiService } from '../api/execution-api.service';
 import { ExecutionCatalogCommandService } from './execution-catalog-command.service';
@@ -64,6 +68,11 @@ describe('ExecutionCatalogStore', () => {
                 total: 1,
               });
             },
+          },
+        },
+        {
+          provide: ProcessExecutionApiService,
+          useValue: {
             execute,
           },
         },

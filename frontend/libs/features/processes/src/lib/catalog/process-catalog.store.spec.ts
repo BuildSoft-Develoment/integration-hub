@@ -4,6 +4,7 @@ import { of } from 'rxjs';
 import {
   AppFeedbackService,
   AuthAccessService,
+  ProcessExecutionApiService,
 } from '@integration-hub/core/services';
 
 import { ProcessApiService } from '../api/process-api.service';
@@ -69,10 +70,15 @@ describe('ProcessCatalogStore', () => {
             create,
             update: vi.fn(),
             setActive: vi.fn(),
-            execute,
             listSources,
             listReaders,
             listConnections,
+          },
+        },
+        {
+          provide: ProcessExecutionApiService,
+          useValue: {
+            execute,
           },
         },
         {
