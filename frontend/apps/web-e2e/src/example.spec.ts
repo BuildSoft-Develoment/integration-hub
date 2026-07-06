@@ -516,8 +516,12 @@ test.describe('Integration Hub shell', () => {
     });
 
     // Discoverability: reach the console from the executions toolbar link (not just by URL).
+    // "Operaciones DLQ" también existe en el nav lateral (misma etiqueta) → acotar a la toolbar.
     await gotoAuthenticated(page, '/#/executions');
-    await page.getByRole('link', { name: /Operaciones DLQ|DLQ operations/ }).click();
+    await page
+      .locator('ih-execution-toolbar')
+      .getByRole('link', { name: /Operaciones DLQ|DLQ operations/ })
+      .click();
 
     // Header + health banner (a dead row => critical).
     await expect(page.getByRole('heading', { name: /Operaciones DLQ|DLQ operations/ }).first()).toBeVisible({
