@@ -38,7 +38,15 @@ la **emisión de credenciales efímeras**.
 - **`ArtifactTransferTest`** (4): contra un **`HttpServer` en-JVM real** (no mocks) — `download` trae los bytes de una
   referencia GET; `upload` entrega bytes + `Content-Type` a una referencia PUT; status no-2xx → `IOException`;
   `download` rechaza una referencia PUT.
-- **Regresión**: `ReferencePluginSidecarTest` (4) sigue verde. **Total módulos Fase 1: 13 tests, BUILD SUCCESS.**
+- **Regresión**: `ReferencePluginSidecarTest` (4) sigue verde.
+- **Doble-check + e2e (lección de #4: probar la integración real, no solo las piezas)** — `ArtifactTransferTest` +2:
+  - `openDownload` **streaming** (la variante que importa para archivos grandes): lee un artefacto de ~200 KB por
+    stream sin materializar upfront.
+  - **e2e de cadena completa**: `ArtifactReference.get(...)` → `asMap` → **Jackson JSON** (el wire real del payload) →
+    parse → `fromMap` → `assertEquals` con la original (sobrevive el round-trip JSON intacta) → `ArtifactTransfer`
+    descarga/sube contra el `HttpServer` real. Cubre el seam **contrato↔SDK↔wire** que los tests aislados no tocaban
+    (las piezas funcionaban solas, pero no se había probado que compongan a través del JSON real).
+- **Total módulos Fase 1: 15 tests, BUILD SUCCESS.**
 
 ## Estado del proyecto (fases)
 
