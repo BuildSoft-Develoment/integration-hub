@@ -4,6 +4,11 @@ Fecha: 2026-07-05
 Tipo: **análisis** (validación contra código real; sin implementar).
 Contexto: app_htoh(55) señaló que Nx no impone fronteras fuertes (tags vacíos, la regla permite cualquier import).
 
+> **Estado: IMPLEMENTADO (opción ligera).** Ver
+> [implementación v60-fix](2026-07-05-implementacion-fronteras-nx-frontend.md): guard `no-restricted-imports` en config
+> dedicada + `npm run lint:boundaries`, con prueba positiva/negativa evidenciada. La opción idiomática (registrar libs
+> como proyectos Nx + tags + depConstraints + caching) queda agendable como tarea frontend dedicada.
+
 ## Estado hoy (verificado)
 
 1. **La regla existe pero no impone nada.** `frontend/eslint.config.mjs` tiene `@nx/enforce-module-boundaries` en

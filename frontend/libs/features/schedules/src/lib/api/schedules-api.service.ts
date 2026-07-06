@@ -1,6 +1,10 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
+// Deuda tecnica: ProcessApiService deberia vivir en @integration-hub/core/services (servicio de datos
+// compartido), no en la feature processes. Unica arista feature->feature del monorepo; ver
+// revisiones/2026-07-05-analisis-fronteras-nx-frontend.md.
+// eslint-disable-next-line no-restricted-imports -- grandfather de la deuda documentada arriba
 import { ProcessApiService } from '@integration-hub/features/processes';
 import { ScheduleRecord } from '../models/schedules.models';
 
