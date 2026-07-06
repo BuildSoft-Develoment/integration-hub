@@ -39,6 +39,11 @@ configura un broker no-Kafka.
   `channelHealth.ready("audit-out")==false`, `dispatchLive==false`, `state != READY`. Blinda que la señal no miente.
 - **E2E POSITIVO `AsyncTaskKafkaConsumerE2EIT`** (Kafka real): tras conectar, `audit-out` readiness=true (contraparte del
   negativo) — el producer conectado sí reporta vivo.
+- **E2E POSITIVO END-TO-END `AsyncAvailabilityReadyIT` (NUEVO, del doble-check)**: con **todos los gates on + Kafka
+  real**, `state` llega a **READY** con el `HealthCenter` REAL (no mocks). Cierra el hueco que el doble-check detectó: las
+  demás aserciones de READY usaban un `ChannelHealth` mockeado; ninguna probaba que las piezas (`consumerLive` +
+  `dispatchLive` + gates + broker) **COMBINAN** a READY contra el sistema real. Es la contraparte positiva del IT de
+  broker inalcanzable.
 - **Totales backend**: 9 unit + E2E negativo/positivo, **BUILD SUCCESS** (el app bootea con los beans renombrados sin
   `UnsatisfiedResolution`). **Frontend**: `lint:boundaries` verde + `nx build web` OK.
 
