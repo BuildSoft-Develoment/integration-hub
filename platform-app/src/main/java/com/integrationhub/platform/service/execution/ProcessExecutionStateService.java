@@ -61,11 +61,15 @@ public class ProcessExecutionStateService {
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
-    public Long startProcess(Long processDefinitionId, String processName, Long sourceExecutionId, String triggerSource) {
+    public Long startProcess(Long processDefinitionId, String processName, Long sourceExecutionId, String triggerSource,
+                             String executionToken) {
         var definition = processDefinitionRepository.findRequired(processDefinitionId);
         var execution = new ProcessExecution();
         execution.processDefinition = definition;
         execution.status = ExecutionStatus.RUNNING;
+        // P2 (fencing): el path SÍNCRONO también fija un token, para que TODA transición del runtime sea guardada
+        // uniformemente (sin caminos sin fencing). El path queued fija su token en el claim distribuido.
+        execution.executionToken = executionToken;
         execution.startedAt = LocalDateTime.now();
         execution.sourceExecutionId = sourceExecutionId;
         execution.triggerSource = triggerSource;
@@ -160,8 +164,19 @@ public class ProcessExecutionStateService {
         return recovered;
     }
 
+    /**
+     * P2 (fencing): confirma que ESTE worker sigue siendo el dueño RUNNING (token) antes de mutar estado. 0 filas ⇒
+     * perdió el token (lease vencido, recuperado por otro nodo) ⇒ {@link FencingTokenLostException} (aborta el worker).
+     */
+    private void assertOwner(Long processExecutionId, String executionToken, String operation) {
+        if (processExecutionRepository.touchRunningOwner(processExecutionId, executionToken, LocalDateTime.now()) == 0) {
+            throw new FencingTokenLostException(processExecutionId, operation);
+        }
+    }
+
     @Transactional(Transactional.TxType.REQUIRES_NEW)
-    public Long startTask(Long processExecutionId, Long taskDefinitionId, String taskType, Integer taskOrder) {
+    public Long startTask(Long processExecutionId, String executionToken, Long taskDefinitionId, String taskType, Integer taskOrder) {
+        assertOwner(processExecutionId, executionToken, "startTask");
         var execution = processExecutionRepository.findById(processExecutionId);
         var taskDefinition = processTaskDefinitionRepository.findById(taskDefinitionId);
         var taskExecution = new ProcessTaskExecution();
@@ -176,7 +191,8 @@ public class ProcessExecutionStateService {
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
-    public void completeTask(Long processExecutionId, Long taskExecutionId, String details, Object payload) {
+    public void completeTask(Long processExecutionId, String executionToken, Long taskExecutionId, String details, Object payload) {
+        assertOwner(processExecutionId, executionToken, "completeTask");
         var execution = processExecutionRepository.findById(processExecutionId);
         var taskExecution = processTaskExecutionRepository.findById(taskExecutionId);
         taskExecution.status = ExecutionStatus.COMPLETED;
@@ -186,7 +202,8 @@ public class ProcessExecutionStateService {
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
-    public void failTask(Long processExecutionId, Long taskExecutionId, String message, Object payload) {
+    public void failTask(Long processExecutionId, String executionToken, Long taskExecutionId, String message, Object payload) {
+        assertOwner(processExecutionId, executionToken, "failTask");
         var execution = processExecutionRepository.findById(processExecutionId);
         var taskExecution = processTaskExecutionRepository.findById(taskExecutionId);
         taskExecution.status = ExecutionStatus.FAILED;
@@ -196,7 +213,8 @@ public class ProcessExecutionStateService {
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
-    public void completeTaskWithErrors(Long processExecutionId, Long taskExecutionId, String details, Object payload) {
+    public void completeTaskWithErrors(Long processExecutionId, String executionToken, Long taskExecutionId, String details, Object payload) {
+        assertOwner(processExecutionId, executionToken, "completeTaskWithErrors");
         var execution = processExecutionRepository.findById(processExecutionId);
         var taskExecution = processTaskExecutionRepository.findById(taskExecutionId);
         taskExecution.status = ExecutionStatus.COMPLETED_WITH_ERRORS;
@@ -213,18 +231,20 @@ public class ProcessExecutionStateService {
      */
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     public void suspendTask(Long processExecutionId,
+                            String executionToken,
                             Long taskExecutionId,
                             String suspendedStateJson,
                             String resumeToken,
                             LocalDateTime expiresAt,
                             String details,
                             Object auditPayload) {
-        suspendTask(processExecutionId, taskExecutionId, suspendedStateJson, resumeToken,
+        suspendTask(processExecutionId, executionToken, taskExecutionId, suspendedStateJson, resumeToken,
                 expiresAt, null, details, auditPayload);
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     public void suspendTask(Long processExecutionId,
+                            String executionToken,
                             Long taskExecutionId,
                             String suspendedStateJson,
                             String resumeToken,
@@ -232,7 +252,7 @@ public class ProcessExecutionStateService {
                             String continuationJson,
                             String details,
                             Object auditPayload) {
-        suspendTask(processExecutionId, taskExecutionId, suspendedStateJson, resumeToken,
+        suspendTask(processExecutionId, executionToken, taskExecutionId, suspendedStateJson, resumeToken,
                 expiresAt, continuationJson, details, auditPayload, (AsyncTaskEnvelope) null);
     }
 
@@ -246,6 +266,7 @@ public class ProcessExecutionStateService {
      */
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     public void suspendTask(Long processExecutionId,
+                            String executionToken,
                             Long taskExecutionId,
                             String suspendedStateJson,
                             String resumeToken,
@@ -254,7 +275,7 @@ public class ProcessExecutionStateService {
                             String details,
                             Object auditPayload,
                             AsyncTaskEnvelope asyncDispatch) {
-        persistSuspension(processExecutionId, taskExecutionId, suspendedStateJson, resumeToken,
+        persistSuspension(processExecutionId, executionToken, taskExecutionId, suspendedStateJson, resumeToken,
                 expiresAt, continuationJson, details, auditPayload);
         if (asyncDispatch != null) {
             taskOutboxStore.enqueue(asyncDispatch);
@@ -269,6 +290,7 @@ public class ProcessExecutionStateService {
      */
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     public void suspendTask(Long processExecutionId,
+                            String executionToken,
                             Long taskExecutionId,
                             String suspendedStateJson,
                             String resumeToken,
@@ -277,7 +299,7 @@ public class ProcessExecutionStateService {
                             String details,
                             Object auditPayload,
                             AsyncSliceDispatchService.ScatterDispatch scatterDispatch) {
-        persistSuspension(processExecutionId, taskExecutionId, suspendedStateJson, resumeToken,
+        persistSuspension(processExecutionId, executionToken, taskExecutionId, suspendedStateJson, resumeToken,
                 expiresAt, continuationJson, details, auditPayload);
         if (scatterDispatch != null) {
             sliceDispatchService.dispatchSlices(scatterDispatch);
@@ -285,6 +307,7 @@ public class ProcessExecutionStateService {
     }
 
     private void persistSuspension(Long processExecutionId,
+                                   String executionToken,
                                    Long taskExecutionId,
                                    String suspendedStateJson,
                                    String resumeToken,
@@ -292,6 +315,7 @@ public class ProcessExecutionStateService {
                                    String continuationJson,
                                    String details,
                                    Object auditPayload) {
+        assertOwner(processExecutionId, executionToken, "suspendTask");
         var execution = processExecutionRepository.findById(processExecutionId);
         var taskExecution = processTaskExecutionRepository.findById(taskExecutionId);
         taskExecution.status = ExecutionStatus.SUSPENDED;
@@ -336,31 +360,34 @@ public class ProcessExecutionStateService {
         return processTaskExecutionRepository.findActiveByResumeToken(resumeToken);
     }
 
-    @Transactional(Transactional.TxType.REQUIRES_NEW)
-    public void completeProcess(Long processExecutionId, String details) {
+    /** P2 (fencing): transición terminal guardada por token+RUNNING; 0 filas ⇒ token perdido ⇒ aborta sin sobrescribir. */
+    private void transitionProcessTerminal(Long processExecutionId, String executionToken, ExecutionStatus toStatus,
+                                           String details, String auditType, String operation) {
+        var rows = processExecutionRepository.transitionRunningProcess(
+                processExecutionId, executionToken, toStatus, details, LocalDateTime.now());
+        if (rows == 0) {
+            throw new FencingTokenLostException(processExecutionId, operation);
+        }
         var execution = processExecutionRepository.findById(processExecutionId);
-        execution.status = ExecutionStatus.COMPLETED;
-        execution.finishedAt = LocalDateTime.now();
-        execution.details = details;
-        auditService.record(execution, null, "PROCESS_COMPLETED", "COMPLETED", details, null);
+        auditService.record(execution, null, auditType, toStatus.name(), details, null);
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
-    public void failProcess(Long processExecutionId, String message) {
-        var execution = processExecutionRepository.findById(processExecutionId);
-        execution.status = ExecutionStatus.FAILED;
-        execution.finishedAt = LocalDateTime.now();
-        execution.details = message;
-        auditService.record(execution, null, "PROCESS_FAILED", "FAILED", message, null);
+    public void completeProcess(Long processExecutionId, String executionToken, String details) {
+        transitionProcessTerminal(processExecutionId, executionToken, ExecutionStatus.COMPLETED, details,
+                "PROCESS_COMPLETED", "completeProcess");
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
-    public void completeProcessWithErrors(Long processExecutionId, String details) {
-        var execution = processExecutionRepository.findById(processExecutionId);
-        execution.status = ExecutionStatus.COMPLETED_WITH_ERRORS;
-        execution.finishedAt = LocalDateTime.now();
-        execution.details = details;
-        auditService.record(execution, null, "PROCESS_COMPLETED_WITH_ERRORS", "COMPLETED_WITH_ERRORS", details, null);
+    public void failProcess(Long processExecutionId, String executionToken, String message) {
+        transitionProcessTerminal(processExecutionId, executionToken, ExecutionStatus.FAILED, message,
+                "PROCESS_FAILED", "failProcess");
+    }
+
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public void completeProcessWithErrors(Long processExecutionId, String executionToken, String details) {
+        transitionProcessTerminal(processExecutionId, executionToken, ExecutionStatus.COMPLETED_WITH_ERRORS, details,
+                "PROCESS_COMPLETED_WITH_ERRORS", "completeProcessWithErrors");
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)

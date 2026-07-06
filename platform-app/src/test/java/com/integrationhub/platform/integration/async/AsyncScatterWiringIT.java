@@ -61,7 +61,7 @@ class AsyncScatterWiringIT {
         var scatter = ScatterDispatch.materialized(peId, tdId, "DB_WRITE", "KAFKA", Map.of("targetTable", "t"), slices,
                 Map.of(), Map.of(), Map.of());
 
-        stateService.suspendTask(peId, teId, "{\"scatter\":true}", "tok-scatter", null, null,
+        stateService.suspendTask(peId, "seed-tok", teId, "{\"scatter\":true}", "tok-scatter", null, null,
                 "scatter test", Map.of(), scatter);
 
         // El tracker se abrió con N=3.
@@ -86,8 +86,8 @@ class AsyncScatterWiringIT {
                     + "(process_definition_id, task_order, task_type, active, configuration_json) "
                     + "values (" + pdId + ", 1, 'DB_WRITE', true, '{}')");
             var tdId = lastId(statement, "process_task_definition");
-            statement.executeUpdate("insert into process_execution (process_definition_id, status) "
-                    + "values (" + pdId + ", 'RUNNING')");
+            statement.executeUpdate("insert into process_execution (process_definition_id, status, execution_token) "
+                    + "values (" + pdId + ", 'RUNNING', 'seed-tok')");
             var peId = lastId(statement, "process_execution");
             statement.executeUpdate("insert into process_task_execution (process_execution_id, task_definition_id, status) "
                     + "values (" + peId + ", " + tdId + ", 'RUNNING')");

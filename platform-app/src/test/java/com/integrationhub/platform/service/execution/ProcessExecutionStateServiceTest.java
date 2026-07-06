@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -130,41 +131,46 @@ class ProcessExecutionStateServiceTest {
     }
 
     @Test
-    void completeProcessSetsCompletedAndFinishedAt() {
+    void completeProcessTransitionsWhenTokenMatchesRunning() {
         var execution = pendingExecution(4L);
+        when(processExecutionRepository.transitionRunningProcess(eq(4L), eq("tok"), eq(ExecutionStatus.COMPLETED), eq("ok"), any())).thenReturn(1);
         when(processExecutionRepository.findById(4L)).thenReturn(execution);
 
-        service.completeProcess(4L, "ok");
+        service.completeProcess(4L, "tok", "ok");
 
-        assertEquals(ExecutionStatus.COMPLETED, execution.status);
-        assertEquals("ok", execution.details);
-        assertNotNull(execution.finishedAt);
+        verify(processExecutionRepository).transitionRunningProcess(eq(4L), eq("tok"), eq(ExecutionStatus.COMPLETED), eq("ok"), any());
         verify(auditService).record(eq(execution), isNull(), eq("PROCESS_COMPLETED"), eq("COMPLETED"), eq("ok"), isNull());
     }
 
     @Test
-    void failProcessSetsFailedAndFinishedAt() {
+    void completeProcessThrowsFencingWhenTokenLost() {
+        // P2: el UPDATE guardado no afecta filas (token perdido / no RUNNING) -> fencing, sin auditar ni cerrar.
+        when(processExecutionRepository.transitionRunningProcess(eq(4L), eq("stale"), any(), any(), any())).thenReturn(0);
+
+        assertThrows(FencingTokenLostException.class, () -> service.completeProcess(4L, "stale", "ok"));
+        verifyNoInteractions(auditService);
+    }
+
+    @Test
+    void failProcessTransitionsWhenTokenMatchesRunning() {
         var execution = pendingExecution(5L);
+        when(processExecutionRepository.transitionRunningProcess(eq(5L), eq("tok"), eq(ExecutionStatus.FAILED), eq("boom"), any())).thenReturn(1);
         when(processExecutionRepository.findById(5L)).thenReturn(execution);
 
-        service.failProcess(5L, "boom");
+        service.failProcess(5L, "tok", "boom");
 
-        assertEquals(ExecutionStatus.FAILED, execution.status);
-        assertEquals("boom", execution.details);
-        assertNotNull(execution.finishedAt);
         verify(auditService).record(eq(execution), isNull(), eq("PROCESS_FAILED"), eq("FAILED"), eq("boom"), isNull());
     }
 
     @Test
-    void completeProcessWithErrorsSetsCompletedWithErrors() {
+    void completeProcessWithErrorsTransitionsWhenTokenMatchesRunning() {
         var execution = pendingExecution(6L);
+        when(processExecutionRepository.transitionRunningProcess(eq(6L), eq("tok"), eq(ExecutionStatus.COMPLETED_WITH_ERRORS), eq("parcial"), any())).thenReturn(1);
         when(processExecutionRepository.findById(6L)).thenReturn(execution);
 
-        service.completeProcessWithErrors(6L, "parcial");
+        service.completeProcessWithErrors(6L, "tok", "parcial");
 
-        assertEquals(ExecutionStatus.COMPLETED_WITH_ERRORS, execution.status);
-        assertEquals("parcial", execution.details);
-        assertNotNull(execution.finishedAt);
+        verify(processExecutionRepository).transitionRunningProcess(eq(6L), eq("tok"), eq(ExecutionStatus.COMPLETED_WITH_ERRORS), eq("parcial"), any());
     }
 
     @Test
@@ -172,10 +178,11 @@ class ProcessExecutionStateServiceTest {
         var execution = pendingExecution(8L);
         var taskDefinition = new ProcessTaskDefinition();
         taskDefinition.id = 11L;
+        when(processExecutionRepository.touchRunningOwner(eq(8L), eq("tok"), any())).thenReturn(1);
         when(processExecutionRepository.findById(8L)).thenReturn(execution);
         when(processTaskDefinitionRepository.findById(11L)).thenReturn(taskDefinition);
 
-        service.startTask(8L, 11L, "READER", 1);
+        service.startTask(8L, "tok", 11L, "READER", 1);
 
         verify(processTaskExecutionRepository).persist(any(ProcessTaskExecution.class));
         verify(auditService).record(eq(execution), eq(taskDefinition), eq("TASK_STARTED"), eq("RUNNING"), any(), any());
@@ -189,14 +196,24 @@ class ProcessExecutionStateServiceTest {
         var taskExecution = new ProcessTaskExecution();
         taskExecution.id = 21L;
         taskExecution.taskDefinition = taskDefinition;
+        when(processExecutionRepository.touchRunningOwner(eq(9L), eq("tok"), any())).thenReturn(1);
         when(processExecutionRepository.findById(9L)).thenReturn(execution);
         when(processTaskExecutionRepository.findById(21L)).thenReturn(taskExecution);
 
-        service.completeTask(9L, 21L, "done", null);
+        service.completeTask(9L, "tok", 21L, "done", null);
 
         assertEquals(ExecutionStatus.COMPLETED, taskExecution.status);
         assertEquals("done", taskExecution.details);
         assertNotNull(taskExecution.finishedAt);
+    }
+
+    @Test
+    void completeTaskThrowsFencingWhenTokenLost() {
+        // P2: assertOwner (touchRunningOwner) no afecta filas -> fencing antes de mutar la tarea.
+        when(processExecutionRepository.touchRunningOwner(eq(9L), eq("stale"), any())).thenReturn(0);
+
+        assertThrows(FencingTokenLostException.class, () -> service.completeTask(9L, "stale", 21L, "done", null));
+        verifyNoInteractions(processTaskExecutionRepository);
     }
 
     @Test
@@ -207,10 +224,11 @@ class ProcessExecutionStateServiceTest {
         var taskExecution = new ProcessTaskExecution();
         taskExecution.id = 22L;
         taskExecution.taskDefinition = taskDefinition;
+        when(processExecutionRepository.touchRunningOwner(eq(10L), eq("tok"), any())).thenReturn(1);
         when(processExecutionRepository.findById(10L)).thenReturn(execution);
         when(processTaskExecutionRepository.findById(22L)).thenReturn(taskExecution);
 
-        service.failTask(10L, 22L, "task boom", null);
+        service.failTask(10L, "tok", 22L, "task boom", null);
 
         assertEquals(ExecutionStatus.FAILED, taskExecution.status);
         assertEquals("task boom", taskExecution.details);

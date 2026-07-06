@@ -33,6 +33,7 @@ public interface ExecutionFastPath {
      * @return The resulting ProcessExecution state or null if a custom fail-fast happened.
      */
     ProcessExecution execute(Long processExecutionId,
+                             String executionToken,
                              ProcessExecutionStateService.TaskPlan current,
                              ProcessExecutionStateService.TaskPlan next,
                              Map<String, String> executionVariables,

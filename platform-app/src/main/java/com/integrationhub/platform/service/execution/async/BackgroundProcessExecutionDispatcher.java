@@ -77,7 +77,7 @@ public class BackgroundProcessExecutionDispatcher {
                     LOG.infov(
                             "Dispatching queued process execution {0} claimed by {1}. activeExecutions={2}/{3}",
                             processExecutionId, nodeId, activeExecutions.get(), maxConcurrentExecutions);
-                    submit(processExecutionId);
+                    submit(processExecutionId, token);
                 }
 
                 if (!dispatchedAny) {
@@ -120,14 +120,18 @@ public class BackgroundProcessExecutionDispatcher {
         }
     }
 
-    private void submit(Long processExecutionId) {
+    private void submit(Long processExecutionId, String executionToken) {
         var activeNow = activeExecutions.incrementAndGet();
         LOG.infov(
                 "Submitting queued process execution {0} to background executor. activeExecutions={1}/{2}",
                 processExecutionId, activeNow, maxConcurrentExecutions);
         managedExecutor.runAsync(() -> {
             try {
-                processExecutionRunner.run(processExecutionId);
+                processExecutionRunner.run(processExecutionId, executionToken);
+            } catch (com.integrationhub.platform.service.execution.FencingTokenLostException fence) {
+                // P2: el lease venció y otro nodo recuperó la ejecución; este worker zombi abortó sin tocar estado.
+                LOG.warnv("Queued process execution {0} aborted: fencing token lost (recovered by another node)",
+                        processExecutionId);
             } catch (Exception e) {
                 LOG.errorv(e, "Queued process execution {0} failed during background run", processExecutionId);
             } finally {

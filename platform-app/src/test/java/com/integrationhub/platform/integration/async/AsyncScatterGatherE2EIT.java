@@ -68,7 +68,7 @@ class AsyncScatterGatherE2EIT {
                 Map.of(), slices, Map.of("task-1.ref", "R-1"), Map.of("processName", "P"), Map.of("env", "prod"));
 
         // El motor abre el tracker(3) + encola 3 work-items + suspende, atómico (B2b).
-        stateService.suspendTask(peId, teId, "{\"scatter\":true}", "tok-scatter", null, null,
+        stateService.suspendTask(peId, "seed-tok", teId, "{\"scatter\":true}", "tok-scatter", null, null,
                 "scatter", Map.of(), scatter);
         assertEquals("SUSPENDED", readString("select status from process_task_execution where id = " + teId));
 
@@ -109,8 +109,8 @@ class AsyncScatterGatherE2EIT {
                     + "(process_definition_id, task_order, task_type, active, configuration_json) "
                     + "values (" + pdId + ", 1, '" + RecordingBatchTaskProvider.TASK_TYPE + "', true, '{}')");
             var tdId = lastId(statement, "process_task_definition");
-            statement.executeUpdate("insert into process_execution (process_definition_id, status) "
-                    + "values (" + pdId + ", 'RUNNING')");
+            statement.executeUpdate("insert into process_execution (process_definition_id, status, execution_token) "
+                    + "values (" + pdId + ", 'RUNNING', 'seed-tok')");
             var peId = lastId(statement, "process_execution");
             statement.executeUpdate("insert into process_task_execution (process_execution_id, task_definition_id, status) "
                     + "values (" + peId + ", " + tdId + ", 'RUNNING')");

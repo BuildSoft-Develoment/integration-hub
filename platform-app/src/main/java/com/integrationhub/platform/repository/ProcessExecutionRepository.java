@@ -66,6 +66,28 @@ public class ProcessExecutionRepository implements PanacheRepository<ProcessExec
                 ExecutionStatus.RUNNING, owner, token, leaseUntil, now, id, ExecutionStatus.PENDING);
     }
 
+    /**
+     * P2 (fencing): transición TERMINAL del proceso (COMPLETED/FAILED/COMPLETED_WITH_ERRORS) guardada por
+     * {@code executionToken} + {@code status='RUNNING'}. Devuelve 1 si ESTE worker sigue siendo el dueño RUNNING;
+     * 0 si perdió el token (lease vencido y recuperado por otro nodo) → el caller aborta sin sobrescribir estado ajeno.
+     */
+    public int transitionRunningProcess(Long id, String token, ExecutionStatus toStatus, String details,
+                                        java.time.LocalDateTime now) {
+        return update("status = ?1, finishedAt = ?2, details = ?3 "
+                        + "where id = ?4 and executionToken = ?5 and status = ?6",
+                toStatus, now, details, id, token, ExecutionStatus.RUNNING);
+    }
+
+    /**
+     * P2 (fencing): confirma atómicamente que ESTE worker sigue siendo el dueño RUNNING (token coincide) antes de una
+     * mutación no-terminal (start/complete/fail de una tarea, suspensión). Refresca el heartbeat de paso. Devuelve 1
+     * si sigue siendo dueño; 0 si perdió el token → el caller aborta.
+     */
+    public int touchRunningOwner(Long id, String token, java.time.LocalDateTime now) {
+        return update("executionHeartbeatAt = ?1 where id = ?2 and executionToken = ?3 and status = ?4",
+                now, id, token, ExecutionStatus.RUNNING);
+    }
+
     /** v53-fix: renueva el lease/heartbeat SOLO si este nodo sigue siendo el dueño (token) y sigue RUNNING. */
     public int renewLease(Long id, String token, java.time.LocalDateTime leaseUntil, java.time.LocalDateTime now) {
         return update("executionLeaseUntil = ?1, executionHeartbeatAt = ?2 "

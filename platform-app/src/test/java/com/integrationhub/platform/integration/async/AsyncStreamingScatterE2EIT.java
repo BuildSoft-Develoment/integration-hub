@@ -249,7 +249,7 @@ class AsyncStreamingScatterE2EIT {
                 Map.of(), taskOutputs, Map.of(), Map.of());
         var scatter = ScatterDispatch.streaming(ids[0], ids[1], RecordingBatchTaskProvider.TASK_TYPE, "KAFKA", seed);
         // Token único por tarea (ux_process_task_execution_resume_token) para permitir múltiples scatters.
-        stateService.suspendTask(ids[0], ids[2], "{\"scatter\":true}", "tok-streaming-" + ids[2], null, null,
+        stateService.suspendTask(ids[0], "seed-tok", ids[2], "{\"scatter\":true}", "tok-streaming-" + ids[2], null, null,
                 "scatter", Map.of(), scatter);
     }
 
@@ -291,8 +291,8 @@ class AsyncStreamingScatterE2EIT {
                     + "(process_definition_id, task_order, task_type, active, configuration_json) "
                     + "values (" + pdId + ", 1, '" + RecordingBatchTaskProvider.TASK_TYPE + "', true, '{}')");
             var tdId = lastId(statement, "process_task_definition");
-            statement.executeUpdate("insert into process_execution (process_definition_id, status) "
-                    + "values (" + pdId + ", 'RUNNING')");
+            statement.executeUpdate("insert into process_execution (process_definition_id, status, execution_token) "
+                    + "values (" + pdId + ", 'RUNNING', 'seed-tok')");
             var peId = lastId(statement, "process_execution");
             statement.executeUpdate("insert into process_task_execution (process_execution_id, task_definition_id, status) "
                     + "values (" + peId + ", " + tdId + ", 'RUNNING')");
