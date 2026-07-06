@@ -68,3 +68,35 @@ Recomendación: **es defendible diferir #4-b** — el health async ya es sustanc
 quiere cerrarlo del todo con bajo costo, **(b1)** es la vía (readiness de `audit-out`, reusa la infra), asumiendo el
 acoplamiento a Kafka y el valor modesto. **(b2)** (SPI para brokers crudos) queda para cuando haya un broker no-Kafka en
 producción. No es money-path ni correctitud.
+
+## Doble-check — verificación contra código (self-review)
+
+Sin bug de correctitud; dos correcciones que **afinan el razonamiento y refuerzan diferir**:
+
+### Corrección 1 — "#4a ya detecta Kafka caído" es más preciso (y refuerza diferir)
+Verificado en `application.properties`: los 3 gates default **false**; el consumer `@Incoming("tasks-in")` corre **solo
+in-process** en platform-app (el único deployable aparte, `audit-consumer`, es del stream de **auditoría**, no de tasks).
+Entonces:
+- **Default (todo off)**: `state` = DISABLED (execution off) → b1 irrelevante.
+- **Async plenamente activo (único caso donde READY es alcanzable)**: el consumer **está habilitado in-process** →
+  `consumerLive` (readiness de `tasks-in`) **ya capta Kafka caído**. El `dispatchLive` (audit-out) sería en gran parte
+  **redundante** para el modo de fallo broker-down.
+- **Parcial (dispatch on, consumer off)**: READY es inalcanzable por el gate del consumer igualmente → b1 no mueve la
+  aguja.
+→ b1 es marginal en **todas** las configs realistas, por una razón precisa: **READY exige el consumer habilitado, que ya
+aporta la señal de liveness de Kafka**. (Mi "valor modesto" original era correcto pero vago; esta es la razón exacta.)
+
+### Corrección 2 — la premisa de b1 (readiness de `audit-out`) está SIN VERIFICAR (subestimé su costo)
+No hay override de health del conector (`audit-out` usa el default de Kafka). La readiness de un canal **OUTGOING**
+(producer) de SmallRye/Kafka **no necesariamente refleja la conectividad viva del broker**: un producer Kafka bufferea y
+no falla-rápido ante un broker-down transitorio, así que su readiness podría reportar UP con el broker caído. A
+diferencia de la readiness del **consumer** de #4a (que **verifiqué empíricamente** que solo es true conectado+asignado),
+el comportamiento de la readiness **outgoing** ante broker-down **no está verificado**. Es justo el tipo de supuesto que
+#4 enseñó a no confiar sin probar → b1 **no es el "reusa #4a casi gratis"** que implicaba: requeriría verificación
+empírica (E2E Kafka con broker caído) antes de fiarse, elevando su costo real.
+
+### Veredicto del doble-check
+Ambas correcciones **refuerzan diferir #4-b**: el valor es marginal por una razón precisa (READY⇒consumer habilitado⇒ya
+hay señal) y su premisa (readiness outgoing = liveness) está sin verificar (costo real > "reusar #4a"). Si aun así se
+procede, (b1) **debe** incluir un E2E que baje el broker Kafka y confirme que `audit-out` pasa a not-ready — sin eso, el
+`dispatchLive` sería otro flag que puede mentir.
