@@ -36,6 +36,7 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Proyecto #3, Fase 3a — E2E del reader por referencia: la plataforma STAGEA el input (upload por streaming) y presigna
@@ -119,6 +120,22 @@ class RemoteReaderArtifactRefMinioIT {
 
         assertEquals(2, result.recordCount());
         assertEquals(0, countStagingObjects(), "el input staged se limpia tras el READ (deleteStaged)");
+    }
+
+    @Test
+    void cleansUpStagedInputEvenWhenTheReadFails() {
+        var staging = new S3ArtifactStaging(new S3StagingConfig(BUCKET, REGION, endpoint, ACCESS_KEY, SECRET_KEY, true));
+        var descriptor = new RemotePluginDescriptor(
+                "acme-reader", "1.0.0", "2", Set.of(), Set.of(), Set.of("REMOTE_CSV"), "GRPC", endpoint, true);
+        // El plugin FALLA el READ (tras stagearse el input).
+        RemotePluginInvoker invoker = (desc, taskType, context, payload) -> TaskResult.failure("boom del plugin", Map.of());
+
+        var provider = new RemoteReaderProvider("REMOTE_CSV", descriptor, invoker, new RemotePluginRegistry(), staging);
+        var payload = SourcePayload.fromBytes("x.csv", "data".getBytes(StandardCharsets.UTF_8), "text/csv");
+
+        assertThrows(IllegalStateException.class, () -> provider.readInBatches(payload, Map.of(), 10, batch -> { }));
+        // El finally del readInBatches limpia el input aunque el READ falle -> sin leak.
+        assertEquals(0, countStagingObjects(), "el input staged se limpia aun si el READ falla (no leak)");
     }
 
     private static int countStagingObjects() {

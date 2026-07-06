@@ -26,10 +26,14 @@ Fuera del money-path.
   devuelve records, y el input se limpia (`deleted.size()==1`); `spiVersion=1` → **fail-fast**.
 - **Unit `ReaderProviderRegistryRemoteTest`** (migrado a `artifactRef`), `SourceProviderRegistryRemoteTest` (2) y
   `StreamingPipelineServiceTest` (7) siguen verdes.
-- **E2E `RemoteReaderArtifactRefMinioIT`** (Testcontainers **MinIO real**): la plataforma stagea el input, el
+- **E2E `RemoteReaderArtifactRefMinioIT`** (Testcontainers **MinIO real**, 2 tests): la plataforma stagea el input, el
   invoker-stub (plugin) lo **descarga por la URL GET presignada** (valida el `presignGetObject` nuevo, no solo el PUT de
-  2a) y devuelve records → `readInBatches` retorna los counts y el **input staged se limpia** (0 objetos). **1 test,
-  BUILD SUCCESS ~11 s.**
+  2a) y devuelve records → `readInBatches` retorna los counts y el **input staged se limpia** (0 objetos); y
+  **(doble-check) leak-on-failure**: si el plugin **falla** el READ, el `finally { deleteStaged }` limpia el input igual
+  (0 objetos, sin leak). BUILD SUCCESS ~9 s.
+- **Doble-check (B)**: `SourcePayload.fromBytes` fija el `size` (`content.length`) → `stage()` pasa `size > 0` → se
+  ejercita el **upload por streaming** (`RequestBody.fromInputStream`), no el fallback.
+- **Regresión amplia**: 26 tests unit de reader/source/artifact/pipeline verdes.
 - **Wiring CDI**: el app **bootea** (`/q/health/ready` 200, ~75 s) → `ReaderProviderRegistry` de 4 args + el producer
   `ArtifactStaging` resuelven sin `UnsatisfiedResolution`.
 
