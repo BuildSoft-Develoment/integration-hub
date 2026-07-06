@@ -32,10 +32,11 @@ SDK (`ArtifactTransfer`/`openRange`). El mecanismo de referencia es **independie
 
 - **Migración: ninguna.** No hay Base64 de archivos en el broker; source/reader no usan broker; la referencia es
   transport-agnostic.
-- **Verificación opcional (belt-and-suspenders)**: un test unit que confirme que el `payload(...)` del
-  `BrokerRemotePluginTransport` **serializa un `configuration` que contiene `artifactRef`** (round-trip) — prueba la
-  afirmación "la referencia sobrevive el envelope del broker" sin implementar nada. Es defensivo (hoy ninguna task async
-  pone `artifactRef`), pero blinda el diseño transport-agnostic ante un uso futuro.
+- **Verificación (belt-and-suspenders) — HECHA**: `BrokerRemotePluginTransportTest.artifactRefInConfigurationSurvivesTheBrokerEnvelope`
+  invoca el transporte broker con un `configuration` que contiene un `artifactRef`, captura el `OutboundMessage`
+  publicado, decodifica el envelope (doble JSON: envelope + body) y asevera que `ArtifactReference.fromMap(...)`
+  reconstruye la **referencia idéntica**. → prueba que la referencia (opción B) **sobrevive intacta el envelope del
+  broker**, blindando el diseño transport-agnostic ante un uso futuro. **BUILD SUCCESS.**
 
 ## Estado de la Fase 5 (retirar guard v58) — también resuelta
 
