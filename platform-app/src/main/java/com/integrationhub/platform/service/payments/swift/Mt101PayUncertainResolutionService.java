@@ -2,12 +2,14 @@ package com.integrationhub.platform.service.payments.swift;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101StatusQueryExecutor;
+import com.integrationhub.platform.repository.payments.swift.Mt101ConfirmationRepository;
 import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import javax.sql.DataSource;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -25,8 +27,9 @@ import java.util.Set;
  * {@code MT101_STATUS} de la definición de proceso del set (opción B) — coherente con el correctivo.
  *
  * <p>Fuente DURABLE (no el hand-off in-memory del pipeline, que solo lleva SENT) y sin muestra acotada: pagina TODOS
- * los fragmentos no resueltos. Solo soporta consulta REST ({@code query.url}); SFTP/route-aware es follow-up
- * documentado (se rechaza con error claro, sin consultar a ciegas).</p>
+ * los fragmentos no resueltos. Soporta REST + SFTP + route-aware vía el {@link Mt101StatusQueryExecutor} compartido
+ * (v55). Persiste una confirmacion de auditoria por fragmento resuelto en {@code mt101_confirmation} (v57), en paridad
+ * con el correctivo.</p>
  */
 @ApplicationScoped
 public class Mt101PayUncertainResolutionService {
@@ -35,10 +38,13 @@ public class Mt101PayUncertainResolutionService {
     private static final int PAGE_SIZE = 500;
     private static final int DEFAULT_TIMEOUT_SECONDS = 20;
 
+    private static final String CONFIRMATION_TABLE = "mt101_confirmation";
+
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
     private final Mt101FragmentRepository fragmentRepository;
     private final Mt101StatusQueryExecutor statusQueryExecutor;
+    private final Mt101ConfirmationRepository confirmationRepository;
 
     private final com.integrationhub.platform.service.payments.swift.Mt101CorrectiveTaskConfigSource taskConfigSource;
 
@@ -47,11 +53,13 @@ public class Mt101PayUncertainResolutionService {
                                               ConnectionPoolManager connectionPoolManager,
                                               Mt101FragmentRepository fragmentRepository,
                                               ObjectMapper objectMapper,
+                                              Mt101ConfirmationRepository confirmationRepository,
                                               Mt101CorrectiveTaskConfigSource taskConfigSource) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.fragmentRepository = fragmentRepository;
         this.statusQueryExecutor = new Mt101StatusQueryExecutor(objectMapper);
+        this.confirmationRepository = confirmationRepository;
         this.taskConfigSource = taskConfigSource;
     }
 
@@ -60,11 +68,13 @@ public class Mt101PayUncertainResolutionService {
                                        ConnectionPoolManager connectionPoolManager,
                                        Mt101FragmentRepository fragmentRepository,
                                        Mt101StatusQueryExecutor statusQueryExecutor,
+                                       Mt101ConfirmationRepository confirmationRepository,
                                        Mt101CorrectiveTaskConfigSource taskConfigSource) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.fragmentRepository = fragmentRepository;
         this.statusQueryExecutor = statusQueryExecutor;
+        this.confirmationRepository = confirmationRepository;
         this.taskConfigSource = taskConfigSource;
     }
 
@@ -118,6 +128,8 @@ public class Mt101PayUncertainResolutionService {
                 }
                 var sentRefs = new LinkedHashSet<String>();
                 var rejectedRefs = new LinkedHashSet<String>();
+                // v57-fix: confirmaciones de auditoria por fragmento resuelto (paridad con el correctivo).
+                var confirmationRows = new ArrayList<Mt101ConfirmationRepository.ConfirmationRow>();
                 for (var record : page) {
                     afterIndex = intValue(record.get("fragmentIndex"), afterIndex);
                     var reference = stringOrNull(record.get("sendersReference"));
@@ -137,11 +149,17 @@ public class Mt101PayUncertainResolutionService {
                         rejectedRefs.add(reference);
                     } else {
                         pending++; // pendiente/desconocido: no se toca (nunca reenvío)
+                        continue;
                     }
+                    // Solo se audita lo REALMENTE resuelto (SENT/REJECTED): evidencia de la respuesta del banco.
+                    confirmationRows.add(new Mt101ConfirmationRepository.ConfirmationRow(
+                            longOrNull(record.get("archiveId")), "STATUS_API",
+                            result.gatewayReference(), result.confirmedStatus(), result.rawBody()));
                 }
                 resolvedSent += fragmentRepository.resolvePayStatus(dataSource, set, sentRefs, UNRESOLVED, "SENT", null);
                 resolvedRejected += fragmentRepository.resolvePayStatus(dataSource, set, rejectedRefs, UNRESOLVED,
                         "REJECTED", reasonText + " | confirmed rejected by MT101_STATUS");
+                persistConfirmations(dataSource, confirmationRows);
                 if (page.size() < PAGE_SIZE) {
                     break;
                 }
@@ -163,6 +181,29 @@ public class Mt101PayUncertainResolutionService {
         }
         if (rejected.contains(normalized)) {
             return "REJECTED";
+        }
+        return null;
+    }
+
+    /**
+     * v57-fix: persiste las confirmaciones de auditoria de los fragmentos resueltos en {@code mt101_confirmation}
+     * (paridad con el correctivo). archive_id admite null (best-effort). No aborta la resolucion si falla el audit.
+     */
+    private void persistConfirmations(DataSource dataSource, List<Mt101ConfirmationRepository.ConfirmationRow> rows) {
+        if (rows.isEmpty()) {
+            return;
+        }
+        try (Connection connection = dataSource.getConnection()) {
+            confirmationRepository.insertConfirmations(connection, CONFIRMATION_TABLE, rows);
+        } catch (SQLException error) {
+            throw new IllegalStateException("cannot persist MT101 STATUS confirmations during uncertain resolution: "
+                    + error.getMessage(), error);
+        }
+    }
+
+    private Long longOrNull(Object raw) {
+        if (raw instanceof Number number) {
+            return number.longValue();
         }
         return null;
     }

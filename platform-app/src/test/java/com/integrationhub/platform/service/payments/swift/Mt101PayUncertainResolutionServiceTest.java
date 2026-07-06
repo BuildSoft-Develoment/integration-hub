@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101StatusQueryExecutor;
+import com.integrationhub.platform.repository.payments.swift.Mt101ConfirmationRepository;
 import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,7 +60,8 @@ class Mt101PayUncertainResolutionServiceTest {
                 "rejectedStatuses", List.of("REJECTED"));
         Mt101CorrectiveTaskConfigSource configSource = (taskDefinitionId, taskType) ->
                 "MT101_STATUS".equals(taskType) ? statusConfig : null;
-        service = new Mt101PayUncertainResolutionService(dataSource, null, repository, executor, configSource);
+        service = new Mt101PayUncertainResolutionService(dataSource, null, repository, executor,
+                new Mt101ConfirmationRepository(), configSource);
         prepareSchema();
     }
 
@@ -116,12 +118,33 @@ class Mt101PayUncertainResolutionServiceTest {
         Mt101CorrectiveTaskConfigSource configSource = (taskDefinitionId, taskType) ->
                 "MT101_STATUS".equals(taskType) ? routeConfig : null;
         var routeService = new Mt101PayUncertainResolutionService(dataSource, null, repository,
-                new Mt101StatusQueryExecutor(new ObjectMapper()), configSource);
+                new Mt101StatusQueryExecutor(new ObjectMapper()), new Mt101ConfirmationRepository(), configSource);
 
         var result = routeService.resolveUncertainNormalPay(null, setId, "ana", "route-aware");
 
         assertEquals(1, result.resolvedSent(), "resuelto via el endpoint de la ruta REST_A");
         assertEquals("SENT", statusFor(setId, "R1"));
+    }
+
+    @Test
+    void persistsAConfirmationRowPerResolvedFragmentCorrelatedByArchiveId() throws Exception {
+        // v57-fix: por cada fragmento resuelto (SENT/REJECTED) se persiste una confirmacion de auditoria en
+        // mt101_confirmation, correlacionada al archive por (senders_reference, process_execution_id). Un pendiente
+        // NO deja confirmacion.
+        var setId = "PAY-UNC-AUDIT";
+        seed(setId, "A1", 1, "UNCERTAIN");   // -> ACCEPTED -> SENT + confirmacion
+        seed(setId, "A2", 2, "UNCERTAIN");   // -> PENDING  -> sin confirmacion
+        seedArchive("A1", 100L, 5001L);      // archive de A1 (process_execution_id=100, como el seed del fragmento)
+        stubFor(get(urlEqualTo("/status/A1")).willReturn(aResponse().withHeader("Content-Type", "application/json")
+                .withBody("{\"status\":\"ACCEPTED\",\"gatewayReference\":\"GW-A1\"}")));
+        stubFor(get(urlEqualTo("/status/A2")).willReturn(aResponse().withHeader("Content-Type", "application/json")
+                .withBody("{\"status\":\"PENDING\"}")));
+
+        service.resolveUncertainNormalPay(null, setId, "ana", "audit");
+
+        assertEquals(1L, countConfirmations(5001L), "una confirmacion para A1 correlacionada al archive");
+        assertEquals("ACCEPTED", confirmedStatusFor(5001L), "la confirmacion guarda el confirmedStatus del gateway");
+        assertEquals(0L, countConfirmationsByStatus("PENDING"), "un pendiente NO deja confirmacion");
     }
 
     // --- helpers ---
@@ -151,6 +174,46 @@ class Mt101PayUncertainResolutionServiceTest {
             statement.setString(3, reference);
             statement.setString(4, status);
             statement.executeUpdate();
+        }
+    }
+
+    private void seedArchive(String sendersReference, long processExecutionId, long archiveId) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement("insert into mt101_archive (id, senders_reference, "
+                     + "process_execution_id, status) values (?, ?, ?, 'SENT')")) {
+            statement.setLong(1, archiveId);
+            statement.setString(2, sendersReference);
+            statement.setLong(3, processExecutionId);
+            statement.executeUpdate();
+        }
+    }
+
+    private long countConfirmations(long archiveId) throws SQLException {
+        return scalarLong("select count(*) from mt101_confirmation where archive_id = " + archiveId);
+    }
+
+    private long countConfirmationsByStatus(String status) throws SQLException {
+        return scalarLong("select count(*) from mt101_confirmation where confirmed_status = '" + status + "'");
+    }
+
+    private String confirmedStatusFor(long archiveId) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "select confirmed_status from mt101_confirmation where archive_id = ?")) {
+            statement.setLong(1, archiveId);
+            try (var rs = statement.executeQuery()) {
+                rs.next();
+                return rs.getString(1);
+            }
+        }
+    }
+
+    private long scalarLong(String sql) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql);
+             var rs = statement.executeQuery()) {
+            rs.next();
+            return rs.getLong(1);
         }
     }
 
@@ -200,6 +263,22 @@ class Mt101PayUncertainResolutionServiceTest {
                     + "updated_at timestamp not null default current_timestamp)");
             statement.executeUpdate("create unique index ux_pay_unc_ref on mt101_build_fragment"
                     + "(fragment_set_id, senders_reference)");
+            // v57-fix: archive (para la correlacion del archive_id) + confirmation (audit).
+            statement.executeUpdate("drop table if exists mt101_confirmation");
+            statement.executeUpdate("drop table if exists mt101_archive");
+            statement.executeUpdate("create table mt101_archive ("
+                    + "id bigint primary key,"
+                    + "senders_reference varchar(16) not null,"
+                    + "process_execution_id bigint,"
+                    + "status varchar(20) not null default 'PENDING')");
+            statement.executeUpdate("create table mt101_confirmation ("
+                    + "id bigserial primary key,"
+                    + "archive_id bigint references mt101_archive(id) on delete cascade,"
+                    + "confirmation_type varchar(10) not null,"
+                    + "gateway_reference varchar(35),"
+                    + "confirmed_status varchar(20),"
+                    + "raw_payload text,"
+                    + "received_at timestamp not null default current_timestamp)");
         }
     }
 

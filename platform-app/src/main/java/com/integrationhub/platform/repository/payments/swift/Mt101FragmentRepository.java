@@ -193,9 +193,15 @@ public class Mt101FragmentRepository {
                                                                 int afterIndex,
                                                                 int pageSize) throws SQLException {
         var effectiveStatuses = statuses == null || statuses.isEmpty() ? List.of("UNCERTAIN", "DISPATCHING") : statuses;
-        var sql = "select fragment_index, senders_reference, routed_as from mt101_build_fragment "
-                + "where fragment_set_id = ? and status in (" + placeholders(effectiveStatuses.size()) + ") "
-                + "and fragment_index > ? order by fragment_index asc limit ?";
+        // v57-fix: archive_id por SUBCONSULTA ESCALAR (max(a.id)) — NO un join: el indice V36
+        // (senders_reference, process_execution_id) NO es unico, y un join podria multiplicar filas de fragmento
+        // (=> doble consulta/transicion). La subconsulta devuelve exactamente un valor por fragmento (o null).
+        var sql = "select f.fragment_index, f.senders_reference, f.routed_as, "
+                + "(select max(a.id) from mt101_archive a where a.senders_reference = f.senders_reference "
+                + "and a.process_execution_id = f.process_execution_id) as archive_id "
+                + "from mt101_build_fragment f "
+                + "where f.fragment_set_id = ? and f.status in (" + placeholders(effectiveStatuses.size()) + ") "
+                + "and f.fragment_index > ? order by f.fragment_index asc limit ?";
         var page = new ArrayList<Map<String, Object>>(Math.max(pageSize, 1));
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
@@ -212,6 +218,10 @@ public class Mt101FragmentRepository {
                     record.put("fragmentIndex", rs.getInt("fragment_index"));
                     record.put("sendersReference", rs.getString("senders_reference"));
                     record.put("route", rs.getString("routed_as"));
+                    var archiveId = rs.getLong("archive_id");
+                    if (!rs.wasNull()) {
+                        record.put("archiveId", archiveId);
+                    }
                     page.add(record);
                 }
             }
