@@ -8,19 +8,30 @@ Base64, incompatible con archivos masivos (el flujo local sí escala a 1M por st
 ## Limitación (verificada en código)
 
 - **`RemoteReaderProvider`** (envío al plugin): `bytes(payload) = payload.openStream().readAllBytes()` — lee el
-  archivo **completo** a memoria; `request.contentBase64 = Base64.encode(bytes)` — lo mete Base64 en **un solo
-  request** (~+33% de tamaño).
+  archivo **completo** a memoria; `request.put("contentBase64", Base64.encode(bytes))`.
 - **`RemoteSourceProvider`** (recepción del plugin): el plugin devuelve `outputs.contentBase64` con el archivo
   **completo** → `Base64.decode(...)` a memoria.
 - **Protocolo**: `remote_plugin.proto` es **unary** (`rpc Execute (GrpcRemoteTaskRequest) returns
-  (GrpcRemoteTaskResult)`) — no hay RPC de streaming.
-- **Cap de tamaño**: `GrpcRemotePluginTransport.maxMessageBytes` default **16 MB** (`maxInboundMessageSize`, min
-  64 KB). Un archivo > ~12 MB (tras Base64) **excede el límite** → la llamada gRPC falla (RESOURCE_EXHAUSTED).
+  (GrpcRemoteTaskResult)`) — no hay RPC de streaming. **Doble-check:** el request NO tiene campo de bytes; sus campos
+  son `attributes_json`/`configuration_json` (+ ids). Así que el `contentBase64` viaja **embebido dentro de
+  `configuration_json`** (Base64 dentro de un string JSON) — aún menos eficiente que un campo binario dedicado. La
+  respuesta lleva el archivo dentro de `outputs_json`.
 
-**Efecto:** los readers/sources remotos funcionan para archivos **pequeños** (< ~12 MB) y **fallan duro** para
-grandes. El cap de 16 MB es un guard implícito que impide procesar masivos por plugin remoto, pero el fallo es un
-error gRPC crudo, no un streaming graceful ni un mensaje accionable. **No hay P0 de correctitud** (no corrompe ni
-duplica; simplemente no escala y falla).
+### Cap de tamaño — ASIMÉTRICO (corrección del doble-check)
+
+`GrpcRemotePluginTransport` setea **solo** `maxInboundMessageSize(maxMessageBytes)` (default **16 MB**) en el canal
+cliente — **no** setea `maxOutboundMessageSize`. Por tanto el límite es distinto por dirección:
+
+- **Source** (la plataforma RECIBE el archivo en la respuesta): capado por el `maxInboundMessageSize` de la
+  plataforma = **16 MB**. Un source que devuelve > ~12 MB (tras Base64+JSON) → RESOURCE_EXHAUSTED en el cliente.
+- **Reader** (la plataforma ENVÍA el archivo en el request): la plataforma **no** lo capa (sin outbound limit); lo
+  capa el **server del plugin** (su `maxInboundMessageSize`), cuyo default en gRPC-Java es **~4 MB** salvo que el
+  plugin lo suba. → el umbral del reader es **dependiente del plugin y típicamente MENOR** (~3 MB de archivo).
+
+**Efecto:** los readers/sources remotos funcionan para archivos **pequeños** y **fallan duro** para grandes (source
+~12 MB; reader ~3 MB según el plugin). El cap es un guard implícito que impide procesar masivos por plugin remoto,
+pero el fallo es un RESOURCE_EXHAUSTED gRPC crudo, no un streaming graceful ni un mensaje accionable. **No hay P0 de
+correctitud** (no corrompe ni duplica; simplemente no escala y falla).
 
 ## Diseño (redesign del contrato de datos remoto)
 
@@ -54,9 +65,11 @@ restricción (los flujos SWIFT/PAY masivos usan readers/sources LOCALES, no remo
   (protocolo + SDK + posiblemente infra MinIO). **Recomiendo diferirlo** salvo que haya un requisito concreto de
   plugins remotos para archivos masivos.
 - **Paso bounded intermedio (opcional)**: convertir el fallo de tamaño en un **guard explícito y accionable** —
-  antes de invocar, si `bytes.length` (o el contentBase64 estimado) excede `maxMessageBytes`, rechazar con un error
-  claro ("remote reader/source no soporta archivos > N MB; usa un reader/source local o el contrato de streaming (no
-  disponible aún)") en vez de un RESOURCE_EXHAUSTED gRPC crudo. Mejora la operabilidad sin el rediseño.
+  antes de invocar, si el tamaño Base64 estimado (`bytes.length * 4/3`) excede un umbral **configurable**, rechazar
+  con un error claro ("remote reader/source no soporta archivos > N MB; usa un reader/source local o el contrato de
+  streaming (no disponible aún)") en vez de un RESOURCE_EXHAUSTED gRPC crudo. El umbral debe ser configurable y
+  **conservador** para el reader (su límite real lo impone el server del plugin, ~4 MB por defecto, no la plataforma).
+  Mejora la operabilidad sin el rediseño.
 
 ## Veredicto
 
