@@ -48,9 +48,26 @@ constructores de test que inyectan un `HttpClient` stub.
   riesgo de tocar más rutas. Se puede dejar para después o hacer en el mismo cambio si se quiere `resolveTemplate`
   también en el ejecutor.
 
+## Corrección del doble-check — NO es byte-idéntico: mensajes de error de ruta
+
+Al portar `resolveStatusQuery` al ejecutor **cambié levemente la redacción de los mensajes de error de ruta**
+(p.ej. provider: *"corrective fragment has no route…"* → ejecutor: *"fragment has no route…"*). Verificado: **ningún
+test** (STATUS, correctivo ni otro) asserta esos strings, así que **no rompe nada**. Además, como el ejecutor es
+**compartido** (resolver normal + correctivo), la redacción **neutral** (sin "corrective") es la correcta. Es un
+cambio **cosmético** (texto en la muestra `errors`/logs), no una regresión funcional. → La migración es un refactor
+**de comportamiento equivalente**, no byte-idéntico en el texto de esos errores.
+
+## Puntos de validación adicionales (del doble-check)
+
+- El ejecutor re-implementa helpers triviales (`stringValue`/`intValue`/`mapValue`/`stringList`); verificar que son
+  equivalentes a los del provider (lo cubren `Mt101StatusTaskProviderTest` route-aware/SFTP).
+- `resolveTemplate` queda duplicado (provider para poll/normal + ejecutor para el correctivo) — trivial (5 líneas);
+  se elimina del provider solo si además se migran poll/normal (opcional).
+
 ## Riesgos / validación
 
-- Es un **refactor puro** (mismo comportamiento). El seam es limpio: L590–663 ↔ `executor.query`, L664–703 intactas.
+- Es un refactor de **comportamiento equivalente** (salvo la redacción cosmética de los errores de ruta, no asertada).
+  El seam es limpio: L590–663 ↔ `executor.query`, L664–703 intactas.
 - Validado por `Mt101StatusTaskProviderTest` (**20**, incl. SFTP con contenedor `atmoz/sftp` y route-aware),
   `Mt101CorrectiveLifecycleServiceTest` (**62**, resolveUncertainPay) y los E2E con Flyway real.
 - Toca el path de confirmación bancaria del correctivo → correr la suite completa antes de commitear (idealmente sin
