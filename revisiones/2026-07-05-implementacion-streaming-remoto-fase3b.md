@@ -32,9 +32,13 @@ Alcance: pagina la respuesta de records del reader remoto para acotar la memoria
 - **E2E `RemoteReaderArtifactRefMinioIT`** (MinIO real, 3): happy+cleanup, leak-on-failure, y **paginado por Range GET
   contra MinIO real** — el plugin pagina por offset con `Range: bytes=N-` de la URL presignada (206), 2 páginas →
   `recordCount`=2, una página por invocación, cleanup. **BUILD SUCCESS ~11 s.**
-- **Regresión amplia**: 28 tests (StreamingPipeline Service/Worker, reader/source registries, `FileReadRuntimeSupport`,
-  `ProcessTaskRuntimeService`) verdes → el `ReadResult` vacío no rompe el streaming pipeline ni `collectReadResult`
-  (usan counts + callback). El wiring CDI no cambió respecto a 3a (que booteó OK).
+- **Integración `collectReadResult` + reader paginado (doble-check)**: `FileReadRuntimeSupport.collectReadResult` (el
+  path de `ProcessTaskRuntimeService`) con el reader paginado (2 páginas) **acumula las 3 filas via el callback** y
+  devuelve `recordCount`=3 + `records().size()`=3 — aunque el reader devuelva `records()` **vacío**. Cierra el hueco: el
+  otro consumidor (el que materializa) funciona con 3b.
+- **Regresión amplia**: 28 tests (StreamingPipeline Service/Worker, reader/source registries, `ProcessTaskRuntimeService`)
+  verdes → el `ReadResult` vacío no rompe el streaming pipeline ni `collectReadResult`. El wiring CDI no cambió respecto
+  a 3a (que booteó OK).
 
 ## Alcance honesto
 

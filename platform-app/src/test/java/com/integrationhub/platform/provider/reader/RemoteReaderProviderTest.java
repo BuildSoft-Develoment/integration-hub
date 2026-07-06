@@ -1,6 +1,8 @@
 package com.integrationhub.platform.provider.reader;
 
+import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.artifact.FakeArtifactStaging;
+import com.integrationhub.platform.service.execution.FileReadRuntimeSupport;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginInvoker;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
@@ -19,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
 
 /**
  * Proyecto #3 Fase 3a: el reader remoto envía el input por REFERENCIA (la plataforma stagea el archivo y presigna un
@@ -79,6 +82,30 @@ class RemoteReaderProviderTest {
         assertEquals(3, result.recordCount(), "acumula el total de todas las páginas");
         assertEquals(List.of(2, 1), batchSizes, "el consumer recibe una página por invocación (streaming)");
         assertEquals(1, staging.deleted.size(), "el input staged se limpia tras el loop");
+    }
+
+    @Test
+    void collectReadResultAccumulatesAllPagesEvenThoughRemoteReaderReturnsEmptyRecords() {
+        // Doble-check (integracion): el path collectReadResult (ProcessTaskRuntimeService) construye su lista via el
+        // callback -> funciona con el reader paginado que devuelve ReadResult.records() VACIO.
+        var staging = new FakeArtifactStaging();
+        RemotePluginInvoker invoker = (desc, taskType, context, payload) -> {
+            var cursor = payload.get("cursor");
+            if (cursor == null) {
+                return TaskResult.success("p1", Map.of(
+                        "records", List.of(Map.of("r", "1"), Map.of("r", "2")), "nextCursor", "c2"));
+            }
+            return TaskResult.success("p2", Map.of("records", List.of(Map.of("r", "3"))));
+        };
+        var reader = new RemoteReaderProvider("MY_READER", descriptor("2"), invoker, new RemotePluginRegistry(), staging);
+        var payload = SourcePayload.fromBytes("big.csv", "data".getBytes(StandardCharsets.UTF_8), "text/csv");
+        var support = new FileReadRuntimeSupport(mock(JsonConfigurationMapper.class));
+
+        var result = support.collectReadResult(reader, payload, Map.of());
+
+        assertEquals(3, result.recordCount(), "collectReadResult usa el recordCount del reader (total de las páginas)");
+        assertEquals(3, result.records().size(),
+                "collectReadResult materializa via el callback -> funciona con el reader paginado (records() del reader vacío)");
     }
 
     @Test
