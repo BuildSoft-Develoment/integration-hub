@@ -112,13 +112,49 @@ Reté los claims factuales contra el código. Sin bug, pero **tres correcciones 
 más barata** de lo que dije —reusa S3/Azure ya integrados y el `SourcePayload` ya streamea— así que la recomiendo con
 más fuerza. El único "infra nuevo" real es bucket + credenciales efímeras + MinIO para dev.
 
+## Doble-check PROFUNDO — retando las propias correcciones (self-review²)
+
+Fui más a fondo, retando incluso las correcciones anteriores. Resultado: **una validada, un insight nuevo, y un
+walk-back parcial de mi propia corrección #1**.
+
+### Validado (más fuerte) — la fuente streaming ya está probada
+`S3SourceProvider.openFile` → `new SourcePayload(selectedFile, () -> client.getObject(request))`: **GetObject perezoso
+→ `ResponseInputStream`, sin cargar en memoria** (idem el `SourcePayload.fromPath`). Es decir, el camino
+"source por streaming" **ya funciona hoy** para S3 (y por diseño para Azure/GCS/FTP/SFTP/FS). La corrección #2 no solo
+se sostiene: la mitad "plataforma recibe por streaming" está **implementada y probada** — reusable tal cual.
+
+### Insight NUEVO — el NEED es aún más estrecho de lo dicho
+Existen **7 source providers LOCALES** que ya streamean: `FILESYSTEM, FTP, SFTP, S3, GCS, AZURE_BLOB, REST`. Cubren
+prácticamente **todas** las fuentes comunes de archivos grandes. → El caso "reader/source REMOTO con archivo grande"
+solo aplica a una fuente **que ninguno de los 7 cubre** (un sistema propietario/bespoke) **y** que además sea masiva:
+una intersección **muy angosta**. El valor del proyecto es **aún menor** de lo que estimé → refuerza diferir con más
+confianza.
+
+### Walk-back PARCIAL de mi corrección #1 — el "reuse S3" es solo del lado PLATAFORMA
+Mi corrección #1 dijo que la opción B "reusa la integración S3/Azure existente". Cierto, pero **solo del lado de la
+plataforma** (stagear/leer el artefacto). El punto entero de "remoto" es que el **plugin es un proceso externo**, y para
+la opción B el plugin debe **leer/escribir el object store** — capacidad que **NO existe** hoy en el SDK/sidecar
+(`ejemplos/backend-plugin-sidecar` no tiene cliente S3/Azure; grep vacío). Además, entregar acceso al store a un plugin
+externo exige **emisión de credenciales efímeras/URLs presignadas con alcance mínimo** — mecanismo que **tampoco existe**
+(no hay presign/STS para terceros). → El **coste y el riesgo reales de la opción B son el lado plugin (SDK con cliente
+de object store) + la emisión segura de credenciales**, no la integración de la plataforma (que sí se reusa). Mi
+corrección #1 fue **demasiado optimista** sobre cuánto se reusa.
+
+### Síntesis del doble-check profundo
+- **Barato/probado**: la mitad "plataforma recibe por streaming" (source) — ya existe.
+- **Estrecho**: el need es un nicho (7 providers locales cubren lo común).
+- **Caro/sensible**: lo nuevo real = SDK del plugin con acceso a object store + emisión de credenciales efímeras a un
+  externo (seguridad). Eso, no la integración de la plataforma, domina el esfuerzo/riesgo.
+
 ## Veredicto (revisado)
 
-Es un **proyecto real y multi-módulo**, no un cambio incremental: streaming/referencia de transporte **+**
-paginación/checkpoint de records **+** SDK/sidecar. **Recomiendo la opción B (artefacto por referencia)** como destino
-—desacopla datos del control, sirve a gRPC y broker por igual, y **reusa la integración S3/Azure ya existente** (coste de
-infra bajo: bucket + credenciales efímeras + MinIO dev)— **por fases** (contrato/SDK → source → reader → broker). Aun
-así, **diferir el arranque** salvo requisito concreto de plugins remotos masivos: está **fuera del money-path** y el
-guard v58 ya contiene el riesgo. Si se prioriza, la **Fase 2 (source por referencia a S3/Azure)** es el primer
-incremento de mayor valor y, con las correcciones, el **más barato** (reusa `S3SourceProvider` + `SourcePayload`
-stream-backed).
+Es un **proyecto real y multi-módulo**. El destino sigue siendo la **opción B (artefacto por referencia)** —desacopla
+datos del control y sirve a gRPC y broker por igual—, pero el doble-check profundo afina el cuadro: la mitad
+**plataforma-recibe-por-streaming ya existe y está probada** (`S3SourceProvider` + `SourcePayload`), el **need es un
+nicho angosto** (7 source providers locales ya cubren las fuentes grandes comunes), y el **coste/riesgo reales viven en
+el lado plugin** (SDK con cliente de object store, hoy inexistente) **+ la emisión segura de credenciales efímeras a un
+proceso externo** (seguridad, sin mecanismo hoy). → **Diferir con confianza**: fuera del money-path, need de nicho, y el
+guard v58 ya contiene el riesgo. Si algún día se prioriza, entrar por la **Fase 2 (source)** —la mitad barata/probada—
+sabiendo que el trabajo pesado no es la plataforma sino **el SDK del plugin y la seguridad de credenciales**. Antes que
+este proyecto, si aparece un caso de fuente grande, la respuesta correcta suele ser **un provider local** (S3/Azure/SFTP/
+GCS/FTP), no un plugin remoto.
