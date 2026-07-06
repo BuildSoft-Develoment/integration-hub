@@ -22,15 +22,18 @@ public class ArtifactStagingProducer {
     public ArtifactStaging artifactStaging(
             @ConfigProperty(name = "integrationhub.plugin.remote.staging.bucket") Optional<String> bucket,
             @ConfigProperty(name = "integrationhub.plugin.remote.staging.region", defaultValue = "us-east-1") String region,
-            @ConfigProperty(name = "integrationhub.plugin.remote.staging.endpoint", defaultValue = "") String endpoint,
-            @ConfigProperty(name = "integrationhub.plugin.remote.staging.access-key-id", defaultValue = "") String accessKeyId,
-            @ConfigProperty(name = "integrationhub.plugin.remote.staging.secret-access-key", defaultValue = "") String secretAccessKey,
+            // endpoint/access-key-id/secret-access-key: Optional en vez de defaultValue="" — SmallRye trata el default
+            // de string vacío como "sin default" (propiedad requerida) y rompía el boot en cualquier perfil sin staging
+            // (test, y prod sin configurar). Optional garantiza inyección opcional; el null-object cubre el resto.
+            @ConfigProperty(name = "integrationhub.plugin.remote.staging.endpoint") Optional<String> endpoint,
+            @ConfigProperty(name = "integrationhub.plugin.remote.staging.access-key-id") Optional<String> accessKeyId,
+            @ConfigProperty(name = "integrationhub.plugin.remote.staging.secret-access-key") Optional<String> secretAccessKey,
             @ConfigProperty(name = "integrationhub.plugin.remote.staging.path-style-access", defaultValue = "false") boolean pathStyleAccess) {
 
         if (bucket.isEmpty() || bucket.get().isBlank()) {
             return new UnconfiguredArtifactStaging();
         }
         return new S3ArtifactStaging(new S3StagingConfig(
-                bucket.get(), region, endpoint, accessKeyId, secretAccessKey, pathStyleAccess));
+                bucket.get(), region, endpoint.orElse(""), accessKeyId.orElse(""), secretAccessKey.orElse(""), pathStyleAccess));
     }
 }
