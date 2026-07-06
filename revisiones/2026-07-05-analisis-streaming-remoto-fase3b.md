@@ -63,10 +63,37 @@ return ReadResult(List.of(), total, allSkips.size(), allSkips)   // records VAC�
   fuera de alcance — documentado).
 - **Sin bump de spiVersion** (loop backward-compatible). **No** money-path ni correctitud.
 
-## Veredicto
+## Doble-check — refinamientos (self-review)
 
-Fase 3b es **factible y acotada**: un loop con cursor + checkpoint en `readInBatches`, `ReadResult` vacío (seguro,
-verificado), backward-compatible (una página = comportamiento 3a, sin bump de versión), con un guard de max-páginas. El
-beneficio de memoria aplica al **streaming pipeline** (el path de alto volumen). Recomiendo **proceder** con la
-reescritura de `readInBatches` a loop + tests (unit multi-página + backward-compat + guard + E2E MinIO paginado + ajustar
-el assert de 3a). Sigue fuera del money-path.
+Reté el diseño. Sin bug, pero **una cuestión de fondo subestimada** + dos refinamientos:
+
+1. **¿CÓMO pagina un plugin stateless-por-invoke? (subestimado).** Cada `READ(cursor)` es una invocación gRPC/broker
+   **separada** y sin estado. Para devolver la "página N", el plugin debe reanudar desde el cursor **sin re-descargar y
+   re-parsear todo el input cada página** (eso sería **O(N²)**). El camino eficiente: el cursor codifica un **offset**
+   (de byte en una frontera de record), y el plugin hace un **Range GET** de la URL presignada (S3/MinIO soportan
+   `Range:` en URLs presignadas si `Range` no va en las cabeceras firmadas) → cada byte se lee una vez en total
+   (O(archivo)). → **La plataforma provee el MECANISMO** (cursor opaco threadeado + URL GET capaz de Range); la
+   **paginación eficiente es responsabilidad del plugin** y **no es trivial** (manejar records que cruzan la frontera
+   del rango). Un plugin naïve que re-parsea desde el inicio cada página funciona pero es O(N²). **A documentar en el
+   contrato del SDK**: el cursor debería ser un offset y el plugin usar Range GET.
+2. **Guard: mejor detectar NO-PROGRESO que un `MAX_PAGES` fijo.** Un `MAX_PAGES` constante puede **falso-positivo** en un
+   archivo legítimamente enorme con páginas chicas (batchSize=1 → 1M páginas = 1M records). Mejor guard: cortar si una
+   página viene **vacía con `nextCursor` no vacío** (el plugin no avanza) o si el `nextCursor` **no cambia** entre
+   iteraciones (stuck) → fail-fast. Complementar con un ceiling **generoso** de páginas como red, no como límite
+   funcional.
+3. **La memoria es O(página + TODOS los skips), no O(página).** El loop **acumula `skippedRows`** de todas las páginas
+   para devolverlos en el `ReadResult` (los callers los usan). En un caso patológico (casi todo skippeado), los skips
+   son O(todos). Para la mayoría de archivos los skips son pocos, pero el bound real incluye los skips acumulados.
+4. **Inconsistencia menor de API**: el reader remoto devolvería `ReadResult.records()` **vacío** mientras los readers
+   locales (Csv/Xls...) lo devuelven poblado. Es **seguro** (ningún caller lee `records()` del remoto, verificado) pero
+   es una divergencia semántica — documentar que el reader remoto streamea por el consumer y no por `records()`.
+
+## Veredicto (revisado)
+
+Fase 3b es **factible y acotada** en la PLATAFORMA (loop con cursor + `ReadResult` vacío + guard de no-progreso), pero el
+doble-check aclara que la **paginación EFICIENTE recae en el plugin** (cursor=offset + Range GET; el naïve es O(N²)) — la
+plataforma solo provee el mecanismo. El beneficio de memoria de plataforma es O(página + skips) y aplica al **streaming
+pipeline**. Sin bump de spiVersion (backward-compatible). Recomiendo **proceder** con la reescritura de `readInBatches`
+a loop (cursor threadeado + return vacío + guard de no-progreso) + tests (multi-página + backward-compat + no-progreso +
+E2E MinIO paginado + ajustar el assert de 3a), **documentando en el contrato del SDK** que el cursor es un offset y el
+plugin debe usar Range GET para paginar eficientemente. Sigue fuera del money-path.
