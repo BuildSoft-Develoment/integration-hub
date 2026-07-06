@@ -69,9 +69,46 @@ otra):
   type y el nuevo servicio.
 - Nota: cambio 100% frontend, sin runtime backend → la validación es lint:boundaries + unit + build, no el stack.
 
-## Veredicto
+## Doble-check — correcciones (self-review)
 
-**Viable, bounded y de bajo riesgo** — el blast radius es mínimo (3 api services + 2 consumidores + schedules; DTOs sin
-importadores externos), y el backend ya está unificado. **Valor modesto** (DRY/DIP: un único contrato de "ejecutar
-proceso"), **no urgente** (el guard de fronteras ya está limpio; no es correctitud ni money-path). Recomiendo
-**proceder** si se quiere cerrar la duplicación con una consolidación limpia; es de las mejoras más baratas que quedan.
+Reté el análisis contra el código. **No hay bug de correctitud**, pero encontré que **subestimé el churn** (lo que
+mueve la recomendación de "casi gratis" a "barato-pero-no-trivial"):
+
+### Confirmado
+- DTOs **100% primitivos** (`ExecuteProcessRequest`, `ExecuteProcessResponse={id}`, `ProcessExecutionStartResponse`
+  wide) → movibles a core sin arrastrar dominio. **Sin importadores externos** (grep vacío).
+- Solo **2 consumidores** llaman `.execute()` (los dos `*-catalog-command`); `process-catalog-command` lee `.id/.status`
+  y `execution-catalog-command` lee `.id` → ambos presentes en el tipo wide.
+- No existe servicio en core que ya toque `/api/process-executions` → un nuevo servicio es el hogar correcto.
+
+### Correcciones (churn subestimado)
+1. **Los api services siguen muy usados por OTROS métodos** — `ExecutionApiService` lo inyectan 4 consumidores (query
+   store, detail loader, detail store, command) y `ProcessApiService` 5 (query store, 3 task-forms, reference store).
+   Solo pierden `execute`; **no** desaparecen. La cirugía debe ser quirúrgica (quitar 1 método), no mover el servicio.
+2. **`process-catalog-command` usa `ProcessApiService` para create/update/setActive Y execute** — al migrar `execute` a
+   core, ese consumidor necesita **una segunda inyección** (`ProcessExecutionApiService` para execute + `ProcessApiService`
+   para el CRUD). Es defendible (separación de concerns: CRUD de definición = feature; disparar ejecución =
+   transversal), pero es más cambio que "swap de un import".
+3. **3 specs mockean `execute`** dentro del mock del api service (`process-catalog.store.spec`,
+   `execution-catalog-command.service.spec`, `execution-catalog.store.spec`) → hay que **separar** ese mock a un provider
+   del nuevo core service. Más churn de test del que decía el plan.
+
+### Trade-off que emerge (decisión real)
+Dado que el valor es **modesto** y el churn es **moderado**, hay dos formas de implementarlo:
+- **(A) Extracción directa** (mi propuesta original): consumidores usan el core service; se elimina `execute` de los api
+  services. Layering más limpio, pero +1 inyección en 2 consumidores y reestructurar 3 specs.
+- **(B) Delegación fina**: los api services conservan `execute` pero **delegan** en el core service (un solo `POST` en
+  core). Consumidores y specs **no cambian**; se elimina la duplicación del endpoint. Costo: una fachada de indirección
+  en cada api service (lo que el objetivo "no shells" quería evitar).
+
+## Veredicto (revisado)
+
+**Viable y bounded, sin riesgo de correctitud**, pero **no es el casi-gratis** que sugerí: el `execute` está entrelazado
+con CRUD hermano en los mismos consumidores y mocks, así que la extracción directa (A) toca 2 api services + 2
+consumidores (con doble inyección) + **3 specs**. El **valor es modesto** (DRY: endpoint 3→1, response 2→1; DIP) y **no
+urgente** (guard limpio, no money-path).
+
+Recomendación afinada: **hacerlo solo si se quiere cerrar la deuda DRY explícitamente**, y en ese caso preferir la
+variante **(A) directa** por layering limpio (asumiendo el churn de specs) — la delegación (B) minimiza churn pero
+introduce la indirección que justamente queremos evitar. Si el foco es valor/esfuerzo, es **legítimo diferirlo**: es la
+mejora de menor impacto de las que quedan.
