@@ -6,7 +6,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 
 /**
- * v60-fix (#4 opción a) — readiness EN VIVO de un canal consumer, leída del {@link HealthCenter} de
+ * v60-fix (#4) — readiness EN VIVO de un canal de reactive-messaging (por nombre), leída del {@link HealthCenter} de
  * smallrye-reactive-messaging (el componente que computa el mismo readiness que alimenta {@code /q/health/ready}).
  *
  * <p><b>Nota (validada por E2E):</b> se inyecta el bean concreto {@code HealthCenter} (que es {@code @ApplicationScoped}),
@@ -14,17 +14,17 @@ import jakarta.enterprise.inject.Instance;
  * ella queda <i>unsatisfied</i> y devolvería siempre {@code false}, dejando READY inalcanzable). El
  * {@code AsyncTaskKafkaConsumerE2EIT} atrapó exactamente ese fallo.</p>
  *
- * <p>El canal {@code tasks-in} usa el conector {@code smallrye-kafka}: conectado → readiness OK; deshabilitado
- * (default) o desconectado → no OK. <b>SRP</b>: solo traduce readiness→boolean por canal. <b>Falla CERRADA</b>: si el
- * componente no está, el canal no aparece, o la lectura lanza → {@code false} (coherente con "tratar != READY como no
- * operativo").</p>
+ * <p>Funciona para el canal consumer {@code tasks-in} (#4a) y el producer {@code audit-out} (#4b): ambos usan
+ * {@code smallrye-kafka} y su readiness refleja la conectividad al broker (verificado: con un broker inalcanzable,
+ * {@code audit-out} reporta readiness=false). <b>SRP</b>: solo traduce readiness→boolean por canal. <b>Falla
+ * CERRADA</b>: si el componente no está, el canal no aparece, o la lectura lanza → {@code false}.</p>
  */
 @ApplicationScoped
-public class SmallRyeConsumerChannelHealth implements ConsumerChannelHealth {
+public class SmallRyeChannelHealth implements ChannelHealth {
 
     private final Instance<HealthCenter> healthCenter;
 
-    public SmallRyeConsumerChannelHealth(Instance<HealthCenter> healthCenter) {
+    public SmallRyeChannelHealth(Instance<HealthCenter> healthCenter) {
         this.healthCenter = healthCenter;
     }
 

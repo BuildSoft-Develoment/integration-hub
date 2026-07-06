@@ -6,6 +6,7 @@ import com.integrationhub.platform.integration.PostgresTestResource;
 import com.integrationhub.platform.integration.suspend.RecordingFollowUpTaskProvider;
 import com.integrationhub.platform.service.execution.ProcessExecutionService;
 import com.integrationhub.platform.service.messaging.AsyncAvailabilityService;
+import com.integrationhub.platform.service.messaging.ChannelHealth;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
@@ -50,6 +51,9 @@ class AsyncTaskKafkaConsumerE2EIT {
     @Inject
     AsyncAvailabilityService asyncAvailability;
 
+    @Inject
+    ChannelHealth channelHealth;
+
     @BeforeEach
     void reset() throws Exception {
         RecordingFollowUpTaskProvider.resetRecording();
@@ -92,6 +96,11 @@ class AsyncTaskKafkaConsumerE2EIT {
         assertTrue(awaitConsumerLive(Duration.ofSeconds(20)),
                 "consumerLive debe ser true con el consumer Kafka conectado; si es false, la fuente de readiness es "
                         + "incorrecta y READY sería inalcanzable");
+
+        // v60-fix (#4b) — caso POSITIVO del producer: con Kafka real arriba, el canal producer audit-out está
+        // conectado → su readiness es true (contraparte del IT negativo con broker inalcanzable → false).
+        assertTrue(channelHealth.ready(AsyncAvailabilityService.DISPATCH_CHANNEL),
+                "audit-out (producer) debe reportar readiness=true con el broker Kafka real conectado");
     }
 
     private boolean awaitConsumerLive(Duration timeout) throws Exception {

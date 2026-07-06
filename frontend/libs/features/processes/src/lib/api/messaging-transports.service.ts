@@ -18,6 +18,7 @@ export interface AsyncStatus {
   dispatchEnabled?: boolean;
   consumerEnabled?: boolean;
   consumerLive?: boolean;
+  dispatchLive?: boolean;
   brokersRegistered?: boolean;
 }
 
