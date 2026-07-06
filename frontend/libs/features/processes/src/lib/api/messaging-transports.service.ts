@@ -3,9 +3,22 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
-/** Estado del feature de despacho async en el entorno (`GET /api/messaging/async-status`). */
+/** Estado compuesto del feature de despacho async (`GET /api/messaging/async-status`). */
+export type AsyncState = 'DISABLED' | 'DEGRADED' | 'READY';
+
+/**
+ * Espejo del backend `AsyncAvailabilityService.AsyncAvailability`. `state` es el estado compuesto que la UI debería
+ * usar (tratar `!== 'READY'` como no operativo); `consumerLive` refleja si el canal consumer está conectado EN VIVO.
+ * `executionEnabled` se conserva por compatibilidad con la UI previa. NOTA: hoy la UI solo lee `executionEnabled`;
+ * consumir `state` es una mejora frontend pendiente.
+ */
 export interface AsyncStatus {
   executionEnabled: boolean;
+  state?: AsyncState;
+  dispatchEnabled?: boolean;
+  consumerEnabled?: boolean;
+  consumerLive?: boolean;
+  brokersRegistered?: boolean;
 }
 
 /** Capacidad de offload async de un tipo de tarea (espejo del backend `AsyncOffloadSupport`). */

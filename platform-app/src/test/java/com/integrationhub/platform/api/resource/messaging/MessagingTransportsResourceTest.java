@@ -1,6 +1,7 @@
 package com.integrationhub.platform.api.resource.messaging;
 
 import com.integrationhub.platform.service.messaging.AsyncAvailabilityService;
+import com.integrationhub.platform.service.messaging.ConsumerChannelHealth;
 import com.integrationhub.platform.service.messaging.MessageBrokerRegistry;
 import org.junit.jupiter.api.Test;
 
@@ -14,10 +15,13 @@ import static org.mockito.Mockito.when;
 
 class MessagingTransportsResourceTest {
 
+    /** Canal consumer siempre listo en vivo, para aislar estas pruebas del health real. */
+    private static final ConsumerChannelHealth CONSUMER_LIVE = channel -> true;
+
     private MessagingTransportsResource resource(MessageBrokerRegistry brokers,
                                                  boolean execution, boolean dispatch, boolean consumer) {
         return new MessagingTransportsResource(brokers,
-                new AsyncAvailabilityService(brokers, execution, dispatch, consumer));
+                new AsyncAvailabilityService(brokers, CONSUMER_LIVE, execution, dispatch, consumer));
     }
 
     @Test
