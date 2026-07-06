@@ -43,6 +43,25 @@ SDK (`ArtifactTransfer`/`openRange`). El mecanismo de referencia es **independie
   S3, no por gRPC). El **source nunca tuvo** guard de tamaño (embebía Base64 sin cap, migrado en 2b). → **La Fase 5 ya
   está hecha** como parte de 3a/2b.
 
+## Doble-check — verificación del no-op (self-review)
+
+Reté el "no-op" (donde más fácil se esconde un agujero). **Confirmado, sin hueco**, con verificación extra:
+
+- **El pipeline async invoca source/reader SÍNCRONOS.** `StreamingPipelineWorker` llama `sourceProvider.openFile(...)` y
+  `readerProvider.readInBatches(...)` **directamente** (interfaz síncrona). Aun dentro del worker async, el remote
+  source/reader va por gRPC (síncrono) — nunca por el broker. → el file-transfer es gRPC-only, sin ambigüedad.
+- **El RESULTADO de una task async NO transfiere archivos.** `RemoteTaskProvider` mapea el resume a
+  `TaskResult.success(details, outputs)` donde `outputs` es un `Map` estructurado (del `RemoteTaskResumePayload`); no hay
+  `contentBase64`/`byte[]`/`SourcePayload`. → el canal de callback/resume devuelve datos estructurados, no archivos.
+- **Sin residuos del guard v58**: solo queda un comentario en `ReaderProviderRegistry` (`// el guard v58 … se retira`),
+  ningún código. Fase 5 confirmada hecha.
+
+### Clarificación de frontera (honestidad)
+El `outputs` del resume async es un `Map` (podría, en teoría, llevar un valor grande). Hoy **ninguna task async devuelve
+archivos**. Si en el futuro una task async necesitara **producir un archivo grande**, sería una **extensión separada**
+(un `artifactRef` en `outputs` sobre el canal de resume/HTTP) — fuera del alcance de #3 (readers/sources) y no necesaria
+hoy. No es un agujero del no-op; es un límite del alcance, documentado.
+
 ## Veredicto
 
 **La Fase 4 no requiere implementación** y **la Fase 5 ya está hecha** — ambas resueltas por el diseño transport-agnostic
