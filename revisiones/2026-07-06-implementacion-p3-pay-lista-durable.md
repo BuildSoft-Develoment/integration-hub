@@ -49,7 +49,32 @@ re-request-safety que el persistido, **sin cambiar la topología** (no obliga a 
 - No cambia la topología (no obliga `BUILD_FROM_TABLE`); el money-path masivo/correctivo (rama persistida) no se toca.
 - Complementa P11 (idempotency contractual por banco): ahora hay dedup **platform-side** además del del banco.
 
+## Doble-check — verificación del wiring real + durabilidad transaccional (self-review)
+
+Reté los dos puntos más peligrosos (lección #4: verificar la integración real, no la pieza aislada):
+
+- **Crux de durabilidad transaccional — CONFIRMADO correcto**: el `DISPATCHING` debe commitear ANTES del `send()`. Si
+  `execute()` corriera dentro de una tx JTA, el store (que usa el `DataSource` CDI) no commitearía a tiempo y la
+  durabilidad sería falsa. Verificado: `Mt101PayTaskProvider.execute` es `@Transactional(NOT_SUPPORTED)`
+  ([línea 131](platform-app/src/main/java/com/integrationhub/platform/provider/task/payments/swift/Mt101PayTaskProvider.java)) →
+  corre FUERA de JTA → el connection del store es autocommit → cada claim/recordResult commitea de inmediato. El
+  `DISPATCHING` es durable antes del `send()` (un crash entre claim y resultado deja la intención en `DISPATCHING` →
+  re-request no reenvía).
+- **Wiring real del provider — probado end-to-end (era el hueco: el store IT lo probaba aislado)**:
+  **`Mt101PayDirectListDurableTest` (NUEVO)** construye el PROVIDER real con un stub transport que **cuenta envíos** y el
+  store real (Postgres): primer PAY de una lista `[A1,A2,A3]` (A2 ambiguo) → **3 envíos**, intenciones `A1/A3=SENT`,
+  `A2=UNCERTAIN`; **segundo PAY (re-request)** de la misma lista → **0 envíos** (SENT/UNCERTAIN bloquean el claim), `A2`
+  sigue `UNCERTAIN`. → prueba que el provider **usa** el store para prevenir el doble-envío, no solo que el store funcione
+  aislado. Es la contraparte de lista del `Mt101PayNormalDurableTest` (camino persistido).
+- **Regresión amplia PAY (nada roto)**: `Mt101PayTaskProviderTest` (13), `Mt101PayNormalDurableTest` (2),
+  `Mt101PayFragmentReprocessTest` (35), `Mt101AllTasksProcessE2EIT` (2), `Mt101OutboundEndToEndIT` (2),
+  `Mt101PayDispatchIntentStoreIT` (5) — todo verde. El intent-claim no rompe el path persistido, el normal-durable, el
+  reprocess, ni los E2E.
+
+**Neto**: sin errores; se confirmó la durabilidad transaccional (autocommit por `NOT_SUPPORTED`) y se cerró el hueco de
+verificación (el provider real previene el doble-envío, no solo el store aislado).
+
 ## Estado
 
-**P3 cerrado.** Pendiente abierto del análisis (no autorizado): **P9** (backend fail-closed si async no READY). P5/P6
-quedó como guardrail (degradado en su doble-check).
+**P3 cerrado y verificado (doble-check).** Pendiente abierto del análisis (no autorizado): **P9** (backend fail-closed si
+async no READY). P5/P6 quedó como guardrail (degradado en su doble-check).
