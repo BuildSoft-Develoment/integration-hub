@@ -47,6 +47,22 @@ describe('ExecutionProgressPoller', () => {
     expect(refreshLiveSnapshot).not.toHaveBeenCalled();
   });
 
+  it('re-apunta al cambiar de ejecución seleccionada (navegación)', async () => {
+    setup();
+    selectedExecutionId.set(5);
+    drawerOpen.set(true);
+    TestBed.tick();
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(refreshLiveSnapshot).toHaveBeenCalledWith(5);
+
+    selectedExecutionId.set(8); // navega a otra ejecución relacionada
+    TestBed.tick(); // el effect re-corre → re-apunta el intervalo a la nueva id
+    refreshLiveSnapshot.mockClear();
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(refreshLiveSnapshot).toHaveBeenCalledWith(8);
+    expect(refreshLiveSnapshot).not.toHaveBeenCalledWith(5);
+  });
+
   it('se auto-detiene al alcanzar estado terminal', async () => {
     setup();
     refreshLiveSnapshot.mockResolvedValue({ active: false }); // terminal
