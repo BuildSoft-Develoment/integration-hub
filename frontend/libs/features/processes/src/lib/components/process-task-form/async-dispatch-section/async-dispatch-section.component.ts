@@ -4,7 +4,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { I18nService } from '@integration-hub/core/services';
-import { AsyncOffloadSupport } from '../../../api/messaging-transports.service';
+import { AsyncOffloadSupport, AsyncState } from '../../../api/messaging-transports.service';
 
 /**
  * Sección de configuración del <b>despacho async</b> de una tarea (ADR-015). Presentacional: recibe
@@ -59,8 +59,8 @@ import { AsyncOffloadSupport } from '../../../api/messaging-transports.service';
           {{ modeHint() }}
         </p>
 
-        @if (!featureEnabled()) {
-          <p class="async-dispatch__warning">{{ i18n.t('ui.asyncFeatureDisabled') }}</p>
+        @if (asyncWarningKey(); as key) {
+          <p class="async-dispatch__warning">{{ i18n.t(key) }}</p>
         }
       }
     </div>
@@ -101,8 +101,12 @@ export class AsyncDispatchSectionComponent {
   readonly executionMode = input('once');
   readonly transports = input<readonly string[]>(['KAFKA']);
   readonly readonly = input(false);
-  /** Si el feature de despacho async está activo en el entorno; si no, se avisa que correrá síncrono. */
-  readonly featureEnabled = input(true);
+  /**
+   * Estado compuesto del despacho async en el entorno (backend #4): `READY` operativo end-to-end; `DISABLED` apagado
+   * (correrá síncrono); `DEGRADED` habilitado pero no operativo (relay/consumer/broker no listos → quedaría encolado
+   * sin procesarse). Solo alimenta el aviso (advisory); no gatea el toggle. Default `READY` (permisivo).
+   */
+  readonly asyncState = input<AsyncState>('READY');
   /**
    * Capacidad de offload async del tipo de tarea (del catálogo backend, ADR-015). Gatea el toggle:
    * `UNSUPPORTED` no lo ofrece; `SLICE_ONLY` solo en modos distribuidos (batch/per-record). Default
@@ -156,5 +160,21 @@ export class AsyncDispatchSectionComponent {
       return this.i18n.t('ui.asyncModeSync');
     }
     return this.distributed() ? this.i18n.t('ui.asyncModeScatter') : this.i18n.t('ui.asyncModeOffload');
+  });
+
+  /**
+   * Clave i18n del aviso según el estado del entorno (o `null` si READY → sin aviso). SRP: la sección mapea
+   * estado→mensaje; OCP: un estado futuro es otra rama. Distingue "apagado" de "habilitado-pero-roto" (DEGRADED),
+   * haciendo visible el estado compuesto de #4.
+   */
+  readonly asyncWarningKey = computed<string | null>(() => {
+    switch (this.asyncState()) {
+      case 'DISABLED':
+        return 'ui.asyncFeatureDisabled';
+      case 'DEGRADED':
+        return 'ui.asyncFeatureDegraded';
+      default:
+        return null;
+    }
   });
 }

@@ -50,14 +50,25 @@ describe('AsyncDispatchSectionComponent', () => {
     expect(fixture.componentInstance.modeHint()).toBe(fixture.componentInstance.i18n.t('ui.asyncModeScatter'));
   });
 
-  it('warns when async is on but the feature is disabled in the environment', () => {
-    const el = setup({ async: true, featureEnabled: false }).nativeElement as HTMLElement;
+  it('warns (disabled message) when async is on but the environment is DISABLED', () => {
+    const fixture = setup({ async: true, asyncState: 'DISABLED' });
+    const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.async-dispatch__warning')).toBeTruthy();
+    expect(fixture.componentInstance.asyncWarningKey()).toBe('ui.asyncFeatureDisabled');
   });
 
-  it('shows no warning when the async feature is enabled', () => {
-    const el = setup({ async: true, featureEnabled: true }).nativeElement as HTMLElement;
+  it('warns (degraded message) when the environment is DEGRADED (enabled but not operational)', () => {
+    const fixture = setup({ async: true, asyncState: 'DEGRADED' });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.async-dispatch__warning')).toBeTruthy();
+    expect(fixture.componentInstance.asyncWarningKey()).toBe('ui.asyncFeatureDegraded');
+  });
+
+  it('shows no warning when the async state is READY', () => {
+    const fixture = setup({ async: true, asyncState: 'READY' });
+    const el = fixture.nativeElement as HTMLElement;
     expect(el.querySelector('.async-dispatch__warning')).toBeNull();
+    expect(fixture.componentInstance.asyncWarningKey()).toBeNull();
   });
 
   it('hides the toggle and shows a hint when the type does not support async (UNSUPPORTED)', () => {

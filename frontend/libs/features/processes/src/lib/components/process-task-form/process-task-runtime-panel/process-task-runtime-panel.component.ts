@@ -12,7 +12,7 @@ import {
 } from '@integration-hub/core/providers';
 import { I18nService } from '@integration-hub/core/services';
 import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
-import { AsyncOffloadSupport, MessagingTransportsService } from '../../../api/messaging-transports.service';
+import { AsyncOffloadSupport, AsyncState, MessagingTransportsService } from '../../../api/messaging-transports.service';
 import { ProcessTaskFormModel } from '../../../models/process.models';
 import { AsyncDispatchSectionComponent } from '../async-dispatch-section/async-dispatch-section.component';
 import { TaskContinueOnFailureComponent } from '../task-continue-on-failure/task-continue-on-failure.component';
@@ -54,8 +54,11 @@ export class ProcessTaskRuntimePanelComponent {
 
   /** Transportes disponibles para el selector async (fallback ['KAFKA'] ante error/403). */
   readonly transports = signal<readonly string[]>(['KAFKA']);
-  /** Si el despacho async está activo en el entorno (para avisar que `async:true` correría síncrono). */
-  readonly asyncFeatureEnabled = signal(true);
+  /**
+   * Estado compuesto del despacho async del entorno (#4): READY/DEGRADED/DISABLED. Alimenta el aviso de la sección
+   * (advisory). Default READY (permisivo): ante error de lectura no se alarma — el guard del backend es la barrera real.
+   */
+  readonly asyncState = signal<AsyncState>('READY');
   /** Capacidad de offload async por tipo de tarea (del catálogo backend). */
   private readonly asyncCapabilities = signal<Record<string, AsyncOffloadSupport>>({});
 
@@ -86,9 +89,11 @@ export class ProcessTaskRuntimePanelComponent {
       .asyncStatus()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (status) => this.asyncFeatureEnabled.set(status.executionEnabled),
+        // Consume el estado compuesto; fallback al flag legacy si `state` no viniera (backend viejo).
+        next: (status) =>
+          this.asyncState.set(status.state ?? (status.executionEnabled ? 'READY' : 'DISABLED')),
         error: () => {
-          /* asume habilitado ante error para no alarmar de mas */
+          /* asume READY ante error para no alarmar de mas (el guard del backend es la barrera real) */
         },
       });
     this.transportsApi

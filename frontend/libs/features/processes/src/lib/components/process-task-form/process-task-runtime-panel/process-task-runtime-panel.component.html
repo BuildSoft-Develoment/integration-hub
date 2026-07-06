@@ -32,7 +32,7 @@
     [transport]="draft().asyncTransport ?? 'KAFKA'"
     [executionMode]="draft().executionMode"
     [transports]="transports()"
-    [featureEnabled]="asyncFeatureEnabled()"
+    [asyncState]="asyncState()"
     [offloadSupport]="asyncOffloadSupport()"
     [readonly]="readonly()"
     (asyncChange)="updateAsync($event)"

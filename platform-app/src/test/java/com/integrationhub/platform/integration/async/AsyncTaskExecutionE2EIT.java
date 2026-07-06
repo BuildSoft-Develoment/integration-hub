@@ -18,6 +18,9 @@ import java.sql.Connection;
 import java.sql.Statement;
 import java.util.Map;
 
+import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.anyOf;
+import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -54,6 +57,23 @@ class AsyncTaskExecutionE2EIT {
                             + "process_task_definition, process_definition, source_definition, "
                             + "reader_definition RESTART IDENTITY CASCADE");
         }
+    }
+
+    /**
+     * Contrato UI↔backend (#4 + UI que consume `state`): el enum {@code State} se serializa por el JSON REAL del
+     * endpoint como su NAME ({@code DISABLED}/{@code DEGRADED}/{@code READY}) — que es exactamente lo que la UI compara
+     * (`state === 'READY'`). Si Jackson lo cambiara (ordinal/lowercase) la UI avisaría siempre en silencio; este test
+     * lo blinda contra el JSON real, no contra un supuesto (lección de #4).
+     */
+    @Test
+    @TestSecurity(user = "admin", roles = {"platform-admin"})
+    void asyncStatusEndpointSerializesStateAsEnumName() {
+        given()
+                .when().get("/api/messaging/async-status")
+                .then().statusCode(200)
+                .body("state", anyOf(is("DISABLED"), is("DEGRADED"), is("READY")))
+                .body("consumerLive", anyOf(is(true), is(false)))
+                .body("executionEnabled", anyOf(is(true), is(false)));
     }
 
     @Test

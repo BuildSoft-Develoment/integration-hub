@@ -1243,6 +1243,7 @@ export const en = {
   'flow.dispatchAsync': 'Asynchronous execution: offloaded to the broker (deferred processing).',
   'flow.dispatchScatter': 'Distributed async execution: split into slices across workers (scatter-gather).',
   'ui.asyncFeatureDisabled': 'Asynchronous dispatch is disabled in this environment: the task will run synchronously until it is enabled.',
+  'ui.asyncFeatureDegraded': 'Asynchronous dispatch is enabled but not operational in this environment (relay, consumer or broker not ready): the task would be queued but not processed until it recovers.',
   'ui.continueOnFailure': 'Continue if the task fails (complete with errors)',
   'ui.continueOnFailureHint': 'If the task returns failure, the process continues and marks it completed with errors; otherwise it aborts.',
   'ui.asyncModeSync': 'Runs in the engine synchronously.',
