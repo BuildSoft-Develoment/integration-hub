@@ -5,6 +5,7 @@ import { of } from 'rxjs';
 import { AsyncDlqApiService } from '../../api/async-dlq-api.service';
 import { DeadTask, DlqSummary, StalledScatter } from '../../models/async-dlq.models';
 import { AsyncDlqComponent } from './async-dlq.component';
+import { AsyncDlqStore } from './async-dlq.store';
 
 function summary(p: Partial<DlqSummary>): DlqSummary {
   return { outboxDead: 0, inboxDead: 0, inboxPoison: 0, ...p };
@@ -41,6 +42,7 @@ describe('AsyncDlqComponent', () => {
 
     TestBed.configureTestingModule({
       providers: [
+        AsyncDlqStore,
         { provide: AsyncDlqApiService, useValue: api },
         { provide: AuthAccessService, useValue: access },
       ],

@@ -9,14 +9,14 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { ActionDispatcherService, RelativeTimePipe } from '@integration-hub/shared/ui';
-import { forkJoin } from 'rxjs';
 
-import { AsyncDlqApiService } from '../../api/async-dlq-api.service';
-import { DeadTask, DlqSummary, StalledScatter } from '../../models/async-dlq.models';
+import { StalledScatter } from '../../models/async-dlq.models';
+import { AsyncDlqStore } from './async-dlq.store';
 
 @Component({
   selector: 'ih-async-dlq',
   standalone: true,
+  providers: [AsyncDlqStore],
   imports: [
     CommonModule,
     FormsModule,
@@ -31,7 +31,7 @@ import { DeadTask, DlqSummary, StalledScatter } from '../../models/async-dlq.mod
   templateUrl: './async-dlq.component.html',
 })
 export class AsyncDlqComponent implements OnInit {
-  private readonly api = inject(AsyncDlqApiService);
+  private readonly store = inject(AsyncDlqStore);
   private readonly breadcrumb = inject(BreadcrumbService);
   private readonly access = inject(AuthAccessService);
   readonly i18n = inject(I18nService);
@@ -41,13 +41,16 @@ export class AsyncDlqComponent implements OnInit {
   // mutantes (redrive/requeue) el backend las restringe a admin y aquí se ocultan a no-admin.
   readonly canAdmin = this.access.canAdmin;
 
-  readonly summary = signal<DlqSummary | null>(null);
-  readonly deadRows = signal<DeadTask[]>([]);
-  readonly stalledRows = signal<StalledScatter[]>([]);
-  readonly loading = signal(false);
-  readonly error = signal<string | null>(null);
-  readonly message = signal<string | null>(null);
-  readonly lastRefresh = signal<string | null>(null);
+  // El estado y las operaciones viven en el store (SRP); el componente solo re-expone las señales al
+  // template y añade la presentación (labels i18n), el gating de acciones y el auto-refresh de UI.
+  readonly summary = this.store.summary;
+  readonly deadRows = this.store.deadRows;
+  readonly stalledRows = this.store.stalledRows;
+  readonly loading = this.store.loading;
+  readonly error = this.store.error;
+  readonly message = this.store.message;
+  readonly lastRefresh = this.store.lastRefresh;
+  readonly health = this.store.health;
 
   deadLimit = 100;
   stalledMinutes = 5;
@@ -69,21 +72,6 @@ export class AsyncDlqComponent implements OnInit {
       onCleanup(() => clearInterval(id));
     });
   }
-
-  // Semáforo: cualquier fila muerta (outbox/inbox) es crítico; scatters estancados es advertencia; limpio = sano.
-  readonly health = computed<'ok' | 'warn' | 'error' | null>(() => {
-    const s = this.summary();
-    if (!s) {
-      return null;
-    }
-    if (s.outboxDead + s.inboxDead + s.inboxPoison > 0) {
-      return 'error';
-    }
-    if (this.stalledRows().length > 0) {
-      return 'warn';
-    }
-    return 'ok';
-  });
 
   readonly healthLabel = computed(() => {
     const s = this.summary();
@@ -131,25 +119,7 @@ export class AsyncDlqComponent implements OnInit {
   }
 
   load(): void {
-    this.loading.set(true);
-    this.error.set(null);
-    forkJoin({
-      summary: this.api.summary(),
-      dead: this.api.dead(this.numberOr(this.deadLimit, 100)),
-      stalled: this.api.stalled(this.numberOr(this.stalledMinutes, 5), 100),
-    }).subscribe({
-      next: ({ summary, dead, stalled }) => {
-        this.summary.set(summary);
-        this.deadRows.set(dead);
-        this.stalledRows.set(stalled);
-        this.lastRefresh.set(new Date().toISOString());
-        this.loading.set(false);
-      },
-      error: () => {
-        this.error.set(this.i18n.t('executions.dlq.loadError'));
-        this.loading.set(false);
-      },
-    });
+    this.store.load(this.numberOr(this.deadLimit, 100), this.numberOr(this.stalledMinutes, 5));
   }
 
   confirmRedrive(): void {
@@ -157,7 +127,7 @@ export class AsyncDlqComponent implements OnInit {
       return;
     }
     if (this.actions.dispatch({ id: 'dlq:redrive', severity: 'danger' })) {
-      this.redrive();
+      this.store.redrive(this.numberOr(this.deadLimit, 100), this.numberOr(this.stalledMinutes, 5));
     }
   }
 
@@ -165,48 +135,13 @@ export class AsyncDlqComponent implements OnInit {
     if (!this.canAdmin()) {
       return;
     }
-    const id = `dlq:requeue:${row.processExecutionId}:${row.taskDefinitionId}`;
-    if (this.actions.dispatch({ id, severity: 'danger' })) {
-      this.requeue(row);
+    if (this.actions.dispatch({ id: this.requeueArmId(row), severity: 'danger' })) {
+      this.store.requeue(row, this.numberOr(this.deadLimit, 100), this.numberOr(this.stalledMinutes, 5));
     }
   }
 
   requeueArmId(row: StalledScatter): string {
     return `dlq:requeue:${row.processExecutionId}:${row.taskDefinitionId}`;
-  }
-
-  private redrive(): void {
-    this.loading.set(true);
-    this.error.set(null);
-    this.api.redriveOutbox(1000).subscribe({
-      next: (result) => {
-        this.message.set(this.i18n.t('executions.dlq.redriveOk', { count: result.redriven }));
-        this.load();
-      },
-      error: () => {
-        this.error.set(this.i18n.t('executions.dlq.redriveError'));
-        this.loading.set(false);
-      },
-    });
-  }
-
-  private requeue(row: StalledScatter): void {
-    this.loading.set(true);
-    this.error.set(null);
-    this.api.requeue(row.processExecutionId, row.taskDefinitionId).subscribe({
-      next: (result) => {
-        this.message.set(
-          result.requeued
-            ? this.i18n.t('executions.dlq.requeueOk', { pe: row.processExecutionId })
-            : this.i18n.t('executions.dlq.requeueRejected', { pe: row.processExecutionId }),
-        );
-        this.load();
-      },
-      error: () => {
-        this.error.set(this.i18n.t('executions.dlq.requeueError', { pe: row.processExecutionId }));
-        this.loading.set(false);
-      },
-    });
   }
 
   private numberOr(value: unknown, fallback: number): number {
