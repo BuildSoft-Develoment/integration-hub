@@ -27,4 +27,17 @@ public interface ArtifactStaging {
      * del bucket es la red de seguridad ante fallo/leak.
      */
     InputStream openAndDeleteOnClose(String key) throws IOException;
+
+    /**
+     * Proyecto #3, Fase 3a (caso reader) — la plataforma SUBE {@code content} al staging (por streaming) y presigna un
+     * GET de corta vida para que el plugin lo DESCARGUE. Devuelve la referencia (GET) + la key interna. El caller borra
+     * con {@link #deleteStaged} tras el READ (aquí el consumidor es el plugin, no la plataforma → no delete-on-close).
+     *
+     * @param sizeBytes tamaño conocido del contenido (para subir por streaming sin materializar); {@code <= 0} = usar
+     *                  fallback materializando (tamaño desconocido).
+     */
+    StagedDownload stageForDownload(InputStream content, String mediaType, long sizeBytes, Duration ttl) throws IOException;
+
+    /** Borra un objeto de staging (cleanup del caso reader, tras el READ). */
+    void deleteStaged(String key);
 }

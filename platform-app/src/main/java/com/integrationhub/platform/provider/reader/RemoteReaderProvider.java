@@ -1,5 +1,7 @@
 package com.integrationhub.platform.provider.reader;
 
+import com.integrationhub.platform.service.artifact.ArtifactStaging;
+import com.integrationhub.platform.service.artifact.StagedDownload;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginInvoker;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
@@ -12,9 +14,10 @@ import com.integrationhub.platform.spi.reader.ReaderProvider;
 import com.integrationhub.platform.spi.source.SourcePayload;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
+import com.integrationhub.platform.task.ArtifactReference;
 
 import java.io.IOException;
-import java.util.Base64;
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -22,36 +25,30 @@ import java.util.Map;
 
 public class RemoteReaderProvider implements ReaderProvider {
 
-    /** Umbral por defecto del contenido remoto (conservador ~4 MB): el server del plugin suele capar a ~4 MB inbound. */
-    public static final long DEFAULT_MAX_CONTENT_BYTES = 4L * 1024 * 1024;
+    /**
+     * Proyecto #3 Fase 3a: el reader por referencia requiere spiVersion mayor >= 2 (retira el contentBase64 del envío;
+     * el guard v58 de tamaño ya no aplica porque el input va por el object store, no por gRPC).
+     */
+    static final int REQUIRED_SPI_VERSION = 2;
+    /** TTL de la URL presignada de descarga (corta vida; el plugin descarga dentro del READ síncrono). */
+    static final Duration DOWNLOAD_TTL = Duration.ofMinutes(15);
 
     private final String type;
     private final RemotePluginDescriptor descriptor;
     private final RemotePluginInvoker invoker;
     private final RemotePluginRegistry registry;
-    // v58-fix: guard de tamano. El reader empuja el archivo COMPLETO (Base64 dentro de configuration_json) en un
-    // request gRPC unary; para archivos grandes el server del plugin lo rechaza con un RESOURCE_EXHAUSTED cripitico.
-    // Se pre-chequea el tamano Base64 estimado y se rechaza con un mensaje ACCIONABLE (usar reader local). No es
-    // streaming; es un guard de operabilidad hasta que exista un contrato de streaming.
-    private final long maxContentBytes;
-
-    public RemoteReaderProvider(String type,
-                                RemotePluginDescriptor descriptor,
-                                RemotePluginInvoker invoker,
-                                RemotePluginRegistry registry) {
-        this(type, descriptor, invoker, registry, DEFAULT_MAX_CONTENT_BYTES);
-    }
+    private final ArtifactStaging staging;
 
     public RemoteReaderProvider(String type,
                                 RemotePluginDescriptor descriptor,
                                 RemotePluginInvoker invoker,
                                 RemotePluginRegistry registry,
-                                long maxContentBytes) {
+                                ArtifactStaging staging) {
         this.type = type;
         this.descriptor = descriptor;
         this.invoker = invoker;
         this.registry = registry;
-        this.maxContentBytes = maxContentBytes > 0 ? maxContentBytes : DEFAULT_MAX_CONTENT_BYTES;
+        this.staging = staging;
     }
 
     @Override
@@ -64,24 +61,41 @@ public class RemoteReaderProvider implements ReaderProvider {
                                     Map<String, Object> configuration,
                                     int batchSize,
                                     ReadBatchConsumer consumer) {
-        var result = invoke(payload, configuration, batchSize);
-        var records = list(result.outputs().get("records"), "Remote reader plugin must return outputs.records")
-                .stream()
-                .map(this::record)
-                .toList();
-        var skips = listOrEmpty(result.outputs().get("skippedRows")).stream()
-                .map(this::skip)
-                .toList();
+        requireArtifactRefContract();
+        var staged = stage(payload);
+        try {
+            var result = invoke(staged.reference(), payload, configuration, batchSize);
+            var records = list(result.outputs().get("records"), "Remote reader plugin must return outputs.records")
+                    .stream()
+                    .map(this::record)
+                    .toList();
+            var skips = listOrEmpty(result.outputs().get("skippedRows")).stream()
+                    .map(this::skip)
+                    .toList();
 
-        var effectiveBatchSize = Math.max(1, batchSize);
-        for (int from = 0, batchNumber = 1; from < records.size(); from += effectiveBatchSize, batchNumber++) {
-            var to = Math.min(from + effectiveBatchSize, records.size());
-            consumer.accept(new ReadBatch(payload.name(), batchNumber, records.subList(from, to)));
+            var effectiveBatchSize = Math.max(1, batchSize);
+            for (int from = 0, batchNumber = 1; from < records.size(); from += effectiveBatchSize, batchNumber++) {
+                var to = Math.min(from + effectiveBatchSize, records.size());
+                consumer.accept(new ReadBatch(payload.name(), batchNumber, records.subList(from, to)));
+            }
+            return new ReadResult(records, records.size(), skips.size(), skips);
+        } finally {
+            staging.deleteStaged(staged.key());
         }
-        return new ReadResult(records, records.size(), skips.size(), skips);
     }
 
-    private TaskResult invoke(SourcePayload payload, Map<String, Object> configuration, int batchSize) {
+    /** 3a: stagea el archivo de entrada (upload por streaming) y presigna un GET para que el plugin lo descargue. */
+    private StagedDownload stage(SourcePayload payload) {
+        var size = payload.file() == null || payload.file().size() == null ? 0L : payload.file().size();
+        try (var stream = payload.openStream()) {
+            return staging.stageForDownload(stream, payload.mediaType(), size, DOWNLOAD_TTL);
+        } catch (IOException error) {
+            throw degraded("no se pudo stagear el archivo para el reader remoto: " + error.getMessage());
+        }
+    }
+
+    private TaskResult invoke(ArtifactReference inputReference, SourcePayload payload,
+                              Map<String, Object> configuration, int batchSize) {
         if (!descriptor.trusted()) {
             throw degraded("descriptor no confiable");
         }
@@ -90,7 +104,7 @@ public class RemoteReaderProvider implements ReaderProvider {
                     descriptor,
                     "READER_READ:" + normalized(type),
                     context(),
-                    request(payload, configuration, batchSize));
+                    request(inputReference, payload, configuration, batchSize));
             if (result.suspended()) {
                 throw degraded("remote reader provider requires immediate result");
             }
@@ -104,7 +118,8 @@ public class RemoteReaderProvider implements ReaderProvider {
         }
     }
 
-    private Map<String, Object> request(SourcePayload payload, Map<String, Object> configuration, int batchSize) {
+    private Map<String, Object> request(ArtifactReference inputReference, SourcePayload payload,
+                                        Map<String, Object> configuration, int batchSize) {
         var request = new LinkedHashMap<String, Object>();
         request.put("configuration", configuration == null ? Map.of() : configuration);
         request.put("batchSize", batchSize);
@@ -113,25 +128,29 @@ public class RemoteReaderProvider implements ReaderProvider {
         sourceFile.put("location", payload.location());
         sourceFile.put("mediaType", payload.mediaType());
         request.put("sourceFile", sourceFile);
-        var content = bytes(payload);
-        // Estimacion del tamano Base64 (~4/3 del binario). Si excede el umbral, se rechaza ANTES de invocar con un
-        // mensaje accionable, en vez de un RESOURCE_EXHAUSTED gRPC crudo del server del plugin.
-        var estimatedBase64 = content.length / 3L * 4;
-        if (estimatedBase64 > maxContentBytes) {
-            throw degraded("el archivo '" + payload.name() + "' (~" + estimatedBase64 + " B en Base64) excede el "
-                    + "maximo del reader remoto (" + maxContentBytes + " B). Los plugins remotos transfieren el "
-                    + "archivo completo en un mensaje gRPC (sin streaming); usa un reader LOCAL para archivos "
-                    + "masivos o sube el limite del plugin y de integrationhub.plugin.remote.reader.max-content-bytes");
-        }
-        request.put("contentBase64", Base64.getEncoder().encodeToString(content));
+        // 3a: el archivo va por referencia (GET presignado), no como contentBase64; el plugin lo descarga por streaming.
+        request.put(ArtifactReference.ARTIFACT_REF, inputReference.asMap());
         return request;
     }
 
-    private byte[] bytes(SourcePayload payload) {
-        try (var stream = payload.openStream()) {
-            return stream.readAllBytes();
-        } catch (IOException error) {
-            throw new IllegalArgumentException("Cannot read source payload for remote reader", error);
+    /** Negociación: el reader por referencia requiere que el plugin declare spiVersion mayor >= 2. */
+    private void requireArtifactRefContract() {
+        int major = majorVersion(descriptor.spiVersion());
+        if (major < REQUIRED_SPI_VERSION) {
+            throw degraded("el plugin declara spiVersion='" + descriptor.spiVersion() + "' pero el reader remoto por "
+                    + "referencia (artifactRef) requiere spiVersion mayor >= " + REQUIRED_SPI_VERSION
+                    + ": actualiza el plugin para descargar el archivo de la URL presignada en vez de recibir contentBase64");
+        }
+    }
+
+    private static int majorVersion(String spiVersion) {
+        if (spiVersion == null || spiVersion.isBlank()) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(spiVersion.trim().split("\\.")[0]);
+        } catch (NumberFormatException error) {
+            return 0;
         }
     }
 

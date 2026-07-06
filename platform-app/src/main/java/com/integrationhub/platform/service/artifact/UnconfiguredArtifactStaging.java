@@ -22,4 +22,14 @@ public class UnconfiguredArtifactStaging implements ArtifactStaging {
     public InputStream openAndDeleteOnClose(String key) {
         throw new IllegalStateException(MESSAGE);
     }
+
+    @Override
+    public StagedDownload stageForDownload(InputStream content, String mediaType, long sizeBytes, Duration ttl) {
+        throw new IllegalStateException(MESSAGE);
+    }
+
+    @Override
+    public void deleteStaged(String key) {
+        throw new IllegalStateException(MESSAGE);
+    }
 }

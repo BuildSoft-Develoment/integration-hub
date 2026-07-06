@@ -3,6 +3,7 @@ package com.integrationhub.platform.service.artifact;
 import com.integrationhub.platform.task.ArtifactReference;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -11,6 +12,7 @@ import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.GetObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+import software.amazon.awssdk.services.s3.presigner.model.GetObjectPresignRequest;
 import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignRequest;
 
 import java.io.FilterInputStream;
@@ -85,6 +87,40 @@ public class S3ArtifactStaging implements ArtifactStaging {
                 mediaType == null ? "" : mediaType,
                 System.currentTimeMillis() + ttl.toMillis());
         return new StagedUpload(reference, key);
+    }
+
+    @Override
+    public StagedDownload stageForDownload(InputStream content, String mediaType, long sizeBytes, Duration ttl)
+            throws IOException {
+        var key = STAGING_PREFIX + UUID.randomUUID();
+        var putRequest = PutObjectRequest.builder().bucket(bucket).key(key);
+        if (mediaType != null && !mediaType.isBlank()) {
+            putRequest.contentType(mediaType);
+        }
+        try (content) {
+            if (sizeBytes > 0) {
+                // Upload por streaming: no materializa el archivo en la plataforma.
+                s3.putObject(putRequest.build(), RequestBody.fromInputStream(content, sizeBytes));
+            } else {
+                // Fallback tamaño desconocido: materializa (raro; el SelectedSourceFile suele traer size).
+                s3.putObject(putRequest.build(), RequestBody.fromBytes(content.readAllBytes()));
+            }
+        }
+        var presigned = presigner.presignGetObject(GetObjectPresignRequest.builder()
+                .signatureDuration(ttl)
+                .getObjectRequest(GetObjectRequest.builder().bucket(bucket).key(key).build())
+                .build());
+        var reference = ArtifactReference.get(
+                presigned.url().toString(),
+                mediaType == null ? "" : mediaType,
+                Math.max(0, sizeBytes),
+                System.currentTimeMillis() + ttl.toMillis());
+        return new StagedDownload(reference, key);
+    }
+
+    @Override
+    public void deleteStaged(String key) {
+        s3.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build());
     }
 
     @Override

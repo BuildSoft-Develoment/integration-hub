@@ -1,13 +1,14 @@
 package com.integrationhub.platform.service.reader;
 
 import com.integrationhub.platform.provider.reader.RemoteReaderProvider;
+import com.integrationhub.platform.service.artifact.ArtifactStaging;
+import com.integrationhub.platform.service.artifact.UnconfiguredArtifactStaging;
 import com.integrationhub.platform.service.plugin.RemotePluginInvoker;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
 import com.integrationhub.platform.spi.reader.ReaderProvider;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -19,35 +20,35 @@ public class ReaderProviderRegistry {
     private final Instance<ReaderProvider> providers;
     private final RemotePluginRegistry remotePlugins;
     private final Supplier<Optional<RemotePluginInvoker>> remoteInvoker;
-    // v58-fix: umbral del contenido que el reader remoto puede empujar (guard de tamano, ver RemoteReaderProvider).
-    private final long remoteReaderMaxContentBytes;
+    // Proyecto #3 Fase 3a: el reader remoto envía el input por referencia (staging + presign GET), no como Base64 por
+    // gRPC → el guard v58 de tamaño (max-content-bytes) se retira.
+    private final ArtifactStaging staging;
 
     @Inject
     public ReaderProviderRegistry(Instance<ReaderProvider> providers,
                                   RemotePluginRegistry remotePlugins,
                                   Instance<RemotePluginInvoker> remoteInvokers,
-                                  @ConfigProperty(name = "integrationhub.plugin.remote.reader.max-content-bytes",
-                                          defaultValue = "4194304") long remoteReaderMaxContentBytes) {
+                                  ArtifactStaging staging) {
         this.providers = providers;
         this.remotePlugins = remotePlugins;
         this.remoteInvoker = () -> remoteInvokers.isResolvable()
                 ? Optional.of(remoteInvokers.get())
                 : Optional.empty();
-        this.remoteReaderMaxContentBytes = remoteReaderMaxContentBytes;
+        this.staging = staging;
     }
 
-    /** Compat: firma previa (sin el umbral de contenido) → usa el default. */
+    /** Compat: firma previa (sin staging) → usa el null-object (source/reader remoto por referencia falla-fast). */
     public ReaderProviderRegistry(Instance<ReaderProvider> providers,
                                   RemotePluginRegistry remotePlugins,
                                   Instance<RemotePluginInvoker> remoteInvokers) {
-        this(providers, remotePlugins, remoteInvokers, RemoteReaderProvider.DEFAULT_MAX_CONTENT_BYTES);
+        this(providers, remotePlugins, remoteInvokers, new UnconfiguredArtifactStaging());
     }
 
     public ReaderProviderRegistry(Instance<ReaderProvider> providers) {
         this.providers = providers;
         this.remotePlugins = new RemotePluginRegistry();
         this.remoteInvoker = Optional::empty;
-        this.remoteReaderMaxContentBytes = RemoteReaderProvider.DEFAULT_MAX_CONTENT_BYTES;
+        this.staging = new UnconfiguredArtifactStaging();
     }
 
     public ReaderProvider resolve(String type) {
@@ -63,7 +64,7 @@ public class ReaderProviderRegistry {
                     "Remote reader provider " + type + " is registered by plugin "
                             + remote.get().id() + " but no RemotePluginInvoker is configured"
             ));
-            return new RemoteReaderProvider(type, remote.get(), invoker, remotePlugins, remoteReaderMaxContentBytes);
+            return new RemoteReaderProvider(type, remote.get(), invoker, remotePlugins, staging);
         }
         throw new IllegalArgumentException("Unsupported reader provider: " + type);
     }

@@ -55,4 +55,32 @@ public class FakeArtifactStaging implements ArtifactStaging {
     public void upload(String referenceUri, byte[] content) {
         store.put(referenceUri.substring(SCHEME.length()), content);
     }
+
+    // --- Fase 3a (caso reader): la plataforma sube y presigna un GET; el plugin descarga por download(uri). ---
+
+    @Override
+    public StagedDownload stageForDownload(java.io.InputStream content, String mediaType, long sizeBytes,
+                                           java.time.Duration ttl) {
+        var key = "fake-staging/" + UUID.randomUUID();
+        try (content) {
+            store.put(key, content.readAllBytes());
+        } catch (java.io.IOException error) {
+            throw new java.io.UncheckedIOException(error);
+        }
+        var reference = ArtifactReference.get(SCHEME + key, mediaType, Math.max(0, sizeBytes),
+                System.currentTimeMillis() + ttl.toMillis());
+        return new StagedDownload(reference, key);
+    }
+
+    @Override
+    public void deleteStaged(String key) {
+        if (store.remove(key) != null) {
+            deleted.add(key);
+        }
+    }
+
+    /** Simula al plugin descargando de la URL de la referencia GET (caso reader). */
+    public byte[] download(String referenceUri) {
+        return store.get(referenceUri.substring(SCHEME.length()));
+    }
 }
