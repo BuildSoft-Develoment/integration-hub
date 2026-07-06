@@ -29,6 +29,7 @@ import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
@@ -118,5 +119,37 @@ class S3ArtifactStagingMinioIT {
             assertThrows(NoSuchKeyException.class, () -> s3.getObject(
                     GetObjectRequest.builder().bucket(BUCKET).key(staged.key()).build()));
         }
+    }
+
+    /**
+     * Propiedad de SEGURIDAD (doble-check): la credencial efímera DEBE expirar. Se presigna con TTL de 1 s, se espera a
+     * que venza, y el PUT debe ser rechazado (no-2xx). Sin esto, "corta vida" sería una afirmación hueca.
+     */
+    @Test
+    void presignedUrlIsRejectedAfterItsTtlExpires() throws Exception {
+        var staging = staging();
+        var staged = staging.presignUpload("text/csv", Duration.ofSeconds(1));
+
+        Thread.sleep(2_500);
+
+        var put = HttpClient.newHttpClient().send(
+                HttpRequest.newBuilder(URI.create(staged.reference().uri()))
+                        .PUT(HttpRequest.BodyPublishers.ofByteArray("late".getBytes(StandardCharsets.UTF_8)))
+                        .build(),
+                HttpResponse.BodyHandlers.discarding());
+
+        assertNotEquals(2, put.statusCode() / 100,
+                "el PUT presignado debe ser rechazado tras vencer el TTL (credencial efimera); fue HTTP " + put.statusCode());
+    }
+
+    /**
+     * Path de error (doble-check): si el plugin no subió el objeto, {@code openAndDeleteOnClose} falla claro
+     * (NoSuchKey) — lo que la migración del source (fase 2b) traducirá a "source degradado".
+     */
+    @Test
+    void openMissingObjectFailsWithNoSuchKey() {
+        var staging = staging();
+        assertThrows(NoSuchKeyException.class,
+                () -> staging.openAndDeleteOnClose(S3ArtifactStaging.STAGING_PREFIX + "no-subido"));
     }
 }

@@ -36,6 +36,14 @@ ella**. Por eso este incremento entrega el servicio de staging **y** su IT contr
   ~26 s.**
 - Confirma empíricamente los tres refinamientos (#1 endpoint, #2 gotcha de firma, #3 delete-on-close) — el supuesto que
   más podía fallar en runtime.
+- **Doble-check + e2e (bordes)** — 3 tests contra MinIO real:
+  1. **happy path** (presign → PUT plano → read-back streaming → delete-on-close);
+  2. **TTL/expiry (propiedad de SEGURIDAD)**: se presigna con TTL de 1 s, se espera a que venza, y el PUT es
+     **rechazado** (no-2xx). Verifica que la "credencial efímera" **expira de verdad** (MinIO enforcea el TTL de la URL
+     presignada) — sin esto, "corta vida" sería hueco. Es el fundamento de seguridad de la opción B, ahora probado.
+  3. **path de error**: `openAndDeleteOnClose` sobre una key no subida → `NoSuchKeyException` (comportamiento que la
+     migración del source, 2b, traducirá a "source degradado").
+  **3 tests, BUILD SUCCESS.**
 
 ## Estado del proyecto
 

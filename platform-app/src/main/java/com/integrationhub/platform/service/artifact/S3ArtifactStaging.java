@@ -37,7 +37,7 @@ import java.util.UUID;
 public class S3ArtifactStaging implements ArtifactStaging {
 
     /** Prefijo de las keys de staging (facilita una lifecycle-expiry por prefijo en el bucket). */
-    static final String STAGING_PREFIX = "remote-plugin-staging/";
+    public static final String STAGING_PREFIX = "remote-plugin-staging/";
 
     private final S3Client s3;
     private final S3Presigner presigner;
