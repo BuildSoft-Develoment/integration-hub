@@ -24,10 +24,15 @@ verificado en [Fase 2a](2026-07-05-implementacion-streaming-remoto-fase2a-stagin
   + invoker-stub que "sube" al fake — `openFile` presigna, incluye `artifactRef`, lee por streaming lo subido y **borra
   el objeto tras consumir** (`deleted.size()==1`); y `spiVersion=1` → **fail-fast** con mensaje de negociación.
   `StreamingPipelineServiceTest` (7) sigue verde (constructor de test intacto).
-- **E2E `RemoteSourceArtifactRefMinioIT`** (Testcontainers **MinIO real**): `RemoteSourceProvider` real + `S3ArtifactStaging`
-  real + un invoker-stub que **sube por HTTP a la URL presignada** (rol del plugin) → `openFile` lee por streaming ~6 KB
-  exactos del staging. **1 test, BUILD SUCCESS ~9 s.** Valida el flujo completo sin extender el sidecar (patrón
-  invoker-stub).
+- **E2E `RemoteSourceArtifactRefMinioIT`** (Testcontainers **MinIO real**, 2 tests): `RemoteSourceProvider` real +
+  `S3ArtifactStaging` real + un invoker-stub que **sube por HTTP a la URL presignada** (rol del plugin) → `openFile` lee
+  por streaming ~6 KB exactos del staging; **(doble-check) verifica el cleanup** en el flujo completo (0 objetos bajo el
+  prefijo de staging tras cerrar el payload — delete-on-close real, no solo el fake); y **(doble-check) el plugin que
+  MIENTE** (reporta success sin subir) → la lectura perezosa falla (`NoSuchKey`). BUILD SUCCESS ~9 s. Valida el flujo
+  completo sin extender el sidecar (patrón invoker-stub).
+- **Regresión amplia (doble-check)**: 18 tests de `*Source*`/`*RemoteReader*`/`*Artifact*` verdes — en particular
+  `RemoteReaderProviderTest` **sigue usando `contentBase64` intacto**: retirar el Base64 del **source** no rompió el
+  **reader** (que migra en Fase 3).
 - **Wiring CDI (lección de #4)**: el app **bootea** (`/q/health/ready` 200, ~50 s) → el producer `ArtifactStaging` y el
   `SourceProviderRegistry` de 4 args resuelven sin `UnsatisfiedResolution`/`Ambiguous`. Los unit tests (construcción
   directa) no lo validaban.

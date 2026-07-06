@@ -3,6 +3,7 @@ package com.integrationhub.platform.integration;
 import com.integrationhub.platform.provider.source.RemoteSourceProvider;
 import com.integrationhub.platform.service.artifact.S3ArtifactStaging;
 import com.integrationhub.platform.service.artifact.S3StagingConfig;
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginInvoker;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
@@ -117,6 +118,48 @@ class RemoteSourceArtifactRefMinioIT {
             assertEquals(new String(content, StandardCharsets.UTF_8),
                     new String(stream.readAllBytes(), StandardCharsets.UTF_8),
                     "la plataforma lee por streaming del staging exactamente lo que el plugin subio");
+        }
+
+        // Doble-check: el cleanup (delete-on-close) ocurrio en el flujo completo -> no queda basura en el staging.
+        assertEquals(0, countStagingObjects(), "el objeto de staging debe borrarse tras cerrar el payload");
+    }
+
+    @Test
+    void openFileFailsWhenPluginReportsSuccessButDidNotUpload() {
+        var staging = new S3ArtifactStaging(new S3StagingConfig(BUCKET, REGION, endpoint, ACCESS_KEY, SECRET_KEY, true));
+        var descriptor = new RemotePluginDescriptor(
+                "acme-source", "1.0.0", "2", Set.of(), Set.of("REMOTE_FS"), Set.of(), "GRPC", endpoint, true);
+
+        // El plugin MIENTE: reporta success en OPEN sin subir nada.
+        RemotePluginInvoker invoker = (desc, taskType, context, payload) -> {
+            if (taskType.startsWith("SOURCE_SELECT")) {
+                return TaskResult.success("selected", Map.of("files", java.util.List.of(Map.of(
+                        "name", "ghost.csv", "location", "remote://ghost.csv", "mediaType", "text/csv", "size", 0))));
+            }
+            return TaskResult.success("opened", Map.of("mediaType", "text/csv")); // no sube
+        };
+
+        var provider = new RemoteSourceProvider("REMOTE_FS", descriptor, invoker, new RemotePluginRegistry(), staging);
+        var files = provider.selectFiles(Map.of());
+        var payload = provider.openFile(files.getFirst(), Map.of());
+        // La ausencia del objeto se detecta al leer (payload perezoso): NoSuchKey en el object store real.
+        org.junit.jupiter.api.Assertions.assertThrows(Exception.class, payload::openStream);
+    }
+
+    private static S3Client s3Client() {
+        return S3Client.builder()
+                .region(Region.of(REGION))
+                .httpClient(UrlConnectionHttpClient.create())
+                .credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(ACCESS_KEY, SECRET_KEY)))
+                .endpointOverride(URI.create(endpoint))
+                .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
+                .build();
+    }
+
+    private static int countStagingObjects() {
+        try (S3Client s3 = s3Client()) {
+            return s3.listObjectsV2(ListObjectsV2Request.builder()
+                    .bucket(BUCKET).prefix(S3ArtifactStaging.STAGING_PREFIX).build()).keyCount();
         }
     }
 }
