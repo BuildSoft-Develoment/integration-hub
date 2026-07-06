@@ -56,7 +56,23 @@ completar/fallar el proceso, marcar tareas o suspender, **sobrescribiendo inclus
 - El path de PAY correctivo (money-path) ya estaba blindado a nivel ledger (P1); esto blinda el **estado del motor** que lo
   contiene, cerrando el hueco de un worker zombi alterando el proceso o ejecutando efectos de otras tareas.
 
+## Doble-check — completitud + regresión (self-review)
+
+- **Auditoría de completitud**: revisé **todas** las mutaciones de `.status` en `ProcessExecutionStateService`. Las
+  transiciones del **worker loop** (startProcess/startTask/completeTask/failTask/completeTaskWithErrors/completeProcess/
+  failProcess/completeProcessWithErrors/suspendTask) quedan **todas guardadas**. La única no guardada es **`markResumed`**
+  (SUSPENDED→RUNNING): es del **lifecycle de resume**, no del worker zombi — una ejecución SUSPENDED **nunca** es recuperada
+  por lease (la recuperación filtra `status='RUNNING'`), y `markResumed` solo es alcanzable con un **resume-token válido**
+  + `resumedAt` (fija `resumedAt=now`; el lookup filtra `resumedAt is null` → idempotente ante doble-resume). Boundary
+  deliberado, no un hueco del P2.
+- **Regresión amplia (threading del token en TODAS las rutas)** — verde contra DB real:
+  - `ProcessExecutionSuspendResumeIT` (5), `AsyncSuspendableReSuspendE2EIT` (1, re-suspend), `AsyncTaskExecutionE2EIT`
+    (4, completión async→resume), `ProcessExecutionFailurePropagationIT` (2, fail guardado), `SyncProgressExecuteByModeIT`
+    (1, sync) → **13/13**. El token viaja bien por sync, queued, fast-path, suspensión, resume y re-suspend.
+  - Sumado a: `ProcessExecutionFencingIT` (4, zombi), `Mt101AllTasksProcessE2EIT` + 4 scatter (12, happy-path),
+    unit (16). **Ninguna ruta de ejecución rota.**
+
 ## Estado
 
-**P2 cerrado.** Pendientes del análisis que siguen abiertos (no autorizados aún): P5/P6 (secretos en el offload async),
-P3 (PAY real solo desde fuente persistida), P9 (backend fail-closed si async no READY).
+**P2 cerrado y verificado (doble-check).** Pendientes del análisis que siguen abiertos (no autorizados aún): P5/P6
+(secretos en el offload async), P3 (PAY real solo desde fuente persistida), P9 (backend fail-closed si async no READY).
