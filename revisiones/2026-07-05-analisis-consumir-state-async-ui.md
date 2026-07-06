@@ -63,9 +63,32 @@ ante error (tratar como READY/sin aviso), sin cambiarlo — es advisory, no gati
   processes y usa `MessagingTransportsService` local).
 - Frontend puro, sin runtime backend → validación por lint/build/suite.
 
-## Veredicto
+## Doble-check — verificación contra código (self-review)
 
-**Bounded, de alto valor/esfuerzo**: cierra el valor de #4 haciendo **visible** el estado DEGRADED (hoy el operador no
-ve que el async está "on-pero-roto"). Es un consumidor único + `async-dispatch-section` + 1 clave i18n. **Recomiendo
-proceder con la opción (B)** (rica), que aprovecha `consumerLive`/`state`; la (A) es el fallback de una línea si se
-quiere lo mínimo. No es money-path ni correctitud; es operabilidad/UX.
+Reté los supuestos. **Sin bug de correctitud**; dos hallazgos:
+
+### Confirmado / reforzado
+- **`featureEnabled` es advisory-only (refuerza la opción B, la de-riesga)**: en `async-dispatch-section`, el toggle usa
+  `[disabled]="toggleDisabled()"` y `toggleDisabled = readonly() || (!available() && !async())`, con
+  `available()` dependiendo **solo** de `offloadSupport()`. `featureEnabled()` se usa **únicamente** en el
+  `@if (!featureEnabled())` del aviso. → cambiar la fuente del aviso a `state === 'READY'` **NO bloquea** el toggle
+  async cuando el entorno está DEGRADED (correcto: el aviso es advisory; el usuario aún puede marcar `async:true`).
+- **Consumidor único confirmado**: el otro match de `.state()` es `ui-kit-gallery.component` — una señal **local**
+  (`'loading'|'error'|'data'`), sin relación con async-status. `process-task-runtime-panel` es el único consumidor real.
+
+### Corrección al plan de validación (aplicando la lección de #4)
+- **La serialización del enum `State` NO está verificada empíricamente en ningún lado.** Estáticamente es segura (el
+  `enum State` no tiene `@JsonValue`/`@JsonFormat`; no hay `ObjectMapperCustomizer` ni config de enums → Jackson default
+  = `name()` → `"DISABLED"/"DEGRADED"/"READY"`, que coincide con el type frontend). **Pero** no hay ningún test
+  REST-level que assevere el JSON de `/api/messaging/async-status` (los tests actuales verifican el **objeto** record, no
+  el JSON). Si la serialización fuera distinta (ordinal, lowercase), `state === 'READY'` sería **siempre falso** → la UI
+  avisaría siempre. #4 enseñó a no confiar en la integración asumida: **la implementación DEBE añadir un test REST
+  (RestAssured `@QuarkusTest`) que GETee el endpoint y asevere `state` ∈ {DISABLED,DEGRADED,READY}** — belt-and-suspenders
+  barato que blinda el contrato UI↔backend. (El 401 sin token se resuelve con `@TestSecurity`.)
+
+## Veredicto (confirmado)
+
+**Bounded, de alto valor/esfuerzo**, sin correctitud/money-path: cierra el valor de #4 haciendo **visible** el estado
+DEGRADED. Un consumidor único + `async-dispatch-section` + 1 clave i18n. El doble-check **de-riesga** la opción (B)
+(`featureEnabled` es advisory-only → no bloquea el toggle) y **añade** un test REST que asevere la serialización del enum
+(sin él, un cambio de serialización rompería la UI en silencio). **Recomiendo proceder con (B)** + ese test de contrato.
