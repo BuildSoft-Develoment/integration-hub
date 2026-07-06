@@ -66,11 +66,32 @@ de `contentBase64` a artefacto-por-referencia, sobre el ladrillo ya verificado e
   plataforma) — pero eso es otra fase.
 - **No** money-path ni correctitud.
 
-## Veredicto
+## Doble-check — refinamientos (self-review, fundamentado en código)
 
-Fase 2b es **factible y bien acotada** gracias a: el ladrillo `ArtifactStaging` ya verificado (2a), el patrón
-invoker-stub que permite un E2E sin extender el sidecar, y `spiVersion` ya presente para negociar. El trabajo: producer
-CDI + inyección en el registry + reescritura de `openFile` (con negociación + streaming + cleanup) + config/MinIO +
-tests (unit + E2E MinIO + migrar la regresión). Recomiendo entrar por el **producer + la reescritura de `openFile` con
-su unit test (staging fake)**, luego el **E2E MinIO con invoker-stub**, y cerrar con **docker-compose MinIO** para dev.
-Sigue fuera del money-path → la prioridad general no cambia.
+1. **CONFLICTO DE PUERTO de MinIO (concreto, lo omití).** `docker-compose.yml` ya mapea **ClickHouse en `"9000:9000"`**,
+   y el puerto 9000 ya está disputado (el gRPC del app también). El puerto **API de MinIO es 9000** → añadirlo naïve
+   **choca**. MinIO debe mapearse a un **host-port distinto** (p.ej. `"9100:9000"` API + `"9101:9001"` consola), y el
+   endpoint del app apuntar a ese host-port en dev. Requisito concreto para el docker-compose.
+2. **`spiVersion` es un `"1"` pelado (no semver rico).** Los fixtures/entidad muestran `spiVersion="1"` (columna
+   `length=40`). Implicaciones: (a) la negociación no es "comparar semver" sino "¿es una versión que soporta
+   `artifactRef`?" → introducir una **constante** (p.ej. contrato `artifactRef` = spiVersion **"2"**) y comparar de
+   forma robusta (no `<` de String, que ordena mal `"10"` vs `"2"`); (b) **todos los plugins existentes son `"1"`** → el
+   gate es un **cutover duro**: cada source remoto debe re-declarar la versión nueva + implementar la subida (el sidecar
+   de referencia declara la nueva). Alternativa más fina: un **flag de capacidad** (`supportsArtifactRef`) en el
+   descriptor en vez de bumpear el spiVersion global (que es coarse: cualquier cambio de SPI lo movería). **Recomiendo**
+   la constante de versión por simplicidad en este feature de madurez, documentando el cutover; el flag de capacidad si
+   se quiere granularidad.
+3. **La inyección `Instance<>` opcional encaja (confirmado).** `SourceProviderRegistry` ya inyecta sus deps como
+   `Instance<SourceProvider>` / `Instance<RemotePluginInvoker>` y tiene un segundo constructor para tests. → inyectar
+   `Instance<ArtifactStaging>` (opcional: `isResolvable()`) es consistente y permite que el app **arranque sin staging
+   configurado**; el source remoto con contenido **falla-fast** solo cuando se usa sin staging. Valida el enfoque del
+   producer opcional.
+
+## Veredicto (revisado)
+
+Fase 2b es **factible y bien acotada** sobre el ladrillo 2a verificado, con estos requisitos concretos del doble-check:
+**mapear MinIO a un host-port ≠ 9000** (evitar el choque con ClickHouse), **negociar con una constante de versión
+robusta** (no `<` de String) asumiendo el cutover duro (o un flag de capacidad), e **inyectar `Instance<ArtifactStaging>`
+opcional** (arranque sin staging). El patrón invoker-stub habilita el E2E sin extender el sidecar. Recomiendo entrar por
+el **producer opcional + la reescritura de `openFile` con su unit test (staging fake + negociación)**, luego el **E2E
+MinIO con invoker-stub**, y cerrar con **docker-compose MinIO (host-port libre)**. Sigue fuera del money-path.
