@@ -62,7 +62,7 @@ class AsyncTaskConsumerTest {
         when(configurationMapper.resolveSecretsIn(any())).thenAnswer(inv -> inv.getArgument(0));
         // maxAttempts=3, backoff=0 (sin sleep en tests).
         consumer = new AsyncTaskConsumer(inbox, registry, completion, gather, mapper, pageChain,
-                configurationMapper, 3, 0);
+                configurationMapper, 3, 0, 30);
     }
 
     /** payload de wire = envelope entero (patrón audit/sidecar); config = envelope.payload(). */
@@ -105,6 +105,23 @@ class AsyncTaskConsumerTest {
         verify(registry, never()).resolve("DB_WRITE");
         assertTrue(inbox.records.isEmpty(), "un duplicado no registra nada nuevo");
         assertTrue(completion.calls.isEmpty(), "un duplicado no re-completa el proceso");
+    }
+
+    @Test
+    void lostClaimSkipsProviderExecutionWithoutRepeatingTheEffect() {
+        // §5: el pre-check isProcessed NO cortó (no es terminal), pero el claim atómico lo gana otro nodo
+        // (claim vivo ajeno) → este consumer NO ejecuta el efecto y descarta la re-entrega.
+        var captured = new CapturingProvider(TaskResult.success("ok", Map.of()));
+        when(registry.resolve("DB_WRITE")).thenReturn(captured);
+        inbox.claimResult = false; // el claim lo tiene otro nodo, vivo
+
+        var result = consumer.consume(wire("DB_WRITE", "idem-claimed", "{}"), "KAFKA", "tasks.db_write");
+
+        assertEquals(AsyncTaskConsumer.ConsumeResult.DUPLICATE, result);
+        assertNull(captured.configuration, "el efecto NO debe ejecutarse si se perdió el claim");
+        assertTrue(inbox.records.isEmpty(), "no se registra terminal: el dueño del claim lo hará");
+        assertTrue(completion.calls.isEmpty(), "no se re-completa el proceso");
+        assertTrue(inbox.claimedKeys.contains("idem-claimed"), "se intentó el claim");
     }
 
     @Test
@@ -499,10 +516,19 @@ class AsyncTaskConsumerTest {
     private static final class RecordingInbox implements TaskInboxStore {
         final List<Recorded> records = new ArrayList<>();
         final List<String> processedKeys = new ArrayList<>();
+        final List<String> claimedKeys = new ArrayList<>();
+        // §5: por defecto este consumer gana el claim (ejecuta); un test puede forzar false (claim ajeno vivo).
+        boolean claimResult = true;
 
         @Override
         public boolean isProcessed(String idempotencyKey) {
             return processedKeys.contains(idempotencyKey);
+        }
+
+        @Override
+        public boolean claim(AsyncTaskEnvelope e, String owner, int leaseSeconds) {
+            claimedKeys.add(e.idempotencyKey());
+            return claimResult;
         }
 
         @Override

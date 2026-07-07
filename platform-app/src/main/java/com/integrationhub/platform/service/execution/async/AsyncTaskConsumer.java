@@ -57,6 +57,9 @@ public class AsyncTaskConsumer {
     private final JsonConfigurationMapper configurationMapper;
     private final int maxAttempts;
     private final long backoffMs;
+    private final int claimLeaseSeconds;
+    // §5: identidad de ESTE nodo, owner del claim del inbox (igual que el claim de process_execution).
+    private final String nodeId = "inbox-" + java.util.UUID.randomUUID();
 
     @Inject
     public AsyncTaskConsumer(TaskInboxStore inbox,
@@ -69,7 +72,9 @@ public class AsyncTaskConsumer {
                              @ConfigProperty(name = "tasks.async.consumer.max-attempts", defaultValue = "3")
                              int maxAttempts,
                              @ConfigProperty(name = "tasks.async.consumer.backoff-ms", defaultValue = "200")
-                             long backoffMs) {
+                             long backoffMs,
+                             @ConfigProperty(name = "tasks.async.consumer.claim-lease-seconds", defaultValue = "30")
+                             int claimLeaseSeconds) {
         this.inbox = inbox;
         this.providers = providers;
         this.completion = completion;
@@ -79,6 +84,7 @@ public class AsyncTaskConsumer {
         this.configurationMapper = configurationMapper;
         this.maxAttempts = Math.max(1, maxAttempts);
         this.backoffMs = Math.max(0, backoffMs);
+        this.claimLeaseSeconds = Math.max(1, claimLeaseSeconds);
     }
 
     /**
@@ -176,7 +182,16 @@ public class AsyncTaskConsumer {
         // §6: la config viajó con los ${secret:} SIN resolver (no se persisten en outbox/broker); se
         // re-resuelven aquí, en el punto-de-uso, justo antes de ejecutar. Sin secretos inline es no-op.
         var resolvedConfiguration = resolveSecrets(configuration);
-        // Un throw aquí (fallo transitorio) NO se captura: propaga → nack → reentrega (at-least-once).
+        // §5: claim ATÓMICO antes del efecto. Si no ganamos (otro nodo lo tiene vivo o ya es terminal), NO
+        // ejecutamos: una re-entrega tras un claim ajeno no repite el efecto externo. El pre-check isProcessed
+        // ya cortó los terminales; aquí se cubre la carrera contra un claim VIVO y se re-toma un lease vencido.
+        if (!inbox.claim(envelope, nodeId, claimLeaseSeconds)) {
+            LOG.debugf("Async task consumer: %s reclamada por otro nodo (claim vivo); skip sin re-ejecutar",
+                    envelope.idempotencyKey());
+            return ConsumeResult.DUPLICATE;
+        }
+        // Un throw aquí (fallo transitorio) NO se captura: propaga → nack → reentrega (at-least-once). El claim
+        // queda CLAIMED con lease: la re-entrega la re-toma este mismo nodo (owner) o, si cayó, otro al vencer.
         var result = provider.execute(context, resolvedConfiguration);
 
         // Aplica el resultado a la tarea suspendida por despacho async y continúa el pipeline (o, si el

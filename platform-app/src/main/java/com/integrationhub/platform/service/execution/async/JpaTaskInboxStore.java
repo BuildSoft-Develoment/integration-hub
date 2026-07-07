@@ -7,6 +7,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
+import java.sql.Timestamp;
+import java.time.LocalDateTime;
+
 /**
  * Adaptador JPA del puerto {@link TaskInboxStore} (ADR-015). Responsabilidad única: mapear el
  * dominio ({@link AsyncTaskEnvelope} + resultado) a filas del ledger y delimitar la transacción;
@@ -30,19 +33,31 @@ public class JpaTaskInboxStore implements TaskInboxStore {
     @Override
     @Transactional
     public boolean isProcessed(String idempotencyKey) {
-        return repository.existsByIdempotencyKey(idempotencyKey);
+        // §5: solo terminal cortocircuita; un CLAIMED vivo/estancado va al claim() (re-toma si venció).
+        return repository.existsTerminalByIdempotencyKey(idempotencyKey);
+    }
+
+    @Override
+    @Transactional
+    public boolean claim(AsyncTaskEnvelope envelope, String owner, int leaseSeconds) {
+        var now = LocalDateTime.now();
+        var claimedUntil = now.plusSeconds(Math.max(leaseSeconds, 1));
+        return repository.claim(
+                envelope.idempotencyKey(), envelope.taskType(), envelope.processExecutionId(),
+                envelope.taskDefinitionId(), envelope.transport(), owner,
+                Timestamp.valueOf(claimedUntil), Timestamp.valueOf(now)) == 1;
     }
 
     @Override
     @Transactional
     public void recordProcessed(AsyncTaskEnvelope envelope, String outputsJson, String details) {
-        insertTerminal(envelope, TaskInbox.PROCESSED, outputsJson, details, null);
+        finalizeOrInsert(envelope, TaskInbox.PROCESSED, outputsJson, details, null);
     }
 
     @Override
     @Transactional
     public void recordFailed(AsyncTaskEnvelope envelope, String details) {
-        insertTerminal(envelope, TaskInbox.FAILED, null, details, null);
+        finalizeOrInsert(envelope, TaskInbox.FAILED, null, details, null);
     }
 
     @Override
@@ -57,6 +72,19 @@ public class JpaTaskInboxStore implements TaskInboxStore {
         // Sin idempotencyKey → no entra al índice parcial → siempre se inserta (DLQ del consumer).
         repository.insertIfAbsent(null, null, null, null, TaskInbox.POISON,
                 null, null, error, rawPayload, brokerType, topic);
+    }
+
+    /**
+     * §5: finaliza el claim de este work-item (CLAIMED → terminal). Si no había claim (0 filas) cae a
+     * {@code insertIfAbsent}: preserva el registro idempotente para cualquier camino que no reclame (defensa).
+     */
+    private void finalizeOrInsert(AsyncTaskEnvelope envelope, String status,
+                                  String outputsJson, String details, String error) {
+        var finalized = repository.finalizeClaimed(
+                envelope.idempotencyKey(), status, outputsJson, details, error);
+        if (finalized == 0) {
+            insertTerminal(envelope, status, outputsJson, details, error);
+        }
     }
 
     private void insertTerminal(AsyncTaskEnvelope envelope, String status,

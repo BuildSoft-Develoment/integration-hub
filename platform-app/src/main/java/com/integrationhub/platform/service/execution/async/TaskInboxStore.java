@@ -12,6 +12,13 @@ public interface TaskInboxStore {
     /** ¿Ya hay un registro terminal para esta clave? (descarta reentregas at-least-once). */
     boolean isProcessed(String idempotencyKey);
 
+    /**
+     * §5: claim ATÓMICO del work-item once antes de ejecutar el efecto. Devuelve {@code true} si este
+     * consumer gana (o re-toma un claim propio/vencido) y debe ejecutar; {@code false} si otro lo tiene vivo
+     * o ya es terminal → skip. Con owner+lease, dos entregas de la misma trama no ejecutan el efecto dos veces.
+     */
+    boolean claim(AsyncTaskEnvelope envelope, String owner, int leaseSeconds);
+
     /** Registra una ejecución exitosa; el {@code outputsJson} lo consumirá la continuación (Etapa 4). */
     void recordProcessed(AsyncTaskEnvelope envelope, String outputsJson, String details);
 
