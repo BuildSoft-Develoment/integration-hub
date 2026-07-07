@@ -4,6 +4,7 @@ import com.integrationhub.platform.integration.PostgresTestResource;
 import com.integrationhub.platform.repository.TaskInboxRepository;
 import com.integrationhub.platform.service.execution.async.AsyncInboxClaimRecoveryScheduler;
 import com.integrationhub.platform.service.execution.async.AsyncNodeIdentity;
+import com.integrationhub.platform.service.execution.async.LeaseHeartbeat;
 import com.integrationhub.platform.service.execution.async.TaskInboxStore;
 import com.integrationhub.platform.task.AsyncTaskEnvelope;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -181,6 +182,27 @@ class AsyncInboxClaimIT {
     }
 
     @Test
+    void heartbeatRenewsTheLeaseAgainstTheRealDbFromItsSchedulerThread() throws Exception {
+        // F3 (ruta real): el heartbeat renueva via store.renewLease @Transactional DESDE SU HILO DE SCHEDULER
+        // contra la BD real. Si @Transactional no funcionara en ese hilo, la renovación se tragaría en el
+        // try/catch y claimed_until NO avanzaría. Se verifica que SÍ avanza (heartbeat efectivo de verdad).
+        var env = envelope("idem-hb-real");
+        assertTrue(inbox.claim(env, nodeIdentity.id(), 2)); // lease corto (2s) → renueva cada 1s
+        var before = claimedUntil("idem-hb-real");
+
+        var heartbeat = new LeaseHeartbeat(inbox, 2, 1); // store REAL (CDI), lease 2s
+        heartbeat.runWithHeartbeat(env, nodeIdentity.id(), () -> {
+            sleepQuietly(2600); // supera lease/2 (1s) varias veces → dispara renovaciones reales
+            return null;
+        });
+
+        var after = claimedUntil("idem-hb-real");
+        assertTrue(after.compareTo(before) > 0,
+                "el heartbeat avanzó claimed_until contra la BD real (" + before + " -> " + after + ")");
+        assertEquals("CLAIMED", status("idem-hb-real"), "el claim sigue vivo tras la ejecución");
+    }
+
+    @Test
     void renewLeaseOnATerminalRowIsANoOp() throws Exception {
         // Un heartbeat que dispara tras finalizar es inofensivo: la fila ya no está CLAIMED → 0 filas.
         var env = envelope("idem-renew-term");
@@ -211,6 +233,18 @@ class AsyncInboxClaimIT {
 
     private String owner(String key) {
         return single("select inbox_owner from task_inbox where idempotency_key = '" + key + "'");
+    }
+
+    private String claimedUntil(String key) {
+        return single("select claimed_until from task_inbox where idempotency_key = '" + key + "'");
+    }
+
+    private static void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private void expireClaim(String key) throws Exception {
