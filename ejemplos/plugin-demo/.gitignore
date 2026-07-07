@@ -1,0 +1,13 @@
+# Build artefacts — el ejemplo se reconstruye desde fuentes.
+**/target/
+**/node_modules/
+**/dist/
+
+# Stubs gRPC generados (Python) — se generan en build (Dockerfile / grpc_tools.protoc).
+backend-grpc-python/src/remote_plugin_pb2.py
+backend-grpc-python/src/remote_plugin_pb2_grpc.py
+**/__pycache__/
+**/*.pyc
+
+# Shade plugin artifact
+backend-grpc-java/dependency-reduced-pom.xml
