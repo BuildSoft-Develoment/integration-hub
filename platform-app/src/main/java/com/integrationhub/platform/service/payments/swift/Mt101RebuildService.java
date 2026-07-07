@@ -8,6 +8,7 @@ import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.task.TaskContext;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.jboss.logging.Logger;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
@@ -25,6 +26,8 @@ import java.util.Map;
  */
 @ApplicationScoped
 public class Mt101RebuildService {
+
+    private static final Logger LOG = Logger.getLogger(Mt101RebuildService.class);
 
     private static final String REBUILDABLE_FRAGMENT_STATUS = "REJECTED";
     /** Limite de varchar(80) de fragment_set_id / corrective_set_id / rebuild_run_id. */
@@ -540,19 +543,28 @@ public class Mt101RebuildService {
      * @return cuantos runs avanzaron de estado.
      */
     public int synchronizeActiveLifecycles() {
+        int updated;
         try {
-            var updated = 0;
-            updated += synchronizeActiveLifecycles(null, defaultDataSource);
-            if (connectionPoolManager != null) {
-                for (var connectionRef : connectionPoolManager.activeJdbcConnectionRefs()) {
-                    updated += synchronizeActiveLifecycles(connectionRef,
-                            connectionPoolManager.resolveJdbcDataSource(connectionRef));
-                }
-            }
-            return updated;
+            updated = synchronizeActiveLifecycles(null, defaultDataSource);
         } catch (SQLException error) {
+            // El datasource por defecto es critico (lo cubren los health checks): su fallo se propaga.
             throw new IllegalStateException("Cannot synchronize active MT101 rebuild lifecycles", error);
         }
+        if (connectionPoolManager != null) {
+            for (var connectionRef : connectionPoolManager.activeJdbcConnectionRefs()) {
+                try {
+                    updated += synchronizeActiveLifecycles(connectionRef,
+                            connectionPoolManager.resolveJdbcDataSource(connectionRef));
+                } catch (SQLException | RuntimeException error) {
+                    // Una conexion JDBC externa mal configurada (p.ej. credenciales/host errados) NO
+                    // debe abortar el sync de las demas ni repetirse en bucle cada tick del scheduler.
+                    // Se registra fuerte y se continua: fail-loud por conexion, resiliente en el agregado.
+                    LOG.errorf(error, "MT101 lifecycle sync skipped JDBC connection '%s': %s",
+                            connectionRef, error.getMessage());
+                }
+            }
+        }
+        return updated;
     }
 
     private int synchronizeActiveLifecycles(String schedulerConnectionRef, DataSource schedulerDataSource) throws SQLException {

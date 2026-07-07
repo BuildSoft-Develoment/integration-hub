@@ -222,6 +222,42 @@ class Mt101RebuildServiceTest {
     }
 
     @Test
+    void schedulerIsolatesFailingJdbcConnectionAndStillSyncsHealthyOnes() throws Exception {
+        // Conexion SANA con un run activo que debe avanzar BUILT -> ARCHIVED.
+        var healthyDataSource = schemaDataSource("remote_ok");
+        createSchema("remote_ok");
+        prepareSchema(healthyDataSource);
+        insertRemoteActiveRun(healthyDataSource);
+
+        // Conexion MAL configurada: getConnection() falla con el error real observado
+        // (como la conexion 'bdtrama' del entorno, apuntando a puerto/clave equivocados).
+        DataSource brokenDataSource = new FailingDataSource(
+                "FATAL: password authentication failed for user \"postgres\"");
+
+        // La conexion ROTA va PRIMERO: prueba que no aborta el sync de la SANA que va despues.
+        var pool = new ConnectionPoolManager(null, null) {
+            @Override
+            public List<String> activeJdbcConnectionRefs() {
+                return List.of("broken-jdbc", "remote-jdbc");
+            }
+
+            @Override
+            public DataSource resolveJdbcDataSource(String connectionRef) {
+                return "broken-jdbc".equals(connectionRef) ? brokenDataSource : healthyDataSource;
+            }
+        };
+        var schedulerService = new Mt101RebuildService(dataSource, pool, null, null,
+                new Mt101FailedRecordRepository(), new Mt101FragmentRepository());
+
+        // No lanza pese a la conexion rota, y la sana AVANZA (1 run): la rota se aisla y se continua.
+        assertEquals(1, schedulerService.synchronizeActiveLifecycles(),
+                "una conexion JDBC rota no debe abortar el sync de las sanas");
+        assertEquals("ARCHIVED", queryString(healthyDataSource,
+                "select status from mt101_rebuild_run where rebuild_run_id = ?", "FIX-REMOTE"),
+                "el run de la conexion sana avanza aunque otra conexion falle");
+    }
+
+    @Test
     void failsWhenNoQuarantinedRows() throws Exception {
         insertFragmentWithLineage("P1", 2, 2);
 
@@ -593,6 +629,33 @@ class Mt101RebuildServiceTest {
             statement.executeUpdate("drop schema if exists " + schema + " cascade");
             statement.executeUpdate("create schema " + schema);
         }
+    }
+
+    /** DataSource cuyo {@code getConnection()} siempre falla; simula una conexion con credenciales/host errados. */
+    private static final class FailingDataSource implements DataSource {
+        private final String message;
+
+        FailingDataSource(String message) {
+            this.message = message;
+        }
+
+        @Override
+        public Connection getConnection() throws SQLException {
+            throw new SQLException(message);
+        }
+
+        @Override
+        public Connection getConnection(String username, String password) throws SQLException {
+            throw new SQLException(message);
+        }
+
+        @Override public java.io.PrintWriter getLogWriter() { return null; }
+        @Override public void setLogWriter(java.io.PrintWriter out) { }
+        @Override public void setLoginTimeout(int seconds) { }
+        @Override public int getLoginTimeout() { return 0; }
+        @Override public java.util.logging.Logger getParentLogger() { return java.util.logging.Logger.getGlobal(); }
+        @Override public <T> T unwrap(Class<T> iface) { throw new UnsupportedOperationException(); }
+        @Override public boolean isWrapperFor(Class<?> iface) { return false; }
     }
 
     private void insertRemoteActiveRun(DataSource targetDataSource) throws SQLException {
