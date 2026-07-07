@@ -7,7 +7,7 @@
 -- - La migracion V14 debe haber ampliado payment_validation_rule.code a 80.
 --
 -- Uso local:
--- psql -h localhost -p 5432 -U postgres -d bdtrama -f qa/fase-6-qa/perfiles-simulados/payment-validation-rule-seed.sql
+-- psql -h localhost -p 5432 -U postgres -d integration_hub -f qa/fase-6-qa/perfiles-simulados/payment-validation-rule-seed.sql
 
 insert into public.payment_validation_rule
     (rule_set, code, standard, applies_to, severity, predicate_kind, predicate_body, active)

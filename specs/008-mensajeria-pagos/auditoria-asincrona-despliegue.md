@@ -40,7 +40,7 @@
 | `platform-app` | Quarkus (API + engine + productor + relay) | 8080 | por carga de pagos |
 | `audit-consumer` | Quarkus (consumidor MQ → BD) | 8082 | **independiente** (réplicas por lag de auditoría) |
 | MQ | Kafka (default) / Artemis / RabbitMQ / Redis | — | según broker |
-| Postgres | `bdtrama` (compartido: spool, audit_event, audit_record_event) | 5432 | — |
+| Postgres | `integration_hub` (compartido: spool, audit_event, audit_record_event) | 5432 | — |
 | ClickHouse (opc.) | store frío RECORD a escala | 8123/9000 | — |
 
 Servicios listos en `docker-compose.yml`: `postgres`, `kafka` (+`kafka-ui`), `audit-consumer`, y opcionales `rabbitmq`, `redis`, `artemis`, `clickhouse`.

@@ -60,7 +60,7 @@ set JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-25.0.2.10-hotspot
 
 ```json
 {
-  "jdbcUrl": "jdbc:postgresql://localhost:5432/bdtrama",
+  "jdbcUrl": "jdbc:postgresql://localhost:5432/integration_hub",
   "username": "postgres",
   "password": "${secret:connections/db/conexion1/password}"
 }

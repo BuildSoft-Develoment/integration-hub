@@ -9,7 +9,7 @@
     "apiResourcePlural": "processes",
     "apiResourcePath": "/api/process-definitions",
     "javaBasePackage": "com.integrationhub.platform",
-    "databaseName": "bdtrama",
+    "databaseName": "integration_hub",
     "featureFlagPrefix": "integration-hub",
     "backstageOwner": "team-integration-hub",
     "backstageSystem": "integration-hub",

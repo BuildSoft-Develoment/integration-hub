@@ -27,7 +27,7 @@ Para bases locales/dev donde se requiere dejar filas visibles directamente en
 `public.payment_validation_rule`, usar el seed idempotente:
 
 ```bash
-psql -h localhost -p 5432 -U postgres -d bdtrama \
+psql -h localhost -p 5432 -U postgres -d integration_hub \
   -f qa/fase-6-qa/perfiles-simulados/payment-validation-rule-seed.sql
 ```
 

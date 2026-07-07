@@ -1,5 +1,5 @@
 {
-  "jdbcUrl": "jdbc:postgresql://localhost:5432/bdtrama",
+  "jdbcUrl": "jdbc:postgresql://localhost:5432/integration_hub",
   "username": "postgres",
   "password": "${secret:connections/db/conexion1/password}",
   "minSize": 0,
