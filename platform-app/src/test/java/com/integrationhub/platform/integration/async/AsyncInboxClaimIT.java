@@ -16,6 +16,11 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.Statement;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -63,6 +68,40 @@ class AsyncInboxClaimIT {
                 "un segundo claim de otro nodo (lease vivo) pierde → NO ejecutará el efecto");
         assertEquals("CLAIMED", status("idem-race"));
         assertEquals("node-A", owner("idem-race"));
+    }
+
+    @Test
+    void concurrentClaimsOnTheSameKeyGrantExactlyOne() throws Exception {
+        var env = envelope("idem-concurrent");
+        var threads = 8;
+        var pool = Executors.newFixedThreadPool(threads);
+        var start = new CountDownLatch(1);
+        var done = new CountDownLatch(threads);
+        var winners = new AtomicInteger(0);
+        try {
+            for (var i = 0; i < threads; i++) {
+                var owner = "node-" + i;
+                pool.submit(() -> {
+                    try {
+                        start.await();
+                        if (inbox.claim(env, owner, 30)) {
+                            winners.incrementAndGet();
+                        }
+                    } catch (InterruptedException ignored) {
+                        Thread.currentThread().interrupt();
+                    } finally {
+                        done.countDown();
+                    }
+                });
+            }
+            start.countDown(); // libera todos a la vez → máxima contención
+            assertTrue(done.await(20, TimeUnit.SECONDS), "todos los claims terminaron");
+        } finally {
+            pool.shutdownNow();
+        }
+        // Postgres serializa el INSERT ... ON CONFLICT sobre el índice único: exactamente uno gana el efecto.
+        assertEquals(1, winners.get(), "exactamente un consumer gana el claim bajo contención real");
+        assertEquals("CLAIMED", status("idem-concurrent"));
     }
 
     @Test
