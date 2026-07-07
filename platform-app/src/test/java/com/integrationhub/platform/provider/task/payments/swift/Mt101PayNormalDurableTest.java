@@ -3,6 +3,8 @@ package com.integrationhub.platform.provider.task.payments.swift;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
@@ -149,7 +151,51 @@ class Mt101PayNormalDurableTest {
         assertFalse(payConflictFor(setId, "L1"), "un fragmento sin conflicto NO se marca");
     }
 
+    @Test
+    void concurrentStatusResolvingToSameTerminalIsIdempotentNotConflict() throws Exception {
+        // B (falso positivo corregido): si STATUS resuelve el fragmento al MISMO terminal que el worker va a
+        // escribir, el resultado del worker es idempotente (SAME_TERMINAL) y NO debe marcarse pay_conflict.
+        var setId = "PAY-SAME-TERMINAL";
+        seedArchived(setId, "S1", 1, 1);
+        var emitter = new CapturingAuditEmitter();
+        // El transporte simula STATUS concurrente: al enviar S1 lo fija a SENT (mismo terminal), luego ACCEPTED.
+        var transport = new StatusRacingTransport("REST", dataSource, Map.of("S1", "SENT"));
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore, null, emitter);
+
+        provider.execute(payContextFor(setId, 1), payConfig());
+
+        assertEquals("SENT", statusFor(setId, "S1"));
+        assertFalse(payConflictFor(setId, "S1"), "SAME_TERMINAL es idempotente: no es conflicto");
+        assertFalse(emitter.hasStage("PAY_CONFLICT"), "no se emite trama PAY_CONFLICT para un terminal idéntico");
+    }
+
+    @Test
+    void concurrentStatusResolvingToDifferentTerminalIsFlaggedAndEmitsPayConflictAudit() throws Exception {
+        // A/C: STATUS resolvió REJECTED y el worker trae un ACCEPTED tardío (SENT) -> contradicción real: no se
+        // sobrescribe el estado, se marca pay_conflict y se emite la trama append-only PAY_CONFLICT (no solo el
+        // booleano). El caso inverso al de arriba, con el mismo mecanismo simétrico.
+        var setId = "PAY-CONFLICT-TERMINAL";
+        seedArchived(setId, "C1", 1, 1);
+        var emitter = new CapturingAuditEmitter();
+        var transport = new StatusRacingTransport("REST", dataSource, Map.of("C1", "REJECTED"));
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore, null, emitter);
+
+        provider.execute(payContextFor(setId, 1), payConfig());
+
+        assertEquals("REJECTED", statusFor(setId, "C1"),
+                "el estado real (REJECTED) no se sobrescribe con el SENT tardío");
+        assertTrue(payConflictFor(setId, "C1"), "un terminal contradictorio marca pay_conflict");
+        assertTrue(emitter.hasStage("PAY_CONFLICT"), "se emite la trama append-only PAY_CONFLICT para el conflicto");
+    }
+
     // --- helpers ---
+
+    private TaskContext payContextFor(String fragmentSetId, int total) {
+        var context = new TaskContext(100L, 20L);
+        var fragmentSource = fragmentStore.source(null, fragmentSetId, total);
+        context.attributes().put("taskOutputs", Map.of("build.fragments", fragmentSource));
+        return context;
+    }
 
     private boolean payConflictFor(String setId, String reference) throws SQLException {
         try (Connection connection = dataSource.getConnection();
@@ -285,6 +331,58 @@ class Mt101PayNormalDurableTest {
         }
 
         int calls() { return calls; }
+    }
+
+    /**
+     * Simula una resolución STATUS/RECONCILE CONCURRENTE: al enviar un ref, fija su fragmento al terminal indicado
+     * (como si STATUS lo hubiera resuelto mientras el send estaba en vuelo) y luego devuelve ACCEPTED, de modo que
+     * el worker intente marcar SENT sobre un terminal ya escrito. Con esto se ejercita la clasificación
+     * SAME_TERMINAL vs CONFLICT de {@code finalizeNormalGuarded}.
+     */
+    private static final class StatusRacingTransport implements PaymentMessageTransport {
+        private final String transportId;
+        private final DataSource dataSource;
+        private final Map<String, String> resolveTo;
+
+        StatusRacingTransport(String transportId, DataSource dataSource, Map<String, String> resolveTo) {
+            this.transportId = transportId;
+            this.dataSource = dataSource;
+            this.resolveTo = resolveTo;
+        }
+
+        @Override public String transport() { return transportId; }
+
+        @Override
+        public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
+            var ref = message.sequenceA() == null ? null : message.sequenceA().sendersReference();
+            var terminal = ref == null ? null : resolveTo.get(ref);
+            if (terminal != null) {
+                try (Connection connection = dataSource.getConnection();
+                     var statement = connection.prepareStatement(
+                             "update mt101_build_fragment set status = ? where senders_reference = ?")) {
+                    statement.setString(1, terminal);
+                    statement.setString(2, ref);
+                    statement.executeUpdate();
+                } catch (SQLException error) {
+                    throw new IllegalStateException("racing STATUS update failed for " + ref, error);
+                }
+            }
+            return TransportResult.accepted("GW-" + ref, 1, 1L);
+        }
+    }
+
+    /** Captura las tramas de auditoría emitidas para verificar la trama append-only PAY_CONFLICT. */
+    private static final class CapturingAuditEmitter implements RecordAuditEmitter {
+        private final List<AuditEnvelope> captured = new ArrayList<>();
+
+        @Override
+        public void emitRecords(java.util.Collection<AuditEnvelope> envelopes) {
+            captured.addAll(envelopes);
+        }
+
+        boolean hasStage(String stage) {
+            return captured.stream().anyMatch(envelope -> stage.equals(envelope.stage()));
+        }
     }
 
     private static final class InstanceOfOne<T> implements Instance<T> {

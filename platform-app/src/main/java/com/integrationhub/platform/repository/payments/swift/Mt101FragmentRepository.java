@@ -503,6 +503,44 @@ public class Mt101FragmentRepository {
         }
     }
 
+    /**
+     * P0-1 (simetría terminal): estado {@code status} actual de un conjunto de refs. Se usa para clasificar un
+     * resultado terminal que NO transicionó desde {@code DISPATCHING/UNCERTAIN}: si el estado actual coincide con
+     * el terminal entrante es idempotente ({@code SAME_TERMINAL}, sin conflicto — evita el falso positivo); si es
+     * OTRO terminal es una contradicción real ({@code CONFLICT}) que debe marcar {@code pay_conflict} y auditar.
+     */
+    public Map<String, String> payStatusesFor(DataSource dataSource, String fragmentSetId,
+                                               Collection<String> sendersReferences) throws SQLException {
+        var refs = new ArrayList<String>();
+        if (sendersReferences != null) {
+            for (var reference : sendersReferences) {
+                if (reference != null && !reference.isBlank()) {
+                    refs.add(reference);
+                }
+            }
+        }
+        var statuses = new java.util.LinkedHashMap<String, String>();
+        if (refs.isEmpty()) {
+            return statuses;
+        }
+        var sql = "select senders_reference, status from mt101_build_fragment where fragment_set_id = ? "
+                + "and senders_reference in (" + placeholders(refs.size()) + ")";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            statement.setString(parameter++, fragmentSetId);
+            for (var reference : refs) {
+                statement.setString(parameter++, reference);
+            }
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    statuses.put(rs.getString("senders_reference"), rs.getString("status"));
+                }
+            }
+        }
+        return statuses;
+    }
+
     public void updateStatusBatch(DataSource dataSource,
                                   String fragmentSetId,
                                   Map<String, String> errorBySendersReference,

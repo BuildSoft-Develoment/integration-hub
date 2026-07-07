@@ -404,6 +404,26 @@ public class Mt101FragmentStore {
         }
     }
 
+    /**
+     * P0-1 (simetría terminal): estado {@code status} actual de los refs indicados, para clasificar un resultado
+     * terminal no aplicado como {@code SAME_TERMINAL} (idempotente) vs {@code CONFLICT} (contradicción real).
+     */
+    public Map<String, String> payStatusesFor(Map<String, Object> fragmentSource, java.util.Collection<String> refs) {
+        if (fragmentSource == null || refs == null || refs.isEmpty()) {
+            return Map.of();
+        }
+        var fragmentSetId = stringValue(fragmentSource.get("fragmentSetId"));
+        if (fragmentSetId.isBlank()) {
+            return Map.of();
+        }
+        var connectionRef = stringValue(fragmentSource.get("connectionRef"));
+        try {
+            return fragmentRepository.payStatusesFor(resolveDataSource(connectionRef), fragmentSetId, refs);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot read MT101 pay statuses for set " + fragmentSetId, error);
+        }
+    }
+
     public void markRouteBatch(Map<String, Object> fragmentSource,
                                Map<String, String> routeBySendersReference,
                                Map<String, String> errorBySendersReference) {

@@ -385,7 +385,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
             // P0-1 (PAY normal): transición terminal GUARDADA (solo desde DISPATCHING/UNCERTAIN) + pay_conflict
             // durable ante un resultado tardío contradictorio. Reemplaza el markStatusBatch sin guarda, que podía
             // sobrescribir en silencio un terminal ya resuelto por STATUS/RECONCILE (REJECTED→SENT).
-            finalizeNormalGuarded(configuration, fragmentSource, sentRefs, rejectedByRef, uncertainRefs,
+            finalizeNormalGuarded(context, configuration, fragmentSource, sentRefs, rejectedByRef, uncertainRefs,
                     sentTargets, rejectedTargets);
         } else {
             // CORRECTIVO: el ledger correctivo ya filtró conflicts y el fragmento está DISPATCHING del run (claim
@@ -405,23 +405,46 @@ public class Mt101PayTaskProvider implements TaskProvider {
      * (durable, sin sobrescribir) y NO se propagan a archive. Fuerza conciliación, sin sobrescritura silenciosa.
      * Espejo del PAY_CONFLICT del correctivo (V58) sobre el fragmento normal.
      */
-    private void finalizeNormalGuarded(Map<String, Object> configuration, Map<String, Object> fragmentSource,
+    private void finalizeNormalGuarded(TaskContext context, Map<String, Object> configuration,
+            Map<String, Object> fragmentSource,
             java.util.List<String> sentRefs, Map<String, String> rejectedByRef, java.util.List<String> uncertainRefs,
             java.util.List<Mt101ArchiveStatusUpdater.StatusTarget> sentTargets,
             java.util.List<Mt101ArchiveStatusUpdater.StatusTarget> rejectedTargets) {
         var fromUnresolved = java.util.List.of("DISPATCHING", "UNCERTAIN");
-        var conflicts = new java.util.LinkedHashSet<String>();
         var sentUpdated = fragmentStore.resolvePayStatusReturning(fragmentSource, sentRefs, fromUnresolved, "SENT", null);
-        for (var ref : sentRefs) {
-            if (!sentUpdated.contains(ref)) {
-                conflicts.add(ref);
-            }
-        }
         var rejectedUpdated = fragmentStore.resolvePayStatusReturning(
                 fragmentSource, rejectedByRef, fromUnresolved, "REJECTED");
+
+        // Refs que NO transicionaron desde DISPATCHING/UNCERTAIN: su estado actual ya es terminal. Se CLASIFICA
+        // con el estado real (P0-1, simetría), sin tratar cualquier no-update como conflicto:
+        //   estado actual == terminal entrante  -> SAME_TERMINAL: idempotente, NO es conflicto (evita el falso
+        //                                           positivo cuando STATUS ya resolvió al mismo terminal).
+        //   estado actual == OTRO terminal        -> CONFLICT: contradicción real -> pay_conflict + trama append-only.
+        var intendedByRef = new java.util.LinkedHashMap<String, String>();
+        for (var ref : sentRefs) {
+            if (!sentUpdated.contains(ref)) {
+                intendedByRef.put(ref, "SENT");
+            }
+        }
         for (var ref : rejectedByRef.keySet()) {
             if (!rejectedUpdated.contains(ref)) {
+                intendedByRef.put(ref, "REJECTED");
+            }
+        }
+        var conflicts = new java.util.LinkedHashSet<String>();
+        var conflictAudit = new ArrayList<AuditEnvelope>();
+        if (!intendedByRef.isEmpty()) {
+            var currentStatuses = fragmentStore.payStatusesFor(fragmentSource, intendedByRef.keySet());
+            for (var entry : intendedByRef.entrySet()) {
+                var ref = entry.getKey();
+                var incoming = entry.getValue();
+                var current = currentStatuses.get(ref);
+                if (current == null || incoming.equals(current)) {
+                    // SAME_TERMINAL (o ya no existe): idempotente. No sobrescribe y NO marca conflicto.
+                    continue;
+                }
                 conflicts.add(ref);
+                conflictAudit.add(payConflictEnvelope(context, ref, current, incoming));
             }
         }
         // UNCERTAIN solo desde DISPATCHING (un terminal ya resuelto no debe bajar a UNCERTAIN).
@@ -433,6 +456,8 @@ public class Mt101PayTaskProvider implements TaskProvider {
             fragmentStore.markPayConflict(fragmentSource, conflicts,
                     "resultado terminal tardío contradijo una resolución previa (STATUS/RECONCILE); "
                             + "no se sobrescribió el fragmento — conciliar");
+            // Trama append-only PAY_CONFLICT (espejo del correctivo): el booleano no basta para monitoreo bancario.
+            emitRecordAudit(conflictAudit);
             // No propagar a archive los conflictivos: coherencia con el pay_status real del fragmento.
             sentTargets.removeIf(target -> conflicts.contains(target.sendersReference()));
             rejectedTargets.removeIf(target -> conflicts.contains(target.sendersReference()));
@@ -440,6 +465,43 @@ public class Mt101PayTaskProvider implements TaskProvider {
         // H5: avanza mt101_archive para lo NO conflictivo si la sync no se desactivó.
         syncArchive(configuration, fragmentSource, sentTargets, "SENT");
         syncArchive(configuration, fragmentSource, rejectedTargets, "REJECTED");
+    }
+
+    /**
+     * P0-1 (C): trama append-only {@code PAY_CONFLICT} para el PAY normal, espejo de la acción del ledger
+     * correctivo. Un resultado terminal tardío contradijo el estado ya resuelto por STATUS/RECONCILE; se conserva
+     * el estado real (no se sobrescribe) y se deja evidencia conciliable en auditoría/timeline/UI (no solo el
+     * booleano {@code pay_conflict}). Mismo esqueleto que {@link #recordEnvelope} para paridad de esquema.
+     */
+    private AuditEnvelope payConflictEnvelope(TaskContext context, String reference,
+            String currentStatus, String incomingTerminal) {
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
+                reference,
+                AuditLevel.RECORD,
+                "PAY_CONFLICT",
+                "PAY_CONFLICT",
+                context.processExecutionId(),
+                context.taskDefinitionId(),
+                "resultado terminal tardío '" + incomingTerminal + "' contradijo el estado ya resuelto '"
+                        + currentStatus + "'; no se sobrescribió — conciliar (STATUS/RECONCILE)",
+                null,
+                Map.of("previousStatus", currentStatus, "incomingTerminal", incomingTerminal),
+                "SWIFT",
+                "MT101",
+                null,
+                null,
+                null,
+                null,
+                null,
+                reference,
+                null,
+                null,
+                null,
+                null,
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
     }
 
     private record RoutedDispatchMessage(Mt101Message message, String routedAs, String routeError) {
