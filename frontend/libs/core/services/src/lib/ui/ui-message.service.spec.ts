@@ -1,8 +1,6 @@
 import { TestBed } from '@angular/core/testing';
-import {
-  I18nService,
-  UiMessageService,
-} from '@integration-hub/core/services';
+import { I18nService } from '@integration-hub/core/i18n';
+import { UiMessageService } from './ui-message.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { UiMessageSnackbarComponent } from '@integration-hub/plugin-ui-kit';
 

@@ -1,4 +1,4 @@
-import { I18nService } from '@integration-hub/core/services';
+import { I18nService } from '@integration-hub/core/i18n';
 import {
   ProcessTaskExecutionMode,
   ProcessTaskInputDraft,

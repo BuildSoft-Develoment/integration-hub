@@ -57,8 +57,13 @@ export class DurationInputComponent implements ControlValueAccessor {
   readonly amount = signal(0);
   readonly unit = signal<DurationUnit>('M');
 
-  private onChange: (value: string) => void = () => {};
-  private onTouched: () => void = () => {};
+  // ControlValueAccessor: no-ops hasta que Angular registre los callbacks (registerOnChange/registerOnTouched).
+  private onChange: (value: string) => void = () => {
+    /* reemplazado por registerOnChange */
+  };
+  private onTouched: () => void = () => {
+    /* reemplazado por registerOnTouched */
+  };
 
   writeValue(value: string): void {
     const { amount, unit } = parseDuration(value);

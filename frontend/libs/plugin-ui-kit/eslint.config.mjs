@@ -12,6 +12,8 @@ export default [
         'error',
         {
           ignoredFiles: ['{projectRoot}/eslint.config.{js,cjs,mjs,ts,cts,mts}'],
+          // @storybook/angular es dev-only (stories); NO es un peerDependency publicable del UI kit.
+          ignoredDependencies: ['@storybook/angular'],
         },
       ],
     },

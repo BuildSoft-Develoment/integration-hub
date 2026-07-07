@@ -12,7 +12,10 @@ export * from './lib/managers/reader-manager.service';
 export * from './lib/managers/source-manager.service';
 export * from './lib/ui/theme.service';
 export * from './lib/ui/system-theme-config.service';
-export * from './lib/i18n/i18n.service';
+// §Fase1: I18nService vive ahora en la leaf @integration-hub/core/i18n (rompe el ciclo
+// core/providers ↔ core/services: providers usa i18n sin subir a la capa de services). Se re-exporta
+// aquí para no cambiar la API del barrel (los ~106 consumidores de features/app siguen igual).
+export * from '@integration-hub/core/i18n';
 export * from './lib/infrastructure/paginator-intl.service';
 export * from './lib/ui/ui-message.service';
 export * from './lib/ui/breadcrumb.service';

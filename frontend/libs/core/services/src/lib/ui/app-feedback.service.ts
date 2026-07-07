@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { I18nService } from '../i18n/i18n.service';
+import { I18nService } from '@integration-hub/core/i18n';
 import { UiMessageService } from './ui-message.service';
 
 @Injectable({ providedIn: 'root' })

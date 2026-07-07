@@ -1,6 +1,6 @@
 import { inject, Injectable } from '@angular/core';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { I18nService } from '../i18n/i18n.service';
+import { I18nService } from '@integration-hub/core/i18n';
 import {
   UiMessageKind,
   UiMessageSnackBarData,

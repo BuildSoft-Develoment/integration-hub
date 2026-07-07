@@ -1,11 +1,8 @@
 import { HttpClient, HttpContext, provideHttpClient, withInterceptors } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import {
-  AppFeedbackService,
-  httpErrorInterceptor,
-  SKIP_GLOBAL_ERROR_FEEDBACK,
-} from '@integration-hub/core/services';
+import { httpErrorInterceptor, SKIP_GLOBAL_ERROR_FEEDBACK } from './http-error.interceptor';
+import { AppFeedbackService } from '../ui/app-feedback.service';
 
 describe('httpErrorInterceptor', () => {
   let httpClient: HttpClient;

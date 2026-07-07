@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { ActivatedRouteSnapshot, RouterStateSnapshot, TitleStrategy } from '@angular/router';
-import { I18nService } from '../i18n/i18n.service';
+import { I18nService } from '@integration-hub/core/i18n';
 
 @Injectable({ providedIn: 'root' })
 export class I18nTitleStrategy extends TitleStrategy {

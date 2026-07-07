@@ -1,0 +1,7 @@
+{
+  "name": "feature-executions",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/features/executions/src",
+  "tags": ["type:feature", "scope:executions"]
+}
