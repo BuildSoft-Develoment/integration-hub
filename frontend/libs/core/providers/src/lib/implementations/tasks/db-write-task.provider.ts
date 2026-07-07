@@ -1,6 +1,6 @@
 // @trace RF-002 (procesos: contrato configuration_json de tarea tipo DB_WRITE)
 import { Injectable } from '@angular/core';
-import { I18nService } from '@integration-hub/core/services';
+import { I18nService } from '@integration-hub/core/i18n';
 import { ProcessTaskRuntimeDraft } from '../../tasks/process-task-binding.models';
 import { ProcessTaskProvider, ProcessTaskSummaryContext } from '../../tasks/process-task-provider.abstract';
 import { ProcessTaskFormModel } from '../../tasks/process-task.models';

@@ -7,7 +7,7 @@ import {
   createHttpRequestDraft,
   hydrateHttpRequest,
 } from '../../tasks/http-request-task.support';
-import { I18nService } from '@integration-hub/core/services';
+import { I18nService } from '@integration-hub/core/i18n';
 import { ProcessTaskProvider, ProcessTaskSummaryContext } from '../../tasks/process-task-provider.abstract';
 import { ProcessTaskFormModel } from '../../tasks/process-task.models';
 

@@ -1,0 +1,7 @@
+{
+  "name": "feature-processes",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/features/processes/src",
+  "tags": ["type:feature", "scope:processes"]
+}

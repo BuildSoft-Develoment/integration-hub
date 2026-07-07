@@ -10,6 +10,11 @@ import { IhIconName } from '@integration-hub/plugin-ui-kit';
  * (`Record<Type, ResourcePresentation>`) y TypeScript exige cubrir todas las
  * variantes del tipo. Un valor sin entrada es error de compilacion, no un
  * respaldo en runtime.</p>
+ *
+ * <p>Vive en la leaf {@code @integration-hub/shared/models} (solo tipos, sin
+ * dependencias a otras libs salvo la primitiva de iconos) para que tanto
+ * {@code core/services} como {@code shared/ui} la consuman sin crear un ciclo
+ * de proyectos (prerequisito de registrar las libs como proyectos Nx).</p>
  */
 export interface ResourcePresentation {
   /** Icono del catalogo `IhIconName` (sin webfont externa). */

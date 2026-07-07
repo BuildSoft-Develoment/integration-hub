@@ -1,0 +1,7 @@
+{
+  "name": "feature-schedules",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/features/schedules/src",
+  "tags": ["type:feature", "scope:schedules"]
+}

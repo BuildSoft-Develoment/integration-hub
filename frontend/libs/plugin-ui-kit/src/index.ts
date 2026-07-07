@@ -7,3 +7,4 @@ export * from './lib/status-badge/status-badge.component';
 export * from './lib/empty-state/empty-state.component';
 export * from './lib/loading/loading.component';
 export * from './lib/icon/icon.component';
+export * from './lib/ui-message-snackbar/ui-message-snackbar.component';

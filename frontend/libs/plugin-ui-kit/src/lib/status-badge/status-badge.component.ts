@@ -4,8 +4,8 @@ export type StatusBadgeKind = 'success' | 'error' | 'warning' | 'info' | 'neutra
 
 /**
  * Reusable pill badge for a semantic status, styled from the platform status design
- * tokens (light/dark aware). Part of the plugin UI kit: an external remote plugin can
- * import it from `@integration-hub/shared/ui` to render badges with the native look.
+ * tokens (light/dark aware). Part of the plugin UI kit: an external remote plugin
+ * consumes it (via the shared UI barrel) to render badges with the native look.
  * The label is projected: {@code <ih-status-badge status="success">Active</ih-status-badge>}.
  */
 @Component({

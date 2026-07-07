@@ -2,7 +2,8 @@ import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
-import { BreadcrumbComponent, IhBreadcrumbItem } from './breadcrumb.component';
+import { BreadcrumbComponent } from './breadcrumb.component';
+import { IhBreadcrumbItem } from '@integration-hub/shared/models';
 
 @Component({
   standalone: true,

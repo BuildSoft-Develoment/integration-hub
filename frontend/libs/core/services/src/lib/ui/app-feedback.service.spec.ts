@@ -1,10 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
-import {
-  AppFeedbackService,
-  I18nService,
-  UiMessageService,
-} from '@integration-hub/core/services';
+import { I18nService } from '@integration-hub/core/i18n';
+import { AppFeedbackService } from './app-feedback.service';
+import { UiMessageService } from './ui-message.service';
 
 describe('AppFeedbackService', () => {
   let service: AppFeedbackService;

@@ -1,7 +1,7 @@
 // @trace spec 008-mensajeria-pagos RF-001, T-003
 // @trace ADR-009
 import { Injectable } from '@angular/core';
-import { I18nService } from '@integration-hub/core/services';
+import { I18nService } from '@integration-hub/core/i18n';
 import { ProcessTaskProvider, ProcessTaskProviderDescriptor, ProcessTaskSummaryContext } from '../../tasks/process-task-provider.abstract';
 import { ProcessTaskRuntimeDraft } from '../../tasks/process-task-binding.models';
 import { ProcessTaskFormModel } from '../../tasks/process-task.models';

@@ -4,10 +4,13 @@ Fecha: 2026-07-05
 Tipo: **análisis** (validación contra código real; sin implementar).
 Contexto: app_htoh(55) señaló que Nx no impone fronteras fuertes (tags vacíos, la regla permite cualquier import).
 
-> **Estado: IMPLEMENTADO (opción ligera).** Ver
-> [implementación v60-fix](2026-07-05-implementacion-fronteras-nx-frontend.md): guard `no-restricted-imports` en config
-> dedicada + `npm run lint:boundaries`, con prueba positiva/negativa evidenciada. La opción idiomática (registrar libs
-> como proyectos Nx + tags + depConstraints + caching) queda agendable como tarea frontend dedicada.
+> **Estado: la opción IDIOMÁTICA está IMPLEMENTADA** (supera a la ligera, ahora retirada). Ver
+> [implementación migración Nx](2026-07-07-implementacion-migracion-nx-libs-proyectos.md): 13 libs de dominio
+> registradas como proyectos Nx non-buildable + tags + `depConstraints` por tag + caching/`affected` para lint,
+> y el guard manual `lint:boundaries` retirado (ya redundante). En el camino se destaparon y rompieron **dos
+> ciclos** (`shared/ui↔core/services`, `core-providers↔core-services`) que las carpetas-cosméticas ocultaban.
+> La opción ligera original ([v60-fix](2026-07-05-implementacion-fronteras-nx-frontend.md), `no-restricted-imports`
+> + `npm run lint:boundaries`) fue el guard inmediato; hoy está superada y eliminada.
 
 ## Estado hoy (verificado)
 

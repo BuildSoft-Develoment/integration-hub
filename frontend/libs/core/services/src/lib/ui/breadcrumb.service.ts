@@ -1,5 +1,5 @@
 import { Injectable, signal } from '@angular/core';
-import { IhBreadcrumbItem } from '@integration-hub/shared/ui';
+import { IhBreadcrumbItem } from '@integration-hub/shared/models';
 
 @Injectable({ providedIn: 'root' })
 export class BreadcrumbService {

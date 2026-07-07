@@ -5,8 +5,8 @@
   "projects": {
     "ui-kit-storybook": {
       "projectType": "library",
-      "root": "libs/shared/ui",
-      "sourceRoot": "libs/shared/ui/src",
+      "root": ".storybook",
+      "sourceRoot": ".storybook",
       "prefix": "ih",
       "architect": {
         "build": {

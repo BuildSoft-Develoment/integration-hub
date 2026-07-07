@@ -148,7 +148,9 @@ export abstract class ManagedEditorStateBase<
     );
   }
 
-  protected resetTransientState(): void {}
+  protected resetTransientState(): void {
+    // Hook opcional: las subclases con estado transitorio lo sobreescriben; por defecto no-op.
+  }
 
   private captureSnapshot(): void {
     this.formSnapshot = JSON.stringify(this.form());

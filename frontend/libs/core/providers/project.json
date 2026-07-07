@@ -1,0 +1,7 @@
+{
+  "name": "core-providers",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/core/providers/src",
+  "tags": ["type:core", "scope:core"]
+}
