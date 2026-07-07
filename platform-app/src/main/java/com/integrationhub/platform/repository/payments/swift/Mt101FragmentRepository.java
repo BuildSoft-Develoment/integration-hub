@@ -380,6 +380,129 @@ public class Mt101FragmentRepository {
         }
     }
 
+    /**
+     * P0-1 (PAY normal): transición terminal GUARDADA con {@code RETURNING}: como {@link #resolvePayStatus} pero
+     * devuelve el conjunto de {@code senders_reference} que REALMENTE transicionó (solo los que estaban en
+     * {@code fromStatuses}). Los que faltan quedaron en un terminal contradictorio → conflicto (el caller los
+     * marca {@code pay_conflict} y NO los sobrescribe). Evita la sobrescritura silenciosa REJECTED→SENT.
+     */
+    public java.util.Set<String> resolvePayStatusReturning(DataSource dataSource,
+                                                           String fragmentSetId,
+                                                           Collection<String> sendersReferences,
+                                                           List<String> fromStatuses,
+                                                           String toStatus,
+                                                           String errorMessage) throws SQLException {
+        var refs = new ArrayList<String>();
+        if (sendersReferences != null) {
+            for (var reference : sendersReferences) {
+                if (reference != null && !reference.isBlank()) {
+                    refs.add(reference);
+                }
+            }
+        }
+        var updated = new java.util.LinkedHashSet<String>();
+        if (refs.isEmpty() || fromStatuses == null || fromStatuses.isEmpty()) {
+            return updated;
+        }
+        var sql = "update mt101_build_fragment set status = ?, error_message = ?, updated_at = current_timestamp "
+                + "where fragment_set_id = ? and status in (" + placeholders(fromStatuses.size()) + ") "
+                + "and senders_reference in (" + placeholders(refs.size()) + ") returning senders_reference";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            statement.setString(parameter++, toStatus);
+            statement.setString(parameter++, errorMessage);
+            statement.setString(parameter++, fragmentSetId);
+            for (var status : fromStatuses) {
+                statement.setString(parameter++, status);
+            }
+            for (var reference : refs) {
+                statement.setString(parameter++, reference);
+            }
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    updated.add(rs.getString("senders_reference"));
+                }
+            }
+        }
+        return updated;
+    }
+
+    /**
+     * P0-1 (PAY normal, REJECTED con error por ref): transición terminal GUARDADA per-ref (preserva el
+     * {@code error_message} de cada fragmento) que devuelve los refs que realmente transicionaron desde
+     * {@code fromStatuses}. Los ausentes quedaron en un terminal contradictorio → conflicto.
+     */
+    public java.util.Set<String> resolvePayStatusReturning(DataSource dataSource,
+                                                           String fragmentSetId,
+                                                           Map<String, String> errorBySendersReference,
+                                                           List<String> fromStatuses,
+                                                           String toStatus) throws SQLException {
+        var updated = new java.util.LinkedHashSet<String>();
+        if (errorBySendersReference == null || errorBySendersReference.isEmpty()
+                || fromStatuses == null || fromStatuses.isEmpty()) {
+            return updated;
+        }
+        var sql = "update mt101_build_fragment set status = ?, error_message = ?, updated_at = current_timestamp "
+                + "where fragment_set_id = ? and status in (" + placeholders(fromStatuses.size()) + ") "
+                + "and senders_reference = ? returning senders_reference";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            for (var entry : errorBySendersReference.entrySet()) {
+                if (entry.getKey() == null || entry.getKey().isBlank()) {
+                    continue;
+                }
+                var parameter = 1;
+                statement.setString(parameter++, toStatus);
+                statement.setString(parameter++, entry.getValue());
+                statement.setString(parameter++, fragmentSetId);
+                for (var status : fromStatuses) {
+                    statement.setString(parameter++, status);
+                }
+                statement.setString(parameter, entry.getKey());
+                try (var rs = statement.executeQuery()) {
+                    if (rs.next()) {
+                        updated.add(rs.getString("senders_reference"));
+                    }
+                }
+            }
+        }
+        return updated;
+    }
+
+    /**
+     * P0-1: marca {@code pay_conflict} (durable, sin tocar el status real) los fragmentos cuyo terminal entrante
+     * contradijo el ya resuelto. NO sobrescribe pay_status: un lector operativo ve el conflicto y se resuelve por
+     * STATUS/RECONCILE. Espejo de la marca del ledger correctivo (V58) sobre el fragmento normal.
+     */
+    public void markPayConflict(DataSource dataSource, String fragmentSetId,
+                                Collection<String> sendersReferences, String reason) throws SQLException {
+        var refs = new ArrayList<String>();
+        if (sendersReferences != null) {
+            for (var reference : sendersReferences) {
+                if (reference != null && !reference.isBlank()) {
+                    refs.add(reference);
+                }
+            }
+        }
+        if (refs.isEmpty()) {
+            return;
+        }
+        var sql = "update mt101_build_fragment set pay_conflict = true, pay_conflict_reason = ?, "
+                + "updated_at = current_timestamp where fragment_set_id = ? and senders_reference in ("
+                + placeholders(refs.size()) + ")";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            statement.setString(parameter++, reason);
+            statement.setString(parameter++, fragmentSetId);
+            for (var reference : refs) {
+                statement.setString(parameter++, reference);
+            }
+            statement.executeUpdate();
+        }
+    }
+
     public void updateStatusBatch(DataSource dataSource,
                                   String fragmentSetId,
                                   Map<String, String> errorBySendersReference,

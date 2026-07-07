@@ -115,7 +115,54 @@ class Mt101PayNormalDurableTest {
         assertTrue(second.isEmpty(), "un fragmento ya DISPATCHING no lo reclama otro worker");
     }
 
+    @Test
+    void lateTerminalResultDoesNotOverwriteStatusAndFlagsPayConflict() throws Exception {
+        // P0-1: un resultado terminal TARDÍO del worker (ACCEPTED de un send colgado) NO debe sobrescribir un
+        // terminal ya resuelto por STATUS/RECONCILE (REJECTED). El update pasa a estar GUARDADO (solo desde
+        // DISPATCHING/UNCERTAIN) y el conflicto se marca durable (pay_conflict), sin sobrescritura silenciosa.
+        var setId = "PAY-NORMAL-P0-1";
+        seedArchived(setId, "L1", 1, 2);
+        seedArchived(setId, "L2", 2, 2);
+        var fragmentSource = fragmentStore.source(null, setId, 2);
+        var from = List.of("DISPATCHING", "UNCERTAIN");
+
+        // Happy path: DISPATCHING -> SENT (guardado) transiciona y devuelve el ref.
+        fragmentStore.claimForDispatch(fragmentSource, List.of("L1"), List.of("ARCHIVED"));
+        var updatedOk = fragmentStore.resolvePayStatusReturning(fragmentSource, List.of("L1"), from, "SENT", null);
+        assertEquals(Set.of("L1"), updatedOk);
+        assertEquals("SENT", statusFor(setId, "L1"));
+
+        // RACE: L2 reclamado (DISPATCHING); STATUS lo resuelve REJECTED mientras el worker enviaba.
+        fragmentStore.claimForDispatch(fragmentSource, List.of("L2"), List.of("ARCHIVED"));
+        fragmentStore.resolvePayStatusReturning(fragmentSource, List.of("L2"), from, "REJECTED",
+                "confirmed rejected by STATUS");
+        assertEquals("REJECTED", statusFor(setId, "L2"));
+
+        // El worker recibe un ACCEPTED TARDÍO e intenta marcar SENT: el guard lo BLOQUEA (L2 ya terminal).
+        var updatedLate = fragmentStore.resolvePayStatusReturning(fragmentSource, List.of("L2"), from, "SENT", null);
+        assertTrue(updatedLate.isEmpty(), "un resultado tardío NO transiciona un terminal ya resuelto");
+        assertEquals("REJECTED", statusFor(setId, "L2"), "el fragmento conserva su estado real (no se sobrescribe)");
+
+        // El conflicto queda durable para conciliación (no silencioso).
+        fragmentStore.markPayConflict(fragmentSource, List.of("L2"), "late SENT vs prior REJECTED");
+        assertTrue(payConflictFor(setId, "L2"), "el fragmento queda marcado pay_conflict");
+        assertFalse(payConflictFor(setId, "L1"), "un fragmento sin conflicto NO se marca");
+    }
+
     // --- helpers ---
+
+    private boolean payConflictFor(String setId, String reference) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "select pay_conflict from mt101_build_fragment where fragment_set_id = ? and senders_reference = ?")) {
+            statement.setString(1, setId);
+            statement.setString(2, reference);
+            try (var rs = statement.executeQuery()) {
+                rs.next();
+                return rs.getBoolean(1);
+            }
+        }
+    }
 
     private TaskContext payContext(String fragmentSetId) {
         var context = new TaskContext(100L, 20L);
@@ -184,6 +231,8 @@ class Mt101PayNormalDurableTest {
                     + "routed_as varchar(80),"
                     + "routed_at timestamp,"
                     + "route_error text,"
+                    + "pay_conflict boolean not null default false,"
+                    + "pay_conflict_reason text,"
                     + "created_at timestamp not null default current_timestamp,"
                     + "updated_at timestamp not null default current_timestamp)");
             statement.executeUpdate("create unique index ux_pay_normal_fragment_ref on mt101_build_fragment"

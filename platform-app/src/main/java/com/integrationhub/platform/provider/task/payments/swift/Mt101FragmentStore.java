@@ -342,6 +342,68 @@ public class Mt101FragmentStore {
         }
     }
 
+    /**
+     * P0-1 (PAY normal): transición terminal GUARDADA (solo desde {@code fromStatuses}) que devuelve los refs que
+     * REALMENTE transicionaron. Los ausentes quedaron en un terminal contradictorio → el caller marca conflicto.
+     */
+    public java.util.Set<String> resolvePayStatusReturning(Map<String, Object> fragmentSource,
+                                                           java.util.Collection<String> refs,
+                                                           java.util.List<String> fromStatuses,
+                                                           String toStatus, String error) {
+        if (fragmentSource == null || refs == null || refs.isEmpty()) {
+            return java.util.Set.of();
+        }
+        var fragmentSetId = stringValue(fragmentSource.get("fragmentSetId"));
+        if (fragmentSetId.isBlank()) {
+            return java.util.Set.of();
+        }
+        var connectionRef = stringValue(fragmentSource.get("connectionRef"));
+        try {
+            return fragmentRepository.resolvePayStatusReturning(resolveDataSource(connectionRef),
+                    fragmentSetId, refs, fromStatuses, toStatus, error);
+        } catch (SQLException error2) {
+            throw new IllegalStateException("Cannot resolve MT101 pay status (guarded) for set " + fragmentSetId, error2);
+        }
+    }
+
+    /** P0-1 (REJECTED con error por ref): transición GUARDADA per-ref que devuelve los refs transicionados. */
+    public java.util.Set<String> resolvePayStatusReturning(Map<String, Object> fragmentSource,
+                                                           Map<String, String> errorByRef,
+                                                           java.util.List<String> fromStatuses, String toStatus) {
+        if (fragmentSource == null || errorByRef == null || errorByRef.isEmpty()) {
+            return java.util.Set.of();
+        }
+        var fragmentSetId = stringValue(fragmentSource.get("fragmentSetId"));
+        if (fragmentSetId.isBlank()) {
+            return java.util.Set.of();
+        }
+        var connectionRef = stringValue(fragmentSource.get("connectionRef"));
+        try {
+            return fragmentRepository.resolvePayStatusReturning(resolveDataSource(connectionRef),
+                    fragmentSetId, errorByRef, fromStatuses, toStatus);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot resolve MT101 pay status (guarded, per-ref) for set "
+                    + fragmentSetId, error);
+        }
+    }
+
+    /** P0-1: marca durable {@code pay_conflict} (sin tocar pay_status) los fragmentos en conflicto terminal. */
+    public void markPayConflict(Map<String, Object> fragmentSource, java.util.Collection<String> refs, String reason) {
+        if (fragmentSource == null || refs == null || refs.isEmpty()) {
+            return;
+        }
+        var fragmentSetId = stringValue(fragmentSource.get("fragmentSetId"));
+        if (fragmentSetId.isBlank()) {
+            return;
+        }
+        var connectionRef = stringValue(fragmentSource.get("connectionRef"));
+        try {
+            fragmentRepository.markPayConflict(resolveDataSource(connectionRef), fragmentSetId, refs, reason);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot mark MT101 pay_conflict for set " + fragmentSetId, error);
+        }
+    }
+
     public void markRouteBatch(Map<String, Object> fragmentSource,
                                Map<String, String> routeBySendersReference,
                                Map<String, String> errorBySendersReference) {

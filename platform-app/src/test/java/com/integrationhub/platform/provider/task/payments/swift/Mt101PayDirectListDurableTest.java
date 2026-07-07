@@ -29,6 +29,7 @@ import java.util.stream.StreamSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * P3 — durabilidad del PAY por LISTA en memoria ({@code MT101_BUILD}/{@code SPLIT} → PAY). El PROVIDER real reclama la
@@ -83,7 +84,31 @@ class Mt101PayDirectListDurableTest {
         assertEquals("UNCERTAIN", intentStatus("REST||A2"), "A2 sigue UNCERTAIN (exige STATUS/RECONCILE)");
     }
 
+    @Test
+    void emptyCorrelationKeyIsRejectedAndNeverSilencesAPayment() throws Exception {
+        // P0-2: con idempotencyKeyTemplate vacío la correlationKey queda "" → la clave sería "REST||" para TODOS
+        // los pagos → colisión: sin fix, el 2º se reportaría ALREADY_SENT sin enviarse (silenciaría un pago). El
+        // fix rechaza (fail-loud) ANTES del claim: nunca crea intención ambigua ni llama al banco.
+        var transport = new RefKeyedTransport("REST", Set.of());
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport),
+                null, null, null, null, null, intentStore);
+
+        var result = provider.execute(directListContext(), payConfigEmptyCorrelation());
+
+        assertFalse(result.success(), "sin clave de idempotencia no se puede despachar de forma segura → no-éxito");
+        assertEquals(0, transport.calls(), "NUNCA se envía sin correlación (fail-loud, sin banco ni intención)");
+        assertNull(intentStatus("REST||"), "no se crea intención ambigua bajo la clave colisionante 'REST||'");
+    }
+
     // --- helpers ---
+
+    private Map<String, Object> payConfigEmptyCorrelation() {
+        return Map.of(
+                "transport", "REST",
+                "idempotencyKeyTemplate", "",
+                "archiveStatusSync", false,
+                "input", Map.of("sourceTaskRef", "build", "sourceOutput", "records"));
+    }
 
     private TaskContext directListContext() {
         var context = new TaskContext(100L, 20L);
