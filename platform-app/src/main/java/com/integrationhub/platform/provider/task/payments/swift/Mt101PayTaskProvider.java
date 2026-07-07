@@ -381,16 +381,63 @@ public class Mt101PayTaskProvider implements TaskProvider {
             rejectedByRef.keySet().removeAll(conflicts);
             rejectedTargets.removeIf(target -> conflicts.contains(target.sendersReference()));
         }
-        fragmentStore.markStatusBatch(fragmentSource, sentRefs, "SENT");
-        fragmentStore.markStatusBatch(fragmentSource, rejectedByRef, "REJECTED");
-        // v51-fix (PAY normal durable): los inciertos del flujo normal pasan a UNCERTAIN (estado durable
-        // terminal-para-seleccion). PAY solo lee ARCHIVED, asi que no se re-seleccionan: exigen STATUS/RECONCILE.
-        if (rebuildRunId == null && !uncertainRefs.isEmpty()) {
-            fragmentStore.markStatusBatch(fragmentSource, uncertainRefs, "UNCERTAIN");
+        if (rebuildRunId == null) {
+            // P0-1 (PAY normal): transición terminal GUARDADA (solo desde DISPATCHING/UNCERTAIN) + pay_conflict
+            // durable ante un resultado tardío contradictorio. Reemplaza el markStatusBatch sin guarda, que podía
+            // sobrescribir en silencio un terminal ya resuelto por STATUS/RECONCILE (REJECTED→SENT).
+            finalizeNormalGuarded(configuration, fragmentSource, sentRefs, rejectedByRef, uncertainRefs,
+                    sentTargets, rejectedTargets);
+        } else {
+            // CORRECTIVO: el ledger correctivo ya filtró conflicts y el fragmento está DISPATCHING del run (claim
+            // v37, contra el contrato persistido). El marcado directo mantiene el comportamiento existente.
+            fragmentStore.markStatusBatch(fragmentSource, sentRefs, "SENT");
+            fragmentStore.markStatusBatch(fragmentSource, rejectedByRef, "REJECTED");
+            // H5: avanza el estado durable en mt101_archive (auditoría) si la sync no se desactivó.
+            syncArchive(configuration, fragmentSource, sentTargets, "SENT");
+            syncArchive(configuration, fragmentSource, rejectedTargets, "REJECTED");
         }
-        // H5: avanza el estado durable en mt101_archive (la tabla de
-        // auditoria, no solo el fragmento) si la sincronizacion no se
-        // desactivo explicitamente.
+    }
+
+    /**
+     * P0-1 (PAY normal): finaliza el resultado con transición terminal GUARDADA. Un resultado tardío (p.ej. un
+     * ACCEPTED de un send colgado) NO sobrescribe un terminal ya resuelto por STATUS/RECONCILE: los refs que no
+     * transicionan desde DISPATCHING/UNCERTAIN quedaron en un terminal contradictorio → se marcan pay_conflict
+     * (durable, sin sobrescribir) y NO se propagan a archive. Fuerza conciliación, sin sobrescritura silenciosa.
+     * Espejo del PAY_CONFLICT del correctivo (V58) sobre el fragmento normal.
+     */
+    private void finalizeNormalGuarded(Map<String, Object> configuration, Map<String, Object> fragmentSource,
+            java.util.List<String> sentRefs, Map<String, String> rejectedByRef, java.util.List<String> uncertainRefs,
+            java.util.List<Mt101ArchiveStatusUpdater.StatusTarget> sentTargets,
+            java.util.List<Mt101ArchiveStatusUpdater.StatusTarget> rejectedTargets) {
+        var fromUnresolved = java.util.List.of("DISPATCHING", "UNCERTAIN");
+        var conflicts = new java.util.LinkedHashSet<String>();
+        var sentUpdated = fragmentStore.resolvePayStatusReturning(fragmentSource, sentRefs, fromUnresolved, "SENT", null);
+        for (var ref : sentRefs) {
+            if (!sentUpdated.contains(ref)) {
+                conflicts.add(ref);
+            }
+        }
+        var rejectedUpdated = fragmentStore.resolvePayStatusReturning(
+                fragmentSource, rejectedByRef, fromUnresolved, "REJECTED");
+        for (var ref : rejectedByRef.keySet()) {
+            if (!rejectedUpdated.contains(ref)) {
+                conflicts.add(ref);
+            }
+        }
+        // UNCERTAIN solo desde DISPATCHING (un terminal ya resuelto no debe bajar a UNCERTAIN).
+        if (!uncertainRefs.isEmpty()) {
+            fragmentStore.resolvePayStatusReturning(fragmentSource, uncertainRefs,
+                    java.util.List.of("DISPATCHING"), "UNCERTAIN", null);
+        }
+        if (!conflicts.isEmpty()) {
+            fragmentStore.markPayConflict(fragmentSource, conflicts,
+                    "resultado terminal tardío contradijo una resolución previa (STATUS/RECONCILE); "
+                            + "no se sobrescribió el fragmento — conciliar");
+            // No propagar a archive los conflictivos: coherencia con el pay_status real del fragmento.
+            sentTargets.removeIf(target -> conflicts.contains(target.sendersReference()));
+            rejectedTargets.removeIf(target -> conflicts.contains(target.sendersReference()));
+        }
+        // H5: avanza mt101_archive para lo NO conflictivo si la sync no se desactivó.
         syncArchive(configuration, fragmentSource, sentTargets, "SENT");
         syncArchive(configuration, fragmentSource, rejectedTargets, "REJECTED");
     }
@@ -473,6 +520,16 @@ public class Mt101PayTaskProvider implements TaskProvider {
             String correlationKey, String sendersReference, TaskContext context, boolean durableIntent) {
         if (!durableIntent || dispatchIntentStore == null) {
             return sendClassified(transport, message, dispatchConfiguration);
+        }
+        // P0-2 (fail-loud): la clave de re-request-safety EXIGE una correlationKey (idempotency key del banco) NO
+        // vacía y única por pago. Si queda vacía (REST con idempotencyKeyTemplate vacío, o SFTP sin dropPathTemplate),
+        // dos pagos DISTINTOS colisionarían bajo la misma clave "transport|conn|" y el segundo se reportaría
+        // ALREADY_SENT SIN enviarse (silenciaría un pago que nunca salió). Sin correlación NO se crea intención
+        // ambigua: rechazo seguro (re-solicitable), nunca una aceptación silenciosa.
+        if (correlationKey == null || correlationKey.isBlank()) {
+            return TransportResult.rejected(0, 0L,
+                    "missing per-payment idempotency/correlation key for durable dispatch intent "
+                    + "(configure a non-empty idempotencyKeyTemplate for REST or dropPathTemplate for SFTP); not sent");
         }
         // La clave incluye el destino real (transport + connectionRef) + la idempotency key del banco (correlationKey).
         var intentKey = transport.transport() + "|"
