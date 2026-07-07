@@ -49,16 +49,12 @@ jobs:
       # `nx test web` descubre y corre los specs de apps/web + libs/** (76 tests).
       # El builder @angular/build:unit-test globa desde projectSourceRoot, por eso el
       # target usa sourceRoot "." + index.html explicito en build (ver apps/web/project.json).
-      - name: Lint
+      # Lintea app + las 18 libs registradas como projects Nx. Las fronteras de modulo (feature no importa
+      # feature; capas bajas no importan features) las impone @nx/enforce-module-boundaries por tag
+      # (depConstraints en eslint.config.mjs), reemplazando el guard manual `lint:boundaries` (retirado).
+      - name: Lint (app + libs, con fronteras de modulo Nx)
         working-directory: frontend
-        run: npx nx lint web
-      # Fronteras de modulo: las libs (core/*, shared/*, features/*, plugin-ui-kit) NO son projects Nx, asi que
-      # `nx lint web` no las gobierna. Este es el UNICO enforcement de la direccion de dependencias por import
-      # (feature no importa feature; capas bajas no importan features). Va tras Lint y antes de test/build para
-      # fallar en segundos ante una violacion. Ver revisiones/2026-07-06-analisis-lint-boundaries-en-ci.md.
-      - name: Boundaries (direccion de dependencias de modulo)
-        working-directory: frontend
-        run: npm run lint:boundaries
+        run: npx nx run-many -t lint
       - name: Plugin catalog gate
         working-directory: frontend
         run: npx nx run web:test-plugins
