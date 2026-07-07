@@ -1,0 +1,10 @@
+{
+  "id": "demo-transform-python",
+  "version": "1.0.0",
+  "spiVersion": "1.0.0",
+  "providedTypes": ["DEMO_TRANSFORM_PY"],
+  "transport": "GRPC",
+  "endpoint": "http://localhost:50063",
+  "trusted": false,
+  "active": true
+}

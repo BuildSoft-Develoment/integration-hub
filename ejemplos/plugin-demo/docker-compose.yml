@@ -1,0 +1,41 @@
+# Ejemplo de plugins EXTERNOS levantados en Docker e instalados en la plataforma local.
+#
+# La PLATAFORMA NO va aquí: corre en el host (dev, http://localhost:8080). Estos
+# contenedores publican sus puertos en el host, de modo que la plataforma los alcanza como
+# `http://localhost:5006x` (127.0.0.1) — el único origen que la trust-policy acepta sobre
+# HTTP plano para gRPC (ver PluginDescriptorTrustPolicy: http solo se permite a localhost).
+#
+# Uso:
+#   docker compose up --build          # levanta los 3 backends gRPC + el front
+#   ./install/register.sh <BEARER>     # registra los 4 plugins en la plataforma (rol admin)
+services:
+  backend-grpc-java:
+    build: ./backend-grpc-java
+    image: demo-transform-java:1.0.0
+    environment:
+      PLUGIN_GRPC_PORT: "50061"
+    ports:
+      - "50061:50061"
+
+  backend-grpc-node:
+    build: ./backend-grpc-node
+    image: demo-transform-node:1.0.0
+    environment:
+      PLUGIN_GRPC_PORT: "50062"
+    ports:
+      - "50062:50062"
+
+  backend-grpc-python:
+    build: ./backend-grpc-python
+    image: demo-transform-py:1.0.0
+    environment:
+      PLUGIN_GRPC_PORT: "50063"
+    ports:
+      - "50063:50063"
+
+  frontend-widget:
+    build: ./frontend-widget
+    image: demo-transform-widget:1.0.0
+    # nginx sirve remoteEntry.json + chunks con CORS; la shell del host lo carga cross-origin.
+    ports:
+      - "4300:80"
