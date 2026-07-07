@@ -164,11 +164,68 @@ public class Mt101PayUncertainResolutionService {
                     break;
                 }
             }
-            return new NormalPayResolution(resolvedSent, resolvedRejected, pending, errors);
+            // A (Modelo B): segunda pasada — re-consulta STATUS los fragmentos ya SENT (no conflictivos). Si el
+            // banco los resuelve a un terminal CONTRADICTORIO (REJECTED), es una contradicción real: se marca
+            // pay_conflict + confirmación append-only y NO se sobrescribe (conciliación manual). Cierra la asimetría
+            // SENT→banco-REJECTED, que la primera pasada (solo UNCERTAIN/DISPATCHING) no veía.
+            int conflicts = reconcileSentAgainstStatus(dataSource, set, planConfig, accepted, rejected, reasonText);
+            return new NormalPayResolution(resolvedSent, resolvedRejected, pending, errors, conflicts);
         } catch (SQLException error) {
             throw new IllegalStateException("cannot resolve uncertain PAY for set " + set + ": " + error.getMessage(),
                     error);
         }
+    }
+
+    /**
+     * A (Modelo B): reconcilia contra STATUS los fragmentos ya {@code SENT} que aún no están en conflicto. Un banco
+     * que responde {@code REJECTED} sobre un {@code SENT} es una contradicción terminal: {@code SENT} y
+     * {@code REJECTED} son terminales incompatibles → se marca {@code pay_conflict} + confirmación append-only y NO
+     * se auto-resuelve (conciliación manual), espejo del correctivo. Nunca reenvía (STATUS solo consulta). Si el
+     * banco confirma {@code SENT} o la consulta es no concluyente/pendiente, el fragmento no se toca.
+     */
+    private int reconcileSentAgainstStatus(DataSource dataSource, String set,
+            Mt101StatusQueryExecutor.QueryPlanConfig planConfig, Set<String> accepted, Set<String> rejected,
+            String reasonText) throws SQLException {
+        int conflicts = 0;
+        int afterIndex = 0;
+        while (true) {
+            var page = fragmentRepository.unconflictedPayStatusRecords(dataSource, set, List.of("SENT"),
+                    afterIndex, PAGE_SIZE);
+            if (page.isEmpty()) {
+                break;
+            }
+            var conflictRefs = new LinkedHashSet<String>();
+            var confirmationRows = new ArrayList<Mt101ConfirmationRepository.ConfirmationRow>();
+            for (var record : page) {
+                afterIndex = intValue(record.get("fragmentIndex"), afterIndex);
+                var reference = stringOrNull(record.get("sendersReference"));
+                if (reference == null || reference.isBlank()) {
+                    continue;
+                }
+                var result = statusQueryExecutor.query(record, planConfig);
+                if (result.error() != null || result.pending()) {
+                    continue; // no concluyente / ACK aún no presente -> el SENT se mantiene (nunca reenvío)
+                }
+                // Solo un REJECTED del banco contradice un SENT. Un ACCEPTED/SENT lo confirma (no-op).
+                if ("REJECTED".equals(classify(result.confirmedStatus(), accepted, rejected))) {
+                    conflictRefs.add(reference);
+                    confirmationRows.add(new Mt101ConfirmationRepository.ConfirmationRow(
+                            longOrNull(record.get("archiveId")), "STATUS_API",
+                            result.gatewayReference(), result.confirmedStatus(), result.rawBody()));
+                }
+            }
+            if (!conflictRefs.isEmpty()) {
+                fragmentRepository.markPayConflict(dataSource, set, conflictRefs,
+                        "STATUS/banco resolvió REJECTED sobre un fragmento ya SENT; contradicción terminal — "
+                                + "conciliación manual, no se sobrescribe (" + reasonText + ")");
+                persistConfirmations(dataSource, confirmationRows);
+                conflicts += conflictRefs.size();
+            }
+            if (page.size() < PAGE_SIZE) {
+                break;
+            }
+        }
+        return conflicts;
     }
 
     private String classify(String confirmedStatus, Set<String> accepted, Set<String> rejected) {
@@ -267,7 +324,12 @@ public class Mt101PayUncertainResolutionService {
         return value.trim();
     }
 
-    /** Resultado de la resolución: cuántos fragmentos quedaron SENT/REJECTED y cuántos siguen pendientes. */
-    public record NormalPayResolution(int resolvedSent, int resolvedRejected, int stillPending, int gatewayErrors) {
+    /**
+     * Resultado de la resolución: cuántos fragmentos quedaron SENT/REJECTED, cuántos siguen pendientes, cuántos
+     * errores de gateway y cuántos quedaron en {@code conflicts} (A/Modelo B: SENT que el banco rechazó — exigen
+     * conciliación manual, no se auto-resuelven).
+     */
+    public record NormalPayResolution(int resolvedSent, int resolvedRejected, int stillPending, int gatewayErrors,
+                                      int conflicts) {
     }
 }

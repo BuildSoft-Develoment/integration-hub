@@ -338,6 +338,53 @@ public class Mt101FragmentRepository {
     }
 
     /**
+     * P0-1 (A, Modelo B): registros de fragmentos en {@code statuses} (p.ej. {@code SENT}) que aún NO están en
+     * conflicto ({@code pay_conflict=false}), para re-consultar STATUS y detectar una contradicción terminal tardía
+     * (un {@code SENT} que el banco luego rechaza). El filtro {@code pay_conflict=false} lo hace idempotente: un
+     * fragmento ya marcado en conflicto no se re-procesa ni re-audita. Misma forma de registro que
+     * {@link #unresolvedPayStatusRecords} (para reusar el {@code Mt101StatusQueryExecutor}).
+     */
+    public List<Map<String, Object>> unconflictedPayStatusRecords(DataSource dataSource,
+                                                                  String fragmentSetId,
+                                                                  List<String> statuses,
+                                                                  int afterIndex,
+                                                                  int pageSize) throws SQLException {
+        var effectiveStatuses = statuses == null || statuses.isEmpty() ? List.of("SENT") : statuses;
+        var sql = "select f.fragment_index, f.senders_reference, f.routed_as, "
+                + "(select max(a.id) from mt101_archive a where a.senders_reference = f.senders_reference "
+                + "and a.process_execution_id = f.process_execution_id) as archive_id "
+                + "from mt101_build_fragment f "
+                + "where f.fragment_set_id = ? and f.status in (" + placeholders(effectiveStatuses.size()) + ") "
+                + "and coalesce(f.pay_conflict, false) = false "
+                + "and f.fragment_index > ? order by f.fragment_index asc limit ?";
+        var page = new ArrayList<Map<String, Object>>(Math.max(pageSize, 1));
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            statement.setString(parameter++, fragmentSetId);
+            for (var status : effectiveStatuses) {
+                statement.setString(parameter++, status);
+            }
+            statement.setInt(parameter++, afterIndex);
+            statement.setInt(parameter, pageSize);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    var record = new LinkedHashMap<String, Object>();
+                    record.put("fragmentIndex", rs.getInt("fragment_index"));
+                    record.put("sendersReference", rs.getString("senders_reference"));
+                    record.put("route", rs.getString("routed_as"));
+                    var archiveId = rs.getLong("archive_id");
+                    if (!rs.wasNull()) {
+                        record.put("archiveId", archiveId);
+                    }
+                    page.add(record);
+                }
+            }
+        }
+        return page;
+    }
+
+    /**
      * v52-fix (resolucion del UNCERTAIN normal): transiciona CONDICIONALMENTE los fragmentos indicados de
      * CUALQUIERA de {@code fromStatuses} (p.ej. {@code UNCERTAIN}/{@code DISPATCHING}) a {@code toStatus}
      * ({@code SENT}/{@code REJECTED} segun el gateway), en un solo UPDATE por conjunto de refs. Solo cambia lo que
