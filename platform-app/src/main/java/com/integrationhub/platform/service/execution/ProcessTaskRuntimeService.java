@@ -85,8 +85,11 @@ public class ProcessTaskRuntimeService {
 
         // ADR-015 Etapa 3: si la tarea está marcada async (y el feature está activo), se offloada al
         // broker en vez de ejecutarse in-process. Gated OFF por defecto → sin cambio de comportamiento.
+        // §6: el offload serializa la config SIN resolver secretos (placeholders ${secret:}); el consumer
+        // los re-resuelve en el punto-de-uso. La decisión de plan (flags) es idéntica con o sin resolver.
+        var unresolvedConfiguration = fileReadRuntimeSupport.configurationUnresolved(taskPlan.configurationJson());
         var asyncEnvelope = asyncTaskDispatchService.prepare(
-                processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(), configuration);
+                processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(), unresolvedConfiguration);
         if (asyncEnvelope.isPresent()) {
             guardAsyncOffloadable(provider, taskPlan.taskType(), executionMode);
             var envelope = asyncEnvelope.get();
@@ -103,7 +106,7 @@ public class ProcessTaskRuntimeService {
                     // agotar la tabla.
                     var table = resolvedInput.tableInput();
                     var seed = AsyncPageWorkItem.seed(table.tableName(), table.connectionRef(), table.orderBy(),
-                            table.filters(), configuredBatchSize(configuration), configuration,
+                            table.filters(), configuredBatchSize(configuration), unresolvedConfiguration,
                             taskOutputs, metadata, executionVariables);
                     var scatter = AsyncSliceDispatchService.ScatterDispatch.streaming(
                             processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(),
@@ -125,7 +128,7 @@ public class ProcessTaskRuntimeService {
                 // metadata y variables de ejecución; el consumer reconstruye el TaskContext con ellos.
                 var scatter = AsyncSliceDispatchService.ScatterDispatch.materialized(
                         processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(),
-                        envelope.transport(), configuration, slices,
+                        envelope.transport(), unresolvedConfiguration, slices,
                         taskOutputs, metadata, executionVariables);
                 return TaskRunResult.suspendedScatter(
                         "Tarea " + taskPlan.taskType() + " repartida en " + slices.size() + " slices async por "

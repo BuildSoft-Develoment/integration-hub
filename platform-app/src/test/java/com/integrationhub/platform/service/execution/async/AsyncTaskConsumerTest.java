@@ -2,6 +2,7 @@ package com.integrationhub.platform.service.execution.async;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.repository.TaskAsyncDispatchRepository.SliceProgress;
+import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.TaskProviderRegistry;
 import com.integrationhub.platform.service.execution.ProcessExecutionResumeService;
 import com.integrationhub.platform.spi.reader.ReadRecord;
@@ -55,8 +56,13 @@ class AsyncTaskConsumerTest {
         completion = new RecordingCompletion();
         gather = mock(SliceGatherService.class);
         pageChain = mock(AsyncPageChainService.class);
+        // §6: resolveSecretsIn como identidad = comportamiento sin secretos inline (la resolución real se
+        // prueba en JsonConfigurationMapper); aquí solo importa que el consumer re-resuelva en point-of-use.
+        var configurationMapper = mock(JsonConfigurationMapper.class);
+        when(configurationMapper.resolveSecretsIn(any())).thenAnswer(inv -> inv.getArgument(0));
         // maxAttempts=3, backoff=0 (sin sleep en tests).
-        consumer = new AsyncTaskConsumer(inbox, registry, completion, gather, mapper, pageChain, 3, 0);
+        consumer = new AsyncTaskConsumer(inbox, registry, completion, gather, mapper, pageChain,
+                configurationMapper, 3, 0);
     }
 
     /** payload de wire = envelope entero (patrón audit/sidecar); config = envelope.payload(). */

@@ -37,6 +37,17 @@ public class FileReadRuntimeSupport {
         return jsonConfigurationMapper.toMap(configurationJson);
     }
 
+    /**
+     * §6: config parseada <b>sin</b> resolver los {@code ${secret:...}} (deja los placeholders). El despacho
+     * async serializa ESTA forma al envelope/slice para que los valores de secreto NO se persistan en el
+     * outbox ni viajen por el broker; el consumer los re-resuelve en el punto-de-uso ({@code resolveSecretsIn})
+     * justo antes de ejecutar. La decisión sync/async y la ejecución in-process siguen usando {@link
+     * #configuration} (resuelta): los flags de plan y la ejecución no cambian.
+     */
+    public Map<String, Object> configurationUnresolved(String configurationJson) {
+        return jsonConfigurationMapper.toMapUnresolved(configurationJson);
+    }
+
     public List<SelectedSourceFile> filterSelectedFiles(List<SelectedSourceFile> selectedFiles,
                                                         List<String> selectedFileReferences) {
         if (selectedFileReferences == null || selectedFileReferences.isEmpty()) {

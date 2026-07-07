@@ -20,6 +20,9 @@ public class AsyncExecutionTestProfile extends IntegrationTestProfile {
         // =false (base IT) el relay NO drena → sin side-effect ni race con el read manual del outbox; estos
         // E2E simulan la entrega llamando al consumer a mano. Sin esto, el fail-loud §9 abortaría el despacho.
         overrides.put("tasks.dispatch.enabled", "true");
+        // §6: valor de secreto resoluble por ${config:...} para probar que NO se persiste en el outbox
+        // (el envelope viaja con el placeholder) y que el consumer lo re-resuelve en el punto-de-uso.
+        overrides.put("integrationhub.test.secret", "SUPER_SECRET_XYZ");
         return overrides;
     }
 }

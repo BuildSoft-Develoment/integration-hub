@@ -129,7 +129,9 @@ public class AsyncTaskDlqService {
             return false;
         }
         var definition = taskExecution.taskDefinition;
-        var configuration = configurationMapper.toMap(definition.configurationJson);
+        // §6: re-encola con los ${secret:} SIN resolver (placeholders), coherente con el despacho inicial —
+        // el consumer los re-resuelve en el punto-de-uso. toMap (resuelto) reintroduciría el secreto al outbox.
+        var configuration = configurationMapper.toMapUnresolved(definition.configurationJson);
         var plan = planner.plan(configuration);
         var transport = plan.isAsync() ? plan.transport() : TaskDispatchPlanner.DEFAULT_TRANSPORT;
 

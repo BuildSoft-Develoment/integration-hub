@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.repository.TaskAsyncDispatchRepository;
+import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.TaskProviderRegistry;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
@@ -53,6 +54,7 @@ public class AsyncTaskConsumer {
     private final SliceGatherService gather;
     private final ObjectMapper objectMapper;
     private final AsyncPageChainService pageChain;
+    private final JsonConfigurationMapper configurationMapper;
     private final int maxAttempts;
     private final long backoffMs;
 
@@ -63,6 +65,7 @@ public class AsyncTaskConsumer {
                              SliceGatherService gather,
                              ObjectMapper objectMapper,
                              AsyncPageChainService pageChain,
+                             JsonConfigurationMapper configurationMapper,
                              @ConfigProperty(name = "tasks.async.consumer.max-attempts", defaultValue = "3")
                              int maxAttempts,
                              @ConfigProperty(name = "tasks.async.consumer.backoff-ms", defaultValue = "200")
@@ -73,6 +76,7 @@ public class AsyncTaskConsumer {
         this.gather = gather;
         this.objectMapper = objectMapper;
         this.pageChain = pageChain;
+        this.configurationMapper = configurationMapper;
         this.maxAttempts = Math.max(1, maxAttempts);
         this.backoffMs = Math.max(0, backoffMs);
     }
@@ -169,8 +173,11 @@ public class AsyncTaskConsumer {
         // executionVariables), para que un provider como MT101_STATUS resuelva qué consultar igual que
         // en el motor síncrono. NO viaja sourcePayload (no serializable): esos providers son UNSUPPORTED.
         hydrateOnceContext(context, envelope);
+        // §6: la config viajó con los ${secret:} SIN resolver (no se persisten en outbox/broker); se
+        // re-resuelven aquí, en el punto-de-uso, justo antes de ejecutar. Sin secretos inline es no-op.
+        var resolvedConfiguration = resolveSecrets(configuration);
         // Un throw aquí (fallo transitorio) NO se captura: propaga → nack → reentrega (at-least-once).
-        var result = provider.execute(context, configuration);
+        var result = provider.execute(context, resolvedConfiguration);
 
         // Aplica el resultado a la tarea suspendida por despacho async y continúa el pipeline (o, si el
         // provider volvió a suspender —Nivel 3, suspendible—, re-suspende con token/estado nuevos). Se
@@ -229,8 +236,9 @@ public class AsyncTaskConsumer {
         // metadata, variables) para que el provider resuelva variables como en el motor síncrono. NO se
         // rehidrata sourcePayload (no serializable): los providers que lo requieren son UNSUPPORTED.
         hydrateSliceContext(context, item);
+        // §6: re-resuelve los ${secret:} de la config de la slice en el punto-de-uso (viajó con placeholders).
         // Un throw (fallo transitorio) propaga → nack → reentrega de la slice.
-        var result = batchProvider.executeRecords(context, item.configuration(), records, null);
+        var result = batchProvider.executeRecords(context, resolveSecrets(item.configuration()), records, null);
 
         if (result.suspended()) {
             failSlice(envelope, "una slice no puede suspenderse en el consumer", continueOnFailure);
@@ -283,7 +291,8 @@ public class AsyncTaskConsumer {
             var records = page.records();
             var context = new TaskContext(envelope.processExecutionId(), envelope.taskDefinitionId());
             hydrateContext(context, item.taskOutputs(), item.metadata(), item.executionVariables());
-            var result = batchProvider.executeRecords(context, item.configuration(), records, null);
+            // §6: re-resuelve los ${secret:} de la config de la página en el punto-de-uso (viajó con placeholders).
+            var result = batchProvider.executeRecords(context, resolveSecrets(item.configuration()), records, null);
             if (result.suspended()) {
                 failSlice(envelope, "una página no puede suspenderse en el consumer", continueOnFailure);
                 return ConsumeResult.DEAD;
@@ -404,6 +413,16 @@ public class AsyncTaskConsumer {
             return Map.of();
         }
         return objectMapper.readValue(payload, CONFIG_TYPE);
+    }
+
+    /**
+     * §6: re-resuelve los {@code ${secret:...}} de la config justo antes de ejecutar (punto-de-uso). El
+     * envelope/slice viaja con los placeholders para no persistir secretos en el outbox ni en el broker;
+     * aquí se resuelven contra el store. Sin referencias inline es un no-op (la config queda igual), así que
+     * los providers actuales (MT101_STATUS por {@code connectionRef}) no cambian de comportamiento.
+     */
+    private Map<String, Object> resolveSecrets(Map<String, Object> configuration) {
+        return configurationMapper.resolveSecretsIn(configuration);
     }
 
     private String writeOutputs(Map<String, Object> outputs) {
