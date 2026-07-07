@@ -1,4 +1,4 @@
-import { ResourcePresentation } from '@integration-hub/shared/ui';
+import { ResourcePresentation } from '@integration-hub/shared/models';
 import {
   ConnectionProviderType,
   ProcessTaskType,

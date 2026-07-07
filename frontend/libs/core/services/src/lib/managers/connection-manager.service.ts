@@ -1,5 +1,5 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { ResourcePresentation } from '@integration-hub/shared/ui';
+import { ResourcePresentation } from '@integration-hub/shared/models';
 import {
   CONNECTION_PROVIDERS,
   ConnectionDraft,

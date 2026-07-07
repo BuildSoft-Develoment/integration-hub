@@ -42,5 +42,7 @@ export * from './lib/managed-editor/test-result/managed-editor-test-result.compo
 export * from './lib/actions/action-dispatcher.service';
 export * from './lib/duration-input/duration-input.component';
 export * from './lib/pipes/relative-time.pipe';
-export * from './lib/presentation/resource-presentation.model';
-export * from './lib/ui-message-snackbar/ui-message-snackbar.component';
+// §Fase0: los contratos de presentación (ResourcePresentation, IhBreadcrumbItem) viven ahora en la leaf
+// @integration-hub/shared/models y el snackbar en @integration-hub/plugin-ui-kit (ya re-exportado arriba),
+// para romper el ciclo shared/ui ↔ core/services. Se re-exportan aquí para no cambiar la API del barrel.
+export * from '@integration-hub/shared/models';

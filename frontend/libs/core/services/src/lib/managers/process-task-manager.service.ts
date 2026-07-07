@@ -1,5 +1,5 @@
 import { computed, inject, Injectable } from '@angular/core';
-import { ResourcePresentation } from '@integration-hub/shared/ui';
+import { ResourcePresentation } from '@integration-hub/shared/models';
 import { I18nService } from '../i18n/i18n.service';
 import {
   PROCESS_TASK_PROVIDERS,

@@ -1,15 +1,8 @@
 import { CommonModule, Location } from '@angular/common';
 import { Component, inject, input } from '@angular/core';
-import { Params, RouterLink } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { IconComponent } from '@integration-hub/plugin-ui-kit';
-
-export interface IhBreadcrumbItem {
-  /** Texto ya traducido (el consumidor resuelve i18n). */
-  label: string;
-  /** RouterLink destino; si falta o es el último, se muestra como texto plano. */
-  link?: unknown[];
-  queryParams?: Params;
-}
+import { IhBreadcrumbItem } from '@integration-hub/shared/models';
 
 /**
  * Migas de pan accesibles (WCAG 2.2): `nav[aria-label]` + lista ordenada,

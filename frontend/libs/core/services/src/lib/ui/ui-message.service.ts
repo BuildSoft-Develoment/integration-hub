@@ -5,7 +5,7 @@ import {
   UiMessageKind,
   UiMessageSnackBarData,
   UiMessageSnackbarComponent,
-} from '@integration-hub/shared/ui';
+} from '@integration-hub/plugin-ui-kit';
 
 export interface UiMessageOptions {
   kind?: UiMessageKind;

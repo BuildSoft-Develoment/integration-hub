@@ -18,6 +18,7 @@
     "paths": {
       "@integration-hub/core/providers": ["libs/core/providers/src/index.ts"],
       "@integration-hub/core/services": ["libs/core/services/src/index.ts"],
+      "@integration-hub/shared/models": ["libs/shared/models/src/index.ts"],
       "@integration-hub/shared/ui": ["libs/shared/ui/src/index.ts"],
       "@integration-hub/features/sources": [
         "libs/features/sources/src/index.ts"
