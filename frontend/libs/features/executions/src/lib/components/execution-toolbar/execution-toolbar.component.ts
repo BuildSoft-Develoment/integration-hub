@@ -5,6 +5,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { RouterLink } from '@angular/router';
 import { I18nService } from '@integration-hub/core/services';
 
 type ExecutionStatusFilter = 'ALL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'COMPLETED_WITH_ERRORS';
@@ -13,7 +14,7 @@ type ExecutionModeFilter = 'ALL' | 'MANUAL' | 'SCHEDULED';
 @Component({
   selector: 'ih-execution-toolbar',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule],
+  imports: [CommonModule, FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule, RouterLink],
     templateUrl: './execution-toolbar.component.html',
     changeDetection: ChangeDetectionStrategy.OnPush,
 })

@@ -1,11 +1,13 @@
 package com.integrationhub.platform.service.reader;
 
+import com.integrationhub.platform.service.artifact.FakeArtifactStaging;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginInvoker;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
 import com.integrationhub.platform.spi.reader.ReaderProvider;
 import com.integrationhub.platform.spi.source.SourcePayload;
 import com.integrationhub.platform.spi.task.TaskResult;
+import com.integrationhub.platform.task.ArtifactReference;
 import jakarta.enterprise.inject.Instance;
 import org.junit.jupiter.api.Test;
 
@@ -29,19 +31,27 @@ class ReaderProviderRegistryRemoteTest {
         remotePlugins.register(new RemotePluginDescriptor(
                 "acme-reader",
                 "1.0.0",
-                "1",
+                "2", // spiVersion 2: soporta el input por artifactRef
                 Set.of(),
                 Set.of(),
                 Set.of("REMOTE_CSV"),
                 "GRPC",
                 "http://localhost:9000",
                 true));
-        RemotePluginInvoker invoker = (descriptor, taskType, context, configuration) -> TaskResult.success("read", Map.of(
-                "records", List.of(
-                        Map.of("id", "1", "name", "Ada"),
-                        Map.of("id", "2", "name", "Grace")),
-                "skippedRows", List.of()));
-        var registry = new ReaderProviderRegistry(readerProviders(), remotePlugins, remoteInvokers(invoker));
+        var staging = new FakeArtifactStaging();
+        // El plugin: lee la referencia GET del payload, descarga el input staged, y devuelve records.
+        RemotePluginInvoker invoker = (descriptor, taskType, context, payload) -> {
+            @SuppressWarnings("unchecked")
+            var refMap = (Map<String, Object>) payload.get(ArtifactReference.ARTIFACT_REF);
+            var reference = ArtifactReference.fromMap(refMap);
+            staging.download(reference.uri()); // el plugin descarga el input por referencia
+            return TaskResult.success("read", Map.of(
+                    "records", List.of(
+                            Map.of("id", "1", "name", "Ada"),
+                            Map.of("id", "2", "name", "Grace")),
+                    "skippedRows", List.of()));
+        };
+        var registry = new ReaderProviderRegistry(readerProviders(), remotePlugins, remoteInvokers(invoker), staging);
         var batches = new ArrayList<Integer>();
 
         var provider = registry.resolve("remote_csv");

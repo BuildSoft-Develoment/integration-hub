@@ -19,3 +19,8 @@
     .task-block { display:grid; gap:0.5rem; }
     pre { margin:0; padding:0.85rem; border-radius:14px; overflow:auto; background:color-mix(in srgb, var(--ih-surface) 92%, #0f172a 8%); }
     ul { margin:0; padding-left:1rem; }
+    .task-progress { display:grid; gap:0.35rem; margin:0.35rem 0; }
+    .task-progress__label { font-size:0.8rem; color:var(--ih-text-soft); font-weight:600; }
+    .task-pipeline { display:flex; align-items:center; gap:0.5rem; padding:0.4rem 0.65rem; border-radius:8px; font-size:0.82rem; border:1px solid var(--ih-status-success); color:var(--ih-status-success); background:var(--ih-status-success-bg); }
+    .task-pipeline--alert { border-color:var(--ih-status-error); color:var(--ih-status-error); background:var(--ih-status-error-bg); }
+    .task-pipeline a { color:inherit; font-weight:600; text-decoration:underline; }

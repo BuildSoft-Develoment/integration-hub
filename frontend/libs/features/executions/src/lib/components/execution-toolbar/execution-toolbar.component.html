@@ -8,6 +8,9 @@
         <button mat-stroked-button type="button" class="ih-catalog-action" (click)="refresh.emit()" [disabled]="loading()">
           {{ i18n.t('common.refresh') }}
         </button>
+        <a mat-stroked-button class="ih-catalog-action" routerLink="/executions/async-dlq">
+          {{ i18n.t('executions.dlq.link') }}
+        </a>
         <mat-form-field class="toolbar-search">
           <mat-label>{{ i18n.t('executions.search') }}</mat-label>
           <input matInput [ngModel]="search()" (ngModelChange)="searchChange.emit($event)" />

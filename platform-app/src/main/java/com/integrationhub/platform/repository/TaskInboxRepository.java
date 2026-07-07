@@ -20,9 +20,99 @@ public class TaskInboxRepository implements PanacheRepository<TaskInbox> {
         return idempotencyKey != null && count("idempotencyKey", idempotencyKey) > 0;
     }
 
+    /**
+     * §5: ¿la clave ya está en un estado <b>terminal</b> (PROCESSED/FAILED/DEAD)? Es el pre-check de dedup
+     * del consumer: a diferencia de {@link #existsByIdempotencyKey}, NO cuenta una fila {@code CLAIMED} como
+     * hecha — un claim vivo/estancado debe ir al {@code claim()} (re-toma si el lease venció), no cortocircuitar.
+     */
+    public boolean existsTerminalByIdempotencyKey(String idempotencyKey) {
+        return idempotencyKey != null
+                && count("idempotencyKey = ?1 and status in (?2, ?3, ?4)",
+                        idempotencyKey, TaskInbox.PROCESSED, TaskInbox.FAILED, TaskInbox.DEAD) > 0;
+    }
+
+    /**
+     * §5: claim ATÓMICO del work-item once antes de ejecutar el efecto. Inserta la fila {@code CLAIMED} con
+     * owner+lease; si ya existe, la re-toma <b>solo</b> si sigue {@code CLAIMED} y (es de este mismo owner
+     * —retry in-app— o su lease venció —nodo caído—). Devuelve las filas afectadas: {@code 1} = este consumer
+     * gana y debe ejecutar; {@code 0} = otro la tiene viva o ya es terminal → skip. Un solo UPDATE atómico
+     * (mismo espíritu que el claim de process_execution, v53-fix #8), sin read-then-write racy.
+     */
+    public int claim(String idempotencyKey, String taskType, Long processExecutionId, Long taskDefinitionId,
+                     String brokerType, String owner, Timestamp claimedUntil, Timestamp now) {
+        return getEntityManager().createNativeQuery("""
+                insert into task_inbox
+                    (idempotency_key, task_type, process_execution_id, task_definition_id, status,
+                     inbox_owner, claimed_until, broker_type, created_at)
+                values (?1, ?2, ?3, ?4, 'CLAIMED', ?5, ?6, ?7, current_timestamp)
+                on conflict (idempotency_key) where idempotency_key is not null do update
+                    set status = 'CLAIMED', inbox_owner = excluded.inbox_owner,
+                        claimed_until = excluded.claimed_until
+                    where task_inbox.status = 'CLAIMED'
+                      and (task_inbox.inbox_owner = excluded.inbox_owner or task_inbox.claimed_until < ?8)
+                """)
+                .setParameter(1, idempotencyKey)
+                .setParameter(2, taskType)
+                .setParameter(3, processExecutionId)
+                .setParameter(4, taskDefinitionId)
+                .setParameter(5, owner)
+                .setParameter(6, claimedUntil)
+                .setParameter(7, brokerType)
+                .setParameter(8, now)
+                .executeUpdate();
+    }
+
+    /**
+     * §5: transiciona la fila {@code CLAIMED} de este work-item a su estado terminal tras ejecutar. Devuelve
+     * {@code 1} si finalizó un claim; {@code 0} si no había claim (el caller cae a {@code insertIfAbsent}).
+     */
+    public int finalizeClaimed(String idempotencyKey, String status, String outputsJson,
+                               String details, String error) {
+        return getEntityManager().createNativeQuery("""
+                update task_inbox
+                   set status = ?2, outputs_json = ?3, details = ?4, error = ?5,
+                       inbox_owner = null, claimed_until = null
+                 where idempotency_key = ?1 and status = 'CLAIMED'
+                """)
+                .setParameter(1, idempotencyKey)
+                .setParameter(2, status)
+                .setParameter(3, outputsJson)
+                .setParameter(4, details)
+                .setParameter(5, error)
+                .executeUpdate();
+    }
+
+    /**
+     * §5 recovery (fail-safe): marca {@code DEAD} los claims con lease vencido más allá del corte (nodo caído
+     * que no finalizó). NO re-ejecuta a ciegas (regla de seguridad del claim distribuido): el efecto pudo haber
+     * corrido, así que se deja visible en la consola DLQ para que ops lo redrive con criterio. Devuelve el conteo.
+     */
+    @Transactional
+    public int markExpiredClaimsDead(Timestamp cutoff, String error) {
+        return getEntityManager().createNativeQuery("""
+                update task_inbox
+                   set status = 'DEAD', error = ?2, inbox_owner = null, claimed_until = null
+                 where status = 'CLAIMED' and claimed_until < ?1
+                """)
+                .setParameter(1, cutoff)
+                .setParameter(2, error)
+                .executeUpdate();
+    }
+
     /** Conteo por estado, para métricas de operabilidad (procesados, fallos, DLQ). */
     public long countByStatus(String status) {
         return count("status", status);
+    }
+
+    /**
+     * Filas terminadas mal ({@code DEAD}/{@code POISON}), más recientes primero, para la consola de DLQ.
+     */
+    public java.util.List<com.integrationhub.platform.entity.TaskInbox> findDead(int limit) {
+        return find("status in ?1 order by id desc",
+                java.util.List.of(com.integrationhub.platform.entity.TaskInbox.DEAD,
+                        com.integrationhub.platform.entity.TaskInbox.POISON))
+                .page(0, Math.max(1, limit))
+                .list();
     }
 
     /**

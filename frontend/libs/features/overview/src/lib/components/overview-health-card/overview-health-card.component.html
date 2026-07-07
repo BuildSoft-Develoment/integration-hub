@@ -1,0 +1,25 @@
+<article
+  class="overview-health-card"
+  [class.overview-health-card--warn]="alert() === 'warn'"
+  [class.overview-health-card--error]="alert() === 'error'"
+>
+  <p class="metric-label">
+    @if (alert()) {
+      <ih-icon name="alert-triangle" class="metric-alert-icon" />
+    }
+    {{ i18n.t(titleKey()) }}
+  </p>
+
+  <dl class="overview-health-stats">
+    @for (stat of stats(); track stat.labelKey) {
+      <div class="overview-health-stat">
+        <dt>{{ i18n.t(stat.labelKey) }}</dt>
+        <dd class="overview-health-value overview-health-value--{{ stat.tone }}">{{ stat.value }}</dd>
+      </div>
+    }
+  </dl>
+
+  <a mat-button class="metric-action" [routerLink]="linkRoute()">
+    {{ i18n.t(linkLabelKey()) }} →
+  </a>
+</article>

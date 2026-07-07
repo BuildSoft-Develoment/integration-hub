@@ -101,8 +101,11 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
         }
         var continuation = completion.continuation();
         try {
+            // P2 (fencing): la continuación downstream corre con el token de la ejecución (RUNNING tras el resume).
+            var executionToken = stateService.getExecution(continuation.processExecutionId()).executionToken;
             var execution = processExecutionService.continueAfterResume(
                     continuation.processExecutionId(),
+                    executionToken,
                     continuation.processDefinitionId(),
                     continuation.afterTaskOrder(),
                     continuation.taskOutputs(),
@@ -132,16 +135,41 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
      * reanudada y aplica el resultado externo compartiendo la misma cola terminal que el resume
      * (completeTask/failProcess + continuación downstream), pero sin re-invocar al provider.
      */
+    /**
+     * <b>Contexto capturado al suspender (Nivel 3, camino once)</b>: lee la continuación persistida de la
+     * tarea suspendida por despacho async y devuelve su {@code taskOutputs}/{@code executionVariables}
+     * para que el consumer rehidrate el {@code TaskContext} del provider. No transacciona ni muta estado.
+     */
+    @Override
+    @Transactional
+    public SuspendedContext loadSuspendedContext(Long processExecutionId, Long taskDefinitionId) {
+        var taskExecution = taskExecutionRepository.findActiveSuspendedByExecutionAndTask(
+                processExecutionId, taskDefinitionId);
+        if (taskExecution == null) {
+            return SuspendedContext.empty();
+        }
+        var envelope = suspensionContinuation.unmarshal(taskExecution.suspendedContinuation);
+        if (envelope == null) {
+            return SuspendedContext.empty();
+        }
+        return new SuspendedContext(
+                envelope.taskOutputs() == null ? Map.of() : envelope.taskOutputs(),
+                envelope.executionVariables() == null ? Map.of() : envelope.executionVariables());
+    }
+
     @Transactional
     ResumeCompletion completeTransactional(Long processExecutionId, Long taskDefinitionId, TaskResult result) {
-        if (result.suspended()) {
-            throw new IllegalArgumentException("La completación async no acepta resultados suspended");
-        }
         var taskExecution = taskExecutionRepository.findActiveSuspendedByExecutionAndTask(
                 processExecutionId, taskDefinitionId);
         if (taskExecution == null) {
             return ResumeCompletion.terminal(new ResumeOutcome(Outcome.NOT_FOUND, null, false,
                     "No hay suspensión async activa para exec=" + processExecutionId + " task=" + taskDefinitionId));
+        }
+        // Nivel 3: un SuspendableTaskProvider que ejecutó su primer intento en el consumer y necesita
+        // esperar un evento externo → re-suspende la tarea (nuevo token/estado/expiry, preservando la
+        // continuación) en vez de completarla, para que el callback/scheduler la reanude normalmente.
+        if (result.suspended()) {
+            return reSuspend(taskExecution, result);
         }
         var taskDefinition = taskExecution.taskDefinition;
         if (taskDefinition == null) {
@@ -192,6 +220,9 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
         }
 
         var processExecutionId = processExecution == null ? null : processExecution.id;
+        // P2 (fencing): el token de la ejecución (persistido desde el claim/startProcess y conservado durante la
+        // suspensión). markResumed la lleva a RUNNING, así las transiciones guardadas lo aceptan.
+        var executionToken = processExecution == null ? null : processExecution.executionToken;
         var taskContext = new TaskContext(processExecutionId, taskDefinition.id);
         var taskExecutionId = taskExecution.id;
 
@@ -202,12 +233,12 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
             result = suspendable.resume(taskContext, configuration, mergedState);
         } catch (RuntimeException error) {
             var message = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
-            stateService.failTask(processExecutionId, taskExecutionId, message, Map.of(
+            stateService.failTask(processExecutionId, executionToken, taskExecutionId, message, Map.of(
                     "taskType", taskDefinition.taskType,
                     "resumeToken", token,
                     "phase", "resume"));
             if (processExecutionId != null) {
-                stateService.failProcess(processExecutionId, "Resume failed: " + message);
+                stateService.failProcess(processExecutionId, executionToken, "Resume failed: " + message);
             }
             throw error;
         }
@@ -219,7 +250,7 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
                     auditTaskPlan(taskDefinition),
                     result.details());
             stateService.suspendTask(
-                    processExecutionId, taskExecutionId, stateJson, newToken,
+                    processExecutionId, executionToken, taskExecutionId, stateJson, newToken,
                     SuspensionExpiry.expiresAt(result.suspendedState()),
                     // El envelope previo sigue valido: los outputs de una tarea
                     // re-suspendida aun no son finales.
@@ -234,6 +265,38 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
 
         return finishTerminalResult(taskExecution, taskDefinition, processDefinition,
                 processExecutionId, taskExecutionId, configuration, result, token);
+    }
+
+    /**
+     * Re-suspende una tarea suspendida por despacho async cuyo provider volvió a suspender en el
+     * consumer (Nivel 3, ADR-015). Espeja la re-suspensión del resume por callback (líneas del
+     * {@code resumeTransactional}): marca consumida la suspensión async y crea una nueva (token/estado/
+     * expiry nuevos), preservando la continuación para que el resume posterior siga el downstream.
+     */
+    private ResumeCompletion reSuspend(
+            com.integrationhub.platform.entity.ProcessTaskExecution taskExecution, TaskResult result) {
+        var taskDefinition = taskExecution.taskDefinition;
+        if (taskDefinition == null) {
+            throw new IllegalStateException("Suspended task " + taskExecution.id + " has no taskDefinition");
+        }
+        var processExecution = taskExecution.processExecution;
+        var processExecutionId = processExecution == null ? null : processExecution.id;
+        var executionToken = processExecution == null ? null : processExecution.executionToken;
+        var taskExecutionId = taskExecution.id;
+
+        stateService.markResumed(taskExecutionId);
+
+        var newToken = tokenGenerator.generate();
+        var stateJson = stateMarshaller.marshal(result.suspendedState());
+        var details = auditMapper.buildTaskDetails(auditTaskPlan(taskDefinition), result.details());
+        stateService.suspendTask(
+                processExecutionId, executionToken, taskExecutionId, stateJson, newToken,
+                SuspensionExpiry.expiresAt(result.suspendedState()),
+                taskExecution.suspendedContinuation,
+                details,
+                Map.of("taskType", taskDefinition.taskType, "resumeToken", newToken, "rePhase", "async-re-suspended"));
+        return ResumeCompletion.terminal(
+                new ResumeOutcome(Outcome.RE_SUSPENDED, newToken, false, result.details()));
     }
 
     /**
@@ -252,19 +315,22 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
             Map<String, Object> configuration,
             TaskResult result,
             String token) {
+        // P2 (fencing): token de la ejecución (persistido, conservado en la suspensión); markResumed dejó la
+        // ejecución en RUNNING, así las transiciones guardadas lo aceptan.
+        var executionToken = taskExecution.processExecution == null ? null : taskExecution.processExecution.executionToken;
         if (!result.success()) {
-            stateService.failTask(processExecutionId, taskExecutionId, result.details(), Map.of(
+            stateService.failTask(processExecutionId, executionToken, taskExecutionId, result.details(), Map.of(
                     "taskType", taskDefinition.taskType,
                     "resumeToken", token == null ? "" : token));
             if (processExecutionId != null) {
-                stateService.failProcess(processExecutionId, "Resume returned failure: " + result.details());
+                stateService.failProcess(processExecutionId, executionToken, "Resume returned failure: " + result.details());
             }
             return ResumeCompletion.terminal(
                     new ResumeOutcome(Outcome.FAILED, null, false, result.details()));
         }
 
         var details = auditMapper.buildTaskDetails(auditTaskPlan(taskDefinition), result.details());
-        stateService.completeTask(processExecutionId, taskExecutionId, details,
+        stateService.completeTask(processExecutionId, executionToken, taskExecutionId, details,
                 Map.of("taskType", taskDefinition.taskType,
                         "outputs", result.outputs(),
                         "resumeToken", token == null ? "" : token));
@@ -274,7 +340,7 @@ public class ProcessExecutionResumeService implements AsyncTaskCompletion {
                 : taskDefinitionRepository.countDownstreamTasks(processDefinition, taskDefinition.taskOrder);
         if (downstreamCount == 0) {
             if (processExecutionId != null) {
-                stateService.completeProcess(processExecutionId, "Process completed after resume");
+                stateService.completeProcess(processExecutionId, executionToken, "Process completed after resume");
             }
             return ResumeCompletion.terminal(
                     new ResumeOutcome(Outcome.COMPLETED, null, true, result.details()));

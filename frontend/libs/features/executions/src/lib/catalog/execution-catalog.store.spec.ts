@@ -1,7 +1,11 @@
 import { TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 
-import { AppFeedbackService, UiMessageService } from '@integration-hub/core/services';
+import {
+  AppFeedbackService,
+  ProcessExecutionApiService,
+  UiMessageService,
+} from '@integration-hub/core/services';
 
 import { ExecutionApiService } from '../api/execution-api.service';
 import { ExecutionCatalogCommandService } from './execution-catalog-command.service';
@@ -9,6 +13,7 @@ import { ExecutionCatalogQueryStore } from './execution-catalog-query.store';
 import { ExecutionCatalogStore } from './execution-catalog.store';
 import { ExecutionDetailLoaderService } from '../details/execution-detail-loader.service';
 import { ExecutionDetailStore } from '../details/execution-detail.store';
+import { ExecutionProgressPoller } from '../details/execution-progress-poller';
 import { ExecutionFileActionService } from '../details/execution-file-action.service';
 import { ExecutionNavigationService } from '../details/execution-navigation.service';
 
@@ -33,6 +38,7 @@ describe('ExecutionCatalogStore', () => {
         ExecutionCatalogCommandService,
         ExecutionCatalogQueryStore,
         ExecutionDetailStore,
+        ExecutionProgressPoller,
         ExecutionNavigationService,
         ExecutionDetailLoaderService,
         ExecutionFileActionService,
@@ -64,6 +70,11 @@ describe('ExecutionCatalogStore', () => {
                 total: 1,
               });
             },
+          },
+        },
+        {
+          provide: ProcessExecutionApiService,
+          useValue: {
             execute,
           },
         },

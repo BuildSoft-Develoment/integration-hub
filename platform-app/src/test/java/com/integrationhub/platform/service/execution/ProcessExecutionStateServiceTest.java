@@ -15,12 +15,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 // @covers RF-005 (reingenieria: prueba que cubre el/los RF en produccion)
@@ -58,70 +60,117 @@ class ProcessExecutionStateServiceTest {
     }
 
     @Test
-    void markProcessRunningTransitionsPendingToRunning() {
+    void claimProcessForExecutionSucceedsWhenAtomicUpdateAffectsTheRow() {
         var execution = pendingExecution(1L);
+        when(processExecutionRepository.claimForRunning(eq(1L), eq("nodeA"), eq("tok"), any(), any())).thenReturn(1);
         when(processExecutionRepository.findById(1L)).thenReturn(execution);
 
-        var result = service.markProcessRunningIfPending(1L);
+        var result = service.claimProcessForExecution(1L, "nodeA", "tok", 30);
 
         assertTrue(result);
-        assertEquals(ExecutionStatus.RUNNING, execution.status);
-        assertEquals("Process execution started", execution.details);
         verify(auditService).record(eq(execution), isNull(), eq("PROCESS_STARTED"), eq("RUNNING"), any(), any());
     }
 
     @Test
-    void markProcessRunningReturnsFalseWhenNotFound() {
-        when(processExecutionRepository.findById(2L)).thenReturn(null);
+    void claimProcessForExecutionReturnsFalseWhenAnotherNodeWonTheClaim() {
+        // El UPDATE ... WHERE status='PENDING' no afecto ninguna fila -> otro nodo la reclamo antes.
+        when(processExecutionRepository.claimForRunning(eq(2L), any(), any(), any(), any())).thenReturn(0);
 
-        assertFalse(service.markProcessRunningIfPending(2L));
+        assertFalse(service.claimProcessForExecution(2L, "nodeB", "tok2", 30));
     }
 
     @Test
-    void markProcessRunningReturnsFalseWhenNotPending() {
-        var execution = pendingExecution(3L);
-        execution.status = ExecutionStatus.RUNNING;
-        when(processExecutionRepository.findById(3L)).thenReturn(execution);
+    void recoverRoutesAnExpiredExecutionThatStartedPayToNeedsReconciliation() {
+        // Regla de seguridad money-path: una huerfana que YA inicio MT101_PAY NO se re-ejecuta -> NEEDS_RECONCILIATION.
+        var execution = pendingExecution(30L);
+        when(processExecutionRepository.listExpiredRunningIds(any(), eq(50))).thenReturn(java.util.List.of(30L));
+        when(processExecutionRepository.hasStartedTaskType(30L, "MT101_PAY")).thenReturn(true);
+        when(processExecutionRepository.recoverExpiredRunning(eq(30L), eq(ExecutionStatus.NEEDS_RECONCILIATION), any(), any()))
+                .thenReturn(1);
+        when(processExecutionRepository.findById(30L)).thenReturn(execution);
 
-        assertFalse(service.markProcessRunningIfPending(3L));
+        var recovered = service.recoverExpiredExecutions(50, "MT101_PAY");
+
+        assertEquals(1, recovered);
+        verify(processExecutionRepository).recoverExpiredRunning(eq(30L), eq(ExecutionStatus.NEEDS_RECONCILIATION), any(), any());
     }
 
     @Test
-    void completeProcessSetsCompletedAndFinishedAt() {
+    void recoverReQueuesAnExpiredExecutionThatDidNotStartPay() {
+        var execution = pendingExecution(31L);
+        when(processExecutionRepository.listExpiredRunningIds(any(), eq(50))).thenReturn(java.util.List.of(31L));
+        when(processExecutionRepository.hasStartedTaskType(31L, "MT101_PAY")).thenReturn(false);
+        when(processExecutionRepository.recoverExpiredRunning(eq(31L), eq(ExecutionStatus.PENDING), any(), any()))
+                .thenReturn(1);
+        when(processExecutionRepository.findById(31L)).thenReturn(execution);
+
+        var recovered = service.recoverExpiredExecutions(50, "MT101_PAY");
+
+        assertEquals(1, recovered);
+        verify(processExecutionRepository).recoverExpiredRunning(eq(31L), eq(ExecutionStatus.PENDING), any(), any());
+    }
+
+    @Test
+    void closeReconciledClosesAtomicallyFromNeedsReconciliationAndAudits() {
+        var execution = pendingExecution(40L);
+        when(processExecutionRepository.closeFromNeedsReconciliation(eq(40L),
+                eq(ExecutionStatus.COMPLETED_WITH_ERRORS), any(), any())).thenReturn(1);
+        when(processExecutionRepository.findById(40L)).thenReturn(execution);
+
+        assertTrue(service.closeReconciled(40L, true, "reconciled"));
+        verify(auditService).record(eq(execution), isNull(), eq("PROCESS_RECONCILED_CLOSED"),
+                eq("COMPLETED_WITH_ERRORS"), any(), any());
+    }
+
+    @Test
+    void closeReconciledReturnsFalseWhenNotInNeedsReconciliation() {
+        when(processExecutionRepository.closeFromNeedsReconciliation(eq(41L), any(), any(), any())).thenReturn(0);
+
+        assertFalse(service.closeReconciled(41L, false, "reconciled"));
+        verifyNoInteractions(auditService);
+    }
+
+    @Test
+    void completeProcessTransitionsWhenTokenMatchesRunning() {
         var execution = pendingExecution(4L);
+        when(processExecutionRepository.transitionRunningProcess(eq(4L), eq("tok"), eq(ExecutionStatus.COMPLETED), eq("ok"), any())).thenReturn(1);
         when(processExecutionRepository.findById(4L)).thenReturn(execution);
 
-        service.completeProcess(4L, "ok");
+        service.completeProcess(4L, "tok", "ok");
 
-        assertEquals(ExecutionStatus.COMPLETED, execution.status);
-        assertEquals("ok", execution.details);
-        assertNotNull(execution.finishedAt);
+        verify(processExecutionRepository).transitionRunningProcess(eq(4L), eq("tok"), eq(ExecutionStatus.COMPLETED), eq("ok"), any());
         verify(auditService).record(eq(execution), isNull(), eq("PROCESS_COMPLETED"), eq("COMPLETED"), eq("ok"), isNull());
     }
 
     @Test
-    void failProcessSetsFailedAndFinishedAt() {
+    void completeProcessThrowsFencingWhenTokenLost() {
+        // P2: el UPDATE guardado no afecta filas (token perdido / no RUNNING) -> fencing, sin auditar ni cerrar.
+        when(processExecutionRepository.transitionRunningProcess(eq(4L), eq("stale"), any(), any(), any())).thenReturn(0);
+
+        assertThrows(FencingTokenLostException.class, () -> service.completeProcess(4L, "stale", "ok"));
+        verifyNoInteractions(auditService);
+    }
+
+    @Test
+    void failProcessTransitionsWhenTokenMatchesRunning() {
         var execution = pendingExecution(5L);
+        when(processExecutionRepository.transitionRunningProcess(eq(5L), eq("tok"), eq(ExecutionStatus.FAILED), eq("boom"), any())).thenReturn(1);
         when(processExecutionRepository.findById(5L)).thenReturn(execution);
 
-        service.failProcess(5L, "boom");
+        service.failProcess(5L, "tok", "boom");
 
-        assertEquals(ExecutionStatus.FAILED, execution.status);
-        assertEquals("boom", execution.details);
-        assertNotNull(execution.finishedAt);
         verify(auditService).record(eq(execution), isNull(), eq("PROCESS_FAILED"), eq("FAILED"), eq("boom"), isNull());
     }
 
     @Test
-    void completeProcessWithErrorsSetsCompletedWithErrors() {
+    void completeProcessWithErrorsTransitionsWhenTokenMatchesRunning() {
         var execution = pendingExecution(6L);
+        when(processExecutionRepository.transitionRunningProcess(eq(6L), eq("tok"), eq(ExecutionStatus.COMPLETED_WITH_ERRORS), eq("parcial"), any())).thenReturn(1);
         when(processExecutionRepository.findById(6L)).thenReturn(execution);
 
-        service.completeProcessWithErrors(6L, "parcial");
+        service.completeProcessWithErrors(6L, "tok", "parcial");
 
-        assertEquals(ExecutionStatus.COMPLETED_WITH_ERRORS, execution.status);
-        assertEquals("parcial", execution.details);
-        assertNotNull(execution.finishedAt);
+        verify(processExecutionRepository).transitionRunningProcess(eq(6L), eq("tok"), eq(ExecutionStatus.COMPLETED_WITH_ERRORS), eq("parcial"), any());
     }
 
     @Test
@@ -129,10 +178,11 @@ class ProcessExecutionStateServiceTest {
         var execution = pendingExecution(8L);
         var taskDefinition = new ProcessTaskDefinition();
         taskDefinition.id = 11L;
+        when(processExecutionRepository.touchRunningOwner(eq(8L), eq("tok"), any())).thenReturn(1);
         when(processExecutionRepository.findById(8L)).thenReturn(execution);
         when(processTaskDefinitionRepository.findById(11L)).thenReturn(taskDefinition);
 
-        service.startTask(8L, 11L, "READER", 1);
+        service.startTask(8L, "tok", 11L, "READER", 1);
 
         verify(processTaskExecutionRepository).persist(any(ProcessTaskExecution.class));
         verify(auditService).record(eq(execution), eq(taskDefinition), eq("TASK_STARTED"), eq("RUNNING"), any(), any());
@@ -146,14 +196,24 @@ class ProcessExecutionStateServiceTest {
         var taskExecution = new ProcessTaskExecution();
         taskExecution.id = 21L;
         taskExecution.taskDefinition = taskDefinition;
+        when(processExecutionRepository.touchRunningOwner(eq(9L), eq("tok"), any())).thenReturn(1);
         when(processExecutionRepository.findById(9L)).thenReturn(execution);
         when(processTaskExecutionRepository.findById(21L)).thenReturn(taskExecution);
 
-        service.completeTask(9L, 21L, "done", null);
+        service.completeTask(9L, "tok", 21L, "done", null);
 
         assertEquals(ExecutionStatus.COMPLETED, taskExecution.status);
         assertEquals("done", taskExecution.details);
         assertNotNull(taskExecution.finishedAt);
+    }
+
+    @Test
+    void completeTaskThrowsFencingWhenTokenLost() {
+        // P2: assertOwner (touchRunningOwner) no afecta filas -> fencing antes de mutar la tarea.
+        when(processExecutionRepository.touchRunningOwner(eq(9L), eq("stale"), any())).thenReturn(0);
+
+        assertThrows(FencingTokenLostException.class, () -> service.completeTask(9L, "stale", 21L, "done", null));
+        verifyNoInteractions(processTaskExecutionRepository);
     }
 
     @Test
@@ -164,10 +224,11 @@ class ProcessExecutionStateServiceTest {
         var taskExecution = new ProcessTaskExecution();
         taskExecution.id = 22L;
         taskExecution.taskDefinition = taskDefinition;
+        when(processExecutionRepository.touchRunningOwner(eq(10L), eq("tok"), any())).thenReturn(1);
         when(processExecutionRepository.findById(10L)).thenReturn(execution);
         when(processTaskExecutionRepository.findById(22L)).thenReturn(taskExecution);
 
-        service.failTask(10L, 22L, "task boom", null);
+        service.failTask(10L, "tok", 22L, "task boom", null);
 
         assertEquals(ExecutionStatus.FAILED, taskExecution.status);
         assertEquals("task boom", taskExecution.details);

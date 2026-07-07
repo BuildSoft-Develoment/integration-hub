@@ -40,8 +40,9 @@ public class TaskAsyncDispatch {
     @Column(name = "task_definition_id", nullable = false)
     public Long taskDefinitionId;
 
-    @Column(name = "total_slices", nullable = false)
-    public int totalSlices;
+    /** Total de slices. {@code null} = aún despachando (streaming/page-chain, "unsealed"). */
+    @Column(name = "total_slices")
+    public Integer totalSlices;
 
     @Column(name = "completed_slices", nullable = false)
     public int completedSlices = 0;
@@ -52,8 +53,20 @@ public class TaskAsyncDispatch {
     @Column(nullable = false, length = 16)
     public String status = PENDING;
 
+    /** Índice de la última página despachada (streaming/page-chain); {@code null} si materializado. */
+    @Column(name = "last_page_index")
+    public Integer lastPageIndex;
+
+    /** Work-item JSON de la última página despachada, para re-inyectar si la cadena se rompe. */
+    @Column(name = "last_page_json", columnDefinition = "text")
+    public String lastPageJson;
+
     @Column(name = "created_at", nullable = false)
     public LocalDateTime createdAt = LocalDateTime.now();
+
+    /** Última actividad del scatter (open/slice/dispatch/seal); para detectar estancamiento y auto-recuperar. */
+    @Column(name = "last_progress_at")
+    public LocalDateTime lastProgressAt;
 
     @Column(name = "completed_at")
     public LocalDateTime completedAt;

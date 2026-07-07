@@ -6,6 +6,7 @@
     "start": "nx serve web",
     "build": "nx build web --skip-nx-cache",
     "lint": "nx lint web",
+    "lint:boundaries": "eslint --no-config-lookup --config eslint.boundaries.config.mjs \"libs/**/*.{ts,tsx}\"",
     "test": "nx test web",
     "e2e": "nx e2e web-e2e",
     "storybook": "ng run ui-kit-storybook:storybook",

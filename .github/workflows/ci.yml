@@ -52,6 +52,13 @@ jobs:
       - name: Lint
         working-directory: frontend
         run: npx nx lint web
+      # Fronteras de modulo: las libs (core/*, shared/*, features/*, plugin-ui-kit) NO son projects Nx, asi que
+      # `nx lint web` no las gobierna. Este es el UNICO enforcement de la direccion de dependencias por import
+      # (feature no importa feature; capas bajas no importan features). Va tras Lint y antes de test/build para
+      # fallar en segundos ante una violacion. Ver revisiones/2026-07-06-analisis-lint-boundaries-en-ci.md.
+      - name: Boundaries (direccion de dependencias de modulo)
+        working-directory: frontend
+        run: npm run lint:boundaries
       - name: Plugin catalog gate
         working-directory: frontend
         run: npx nx run web:test-plugins

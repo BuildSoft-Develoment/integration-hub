@@ -23,14 +23,81 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
     public void open(Long processExecutionId, Long taskDefinitionId, int totalSlices) {
         getEntityManager().createNativeQuery("""
                 insert into task_async_dispatch
-                    (process_execution_id, task_definition_id, total_slices, created_at)
-                values (?1, ?2, ?3, current_timestamp)
+                    (process_execution_id, task_definition_id, total_slices, created_at, last_progress_at)
+                values (?1, ?2, ?3, current_timestamp, current_timestamp)
                 on conflict (process_execution_id, task_definition_id) do nothing
                 """)
                 .setParameter(1, processExecutionId)
                 .setParameter(2, taskDefinitionId)
                 .setParameter(3, Math.max(totalSlices, 0))
                 .executeUpdate();
+    }
+
+    /**
+     * Abre un scatter <b>en streaming</b> (page-chain): {@code total_slices = NULL} porque el total se
+     * descubre incrementalmente y se fija con {@link #seal}. Idempotente. Mientras esté unsealed, la
+     * condición terminal (que compara con {@code total_slices}) es NULL en SQL → nunca cierra, evitando
+     * el cierre prematuro con slices que completan antes del seal.
+     */
+    @Transactional
+    public void openStreaming(Long processExecutionId, Long taskDefinitionId) {
+        getEntityManager().createNativeQuery("""
+                insert into task_async_dispatch
+                    (process_execution_id, task_definition_id, total_slices, created_at, last_progress_at)
+                values (?1, ?2, null, current_timestamp, current_timestamp)
+                on conflict (process_execution_id, task_definition_id) do nothing
+                """)
+                .setParameter(1, processExecutionId)
+                .setParameter(2, taskDefinitionId)
+                .executeUpdate();
+    }
+
+    /**
+     * Registra la <b>última página despachada</b> de un scatter en streaming (su work-item JSON + índice),
+     * para poder re-inyectarla si la cadena se rompe. <b>Monótono</b>: solo avanza si el índice es mayor
+     * al registrado (una reentrega/procesado fuera de orden no regresa el progreso).
+     */
+    @Transactional
+    public void recordDispatchedPage(Long processExecutionId, Long taskDefinitionId, int pageIndex, String pageJson) {
+        getEntityManager().createNativeQuery("""
+                update task_async_dispatch
+                   set last_page_index = ?3, last_page_json = ?4, last_progress_at = current_timestamp
+                 where process_execution_id = ?1 and task_definition_id = ?2
+                       and (last_page_index is null or last_page_index < ?3)
+                """)
+                .setParameter(1, processExecutionId)
+                .setParameter(2, taskDefinitionId)
+                .setParameter(3, pageIndex)
+                .setParameter(4, pageJson)
+                .executeUpdate();
+    }
+
+    /**
+     * <b>Sella</b> un scatter en streaming fijando su {@code total_slices} (page-chain: la última página
+     * conoce el total = índice+1). Atómico: solo aplica si sigue unsealed ({@code total_slices IS NULL})
+     * y PENDING, y reclama el terminal si las slices ya contadas alcanzan el total —caso en que ningún
+     * evento de slice-completada futuro dispararía la reanudación—. Devuelve el progreso <b>solo si este
+     * seal cerró el scatter</b> (para disparar la reanudación una vez); vacío si aún faltan slices, si ya
+     * estaba sellado (reentrega de la última página) o si ya cerró.
+     */
+    @Transactional
+    public Optional<SliceProgress> seal(Long processExecutionId, Long taskDefinitionId, int totalSlices) {
+        var rows = getEntityManager().createNativeQuery("""
+                update task_async_dispatch
+                   set total_slices = ?3,
+                       last_progress_at = current_timestamp,
+                       status = case when completed_slices + failed_slices >= ?3 then 'COMPLETED' else status end,
+                       completed_at = case when completed_slices + failed_slices >= ?3 then current_timestamp else completed_at end
+                 where process_execution_id = ?1 and task_definition_id = ?2
+                       and status = 'PENDING' and total_slices is null
+                returning completed_slices, failed_slices, total_slices, status
+                """)
+                .setParameter(1, processExecutionId)
+                .setParameter(2, taskDefinitionId)
+                .setParameter(3, Math.max(totalSlices, 0))
+                .getResultList();
+        // terminal solo si ESTE seal transicionó a COMPLETED (lo evalúa mapProgress por el status).
+        return mapProgress(rows, false);
     }
 
     /**
@@ -46,6 +113,7 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
         var rows = getEntityManager().createNativeQuery("""
                 update task_async_dispatch
                    set completed_slices = completed_slices + 1,
+                       last_progress_at = current_timestamp,
                        status = case when completed_slices + 1 + failed_slices >= total_slices then 'COMPLETED' else status end,
                        completed_at = case when completed_slices + 1 + failed_slices >= total_slices then current_timestamp else completed_at end
                  where process_execution_id = ?1 and task_definition_id = ?2 and status = 'PENDING'
@@ -70,6 +138,7 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
                 ? """
                 update task_async_dispatch
                    set failed_slices = failed_slices + 1,
+                       last_progress_at = current_timestamp,
                        status = case when completed_slices + failed_slices + 1 >= total_slices then 'COMPLETED' else status end,
                        completed_at = case when completed_slices + failed_slices + 1 >= total_slices then current_timestamp else completed_at end
                  where process_execution_id = ?1 and task_definition_id = ?2 and status = 'PENDING'
@@ -77,7 +146,8 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
                 """
                 : """
                 update task_async_dispatch
-                   set failed_slices = failed_slices + 1, status = 'FAILED', completed_at = current_timestamp
+                   set failed_slices = failed_slices + 1, status = 'FAILED',
+                       last_progress_at = current_timestamp, completed_at = current_timestamp
                  where process_execution_id = ?1 and task_definition_id = ?2 and status = 'PENDING'
                 returning completed_slices, failed_slices, total_slices, status
                 """;
@@ -96,7 +166,8 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
         var row = (Object[]) rows.get(0);
         var completed = ((Number) row[0]).intValue();
         var failed = ((Number) row[1]).intValue();
-        var total = ((Number) row[2]).intValue();
+        // total puede ser NULL si el scatter en streaming aún no fue sellado; -1 lo señala como desconocido.
+        var total = row[2] == null ? -1 : ((Number) row[2]).intValue();
         var status = String.valueOf(row[3]);
         var terminal = terminalIfPresent
                 || TaskAsyncDispatch.COMPLETED.equals(status)
@@ -107,6 +178,38 @@ public class TaskAsyncDispatchRepository implements PanacheRepository<TaskAsyncD
     public Optional<TaskAsyncDispatch> findByExecutionAndTask(Long processExecutionId, Long taskDefinitionId) {
         return find("processExecutionId = ?1 and taskDefinitionId = ?2", processExecutionId, taskDefinitionId)
                 .firstResultOptional();
+    }
+
+    /** Trackers de scatter de una ejecución (para el progreso por tarea en la UI de monitoreo). */
+    public java.util.List<TaskAsyncDispatch> findByExecution(Long processExecutionId) {
+        return list("processExecutionId = ?1 order by taskDefinitionId", processExecutionId);
+    }
+
+    /**
+     * Scatters en <b>streaming</b> ({@code lastPageJson != null}) aún PENDING cuya última actividad es
+     * anterior a {@code cutoff}: candidatos a <b>estancados</b> (la cadena se rompió) para auto-recuperar.
+     */
+    public java.util.List<TaskAsyncDispatch> findStalledStreaming(java.time.LocalDateTime cutoff, int limit) {
+        return find("status = 'PENDING' and lastPageJson is not null and lastProgressAt < ?1", cutoff)
+                .page(0, Math.max(1, limit))
+                .list();
+    }
+
+    /** Conteo barato de scatters streaming estancados (para el tile de salud del overview). */
+    public long countStalledStreaming(java.time.LocalDateTime cutoff) {
+        return count("status = 'PENDING' and lastPageJson is not null and lastProgressAt < ?1", cutoff);
+    }
+
+    /** Toca {@code last_progress_at} para que un re-inyecto no vuelva a disparar de inmediato el sweep. */
+    @Transactional
+    public void touchProgress(Long processExecutionId, Long taskDefinitionId) {
+        getEntityManager().createNativeQuery("""
+                update task_async_dispatch set last_progress_at = current_timestamp
+                 where process_execution_id = ?1 and task_definition_id = ?2
+                """)
+                .setParameter(1, processExecutionId)
+                .setParameter(2, taskDefinitionId)
+                .executeUpdate();
     }
 
     /**

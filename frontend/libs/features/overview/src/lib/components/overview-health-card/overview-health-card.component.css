@@ -1,0 +1,15 @@
+.overview-health-card { display:grid; gap:0.55rem; padding:1rem; border:1px solid var(--ih-border); border-radius:18px; background:color-mix(in srgb, var(--ih-surface-alt) 94%, transparent); min-width:0; }
+.overview-health-card--warn { border-color:var(--ih-status-warning); background:var(--ih-status-warning-bg); }
+.overview-health-card--error { border-color:var(--ih-status-error); background:var(--ih-status-error-bg); }
+.metric-label { margin:0; color:var(--ih-text-soft); font-size:0.75rem; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; display:flex; align-items:center; gap:0.3rem; }
+.metric-alert-icon { font-style:normal; }
+.overview-health-card--warn .metric-alert-icon { color:var(--ih-status-warning); }
+.overview-health-card--error .metric-alert-icon { color:var(--ih-status-error); }
+.overview-health-stats { display:flex; gap:1.25rem; margin:0; }
+.overview-health-stat { display:grid; gap:0.15rem; }
+.overview-health-stat dt { margin:0; color:var(--ih-text-soft); font-size:0.72rem; font-weight:600; }
+.overview-health-value { margin:0; font-size:1.75rem; font-weight:800; letter-spacing:-0.05em; line-height:1; }
+.overview-health-value--ok { color:var(--ih-status-success); }
+.overview-health-value--error { color:var(--ih-status-error); }
+.overview-health-value--warn { color:var(--ih-status-warning); }
+.metric-action { justify-self:start; margin-top:0.1rem; }

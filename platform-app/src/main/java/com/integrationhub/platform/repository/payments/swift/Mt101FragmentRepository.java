@@ -179,6 +179,84 @@ public class Mt101FragmentRepository {
         return page;
     }
 
+    /**
+     * v52-fix (resolucion del UNCERTAIN normal): lee, de forma DURABLE y paginada por {@code fragment_index}, los
+     * fragmentos de un set en un estado no resuelto por PAY ({@code statuses}, normalmente
+     * {@code ['UNCERTAIN','DISPATCHING']}), con la forma de registro que consume {@code MT101_STATUS}:
+     * {@code sendersReference} (:20: para la plantilla de consulta al gateway) + {@code route} ({@code routed_as}).
+     * Es el analogo NORMAL de {@code correctivePayStatusRecords} (que lee el ledger correctivo): da al resolver una
+     * FUENTE durable de que consultar al gateway, en vez del hand-off in-memory (solo SENT) del pipeline.
+     */
+    public List<Map<String, Object>> unresolvedPayStatusRecords(DataSource dataSource,
+                                                                String fragmentSetId,
+                                                                List<String> statuses,
+                                                                int afterIndex,
+                                                                int pageSize) throws SQLException {
+        var effectiveStatuses = statuses == null || statuses.isEmpty() ? List.of("UNCERTAIN", "DISPATCHING") : statuses;
+        // v57-fix: archive_id por SUBCONSULTA ESCALAR (max(a.id)) — NO un join: el indice V36
+        // (senders_reference, process_execution_id) NO es unico, y un join podria multiplicar filas de fragmento
+        // (=> doble consulta/transicion). La subconsulta devuelve exactamente un valor por fragmento (o null).
+        var sql = "select f.fragment_index, f.senders_reference, f.routed_as, "
+                + "(select max(a.id) from mt101_archive a where a.senders_reference = f.senders_reference "
+                + "and a.process_execution_id = f.process_execution_id) as archive_id "
+                + "from mt101_build_fragment f "
+                + "where f.fragment_set_id = ? and f.status in (" + placeholders(effectiveStatuses.size()) + ") "
+                + "and f.fragment_index > ? order by f.fragment_index asc limit ?";
+        var page = new ArrayList<Map<String, Object>>(Math.max(pageSize, 1));
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            statement.setString(parameter++, fragmentSetId);
+            for (var status : effectiveStatuses) {
+                statement.setString(parameter++, status);
+            }
+            statement.setInt(parameter++, afterIndex);
+            statement.setInt(parameter, pageSize);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    var record = new LinkedHashMap<String, Object>();
+                    record.put("fragmentIndex", rs.getInt("fragment_index"));
+                    record.put("sendersReference", rs.getString("senders_reference"));
+                    record.put("route", rs.getString("routed_as"));
+                    var archiveId = rs.getLong("archive_id");
+                    if (!rs.wasNull()) {
+                        record.put("archiveId", archiveId);
+                    }
+                    page.add(record);
+                }
+            }
+        }
+        return page;
+    }
+
+    /**
+     * v54-fix (cierre de NEEDS_RECONCILIATION): resumen de terminalidad de los fragmentos de una EJECUCION
+     * (por {@code process_execution_id}). {@code nonTerminal} = fragmentos que NO alcanzaron un terminal de despacho
+     * ({@code SENT/CONFIRMED/RECONCILED/REJECTED/SUPERSEDED}) — incluye ARCHIVED sin enviar, UNCERTAIN/DISPATCHING sin
+     * resolver, etc. El cierre solo procede si {@code nonTerminal == 0} (nunca cerrar como completado con pagos
+     * pendientes). {@code rejected} decide COMPLETED vs COMPLETED_WITH_ERRORS.
+     */
+    public ReconciliationSummary reconciliationSummary(DataSource dataSource, Long processExecutionId)
+            throws SQLException {
+        var sql = "select count(*) as total, "
+                + "count(*) filter (where status not in "
+                + "('SENT','CONFIRMED','RECONCILED','REJECTED','SUPERSEDED')) as non_terminal, "
+                + "count(*) filter (where status = 'REJECTED') as rejected "
+                + "from mt101_build_fragment where process_execution_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, processExecutionId);
+            try (var rs = statement.executeQuery()) {
+                rs.next();
+                return new ReconciliationSummary(rs.getLong("total"), rs.getLong("non_terminal"),
+                        rs.getLong("rejected"));
+            }
+        }
+    }
+
+    public record ReconciliationSummary(long total, long nonTerminal, long rejected) {
+    }
+
     public List<RoutedMessageJsonRow> readRoutedPage(DataSource dataSource,
                                                      String fragmentSetId,
                                                      List<String> statuses,
@@ -209,6 +287,97 @@ public class Mt101FragmentRepository {
             }
         }
         return page;
+    }
+
+    /**
+     * v51-fix (PAY normal durable): claim ATOMICO pre-envio de una pagina de fragmentos no-correctivos.
+     * Transiciona {@code -> DISPATCHING} SOLO los que sigan en uno de los estados legibles por PAY
+     * ({@code fromStatuses}: por defecto {@code ARCHIVED}; o el override {@code fragmentSource.statuses}, p.ej.
+     * {@code REJECTED} en un reproceso explicito), en un UPDATE con {@code RETURNING} (una vuelta a BD), y devuelve
+     * el conjunto realmente reclamado. Un fragmento que otro worker ya reclamo/envio, o que ya salio de esos
+     * estados, NO se reclama -> el provider no lo despacha (sin doble envio). Como PAY solo lee {@code fromStatuses},
+     * un fragmento en {@code DISPATCHING} (p.ej. si el worker cae tras enviar y antes de marcar terminal) queda
+     * EXCLUIDO de una nueva seleccion: exige conciliacion, nunca reenvio automatico.
+     */
+    public java.util.Set<String> claimForDispatch(DataSource dataSource,
+                                                  String fragmentSetId,
+                                                  Collection<String> sendersReferences,
+                                                  List<String> fromStatuses) throws SQLException {
+        var refs = new ArrayList<String>();
+        if (sendersReferences != null) {
+            for (var reference : sendersReferences) {
+                if (reference != null && !reference.isBlank()) {
+                    refs.add(reference);
+                }
+            }
+        }
+        if (refs.isEmpty() || fromStatuses == null || fromStatuses.isEmpty()) {
+            return java.util.Set.of();
+        }
+        var sql = "update mt101_build_fragment set status = 'DISPATCHING', updated_at = current_timestamp "
+                + "where fragment_set_id = ? and status in (" + placeholders(fromStatuses.size()) + ") "
+                + "and senders_reference in (" + placeholders(refs.size()) + ") returning senders_reference";
+        var claimed = new java.util.LinkedHashSet<String>(refs.size());
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            statement.setString(parameter++, fragmentSetId);
+            for (var status : fromStatuses) {
+                statement.setString(parameter++, status);
+            }
+            for (var reference : refs) {
+                statement.setString(parameter++, reference);
+            }
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    claimed.add(rs.getString(1));
+                }
+            }
+        }
+        return claimed;
+    }
+
+    /**
+     * v52-fix (resolucion del UNCERTAIN normal): transiciona CONDICIONALMENTE los fragmentos indicados de
+     * CUALQUIERA de {@code fromStatuses} (p.ej. {@code UNCERTAIN}/{@code DISPATCHING}) a {@code toStatus}
+     * ({@code SENT}/{@code REJECTED} segun el gateway), en un solo UPDATE por conjunto de refs. Solo cambia lo que
+     * sigue en un estado no resuelto: nunca pisa un terminal ni reenvia (STATUS solo consulta, no despacha).
+     * Devuelve cuantos cambiaron.
+     */
+    public int resolvePayStatus(DataSource dataSource,
+                                String fragmentSetId,
+                                Collection<String> sendersReferences,
+                                List<String> fromStatuses,
+                                String toStatus,
+                                String errorMessage) throws SQLException {
+        var refs = new ArrayList<String>();
+        if (sendersReferences != null) {
+            for (var reference : sendersReferences) {
+                if (reference != null && !reference.isBlank()) {
+                    refs.add(reference);
+                }
+            }
+        }
+        if (refs.isEmpty() || fromStatuses == null || fromStatuses.isEmpty()) {
+            return 0;
+        }
+        var sql = "update mt101_build_fragment set status = ?, error_message = ?, updated_at = current_timestamp "
+                + "where fragment_set_id = ? and status in (" + placeholders(fromStatuses.size()) + ") "
+                + "and senders_reference in (" + placeholders(refs.size()) + ")";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            statement.setString(parameter++, toStatus);
+            statement.setString(parameter++, errorMessage);
+            statement.setString(parameter++, fragmentSetId);
+            for (var status : fromStatuses) {
+                statement.setString(parameter++, status);
+            }
+            for (var reference : refs) {
+                statement.setString(parameter++, reference);
+            }
+            return statement.executeUpdate();
+        }
     }
 
     public void updateStatusBatch(DataSource dataSource,

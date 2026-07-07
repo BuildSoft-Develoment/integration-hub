@@ -16,6 +16,9 @@ export interface ProcessFlowNodeSize {
   height: number;
 }
 
+/** Despacho de la tarea para el badge del canvas (ADR-015): offload per-task vs scatter distribuido. */
+export type ProcessNodeDispatch = 'async' | 'scatter';
+
 export interface ProcessFlowNode {
   id: string;
   taskRef: string;
@@ -23,6 +26,8 @@ export interface ProcessFlowNode {
   type: ProcessTaskType;
   position: ProcessFlowNodePosition;
   size?: ProcessFlowNodeSize;
+  /** 'async' = offload al broker; 'scatter' = repartido/distribuido; ausente = síncrono (in-process). */
+  dispatch?: ProcessNodeDispatch;
 }
 
 export interface ProcessFlowEdge {

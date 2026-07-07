@@ -32,6 +32,8 @@
     [transport]="draft().asyncTransport ?? 'KAFKA'"
     [executionMode]="draft().executionMode"
     [transports]="transports()"
+    [asyncState]="asyncState()"
+    [offloadSupport]="asyncOffloadSupport()"
     [readonly]="readonly()"
     (asyncChange)="updateAsync($event)"
     (transportChange)="runtimeChange.emit({ asyncTransport: $event })"

@@ -36,7 +36,9 @@ class CatalogAndExecutionResourceIT {
     void cleanDatabase() throws Exception {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
-            statement.execute("TRUNCATE TABLE audit_spool, audit_event, staging_record, process_task_execution, process_execution, process_task_definition, process_definition, source_definition, reader_definition RESTART IDENTITY CASCADE");
+            // task_sync_progress se incluye: con RESTART IDENTITY el peId reinicia a 1 en cada test y,
+            // como el upsert es monótono (GREATEST), progreso de otro test con el mismo (peId, tdId) fugaría.
+            statement.execute("TRUNCATE TABLE audit_spool, audit_event, staging_record, task_sync_progress, process_task_execution, process_execution, process_task_definition, process_definition, source_definition, reader_definition RESTART IDENTITY CASCADE");
         }
     }
 
@@ -140,6 +142,17 @@ class CatalogAndExecutionResourceIT {
                             .body("size()", is(2))
                             .body("[0].status", is("COMPLETED"))
                             .body("[1].status", is("COMPLETED"));
+
+            // Progreso sync del streaming fastpath (FILE_READ→DB_WRITE): el SyncProgressReporter upsertea
+            // a task_sync_progress bajo la tarea sink; el flush final corre antes de completar la tarea,
+            // así que tras COMPLETED el poll de progreso debe ver los 2 registros escritos.
+            given()
+                    .when()
+                            .get("/api/query/process-executions/{processExecutionId}/progress", executionId.longValue())
+                    .then()
+                            .statusCode(200)
+                            .body("syncTasks.size()", is(1))
+                            .body("syncTasks[0].recordsProcessed", is(2));
 
             // Auditoria asincrona: platform-app es el PRODUCTOR. Su responsabilidad es
             // dejar la trama en el spool durable (audit_spool); poblar audit_event es del

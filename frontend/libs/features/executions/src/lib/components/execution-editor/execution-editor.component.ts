@@ -7,6 +7,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 import {
   ExecutionFileActionRequest,
   ExecutionNavigationEntry,
+  ExecutionProgress,
   ProcessExecutionRecord,
   ProcessTaskExecutionRecord,
 } from '../../models/execution.models';
@@ -42,6 +43,7 @@ export class ExecutionEditorComponent {
   readonly execution = input<ProcessExecutionRecord | null>(null);
   readonly tasks = input<readonly ProcessTaskExecutionRecord[]>([]);
   readonly children = input<readonly ProcessExecutionRecord[]>([]);
+  readonly progress = input<ExecutionProgress | null>(null);
   readonly navigationStack = input<readonly ExecutionNavigationEntry[]>([]);
   readonly loading = input(false);
   readonly actionBusy = input(false);

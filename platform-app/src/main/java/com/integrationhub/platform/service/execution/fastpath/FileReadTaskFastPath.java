@@ -102,14 +102,15 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
 
     @Override
     public ProcessExecution execute(Long processExecutionId,
+                                    String executionToken,
                                     ProcessExecutionStateService.TaskPlan current,
                                     ProcessExecutionStateService.TaskPlan next,
                                     Map<String, String> executionVariables,
                                     List<String> selectedFiles,
                                     String triggerSource,
                                     Map<String, Object> taskOutputs) {
-        var readTaskExecutionId = stateService.startTask(processExecutionId, current.taskDefinitionId(), current.taskType(), current.taskOrder());
-        var sinkTaskExecutionId = stateService.startTask(processExecutionId, next.taskDefinitionId(), next.taskType(), next.taskOrder());
+        var readTaskExecutionId = stateService.startTask(processExecutionId, executionToken, current.taskDefinitionId(), current.taskType(), current.taskOrder());
+        var sinkTaskExecutionId = stateService.startTask(processExecutionId, executionToken, next.taskDefinitionId(), next.taskType(), next.taskOrder());
 
         try {
             var pipelineResult = pipelineService.run(processExecutionId, current, next, executionVariables, selectedFiles);
@@ -129,6 +130,7 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
 
             stateService.completeTask(
                     processExecutionId,
+                    executionToken,
                     readTaskExecutionId,
                     auditMapper.buildReadDetails(current.sourceName(), pipelineResult.readResult(), pipelineResult.fileSummaries()),
                     auditMapper.buildReadAuditPayload(current, pipelineResult.readResult(), pipelineResult.fileSummaries(), pipelineResult.selectedFiles(), executionVariables, triggerSource)
@@ -144,6 +146,7 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
 
             stateService.completeTask(
                     processExecutionId,
+                    executionToken,
                     sinkTaskExecutionId,
                     auditMapper.buildTaskDetails(next, "Pipeline sink completed with " + pipelineResult.processedCount() + " records processed"),
                     auditMapper.buildBatchSinkAuditPayload(
@@ -154,12 +157,16 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
                     )
             );
             return null; // Continue process
+        } catch (com.integrationhub.platform.service.execution.FencingTokenLostException fence) {
+            // P2: token perdido → abortar sin fallar tareas (evita sobrescribir estado de otro dueño).
+            throw fence;
         } catch (Exception pipelineError) {
-            return handleError(processExecutionId, current, next, readTaskExecutionId, sinkTaskExecutionId, executionVariables, triggerSource, pipelineError);
+            return handleError(processExecutionId, executionToken, current, next, readTaskExecutionId, sinkTaskExecutionId, executionVariables, triggerSource, pipelineError);
         }
     }
 
     private ProcessExecution handleError(Long processExecutionId,
+                                         String executionToken,
                                          ProcessExecutionStateService.TaskPlan current,
                                          ProcessExecutionStateService.TaskPlan next,
                                          Long readExecutionId,
@@ -183,21 +190,21 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
 
             var fileErrorPolicy = auditMapper.resolveFileErrorPolicy(current);
             if ("continue".equals(fileErrorPolicy)) {
-                stateService.completeTaskWithErrors(processExecutionId, readExecutionId, failureDetails, failurePayloadRead);
-                stateService.completeTaskWithErrors(processExecutionId, sinkExecutionId, failureDetails, failurePayloadSink);
-                stateService.completeProcessWithErrors(processExecutionId, failureDetails);
+                stateService.completeTaskWithErrors(processExecutionId, executionToken, readExecutionId, failureDetails, failurePayloadRead);
+                stateService.completeTaskWithErrors(processExecutionId, executionToken, sinkExecutionId, failureDetails, failurePayloadSink);
+                stateService.completeProcessWithErrors(processExecutionId, executionToken, failureDetails);
                 return stateService.getExecution(processExecutionId);
             }
 
-            stateService.failTask(processExecutionId, readExecutionId, failureDetails, failurePayloadRead);
-            stateService.failTask(processExecutionId, sinkExecutionId, failureDetails, failurePayloadSink);
+            stateService.failTask(processExecutionId, executionToken, readExecutionId, failureDetails, failurePayloadRead);
+            stateService.failTask(processExecutionId, executionToken, sinkExecutionId, failureDetails, failurePayloadSink);
             // The caller (ProcessExecutionService) will mark the process as failed.
         } else {
             var message = error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage();
             var payloadRead = auditMapper.buildTaskFailurePayload(current, executionVariables, triggerSource);
             var payloadSink = auditMapper.buildTaskFailurePayload(next, executionVariables, triggerSource);
-            stateService.failTask(processExecutionId, readExecutionId, message, payloadRead);
-            stateService.failTask(processExecutionId, sinkExecutionId, message, payloadSink);
+            stateService.failTask(processExecutionId, executionToken, readExecutionId, message, payloadRead);
+            stateService.failTask(processExecutionId, executionToken, sinkExecutionId, message, payloadSink);
         }
         if (error instanceof RuntimeException re) throw re;
         throw new RuntimeException(error);

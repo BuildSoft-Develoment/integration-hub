@@ -6,6 +6,17 @@
         </div>
       </div>
 
+      @if (pipeline(); as pl) {
+        <div class="task-pipeline" [class.task-pipeline--alert]="pipelineDeadCount() > 0" role="status">
+          @if (pipelineDeadCount() > 0) {
+            <span>{{ i18n.t('executions.progress.pipelineDead', { count: pipelineDeadCount() }) }}</span>
+            <a routerLink="/executions/async-dlq">{{ i18n.t('executions.progress.pipelineLink') }}</a>
+          } @else {
+            <span>{{ i18n.t('executions.progress.pipelineOk') }}</span>
+          }
+        </div>
+      }
+
       <mat-accordion class="task-accordion">
         @for (task of tasks(); track task.id; let index = $index) {
           <mat-expansion-panel [expanded]="selectedTaskId() === task.id" (opened)="selectTask.emit(task.id)">
@@ -26,6 +37,25 @@
                 <div><strong>{{ i18n.t('executions.startedAt') }}</strong>: {{ formatDate(task.startedAt) }}</div>
                 <div><strong>{{ i18n.t('executions.finishedAt') }}</strong>: {{ formatDate(task.finishedAt) }}</div>
               </div>
+
+              @if (scatterFor(task); as sc) {
+                <section class="task-progress" role="status">
+                  @if (sc.streaming) {
+                    <div class="task-progress__label">{{ i18n.t('executions.progress.streaming', { completed: sc.completed, failed: sc.failed }) }}</div>
+                    <mat-progress-bar mode="indeterminate" />
+                  } @else if (sc.percent != null) {
+                    <div class="task-progress__label">{{ i18n.t('executions.progress.scatter', { percent: sc.percent, completed: sc.completed, failed: sc.failed, total: sc.total ?? 0 }) }}</div>
+                    <mat-progress-bar mode="determinate" [value]="sc.percent" />
+                  }
+                </section>
+              } @else if (syncFor(task); as sy) {
+                <section class="task-progress" role="status">
+                  <div class="task-progress__label">{{ i18n.t('executions.progress.sync', { count: sy.recordsProcessed }) }}</div>
+                  @if (task.status === 'RUNNING') {
+                    <mat-progress-bar mode="indeterminate" />
+                  }
+                </section>
+              }
 
               @if (failure(task)) {
                 <section class="task-card__surface task-card__surface--error">

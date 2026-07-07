@@ -26,6 +26,8 @@ describe('OverviewStore', () => {
                 retryExecutions: 1,
                 failedProcessedFiles: 7,
                 pendingProcessedFiles: 9,
+                asyncDeadLetters: 2,
+                asyncStalledScatters: 1,
                 recentExecutions: [
                   {
                     id: 11,
@@ -112,6 +114,12 @@ describe('OverviewStore', () => {
 
     // installed: 2 ACTIVE + 1 DEGRADED; canary: 1 not promotable -> blocked.
     expect(store.pluginHealth()).toEqual({ active: 2, degraded: 1, blocked: 1 });
+  });
+
+  it('derives async backbone health from the summary (no extra call)', async () => {
+    expect(store.asyncHealth()).toBeNull(); // sin summary aún → card oculto
+    await store.load();
+    expect(store.asyncHealth()).toEqual({ dead: 2, stalled: 1 });
   });
 
   it('should expose recent rows for cards', async () => {

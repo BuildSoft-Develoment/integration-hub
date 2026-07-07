@@ -39,6 +39,9 @@
       @if (store.pluginHealth(); as health) {
         <ih-overview-plugin-health-card [health]="health" />
       }
+      @if (store.asyncHealth(); as asyncHealth) {
+        <ih-overview-async-health-card [health]="asyncHealth" />
+      }
       <!-- Extension point: plugins/features can register widgets into this slot. -->
       <ih-slot name="overview.widgets" />
     </section>

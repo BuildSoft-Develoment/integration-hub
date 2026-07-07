@@ -26,8 +26,9 @@ class AsyncSliceDispatchServiceTest {
     private final ObjectMapper mapper = new ObjectMapper();
     private final TaskAsyncDispatchRepository tracker = mock(TaskAsyncDispatchRepository.class);
     private final CapturingOutbox outbox = new CapturingOutbox();
+    private final AsyncPageChainService pageChain = mock(AsyncPageChainService.class);
     private final AsyncSliceDispatchService service =
-            new AsyncSliceDispatchService(tracker, outbox, mapper);
+            new AsyncSliceDispatchService(tracker, outbox, mapper, pageChain);
 
     private ReadRecord record(String id) {
         return new ReadRecord(Map.of("id", id));

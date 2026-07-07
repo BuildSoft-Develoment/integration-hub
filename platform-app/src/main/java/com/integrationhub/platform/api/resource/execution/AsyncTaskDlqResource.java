@@ -13,8 +13,10 @@ import jakarta.ws.rs.core.MediaType;
 
 import java.util.Map;
 
+import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
 import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
 import static com.integrationhub.platform.api.security.PlatformRoles.OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PAYMENTS_OPERATOR;
 import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
 
 /**
@@ -31,11 +33,33 @@ public class AsyncTaskDlqResource {
         this.service = service;
     }
 
+    // Reads de salud DLQ: gateados a los MISMOS 5 roles de lectura que /overview-summary y /progress
+    // (son contadores/listados read-only). Antes {admin,admin,operator} era más angosto que la sección
+    // executions ('operate' incluye payments-operator) y que overview (capability null) → 403 espurios en
+    // la UI de esos roles. Las acciones mutantes (redrive/requeue) siguen restringidas a ADMIN.
     @GET
     @Path("/summary")
-    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public AsyncTaskDlqService.DlqSummary summary() {
         return service.summary();
+    }
+
+    /** Filas muertas del consumer (DEAD/POISON), más recientes primero, para la consola de DLQ. */
+    @GET
+    @Path("/dead")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
+    public java.util.List<AsyncTaskDlqService.DeadTask> dead(@QueryParam("limit") @DefaultValue("100") int limit) {
+        return service.listDead(limit);
+    }
+
+    /** Scatters en streaming estancados (sin progreso por &gt; {@code minutes}), candidatos a re-inyección. */
+    @GET
+    @Path("/stalled")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
+    public java.util.List<AsyncTaskDlqService.StalledScatter> stalled(
+            @QueryParam("minutes") @DefaultValue("5") long minutes,
+            @QueryParam("limit") @DefaultValue("100") int limit) {
+        return service.listStalled(java.time.Duration.ofMinutes(Math.max(0, minutes)), limit);
     }
 
     /** Reanima filas DEAD del outbox a PENDING para que el relay reintente publicarlas. */

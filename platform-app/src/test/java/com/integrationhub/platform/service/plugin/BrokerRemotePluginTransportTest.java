@@ -8,6 +8,7 @@ import com.integrationhub.platform.spi.messaging.MessagePublisher;
 import com.integrationhub.platform.spi.messaging.OutboundMessage;
 import com.integrationhub.platform.spi.messaging.PublishResult;
 import com.integrationhub.platform.spi.task.TaskContext;
+import com.integrationhub.platform.task.ArtifactReference;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -94,6 +95,37 @@ class BrokerRemotePluginTransportTest {
 
         assertThrows(IllegalArgumentException.class,
                 () -> transport.invoke(descriptor("KAFKA"), "ACME_DO", new TaskContext(null, 7L), Map.of()));
+    }
+
+    /**
+     * Proyecto #3, Fase 4 (blindaje del diseño transport-agnostic): un {@code artifactRef} puesto en la
+     * {@code configuration} sobrevive intacto el envelope del broker (doble serialización JSON: envelope + body). Prueba
+     * que la referencia (opción B) viaja por cualquier control channel — gRPC o broker — sin cambios de plataforma.
+     */
+    @Test
+    void artifactRefInConfigurationSurvivesTheBrokerEnvelope() throws Exception {
+        var captured = new AtomicReference<OutboundMessage>();
+        var transport = new BrokerRemotePluginTransport(
+                type -> Optional.of(broker(type, message -> {
+                    captured.set(message);
+                    return PublishResult.ok("offset-1");
+                })),
+                new TaskDispatchPublisher(),
+                new ObjectMapper());
+
+        var reference = ArtifactReference.get("https://store/bucket/obj?sig=abc", "text/csv", 123L, 1730000000000L);
+        var configuration = Map.<String, Object>of(ArtifactReference.ARTIFACT_REF, reference.asMap());
+
+        transport.invoke(descriptor("KAFKA"), "ACME_DO", context, configuration);
+
+        var envelope = AsyncTaskMessageCodec.decode(captured.get().payload(), new ObjectMapper());
+        var body = new ObjectMapper().readValue(envelope.payload(), Map.class);
+        @SuppressWarnings("unchecked")
+        var config = (Map<String, Object>) body.get("configuration");
+        @SuppressWarnings("unchecked")
+        var refMap = (Map<String, Object>) config.get(ArtifactReference.ARTIFACT_REF);
+        assertEquals(reference, ArtifactReference.fromMap(refMap),
+                "el artifactRef sobrevive el envelope del broker -> la referencia es transport-agnostic");
     }
 
     private RemotePluginDescriptor descriptor(String transport) {

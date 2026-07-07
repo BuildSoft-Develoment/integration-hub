@@ -1,7 +1,9 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { Component, computed, inject, input, output } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatExpansionModule } from '@angular/material/expansion';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { RouterLink } from '@angular/router';
 import { DateTimeService, I18nService } from '@integration-hub/core/services';
 import {
   buildTaskDbWriteSummary,
@@ -12,12 +14,17 @@ import {
   summarizeFailure,
   taskOutputEntries,
 } from '../../details/execution-detail.utils';
-import { ProcessTaskExecutionRecord } from '../../models/execution.models';
+import {
+  ExecutionProgress,
+  ProcessTaskExecutionRecord,
+  SyncTaskProgress,
+  TaskScatterProgress,
+} from '../../models/execution.models';
 
 @Component({
   selector: 'ih-execution-task-list',
   standalone: true,
-  imports: [CommonModule, MatButtonModule, MatExpansionModule],
+  imports: [CommonModule, MatButtonModule, MatExpansionModule, MatProgressBarModule, RouterLink],
     templateUrl: './execution-task-list.component.html',
     styleUrl: './execution-task-list.component.css'
 })
@@ -26,8 +33,41 @@ export class ExecutionTaskListComponent {
   readonly dateTime = inject(DateTimeService);
 
   readonly tasks = input.required<readonly ProcessTaskExecutionRecord[]>();
+  readonly progress = input<ExecutionProgress | null>(null);
   readonly selectedTaskId = input<number | null>(null);
   readonly selectTask = output<number>();
+
+  // Índices por taskDefinitionId para correlacionar el progreso con la fila de tarea.
+  private readonly scatterByTask = computed(() => {
+    const map = new Map<number, TaskScatterProgress>();
+    for (const p of this.progress()?.scatterTasks ?? []) {
+      map.set(p.taskDefinitionId, p);
+    }
+    return map;
+  });
+
+  private readonly syncByTask = computed(() => {
+    const map = new Map<number, SyncTaskProgress>();
+    for (const p of this.progress()?.syncTasks ?? []) {
+      map.set(p.taskDefinitionId, p);
+    }
+    return map;
+  });
+
+  /** Salud del backbone async embebida en el progreso; muestra el chip solo si hay algo que reportar. */
+  readonly pipeline = computed(() => this.progress()?.pipeline ?? null);
+  readonly pipelineDeadCount = computed(() => {
+    const p = this.pipeline();
+    return p ? p.outboxDead + p.inboxDead + p.inboxPoison : 0;
+  });
+
+  scatterFor(task: ProcessTaskExecutionRecord): TaskScatterProgress | null {
+    return this.scatterByTask().get(task.taskDefinitionId) ?? null;
+  }
+
+  syncFor(task: ProcessTaskExecutionRecord): SyncTaskProgress | null {
+    return this.syncByTask().get(task.taskDefinitionId) ?? null;
+  }
 
   readSummary(task: ProcessTaskExecutionRecord) {
     return buildTaskReadSummary(task);

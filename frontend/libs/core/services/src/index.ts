@@ -19,3 +19,4 @@ export * from './lib/ui/breadcrumb.service';
 export * from './lib/ui/i18n-title.strategy';
 export * from './lib/ui/table-preferences.service';
 export * from './lib/ui/sort-utils';
+export * from './lib/execution/process-execution-api.service';

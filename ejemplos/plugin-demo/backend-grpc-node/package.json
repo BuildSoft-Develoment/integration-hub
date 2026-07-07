@@ -1,0 +1,15 @@
+{
+  "name": "demo-transform-node",
+  "version": "1.0.0",
+  "description": "Plugin gRPC DEMO_TRANSFORM_NODE independiente (sin dependencia del monorepo).",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.11.3",
+    "@grpc/proto-loader": "^0.7.13"
+  }
+}

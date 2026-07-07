@@ -50,6 +50,66 @@ describe('AsyncDispatchSectionComponent', () => {
     expect(fixture.componentInstance.modeHint()).toBe(fixture.componentInstance.i18n.t('ui.asyncModeScatter'));
   });
 
+  it('warns (disabled message) when async is on but the environment is DISABLED', () => {
+    const fixture = setup({ async: true, asyncState: 'DISABLED' });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.async-dispatch__warning')).toBeTruthy();
+    expect(fixture.componentInstance.asyncWarningKey()).toBe('ui.asyncFeatureDisabled');
+  });
+
+  it('warns (degraded message) when the environment is DEGRADED (enabled but not operational)', () => {
+    const fixture = setup({ async: true, asyncState: 'DEGRADED' });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.async-dispatch__warning')).toBeTruthy();
+    expect(fixture.componentInstance.asyncWarningKey()).toBe('ui.asyncFeatureDegraded');
+  });
+
+  it('shows no warning when the async state is READY', () => {
+    const fixture = setup({ async: true, asyncState: 'READY' });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.async-dispatch__warning')).toBeNull();
+    expect(fixture.componentInstance.asyncWarningKey()).toBeNull();
+  });
+
+  it('hides the toggle and shows a hint when the type does not support async (UNSUPPORTED)', () => {
+    const fixture = setup({ offloadSupport: 'UNSUPPORTED', executionMode: 'once' });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(fixture.componentInstance.available()).toBe(false);
+    expect(el.querySelector('mat-slide-toggle')).toBeNull();
+    expect(el.querySelector('.async-dispatch__hint--unavailable')?.textContent).toBe(
+      fixture.componentInstance.i18n.t('ui.asyncNotSupported')
+    );
+  });
+
+  it('SLICE_ONLY is unavailable in once mode', () => {
+    expect(setup({ offloadSupport: 'SLICE_ONLY', executionMode: 'once' }).componentInstance.available()).toBe(false);
+  });
+
+  it('SLICE_ONLY is available in batch mode', () => {
+    expect(setup({ offloadSupport: 'SLICE_ONLY', executionMode: 'batch' }).componentInstance.available()).toBe(true);
+  });
+
+  it('SLICE_ONLY is available in per-record mode', () => {
+    expect(
+      setup({ offloadSupport: 'SLICE_ONLY', executionMode: 'per-record' }).componentInstance.available()
+    ).toBe(true);
+  });
+
+  it('SLICE_ONLY in once mode shows the scatter-only hint', () => {
+    const fixture = setup({ offloadSupport: 'SLICE_ONLY', executionMode: 'once' });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('.async-dispatch__hint--unavailable')?.textContent).toBe(
+      fixture.componentInstance.i18n.t('ui.asyncScatterOnly')
+    );
+  });
+
+  it('keeps the toggle visible when async is already on even if now unsupported, so it can be turned off', () => {
+    const fixture = setup({ offloadSupport: 'UNSUPPORTED', executionMode: 'once', async: true });
+    const el = fixture.nativeElement as HTMLElement;
+    expect(el.querySelector('mat-slide-toggle')).toBeTruthy();
+    expect(fixture.componentInstance.toggleDisabled()).toBe(false);
+  });
+
   it('emits async and transport changes', () => {
     const fixture = setup({ async: false });
     const emitted: Record<string, unknown> = {};

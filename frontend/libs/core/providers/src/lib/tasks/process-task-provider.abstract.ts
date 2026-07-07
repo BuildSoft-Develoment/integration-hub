@@ -82,9 +82,11 @@ export abstract class ProcessTaskProvider<TDraft> {
       if (asyncTransport) {
         next['asyncTransport'] = asyncTransport;
       }
-      if (draft.continueOnFailure) {
-        next['continueOnFailure'] = true;
-      }
+    }
+    // continueOnFailure es politica de tarea GENERAL (el motor sincrono la lee para cualquier tarea):
+    // se persiste independiente de async. No anidarla bajo async (bug detectado en el doble check).
+    if (draft.continueOnFailure) {
+      next['continueOnFailure'] = true;
     }
     if (input?.sourceTaskRef) {
       next['input'] = {

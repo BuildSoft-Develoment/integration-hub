@@ -1,0 +1,31 @@
+.dlq { display:flex; flex-direction:column; gap:1rem; }
+.dlq__toolbar { display:flex; justify-content:space-between; gap:.75rem; flex-wrap:wrap; align-items:center; }
+.dlq__filters { display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; }
+.dlq__filters mat-form-field { width:11rem; }
+.dlq__actions { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+.dlq__danger--armed { --mdc-outlined-button-label-text-color:var(--ih-status-error); --mdc-outlined-button-outline-color:var(--ih-status-error); }
+.dlq__summary { display:grid; grid-template-columns:repeat(auto-fit, minmax(9rem, 1fr)); gap:.6rem; }
+.dlq__metric { display:grid; gap:.25rem; padding:.75rem; border:1px solid var(--ih-border); border-radius:8px; background:var(--ih-surface-alt); }
+.dlq__metric small { color:var(--ih-text-soft); }
+.dlq__metric strong { font-size:1.35rem; }
+.dlq__metric--alert { border-color:var(--ih-status-error); background:var(--ih-status-error-bg); }
+.dlq__metric--alert strong { color:var(--ih-status-error); }
+.dlq__health { display:flex; align-items:center; gap:.5rem; padding:.5rem .75rem; border-radius:8px; font-size:.86rem; font-weight:600; border:1px solid var(--ih-border); }
+.dlq__health-dot { width:.6rem; height:.6rem; border-radius:50%; background:currentColor; flex:0 0 auto; }
+.dlq__health--ok { color:var(--ih-status-success); background:var(--ih-status-success-bg); border-color:var(--ih-status-success); }
+.dlq__health--warn { color:var(--ih-status-warning); background:var(--ih-status-warning-bg); border-color:var(--ih-status-warning); }
+.dlq__health--error { color:var(--ih-status-error); background:var(--ih-status-error-bg); border-color:var(--ih-status-error); }
+.dlq__subtitle { font-size:.95rem; margin:.5rem 0 0; }
+.dlq__table { overflow:auto; border:1px solid var(--ih-border); border-radius:8px; }
+table { width:100%; border-collapse:collapse; min-width:52rem; }
+th, td { padding:.55rem .65rem; border-bottom:1px solid var(--ih-border); text-align:left; vertical-align:top; }
+th { font-size:.75rem; color:var(--ih-text-soft); font-weight:600; }
+td { font-size:.86rem; }
+.dlq__mono { font-family:ui-monospace, SFMono-Regular, Consolas, monospace; overflow-wrap:anywhere; }
+.dlq__badge { display:inline-block; padding:.1rem .45rem; border-radius:6px; font-size:.72rem; font-weight:600; background:var(--ih-surface-alt); border:1px solid var(--ih-border); }
+.dlq__badge--dead, .dlq__badge--poison { color:var(--ih-status-error); border-color:var(--ih-status-error); background:var(--ih-status-error-bg); }
+.dlq__cell--alert { color:var(--ih-status-error); font-weight:600; }
+.dlq__error { color:var(--ih-status-error); }
+.dlq__ok { color:var(--ih-status-success); }
+.dlq__empty { color:var(--ih-text-soft); padding:.75rem; }
+.dlq__last-refresh { font-size:.75rem; color:var(--ih-text-soft); text-align:right; margin:0; }

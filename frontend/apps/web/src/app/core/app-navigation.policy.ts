@@ -46,6 +46,14 @@ export const APP_NAVIGATION_DEFINITIONS: readonly AppNavigationItem[] = [
     requiredCapability: APP_SECTION_CAPABILITIES.executions,
   },
   {
+    // Consola de operaciones DLQ async (sub-ruta de executions), expuesta en el nav como las
+    // sub-consolas de auditoría (spool/cuarentena). Misma capability que la sección executions.
+    id: 'asyncDlq',
+    route: '/executions/async-dlq',
+    labelKey: 'nav.asyncDlq',
+    requiredCapability: APP_SECTION_CAPABILITIES.executions,
+  },
+  {
     id: 'schedules',
     route: '/schedules',
     labelKey: 'nav.schedules',

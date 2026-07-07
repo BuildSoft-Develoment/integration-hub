@@ -18,9 +18,14 @@ import java.sql.Connection;
 import java.sql.Statement;
 import java.util.Map;
 
+import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.anyOf;
+import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * E2E del lazo async completo (ADR-015 Etapas 1-4) sin broker: una tarea {@code async:true} suspende
@@ -54,6 +59,23 @@ class AsyncTaskExecutionE2EIT {
                             + "process_task_definition, process_definition, source_definition, "
                             + "reader_definition RESTART IDENTITY CASCADE");
         }
+    }
+
+    /**
+     * Contrato UI↔backend (#4 + UI que consume `state`): el enum {@code State} se serializa por el JSON REAL del
+     * endpoint como su NAME ({@code DISABLED}/{@code DEGRADED}/{@code READY}) — que es exactamente lo que la UI compara
+     * (`state === 'READY'`). Si Jackson lo cambiara (ordinal/lowercase) la UI avisaría siempre en silencio; este test
+     * lo blinda contra el JSON real, no contra un supuesto (lección de #4).
+     */
+    @Test
+    @TestSecurity(user = "admin", roles = {"platform-admin"})
+    void asyncStatusEndpointSerializesStateAsEnumName() {
+        given()
+                .when().get("/api/messaging/async-status")
+                .then().statusCode(200)
+                .body("state", anyOf(is("DISABLED"), is("DEGRADED"), is("READY")))
+                .body("consumerLive", anyOf(is(true), is(false)))
+                .body("executionEnabled", anyOf(is(true), is(false)));
     }
 
     @Test
@@ -126,6 +148,54 @@ class AsyncTaskExecutionE2EIT {
         assertEquals("1", readSingleString("select count(*) from task_inbox where status = 'PROCESSED'"));
         assertEquals("COMPLETED",
                 readSingleString("select status from process_execution order by id desc limit 1"));
+    }
+
+    /**
+     * §6: una tarea async cuya config lleva un {@code ${config:...}} (referencia de secreto). Se despacha
+     * con el placeholder SIN resolver (no se persiste el valor en el outbox ni viaja por el broker) y el
+     * consumer lo re-resuelve en el punto-de-uso, justo antes de ejecutar.
+     */
+    @Test
+    @TestSecurity(user = "admin", roles = {"platform-admin"})
+    void asyncSecretIsNotPersistedInOutboxAndIsResolvedAtConsumer() throws Exception {
+        var processDefinitionId = insertAsyncTaskWithSecret();
+
+        var execution = processExecutionService.execute(processDefinitionId, Map.of(), "MANUAL");
+        assertEquals(ExecutionStatus.SUSPENDED, execution.status);
+
+        // Leak-proof: el envelope del outbox lleva el PLACEHOLDER, no el valor resuelto del secreto.
+        var payload = readSingleString("select envelope_json from task_dispatch_outbox order by id desc limit 1");
+        assertNotNull(payload);
+        assertTrue(payload.contains("${secret:integrationhub.test.secret}"),
+                "el outbox debe llevar el placeholder ${config:...}, no el valor: " + payload);
+        assertFalse(payload.contains("SUPER_SECRET_XYZ"),
+                "el valor del secreto NO debe persistirse en el outbox: " + payload);
+
+        // Round-trip: el consumer re-resuelve → el provider recibe el VALOR real al ejecutar.
+        var outcome = asyncTaskConsumer.consume(payload, "KAFKA", "tasks.test_follow_up");
+        assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED, outcome);
+        assertEquals("SUPER_SECRET_XYZ", RecordingFollowUpTaskProvider.SEEN_SECRET_FIELD.get(),
+                "el provider debe recibir el secreto re-resuelto en el consumer");
+    }
+
+    private Long insertAsyncTaskWithSecret() throws Exception {
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate(
+                    "insert into process_definition (name, description, active, scheduled) "
+                            + "values ('async-secret-e2e', 'adr-015 async §6', true, false)");
+            try (var rs = statement.executeQuery("select id from process_definition order by id desc limit 1")) {
+                rs.next();
+                var processDefinitionId = rs.getLong(1);
+                statement.executeUpdate(
+                        "insert into process_task_definition "
+                                + "(process_definition_id, task_order, task_type, active, configuration_json) "
+                                + "values (" + processDefinitionId + ", 1, '" + RecordingFollowUpTaskProvider.TASK_TYPE
+                                + "', true, '{\"taskRef\":\"task-1\",\"executionMode\":\"once\",\"async\":true,"
+                                + "\"secretField\":\"${secret:integrationhub.test.secret}\"}')");
+                return processDefinitionId;
+            }
+        }
     }
 
     private Long insertAsyncTask() throws Exception {

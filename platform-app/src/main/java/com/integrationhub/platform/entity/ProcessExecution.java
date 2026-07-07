@@ -49,5 +49,22 @@ public class ProcessExecution {
 
     @Column(columnDefinition = "text")
     public String details;
+
+    // v53-fix (#8): claim atomico distribuido. El nodo que gana el UPDATE...WHERE status='PENDING' fija owner+token
+    // y renueva el lease/heartbeat mientras ejecuta; una ejecucion RUNNING con lease vencido esta huerfana.
+    @Column(name = "execution_owner", length = 120)
+    public String executionOwner;
+
+    @Column(name = "execution_token", length = 64)
+    public String executionToken;
+
+    @Column(name = "execution_lease_until")
+    public LocalDateTime executionLeaseUntil;
+
+    @Column(name = "execution_heartbeat_at")
+    public LocalDateTime executionHeartbeatAt;
+
+    @Column(name = "execution_attempt", nullable = false)
+    public int executionAttempt = 0;
 }
 

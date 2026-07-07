@@ -2,6 +2,7 @@ package com.integrationhub.platform.service.execution;
 
 import com.integrationhub.platform.domain.TaskType;
 import com.integrationhub.platform.service.TaskProviderRegistry;
+import com.integrationhub.platform.service.execution.async.AsyncPageWorkItem;
 import com.integrationhub.platform.service.execution.async.AsyncSliceDispatchService;
 import com.integrationhub.platform.service.execution.async.AsyncTaskDispatchService;
 import com.integrationhub.platform.service.reader.ReaderProviderRegistry;
@@ -9,10 +10,14 @@ import com.integrationhub.platform.service.source.SourceProviderRegistry;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.source.SourcePayload;
+import com.integrationhub.platform.spi.task.AsyncOffloadSupport;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
+import com.integrationhub.platform.spi.task.SuspendableTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
+import com.integrationhub.platform.spi.task.TaskProvider;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
+import org.jboss.logging.Logger;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -22,6 +27,8 @@ import java.util.Map;
 @ApplicationScoped
 public class ProcessTaskRuntimeService {
 
+    private static final Logger LOG = Logger.getLogger(ProcessTaskRuntimeService.class);
+
     private final SourceProviderRegistry sourceProviderRegistry;
     private final ReaderProviderRegistry readerProviderRegistry;
     private final TaskProviderRegistry taskProviderRegistry;
@@ -29,6 +36,10 @@ public class ProcessTaskRuntimeService {
     private final TaskOutputRegistry taskOutputRegistry;
     private final TaskInputResolver taskInputResolver;
     private final AsyncTaskDispatchService asyncTaskDispatchService;
+    private final com.integrationhub.platform.repository.TaskSyncProgressRepository syncProgressRepository;
+
+    /** Cada cuántos slices se persiste el progreso sync (throttle: a 1M/batch no se escribe por lote). */
+    private static final int PROGRESS_EVERY_N_SLICES = 10;
 
     public ProcessTaskRuntimeService(SourceProviderRegistry sourceProviderRegistry,
                                      ReaderProviderRegistry readerProviderRegistry,
@@ -36,7 +47,8 @@ public class ProcessTaskRuntimeService {
                                      FileReadRuntimeSupport fileReadRuntimeSupport,
                                      TaskOutputRegistry taskOutputRegistry,
                                      TaskInputResolver taskInputResolver,
-                                     AsyncTaskDispatchService asyncTaskDispatchService) {
+                                     AsyncTaskDispatchService asyncTaskDispatchService,
+                                     com.integrationhub.platform.repository.TaskSyncProgressRepository syncProgressRepository) {
         this.sourceProviderRegistry = sourceProviderRegistry;
         this.readerProviderRegistry = readerProviderRegistry;
         this.taskProviderRegistry = taskProviderRegistry;
@@ -44,6 +56,7 @@ public class ProcessTaskRuntimeService {
         this.taskOutputRegistry = taskOutputRegistry;
         this.taskInputResolver = taskInputResolver;
         this.asyncTaskDispatchService = asyncTaskDispatchService;
+        this.syncProgressRepository = syncProgressRepository;
     }
 
     @Transactional(Transactional.TxType.NOT_SUPPORTED)
@@ -72,17 +85,37 @@ public class ProcessTaskRuntimeService {
 
         // ADR-015 Etapa 3: si la tarea está marcada async (y el feature está activo), se offloada al
         // broker en vez de ejecutarse in-process. Gated OFF por defecto → sin cambio de comportamiento.
+        // §6: el offload serializa la config SIN resolver secretos (placeholders ${secret:}); el consumer
+        // los re-resuelve en el punto-de-uso. La decisión de plan (flags) es idéntica con o sin resolver.
+        var unresolvedConfiguration = fileReadRuntimeSupport.configurationUnresolved(taskPlan.configurationJson());
         var asyncEnvelope = asyncTaskDispatchService.prepare(
-                processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(), configuration);
+                processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(), unresolvedConfiguration);
         if (asyncEnvelope.isPresent()) {
+            guardAsyncOffloadable(provider, taskPlan.taskType(), executionMode);
             var envelope = asyncEnvelope.get();
             if (requiresRecordInput(executionMode)) {
                 // Opción B (scatter): reparte los records en N slices (N work-items) en vez de offloadar
                 // la tarea como una unidad. El tracker N→1 los agrega y reanuda la tarea al cerrar.
                 var resolvedInput = taskInputResolver.resolve(configuration, taskOutputs);
+                var metadata = taskOutputRegistry.taskMetadata(
+                        processExecutionId, taskPlan, configuration, triggerSource);
                 if (resolvedInput.tableInput() != null) {
-                    throw new IllegalStateException("El scatter async aún no soporta input por table-streaming (tarea "
-                            + taskPlan.taskType() + ")");
+                    // Input por table-streaming (N desconocido): page-chain. Se encola una página semilla
+                    // y cada consumer encola la siguiente (keyset paging) → dispatch distribuido, memoria
+                    // acotada, recuperación por at-least-once. El scatter se abre open-ended y se sella al
+                    // agotar la tabla.
+                    var table = resolvedInput.tableInput();
+                    var seed = AsyncPageWorkItem.seed(table.tableName(), table.connectionRef(), table.orderBy(),
+                            table.filters(), configuredBatchSize(configuration), unresolvedConfiguration,
+                            taskOutputs, metadata, executionVariables);
+                    var scatter = AsyncSliceDispatchService.ScatterDispatch.streaming(
+                            processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(),
+                            envelope.transport(), seed);
+                    return TaskRunResult.suspendedScatter(
+                            "Tarea " + taskPlan.taskType() + " en scatter por table-streaming (page-chain) por "
+                                    + envelope.transport(),
+                            Map.of("scatterDispatch", true, "streaming", true, "transport", envelope.transport()),
+                            scatter);
                 }
                 var records = resolvedInput.readResult() == null
                         ? List.<ReadRecord>of()
@@ -91,9 +124,12 @@ public class ProcessTaskRuntimeService {
                 if (slices.isEmpty()) {
                     return TaskRunResult.generic(true, "sin registros para repartir", sourcePayload, readResult, Map.of());
                 }
-                var scatter = new AsyncSliceDispatchService.ScatterDispatch(
+                // Propaga el contexto serializable a cada slice (Nivel 2): outputs de tareas origen,
+                // metadata y variables de ejecución; el consumer reconstruye el TaskContext con ellos.
+                var scatter = AsyncSliceDispatchService.ScatterDispatch.materialized(
                         processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(),
-                        envelope.transport(), configuration, slices);
+                        envelope.transport(), unresolvedConfiguration, slices,
+                        taskOutputs, metadata, executionVariables);
                 return TaskRunResult.suspendedScatter(
                         "Tarea " + taskPlan.taskType() + " repartida en " + slices.size() + " slices async por "
                                 + envelope.transport(),
@@ -132,10 +168,23 @@ public class ProcessTaskRuntimeService {
                         if (slice.records().size() == 1) {
                             taskContext.attributes().put("currentRecord", slice.records().getFirst().values());
                         }
-                        if (provider instanceof BatchTaskProvider batchTaskProvider) {
-                            return batchTaskProvider.executeRecords(taskContext, configuration, slice.records(), resolvedInput.sourcePayload());
+                        var sliceResult = provider instanceof BatchTaskProvider batchTaskProvider
+                                ? batchTaskProvider.executeRecords(taskContext, configuration, slice.records(), resolvedInput.sourcePayload())
+                                : provider.execute(taskContext, configuration);
+                        // Progreso en vivo (throttled): persiste el acumulado (slice.batchTo) cada N slices,
+                        // en tx propia (runTask es NOT_SUPPORTED) → la UI de monitoreo lo ve durante la corrida.
+                        // Best-effort: un fallo al persistir el progreso NO debe fallar la tarea (el trabajo
+                        // real ya se hizo); se registra y se sigue.
+                        if (slice.batchNumber() % PROGRESS_EVERY_N_SLICES == 0) {
+                            try {
+                                syncProgressRepository.upsert(
+                                        processExecutionId, taskPlan.taskDefinitionId(), slice.batchTo());
+                            } catch (RuntimeException progressError) {
+                                LOG.debugf(progressError, "No se pudo persistir el progreso sync de exec=%d task=%d",
+                                        processExecutionId, taskPlan.taskDefinitionId());
+                            }
                         }
-                        return provider.execute(taskContext, configuration);
+                        return sliceResult;
                     }
             );
             return TaskRunResult.generic(accumulator.success(), accumulator.details(),
@@ -164,6 +213,37 @@ public class ProcessTaskRuntimeService {
 
     private boolean requiresRecordInput(String executionMode) {
         return "batch".equals(executionMode) || "per-record".equals(executionMode);
+    }
+
+    /**
+     * ADR-015: verifica que el provider soporte offload async para el {@code executionMode} pedido.
+     * Si no lo soporta, <b>lanza</b> (no degrada a síncrono en silencio ni deja que el consumer marque
+     * DEAD/no-op): async es opt-in por capacidad ({@link AsyncOffloadSupport}) y un tipo marcado async
+     * que no la soporta es un error de configuración que debe fallar fuerte y visible.
+     */
+    private void guardAsyncOffloadable(TaskProvider provider, String taskType, String executionMode) {
+        var scatter = requiresRecordInput(executionMode);
+        // Nivel 3: un SuspendableTaskProvider SÍ es offloadable en 'once' (el consumer ejecuta el primer
+        // intento y, si suspende, la tarea se re-suspende para callback/scheduler). Pero NO en scatter: la
+        // re-suspensión no aplica a una slice; una slice que suspende va a DEAD. Se bloquea explícito.
+        if (provider instanceof SuspendableTaskProvider && scatter) {
+            throw new IllegalStateException("La tarea suspendible '" + taskType + "' no soporta async en modo "
+                    + "distribuido (scatter): la re-suspensión solo aplica a executionMode 'once'.");
+        }
+        var support = provider.asyncOffloadSupport();
+        var allowed = switch (support) {
+            case SUPPORTED -> true;
+            case SLICE_ONLY -> scatter;
+            case UNSUPPORTED -> false;
+        };
+        if (!allowed) {
+            var detail = support == AsyncOffloadSupport.SLICE_ONLY
+                    ? " en modo '" + executionMode + "': solo es offloadable como scatter (executionMode "
+                            + "batch/per-record, donde los records viajan en los slices)."
+                    : ": depende de contexto en vivo no propagable por el broker (readResult/taskOutputs/"
+                            + "executionVariables/sourcePayload). Ejecútela síncrona.";
+            throw new IllegalStateException("La tarea '" + taskType + "' no soporta ejecución async" + detail);
+        }
     }
 
     private TaskContext taskContext(Long processExecutionId,

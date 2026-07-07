@@ -1,17 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { ProcessExecutionRecord, ProcessTaskExecutionRecord } from '../models/execution.models';
-
-export interface ExecuteProcessRequest {
-  executionVariables?: Record<string, string>;
-  selectedFiles?: string[];
-  sourceExecutionId?: number | null;
-}
-
-export interface ExecuteProcessResponse {
-  id: number;
-}
+import { ExecutionProgress, ProcessExecutionRecord, ProcessTaskExecutionRecord } from '../models/execution.models';
 
 export interface ExecutionPageResponse {
   total: number;
@@ -51,11 +41,12 @@ export class ExecutionApiService {
     return this.http.get<ProcessTaskExecutionRecord[]>(`${this.baseUrl}/${executionId}/tasks`);
   }
 
-  listChildren(executionId: number): Observable<ProcessExecutionRecord[]> {
-    return this.http.get<ProcessExecutionRecord[]>(`${this.baseUrl}/${executionId}/children`);
+  /** Progreso en vivo (scatter + sync + salud del pipeline) para el monitoreo a escala (ADR-015). */
+  progress(executionId: number): Observable<ExecutionProgress> {
+    return this.http.get<ExecutionProgress>(`${this.baseUrl}/${executionId}/progress`);
   }
 
-  execute(processDefinitionId: number, request: ExecuteProcessRequest): Observable<ExecuteProcessResponse> {
-    return this.http.post<ExecuteProcessResponse>(`/api/process-executions/${processDefinitionId}`, request);
+  listChildren(executionId: number): Observable<ProcessExecutionRecord[]> {
+    return this.http.get<ProcessExecutionRecord[]>(`${this.baseUrl}/${executionId}/children`);
   }
 }

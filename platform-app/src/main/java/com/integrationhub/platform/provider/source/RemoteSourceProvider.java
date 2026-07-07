@@ -1,5 +1,6 @@
 package com.integrationhub.platform.provider.source;
 
+import com.integrationhub.platform.service.artifact.ArtifactStaging;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginInvoker;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
@@ -8,9 +9,10 @@ import com.integrationhub.platform.spi.source.SourcePayload;
 import com.integrationhub.platform.spi.source.SourceProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
+import com.integrationhub.platform.task.ArtifactReference;
 
+import java.time.Duration;
 import java.time.Instant;
-import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -18,19 +20,27 @@ import java.util.Map;
 
 public class RemoteSourceProvider implements SourceProvider {
 
+    /** Proyecto #3 Fase 2b: el contrato source por {@code artifactRef} requiere spiVersion mayor >= 2 (retira Base64). */
+    static final int REQUIRED_SPI_VERSION = 2;
+    /** TTL de la URL presignada de subida (corta vida; el plugin sube dentro del OPEN síncrono). */
+    static final Duration UPLOAD_TTL = Duration.ofMinutes(15);
+
     private final String type;
     private final RemotePluginDescriptor descriptor;
     private final RemotePluginInvoker invoker;
     private final RemotePluginRegistry registry;
+    private final ArtifactStaging staging;
 
     public RemoteSourceProvider(String type,
                                 RemotePluginDescriptor descriptor,
                                 RemotePluginInvoker invoker,
-                                RemotePluginRegistry registry) {
+                                RemotePluginRegistry registry,
+                                ArtifactStaging staging) {
         this.type = type;
         this.descriptor = descriptor;
         this.invoker = invoker;
         this.registry = registry;
+        this.staging = staging;
     }
 
     @Override
@@ -45,22 +55,51 @@ public class RemoteSourceProvider implements SourceProvider {
         return files.stream().map(this::selectedFile).toList();
     }
 
+    /**
+     * Fase 2b — el plugin ya no devuelve {@code contentBase64}: la plataforma presigna un PUT, el plugin SUBE el archivo
+     * a esa URL (vía el SDK {@code ArtifactTransfer}), y la plataforma lo lee por <b>streaming</b> del staging
+     * (delete-on-close). Negocia por {@code spiVersion} (fail-fast, no ruptura silenciosa).
+     */
     @Override
     public SourcePayload openFile(SelectedSourceFile selectedFile, Map<String, Object> configuration) {
+        requireArtifactRefContract();
+        var staged = staging.presignUpload(selectedFile.mediaType(), UPLOAD_TTL);
+
         var payload = new LinkedHashMap<String, Object>();
         payload.put("configuration", configuration == null ? Map.of() : configuration);
         payload.put("file", selectedFile(selectedFile));
+        payload.put(ArtifactReference.ARTIFACT_REF, staged.reference().asMap());
+
         var result = invoke("OPEN", payload);
-        var encoded = text(result.outputs().get("contentBase64"));
-        if (encoded.isBlank()) {
-            throw degraded("Remote source plugin must return outputs.contentBase64");
-        }
-        var bytes = Base64.getDecoder().decode(encoded);
         var mediaType = text(result.outputs().get("mediaType"));
-        return SourcePayload.fromBytes(
-                selectedFile.name(),
-                bytes,
-                mediaType.isBlank() ? selectedFile.mediaType() : mediaType);
+        var effectiveMediaType = mediaType.isBlank() ? selectedFile.mediaType() : mediaType;
+
+        // Read-back perezoso por streaming; el close() del stream borra el objeto de staging (delete-on-close).
+        var file = new SelectedSourceFile(selectedFile.name(), selectedFile.location(),
+                effectiveMediaType, selectedFile.size(), selectedFile.lastModified());
+        return new SourcePayload(file, () -> staging.openAndDeleteOnClose(staged.key()));
+    }
+
+    /** Negociación de contrato: el source por {@code artifactRef} requiere que el plugin declare spiVersion >= 2. */
+    private void requireArtifactRefContract() {
+        int major = majorVersion(descriptor.spiVersion());
+        if (major < REQUIRED_SPI_VERSION) {
+            throw degraded("el plugin declara spiVersion='" + descriptor.spiVersion() + "' pero el source remoto por "
+                    + "referencia (artifactRef) requiere spiVersion mayor >= " + REQUIRED_SPI_VERSION
+                    + ": actualiza el plugin para subir el archivo a la URL presignada en vez de devolver contentBase64");
+        }
+    }
+
+    /** Parsea el componente MAYOR de spiVersion ("1", "2.1.0", ...) de forma robusta; no numérico → 0. */
+    private static int majorVersion(String spiVersion) {
+        if (spiVersion == null || spiVersion.isBlank()) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(spiVersion.trim().split("\\.")[0]);
+        } catch (NumberFormatException error) {
+            return 0;
+        }
     }
 
     private TaskResult invoke(String operation, Map<String, Object> payload) {

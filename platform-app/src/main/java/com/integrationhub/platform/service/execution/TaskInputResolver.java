@@ -165,7 +165,8 @@ public class TaskInputResolver {
                 batchSize);
     }
 
-    private Object cursorValue(List<ReadRecord> records, String orderBy) {
+    /** Key del cursor keyset = valor de {@code orderBy} en el último record de la página (o null). */
+    public static Object cursorValue(List<ReadRecord> records, String orderBy) {
         var last = records.get(records.size() - 1);
         var column = orderBy.contains(".") ? orderBy.substring(orderBy.lastIndexOf('.') + 1) : orderBy;
         var values = last.values();

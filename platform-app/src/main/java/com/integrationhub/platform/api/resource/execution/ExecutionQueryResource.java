@@ -7,6 +7,7 @@ import com.integrationhub.platform.api.response.execution.AuditEventPageResponse
 import com.integrationhub.platform.api.response.execution.OverviewSummaryResponse;
 import com.integrationhub.platform.api.response.execution.ProcessExecutionResponse;
 import com.integrationhub.platform.api.response.execution.ProcessTaskExecutionResponse;
+import com.integrationhub.platform.service.execution.ExecutionProgressService;
 import com.integrationhub.platform.service.execution.ExecutionQueryService;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.DefaultValue;
@@ -31,9 +32,12 @@ import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_AD
 public class ExecutionQueryResource {
 
     private final ExecutionQueryService executionQueryService;
+    private final ExecutionProgressService executionProgressService;
 
-    public ExecutionQueryResource(ExecutionQueryService executionQueryService) {
+    public ExecutionQueryResource(ExecutionQueryService executionQueryService,
+                                  ExecutionProgressService executionProgressService) {
         this.executionQueryService = executionQueryService;
+        this.executionProgressService = executionProgressService;
     }
 
     @GET
@@ -76,6 +80,15 @@ public class ExecutionQueryResource {
     @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public List<ProcessTaskExecutionResponse> listTaskExecutions(@PathParam("processExecutionId") Long processExecutionId) {
         return executionQueryService.listTaskExecutions(processExecutionId);
+    }
+
+    /** Progreso de una ejecución (scatter por tarea + salud del pipeline) para el monitoreo a escala. */
+    @GET
+    @Path("/process-executions/{processExecutionId}/progress")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
+    public com.integrationhub.platform.service.execution.ExecutionProgressService.ExecutionProgress progress(
+            @PathParam("processExecutionId") Long processExecutionId) {
+        return executionProgressService.progress(processExecutionId);
     }
 
     @GET

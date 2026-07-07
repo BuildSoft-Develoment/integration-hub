@@ -23,7 +23,8 @@ class TaskTypeCatalogResourceTest {
                 "1.0.0",
                 "KAFKA",
                 "AVAILABLE",
-                null)));
+                null,
+                "UNSUPPORTED")));
         var resource = new TaskTypeCatalogResource(service);
 
         var response = resource.list();
@@ -32,5 +33,6 @@ class TaskTypeCatalogResourceTest {
         assertEquals("ACME_DO", response.taskTypes().getFirst().type());
         assertEquals("REMOTE", response.taskTypes().getFirst().origin());
         assertEquals("acme", response.taskTypes().getFirst().pluginId());
+        assertEquals("UNSUPPORTED", response.taskTypes().getFirst().asyncOffload());
     }
 }

@@ -12,6 +12,7 @@ const routes = [
   { path: '/#/audit', title: /Auditoria|Audit/ },
   { path: '/#/audit/spool', title: /Spool de auditoria|Audit spool/ },
   { path: '/#/audit/mt101-quarantine', title: /cuarentena|quarantine/i },
+  { path: '/#/executions/async-dlq', title: /Operaciones DLQ|DLQ operations/ },
 ] as const;
 
 test.describe('Integration Hub shell', () => {
@@ -418,10 +419,10 @@ test.describe('Integration Hub shell', () => {
     const card = page.locator('ih-overview-plugin-health-card');
     await expect(card).toBeVisible({ timeout: 15_000 });
     await expect(card.getByText(/Salud de plugins|Plugin health/)).toBeVisible();
-    // active=2, degraded=1, blocked=1 rendered.
-    await expect(card.locator('.plugin-health-value--active')).toHaveText('2');
-    await expect(card.locator('.plugin-health-value--degraded')).toHaveText('1');
-    await expect(card.locator('.plugin-health-value--blocked')).toHaveText('1');
+    // active=2 (ok), degraded=1 (error), blocked=1 (warn) rendered via the shared health card.
+    await expect(card.locator('.overview-health-value--ok')).toHaveText('2');
+    await expect(card.locator('.overview-health-value--error')).toHaveText('1');
+    await expect(card.locator('.overview-health-value--warn')).toHaveText('1');
     await expect(card.getByRole('link', { name: /Ver plugins|View plugins/ })).toBeVisible();
   });
 
@@ -465,6 +466,195 @@ test.describe('Integration Hub shell', () => {
     await expect(
       page.getByText(/not in the allowed plugin origins/).first()
     ).toBeVisible();
+  });
+
+  test('operates the async DLQ console end-to-end (mocked backend)', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    const json = (body: unknown) => ({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+    let redriveCalled = false;
+    // Deterministic DLQ state: 1 outbox DEAD (health error), 1 dead consumer row, 1 stalled scatter.
+    await page.route('**/api/query/tasks-dlq/summary', (route) =>
+      route.fulfill(json({ outboxDead: 1, inboxDead: 0, inboxPoison: 0 }))
+    );
+    await page.route('**/api/query/tasks-dlq/dead**', (route) =>
+      route.fulfill(
+        json([
+          {
+            id: 501,
+            idempotencyKey: 'evt-abc-501',
+            taskType: 'REST_CALL',
+            processExecutionId: 42,
+            taskDefinitionId: 7,
+            status: 'DEAD',
+            error: 'boom downstream',
+          },
+        ])
+      )
+    );
+    await page.route('**/api/query/tasks-dlq/stalled**', (route) =>
+      route.fulfill(
+        json([
+          {
+            processExecutionId: 88,
+            taskDefinitionId: 9,
+            completed: 120000,
+            failed: 0,
+            lastPageIndex: 24,
+            lastProgressAt: new Date(Date.now() - 10 * 60_000).toISOString(),
+          },
+        ])
+      )
+    );
+    await page.route('**/api/query/tasks-dlq/outbox/redrive**', (route) => {
+      redriveCalled = true;
+      return route.fulfill(json({ redriven: 1 }));
+    });
+
+    // Discoverability: reach the console from the executions toolbar link (not just by URL).
+    // "Operaciones DLQ" también existe en el nav lateral (misma etiqueta) → acotar a la toolbar.
+    await gotoAuthenticated(page, '/#/executions');
+    await page
+      .locator('ih-execution-toolbar')
+      .getByRole('link', { name: /Operaciones DLQ|DLQ operations/ })
+      .click();
+
+    // Header + health banner (a dead row => critical).
+    await expect(page.getByRole('heading', { name: /Operaciones DLQ|DLQ operations/ }).first()).toBeVisible({
+      timeout: 20_000,
+    });
+    await expect(page.locator('.dlq__health--error')).toBeVisible({ timeout: 15_000 });
+
+    // Both tables render the mocked rows.
+    await expect(page.getByText('evt-abc-501')).toBeVisible();
+    await expect(page.getByText('88 / 9')).toBeVisible();
+
+    // Two-step redrive: the first click arms (no call), the second confirms and calls the endpoint.
+    const redrive = page.getByRole('button', { name: /Redrive outbox DEAD/ });
+    await redrive.click();
+    await expect(page.getByRole('button', { name: /Confirmar redrive|Confirm redrive/ })).toBeVisible();
+    expect(redriveCalled).toBe(false);
+    await page.getByRole('button', { name: /Confirmar redrive|Confirm redrive/ }).click();
+    await expect.poll(() => redriveCalled, { timeout: 15_000 }).toBe(true);
+
+    // The stalled scatter exposes the requeue (resume-chain) recovery action for admins.
+    // The accessible name is the descriptive aria-label (a11y), not the short visible text.
+    await expect(
+      page.getByRole('button', { name: /Reanudar la cadena del scatter|Resume the scatter chain/ }).first()
+    ).toBeVisible();
+  });
+
+  test('shows live progress in the execution detail (mocked backend)', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    const json = (body: unknown) => ({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+    const taskRow = (taskDefinitionId: number, taskType: string) => ({
+      id: taskDefinitionId * 10,
+      processExecutionId: 1,
+      taskDefinitionId,
+      taskOrder: taskDefinitionId,
+      taskType,
+      status: 'RUNNING',
+      executedAt: null,
+      startedAt: null,
+      finishedAt: null,
+      details: null,
+      payloadJson: null,
+      processedFiles: [],
+    });
+
+    // Only the detail's tasks + progress are mocked (with known taskDefinitionIds so the progress
+    // correlates); the executions LIST and get/children use the real backend so the catalog-list shell
+    // renders normally and a row is clickable.
+    await page.route('**/api/query/process-executions/*/tasks', (route) =>
+      route.fulfill(json([taskRow(1, 'FILE_READ'), taskRow(2, 'DB_WRITE')]))
+    );
+    await page.route('**/api/query/process-executions/*/progress', (route) =>
+      route.fulfill(
+        json({
+          executionId: 1,
+          scatterTasks: [
+            { taskDefinitionId: 1, completed: 75000, failed: 0, total: 100000, streaming: false, percent: 75, status: 'RUNNING', lastProgressAt: null },
+          ],
+          syncTasks: [{ taskDefinitionId: 2, recordsProcessed: 420000 }],
+          pipeline: { outboxDead: 0, inboxDead: 0, inboxPoison: 0 },
+        })
+      )
+    );
+
+    await gotoAuthenticated(page, '/#/executions');
+
+    // Open the execution detail drawer from the (real) list, then the Tasks tab.
+    const list = page.locator('ih-catalog-list').first();
+    await expect(list).toBeVisible({ timeout: 20_000 });
+    await list.locator('[data-row-index]').first().click();
+    await page.getByRole('tab', { name: /Tareas|Tasks/ }).click();
+
+    // Pipeline health chip renders outside the accordion → proves live progress was fetched.
+    await expect(page.getByText(/Backbone async sano|Async backbone healthy/)).toBeVisible({ timeout: 15_000 });
+
+    // Per-task progress lives inside collapsed expansion panels; expand the first task to reveal it.
+    await page.locator('mat-expansion-panel-header').first().click();
+
+    // Materialized scatter → determinate % bar; the sync counter is on the second task panel.
+    await expect(page.getByText(/Progreso: 75%|Progress: 75%/)).toBeVisible({ timeout: 15_000 });
+    await expect(page.locator('mat-progress-bar[mode="determinate"]').first()).toBeAttached();
+    await page.locator('mat-expansion-panel-header').nth(1).click();
+    await expect(page.getByText(/420000 registros procesados|420000 records processed/)).toBeVisible();
+  });
+
+  test('shows the async backbone health tile on the overview (mocked backend)', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    const json = (body: unknown) => ({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify(body),
+    });
+    const metric = { total: 1, active: 1 };
+    // Full overview-summary with an UNHEALTHY async backbone (3 dead, 2 stalled → error tile).
+    await page.route('**/api/query/overview-summary', (route) =>
+      route.fulfill(
+        json({
+          sources: metric,
+          readers: metric,
+          processes: metric,
+          scheduledProcesses: 0,
+          runningExecutions: 0,
+          failedExecutions: 0,
+          completedWithErrorsExecutions: 0,
+          retryExecutions: 0,
+          failedProcessedFiles: 0,
+          pendingProcessedFiles: 0,
+          asyncDeadLetters: 3,
+          asyncStalledScatters: 2,
+          recentExecutions: [],
+          recentAuditEvents: [],
+          failedExecutionHighlights: [],
+        })
+      )
+    );
+
+    await gotoAuthenticated(page, '/#/overview');
+
+    const card = page.locator('ih-overview-async-health-card');
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    await expect(card.getByText(/Salud backbone async|Async backbone health/)).toBeVisible();
+    // dead=3 (error tone) and stalled=2 (warn tone) rendered via the shared health card.
+    await expect(card.locator('.overview-health-value--error')).toHaveText('3');
+    await expect(card.locator('.overview-health-value--warn')).toHaveText('2');
+    // Dead rows raise the error alert level on the card.
+    await expect(card.locator('.overview-health-card--error')).toBeVisible();
+    // Link to the DLQ console (F1).
+    await expect(card.getByRole('link', { name: /Ver consola DLQ|View DLQ console/ })).toBeVisible();
   });
 });
 

@@ -3,6 +3,7 @@ package com.integrationhub.platform.provider.task.rest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
+import com.integrationhub.platform.spi.task.AsyncOffloadSupport;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskProvider;
@@ -35,6 +36,21 @@ public class RestCallTaskProvider implements BatchTaskProvider {
     @Override
     public String type() {
         return "REST_CALL";
+    }
+
+    /**
+     * <b>SLICE_ONLY</b>: trabaja sobre los {@code records} del slice + variables de plantilla. Estas
+     * incluyen outputs de las <b>tareas origen elegidas</b> (p.ej. {@code ${task-1.output}}) vía
+     * {@link RestTaskSupport#buildRecordVariables}/{@code buildBatchVariables} →
+     * {@code TaskOutputSupport.mergeTaskOutputs/mergeMetadata}, que leen {@code taskOutputs}/
+     * {@code metadata} del contexto. Con la propagación de contexto (Nivel 2) esos valores viajan en el
+     * {@code AsyncSliceWorkItem} y el consumer los rehidrata, así que la resolución es equivalente a la
+     * síncrona. No usa {@code sourcePayload}. Offloadable como scatter (batch/per-record), no en once
+     * (los records solo viajan como slices).
+     */
+    @Override
+    public AsyncOffloadSupport asyncOffloadSupport() {
+        return AsyncOffloadSupport.SLICE_ONLY;
     }
 
     @Override

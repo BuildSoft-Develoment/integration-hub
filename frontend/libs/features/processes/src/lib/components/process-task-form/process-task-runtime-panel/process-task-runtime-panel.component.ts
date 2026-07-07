@@ -12,7 +12,7 @@ import {
 } from '@integration-hub/core/providers';
 import { I18nService } from '@integration-hub/core/services';
 import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
-import { MessagingTransportsService } from '../../../api/messaging-transports.service';
+import { AsyncOffloadSupport, AsyncState, MessagingTransportsService } from '../../../api/messaging-transports.service';
 import { ProcessTaskFormModel } from '../../../models/process.models';
 import { AsyncDispatchSectionComponent } from '../async-dispatch-section/async-dispatch-section.component';
 import { TaskContinueOnFailureComponent } from '../task-continue-on-failure/task-continue-on-failure.component';
@@ -54,6 +54,22 @@ export class ProcessTaskRuntimePanelComponent {
 
   /** Transportes disponibles para el selector async (fallback ['KAFKA'] ante error/403). */
   readonly transports = signal<readonly string[]>(['KAFKA']);
+  /**
+   * Estado compuesto del despacho async del entorno (#4): READY/DEGRADED/DISABLED. Alimenta el aviso de la sección
+   * (advisory). Default READY (permisivo): ante error de lectura no se alarma — el guard del backend es la barrera real.
+   */
+  readonly asyncState = signal<AsyncState>('READY');
+  /** Capacidad de offload async por tipo de tarea (del catálogo backend). */
+  private readonly asyncCapabilities = signal<Record<string, AsyncOffloadSupport>>({});
+
+  /**
+   * Capacidad del tipo de la tarea actual. Mientras no cargue el catálogo (o el tipo no aparezca) se
+   * asume `SUPPORTED` (permisivo): la UI no oculta el toggle por una lectura fallida — el guard del
+   * backend es la barrera real. Cuando el catálogo dice `UNSUPPORTED`/`SLICE_ONLY`, la sección gatea.
+   */
+  readonly asyncOffloadSupport = computed<AsyncOffloadSupport>(
+    () => this.asyncCapabilities()[String(this.task().taskType ?? '').toUpperCase()] ?? 'SUPPORTED'
+  );
 
   constructor() {
     this.transportsApi
@@ -67,6 +83,26 @@ export class ProcessTaskRuntimePanelComponent {
         },
         error: () => {
           /* fallback ['KAFKA'] */
+        },
+      });
+    this.transportsApi
+      .asyncStatus()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        // Consume el estado compuesto; fallback al flag legacy si `state` no viniera (backend viejo).
+        next: (status) =>
+          this.asyncState.set(status.state ?? (status.executionEnabled ? 'READY' : 'DISABLED')),
+        error: () => {
+          /* asume READY ante error para no alarmar de mas (el guard del backend es la barrera real) */
+        },
+      });
+    this.transportsApi
+      .asyncCapabilities()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (capabilities) => this.asyncCapabilities.set(capabilities),
+        error: () => {
+          /* asume SUPPORTED ante error: no gatea por una lectura fallida (el backend igual guarda) */
         },
       });
   }

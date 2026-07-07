@@ -29,7 +29,7 @@ public class ProcessExecutionRunner {
     }
 
     @ActivateRequestContext
-    public void run(Long processExecutionId) {
+    public void run(Long processExecutionId, String executionToken) {
         var execution = processExecutionStateService.loadQueuedExecution(processExecutionId);
         var payload = jsonConfigurationMapper.toMap(execution.requestPayloadJson());
         var executionVariables = stringMap(payload.get("executionVariables"));
@@ -45,6 +45,7 @@ public class ProcessExecutionRunner {
         try {
             processExecutionService.executeQueued(
                     execution.processExecutionId(),
+                    executionToken,
                     execution.processDefinitionId(),
                     executionVariables,
                     selectedFiles,

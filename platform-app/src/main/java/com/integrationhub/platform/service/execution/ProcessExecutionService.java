@@ -73,11 +73,15 @@ public class ProcessExecutionService {
 
         var plan = processExecutionStateService.loadExecutionPlan(processDefinitionId);
         processSpan.setAttribute("process.definition.name", plan.processName());
-        var processExecutionId = processExecutionStateService.startProcess(plan.processDefinitionId(), plan.processName(), sourceExecutionId, normalizedTriggerSource);
-        return executeLoadedPlan(plan, processExecutionId, normalizedExecutionVariables, normalizedSelectedFiles, normalizedTriggerSource, processSpan);
+        // P2 (fencing): el path síncrono también fija un token de ejecución, para que TODA transición sea guardada
+        // uniformemente (sin caminos sin fencing). El path queued usa el token del claim distribuido.
+        var executionToken = java.util.UUID.randomUUID().toString();
+        var processExecutionId = processExecutionStateService.startProcess(plan.processDefinitionId(), plan.processName(), sourceExecutionId, normalizedTriggerSource, executionToken);
+        return executeLoadedPlan(plan, processExecutionId, executionToken, normalizedExecutionVariables, normalizedSelectedFiles, normalizedTriggerSource, processSpan);
     }
 
     public com.integrationhub.platform.entity.ProcessExecution executeQueued(Long processExecutionId,
+                                                                             String executionToken,
                                                                              Long processDefinitionId,
                                                                              Map<String, String> executionVariables,
                                                                              List<String> selectedFiles,
@@ -93,7 +97,7 @@ public class ProcessExecutionService {
 
         var plan = processExecutionStateService.loadExecutionPlan(processDefinitionId);
         processSpan.setAttribute("process.definition.name", plan.processName());
-        return executeLoadedPlan(plan, processExecutionId, normalizedExecutionVariables, normalizedSelectedFiles, normalizedTriggerSource, processSpan);
+        return executeLoadedPlan(plan, processExecutionId, executionToken, normalizedExecutionVariables, normalizedSelectedFiles, normalizedTriggerSource, processSpan);
     }
 
     /**
@@ -104,6 +108,7 @@ public class ProcessExecutionService {
      */
     public com.integrationhub.platform.entity.ProcessExecution continueAfterResume(
             Long processExecutionId,
+            String executionToken,
             Long processDefinitionId,
             int afterTaskOrder,
             java.util.LinkedHashMap<String, Object> taskOutputs,
@@ -119,22 +124,24 @@ public class ProcessExecutionService {
         var remaining = plan.tasks().stream()
                 .filter(taskPlan -> taskPlan.taskOrder() != null && taskPlan.taskOrder() > afterTaskOrder)
                 .toList();
-        return executeTasks(remaining, processExecutionId, normalizedVariables, List.of(),
+        return executeTasks(remaining, processExecutionId, executionToken, normalizedVariables, List.of(),
                 normalizedTriggerSource, processSpan, taskOutputs);
     }
 
     private com.integrationhub.platform.entity.ProcessExecution executeLoadedPlan(ProcessExecutionStateService.ExecutionPlan plan,
                                                                                   Long processExecutionId,
+                                                                                  String executionToken,
                                                                                   Map<String, String> executionVariables,
                                                                                   List<String> selectedFiles,
                                                                                   String triggerSource,
                                                                                   io.opentelemetry.api.trace.Span processSpan) {
-        return executeTasks(plan.tasks(), processExecutionId, executionVariables, selectedFiles,
+        return executeTasks(plan.tasks(), processExecutionId, executionToken, executionVariables, selectedFiles,
                 triggerSource, processSpan, new java.util.LinkedHashMap<>());
     }
 
     private com.integrationhub.platform.entity.ProcessExecution executeTasks(List<ProcessExecutionStateService.TaskPlan> tasks,
                                                                               Long processExecutionId,
+                                                                              String executionToken,
                                                                               Map<String, String> executionVariables,
                                                                               List<String> selectedFiles,
                                                                               String triggerSource,
@@ -151,7 +158,7 @@ public class ProcessExecutionService {
                 // 1. Try Optimized Fast Paths (e.g. Pipeline FILE_READ -> BATCH_SINK)
                 var fastPath = resolveFastPath(taskPlan, nextTaskPlan);
                 if (fastPath != null) {
-                    var result = fastPath.execute(processExecutionId, taskPlan, nextTaskPlan, executionVariables, selectedFiles, triggerSource, taskOutputs);
+                    var result = fastPath.execute(processExecutionId, executionToken, taskPlan, nextTaskPlan, executionVariables, selectedFiles, triggerSource, taskOutputs);
                     if (result != null) return result; // Pipeline forced an early exit
                     index += fastPath.consumedTaskCount() - 1;
                     continue;
@@ -164,7 +171,7 @@ public class ProcessExecutionService {
                         .setAttribute("task.type", taskPlan.taskType())
                         .startSpan();
 
-                var taskExecutionId = processExecutionStateService.startTask(processExecutionId, taskPlan.taskDefinitionId(), taskPlan.taskType(), taskPlan.taskOrder());
+                var taskExecutionId = processExecutionStateService.startTask(processExecutionId, executionToken, taskPlan.taskDefinitionId(), taskPlan.taskType(), taskPlan.taskOrder());
                 try {
                     var taskConfiguration = taskOutputRegistry.configuration(taskPlan.configurationJson());
                     var runResult = processTaskRuntimeService.runTask(processExecutionId, taskPlan, sourcePayload, readResult, executionVariables, taskOutputs, selectedFiles, triggerSource);
@@ -192,13 +199,13 @@ public class ProcessExecutionService {
                             // Opción B: abre el tracker N→1 y encola los N work-items de slice en ESTA
                             // misma transaccion que la suspension (atomico).
                             processExecutionStateService.suspendTask(
-                                    processExecutionId, taskExecutionId, stateJson, token, suspensionExpiry,
+                                    processExecutionId, executionToken, taskExecutionId, stateJson, token, suspensionExpiry,
                                     continuationJson, details, payload, runResult.scatterDispatch());
                         } else {
                             // ADR-015: si es despacho async per-task, el work-item se encola en el outbox
                             // en ESTA misma transaccion (transactional outbox).
                             processExecutionStateService.suspendTask(
-                                    processExecutionId, taskExecutionId, stateJson, token, suspensionExpiry,
+                                    processExecutionId, executionToken, taskExecutionId, stateJson, token, suspensionExpiry,
                                     continuationJson, details, payload, runResult.asyncDispatch());
                         }
                         taskSpan.setAttribute("task.suspended", true);
@@ -233,22 +240,27 @@ public class ProcessExecutionService {
                     if (!runResult.suspended() && !runResult.fileRead() && !runResult.success()) {
                         if (boolValue(taskConfiguration.get("continueOnFailure"), false)) {
                             processExecutionStateService.completeTaskWithErrors(
-                                    processExecutionId, taskExecutionId, taskDetails, taskPayload);
+                                    processExecutionId, executionToken, taskExecutionId, taskDetails, taskPayload);
                             taskSpan.setAttribute("task.completed.with.errors", true);
                             continue;
                         }
-                        processExecutionStateService.failTask(processExecutionId, taskExecutionId, taskDetails,
+                        processExecutionStateService.failTask(processExecutionId, executionToken, taskExecutionId, taskDetails,
                                 auditMapper.buildTaskFailurePayload(taskPlan, executionVariables, triggerSource));
-                        processExecutionStateService.failProcess(processExecutionId,
+                        processExecutionStateService.failProcess(processExecutionId, executionToken,
                                 "Task " + taskPlan.taskType() + " failed: " + runResult.details());
                         taskSpan.setStatus(StatusCode.ERROR, runResult.details());
                         return processExecutionStateService.getExecution(processExecutionId);
                     }
 
-                    processExecutionStateService.completeTask(processExecutionId, taskExecutionId, taskDetails, taskPayload);
+                    processExecutionStateService.completeTask(processExecutionId, executionToken, taskExecutionId, taskDetails, taskPayload);
+                } catch (FencingTokenLostException fence) {
+                    // P2: perdimos el token (lease vencido, recuperado por otro nodo). NO fallamos la tarea (eso
+                    // también estaría fenced y sobrescribiría estado ajeno): abortamos el worker limpiamente.
+                    taskSpan.setStatus(StatusCode.ERROR, "fencing token lost");
+                    throw fence;
                 } catch (Exception taskError) {
                     var message = taskError.getMessage() == null ? taskError.getClass().getSimpleName() : taskError.getMessage();
-                    processExecutionStateService.failTask(processExecutionId, taskExecutionId, message, auditMapper.buildTaskFailurePayload(taskPlan, executionVariables, triggerSource));
+                    processExecutionStateService.failTask(processExecutionId, executionToken, taskExecutionId, message, auditMapper.buildTaskFailurePayload(taskPlan, executionVariables, triggerSource));
                     taskSpan.recordException(taskError);
                     taskSpan.setStatus(StatusCode.ERROR, message);
                     throw taskError;
@@ -257,11 +269,16 @@ public class ProcessExecutionService {
                 }
             }
 
-            processExecutionStateService.completeProcess(processExecutionId, "Process completed successfully");
+            processExecutionStateService.completeProcess(processExecutionId, executionToken, "Process completed successfully");
             return processExecutionStateService.getExecution(processExecutionId);
+        } catch (FencingTokenLostException fence) {
+            // P2: token perdido → abortar sin failProcess (evita sobrescribir el estado de otro dueño).
+            processSpan.recordException(fence);
+            processSpan.setStatus(StatusCode.ERROR, "fencing token lost");
+            throw fence;
         } catch (Exception e) {
             var message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-            processExecutionStateService.failProcess(processExecutionId, message);
+            processExecutionStateService.failProcess(processExecutionId, executionToken, message);
             processSpan.recordException(e);
             processSpan.setStatus(StatusCode.ERROR, message);
             throw e;

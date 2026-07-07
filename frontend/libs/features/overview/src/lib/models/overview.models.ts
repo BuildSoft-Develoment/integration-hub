@@ -45,6 +45,9 @@ export interface OverviewSummaryRecord {
   retryExecutions: number;
   failedProcessedFiles: number;
   pendingProcessedFiles: number;
+  // Salud del backbone async (ADR-015): filas muertas del DLQ + scatters streaming estancados.
+  asyncDeadLetters: number;
+  asyncStalledScatters: number;
   recentExecutions: OverviewExecutionRecord[];
   recentAuditEvents: OverviewAuditRecord[];
   failedExecutionHighlights: OverviewExecutionRecord[];

@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "com.integrationhub.platform.plugin.grpc";
+
+package integrationhub.plugin.v1;
+
+service RemotePluginService {
+  rpc Execute (GrpcRemoteTaskRequest) returns (GrpcRemoteTaskResult);
+}
+
+message GrpcRemoteTaskRequest {
+  string plugin_id = 1;
+  string plugin_version = 2;
+  string spi_version = 3;
+  string task_type = 4;
+  int64 process_execution_id = 5;
+  int64 task_definition_id = 6;
+  string attributes_json = 7;
+  string configuration_json = 8;
+}
+
+message GrpcRemoteTaskResult {
+  bool success = 1;
+  bool suspended = 2;
+  string details = 3;
+  string outputs_json = 4;
+  string suspended_state_json = 5;
+}

@@ -51,6 +51,7 @@ class FileReadTaskFastPathTest {
 
         var result = fastPath.execute(
                 77L,
+                "tok",
                 fileReadPlan("continue"),
                 sinkPlan(),
                 Map.of(),
@@ -198,22 +199,22 @@ class FileReadTaskFastPathTest {
         }
 
         @Override
-        public Long startTask(Long processExecutionId, Long taskDefinitionId, String taskType, Integer taskOrder) {
+        public Long startTask(Long processExecutionId, String executionToken, Long taskDefinitionId, String taskType, Integer taskOrder) {
             return sequence.incrementAndGet() * 10L;
         }
 
         @Override
-        public void completeTaskWithErrors(Long processExecutionId, Long taskExecutionId, String details, Object payload) {
+        public void completeTaskWithErrors(Long processExecutionId, String executionToken, Long taskExecutionId, String details, Object payload) {
             completedWithErrorsCount.incrementAndGet();
         }
 
         @Override
-        public void completeProcessWithErrors(Long processExecutionId, String details) {
+        public void completeProcessWithErrors(Long processExecutionId, String executionToken, String details) {
             completedProcessWithErrorsCount.incrementAndGet();
         }
 
         @Override
-        public void failTask(Long processExecutionId, Long taskExecutionId, String message, Object payload) {
+        public void failTask(Long processExecutionId, String executionToken, Long taskExecutionId, String message, Object payload) {
             failedTaskCount.incrementAndGet();
         }
 
@@ -269,7 +270,7 @@ class FileReadTaskFastPathTest {
     @Vetoed
     private static final class FailingStreamingPipelineService extends StreamingPipelineService {
         private FailingStreamingPipelineService() {
-            super(null, null, null, null, null, null);
+            super(null, null, null, null, null, null, null);
         }
 
         @Override

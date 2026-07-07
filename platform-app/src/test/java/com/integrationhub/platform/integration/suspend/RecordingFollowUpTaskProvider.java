@@ -1,5 +1,6 @@
 package com.integrationhub.platform.integration.suspend;
 
+import com.integrationhub.platform.spi.task.AsyncOffloadSupport;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -24,10 +25,13 @@ public class RecordingFollowUpTaskProvider implements TaskProvider {
 
     public static final AtomicInteger EXECUTIONS = new AtomicInteger();
     public static final AtomicReference<Object> SEEN_UPSTREAM_STATUS = new AtomicReference<>();
+    /** §6: valor de {@code secretField} tal como lo recibe el provider al ejecutar (prueba la re-resolución). */
+    public static final AtomicReference<Object> SEEN_SECRET_FIELD = new AtomicReference<>();
 
     public static void resetRecording() {
         EXECUTIONS.set(0);
         SEEN_UPSTREAM_STATUS.set(null);
+        SEEN_SECRET_FIELD.set(null);
     }
 
     @Override
@@ -35,9 +39,16 @@ public class RecordingFollowUpTaskProvider implements TaskProvider {
         return TASK_TYPE;
     }
 
+    // Config-only (taskOutputs es opcional): offloadable en cualquier modo, incl. once async (E2E).
+    @Override
+    public AsyncOffloadSupport asyncOffloadSupport() {
+        return AsyncOffloadSupport.SUPPORTED;
+    }
+
     @Override
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
         EXECUTIONS.incrementAndGet();
+        SEEN_SECRET_FIELD.set(configuration.get("secretField"));
         if (context.attributes().get("taskOutputs") instanceof Map<?, ?> taskOutputs) {
             SEEN_UPSTREAM_STATUS.set(taskOutputs.get("task-1.status"));
         }

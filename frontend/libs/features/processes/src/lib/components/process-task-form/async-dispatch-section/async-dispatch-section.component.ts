@@ -4,6 +4,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { I18nService } from '@integration-hub/core/services';
+import { AsyncOffloadSupport, AsyncState } from '../../../api/messaging-transports.service';
 
 /**
  * Sección de configuración del <b>despacho async</b> de una tarea (ADR-015). Presentacional: recibe
@@ -28,12 +29,18 @@ import { I18nService } from '@integration-hub/core/services';
     <div class="async-dispatch">
       <div class="task-section-header">{{ i18n.t('ui.asyncDispatchOptions') }}</div>
 
-      <mat-slide-toggle
-        [checked]="async()"
-        [disabled]="readonly()"
-        (change)="asyncChange.emit($event.checked)">
-        {{ i18n.t('ui.asyncDispatch') }}
-      </mat-slide-toggle>
+      @if (toggleShown()) {
+        <mat-slide-toggle
+          [checked]="async()"
+          [disabled]="toggleDisabled()"
+          (change)="asyncChange.emit($event.checked)">
+          {{ i18n.t('ui.asyncDispatch') }}
+        </mat-slide-toggle>
+      }
+
+      @if (!available()) {
+        <p class="async-dispatch__hint async-dispatch__hint--unavailable">{{ unavailableReason() }}</p>
+      }
 
       @if (async()) {
         <mat-form-field appearance="outline">
@@ -51,6 +58,10 @@ import { I18nService } from '@integration-hub/core/services';
         <p class="async-dispatch__hint" [class.async-dispatch__hint--distributed]="distributed()">
           {{ modeHint() }}
         </p>
+
+        @if (asyncWarningKey(); as key) {
+          <p class="async-dispatch__warning">{{ i18n.t(key) }}</p>
+        }
       }
     </div>
   `,
@@ -70,6 +81,15 @@ import { I18nService } from '@integration-hub/core/services';
         font-weight: 600;
         opacity: 0.9;
       }
+      .async-dispatch__hint--unavailable {
+        opacity: 0.9;
+        font-style: italic;
+      }
+      .async-dispatch__warning {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--ih-warning, #b45309);
+      }
     `,
   ],
 })
@@ -81,6 +101,18 @@ export class AsyncDispatchSectionComponent {
   readonly executionMode = input('once');
   readonly transports = input<readonly string[]>(['KAFKA']);
   readonly readonly = input(false);
+  /**
+   * Estado compuesto del despacho async en el entorno (backend #4): `READY` operativo end-to-end; `DISABLED` apagado
+   * (correrá síncrono); `DEGRADED` habilitado pero no operativo (relay/consumer/broker no listos → quedaría encolado
+   * sin procesarse). Solo alimenta el aviso (advisory); no gatea el toggle. Default `READY` (permisivo).
+   */
+  readonly asyncState = input<AsyncState>('READY');
+  /**
+   * Capacidad de offload async del tipo de tarea (del catálogo backend, ADR-015). Gatea el toggle:
+   * `UNSUPPORTED` no lo ofrece; `SLICE_ONLY` solo en modos distribuidos (batch/per-record). Default
+   * `SUPPORTED` (permisivo) para no gatear cuando el host no provee la capacidad.
+   */
+  readonly offloadSupport = input<AsyncOffloadSupport>('SUPPORTED');
 
   readonly asyncChange = output<boolean>();
   readonly transportChange = output<string>();
@@ -90,10 +122,59 @@ export class AsyncDispatchSectionComponent {
     () => this.async() && (this.executionMode() === 'batch' || this.executionMode() === 'per-record')
   );
 
+  /** Si el modo actual reparte records en slices (donde REST_CALL/SLICE_ONLY sí es offloadable). */
+  private readonly scatterMode = computed(
+    () => this.executionMode() === 'batch' || this.executionMode() === 'per-record'
+  );
+
+  /** Si el tipo (en el modo actual) admite async, según su capacidad declarada. */
+  readonly available = computed(() => {
+    switch (this.offloadSupport()) {
+      case 'SUPPORTED':
+        return true;
+      case 'SLICE_ONLY':
+        return this.scatterMode();
+      default:
+        return false;
+    }
+  });
+
+  /** Motivo por el que async no está disponible (para el hint). */
+  readonly unavailableReason = computed(() => {
+    if (this.available()) {
+      return '';
+    }
+    return this.offloadSupport() === 'SLICE_ONLY'
+      ? this.i18n.t('ui.asyncScatterOnly')
+      : this.i18n.t('ui.asyncNotSupported');
+  });
+
+  /** El toggle se muestra si async es admisible, o si ya está activo (para poder desactivarlo). */
+  readonly toggleShown = computed(() => this.available() || this.async());
+
+  /** Deshabilitado en readonly, o cuando no es admisible y no está ya activo (no se puede activar). */
+  readonly toggleDisabled = computed(() => this.readonly() || (!this.available() && !this.async()));
+
   readonly modeHint = computed(() => {
     if (!this.async()) {
       return this.i18n.t('ui.asyncModeSync');
     }
     return this.distributed() ? this.i18n.t('ui.asyncModeScatter') : this.i18n.t('ui.asyncModeOffload');
+  });
+
+  /**
+   * Clave i18n del aviso según el estado del entorno (o `null` si READY → sin aviso). SRP: la sección mapea
+   * estado→mensaje; OCP: un estado futuro es otra rama. Distingue "apagado" de "habilitado-pero-roto" (DEGRADED),
+   * haciendo visible el estado compuesto de #4.
+   */
+  readonly asyncWarningKey = computed<string | null>(() => {
+    switch (this.asyncState()) {
+      case 'DISABLED':
+        return 'ui.asyncFeatureDisabled';
+      case 'DEGRADED':
+        return 'ui.asyncFeatureDegraded';
+      default:
+        return null;
+    }
   });
 }

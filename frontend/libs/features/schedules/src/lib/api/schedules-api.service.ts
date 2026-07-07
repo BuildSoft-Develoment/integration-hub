@@ -1,7 +1,7 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { ProcessApiService } from '@integration-hub/features/processes';
+import { ProcessExecutionApiService } from '@integration-hub/core/services';
 import { ScheduleRecord } from '../models/schedules.models';
 
 export interface SchedulePageResponse {
@@ -20,7 +20,7 @@ export interface ScheduleQueryParams {
 @Injectable({ providedIn: 'root' })
 export class SchedulesApiService {
   private readonly http = inject(HttpClient);
-  private readonly processApi = inject(ProcessApiService);
+  private readonly processExecution = inject(ProcessExecutionApiService);
 
   list(params: ScheduleQueryParams): Observable<SchedulePageResponse> {
     let httpParams = new HttpParams()
@@ -42,7 +42,9 @@ export class SchedulesApiService {
     });
   }
 
+  // schedules dispara la ejecucion via el data-access compartido de core (mismo endpoint que processes/executions);
+  // DIP: depende de la capa estable, no de otra feature.
   execute(processDefinitionId: number): Observable<unknown> {
-    return this.processApi.execute(processDefinitionId);
+    return this.processExecution.execute(processDefinitionId);
   }
 }

@@ -57,6 +57,8 @@ public class Mt101PayTaskProvider implements TaskProvider {
     private final Mt101ArchiveStatusUpdater archiveStatusUpdater;
     private final RecordAuditEmitter recordAuditEmitter;
     private final Mt101CorrectivePayStore correctivePayStore;
+    // P3: ledger de intención de dispatch para el camino de lista en memoria (re-request safety sin cambiar topología).
+    private final Mt101PayDispatchIntentStore dispatchIntentStore;
     // v37: compila/materializa el plan EJECUTABLE persistido (dispatch correctivo sin Mt101PayRouteResolver).
     private final Mt101DispatchPlanCompiler dispatchPlanCompiler =
             new Mt101DispatchPlanCompiler(new com.fasterxml.jackson.databind.ObjectMapper());
@@ -69,13 +71,25 @@ public class Mt101PayTaskProvider implements TaskProvider {
                                 Mt101ArchiveStatusUpdater archiveStatusUpdater,
                                 RecordAuditEmitter recordAuditEmitter,
                                 Mt101CorrectivePayStore correctivePayStore,
-                                com.integrationhub.platform.service.JsonConfigurationMapper configurationMapper) {
+                                com.integrationhub.platform.service.JsonConfigurationMapper configurationMapper,
+                                Mt101PayDispatchIntentStore dispatchIntentStore) {
         this.transports = transports;
         this.fragmentStore = fragmentStore;
         this.archiveStatusUpdater = archiveStatusUpdater;
         this.recordAuditEmitter = recordAuditEmitter;
         this.correctivePayStore = correctivePayStore;
         this.correctiveSecretResolver = configurationMapper == null ? null : configurationMapper::resolveSecretsIn;
+        this.dispatchIntentStore = dispatchIntentStore;
+    }
+
+    public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports,
+                                Mt101FragmentStore fragmentStore,
+                                Mt101ArchiveStatusUpdater archiveStatusUpdater,
+                                RecordAuditEmitter recordAuditEmitter,
+                                Mt101CorrectivePayStore correctivePayStore,
+                                com.integrationhub.platform.service.JsonConfigurationMapper configurationMapper) {
+        this(transports, fragmentStore, archiveStatusUpdater, recordAuditEmitter, correctivePayStore,
+                configurationMapper, null);
     }
 
     public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports,
@@ -83,7 +97,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
                                 Mt101ArchiveStatusUpdater archiveStatusUpdater,
                                 RecordAuditEmitter recordAuditEmitter,
                                 Mt101CorrectivePayStore correctivePayStore) {
-        this(transports, fragmentStore, archiveStatusUpdater, recordAuditEmitter, correctivePayStore, null);
+        this(transports, fragmentStore, archiveStatusUpdater, recordAuditEmitter, correctivePayStore, null, null);
     }
 
     public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports,
@@ -151,7 +165,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
             for (var input : inputs) {
                 var plan = Mt101PayRouteResolver.resolve(configuration, null, null, input.message());
                 var effectiveTransport = routedPay ? resolveTransport(plan.transport()) : transport;
-                var result = dispatch(effectiveTransport, plan.configuration(), input, accumulator);
+                var result = dispatch(effectiveTransport, plan.configuration(), input, accumulator, context, true);
                 var reference = input.message() != null && input.message().sequenceA() != null
                         ? input.message().sequenceA().sendersReference() : null;
                 if (result.accepted()) {
@@ -235,6 +249,23 @@ public class Mt101PayTaskProvider implements TaskProvider {
         // acotada): el ledger es la fuente de verdad para 20k fragmentos correctivos.
         var pageLedger = new ArrayList<Mt101RebuildRepository.PayFragmentResult>(page.size());
         var rebuildRunId = stringValue(fragmentSource.get("correctivePayRunId"), null);
+        // v51-fix (PAY normal durable): en el flujo NO correctivo se reclama la pagina ARCHIVED->DISPATCHING de
+        // forma ATOMICA antes de enviar; solo se despacha lo reclamado. Un fragmento no reclamado (otro worker lo
+        // tomo, o ya es terminal/DISPATCHING) NO se reenvia. En el correctivo el claim es por-fragmento contra la
+        // revision inmutable (mas abajo), asi que aqui no se toca.
+        var uncertainRefs = new ArrayList<String>();
+        java.util.Set<String> claimedNormalRefs = null;
+        if (rebuildRunId == null && fragmentStore != null) {
+            var pageRefs = new ArrayList<String>(page.size());
+            for (var item : page) {
+                var ref = item.message() == null || item.message().sequenceA() == null ? null
+                        : item.message().sequenceA().sendersReference();
+                if (ref != null && !ref.isBlank()) {
+                    pageRefs.add(ref);
+                }
+            }
+            claimedNormalRefs = fragmentStore.claimForDispatch(fragmentSource, pageRefs, FRAGMENT_READ_STATUSES);
+        }
         for (var item : page) {
             var message = item.message();
             var reference = message.sequenceA() == null ? null
@@ -305,14 +336,15 @@ public class Mt101PayTaskProvider implements TaskProvider {
                     continue;
                 }
             } else {
-                // Flujo no-correctivo (inalterado): resuelve la ruta y despacha.
-                plan = Mt101PayRouteResolver.resolve(configuration, item.routedAs(), item.routeError(), message);
-                if (!claimDispatch(fragmentSource, reference, message, item.routedAs(), plan)) {
+                // Flujo no-correctivo: solo se despacha si ESTA fila gano el claim atomico ARCHIVED->DISPATCHING
+                // (v51-fix). Si no se reclamo (concurrencia, ya terminal, o sin store), no se llama al transporte.
+                if (claimedNormalRefs == null || reference == null || !claimedNormalRefs.contains(reference)) {
                     continue;
                 }
+                plan = Mt101PayRouteResolver.resolve(configuration, item.routedAs(), item.routeError(), message);
                 transport = defaultTransport == null ? resolveTransport(plan.transport()) : defaultTransport;
             }
-            var result = dispatch(transport, plan.configuration(), message, accumulator);
+            var result = dispatch(transport, plan.configuration(), message, accumulator, context);
             if (reference == null) {
                 continue;
             }
@@ -320,8 +352,12 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 sentRefs.add(reference);
                 sentTargets.add(archiveTarget(message));
             } else if (result.uncertain()) {
-                // INCIERTO: no se marca SENT ni REJECTED (ningun bucket) -> el fragmento
-                // queda ARCHIVED y requiere conciliacion; reenviarlo duplicaria el pago.
+                // INCIERTO: no se marca SENT ni REJECTED. v51-fix: en el flujo normal el fragmento se marca
+                // UNCERTAIN de forma DURABLE (abajo) para EXCLUIRLO de una nueva seleccion de PAY (que solo lee
+                // ARCHIVED); reenviarlo duplicaria el pago. Resolver por STATUS/RECONCILE, nunca reenvio automatico.
+                if (rebuildRunId == null) {
+                    uncertainRefs.add(reference);
+                }
             } else {
                 rejectedByRef.put(reference, result.lastError());
                 rejectedTargets.add(archiveTarget(message));
@@ -347,6 +383,11 @@ public class Mt101PayTaskProvider implements TaskProvider {
         }
         fragmentStore.markStatusBatch(fragmentSource, sentRefs, "SENT");
         fragmentStore.markStatusBatch(fragmentSource, rejectedByRef, "REJECTED");
+        // v51-fix (PAY normal durable): los inciertos del flujo normal pasan a UNCERTAIN (estado durable
+        // terminal-para-seleccion). PAY solo lee ARCHIVED, asi que no se re-seleccionan: exigen STATUS/RECONCILE.
+        if (rebuildRunId == null && !uncertainRefs.isEmpty()) {
+            fragmentStore.markStatusBatch(fragmentSource, uncertainRefs, "UNCERTAIN");
+        }
         // H5: avanza el estado durable en mt101_archive (la tabla de
         // auditoria, no solo el fragmento) si la sincronizacion no se
         // desactivo explicitamente.
@@ -369,33 +410,6 @@ public class Mt101PayTaskProvider implements TaskProvider {
             return java.util.List.of();
         }
         return correctivePayStore.markResults(fragmentSource, rebuildRunId, pageLedger);
-    }
-
-    /**
-     * P0.2 v22: reclama la intencion durable antes del envio. Devuelve true si se puede despachar:
-     * en el flujo no-correctivo siempre; en el correctivo, solo si se reclamo EXACTAMENTE una
-     * intencion {@code PREPARED} (transicion atomica PREPARED -> DISPATCHING). Si false, NO se
-     * llama al transporte (un fragmento ya DISPATCHING/terminal o sin intencion no se reenvia).
-     */
-    private boolean claimDispatch(Map<String, Object> fragmentSource, String reference,
-                                  Mt101Message message, String routedAs, Mt101PayRouteResolver.PayPlan plan) {
-        var rebuildRunId = stringValue(fragmentSource.get("correctivePayRunId"), null);
-        if (rebuildRunId == null) {
-            return true;
-        }
-        if (correctivePayStore == null) {
-            throw new IllegalStateException("MT101_PAY corrective source requires Mt101CorrectivePayStore");
-        }
-        if (reference == null || reference.isBlank()) {
-            return false;
-        }
-        // P0.2 v24+v26: el plan aprobado por fragmento es payload_hash + routed_as + dispatch_plan_hash
-        // (transport|ruta|destino|correlacion|payload). El provider recomputa el plan_hash y el claim solo
-        // procede si TODO sigue siendo lo aprobado; si no, se INVALIDA y no se envia.
-        var payloadHash = payloadHash(message);
-        var planHash = Mt101PayRouteResolver.dispatchPlanHash(plan, payloadHash, routedAs, message);
-        return correctivePayStore.markDispatching(fragmentSource, rebuildRunId, reference,
-                payloadHash, routedAs, planHash);
     }
 
     /** P0.2 v24: hash del payload actual, idéntico al que el servicio congeló en el ledger al preparar. */
@@ -449,40 +463,83 @@ public class Mt101PayTaskProvider implements TaskProvider {
         }
     }
 
-    /** Despacha un mensaje y acumula el resultado. */
+    /**
+     * P3: en el camino de LISTA en memoria reclama la intención de dispatch (idempotency key del banco) ANTES de enviar,
+     * dándole re-request-safety: un re-request del mismo pago encuentra la fila y NO reenvía. El camino persistido
+     * ({@code durableIntent=false}) ya tiene su claim de fragmento y no pasa por aquí.
+     */
+    private TransportResult dispatchWithDurableIntent(PaymentMessageTransport transport, Mt101Message message,
+            Map<String, Object> dispatchConfiguration, Mt101MessageInputResolver.ResolvedMessage input,
+            String correlationKey, String sendersReference, TaskContext context, boolean durableIntent) {
+        if (!durableIntent || dispatchIntentStore == null) {
+            return sendClassified(transport, message, dispatchConfiguration);
+        }
+        // La clave incluye el destino real (transport + connectionRef) + la idempotency key del banco (correlationKey).
+        var intentKey = transport.transport() + "|"
+                + (input.connectionRef() == null ? "" : input.connectionRef()) + "|" + correlationKey;
+        var peId = context == null ? null : context.processExecutionId();
+        var claim = dispatchIntentStore.claimForDispatch(intentKey, peId, sendersReference);
+        return switch (claim) {
+            case CLAIMED -> {
+                var sent = sendClassified(transport, message, dispatchConfiguration);
+                // DISPATCHING -> SENT/REJECTED/UNCERTAIN. Un UNCERTAIN queda durable y bloquea futuros reenvíos.
+                dispatchIntentStore.recordResult(intentKey, intentStatus(sent), sent.gatewayReference(),
+                        sent.attempts(), sent.lastError());
+                yield sent;
+            }
+            // Ya enviado en un run previo: NO reenviar (idempotente). Se reporta como aceptado (cuenta como enviado).
+            case ALREADY_SENT -> TransportResult.accepted(null, 0, 0L);
+            // Ambiguo previo o en vuelo: NO reenviar; exige conciliación (nunca un reenvío ciego).
+            default -> TransportResult.uncertain(0, 0L,
+                    "prior dispatch for the same payment is ambiguous or in-flight; reconcile before re-send (no re-send)");
+        };
+    }
+
+    private TransportResult sendClassified(PaymentMessageTransport transport, Mt101Message message,
+                                           Map<String, Object> dispatchConfiguration) {
+        try {
+            return transport.send(message, dispatchConfiguration);
+        } catch (PreDispatchTransportException configError) {
+            // v27 P1: error TIPADO de pre-dispatch (validacion/config, antes de cualquier I/O): el mensaje NO salio al
+            // banco -> rechazo seguro (re-solicitable). Clasificacion por TIPO, no por suposicion.
+            return TransportResult.rejected(1, 0L, "transport config error: " + configError.getMessage());
+        } catch (RuntimeException error) {
+            // P0 v26+v27: cualquier OTRA excepcion es INCIERTA: si no se puede DEMOSTRAR que no salio al banco, nunca se
+            // marca REJECTED reusable (evita doble pago); se resuelve por STATUS/conciliacion.
+            return TransportResult.uncertain(1, 0L, "unexpected transport error: " + error.getMessage());
+        }
+    }
+
+    private String intentStatus(TransportResult result) {
+        return result.accepted() ? "SENT" : (result.uncertain() ? "UNCERTAIN" : "REJECTED");
+    }
+
+    /** Despacha un mensaje y acumula el resultado (camino persistido: sin intent, ya tiene claim de fragmento). */
     private TransportResult dispatch(PaymentMessageTransport transport,
                                      Map<String, Object> configuration,
                                      Mt101Message message,
-                                     DispatchAccumulator accumulator) {
+                                     DispatchAccumulator accumulator,
+                                     TaskContext context) {
         return dispatch(transport, configuration,
                 new Mt101MessageInputResolver.ResolvedMessage(message, null, null, null),
-                accumulator);
+                accumulator, context, false);
     }
 
     private TransportResult dispatch(PaymentMessageTransport transport,
                                      Map<String, Object> configuration,
                                      Mt101MessageInputResolver.ResolvedMessage input,
-                                     DispatchAccumulator accumulator) {
+                                     DispatchAccumulator accumulator,
+                                     TaskContext context,
+                                     boolean durableIntent) {
         var message = input.message();
-        TransportResult result;
         accumulator.transportsUsed.add(transport.transport());
         var correlationKey = Mt101PaymentCorrelation.correlationKey(transport.transport(), configuration, message);
         var dispatchConfiguration = Mt101PaymentCorrelation.withResolvedCorrelation(
                 transport.transport(), configuration, message);
-        try {
-            result = transport.send(message, dispatchConfiguration);
-        } catch (PreDispatchTransportException configError) {
-            // v27 P1: error TIPADO de pre-dispatch (validacion/config, antes de cualquier I/O): el mensaje
-            // NO salio al banco -> rechazo seguro (re-solicitable). Clasificacion por TIPO, no por suposicion.
-            result = TransportResult.rejected(1, 0L, "transport config error: " + configError.getMessage());
-        } catch (RuntimeException error) {
-            // P0 v26+v27: cualquier OTRA excepcion (incluida una IllegalArgumentException cruda de un bug o
-            // transporte de terceros) es INCIERTA: si no se puede DEMOSTRAR que no salio al banco, nunca se
-            // marca REJECTED reusable (evita doble pago); se resuelve por STATUS/conciliacion.
-            result = TransportResult.uncertain(1, 0L, "unexpected transport error: " + error.getMessage());
-        }
-
         var ref = message.sequenceA() != null ? message.sequenceA().sendersReference() : null;
+        var result = dispatchWithDurableIntent(transport, message, dispatchConfiguration, input,
+                correlationKey, ref, context, durableIntent);
+
         var uetr = message.envelope() != null ? message.envelope().uetr() : null;
         var entry = new LinkedHashMap<String, Object>();
         entry.put("sendersReference", ref);

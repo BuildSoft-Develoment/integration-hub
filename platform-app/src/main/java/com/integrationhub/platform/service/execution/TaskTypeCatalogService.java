@@ -4,6 +4,7 @@ import com.integrationhub.platform.domain.TaskType;
 import com.integrationhub.platform.service.TaskProviderRegistry;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
+import com.integrationhub.platform.spi.task.AsyncOffloadSupport;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.util.ArrayList;
@@ -54,7 +55,8 @@ public class TaskTypeCatalogService {
                     null,
                     null,
                     STATUS_AVAILABLE,
-                    null));
+                    null,
+                    asyncOffloadFor(type)));
         }
 
         localProviders.entrySet().stream()
@@ -68,7 +70,8 @@ public class TaskTypeCatalogService {
                         null,
                         null,
                         STATUS_AVAILABLE,
-                        null)));
+                        null,
+                        asyncOffloadFor(entry.getKey()))));
 
         var degraded = remotePluginRegistry.degraded();
         remotePluginRegistry.descriptors().stream()
@@ -111,7 +114,23 @@ public class TaskTypeCatalogService {
                 descriptor.version(),
                 descriptor.transport(),
                 status,
-                reason);
+                reason,
+                // Los plugins remotos ya son async vía su propio transporte (y suspenden esperando el
+                // resultado del broker del plugin); el offload async genérico no aplica.
+                AsyncOffloadSupport.UNSUPPORTED.name());
+    }
+
+    /**
+     * Capacidad de offload async del tipo, según la declara su provider ({@link AsyncOffloadSupport}).
+     * Si el tipo no resuelve a un provider local (no debería para builtin/local), degrada a
+     * {@code UNSUPPORTED} conservador en vez de propagar el error del catálogo.
+     */
+    private String asyncOffloadFor(String type) {
+        try {
+            return taskProviderRegistry.resolve(type).asyncOffloadSupport().name();
+        } catch (RuntimeException e) {
+            return AsyncOffloadSupport.UNSUPPORTED.name();
+        }
     }
 
     private static Set<String> normalized(Iterable<String> values) {

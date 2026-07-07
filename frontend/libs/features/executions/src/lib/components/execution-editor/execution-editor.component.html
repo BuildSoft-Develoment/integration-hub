@@ -26,6 +26,7 @@
                 <section class="form-section">
                   <ih-execution-task-list
                     [tasks]="tasks()"
+                    [progress]="progress()"
                     [selectedTaskId]="store.selectedTaskId()"
                     (selectTask)="store.selectTask($event)"
                   />

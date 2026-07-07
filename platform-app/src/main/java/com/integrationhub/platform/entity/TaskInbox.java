@@ -15,6 +15,10 @@ import java.time.LocalDateTime;
  * work-item terminal (por {@code idempotency_key}) para descartar reentregas duplicadas sin repetir
  * el efecto (crítico en DB_WRITE/REST/pagos).
  *
+ * <p>Estado <b>no</b> terminal: {@code CLAIMED} (§5) — un consumer tomó el work-item del camino once y
+ * está ejecutando el efecto; lleva {@code inbox_owner} + {@code claimed_until} (lease). Bloquea que una
+ * re-entrega ejecute el efecto dos veces; un lease vencido lo puede re-tomar otro nodo (crash-safe).</p>
+ *
  * <p>Estados terminales: {@code PROCESSED} (ejecutado ok), {@code FAILED} (fallo de negocio
  * determinista — no se reintenta), {@code DEAD} (no ejecutable: tipo desconocido o config ilegible),
  * {@code POISON} (payload indecodificable: no lleva {@code idempotency_key}). Un fallo transitorio
@@ -24,6 +28,8 @@ import java.time.LocalDateTime;
 @Table(name = "task_inbox")
 public class TaskInbox {
 
+    /** §5: no terminal — work-item reclamado, efecto en ejecución (lleva owner + lease). */
+    public static final String CLAIMED = "CLAIMED";
     public static final String PROCESSED = "PROCESSED";
     public static final String FAILED = "FAILED";
     public static final String DEAD = "DEAD";
@@ -67,6 +73,14 @@ public class TaskInbox {
 
     @Column(length = 200)
     public String topic;
+
+    /** §5: nodo dueño del claim (mientras status = CLAIMED). */
+    @Column(name = "inbox_owner", length = 120)
+    public String inboxOwner;
+
+    /** §5: vencimiento del lease del claim; superado, otro nodo puede re-tomar el work-item. */
+    @Column(name = "claimed_until")
+    public LocalDateTime claimedUntil;
 
     @Column(name = "created_at", nullable = false)
     public LocalDateTime createdAt = LocalDateTime.now();
