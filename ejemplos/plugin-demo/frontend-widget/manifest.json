@@ -1,0 +1,12 @@
+{
+  "id": "demo-transform-widget",
+  "version": "1.0.0",
+  "platformVersion": "1.0.0",
+  "displayName": "Demo Transform",
+  "remote": {
+    "url": "http://localhost:4300/remoteEntry.json",
+    "exposedModule": "./Widget",
+    "integrity": "sha384-REEMPLAZAR-tras-build-con-sign-remote",
+    "signature": "demo-transform-key-1:REEMPLAZAR-tras-build-con-sign-remote"
+  }
+}

@@ -1,0 +1,8 @@
+/* Estilos globales minimos del host de desarrollo. El widget trae sus propios estilos
+   encapsulados y hereda los design tokens (--ih-*) del UI kit compartido por la shell. */
+:root {
+  color-scheme: light dark;
+}
+body {
+  margin: 0;
+}

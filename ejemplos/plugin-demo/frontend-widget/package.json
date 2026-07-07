@@ -1,0 +1,33 @@
+{
+  "name": "demo-transform-widget",
+  "version": "1.0.0",
+  "description": "Widget de plugin externo INDEPENDIENTE (Native Federation remote). No pertenece al workspace Nx del monorepo.",
+  "private": true,
+  "scripts": {
+    "build": "ng build",
+    "start": "ng serve",
+    "sign": "node sign-remote.mjs"
+  },
+  "dependencies": {
+    "@angular/animations": "21.2.17",
+    "@angular/cdk": "21.2.14",
+    "@angular/common": "21.2.17",
+    "@angular/compiler": "21.2.17",
+    "@angular/core": "21.2.17",
+    "@angular/forms": "21.2.17",
+    "@angular/material": "21.2.14",
+    "@angular/platform-browser": "21.2.17",
+    "@angular/router": "21.2.17",
+    "@angular-architects/native-federation": "~21.2.0",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0",
+    "zone.js": "~0.15.0",
+    "@integration-hub/plugin-ui-kit": "file:vendor/integration-hub-plugin-ui-kit-0.0.1.tgz"
+  },
+  "devDependencies": {
+    "@angular/build": "21.2.17",
+    "@angular/cli": "21.2.17",
+    "@angular/compiler-cli": "21.2.17",
+    "typescript": "~5.9.2"
+  }
+}

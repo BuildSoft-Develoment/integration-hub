@@ -11,3 +11,8 @@ backend-grpc-python/src/remote_plugin_pb2_grpc.py
 
 # Shade plugin artifact
 backend-grpc-java/dependency-reduced-pom.xml
+
+# Angular front build cache/output (el remoteEntry se reconstruye).
+**/out-tsc/
+**/.angular/
+# OJO: vendor/*.tgz SI se versiona — es el mecanismo de independencia (kit sin npm publico).
