@@ -219,6 +219,21 @@ public class AsyncTaskConsumer {
     }
 
     /**
+     * §5 (scatter): dedup de <b>ejecución</b> por slice/página, idéntico al camino once. Salta si la unidad ya es
+     * terminal (reentrega ya contada) o si otro nodo tiene un claim VIVO; si no, reclama atómicamente
+     * (owner+lease) antes del efecto externo, para que una reentrega no repita el {@code executeRecords} de un
+     * provider no idempotente (REST_CALL, DB_WRITE, SFTP…). El conteo del scatter lo cierra el commit al
+     * transicionar el mismo claim a su terminal (ver {@code SliceGatherService}). Devuelve {@code true} si este
+     * consumer ganó el claim y debe ejecutar.
+     */
+    private boolean claimScatterUnit(AsyncTaskEnvelope envelope) {
+        if (inbox.isProcessed(envelope.idempotencyKey())) {
+            return false;
+        }
+        return inbox.claim(envelope, nodeId, claimLeaseSeconds);
+    }
+
+    /**
      * Procesa un work-item de <b>slice</b> (Opción B): ejecuta el {@code BatchTaskProvider} sobre los
      * records de la slice y avanza la agregación N→1. La reanudación de la tarea la dispara solo la
      * slice que cierra el conteo (o la primera que falla); las demás solo cuentan.
@@ -242,6 +257,12 @@ public class AsyncTaskConsumer {
         // Si el scatter ya cerró (fail-fast de otra slice), no se ejecuta el provider: evita side-effects
         // inútiles sobre las slices restantes tras el fallo (su commit sería no-op igual).
         if (gather.isScatterTerminal(envelope.processExecutionId(), envelope.taskDefinitionId())) {
+            return ConsumeResult.DUPLICATE;
+        }
+        // §5: claim ATÓMICO de la slice antes del efecto externo. Una reentrega tras un claim ajeno/terminal NO
+        // re-ejecuta executeRecords (evita doble efecto en providers no idempotentes). El commit cuenta la slice
+        // al finalizar este mismo claim.
+        if (!claimScatterUnit(envelope)) {
             return ConsumeResult.DUPLICATE;
         }
 
@@ -295,6 +316,11 @@ public class AsyncTaskConsumer {
         // Si el scatter ya cerró (p.ej. fail-fast de una página previa), NO se lee/encola/ejecuta: mata la
         // cadena runaway y evita side-effects del provider sobre el resto de la tabla tras el fallo.
         if (gather.isScatterTerminal(envelope.processExecutionId(), envelope.taskDefinitionId())) {
+            return ConsumeResult.DUPLICATE;
+        }
+        // §5: claim ATÓMICO de la página antes de leer/encadenar/ejecutar. Una reentrega ya contada o con un claim
+        // vivo ajeno NO repite el executeRecords (ni re-lee/encola): la cadena ya propagó en la primera entrega.
+        if (!claimScatterUnit(envelope)) {
             return ConsumeResult.DUPLICATE;
         }
 

@@ -341,6 +341,38 @@ class AsyncTaskConsumerTest {
     }
 
     @Test
+    void redeliveredProcessedSliceDoesNotReexecuteTheEffect() throws Exception {
+        // §5/E: una reentrega de una slice ya TERMINAL no vuelve a ejecutar executeRecords (evita doble efecto en
+        // providers no idempotentes). El pre-check isProcessed corta antes del claim y del provider.
+        var provider = new CapturingBatchProvider(TaskResult.success("slice ok"));
+        when(registry.resolve("DB_WRITE")).thenReturn(provider);
+        inbox.processedKeys.add(TaskIdempotency.key(1L, 2L, "slice-0"));
+
+        var result = consumer.consume(sliceWire("DB_WRITE", 0, 3, java.util.List.of(Map.of("id", "a"))),
+                "KAFKA", "tasks.db_write");
+
+        assertEquals(AsyncTaskConsumer.ConsumeResult.DUPLICATE, result);
+        assertNull(provider.records, "una slice ya procesada NO re-ejecuta el batch provider");
+        verify(gather, never()).commitCompletedSlice(any(), any(), any());
+    }
+
+    @Test
+    void sliceWithLiveClaimByAnotherNodeDoesNotExecuteTheEffect() throws Exception {
+        // §5/E: si otro nodo tiene un claim VIVO de la slice, esta entrega NO ejecuta el efecto externo (ni cuenta).
+        var provider = new CapturingBatchProvider(TaskResult.success("slice ok"));
+        when(registry.resolve("DB_WRITE")).thenReturn(provider);
+        inbox.claimResult = false;
+
+        var result = consumer.consume(sliceWire("DB_WRITE", 0, 3, java.util.List.of(Map.of("id", "a"))),
+                "KAFKA", "tasks.db_write");
+
+        assertEquals(AsyncTaskConsumer.ConsumeResult.DUPLICATE, result);
+        assertNull(provider.records, "una slice con claim ajeno vivo NO re-ejecuta el batch provider");
+        assertTrue(inbox.claimedKeys.contains(TaskIdempotency.key(1L, 2L, "slice-0")), "se intentó el claim de la slice");
+        verify(gather, never()).commitCompletedSlice(any(), any(), any());
+    }
+
+    @Test
     void lastSliceResumesTaskExactlyOnce() throws Exception {
         when(registry.resolve("DB_WRITE")).thenReturn(new CapturingBatchProvider(TaskResult.success("slice ok")));
         when(gather.commitCompletedSlice(any(), any(), any())).thenReturn(Optional.of(new SliceProgress(3, 0, 3, true)));
