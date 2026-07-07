@@ -61,6 +61,8 @@ public class AsyncTaskConsumer {
     // §5: identidad de ESTE nodo (owner del claim/finalize del inbox). Fuente única compartida con el store y el
     // gather, para que el fencing del finalize (owner match) funcione entre colaboradores de la misma JVM.
     private final AsyncNodeIdentity nodeIdentity;
+    // §5 (F3): mantiene vivo el lease durante un efecto largo (evita re-toma + doble efecto en reentregas).
+    private final LeaseHeartbeat heartbeat;
 
     @Inject
     public AsyncTaskConsumer(TaskInboxStore inbox,
@@ -71,6 +73,7 @@ public class AsyncTaskConsumer {
                              AsyncPageChainService pageChain,
                              JsonConfigurationMapper configurationMapper,
                              AsyncNodeIdentity nodeIdentity,
+                             LeaseHeartbeat heartbeat,
                              @ConfigProperty(name = "tasks.async.consumer.max-attempts", defaultValue = "3")
                              int maxAttempts,
                              @ConfigProperty(name = "tasks.async.consumer.backoff-ms", defaultValue = "200")
@@ -85,6 +88,7 @@ public class AsyncTaskConsumer {
         this.pageChain = pageChain;
         this.configurationMapper = configurationMapper;
         this.nodeIdentity = nodeIdentity;
+        this.heartbeat = heartbeat;
         this.maxAttempts = Math.max(1, maxAttempts);
         this.backoffMs = Math.max(0, backoffMs);
         this.claimLeaseSeconds = Math.max(1, claimLeaseSeconds);
@@ -195,7 +199,10 @@ public class AsyncTaskConsumer {
         var resolvedConfiguration = resolveSecrets(configuration);
         // Un throw aquí (fallo transitorio) NO se captura: propaga → nack → reentrega (at-least-once). El claim
         // queda CLAIMED con lease: la re-entrega la re-toma este mismo nodo (owner) o, si cayó, otro al vencer.
-        var result = provider.execute(context, resolvedConfiguration);
+        // §5 (F3): el heartbeat renueva el lease mientras execute() corre, para que una reentrega durante un
+        // efecto largo NO re-tome el claim en otro nodo (doble efecto). Overhead nulo si termina antes de lease/2.
+        var result = heartbeat.runWithHeartbeat(envelope, nodeIdentity.id(),
+                () -> provider.execute(context, resolvedConfiguration));
 
         // Aplica el resultado a la tarea suspendida por despacho async y continúa el pipeline (o, si el
         // provider volvió a suspender —Nivel 3, suspendible—, re-suspende con token/estado nuevos). Se
@@ -277,7 +284,9 @@ public class AsyncTaskConsumer {
         hydrateSliceContext(context, item);
         // §6: re-resuelve los ${secret:} de la config de la slice en el punto-de-uso (viajó con placeholders).
         // Un throw (fallo transitorio) propaga → nack → reentrega de la slice.
-        var result = batchProvider.executeRecords(context, resolveSecrets(item.configuration()), records, null);
+        // §5 (F3): heartbeat del lease mientras la slice ejecuta su efecto (evita re-toma + doble efecto).
+        var result = heartbeat.runWithHeartbeat(envelope, nodeIdentity.id(),
+                () -> batchProvider.executeRecords(context, resolveSecrets(item.configuration()), records, null));
 
         if (result.suspended()) {
             failSlice(envelope, "una slice no puede suspenderse en el consumer", continueOnFailure);
@@ -336,7 +345,9 @@ public class AsyncTaskConsumer {
             var context = new TaskContext(envelope.processExecutionId(), envelope.taskDefinitionId());
             hydrateContext(context, item.taskOutputs(), item.metadata(), item.executionVariables());
             // §6: re-resuelve los ${secret:} de la config de la página en el punto-de-uso (viajó con placeholders).
-            var result = batchProvider.executeRecords(context, resolveSecrets(item.configuration()), records, null);
+            // §5 (F3): heartbeat del lease mientras la página ejecuta su efecto (evita re-toma + doble efecto).
+            var result = heartbeat.runWithHeartbeat(envelope, nodeIdentity.id(),
+                    () -> batchProvider.executeRecords(context, resolveSecrets(item.configuration()), records, null));
             if (result.suspended()) {
                 failSlice(envelope, "una página no puede suspenderse en el consumer", continueOnFailure);
                 return ConsumeResult.DEAD;

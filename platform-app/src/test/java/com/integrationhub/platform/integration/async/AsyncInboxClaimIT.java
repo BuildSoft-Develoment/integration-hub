@@ -165,6 +165,32 @@ class AsyncInboxClaimIT {
     }
 
     @Test
+    void renewLeaseIsOwnerScopedAndKeepsTheClaimUntakeable() throws Exception {
+        // F3: el heartbeat renueva el lease solo para el DUEÑO; mientras el lease siga vivo (renovado), otro nodo
+        // NO puede re-tomar el claim → una reentrega durante una ejecución larga no duplica el efecto.
+        var env = envelope("idem-renew");
+        assertTrue(inbox.claim(env, nodeIdentity.id(), 30));
+
+        assertFalse(inbox.renewLease(env, "node-OTHER", 30), "un owner ajeno NO renueva el lease");
+        assertTrue(inbox.renewLease(env, nodeIdentity.id(), 30), "el dueño del claim renueva su lease");
+        assertEquals("CLAIMED", status("idem-renew"));
+        assertEquals(nodeIdentity.id(), owner("idem-renew"));
+
+        assertFalse(inbox.claim(env, "node-B", 30),
+                "con el lease vivo (renovado), otro nodo no re-toma el claim (no hay doble efecto)");
+    }
+
+    @Test
+    void renewLeaseOnATerminalRowIsANoOp() throws Exception {
+        // Un heartbeat que dispara tras finalizar es inofensivo: la fila ya no está CLAIMED → 0 filas.
+        var env = envelope("idem-renew-term");
+        assertTrue(inbox.claim(env, nodeIdentity.id(), 30));
+        inbox.recordProcessed(env, "{}", "ok");
+        assertFalse(inbox.renewLease(env, nodeIdentity.id(), 30),
+                "no se renueva un claim ya finalizado (PROCESSED)");
+    }
+
+    @Test
     void recoverySweepMarksStaleClaimsDead() throws Exception {
         var env = envelope("idem-stale");
         assertTrue(inbox.claim(env, "node-A", 30));

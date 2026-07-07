@@ -62,8 +62,11 @@ class AsyncTaskConsumerTest {
         configurationMapper = mock(JsonConfigurationMapper.class);
         when(configurationMapper.resolveSecretsIn(any())).thenAnswer(inv -> inv.getArgument(0));
         // maxAttempts=3, backoff=0 (sin sleep en tests).
+        // Heartbeat con lease 30s: en los tests el work es instantáneo, así que la primera renovación (15s) nunca
+        // dispara → el heartbeat es transparente. La renovación real se prueba en LeaseHeartbeatTest / IT.
+        var heartbeat = new LeaseHeartbeat(inbox, 30, 1);
         consumer = new AsyncTaskConsumer(inbox, registry, completion, gather, mapper, pageChain,
-                configurationMapper, new AsyncNodeIdentity(), 3, 0, 30);
+                configurationMapper, new AsyncNodeIdentity(), heartbeat, 3, 0, 30);
     }
 
     @Test
@@ -575,6 +578,11 @@ class AsyncTaskConsumerTest {
         public boolean claim(AsyncTaskEnvelope e, String owner, int leaseSeconds) {
             claimedKeys.add(e.idempotencyKey());
             return claimResult;
+        }
+
+        @Override
+        public boolean renewLease(AsyncTaskEnvelope e, String owner, int leaseSeconds) {
+            return true;
         }
 
         @Override

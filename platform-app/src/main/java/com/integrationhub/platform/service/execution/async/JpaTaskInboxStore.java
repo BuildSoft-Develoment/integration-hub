@@ -52,6 +52,13 @@ public class JpaTaskInboxStore implements TaskInboxStore {
 
     @Override
     @Transactional
+    public boolean renewLease(AsyncTaskEnvelope envelope, String owner, int leaseSeconds) {
+        var claimedUntil = LocalDateTime.now().plusSeconds(Math.max(leaseSeconds, 1));
+        return repository.renewLease(envelope.idempotencyKey(), owner, Timestamp.valueOf(claimedUntil)) == 1;
+    }
+
+    @Override
+    @Transactional
     public void recordProcessed(AsyncTaskEnvelope envelope, String outputsJson, String details) {
         finalizeOrInsert(envelope, TaskInbox.PROCESSED, outputsJson, details, null);
     }

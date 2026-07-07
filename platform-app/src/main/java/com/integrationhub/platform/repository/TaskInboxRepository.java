@@ -86,6 +86,24 @@ public class TaskInboxRepository implements PanacheRepository<TaskInbox> {
     }
 
     /**
+     * §5 (F3, heartbeat): extiende el lease de un claim VIVO mientras su efecto se ejecuta. Owner-scoped: solo el
+     * dueño renueva. Devuelve {@code 1} si renovó; {@code 0} si ya no era suyo (otro nodo lo re-tomó) o ya no está
+     * {@code CLAIMED} (finalizó): en ese caso el heartbeat deja de renovar. Mantener {@code claimed_until} adelantado
+     * evita que una reentrega durante una ejecución larga (rebalance/redelivery) re-tome el claim y duplique el efecto.
+     */
+    public int renewLease(String idempotencyKey, String owner, Timestamp claimedUntil) {
+        return getEntityManager().createNativeQuery("""
+                update task_inbox
+                   set claimed_until = ?3
+                 where idempotency_key = ?1 and status = 'CLAIMED' and inbox_owner = ?2
+                """)
+                .setParameter(1, idempotencyKey)
+                .setParameter(2, owner)
+                .setParameter(3, claimedUntil)
+                .executeUpdate();
+    }
+
+    /**
      * §5 recovery (fail-safe): marca {@code DEAD} los claims con lease vencido más allá del corte (nodo caído
      * que no finalizó). NO re-ejecuta a ciegas (regla de seguridad del claim distribuido): el efecto pudo haber
      * corrido, así que se deja visible en la consola DLQ para que ops lo redrive con criterio. Devuelve el conteo.
