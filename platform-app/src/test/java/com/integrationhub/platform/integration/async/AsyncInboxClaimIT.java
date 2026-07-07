@@ -3,8 +3,10 @@ package com.integrationhub.platform.integration.async;
 import com.integrationhub.platform.integration.PostgresTestResource;
 import com.integrationhub.platform.repository.TaskInboxRepository;
 import com.integrationhub.platform.service.execution.async.AsyncInboxClaimRecoveryScheduler;
+import com.integrationhub.platform.service.execution.async.AsyncNodeIdentity;
 import com.integrationhub.platform.service.execution.async.TaskInboxStore;
 import com.integrationhub.platform.task.AsyncTaskEnvelope;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
@@ -45,6 +47,9 @@ class AsyncInboxClaimIT {
 
     @Inject
     AsyncInboxClaimRecoveryScheduler recovery;
+
+    @Inject
+    AsyncNodeIdentity nodeIdentity;
 
     @Inject
     DataSource dataSource;
@@ -125,7 +130,9 @@ class AsyncInboxClaimIT {
     @Test
     void finalizingTransitionsClaimedToTerminalAndDedups() {
         var env = envelope("idem-final");
-        assertTrue(inbox.claim(env, "node-A", 30));
+        // FENCING: recordProcessed finaliza con la identidad del store; para que la finalización sea legítima, el
+        // claim debe ser de ESA misma identidad (así reclama el consumer real, que comparte AsyncNodeIdentity).
+        assertTrue(inbox.claim(env, nodeIdentity.id(), 30));
         assertFalse(inbox.isProcessed("idem-final"), "CLAIMED aún no es terminal");
 
         inbox.recordProcessed(env, "{\"rows\":1}", "ok");
@@ -133,6 +140,28 @@ class AsyncInboxClaimIT {
         assertEquals("PROCESSED", status("idem-final"));
         assertTrue(inbox.isProcessed("idem-final"), "tras finalizar, el pre-check corta la re-entrega");
         assertFalse(inbox.claim(env, "node-B", 30), "no se re-reclama una clave ya terminal");
+    }
+
+    @Test
+    void finalizeIsFencedByOwnerSoAStaleNodeCannotFinalizeAReclaimedRow() throws Exception {
+        // F (fencing): node-A reclama, su lease vence y node-B lo re-toma. Un finalize REZAGADO de node-A NO debe
+        // pisar el claim de B (owner distinto → 0 filas); solo el dueño actual (B) finaliza.
+        var env = envelope("idem-fence");
+        assertTrue(inbox.claim(env, "node-A", 30));
+        expireClaim("idem-fence");
+        assertTrue(inbox.claim(env, "node-B", 30), "un lease vencido lo re-toma otro nodo");
+        assertEquals("node-B", owner("idem-fence"));
+
+        var stale = QuarkusTransaction.requiringNew().call(() ->
+                inboxRepository.finalizeClaimed("idem-fence", "PROCESSED", "{}", "late", null, "node-A"));
+        assertEquals(0, stale, "un nodo con lease vencido NO finaliza la fila re-reclamada por otro (fencing)");
+        assertEquals("CLAIMED", status("idem-fence"), "la fila sigue reclamada por B");
+        assertEquals("node-B", owner("idem-fence"));
+
+        var owned = QuarkusTransaction.requiringNew().call(() ->
+                inboxRepository.finalizeClaimed("idem-fence", "PROCESSED", "{\"rows\":1}", "ok", null, "node-B"));
+        assertEquals(1, owned, "el dueño actual del claim sí lo finaliza");
+        assertEquals("PROCESSED", status("idem-fence"));
     }
 
     @Test

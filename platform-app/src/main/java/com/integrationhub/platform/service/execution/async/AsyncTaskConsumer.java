@@ -58,8 +58,9 @@ public class AsyncTaskConsumer {
     private final int maxAttempts;
     private final long backoffMs;
     private final int claimLeaseSeconds;
-    // §5: identidad de ESTE nodo, owner del claim del inbox (igual que el claim de process_execution).
-    private final String nodeId = "inbox-" + java.util.UUID.randomUUID();
+    // §5: identidad de ESTE nodo (owner del claim/finalize del inbox). Fuente única compartida con el store y el
+    // gather, para que el fencing del finalize (owner match) funcione entre colaboradores de la misma JVM.
+    private final AsyncNodeIdentity nodeIdentity;
 
     @Inject
     public AsyncTaskConsumer(TaskInboxStore inbox,
@@ -69,6 +70,7 @@ public class AsyncTaskConsumer {
                              ObjectMapper objectMapper,
                              AsyncPageChainService pageChain,
                              JsonConfigurationMapper configurationMapper,
+                             AsyncNodeIdentity nodeIdentity,
                              @ConfigProperty(name = "tasks.async.consumer.max-attempts", defaultValue = "3")
                              int maxAttempts,
                              @ConfigProperty(name = "tasks.async.consumer.backoff-ms", defaultValue = "200")
@@ -82,6 +84,7 @@ public class AsyncTaskConsumer {
         this.objectMapper = objectMapper;
         this.pageChain = pageChain;
         this.configurationMapper = configurationMapper;
+        this.nodeIdentity = nodeIdentity;
         this.maxAttempts = Math.max(1, maxAttempts);
         this.backoffMs = Math.max(0, backoffMs);
         this.claimLeaseSeconds = Math.max(1, claimLeaseSeconds);
@@ -179,17 +182,17 @@ public class AsyncTaskConsumer {
         // executionVariables), para que un provider como MT101_STATUS resuelva qué consultar igual que
         // en el motor síncrono. NO viaja sourcePayload (no serializable): esos providers son UNSUPPORTED.
         hydrateOnceContext(context, envelope);
-        // §6: la config viajó con los ${secret:} SIN resolver (no se persisten en outbox/broker); se
-        // re-resuelven aquí, en el punto-de-uso, justo antes de ejecutar. Sin secretos inline es no-op.
-        var resolvedConfiguration = resolveSecrets(configuration);
         // §5: claim ATÓMICO antes del efecto. Si no ganamos (otro nodo lo tiene vivo o ya es terminal), NO
         // ejecutamos: una re-entrega tras un claim ajeno no repite el efecto externo. El pre-check isProcessed
         // ya cortó los terminales; aquí se cubre la carrera contra un claim VIVO y se re-toma un lease vencido.
-        if (!inbox.claim(envelope, nodeId, claimLeaseSeconds)) {
+        if (!inbox.claim(envelope, nodeIdentity.id(), claimLeaseSeconds)) {
             LOG.debugf("Async task consumer: %s reclamada por otro nodo (claim vivo); skip sin re-ejecutar",
                     envelope.idempotencyKey());
             return ConsumeResult.DUPLICATE;
         }
+        // §6 (F): los ${secret:} se resuelven DESPUÉS de ganar el claim, en el punto-de-uso. Así un consumer que
+        // pierde el claim (otro nodo lo tiene vivo) NO consulta Vault/OpenBao — solo el ganador materializa secretos.
+        var resolvedConfiguration = resolveSecrets(configuration);
         // Un throw aquí (fallo transitorio) NO se captura: propaga → nack → reentrega (at-least-once). El claim
         // queda CLAIMED con lease: la re-entrega la re-toma este mismo nodo (owner) o, si cayó, otro al vencer.
         var result = provider.execute(context, resolvedConfiguration);
@@ -230,7 +233,7 @@ public class AsyncTaskConsumer {
         if (inbox.isProcessed(envelope.idempotencyKey())) {
             return false;
         }
-        return inbox.claim(envelope, nodeId, claimLeaseSeconds);
+        return inbox.claim(envelope, nodeIdentity.id(), claimLeaseSeconds);
     }
 
     /**

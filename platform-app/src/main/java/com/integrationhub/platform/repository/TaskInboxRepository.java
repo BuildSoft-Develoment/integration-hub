@@ -63,22 +63,25 @@ public class TaskInboxRepository implements PanacheRepository<TaskInbox> {
     }
 
     /**
-     * §5: transiciona la fila {@code CLAIMED} de este work-item a su estado terminal tras ejecutar. Devuelve
-     * {@code 1} si finalizó un claim; {@code 0} si no había claim (el caller cae a {@code insertIfAbsent}).
+     * §5: transiciona la fila {@code CLAIMED} de este work-item a su estado terminal tras ejecutar. FENCING: solo
+     * finaliza si la fila la posee {@code owner} (el mismo nodo que reclamó). Un nodo con el lease vencido, cuya
+     * fila re-reclamó otro, NO puede finalizarla (owner distinto → 0 filas → el caller cae a {@code insertIfAbsent},
+     * que tampoco pisa la fila viva). Devuelve {@code 1} si finalizó su claim; {@code 0} si no era suyo/no había.
      */
     public int finalizeClaimed(String idempotencyKey, String status, String outputsJson,
-                               String details, String error) {
+                               String details, String error, String owner) {
         return getEntityManager().createNativeQuery("""
                 update task_inbox
                    set status = ?2, outputs_json = ?3, details = ?4, error = ?5,
                        inbox_owner = null, claimed_until = null
-                 where idempotency_key = ?1 and status = 'CLAIMED'
+                 where idempotency_key = ?1 and status = 'CLAIMED' and inbox_owner = ?6
                 """)
                 .setParameter(1, idempotencyKey)
                 .setParameter(2, status)
                 .setParameter(3, outputsJson)
                 .setParameter(4, details)
                 .setParameter(5, error)
+                .setParameter(6, owner)
                 .executeUpdate();
     }
 

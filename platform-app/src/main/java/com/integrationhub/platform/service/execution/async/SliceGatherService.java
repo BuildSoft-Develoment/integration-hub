@@ -23,11 +23,14 @@ public class SliceGatherService {
 
     private final TaskInboxRepository inbox;
     private final TaskAsyncDispatchRepository tracker;
+    private final AsyncNodeIdentity nodeIdentity;
 
     @Inject
-    public SliceGatherService(TaskInboxRepository inbox, TaskAsyncDispatchRepository tracker) {
+    public SliceGatherService(TaskInboxRepository inbox, TaskAsyncDispatchRepository tracker,
+                              AsyncNodeIdentity nodeIdentity) {
         this.inbox = inbox;
         this.tracker = tracker;
+        this.nodeIdentity = nodeIdentity;
     }
 
     /**
@@ -63,7 +66,8 @@ public class SliceGatherService {
      */
     private boolean countScatterUnitOnce(AsyncTaskEnvelope envelope, String terminalStatus,
                                          String outputsJson, String details, String error) {
-        if (inbox.finalizeClaimed(envelope.idempotencyKey(), terminalStatus, outputsJson, details, error) > 0) {
+        if (inbox.finalizeClaimed(envelope.idempotencyKey(), terminalStatus, outputsJson, details, error,
+                nodeIdentity.id()) > 0) {
             return true;
         }
         return inbox.insertIfAbsent(envelope.idempotencyKey(), envelope.taskType(),

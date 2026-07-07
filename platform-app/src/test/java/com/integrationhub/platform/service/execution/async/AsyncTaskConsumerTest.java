@@ -47,6 +47,7 @@ class AsyncTaskConsumerTest {
     private RecordingCompletion completion;
     private SliceGatherService gather;
     private AsyncPageChainService pageChain;
+    private JsonConfigurationMapper configurationMapper;
     private AsyncTaskConsumer consumer;
 
     @BeforeEach
@@ -58,11 +59,24 @@ class AsyncTaskConsumerTest {
         pageChain = mock(AsyncPageChainService.class);
         // §6: resolveSecretsIn como identidad = comportamiento sin secretos inline (la resolución real se
         // prueba en JsonConfigurationMapper); aquí solo importa que el consumer re-resuelva en point-of-use.
-        var configurationMapper = mock(JsonConfigurationMapper.class);
+        configurationMapper = mock(JsonConfigurationMapper.class);
         when(configurationMapper.resolveSecretsIn(any())).thenAnswer(inv -> inv.getArgument(0));
         // maxAttempts=3, backoff=0 (sin sleep en tests).
         consumer = new AsyncTaskConsumer(inbox, registry, completion, gather, mapper, pageChain,
-                configurationMapper, 3, 0, 30);
+                configurationMapper, new AsyncNodeIdentity(), 3, 0, 30);
+    }
+
+    @Test
+    void losingTheClaimDoesNotResolveSecrets() {
+        // F: el orden es claim → resolveSecrets. Un consumer que PIERDE el claim (otro nodo lo tiene vivo) NO debe
+        // consultar Vault/OpenBao: se corta en el claim, antes de materializar secretos.
+        when(registry.resolve("DB_WRITE")).thenReturn(new CapturingProvider(TaskResult.success("ok")));
+        inbox.claimResult = false;
+
+        var result = consumer.consume(wire("DB_WRITE", "idem-lost", "{\"limit\":1}"), "KAFKA", "tasks.db_write");
+
+        assertEquals(AsyncTaskConsumer.ConsumeResult.DUPLICATE, result);
+        verify(configurationMapper, org.mockito.Mockito.never()).resolveSecretsIn(any());
     }
 
     /** payload de wire = envelope entero (patrón audit/sidecar); config = envelope.payload(). */
