@@ -41,8 +41,21 @@ resolución manual ya existía; solo faltaba exponerlo.
 | `nx build web` (AOT prod) | OK | build de producción limpio, **sin budgets excedidos** (se reusó `.q__actions` en vez de clases nuevas) |
 | Backend consumido | ya E2E-testeado | `/pay-conflicts` (`Mt101FragmentConflictLookupIT`) y `resolveUncertainNormalPay` (`Mt101PayUncertainResolutionServiceTest`) verdes en trabajo previo |
 
+## Doble-check + E2E (evidencia)
+
+1. **Contrato backend↔frontend verificado campo a campo** (lo crítico en un cambio de wiring — un desajuste de nombres
+   rompería la UI en silencio):
+   - `PayConflictRow(sendersReference, status, reason, updatedAt)` ↔ `Mt101PayConflict{sendersReference, status,
+     reason, updatedAt}` — **exacto**.
+   - `NormalPayResolution(resolvedSent, resolvedRejected, stillPending, gatewayErrors, conflicts)` ↔
+     `Mt101NormalPayResolution{...}` — **exacto**.
+2. **Backend re-corrido** (los endpoints que consume la UI): `Mt101FragmentConflictLookupIT` **1/1** +
+   `Mt101PayUncertainResolutionServiceTest` **7/7** = **8/8**, BUILD SUCCESS.
+3. **En vivo** (`localhost:8080`, app reiniciada con el frontend nuevo): health 200, `/` (login) 200;
+   `GET /pay-conflicts` → **401** y `POST /resolve-uncertain-normal-pay` → **401** sin rol (registrados + gated).
+
 ## Resumen
 
 El endpoint de conflictos dejó de ser código muerto y el resolve manual del UNCERTAIN normal ya es accionable desde la
 UI, espejo de lo que el correctivo tenía. **Sin camino legacy ni fallback**: puro wiring de endpoints existentes y
-probados. Cierra el item 3 (visibilidad) del lado operativo.
+probados, con contrato verificado end-to-end. Cierra el item 3 (visibilidad) del lado operativo.
