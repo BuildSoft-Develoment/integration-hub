@@ -3,6 +3,7 @@ package com.integrationhub.platform.provider.task.payments.swift;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
+import com.integrationhub.platform.service.payments.swift.Mt101PayUncertainResolutionService;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
 import org.junit.jupiter.api.AfterAll;
@@ -597,6 +598,99 @@ class Mt101StatusTaskProviderTest {
         @SuppressWarnings("unchecked")
         var byStatus = (Map<String, Integer>) result.outputs().get("countByStatus");
         assertEquals(1, byStatus.get("SETTLED"));
+    }
+
+    // --- v59-item4: resolveNormalPay (delegacion al servicio de resolucion del PAY normal) ---
+
+    @Test
+    void resolveNormalPayDelegatesWithExplicitSetAndDefaultActorReason() {
+        var captured = new java.util.ArrayList<String>();
+        var stub = capturingResolutionService(captured, new Mt101PayUncertainResolutionService.NormalPayResolution(
+                3, 1, 2, 0, 1));
+        var taskProvider = new Mt101StatusTaskProvider(new ObjectMapper(), dataSource, null, stub);
+
+        var result = taskProvider.execute(new TaskContext(1L, 1L), Map.of(
+                "mode", "query",
+                "resolveNormalPay", true,
+                "connectionRef", "7",
+                "fragmentSetId", "SET-EXPLICIT"));
+
+        // Delegacion con los argumentos correctos: connectionRef + set explicito + actor/reason por defecto (accion
+        // automatica del sistema, no maker humano).
+        assertEquals(List.of("7|SET-EXPLICIT|MT101_STATUS|automatic reconciliation by MT101_STATUS"), captured);
+        // Mapeo del resultado a outputs (visibilidad del conteo desde el pipeline).
+        assertTrue(result.success(), () -> "detalle: " + result.details());
+        assertEquals("SET-EXPLICIT", result.outputs().get("fragmentSetId"));
+        assertEquals(3, result.outputs().get("resolvedSent"));
+        assertEquals(1, result.outputs().get("resolvedRejected"));
+        assertEquals(2, result.outputs().get("stillPending"));
+        assertEquals(0, result.outputs().get("gatewayErrors"));
+        assertEquals(1, result.outputs().get("conflicts"));
+        assertTrue(result.details().contains("conflicts=1"), () -> "detalle: " + result.details());
+    }
+
+    @Test
+    void resolveNormalPayDerivesFragmentSetFromUpstreamOutput() {
+        var captured = new java.util.ArrayList<String>();
+        var stub = capturingResolutionService(captured, new Mt101PayUncertainResolutionService.NormalPayResolution(
+                1, 0, 0, 0, 0));
+        var taskProvider = new Mt101StatusTaskProvider(new ObjectMapper(), dataSource, null, stub);
+
+        // Sin fragmentSetId explicito: se deriva del output del build upstream (espejo de como el correctivo deriva
+        // correctivePayRunId de taskOutputs).
+        var context = new TaskContext(1L, 1L);
+        context.attributes().put("taskOutputs", Map.of("build.fragmentSetId", "SET-DERIVED"));
+
+        var result = taskProvider.execute(context, Map.of(
+                "mode", "query",
+                "resolveNormalPay", true,
+                "executedBy", "ops",
+                "reason", "manual trigger",
+                "input", Map.of("sourceTaskRef", "build")));
+
+        assertEquals(List.of("null|SET-DERIVED|ops|manual trigger"), captured);
+        assertTrue(result.success(), () -> "detalle: " + result.details());
+        assertEquals("SET-DERIVED", result.outputs().get("fragmentSetId"));
+    }
+
+    @Test
+    void resolveNormalPayFailsWhenSetCannotBeResolved() {
+        var stub = capturingResolutionService(new java.util.ArrayList<>(),
+                new Mt101PayUncertainResolutionService.NormalPayResolution(0, 0, 0, 0, 0));
+        var taskProvider = new Mt101StatusTaskProvider(new ObjectMapper(), dataSource, null, stub);
+
+        // Sin fragmentSetId explicito ni output upstream con fragmentSetId: error ruidoso (sin fallback silencioso).
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> taskProvider.execute(new TaskContext(1L, 1L), Map.of(
+                        "mode", "query",
+                        "resolveNormalPay", true)));
+        assertTrue(error.getMessage().contains("fragmentSetId"), () -> "mensaje: " + error.getMessage());
+    }
+
+    @Test
+    void resolveNormalPayRequiresWiredService() {
+        // El provider sin servicio inyectado (path CDI de test previo) falla claro si se pide resolveNormalPay.
+        var error = assertThrows(IllegalStateException.class,
+                () -> provider.execute(new TaskContext(1L, 1L), Map.of(
+                        "mode", "query",
+                        "resolveNormalPay", true,
+                        "fragmentSetId", "SET-X")));
+        assertTrue(error.getMessage().contains("resolution service"), () -> "mensaje: " + error.getMessage());
+    }
+
+    private Mt101PayUncertainResolutionService capturingResolutionService(
+            List<String> sink, Mt101PayUncertainResolutionService.NormalPayResolution result) {
+        // Subclase de captura: solo intercepta resolveUncertainNormalPay para verificar la delegacion (los tests de
+        // la logica real viven en Mt101PayUncertainResolutionServiceTest). Los colaboradores van null: el metodo se
+        // sobreescribe y no toca super.
+        return new Mt101PayUncertainResolutionService(null, null, null, new ObjectMapper(), null, null, null) {
+            @Override
+            public NormalPayResolution resolveUncertainNormalPay(String connectionRef, String fragmentSetId,
+                                                                 String executedBy, String reason) {
+                sink.add(connectionRef + "|" + fragmentSetId + "|" + executedBy + "|" + reason);
+                return result;
+            }
+        };
     }
 
     // --- helpers ---
