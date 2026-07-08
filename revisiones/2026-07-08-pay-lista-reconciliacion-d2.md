@@ -53,8 +53,31 @@ ese lazo del ledger. No es seguridad money-path (el dinero ya está resuelto y a
 | `web` (vitest) | **516 / 0 (104 archivos)** | +3 specs del reconcile (exige motivo, RECONCILED, NO_TERMINAL); paridad i18n en/es |
 | lint + `nx build web` (AOT) | OK | typecheck + build prod limpios |
 
+## Doble-check E2E (premise verificado contra el pipeline real + una mejora)
+
+Mis ITs siembran `mt101_archive.status`. Verifiqué que eso es **fiel** a lo que el pipeline produce de verdad:
+
+1. **El ARCHIVE puebla `process_execution_id`** (`Mt101ArchiveRepository.insertArchive`, columna en el insert +
+   `setLong`), así que el join `(senders_reference, process_execution_id)` matchea para archives del pipeline (no solo
+   en los tests). Linchpin confirmado.
+2. **STATUS deja `archive.status` en el terminal exacto que D2 lee**: `syncArchiveStatus` hace
+   `updateArchiveStatus(..., confirmed ? "CONFIRMED" : "REJECTED")` — los strings `CONFIRMED`/`REJECTED` que
+   `archiveTerminalStatus` clasifica. El seed de los ITs reproduce esto 1:1.
+3. **Mejora encontrada**: el vocabulario del archive (V17) incluye `RECONCILED` (post-conciliación bancaria = pago
+   liquidado). Mi query lo dejaba fuera → un pago RECONCILED habría quedado `NO_TERMINAL` (manual) sin motivo. Se
+   añadió `RECONCILED` a los terminales "enviado"; `UNMATCHED` se mantiene fuera (ambiguo → manual). WHERE derivado de
+   las constantes (sin drift) + `order by id desc` (defensivo si hubiese >1).
+
+**Caveat honesto**: `archive.status` es una clasificación **binaria** del pipeline (accepted→CONFIRMED, resto→REJECTED).
+D2 confía en ese veredicto autoritativo (es una acción gobernada por un humano con motivo), no añade juicio propio. Un
+proceso con `archiveStatusTable` custom (≠ `mt101_archive`) → D2 no lo ve → `NO_TERMINAL`, manual.
+
+Evidencia actualizada: store IT **11/11** (incl. `RECONCILED→SENT` y `UNMATCHED→null`), lookup IT **3/3**, re-corridos
+con el fix; PAY/STATUS **59/59** sin regresión; frontend **516/516** + build prod limpio.
+
 ## Resumen
 
 D2-min cierra el lazo del intent-ledger leyendo el terminal ya clasificado del archive (join V36, sin config, sin
 gateway, sin migración), gobernado (reason + evidencia durable). **Sin fallback silencioso**: sin terminal definitivo
-→ manual. El doble-check corrigió dos decisiones (columna V36 ignorada; leer archive.status en vez de confirmation).
+→ manual. El doble-check corrigió dos decisiones de diseño (columna V36 ignorada; leer archive.status en vez de
+confirmation) y, en el segundo pase, verificó el premise contra el pipeline real y añadió `RECONCILED` como terminal.

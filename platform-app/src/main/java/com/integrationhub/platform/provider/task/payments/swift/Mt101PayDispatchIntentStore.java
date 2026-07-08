@@ -203,8 +203,11 @@ public class Mt101PayDispatchIntentStore {
     // transiciona el intent. Nunca re-despacha ni re-consulta el gateway; sin match/terminal -> no-op (manual).
     // ------------------------------------------------------------------
 
+    // Estados del archive (V17): PAY->SENT/REJECTED, STATUS->CONFIRMED/REJECTED, RECONCILE->RECONCILED/UNMATCHED.
+    // SENT/CONFIRMED/RECONCILED = el pago llego al banco (RECONCILED = ademas liquidado). UNMATCHED/ARCHIVED/PENDING no
+    // son terminales concluyentes -> no-op (manual).
     /** Estados terminales del archive que cuentan como "enviado" (el pago llego al banco). */
-    private static final String ARCHIVE_SENT_STATUSES = "('SENT','CONFIRMED')";
+    private static final String ARCHIVE_SENT_STATUSES = "('SENT','CONFIRMED','RECONCILED')";
     private static final String ARCHIVE_REJECTED_STATUS = "REJECTED";
 
     /** Intencion atascada localizada por su clave, con lo necesario para el join al archive. Null si no esta atascada. */
@@ -238,7 +241,8 @@ public class Mt101PayDispatchIntentStore {
         var sql = "select case when status in " + ARCHIVE_SENT_STATUSES + " then 'SENT' "
                 + "when status = '" + ARCHIVE_REJECTED_STATUS + "' then 'REJECTED' end as terminal "
                 + "from mt101_archive where senders_reference = ? and process_execution_id = ? "
-                + "and status in ('SENT','CONFIRMED','" + ARCHIVE_REJECTED_STATUS + "') limit 1";
+                + "and (status in " + ARCHIVE_SENT_STATUSES + " or status = '" + ARCHIVE_REJECTED_STATUS
+                + "') order by id desc limit 1";
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
             statement.setString(1, sendersReference);

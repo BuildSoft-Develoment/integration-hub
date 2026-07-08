@@ -178,9 +178,13 @@ class Mt101PayDispatchIntentStoreIT {
     @Test
     void archiveTerminalStatusClassifiesAndSkipsNonTerminalAndOtherExecution() throws Exception {
         seedArchive("R-REJ", 60L, "REJECTED");
-        seedArchive("R-PEND", 60L, "ARCHIVED"); // no terminal
+        seedArchive("R-PEND", 60L, "ARCHIVED");      // no terminal
+        seedArchive("R-RECON", 60L, "RECONCILED");   // liquidado -> cuenta como enviado
+        seedArchive("R-UNM", 60L, "UNMATCHED");      // ambiguo -> no terminal
         assertEquals("REJECTED", store.archiveTerminalStatus("R-REJ", 60L));
+        assertEquals("SENT", store.archiveTerminalStatus("R-RECON", 60L), "RECONCILED = enviado/liquidado");
         assertNull(store.archiveTerminalStatus("R-PEND", 60L), "ARCHIVED no es terminal -> null");
+        assertNull(store.archiveTerminalStatus("R-UNM", 60L), "UNMATCHED no es terminal concluyente -> null");
         assertNull(store.archiveTerminalStatus("R-REJ", 999L), "otra ejecución no matchea (join acotado)");
     }
 
