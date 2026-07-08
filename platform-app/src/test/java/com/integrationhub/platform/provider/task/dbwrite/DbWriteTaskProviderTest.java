@@ -7,6 +7,7 @@ import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
+import com.integrationhub.platform.spi.reader.SourcePosition;
 import com.integrationhub.platform.spi.task.TaskContext;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -54,12 +55,39 @@ class DbWriteTaskProviderTest {
              Statement statement = connection.createStatement()) {
             statement.executeUpdate("drop table if exists public.integration_target");
             statement.executeUpdate("create table public.integration_target (id bigint primary key, nombre varchar(100), estado varchar(30), total integer, fecha_crea date, process_execution_id bigint, task_definition_id bigint, resultado_prev varchar(100), empresa varchar(50))");
+            // item 2: staging_record con la posición física (para el E2E DB_WRITE staging -> physical_line).
+            statement.executeUpdate("drop table if exists staging_record");
+            statement.executeUpdate("create table staging_record (id bigserial primary key, process_execution_id bigint,"
+                    + " task_definition_id bigint, source_name varchar(255), source_file_hash varchar(64),"
+                    + " record_index bigint, payload_json text, version bigint not null default 0,"
+                    + " physical_line bigint, sheet_name varchar(255), sheet_row bigint,"
+                    + " created_at timestamp not null default current_timestamp)");
         }
     }
 
     @AfterAll
     static void stopContainer() {
         POSTGRES.stop();
+    }
+
+    @Test
+    void stagingInsertPersistsPhysicalLineForItem2() throws Exception {
+        // item 2 E2E (eslabón medio): DB_WRITE en modo staging preserva la posición física del reader hasta la columna.
+        var context = taskContext();
+        context.attributes().put("readResult", new ReadResult(List.of(
+                new ReadRecord(Map.of("dni", "1"), SourcePosition.line(2L)),   // 1er dato = línea física 2 (cabecera)
+                new ReadRecord(Map.of("dni", "2"), SourcePosition.line(3L))
+        ), 2));
+
+        var result = provider.execute(context, Map.of(
+                "mode", "insert",
+                "targetTable", "staging_record",
+                "batchSize", 2));
+
+        assertTrue(result.success(), () -> "detalle: " + result.details());
+        assertEquals("2", singleValue("select physical_line from staging_record where record_index = 0"),
+                "el 1er registro (índice lógico 0) conserva su línea física 2");
+        assertEquals("3", singleValue("select physical_line from staging_record where record_index = 1"));
     }
 
     @Test

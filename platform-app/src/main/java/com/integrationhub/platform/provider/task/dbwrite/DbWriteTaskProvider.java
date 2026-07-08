@@ -165,7 +165,8 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
             }
             runtimeValues.forEach(values::putIfAbsent);
             taskOutputs.forEach(values::putIfAbsent);
-            return new ReadRecord(values);
+            // item 2: preservar la posicion fisica del reader al enriquecer con runtime (no perderla al recrear).
+            return new ReadRecord(values, record != null ? record.position() : null);
         }).toList();
     }
     private DataSource resolveDataSource(Map<String, Object> configuration) {
@@ -203,13 +204,18 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
         var audit = new ArrayList<AuditEnvelope>(records.size());
         for (var record : records) {
             var index = fileIndex.getAndIncrement();
+            // item 2: la posicion FISICA del reader (linea/hoja+fila) se persiste junto al ordinal logico; nullable.
+            var position = record.position();
             rows.add(new DbWriteRepository.StagingRow(
                     context.processExecutionId(),
                     context.taskDefinitionId(),
                     sourceName,
                     sourceFileHash,
                     index,
-                    jsonConfigurationMapper.toJson(record.values())));
+                    jsonConfigurationMapper.toJson(record.values()),
+                    position == null ? null : position.physicalLine(),
+                    position == null ? null : position.sheetName(),
+                    position == null ? null : position.sheetRow()));
             // INGESTED: primer punto donde una fila origen (xls/csv/txt/...) se vuelve trazable.
             audit.add(ingestedEnvelope(context, sourceName, sourceFileHash, index));
         }

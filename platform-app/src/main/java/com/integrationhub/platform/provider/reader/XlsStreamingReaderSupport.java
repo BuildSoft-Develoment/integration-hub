@@ -3,6 +3,7 @@ package com.integrationhub.platform.provider.reader;
 import com.integrationhub.platform.spi.reader.ReadBatch;
 import com.integrationhub.platform.spi.reader.ReadBatchConsumer;
 import com.integrationhub.platform.spi.reader.ReadRecord;
+import com.integrationhub.platform.spi.reader.SourcePosition;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.reader.ReadSkip;
 import com.integrationhub.platform.spi.source.SourcePayload;
@@ -76,6 +77,7 @@ final class XlsStreamingReaderSupport {
         private final List<ReadRecord> batchRecords = new ArrayList<>();
         private final List<ReadSkip> skippedRows = new ArrayList<>();
         private int totalRecords;
+        private String sheetName; // item 2: hoja activa, para SourcePosition.sheet
         private int batchNumber = 1;
 
         private StreamingContext(String fileName,
@@ -105,7 +107,8 @@ final class XlsStreamingReaderSupport {
                 return trimValues ? value.trim() : value;
             });
             if (!rowResult.skipped()) {
-                batchRecords.add(new ReadRecord(rowResult.values()));
+                // item 2: rowIndex 0-based (HSSF) -> fila física 1-based, con el nombre de la hoja.
+                batchRecords.add(new ReadRecord(rowResult.values(), SourcePosition.sheet(sheetName, rowIndex + 1L)));
                 totalRecords++;
                 if (batchRecords.size() >= batchSize) {
                     flush();
@@ -129,6 +132,7 @@ final class XlsStreamingReaderSupport {
         private final StreamingContext context;
         private final int targetSheetIndex;
         private final Map<Integer, String> rowValues = new HashMap<>();
+        private final java.util.List<String> sheetNames = new java.util.ArrayList<>(); // item 2: nombres de hoja (globals)
         private FormatTrackingHSSFListener formatListener;
         private SSTRecord sharedStrings;
         private int currentSheetIndex = -1;
@@ -148,7 +152,8 @@ final class XlsStreamingReaderSupport {
 
         @Override
         public void processRecord(Record record) {
-            if (record instanceof BoundSheetRecord) {
+            if (record instanceof BoundSheetRecord boundSheet) {
+                sheetNames.add(boundSheet.getSheetname()); // item 2: los BoundSheet llegan en globals, antes de las filas
                 return;
             }
             if (record instanceof SSTRecord sstRecord) {
@@ -159,6 +164,9 @@ final class XlsStreamingReaderSupport {
                 flushCurrentRow();
                 currentSheetIndex++;
                 inTargetSheet = currentSheetIndex == targetSheetIndex;
+                if (inTargetSheet) {
+                    context.sheetName = targetSheetIndex < sheetNames.size() ? sheetNames.get(targetSheetIndex) : null;
+                }
                 currentRow = -1;
                 return;
             }

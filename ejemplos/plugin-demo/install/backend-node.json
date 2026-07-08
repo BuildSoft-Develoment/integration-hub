@@ -1,8 +1,9 @@
 {
   "id": "demo-transform-node",
   "version": "1.0.0",
-  "spiVersion": "1.0.0",
+  "spiVersion": "2.0.0",
   "providedTypes": ["DEMO_TRANSFORM_NODE"],
+  "providedReaderTypes": ["DEMO_REMOTE_CSV_NODE"],
   "transport": "GRPC",
   "endpoint": "http://localhost:50062",
   "trusted": false,

@@ -9,7 +9,12 @@ import com.integrationhub.platform.service.execution.ProcessExecutionStateServic
 import com.integrationhub.platform.service.execution.ProcessedSourceFileService;
 import com.integrationhub.platform.service.execution.StreamingPipelineService;
 import com.integrationhub.platform.service.execution.TaskOutputRegistry;
+import com.integrationhub.platform.service.reader.ReaderProviderRegistry;
+import com.integrationhub.platform.spi.reader.ReadBatchConsumer;
+import com.integrationhub.platform.spi.reader.ReadResult;
+import com.integrationhub.platform.spi.reader.ReaderProvider;
 import com.integrationhub.platform.spi.source.SelectedSourceFile;
+import com.integrationhub.platform.spi.source.SourcePayload;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -45,6 +50,7 @@ class FileReadTaskFastPathTest {
                 auditMapper,
                 processedSourceFileService,
                 taskProviderRegistry,
+                new StreamingReaderProviderRegistry(),
                 new TaskOutputRegistry(new JsonConfigurationMapper()),
                 new com.integrationhub.platform.service.execution.async.TaskDispatchPlanner()
         );
@@ -75,6 +81,7 @@ class FileReadTaskFastPathTest {
                 new ProcessExecutionAuditMapper(new JsonConfigurationMapper()),
                 new RecordingProcessedSourceFileService(),
                 new BatchTaskProviderRegistry(),
+                new StreamingReaderProviderRegistry(),
                 new TaskOutputRegistry(new JsonConfigurationMapper()),
                 new com.integrationhub.platform.service.execution.async.TaskDispatchPlanner()
         );
@@ -96,6 +103,7 @@ class FileReadTaskFastPathTest {
                 new ProcessExecutionAuditMapper(new JsonConfigurationMapper()),
                 new RecordingProcessedSourceFileService(),
                 new BatchTaskProviderRegistry(),
+                new StreamingReaderProviderRegistry(),
                 new TaskOutputRegistry(new JsonConfigurationMapper()),
                 new com.integrationhub.platform.service.execution.async.TaskDispatchPlanner()
         );
@@ -103,6 +111,22 @@ class FileReadTaskFastPathTest {
         assertFalse(fastPath.supports(fileReadPlan("fail"), asyncSinkPlan()));
         // control: el mismo sink sin async si es elegible.
         assertTrue(fastPath.supports(fileReadPlan("fail"), sinkPlan()));
+    }
+
+    @Test
+    void supportsRemoteReaderWhenItDeclaresStreamingCapability() {
+        var fastPath = new FileReadTaskFastPath(
+                new FailingStreamingPipelineService(),
+                new RecordingStateService(new ProcessExecution()),
+                new ProcessExecutionAuditMapper(new JsonConfigurationMapper()),
+                new RecordingProcessedSourceFileService(),
+                new BatchTaskProviderRegistry(),
+                new StreamingReaderProviderRegistry(),
+                new TaskOutputRegistry(new JsonConfigurationMapper()),
+                new com.integrationhub.platform.service.execution.async.TaskDispatchPlanner()
+        );
+
+        assertTrue(fastPath.supports(fileReadPlan("fail", "REMOTE_CSV"), sinkPlan()));
     }
 
     private ProcessExecutionStateService.TaskPlan asyncSinkPlan() {
@@ -138,6 +162,10 @@ class FileReadTaskFastPathTest {
     }
 
     private ProcessExecutionStateService.TaskPlan fileReadPlan(String fileErrorPolicy) {
+        return fileReadPlan(fileErrorPolicy, "TXT");
+    }
+
+    private ProcessExecutionStateService.TaskPlan fileReadPlan(String fileErrorPolicy, String readerType) {
         return new ProcessExecutionStateService.TaskPlan(
                 10L,
                 1,
@@ -148,7 +176,7 @@ class FileReadTaskFastPathTest {
                 "FILESYSTEM",
                 "{\"fileErrorPolicy\":\"" + fileErrorPolicy + "\"}",
                 200L,
-                "TXT",
+                readerType,
                 "{}"
         );
     }
@@ -262,6 +290,36 @@ class FileReadTaskFastPathTest {
                                                  List<com.integrationhub.platform.spi.reader.ReadRecord> records,
                                                  com.integrationhub.platform.spi.source.SourcePayload sourcePayload) {
                     return TaskResult.success("ok");
+                }
+            };
+        }
+    }
+
+    @Vetoed
+    private static final class StreamingReaderProviderRegistry extends ReaderProviderRegistry {
+        private StreamingReaderProviderRegistry() {
+            super(null);
+        }
+
+        @Override
+        public ReaderProvider resolve(String type) {
+            return new ReaderProvider() {
+                @Override
+                public String type() {
+                    return type;
+                }
+
+                @Override
+                public boolean supportsStreamingPipeline() {
+                    return true;
+                }
+
+                @Override
+                public ReadResult readInBatches(SourcePayload payload,
+                                                Map<String, Object> configuration,
+                                                int batchSize,
+                                                ReadBatchConsumer consumer) {
+                    return new ReadResult(List.of(), 0);
                 }
             };
         }

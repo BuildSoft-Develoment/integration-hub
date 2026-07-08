@@ -29,4 +29,5 @@ Write-Host "   OK"
 
 Write-Host "== Diagnostico (GET $Platform/api/plugins) =="
 Invoke-RestMethod -Method Get -Uri "$Platform/api/plugins" -Headers $headers | ConvertTo-Json -Depth 4
-Write-Host "Listo. DEMO_TRANSFORM_JAVA/NODE/PY quedan disponibles en el catalogo."
+Write-Host "Listo. DEMO_TRANSFORM_JAVA/NODE/PY y DEMO_REMOTE_CSV quedan instalados para diagnostico."
+Write-Host "Nota: los backends vienen trusted=false; la ejecucion queda bloqueada hasta registrar confianza."

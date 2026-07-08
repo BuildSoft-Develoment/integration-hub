@@ -202,6 +202,60 @@
             <div class="q__card q__card--{{ entry.status }}"><small>{{ entry.status }}</small><strong>{{ entry.count }}</strong></div>
           }
           <div class="q__card q__card--QUARANTINED"><small>{{ i18n.t('audit.quarantine.cardQuarantine') }}</small><strong>{{ pendingCount() }}</strong></div>
+          @if (s.conflicts && s.conflicts > 0) {
+            <div class="q__card q__card--conflict"><small>{{ i18n.t('audit.quarantine.cardConflicts') }}</small><strong>{{ s.conflicts }}</strong></div>
+          }
+        </div>
+        @if (s.conflicts && s.conflicts > 0) {
+          <div class="q__actions">
+            <p class="q__conflict" role="alert">{{ i18n.t('audit.quarantine.conflictAlert', { count: s.conflicts }) }}</p>
+            <button mat-stroked-button type="button" (click)="loadPayConflicts()">{{ i18n.t('audit.quarantine.conflictsView') }}</button>
+          </div>
+        }
+      }
+
+      <!-- v60: lista detallada de conflictos de pago del set (accionable), no solo el conteo. -->
+      @if (payConflictsShown()) {
+        @if (payConflicts().length === 0) {
+          <p class="q__muted">{{ i18n.t('audit.quarantine.conflictsEmpty') }}</p>
+        } @else {
+          <div class="q__table">
+            <table class="ih-dense-table">
+              <caption class="ih-visually-hidden">{{ i18n.t('audit.quarantine.conflictsCaption') }}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">:20:</th>
+                  <th scope="col">{{ i18n.t('audit.quarantine.col.status') }}</th>
+                  <th scope="col">{{ i18n.t('audit.quarantine.col.reason') }}</th>
+                  <th scope="col">{{ i18n.t('audit.quarantine.col.updated') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (c of payConflicts(); track c.sendersReference) {
+                  <tr>
+                    <td class="q__mono">{{ c.sendersReference || '-' }}</td>
+                    <td class="q__status--{{ c.status }}">{{ c.status || '-' }}</td>
+                    <td>{{ c.reason || '-' }}</td>
+                    <td>{{ c.updatedAt || '-' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+
+      <!-- v60: resolución manual gobernada del UNCERTAIN normal del set (consulta STATUS, nunca reenvía). -->
+      @if (canAuditOperate() && fragmentSetId.trim()) {
+        <div class="q__actions">
+          <mat-form-field subscriptSizing="dynamic" class="q__reason">
+            <mat-label>{{ i18n.t('audit.quarantine.payResolutionReason') }}</mat-label>
+            <input matInput [(ngModel)]="payResolutionReason" [placeholder]="i18n.t('audit.quarantine.normalPayReasonHint')" />
+          </mat-form-field>
+          <button mat-stroked-button type="button"
+                  [disabled]="!payResolutionReason.trim() || loading()"
+                  [title]="i18n.t('audit.quarantine.normalPayHint')"
+                  (click)="resolveNormalUncertainPay()">{{ i18n.t('audit.quarantine.normalPayResolve') }}</button>
         </div>
       }
 
@@ -274,6 +328,14 @@
                           <mat-label>{{ i18n.t('audit.quarantine.correctLabel', { row: row.sourceRecordNumber ?? '' }) }}</mat-label>
                           <textarea matInput [(ngModel)]="correctionPayload" rows="3" placeholder='{&quot;cargos&quot;:&quot;OUR&quot;, ...}'></textarea>
                         </mat-form-field>
+                        <!-- item 2: posición física del registro en el archivo origen (para "qué línea abrir"). -->
+                        @if (correctionPosition(); as pos) {
+                          @if (pos.physicalLine !== null) {
+                            <p class="q__muted">{{ i18n.t('audit.quarantine.physicalLine', { line: pos.physicalLine }) }}</p>
+                          } @else if (pos.sheetName !== null) {
+                            <p class="q__muted">{{ i18n.t('audit.quarantine.sheetCell', { sheet: pos.sheetName, row: pos.sheetRow ?? '' }) }}</p>
+                          }
+                        }
                         <p class="q__risk-detail">{{ i18n.t(correctionRisk.labelKey) }}: {{ i18n.t(correctionRisk.summaryKey) }} {{ i18n.t('audit.risk.evidence') }}: {{ evidenceText(correctionRisk) }}</p>
                         <mat-form-field subscriptSizing="dynamic">
                           <mat-label>{{ i18n.t('audit.quarantine.correctReason') }}</mat-label>

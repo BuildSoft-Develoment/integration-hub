@@ -7,6 +7,7 @@ import com.integrationhub.platform.spi.reader.ReadBatchConsumer;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.reader.ReadSkip;
+import com.integrationhub.platform.spi.reader.SourcePosition;
 import com.integrationhub.platform.spi.config.PluginConfigField;
 import com.integrationhub.platform.spi.config.PluginConfigOption;
 import com.integrationhub.platform.spi.config.PluginConfigSchema;
@@ -29,6 +30,11 @@ public class CsvReaderProvider implements ReaderProvider {
     @Override
     public String type() {
         return "CSV";
+    }
+
+    @Override
+    public boolean supportsStreamingPipeline() {
+        return true;
     }
 
     /** Schema de config del reader CSV: ejemplo real de config dirigida por schema para readers. */
@@ -80,7 +86,8 @@ public class CsvReaderProvider implements ReaderProvider {
                     return index < values.length ? values[index].trim() : "";
                 });
                 if (!rowResult.skipped()) {
-                    records.add(new ReadRecord(rowResult.values()));
+                    // item 2: rowIndex es 0-based por LÍNEA física (cuenta cabeceras/blancos) -> línea física 1-based.
+                    records.add(new ReadRecord(rowResult.values(), SourcePosition.line(rowIndex + 1L)));
                     totalRecords++;
                     if (records.size() >= effectiveBatchSize) {
                         flushBatch(payload, records, batchNumber++, consumer);

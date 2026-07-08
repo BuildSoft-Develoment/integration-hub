@@ -1,8 +1,9 @@
 {
   "id": "demo-transform-java",
   "version": "1.0.0",
-  "spiVersion": "1.0.0",
+  "spiVersion": "2.0.0",
   "providedTypes": ["DEMO_TRANSFORM_JAVA"],
+  "providedReaderTypes": ["DEMO_REMOTE_CSV"],
   "transport": "GRPC",
   "endpoint": "http://localhost:50061",
   "trusted": false,

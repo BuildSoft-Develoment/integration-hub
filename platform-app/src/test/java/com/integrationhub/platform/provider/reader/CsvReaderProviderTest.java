@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 // @covers RF-001, RF-005 (reingenieria: prueba que cubre el/los RF en produccion)
@@ -149,6 +151,36 @@ class CsvReaderProviderTest {
 
         assertEquals(2, result.recordCount());
         assertEquals("1", result.records().get(0).values().get("dni"));
+    }
+
+    @Test
+    void capturesPhysicalLineAccountingForHeader() {
+        // item 2: con una cabecera (rowData=2 salta la línea 1), el 1er registro de DATOS es la LÍNEA FÍSICA 2, no 1.
+        var payload = SourcePayload.fromBytes(
+                "clientes.csv",
+                """
+                dni;nombre
+                1;xx1
+                2;xx2
+                """.getBytes(StandardCharsets.UTF_8),
+                "text/csv"
+        );
+
+        ReadResult result = read(provider, payload, Map.of(
+                "delimiter", ";",
+                "rowData", 2,
+                "fields", List.of(
+                        Map.of("name", "dni", "position", 1),
+                        Map.of("name", "nombre", "position", 2)
+                )
+        ));
+
+        assertEquals(2, result.recordCount());
+        assertNotNull(result.records().get(0).position(), "el CSV aporta posición física");
+        assertEquals(2L, result.records().get(0).position().physicalLine(),
+                "el 1er registro de datos es la línea física 2 (la 1 es la cabecera)");
+        assertEquals(3L, result.records().get(1).position().physicalLine());
+        assertNull(result.records().get(0).position().sheetName(), "CSV no tiene hoja");
     }
 
     private ReadResult read(CsvReaderProvider provider, SourcePayload payload, Map<String, Object> configuration) {

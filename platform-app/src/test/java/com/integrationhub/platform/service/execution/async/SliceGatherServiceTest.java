@@ -30,7 +30,7 @@ class SliceGatherServiceTest {
 
     private final TaskInboxRepository inbox = mock(TaskInboxRepository.class);
     private final TaskAsyncDispatchRepository tracker = mock(TaskAsyncDispatchRepository.class);
-    private final SliceGatherService service = new SliceGatherService(inbox, tracker);
+    private final SliceGatherService service = new SliceGatherService(inbox, tracker, new AsyncNodeIdentity());
 
     private final AsyncTaskEnvelope envelope = new AsyncTaskEnvelope(
             "exec-1", 1L, 2L, "DB_WRITE", "KAFKA", "slice-key", 1, "{}", Map.of());

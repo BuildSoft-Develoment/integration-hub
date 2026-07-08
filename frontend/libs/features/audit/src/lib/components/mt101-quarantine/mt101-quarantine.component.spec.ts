@@ -38,6 +38,7 @@ describe('Mt101QuarantineComponent', () => {
   let lastCorrectionVersion: number | undefined;
   let canAuditAdmin: boolean;
   let canAuditOperate: boolean;
+  let normalPayCalls: string[];
 
   beforeEach(() => {
     requestCalls = 0;
@@ -47,6 +48,7 @@ describe('Mt101QuarantineComponent', () => {
     lastCorrectionVersion = undefined;
     canAuditAdmin = true;
     canAuditOperate = true;
+    normalPayCalls = [];
     const api = {
       mt101RequestRebuildRun: () => {
         requestCalls++;
@@ -76,6 +78,14 @@ describe('Mt101QuarantineComponent', () => {
         correctCalls++;
         lastCorrectionVersion = query.version;
         return of({ fragmentSetId: 'S', recordNumber: 25, updated: 1, version: 8 });
+      },
+      // v60: operaciones del PAY normal
+      mt101PayConflicts: () => of([
+        { sendersReference: 'K1', status: 'SENT', reason: 'bank REJECTED over a SENT', updatedAt: '2026-07-08' },
+      ]),
+      mt101ResolveUncertainNormalPay: (query: { reason?: string }) => {
+        normalPayCalls.push(query.reason ?? '');
+        return of({ resolvedSent: 2, resolvedRejected: 1, stillPending: 0, gatewayErrors: 0, conflicts: 1 });
       },
     } as unknown as AuditApiService;
     const route = { snapshot: { queryParamMap: { get: () => null } } } as unknown as ActivatedRoute;
@@ -161,6 +171,40 @@ describe('Mt101QuarantineComponent', () => {
       canAuditAdmin = false;
       component.approveRun();
       expect(approveCalls).toBe(0);
+    });
+  });
+
+  describe('v60: operaciones del PAY normal', () => {
+    it('loadPayConflicts carga la lista detallada de conflictos', () => {
+      component.fragmentSetId = 'S';
+      component.loadPayConflicts();
+      expect(component.payConflictsShown()).toBe(true);
+      expect(component.payConflicts().length).toBe(1);
+      expect(component.payConflicts()[0].sendersReference).toBe('K1');
+    });
+
+    it('resolveNormalUncertainPay exige motivo: sin motivo no llama al backend', () => {
+      component.fragmentSetId = 'S';
+      component.payResolutionReason = '   ';
+      component.resolveNormalUncertainPay();
+      expect(normalPayCalls).toEqual([]);
+      expect(component.error()).toBeTruthy();
+    });
+
+    it('resolveNormalUncertainPay con motivo llama al backend y muestra el resultado', () => {
+      component.fragmentSetId = 'S';
+      component.payResolutionReason = 'conciliar tras STATUS';
+      component.resolveNormalUncertainPay();
+      expect(normalPayCalls).toEqual(['conciliar tras STATUS']);
+      expect(component.message()).toContain('2');
+    });
+
+    it('no resuelve sin la capacidad de operar', () => {
+      component.fragmentSetId = 'S';
+      component.payResolutionReason = 'x';
+      canAuditOperate = false;
+      component.resolveNormalUncertainPay();
+      expect(normalPayCalls).toEqual([]);
     });
   });
 

@@ -30,6 +30,7 @@ import java.util.stream.StreamSupport;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * P3 — durabilidad del PAY por LISTA en memoria ({@code MT101_BUILD}/{@code SPLIT} → PAY). El PROVIDER real reclama la
@@ -85,6 +86,49 @@ class Mt101PayDirectListDurableTest {
     }
 
     @Test
+    void aDifferentPayloadUnderTheSameKeyIsNotSilencedAsAlreadySent() throws Exception {
+        // R1: pago 1 con ref REF y payload P1 -> SENT. Pago 2 con la MISMA ref (misma dispatch_key "REST||REF") pero
+        // payload DISTINTO (otro monto) es OTRO pago colisionando con la idempotency key: sin identidad de payload se
+        // reportaría ALREADY_SENT y se silenciaría; con R1 NO se envía y es no-éxito (conflicto -> conciliar).
+        var transport1 = new RefKeyedTransport("REST", Set.of());
+        var provider1 = new Mt101PayTaskProvider(new InstanceOfOne<>(transport1),
+                null, null, null, null, null, intentStore);
+        var first = provider1.execute(singleMessageContext("REF", "{\"amount\":\"100.00\"}"), payConfig());
+        assertTrue(first.success(), "el primer pago se envía y acepta");
+        assertEquals(1, transport1.calls());
+        assertEquals("SENT", intentStatus("REST||REF"));
+
+        var transport2 = new RefKeyedTransport("REST", Set.of());
+        var provider2 = new Mt101PayTaskProvider(new InstanceOfOne<>(transport2),
+                null, null, null, null, null, intentStore);
+        var second = provider2.execute(singleMessageContext("REF", "{\"amount\":\"500.00\"}"), payConfig());
+        assertEquals(0, transport2.calls(),
+                "un payload DISTINTO bajo la misma clave NUNCA se envía silenciosamente (colisión)");
+        assertFalse(second.success(), "la colisión de clave con payload distinto es no-éxito (conciliar)");
+        assertEquals("SENT", intentStatus("REST||REF"), "el pago original permanece SENT; no se sobrescribe");
+    }
+
+    @Test
+    void sameBusinessPaymentWithARegeneratedUetrStaysIdempotentNotAFalseConflict() throws Exception {
+        // R1 (doble-check): uetrStrategy=perMessage regenera el UETR en cada build. Un re-request del MISMO pago (mismo
+        // :20:, mismo cuerpo de negocio) NO debe verse como colisión sólo por el UETR nuevo: la identidad neutraliza
+        // el UETR -> sigue ALREADY_SENT (idempotente), no un falso conflicto que bloquearía un reintento legítimo.
+        var transport1 = new RefKeyedTransport("REST", Set.of());
+        var provider1 = new Mt101PayTaskProvider(new InstanceOfOne<>(transport1),
+                null, null, null, null, null, intentStore);
+        assertTrue(provider1.execute(uetrContext("REF", "CUERPO-NEGOCIO", "uetr-AAA"), payConfig()).success());
+        assertEquals(1, transport1.calls());
+
+        var transport2 = new RefKeyedTransport("REST", Set.of());
+        var provider2 = new Mt101PayTaskProvider(new InstanceOfOne<>(transport2),
+                null, null, null, null, null, intentStore);
+        var second = provider2.execute(uetrContext("REF", "CUERPO-NEGOCIO", "uetr-BBB"), payConfig());
+        assertEquals(0, transport2.calls(), "mismo pago con UETR nuevo: NO se reenvía (idempotente)");
+        assertTrue(second.success(), "idempotente = éxito, no un incierto por falsa colisión de UETR");
+        assertEquals("SENT", intentStatus("REST||REF"));
+    }
+
+    @Test
     void emptyCorrelationKeyIsRejectedAndNeverSilencesAPayment() throws Exception {
         // P0-2: con idempotencyKeyTemplate vacío la correlationKey queda "" → la clave sería "REST||" para TODOS
         // los pagos → colisión: sin fix, el 2º se reportaría ALREADY_SENT sin enviarse (silenciaría un pago). El
@@ -114,6 +158,30 @@ class Mt101PayDirectListDurableTest {
         var context = new TaskContext(100L, 20L);
         context.attributes().put("taskOutputs", Map.of("build.records",
                 List.of(sampleMessage("A1", 1, 3), sampleMessage("A2", 2, 3), sampleMessage("A3", 3, 3))));
+        return context;
+    }
+
+    /** Contexto con UN solo mensaje de la lista, con un {@code rawPayload} explícito (para R1: identidad del pago). */
+    private TaskContext singleMessageContext(String reference, String rawPayload) {
+        var context = new TaskContext(100L, 20L);
+        context.attributes().put("taskOutputs", Map.of("build.records",
+                List.of(sampleMessage(reference, 1, 1).withRawPayload(rawPayload, "JSON"))));
+        return context;
+    }
+
+    /**
+     * Contexto de UN mensaje cuyo {@code rawPayload} EMBEBE el UETR (como el bloque FIN {@code {3:{121:uetr}}}) sobre
+     * un cuerpo de negocio fijo: dos UETR distintos con el mismo cuerpo prueban la neutralización del UETR (R1).
+     */
+    private TaskContext uetrContext(String reference, String businessBody, String uetr) {
+        var base = sampleMessage(reference, 1, 1);
+        var withUetr = new Mt101Message(
+                new Mt101Message.Envelope(base.envelope().senderLt(), base.envelope().receiverLt(), uetr,
+                        base.envelope().priority()),
+                base.sequenceA(), base.transactions(), base.controlTotals(),
+                "{3:{121:" + uetr + "}}" + businessBody, "FIN");
+        var context = new TaskContext(100L, 20L);
+        context.attributes().put("taskOutputs", Map.of("build.records", List.of(withUetr)));
         return context;
     }
 
@@ -153,6 +221,7 @@ class Mt101PayDirectListDurableTest {
                     + "gateway_reference varchar(140),"
                     + "attempts integer not null default 0,"
                     + "error_message text,"
+                    + "payload_hash varchar(64),"
                     + "created_at timestamp not null default current_timestamp,"
                     + "updated_at timestamp not null default current_timestamp,"
                     + "constraint ux_mt101_pay_dispatch_intent_key unique (dispatch_key))");

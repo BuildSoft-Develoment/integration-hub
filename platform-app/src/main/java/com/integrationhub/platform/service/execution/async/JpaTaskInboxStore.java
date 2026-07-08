@@ -24,10 +24,12 @@ import java.time.LocalDateTime;
 public class JpaTaskInboxStore implements TaskInboxStore {
 
     private final TaskInboxRepository repository;
+    private final AsyncNodeIdentity nodeIdentity;
 
     @Inject
-    public JpaTaskInboxStore(TaskInboxRepository repository) {
+    public JpaTaskInboxStore(TaskInboxRepository repository, AsyncNodeIdentity nodeIdentity) {
         this.repository = repository;
+        this.nodeIdentity = nodeIdentity;
     }
 
     @Override
@@ -46,6 +48,13 @@ public class JpaTaskInboxStore implements TaskInboxStore {
                 envelope.idempotencyKey(), envelope.taskType(), envelope.processExecutionId(),
                 envelope.taskDefinitionId(), envelope.transport(), owner,
                 Timestamp.valueOf(claimedUntil), Timestamp.valueOf(now)) == 1;
+    }
+
+    @Override
+    @Transactional
+    public boolean renewLease(AsyncTaskEnvelope envelope, String owner, int leaseSeconds) {
+        var claimedUntil = LocalDateTime.now().plusSeconds(Math.max(leaseSeconds, 1));
+        return repository.renewLease(envelope.idempotencyKey(), owner, Timestamp.valueOf(claimedUntil)) == 1;
     }
 
     @Override
@@ -81,7 +90,7 @@ public class JpaTaskInboxStore implements TaskInboxStore {
     private void finalizeOrInsert(AsyncTaskEnvelope envelope, String status,
                                   String outputsJson, String details, String error) {
         var finalized = repository.finalizeClaimed(
-                envelope.idempotencyKey(), status, outputsJson, details, error);
+                envelope.idempotencyKey(), status, outputsJson, details, error, nodeIdentity.id());
         if (finalized == 0) {
             insertTerminal(envelope, status, outputsJson, details, error);
         }

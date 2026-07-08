@@ -10,7 +10,14 @@ import {
   Mt101FragmentLink,
   Mt101FragmentSetSummary,
   Mt101LoteHeader,
+  Mt101NormalPayResolution,
+  Mt101PayConflict,
+  Mt101PhysicalLineMatch,
+  Mt101PayDispatchIntent,
+  Mt101PayDispatchReconcileResult,
+  Mt101PayDispatchSummary,
   Mt101QuarantineBuildResult,
+  Mt101StagingRowView,
   Mt101CorrectiveLifecycle,
   Mt101PayAction,
   Mt101RebuildResult,
@@ -141,6 +148,79 @@ export class AuditApiService {
       httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }
     return this.http.get<Mt101FragmentSetSummary>('/api/query/mt101-fragments/summary', { params: httpParams });
+  }
+
+  /** item 2 (búsqueda inversa): "archivo + línea física" → registro de staging (staging_id + índice lógico). */
+  mt101ByPhysicalLine(query: {
+    connectionRef?: string;
+    sourceFileHash: string;
+    physicalLine: number;
+    processExecutionId?: number;
+  }): Observable<Mt101PhysicalLineMatch | null> {
+    let httpParams = new HttpParams()
+      .set('sourceFileHash', query.sourceFileHash.trim())
+      .set('physicalLine', String(query.physicalLine));
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    if (query.processExecutionId != null) {
+      httpParams = httpParams.set('processExecutionId', String(query.processExecutionId));
+    }
+    return this.http.get<Mt101PhysicalLineMatch | null>(
+      '/api/query/mt101-fragments/by-physical-line', { params: httpParams });
+  }
+
+  /** v60: lista detallada de fragmentos en conflicto de pago del set (:20:, estado real, motivo, fecha). */
+  mt101PayConflicts(query: { connectionRef?: string; fragmentSetId: string }): Observable<Mt101PayConflict[]> {
+    let httpParams = new HttpParams().set('fragmentSetId', query.fragmentSetId);
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.get<Mt101PayConflict[]>('/api/query/mt101-fragments/pay-conflicts', { params: httpParams });
+  }
+
+  /**
+   * v60 (gobernado): resuelve el UNCERTAIN normal del set consultando STATUS (nunca reenvía) y detecta conflictos
+   * SENT→banco-REJECTED. Motivo obligatorio (evidencia).
+   */
+  mt101ResolveUncertainNormalPay(query: {
+    connectionRef?: string;
+    fragmentSetId: string;
+    reason?: string;
+  }): Observable<Mt101NormalPayResolution> {
+    let httpParams = new HttpParams().set('fragmentSetId', query.fragmentSetId);
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    if (query.reason?.trim()) {
+      httpParams = httpParams.set('reason', query.reason.trim());
+    }
+    return this.http.post<Mt101NormalPayResolution>(
+      '/api/query/mt101-quarantine/rebuild-runs/resolve-uncertain-normal-pay', {}, { params: httpParams });
+  }
+
+  /** D1: resumen del ledger de dispatch del PAY por lista (total + conteo por estado + atascados). */
+  mt101PayDispatchSummary(): Observable<Mt101PayDispatchSummary> {
+    return this.http.get<Mt101PayDispatchSummary>('/api/query/mt101-pay-dispatch-intents/summary');
+  }
+
+  /** D1: intenciones de dispatch atascadas (UNCERTAIN/DISPATCHING) que exigen conciliación. */
+  mt101PayDispatchStuck(limit?: number): Observable<Mt101PayDispatchIntent[]> {
+    let httpParams = new HttpParams();
+    if (limit != null) {
+      httpParams = httpParams.set('limit', String(limit));
+    }
+    return this.http.get<Mt101PayDispatchIntent[]>('/api/query/mt101-pay-dispatch-intents/stuck', { params: httpParams });
+  }
+
+  /**
+   * D2 (gobernado): reconcilia una intención atascada desde el terminal ya clasificado del archive. Devuelve el
+   * outcome (RECONCILED / NOT_STUCK / NO_EXECUTION / NO_TERMINAL) y el nuevo estado si aplica.
+   */
+  mt101PayDispatchReconcile(dispatchKey: string, reason: string): Observable<Mt101PayDispatchReconcileResult> {
+    const httpParams = new HttpParams().set('dispatchKey', dispatchKey).set('reason', reason);
+    return this.http.post<Mt101PayDispatchReconcileResult>(
+      '/api/query/mt101-pay-dispatch-intents/reconcile', {}, { params: httpParams });
   }
 
   /** Cabecera del lote (archivo + hash + ejecución + conteos) por set o por ejecución. */
@@ -305,7 +385,7 @@ export class AuditApiService {
     sourceFileHash: string;
     recordNumber: number;
     stagingId: number;
-  }): Observable<{ fragmentSetId: string; sourceFileHash: string; recordNumber: number; stagingId: number; payloadJson: string; version: number }> {
+  }): Observable<Mt101StagingRowView> {
     let httpParams = new HttpParams()
       .set('fragmentSetId', query.fragmentSetId)
       .set('sourceFileHash', query.sourceFileHash.trim())
@@ -314,7 +394,7 @@ export class AuditApiService {
     if (query.connectionRef?.trim()) {
       httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }
-    return this.http.get<{ fragmentSetId: string; sourceFileHash: string; recordNumber: number; stagingId: number; payloadJson: string; version: number }>(
+    return this.http.get<Mt101StagingRowView>(
       '/api/query/mt101-quarantine/staging-row', { params: httpParams });
   }
 

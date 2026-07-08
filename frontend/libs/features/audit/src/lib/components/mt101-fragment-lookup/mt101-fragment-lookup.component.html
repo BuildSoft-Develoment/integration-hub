@@ -37,6 +37,20 @@
         </div>
       </div>
 
+      <!-- item 2 (búsqueda inversa): "archivo + línea física" → registro lógico, y auto-llena el número de fila. -->
+      <div class="lookup__search">
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.lookup.fieldPhysicalLine') }}</mat-label>
+          <input matInput type="number" min="1" [(ngModel)]="physicalLine" placeholder="26" (keyup.enter)="resolvePhysicalLine()" />
+        </mat-form-field>
+        <div class="lookup__actions">
+          <button mat-stroked-button type="button" (click)="resolvePhysicalLine()">{{ i18n.t('audit.lookup.resolvePhysicalLine') }}</button>
+        </div>
+        @if (physicalLineMsg()) {
+          <span class="ih-muted">{{ physicalLineMsg() }}</span>
+        }
+      </div>
+
       @if (loading()) {
         <p class="lookup__empty" role="status">{{ i18n.t('audit.lookup.loading') }}</p>
       } @else if (error()) {

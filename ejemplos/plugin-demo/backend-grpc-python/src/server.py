@@ -13,12 +13,13 @@ import grpc
 
 import remote_plugin_pb2 as pb
 import remote_plugin_pb2_grpc as pb_grpc
+from demo_remote_csv_reader import READER_TASK_TYPE, read_remote_csv
 from transform import transform
 
 logging.basicConfig(level=logging.INFO)
 LOG = logging.getLogger("demo-transform-py")
 
-SUPPORTED_TASK_TYPES = {"DEMO_TRANSFORM_PY"}
+SUPPORTED_TASK_TYPES = {"DEMO_TRANSFORM_PY", READER_TASK_TYPE}
 
 
 class RemotePluginService(pb_grpc.RemotePluginServiceServicer):
@@ -38,6 +39,25 @@ class RemotePluginService(pb_grpc.RemotePluginServiceServicer):
             configuration = _parse_json(request.configuration_json)
         except ValueError as err:
             context.abort(grpc.StatusCode.INVALID_ARGUMENT, f"configuration_json is not valid JSON: {err}")
+
+        if request.task_type == READER_TASK_TYPE:
+            try:
+                outputs = read_remote_csv(configuration)
+                return pb.GrpcRemoteTaskResult(
+                    success=True,
+                    suspended=False,
+                    details=f"{READER_TASK_TYPE} page read",
+                    outputs_json=json.dumps(outputs),
+                    suspended_state_json="",
+                )
+            except Exception as err:
+                return pb.GrpcRemoteTaskResult(
+                    success=False,
+                    suspended=False,
+                    details=str(err),
+                    outputs_json="{}",
+                    suspended_state_json="",
+                )
 
         outcome = transform(configuration)
         return pb.GrpcRemoteTaskResult(

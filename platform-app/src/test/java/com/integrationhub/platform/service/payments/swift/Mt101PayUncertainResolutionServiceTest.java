@@ -3,9 +3,11 @@ package com.integrationhub.platform.service.payments.swift;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
+import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101StatusQueryExecutor;
 import com.integrationhub.platform.repository.payments.swift.Mt101ConfirmationRepository;
 import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;
@@ -25,6 +27,9 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * v52-fix (pendiente #1): resolución del UNCERTAIN/DISPATCHING del PAY normal contra el gateway (MT101_STATUS),
@@ -43,6 +48,7 @@ class Mt101PayUncertainResolutionServiceTest {
     private DataSource dataSource;
     private Mt101FragmentRepository repository;
     private Mt101PayUncertainResolutionService service;
+    private CapturingAuditEmitter auditEmitter;
     private String baseUrl;
 
     @BeforeEach
@@ -60,8 +66,9 @@ class Mt101PayUncertainResolutionServiceTest {
                 "rejectedStatuses", List.of("REJECTED"));
         Mt101CorrectiveTaskConfigSource configSource = (taskDefinitionId, taskType) ->
                 "MT101_STATUS".equals(taskType) ? statusConfig : null;
+        auditEmitter = new CapturingAuditEmitter();
         service = new Mt101PayUncertainResolutionService(dataSource, null, repository, executor,
-                new Mt101ConfirmationRepository(), configSource);
+                new Mt101ConfirmationRepository(), auditEmitter, configSource);
         prepareSchema();
     }
 
@@ -118,7 +125,7 @@ class Mt101PayUncertainResolutionServiceTest {
         Mt101CorrectiveTaskConfigSource configSource = (taskDefinitionId, taskType) ->
                 "MT101_STATUS".equals(taskType) ? routeConfig : null;
         var routeService = new Mt101PayUncertainResolutionService(dataSource, null, repository,
-                new Mt101StatusQueryExecutor(new ObjectMapper()), new Mt101ConfirmationRepository(), configSource);
+                new Mt101StatusQueryExecutor(new ObjectMapper()), new Mt101ConfirmationRepository(), null, configSource);
 
         var result = routeService.resolveUncertainNormalPay(null, setId, "ana", "route-aware");
 
@@ -147,7 +154,89 @@ class Mt101PayUncertainResolutionServiceTest {
         assertEquals(0L, countConfirmationsByStatus("PENDING"), "un pendiente NO deja confirmacion");
     }
 
+    @Test
+    void sentFragmentRejectedByBankIsFlaggedAsConflictNotOverwritten() throws Exception {
+        // A (Modelo B): un fragmento ya SENT que el banco luego RECHAZA vía STATUS es una contradicción terminal
+        // (SENT vs REJECTED incompatibles): se marca pay_conflict + confirmación append-only y NO se sobrescribe
+        // (conciliación manual). Un SENT que el banco CONFIRMA no se toca. Cierra la asimetría SENT→banco-REJECTED.
+        var setId = "PAY-SENT-CONFLICT";
+        seed(setId, "K1", 1, "SENT");   // banco lo RECHAZA -> conflicto
+        seed(setId, "K2", 2, "SENT");   // banco lo CONFIRMA -> sin conflicto
+        seedArchive("K1", 100L, 6001L);
+        stubFor(get(urlEqualTo("/status/K1")).willReturn(aResponse().withHeader("Content-Type", "application/json")
+                .withBody("{\"status\":\"REJECTED\",\"gatewayReference\":\"GW-K1\"}")));
+        stubFor(get(urlEqualTo("/status/K2")).willReturn(aResponse().withHeader("Content-Type", "application/json")
+                .withBody("{\"status\":\"ACCEPTED\"}")));
+
+        var result = service.resolveUncertainNormalPay(null, setId, "ana", "reconciliacion SENT");
+
+        assertEquals(1, result.conflicts(), "K1: SENT contradicho por banco REJECTED -> 1 conflicto");
+        assertEquals("SENT", statusFor(setId, "K1"), "el estado real (SENT) NO se sobrescribe (Modelo B)");
+        assertTrue(payConflictFor(setId, "K1"), "K1 queda marcado pay_conflict para conciliación manual");
+        assertFalse(payConflictFor(setId, "K2"), "K2 confirmado por el banco: sin conflicto");
+        assertEquals(1L, countConfirmations(6001L), "confirmación append-only del rechazo tardío de K1");
+        // item 2: además del booleano + confirmación, se emite la trama append-only PAY_CONFLICT con source=STATUS.
+        var trama = auditEmitter.firstOfStage("PAY_CONFLICT");
+        assertTrue(trama.isPresent(), "STATUS/RECONCILE emite la trama append-only PAY_CONFLICT");
+        assertEquals("K1", trama.get().recordId(), "la trama identifica el :20: en conflicto");
+        assertEquals("STATUS", trama.get().attributes().get("source"), "la trama marca source=STATUS");
+        assertEquals("SENT", trama.get().attributes().get("previousStatus"));
+        assertEquals("REJECTED", trama.get().attributes().get("incomingTerminal"));
+        assertEquals("ana", trama.get().attributes().get("actor"), "queda el actor que ejecutó la reconciliación");
+    }
+
+    @Test
+    void reconcilingSentIsIdempotentAndDoesNotReflagAnExistingConflict() throws Exception {
+        // Idempotencia: una segunda reconciliación de un SENT ya marcado pay_conflict NO lo re-procesa ni duplica la
+        // confirmación (el filtro pay_conflict=false lo excluye).
+        var setId = "PAY-SENT-IDEMP";
+        seed(setId, "I1", 1, "SENT");
+        seedArchive("I1", 100L, 6002L);
+        stubFor(get(urlEqualTo("/status/I1")).willReturn(aResponse().withHeader("Content-Type", "application/json")
+                .withBody("{\"status\":\"REJECTED\"}")));
+
+        assertEquals(1, service.resolveUncertainNormalPay(null, setId, "ana", "1a").conflicts());
+        assertEquals(0, service.resolveUncertainNormalPay(null, setId, "ana", "2a").conflicts(),
+                "un SENT ya en conflicto no se re-marca en una segunda pasada");
+        assertEquals(1L, countConfirmations(6002L), "no se duplica la confirmación del conflicto");
+    }
+
+    @Test
+    void fragmentTransitionAndConfirmationAreAtomic() throws Exception {
+        // P1 (atomicidad): si la inserción de la confirmación falla, la transición del fragmento se REVIERTE — nunca
+        // queda un fragmento resuelto sin evidencia (y sigue seleccionable para un reintento). Se fuerza el fallo
+        // dropeando mt101_confirmation: el update del fragmento y el insert de confirmación van en la MISMA tx.
+        var setId = "PAY-UNC-ATOMIC";
+        seed(setId, "T1", 1, "UNCERTAIN");
+        seedArchive("T1", 100L, 7001L);
+        stubFor(get(urlEqualTo("/status/T1")).willReturn(aResponse().withHeader("Content-Type", "application/json")
+                .withBody("{\"status\":\"ACCEPTED\",\"gatewayReference\":\"GW-T1\"}")));
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("drop table mt101_confirmation");
+        }
+
+        assertThrows(IllegalStateException.class,
+                () -> service.resolveUncertainNormalPay(null, setId, "ana", "atomic"),
+                "el fallo de la confirmación aborta la resolución");
+        assertEquals("UNCERTAIN", statusFor(setId, "T1"),
+                "la transición se revierte con la confirmación: sin fragmento resuelto sin evidencia");
+    }
+
     // --- helpers ---
+
+    private boolean payConflictFor(String setId, String reference) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(
+                     "select pay_conflict from mt101_build_fragment where fragment_set_id = ? and senders_reference = ?")) {
+            statement.setString(1, setId);
+            statement.setString(2, reference);
+            try (var rs = statement.executeQuery()) {
+                rs.next();
+                return rs.getBoolean(1);
+            }
+        }
+    }
 
     private void seedRouted(String setId, String reference, int index, String status, String route)
             throws SQLException {
@@ -259,6 +348,8 @@ class Mt101PayUncertainResolutionServiceTest {
                     + "routed_as varchar(80),"
                     + "routed_at timestamp,"
                     + "route_error text,"
+                    + "pay_conflict boolean not null default false,"
+                    + "pay_conflict_reason text,"
                     + "created_at timestamp not null default current_timestamp,"
                     + "updated_at timestamp not null default current_timestamp)");
             statement.executeUpdate("create unique index ux_pay_unc_ref on mt101_build_fragment"
@@ -288,5 +379,19 @@ class Mt101PayUncertainResolutionServiceTest {
         pg.setUser(POSTGRES.getUsername());
         pg.setPassword(POSTGRES.getPassword());
         return pg;
+    }
+
+    /** Captura las tramas de auditoría para verificar la trama append-only PAY_CONFLICT (item 2). */
+    private static final class CapturingAuditEmitter implements RecordAuditEmitter {
+        private final java.util.List<AuditEnvelope> captured = new java.util.ArrayList<>();
+
+        @Override
+        public void emitRecords(java.util.Collection<AuditEnvelope> envelopes) {
+            captured.addAll(envelopes);
+        }
+
+        java.util.Optional<AuditEnvelope> firstOfStage(String stage) {
+            return captured.stream().filter(envelope -> stage.equals(envelope.stage())).findFirst();
+        }
     }
 }

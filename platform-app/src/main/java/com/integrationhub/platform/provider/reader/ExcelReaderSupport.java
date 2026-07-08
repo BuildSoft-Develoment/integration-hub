@@ -3,6 +3,7 @@ package com.integrationhub.platform.provider.reader;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.reader.ReadSkip;
+import com.integrationhub.platform.spi.reader.SourcePosition;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -63,7 +64,9 @@ final class ExcelReaderSupport {
                 return trimValues ? value.trim() : value;
             });
             if (!rowResult.skipped()) {
-                records.add(new ReadRecord(rowResult.values()));
+                // item 2: rowIndex 0-based (POI) -> fila física 1-based; con el nombre de la hoja (Excel no tiene línea global).
+                records.add(new ReadRecord(rowResult.values(),
+                        SourcePosition.sheet(sheet.getSheetName(), rowIndex + 1L)));
             } else {
                 skippedRows.add(new ReadSkip(rowIndex + 1, rowResult.reason() == null ? "Row skipped by validation" : rowResult.reason()));
             }

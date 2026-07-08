@@ -18,14 +18,14 @@ import java.util.logging.Logger;
  * y la logica de negocio {@link TransformTask}. No conoce como se construye el servidor
  * ni el ciclo de vida — eso vive en {@link PluginServer}.
  *
- * <p>Este plugin declara un solo task type: {@code DEMO_TRANSFORM_JAVA}. Un {@code task_type}
+ * <p>Este plugin declara un task type y un reader remoto. Un {@code task_type}
  * desconocido se rechaza (fail-loud) en vez de devolver un exito vacio.</p>
  */
 public final class RemotePluginServiceImpl extends RemotePluginServiceGrpc.RemotePluginServiceImplBase {
 
     static final String PLUGIN_ID = "demo-transform-java";
     static final String PLUGIN_VERSION = "1.0.0";
-    static final Set<String> SUPPORTED_TASK_TYPES = Set.of("DEMO_TRANSFORM_JAVA");
+    static final Set<String> SUPPORTED_TASK_TYPES = Set.of("DEMO_TRANSFORM_JAVA", DemoRemoteCsvReader.TASK_TYPE);
 
     private static final Logger LOG = Logger.getLogger(RemotePluginServiceImpl.class.getName());
     private static final TypeReference<Map<String, Object>> OBJECT_MAP = new TypeReference<>() {
@@ -33,6 +33,7 @@ public final class RemotePluginServiceImpl extends RemotePluginServiceGrpc.Remot
 
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final TransformTask task = new TransformTask();
+    private final DemoRemoteCsvReader reader = new DemoRemoteCsvReader();
 
     @Override
     public void execute(GrpcRemoteTaskRequest request, StreamObserver<GrpcRemoteTaskResult> responseObserver) {
@@ -57,6 +58,29 @@ public final class RemotePluginServiceImpl extends RemotePluginServiceGrpc.Remot
             responseObserver.onError(Status.INVALID_ARGUMENT
                     .withDescription("configuration_json is not valid JSON: " + error.getMessage())
                     .asRuntimeException());
+            return;
+        }
+
+        if (DemoRemoteCsvReader.TASK_TYPE.equals(taskType)) {
+            try {
+                responseObserver.onNext(GrpcRemoteTaskResult.newBuilder()
+                        .setSuccess(true)
+                        .setSuspended(false)
+                        .setDetails("DEMO_REMOTE_CSV page read")
+                        .setOutputsJson(writeJson(reader.read(configuration)))
+                        .setSuspendedStateJson("")
+                        .build());
+                responseObserver.onCompleted();
+            } catch (Exception error) {
+                responseObserver.onNext(GrpcRemoteTaskResult.newBuilder()
+                        .setSuccess(false)
+                        .setSuspended(false)
+                        .setDetails(error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage())
+                        .setOutputsJson("{}")
+                        .setSuspendedStateJson("")
+                        .build());
+                responseObserver.onCompleted();
+            }
             return;
         }
 

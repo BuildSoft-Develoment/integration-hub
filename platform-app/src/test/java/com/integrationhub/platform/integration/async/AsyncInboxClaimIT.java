@@ -3,8 +3,11 @@ package com.integrationhub.platform.integration.async;
 import com.integrationhub.platform.integration.PostgresTestResource;
 import com.integrationhub.platform.repository.TaskInboxRepository;
 import com.integrationhub.platform.service.execution.async.AsyncInboxClaimRecoveryScheduler;
+import com.integrationhub.platform.service.execution.async.AsyncNodeIdentity;
+import com.integrationhub.platform.service.execution.async.LeaseHeartbeat;
 import com.integrationhub.platform.service.execution.async.TaskInboxStore;
 import com.integrationhub.platform.task.AsyncTaskEnvelope;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
@@ -45,6 +48,9 @@ class AsyncInboxClaimIT {
 
     @Inject
     AsyncInboxClaimRecoveryScheduler recovery;
+
+    @Inject
+    AsyncNodeIdentity nodeIdentity;
 
     @Inject
     DataSource dataSource;
@@ -125,7 +131,9 @@ class AsyncInboxClaimIT {
     @Test
     void finalizingTransitionsClaimedToTerminalAndDedups() {
         var env = envelope("idem-final");
-        assertTrue(inbox.claim(env, "node-A", 30));
+        // FENCING: recordProcessed finaliza con la identidad del store; para que la finalización sea legítima, el
+        // claim debe ser de ESA misma identidad (así reclama el consumer real, que comparte AsyncNodeIdentity).
+        assertTrue(inbox.claim(env, nodeIdentity.id(), 30));
         assertFalse(inbox.isProcessed("idem-final"), "CLAIMED aún no es terminal");
 
         inbox.recordProcessed(env, "{\"rows\":1}", "ok");
@@ -133,6 +141,75 @@ class AsyncInboxClaimIT {
         assertEquals("PROCESSED", status("idem-final"));
         assertTrue(inbox.isProcessed("idem-final"), "tras finalizar, el pre-check corta la re-entrega");
         assertFalse(inbox.claim(env, "node-B", 30), "no se re-reclama una clave ya terminal");
+    }
+
+    @Test
+    void finalizeIsFencedByOwnerSoAStaleNodeCannotFinalizeAReclaimedRow() throws Exception {
+        // F (fencing): node-A reclama, su lease vence y node-B lo re-toma. Un finalize REZAGADO de node-A NO debe
+        // pisar el claim de B (owner distinto → 0 filas); solo el dueño actual (B) finaliza.
+        var env = envelope("idem-fence");
+        assertTrue(inbox.claim(env, "node-A", 30));
+        expireClaim("idem-fence");
+        assertTrue(inbox.claim(env, "node-B", 30), "un lease vencido lo re-toma otro nodo");
+        assertEquals("node-B", owner("idem-fence"));
+
+        var stale = QuarkusTransaction.requiringNew().call(() ->
+                inboxRepository.finalizeClaimed("idem-fence", "PROCESSED", "{}", "late", null, "node-A"));
+        assertEquals(0, stale, "un nodo con lease vencido NO finaliza la fila re-reclamada por otro (fencing)");
+        assertEquals("CLAIMED", status("idem-fence"), "la fila sigue reclamada por B");
+        assertEquals("node-B", owner("idem-fence"));
+
+        var owned = QuarkusTransaction.requiringNew().call(() ->
+                inboxRepository.finalizeClaimed("idem-fence", "PROCESSED", "{\"rows\":1}", "ok", null, "node-B"));
+        assertEquals(1, owned, "el dueño actual del claim sí lo finaliza");
+        assertEquals("PROCESSED", status("idem-fence"));
+    }
+
+    @Test
+    void renewLeaseIsOwnerScopedAndKeepsTheClaimUntakeable() throws Exception {
+        // F3: el heartbeat renueva el lease solo para el DUEÑO; mientras el lease siga vivo (renovado), otro nodo
+        // NO puede re-tomar el claim → una reentrega durante una ejecución larga no duplica el efecto.
+        var env = envelope("idem-renew");
+        assertTrue(inbox.claim(env, nodeIdentity.id(), 30));
+
+        assertFalse(inbox.renewLease(env, "node-OTHER", 30), "un owner ajeno NO renueva el lease");
+        assertTrue(inbox.renewLease(env, nodeIdentity.id(), 30), "el dueño del claim renueva su lease");
+        assertEquals("CLAIMED", status("idem-renew"));
+        assertEquals(nodeIdentity.id(), owner("idem-renew"));
+
+        assertFalse(inbox.claim(env, "node-B", 30),
+                "con el lease vivo (renovado), otro nodo no re-toma el claim (no hay doble efecto)");
+    }
+
+    @Test
+    void heartbeatRenewsTheLeaseAgainstTheRealDbFromItsSchedulerThread() throws Exception {
+        // F3 (ruta real): el heartbeat renueva via store.renewLease @Transactional DESDE SU HILO DE SCHEDULER
+        // contra la BD real. Si @Transactional no funcionara en ese hilo, la renovación se tragaría en el
+        // try/catch y claimed_until NO avanzaría. Se verifica que SÍ avanza (heartbeat efectivo de verdad).
+        var env = envelope("idem-hb-real");
+        assertTrue(inbox.claim(env, nodeIdentity.id(), 2)); // lease corto (2s) → renueva cada 1s
+        var before = claimedUntil("idem-hb-real");
+
+        var heartbeat = new LeaseHeartbeat(inbox, 2, 1); // store REAL (CDI), lease 2s
+        heartbeat.runWithHeartbeat(env, nodeIdentity.id(), () -> {
+            sleepQuietly(2600); // supera lease/2 (1s) varias veces → dispara renovaciones reales
+            return null;
+        });
+
+        var after = claimedUntil("idem-hb-real");
+        assertTrue(after.compareTo(before) > 0,
+                "el heartbeat avanzó claimed_until contra la BD real (" + before + " -> " + after + ")");
+        assertEquals("CLAIMED", status("idem-hb-real"), "el claim sigue vivo tras la ejecución");
+    }
+
+    @Test
+    void renewLeaseOnATerminalRowIsANoOp() throws Exception {
+        // Un heartbeat que dispara tras finalizar es inofensivo: la fila ya no está CLAIMED → 0 filas.
+        var env = envelope("idem-renew-term");
+        assertTrue(inbox.claim(env, nodeIdentity.id(), 30));
+        inbox.recordProcessed(env, "{}", "ok");
+        assertFalse(inbox.renewLease(env, nodeIdentity.id(), 30),
+                "no se renueva un claim ya finalizado (PROCESSED)");
     }
 
     @Test
@@ -156,6 +233,18 @@ class AsyncInboxClaimIT {
 
     private String owner(String key) {
         return single("select inbox_owner from task_inbox where idempotency_key = '" + key + "'");
+    }
+
+    private String claimedUntil(String key) {
+        return single("select claimed_until from task_inbox where idempotency_key = '" + key + "'");
+    }
+
+    private static void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private void expireClaim(String key) throws Exception {

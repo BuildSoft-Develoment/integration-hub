@@ -63,22 +63,43 @@ public class TaskInboxRepository implements PanacheRepository<TaskInbox> {
     }
 
     /**
-     * §5: transiciona la fila {@code CLAIMED} de este work-item a su estado terminal tras ejecutar. Devuelve
-     * {@code 1} si finalizó un claim; {@code 0} si no había claim (el caller cae a {@code insertIfAbsent}).
+     * §5: transiciona la fila {@code CLAIMED} de este work-item a su estado terminal tras ejecutar. FENCING: solo
+     * finaliza si la fila la posee {@code owner} (el mismo nodo que reclamó). Un nodo con el lease vencido, cuya
+     * fila re-reclamó otro, NO puede finalizarla (owner distinto → 0 filas → el caller cae a {@code insertIfAbsent},
+     * que tampoco pisa la fila viva). Devuelve {@code 1} si finalizó su claim; {@code 0} si no era suyo/no había.
      */
     public int finalizeClaimed(String idempotencyKey, String status, String outputsJson,
-                               String details, String error) {
+                               String details, String error, String owner) {
         return getEntityManager().createNativeQuery("""
                 update task_inbox
                    set status = ?2, outputs_json = ?3, details = ?4, error = ?5,
                        inbox_owner = null, claimed_until = null
-                 where idempotency_key = ?1 and status = 'CLAIMED'
+                 where idempotency_key = ?1 and status = 'CLAIMED' and inbox_owner = ?6
                 """)
                 .setParameter(1, idempotencyKey)
                 .setParameter(2, status)
                 .setParameter(3, outputsJson)
                 .setParameter(4, details)
                 .setParameter(5, error)
+                .setParameter(6, owner)
+                .executeUpdate();
+    }
+
+    /**
+     * §5 (F3, heartbeat): extiende el lease de un claim VIVO mientras su efecto se ejecuta. Owner-scoped: solo el
+     * dueño renueva. Devuelve {@code 1} si renovó; {@code 0} si ya no era suyo (otro nodo lo re-tomó) o ya no está
+     * {@code CLAIMED} (finalizó): en ese caso el heartbeat deja de renovar. Mantener {@code claimed_until} adelantado
+     * evita que una reentrega durante una ejecución larga (rebalance/redelivery) re-tome el claim y duplique el efecto.
+     */
+    public int renewLease(String idempotencyKey, String owner, Timestamp claimedUntil) {
+        return getEntityManager().createNativeQuery("""
+                update task_inbox
+                   set claimed_until = ?3
+                 where idempotency_key = ?1 and status = 'CLAIMED' and inbox_owner = ?2
+                """)
+                .setParameter(1, idempotencyKey)
+                .setParameter(2, owner)
+                .setParameter(3, claimedUntil)
                 .executeUpdate();
     }
 

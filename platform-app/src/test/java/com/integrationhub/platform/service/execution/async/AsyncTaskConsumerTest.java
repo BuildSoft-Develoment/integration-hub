@@ -47,6 +47,7 @@ class AsyncTaskConsumerTest {
     private RecordingCompletion completion;
     private SliceGatherService gather;
     private AsyncPageChainService pageChain;
+    private JsonConfigurationMapper configurationMapper;
     private AsyncTaskConsumer consumer;
 
     @BeforeEach
@@ -58,11 +59,27 @@ class AsyncTaskConsumerTest {
         pageChain = mock(AsyncPageChainService.class);
         // §6: resolveSecretsIn como identidad = comportamiento sin secretos inline (la resolución real se
         // prueba en JsonConfigurationMapper); aquí solo importa que el consumer re-resuelva en point-of-use.
-        var configurationMapper = mock(JsonConfigurationMapper.class);
+        configurationMapper = mock(JsonConfigurationMapper.class);
         when(configurationMapper.resolveSecretsIn(any())).thenAnswer(inv -> inv.getArgument(0));
         // maxAttempts=3, backoff=0 (sin sleep en tests).
+        // Heartbeat con lease 30s: en los tests el work es instantáneo, así que la primera renovación (15s) nunca
+        // dispara → el heartbeat es transparente. La renovación real se prueba en LeaseHeartbeatTest / IT.
+        var heartbeat = new LeaseHeartbeat(inbox, 30, 1);
         consumer = new AsyncTaskConsumer(inbox, registry, completion, gather, mapper, pageChain,
-                configurationMapper, 3, 0, 30);
+                configurationMapper, new AsyncNodeIdentity(), heartbeat, 3, 0, 30);
+    }
+
+    @Test
+    void losingTheClaimDoesNotResolveSecrets() {
+        // F: el orden es claim → resolveSecrets. Un consumer que PIERDE el claim (otro nodo lo tiene vivo) NO debe
+        // consultar Vault/OpenBao: se corta en el claim, antes de materializar secretos.
+        when(registry.resolve("DB_WRITE")).thenReturn(new CapturingProvider(TaskResult.success("ok")));
+        inbox.claimResult = false;
+
+        var result = consumer.consume(wire("DB_WRITE", "idem-lost", "{\"limit\":1}"), "KAFKA", "tasks.db_write");
+
+        assertEquals(AsyncTaskConsumer.ConsumeResult.DUPLICATE, result);
+        verify(configurationMapper, org.mockito.Mockito.never()).resolveSecretsIn(any());
     }
 
     /** payload de wire = envelope entero (patrón audit/sidecar); config = envelope.payload(). */
@@ -341,6 +358,38 @@ class AsyncTaskConsumerTest {
     }
 
     @Test
+    void redeliveredProcessedSliceDoesNotReexecuteTheEffect() throws Exception {
+        // §5/E: una reentrega de una slice ya TERMINAL no vuelve a ejecutar executeRecords (evita doble efecto en
+        // providers no idempotentes). El pre-check isProcessed corta antes del claim y del provider.
+        var provider = new CapturingBatchProvider(TaskResult.success("slice ok"));
+        when(registry.resolve("DB_WRITE")).thenReturn(provider);
+        inbox.processedKeys.add(TaskIdempotency.key(1L, 2L, "slice-0"));
+
+        var result = consumer.consume(sliceWire("DB_WRITE", 0, 3, java.util.List.of(Map.of("id", "a"))),
+                "KAFKA", "tasks.db_write");
+
+        assertEquals(AsyncTaskConsumer.ConsumeResult.DUPLICATE, result);
+        assertNull(provider.records, "una slice ya procesada NO re-ejecuta el batch provider");
+        verify(gather, never()).commitCompletedSlice(any(), any(), any());
+    }
+
+    @Test
+    void sliceWithLiveClaimByAnotherNodeDoesNotExecuteTheEffect() throws Exception {
+        // §5/E: si otro nodo tiene un claim VIVO de la slice, esta entrega NO ejecuta el efecto externo (ni cuenta).
+        var provider = new CapturingBatchProvider(TaskResult.success("slice ok"));
+        when(registry.resolve("DB_WRITE")).thenReturn(provider);
+        inbox.claimResult = false;
+
+        var result = consumer.consume(sliceWire("DB_WRITE", 0, 3, java.util.List.of(Map.of("id", "a"))),
+                "KAFKA", "tasks.db_write");
+
+        assertEquals(AsyncTaskConsumer.ConsumeResult.DUPLICATE, result);
+        assertNull(provider.records, "una slice con claim ajeno vivo NO re-ejecuta el batch provider");
+        assertTrue(inbox.claimedKeys.contains(TaskIdempotency.key(1L, 2L, "slice-0")), "se intentó el claim de la slice");
+        verify(gather, never()).commitCompletedSlice(any(), any(), any());
+    }
+
+    @Test
     void lastSliceResumesTaskExactlyOnce() throws Exception {
         when(registry.resolve("DB_WRITE")).thenReturn(new CapturingBatchProvider(TaskResult.success("slice ok")));
         when(gather.commitCompletedSlice(any(), any(), any())).thenReturn(Optional.of(new SliceProgress(3, 0, 3, true)));
@@ -529,6 +578,11 @@ class AsyncTaskConsumerTest {
         public boolean claim(AsyncTaskEnvelope e, String owner, int leaseSeconds) {
             claimedKeys.add(e.idempotencyKey());
             return claimResult;
+        }
+
+        @Override
+        public boolean renewLease(AsyncTaskEnvelope e, String owner, int leaseSeconds) {
+            return true;
         }
 
         @Override

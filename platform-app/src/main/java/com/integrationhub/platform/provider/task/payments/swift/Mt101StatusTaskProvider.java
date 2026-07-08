@@ -7,6 +7,7 @@ import com.integrationhub.platform.repository.payments.swift.Mt101ConfirmationRe
 import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.service.payments.swift.Mt101PayUncertainResolutionService;
 import com.integrationhub.platform.spi.task.AsyncOffloadSupport;
 import com.integrationhub.platform.spi.task.SuspendableTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
@@ -61,9 +62,19 @@ import java.util.UUID;
  *   "poll": { "finalStatuses": ["ACCEPTED", "REJECTED"], "maxAttempts": 10 },
  *   "callback": { "completeOnPartial": false },
  *   "connectionRef": "12",
- *   "confirmationTable": "mt101_confirmation"
+ *   "confirmationTable": "mt101_confirmation",
+ *   "resolveNormalPay": false,
+ *   "fragmentSetId": "SET-123"
  * }
  * }</pre>
+ *
+ * <p><b>Reconciliacion automatica del PAY normal</b> (v59-item4): con {@code resolveNormalPay=true} (mode=query) la
+ * tarea resuelve dentro del flujo automatico el {@code UNCERTAIN} del PAY normal ({@code mt101_build_fragment}),
+ * espejo del {@code resolveCorrectivePay} del ledger. Delega en {@code Mt101PayUncertainResolutionService}: consulta
+ * STATUS, transiciona a {@code SENT}/{@code REJECTED} (atomico con su confirmacion) y marca {@code pay_conflict} +
+ * trama {@code PAY_CONFLICT} en las contradicciones {@code SENT}->banco-{@code REJECTED}. Nunca reenvia. El
+ * {@code fragmentSetId} es explicito en la config o se deriva del output {@code fragmentSetId} del build upstream
+ * (via {@code input.sourceTaskRef}); {@code executedBy}/{@code reason} son opcionales (defaults del sistema).</p>
  *
  * <p>El {@code suspendedState} es JSON-friendly: {@code {mode, pending[], attempt}}
  * donde cada pending es el record original (sendersReference, gatewayReference,
@@ -91,6 +102,10 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     private static final int DEFAULT_MAX_RECORDS_IN_OUTPUT = 1000;
     /** Flush de confirmaciones a BD cada N para no retener todos los rawBody. */
     private static final int PERSIST_BATCH_SIZE = 500;
+    /** Actor por defecto de la reconciliacion automatica de PAY normal (accion del sistema, no maker humano). */
+    private static final String DEFAULT_NORMAL_PAY_ACTOR = "MT101_STATUS";
+    /** Motivo por defecto de la reconciliacion automatica de PAY normal. */
+    private static final String DEFAULT_NORMAL_PAY_REASON = "automatic reconciliation by MT101_STATUS";
 
     private final ObjectMapper objectMapper;
     private final DataSource defaultDataSource;
@@ -103,6 +118,9 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     // resolver del UNCERTAIN normal (una sola copia de resolveStatusQuery + ejecucion REST/SFTP).
     private final Mt101StatusQueryExecutor statusQueryExecutor;
     private final RecordAuditEmitter recordAuditEmitter;
+    // v59-item4: la reconciliacion automatica del PAY normal (UNCERTAIN->SENT/REJECTED + SENT vs banco) esta
+    // encapsulada en su servicio; el flag resolveNormalPay delega en el (nullable en tests que no lo ejercitan).
+    private final Mt101PayUncertainResolutionService payUncertainResolutionService;
 
     @Inject
     public Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -111,9 +129,11 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                                    Mt101ArchiveStatusUpdater archiveStatusUpdater,
                                    Mt101ConfirmationRepository confirmationRepository,
                                    Mt101RebuildRepository rebuildRepository,
-                                   RecordAuditEmitter recordAuditEmitter) {
+                                   RecordAuditEmitter recordAuditEmitter,
+                                   Mt101PayUncertainResolutionService payUncertainResolutionService) {
         this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager,
-                archiveStatusUpdater, confirmationRepository, rebuildRepository, recordAuditEmitter);
+                archiveStatusUpdater, confirmationRepository, rebuildRepository, recordAuditEmitter,
+                payUncertainResolutionService);
     }
 
     public Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -122,7 +142,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                                    Mt101ArchiveStatusUpdater archiveStatusUpdater,
                                    Mt101ConfirmationRepository confirmationRepository) {
         this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager,
-                archiveStatusUpdater, confirmationRepository, new Mt101RebuildRepository(), null);
+                archiveStatusUpdater, confirmationRepository, new Mt101RebuildRepository(), null, null);
     }
 
     /** Constructor de test: permite inyectar un HttpClient custom. */
@@ -132,7 +152,18 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             ConnectionPoolManager connectionPoolManager) {
         this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
                 new Mt101ArchiveStatusUpdater(defaultDataSource, connectionPoolManager),
-                new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null);
+                new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null, null);
+    }
+
+    /** Constructor de test (v59-item4): inyecta el servicio de resolucion para ejercitar {@code resolveNormalPay}. */
+    Mt101StatusTaskProvider(ObjectMapper objectMapper,
+                            DataSource defaultDataSource,
+                            ConnectionPoolManager connectionPoolManager,
+                            Mt101PayUncertainResolutionService payUncertainResolutionService) {
+        this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager,
+                new Mt101ArchiveStatusUpdater(defaultDataSource, connectionPoolManager),
+                new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null,
+                payUncertainResolutionService);
     }
 
     Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -141,7 +172,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             ConnectionPoolManager connectionPoolManager,
                             Mt101ArchiveStatusUpdater archiveStatusUpdater) {
         this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
-                archiveStatusUpdater, new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null);
+                archiveStatusUpdater, new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null, null);
     }
 
     Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -151,7 +182,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             Mt101ArchiveStatusUpdater archiveStatusUpdater,
                             Mt101ConfirmationRepository confirmationRepository) {
         this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
-                archiveStatusUpdater, confirmationRepository, new Mt101RebuildRepository(), null);
+                archiveStatusUpdater, confirmationRepository, new Mt101RebuildRepository(), null, null);
     }
 
     Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -161,7 +192,8 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             Mt101ArchiveStatusUpdater archiveStatusUpdater,
                             Mt101ConfirmationRepository confirmationRepository,
                             Mt101RebuildRepository rebuildRepository,
-                            RecordAuditEmitter recordAuditEmitter) {
+                            RecordAuditEmitter recordAuditEmitter,
+                            Mt101PayUncertainResolutionService payUncertainResolutionService) {
         this.objectMapper = objectMapper;
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
@@ -171,6 +203,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         this.gateway = new Mt101StatusGateway(httpClient, objectMapper);
         this.statusQueryExecutor = new Mt101StatusQueryExecutor(gateway, new Mt101StatusSftpGateway());
         this.recordAuditEmitter = recordAuditEmitter;
+        this.payUncertainResolutionService = payUncertainResolutionService;
     }
 
     @Override
@@ -445,6 +478,12 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     // ------------------------------------------------------------------
 
     private TaskResult executeQuery(TaskContext context, Map<String, Object> configuration) {
+        // v59-item4: reconciliacion automatica del PAY normal. Opt-in explicito (resolveNormalPay=true), espejo del
+        // resolveCorrectivePay del ledger. Delega en el servicio (atomico + trama PAY_CONFLICT + visible), sin
+        // reimplementar la logica de consulta/resolucion aqui (SRP/DIP). No coexiste con el correctivo.
+        if (boolValue(configuration.get("resolveNormalPay"), false)) {
+            return resolveNormalPay(context, configuration);
+        }
         var corrective = correctivePaySource(context, configuration);
         if (!corrective.isEmpty()) {
             return executeCorrectiveQuery(context, configuration, corrective);
@@ -538,6 +577,82 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         return errorCount == 0
                 ? TaskResult.success(summary, outputs)
                 : TaskResult.failure(summary, outputs);
+    }
+
+    /**
+     * v59-item4: reconciliacion automatica del PAY normal desde el pipeline. Cierra el hueco de que el UNCERTAIN del
+     * PAY normal (mt101_build_fragment) no se resolvia dentro del flujo automatico STATUS como si lo hace el correctivo
+     * (resolveCorrectivePay). Delega en {@link Mt101PayUncertainResolutionService#resolveUncertainNormalPay}, que ya es
+     * atomico (transicion + confirmacion en 1 tx), emite la trama append-only {@code PAY_CONFLICT} en las
+     * contradicciones SENT->banco-REJECTED y las deja visibles (API/UI). Este metodo solo enruta: obtiene el
+     * {@code fragmentSetId} (explicito o derivado del output del build upstream), el actor y el motivo, y mapea el
+     * resultado a outputs. Nunca reenvia (STATUS solo consulta).
+     *
+     * <p>Errores de gateway y conflictos NO son fallo de la tarea: los fragmentos no concluyentes se mantienen sin
+     * resolver (se reintenta la proxima corrida) y los conflictos quedan para conciliacion manual. La tarea solo
+     * propaga fallo si no puede leer el set (excepcion del servicio).</p>
+     */
+    private TaskResult resolveNormalPay(TaskContext context, Map<String, Object> configuration) {
+        if (payUncertainResolutionService == null) {
+            throw new IllegalStateException(
+                    "MT101_STATUS resolveNormalPay requires the PAY resolution service, which is not wired");
+        }
+        var fragmentSetId = normalPayFragmentSetId(context, configuration);
+        var connectionRef = stringOrNull(configuration.get("connectionRef"));
+        var executedBy = stringValue(configuration.get("executedBy"), DEFAULT_NORMAL_PAY_ACTOR);
+        var reason = stringValue(configuration.get("reason"), DEFAULT_NORMAL_PAY_REASON);
+
+        var resolution = payUncertainResolutionService.resolveUncertainNormalPay(
+                connectionRef, fragmentSetId, executedBy, reason);
+
+        var outputs = new LinkedHashMap<String, Object>();
+        outputs.put("fragmentSetId", fragmentSetId);
+        outputs.put("resolvedSent", resolution.resolvedSent());
+        outputs.put("resolvedRejected", resolution.resolvedRejected());
+        outputs.put("stillPending", resolution.stillPending());
+        outputs.put("gatewayErrors", resolution.gatewayErrors());
+        outputs.put("conflicts", resolution.conflicts());
+
+        var summary = "MT101_STATUS resolveNormalPay set=" + fragmentSetId
+                + " sent=" + resolution.resolvedSent()
+                + " rejected=" + resolution.resolvedRejected()
+                + " pending=" + resolution.stillPending()
+                + " conflicts=" + resolution.conflicts()
+                + " errors=" + resolution.gatewayErrors();
+        return TaskResult.success(summary, outputs);
+    }
+
+    /**
+     * Resuelve el {@code fragmentSetId} a reconciliar: explicito en la config si esta declarado; si no, derivado del
+     * output del task upstream (el build-fragment emite {@code fragmentSetId}), espejo de como el correctivo deriva
+     * {@code correctivePayRunId} de {@code taskOutputs}.
+     */
+    private String normalPayFragmentSetId(TaskContext context, Map<String, Object> configuration) {
+        var explicit = stringOrNull(configuration.get("fragmentSetId"));
+        if (explicit != null) {
+            return explicit;
+        }
+        var derived = upstreamOutputValue(context, configuration, "fragmentSetId");
+        if (derived == null) {
+            throw new IllegalArgumentException("MT101_STATUS resolveNormalPay requires configuration.fragmentSetId "
+                    + "or an upstream output (input.sourceTaskRef) exposing fragmentSetId");
+        }
+        return derived;
+    }
+
+    /** Lee un valor escalar del output del task upstream referenciado por {@code input.sourceTaskRef}. */
+    @SuppressWarnings("unchecked")
+    private String upstreamOutputValue(TaskContext context, Map<String, Object> configuration, String key) {
+        var rawTaskOutputs = context.attributes().get("taskOutputs");
+        if (!(rawTaskOutputs instanceof Map<?, ?> taskOutputs) || taskOutputs.isEmpty()
+                || !(configuration.get("input") instanceof Map<?, ?> rawInput)) {
+            return null;
+        }
+        var sourceTaskRef = stringValue(((Map<String, Object>) rawInput).get("sourceTaskRef"), "");
+        if (sourceTaskRef.isBlank()) {
+            return null;
+        }
+        return stringOrNull(taskOutputs.get(sourceTaskRef + "." + key));
     }
 
     private TaskResult executeCorrectiveQuery(TaskContext context,

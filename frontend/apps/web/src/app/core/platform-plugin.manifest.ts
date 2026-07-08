@@ -174,6 +174,15 @@ export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {
       mode: 'operation',
       requiredCapability: APP_SECTION_CAPABILITIES.audit,
     },
+    {
+      id: 'audit-mt101-pay-dispatch',
+      group: 'audit',
+      route: '/audit/mt101-pay-dispatch',
+      labelKey: 'audit.workspace.payDispatch',
+      descriptionKey: 'audit.workspace.payDispatchHint',
+      mode: 'query',
+      requiredCapability: APP_SECTION_CAPABILITIES.audit,
+    },
   ],
   actions: [
     {

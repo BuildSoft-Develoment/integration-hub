@@ -49,9 +49,10 @@ td { font-size:.86rem; }
 .q__card { background:var(--ih-surface-alt); border:1px solid var(--ih-border); border-radius:8px; padding:.6rem .7rem; display:flex; flex-direction:column; gap:.15rem; }
 .q__card small { font-size:.72rem; color:var(--ih-text-soft); }
 .q__card strong { font-size:1.35rem; font-weight:600; }
-.q__empty,.q__error,.q__ok { padding:.75rem; }
+.q__empty,.q__error,.q__ok,.q__conflict { padding:.75rem; }
 .q__empty,.q__card--SUPERSEDED strong,.q__status--DISCARDED { color:var(--ih-text-soft); }
-.q__error,.q__card--REJECTED strong,.q__status--REBUILD_REJECTED,.q__tl-icon--error { color:var(--ih-status-error); }
+.q__error,.q__conflict,.q__card--conflict strong,.q__card--REJECTED strong,.q__status--REBUILD_REJECTED,.q__tl-icon--error { color:var(--ih-status-error); }
+.q__conflict { font-weight:600; }
 .q__ok,.q__status--RESOLVED,.q__status--REBUILD_VALIDATED,.q__status--REBUILD_SENT,.q__status--REBUILD_CONFIRMED,.q__tl-icon--ok,.q__card--SENT strong,.q__card--ARCHIVED strong,.q__card--VALIDATED strong { color:var(--ih-status-success); }
 .q__status--QUARANTINED,.q__card--QUARANTINED strong { color:var(--ih-status-warning); }
 .q__status--REBUILD_PENDING_VALIDATION,.q__status--REBUILD_ARCHIVED,.q__status--PARTIALLY_SENT { color:var(--ih-status-warning); }

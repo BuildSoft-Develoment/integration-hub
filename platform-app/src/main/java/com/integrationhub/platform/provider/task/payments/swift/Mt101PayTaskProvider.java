@@ -385,7 +385,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
             // P0-1 (PAY normal): transición terminal GUARDADA (solo desde DISPATCHING/UNCERTAIN) + pay_conflict
             // durable ante un resultado tardío contradictorio. Reemplaza el markStatusBatch sin guarda, que podía
             // sobrescribir en silencio un terminal ya resuelto por STATUS/RECONCILE (REJECTED→SENT).
-            finalizeNormalGuarded(configuration, fragmentSource, sentRefs, rejectedByRef, uncertainRefs,
+            finalizeNormalGuarded(context, configuration, fragmentSource, sentRefs, rejectedByRef, uncertainRefs,
                     sentTargets, rejectedTargets);
         } else {
             // CORRECTIVO: el ledger correctivo ya filtró conflicts y el fragmento está DISPATCHING del run (claim
@@ -405,23 +405,46 @@ public class Mt101PayTaskProvider implements TaskProvider {
      * (durable, sin sobrescribir) y NO se propagan a archive. Fuerza conciliación, sin sobrescritura silenciosa.
      * Espejo del PAY_CONFLICT del correctivo (V58) sobre el fragmento normal.
      */
-    private void finalizeNormalGuarded(Map<String, Object> configuration, Map<String, Object> fragmentSource,
+    private void finalizeNormalGuarded(TaskContext context, Map<String, Object> configuration,
+            Map<String, Object> fragmentSource,
             java.util.List<String> sentRefs, Map<String, String> rejectedByRef, java.util.List<String> uncertainRefs,
             java.util.List<Mt101ArchiveStatusUpdater.StatusTarget> sentTargets,
             java.util.List<Mt101ArchiveStatusUpdater.StatusTarget> rejectedTargets) {
         var fromUnresolved = java.util.List.of("DISPATCHING", "UNCERTAIN");
-        var conflicts = new java.util.LinkedHashSet<String>();
         var sentUpdated = fragmentStore.resolvePayStatusReturning(fragmentSource, sentRefs, fromUnresolved, "SENT", null);
-        for (var ref : sentRefs) {
-            if (!sentUpdated.contains(ref)) {
-                conflicts.add(ref);
-            }
-        }
         var rejectedUpdated = fragmentStore.resolvePayStatusReturning(
                 fragmentSource, rejectedByRef, fromUnresolved, "REJECTED");
+
+        // Refs que NO transicionaron desde DISPATCHING/UNCERTAIN: su estado actual ya es terminal. Se CLASIFICA
+        // con el estado real (P0-1, simetría), sin tratar cualquier no-update como conflicto:
+        //   estado actual == terminal entrante  -> SAME_TERMINAL: idempotente, NO es conflicto (evita el falso
+        //                                           positivo cuando STATUS ya resolvió al mismo terminal).
+        //   estado actual == OTRO terminal        -> CONFLICT: contradicción real -> pay_conflict + trama append-only.
+        var intendedByRef = new java.util.LinkedHashMap<String, String>();
+        for (var ref : sentRefs) {
+            if (!sentUpdated.contains(ref)) {
+                intendedByRef.put(ref, "SENT");
+            }
+        }
         for (var ref : rejectedByRef.keySet()) {
             if (!rejectedUpdated.contains(ref)) {
+                intendedByRef.put(ref, "REJECTED");
+            }
+        }
+        var conflicts = new java.util.LinkedHashSet<String>();
+        var conflictAudit = new ArrayList<AuditEnvelope>();
+        if (!intendedByRef.isEmpty()) {
+            var currentStatuses = fragmentStore.payStatusesFor(fragmentSource, intendedByRef.keySet());
+            for (var entry : intendedByRef.entrySet()) {
+                var ref = entry.getKey();
+                var incoming = entry.getValue();
+                var current = currentStatuses.get(ref);
+                if (current == null || incoming.equals(current)) {
+                    // SAME_TERMINAL (o ya no existe): idempotente. No sobrescribe y NO marca conflicto.
+                    continue;
+                }
                 conflicts.add(ref);
+                conflictAudit.add(payConflictEnvelope(context, ref, current, incoming));
             }
         }
         // UNCERTAIN solo desde DISPATCHING (un terminal ya resuelto no debe bajar a UNCERTAIN).
@@ -433,6 +456,8 @@ public class Mt101PayTaskProvider implements TaskProvider {
             fragmentStore.markPayConflict(fragmentSource, conflicts,
                     "resultado terminal tardío contradijo una resolución previa (STATUS/RECONCILE); "
                             + "no se sobrescribió el fragmento — conciliar");
+            // Trama append-only PAY_CONFLICT (espejo del correctivo): el booleano no basta para monitoreo bancario.
+            emitRecordAudit(conflictAudit);
             // No propagar a archive los conflictivos: coherencia con el pay_status real del fragmento.
             sentTargets.removeIf(target -> conflicts.contains(target.sendersReference()));
             rejectedTargets.removeIf(target -> conflicts.contains(target.sendersReference()));
@@ -440,6 +465,21 @@ public class Mt101PayTaskProvider implements TaskProvider {
         // H5: avanza mt101_archive para lo NO conflictivo si la sync no se desactivó.
         syncArchive(configuration, fragmentSource, sentTargets, "SENT");
         syncArchive(configuration, fragmentSource, rejectedTargets, "REJECTED");
+    }
+
+    /**
+     * P0-1 (C): trama append-only {@code PAY_CONFLICT} para el PAY normal, espejo de la acción del ledger
+     * correctivo. Un resultado terminal tardío contradijo el estado ya resuelto por STATUS/RECONCILE; se conserva
+     * el estado real (no se sobrescribe) y se deja evidencia conciliable en auditoría/timeline/UI (no solo el
+     * booleano {@code pay_conflict}). Mismo esqueleto que {@link #recordEnvelope} para paridad de esquema.
+     */
+    private AuditEnvelope payConflictEnvelope(TaskContext context, String reference,
+            String currentStatus, String incomingTerminal) {
+        // DRY: misma trama PAY_CONFLICT que emite el resolver STATUS, con source=WORKER (contradicción detectada al
+        // aplicar un resultado terminal tardío del despacho).
+        return com.integrationhub.platform.service.payments.swift.Mt101PayConflictAudit.envelope(
+                context.processExecutionId(), context.taskDefinitionId(), reference, currentStatus, incomingTerminal,
+                null, com.integrationhub.platform.service.payments.swift.Mt101PayConflictAudit.Source.WORKER, null);
     }
 
     private record RoutedDispatchMessage(Mt101Message message, String routedAs, String routeError) {
@@ -461,10 +501,30 @@ public class Mt101PayTaskProvider implements TaskProvider {
 
     /** P0.2 v24: hash del payload actual, idéntico al que el servicio congeló en el ledger al preparar. */
     private String payloadHash(Mt101Message message) {
-        var raw = message == null ? "" : message.rawPayload();
+        return sha256Hex(message == null ? "" : message.rawPayload());
+    }
+
+    /**
+     * R1: identidad ESTABLE del pago para el intent-ledger del camino de lista. El {@code UETR} es el ÚNICO campo
+     * volátil del payload formateado (los 3 formatters solo inyectan {@code uetr}; {@code uetrStrategy=perMessage} lo
+     * regenera en cada build), así que se neutraliza: dos builds del MISMO pago (mismo :20:, mismo negocio) dan la
+     * MISMA identidad (preserva la idempotencia del re-request), pero cualquier diferencia material (monto,
+     * beneficiario, cuenta) cambia el hash → colisión detectable. El fallo seguro es hacia conflicto, nunca hacia
+     * silenciar un pago.
+     */
+    private String paymentIdentityHash(Mt101Message message) {
+        var raw = message == null || message.rawPayload() == null ? "" : message.rawPayload();
+        var uetr = message != null && message.envelope() != null ? message.envelope().uetr() : null;
+        if (uetr != null && !uetr.isBlank()) {
+            raw = raw.replace(uetr, "");
+        }
+        return sha256Hex(raw);
+    }
+
+    private static String sha256Hex(String value) {
         try {
             var digest = java.security.MessageDigest.getInstance("SHA-256")
-                    .digest((raw == null ? "" : raw).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    .digest((value == null ? "" : value).getBytes(java.nio.charset.StandardCharsets.UTF_8));
             return java.util.HexFormat.of().formatHex(digest);
         } catch (java.security.NoSuchAlgorithmException error) {
             throw new IllegalStateException("SHA-256 not available", error);
@@ -531,11 +591,21 @@ public class Mt101PayTaskProvider implements TaskProvider {
                     "missing per-payment idempotency/correlation key for durable dispatch intent "
                     + "(configure a non-empty idempotencyKeyTemplate for REST or dropPathTemplate for SFTP); not sent");
         }
+        // R1 (identidad de pago, fail-loud): el hash del payload (lo EXACTO que recibe el banco) es la prueba de que
+        // un ALREADY_SENT corresponde al MISMO pago. Sin payload no hay identidad comparable -> dos pagos distintos
+        // bajo la misma clave se silenciarían. Espejo del guard de correlación: sin payload NO se crea intención.
+        var rawPayload = message == null ? null : message.rawPayload();
+        if (rawPayload == null || rawPayload.isBlank()) {
+            return TransportResult.rejected(0, 0L,
+                    "missing formatted message payload for durable dispatch intent identity "
+                    + "(format the MT101 message before PAY so its payload can be hashed); not sent");
+        }
+        var payloadHash = paymentIdentityHash(message);
         // La clave incluye el destino real (transport + connectionRef) + la idempotency key del banco (correlationKey).
         var intentKey = transport.transport() + "|"
                 + (input.connectionRef() == null ? "" : input.connectionRef()) + "|" + correlationKey;
         var peId = context == null ? null : context.processExecutionId();
-        var claim = dispatchIntentStore.claimForDispatch(intentKey, peId, sendersReference);
+        var claim = dispatchIntentStore.claimForDispatch(intentKey, peId, sendersReference, payloadHash);
         return switch (claim) {
             case CLAIMED -> {
                 var sent = sendClassified(transport, message, dispatchConfiguration);
@@ -544,9 +614,18 @@ public class Mt101PayTaskProvider implements TaskProvider {
                         sent.attempts(), sent.lastError());
                 yield sent;
             }
-            // Ya enviado en un run previo: NO reenviar (idempotente). Se reporta como aceptado (cuenta como enviado).
+            // MISMO pago ya enviado (payload idéntico): NO reenviar (idempotente). Se reporta aceptado (cuenta enviado).
             case ALREADY_SENT -> TransportResult.accepted(null, 0, 0L);
-            // Ambiguo previo o en vuelo: NO reenviar; exige conciliación (nunca un reenvío ciego).
+            // R1: MISMA clave, payload DISTINTO -> es OTRO pago colisionando con la idempotency key de uno ya enviado
+            // (o ambiguo). NUNCA se reporta aceptado (silenciaría este pago): se clasifica INCIERTO (no toca archive,
+            // no-éxito, exige conciliar la colisión de clave). No se sobrescribe el pago original.
+            case ALREADY_SENT_CONFLICT -> TransportResult.uncertain(0, 0L,
+                    "a different payment payload collides with the idempotency key of an already-SENT payment; "
+                    + "not sent — reconcile the key collision (no re-send)");
+            case ALREADY_UNCERTAIN_CONFLICT -> TransportResult.uncertain(0, 0L,
+                    "a different payment payload collides with the idempotency key of an ambiguous (UNCERTAIN) "
+                    + "payment; not sent — reconcile the key collision (no re-send)");
+            // MISMO pago ambiguo o en vuelo: NO reenviar; exige conciliación (nunca un reenvío ciego).
             default -> TransportResult.uncertain(0, 0L,
                     "prior dispatch for the same payment is ambiguous or in-flight; reconcile before re-send (no re-send)");
         };

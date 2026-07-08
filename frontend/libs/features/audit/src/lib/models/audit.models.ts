@@ -178,6 +178,50 @@ export interface Mt101FragmentSetSummary {
   fragmentSetId: string;
   total: number;
   byStatus: Record<string, number>;
+  /** Item 3: fragmentos en conflicto de pago (contradicción terminal worker↔STATUS) que exigen conciliación. */
+  conflicts?: number;
+}
+
+/** Item 3: fragmento en conflicto de pago, para listarlo con su motivo en la UI de conciliación. */
+export interface Mt101PayConflict {
+  sendersReference: string;
+  status: string;
+  reason: string | null;
+  updatedAt: string | null;
+}
+
+/**
+ * item 2: vista de una fila de staging para corrección, con su posición FÍSICA en el archivo origen (línea física
+ * para CSV/TXT/FIN; hoja+fila para Excel). Nullables: readers que no aportan posición los dejan null.
+ */
+export interface Mt101StagingRowView {
+  fragmentSetId: string;
+  sourceFileHash: string;
+  recordNumber: number;
+  stagingId: number;
+  payloadJson: string;
+  version: number;
+  physicalLine: number | null;
+  sheetName: string | null;
+  sheetRow: number | null;
+}
+
+/** item 2 (búsqueda inversa): match de "archivo + línea física" al registro de staging. */
+export interface Mt101PhysicalLineMatch {
+  stagingId: number;
+  recordIndex: number;
+  physicalLine: number | null;
+  sourceFileHash: string;
+  processExecutionId: number | null;
+}
+
+/** v60: resultado de resolver el UNCERTAIN normal de un fragment set (consulta STATUS, no reenvía). */
+export interface Mt101NormalPayResolution {
+  resolvedSent: number;
+  resolvedRejected: number;
+  stillPending: number;
+  gatewayErrors: number;
+  conflicts: number;
 }
 
 export interface Mt101RowTimelineEntry {
@@ -185,6 +229,33 @@ export interface Mt101RowTimelineEntry {
   status: string;
   detail: string;
   eventTs: string | null;
+}
+
+/** D1: resumen del ledger de dispatch del PAY directo por lista (visibilidad de atascos). */
+export interface Mt101PayDispatchSummary {
+  total: number;
+  byStatus: Record<string, number>;
+  /** Intenciones atascadas (UNCERTAIN/DISPATCHING) que bloquean el reenvío del pago hasta conciliar. */
+  stuck: number;
+}
+
+/** D2: resultado de reconciliar una intención atascada desde el terminal del archive. */
+export interface Mt101PayDispatchReconcileResult {
+  outcome: 'RECONCILED' | 'NOT_STUCK' | 'NO_EXECUTION' | 'NO_TERMINAL';
+  newStatus: string | null;
+}
+
+/** D1: intención de dispatch atascada, para listarla con su motivo en la UI de conciliación. */
+export interface Mt101PayDispatchIntent {
+  dispatchKey: string;
+  processExecutionId: number | null;
+  sendersReference: string | null;
+  status: string;
+  gatewayReference: string | null;
+  attempts: number;
+  errorMessage: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
 }
 
 export interface Mt101LoteHeader {

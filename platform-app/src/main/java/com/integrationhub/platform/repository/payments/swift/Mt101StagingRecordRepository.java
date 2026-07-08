@@ -319,6 +319,40 @@ public class Mt101StagingRecordRepository {
     public record StagingRowInfo(long id, java.time.LocalDateTime createdAt) {
     }
 
+    /**
+     * item 2 (búsqueda inversa): resuelve una LÍNEA FÍSICA del archivo a su registro de staging (staging_id + índice
+     * lógico), para "archivo + línea X → ¿qué registro/fragmento?". Usa el índice V90 {@code (source_file_hash,
+     * physical_line)}. {@code processExecutionId} opcional desambigua re-procesos del mismo archivo; sin él, la más
+     * reciente. Null si no hay match (línea sin registro, o reader que no aporta línea física).
+     */
+    public PhysicalLineMatch findByPhysicalLine(DataSource dataSource, String sourceFileHash, long physicalLine,
+                                                Long processExecutionId) throws SQLException {
+        var hash = requireSourceFileHash(sourceFileHash);
+        var sql = "select id, record_index, physical_line, source_file_hash, process_execution_id from staging_record "
+                + "where source_file_hash = ? and physical_line = ? "
+                + "and (cast(? as bigint) is null or process_execution_id = ?) order by id desc limit 1";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, hash);
+            statement.setLong(2, physicalLine);
+            statement.setObject(3, processExecutionId);
+            statement.setObject(4, processExecutionId);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return new PhysicalLineMatch(rs.getLong("id"), rs.getLong("record_index"),
+                        rs.getObject("physical_line", Long.class), rs.getString("source_file_hash"),
+                        rs.getObject("process_execution_id", Long.class));
+            }
+        }
+    }
+
+    /** Match de la búsqueda inversa por línea física: identifica el registro de staging exacto. */
+    public record PhysicalLineMatch(long stagingId, long recordIndex, Long physicalLine, String sourceFileHash,
+                                    Long processExecutionId) {
+    }
+
     public StagingRowInfo findStagingRowById(DataSource dataSource, long stagingId) throws SQLException {
         var sql = "select id, created_at from staging_record where id = ?";
         try (var connection = dataSource.getConnection();
@@ -348,7 +382,7 @@ public class Mt101StagingRecordRepository {
                                              long recordIndex,
                                              String sourceFileHash) throws SQLException {
         var hash = requireSourceFileHash(sourceFileHash);
-        var sql = "select id, payload_json, version from staging_record "
+        var sql = "select id, payload_json, version, physical_line, sheet_name, sheet_row from staging_record "
                 + "where process_execution_id = ? and record_index = ? and source_file_hash = ? limit 1";
         try (var statement = connection.prepareStatement(sql)) {
             statement.setLong(1, processExecutionId);
@@ -358,24 +392,32 @@ public class Mt101StagingRecordRepository {
                 if (!rs.next()) {
                     return null;
                 }
-                return new StagingPayload(rs.getLong("id"), rs.getString("payload_json"), rs.getLong("version"));
+                return stagingPayload(rs);
             }
         }
     }
 
-    public record StagingPayload(long id, String payloadJson, long version) {
+    /** item 2: proyeccion con la posicion FISICA (linea/hoja+fila) para el "que linea del archivo fallo". Nullables. */
+    public record StagingPayload(long id, String payloadJson, long version,
+                                 Long physicalLine, String sheetName, Long sheetRow) {
+    }
+
+    private StagingPayload stagingPayload(java.sql.ResultSet rs) throws SQLException {
+        return new StagingPayload(rs.getLong("id"), rs.getString("payload_json"), rs.getLong("version"),
+                rs.getObject("physical_line", Long.class), rs.getString("sheet_name"),
+                rs.getObject("sheet_row", Long.class));
     }
 
     /** Fila exacta por id tecnico de staging; camino requerido para archivos identicos. */
     public StagingPayload findStagingPayloadById(Connection connection, long stagingId) throws SQLException {
-        var sql = "select id, payload_json, version from staging_record where id = ?";
+        var sql = "select id, payload_json, version, physical_line, sheet_name, sheet_row from staging_record where id = ?";
         try (var statement = connection.prepareStatement(sql)) {
             statement.setLong(1, stagingId);
             try (var rs = statement.executeQuery()) {
                 if (!rs.next()) {
                     return null;
                 }
-                return new StagingPayload(rs.getLong("id"), rs.getString("payload_json"), rs.getLong("version"));
+                return stagingPayload(rs);
             }
         }
     }

@@ -58,8 +58,11 @@ public class AsyncTaskConsumer {
     private final int maxAttempts;
     private final long backoffMs;
     private final int claimLeaseSeconds;
-    // §5: identidad de ESTE nodo, owner del claim del inbox (igual que el claim de process_execution).
-    private final String nodeId = "inbox-" + java.util.UUID.randomUUID();
+    // §5: identidad de ESTE nodo (owner del claim/finalize del inbox). Fuente única compartida con el store y el
+    // gather, para que el fencing del finalize (owner match) funcione entre colaboradores de la misma JVM.
+    private final AsyncNodeIdentity nodeIdentity;
+    // §5 (F3): mantiene vivo el lease durante un efecto largo (evita re-toma + doble efecto en reentregas).
+    private final LeaseHeartbeat heartbeat;
 
     @Inject
     public AsyncTaskConsumer(TaskInboxStore inbox,
@@ -69,6 +72,8 @@ public class AsyncTaskConsumer {
                              ObjectMapper objectMapper,
                              AsyncPageChainService pageChain,
                              JsonConfigurationMapper configurationMapper,
+                             AsyncNodeIdentity nodeIdentity,
+                             LeaseHeartbeat heartbeat,
                              @ConfigProperty(name = "tasks.async.consumer.max-attempts", defaultValue = "3")
                              int maxAttempts,
                              @ConfigProperty(name = "tasks.async.consumer.backoff-ms", defaultValue = "200")
@@ -82,6 +87,8 @@ public class AsyncTaskConsumer {
         this.objectMapper = objectMapper;
         this.pageChain = pageChain;
         this.configurationMapper = configurationMapper;
+        this.nodeIdentity = nodeIdentity;
+        this.heartbeat = heartbeat;
         this.maxAttempts = Math.max(1, maxAttempts);
         this.backoffMs = Math.max(0, backoffMs);
         this.claimLeaseSeconds = Math.max(1, claimLeaseSeconds);
@@ -179,20 +186,23 @@ public class AsyncTaskConsumer {
         // executionVariables), para que un provider como MT101_STATUS resuelva qué consultar igual que
         // en el motor síncrono. NO viaja sourcePayload (no serializable): esos providers son UNSUPPORTED.
         hydrateOnceContext(context, envelope);
-        // §6: la config viajó con los ${secret:} SIN resolver (no se persisten en outbox/broker); se
-        // re-resuelven aquí, en el punto-de-uso, justo antes de ejecutar. Sin secretos inline es no-op.
-        var resolvedConfiguration = resolveSecrets(configuration);
         // §5: claim ATÓMICO antes del efecto. Si no ganamos (otro nodo lo tiene vivo o ya es terminal), NO
         // ejecutamos: una re-entrega tras un claim ajeno no repite el efecto externo. El pre-check isProcessed
         // ya cortó los terminales; aquí se cubre la carrera contra un claim VIVO y se re-toma un lease vencido.
-        if (!inbox.claim(envelope, nodeId, claimLeaseSeconds)) {
+        if (!inbox.claim(envelope, nodeIdentity.id(), claimLeaseSeconds)) {
             LOG.debugf("Async task consumer: %s reclamada por otro nodo (claim vivo); skip sin re-ejecutar",
                     envelope.idempotencyKey());
             return ConsumeResult.DUPLICATE;
         }
+        // §6 (F): los ${secret:} se resuelven DESPUÉS de ganar el claim, en el punto-de-uso. Así un consumer que
+        // pierde el claim (otro nodo lo tiene vivo) NO consulta Vault/OpenBao — solo el ganador materializa secretos.
+        var resolvedConfiguration = resolveSecrets(configuration);
         // Un throw aquí (fallo transitorio) NO se captura: propaga → nack → reentrega (at-least-once). El claim
         // queda CLAIMED con lease: la re-entrega la re-toma este mismo nodo (owner) o, si cayó, otro al vencer.
-        var result = provider.execute(context, resolvedConfiguration);
+        // §5 (F3): el heartbeat renueva el lease mientras execute() corre, para que una reentrega durante un
+        // efecto largo NO re-tome el claim en otro nodo (doble efecto). Overhead nulo si termina antes de lease/2.
+        var result = heartbeat.runWithHeartbeat(envelope, nodeIdentity.id(),
+                () -> provider.execute(context, resolvedConfiguration));
 
         // Aplica el resultado a la tarea suspendida por despacho async y continúa el pipeline (o, si el
         // provider volvió a suspender —Nivel 3, suspendible—, re-suspende con token/estado nuevos). Se
@@ -216,6 +226,21 @@ public class AsyncTaskConsumer {
 
         inbox.recordProcessed(envelope, writeOutputs(result.outputs()), result.details());
         return ConsumeResult.PROCESSED;
+    }
+
+    /**
+     * §5 (scatter): dedup de <b>ejecución</b> por slice/página, idéntico al camino once. Salta si la unidad ya es
+     * terminal (reentrega ya contada) o si otro nodo tiene un claim VIVO; si no, reclama atómicamente
+     * (owner+lease) antes del efecto externo, para que una reentrega no repita el {@code executeRecords} de un
+     * provider no idempotente (REST_CALL, DB_WRITE, SFTP…). El conteo del scatter lo cierra el commit al
+     * transicionar el mismo claim a su terminal (ver {@code SliceGatherService}). Devuelve {@code true} si este
+     * consumer ganó el claim y debe ejecutar.
+     */
+    private boolean claimScatterUnit(AsyncTaskEnvelope envelope) {
+        if (inbox.isProcessed(envelope.idempotencyKey())) {
+            return false;
+        }
+        return inbox.claim(envelope, nodeIdentity.id(), claimLeaseSeconds);
     }
 
     /**
@@ -244,6 +269,12 @@ public class AsyncTaskConsumer {
         if (gather.isScatterTerminal(envelope.processExecutionId(), envelope.taskDefinitionId())) {
             return ConsumeResult.DUPLICATE;
         }
+        // §5: claim ATÓMICO de la slice antes del efecto externo. Una reentrega tras un claim ajeno/terminal NO
+        // re-ejecuta executeRecords (evita doble efecto en providers no idempotentes). El commit cuenta la slice
+        // al finalizar este mismo claim.
+        if (!claimScatterUnit(envelope)) {
+            return ConsumeResult.DUPLICATE;
+        }
 
         var records = item.records().stream().map(ReadRecord::new).toList();
         var context = new TaskContext(envelope.processExecutionId(), envelope.taskDefinitionId());
@@ -253,7 +284,9 @@ public class AsyncTaskConsumer {
         hydrateSliceContext(context, item);
         // §6: re-resuelve los ${secret:} de la config de la slice en el punto-de-uso (viajó con placeholders).
         // Un throw (fallo transitorio) propaga → nack → reentrega de la slice.
-        var result = batchProvider.executeRecords(context, resolveSecrets(item.configuration()), records, null);
+        // §5 (F3): heartbeat del lease mientras la slice ejecuta su efecto (evita re-toma + doble efecto).
+        var result = heartbeat.runWithHeartbeat(envelope, nodeIdentity.id(),
+                () -> batchProvider.executeRecords(context, resolveSecrets(item.configuration()), records, null));
 
         if (result.suspended()) {
             failSlice(envelope, "una slice no puede suspenderse en el consumer", continueOnFailure);
@@ -297,6 +330,11 @@ public class AsyncTaskConsumer {
         if (gather.isScatterTerminal(envelope.processExecutionId(), envelope.taskDefinitionId())) {
             return ConsumeResult.DUPLICATE;
         }
+        // §5: claim ATÓMICO de la página antes de leer/encadenar/ejecutar. Una reentrega ya contada o con un claim
+        // vivo ajeno NO repite el executeRecords (ni re-lee/encola): la cadena ya propagó en la primera entrega.
+        if (!claimScatterUnit(envelope)) {
+            return ConsumeResult.DUPLICATE;
+        }
 
         // Lee esta página y encola la siguiente (auto-propagación). Un throw (BD caída) propaga → reentrega.
         var page = pageChain.readAndChain(envelope, item);
@@ -307,7 +345,9 @@ public class AsyncTaskConsumer {
             var context = new TaskContext(envelope.processExecutionId(), envelope.taskDefinitionId());
             hydrateContext(context, item.taskOutputs(), item.metadata(), item.executionVariables());
             // §6: re-resuelve los ${secret:} de la config de la página en el punto-de-uso (viajó con placeholders).
-            var result = batchProvider.executeRecords(context, resolveSecrets(item.configuration()), records, null);
+            // §5 (F3): heartbeat del lease mientras la página ejecuta su efecto (evita re-toma + doble efecto).
+            var result = heartbeat.runWithHeartbeat(envelope, nodeIdentity.id(),
+                    () -> batchProvider.executeRecords(context, resolveSecrets(item.configuration()), records, null));
             if (result.suspended()) {
                 failSlice(envelope, "una página no puede suspenderse en el consumer", continueOnFailure);
                 return ConsumeResult.DEAD;

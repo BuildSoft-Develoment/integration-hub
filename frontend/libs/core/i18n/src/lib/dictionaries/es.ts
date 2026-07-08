@@ -1065,6 +1065,7 @@ export const es = {
   'audit.breadcrumb.lineage': 'Linaje',
   'audit.breadcrumb.fragments': 'Fragmentos MT101',
   'audit.breadcrumb.quarantine': 'Cuarentena',
+  'audit.breadcrumb.payDispatch': 'Dispatch PAY por lista',
   'audit.breadcrumb.spool': 'Spool',
   // Workspace
   'audit.workspace.label': 'Navegacion del workspace de auditoria',
@@ -1080,6 +1081,8 @@ export const es = {
   'audit.workspace.spoolHint': 'Operacion controlada de dead letters y retencion del outbox.',
   'audit.workspace.quarantine': 'Cuarentena MT101',
   'audit.workspace.quarantineHint': 'Correccion, rebuild y PAY correctivo bajo control operacional.',
+  'audit.workspace.payDispatch': 'Dispatch PAY por lista',
+  'audit.workspace.payDispatchHint': 'Pagos de dispatch por lista bloqueados (inciertos/en vuelo) a la espera de conciliacion.',
   // Spool
   'audit.spool.title': 'Spool de auditoria',
   'audit.spool.subtitle': 'Eventos pendientes, en vuelo y dead-letter del outbox asincronico.',
@@ -1146,6 +1149,57 @@ export const es = {
   'audit.quarantine.confirmSet': 'Se generara un nuevo lote SWIFT: {set}.',
   'audit.quarantine.cardFragments': 'Fragmentos',
   'audit.quarantine.cardQuarantine': 'En cuarentena',
+  'audit.quarantine.cardConflicts': 'Conflictos de pago',
+  'audit.quarantine.conflictAlert':
+    '{count} fragmento(s) en conflicto de pago (contradicción terminal worker↔STATUS) — requiere conciliación manual.',
+  // v60: operaciones del PAY normal (lista de conflictos + resolución manual)
+  'audit.quarantine.conflictsView': 'Ver conflictos',
+  'audit.quarantine.conflictsEmpty': 'No hay conflictos de pago que listar para este set.',
+  'audit.quarantine.conflictsError': 'No se pudieron cargar los conflictos de pago.',
+  'audit.quarantine.conflictsCaption': 'Fragmentos MT101 en conflicto de pago de este set',
+  'audit.quarantine.col.reason': 'Motivo',
+  'audit.quarantine.col.updated': 'Actualizado',
+  'audit.quarantine.normalPayResolve': 'Resolver incierto (normal)',
+  'audit.quarantine.normalPayReasonHint': 'Motivo de negocio (obligatorio)',
+  'audit.quarantine.normalPayHint':
+    'Consulta STATUS para resolver UNCERTAIN/DISPATCHING → SENT/REJECTED y marca conflictos SENT→banco-REJECTED. Nunca reenvía.',
+  'audit.quarantine.normalPayResolved':
+    'PAY normal resuelto: {sent} enviados, {rejected} rechazados, {pending} pendientes, {conflicts} conflicto(s).',
+  'audit.quarantine.normalPayError': 'No se pudo resolver el PAY normal incierto.',
+  // item 2: posición física del registro en el archivo origen
+  'audit.quarantine.physicalLine': 'Línea física en el archivo: {line}',
+  'audit.quarantine.sheetCell': 'Hoja {sheet}, fila {row}',
+  // D1: visibilidad del dispatch PAY por lista
+  'audit.payDispatch.title': 'Dispatch PAY por lista',
+  'audit.payDispatch.subtitle':
+    'Pagos por lista en memoria (MT101_BUILD/SPLIT → PAY). Un dispatch incierto o en vuelo bloquea el reenvío hasta conciliar.',
+  'audit.payDispatch.error': 'No se pudo cargar el ledger de dispatch.',
+  'audit.payDispatch.loading': 'Cargando el ledger de dispatch...',
+  'audit.payDispatch.empty': 'Sin intenciones de dispatch atascadas. Nada a la espera de conciliación.',
+  'audit.payDispatch.cardTotal': 'Total',
+  'audit.payDispatch.cardStuck': 'Atascados',
+  'audit.payDispatch.stuckAlert':
+    '{count} intención(es) de dispatch atascada(s) (incierta/en vuelo) — bloquean el reenvío hasta conciliar.',
+  'audit.payDispatch.caption': 'Intenciones de dispatch por lista MT101 atascadas a la espera de conciliación',
+  'audit.payDispatch.col.status': 'Estado',
+  'audit.payDispatch.col.execution': 'Ejecución',
+  'audit.payDispatch.col.attempts': 'Intentos',
+  'audit.payDispatch.col.error': 'Motivo',
+  'audit.payDispatch.col.updated': 'Actualizado',
+  'audit.payDispatch.col.actions': 'Acciones',
+  // D2: reconcile gobernado
+  'audit.payDispatch.reasonLabel': 'Motivo de conciliación',
+  'audit.payDispatch.reasonHint': 'Obligatorio para conciliar (evidencia)',
+  'audit.payDispatch.reconcile': 'Reconciliar',
+  'audit.payDispatch.reconcileHint':
+    'Cierra el ledger desde el terminal del archive que STATUS ya confirmó. Nunca reenvía.',
+  'audit.payDispatch.reconcileOk': 'Reconciliado {ref} → {status}.',
+  'audit.payDispatch.reconcileError': 'No se pudo reconciliar la intención de dispatch.',
+  'audit.payDispatch.reconcileNoop.NOT_STUCK': '{ref} ya no está atascada (resuelta por otro).',
+  'audit.payDispatch.reconcileNoop.NO_EXECUTION':
+    '{ref} no tiene ejecución para acotar la búsqueda en el archive — resolver manual.',
+  'audit.payDispatch.reconcileNoop.NO_TERMINAL':
+    '{ref} aún no tiene estado terminal en el archive (STATUS no concluyó) — resolver manual.',
   'audit.quarantine.processing': 'Procesando...',
   'audit.quarantine.emptyNoSet': 'Sin filas en cuarentena para este set. Ingresa el fragment set (lo ves en el lookup de fragmentos o en la trazabilidad de la ejecucion) y pulsa "Construir cuarentena".',
   'audit.quarantine.emptyWithSet': 'Sin filas en cuarentena para este set. El lote no tiene filas rechazadas, o aun no construiste la cuarentena.',
@@ -1237,6 +1291,13 @@ export const es = {
   'audit.lookup.col.error': 'Error',
   'audit.lookup.col.updated': 'Actualizado',
   'audit.lookup.goQuarantine': 'Cuarentena',
+  // item 2: búsqueda inversa por línea física del archivo
+  'audit.lookup.fieldPhysicalLine': 'Línea física del archivo',
+  'audit.lookup.resolvePhysicalLine': 'Resolver línea → registro',
+  'audit.lookup.physicalLineInvalid': 'Ingresa el hash del archivo y una línea física positiva.',
+  'audit.lookup.physicalLineEmpty': 'No hay registro en la línea física {line} de este archivo.',
+  'audit.lookup.physicalLineResolved': 'Línea física {line} → registro lógico {record} (staging {staging}). Número de fila autocompletado.',
+  'audit.lookup.physicalLineError': 'No se pudo resolver la línea física.',
   'ui.asyncDispatchOptions': 'Despacho asíncrono',
   'ui.asyncDispatch': 'Ejecución asíncrona (offload a broker)',
   'ui.asyncTransport': 'Transporte',
