@@ -1,0 +1,75 @@
+<section class="pd audit-page">
+  <ih-audit-workspace-nav />
+
+  <div>
+    <h1 class="ih-section-title">{{ i18n.t('audit.payDispatch.title') }}</h1>
+    <p class="ih-muted">{{ i18n.t('audit.payDispatch.subtitle') }}</p>
+  </div>
+
+  <div class="pd__actions">
+    <button mat-stroked-button type="button" (click)="load()" [disabled]="loading()">{{ i18n.t('audit.common.refresh') }}</button>
+  </div>
+
+  @if (summary(); as s) {
+    <div class="pd__cards">
+      <div class="pd__card">
+        <small>{{ i18n.t('audit.payDispatch.cardTotal') }}</small>
+        <strong>{{ s.total }}</strong>
+      </div>
+      <div class="pd__card" [class.pd__card--stuck]="s.stuck > 0">
+        <small>{{ i18n.t('audit.payDispatch.cardStuck') }}</small>
+        <strong>{{ s.stuck }}</strong>
+      </div>
+      @for (entry of statusEntries(); track entry.status) {
+        <div class="pd__card pd__card--{{ entry.status }}">
+          <small>{{ entry.status }}</small>
+          <strong>{{ entry.count }}</strong>
+        </div>
+      }
+    </div>
+
+    @if (s.stuck > 0) {
+      <p class="pd__alert" role="alert">{{ i18n.t('audit.payDispatch.stuckAlert', { count: s.stuck }) }}</p>
+    }
+  }
+
+  @if (loading()) {
+    <p class="pd__empty" role="status">{{ i18n.t('audit.payDispatch.loading') }}</p>
+  } @else if (error()) {
+    <p class="pd__error" role="alert">{{ error() }}</p>
+  } @else if (stuck().length === 0) {
+    <p class="pd__ok">{{ i18n.t('audit.payDispatch.empty') }}</p>
+  } @else {
+    <div class="pd__table">
+      <table class="ih-dense-table">
+        <caption class="ih-visually-hidden">{{ i18n.t('audit.payDispatch.caption') }}</caption>
+        <thead>
+          <tr>
+            <th scope="col">:20:</th>
+            <th scope="col">{{ i18n.t('audit.payDispatch.col.status') }}</th>
+            <th scope="col">{{ i18n.t('audit.payDispatch.col.execution') }}</th>
+            <th scope="col">{{ i18n.t('audit.payDispatch.col.attempts') }}</th>
+            <th scope="col">{{ i18n.t('audit.payDispatch.col.error') }}</th>
+            <th scope="col">{{ i18n.t('audit.payDispatch.col.updated') }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of stuck(); track row.dispatchKey) {
+            <tr>
+              <td class="pd__mono">{{ row.sendersReference || '-' }}</td>
+              <td class="pd__status--{{ row.status }}">{{ row.status }}</td>
+              <td>{{ row.processExecutionId ?? '-' }}</td>
+              <td>{{ row.attempts }}</td>
+              <td>{{ row.errorMessage || '-' }}</td>
+              <td>
+                @if (row.updatedAt || row.createdAt; as ts) {
+                  <time [attr.datetime]="ts" [title]="ts | ihTime:'absolute'" [attr.aria-label]="ts | ihTime:'absolute'">{{ ts | ihTime }}</time>
+                } @else { - }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

@@ -5,6 +5,8 @@ import jakarta.inject.Inject;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * P3 — ledger de INTENCIÓN de dispatch para el camino de <b>lista en memoria</b> de {@code MT101_PAY}
@@ -115,5 +117,91 @@ public class Mt101PayDispatchIntentStore {
                 return rs.next() ? rs.getString(1) : "";
             }
         }
+    }
+
+    // ------------------------------------------------------------------
+    // D1 (visibilidad): lectura del ledger para hacer observable el atasco de dispatch de lista. Un UNCERTAIN (o un
+    // DISPATCHING que un crash dejo colgado) bloquea futuros reenvios "hasta conciliar", pero hoy es INVISIBLE (sin
+    // API/UI). Estos lectores exponen el estado para que el operador lo vea y actue (espejo de item 3 para fragmentos).
+    // ------------------------------------------------------------------
+
+    /** Estados que exigen atencion: ambiguo (UNCERTAIN) o colgado en vuelo (DISPATCHING) tras un crash pre-resultado. */
+    private static final String STUCK_STATUSES = "('UNCERTAIN','DISPATCHING')";
+
+    /** Conteo por estado de todo el ledger (para el resumen operativo de un vistazo). */
+    public List<StatusCount> statusCounts() {
+        var sql = "select status, count(*) as total from mt101_pay_dispatch_intent group by status order by status";
+        var result = new ArrayList<StatusCount>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql);
+             var rs = statement.executeQuery()) {
+            while (rs.next()) {
+                result.add(new StatusCount(rs.getString("status"), rs.getLong("total")));
+            }
+            return result;
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot read MT101 pay dispatch intent status counts", error);
+        }
+    }
+
+    /**
+     * Intenciones atascadas (UNCERTAIN / DISPATCHING) mas antiguas primero: son las que exigen conciliacion manual y
+     * bloquean el reenvio del pago. {@code limit} acota la muestra.
+     */
+    public List<DispatchIntentRow> stuckIntents(int limit) {
+        var sql = "select dispatch_key, process_execution_id, senders_reference, status, gateway_reference, "
+                + "attempts, error_message, created_at, updated_at from mt101_pay_dispatch_intent "
+                + "where status in " + STUCK_STATUSES + " order by updated_at asc limit ?";
+        var result = new ArrayList<DispatchIntentRow>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setInt(1, Math.max(1, limit));
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    var peId = rs.getLong("process_execution_id");
+                    result.add(new DispatchIntentRow(
+                            rs.getString("dispatch_key"),
+                            rs.wasNull() ? null : peId,
+                            rs.getString("senders_reference"),
+                            rs.getString("status"),
+                            rs.getString("gateway_reference"),
+                            rs.getInt("attempts"),
+                            rs.getString("error_message"),
+                            rs.getTimestamp("created_at") == null ? null : rs.getTimestamp("created_at").toInstant().toString(),
+                            rs.getTimestamp("updated_at") == null ? null : rs.getTimestamp("updated_at").toInstant().toString()));
+                }
+            }
+            return result;
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot read stuck MT101 pay dispatch intents", error);
+        }
+    }
+
+    /** Conteo de intenciones atascadas (UNCERTAIN / DISPATCHING), para la alerta operativa. */
+    public long stuckIntentCount() {
+        var sql = "select count(*) from mt101_pay_dispatch_intent where status in " + STUCK_STATUSES;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql);
+             var rs = statement.executeQuery()) {
+            return rs.next() ? rs.getLong(1) : 0L;
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot count stuck MT101 pay dispatch intents", error);
+        }
+    }
+
+    /** Conteo por estado del ledger. */
+    public record StatusCount(String status, long count) {
+    }
+
+    /** Fila del ledger de intencion de dispatch (camino de lista) expuesta para visibilidad/conciliacion. */
+    public record DispatchIntentRow(String dispatchKey,
+                                    Long processExecutionId,
+                                    String sendersReference,
+                                    String status,
+                                    String gatewayReference,
+                                    int attempts,
+                                    String errorMessage,
+                                    String createdAt,
+                                    String updatedAt) {
     }
 }

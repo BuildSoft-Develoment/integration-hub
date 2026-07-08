@@ -197,6 +197,27 @@ export interface Mt101RowTimelineEntry {
   eventTs: string | null;
 }
 
+/** D1: resumen del ledger de dispatch del PAY directo por lista (visibilidad de atascos). */
+export interface Mt101PayDispatchSummary {
+  total: number;
+  byStatus: Record<string, number>;
+  /** Intenciones atascadas (UNCERTAIN/DISPATCHING) que bloquean el reenvío del pago hasta conciliar. */
+  stuck: number;
+}
+
+/** D1: intención de dispatch atascada, para listarla con su motivo en la UI de conciliación. */
+export interface Mt101PayDispatchIntent {
+  dispatchKey: string;
+  processExecutionId: number | null;
+  sendersReference: string | null;
+  status: string;
+  gatewayReference: string | null;
+  attempts: number;
+  errorMessage: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 export interface Mt101LoteHeader {
   fragmentSetId: string;
   processExecutionId: number | null;

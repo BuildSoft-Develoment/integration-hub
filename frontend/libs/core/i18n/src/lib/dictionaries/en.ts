@@ -1065,6 +1065,7 @@ export const en = {
   'audit.breadcrumb.lineage': 'Lineage',
   'audit.breadcrumb.fragments': 'MT101 fragments',
   'audit.breadcrumb.quarantine': 'Quarantine',
+  'audit.breadcrumb.payDispatch': 'List PAY dispatch',
   'audit.breadcrumb.spool': 'Spool',
   // Workspace
   'audit.workspace.label': 'Audit workspace navigation',
@@ -1080,6 +1081,8 @@ export const en = {
   'audit.workspace.spoolHint': 'Controlled operation for dead letters and outbox retention.',
   'audit.workspace.quarantine': 'MT101 quarantine',
   'audit.workspace.quarantineHint': 'Correction, rebuild and corrective PAY under operational control.',
+  'audit.workspace.payDispatch': 'List PAY dispatch',
+  'audit.workspace.payDispatchHint': 'Blocked list-dispatch payments (uncertain/in-flight) awaiting reconciliation.',
   // Spool
   'audit.spool.title': 'Audit spool',
   'audit.spool.subtitle': 'Pending, in-flight and dead-letter events of the async outbox.',
@@ -1149,6 +1152,23 @@ export const en = {
   'audit.quarantine.cardConflicts': 'Pay conflicts',
   'audit.quarantine.conflictAlert':
     '{count} fragment(s) in pay conflict (terminal contradiction worker↔STATUS) — manual reconciliation required.',
+  // D1: list PAY dispatch visibility
+  'audit.payDispatch.title': 'List PAY dispatch',
+  'audit.payDispatch.subtitle':
+    'Direct list-dispatch payments (in-memory MT101_BUILD/SPLIT → PAY). Uncertain or in-flight dispatches block re-send until reconciled.',
+  'audit.payDispatch.error': 'Could not load the dispatch ledger.',
+  'audit.payDispatch.loading': 'Loading dispatch ledger...',
+  'audit.payDispatch.empty': 'No stuck dispatch intents. Nothing awaiting reconciliation.',
+  'audit.payDispatch.cardTotal': 'Total',
+  'audit.payDispatch.cardStuck': 'Stuck',
+  'audit.payDispatch.stuckAlert':
+    '{count} dispatch intent(s) stuck (uncertain/in-flight) — they block re-send until reconciled.',
+  'audit.payDispatch.caption': 'Stuck MT101 list-dispatch intents awaiting reconciliation',
+  'audit.payDispatch.col.status': 'Status',
+  'audit.payDispatch.col.execution': 'Execution',
+  'audit.payDispatch.col.attempts': 'Attempts',
+  'audit.payDispatch.col.error': 'Reason',
+  'audit.payDispatch.col.updated': 'Updated',
   'audit.quarantine.processing': 'Processing...',
   'audit.quarantine.emptyNoSet': 'No quarantined rows for this set. Enter the fragment set (from the fragment lookup or the execution traceability) and press "Build quarantine".',
   'audit.quarantine.emptyWithSet': 'No quarantined rows for this set. The batch has no rejected rows, or you have not built the quarantine yet.',

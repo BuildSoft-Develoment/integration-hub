@@ -10,6 +10,8 @@ import {
   Mt101FragmentLink,
   Mt101FragmentSetSummary,
   Mt101LoteHeader,
+  Mt101PayDispatchIntent,
+  Mt101PayDispatchSummary,
   Mt101QuarantineBuildResult,
   Mt101CorrectiveLifecycle,
   Mt101PayAction,
@@ -141,6 +143,20 @@ export class AuditApiService {
       httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }
     return this.http.get<Mt101FragmentSetSummary>('/api/query/mt101-fragments/summary', { params: httpParams });
+  }
+
+  /** D1: resumen del ledger de dispatch del PAY por lista (total + conteo por estado + atascados). */
+  mt101PayDispatchSummary(): Observable<Mt101PayDispatchSummary> {
+    return this.http.get<Mt101PayDispatchSummary>('/api/query/mt101-pay-dispatch-intents/summary');
+  }
+
+  /** D1: intenciones de dispatch atascadas (UNCERTAIN/DISPATCHING) que exigen conciliación. */
+  mt101PayDispatchStuck(limit?: number): Observable<Mt101PayDispatchIntent[]> {
+    let httpParams = new HttpParams();
+    if (limit != null) {
+      httpParams = httpParams.set('limit', String(limit));
+    }
+    return this.http.get<Mt101PayDispatchIntent[]>('/api/query/mt101-pay-dispatch-intents/stuck', { params: httpParams });
   }
 
   /** Cabecera del lote (archivo + hash + ejecución + conteos) por set o por ejecución. */

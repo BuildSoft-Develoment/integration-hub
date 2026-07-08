@@ -1065,6 +1065,7 @@ export const es = {
   'audit.breadcrumb.lineage': 'Linaje',
   'audit.breadcrumb.fragments': 'Fragmentos MT101',
   'audit.breadcrumb.quarantine': 'Cuarentena',
+  'audit.breadcrumb.payDispatch': 'Dispatch PAY por lista',
   'audit.breadcrumb.spool': 'Spool',
   // Workspace
   'audit.workspace.label': 'Navegacion del workspace de auditoria',
@@ -1080,6 +1081,8 @@ export const es = {
   'audit.workspace.spoolHint': 'Operacion controlada de dead letters y retencion del outbox.',
   'audit.workspace.quarantine': 'Cuarentena MT101',
   'audit.workspace.quarantineHint': 'Correccion, rebuild y PAY correctivo bajo control operacional.',
+  'audit.workspace.payDispatch': 'Dispatch PAY por lista',
+  'audit.workspace.payDispatchHint': 'Pagos de dispatch por lista bloqueados (inciertos/en vuelo) a la espera de conciliacion.',
   // Spool
   'audit.spool.title': 'Spool de auditoria',
   'audit.spool.subtitle': 'Eventos pendientes, en vuelo y dead-letter del outbox asincronico.',
@@ -1149,6 +1152,23 @@ export const es = {
   'audit.quarantine.cardConflicts': 'Conflictos de pago',
   'audit.quarantine.conflictAlert':
     '{count} fragmento(s) en conflicto de pago (contradicción terminal worker↔STATUS) — requiere conciliación manual.',
+  // D1: visibilidad del dispatch PAY por lista
+  'audit.payDispatch.title': 'Dispatch PAY por lista',
+  'audit.payDispatch.subtitle':
+    'Pagos por lista en memoria (MT101_BUILD/SPLIT → PAY). Un dispatch incierto o en vuelo bloquea el reenvío hasta conciliar.',
+  'audit.payDispatch.error': 'No se pudo cargar el ledger de dispatch.',
+  'audit.payDispatch.loading': 'Cargando el ledger de dispatch...',
+  'audit.payDispatch.empty': 'Sin intenciones de dispatch atascadas. Nada a la espera de conciliación.',
+  'audit.payDispatch.cardTotal': 'Total',
+  'audit.payDispatch.cardStuck': 'Atascados',
+  'audit.payDispatch.stuckAlert':
+    '{count} intención(es) de dispatch atascada(s) (incierta/en vuelo) — bloquean el reenvío hasta conciliar.',
+  'audit.payDispatch.caption': 'Intenciones de dispatch por lista MT101 atascadas a la espera de conciliación',
+  'audit.payDispatch.col.status': 'Estado',
+  'audit.payDispatch.col.execution': 'Ejecución',
+  'audit.payDispatch.col.attempts': 'Intentos',
+  'audit.payDispatch.col.error': 'Motivo',
+  'audit.payDispatch.col.updated': 'Actualizado',
   'audit.quarantine.processing': 'Procesando...',
   'audit.quarantine.emptyNoSet': 'Sin filas en cuarentena para este set. Ingresa el fragment set (lo ves en el lookup de fragmentos o en la trazabilidad de la ejecucion) y pulsa "Construir cuarentena".',
   'audit.quarantine.emptyWithSet': 'Sin filas en cuarentena para este set. El lote no tiene filas rechazadas, o aun no construiste la cuarentena.',

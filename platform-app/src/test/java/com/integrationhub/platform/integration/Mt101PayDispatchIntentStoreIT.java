@@ -83,6 +83,52 @@ class Mt101PayDispatchIntentStoreIT {
         assertEquals("DISPATCHING", statusOf("REST|12|REF-REJ"), "el re-claim vuelve a DISPATCHING");
     }
 
+    // --- D1 (visibilidad): lectores del ledger para hacer observable el atasco ---
+
+    @Test
+    void stuckReadersExposeUncertainAndDispatchingButNotTerminal() {
+        // Un pago de cada clase terminal + uno en vuelo.
+        store.claimForDispatch("REST|12|V-SENT", 1L, "V-SENT");
+        store.recordResult("REST|12|V-SENT", "SENT", "GW-9", 1, null);
+        store.claimForDispatch("REST|12|V-REJ", 1L, "V-REJ");
+        store.recordResult("REST|12|V-REJ", "REJECTED", null, 1, "config error");
+        store.claimForDispatch("REST|12|V-UNC", 1L, "V-UNC");
+        store.recordResult("REST|12|V-UNC", "UNCERTAIN", null, 1, "timeout tras posible recepción");
+        store.claimForDispatch("REST|12|V-INFLIGHT", 2L, "V-INFLIGHT"); // DISPATCHING (sin resultado)
+
+        // Atascados = UNCERTAIN + DISPATCHING (los terminales SENT/REJECTED NO exigen conciliación).
+        assertEquals(2L, store.stuckIntentCount());
+
+        var stuck = store.stuckIntents(10);
+        assertEquals(2, stuck.size(), "solo UNCERTAIN + DISPATCHING");
+        var refs = stuck.stream().map(Mt101PayDispatchIntentStore.DispatchIntentRow::sendersReference).sorted().toList();
+        assertEquals(java.util.List.of("V-INFLIGHT", "V-UNC"), refs);
+        var uncertain = stuck.stream()
+                .filter(r -> "V-UNC".equals(r.sendersReference())).findFirst().orElseThrow();
+        assertEquals("UNCERTAIN", uncertain.status());
+        assertEquals("timeout tras posible recepción", uncertain.errorMessage(), "el motivo viaja para conciliar");
+        assertEquals(Long.valueOf(1L), uncertain.processExecutionId());
+
+        // El resumen por estado cubre TODO el ledger (para el panel).
+        var counts = new java.util.HashMap<String, Long>();
+        store.statusCounts().forEach(c -> counts.put(c.status(), c.count()));
+        assertEquals(Long.valueOf(1L), counts.get("SENT"));
+        assertEquals(Long.valueOf(1L), counts.get("REJECTED"));
+        assertEquals(Long.valueOf(1L), counts.get("UNCERTAIN"));
+        assertEquals(Long.valueOf(1L), counts.get("DISPATCHING"));
+    }
+
+    @Test
+    void stuckIntentsRespectsLimit() {
+        store.claimForDispatch("REST|12|L-UNC1", 1L, "L-UNC1");
+        store.recordResult("REST|12|L-UNC1", "UNCERTAIN", null, 1, "a");
+        store.claimForDispatch("REST|12|L-UNC2", 1L, "L-UNC2");
+        store.recordResult("REST|12|L-UNC2", "UNCERTAIN", null, 1, "b");
+
+        assertEquals(1, store.stuckIntents(1).size(), "limit acota la muestra");
+        assertEquals(2L, store.stuckIntentCount(), "el conteo es exacto (no acotado)");
+    }
+
     private String statusOf(String dispatchKey) {
         try (Connection c = dataSource.getConnection(); Statement s = c.createStatement();
              var rs = s.executeQuery("select status from mt101_pay_dispatch_intent where dispatch_key = '"
