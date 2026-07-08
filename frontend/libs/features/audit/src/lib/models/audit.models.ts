@@ -190,6 +190,15 @@ export interface Mt101PayConflict {
   updatedAt: string | null;
 }
 
+/** v60: resultado de resolver el UNCERTAIN normal de un fragment set (consulta STATUS, no reenvía). */
+export interface Mt101NormalPayResolution {
+  resolvedSent: number;
+  resolvedRejected: number;
+  stillPending: number;
+  gatewayErrors: number;
+  conflicts: number;
+}
+
 export interface Mt101RowTimelineEntry {
   stage: string;
   status: string;

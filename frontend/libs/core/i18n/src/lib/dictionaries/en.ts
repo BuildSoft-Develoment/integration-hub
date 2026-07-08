@@ -1152,6 +1152,20 @@ export const en = {
   'audit.quarantine.cardConflicts': 'Pay conflicts',
   'audit.quarantine.conflictAlert':
     '{count} fragment(s) in pay conflict (terminal contradiction worker↔STATUS) — manual reconciliation required.',
+  // v60: normal PAY operations (conflict detail list + manual resolve)
+  'audit.quarantine.conflictsView': 'View conflicts',
+  'audit.quarantine.conflictsEmpty': 'No pay conflicts to list for this set.',
+  'audit.quarantine.conflictsError': 'Could not load the pay conflicts.',
+  'audit.quarantine.conflictsCaption': 'MT101 fragments in pay conflict for this set',
+  'audit.quarantine.col.reason': 'Reason',
+  'audit.quarantine.col.updated': 'Updated',
+  'audit.quarantine.normalPayResolve': 'Resolve uncertain (normal)',
+  'audit.quarantine.normalPayReasonHint': 'Business reason (required)',
+  'audit.quarantine.normalPayHint':
+    'Query STATUS to resolve UNCERTAIN/DISPATCHING → SENT/REJECTED and flag SENT→bank-REJECTED conflicts. Never re-sends.',
+  'audit.quarantine.normalPayResolved':
+    'Normal PAY resolved: {sent} sent, {rejected} rejected, {pending} pending, {conflicts} conflict(s).',
+  'audit.quarantine.normalPayError': 'Could not resolve the uncertain normal PAY.',
   // D1: list PAY dispatch visibility
   'audit.payDispatch.title': 'List PAY dispatch',
   'audit.payDispatch.subtitle':

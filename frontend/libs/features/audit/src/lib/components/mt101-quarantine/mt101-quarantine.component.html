@@ -207,8 +207,56 @@
           }
         </div>
         @if (s.conflicts && s.conflicts > 0) {
-          <p class="q__conflict" role="alert">{{ i18n.t('audit.quarantine.conflictAlert', { count: s.conflicts }) }}</p>
+          <div class="q__actions">
+            <p class="q__conflict" role="alert">{{ i18n.t('audit.quarantine.conflictAlert', { count: s.conflicts }) }}</p>
+            <button mat-stroked-button type="button" (click)="loadPayConflicts()">{{ i18n.t('audit.quarantine.conflictsView') }}</button>
+          </div>
         }
+      }
+
+      <!-- v60: lista detallada de conflictos de pago del set (accionable), no solo el conteo. -->
+      @if (payConflictsShown()) {
+        @if (payConflicts().length === 0) {
+          <p class="q__muted">{{ i18n.t('audit.quarantine.conflictsEmpty') }}</p>
+        } @else {
+          <div class="q__table">
+            <table class="ih-dense-table">
+              <caption class="ih-visually-hidden">{{ i18n.t('audit.quarantine.conflictsCaption') }}</caption>
+              <thead>
+                <tr>
+                  <th scope="col">:20:</th>
+                  <th scope="col">{{ i18n.t('audit.quarantine.col.status') }}</th>
+                  <th scope="col">{{ i18n.t('audit.quarantine.col.reason') }}</th>
+                  <th scope="col">{{ i18n.t('audit.quarantine.col.updated') }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (c of payConflicts(); track c.sendersReference) {
+                  <tr>
+                    <td class="q__mono">{{ c.sendersReference || '-' }}</td>
+                    <td class="q__status--{{ c.status }}">{{ c.status || '-' }}</td>
+                    <td>{{ c.reason || '-' }}</td>
+                    <td>{{ c.updatedAt || '-' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      }
+
+      <!-- v60: resolución manual gobernada del UNCERTAIN normal del set (consulta STATUS, nunca reenvía). -->
+      @if (canAuditOperate() && fragmentSetId.trim()) {
+        <div class="q__actions">
+          <mat-form-field subscriptSizing="dynamic" class="q__reason">
+            <mat-label>{{ i18n.t('audit.quarantine.payResolutionReason') }}</mat-label>
+            <input matInput [(ngModel)]="payResolutionReason" [placeholder]="i18n.t('audit.quarantine.normalPayReasonHint')" />
+          </mat-form-field>
+          <button mat-stroked-button type="button"
+                  [disabled]="!payResolutionReason.trim() || loading()"
+                  [title]="i18n.t('audit.quarantine.normalPayHint')"
+                  (click)="resolveNormalUncertainPay()">{{ i18n.t('audit.quarantine.normalPayResolve') }}</button>
+        </div>
       }
 
       @if (message()) {

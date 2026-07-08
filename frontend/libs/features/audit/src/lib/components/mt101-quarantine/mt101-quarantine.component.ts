@@ -11,7 +11,7 @@ import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-
 import { ActionDispatcherService, IconComponent } from '@integration-hub/shared/ui';
 import { Observable } from 'rxjs';
 import { AuditApiService } from '../../api/audit-api.service';
-import { Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101PayAction, Mt101RebuildRunSummary, Mt101RowTimelineEntry } from '../../models/audit.models';
+import { Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101NormalPayResolution, Mt101PayAction, Mt101PayConflict, Mt101RebuildRunSummary, Mt101RowTimelineEntry } from '../../models/audit.models';
 import { AuditOperationRisk, auditEvidenceLabelKey, auditOperationRisk } from '../../utils/audit-operation-risk';
 import { durationBetween, timelineStatusIcon, timelineStatusKind } from '../../utils/timeline-format';
 import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspace-nav.component';
@@ -131,6 +131,10 @@ export class Mt101QuarantineComponent {
   readonly error = signal<string | null>(null);
   readonly message = signal<string | null>(null);
   readonly summary = signal<Mt101FragmentSetSummary | null>(null);
+  // v60: lista detallada de conflictos de pago del set (:20:, estado, motivo, fecha) + resolución manual del UNCERTAIN
+  // normal. Complementa el conteo/alerta con la vista accionable (backend ya existente: /pay-conflicts).
+  readonly payConflicts = signal<Mt101PayConflict[]>([]);
+  readonly payConflictsShown = signal(false);
   readonly lote = signal<Mt101LoteHeader | null>(null);
   readonly selectedRow = signal<number | null>(null);
   readonly timeline = signal<Mt101RowTimelineEntry[]>([]);
@@ -404,6 +408,64 @@ export class Mt101QuarantineComponent {
     }).subscribe({
       next: (s) => this.summary.set(s),
       error: () => this.summary.set(null),
+    });
+  }
+
+  /** v60: carga la lista detallada de conflictos de pago del set (on-demand desde la alerta). */
+  loadPayConflicts(): void {
+    if (!this.fragmentSetId.trim()) {
+      return;
+    }
+    this.payConflictsShown.set(true);
+    this.api.mt101PayConflicts({
+      fragmentSetId: this.fragmentSetId,
+      connectionRef: this.connectionRef,
+    }).subscribe({
+      next: (rows) => this.payConflicts.set(rows),
+      error: () => {
+        this.payConflicts.set([]);
+        this.error.set(this.i18n.t('audit.quarantine.conflictsError'));
+      },
+    });
+  }
+
+  /**
+   * v60 (gobernado): resuelve el UNCERTAIN normal del set consultando STATUS (nunca reenvía) y detecta conflictos
+   * SENT→banco-REJECTED. Motivo obligatorio (reutiliza payResolutionReason). Recarga summary/lista/conflictos.
+   */
+  resolveNormalUncertainPay(): void {
+    if (!this.canAuditOperate() || !this.fragmentSetId.trim()) {
+      return;
+    }
+    if (!this.payResolutionReason.trim()) {
+      this.error.set(this.i18n.t('audit.quarantine.payResolutionReasonRequired'));
+      return;
+    }
+    this.loading.set(true);
+    this.error.set(null);
+    this.message.set(null);
+    this.api.mt101ResolveUncertainNormalPay({
+      fragmentSetId: this.fragmentSetId,
+      connectionRef: this.connectionRef,
+      reason: this.payResolutionReason,
+    }).subscribe({
+      next: (result: Mt101NormalPayResolution) => {
+        this.message.set(this.i18n.t('audit.quarantine.normalPayResolved', {
+          sent: result.resolvedSent,
+          rejected: result.resolvedRejected,
+          pending: result.stillPending,
+          conflicts: result.conflicts,
+        }));
+        this.loading.set(false);
+        this.list(false);
+        if (this.payConflictsShown()) {
+          this.loadPayConflicts();
+        }
+      },
+      error: (e) => {
+        this.error.set(this.backendError(e, 'audit.quarantine.normalPayError'));
+        this.loading.set(false);
+      },
     });
   }
 

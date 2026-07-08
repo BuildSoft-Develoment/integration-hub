@@ -1152,6 +1152,20 @@ export const es = {
   'audit.quarantine.cardConflicts': 'Conflictos de pago',
   'audit.quarantine.conflictAlert':
     '{count} fragmento(s) en conflicto de pago (contradicción terminal worker↔STATUS) — requiere conciliación manual.',
+  // v60: operaciones del PAY normal (lista de conflictos + resolución manual)
+  'audit.quarantine.conflictsView': 'Ver conflictos',
+  'audit.quarantine.conflictsEmpty': 'No hay conflictos de pago que listar para este set.',
+  'audit.quarantine.conflictsError': 'No se pudieron cargar los conflictos de pago.',
+  'audit.quarantine.conflictsCaption': 'Fragmentos MT101 en conflicto de pago de este set',
+  'audit.quarantine.col.reason': 'Motivo',
+  'audit.quarantine.col.updated': 'Actualizado',
+  'audit.quarantine.normalPayResolve': 'Resolver incierto (normal)',
+  'audit.quarantine.normalPayReasonHint': 'Motivo de negocio (obligatorio)',
+  'audit.quarantine.normalPayHint':
+    'Consulta STATUS para resolver UNCERTAIN/DISPATCHING → SENT/REJECTED y marca conflictos SENT→banco-REJECTED. Nunca reenvía.',
+  'audit.quarantine.normalPayResolved':
+    'PAY normal resuelto: {sent} enviados, {rejected} rechazados, {pending} pendientes, {conflicts} conflicto(s).',
+  'audit.quarantine.normalPayError': 'No se pudo resolver el PAY normal incierto.',
   // D1: visibilidad del dispatch PAY por lista
   'audit.payDispatch.title': 'Dispatch PAY por lista',
   'audit.payDispatch.subtitle':
