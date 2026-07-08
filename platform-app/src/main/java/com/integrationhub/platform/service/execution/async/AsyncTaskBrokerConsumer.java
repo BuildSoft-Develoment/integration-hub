@@ -38,8 +38,15 @@ public class AsyncTaskBrokerConsumer {
         this.consumer = consumer;
     }
 
+    // P0-1 (invariante de seguridad, EXPLÍCITA): ordered=true serializa el procesamiento por nodo. El claim del
+    // task_inbox re-toma una fila CLAIMED del MISMO owner (necesario para el retry in-app, que es secuencial). Si el
+    // canal procesara en paralelo (ordered=false), dos entregas del mismo idempotency_key en el mismo nodo matcharían
+    // same-owner y ejecutarían el efecto DOS veces. No cambiar a ordered=false sin volver el claim seguro ante
+    // concurrencia (fencing token por-entrega o claim-una-vez fuera del loop de retry). Blindado por
+    // AsyncTaskBrokerConsumerOrderingTest. El pool async-task-worker-pool es exclusivo de este consumer y va a
+    // max-concurrency=1 (defensa en profundidad).
     @Incoming("tasks-in")
-    @Blocking("async-task-worker-pool")
+    @Blocking(value = "async-task-worker-pool", ordered = true)
     public CompletionStage<Void> consume(Message<String> message) {
         var topic = message.getMetadata(IncomingKafkaRecordMetadata.class)
                 .map(IncomingKafkaRecordMetadata::getTopic)
