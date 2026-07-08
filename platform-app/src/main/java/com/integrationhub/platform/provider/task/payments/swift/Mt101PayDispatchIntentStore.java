@@ -195,6 +195,85 @@ public class Mt101PayDispatchIntentStore {
         }
     }
 
+    // ------------------------------------------------------------------
+    // D2 (reconciliacion): cierra el lazo del ledger. En la topologia de lista, MT101_STATUS confirma inline el pago
+    // (deja mt101_archive.status en el terminal ya CLASIFICADO por el pipeline, V17: PAY->SENT/REJECTED,
+    // STATUS->CONFIRMED/REJECTED) pero NO toca el intent -> queda UNCERTAIN/DISPATCHING bloqueando el reenvio. Este
+    // reconcile lee ese terminal autoritativo (join por (senders_reference, process_execution_id), indice V36) y
+    // transiciona el intent. Nunca re-despacha ni re-consulta el gateway; sin match/terminal -> no-op (manual).
+    // ------------------------------------------------------------------
+
+    /** Estados terminales del archive que cuentan como "enviado" (el pago llego al banco). */
+    private static final String ARCHIVE_SENT_STATUSES = "('SENT','CONFIRMED')";
+    private static final String ARCHIVE_REJECTED_STATUS = "REJECTED";
+
+    /** Intencion atascada localizada por su clave, con lo necesario para el join al archive. Null si no esta atascada. */
+    public StuckIntentRef findStuckByKey(String dispatchKey) {
+        var sql = "select senders_reference, process_execution_id, status from mt101_pay_dispatch_intent "
+                + "where dispatch_key = ? and status in " + STUCK_STATUSES;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, dispatchKey);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                var peId = rs.getLong("process_execution_id");
+                var peIdNull = rs.wasNull();
+                return new StuckIntentRef(rs.getString("senders_reference"),
+                        peIdNull ? null : peId, rs.getString("status"));
+            }
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot read MT101 pay dispatch intent " + dispatchKey, error);
+        }
+    }
+
+    /**
+     * Estado terminal ya clasificado del pago en {@code mt101_archive}, por {@code (senders_reference,
+     * process_execution_id)} (indice V36). Devuelve {@code "SENT"} (archive SENT/CONFIRMED), {@code "REJECTED"}
+     * (archive REJECTED) o {@code null} si no hay match o el archive aun no esta en un terminal (queda manual). Solo
+     * lee el archive por defecto de la plataforma; tablas de archive por conexion no se cubren (no-op -> manual).
+     */
+    public String archiveTerminalStatus(String sendersReference, long processExecutionId) {
+        var sql = "select case when status in " + ARCHIVE_SENT_STATUSES + " then 'SENT' "
+                + "when status = '" + ARCHIVE_REJECTED_STATUS + "' then 'REJECTED' end as terminal "
+                + "from mt101_archive where senders_reference = ? and process_execution_id = ? "
+                + "and status in ('SENT','CONFIRMED','" + ARCHIVE_REJECTED_STATUS + "') limit 1";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, sendersReference);
+            statement.setLong(2, processExecutionId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getString("terminal") : null;
+            }
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot read archive terminal status for " + sendersReference, error);
+        }
+    }
+
+    /**
+     * Transiciona la intencion atascada al terminal, SOLO desde {@code UNCERTAIN}/{@code DISPATCHING} (espejo de
+     * {@link #recordResult}, que solo va desde DISPATCHING). El {@code evidence} (actor + motivo + terminal del
+     * archive) queda durable en {@code error_message}. Devuelve las filas afectadas (0 si ya no estaba atascada).
+     */
+    public int reconcileToTerminal(String dispatchKey, String terminalStatus, String evidence) {
+        var sql = "update mt101_pay_dispatch_intent set status = ?, error_message = ?, updated_at = current_timestamp "
+                + "where dispatch_key = ? and status in " + STUCK_STATUSES;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, terminalStatus);
+            statement.setString(2, evidence);
+            statement.setString(3, dispatchKey);
+            return statement.executeUpdate();
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot reconcile MT101 pay dispatch intent " + dispatchKey, error);
+        }
+    }
+
+    /** Intencion atascada localizada para el reconcile. */
+    public record StuckIntentRef(String sendersReference, Long processExecutionId, String status) {
+    }
+
     /** Conteo por estado del ledger. */
     public record StatusCount(String status, long count) {
     }

@@ -1,5 +1,7 @@
 .pd { display:flex; flex-direction:column; gap:1rem; }
-.pd__actions { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+.pd__actions { display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; }
+.pd__reason { width:22rem; max-width:100%; }
+.pd__msg { padding:.75rem; color:var(--ih-accent-strong); }
 .pd__cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(7rem,1fr)); gap:.6rem; }
 .pd__card { background:var(--ih-surface-alt); border:1px solid var(--ih-border); border-radius:8px; padding:.6rem .7rem; display:flex; flex-direction:column; gap:.15rem; }
 .pd__card small { font-size:.72rem; color:var(--ih-text-soft); }

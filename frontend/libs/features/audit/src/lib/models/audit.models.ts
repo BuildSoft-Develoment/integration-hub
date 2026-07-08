@@ -205,6 +205,12 @@ export interface Mt101PayDispatchSummary {
   stuck: number;
 }
 
+/** D2: resultado de reconciliar una intención atascada desde el terminal del archive. */
+export interface Mt101PayDispatchReconcileResult {
+  outcome: 'RECONCILED' | 'NOT_STUCK' | 'NO_EXECUTION' | 'NO_TERMINAL';
+  newStatus: string | null;
+}
+
 /** D1: intención de dispatch atascada, para listarla con su motivo en la UI de conciliación. */
 export interface Mt101PayDispatchIntent {
   dispatchKey: string;

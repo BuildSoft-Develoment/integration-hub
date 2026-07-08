@@ -1169,6 +1169,20 @@ export const es = {
   'audit.payDispatch.col.attempts': 'Intentos',
   'audit.payDispatch.col.error': 'Motivo',
   'audit.payDispatch.col.updated': 'Actualizado',
+  'audit.payDispatch.col.actions': 'Acciones',
+  // D2: reconcile gobernado
+  'audit.payDispatch.reasonLabel': 'Motivo de conciliación',
+  'audit.payDispatch.reasonHint': 'Obligatorio para conciliar (evidencia)',
+  'audit.payDispatch.reconcile': 'Reconciliar',
+  'audit.payDispatch.reconcileHint':
+    'Cierra el ledger desde el terminal del archive que STATUS ya confirmó. Nunca reenvía.',
+  'audit.payDispatch.reconcileOk': 'Reconciliado {ref} → {status}.',
+  'audit.payDispatch.reconcileError': 'No se pudo reconciliar la intención de dispatch.',
+  'audit.payDispatch.reconcileNoop.NOT_STUCK': '{ref} ya no está atascada (resuelta por otro).',
+  'audit.payDispatch.reconcileNoop.NO_EXECUTION':
+    '{ref} no tiene ejecución para acotar la búsqueda en el archive — resolver manual.',
+  'audit.payDispatch.reconcileNoop.NO_TERMINAL':
+    '{ref} aún no tiene estado terminal en el archive (STATUS no concluyó) — resolver manual.',
   'audit.quarantine.processing': 'Procesando...',
   'audit.quarantine.emptyNoSet': 'Sin filas en cuarentena para este set. Ingresa el fragment set (lo ves en el lookup de fragmentos o en la trazabilidad de la ejecucion) y pulsa "Construir cuarentena".',
   'audit.quarantine.emptyWithSet': 'Sin filas en cuarentena para este set. El lote no tiene filas rechazadas, o aun no construiste la cuarentena.',

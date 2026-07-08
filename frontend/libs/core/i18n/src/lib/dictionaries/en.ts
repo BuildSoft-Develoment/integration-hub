@@ -1169,6 +1169,20 @@ export const en = {
   'audit.payDispatch.col.attempts': 'Attempts',
   'audit.payDispatch.col.error': 'Reason',
   'audit.payDispatch.col.updated': 'Updated',
+  'audit.payDispatch.col.actions': 'Actions',
+  // D2: governed reconcile
+  'audit.payDispatch.reasonLabel': 'Reconcile reason',
+  'audit.payDispatch.reasonHint': 'Required to reconcile (evidence)',
+  'audit.payDispatch.reconcile': 'Reconcile',
+  'audit.payDispatch.reconcileHint':
+    'Close the ledger from the archive terminal that STATUS already confirmed. Never re-sends.',
+  'audit.payDispatch.reconcileOk': 'Reconciled {ref} → {status}.',
+  'audit.payDispatch.reconcileError': 'Could not reconcile the dispatch intent.',
+  'audit.payDispatch.reconcileNoop.NOT_STUCK': '{ref} is no longer stuck (already resolved).',
+  'audit.payDispatch.reconcileNoop.NO_EXECUTION':
+    '{ref} has no execution to scope the archive lookup — resolve manually.',
+  'audit.payDispatch.reconcileNoop.NO_TERMINAL':
+    '{ref} has no terminal archive status yet (STATUS not conclusive) — resolve manually.',
   'audit.quarantine.processing': 'Processing...',
   'audit.quarantine.emptyNoSet': 'No quarantined rows for this set. Enter the fragment set (from the fragment lookup or the execution traceability) and press "Build quarantine".',
   'audit.quarantine.emptyWithSet': 'No quarantined rows for this set. The batch has no rejected rows, or you have not built the quarantine yet.',

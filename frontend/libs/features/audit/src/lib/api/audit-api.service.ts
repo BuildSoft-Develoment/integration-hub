@@ -11,6 +11,7 @@ import {
   Mt101FragmentSetSummary,
   Mt101LoteHeader,
   Mt101PayDispatchIntent,
+  Mt101PayDispatchReconcileResult,
   Mt101PayDispatchSummary,
   Mt101QuarantineBuildResult,
   Mt101CorrectiveLifecycle,
@@ -157,6 +158,16 @@ export class AuditApiService {
       httpParams = httpParams.set('limit', String(limit));
     }
     return this.http.get<Mt101PayDispatchIntent[]>('/api/query/mt101-pay-dispatch-intents/stuck', { params: httpParams });
+  }
+
+  /**
+   * D2 (gobernado): reconcilia una intención atascada desde el terminal ya clasificado del archive. Devuelve el
+   * outcome (RECONCILED / NOT_STUCK / NO_EXECUTION / NO_TERMINAL) y el nuevo estado si aplica.
+   */
+  mt101PayDispatchReconcile(dispatchKey: string, reason: string): Observable<Mt101PayDispatchReconcileResult> {
+    const httpParams = new HttpParams().set('dispatchKey', dispatchKey).set('reason', reason);
+    return this.http.post<Mt101PayDispatchReconcileResult>(
+      '/api/query/mt101-pay-dispatch-intents/reconcile', {}, { params: httpParams });
   }
 
   /** Cabecera del lote (archivo + hash + ejecución + conteos) por set o por ejecución. */

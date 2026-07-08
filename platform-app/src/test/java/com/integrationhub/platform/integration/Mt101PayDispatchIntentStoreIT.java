@@ -14,6 +14,7 @@ import java.sql.Connection;
 import java.sql.Statement;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
@@ -36,6 +37,19 @@ class Mt101PayDispatchIntentStoreIT {
     void clean() throws Exception {
         try (Connection c = dataSource.getConnection(); Statement s = c.createStatement()) {
             s.executeUpdate("truncate table mt101_pay_dispatch_intent restart identity");
+            s.executeUpdate("truncate table mt101_archive restart identity cascade");
+        }
+    }
+
+    /** Siembra una fila de archive con el terminal ya clasificado por el pipeline (V17), para el reconcile de D2. */
+    private void seedArchive(String sendersReference, long processExecutionId, String status) throws Exception {
+        try (Connection c = dataSource.getConnection();
+             var st = c.prepareStatement("insert into mt101_archive (senders_reference, process_execution_id, status) "
+                     + "values (?, ?, ?)")) {
+            st.setString(1, sendersReference);
+            st.setLong(2, processExecutionId);
+            st.setString(3, status);
+            st.executeUpdate();
         }
     }
 
@@ -138,6 +152,46 @@ class Mt101PayDispatchIntentStoreIT {
 
         assertEquals(1, store.stuckIntents(1).size(), "limit acota la muestra");
         assertEquals(2L, store.stuckIntentCount(), "el conteo es exacto (no acotado)");
+    }
+
+    // --- D2 (reconciliación): cierra el intent desde el terminal ya clasificado del archive ---
+
+    @Test
+    void reconcileTransitionsStuckUncertainIntentFromArchiveTerminal() throws Exception {
+        // STATUS confirmó el pago inline (archive CONFIRMED) pero el intent quedó UNCERTAIN.
+        seedArchive("R-OK", 55L, "CONFIRMED");
+        store.claimForDispatch("REST|12|R-OK", 55L, "R-OK");
+        store.recordResult("REST|12|R-OK", "UNCERTAIN", null, 1, "timeout");
+
+        // El archive expone el terminal ya clasificado (CONFIRMED -> SENT), acotado por (senders_reference, execId).
+        assertEquals("SENT", store.archiveTerminalStatus("R-OK", 55L));
+        var stuck = store.findStuckByKey("REST|12|R-OK");
+        assertNotNull(stuck);
+        assertEquals(Long.valueOf(55L), stuck.processExecutionId());
+
+        // Reconcile: transiciona el intent y ya no está atascado.
+        assertEquals(1, store.reconcileToTerminal("REST|12|R-OK", "SENT", "reconciled by ops"));
+        assertEquals("SENT", statusOf("REST|12|R-OK"));
+        assertNull(store.findStuckByKey("REST|12|R-OK"), "ya no está atascado tras reconciliar");
+    }
+
+    @Test
+    void archiveTerminalStatusClassifiesAndSkipsNonTerminalAndOtherExecution() throws Exception {
+        seedArchive("R-REJ", 60L, "REJECTED");
+        seedArchive("R-PEND", 60L, "ARCHIVED"); // no terminal
+        assertEquals("REJECTED", store.archiveTerminalStatus("R-REJ", 60L));
+        assertNull(store.archiveTerminalStatus("R-PEND", 60L), "ARCHIVED no es terminal -> null");
+        assertNull(store.archiveTerminalStatus("R-REJ", 999L), "otra ejecución no matchea (join acotado)");
+    }
+
+    @Test
+    void reconcileToTerminalNoOpWhenNotStuck() {
+        store.claimForDispatch("REST|12|R-SENT2", 1L, "R-SENT2");
+        store.recordResult("REST|12|R-SENT2", "SENT", "GW", 1, null); // ya terminal
+        // No está en UNCERTAIN/DISPATCHING -> el reconcile no la toca (nunca pisa un terminal).
+        assertEquals(0, store.reconcileToTerminal("REST|12|R-SENT2", "REJECTED", "should not apply"));
+        assertEquals("SENT", statusOf("REST|12|R-SENT2"));
+        assertNull(store.findStuckByKey("REST|12|R-SENT2"), "un terminal no cuenta como atascado");
     }
 
     private String statusOf(String dispatchKey) {
