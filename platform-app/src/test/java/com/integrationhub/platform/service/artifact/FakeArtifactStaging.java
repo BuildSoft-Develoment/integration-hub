@@ -60,14 +60,20 @@ public class FakeArtifactStaging implements ArtifactStaging {
 
     @Override
     public StagedDownload stageForDownload(java.io.InputStream content, String mediaType, long sizeBytes,
-                                           java.time.Duration ttl) {
+                                           java.time.Duration ttl) throws IOException {
+        // Alineado con S3ArtifactStaging: un content-length desconocido (<0) NO se materializa a ciegas (OOM en el
+        // camino de memoria acotada); falla ruidoso igual que producción, para no enmascarar la regresión de
+        // comportamiento en tests que usan este doble.
+        if (sizeBytes < 0) {
+            throw new IOException("artifact staging requires a known content length for remote reader downloads");
+        }
         var key = "fake-staging/" + UUID.randomUUID();
         try (content) {
             store.put(key, content.readAllBytes());
         } catch (java.io.IOException error) {
             throw new java.io.UncheckedIOException(error);
         }
-        var reference = ArtifactReference.get(SCHEME + key, mediaType, Math.max(0, sizeBytes),
+        var reference = ArtifactReference.get(SCHEME + key, mediaType, sizeBytes,
                 System.currentTimeMillis() + ttl.toMillis());
         return new StagedDownload(reference, key);
     }

@@ -6,12 +6,15 @@ import com.integrationhub.platform.service.execution.FileReadRuntimeSupport;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginInvoker;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
+import com.integrationhub.platform.spi.source.SelectedSourceFile;
 import com.integrationhub.platform.spi.source.SourcePayload;
 import com.integrationhub.platform.spi.task.TaskResult;
 import com.integrationhub.platform.task.ArtifactReference;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -108,6 +111,26 @@ class RemoteReaderProviderTest {
                 () -> provider.readInBatches(payload, Map.of(), 10, batch -> { }));
         assertTrue(error.getMessage().contains("no avanza"), "cursor progress guard");
         assertEquals(1, staging.deleted.size(), "staged input is cleaned even when the guard trips");
+    }
+
+    @Test
+    void failsGracefullyWhenSourceHasNoKnownContentLength() {
+        // Regresión de comportamiento (S3ArtifactStaging): una fuente SIN content-length (file().size()==null) ya no se
+        // materializa a ciegas (riesgo OOM en memoria acotada) -> el staging lanza y el reader lo DEGRADA limpio. Como
+        // stageForDownload lanza ANTES de subir, no queda objeto huérfano que limpiar. El fake ahora replica el throw.
+        var staging = new FakeArtifactStaging();
+        RemotePluginInvoker invoker = (desc, taskType, context, payload) ->
+                TaskResult.success("ok", Map.of("records", List.of()));
+        var provider = new RemoteReaderProvider("MY_READER", descriptor("2"), invoker, new RemotePluginRegistry(), staging);
+        var payload = new SourcePayload(
+                new SelectedSourceFile("unknown.csv", "unknown.csv", "text/csv", null, Instant.now()),
+                () -> new ByteArrayInputStream("data".getBytes(StandardCharsets.UTF_8)));
+
+        var error = assertThrows(IllegalStateException.class,
+                () -> provider.readInBatches(payload, Map.of(), 10, batch -> { }));
+        assertTrue(error.getMessage().contains("content length") || error.getMessage().contains("stagear"),
+                "debe degradar por content-length desconocido: " + error.getMessage());
+        assertEquals(0, staging.deleted.size(), "nada se stageó (throw antes del upload) -> nada huérfano que limpiar");
     }
 
     @Test
