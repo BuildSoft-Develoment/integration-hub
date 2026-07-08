@@ -31,10 +31,17 @@ public class Mt101PayDispatchIntentStore {
     public enum ClaimResult {
         /** Se reclamó (fila nueva o re-reclamo de un REJECTED): proceder a enviar. */
         CLAIMED,
-        /** Ya fue enviado (SENT): no reenviar; reportar como aceptado. */
+        /** El MISMO pago ya fue enviado (SENT + mismo payload_hash): no reenviar; reportar como aceptado (idempotente). */
         ALREADY_SENT,
-        /** Resultado previo ambiguo (UNCERTAIN): no reenviar; exige conciliación. */
+        /**
+         * R1: la clave ya está SENT pero con un payload DISTINTO (otro pago colisionando con la idempotency key). NO
+         * se puede reportar aceptado sin silenciar este pago: se exige conciliación de la colisión (nunca reenvío).
+         */
+        ALREADY_SENT_CONFLICT,
+        /** El MISMO pago quedó ambiguo (UNCERTAIN + mismo payload_hash): no reenviar; exige conciliación. */
         ALREADY_UNCERTAIN,
+        /** R1: la clave está UNCERTAIN pero con un payload DISTINTO (colisión con otro pago): conciliar, nunca reenvío. */
+        ALREADY_UNCERTAIN_CONFLICT,
         /** Otro intento en vuelo (DISPATCHING): no reenviar; tratar como incierto. */
         IN_FLIGHT
     }
@@ -48,17 +55,28 @@ public class Mt101PayDispatchIntentStore {
 
     /**
      * Reclama atómicamente la intención de dispatch. Commitea el {@code DISPATCHING} antes de retornar (durable).
+     *
+     * <p>R1: {@code payloadHash} (SHA-256 del payload EXACTO que recibe el banco) es la identidad del pago; se fija al
+     * reclamar. En un claim bloqueado (SENT/UNCERTAIN) se compara contra el persistido para DEMOSTRAR —no inferir— que
+     * el re-request es el MISMO pago (idempotente) o un pago DISTINTO colisionando con la misma clave (conflicto).</p>
      */
-    public ClaimResult claimForDispatch(String dispatchKey, Long processExecutionId, String sendersReference) {
+    public ClaimResult claimForDispatch(String dispatchKey, Long processExecutionId, String sendersReference,
+                                        String payloadHash) {
         if (dispatchKey == null || dispatchKey.isBlank()) {
             throw new IllegalArgumentException("MT101 pay dispatch intent requires a non-blank dispatch key");
         }
+        // R1 (invariante): sin identidad de payload no se puede probar que un ALREADY_SENT sea el MISMO pago. El
+        // provider hace fail-loud antes de llegar aquí; el store lo reafirma (nunca una intención sin identidad).
+        if (payloadHash == null || payloadHash.isBlank()) {
+            throw new IllegalArgumentException("MT101 pay dispatch intent requires a non-blank payload hash");
+        }
         var claim = "insert into mt101_pay_dispatch_intent "
-                + "(dispatch_key, process_execution_id, senders_reference, status, attempts, created_at, updated_at) "
-                + "values (?, ?, ?, 'DISPATCHING', 1, current_timestamp, current_timestamp) "
+                + "(dispatch_key, process_execution_id, senders_reference, status, payload_hash, attempts, "
+                + " created_at, updated_at) "
+                + "values (?, ?, ?, 'DISPATCHING', ?, 1, current_timestamp, current_timestamp) "
                 + "on conflict (dispatch_key) do update "
-                + "set status = 'DISPATCHING', attempts = mt101_pay_dispatch_intent.attempts + 1, "
-                + "    updated_at = current_timestamp "
+                + "set status = 'DISPATCHING', payload_hash = excluded.payload_hash, "
+                + "    attempts = mt101_pay_dispatch_intent.attempts + 1, updated_at = current_timestamp "
                 + "where mt101_pay_dispatch_intent.status = 'REJECTED' "
                 + "returning status";
         try (var connection = dataSource.getConnection()) {
@@ -70,16 +88,22 @@ public class Mt101PayDispatchIntentStore {
                     statement.setLong(2, processExecutionId);
                 }
                 statement.setString(3, sendersReference);
+                statement.setString(4, payloadHash);
                 try (var rs = statement.executeQuery()) {
                     if (rs.next()) {
                         return ClaimResult.CLAIMED; // fila nueva o re-reclamo desde REJECTED (autocommit: durable)
                     }
                 }
             }
-            // Bloqueado: el ON CONFLICT no actualizó (estado no-REJECTED). Se reporta el estado persistido.
-            return switch (currentStatus(connection, dispatchKey)) {
-                case "SENT" -> ClaimResult.ALREADY_SENT;
-                case "UNCERTAIN" -> ClaimResult.ALREADY_UNCERTAIN;
+            // Bloqueado: el ON CONFLICT no actualizó (estado no-REJECTED). Se compara la IDENTIDAD del pago
+            // (payload_hash persistido vs el actual): mismo pago -> idempotente; pago DISTINTO bajo la misma clave ->
+            // conflicto (no se reporta enviado). Un payload_hash persistido NULL (fila anterior a la identidad) NO se
+            // puede probar igual -> conflicto seguro (nunca un accepted silencioso sin prueba).
+            var existing = currentIntent(connection, dispatchKey);
+            var samePayload = existing.payloadHash() != null && existing.payloadHash().equals(payloadHash);
+            return switch (existing.status()) {
+                case "SENT" -> samePayload ? ClaimResult.ALREADY_SENT : ClaimResult.ALREADY_SENT_CONFLICT;
+                case "UNCERTAIN" -> samePayload ? ClaimResult.ALREADY_UNCERTAIN : ClaimResult.ALREADY_UNCERTAIN_CONFLICT;
                 default -> ClaimResult.IN_FLIGHT; // DISPATCHING (u otro no-terminal): otro intento en vuelo
             };
         } catch (SQLException error) {
@@ -109,14 +133,22 @@ public class Mt101PayDispatchIntentStore {
         }
     }
 
-    private String currentStatus(java.sql.Connection connection, String dispatchKey) throws SQLException {
+    /** Estado + identidad (payload_hash) persistidos de la intención, para clasificar un claim bloqueado. */
+    private IntentIdentity currentIntent(java.sql.Connection connection, String dispatchKey) throws SQLException {
         try (var statement = connection.prepareStatement(
-                "select status from mt101_pay_dispatch_intent where dispatch_key = ?")) {
+                "select status, payload_hash from mt101_pay_dispatch_intent where dispatch_key = ?")) {
             statement.setString(1, dispatchKey);
             try (var rs = statement.executeQuery()) {
-                return rs.next() ? rs.getString(1) : "";
+                if (rs.next()) {
+                    return new IntentIdentity(rs.getString("status"), rs.getString("payload_hash"));
+                }
+                return new IntentIdentity("", null);
             }
         }
+    }
+
+    /** Estado terminal + hash del payload de una intención persistida (R1: para probar mismo-pago vs colisión). */
+    private record IntentIdentity(String status, String payloadHash) {
     }
 
     // ------------------------------------------------------------------
