@@ -158,17 +158,23 @@ public class Mt101PayDispatchIntentStore {
             statement.setInt(1, Math.max(1, limit));
             try (var rs = statement.executeQuery()) {
                 while (rs.next()) {
+                    // wasNull() refleja SIEMPRE la ultima columna leida: hay que capturarlo inmediatamente tras el
+                    // getLong, antes de leer cualquier otra columna (si no, reflejaria la ultima y process_execution_id
+                    // NULL se reportaria como 0). Igual, los timestamps se leen UNA vez (no dos por columna).
                     var peId = rs.getLong("process_execution_id");
+                    var peIdNull = rs.wasNull();
+                    var createdAt = rs.getTimestamp("created_at");
+                    var updatedAt = rs.getTimestamp("updated_at");
                     result.add(new DispatchIntentRow(
                             rs.getString("dispatch_key"),
-                            rs.wasNull() ? null : peId,
+                            peIdNull ? null : peId,
                             rs.getString("senders_reference"),
                             rs.getString("status"),
                             rs.getString("gateway_reference"),
                             rs.getInt("attempts"),
                             rs.getString("error_message"),
-                            rs.getTimestamp("created_at") == null ? null : rs.getTimestamp("created_at").toInstant().toString(),
-                            rs.getTimestamp("updated_at") == null ? null : rs.getTimestamp("updated_at").toInstant().toString()));
+                            createdAt == null ? null : createdAt.toInstant().toString(),
+                            updatedAt == null ? null : updatedAt.toInstant().toString()));
                 }
             }
             return result;

@@ -14,6 +14,7 @@ import java.sql.Connection;
 import java.sql.Statement;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * P3 — E2E contra Postgres real del ledger de intención de dispatch (camino de lista en memoria). Prueba la
@@ -116,6 +117,16 @@ class Mt101PayDispatchIntentStoreIT {
         assertEquals(Long.valueOf(1L), counts.get("REJECTED"));
         assertEquals(Long.valueOf(1L), counts.get("UNCERTAIN"));
         assertEquals(Long.valueOf(1L), counts.get("DISPATCHING"));
+    }
+
+    @Test
+    void stuckIntentReportsNullProcessExecutionIdAsNull() {
+        // Regresión: el camino de lista puede reclamar sin process_execution_id (NULL). getLong() lo devuelve como 0;
+        // el mapeo debe reportarlo como null (wasNull capturado en la columna correcta), no como 0.
+        store.claimForDispatch("REST|12|N-EXEC", null, "N-EXEC"); // DISPATCHING, execId NULL
+        var row = store.stuckIntents(10).stream()
+                .filter(r -> "N-EXEC".equals(r.sendersReference())).findFirst().orElseThrow();
+        assertNull(row.processExecutionId(), "un process_execution_id NULL se reporta como null, no 0");
     }
 
     @Test

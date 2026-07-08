@@ -15,6 +15,7 @@ import java.sql.Statement;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.nullValue;
 
 /**
  * D1 (visibilidad): los endpoints de lookup del ledger de dispatch del PAY por lista exponen las intenciones
@@ -57,7 +58,9 @@ class Mt101PayDispatchIntentLookupIT {
                 .then().statusCode(200)
                 .body("size()", is(2))
                 .body("findAll { it.status == 'SENT' }.size()", is(0))
-                .body("find { it.sendersReference == 'D-UNC' }.errorMessage", containsString("recepción"));
+                .body("find { it.sendersReference == 'D-UNC' }.errorMessage", containsString("recepción"))
+                // Regresión: sembrado sin process_execution_id -> se serializa como null (no 0).
+                .body("find { it.sendersReference == 'D-UNC' }.processExecutionId", nullValue());
     }
 
     private void seed(String dispatchKey, String ref, String status, String error) throws Exception {
