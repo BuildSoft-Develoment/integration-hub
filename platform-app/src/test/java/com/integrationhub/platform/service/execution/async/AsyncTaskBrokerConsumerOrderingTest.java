@@ -33,4 +33,14 @@ class AsyncTaskBrokerConsumerOrderingTest {
         assertEquals("async-task-worker-pool", blocking.value(),
                 "el consumer usa su pool bloqueante dedicado (exclusivo, max-concurrency=1)");
     }
+
+    @Test
+    void blockingDefaultIsOrderedTrue() throws NoSuchMethodException {
+        // Linchpin del analisis P0-1: el @Blocking("...") original (sin ordered explicito) ya era ordered=true, por lo
+        // que el canal SIEMPRE fue serial (nunca hubo doble-efecto). Si este default fuese false, el analisis "no
+        // alcanzable" seria erroneo. Se verifica el default real de la anotacion de SmallRye.
+        Object def = Blocking.class.getDeclaredMethod("ordered").getDefaultValue();
+        assertEquals(Boolean.TRUE, def,
+                "el default de @Blocking.ordered() debe ser true (base de la serializacion del canal)");
+    }
 }

@@ -39,12 +39,22 @@ inerte — un foot-gun: un futuro `ordered=false` por throughput reabriría la v
 Sin cambio de comportamiento en runtime (el canal está apagado y `ordered=true` ya serializaba); es un blindaje contra
 regresión futura.
 
-## Pruebas (evidencia)
+## Doble-check + E2E (evidencia)
+
+1. **Premisa verificada (linchpin)**: el test `blockingDefaultIsOrderedTrue` afirma que el default real de
+   `@Blocking.ordered()` es `true` (vía `getDefaultValue()`). → El `@Blocking("...")` original (sin `ordered`
+   explícito) **siempre** fue serial; nunca hubo doble-efecto. Mi análisis "no alcanzable" queda validado, no asumido.
+2. **El blindaje atrapa la regresión (mutación)**: al mutar el source a `ordered = false`, el guard test **falla** con
+   el mensaje exacto de P0-1 (`ordered debe ser true ... ==> expected: <true> but was: <false>`, BUILD FAILURE); al
+   revertir a `ordered = true`, vuelve a 2/2 verde. Prueba que el guard cierra de verdad la regresión silenciosa.
+3. **La app arranca con `max-concurrency=1`**: ITs `@QuarkusTest` que bootean el stack completo con la config real
+   pasan → el cambio de config no rompe el arranque ni el subsistema async.
 
 | Suite | Resultado | Qué prueba |
 |---|---|---|
-| `AsyncTaskBrokerConsumerOrderingTest` | **1 / 0 / 0** | la invariante `@Blocking(ordered=true)` + pool dedicado (falla si se cambia) |
+| `AsyncTaskBrokerConsumerOrderingTest` | **2 / 0 / 0** | invariante `@Blocking(ordered=true)` + pool dedicado + default real `true` (mutación a false → falla, verificado) |
 | `AsyncTaskConsumerTest` | **24 / 0 / 0** | núcleo del consumer sin regresión |
+| `AsyncTaskMetricsIT` + `AsyncTaskRetentionIT` (`@QuarkusTest`) | **3 / 0 / 0** | el stack arranca y el async funciona con `max-concurrency=1` |
 
 ## Resumen
 
