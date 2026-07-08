@@ -202,7 +202,13 @@
             <div class="q__card q__card--{{ entry.status }}"><small>{{ entry.status }}</small><strong>{{ entry.count }}</strong></div>
           }
           <div class="q__card q__card--QUARANTINED"><small>{{ i18n.t('audit.quarantine.cardQuarantine') }}</small><strong>{{ pendingCount() }}</strong></div>
+          @if (s.conflicts && s.conflicts > 0) {
+            <div class="q__card q__card--conflict"><small>{{ i18n.t('audit.quarantine.cardConflicts') }}</small><strong>{{ s.conflicts }}</strong></div>
+          }
         </div>
+        @if (s.conflicts && s.conflicts > 0) {
+          <p class="q__conflict" role="alert">{{ i18n.t('audit.quarantine.conflictAlert', { count: s.conflicts }) }}</p>
+        }
       }
 
       @if (message()) {

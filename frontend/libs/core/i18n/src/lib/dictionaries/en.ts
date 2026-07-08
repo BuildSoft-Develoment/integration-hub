@@ -1146,6 +1146,9 @@ export const en = {
   'audit.quarantine.confirmSet': 'A new SWIFT batch will be generated: {set}.',
   'audit.quarantine.cardFragments': 'Fragments',
   'audit.quarantine.cardQuarantine': 'Quarantined',
+  'audit.quarantine.cardConflicts': 'Pay conflicts',
+  'audit.quarantine.conflictAlert':
+    '{count} fragment(s) in pay conflict (terminal contradiction worker↔STATUS) — manual reconciliation required.',
   'audit.quarantine.processing': 'Processing...',
   'audit.quarantine.emptyNoSet': 'No quarantined rows for this set. Enter the fragment set (from the fragment lookup or the execution traceability) and press "Build quarantine".',
   'audit.quarantine.emptyWithSet': 'No quarantined rows for this set. The batch has no rejected rows, or you have not built the quarantine yet.',

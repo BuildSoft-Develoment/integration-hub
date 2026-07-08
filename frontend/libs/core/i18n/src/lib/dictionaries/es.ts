@@ -1146,6 +1146,9 @@ export const es = {
   'audit.quarantine.confirmSet': 'Se generara un nuevo lote SWIFT: {set}.',
   'audit.quarantine.cardFragments': 'Fragmentos',
   'audit.quarantine.cardQuarantine': 'En cuarentena',
+  'audit.quarantine.cardConflicts': 'Conflictos de pago',
+  'audit.quarantine.conflictAlert':
+    '{count} fragmento(s) en conflicto de pago (contradicción terminal worker↔STATUS) — requiere conciliación manual.',
   'audit.quarantine.processing': 'Procesando...',
   'audit.quarantine.emptyNoSet': 'Sin filas en cuarentena para este set. Ingresa el fragment set (lo ves en el lookup de fragmentos o en la trazabilidad de la ejecucion) y pulsa "Construir cuarentena".',
   'audit.quarantine.emptyWithSet': 'Sin filas en cuarentena para este set. El lote no tiene filas rechazadas, o aun no construiste la cuarentena.',

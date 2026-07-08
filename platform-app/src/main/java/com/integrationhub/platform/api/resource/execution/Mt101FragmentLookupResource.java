@@ -70,8 +70,28 @@ public class Mt101FragmentLookupResource {
                 byStatus.put(entry.status(), entry.count());
                 total += entry.count();
             }
+            // Item 3: el conteo de conflictos de pago viaja en el resumen para una alerta operativa de un vistazo.
+            var conflicts = service.payConflictCount(connectionRef, fragmentSetId);
             return Map.of("fragmentSetId", fragmentSetId == null ? "" : fragmentSetId,
-                    "total", total, "byStatus", byStatus);
+                    "total", total, "byStatus", byStatus, "conflicts", conflicts);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /**
+     * Item 3 (visibilidad): fragmentos en conflicto de pago del set (contradicción terminal worker↔STATUS), con su
+     * motivo y estado real. La UI los lista para conciliar; complementa las tramas append-only {@code PAY_CONFLICT}
+     * del timeline.
+     */
+    @GET
+    @Path("/pay-conflicts")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
+    public List<Mt101FragmentRepository.PayConflictRow> payConflicts(
+            @QueryParam("connectionRef") String connectionRef,
+            @QueryParam("fragmentSetId") String fragmentSetId) {
+        try {
+            return service.payConflicts(connectionRef, fragmentSetId);
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }

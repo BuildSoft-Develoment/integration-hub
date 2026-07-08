@@ -397,6 +397,22 @@ public class Mt101FragmentRepository {
                                 List<String> fromStatuses,
                                 String toStatus,
                                 String errorMessage) throws SQLException {
+        try (var connection = dataSource.getConnection()) {
+            return resolvePayStatus(connection, fragmentSetId, sendersReferences, fromStatuses, toStatus, errorMessage);
+        }
+    }
+
+    /**
+     * P1 (atomicidad): variante por {@code Connection} para transicionar el pay_status DENTRO de una transacción
+     * compartida con la inserción de la confirmación (misma conexión, un solo commit). Evita el estado inconsistente
+     * "fragmento resuelto sin evidencia" si la confirmation fallara tras el update en autocommit separado.
+     */
+    public int resolvePayStatus(java.sql.Connection connection,
+                                String fragmentSetId,
+                                Collection<String> sendersReferences,
+                                List<String> fromStatuses,
+                                String toStatus,
+                                String errorMessage) throws SQLException {
         var refs = new ArrayList<String>();
         if (sendersReferences != null) {
             for (var reference : sendersReferences) {
@@ -411,8 +427,7 @@ public class Mt101FragmentRepository {
         var sql = "update mt101_build_fragment set status = ?, error_message = ?, updated_at = current_timestamp "
                 + "where fragment_set_id = ? and status in (" + placeholders(fromStatuses.size()) + ") "
                 + "and senders_reference in (" + placeholders(refs.size()) + ")";
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
+        try (var statement = connection.prepareStatement(sql)) {
             var parameter = 1;
             statement.setString(parameter++, toStatus);
             statement.setString(parameter++, errorMessage);
@@ -524,6 +539,14 @@ public class Mt101FragmentRepository {
      */
     public void markPayConflict(DataSource dataSource, String fragmentSetId,
                                 Collection<String> sendersReferences, String reason) throws SQLException {
+        try (var connection = dataSource.getConnection()) {
+            markPayConflict(connection, fragmentSetId, sendersReferences, reason);
+        }
+    }
+
+    /** P1 (atomicidad): variante por {@code Connection} para marcar pay_conflict + confirmación en una sola tx. */
+    public void markPayConflict(java.sql.Connection connection, String fragmentSetId,
+                                Collection<String> sendersReferences, String reason) throws SQLException {
         var refs = new ArrayList<String>();
         if (sendersReferences != null) {
             for (var reference : sendersReferences) {
@@ -538,8 +561,7 @@ public class Mt101FragmentRepository {
         var sql = "update mt101_build_fragment set pay_conflict = true, pay_conflict_reason = ?, "
                 + "updated_at = current_timestamp where fragment_set_id = ? and senders_reference in ("
                 + placeholders(refs.size()) + ")";
-        try (var connection = dataSource.getConnection();
-             var statement = connection.prepareStatement(sql)) {
+        try (var statement = connection.prepareStatement(sql)) {
             var parameter = 1;
             statement.setString(parameter++, reason);
             statement.setString(parameter++, fragmentSetId);
@@ -937,6 +959,49 @@ public class Mt101FragmentRepository {
     }
 
     public record StatusCount(String status, long count) {
+    }
+
+    /**
+     * Item 3 (visibilidad): fragmentos en conflicto de pago ({@code pay_conflict=true}) de un set, con su motivo y
+     * estado real (no sobrescrito). Los expone la API/UI para que un operador vea y concilie las contradicciones
+     * terminales (worker↔STATUS) en vez de que queden solo como columna interna.
+     */
+    public List<PayConflictRow> conflictedFragments(DataSource dataSource, String fragmentSetId) throws SQLException {
+        var sql = "select senders_reference, status, pay_conflict_reason, updated_at from mt101_build_fragment "
+                + "where fragment_set_id = ? and coalesce(pay_conflict, false) = true order by senders_reference";
+        var result = new ArrayList<PayConflictRow>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, fragmentSetId);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    var updatedAt = rs.getTimestamp("updated_at");
+                    result.add(new PayConflictRow(
+                            rs.getString("senders_reference"),
+                            rs.getString("status"),
+                            rs.getString("pay_conflict_reason"),
+                            updatedAt == null ? null : updatedAt.toInstant().toString()));
+                }
+            }
+        }
+        return result;
+    }
+
+    /** Item 3: cuántos fragmentos de un set están en conflicto de pago (para el resumen). */
+    public long payConflictCount(DataSource dataSource, String fragmentSetId) throws SQLException {
+        var sql = "select count(*) from mt101_build_fragment "
+                + "where fragment_set_id = ? and coalesce(pay_conflict, false) = true";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, fragmentSetId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getLong(1) : 0;
+            }
+        }
+    }
+
+    /** Fila de conflicto de pago para la API/UI (item 3). */
+    public record PayConflictRow(String sendersReference, String status, String reason, String updatedAt) {
     }
 
     public Map<TransactionKey, FragmentRecordLineage> fragmentRecordLineageByTransactions(

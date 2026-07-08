@@ -188,6 +188,24 @@ class Mt101PayNormalDurableTest {
         assertTrue(emitter.hasStage("PAY_CONFLICT"), "se emite la trama append-only PAY_CONFLICT para el conflicto");
     }
 
+    @Test
+    void conflictedFragmentsAndCountAreExposedForVisibility() throws Exception {
+        // Item 3: los fragmentos en conflicto (pay_conflict) se exponen con su motivo para que la API/UI los concilie.
+        var setId = "PAY-CONFLICT-VIS";
+        seedArchived(setId, "V1", 1, 2);
+        seedArchived(setId, "V2", 2, 2);
+        var fragmentSource = fragmentStore.source(null, setId, 2);
+        fragmentStore.markPayConflict(fragmentSource, List.of("V1"), "late SENT vs prior REJECTED");
+
+        var repo = new com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository();
+        assertEquals(1L, repo.payConflictCount(dataSource, setId), "un fragmento en conflicto en el set");
+        var conflicts = repo.conflictedFragments(dataSource, setId);
+        assertEquals(1, conflicts.size(), "solo V1 está en conflicto");
+        assertEquals("V1", conflicts.get(0).sendersReference());
+        assertEquals("late SENT vs prior REJECTED", conflicts.get(0).reason(),
+                "el motivo del conflicto viaja para conciliación");
+    }
+
     // --- helpers ---
 
     private TaskContext payContextFor(String fragmentSetId, int total) {

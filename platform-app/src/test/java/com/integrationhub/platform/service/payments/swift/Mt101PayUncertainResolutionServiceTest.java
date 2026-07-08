@@ -3,9 +3,11 @@ package com.integrationhub.platform.service.payments.swift;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
+import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101StatusQueryExecutor;
 import com.integrationhub.platform.repository.payments.swift.Mt101ConfirmationRepository;
 import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;
@@ -26,6 +28,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -45,6 +48,7 @@ class Mt101PayUncertainResolutionServiceTest {
     private DataSource dataSource;
     private Mt101FragmentRepository repository;
     private Mt101PayUncertainResolutionService service;
+    private CapturingAuditEmitter auditEmitter;
     private String baseUrl;
 
     @BeforeEach
@@ -62,8 +66,9 @@ class Mt101PayUncertainResolutionServiceTest {
                 "rejectedStatuses", List.of("REJECTED"));
         Mt101CorrectiveTaskConfigSource configSource = (taskDefinitionId, taskType) ->
                 "MT101_STATUS".equals(taskType) ? statusConfig : null;
+        auditEmitter = new CapturingAuditEmitter();
         service = new Mt101PayUncertainResolutionService(dataSource, null, repository, executor,
-                new Mt101ConfirmationRepository(), configSource);
+                new Mt101ConfirmationRepository(), auditEmitter, configSource);
         prepareSchema();
     }
 
@@ -120,7 +125,7 @@ class Mt101PayUncertainResolutionServiceTest {
         Mt101CorrectiveTaskConfigSource configSource = (taskDefinitionId, taskType) ->
                 "MT101_STATUS".equals(taskType) ? routeConfig : null;
         var routeService = new Mt101PayUncertainResolutionService(dataSource, null, repository,
-                new Mt101StatusQueryExecutor(new ObjectMapper()), new Mt101ConfirmationRepository(), configSource);
+                new Mt101StatusQueryExecutor(new ObjectMapper()), new Mt101ConfirmationRepository(), null, configSource);
 
         var result = routeService.resolveUncertainNormalPay(null, setId, "ana", "route-aware");
 
@@ -170,6 +175,14 @@ class Mt101PayUncertainResolutionServiceTest {
         assertTrue(payConflictFor(setId, "K1"), "K1 queda marcado pay_conflict para conciliación manual");
         assertFalse(payConflictFor(setId, "K2"), "K2 confirmado por el banco: sin conflicto");
         assertEquals(1L, countConfirmations(6001L), "confirmación append-only del rechazo tardío de K1");
+        // item 2: además del booleano + confirmación, se emite la trama append-only PAY_CONFLICT con source=STATUS.
+        var trama = auditEmitter.firstOfStage("PAY_CONFLICT");
+        assertTrue(trama.isPresent(), "STATUS/RECONCILE emite la trama append-only PAY_CONFLICT");
+        assertEquals("K1", trama.get().recordId(), "la trama identifica el :20: en conflicto");
+        assertEquals("STATUS", trama.get().attributes().get("source"), "la trama marca source=STATUS");
+        assertEquals("SENT", trama.get().attributes().get("previousStatus"));
+        assertEquals("REJECTED", trama.get().attributes().get("incomingTerminal"));
+        assertEquals("ana", trama.get().attributes().get("actor"), "queda el actor que ejecutó la reconciliación");
     }
 
     @Test
@@ -186,6 +199,28 @@ class Mt101PayUncertainResolutionServiceTest {
         assertEquals(0, service.resolveUncertainNormalPay(null, setId, "ana", "2a").conflicts(),
                 "un SENT ya en conflicto no se re-marca en una segunda pasada");
         assertEquals(1L, countConfirmations(6002L), "no se duplica la confirmación del conflicto");
+    }
+
+    @Test
+    void fragmentTransitionAndConfirmationAreAtomic() throws Exception {
+        // P1 (atomicidad): si la inserción de la confirmación falla, la transición del fragmento se REVIERTE — nunca
+        // queda un fragmento resuelto sin evidencia (y sigue seleccionable para un reintento). Se fuerza el fallo
+        // dropeando mt101_confirmation: el update del fragmento y el insert de confirmación van en la MISMA tx.
+        var setId = "PAY-UNC-ATOMIC";
+        seed(setId, "T1", 1, "UNCERTAIN");
+        seedArchive("T1", 100L, 7001L);
+        stubFor(get(urlEqualTo("/status/T1")).willReturn(aResponse().withHeader("Content-Type", "application/json")
+                .withBody("{\"status\":\"ACCEPTED\",\"gatewayReference\":\"GW-T1\"}")));
+        try (Connection connection = dataSource.getConnection();
+             Statement statement = connection.createStatement()) {
+            statement.executeUpdate("drop table mt101_confirmation");
+        }
+
+        assertThrows(IllegalStateException.class,
+                () -> service.resolveUncertainNormalPay(null, setId, "ana", "atomic"),
+                "el fallo de la confirmación aborta la resolución");
+        assertEquals("UNCERTAIN", statusFor(setId, "T1"),
+                "la transición se revierte con la confirmación: sin fragmento resuelto sin evidencia");
     }
 
     // --- helpers ---
@@ -344,5 +379,19 @@ class Mt101PayUncertainResolutionServiceTest {
         pg.setUser(POSTGRES.getUsername());
         pg.setPassword(POSTGRES.getPassword());
         return pg;
+    }
+
+    /** Captura las tramas de auditoría para verificar la trama append-only PAY_CONFLICT (item 2). */
+    private static final class CapturingAuditEmitter implements RecordAuditEmitter {
+        private final java.util.List<AuditEnvelope> captured = new java.util.ArrayList<>();
+
+        @Override
+        public void emitRecords(java.util.Collection<AuditEnvelope> envelopes) {
+            captured.addAll(envelopes);
+        }
+
+        java.util.Optional<AuditEnvelope> firstOfStage(String stage) {
+            return captured.stream().filter(envelope -> stage.equals(envelope.stage())).findFirst();
+        }
     }
 }

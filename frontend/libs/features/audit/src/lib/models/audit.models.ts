@@ -178,6 +178,16 @@ export interface Mt101FragmentSetSummary {
   fragmentSetId: string;
   total: number;
   byStatus: Record<string, number>;
+  /** Item 3: fragmentos en conflicto de pago (contradicción terminal worker↔STATUS) que exigen conciliación. */
+  conflicts?: number;
+}
+
+/** Item 3: fragmento en conflicto de pago, para listarlo con su motivo en la UI de conciliación. */
+export interface Mt101PayConflict {
+  sendersReference: string;
+  status: string;
+  reason: string | null;
+  updatedAt: string | null;
 }
 
 export interface Mt101RowTimelineEntry {

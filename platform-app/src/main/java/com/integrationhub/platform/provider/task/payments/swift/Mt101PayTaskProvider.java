@@ -475,33 +475,11 @@ public class Mt101PayTaskProvider implements TaskProvider {
      */
     private AuditEnvelope payConflictEnvelope(TaskContext context, String reference,
             String currentStatus, String incomingTerminal) {
-        return new AuditEnvelope(
-                UUID.randomUUID().toString(),
-                context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
-                reference,
-                AuditLevel.RECORD,
-                "PAY_CONFLICT",
-                "PAY_CONFLICT",
-                context.processExecutionId(),
-                context.taskDefinitionId(),
-                "resultado terminal tardío '" + incomingTerminal + "' contradijo el estado ya resuelto '"
-                        + currentStatus + "'; no se sobrescribió — conciliar (STATUS/RECONCILE)",
-                null,
-                Map.of("previousStatus", currentStatus, "incomingTerminal", incomingTerminal),
-                "SWIFT",
-                "MT101",
-                null,
-                null,
-                null,
-                null,
-                null,
-                reference,
-                null,
-                null,
-                null,
-                null,
-                Instant.now(),
-                AuditEnvelope.CURRENT_SCHEMA_VERSION);
+        // DRY: misma trama PAY_CONFLICT que emite el resolver STATUS, con source=WORKER (contradicción detectada al
+        // aplicar un resultado terminal tardío del despacho).
+        return com.integrationhub.platform.service.payments.swift.Mt101PayConflictAudit.envelope(
+                context.processExecutionId(), context.taskDefinitionId(), reference, currentStatus, incomingTerminal,
+                null, com.integrationhub.platform.service.payments.swift.Mt101PayConflictAudit.Source.WORKER, null);
     }
 
     private record RoutedDispatchMessage(Mt101Message message, String routedAs, String routeError) {

@@ -56,6 +56,30 @@ public class Mt101FragmentLookupService {
         }
     }
 
+    /** Item 3 (visibilidad): fragmentos en conflicto de pago del set (con motivo), para que la UI los concilie. */
+    public List<Mt101FragmentRepository.PayConflictRow> payConflicts(String connectionRef, String fragmentSetId) {
+        if (fragmentSetId == null || fragmentSetId.isBlank()) {
+            throw new IllegalArgumentException("fragmentSetId is required");
+        }
+        try {
+            return repository.conflictedFragments(resolveDataSource(connectionRef), fragmentSetId.trim());
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot list MT101 pay conflicts for set " + fragmentSetId, error);
+        }
+    }
+
+    /** Item 3: cuántos fragmentos del set están en conflicto de pago (para el resumen operativo). */
+    public long payConflictCount(String connectionRef, String fragmentSetId) {
+        if (fragmentSetId == null || fragmentSetId.isBlank()) {
+            throw new IllegalArgumentException("fragmentSetId is required");
+        }
+        try {
+            return repository.payConflictCount(resolveDataSource(connectionRef), fragmentSetId.trim());
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot count MT101 pay conflicts for set " + fragmentSetId, error);
+        }
+    }
+
     private DataSource resolveDataSource(String connectionRef) {
         if (connectionRef == null || connectionRef.isBlank()) {
             return defaultDataSource;
