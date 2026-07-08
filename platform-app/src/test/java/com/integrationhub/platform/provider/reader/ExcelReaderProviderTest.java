@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 // @covers RF-004 (reingenieria: prueba que cubre el/los RF en produccion)
 class ExcelReaderProviderTest {
@@ -136,6 +138,36 @@ class ExcelReaderProviderTest {
 
         assertEquals(2, result.recordCount());
         assertEquals("001", result.records().get(0).values().get("codigo"));
+    }
+
+    @Test
+    void capturesSheetAndPhysicalRowForXlsx() throws IOException {
+        // item 2 (B): el reader Excel aporta posición física = hoja + fila 1-based (Excel no tiene "línea" global).
+        var payload = SourcePayload.fromBytes("clientes.xlsx", buildXlsxBytes(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        ReadResult result = read(xlsxReaderProvider, payload, Map.of(
+                "sheetIndex", 1, "rowData", 2, // hoja "Hoja 2", salta la cabecera (fila física 1)
+                "fields", List.of(Map.of("name", "codigo", "position", 1))));
+
+        assertEquals(2, result.recordCount());
+        var pos = result.records().get(0).position();
+        assertNotNull(pos, "el reader Excel aporta posición");
+        assertEquals("Hoja 2", pos.sheetName(), "hoja seleccionada por sheetIndex");
+        assertEquals(2L, pos.sheetRow(), "1er dato = fila física 2 (la 1 es cabecera)");
+        assertNull(pos.physicalLine(), "Excel usa hoja+fila, no línea global");
+        assertEquals("101", result.records().get(0).values().get("codigo"));
+    }
+
+    @Test
+    void capturesSheetAndPhysicalRowForXls() throws IOException {
+        var payload = SourcePayload.fromBytes("clientes.xls", buildXlsBytes(), "application/vnd.ms-excel");
+        ReadResult result = read(xlsReaderProvider, payload, Map.of(
+                "rowData", 2, "fields", List.of(Map.of("name", "codigo", "position", 1))));
+
+        var pos = result.records().get(0).position();
+        assertNotNull(pos);
+        assertEquals("clientes", pos.sheetName());
+        assertEquals(2L, pos.sheetRow(), "1er dato = fila física 2 (la 1 es cabecera)");
     }
 
     private ReadResult read(ReaderProvider provider, SourcePayload payload, Map<String, Object> configuration) {

@@ -40,10 +40,45 @@ export class Mt101FragmentLookupComponent {
   processExecutionId = '';
   fragmentSetId = '';
   connectionRef = '';
+  // item 2 (búsqueda inversa): "archivo + línea física" → registro lógico (auto-llena recordNumber para el lookup).
+  physicalLine = '';
 
   readonly rows = signal<Mt101FragmentLink[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
+  readonly physicalLineMsg = signal<string | null>(null);
+
+  /**
+   * item 2: resuelve una LÍNEA FÍSICA del archivo a su registro lógico (staging_id + record_index) y auto-llena
+   * recordNumber para que el operador siga al lookup de fragmentos. 204 → sin registro en esa línea.
+   */
+  resolvePhysicalLine(): void {
+    this.physicalLineMsg.set(null);
+    const line = Number(this.physicalLine);
+    if (!this.sourceFileHash.trim() || !Number.isInteger(line) || line < 1) {
+      this.physicalLineMsg.set(this.i18n.t('audit.lookup.physicalLineInvalid'));
+      return;
+    }
+    this.api.mt101ByPhysicalLine({
+      sourceFileHash: this.sourceFileHash,
+      physicalLine: line,
+      processExecutionId: this.processExecutionId ? Number(this.processExecutionId) : undefined,
+      connectionRef: this.connectionRef,
+    }).subscribe({
+      next: (match) => {
+        if (!match) {
+          this.physicalLineMsg.set(this.i18n.t('audit.lookup.physicalLineEmpty', { line }));
+          return;
+        }
+        // Registro lógico 1-based visible al operador = record_index (0-based) + 1.
+        this.recordNumber = String(match.recordIndex + 1);
+        this.physicalLineMsg.set(this.i18n.t('audit.lookup.physicalLineResolved', {
+          line, record: match.recordIndex + 1, staging: match.stagingId,
+        }));
+      },
+      error: () => this.physicalLineMsg.set(this.i18n.t('audit.lookup.physicalLineError')),
+    });
+  }
 
   constructor() {
     this.breadcrumb.setItems([

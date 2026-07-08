@@ -12,6 +12,7 @@ import {
   Mt101LoteHeader,
   Mt101NormalPayResolution,
   Mt101PayConflict,
+  Mt101PhysicalLineMatch,
   Mt101PayDispatchIntent,
   Mt101PayDispatchReconcileResult,
   Mt101PayDispatchSummary,
@@ -147,6 +148,26 @@ export class AuditApiService {
       httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }
     return this.http.get<Mt101FragmentSetSummary>('/api/query/mt101-fragments/summary', { params: httpParams });
+  }
+
+  /** item 2 (búsqueda inversa): "archivo + línea física" → registro de staging (staging_id + índice lógico). */
+  mt101ByPhysicalLine(query: {
+    connectionRef?: string;
+    sourceFileHash: string;
+    physicalLine: number;
+    processExecutionId?: number;
+  }): Observable<Mt101PhysicalLineMatch | null> {
+    let httpParams = new HttpParams()
+      .set('sourceFileHash', query.sourceFileHash.trim())
+      .set('physicalLine', String(query.physicalLine));
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    if (query.processExecutionId != null) {
+      httpParams = httpParams.set('processExecutionId', String(query.processExecutionId));
+    }
+    return this.http.get<Mt101PhysicalLineMatch | null>(
+      '/api/query/mt101-fragments/by-physical-line', { params: httpParams });
   }
 
   /** v60: lista detallada de fragmentos en conflicto de pago del set (:20:, estado real, motivo, fecha). */

@@ -3,6 +3,7 @@ package com.integrationhub.platform.provider.reader;
 import com.integrationhub.platform.spi.reader.ReadBatch;
 import com.integrationhub.platform.spi.reader.ReadBatchConsumer;
 import com.integrationhub.platform.spi.reader.ReadRecord;
+import com.integrationhub.platform.spi.reader.SourcePosition;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.reader.ReadSkip;
 import com.integrationhub.platform.spi.source.SourcePayload;
@@ -58,6 +59,7 @@ final class XlsxStreamingReaderSupport {
                         continue;
                     }
                     foundSheet = true;
+                    context.sheetName = sheets.getSheetName(); // item 2: nombre de la hoja para la posición física
                     var parser = SAXHelper.newXMLReader();
                     var handler = new XSSFSheetXMLHandler(styles, null, sharedStrings, new SheetHandler(context), new DataFormatter(), false);
                     parser.setContentHandler(handler);
@@ -87,6 +89,7 @@ final class XlsxStreamingReaderSupport {
         private final List<ReadRecord> batchRecords = new ArrayList<>();
         private final List<ReadSkip> skippedRows = new ArrayList<>();
         private int totalRecords;
+        private String sheetName; // item 2: hoja activa, para SourcePosition.sheet
         private int batchNumber = 1;
 
         private StreamingContext(String fileName,
@@ -116,7 +119,8 @@ final class XlsxStreamingReaderSupport {
                 return trimValues ? value.trim() : value;
             });
             if (!rowResult.skipped()) {
-                batchRecords.add(new ReadRecord(rowResult.values()));
+                // item 2: rowIndex 0-based (SAX) -> fila física 1-based, con el nombre de la hoja.
+                batchRecords.add(new ReadRecord(rowResult.values(), SourcePosition.sheet(sheetName, rowIndex + 1L)));
                 totalRecords++;
                 if (batchRecords.size() >= batchSize) {
                     flush();

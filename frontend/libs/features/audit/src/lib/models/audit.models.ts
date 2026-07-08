@@ -206,6 +206,15 @@ export interface Mt101StagingRowView {
   sheetRow: number | null;
 }
 
+/** item 2 (búsqueda inversa): match de "archivo + línea física" al registro de staging. */
+export interface Mt101PhysicalLineMatch {
+  stagingId: number;
+  recordIndex: number;
+  physicalLine: number | null;
+  sourceFileHash: string;
+  processExecutionId: number | null;
+}
+
 /** v60: resultado de resolver el UNCERTAIN normal de un fragment set (consulta STATUS, no reenvía). */
 export interface Mt101NormalPayResolution {
   resolvedSent: number;

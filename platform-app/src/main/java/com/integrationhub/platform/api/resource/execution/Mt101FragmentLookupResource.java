@@ -2,6 +2,7 @@ package com.integrationhub.platform.api.resource.execution;
 
 import com.integrationhub.platform.api.response.execution.Mt101FragmentLinkResponse;
 import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
+import com.integrationhub.platform.repository.payments.swift.Mt101StagingRecordRepository;
 import com.integrationhub.platform.service.payments.swift.Mt101FragmentLookupService;
 import com.integrationhub.platform.service.payments.swift.Mt101RowTimelineService;
 import jakarta.annotation.security.RolesAllowed;
@@ -74,6 +75,30 @@ public class Mt101FragmentLookupResource {
             var conflicts = service.payConflictCount(connectionRef, fragmentSetId);
             return Map.of("fragmentSetId", fragmentSetId == null ? "" : fragmentSetId,
                     "total", total, "byStatus", byStatus, "conflicts", conflicts);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /**
+     * item 2 (búsqueda inversa): "archivo + línea física → registro". Resuelve una línea física del archivo a su
+     * staging_id + índice lógico (para que soporte ubique el registro/fragmento desde una línea que un banco/auditor
+     * referencia). Usa el índice V90 {@code (source_file_hash, physical_line)}. 404 (null) si la línea no tiene
+     * registro o el reader no aportó línea física.
+     */
+    @GET
+    @Path("/by-physical-line")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
+    public Mt101StagingRecordRepository.PhysicalLineMatch byPhysicalLine(
+            @QueryParam("connectionRef") String connectionRef,
+            @QueryParam("sourceFileHash") String sourceFileHash,
+            @QueryParam("physicalLine") Long physicalLine,
+            @QueryParam("processExecutionId") Long processExecutionId) {
+        if (physicalLine == null) {
+            throw new BadRequestException("physicalLine is required");
+        }
+        try {
+            return service.findByPhysicalLine(connectionRef, sourceFileHash, physicalLine, processExecutionId);
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }

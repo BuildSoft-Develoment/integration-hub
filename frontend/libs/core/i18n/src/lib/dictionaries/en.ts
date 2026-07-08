@@ -1291,6 +1291,13 @@ export const en = {
   'audit.lookup.col.error': 'Error',
   'audit.lookup.col.updated': 'Updated',
   'audit.lookup.goQuarantine': 'Quarantine',
+  // item 2: reverse search by physical file line
+  'audit.lookup.fieldPhysicalLine': 'Physical file line',
+  'audit.lookup.resolvePhysicalLine': 'Resolve line → record',
+  'audit.lookup.physicalLineInvalid': 'Enter a source file hash and a positive physical line.',
+  'audit.lookup.physicalLineEmpty': 'No record at physical line {line} for this file.',
+  'audit.lookup.physicalLineResolved': 'Physical line {line} → logical record {record} (staging {staging}). Row number filled.',
+  'audit.lookup.physicalLineError': 'Could not resolve the physical line.',
   'ui.asyncDispatchOptions': 'Async dispatch',
   'ui.asyncDispatch': 'Asynchronous execution (offload to broker)',
   'ui.asyncTransport': 'Transport',

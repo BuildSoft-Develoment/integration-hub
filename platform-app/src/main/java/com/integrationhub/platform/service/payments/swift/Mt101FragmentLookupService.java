@@ -1,6 +1,7 @@
 package com.integrationhub.platform.service.payments.swift;
 
 import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
+import com.integrationhub.platform.repository.payments.swift.Mt101StagingRecordRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -15,13 +16,36 @@ public class Mt101FragmentLookupService {
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
     private final Mt101FragmentRepository repository;
+    private final Mt101StagingRecordRepository stagingRepository;
 
     public Mt101FragmentLookupService(DataSource defaultDataSource,
                                       ConnectionPoolManager connectionPoolManager,
-                                      Mt101FragmentRepository repository) {
+                                      Mt101FragmentRepository repository,
+                                      Mt101StagingRecordRepository stagingRepository) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.repository = repository;
+        this.stagingRepository = stagingRepository;
+    }
+
+    /**
+     * item 2 (búsqueda inversa): resuelve "archivo + línea física" al registro de staging (staging_id + índice lógico),
+     * para que soporte ubique el registro/fragmento desde una línea del archivo. {@code processExecutionId} opcional.
+     */
+    public Mt101StagingRecordRepository.PhysicalLineMatch findByPhysicalLine(String connectionRef,
+                                                                            String sourceFileHash,
+                                                                            long physicalLine,
+                                                                            Long processExecutionId) {
+        if (physicalLine < 1) {
+            throw new IllegalArgumentException("physicalLine must be positive");
+        }
+        var hash = requireSourceFileHash(sourceFileHash);
+        try {
+            return stagingRepository.findByPhysicalLine(resolveDataSource(connectionRef), hash, physicalLine,
+                    processExecutionId);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot resolve staging row for physical line " + physicalLine, error);
+        }
     }
 
     public List<Mt101FragmentRepository.FragmentLookupRow> findBySourceRow(String connectionRef,

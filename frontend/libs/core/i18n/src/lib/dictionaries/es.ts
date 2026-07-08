@@ -1291,6 +1291,13 @@ export const es = {
   'audit.lookup.col.error': 'Error',
   'audit.lookup.col.updated': 'Actualizado',
   'audit.lookup.goQuarantine': 'Cuarentena',
+  // item 2: búsqueda inversa por línea física del archivo
+  'audit.lookup.fieldPhysicalLine': 'Línea física del archivo',
+  'audit.lookup.resolvePhysicalLine': 'Resolver línea → registro',
+  'audit.lookup.physicalLineInvalid': 'Ingresa el hash del archivo y una línea física positiva.',
+  'audit.lookup.physicalLineEmpty': 'No hay registro en la línea física {line} de este archivo.',
+  'audit.lookup.physicalLineResolved': 'Línea física {line} → registro lógico {record} (staging {staging}). Número de fila autocompletado.',
+  'audit.lookup.physicalLineError': 'No se pudo resolver la línea física.',
   'ui.asyncDispatchOptions': 'Despacho asíncrono',
   'ui.asyncDispatch': 'Ejecución asíncrona (offload a broker)',
   'ui.asyncTransport': 'Transporte',
