@@ -29,4 +29,5 @@ curl -fsS "${AUTH[@]}" -X POST "${PLATFORM}/api/plugins/ui-catalog" \
 
 echo "== Diagnostico (GET ${PLATFORM}/api/plugins) =="
 curl -fsS "${AUTH[@]}" "${PLATFORM}/api/plugins" | head -c 600; echo
-echo "Listo. Los task types DEMO_TRANSFORM_JAVA/NODE/PY quedan disponibles en el catalogo."
+echo "Listo. DEMO_TRANSFORM_JAVA/NODE/PY y DEMO_REMOTE_CSV quedan instalados para diagnostico."
+echo "Nota: los backends vienen trusted=false; la ejecucion queda bloqueada hasta registrar confianza."

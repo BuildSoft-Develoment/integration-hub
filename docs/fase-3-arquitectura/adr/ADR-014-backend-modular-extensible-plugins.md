@@ -256,11 +256,15 @@ verticales de primera parte siguen como modulos de build.
   sin fallback a providers locales.
 - Contrato remoto source/reader base:
   - Source `SOURCE_SELECT:{type}` devuelve `outputs.files`.
-  - Source `SOURCE_OPEN:{type}` devuelve `outputs.contentBase64` y opcionalmente
-    `outputs.mediaType`.
-  - Reader `READER_READ:{type}` recibe `contentBase64`, `sourceFile`,
-    `configuration` y `batchSize`, y devuelve `outputs.records` y
-    `outputs.skippedRows`.
+  - Source `SOURCE_OPEN:{type}` recibe `artifactRef` `PUT` presignado; el plugin
+    sube el archivo al object store y puede devolver `outputs.mediaType`.
+  - Reader `READER_READ:{type}` recibe `artifactRef` `GET`, `sourceFile`,
+    `configuration`, `batchSize` y opcionalmente `cursor`; devuelve una pagina en
+    `outputs.records`, `outputs.skippedRows` y opcionalmente `outputs.nextCursor`.
+  - Los readers que declaran capacidad de streaming entran al fast path por
+    `ReaderProvider.supportsStreamingPipeline()`, no por lista cerrada de tipos.
+    Los readers remotos requieren ese camino y fallan rapido si se intenta
+    materializarlos con `collectReadResult`.
 - Endpoint `GET /api/plugins` con RBAC (`PLATFORM_ADMIN`, `INTEGRATION_ADMIN`,
   `AUDITOR`) que expone plugins backend instalados, tipos aportados, transporte,
   confianza, estado y razon de degradacion.
@@ -322,7 +326,8 @@ verticales de primera parte siguen como modulos de build.
   existe como base. Queda pendiente orquestacion progresiva de trafico por
   porcentaje/segmento, politicas por canal y aprobacion automatizada desde un
   marketplace corporativo.
-- Streaming remoto avanzado para `SourceProvider`/`ReaderProvider`: la base
-  sincronica ya resuelve plugins externos y procesa payloads por contrato. Queda
-  pendiente streaming/chunking nativo para archivos grandes y canary dedicado por
-  operacion source/reader.
+- Streaming remoto avanzado para `SourceProvider`/`ReaderProvider`: `artifactRef`,
+  staging S3/MinIO, paginacion por cursor y fast path por capability ya estan
+  implementados para evitar `contentBase64` y listas cerradas. Queda pendiente
+  evidencia de volumen con broker/sidecar real, TTL renovable para transferencias
+  largas y canary dedicado por operacion source/reader.

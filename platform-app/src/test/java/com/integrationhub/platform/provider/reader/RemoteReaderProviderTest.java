@@ -24,8 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 
 /**
- * Proyecto #3 Fase 3a: el reader remoto envía el input por REFERENCIA (la plataforma stagea el archivo y presigna un
- * GET; el plugin lo descarga), no como Base64. Negocia por spiVersion (fail-fast). Retira el guard v58 de tamaño.
+ * Remote reader input travels by artifact reference. The plugin downloads the staged object and returns pages of
+ * records through the control channel; the platform must not materialize a remote reader through collectReadResult.
  */
 class RemoteReaderProviderTest {
 
@@ -42,8 +42,8 @@ class RemoteReaderProviderTest {
             @SuppressWarnings("unchecked")
             var refMap = (Map<String, Object>) payload.get(ArtifactReference.ARTIFACT_REF);
             var reference = ArtifactReference.fromMap(refMap);
-            assertEquals(ArtifactReference.GET, reference.method(), "el reader debe pasar una referencia GET");
-            downloadedByPlugin.set(staging.download(reference.uri())); // el plugin descarga el input staged
+            assertEquals(ArtifactReference.GET, reference.method(), "reader must pass a GET artifact reference");
+            downloadedByPlugin.set(staging.download(reference.uri()));
             return TaskResult.success("ok", Map.of("records", List.of(Map.of("a", "1"), Map.of("a", "2"))));
         };
 
@@ -53,17 +53,15 @@ class RemoteReaderProviderTest {
 
         var result = provider.readInBatches(payload, Map.of(), 10, batch -> { });
 
-        // 3b: records() del ReadResult es VACÍO (se streamea por el consumer); el total va en recordCount().
-        assertEquals(0, result.records().size(), "el reader remoto streamea por el consumer, no por records()");
+        assertEquals(0, result.records().size(), "remote reader streams through the consumer, not records()");
         assertEquals(2, result.recordCount());
-        assertArrayEquals(input, downloadedByPlugin.get(), "el plugin recibio el input por referencia (descargo el staged)");
-        assertEquals(1, staging.deleted.size(), "el input staged se limpia tras el READ");
+        assertArrayEquals(input, downloadedByPlugin.get(), "plugin downloaded the staged input by reference");
+        assertEquals(1, staging.deleted.size(), "staged input is cleaned after READ");
     }
 
     @Test
     void paginatesRecordsAcrossPagesUntilCursorIsEmpty() {
         var staging = new FakeArtifactStaging();
-        // El plugin devuelve 2 páginas: la primera con nextCursor, la segunda sin él (fin).
         RemotePluginInvoker invoker = (desc, taskType, context, payload) -> {
             var cursor = payload.get("cursor");
             if (cursor == null) {
@@ -79,39 +77,28 @@ class RemoteReaderProviderTest {
         var batchSizes = new java.util.ArrayList<Integer>();
         var result = provider.readInBatches(payload, Map.of(), 10, batch -> batchSizes.add(batch.records().size()));
 
-        assertEquals(3, result.recordCount(), "acumula el total de todas las páginas");
-        assertEquals(List.of(2, 1), batchSizes, "el consumer recibe una página por invocación (streaming)");
-        assertEquals(1, staging.deleted.size(), "el input staged se limpia tras el loop");
+        assertEquals(3, result.recordCount(), "total includes all pages");
+        assertEquals(List.of(2, 1), batchSizes, "consumer receives one page per invocation");
+        assertEquals(1, staging.deleted.size(), "staged input is cleaned after the loop");
     }
 
     @Test
-    void collectReadResultAccumulatesAllPagesEvenThoughRemoteReaderReturnsEmptyRecords() {
-        // Doble-check (integracion): el path collectReadResult (ProcessTaskRuntimeService) construye su lista via el
-        // callback -> funciona con el reader paginado que devuelve ReadResult.records() VACIO.
+    void collectReadResultRejectsRemoteReaderBecauseItRequiresStreamingPipeline() {
         var staging = new FakeArtifactStaging();
-        RemotePluginInvoker invoker = (desc, taskType, context, payload) -> {
-            var cursor = payload.get("cursor");
-            if (cursor == null) {
-                return TaskResult.success("p1", Map.of(
-                        "records", List.of(Map.of("r", "1"), Map.of("r", "2")), "nextCursor", "c2"));
-            }
-            return TaskResult.success("p2", Map.of("records", List.of(Map.of("r", "3"))));
-        };
+        RemotePluginInvoker invoker = (desc, taskType, context, payload) ->
+                TaskResult.success("p1", Map.of("records", List.of(Map.of("r", "1"))));
         var reader = new RemoteReaderProvider("MY_READER", descriptor("2"), invoker, new RemotePluginRegistry(), staging);
         var payload = SourcePayload.fromBytes("big.csv", "data".getBytes(StandardCharsets.UTF_8), "text/csv");
         var support = new FileReadRuntimeSupport(mock(JsonConfigurationMapper.class));
 
-        var result = support.collectReadResult(reader, payload, Map.of());
+        var error = assertThrows(IllegalStateException.class, () -> support.collectReadResult(reader, payload, Map.of()));
 
-        assertEquals(3, result.recordCount(), "collectReadResult usa el recordCount del reader (total de las páginas)");
-        assertEquals(3, result.records().size(),
-                "collectReadResult materializa via el callback -> funciona con el reader paginado (records() del reader vacío)");
+        assertTrue(error.getMessage().contains("streaming FILE_READ pipeline"));
     }
 
     @Test
     void failsWhenTheCursorDoesNotAdvance() {
         var staging = new FakeArtifactStaging();
-        // El plugin devuelve SIEMPRE el mismo nextCursor -> no avanza (posible loop).
         RemotePluginInvoker invoker = (desc, taskType, context, payload) ->
                 TaskResult.success("stuck", Map.of("records", List.of(Map.of("r", "x")), "nextCursor", "stuck-cursor"));
         var provider = new RemoteReaderProvider("MY_READER", descriptor("2"), invoker, new RemotePluginRegistry(), staging);
@@ -119,8 +106,8 @@ class RemoteReaderProviderTest {
 
         var error = assertThrows(IllegalStateException.class,
                 () -> provider.readInBatches(payload, Map.of(), 10, batch -> { }));
-        assertTrue(error.getMessage().contains("no avanza"), "guard de no-progreso del cursor");
-        assertEquals(1, staging.deleted.size(), "el input staged se limpia aun al cortar por no-progreso");
+        assertTrue(error.getMessage().contains("no avanza"), "cursor progress guard");
+        assertEquals(1, staging.deleted.size(), "staged input is cleaned even when the guard trips");
     }
 
     @Test
@@ -133,6 +120,6 @@ class RemoteReaderProviderTest {
 
         var error = assertThrows(IllegalStateException.class,
                 () -> provider.readInBatches(payload, Map.of(), 10, batch -> { }));
-        assertTrue(error.getMessage().contains("spiVersion"), "el error debe explicar la negociacion de version");
+        assertTrue(error.getMessage().contains("spiVersion"), "error must explain version negotiation");
     }
 }

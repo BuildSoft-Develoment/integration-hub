@@ -40,6 +40,12 @@ mvn -pl platform-app test -Dtest=GrpcRemotePluginTransportTest
 
 ## Follow-up documentado: streaming/chunking real
 
+> Actualizacion 2026-07-07: el diseno vigente retiro `contentBase64` del flujo
+> source/reader remoto. La ruta actual usa `artifactRef` contra staging S3/MinIO,
+> `ReaderProvider.supportsStreamingPipeline()` para entrar al fast path y
+> `outputs.nextCursor` para paginacion de reader remoto. Ver
+> `remote-source-reader-streaming-capability-2026-07-07.md`.
+
 Diseño recomendado para lectura de ficheros grandes sin cargar todo en memoria/mensaje:
 
 1. **Lectura paginada sobre el contrato unario existente** (sin cambiar el proto; funciona en

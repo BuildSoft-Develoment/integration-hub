@@ -61,6 +61,16 @@ public class RemoteReaderProvider implements ReaderProvider {
     }
 
     @Override
+    public boolean supportsStreamingPipeline() {
+        return true;
+    }
+
+    @Override
+    public boolean requiresStreamingPipeline() {
+        return true;
+    }
+
+    @Override
     public ReadResult readInBatches(SourcePayload payload,
                                     Map<String, Object> configuration,
                                     int batchSize,
@@ -114,7 +124,7 @@ public class RemoteReaderProvider implements ReaderProvider {
 
     /** 3a: stagea el archivo de entrada (upload por streaming) y presigna un GET para que el plugin lo descargue. */
     private StagedDownload stage(SourcePayload payload) {
-        var size = payload.file() == null || payload.file().size() == null ? 0L : payload.file().size();
+        var size = payload.file() == null || payload.file().size() == null ? -1L : payload.file().size();
         try (var stream = payload.openStream()) {
             return staging.stageForDownload(stream, payload.mediaType(), size, DOWNLOAD_TTL);
         } catch (IOException error) {

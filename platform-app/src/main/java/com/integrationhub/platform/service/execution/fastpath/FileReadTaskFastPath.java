@@ -9,6 +9,7 @@ import com.integrationhub.platform.service.execution.ProcessExecutionStateServic
 import com.integrationhub.platform.service.execution.ProcessedSourceFileService;
 import com.integrationhub.platform.service.execution.TaskOutputRegistry;
 import com.integrationhub.platform.service.execution.async.TaskDispatchPlanner;
+import com.integrationhub.platform.service.reader.ReaderProviderRegistry;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import jakarta.enterprise.context.ApplicationScoped;
 
@@ -18,10 +19,6 @@ import java.util.Set;
 
 @ApplicationScoped
 public class FileReadTaskFastPath implements ExecutionFastPath {
-
-    // SWIFT_MT emite mensajes por lotes via consumer (multi-mensaje): el fast path lo
-    // streamea a DB_WRITE sin materializar todos los mensajes -> staging inbound a escala.
-    private static final Set<String> SUPPORTED_READERS = Set.of("TXT", "CSV", "XLS", "XLSX", "SWIFT_MT");
 
     // Transforms que publican un output `records` consumido por tareas downstream
     // (p.ej. MT101_PARSE -> MT101_ROUTE, MT101_BUILD -> MT101_SPLIT). El fast path solo
@@ -35,6 +32,7 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
     private final ProcessExecutionAuditMapper auditMapper;
     private final ProcessedSourceFileService processedSourceFileService;
     private final TaskProviderRegistry taskProviderRegistry;
+    private final ReaderProviderRegistry readerProviderRegistry;
     private final TaskOutputRegistry taskOutputRegistry;
     private final TaskDispatchPlanner dispatchPlanner;
 
@@ -43,6 +41,7 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
                                 ProcessExecutionAuditMapper auditMapper,
                                 ProcessedSourceFileService processedSourceFileService,
                                 TaskProviderRegistry taskProviderRegistry,
+                                ReaderProviderRegistry readerProviderRegistry,
                                 TaskOutputRegistry taskOutputRegistry,
                                 TaskDispatchPlanner dispatchPlanner) {
         this.pipelineService = pipelineService;
@@ -50,6 +49,7 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
         this.auditMapper = auditMapper;
         this.processedSourceFileService = processedSourceFileService;
         this.taskProviderRegistry = taskProviderRegistry;
+        this.readerProviderRegistry = readerProviderRegistry;
         this.taskOutputRegistry = taskOutputRegistry;
         this.dispatchPlanner = dispatchPlanner;
     }
@@ -58,7 +58,7 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
     public boolean supports(ProcessExecutionStateService.TaskPlan current, ProcessExecutionStateService.TaskPlan next) {
         if (current == null || next == null) return false;
         if (!TaskType.FILE_READ.equals(current.taskType())) return false;
-        if (current.readerType() == null || !SUPPORTED_READERS.contains(current.readerType().toUpperCase())) return false;
+        if (!readerSupportsStreamingPipeline(current.readerType())) return false;
         if (!declaresCurrentReadRecordsInput(current, next)) return false;
 
         if (next.taskType() != null && RECORDS_PRODUCING_SINKS.contains(next.taskType().toUpperCase())) {
@@ -74,6 +74,17 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
 
         var provider = taskProviderRegistry.resolve(next.taskType());
         return provider instanceof BatchTaskProvider;
+    }
+
+    private boolean readerSupportsStreamingPipeline(String readerType) {
+        if (readerType == null || readerType.isBlank()) {
+            return false;
+        }
+        try {
+            return readerProviderRegistry.resolve(readerType).supportsStreamingPipeline();
+        } catch (IllegalArgumentException | IllegalStateException error) {
+            return false;
+        }
     }
 
     private boolean declaresCurrentReadRecordsInput(ProcessExecutionStateService.TaskPlan current,

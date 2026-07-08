@@ -1,114 +1,137 @@
-# plugin-demo — plugins externos INDEPENDIENTES (front + back) en Docker
+# plugin-demo - plugins externos front + back en Docker
 
-Ejemplo completo y **desacoplado del monorepo** de cómo un tercero publica plugins para la
-plataforma, los levanta en Docker y los instala en la instancia local. Nada aquí depende del
-workspace Nx ni del `pom` padre: el único contrato compartido es el `.proto` (backend) y un
-paquete UI versionado que se instala por **tarball local** (frontend).
-
-```
-                          ┌──────────────────────────────────────────┐
-   Plataforma (host, dev) │  http://localhost:8080                    │
-   ┌──────────────┐       │  · engine: task DEMO_TRANSFORM_* ─(gRPC)──┼──► backend-grpc-*
-   │  shell UI    │──carga remoteEntry.json (Native Federation)───────┼──► frontend-widget
-   └──────────────┘       └──────────────────────────────────────────┘
-        docker compose:  50061 (java) · 50062 (node) · 50063 (py) · 4300 (front)
-```
+Ejemplo completo y desacoplado del monorepo para publicar plugins externos de Integration Hub.
+La plataforma corre en el host (`http://localhost:8080`) y estos plugins corren fuera del
+runtime principal.
 
 ## Componentes
 
-| Carpeta | Qué es | Contrato | Independencia |
+| Carpeta | Que es | Contrato | Independencia |
 |---|---|---|---|
-| `backend-grpc-java` | Task provider gRPC `DEMO_TRANSFORM_JAVA` | `remote_plugin.proto` (copiado) | pom sin parent, grpc-netty plano, fat-jar |
-| `backend-grpc-node` | `DEMO_TRANSFORM_NODE` | idem | `@grpc/grpc-js` + proto-loader |
-| `backend-grpc-python` | `DEMO_TRANSFORM_PY` | idem | `grpcio`, stubs generados en build |
-| `frontend-widget` | Widget Native Federation (`./Widget`) | manifest + firma ADR-013 | Angular standalone, UI kit por tarball |
+| `backend-grpc-java` | Task `DEMO_TRANSFORM_JAVA` + reader `DEMO_REMOTE_CSV` | `remote_plugin.proto` copiado | Maven standalone, sin parent |
+| `backend-grpc-node` | Task `DEMO_TRANSFORM_NODE` + reader `DEMO_REMOTE_CSV_NODE` | `remote_plugin.proto` copiado | Node + grpc-js |
+| `backend-grpc-python` | Task `DEMO_TRANSFORM_PY` + reader `DEMO_REMOTE_CSV_PY` | `remote_plugin.proto` copiado | Python + grpcio |
+| `frontend-widget` | Widget Native Federation `./Widget` | manifest + firma ADR-013 | Angular standalone + UI kit por tarball |
 
-Los tres backends implementan **el mismo contrato** `RemotePluginService.Execute` (la
-plataforma es el cliente gRPC, ADR-014) y transforman un texto: `{text, op}` → `{result}`,
-con `op ∈ upper|lower|reverse|identity`.
+Los backends implementan `RemotePluginService.Execute`. La plataforma es cliente gRPC.
+El frontend se carga como remote module firmado y verificado por la shell.
 
-## Independencia (por qué es "de verdad")
+## Backend task demo
 
-- **Backend**: cada proyecto **copia** `remote_plugin.proto` y genera sus stubs. No depende
-  de `platform-contract` ni de ningún artefacto del monorepo. Se compila y corre solo.
-- **Frontend**: no pertenece al workspace Nx. Consume `@integration-hub/plugin-ui-kit` desde
-  `frontend-widget/vendor/integration-hub-plugin-ui-kit-0.0.1.tgz` (tarball local vendorizado),
-  **sin publicar a ningún registry público**. Ver `frontend-widget/README.md`.
+Los tres backends transforman texto:
 
-## 1) Levantar los plugins en Docker
+```json
+{ "text": "hola mundo", "op": "upper" }
+```
+
+Resultado esperado:
+
+```json
+{ "result": "HOLA MUNDO", "op": "upper", "engine": "java" }
+```
+
+Tipos:
+
+- `DEMO_TRANSFORM_JAVA`
+- `DEMO_TRANSFORM_NODE`
+- `DEMO_TRANSFORM_PY`
+
+## Backend reader demo
+
+Los tres backends exponen un reader remoto CSV SPI 2:
+
+- Java: `DEMO_REMOTE_CSV`, invocado como `READER_READ:DEMO_REMOTE_CSV`.
+- Node: `DEMO_REMOTE_CSV_NODE`, invocado como `READER_READ:DEMO_REMOTE_CSV_NODE`.
+- Python: `DEMO_REMOTE_CSV_PY`, invocado como `READER_READ:DEMO_REMOTE_CSV_PY`.
+
+La plataforma los invoca con el patron:
+
+```text
+READER_READ:<readerType>
+```
+
+Payload esperado en `configuration_json`:
+
+- `artifactRef`: URL presignada `GET` creada por la plataforma.
+- `batchSize`: cantidad maxima de records por pagina.
+- `cursor`: byte offset opcional para continuar.
+- `configuration.columns`: nombres de columnas opcionales.
+- `configuration.delimiter`: delimitador opcional, por defecto `,`.
+
+El plugin descarga el archivo por HTTP, usa `Range: bytes=<cursor>-`, devuelve una pagina
+en `outputs.records` y publica `outputs.nextCursor` cuando hay mas datos.
+
+Para probarlo en la plataforma:
+
+1. Registra un `ReaderDefinition` con el `readerType` del backend elegido.
+2. Usa config opcional:
+
+```json
+{ "columns": ["name", "amount"], "delimiter": "," }
+```
+
+3. Encadena un proceso `FILE_READ -> DB_WRITE`. El motor debe entrar por fast path porque
+   el reader remoto declara capacidad streaming en la plataforma.
+
+## Levantar en Docker
 
 ```bash
 cd ejemplos/plugin-demo
 docker compose up --build
 ```
 
-Esto construye y arranca los 3 backends (puertos 50061/50062/50063) y el front (4300).
-La **plataforma no se levanta aquí**: corre en el host en modo dev (`http://localhost:8080`).
-Los puertos publicados hacen que la plataforma alcance los backends como
-`http://localhost:5006x`, el único origen que la trust-policy admite sobre HTTP plano para
-gRPC (`PluginDescriptorTrustPolicy`: HTTP solo se permite a `localhost/127.0.0.1`).
+Puertos:
 
-## 2) Firmar el front (ADR-013)
+- Java gRPC: `50061`
+- Node gRPC: `50062`
+- Python gRPC: `50063`
+- Front widget: `4300`
 
-La shell verifica **SRI + firma ECDSA P-256** antes de montar el remoto. Tras el build:
+## Firmar el frontend
+
+La shell verifica SRI + firma ECDSA P-256 antes de montar el remoto.
 
 ```bash
 cd frontend-widget
+npm install
+npm run build
 node sign-remote.mjs dist/browser/remoteEntry.json demo-transform-key-1
 ```
 
-- Registra la **clave pública** que imprime en el host (`APP_PLUGIN_REMOTE_TRUSTED_KEYS`,
-  con `keyId=demo-transform-key-1`).
-- Pega `integrity` y `signature` en `frontend-widget/manifest.json → remote`.
+Luego:
 
-> El `manifest.json` versionado trae placeholders `REEMPLAZAR-…` a propósito: sin firmar y
-> sin registrar la clave, la shell rechaza el remoto (fail-loud), no lo monta silenciosamente.
+- registra la clave publica en `APP_PLUGIN_REMOTE_TRUSTED_KEYS`.
+- pega `integrity` y `signature` en `frontend-widget/manifest.json`.
 
-## 3) Instalar en la plataforma
+El manifest versionado trae placeholders a proposito; sin firma valida la shell debe rechazar
+el remoto.
 
-Ambos endpoints exigen rol `PLATFORM_ADMIN` o `INTEGRATION_ADMIN`. Inicia sesión como admin,
-copia el JWT y:
+## Instalar en la plataforma
+
+Requiere rol `PLATFORM_ADMIN` o `INTEGRATION_ADMIN`.
 
 ```bash
-# Linux/macOS
 ./install/register.sh <BEARER_TOKEN>
-# Windows
+```
+
+En Windows:
+
+```powershell
 powershell -File install/register.ps1 -Token "<JWT>"
 ```
 
-Qué hace el script:
+Los descriptores backend de ejemplo quedan con `trusted:false`. Eso permite instalacion y
+diagnostico, pero la ejecucion real queda bloqueada por el core hasta instalar metadata de
+confianza (`integrity`/`signature`) o usar un flujo corporativo de confianza.
 
-| Plugin | Endpoint | Cuerpo |
-|---|---|---|
-| 3 backends | `POST /api/plugins/install` | `install/backend-*.json` (transport GRPC + endpoint local) |
-| front | `POST /api/plugins/ui-catalog` | `frontend-widget/manifest.json` |
+## Evidencia esperada
 
-Al instalar un backend, el `reloadInstalledPlugins()` publica el descriptor en el
-`RemotePluginRegistry`; el engine enruta entonces `DEMO_TRANSFORM_*` al plugin por gRPC
-(`TaskProviderRegistry.descriptorForInvocation`). El front queda en el catálogo de UI que la
-shell lee al arrancar.
+- Java: unit tests de `TransformTask` y `DemoRemoteCsvReader` con HTTP Range local.
+- Node/Python: unit tests de transform y reader CSV remoto con HTTP Range local.
+- Cross-language: cliente gRPC invoca los tres servidores.
+- Frontend: `npm install`, `ng build`, firma de `remoteEntry.json`.
 
-## 4) Probar
+## Modelo alternativo
 
-- Crea/ejecuta una tarea con `taskType = DEMO_TRANSFORM_JAVA` (o `_NODE` / `_PY`) y
-  configuración `{"text":"hola mundo","op":"upper"}`. El output será
-  `{"result":"HOLA MUNDO","op":"upper","engine":"java"}`.
-- Abre la sección de plugins de la UI: el widget **Demo Transform** se carga por Native
-  Federation con el look nativo (design tokens del kit compartido).
-
-## Evidencia de verificación (este ejemplo)
-
-- **Backends**: unit tests de la lógica pura (Java 5/5, Node 5/5, Python vía Docker) y prueba
-  **E2E gRPC cross-language** — un cliente invoca `Execute` contra los 3 servidores con el
-  wire-format real (`configuration_json → outputs_json`), los 3 devuelven `HOLA MUNDO`, y un
-  `task_type` no soportado responde `INVALID_ARGUMENT` (fail-loud).
-- **Frontend**: `npm install` (tarball resuelto) + `ng build` → `remoteEntry.json` con
-  `exposes:["./Widget"]` y `plugin-ui-kit` en `shared`; `sign-remote` produce
-  `integrity`+`signature` sobre el `remoteEntry.json` real.
-
-## Modelo alternativo (referencia)
-
-Existe además el modelo **broker + HTTP-resume** (asíncrono) en
-`ejemplos/backend-plugin-sidecar`, que consume `AsyncTaskEnvelope` y reanuda vía
-`POST /api/process-executions/resume/{token}`. Este ejemplo usa el modelo **gRPC síncrono**
-por ser el camino más limpio para independencia (un plugin solo necesita el `.proto`).
+El modelo broker + HTTP resume vive en `ejemplos/backend-plugin-sidecar`. Este demo usa gRPC
+sincrono porque es el camino minimo para plugins independientes.

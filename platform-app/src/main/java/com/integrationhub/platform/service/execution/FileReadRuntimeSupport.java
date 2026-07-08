@@ -66,6 +66,11 @@ public class FileReadRuntimeSupport {
     public ReadResult collectReadResult(ReaderProvider readerProvider,
                                         SourcePayload payload,
                                         Map<String, Object> configuration) {
+        if (readerProvider.requiresStreamingPipeline()) {
+            throw new IllegalStateException("Reader " + readerProvider.type()
+                    + " requires the streaming FILE_READ pipeline; configure a downstream batch sink or use a reader "
+                    + "that explicitly supports materialized FILE_READ outputs.");
+        }
         var records = new ArrayList<ReadRecord>();
         var result = readerProvider.readInBatches(
                 payload,

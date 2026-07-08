@@ -4,12 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import grpc from '@grpc/grpc-js';
 import protoLoader from '@grpc/proto-loader';
+import { readRemoteCsv, READER_TASK_TYPE } from './demo-remote-csv-reader.js';
 import { transform } from './transform.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROTO_PATH = join(__dirname, '..', 'proto', 'remote_plugin.proto');
 
-const SUPPORTED_TASK_TYPES = new Set(['DEMO_TRANSFORM_NODE']);
+const SUPPORTED_TASK_TYPES = new Set(['DEMO_TRANSFORM_NODE', READER_TASK_TYPE]);
 
 const packageDef = protoLoader.loadSync(PROTO_PATH, {
   keepCase: false, longs: String, enums: String, defaults: true, oneofs: true,
@@ -31,6 +32,25 @@ function execute(call, callback) {
     configuration = parseJson(req.configurationJson);
   } catch (err) {
     callback({ code: grpc.status.INVALID_ARGUMENT, message: `configuration_json is not valid JSON: ${err.message}` });
+    return;
+  }
+
+  if (req.taskType === READER_TASK_TYPE) {
+    readRemoteCsv(configuration)
+      .then((outputs) => callback(null, {
+        success: true,
+        suspended: false,
+        details: `${READER_TASK_TYPE} page read`,
+        outputsJson: JSON.stringify(outputs),
+        suspendedStateJson: '',
+      }))
+      .catch((err) => callback(null, {
+        success: false,
+        suspended: false,
+        details: err.message,
+        outputsJson: '{}',
+        suspendedStateJson: '',
+      }));
     return;
   }
 

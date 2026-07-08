@@ -71,6 +71,22 @@ public final class ArtifactTransfer {
     }
 
     /** Sube el artefacto a una referencia PUT (caso source). */
+    public void upload(ArtifactReference reference, InputStream content, long contentLength)
+            throws IOException, InterruptedException {
+        requireMethod(reference, ArtifactReference.PUT, "upload");
+        if (contentLength < 0) {
+            throw new IllegalArgumentException("upload streaming requiere contentLength conocido");
+        }
+        var builder = HttpRequest.newBuilder(URI.create(reference.uri()))
+                .PUT(HttpRequest.BodyPublishers.ofInputStream(() -> content));
+        if (reference.mediaType() != null && !reference.mediaType().isBlank()) {
+            builder.header("Content-Type", reference.mediaType());
+        }
+        HttpResponse<Void> response = http.send(builder.build(), HttpResponse.BodyHandlers.discarding());
+        ensure2xx(response.statusCode(), "subida");
+    }
+
+    /** Sube el artefacto a una referencia PUT (caso source) para artefactos pequenos que caben en memoria. */
     public void upload(ArtifactReference reference, byte[] content) throws IOException, InterruptedException {
         requireMethod(reference, ArtifactReference.PUT, "upload");
         var builder = HttpRequest.newBuilder(URI.create(reference.uri()))

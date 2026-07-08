@@ -116,14 +116,15 @@ con PostgreSQL/Kafka reales via Testcontainers.
 - El transporte broker existente sigue verde; se corrigio la publicacion Kafka
   para propagar headers del `OutboundMessage`, alineando implementacion con
   `AsyncTaskMessageCodec`.
-- La ejecucion remota de `SourceProvider`/`ReaderProvider` queda documentada como
-  pendiente real porque el catalogo funcional actual usa enums cerrados
-  (`SourceType`, `ReaderType`).
+- La ejecucion remota de `SourceProvider`/`ReaderProvider` ya no depende de enums
+  cerrados en el runtime productivo: `sourceType`/`readerType` se resuelven como
+  identificadores `String` y pueden venir de capabilities de plugin.
 - El E2E con sidecar de referencia ya cruza el endpoint HTTP real de resume. El
   runtime productivo no depende del ejemplo; se conserva aislamiento out-of-process
   por contrato y despliegue.
 - El canary basico con metricas reales ya esta implementado. Queda pendiente
   orquestacion progresiva de trafico/segmentos y aprobacion automatizada ligada a
   marketplace corporativo.
-- Source/reader remoto queda habilitado para resultados sincronicos. Queda
-  pendiente streaming/chunking remoto para archivos grandes.
+- Source/reader remoto queda habilitado por `artifactRef` y reader streaming por
+  capability. La evidencia actualizada vive en
+  `qa/fase-6-qa/evidencias/remote-source-reader-streaming-capability-2026-07-07.md`.

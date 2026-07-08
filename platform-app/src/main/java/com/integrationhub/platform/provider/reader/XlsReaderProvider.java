@@ -19,6 +19,11 @@ public class XlsReaderProvider implements ReaderProvider {
     }
 
     @Override
+    public boolean supportsStreamingPipeline() {
+        return true;
+    }
+
+    @Override
     public ReadResult readInBatches(SourcePayload payload,
                                     Map<String, Object> configuration,
                                     int batchSize,

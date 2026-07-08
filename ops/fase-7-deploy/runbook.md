@@ -189,8 +189,11 @@ mvn -q -pl platform-app -am "-Dtest=RemotePluginSidecarHttpE2EIT" "-Dsurefire.fa
   capabilities `providedSourceTypes`/`providedReaderTypes` en plugins activos.
   Los adapters remotos requieren respuesta inmediata:
   - `SOURCE_SELECT:{TYPE}` debe devolver `outputs.files`.
-  - `SOURCE_OPEN:{TYPE}` debe devolver `outputs.contentBase64`.
-  - `READER_READ:{TYPE}` debe devolver `outputs.records` y opcionalmente
-    `outputs.skippedRows`.
+  - `SOURCE_OPEN:{TYPE}` recibe `artifactRef` `PUT`; el plugin debe subir el
+    archivo a esa URL presignada y puede devolver `outputs.mediaType`.
+  - `READER_READ:{TYPE}` recibe `artifactRef` `GET` y debe devolver una pagina en
+    `outputs.records`, opcionalmente `outputs.skippedRows` y `outputs.nextCursor`.
+    Los readers remotos requieren el pipeline streaming; no se materializan via
+    `collectReadResult`.
   Si el plugin responde `suspended` o no respeta el payload esperado, el plugin se
   marca `DEGRADED`; no se reintenta por un provider local alterno.

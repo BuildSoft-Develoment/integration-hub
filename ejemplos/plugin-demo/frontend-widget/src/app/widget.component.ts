@@ -22,7 +22,8 @@ import { IconComponent, StatusBadgeComponent } from '@integration-hub/plugin-ui-
       <p>
         Plugin externo independiente cargado por Native Federation y verificado por la cadena
         ADR-013. El backend gRPC (Java / Node / Python) resuelve el task
-        <code>DEMO_TRANSFORM_*</code>.
+        <code>DEMO_TRANSFORM_*</code>; tambien expone readers
+        <code>DEMO_REMOTE_CSV*</code> por artifactRef.
       </p>
     </section>
   `,
