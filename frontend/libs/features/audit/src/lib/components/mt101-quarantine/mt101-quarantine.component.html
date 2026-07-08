@@ -328,6 +328,14 @@
                           <mat-label>{{ i18n.t('audit.quarantine.correctLabel', { row: row.sourceRecordNumber ?? '' }) }}</mat-label>
                           <textarea matInput [(ngModel)]="correctionPayload" rows="3" placeholder='{&quot;cargos&quot;:&quot;OUR&quot;, ...}'></textarea>
                         </mat-form-field>
+                        <!-- item 2: posición física del registro en el archivo origen (para "qué línea abrir"). -->
+                        @if (correctionPosition(); as pos) {
+                          @if (pos.physicalLine !== null) {
+                            <p class="q__muted">{{ i18n.t('audit.quarantine.physicalLine', { line: pos.physicalLine }) }}</p>
+                          } @else if (pos.sheetName !== null) {
+                            <p class="q__muted">{{ i18n.t('audit.quarantine.sheetCell', { sheet: pos.sheetName, row: pos.sheetRow ?? '' }) }}</p>
+                          }
+                        }
                         <p class="q__risk-detail">{{ i18n.t(correctionRisk.labelKey) }}: {{ i18n.t(correctionRisk.summaryKey) }} {{ i18n.t('audit.risk.evidence') }}: {{ evidenceText(correctionRisk) }}</p>
                         <mat-form-field subscriptSizing="dynamic">
                           <mat-label>{{ i18n.t('audit.quarantine.correctReason') }}</mat-label>

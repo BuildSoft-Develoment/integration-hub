@@ -11,7 +11,7 @@ import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-
 import { ActionDispatcherService, IconComponent } from '@integration-hub/shared/ui';
 import { Observable } from 'rxjs';
 import { AuditApiService } from '../../api/audit-api.service';
-import { Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101NormalPayResolution, Mt101PayAction, Mt101PayConflict, Mt101RebuildRunSummary, Mt101RowTimelineEntry } from '../../models/audit.models';
+import { Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101NormalPayResolution, Mt101PayAction, Mt101PayConflict, Mt101RebuildRunSummary, Mt101RowTimelineEntry, Mt101StagingRowView } from '../../models/audit.models';
 import { AuditOperationRisk, auditEvidenceLabelKey, auditOperationRisk } from '../../utils/audit-operation-risk';
 import { durationBetween, timelineStatusIcon, timelineStatusKind } from '../../utils/timeline-format';
 import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspace-nav.component';
@@ -143,6 +143,8 @@ export class Mt101QuarantineComponent {
   correctionPayload = '';
   // Version (ETag) de la fila cargada, para el locking optimista al guardar.
   readonly correctionVersion = signal<number | null>(null);
+  // item 2: posición FÍSICA de la fila cargada (línea física, o hoja+fila en Excel) para "qué línea del archivo".
+  readonly correctionPosition = signal<Mt101StagingRowView | null>(null);
 
   // Copia al portapapeles con feedback efimero (CDK Clipboard) para valores
   // truncados como el hash del archivo, reutilizables en el modo Archivo+fila.
@@ -295,6 +297,7 @@ export class Mt101QuarantineComponent {
     this.correctionReason = '';
     this.correctionTicketRef = '';
     this.correctionVersion.set(null);
+    this.correctionPosition.set(null);
     this.correctingRow.set(row.id);
     const sourceFileHash = row.sourceFileHash?.trim();
     if (row.sourceRecordNumber === null || row.stagingId === null || !sourceFileHash) {
@@ -312,6 +315,7 @@ export class Mt101QuarantineComponent {
         if (this.correctingRow() === row.id) {
           this.correctionPayload = view.payloadJson ?? '';
           this.correctionVersion.set(view.version);
+          this.correctionPosition.set(view);
         }
       },
       error: () => {

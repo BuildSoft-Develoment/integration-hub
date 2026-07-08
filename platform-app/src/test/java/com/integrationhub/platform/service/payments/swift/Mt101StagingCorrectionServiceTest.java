@@ -18,6 +18,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -70,6 +71,20 @@ class Mt101StagingCorrectionServiceTest {
         assertTrue(emitted.get(0).attributes().containsKey("oldPayloadHash"));
         assertTrue(emitted.get(0).attributes().containsKey("newPayloadHash"));
         assertEquals(1L, correctionAuditCount());
+    }
+
+    @Test
+    void readRowExposesPhysicalLineForItem2() throws Exception {
+        // item 2: readRow devuelve la LÍNEA FÍSICA del archivo (para "qué línea abrir"), no solo el ordinal lógico.
+        insertFragment("REJECTED");
+        insertQuarantine(25);
+        insertStagingWithPhysicalLine(24, "{\"cargos\":\"BAD\"}", 26L); // registro lógico 25, línea física 26
+
+        var view = service.readRow(null, "SET", "hashA", 25, STAGING_ID);
+
+        assertEquals(25L, view.recordNumber(), "ordinal lógico visible al operador");
+        assertEquals(26L, view.physicalLine(), "línea física real del archivo (con cabecera/multilínea)");
+        assertNull(view.sheetName(), "CSV/TXT no tienen hoja");
     }
 
     @Test
@@ -186,6 +201,19 @@ class Mt101StagingCorrectionServiceTest {
         }
     }
 
+    private void insertStagingWithPhysicalLine(long recordIndex, String payload, long physicalLine) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var st = connection.prepareStatement(
+                     "insert into staging_record (id, process_execution_id, task_definition_id, record_index, "
+                             + "source_file_hash, payload_json, physical_line) values (?, 100, 9, ?, 'hashA', ?, ?)")) {
+            st.setLong(1, STAGING_ID);
+            st.setLong(2, recordIndex);
+            st.setString(3, payload);
+            st.setLong(4, physicalLine);
+            st.executeUpdate();
+        }
+    }
+
     private String stagingPayload(long recordIndex) throws SQLException {
         try (Connection connection = dataSource.getConnection();
              var st = connection.prepareStatement(
@@ -218,6 +246,7 @@ class Mt101StagingCorrectionServiceTest {
                     + "id bigserial primary key, process_execution_id bigint, task_definition_id bigint,"
                     + "record_index bigint, source_name varchar(255), source_file_hash varchar(64),"
                     + "payload_json text, version bigint not null default 0,"
+                    + "physical_line bigint, sheet_name varchar(255), sheet_row bigint,"
                     + "created_at timestamp not null default current_timestamp)");
             statement.executeUpdate("create table mt101_build_fragment ("
                     + "id bigserial primary key, fragment_set_id varchar(80) not null,"

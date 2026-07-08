@@ -16,6 +16,7 @@ import {
   Mt101PayDispatchReconcileResult,
   Mt101PayDispatchSummary,
   Mt101QuarantineBuildResult,
+  Mt101StagingRowView,
   Mt101CorrectiveLifecycle,
   Mt101PayAction,
   Mt101RebuildResult,
@@ -363,7 +364,7 @@ export class AuditApiService {
     sourceFileHash: string;
     recordNumber: number;
     stagingId: number;
-  }): Observable<{ fragmentSetId: string; sourceFileHash: string; recordNumber: number; stagingId: number; payloadJson: string; version: number }> {
+  }): Observable<Mt101StagingRowView> {
     let httpParams = new HttpParams()
       .set('fragmentSetId', query.fragmentSetId)
       .set('sourceFileHash', query.sourceFileHash.trim())
@@ -372,7 +373,7 @@ export class AuditApiService {
     if (query.connectionRef?.trim()) {
       httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }
-    return this.http.get<{ fragmentSetId: string; sourceFileHash: string; recordNumber: number; stagingId: number; payloadJson: string; version: number }>(
+    return this.http.get<Mt101StagingRowView>(
       '/api/query/mt101-quarantine/staging-row', { params: httpParams });
   }
 

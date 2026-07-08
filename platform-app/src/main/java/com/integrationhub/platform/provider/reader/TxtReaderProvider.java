@@ -7,6 +7,7 @@ import com.integrationhub.platform.spi.reader.ReadBatchConsumer;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.reader.ReadSkip;
+import com.integrationhub.platform.spi.reader.SourcePosition;
 import com.integrationhub.platform.spi.reader.ReaderProvider;
 import com.integrationhub.platform.spi.source.SourcePayload;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -26,6 +27,11 @@ public class TxtReaderProvider implements ReaderProvider {
     @Override
     public String type() {
         return "TXT";
+    }
+
+    @Override
+    public boolean supportsStreamingPipeline() {
+        return true;
     }
 
     @Override
@@ -78,7 +84,8 @@ public class TxtReaderProvider implements ReaderProvider {
                     return index < values.length ? values[index].trim() : "";
                 });
                 if (!rowResult.skipped()) {
-                    records.add(new ReadRecord(rowResult.values()));
+                    // item 2: rowIndex 0-based por línea física (cuenta cabeceras/blancos) -> línea física 1-based.
+                    records.add(new ReadRecord(rowResult.values(), SourcePosition.line(rowIndex + 1L)));
                     totalRecords++;
                     if (records.size() >= effectiveBatchSize) {
                         flushBatch(payload, records, batchNumber++, consumer);
@@ -135,7 +142,8 @@ public class TxtReaderProvider implements ReaderProvider {
                     return fromIndex >= currentLine.length() ? "" : currentLine.substring(fromIndex, toIndex).trim();
                 });
                 if (!rowResult.skipped()) {
-                    records.add(new ReadRecord(rowResult.values()));
+                    // item 2: rowIndex 0-based por línea física (cuenta cabeceras/blancos) -> línea física 1-based.
+                    records.add(new ReadRecord(rowResult.values(), SourcePosition.line(rowIndex + 1L)));
                     totalRecords++;
                     if (records.size() >= effectiveBatchSize) {
                         flushBatch(payload, records, batchNumber++, consumer);

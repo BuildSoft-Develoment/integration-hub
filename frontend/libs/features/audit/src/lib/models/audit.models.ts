@@ -190,6 +190,22 @@ export interface Mt101PayConflict {
   updatedAt: string | null;
 }
 
+/**
+ * item 2: vista de una fila de staging para corrección, con su posición FÍSICA en el archivo origen (línea física
+ * para CSV/TXT/FIN; hoja+fila para Excel). Nullables: readers que no aportan posición los dejan null.
+ */
+export interface Mt101StagingRowView {
+  fragmentSetId: string;
+  sourceFileHash: string;
+  recordNumber: number;
+  stagingId: number;
+  payloadJson: string;
+  version: number;
+  physicalLine: number | null;
+  sheetName: string | null;
+  sheetRow: number | null;
+}
+
 /** v60: resultado de resolver el UNCERTAIN normal de un fragment set (consulta STATUS, no reenvía). */
 export interface Mt101NormalPayResolution {
   resolvedSent: number;

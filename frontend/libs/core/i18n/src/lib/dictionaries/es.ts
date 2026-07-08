@@ -1166,6 +1166,9 @@ export const es = {
   'audit.quarantine.normalPayResolved':
     'PAY normal resuelto: {sent} enviados, {rejected} rechazados, {pending} pendientes, {conflicts} conflicto(s).',
   'audit.quarantine.normalPayError': 'No se pudo resolver el PAY normal incierto.',
+  // item 2: posición física del registro en el archivo origen
+  'audit.quarantine.physicalLine': 'Línea física en el archivo: {line}',
+  'audit.quarantine.sheetCell': 'Hoja {sheet}, fila {row}',
   // D1: visibilidad del dispatch PAY por lista
   'audit.payDispatch.title': 'Dispatch PAY por lista',
   'audit.payDispatch.subtitle':

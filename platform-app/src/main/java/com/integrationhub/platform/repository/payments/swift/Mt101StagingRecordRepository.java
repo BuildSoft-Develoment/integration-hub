@@ -348,7 +348,7 @@ public class Mt101StagingRecordRepository {
                                              long recordIndex,
                                              String sourceFileHash) throws SQLException {
         var hash = requireSourceFileHash(sourceFileHash);
-        var sql = "select id, payload_json, version from staging_record "
+        var sql = "select id, payload_json, version, physical_line, sheet_name, sheet_row from staging_record "
                 + "where process_execution_id = ? and record_index = ? and source_file_hash = ? limit 1";
         try (var statement = connection.prepareStatement(sql)) {
             statement.setLong(1, processExecutionId);
@@ -358,24 +358,32 @@ public class Mt101StagingRecordRepository {
                 if (!rs.next()) {
                     return null;
                 }
-                return new StagingPayload(rs.getLong("id"), rs.getString("payload_json"), rs.getLong("version"));
+                return stagingPayload(rs);
             }
         }
     }
 
-    public record StagingPayload(long id, String payloadJson, long version) {
+    /** item 2: proyeccion con la posicion FISICA (linea/hoja+fila) para el "que linea del archivo fallo". Nullables. */
+    public record StagingPayload(long id, String payloadJson, long version,
+                                 Long physicalLine, String sheetName, Long sheetRow) {
+    }
+
+    private StagingPayload stagingPayload(java.sql.ResultSet rs) throws SQLException {
+        return new StagingPayload(rs.getLong("id"), rs.getString("payload_json"), rs.getLong("version"),
+                rs.getObject("physical_line", Long.class), rs.getString("sheet_name"),
+                rs.getObject("sheet_row", Long.class));
     }
 
     /** Fila exacta por id tecnico de staging; camino requerido para archivos identicos. */
     public StagingPayload findStagingPayloadById(Connection connection, long stagingId) throws SQLException {
-        var sql = "select id, payload_json, version from staging_record where id = ?";
+        var sql = "select id, payload_json, version, physical_line, sheet_name, sheet_row from staging_record where id = ?";
         try (var statement = connection.prepareStatement(sql)) {
             statement.setLong(1, stagingId);
             try (var rs = statement.executeQuery()) {
                 if (!rs.next()) {
                     return null;
                 }
-                return new StagingPayload(rs.getLong("id"), rs.getString("payload_json"), rs.getLong("version"));
+                return stagingPayload(rs);
             }
         }
     }

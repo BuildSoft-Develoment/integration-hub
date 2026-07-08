@@ -179,7 +179,9 @@ public class Mt101StagingCorrectionService {
         var dataSource = resolveDataSource(connectionRef);
         try {
             var row = resolve(dataSource, set, hash, recordNumber, stagingId);
-            return new StagingRowView(set, hash, recordNumber, row.stagingId(), row.current().payloadJson(), row.current().version());
+            var current = row.current();
+            return new StagingRowView(set, hash, recordNumber, row.stagingId(), current.payloadJson(),
+                    current.version(), current.physicalLine(), current.sheetName(), current.sheetRow());
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot read staging row " + recordNumber + " for set " + set, error);
         }
@@ -371,7 +373,8 @@ public class Mt101StagingCorrectionService {
     }
 
     public record StagingRowView(String fragmentSetId, String sourceFileHash, long recordNumber, long stagingId,
-                                 String payloadJson, long version) {
+                                 String payloadJson, long version,
+                                 Long physicalLine, String sheetName, Long sheetRow) {
     }
 
     /** Conflicto de locking optimista: la fila cambio desde que el operador la leyo. */

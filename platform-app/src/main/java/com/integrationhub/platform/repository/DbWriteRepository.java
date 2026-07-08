@@ -21,16 +21,24 @@ import java.util.Map;
 public class DbWriteRepository {
 
     private static final String STAGING_INSERT =
-            "insert into staging_record (process_execution_id, task_definition_id, source_name, source_file_hash, record_index, payload_json)"
-                    + " values (?, ?, ?, ?, ?, ?)";
+            "insert into staging_record (process_execution_id, task_definition_id, source_name, source_file_hash,"
+                    + " record_index, payload_json, physical_line, sheet_name, sheet_row)"
+                    + " values (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-    /** Fila de staging ya resuelta por el provider (indice global + payload serializado). */
+    /**
+     * Fila de staging ya resuelta por el provider (indice logico + payload serializado + posicion FISICA opcional).
+     * {@code physicalLine}/{@code sheetName}/{@code sheetRow} son nullables (readers que no aportan posicion los dejan
+     * en null): item 2, precision de auditoria "que linea del archivo fallo".
+     */
     public record StagingRow(Long processExecutionId,
                              Long taskDefinitionId,
                              String sourceName,
                              String sourceFileHash,
                              long recordIndex,
-                             String payloadJson) {
+                             String payloadJson,
+                             Long physicalLine,
+                             String sheetName,
+                             Long sheetRow) {
     }
 
     public int insertStagingBatch(DataSource dataSource, List<StagingRow> rows, int batchSize) {
@@ -47,6 +55,9 @@ public class DbWriteRepository {
                 statement.setString(4, row.sourceFileHash());
                 statement.setLong(5, row.recordIndex());
                 statement.setString(6, row.payloadJson());
+                statement.setObject(7, row.physicalLine());
+                statement.setString(8, row.sheetName());
+                statement.setObject(9, row.sheetRow());
                 statement.addBatch();
                 if (++written % batchSize == 0) {
                     statement.executeBatch();
