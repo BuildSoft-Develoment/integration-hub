@@ -38,7 +38,7 @@ pendiente y condicionada (requiere el salto `process_execution_id → task_defin
 
 | Suite | Resultado | Qué prueba |
 |---|---|---|
-| `Mt101PayDispatchIntentStoreIT` | **7 / 0 / 0** (5 previos + 2 nuevos) | lectores: atascados = UNCERTAIN+DISPATCHING (no terminales), motivo/execId presentes, `statusCounts` cubre todo el ledger, `limit` acota pero el conteo es exacto |
+| `Mt101PayDispatchIntentStoreIT` | **8 / 0 / 0** (5 previos + 3 nuevos) | lectores: atascados = UNCERTAIN+DISPATCHING (no terminales), motivo/execId presentes, `statusCounts` cubre todo el ledger, `limit` acota pero el conteo es exacto, `process_execution_id` NULL → null (ver doble-check E2E) |
 | `Mt101PayDispatchIntentLookupIT` | **1 / 0 / 0** | E2E REST `/summary` (total=3, stuck=2, byStatus) + `/stuck` (excluye SENT, lista el motivo) con rol `payments-operator` |
 
 ### Frontend
