@@ -38,7 +38,7 @@ class JpaTaskInboxStoreTest {
         String idem = "it-inbox-ok-" + System.nanoTime();
         assertFalse(store.isProcessed(idem), "antes de registrar no está procesada");
 
-        store.recordProcessed(envelope(idem), "{\"rows\":3}", "ok");
+        store.recordProcessed(envelope(idem), "tok", "{\"rows\":3}", "ok");
 
         assertTrue(store.isProcessed(idem), "tras registrar, una reentrega se descarta");
     }
@@ -46,11 +46,11 @@ class JpaTaskInboxStoreTest {
     @Test
     void duplicateRecordIsSwallowedNotThrown() {
         String idem = "it-inbox-dup-" + System.nanoTime();
-        store.recordProcessed(envelope(idem), null, "ok");
+        store.recordProcessed(envelope(idem), "tok", null, "ok");
 
         // Carrera: otro consumer registra la misma clave → el índice único aflora y se trata como
         // duplicado, sin propagar excepción (el efecto ya quedó asentado una vez).
-        assertDoesNotThrow(() -> store.recordProcessed(envelope(idem), null, "ok-again"));
+        assertDoesNotThrow(() -> store.recordProcessed(envelope(idem), "tok", null, "ok-again"));
         assertTrue(store.isProcessed(idem));
     }
 

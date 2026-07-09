@@ -24,12 +24,10 @@ import java.time.LocalDateTime;
 public class JpaTaskInboxStore implements TaskInboxStore {
 
     private final TaskInboxRepository repository;
-    private final AsyncNodeIdentity nodeIdentity;
 
     @Inject
-    public JpaTaskInboxStore(TaskInboxRepository repository, AsyncNodeIdentity nodeIdentity) {
+    public JpaTaskInboxStore(TaskInboxRepository repository) {
         this.repository = repository;
-        this.nodeIdentity = nodeIdentity;
     }
 
     @Override
@@ -41,32 +39,38 @@ public class JpaTaskInboxStore implements TaskInboxStore {
 
     @Override
     @Transactional
-    public boolean claim(AsyncTaskEnvelope envelope, String owner, int leaseSeconds) {
+    public boolean claim(AsyncTaskEnvelope envelope, String owner, String claimToken, int leaseSeconds) {
         var now = LocalDateTime.now();
         var claimedUntil = now.plusSeconds(Math.max(leaseSeconds, 1));
         return repository.claim(
                 envelope.idempotencyKey(), envelope.taskType(), envelope.processExecutionId(),
-                envelope.taskDefinitionId(), envelope.transport(), owner,
+                envelope.taskDefinitionId(), envelope.transport(), owner, claimToken,
                 Timestamp.valueOf(claimedUntil), Timestamp.valueOf(now)) == 1;
     }
 
     @Override
     @Transactional
-    public boolean renewLease(AsyncTaskEnvelope envelope, String owner, int leaseSeconds) {
+    public boolean renewLease(AsyncTaskEnvelope envelope, String claimToken, int leaseSeconds) {
         var claimedUntil = LocalDateTime.now().plusSeconds(Math.max(leaseSeconds, 1));
-        return repository.renewLease(envelope.idempotencyKey(), owner, Timestamp.valueOf(claimedUntil)) == 1;
+        return repository.renewLease(envelope.idempotencyKey(), claimToken, Timestamp.valueOf(claimedUntil)) == 1;
     }
 
     @Override
     @Transactional
-    public void recordProcessed(AsyncTaskEnvelope envelope, String outputsJson, String details) {
-        finalizeOrInsert(envelope, TaskInbox.PROCESSED, outputsJson, details, null);
+    public void releaseClaim(AsyncTaskEnvelope envelope, String claimToken) {
+        repository.releaseClaim(envelope.idempotencyKey(), claimToken);
     }
 
     @Override
     @Transactional
-    public void recordFailed(AsyncTaskEnvelope envelope, String details) {
-        finalizeOrInsert(envelope, TaskInbox.FAILED, null, details, null);
+    public void recordProcessed(AsyncTaskEnvelope envelope, String claimToken, String outputsJson, String details) {
+        finalizeOrInsert(envelope, claimToken, TaskInbox.PROCESSED, outputsJson, details, null);
+    }
+
+    @Override
+    @Transactional
+    public void recordFailed(AsyncTaskEnvelope envelope, String claimToken, String details) {
+        finalizeOrInsert(envelope, claimToken, TaskInbox.FAILED, null, details, null);
     }
 
     @Override
@@ -87,10 +91,10 @@ public class JpaTaskInboxStore implements TaskInboxStore {
      * §5: finaliza el claim de este work-item (CLAIMED → terminal). Si no había claim (0 filas) cae a
      * {@code insertIfAbsent}: preserva el registro idempotente para cualquier camino que no reclame (defensa).
      */
-    private void finalizeOrInsert(AsyncTaskEnvelope envelope, String status,
+    private void finalizeOrInsert(AsyncTaskEnvelope envelope, String claimToken, String status,
                                   String outputsJson, String details, String error) {
         var finalized = repository.finalizeClaimed(
-                envelope.idempotencyKey(), status, outputsJson, details, error, nodeIdentity.id());
+                envelope.idempotencyKey(), status, outputsJson, details, error, claimToken);
         if (finalized == 0) {
             insertTerminal(envelope, status, outputsJson, details, error);
         }

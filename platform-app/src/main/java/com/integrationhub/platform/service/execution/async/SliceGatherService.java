@@ -23,14 +23,11 @@ public class SliceGatherService {
 
     private final TaskInboxRepository inbox;
     private final TaskAsyncDispatchRepository tracker;
-    private final AsyncNodeIdentity nodeIdentity;
 
     @Inject
-    public SliceGatherService(TaskInboxRepository inbox, TaskAsyncDispatchRepository tracker,
-                              AsyncNodeIdentity nodeIdentity) {
+    public SliceGatherService(TaskInboxRepository inbox, TaskAsyncDispatchRepository tracker) {
         this.inbox = inbox;
         this.tracker = tracker;
-        this.nodeIdentity = nodeIdentity;
     }
 
     /**
@@ -39,11 +36,12 @@ public class SliceGatherService {
      * (o no hay scatter activo) → el caller no debe disparar la reanudación.
      */
     @Transactional
-    public Optional<SliceProgress> commitCompletedSlice(AsyncTaskEnvelope envelope, String outputsJson, String details) {
+    public Optional<SliceProgress> commitCompletedSlice(AsyncTaskEnvelope envelope, String claimToken,
+                                                        String outputsJson, String details) {
         // §5: la slice se reclamó (CLAIMED) antes de ejecutar; aquí se cierra ese claim → PROCESSED y se cuenta
         // SOLO si esta entrega lo transicionó (dedup+conteo en una transacción). Fallback a insertIfAbsent para
         // una slice SIN claim previo (compat rolling-deploy): si inserta la fila terminal, también es primera vez.
-        if (!countScatterUnitOnce(envelope, TaskInbox.PROCESSED, outputsJson, details, null)) {
+        if (!countScatterUnitOnce(envelope, claimToken, TaskInbox.PROCESSED, outputsJson, details, null)) {
             return Optional.empty(); // slice ya contada (reentrega): no re-incrementar
         }
         var progress = tracker.recordSliceCompleted(envelope.processExecutionId(), envelope.taskDefinitionId());
@@ -64,10 +62,10 @@ public class SliceGatherService {
      * rolling-deploy) cae a {@code insertIfAbsent}. Devuelve {@code true} si ESTA entrega fue la primera en asentar
      * el terminal (debe contar en el tracker); {@code false} si era una reentrega ya contada.
      */
-    private boolean countScatterUnitOnce(AsyncTaskEnvelope envelope, String terminalStatus,
+    private boolean countScatterUnitOnce(AsyncTaskEnvelope envelope, String claimToken, String terminalStatus,
                                          String outputsJson, String details, String error) {
         if (inbox.finalizeClaimed(envelope.idempotencyKey(), terminalStatus, outputsJson, details, error,
-                nodeIdentity.id()) > 0) {
+                claimToken) > 0) {
             return true;
         }
         return inbox.insertIfAbsent(envelope.idempotencyKey(), envelope.taskType(),
@@ -104,10 +102,11 @@ public class SliceGatherService {
      * si esta entrega contó la slice; vacío si era duplicada.
      */
     @Transactional
-    public Optional<SliceProgress> failSlice(AsyncTaskEnvelope envelope, String error, boolean continueOnFailure) {
+    public Optional<SliceProgress> failSlice(AsyncTaskEnvelope envelope, String claimToken, String error,
+                                             boolean continueOnFailure) {
         // §5: cierra el claim de la slice → DEAD y cuenta solo si esta entrega lo transicionó (o, sin claim previo,
         // si insertIfAbsent asienta la fila). Mismo dedup+conteo atómico que el camino de éxito.
-        if (!countScatterUnitOnce(envelope, TaskInbox.DEAD, null, null, error)) {
+        if (!countScatterUnitOnce(envelope, claimToken, TaskInbox.DEAD, null, null, error)) {
             return Optional.empty();
         }
         var progress = tracker.recordSliceFailed(envelope.processExecutionId(), envelope.taskDefinitionId(),

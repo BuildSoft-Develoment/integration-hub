@@ -30,7 +30,7 @@ class SliceGatherServiceTest {
 
     private final TaskInboxRepository inbox = mock(TaskInboxRepository.class);
     private final TaskAsyncDispatchRepository tracker = mock(TaskAsyncDispatchRepository.class);
-    private final SliceGatherService service = new SliceGatherService(inbox, tracker, new AsyncNodeIdentity());
+    private final SliceGatherService service = new SliceGatherService(inbox, tracker);
 
     private final AsyncTaskEnvelope envelope = new AsyncTaskEnvelope(
             "exec-1", 1L, 2L, "DB_WRITE", "KAFKA", "slice-key", 1, "{}", Map.of());
@@ -45,7 +45,7 @@ class SliceGatherServiceTest {
         inboxInsertReturns(1);
         when(tracker.recordSliceCompleted(1L, 2L)).thenReturn(Optional.of(new SliceProgress(1, 0, 3, false)));
 
-        var progress = service.commitCompletedSlice(envelope, "{}", "ok");
+        var progress = service.commitCompletedSlice(envelope, "tok", "{}", "ok");
 
         assertTrue(progress.isPresent());
     }
@@ -54,7 +54,7 @@ class SliceGatherServiceTest {
     void duplicateSliceDoesNotIncrement() {
         inboxInsertReturns(0); // ya insertada (reentrega)
 
-        var progress = service.commitCompletedSlice(envelope, "{}", "ok");
+        var progress = service.commitCompletedSlice(envelope, "tok", "{}", "ok");
 
         assertTrue(progress.isEmpty());
         verify(tracker, never()).recordSliceCompleted(anyLong(), anyLong());
@@ -66,7 +66,7 @@ class SliceGatherServiceTest {
         when(tracker.recordSliceCompleted(1L, 2L)).thenReturn(Optional.empty());
         when(tracker.findByExecutionAndTask(1L, 2L)).thenReturn(Optional.empty()); // tracker no existe aún
 
-        assertThrows(IllegalStateException.class, () -> service.commitCompletedSlice(envelope, "{}", "ok"));
+        assertThrows(IllegalStateException.class, () -> service.commitCompletedSlice(envelope, "tok", "{}", "ok"));
     }
 
     @Test
@@ -77,7 +77,7 @@ class SliceGatherServiceTest {
         closed.status = TaskAsyncDispatch.COMPLETED;
         when(tracker.findByExecutionAndTask(1L, 2L)).thenReturn(Optional.of(closed));
 
-        var progress = service.commitCompletedSlice(envelope, "{}", "ok");
+        var progress = service.commitCompletedSlice(envelope, "tok", "{}", "ok");
 
         assertTrue(progress.isEmpty(), "scatter ya cerrado → skip legítimo, sin lanzar");
     }

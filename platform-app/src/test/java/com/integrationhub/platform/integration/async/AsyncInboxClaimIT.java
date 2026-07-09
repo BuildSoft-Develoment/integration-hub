@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -67,13 +68,14 @@ class AsyncInboxClaimIT {
     }
 
     @Test
-    void firstClaimWinsAndAConcurrentSecondClaimLoses() {
+    void firstClaimWinsAndAConcurrentSecondDeliveryLoses() {
+        // #4: dos ENTREGAS distintas (tokens distintos) del mismo work-item; con el lease vivo, la segunda pierde
+        // aunque sea el MISMO nodo/owner (antes el clause same-owner la dejaba ganar → doble efecto con ordered=false).
         var env = envelope("idem-race");
-        assertTrue(inbox.claim(env, "node-A", 30), "el primer claim gana");
-        assertFalse(inbox.claim(env, "node-B", 30),
-                "un segundo claim de otro nodo (lease vivo) pierde → NO ejecutará el efecto");
+        assertTrue(inbox.claim(env, "node-A", "tok-A", 30), "el primer claim gana");
+        assertFalse(inbox.claim(env, "node-A", "tok-B", 30),
+                "una SEGUNDA entrega (token distinto, lease vivo) pierde aun con el MISMO owner → NO doble efecto");
         assertEquals("CLAIMED", status("idem-race"));
-        assertEquals("node-A", owner("idem-race"));
     }
 
     @Test
@@ -87,10 +89,11 @@ class AsyncInboxClaimIT {
         try {
             for (var i = 0; i < threads; i++) {
                 var owner = "node-" + i;
+                var token = "tok-" + i; // #4: cada entrega concurrente lleva su propio token
                 pool.submit(() -> {
                     try {
                         start.await();
-                        if (inbox.claim(env, owner, 30)) {
+                        if (inbox.claim(env, owner, token, 30)) {
                             winners.incrementAndGet();
                         }
                     } catch (InterruptedException ignored) {
@@ -111,87 +114,94 @@ class AsyncInboxClaimIT {
     }
 
     @Test
-    void sameOwnerReClaimsForInAppRetry() {
+    void sameTokenReClaimsForInAppRetry() {
+        // #4: el retry in-app de la MISMA entrega reusa su token → re-clama; una entrega distinta (token distinto)
+        // con lease vivo NO re-clama (arriba).
         var env = envelope("idem-retry");
-        assertTrue(inbox.claim(env, "node-A", 30));
-        assertTrue(inbox.claim(env, "node-A", 30),
-                "el mismo owner re-toma su claim (retry in-app tras un fallo transitorio)");
+        assertTrue(inbox.claim(env, "node-A", "tok-A", 30));
+        assertTrue(inbox.claim(env, "node-A", "tok-A", 30),
+                "el mismo TOKEN re-toma su claim (retry in-app de la misma entrega)");
+    }
+
+    @Test
+    void releasedClaimIsImmediatelyReClaimableByAnotherDelivery() {
+        // #4 (release-on-failure): tras agotar los retries in-app se LIBERA el claim; una re-entrega del broker
+        // (token nuevo) lo re-clama de inmediato, sin esperar a que venza el lease.
+        var env = envelope("idem-release");
+        assertTrue(inbox.claim(env, "node-A", "tok-A", 30));
+        inbox.releaseClaim(env, "tok-A");
+        assertTrue(inbox.claim(env, "node-A", "tok-B", 30),
+                "un claim liberado se re-clama de inmediato (nueva entrega, token nuevo)");
     }
 
     @Test
     void expiredLeaseIsTakenOverByAnotherNode() throws Exception {
         var env = envelope("idem-lease");
-        assertTrue(inbox.claim(env, "node-A", 30));
+        assertTrue(inbox.claim(env, "node-A", "tok-A", 30));
         expireClaim("idem-lease");
-        assertTrue(inbox.claim(env, "node-B", 30),
-                "un lease vencido (nodo caído) lo re-toma otro nodo");
+        assertTrue(inbox.claim(env, "node-B", "tok-B", 30),
+                "un lease vencido (nodo caído) lo re-toma otra entrega");
         assertEquals("node-B", owner("idem-lease"));
     }
 
     @Test
     void finalizingTransitionsClaimedToTerminalAndDedups() {
         var env = envelope("idem-final");
-        // FENCING: recordProcessed finaliza con la identidad del store; para que la finalización sea legítima, el
-        // claim debe ser de ESA misma identidad (así reclama el consumer real, que comparte AsyncNodeIdentity).
-        assertTrue(inbox.claim(env, nodeIdentity.id(), 30));
+        assertTrue(inbox.claim(env, nodeIdentity.id(), "tok-final", 30));
         assertFalse(inbox.isProcessed("idem-final"), "CLAIMED aún no es terminal");
 
-        inbox.recordProcessed(env, "{\"rows\":1}", "ok");
+        inbox.recordProcessed(env, "tok-final", "{\"rows\":1}", "ok");
 
         assertEquals("PROCESSED", status("idem-final"));
         assertTrue(inbox.isProcessed("idem-final"), "tras finalizar, el pre-check corta la re-entrega");
-        assertFalse(inbox.claim(env, "node-B", 30), "no se re-reclama una clave ya terminal");
+        assertFalse(inbox.claim(env, "node-B", "tok-B", 30), "no se re-reclama una clave ya terminal");
     }
 
     @Test
-    void finalizeIsFencedByOwnerSoAStaleNodeCannotFinalizeAReclaimedRow() throws Exception {
-        // F (fencing): node-A reclama, su lease vence y node-B lo re-toma. Un finalize REZAGADO de node-A NO debe
-        // pisar el claim de B (owner distinto → 0 filas); solo el dueño actual (B) finaliza.
+    void finalizeIsFencedByTokenSoAStaleDeliveryCannotFinalizeAReclaimedRow() throws Exception {
+        // #4 (fencing por token): tok-A reclama, su lease vence y tok-B lo re-toma. Un finalize REZAGADO de tok-A NO
+        // debe pisar el claim de tok-B (token distinto → 0 filas); solo el token actual (B) finaliza.
         var env = envelope("idem-fence");
-        assertTrue(inbox.claim(env, "node-A", 30));
+        assertTrue(inbox.claim(env, "node-A", "tok-A", 30));
         expireClaim("idem-fence");
-        assertTrue(inbox.claim(env, "node-B", 30), "un lease vencido lo re-toma otro nodo");
-        assertEquals("node-B", owner("idem-fence"));
+        assertTrue(inbox.claim(env, "node-B", "tok-B", 30), "un lease vencido lo re-toma otra entrega");
 
         var stale = QuarkusTransaction.requiringNew().call(() ->
-                inboxRepository.finalizeClaimed("idem-fence", "PROCESSED", "{}", "late", null, "node-A"));
-        assertEquals(0, stale, "un nodo con lease vencido NO finaliza la fila re-reclamada por otro (fencing)");
-        assertEquals("CLAIMED", status("idem-fence"), "la fila sigue reclamada por B");
-        assertEquals("node-B", owner("idem-fence"));
+                inboxRepository.finalizeClaimed("idem-fence", "PROCESSED", "{}", "late", null, "tok-A"));
+        assertEquals(0, stale, "una entrega con token viejo NO finaliza la fila re-reclamada (fencing por token)");
+        assertEquals("CLAIMED", status("idem-fence"), "la fila sigue reclamada por tok-B");
 
         var owned = QuarkusTransaction.requiringNew().call(() ->
-                inboxRepository.finalizeClaimed("idem-fence", "PROCESSED", "{\"rows\":1}", "ok", null, "node-B"));
-        assertEquals(1, owned, "el dueño actual del claim sí lo finaliza");
+                inboxRepository.finalizeClaimed("idem-fence", "PROCESSED", "{\"rows\":1}", "ok", null, "tok-B"));
+        assertEquals(1, owned, "el token actual del claim sí lo finaliza");
         assertEquals("PROCESSED", status("idem-fence"));
     }
 
     @Test
-    void renewLeaseIsOwnerScopedAndKeepsTheClaimUntakeable() throws Exception {
-        // F3: el heartbeat renueva el lease solo para el DUEÑO; mientras el lease siga vivo (renovado), otro nodo
-        // NO puede re-tomar el claim → una reentrega durante una ejecución larga no duplica el efecto.
+    void renewLeaseIsTokenScopedAndKeepsTheClaimUntakeable() throws Exception {
+        // F3 + #4: el heartbeat renueva el lease solo para el TOKEN dueño; mientras el lease siga vivo (renovado),
+        // otra entrega NO puede re-tomar el claim → una reentrega durante una ejecución larga no duplica el efecto.
         var env = envelope("idem-renew");
-        assertTrue(inbox.claim(env, nodeIdentity.id(), 30));
+        assertTrue(inbox.claim(env, nodeIdentity.id(), "tok-R", 30));
 
-        assertFalse(inbox.renewLease(env, "node-OTHER", 30), "un owner ajeno NO renueva el lease");
-        assertTrue(inbox.renewLease(env, nodeIdentity.id(), 30), "el dueño del claim renueva su lease");
+        assertFalse(inbox.renewLease(env, "tok-OTHER", 30), "un token ajeno NO renueva el lease");
+        assertTrue(inbox.renewLease(env, "tok-R", 30), "el token dueño del claim renueva su lease");
         assertEquals("CLAIMED", status("idem-renew"));
-        assertEquals(nodeIdentity.id(), owner("idem-renew"));
 
-        assertFalse(inbox.claim(env, "node-B", 30),
-                "con el lease vivo (renovado), otro nodo no re-toma el claim (no hay doble efecto)");
+        assertFalse(inbox.claim(env, "node-B", "tok-B", 30),
+                "con el lease vivo (renovado), otra entrega no re-toma el claim (no hay doble efecto)");
     }
 
     @Test
     void heartbeatRenewsTheLeaseAgainstTheRealDbFromItsSchedulerThread() throws Exception {
         // F3 (ruta real): el heartbeat renueva via store.renewLease @Transactional DESDE SU HILO DE SCHEDULER
-        // contra la BD real. Si @Transactional no funcionara en ese hilo, la renovación se tragaría en el
-        // try/catch y claimed_until NO avanzaría. Se verifica que SÍ avanza (heartbeat efectivo de verdad).
+        // contra la BD real. Se verifica que claimed_until SÍ avanza (heartbeat efectivo de verdad).
         var env = envelope("idem-hb-real");
-        assertTrue(inbox.claim(env, nodeIdentity.id(), 2)); // lease corto (2s) → renueva cada 1s
+        assertTrue(inbox.claim(env, nodeIdentity.id(), "tok-HB", 2)); // lease corto (2s) → renueva cada 1s
         var before = claimedUntil("idem-hb-real");
 
         var heartbeat = new LeaseHeartbeat(inbox, 2, 1); // store REAL (CDI), lease 2s
-        heartbeat.runWithHeartbeat(env, nodeIdentity.id(), () -> {
+        heartbeat.runWithHeartbeat(env, "tok-HB", () -> {
             sleepQuietly(2600); // supera lease/2 (1s) varias veces → dispara renovaciones reales
             return null;
         });
@@ -206,16 +216,16 @@ class AsyncInboxClaimIT {
     void renewLeaseOnATerminalRowIsANoOp() throws Exception {
         // Un heartbeat que dispara tras finalizar es inofensivo: la fila ya no está CLAIMED → 0 filas.
         var env = envelope("idem-renew-term");
-        assertTrue(inbox.claim(env, nodeIdentity.id(), 30));
-        inbox.recordProcessed(env, "{}", "ok");
-        assertFalse(inbox.renewLease(env, nodeIdentity.id(), 30),
+        assertTrue(inbox.claim(env, nodeIdentity.id(), "tok-T", 30));
+        inbox.recordProcessed(env, "tok-T", "{}", "ok");
+        assertFalse(inbox.renewLease(env, "tok-T", 30),
                 "no se renueva un claim ya finalizado (PROCESSED)");
     }
 
     @Test
     void recoverySweepMarksStaleClaimsDead() throws Exception {
         var env = envelope("idem-stale");
-        assertTrue(inbox.claim(env, "node-A", 30));
+        assertTrue(inbox.claim(env, "node-A", "tok-S", 30));
         expireClaimByMinutes("idem-stale", 30); // lease vencido hace 30 min (> gracia por defecto 5m)
 
         var recovered = recovery.recoverStaleClaims();
@@ -223,6 +233,8 @@ class AsyncInboxClaimIT {
         assertEquals(1, recovered, "el claim estancado se recupera");
         assertEquals("DEAD", status("idem-stale"));
         assertEquals(1, inboxRepository.findDead(10).size(), "queda visible en la consola DLQ");
+        // #4 (A): la fila DEAD no deja un token huérfano (higiene, como finalize/release).
+        assertNull(claimToken("idem-stale"), "el inbox_claim_token se limpia al marcar DEAD");
     }
 
     // --- helpers de inspección/manipulación directa ---
@@ -233,6 +245,10 @@ class AsyncInboxClaimIT {
 
     private String owner(String key) {
         return single("select inbox_owner from task_inbox where idempotency_key = '" + key + "'");
+    }
+
+    private String claimToken(String key) {
+        return single("select inbox_claim_token from task_inbox where idempotency_key = '" + key + "'");
     }
 
     private String claimedUntil(String key) {

@@ -55,9 +55,9 @@ public class LeaseHeartbeat {
      * incluso si {@code work} lanza. Un heartbeat que dispara tras finalizar es un no-op seguro (la fila ya no
      * está {@code CLAIMED}).
      */
-    public <T> T runWithHeartbeat(AsyncTaskEnvelope envelope, String owner, Supplier<T> work) {
+    public <T> T runWithHeartbeat(AsyncTaskEnvelope envelope, String claimToken, Supplier<T> work) {
         var future = scheduler.scheduleAtFixedRate(
-                () -> renew(envelope, owner), periodSeconds, periodSeconds, TimeUnit.SECONDS);
+                () -> renew(envelope, claimToken), periodSeconds, periodSeconds, TimeUnit.SECONDS);
         try {
             return work.get();
         } finally {
@@ -65,13 +65,13 @@ public class LeaseHeartbeat {
         }
     }
 
-    private void renew(AsyncTaskEnvelope envelope, String owner) {
+    private void renew(AsyncTaskEnvelope envelope, String claimToken) {
         try {
-            if (!inbox.renewLease(envelope, owner, leaseSeconds)) {
-                // El claim ya no es nuestro (re-tomado) o ya finalizó: no hay nada que renovar. No se puede abortar
-                // un execute() en curso; el fencing del finalize (owner) es la red si el efecto se duplicó.
-                LOG.debugf("Async heartbeat: lease de %s ya no renovable por %s (re-tomado/terminal)",
-                        envelope.idempotencyKey(), owner);
+            if (!inbox.renewLease(envelope, claimToken, leaseSeconds)) {
+                // El claim ya no es nuestro (re-tomado por otra entrega, token distinto) o ya finalizó: nada que
+                // renovar. No se puede abortar un execute() en curso; el fencing por token del finalize es la red.
+                LOG.debugf("Async heartbeat: lease de %s ya no renovable (re-tomado/terminal)",
+                        envelope.idempotencyKey());
             }
         } catch (RuntimeException error) {
             // Un fallo transitorio de BD al renovar no debe tumbar la ejecución en curso; se reintenta al próximo tick.

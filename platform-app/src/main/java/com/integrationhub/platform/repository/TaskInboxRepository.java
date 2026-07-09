@@ -39,26 +39,34 @@ public class TaskInboxRepository implements PanacheRepository<TaskInbox> {
      * (mismo espíritu que el claim de process_execution, v53-fix #8), sin read-then-write racy.
      */
     public int claim(String idempotencyKey, String taskType, Long processExecutionId, Long taskDefinitionId,
-                     String brokerType, String owner, Timestamp claimedUntil, Timestamp now) {
+                     String brokerType, String owner, String claimToken, Timestamp claimedUntil, Timestamp now) {
+        // #4 (fencing por token): re-toma un CLAIMED solo si es MI PROPIO claim (mismo inbox_claim_token — el retry
+        // in-app de esta misma entrega) o su lease venció/liberado (nodo caído / release-on-failure). Una entrega
+        // CONCURRENTE distinta trae otro token y, con el lease vivo, NO matchea → 0 filas → skip (no doble efecto).
+        // Reemplaza al clause same-owner: la correctitud ya no depende de ordered=true/max-concurrency=1.
         return getEntityManager().createNativeQuery("""
                 insert into task_inbox
                     (idempotency_key, task_type, process_execution_id, task_definition_id, status,
-                     inbox_owner, claimed_until, broker_type, created_at)
-                values (?1, ?2, ?3, ?4, 'CLAIMED', ?5, ?6, ?7, current_timestamp)
+                     inbox_owner, inbox_claim_token, claimed_until, broker_type, created_at)
+                values (?1, ?2, ?3, ?4, 'CLAIMED', ?5, ?6, ?7, ?8, current_timestamp)
                 on conflict (idempotency_key) where idempotency_key is not null do update
                     set status = 'CLAIMED', inbox_owner = excluded.inbox_owner,
+                        inbox_claim_token = excluded.inbox_claim_token,
                         claimed_until = excluded.claimed_until
                     where task_inbox.status = 'CLAIMED'
-                      and (task_inbox.inbox_owner = excluded.inbox_owner or task_inbox.claimed_until < ?8)
+                      and (task_inbox.inbox_claim_token = excluded.inbox_claim_token
+                           or task_inbox.claimed_until is null
+                           or task_inbox.claimed_until < ?9)
                 """)
                 .setParameter(1, idempotencyKey)
                 .setParameter(2, taskType)
                 .setParameter(3, processExecutionId)
                 .setParameter(4, taskDefinitionId)
                 .setParameter(5, owner)
-                .setParameter(6, claimedUntil)
-                .setParameter(7, brokerType)
-                .setParameter(8, now)
+                .setParameter(6, claimToken)
+                .setParameter(7, claimedUntil)
+                .setParameter(8, brokerType)
+                .setParameter(9, now)
                 .executeUpdate();
     }
 
@@ -69,19 +77,40 @@ public class TaskInboxRepository implements PanacheRepository<TaskInbox> {
      * que tampoco pisa la fila viva). Devuelve {@code 1} si finalizó su claim; {@code 0} si no era suyo/no había.
      */
     public int finalizeClaimed(String idempotencyKey, String status, String outputsJson,
-                               String details, String error, String owner) {
+                               String details, String error, String claimToken) {
+        // #4: FENCING por token — solo finaliza el claim EXACTO (mismo inbox_claim_token). Un claim re-tomado por otra
+        // entrega (token distinto) o vencido NO puede ser finalizado por un intento tardío → 0 filas → el caller cae a
+        // insertIfAbsent (que tampoco pisa la fila viva). Reemplaza el fencing por owner (que no distinguía re-tomas
+        // del mismo owner).
         return getEntityManager().createNativeQuery("""
                 update task_inbox
                    set status = ?2, outputs_json = ?3, details = ?4, error = ?5,
-                       inbox_owner = null, claimed_until = null
-                 where idempotency_key = ?1 and status = 'CLAIMED' and inbox_owner = ?6
+                       inbox_owner = null, inbox_claim_token = null, claimed_until = null
+                 where idempotency_key = ?1 and status = 'CLAIMED' and inbox_claim_token = ?6
                 """)
                 .setParameter(1, idempotencyKey)
                 .setParameter(2, status)
                 .setParameter(3, outputsJson)
                 .setParameter(4, details)
                 .setParameter(5, error)
-                .setParameter(6, owner)
+                .setParameter(6, claimToken)
+                .executeUpdate();
+    }
+
+    /**
+     * #4 (release-on-failure): libera el claim de ESTA entrega tras agotar los retries in-app, para que la re-entrega
+     * del broker (nueva entrega, nuevo token) lo re-clame de inmediato en vez de esperar a que venza el lease (o peor,
+     * que el barrido de recuperación lo marque DEAD como si el nodo hubiera caído). Owner-scoped por token: solo el
+     * dueño del claim vivo lo libera. Deja la fila {@code CLAIMED} pero re-clamable (lease/owner/token limpios).
+     */
+    public int releaseClaim(String idempotencyKey, String claimToken) {
+        return getEntityManager().createNativeQuery("""
+                update task_inbox
+                   set inbox_owner = null, inbox_claim_token = null, claimed_until = null
+                 where idempotency_key = ?1 and status = 'CLAIMED' and inbox_claim_token = ?2
+                """)
+                .setParameter(1, idempotencyKey)
+                .setParameter(2, claimToken)
                 .executeUpdate();
     }
 
@@ -91,14 +120,16 @@ public class TaskInboxRepository implements PanacheRepository<TaskInbox> {
      * {@code CLAIMED} (finalizó): en ese caso el heartbeat deja de renovar. Mantener {@code claimed_until} adelantado
      * evita que una reentrega durante una ejecución larga (rebalance/redelivery) re-tome el claim y duplique el efecto.
      */
-    public int renewLease(String idempotencyKey, String owner, Timestamp claimedUntil) {
+    public int renewLease(String idempotencyKey, String claimToken, Timestamp claimedUntil) {
+        // #4: renueva solo si sigue siendo MI claim (mismo inbox_claim_token). Si otra entrega lo re-tomó (token
+        // distinto) o ya finalizó, 0 filas → el heartbeat deja de renovar.
         return getEntityManager().createNativeQuery("""
                 update task_inbox
                    set claimed_until = ?3
-                 where idempotency_key = ?1 and status = 'CLAIMED' and inbox_owner = ?2
+                 where idempotency_key = ?1 and status = 'CLAIMED' and inbox_claim_token = ?2
                 """)
                 .setParameter(1, idempotencyKey)
-                .setParameter(2, owner)
+                .setParameter(2, claimToken)
                 .setParameter(3, claimedUntil)
                 .executeUpdate();
     }
@@ -110,9 +141,11 @@ public class TaskInboxRepository implements PanacheRepository<TaskInbox> {
      */
     @Transactional
     public int markExpiredClaimsDead(Timestamp cutoff, String error) {
+        // #4 (A): también se limpia inbox_claim_token (como finalizeClaimed/releaseClaim), para no dejar un token
+        // huérfano en una fila DEAD (higiene del DLQ; DEAD no es re-clamable, así que no abre doble ejecución).
         return getEntityManager().createNativeQuery("""
                 update task_inbox
-                   set status = 'DEAD', error = ?2, inbox_owner = null, claimed_until = null
+                   set status = 'DEAD', error = ?2, inbox_owner = null, inbox_claim_token = null, claimed_until = null
                  where status = 'CLAIMED' and claimed_until < ?1
                 """)
                 .setParameter(1, cutoff)

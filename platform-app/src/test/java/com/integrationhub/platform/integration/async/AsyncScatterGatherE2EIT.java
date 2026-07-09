@@ -74,7 +74,7 @@ class AsyncScatterGatherE2EIT {
 
         // Simula la entrega por broker: cada envelope_json es el payload de wire de una slice.
         for (var payload : readAll("select envelope_json from task_dispatch_outbox order by id asc")) {
-            consumer.consume(payload, "KAFKA", "tasks.test_scatter_batch");
+            consumer.consume(payload, "KAFKA", "tasks.test_scatter_batch", java.util.UUID.randomUUID().toString());
         }
 
         // Todas las slices se ejecutaron (5 records repartidos) y el gather cerró el scatter.
