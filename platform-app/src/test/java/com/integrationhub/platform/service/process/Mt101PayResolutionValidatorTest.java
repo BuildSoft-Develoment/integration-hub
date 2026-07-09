@@ -70,4 +70,40 @@ class Mt101PayResolutionValidatorTest {
         assertDoesNotThrow(() -> validator.validate(List.of()));
         assertDoesNotThrow(() -> validator.validate(null));
     }
+
+    // ---- #1: resolveNormalPay obligatorio por ambiente (mt101.pay.require-normal-pay-resolver=true) ----
+
+    private final Mt101PayResolutionValidator requiringResolver =
+            new Mt101PayResolutionValidator(new ObjectMapper(), true);
+
+    @Test
+    void whenEnvRequiresResolverPayWithoutDownstreamResolverIsRejected() {
+        var error = assertThrows(IllegalArgumentException.class, () -> requiringResolver.validate(List.of(
+                new TaskView("FILE_READ", 1, "{}"),
+                new TaskView("MT101_PAY", 2, "{}"))));
+        assertTrue(error.getMessage().contains("require-normal-pay-resolver"), () -> "mensaje: " + error.getMessage());
+    }
+
+    @Test
+    void whenEnvRequiresResolverPayWithDownstreamResolverAndContinueOnFailureIsAccepted() {
+        assertDoesNotThrow(() -> requiringResolver.validate(List.of(
+                new TaskView("MT101_PAY", 1, "{\"continueOnFailure\":true}"),
+                new TaskView("MT101_STATUS", 2, "{\"resolveNormalPay\":true}"))));
+    }
+
+    @Test
+    void whenEnvRequiresResolverAConfirmationOnlyStatusStillFails() {
+        // Un STATUS de confirmación (sin resolveNormalPay) no satisface la exigencia del ambiente.
+        var error = assertThrows(IllegalArgumentException.class, () -> requiringResolver.validate(List.of(
+                new TaskView("MT101_PAY", 1, "{\"continueOnFailure\":true}"),
+                new TaskView("MT101_STATUS", 2, "{\"mode\":\"query\"}"))));
+        assertTrue(error.getMessage().contains("require-normal-pay-resolver"), () -> "mensaje: " + error.getMessage());
+    }
+
+    @Test
+    void envRequirementDoesNotAffectProcessesWithoutPay() {
+        assertDoesNotThrow(() -> requiringResolver.validate(List.of(
+                new TaskView("FILE_READ", 1, "{}"),
+                new TaskView("DB_WRITE", 2, "{}"))));
+    }
 }
