@@ -44,6 +44,7 @@ public class RecordLineageResource {
                                                     @QueryParam("value") String value,
                                                     @QueryParam("sourceFileHash") String sourceFileHash,
                                                     @QueryParam("recordNumber") Long recordNumber,
+                                                    @QueryParam("processExecutionId") Long processExecutionId,
                                                     @QueryParam("limit") @DefaultValue("1000") int limit) {
         var capped = Math.min(Math.max(limit, 1), MAX_ENTRIES);
         List<AuditRecordEvent> events;
@@ -52,7 +53,8 @@ public class RecordLineageResource {
         } else if (traceId != null && !traceId.isBlank()) {
             events = repository.timelineByTraceId(traceId, capped);
         } else if (sourceFileHash != null && !sourceFileHash.isBlank() && recordNumber != null) {
-            events = repository.timelineBySourceRow(sourceFileHash, recordNumber, capped);
+            // B: processExecutionId (opcional) desambigua reprocesos del mismo archivo+fila (varias ejecuciones).
+            events = repository.timelineBySourceRow(sourceFileHash, recordNumber, processExecutionId, capped);
         } else if (key != null && !key.isBlank() && value != null && !value.isBlank()) {
             try {
                 events = repository.timelineByOperationalKey(key, value, capped);

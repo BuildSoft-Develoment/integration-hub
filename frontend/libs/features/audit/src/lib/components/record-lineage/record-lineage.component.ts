@@ -56,6 +56,8 @@ export class RecordLineageComponent {
   value = '';
   sourceFileHash = '';
   recordNumber = '';
+  // B: acota la traza a una ejecución (desambigua reprocesos del mismo archivo+fila).
+  processExecutionId = '';
 
   readonly mode = signal<SearchMode>('record');
   readonly modes: { value: SearchMode; labelKey: string }[] = [
@@ -90,6 +92,7 @@ export class RecordLineageComponent {
     } else if (hash && recordNumber) {
       this.sourceFileHash = hash;
       this.recordNumber = recordNumber;
+      this.processExecutionId = qp.get('processExecutionId') ?? '';
       this.mode.set('sourceRow');
       this.searchBySourceRow();
     } else if (key && value) {
@@ -211,10 +214,14 @@ export class RecordLineageComponent {
     if (!this.sourceFileHash.trim() || !this.recordNumber.trim()) {
       return;
     }
-    this.fetch({ sourceFileHash: this.sourceFileHash, recordNumber: this.recordNumber });
+    this.fetch({
+      sourceFileHash: this.sourceFileHash,
+      recordNumber: this.recordNumber,
+      processExecutionId: this.processExecutionId.trim() || undefined,
+    });
   }
 
-  private fetch(query: { recordId?: string; traceId?: string; key?: string; value?: string; sourceFileHash?: string; recordNumber?: string }): void {
+  private fetch(query: { recordId?: string; traceId?: string; key?: string; value?: string; sourceFileHash?: string; recordNumber?: string; processExecutionId?: string }): void {
     this.loading.set(true);
     this.error.set(null);
     this.api.recordLineage({ ...query, limit: this.limit }).subscribe({

@@ -71,6 +71,7 @@ export class AuditApiService {
     value?: string;
     sourceFileHash?: string;
     recordNumber?: number | string;
+    processExecutionId?: number | string;
     limit?: number;
   }): Observable<RecordLineageEntry[]> {
     let httpParams = new HttpParams().set('limit', String(query.limit ?? 1000));
@@ -87,6 +88,10 @@ export class AuditApiService {
       httpParams = httpParams
         .set('sourceFileHash', query.sourceFileHash.trim())
         .set('recordNumber', String(query.recordNumber).trim());
+      // B: desambigua reprocesos (mismo archivo+fila en varias ejecuciones).
+      if (query.processExecutionId !== undefined && String(query.processExecutionId).trim()) {
+        httpParams = httpParams.set('processExecutionId', String(query.processExecutionId).trim());
+      }
     }
     return this.http.get<RecordLineageEntry[]>('/api/query/record-lineage', { params: httpParams });
   }

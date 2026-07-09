@@ -45,8 +45,17 @@ public class AuditRecordEventRepository implements PanacheRepository<AuditRecord
         };
     }
 
-    public List<AuditRecordEvent> timelineBySourceRow(String sourceFileHash, Long recordNumber, int limit) {
-        return find("sourceFileHash = ?1 and recordNumber = ?2 order by eventTs asc, id asc",
-                sourceFileHash, recordNumber).page(0, limit).list();
+    /**
+     * B: timeline de una fila origen. {@code processExecutionId} opcional desambigua reprocesos del mismo archivo+fila
+     * (varias ejecuciones dejan eventos bajo el mismo {@code (sourceFileHash, recordNumber)}); si es null, trae todos.
+     */
+    public List<AuditRecordEvent> timelineBySourceRow(String sourceFileHash, Long recordNumber,
+                                                      Long processExecutionId, int limit) {
+        if (processExecutionId == null) {
+            return find("sourceFileHash = ?1 and recordNumber = ?2 order by eventTs asc, id asc",
+                    sourceFileHash, recordNumber).page(0, limit).list();
+        }
+        return find("sourceFileHash = ?1 and recordNumber = ?2 and processExecutionId = ?3 order by eventTs asc, id asc",
+                sourceFileHash, recordNumber, processExecutionId).page(0, limit).list();
     }
 }
