@@ -1303,6 +1303,7 @@ export const es = {
   'audit.lookup.col.record': 'Registro lógico',
   'audit.lookup.col.quarantine': 'Cuarentena',
   'audit.lookup.usePhysicalLineMatch': 'Usar',
+  'audit.lookup.viewLineage': 'Lineage',
   'ui.asyncDispatchOptions': 'Despacho asíncrono',
   'ui.asyncDispatch': 'Ejecución asíncrona (offload a broker)',
   'ui.asyncTransport': 'Transporte',

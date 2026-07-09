@@ -80,6 +80,8 @@
                   <td class="lookup__mono">{{ m.sendersReference || '-' }}</td>
                   <td>
                     <button mat-button type="button" (click)="pickPhysicalLineMatch(m)">{{ i18n.t('audit.lookup.usePhysicalLineMatch') }}</button>
+                    <!-- G5: salto al lineage E2E completo (record-lineage, modo sourceRow) desde la línea física. -->
+                    <a mat-button [routerLink]="['/audit/record-lineage']" [queryParams]="{ sourceFileHash: m.sourceFileHash, recordNumber: m.recordIndex + 1, processExecutionId: m.processExecutionId }">{{ i18n.t('audit.lookup.viewLineage') }} ↗</a>
                   </td>
                 </tr>
               }

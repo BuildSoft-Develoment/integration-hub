@@ -1303,6 +1303,7 @@ export const en = {
   'audit.lookup.col.record': 'Logical record',
   'audit.lookup.col.quarantine': 'Quarantine',
   'audit.lookup.usePhysicalLineMatch': 'Use',
+  'audit.lookup.viewLineage': 'Lineage',
   'ui.asyncDispatchOptions': 'Async dispatch',
   'ui.asyncDispatch': 'Asynchronous execution (offload to broker)',
   'ui.asyncTransport': 'Transport',
