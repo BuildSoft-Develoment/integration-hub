@@ -7,9 +7,10 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { BreadcrumbService, I18nService } from '@integration-hub/core/services';
-import { RelativeTimePipe } from '@integration-hub/shared/ui';
+import { IconComponent, RelativeTimePipe } from '@integration-hub/shared/ui';
 import { AuditApiService } from '../../api/audit-api.service';
-import { Mt101FragmentLink, Mt101PhysicalLineLineage } from '../../models/audit.models';
+import { Mt101FragmentLink, Mt101PhysicalLineLineage, RecordLineageEntry } from '../../models/audit.models';
+import { timelineStatusIcon, timelineStatusKind } from '../../utils/timeline-format';
 import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspace-nav.component';
 
 @Component({
@@ -24,6 +25,7 @@ import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspa
     MatInputModule,
     AuditWorkspaceNavComponent,
     RelativeTimePipe,
+    IconComponent,
   ],
   styleUrl: './mt101-fragment-lookup.component.css',
   templateUrl: './mt101-fragment-lookup.component.html',
@@ -52,6 +54,43 @@ export class Mt101FragmentLookupComponent {
   readonly physicalLineMsg = signal<string | null>(null);
   // G-A: TODOS los registros de esa línea física (uno por ejecución: reprocesos visibles), con su cuarentena.
   readonly physicalLineMatches = signal<Mt101PhysicalLineLineage[]>([]);
+
+  // B (página única): lineage E2E embebido en la misma pantalla (sin navegar). Reusa /api/query/record-lineage
+  // (modo sourceRow) y el mismo render de timeline del record-lineage. El deep-link a la vista completa se conserva.
+  readonly lineageEntries = signal<RecordLineageEntry[]>([]);
+  readonly lineageLoading = signal(false);
+  readonly lineageError = signal<string | null>(null);
+  readonly lineageForRef = signal<string | null>(null);
+  protected readonly statusKind = timelineStatusKind;
+  protected readonly statusIcon = timelineStatusIcon;
+
+  /** B: resuelve y muestra el timeline E2E de un match AQUÍ mismo (staging→fragmento→…→STATUS→RECONCILE→conflictos). */
+  showLineage(match: Mt101PhysicalLineLineage): void {
+    this.lineageForRef.set(`${match.sourceFileHash} · #${match.recordIndex + 1}`);
+    this.lineageEntries.set([]);
+    this.lineageError.set(null);
+    this.lineageLoading.set(true);
+    this.api.recordLineage({
+      sourceFileHash: match.sourceFileHash,
+      recordNumber: match.recordIndex + 1,
+      processExecutionId: match.processExecutionId ?? undefined,
+    }).subscribe({
+      next: (entries) => {
+        this.lineageEntries.set(entries);
+        this.lineageLoading.set(false);
+      },
+      error: () => {
+        this.lineageError.set(this.i18n.t('audit.lookup.lineageError'));
+        this.lineageLoading.set(false);
+      },
+    });
+  }
+
+  closeLineage(): void {
+    this.lineageForRef.set(null);
+    this.lineageEntries.set([]);
+    this.lineageError.set(null);
+  }
 
   /**
    * G-A: resuelve una LÍNEA FÍSICA del archivo a la LISTA de registros (staging_id + record_index por ejecución), cada

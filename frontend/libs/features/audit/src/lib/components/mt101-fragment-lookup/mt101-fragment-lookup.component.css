@@ -12,3 +12,16 @@
     .lookup__error { color:var(--ih-status-error); }
     .lookup__status--SENT,.lookup__status--ARCHIVED,.lookup__status--COMPOSED { color:var(--ih-status-success); }
     .lookup__status--REJECTED,.lookup__status--ERROR { color:var(--ih-status-error); }
+
+    /* B (página única): panel de lineage E2E embebido. */
+    .lookup__lineage { border:1px solid var(--ih-border); border-radius:8px; padding:.75rem 1rem; background:color-mix(in srgb, var(--ih-surface-alt) 88%, transparent); }
+    .lookup__lineage-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:.5rem; }
+    .lookup__tl { display:flex; flex-direction:column; }
+    .lookup__tl-row { display:grid; grid-template-columns:auto 1fr; gap:.6rem; padding:.4rem 0; border-left:2px solid transparent; }
+    .lookup__tl-dot { display:inline-flex; align-items:center; justify-content:center; width:1.5rem; height:1.5rem; border-radius:999px; background:var(--ih-surface); color:var(--ih-text-soft); }
+    .lookup__tl-row--ok .lookup__tl-dot { color:var(--ih-status-success); }
+    .lookup__tl-row--error .lookup__tl-dot { color:var(--ih-status-error); }
+    .lookup__tl-row--pending .lookup__tl-dot { color:var(--ih-status-warning); }
+    .lookup__tl-head { display:flex; align-items:center; gap:.6rem; flex-wrap:wrap; }
+    .lookup__tl-stage { font-weight:600; font-size:.86rem; }
+    .lookup__tl-body time { font-size:.78rem; }

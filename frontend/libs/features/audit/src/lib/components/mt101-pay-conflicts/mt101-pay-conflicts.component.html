@@ -6,9 +6,15 @@
       <h1 class="ih-section-title">{{ i18n.t('audit.payConflicts.title') }}</h1>
       <p class="ih-muted">{{ i18n.t('audit.payConflicts.subtitle') }}</p>
     </div>
-    <button mat-stroked-button type="button" (click)="load()" [disabled]="loading()">
-      {{ i18n.t('audit.common.refresh') }}
-    </button>
+    <div class="conflicts__head-actions">
+      <button mat-stroked-button type="button" (click)="exportEvidence()" [disabled]="conflicts().length === 0">
+        <ih-icon name="download" [size]="16" />
+        {{ i18n.t('audit.payConflicts.export') }}
+      </button>
+      <button mat-stroked-button type="button" (click)="load()" [disabled]="loading()">
+        {{ i18n.t('audit.common.refresh') }}
+      </button>
+    </div>
   </div>
 
   @if (conflicts().length === 0 && loading()) {
@@ -53,12 +59,43 @@
                 } @else { - }
               </td>
               <td>
-                <!-- Deep-link a la vista por-set (quarantine), donde se concilia el conflicto. -->
+                <!-- A1: evidencia inline (confirmaciones del banco: gatewayReference + último STATUS). -->
+                <button mat-button type="button" (click)="toggleEvidence(c)">{{ i18n.t('audit.payConflicts.evidence') }}</button>
+                <!-- Deep-link (A2) a la acción gobernada: vista por-set (quarantine), donde se concilia el conflicto. -->
                 <a mat-button [routerLink]="['/audit/mt101-quarantine']" [queryParams]="{ fragmentSetId: c.fragmentSetId }">{{ i18n.t('audit.payConflicts.reconcile') }}</a>
                 <!-- Deep-link al lineage E2E de la trama en conflicto (modo 'key' por :20: = paymentReference). -->
                 <a mat-button [routerLink]="['/audit/record-lineage']" [queryParams]="{ key: 'paymentReference', value: c.sendersReference }">{{ i18n.t('audit.lookup.viewLineage') }} ↗</a>
               </td>
             </tr>
+            @if (expandedKey() === trackConflict($index, c)) {
+              <tr class="conflicts__evidence-row">
+                <td colspan="8">
+                  <div class="conflicts__evidence">
+                    <strong>{{ i18n.t('audit.payConflicts.evidenceTitle') }} — <span class="conflicts__mono">{{ c.sendersReference }}</span></strong>
+                    @if (confirmationsLoading()) {
+                      <p class="ih-muted" role="status">{{ i18n.t('audit.payConflicts.loading') }}</p>
+                    } @else if (confirmationsError()) {
+                      <p class="conflicts__error" role="alert">{{ confirmationsError() }}</p>
+                    } @else if (confirmations().length === 0) {
+                      <p class="ih-muted">{{ i18n.t('audit.payConflicts.evidenceEmpty') }}</p>
+                    } @else {
+                      <ul class="conflicts__conf-list">
+                        @for (conf of confirmations(); track $index) {
+                          <li>
+                            <span class="conflicts__status">{{ conf.confirmedStatus || '-' }}</span>
+                            <span class="conflicts__mono">{{ conf.gatewayReference || '-' }}</span>
+                            <span class="ih-muted">{{ conf.confirmationType || '-' }}</span>
+                            @if (conf.receivedAt; as ts) {
+                              <time class="ih-muted" [attr.datetime]="ts" [title]="ts | ihTime:'absolute'">{{ ts | ihTime }}</time>
+                            }
+                          </li>
+                        }
+                      </ul>
+                    }
+                  </div>
+                </td>
+              </tr>
+            }
           }
         </tbody>
       </table>

@@ -118,6 +118,25 @@ public class Mt101FragmentLookupService {
     /** Cota por defecto/máxima de la consola de conflictos (el conflicto es excepcional; no debería acercarse). */
     private static final int DEFAULT_OPEN_CONFLICTS_LIMIT = 200;
     private static final int MAX_OPEN_CONFLICTS_LIMIT = 1000;
+    /** Cota de confirmaciones por conflicto (evidencia inline): un pago tiene pocas confirmaciones. */
+    private static final int DEFAULT_CONFLICT_CONFIRMATIONS_LIMIT = 20;
+
+    /**
+     * Consola de PAY Conflicts (A1 — evidencia inline): confirmación(es) del banco para un {@code :20:} (gatewayReference
+     * + último STATUS), la evidencia de por qué el fragmento quedó en conflicto. Solo lectura.
+     */
+    public List<Mt101FragmentRepository.OpenPayConflictConfirmation> payConflictConfirmations(String connectionRef,
+                                                                                              String sendersReference) {
+        if (sendersReference == null || sendersReference.isBlank()) {
+            throw new IllegalArgumentException("sendersReference is required");
+        }
+        try {
+            return repository.payConflictConfirmations(resolveDataSource(connectionRef), sendersReference.trim(),
+                    DEFAULT_CONFLICT_CONFIRMATIONS_LIMIT);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot list confirmations for " + sendersReference, error);
+        }
+    }
 
     /** Página del inbox de conflictos: los items + un cursor opaco para la siguiente página ({@code null} = fin). */
     public record OpenPayConflictsPage(List<Mt101FragmentRepository.OpenPayConflictRow> items, String nextCursor) {

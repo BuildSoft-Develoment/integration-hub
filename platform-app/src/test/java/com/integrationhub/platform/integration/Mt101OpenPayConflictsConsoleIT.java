@@ -44,6 +44,9 @@ class Mt101OpenPayConflictsConsoleIT {
             s.execute("delete from mt101_build_fragment where fragment_set_id in ('OPEN-CON-A', 'OPEN-CON-B')");
             s.execute("delete from mt101_corrective_pay_fragment where rebuild_run_id = 'OPEN-CON-RUN'");
             s.execute("delete from mt101_rebuild_run where rebuild_run_id = 'OPEN-CON-RUN'");
+            s.execute("delete from mt101_confirmation where archive_id in "
+                    + "(select id from mt101_archive where senders_reference = 'K-EVID')");
+            s.execute("delete from mt101_archive where senders_reference = 'K-EVID'");
             s.execute("delete from process_execution where process_definition_id in "
                     + "(select id from process_definition where name = 'open-con-e2e')");
             s.execute("delete from process_definition where name = 'open-con-e2e'");
@@ -164,6 +167,27 @@ class Mt101OpenPayConflictsConsoleIT {
 
     @Test
     @TestSecurity(user = "ops", roles = {"payments-operator"})
+    void listsBankConfirmationsAsEvidenceForAConflict() throws Exception {
+        // A1: la evidencia inline trae la(s) confirmacion(es) del banco (gatewayReference + estado) para un :20:,
+        // unidas mt101_confirmation -> mt101_archive por senders_reference. Mas reciente primero.
+        long archiveId = seedArchive("K-EVID");
+        seedConfirmation(archiveId, "STATUS_API", "GW-1", "REJECTED");
+
+        given().queryParam("sendersReference", "K-EVID")
+                .when().get("/api/query/mt101-fragments/pay-conflicts/confirmations")
+                .then().statusCode(200)
+                .body("size()", org.hamcrest.Matchers.greaterThanOrEqualTo(1))
+                .body("[0].gatewayReference", is("GW-1"))
+                .body("[0].confirmedStatus", is("REJECTED"))
+                .body("[0].confirmationType", is("STATUS_API"));
+
+        // Sin sendersReference -> 400.
+        given().when().get("/api/query/mt101-fragments/pay-conflicts/confirmations")
+                .then().statusCode(400);
+    }
+
+    @Test
+    @TestSecurity(user = "ops", roles = {"payments-operator"})
     void rejectsMalformedCursorWith400() {
         given().queryParam("cursor", "not-a-valid-cursor")
                 .when().get("/api/query/mt101-fragments/pay-conflicts/open")
@@ -204,6 +228,31 @@ class Mt101OpenPayConflictsConsoleIT {
             st.setInt(2, index);
             st.setString(3, ref);
             st.setString(4, updatedAt);
+            st.executeUpdate();
+        }
+    }
+
+    private long seedArchive(String sendersReference) throws Exception {
+        try (Connection c = dataSource.getConnection();
+             var st = c.prepareStatement("insert into mt101_archive (senders_reference, status) "
+                     + "values (?, 'SENT') returning id")) {
+            st.setString(1, sendersReference);
+            try (var rs = st.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
+        }
+    }
+
+    private void seedConfirmation(long archiveId, String type, String gatewayReference, String confirmedStatus)
+            throws Exception {
+        try (Connection c = dataSource.getConnection();
+             var st = c.prepareStatement("insert into mt101_confirmation "
+                     + "(archive_id, confirmation_type, gateway_reference, confirmed_status) values (?, ?, ?, ?)")) {
+            st.setLong(1, archiveId);
+            st.setString(2, type);
+            st.setString(3, gatewayReference);
+            st.setString(4, confirmedStatus);
             st.executeUpdate();
         }
     }

@@ -1098,6 +1098,42 @@ public class Mt101FragmentRepository {
         return result;
     }
 
+    /**
+     * Consola de PAY Conflicts (A1 — evidencia inline): la(s) confirmación(es) del banco para un {@code :20:}, con su
+     * {@code gatewayReference} y estado confirmado (último STATUS), unidas {@code mt101_confirmation → mt101_archive}
+     * por la referencia SWIFT ({@code senders_reference}). Más recientes primero. Solo lectura: es la evidencia de por
+     * qué el fragmento quedó en conflicto (terminal del ledger vs. respuesta del banco).
+     */
+    public List<OpenPayConflictConfirmation> payConflictConfirmations(DataSource dataSource, String sendersReference,
+                                                                      int limit) throws SQLException {
+        var sql = "select c.confirmation_type, c.gateway_reference, c.confirmed_status, c.received_at "
+                + "from mt101_confirmation c join mt101_archive a on a.id = c.archive_id "
+                + "where a.senders_reference = ? "
+                + "order by c.received_at desc, c.id desc limit ?";
+        var result = new ArrayList<OpenPayConflictConfirmation>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, sendersReference);
+            statement.setInt(2, Math.max(1, limit));
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    var receivedAt = rs.getTimestamp("received_at");
+                    result.add(new OpenPayConflictConfirmation(
+                            rs.getString("confirmation_type"),
+                            rs.getString("gateway_reference"),
+                            rs.getString("confirmed_status"),
+                            receivedAt == null ? null : receivedAt.toInstant().toString()));
+                }
+            }
+        }
+        return result;
+    }
+
+    /** A1: confirmación del banco para la evidencia inline de un conflicto (tipo, gatewayReference, estado, fecha). */
+    public record OpenPayConflictConfirmation(String confirmationType, String gatewayReference, String confirmedStatus,
+                                              String receivedAt) {
+    }
+
     public Map<TransactionKey, FragmentRecordLineage> fragmentRecordLineageByTransactions(
             DataSource dataSource,
             String fragmentSetId,

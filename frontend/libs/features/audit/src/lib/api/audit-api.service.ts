@@ -11,6 +11,7 @@ import {
   Mt101FragmentSetSummary,
   Mt101LoteHeader,
   Mt101NormalPayResolution,
+  Mt101OpenPayConflictConfirmation,
   Mt101OpenPayConflictsPage,
   Mt101PayConflict,
   Mt101PhysicalLineLineage,
@@ -234,6 +235,22 @@ export class AuditApiService {
     }
     return this.http.get<Mt101OpenPayConflictsPage>(
       '/api/query/mt101-fragments/pay-conflicts/open', { params: httpParams });
+  }
+
+  /**
+   * A1 (evidencia inline): confirmación(es) del banco para un :20: (gatewayReference + último STATUS), la evidencia de
+   * por qué el fragmento quedó en conflicto.
+   */
+  mt101PayConflictConfirmations(query: {
+    connectionRef?: string;
+    sendersReference: string;
+  }): Observable<Mt101OpenPayConflictConfirmation[]> {
+    let httpParams = new HttpParams().set('sendersReference', query.sendersReference);
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.get<Mt101OpenPayConflictConfirmation[]>(
+      '/api/query/mt101-fragments/pay-conflicts/confirmations', { params: httpParams });
   }
 
   /**

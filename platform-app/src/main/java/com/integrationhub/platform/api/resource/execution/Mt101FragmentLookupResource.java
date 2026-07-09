@@ -172,6 +172,23 @@ public class Mt101FragmentLookupResource {
     }
 
     /**
+     * A1 (evidencia inline de la consola): confirmación(es) del banco para un {@code :20:} (gatewayReference + último
+     * STATUS confirmado), la evidencia de por qué el fragmento quedó en conflicto. Mismo gating que la consola.
+     */
+    @GET
+    @Path("/pay-conflicts/confirmations")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
+    public List<Mt101FragmentRepository.OpenPayConflictConfirmation> payConflictConfirmations(
+            @QueryParam("connectionRef") String connectionRef,
+            @QueryParam("sendersReference") String sendersReference) {
+        try {
+            return service.payConflictConfirmations(connectionRef, sendersReference);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /**
      * Línea de tiempo E2E <b>operacional</b> de una fila (instantánea, desde staging /
      * fragmento / cuarentena), independiente del store frío asíncrono.
      */

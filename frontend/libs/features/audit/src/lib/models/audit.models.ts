@@ -216,6 +216,14 @@ export interface Mt101OpenPayConflictsPage {
   nextCursor: string | null;
 }
 
+/** A1: confirmación del banco (evidencia inline de un conflicto): tipo, gatewayReference, último estado, fecha. */
+export interface Mt101OpenPayConflictConfirmation {
+  confirmationType: string | null;
+  gatewayReference: string | null;
+  confirmedStatus: string | null;
+  receivedAt: string | null;
+}
+
 /**
  * item 2: vista de una fila de staging para corrección, con su posición FÍSICA en el archivo origen (línea física
  * para CSV/TXT/FIN; hoja+fila para Excel). Nullables: readers que no aportan posición los dejan null.
