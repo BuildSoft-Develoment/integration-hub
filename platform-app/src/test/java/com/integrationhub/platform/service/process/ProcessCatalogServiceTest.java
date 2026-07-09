@@ -45,7 +45,8 @@ class ProcessCatalogServiceTest {
             readerDefinitionRepository,
             apiMapper,
             taskTypeRegistry,
-            new Mt101PayResolutionValidator(new com.fasterxml.jackson.databind.ObjectMapper()));
+            new Mt101PayResolutionValidator(new com.fasterxml.jackson.databind.ObjectMapper()),
+            new Mt101StatusRouteCoverageValidator(new com.fasterxml.jackson.databind.ObjectMapper()));
 
     private ProcessDefinitionRequest request(boolean scheduled, String scheduleEvery, List<ProcessTaskRequest> tasks) {
         tasks.forEach(task -> when(taskTypeRegistry.isRegistered(task.taskType())).thenReturn(true));

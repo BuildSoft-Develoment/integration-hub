@@ -30,6 +30,7 @@ public class ProcessCatalogService {
     private final ProcessDefinitionApiMapper processDefinitionApiMapper;
     private final TaskTypeRegistry taskTypeRegistry;
     private final Mt101PayResolutionValidator payResolutionValidator;
+    private final Mt101StatusRouteCoverageValidator routeCoverageValidator;
 
     public ProcessCatalogService(
             ProcessDefinitionRepository processDefinitionRepository,
@@ -38,7 +39,8 @@ public class ProcessCatalogService {
             ReaderDefinitionRepository readerDefinitionRepository,
             ProcessDefinitionApiMapper processDefinitionApiMapper,
             TaskTypeRegistry taskTypeRegistry,
-            Mt101PayResolutionValidator payResolutionValidator
+            Mt101PayResolutionValidator payResolutionValidator,
+            Mt101StatusRouteCoverageValidator routeCoverageValidator
     ) {
         this.processDefinitionRepository = processDefinitionRepository;
         this.processTaskDefinitionRepository = processTaskDefinitionRepository;
@@ -47,13 +49,14 @@ public class ProcessCatalogService {
         this.processDefinitionApiMapper = processDefinitionApiMapper;
         this.taskTypeRegistry = taskTypeRegistry;
         this.payResolutionValidator = payResolutionValidator;
+        this.routeCoverageValidator = routeCoverageValidator;
     }
 
     @Transactional
     public ProcessDefinitionResponse create(ProcessDefinitionRequest request) {
-        // G2: solo un proceso RUNNABLE (active) exige el cableado money-path; un borrador (inactive) se guarda libre.
+        // G2/#1/#2: solo un proceso RUNNABLE (active) exige el cableado money-path; un borrador (inactive) se guarda libre.
         if (request.active()) {
-            payResolutionValidator.validate(toTaskViews(request.tasks()));
+            validateMoneyPath(toTaskViews(request.tasks()));
         }
         var definition = new ProcessDefinition();
         applyDefinition(definition, request);
@@ -65,7 +68,7 @@ public class ProcessCatalogService {
     @Transactional
     public ProcessDefinitionResponse update(Long processDefinitionId, ProcessDefinitionRequest request) {
         if (request.active()) {
-            payResolutionValidator.validate(toTaskViews(request.tasks()));
+            validateMoneyPath(toTaskViews(request.tasks()));
         }
         var definition = processDefinitionRepository.findRequired(processDefinitionId);
         applyDefinition(definition, request);
@@ -77,9 +80,9 @@ public class ProcessCatalogService {
     @Transactional
     public ProcessDefinitionResponse setActive(Long processDefinitionId, boolean active) {
         var definition = processDefinitionRepository.findRequired(processDefinitionId);
-        // G2: activar es publicar; se valida el cableado money-path sobre las tareas activas persistidas.
+        // G2/#1/#2: activar es publicar; se valida el cableado money-path sobre las tareas activas persistidas.
         if (active) {
-            payResolutionValidator.validate(toTaskViewsFromEntities(definition.tasks));
+            validateMoneyPath(toTaskViewsFromEntities(definition.tasks));
         }
         definition.active = active;
         if (!active) {
@@ -148,6 +151,16 @@ public class ProcessCatalogService {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value;
+    }
+
+    /**
+     * Valida el cableado money-path de un proceso RUNNABLE: G2 (resolutor sin continueOnFailure) + #1 (resolutor
+     * obligatorio por ambiente) + #2 (STATUS route-aware cubre las rutas declaradas). Cada validador es SRP; el orden
+     * no importa (todos lanzan {@link IllegalArgumentException} → 400).
+     */
+    private void validateMoneyPath(List<Mt101PayResolutionValidator.TaskView> views) {
+        payResolutionValidator.validate(views);
+        routeCoverageValidator.validate(views);
     }
 
     /** G2: vista de tareas desde el request (create/update). */
