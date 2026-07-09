@@ -7,6 +7,7 @@ import com.integrationhub.platform.api.request.reader.ReaderDefinitionRequest;
 import com.integrationhub.platform.api.response.reader.ReaderDefinitionResponse;
 import com.integrationhub.platform.service.reader.ReaderCatalogService;
 import jakarta.annotation.security.RolesAllowed;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -46,18 +47,28 @@ public class ReaderDefinitionResource {
     @POST
     @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public ReaderDefinitionResponse create(ReaderDefinitionRequest request) {
-        return readerApiMapper.toResponse(
-                readerCatalogService.create(request.name(), request.readerType(), request.active(), request.configurationJson())
-        );
+        try {
+            return readerApiMapper.toResponse(
+                    readerCatalogService.create(request.name(), request.readerType(), request.active(), request.configurationJson())
+            );
+        } catch (IllegalArgumentException error) {
+            // #5: config de reader inválida (tipo no soportado o campos faltantes) → 400 claro, no 500.
+            throw new BadRequestException(error.getMessage(), error);
+        }
     }
 
     @PUT
     @Path("/{readerDefinitionId}")
     @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public ReaderDefinitionResponse update(@PathParam("readerDefinitionId") Long readerDefinitionId, ReaderDefinitionRequest request) {
-        return readerApiMapper.toResponse(
-                readerCatalogService.update(readerDefinitionId, request.name(), request.readerType(), request.active(), request.configurationJson())
-        );
+        try {
+            return readerApiMapper.toResponse(
+                    readerCatalogService.update(readerDefinitionId, request.name(), request.readerType(), request.active(), request.configurationJson())
+            );
+        } catch (IllegalArgumentException error) {
+            // #5: config de reader inválida (tipo no soportado o campos faltantes) → 400 claro, no 500.
+            throw new BadRequestException(error.getMessage(), error);
+        }
     }
 
     @POST

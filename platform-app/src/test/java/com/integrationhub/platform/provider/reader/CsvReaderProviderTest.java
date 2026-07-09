@@ -130,6 +130,22 @@ class CsvReaderProviderTest {
     }
 
     @Test
+    void validateConfigurationRejectsCsvWithoutFieldsAtCreateTime() {
+        // #5: la validación al CREAR/ACTUALIZAR falla claro (sin necesidad de leer un archivo) si no hay campos.
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> provider.validateConfiguration(Map.of("delimiter", ";")));
+        assertEquals("CSV requires field definitions", error.getMessage());
+    }
+
+    @Test
+    void validateConfigurationAcceptsCsvWithFields() {
+        // #5: una config con campos posicionales es válida (no lanza).
+        provider.validateConfiguration(Map.of(
+                "delimiter", ";",
+                "fields", List.of(Map.of("name", "dni", "position", 1))));
+    }
+
+    @Test
     void treatsCsvRowDataAsOneBasedRowNumber() {
         var payload = SourcePayload.fromBytes(
                 "clientes.csv",
