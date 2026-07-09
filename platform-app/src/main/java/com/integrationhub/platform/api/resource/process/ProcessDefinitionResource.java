@@ -6,6 +6,7 @@ import com.integrationhub.platform.api.request.process.ProcessDefinitionRequest;
 import com.integrationhub.platform.api.response.process.ProcessDefinitionResponse;
 import com.integrationhub.platform.service.process.ProcessCatalogService;
 import jakarta.annotation.security.RolesAllowed;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -43,20 +44,32 @@ public class ProcessDefinitionResource {
     @POST
     @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public ProcessDefinitionResponse create(ProcessDefinitionRequest request) {
-        return processCatalogService.create(request);
+        try {
+            return processCatalogService.create(request);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
     }
 
     @PUT
     @Path("/{processDefinitionId}")
     @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public ProcessDefinitionResponse update(@PathParam("processDefinitionId") Long processDefinitionId, ProcessDefinitionRequest request) {
-        return processCatalogService.update(processDefinitionId, request);
+        try {
+            return processCatalogService.update(processDefinitionId, request);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
     }
 
     @POST
     @Path("/{processDefinitionId}/activation/{active}")
     @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public ProcessDefinitionResponse setActive(@PathParam("processDefinitionId") Long processDefinitionId, @PathParam("active") boolean active) {
-        return processCatalogService.setActive(processDefinitionId, active);
+        try {
+            return processCatalogService.setActive(processDefinitionId, active);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
     }
 }

@@ -29,6 +29,7 @@ public class ProcessCatalogService {
     private final ReaderDefinitionRepository readerDefinitionRepository;
     private final ProcessDefinitionApiMapper processDefinitionApiMapper;
     private final TaskTypeRegistry taskTypeRegistry;
+    private final Mt101PayResolutionValidator payResolutionValidator;
 
     public ProcessCatalogService(
             ProcessDefinitionRepository processDefinitionRepository,
@@ -36,7 +37,8 @@ public class ProcessCatalogService {
             SourceDefinitionRepository sourceDefinitionRepository,
             ReaderDefinitionRepository readerDefinitionRepository,
             ProcessDefinitionApiMapper processDefinitionApiMapper,
-            TaskTypeRegistry taskTypeRegistry
+            TaskTypeRegistry taskTypeRegistry,
+            Mt101PayResolutionValidator payResolutionValidator
     ) {
         this.processDefinitionRepository = processDefinitionRepository;
         this.processTaskDefinitionRepository = processTaskDefinitionRepository;
@@ -44,10 +46,15 @@ public class ProcessCatalogService {
         this.readerDefinitionRepository = readerDefinitionRepository;
         this.processDefinitionApiMapper = processDefinitionApiMapper;
         this.taskTypeRegistry = taskTypeRegistry;
+        this.payResolutionValidator = payResolutionValidator;
     }
 
     @Transactional
     public ProcessDefinitionResponse create(ProcessDefinitionRequest request) {
+        // G2: solo un proceso RUNNABLE (active) exige el cableado money-path; un borrador (inactive) se guarda libre.
+        if (request.active()) {
+            payResolutionValidator.validate(toTaskViews(request.tasks()));
+        }
         var definition = new ProcessDefinition();
         applyDefinition(definition, request);
         processDefinitionRepository.persist(definition);
@@ -57,6 +64,9 @@ public class ProcessCatalogService {
 
     @Transactional
     public ProcessDefinitionResponse update(Long processDefinitionId, ProcessDefinitionRequest request) {
+        if (request.active()) {
+            payResolutionValidator.validate(toTaskViews(request.tasks()));
+        }
         var definition = processDefinitionRepository.findRequired(processDefinitionId);
         applyDefinition(definition, request);
         processTaskDefinitionRepository.deactivateByProcessDefinition(definition);
@@ -67,6 +77,10 @@ public class ProcessCatalogService {
     @Transactional
     public ProcessDefinitionResponse setActive(Long processDefinitionId, boolean active) {
         var definition = processDefinitionRepository.findRequired(processDefinitionId);
+        // G2: activar es publicar; se valida el cableado money-path sobre las tareas activas persistidas.
+        if (active) {
+            payResolutionValidator.validate(toTaskViewsFromEntities(definition.tasks));
+        }
         definition.active = active;
         if (!active) {
             definition.nextRunAt = null;
@@ -134,5 +148,26 @@ public class ProcessCatalogService {
 
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value;
+    }
+
+    /** G2: vista de tareas desde el request (create/update). */
+    private List<Mt101PayResolutionValidator.TaskView> toTaskViews(List<ProcessTaskRequest> requests) {
+        if (requests == null) {
+            return List.of();
+        }
+        return requests.stream()
+                .map(r -> new Mt101PayResolutionValidator.TaskView(r.taskType(), r.taskOrder(), r.configurationJson()))
+                .toList();
+    }
+
+    /** G2: vista de tareas ACTIVAS persistidas (setActive) — ignora las desactivadas por un update previo. */
+    private List<Mt101PayResolutionValidator.TaskView> toTaskViewsFromEntities(List<ProcessTaskDefinition> tasks) {
+        if (tasks == null) {
+            return List.of();
+        }
+        return tasks.stream()
+                .filter(t -> t.active)
+                .map(t -> new Mt101PayResolutionValidator.TaskView(t.taskType, t.taskOrder, t.configurationJson))
+                .toList();
     }
 }
