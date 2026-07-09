@@ -61,12 +61,39 @@
               <td>
                 <!-- A1: evidencia inline (confirmaciones del banco: gatewayReference + último STATUS). -->
                 <button mat-button type="button" (click)="toggleEvidence(c)">{{ i18n.t('audit.payConflicts.evidence') }}</button>
-                <!-- Deep-link (A2) a la acción gobernada: vista por-set (quarantine), donde se concilia el conflicto. -->
+                <!-- A2 (mutación gobernada): reconocer el conflicto con motivo (limpia el flag, conserva el terminal). -->
+                <button mat-button type="button" (click)="startResolve(c)">{{ i18n.t('audit.payConflicts.resolve') }}</button>
+                <!-- Deep-link a la acción gobernada de conciliación por-set (quarantine). -->
                 <a mat-button [routerLink]="['/audit/mt101-quarantine']" [queryParams]="{ fragmentSetId: c.fragmentSetId }">{{ i18n.t('audit.payConflicts.reconcile') }}</a>
                 <!-- Deep-link al lineage E2E de la trama en conflicto (modo 'key' por :20: = paymentReference). -->
                 <a mat-button [routerLink]="['/audit/record-lineage']" [queryParams]="{ key: 'paymentReference', value: c.sendersReference }">{{ i18n.t('audit.lookup.viewLineage') }} ↗</a>
               </td>
             </tr>
+            @if (resolvingKey() === trackConflict($index, c)) {
+              <tr class="conflicts__evidence-row">
+                <td colspan="8">
+                  <div class="conflicts__resolve">
+                    <strong>{{ i18n.t('audit.payConflicts.resolveTitle') }} — <span class="conflicts__mono">{{ c.sendersReference }}</span></strong>
+                    <p class="ih-muted">{{ i18n.t('audit.payConflicts.resolveHint') }}</p>
+                    <mat-form-field appearance="outline" class="conflicts__reason">
+                      <mat-label>{{ i18n.t('audit.payConflicts.resolveReason') }}</mat-label>
+                      <input matInput [(ngModel)]="resolveReason" [disabled]="resolveBusy()" (keyup.enter)="confirmResolve(c)" />
+                    </mat-form-field>
+                    @if (resolveError()) {
+                      <p class="conflicts__error" role="alert">{{ resolveError() }}</p>
+                    }
+                    <div class="conflicts__resolve-actions">
+                      <button mat-flat-button color="primary" type="button" [disabled]="!resolveReason.trim() || resolveBusy()" (click)="confirmResolve(c)">
+                        {{ i18n.t('audit.payConflicts.resolveConfirm') }}
+                      </button>
+                      <button mat-stroked-button type="button" [disabled]="resolveBusy()" (click)="cancelResolve()">
+                        {{ i18n.t('audit.common.cancel') }}
+                      </button>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            }
             @if (expandedKey() === trackConflict($index, c)) {
               <tr class="conflicts__evidence-row">
                 <td colspan="8">

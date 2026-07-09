@@ -11,6 +11,8 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HexFormat;
@@ -52,6 +54,34 @@ public class AuditSpoolWriter {
             rows.add(row(envelope));
         }
         auditSpoolRepository.persistBatch(rows);
+    }
+
+    /**
+     * Atomicidad: escribe las tramas en el spool <b>dentro de una {@code Connection}/transacción existente</b> (no abre
+     * tx propia, a diferencia de {@link #writeBatch(Collection)} que usa {@code REQUIRES_NEW}). El caller es dueño del
+     * {@code commit}/{@code rollback}: la trama de auditoría y la mutación de negocio commitean juntas o no commitean —
+     * usado por acciones gobernadas (p. ej. acknowledge de PAY conflicts) donde perder la trama sería un hueco de
+     * auditoría. Reusa {@link #row(AuditEnvelope)} (misma serialización JSON, partition key y {@code spool_status}).
+     */
+    public void writeBatch(Connection connection, Collection<AuditEnvelope> envelopes) throws SQLException {
+        if (envelopes == null || envelopes.isEmpty()) {
+            return;
+        }
+        var sql = "insert into audit_spool (event_id, trace_id, topic, partition_key, payload, spool_status) "
+                + "values (?, ?, ?, ?, ?, ?)";
+        try (var statement = connection.prepareStatement(sql)) {
+            for (var envelope : envelopes) {
+                var row = row(envelope);
+                statement.setString(1, row.eventId);
+                statement.setString(2, row.traceId);
+                statement.setString(3, row.topic);
+                statement.setString(4, row.partitionKey);
+                statement.setString(5, row.payload);
+                statement.setString(6, row.spoolStatus);
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        }
     }
 
     private AuditSpool row(AuditEnvelope envelope) {

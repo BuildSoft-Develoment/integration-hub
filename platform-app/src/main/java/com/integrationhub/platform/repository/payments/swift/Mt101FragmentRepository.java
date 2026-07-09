@@ -1134,6 +1134,74 @@ public class Mt101FragmentRepository {
                                               String receivedAt) {
     }
 
+    /** A2 (resolución gobernada): fila reconocida — referencia, terminal conservado y linkage para la trama de audit. */
+    public record AcknowledgedPayConflict(String sendersReference, String retainedStatus, Long processExecutionId,
+                                          Long taskDefinitionId) {
+    }
+
+    /**
+     * A2: <b>reconoce</b> (acknowledge) el conflicto de pago NORMAL de un {@code :20:} en un set: limpia
+     * {@code pay_conflict} y deja el motivo del reconocimiento, <b>sin tocar {@code status}</b> (nunca sobrescribe el
+     * terminal real). {@code UPDATE ... RETURNING} → atómico e idempotente (solo afecta filas actualmente en conflicto).
+     * Devuelve las filas afectadas para emitir la trama append-only {@code PAY_CONFLICT_RESOLVED}. Recibe la
+     * {@code Connection} del caller para que la limpieza del flag y la trama de auditoría commiteen en <b>una sola tx</b>.
+     */
+    public List<AcknowledgedPayConflict> acknowledgeNormalPayConflict(java.sql.Connection connection, String fragmentSetId,
+                                                                      String sendersReference, String reason)
+            throws SQLException {
+        var sql = "update mt101_build_fragment set pay_conflict = false, pay_conflict_reason = ?, "
+                + "updated_at = current_timestamp where fragment_set_id = ? and senders_reference = ? "
+                + "and coalesce(pay_conflict, false) = true "
+                + "returning senders_reference, status, process_execution_id, task_definition_id";
+        var result = new ArrayList<AcknowledgedPayConflict>();
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, reason);
+            statement.setString(2, fragmentSetId);
+            statement.setString(3, sendersReference);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new AcknowledgedPayConflict(
+                            rs.getString("senders_reference"),
+                            rs.getString("status"),
+                            rs.getObject("process_execution_id", Long.class),
+                            rs.getObject("task_definition_id", Long.class)));
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * A2 (espejo correctivo): reconoce el conflicto de pago del ledger correctivo por {@code rebuild_run_id} +
+     * {@code corrective_senders_reference}. Limpia {@code pay_conflict}, conserva {@code pay_status}. Sin
+     * {@code process_execution_id}/{@code task_definition_id} (es maker-checker). Recibe la {@code Connection} del
+     * caller para que la limpieza del flag y la trama de auditoría commiteen en <b>una sola tx</b>.
+     */
+    public List<AcknowledgedPayConflict> acknowledgeCorrectivePayConflict(java.sql.Connection connection, String rebuildRunId,
+                                                                          String sendersReference, String reason)
+            throws SQLException {
+        var sql = "update mt101_corrective_pay_fragment set pay_conflict = false, pay_conflict_reason = ?, "
+                + "updated_at = current_timestamp where rebuild_run_id = ? and corrective_senders_reference = ? "
+                + "and coalesce(pay_conflict, false) = true "
+                + "returning corrective_senders_reference, pay_status";
+        var result = new ArrayList<AcknowledgedPayConflict>();
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, reason);
+            statement.setString(2, rebuildRunId);
+            statement.setString(3, sendersReference);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new AcknowledgedPayConflict(
+                            rs.getString("corrective_senders_reference"),
+                            rs.getString("pay_status"),
+                            null,
+                            null));
+                }
+            }
+        }
+        return result;
+    }
+
     public Map<TransactionKey, FragmentRecordLineage> fragmentRecordLineageByTransactions(
             DataSource dataSource,
             String fragmentSetId,

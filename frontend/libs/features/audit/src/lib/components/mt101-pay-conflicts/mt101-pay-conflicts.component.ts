@@ -1,6 +1,9 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { BreadcrumbService, I18nService } from '@integration-hub/core/services';
@@ -20,7 +23,10 @@ import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspa
   standalone: true,
   imports: [
     CommonModule,
+    FormsModule,
     MatButtonModule,
+    MatFormFieldModule,
+    MatInputModule,
     MatTooltipModule,
     RouterLink,
     AuditWorkspaceNavComponent,
@@ -45,6 +51,12 @@ export class Mt101PayConflictsComponent {
   readonly confirmations = signal<Mt101OpenPayConflictConfirmation[]>([]);
   readonly confirmationsLoading = signal(false);
   readonly confirmationsError = signal<string | null>(null);
+
+  // A2: resolución gobernada (reconocer con motivo) del conflicto en modo resolución.
+  readonly resolvingKey = signal<string | null>(null);
+  resolveReason = '';
+  readonly resolveBusy = signal(false);
+  readonly resolveError = signal<string | null>(null);
 
   constructor() {
     this.breadcrumb.setItems([
@@ -115,6 +127,53 @@ export class Mt101PayConflictsComponent {
       error: () => {
         this.confirmationsError.set(this.i18n.t('audit.payConflicts.evidenceError'));
         this.confirmationsLoading.set(false);
+      },
+    });
+  }
+
+  /** A2: abre/cierra el modo resolución (reconocer con motivo) de un conflicto. */
+  startResolve(c: Mt101OpenPayConflict): void {
+    const key = this.trackConflict(0, c);
+    if (this.resolvingKey() === key) {
+      this.resolvingKey.set(null);
+      return;
+    }
+    this.resolvingKey.set(key);
+    this.resolveReason = '';
+    this.resolveError.set(null);
+  }
+
+  cancelResolve(): void {
+    this.resolvingKey.set(null);
+    this.resolveReason = '';
+    this.resolveError.set(null);
+  }
+
+  /**
+   * A2: reconoce el conflicto con el motivo ingresado — limpia el flag conservando el terminal real (mutación
+   * gobernada, single-actor). Requiere motivo. Al éxito, recarga (el conflicto sale del inbox).
+   */
+  confirmResolve(c: Mt101OpenPayConflict): void {
+    const reason = this.resolveReason.trim();
+    if (!reason || this.resolveBusy()) {
+      return;
+    }
+    this.resolveBusy.set(true);
+    this.resolveError.set(null);
+    this.api.mt101AcknowledgePayConflict({
+      source: c.source,
+      setId: c.source === 'CORRECTIVE' ? (c.rebuildRunId ?? '') : c.fragmentSetId,
+      sendersReference: c.sendersReference,
+      reason,
+    }).subscribe({
+      next: () => {
+        this.resolveBusy.set(false);
+        this.cancelResolve();
+        this.load();
+      },
+      error: () => {
+        this.resolveBusy.set(false);
+        this.resolveError.set(this.i18n.t('audit.payConflicts.resolveError'));
       },
     });
   }

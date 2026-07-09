@@ -1199,6 +1199,12 @@ export const en = {
   'audit.payConflicts.evidenceTitle': 'Bank confirmations',
   'audit.payConflicts.evidenceEmpty': 'No bank confirmations recorded for this reference.',
   'audit.payConflicts.evidenceError': 'Could not load the confirmations.',
+  'audit.payConflicts.resolve': 'Resolve',
+  'audit.payConflicts.resolveTitle': 'Acknowledge conflict',
+  'audit.payConflicts.resolveHint': 'Clears the conflict keeping the current ledger terminal (does NOT change the payment). Records who and why.',
+  'audit.payConflicts.resolveReason': 'Reason',
+  'audit.payConflicts.resolveConfirm': 'Acknowledge',
+  'audit.payConflicts.resolveError': 'Could not acknowledge the conflict.',
   'audit.payDispatch.title': 'List PAY dispatch',
   'audit.payDispatch.subtitle':
     'Direct list-dispatch payments (in-memory MT101_BUILD/SPLIT → PAY). Uncertain or in-flight dispatches block re-send until reconciled.',

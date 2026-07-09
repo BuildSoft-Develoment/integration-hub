@@ -4,15 +4,19 @@ import com.integrationhub.platform.api.response.execution.Mt101FragmentLinkRespo
 import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
 import com.integrationhub.platform.repository.payments.swift.Mt101StagingRecordRepository;
 import com.integrationhub.platform.service.payments.swift.Mt101FragmentLookupService;
+import com.integrationhub.platform.service.payments.swift.Mt101PayConflictAcknowledgeService;
 import com.integrationhub.platform.service.payments.swift.Mt101RowTimelineService;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
+import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.SecurityContext;
 
 import java.util.List;
 import java.util.Map;
@@ -29,11 +33,17 @@ public class Mt101FragmentLookupResource {
 
     private final Mt101FragmentLookupService service;
     private final Mt101RowTimelineService rowTimelineService;
+    private final Mt101PayConflictAcknowledgeService acknowledgeService;
+
+    @Context
+    SecurityContext securityContext;
 
     public Mt101FragmentLookupResource(Mt101FragmentLookupService service,
-                                       Mt101RowTimelineService rowTimelineService) {
+                                       Mt101RowTimelineService rowTimelineService,
+                                       Mt101PayConflictAcknowledgeService acknowledgeService) {
         this.service = service;
         this.rowTimelineService = rowTimelineService;
+        this.acknowledgeService = acknowledgeService;
     }
 
     @GET
@@ -186,6 +196,39 @@ public class Mt101FragmentLookupResource {
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }
+    }
+
+    /**
+     * A2 (resolución gobernada): <b>reconoce</b> un conflicto de pago con motivo — limpia el flag y deja la trama
+     * append-only {@code PAY_CONFLICT_RESOLVED}, SIN tocar el terminal real. Single-actor gobernado por rol (no AUDITOR
+     * read-only). {@code source}=NORMAL usa {@code setId} (fragmentSetId); {@code source}=CORRECTIVE usa {@code setId}
+     * como {@code rebuildRunId}. Idempotente (0 si ya no había conflicto).
+     */
+    @POST
+    @Path("/pay-conflicts/acknowledge")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, PAYMENTS_OPERATOR})
+    public Mt101PayConflictAcknowledgeService.AcknowledgeResult acknowledgePayConflict(
+            @QueryParam("connectionRef") String connectionRef,
+            @QueryParam("source") String source,
+            @QueryParam("setId") String setId,
+            @QueryParam("sendersReference") String sendersReference,
+            @QueryParam("reason") String reason) {
+        try {
+            return acknowledgeService.acknowledge(connectionRef, source, setId, sendersReference, actor(), reason);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /** Actor de la acción gobernada (del token OIDC); "unknown" si no hay principal. */
+    private String actor() {
+        if (securityContext != null && securityContext.getUserPrincipal() != null) {
+            var name = securityContext.getUserPrincipal().getName();
+            if (name != null && !name.isBlank()) {
+                return name;
+            }
+        }
+        return "unknown";
     }
 
     /**

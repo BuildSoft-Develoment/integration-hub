@@ -1199,6 +1199,12 @@ export const es = {
   'audit.payConflicts.evidenceTitle': 'Confirmaciones del banco',
   'audit.payConflicts.evidenceEmpty': 'No hay confirmaciones del banco para esta referencia.',
   'audit.payConflicts.evidenceError': 'No se pudieron cargar las confirmaciones.',
+  'audit.payConflicts.resolve': 'Resolver',
+  'audit.payConflicts.resolveTitle': 'Reconocer conflicto',
+  'audit.payConflicts.resolveHint': 'Limpia el conflicto conservando el terminal actual del ledger (NO cambia el pago). Registra quién y por qué.',
+  'audit.payConflicts.resolveReason': 'Motivo',
+  'audit.payConflicts.resolveConfirm': 'Reconocer',
+  'audit.payConflicts.resolveError': 'No se pudo reconocer el conflicto.',
   'audit.payDispatch.title': 'Dispatch PAY por lista',
   'audit.payDispatch.subtitle':
     'Pagos por lista en memoria (MT101_BUILD/SPLIT → PAY). Un dispatch incierto o en vuelo bloquea el reenvío hasta conciliar.',

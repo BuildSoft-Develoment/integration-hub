@@ -76,4 +76,53 @@ public final class Mt101PayConflictAudit {
                 Instant.now(),
                 AuditEnvelope.CURRENT_SCHEMA_VERSION);
     }
+
+    /**
+     * A2 (resolución gobernada): trama append-only {@code PAY_CONFLICT_RESOLVED} que registra que un operador
+     * <b>reconoció</b> el conflicto (limpió el flag) con su motivo, <b>conservando</b> el terminal real del ledger
+     * ({@code retainedStatus}). NO cambia el dinero: es la evidencia auditable de la decisión humana.
+     */
+    public static AuditEnvelope resolvedEnvelope(Long processExecutionId,
+                                                 Long taskDefinitionId,
+                                                 String sendersReference,
+                                                 String retainedStatus,
+                                                 String actor,
+                                                 String reason) {
+        var attributes = new LinkedHashMap<String, String>();
+        attributes.put("retainedStatus", retainedStatus);
+        if (actor != null && !actor.isBlank()) {
+            attributes.put("actor", actor);
+        }
+        if (reason != null && !reason.isBlank()) {
+            attributes.put("reason", reason);
+        }
+        var message = "conflicto PAY reconocido por " + (actor == null ? "?" : actor) + ": se conserva el terminal '"
+                + retainedStatus + "'" + (reason == null || reason.isBlank() ? "" : " — " + reason);
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                processExecutionId == null ? null : "exec-" + processExecutionId,
+                sendersReference,
+                AuditLevel.RECORD,
+                "PAY_CONFLICT_RESOLVED",
+                "PAY_CONFLICT_RESOLVED",
+                processExecutionId,
+                taskDefinitionId,
+                message,
+                null,
+                attributes,
+                "SWIFT",
+                "MT101",
+                null,
+                null,
+                null,
+                null,
+                null,
+                sendersReference,
+                null,
+                null,
+                null,
+                null,
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
+    }
 }

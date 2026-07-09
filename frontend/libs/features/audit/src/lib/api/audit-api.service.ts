@@ -254,6 +254,29 @@ export class AuditApiService {
   }
 
   /**
+   * A2 (resolucion gobernada): reconoce un conflicto con motivo — limpia el flag y deja la trama PAY_CONFLICT_RESOLVED,
+   * sin tocar el terminal real. source=NORMAL usa fragmentSetId; source=CORRECTIVE usa rebuildRunId (ambos en setId).
+   */
+  mt101AcknowledgePayConflict(body: {
+    connectionRef?: string;
+    source: 'NORMAL' | 'CORRECTIVE';
+    setId: string;
+    sendersReference: string;
+    reason: string;
+  }): Observable<{ acknowledged: number }> {
+    let httpParams = new HttpParams()
+      .set('source', body.source)
+      .set('setId', body.setId)
+      .set('sendersReference', body.sendersReference)
+      .set('reason', body.reason);
+    if (body.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', body.connectionRef.trim());
+    }
+    return this.http.post<{ acknowledged: number }>(
+      '/api/query/mt101-fragments/pay-conflicts/acknowledge', null, { params: httpParams });
+  }
+
+  /**
    * v60 (gobernado): resuelve el UNCERTAIN normal del set consultando STATUS (nunca reenvía) y detecta conflictos
    * SENT→banco-REJECTED. Motivo obligatorio (evidencia).
    */

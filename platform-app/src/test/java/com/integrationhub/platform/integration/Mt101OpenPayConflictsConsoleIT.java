@@ -188,6 +188,64 @@ class Mt101OpenPayConflictsConsoleIT {
 
     @Test
     @TestSecurity(user = "ops", roles = {"payments-operator"})
+    void acknowledgesNormalConflictAndClearsIt() throws Exception {
+        // A2: reconocer un conflicto NORMAL con motivo -> limpia el flag (desaparece del inbox), sin tocar el status.
+        seedConflict("OPEN-CON-A", 1, "K-ACK", "SENT", true, "banco REJECTED", peId);
+
+        given().queryParam("source", "NORMAL").queryParam("setId", "OPEN-CON-A")
+                .queryParam("sendersReference", "K-ACK").queryParam("reason", "revisado, se conserva SENT")
+                .when().post("/api/query/mt101-fragments/pay-conflicts/acknowledge")
+                .then().statusCode(200)
+                .body("acknowledged", is(1));
+
+        // Ya no aparece como conflicto abierto.
+        given().when().get("/api/query/mt101-fragments/pay-conflicts/open")
+                .then().statusCode(200)
+                .body("items.sendersReference", not(hasItems("K-ACK")));
+
+        // El status real NO cambió (sigue SENT en la fila).
+        try (Connection c = dataSource.getConnection(); Statement s = c.createStatement();
+             var rs = s.executeQuery("select status, pay_conflict from mt101_build_fragment "
+                     + "where fragment_set_id = 'OPEN-CON-A' and senders_reference = 'K-ACK'")) {
+            rs.next();
+            org.junit.jupiter.api.Assertions.assertEquals("SENT", rs.getString("status"));
+            org.junit.jupiter.api.Assertions.assertFalse(rs.getBoolean("pay_conflict"));
+        }
+
+        // Atomicidad: la trama PAY_CONFLICT_RESOLVED quedó en el spool (escrita en la MISMA tx que la limpieza del flag).
+        try (Connection c = dataSource.getConnection(); Statement s = c.createStatement();
+             var rs = s.executeQuery("select count(*) from audit_spool where partition_key = 'K-ACK' "
+                     + "and payload like '%PAY_CONFLICT_RESOLVED%'")) {
+            rs.next();
+            org.junit.jupiter.api.Assertions.assertEquals(1, rs.getInt(1),
+                    "la trama de resolución debe persistir junto a la limpieza del flag");
+        }
+
+        // Sin motivo -> 400.
+        given().queryParam("source", "NORMAL").queryParam("setId", "OPEN-CON-A").queryParam("sendersReference", "K-ACK")
+                .when().post("/api/query/mt101-fragments/pay-conflicts/acknowledge")
+                .then().statusCode(400);
+    }
+
+    @Test
+    @TestSecurity(user = "ops", roles = {"payments-operator"})
+    void acknowledgesCorrectiveConflict() throws Exception {
+        seedRebuildRun("OPEN-CON-RUN", "OPEN-CON-ORIG", "OPEN-CON-CORR");
+        seedCorrectiveConflict("OPEN-CON-RUN", "OPEN-CON-CORR", "K-ACK-C", "SENT", "contradiccion");
+
+        given().queryParam("source", "CORRECTIVE").queryParam("setId", "OPEN-CON-RUN")
+                .queryParam("sendersReference", "K-ACK-C").queryParam("reason", "revisado")
+                .when().post("/api/query/mt101-fragments/pay-conflicts/acknowledge")
+                .then().statusCode(200)
+                .body("acknowledged", is(1));
+
+        given().when().get("/api/query/mt101-fragments/pay-conflicts/open")
+                .then().statusCode(200)
+                .body("items.sendersReference", not(hasItems("K-ACK-C")));
+    }
+
+    @Test
+    @TestSecurity(user = "ops", roles = {"payments-operator"})
     void rejectsMalformedCursorWith400() {
         given().queryParam("cursor", "not-a-valid-cursor")
                 .when().get("/api/query/mt101-fragments/pay-conflicts/open")

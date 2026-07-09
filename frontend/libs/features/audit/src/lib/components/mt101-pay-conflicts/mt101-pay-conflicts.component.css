@@ -83,3 +83,19 @@
   flex-wrap: wrap;
   font-size: 0.86rem;
 }
+
+.conflicts__resolve {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.5rem 0.25rem;
+}
+
+.conflicts__reason {
+  max-width: 36rem;
+}
+
+.conflicts__resolve-actions {
+  display: flex;
+  gap: 0.5rem;
+}
