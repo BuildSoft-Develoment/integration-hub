@@ -31,6 +31,7 @@ public class ProcessCatalogService {
     private final TaskTypeRegistry taskTypeRegistry;
     private final Mt101PayResolutionValidator payResolutionValidator;
     private final Mt101StatusRouteCoverageValidator routeCoverageValidator;
+    private final Mt101PayStatusConnectionCoverageValidator connectionCoverageValidator;
 
     public ProcessCatalogService(
             ProcessDefinitionRepository processDefinitionRepository,
@@ -40,7 +41,8 @@ public class ProcessCatalogService {
             ProcessDefinitionApiMapper processDefinitionApiMapper,
             TaskTypeRegistry taskTypeRegistry,
             Mt101PayResolutionValidator payResolutionValidator,
-            Mt101StatusRouteCoverageValidator routeCoverageValidator
+            Mt101StatusRouteCoverageValidator routeCoverageValidator,
+            Mt101PayStatusConnectionCoverageValidator connectionCoverageValidator
     ) {
         this.processDefinitionRepository = processDefinitionRepository;
         this.processTaskDefinitionRepository = processTaskDefinitionRepository;
@@ -50,6 +52,7 @@ public class ProcessCatalogService {
         this.taskTypeRegistry = taskTypeRegistry;
         this.payResolutionValidator = payResolutionValidator;
         this.routeCoverageValidator = routeCoverageValidator;
+        this.connectionCoverageValidator = connectionCoverageValidator;
     }
 
     @Transactional
@@ -161,6 +164,7 @@ public class ProcessCatalogService {
     private void validateMoneyPath(List<Mt101PayResolutionValidator.TaskView> views) {
         payResolutionValidator.validate(views);
         routeCoverageValidator.validate(views);
+        connectionCoverageValidator.validate(views);
     }
 
     /** G2: vista de tareas desde el request (create/update). */
