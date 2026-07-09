@@ -12,7 +12,7 @@ import {
   Mt101LoteHeader,
   Mt101NormalPayResolution,
   Mt101PayConflict,
-  Mt101PhysicalLineMatch,
+  Mt101PhysicalLineLineage,
   Mt101PayDispatchIntent,
   Mt101PayDispatchReconcileResult,
   Mt101PayDispatchSummary,
@@ -150,13 +150,16 @@ export class AuditApiService {
     return this.http.get<Mt101FragmentSetSummary>('/api/query/mt101-fragments/summary', { params: httpParams });
   }
 
-  /** item 2 (búsqueda inversa): "archivo + línea física" → registro de staging (staging_id + índice lógico). */
+  /**
+   * G-A (búsqueda inversa enriquecida): "archivo + línea física" → LISTA de registros de staging (uno por ejecución:
+   * reprocesos visibles), cada uno con su resumen de cuarentena si falló validación.
+   */
   mt101ByPhysicalLine(query: {
     connectionRef?: string;
     sourceFileHash: string;
     physicalLine: number;
     processExecutionId?: number;
-  }): Observable<Mt101PhysicalLineMatch | null> {
+  }): Observable<Mt101PhysicalLineLineage[]> {
     let httpParams = new HttpParams()
       .set('sourceFileHash', query.sourceFileHash.trim())
       .set('physicalLine', String(query.physicalLine));
@@ -166,7 +169,7 @@ export class AuditApiService {
     if (query.processExecutionId != null) {
       httpParams = httpParams.set('processExecutionId', String(query.processExecutionId));
     }
-    return this.http.get<Mt101PhysicalLineMatch | null>(
+    return this.http.get<Mt101PhysicalLineLineage[]>(
       '/api/query/mt101-fragments/by-physical-line', { params: httpParams });
   }
 

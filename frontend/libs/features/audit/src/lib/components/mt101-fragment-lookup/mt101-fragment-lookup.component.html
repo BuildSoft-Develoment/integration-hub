@@ -37,7 +37,7 @@
         </div>
       </div>
 
-      <!-- item 2 (búsqueda inversa): "archivo + línea física" → registro lógico, y auto-llena el número de fila. -->
+      <!-- G-A (búsqueda inversa enriquecida): "archivo + línea física" → registro(s) + cuarentena; auto-llena la fila. -->
       <div class="lookup__search">
         <mat-form-field subscriptSizing="dynamic">
           <mat-label>{{ i18n.t('audit.lookup.fieldPhysicalLine') }}</mat-label>
@@ -50,6 +50,43 @@
           <span class="ih-muted">{{ physicalLineMsg() }}</span>
         }
       </div>
+
+      @if (physicalLineMatches().length) {
+        <div class="lookup__table">
+          <table class="ih-dense-table">
+            <caption class="ih-visually-hidden">{{ i18n.t('audit.lookup.physicalLineCaption') }}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{{ i18n.t('audit.lookup.col.record') }}</th>
+                <th scope="col">{{ i18n.t('audit.lookup.fieldExecution') }}</th>
+                <th scope="col">staging</th>
+                <th scope="col">{{ i18n.t('audit.lookup.col.quarantine') }}</th>
+                <th scope="col">:20:</th>
+                <th scope="col"><span class="ih-visually-hidden">{{ i18n.t('audit.common.actions') }}</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (m of physicalLineMatches(); track m.stagingId) {
+                <tr>
+                  <td>{{ m.recordIndex + 1 }}</td>
+                  <td>{{ m.processExecutionId ?? '-' }}</td>
+                  <td class="lookup__mono">{{ m.stagingId }}</td>
+                  <td>
+                    @if (m.quarantineRuleCode) {
+                      <span class="lookup__status--REJECTED">{{ m.quarantineRuleCode }}</span>
+                      @if (m.quarantineMessage) { <div class="ih-muted">{{ m.quarantineMessage }}</div> }
+                    } @else { - }
+                  </td>
+                  <td class="lookup__mono">{{ m.sendersReference || '-' }}</td>
+                  <td>
+                    <button mat-button type="button" (click)="pickPhysicalLineMatch(m)">{{ i18n.t('audit.lookup.usePhysicalLineMatch') }}</button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
 
       @if (loading()) {
         <p class="lookup__empty" role="status">{{ i18n.t('audit.lookup.loading') }}</p>

@@ -9,7 +9,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { RelativeTimePipe } from '@integration-hub/shared/ui';
 import { AuditApiService } from '../../api/audit-api.service';
-import { Mt101FragmentLink } from '../../models/audit.models';
+import { Mt101FragmentLink, Mt101PhysicalLineLineage } from '../../models/audit.models';
 import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspace-nav.component';
 
 @Component({
@@ -47,13 +47,17 @@ export class Mt101FragmentLookupComponent {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly physicalLineMsg = signal<string | null>(null);
+  // G-A: TODOS los registros de esa línea física (uno por ejecución: reprocesos visibles), con su cuarentena.
+  readonly physicalLineMatches = signal<Mt101PhysicalLineLineage[]>([]);
 
   /**
-   * item 2: resuelve una LÍNEA FÍSICA del archivo a su registro lógico (staging_id + record_index) y auto-llena
-   * recordNumber para que el operador siga al lookup de fragmentos. 204 → sin registro en esa línea.
+   * G-A: resuelve una LÍNEA FÍSICA del archivo a la LISTA de registros (staging_id + record_index por ejecución), cada
+   * uno con su cuarentena si falló validación. Auto-llena recordNumber con el primero (más reciente) para seguir al
+   * lookup de fragmentos; si hay varios (reproceso), la tabla los muestra y el operador elige.
    */
   resolvePhysicalLine(): void {
     this.physicalLineMsg.set(null);
+    this.physicalLineMatches.set([]);
     const line = Number(this.physicalLine);
     if (!this.sourceFileHash.trim() || !Number.isInteger(line) || line < 1) {
       this.physicalLineMsg.set(this.i18n.t('audit.lookup.physicalLineInvalid'));
@@ -65,19 +69,31 @@ export class Mt101FragmentLookupComponent {
       processExecutionId: this.processExecutionId ? Number(this.processExecutionId) : undefined,
       connectionRef: this.connectionRef,
     }).subscribe({
-      next: (match) => {
-        if (!match) {
+      next: (matches) => {
+        if (!matches || matches.length === 0) {
           this.physicalLineMsg.set(this.i18n.t('audit.lookup.physicalLineEmpty', { line }));
           return;
         }
-        // Registro lógico 1-based visible al operador = record_index (0-based) + 1.
-        this.recordNumber = String(match.recordIndex + 1);
-        this.physicalLineMsg.set(this.i18n.t('audit.lookup.physicalLineResolved', {
-          line, record: match.recordIndex + 1, staging: match.stagingId,
-        }));
+        this.physicalLineMatches.set(matches);
+        // Auto-llena con el primero (más reciente); si hay varios el operador puede elegir en la tabla.
+        this.pickPhysicalLineMatch(matches[0]);
+        if (matches.length > 1) {
+          this.physicalLineMsg.set(this.i18n.t('audit.lookup.physicalLineMultiple', { line, count: matches.length }));
+        }
       },
       error: () => this.physicalLineMsg.set(this.i18n.t('audit.lookup.physicalLineError')),
     });
+  }
+
+  /** Selecciona un match de la línea física: auto-llena recordNumber (1-based = record_index + 1) para el lookup. */
+  pickPhysicalLineMatch(match: Mt101PhysicalLineLineage): void {
+    this.recordNumber = String(match.recordIndex + 1);
+    if (match.processExecutionId != null) {
+      this.processExecutionId = String(match.processExecutionId);
+    }
+    this.physicalLineMsg.set(this.i18n.t('audit.lookup.physicalLineResolved', {
+      line: match.physicalLine ?? this.physicalLine, record: match.recordIndex + 1, staging: match.stagingId,
+    }));
   }
 
   constructor() {

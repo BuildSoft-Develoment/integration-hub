@@ -29,19 +29,20 @@ public class Mt101FragmentLookupService {
     }
 
     /**
-     * item 2 (búsqueda inversa): resuelve "archivo + línea física" al registro de staging (staging_id + índice lógico),
-     * para que soporte ubique el registro/fragmento desde una línea del archivo. {@code processExecutionId} opcional.
+     * G-A (búsqueda inversa enriquecida): resuelve "archivo + línea física" a <b>todos</b> los registros de staging
+     * (uno por ejecución: reprocesos visibles), cada uno con su resumen de cuarentena si falló validación (regla +
+     * motivo + :20:/:21:). {@code processExecutionId} opcional acota a una ejecución.
      */
-    public Mt101StagingRecordRepository.PhysicalLineMatch findByPhysicalLine(String connectionRef,
-                                                                            String sourceFileHash,
-                                                                            long physicalLine,
-                                                                            Long processExecutionId) {
+    public List<Mt101StagingRecordRepository.PhysicalLineLineage> findLineageByPhysicalLine(String connectionRef,
+                                                                                            String sourceFileHash,
+                                                                                            long physicalLine,
+                                                                                            Long processExecutionId) {
         if (physicalLine < 1) {
             throw new IllegalArgumentException("physicalLine must be positive");
         }
         var hash = requireSourceFileHash(sourceFileHash);
         try {
-            return stagingRepository.findByPhysicalLine(resolveDataSource(connectionRef), hash, physicalLine,
+            return stagingRepository.findLineageByPhysicalLine(resolveDataSource(connectionRef), hash, physicalLine,
                     processExecutionId);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot resolve staging row for physical line " + physicalLine, error);

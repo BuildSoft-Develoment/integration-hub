@@ -81,15 +81,16 @@ public class Mt101FragmentLookupResource {
     }
 
     /**
-     * item 2 (búsqueda inversa): "archivo + línea física → registro". Resuelve una línea física del archivo a su
-     * staging_id + índice lógico (para que soporte ubique el registro/fragmento desde una línea que un banco/auditor
-     * referencia). Usa el índice V90 {@code (source_file_hash, physical_line)}. 404 (null) si la línea no tiene
-     * registro o el reader no aportó línea física.
+     * G-A (búsqueda inversa enriquecida): "archivo + línea física → registro(s)". Devuelve <b>lista</b> de registros
+     * (uno por ejecución: reprocesos del mismo archivo visibles, no solo el último), cada uno con su resumen de
+     * cuarentena si falló validación (regla + motivo + :20:/:21:) — así, desde una línea que un banco/auditor
+     * referencia, soporte ve el registro Y por qué se cuarentenó (un cuarentenado no tiene fragmento). Usa el índice
+     * V90 {@code (source_file_hash, physical_line)}. Lista vacía si la línea no tiene registro.
      */
     @GET
     @Path("/by-physical-line")
     @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
-    public Mt101StagingRecordRepository.PhysicalLineMatch byPhysicalLine(
+    public List<Mt101StagingRecordRepository.PhysicalLineLineage> byPhysicalLine(
             @QueryParam("connectionRef") String connectionRef,
             @QueryParam("sourceFileHash") String sourceFileHash,
             @QueryParam("physicalLine") Long physicalLine,
@@ -98,7 +99,7 @@ public class Mt101FragmentLookupResource {
             throw new BadRequestException("physicalLine is required");
         }
         try {
-            return service.findByPhysicalLine(connectionRef, sourceFileHash, physicalLine, processExecutionId);
+            return service.findLineageByPhysicalLine(connectionRef, sourceFileHash, physicalLine, processExecutionId);
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }

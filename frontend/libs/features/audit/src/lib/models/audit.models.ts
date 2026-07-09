@@ -206,13 +206,24 @@ export interface Mt101StagingRowView {
   sheetRow: number | null;
 }
 
-/** item 2 (búsqueda inversa): match de "archivo + línea física" al registro de staging. */
-export interface Mt101PhysicalLineMatch {
+/**
+ * G-A (búsqueda inversa enriquecida): lineage de un registro localizado por línea física. Incluye el resumen de
+ * cuarentena (regla + motivo + :20:/:21:) si el registro falló validación — un cuarentenado no tiene fragmento, así
+ * que este es el único lugar donde el operador ve, desde una línea física, por qué falló.
+ */
+export interface Mt101PhysicalLineLineage {
   stagingId: number;
   recordIndex: number;
   physicalLine: number | null;
   sourceFileHash: string;
   processExecutionId: number | null;
+  sheetName: string | null;
+  sheetRow: number | null;
+  quarantineRuleCode: string | null;
+  quarantineMessage: string | null;
+  quarantineStatus: string | null;
+  sendersReference: string | null;
+  transactionReference: string | null;
 }
 
 /** v60: resultado de resolver el UNCERTAIN normal de un fragment set (consulta STATUS, no reenvía). */
