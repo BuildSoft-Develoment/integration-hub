@@ -390,6 +390,18 @@ public class ProcessExecutionStateService {
                 "PROCESS_COMPLETED_WITH_ERRORS", "completeProcessWithErrors");
     }
 
+    /**
+     * G1 — cierra la ejecución en {@code NEEDS_RECONCILIATION} cuando una tarea del money-path dejó dinero en estado
+     * ambiguo (MT101_PAY normal con fragmentos {@code UNCERTAIN}). NO es COMPLETED silencioso ni FAILED opaco: obliga a
+     * conciliar (STATUS/RECONCILE) y reusa el ciclo de cierre de {@link #closeReconciled}. Guardado por token+RUNNING
+     * (fencing), igual que los demás terminales.
+     */
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public void markNeedsReconciliation(Long processExecutionId, String executionToken, String details) {
+        transitionProcessTerminal(processExecutionId, executionToken, ExecutionStatus.NEEDS_RECONCILIATION, details,
+                "PROCESS_NEEDS_RECONCILIATION", "markNeedsReconciliation");
+    }
+
     @Transactional(Transactional.TxType.REQUIRES_NEW)
     public ProcessExecution getExecution(Long processExecutionId) {
         return processExecutionRepository.findById(processExecutionId);

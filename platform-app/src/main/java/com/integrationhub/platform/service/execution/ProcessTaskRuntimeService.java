@@ -208,7 +208,8 @@ public class ProcessTaskRuntimeService {
         if (result.suspended()) {
             return TaskRunResult.suspended(result.details(), result.suspendedState());
         }
-        return TaskRunResult.generic(result.success(), result.details(), sourcePayload, readResult, result.outputs());
+        return TaskRunResult.generic(result.success(), result.details(), sourcePayload, readResult, result.outputs(),
+                result.needsReconciliation(), result.reconciliationResolved());
     }
 
     private boolean requiresRecordInput(String executionMode) {
@@ -353,16 +354,26 @@ public class ProcessTaskRuntimeService {
             boolean suspended,
             Map<String, Object> suspendedState,
             com.integrationhub.platform.task.AsyncTaskEnvelope asyncDispatch,
-            com.integrationhub.platform.service.execution.async.AsyncSliceDispatchService.ScatterDispatch scatterDispatch
+            com.integrationhub.platform.service.execution.async.AsyncSliceDispatchService.ScatterDispatch scatterDispatch,
+            boolean needsReconciliation,
+            boolean reconciliationResolved
     ) {
         static TaskRunResult fileRead(SourcePayload sourcePayload, ReadResult readResult) {
-            return new TaskRunResult(true, null, sourcePayload, readResult, Map.of(), true, false, Map.of(), null, null);
+            return new TaskRunResult(true, null, sourcePayload, readResult, Map.of(), true, false, Map.of(), null, null, false, false);
         }
 
         static TaskRunResult generic(boolean success, String details, SourcePayload sourcePayload, ReadResult readResult, Map<String, Object> outputs) {
+            return generic(success, details, sourcePayload, readResult, outputs, false, false);
+        }
+
+        // G1: propaga las señales del TaskResult del provider. needsReconciliation (money-path ambiguo) -> el motor
+        // cierra NEEDS_RECONCILIATION; reconciliationResolved (un resolutor limpió la ambigüedad) -> limpia el flag.
+        static TaskRunResult generic(boolean success, String details, SourcePayload sourcePayload, ReadResult readResult,
+                                     Map<String, Object> outputs, boolean needsReconciliation,
+                                     boolean reconciliationResolved) {
             return new TaskRunResult(success, details, sourcePayload, readResult,
                     outputs == null ? Map.of() : new LinkedHashMap<>(outputs),
-                    false, false, Map.of(), null, null);
+                    false, false, Map.of(), null, null, needsReconciliation, reconciliationResolved);
         }
 
         /**
@@ -374,7 +385,7 @@ public class ProcessTaskRuntimeService {
          */
         static TaskRunResult suspended(String details, Map<String, Object> suspendedState) {
             return new TaskRunResult(true, details, null, null, Map.of(), false, true,
-                    suspendedState == null ? Map.of() : new LinkedHashMap<>(suspendedState), null, null);
+                    suspendedState == null ? Map.of() : new LinkedHashMap<>(suspendedState), null, null, false, false);
         }
 
         /**
@@ -385,7 +396,7 @@ public class ProcessTaskRuntimeService {
         static TaskRunResult suspendedAsync(String details, Map<String, Object> suspendedState,
                                             com.integrationhub.platform.task.AsyncTaskEnvelope asyncDispatch) {
             return new TaskRunResult(true, details, null, null, Map.of(), false, true,
-                    suspendedState == null ? Map.of() : new LinkedHashMap<>(suspendedState), asyncDispatch, null);
+                    suspendedState == null ? Map.of() : new LinkedHashMap<>(suspendedState), asyncDispatch, null, false, false);
         }
 
         /**
@@ -396,7 +407,7 @@ public class ProcessTaskRuntimeService {
         static TaskRunResult suspendedScatter(String details, Map<String, Object> suspendedState,
                                               com.integrationhub.platform.service.execution.async.AsyncSliceDispatchService.ScatterDispatch scatterDispatch) {
             return new TaskRunResult(true, details, null, null, Map.of(), false, true,
-                    suspendedState == null ? Map.of() : new LinkedHashMap<>(suspendedState), null, scatterDispatch);
+                    suspendedState == null ? Map.of() : new LinkedHashMap<>(suspendedState), null, scatterDispatch, false, false);
         }
     }
 }

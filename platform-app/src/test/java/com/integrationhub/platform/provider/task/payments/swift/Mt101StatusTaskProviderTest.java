@@ -619,7 +619,6 @@ class Mt101StatusTaskProviderTest {
         // automatica del sistema, no maker humano).
         assertEquals(List.of("7|SET-EXPLICIT|MT101_STATUS|automatic reconciliation by MT101_STATUS"), captured);
         // Mapeo del resultado a outputs (visibilidad del conteo desde el pipeline).
-        assertTrue(result.success(), () -> "detalle: " + result.details());
         assertEquals("SET-EXPLICIT", result.outputs().get("fragmentSetId"));
         assertEquals(3, result.outputs().get("resolvedSent"));
         assertEquals(1, result.outputs().get("resolvedRejected"));
@@ -627,6 +626,11 @@ class Mt101StatusTaskProviderTest {
         assertEquals(0, result.outputs().get("gatewayErrors"));
         assertEquals(1, result.outputs().get("conflicts"));
         assertTrue(result.details().contains("conflicts=1"), () -> "detalle: " + result.details());
+        // G1 (opción B): con pendientes/conflictos el dinero sigue ambiguo -> needsReconciliation (el proceso queda
+        // NEEDS_RECONCILIATION), no un COMPLETED silencioso.
+        assertFalse(result.success(), "con pending/conflicts restantes NO es éxito silencioso");
+        assertTrue(result.needsReconciliation(), "pending/conflicts -> señal needsReconciliation");
+        assertFalse(result.reconciliationResolved());
     }
 
     @Test
@@ -649,7 +653,11 @@ class Mt101StatusTaskProviderTest {
                 "input", Map.of("sourceTaskRef", "build")));
 
         assertEquals(List.of("null|SET-DERIVED|ops|manual trigger"), captured);
+        // G1 (opción B): resolución TOTAL (0 pending/conflicts/errors) -> resolvedReconciliation: limpia el flag del
+        // motor, el proceso puede cerrar COMPLETED.
         assertTrue(result.success(), () -> "detalle: " + result.details());
+        assertTrue(result.reconciliationResolved(), "todo resuelto -> señal resolvedReconciliation");
+        assertFalse(result.needsReconciliation());
         assertEquals("SET-DERIVED", result.outputs().get("fragmentSetId"));
     }
 

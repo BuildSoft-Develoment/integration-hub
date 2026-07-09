@@ -215,8 +215,13 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 + " rejected=" + accumulator.rejectedCount
                 + " uncertain=" + accumulator.uncertainCount
                 + " retried=" + accumulator.retriedCount;
-        // INCIERTO tambien es no-exito: el orquestador debe tratarlo (no asumir enviado).
-        return accumulator.rejectedCount > 0 || accumulator.uncertainCount > 0
+        // G1: un INCIERTO deja dinero en estado ambiguo -> señal needsReconciliation para que el motor cierre la
+        // ejecución en NEEDS_RECONCILIATION (no COMPLETED silencioso ni FAILED opaco). Un REJECTED sin UNCERTAIN es un
+        // fallo de negocio probado (no salió al banco): failure normal. Éxito solo si todo SENT.
+        if (accumulator.uncertainCount > 0) {
+            return TaskResult.needsReconciliation(summary, outputs);
+        }
+        return accumulator.rejectedCount > 0
                 ? TaskResult.failure(summary, outputs)
                 : TaskResult.success(summary, outputs);
     }

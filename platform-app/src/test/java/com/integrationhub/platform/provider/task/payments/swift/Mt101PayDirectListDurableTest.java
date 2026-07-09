@@ -67,6 +67,8 @@ class Mt101PayDirectListDurableTest {
         var result = provider.execute(directListContext(), payConfig());
 
         assertFalse(result.success(), "un INCIERTO es no-éxito (el orquestador debe conciliar)");
+        assertTrue(result.needsReconciliation(),
+                "G1: un INCIERTO señala needsReconciliation -> el motor cierra la ejecución en NEEDS_RECONCILIATION");
         assertEquals(3, transport.calls(), "los 3 mensajes de la lista se reclaman y despachan una vez");
         assertEquals("SENT", intentStatus("REST||A1"));
         assertEquals("SENT", intentStatus("REST||A3"));

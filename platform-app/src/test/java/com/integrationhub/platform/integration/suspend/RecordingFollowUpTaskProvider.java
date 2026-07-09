@@ -54,6 +54,11 @@ public class RecordingFollowUpTaskProvider implements TaskProvider {
         }
         var outputs = new LinkedHashMap<String, Object>();
         outputs.put("followUpDone", true);
+        // G1 (opción B): modo resolutor — emite resolvedReconciliation (espejo de MT101_STATUS que resolvió todo) para
+        // probar que el motor LIMPIA el flag y el proceso cierra COMPLETED. Se activa con reconciliationResolved=true.
+        if (Boolean.parseBoolean(String.valueOf(configuration.get("reconciliationResolved")))) {
+            return TaskResult.resolvedReconciliation("reconciliation resolved by follow-up", outputs);
+        }
         return TaskResult.success("follow-up executed", outputs);
     }
 }

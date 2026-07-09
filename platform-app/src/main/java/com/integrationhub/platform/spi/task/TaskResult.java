@@ -8,7 +8,9 @@ public record TaskResult(boolean success,
                          boolean suspended,
                          String details,
                          Map<String, Object> outputs,
-                         Map<String, Object> suspendedState) {
+                         Map<String, Object> suspendedState,
+                         boolean needsReconciliation,
+                         boolean reconciliationResolved) {
 
     public TaskResult {
         outputs = outputs == null ? Map.of() : Collections.unmodifiableMap(new LinkedHashMap<>(outputs));
@@ -16,19 +18,40 @@ public record TaskResult(boolean success,
     }
 
     public static TaskResult success(String details) {
-        return new TaskResult(true, false, details, Map.of(), Map.of());
+        return new TaskResult(true, false, details, Map.of(), Map.of(), false, false);
     }
 
     public static TaskResult success(String details, Map<String, Object> outputs) {
-        return new TaskResult(true, false, details, outputs, Map.of());
+        return new TaskResult(true, false, details, outputs, Map.of(), false, false);
     }
 
     public static TaskResult failure(String details) {
-        return new TaskResult(false, false, details, Map.of(), Map.of());
+        return new TaskResult(false, false, details, Map.of(), Map.of(), false, false);
     }
 
     public static TaskResult failure(String details, Map<String, Object> outputs) {
-        return new TaskResult(false, false, details, outputs, Map.of());
+        return new TaskResult(false, false, details, outputs, Map.of(), false, false);
+    }
+
+    /**
+     * G1 — resultado de negocio no-exitoso donde quedó <b>dinero en estado ambiguo</b> (p.ej. MT101_PAY normal con
+     * fragmentos {@code UNCERTAIN}): no es un fallo técnico ni un éxito. El motor NO debe cerrar la ejecución como
+     * {@code COMPLETED} silencioso ni {@code FAILED} opaco; la enruta a {@code NEEDS_RECONCILIATION} para forzar
+     * conciliación (STATUS/RECONCILE), reusando el ciclo de cierre existente. Señal genérica (cualquier provider de
+     * money-path puede emitirla), no acopla el motor a MT101.
+     */
+    public static TaskResult needsReconciliation(String details, Map<String, Object> outputs) {
+        return new TaskResult(false, false, details, outputs, Map.of(), true, false);
+    }
+
+    /**
+     * G1 (opción B) — resultado <b>exitoso</b> de un resolutor (p.ej. MT101_STATUS con {@code resolveNormalPay}) que
+     * <b>resolvió toda la ambigüedad</b> de dinero previa (0 pendientes, 0 conflictos, 0 errores de gateway). El motor
+     * <b>limpia</b> el flag de reconciliación: si no queda dinero incierto, el proceso puede cerrar {@code COMPLETED} en
+     * vez de quedar en {@code NEEDS_RECONCILIATION}. Señal genérica, espejo de {@link #needsReconciliation}.
+     */
+    public static TaskResult resolvedReconciliation(String details, Map<String, Object> outputs) {
+        return new TaskResult(true, false, details, outputs, Map.of(), false, true);
     }
 
     /**
@@ -45,6 +68,6 @@ public record TaskResult(boolean success,
      * {@link #suspended()}.</p>
      */
     public static TaskResult suspended(String details, Map<String, Object> suspendedState) {
-        return new TaskResult(true, true, details, Map.of(), suspendedState);
+        return new TaskResult(true, true, details, Map.of(), suspendedState, false, false);
     }
 }
