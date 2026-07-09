@@ -106,6 +106,33 @@ public class Mt101FragmentLookupResource {
     }
 
     /**
+     * #4 (búsqueda inversa Excel): "archivo + hoja + fila → registro(s)". Espejo de {@code by-physical-line} para Excel:
+     * devuelve lista (reprocesos visibles) enriquecida con cuarentena. Usa el índice V93 {@code (source_file_hash,
+     * sheet_name, sheet_row)}. Lista vacía si no hay registro en esa hoja+fila.
+     */
+    @GET
+    @Path("/by-sheet-row")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
+    public List<Mt101StagingRecordRepository.PhysicalLineLineage> bySheetRow(
+            @QueryParam("connectionRef") String connectionRef,
+            @QueryParam("sourceFileHash") String sourceFileHash,
+            @QueryParam("sheetName") String sheetName,
+            @QueryParam("sheetRow") Long sheetRow,
+            @QueryParam("processExecutionId") Long processExecutionId) {
+        if (sheetName == null || sheetName.isBlank()) {
+            throw new BadRequestException("sheetName is required");
+        }
+        if (sheetRow == null) {
+            throw new BadRequestException("sheetRow is required");
+        }
+        try {
+            return service.findLineageBySheetRow(connectionRef, sourceFileHash, sheetName, sheetRow, processExecutionId);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /**
      * Item 3 (visibilidad): fragmentos en conflicto de pago del set (contradicción terminal worker↔STATUS), con su
      * motivo y estado real. La UI los lista para conciliar; complementa las tramas append-only {@code PAY_CONFLICT}
      * del timeline.

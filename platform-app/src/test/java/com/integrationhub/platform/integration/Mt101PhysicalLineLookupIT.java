@@ -113,6 +113,44 @@ class Mt101PhysicalLineLookupIT {
                 .body("[0].processExecutionId", is((int) pe2));
     }
 
+    @Test
+    @TestSecurity(user = "ops", roles = {"payments-operator"})
+    void resolvesExcelSheetRowWithQuarantineAndReprocesses() throws Exception {
+        // #4 (Excel): registro lógico 1 en la hoja "Pagos" fila 1532, con su cuarentena; y un reproceso en otra ejecución.
+        seedSheet(peId, 1, "Pagos", 1532L);
+        seedQuarantine(2L, "STRUCT.CHARGES_VALUE", "Valor inválido", "ABC123", "XYZ789");
+        var pe2 = newExecution();
+        seedSheet(pe2, 1, "Pagos", 1532L);
+
+        // hoja+fila → lista (reprocesos), enriquecida con cuarentena.
+        given().queryParam("sourceFileHash", "PL-E2E").queryParam("sheetName", "Pagos").queryParam("sheetRow", 1532)
+                .when().get("/api/query/mt101-fragments/by-sheet-row")
+                .then().statusCode(200)
+                .body("size()", is(2))
+                .body("find { it.processExecutionId == " + peId + " }.sheetName", is("Pagos"))
+                .body("find { it.processExecutionId == " + peId + " }.sheetRow", is(1532))
+                .body("find { it.processExecutionId == " + peId + " }.quarantineRuleCode", is("STRUCT.CHARGES_VALUE"));
+
+        // Acotando por ejecución → solo una.
+        given().queryParam("sourceFileHash", "PL-E2E").queryParam("sheetName", "Pagos").queryParam("sheetRow", 1532)
+                .queryParam("processExecutionId", pe2)
+                .when().get("/api/query/mt101-fragments/by-sheet-row")
+                .then().statusCode(200)
+                .body("size()", is(1))
+                .body("[0].processExecutionId", is((int) pe2));
+
+        // Hoja/fila sin registro → lista vacía (200).
+        given().queryParam("sourceFileHash", "PL-E2E").queryParam("sheetName", "Otra").queryParam("sheetRow", 99)
+                .when().get("/api/query/mt101-fragments/by-sheet-row")
+                .then().statusCode(200)
+                .body("size()", is(0));
+
+        // sheetName ausente → 400.
+        given().queryParam("sourceFileHash", "PL-E2E").queryParam("sheetRow", 1532)
+                .when().get("/api/query/mt101-fragments/by-sheet-row")
+                .then().statusCode(400);
+    }
+
     private long newExecution() throws Exception {
         try (Connection c = dataSource.getConnection(); Statement s = c.createStatement()) {
             s.executeUpdate("insert into process_execution (process_definition_id, status, execution_token) "
@@ -132,6 +170,23 @@ class Mt101PhysicalLineLookupIT {
                      + ", 'clientes.csv', 'PL-E2E', ?, '{}', ?) returning id")) {
             st.setLong(1, recordIndex);
             st.setLong(2, physicalLine);
+            try (var rs = st.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
+        }
+    }
+
+    /** #4: siembra una fila con posición Excel (hoja+fila), sin línea física (como los readers Excel). */
+    private long seedSheet(long executionId, long recordIndex, String sheetName, long sheetRow) throws Exception {
+        try (Connection c = dataSource.getConnection();
+             var st = c.prepareStatement("insert into staging_record "
+                     + "(process_execution_id, task_definition_id, source_name, source_file_hash, record_index, "
+                     + "payload_json, sheet_name, sheet_row) values (" + executionId + ", " + tdId
+                     + ", 'pagos.xlsx', 'PL-E2E', ?, '{}', ?, ?) returning id")) {
+            st.setLong(1, recordIndex);
+            st.setString(2, sheetName);
+            st.setLong(3, sheetRow);
             try (var rs = st.executeQuery()) {
                 rs.next();
                 return rs.getLong(1);

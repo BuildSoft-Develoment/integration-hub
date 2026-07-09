@@ -178,6 +178,31 @@ export class AuditApiService {
       '/api/query/mt101-fragments/by-physical-line', { params: httpParams });
   }
 
+  /**
+   * #4 (Excel): "archivo + hoja + fila Excel" → LISTA de registros de staging (uno por ejecución), cada uno con su
+   * resumen de cuarentena. Espejo de {@link mt101ByPhysicalLine} para la clave operativa de Excel.
+   */
+  mt101BySheetRow(query: {
+    connectionRef?: string;
+    sourceFileHash: string;
+    sheetName: string;
+    sheetRow: number;
+    processExecutionId?: number;
+  }): Observable<Mt101PhysicalLineLineage[]> {
+    let httpParams = new HttpParams()
+      .set('sourceFileHash', query.sourceFileHash.trim())
+      .set('sheetName', query.sheetName.trim())
+      .set('sheetRow', String(query.sheetRow));
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    if (query.processExecutionId != null) {
+      httpParams = httpParams.set('processExecutionId', String(query.processExecutionId));
+    }
+    return this.http.get<Mt101PhysicalLineLineage[]>(
+      '/api/query/mt101-fragments/by-sheet-row', { params: httpParams });
+  }
+
   /** v60: lista detallada de fragmentos en conflicto de pago del set (:20:, estado real, motivo, fecha). */
   mt101PayConflicts(query: { connectionRef?: string; fragmentSetId: string }): Observable<Mt101PayConflict[]> {
     let httpParams = new HttpParams().set('fragmentSetId', query.fragmentSetId);

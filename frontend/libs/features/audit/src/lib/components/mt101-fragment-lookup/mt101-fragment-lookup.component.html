@@ -51,6 +51,21 @@
         }
       </div>
 
+      <!-- #4 (Excel): "archivo + hoja + fila Excel" → registro(s). Reusa la tabla de matches de abajo. -->
+      <div class="lookup__search">
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.lookup.fieldSheetName') }}</mat-label>
+          <input matInput [(ngModel)]="sheetName" placeholder="Hoja1" (keyup.enter)="resolveSheetRow()" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.lookup.fieldSheetRow') }}</mat-label>
+          <input matInput type="number" min="1" [(ngModel)]="sheetRow" placeholder="1532" (keyup.enter)="resolveSheetRow()" />
+        </mat-form-field>
+        <div class="lookup__actions">
+          <button mat-stroked-button type="button" (click)="resolveSheetRow()">{{ i18n.t('audit.lookup.resolveSheetRow') }}</button>
+        </div>
+      </div>
+
       @if (physicalLineMatches().length) {
         <div class="lookup__table">
           <table class="ih-dense-table">

@@ -42,6 +42,9 @@ export class Mt101FragmentLookupComponent {
   connectionRef = '';
   // item 2 (búsqueda inversa): "archivo + línea física" → registro lógico (auto-llena recordNumber para el lookup).
   physicalLine = '';
+  // #4 (Excel): "archivo + hoja + fila Excel" → registro (la línea física no aplica a Excel).
+  sheetName = '';
+  sheetRow = '';
 
   readonly rows = signal<Mt101FragmentLink[]>([]);
   readonly loading = signal(false);
@@ -82,6 +85,40 @@ export class Mt101FragmentLookupComponent {
         }
       },
       error: () => this.physicalLineMsg.set(this.i18n.t('audit.lookup.physicalLineError')),
+    });
+  }
+
+  /**
+   * #4 (Excel): resuelve "archivo + hoja + fila Excel" a la LISTA de registros (con cuarentena). Reusa la misma tabla
+   * de matches y el auto-llenado de recordNumber que la búsqueda por línea física; para Excel la clave es hoja+fila.
+   */
+  resolveSheetRow(): void {
+    this.physicalLineMsg.set(null);
+    this.physicalLineMatches.set([]);
+    const row = Number(this.sheetRow);
+    if (!this.sourceFileHash.trim() || !this.sheetName.trim() || !Number.isInteger(row) || row < 1) {
+      this.physicalLineMsg.set(this.i18n.t('audit.lookup.sheetRowInvalid'));
+      return;
+    }
+    this.api.mt101BySheetRow({
+      sourceFileHash: this.sourceFileHash,
+      sheetName: this.sheetName,
+      sheetRow: row,
+      processExecutionId: this.processExecutionId ? Number(this.processExecutionId) : undefined,
+      connectionRef: this.connectionRef,
+    }).subscribe({
+      next: (matches) => {
+        if (!matches || matches.length === 0) {
+          this.physicalLineMsg.set(this.i18n.t('audit.lookup.sheetRowEmpty', { sheet: this.sheetName, row }));
+          return;
+        }
+        this.physicalLineMatches.set(matches);
+        this.pickPhysicalLineMatch(matches[0]);
+        if (matches.length > 1) {
+          this.physicalLineMsg.set(this.i18n.t('audit.lookup.physicalLineMultiple', { line: row, count: matches.length }));
+        }
+      },
+      error: () => this.physicalLineMsg.set(this.i18n.t('audit.lookup.sheetRowError')),
     });
   }
 

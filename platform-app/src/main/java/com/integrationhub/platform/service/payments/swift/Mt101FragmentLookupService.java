@@ -49,6 +49,28 @@ public class Mt101FragmentLookupService {
         }
     }
 
+    /**
+     * #4 (Excel): resuelve "archivo + hoja + fila Excel" a la lista de registros de staging (uno por ejecución), cada
+     * uno con su resumen de cuarentena. Espejo de {@link #findLineageByPhysicalLine} para la clave operativa de Excel.
+     */
+    public List<Mt101StagingRecordRepository.PhysicalLineLineage> findLineageBySheetRow(String connectionRef,
+                                                                                        String sourceFileHash,
+                                                                                        String sheetName,
+                                                                                        long sheetRow,
+                                                                                        Long processExecutionId) {
+        if (sheetRow < 1) {
+            throw new IllegalArgumentException("sheetRow must be positive");
+        }
+        var hash = requireSourceFileHash(sourceFileHash);
+        try {
+            return stagingRepository.findLineageBySheetRow(resolveDataSource(connectionRef), hash, sheetName, sheetRow,
+                    processExecutionId);
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot resolve staging row for sheet " + sheetName + " row " + sheetRow,
+                    error);
+        }
+    }
+
     public List<Mt101FragmentRepository.FragmentLookupRow> findBySourceRow(String connectionRef,
                                                                            Long recordNumber,
                                                                            String sourceFileHash,
