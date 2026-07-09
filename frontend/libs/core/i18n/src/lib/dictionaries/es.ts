@@ -1066,6 +1066,7 @@ export const es = {
   'audit.breadcrumb.fragments': 'Fragmentos MT101',
   'audit.breadcrumb.quarantine': 'Cuarentena',
   'audit.breadcrumb.payDispatch': 'Dispatch PAY por lista',
+  'audit.breadcrumb.payConflicts': 'Conflictos de pago',
   'audit.breadcrumb.spool': 'Spool',
   // Workspace
   'audit.workspace.label': 'Navegacion del workspace de auditoria',
@@ -1083,6 +1084,8 @@ export const es = {
   'audit.workspace.quarantineHint': 'Correccion, rebuild y PAY correctivo bajo control operacional.',
   'audit.workspace.payDispatch': 'Dispatch PAY por lista',
   'audit.workspace.payDispatchHint': 'Pagos de dispatch por lista bloqueados (inciertos/en vuelo) a la espera de conciliacion.',
+  'audit.workspace.payConflicts': 'Conflictos de pago',
+  'audit.workspace.payConflictsHint': 'Conflictos de pago abiertos en todos los sets/ejecuciones (contradiccion terminal worker vs STATUS).',
   // Spool
   'audit.spool.title': 'Spool de auditoria',
   'audit.spool.subtitle': 'Eventos pendientes, en vuelo y dead-letter del outbox asincronico.',
@@ -1170,6 +1173,23 @@ export const es = {
   'audit.quarantine.physicalLine': 'Línea física en el archivo: {line}',
   'audit.quarantine.sheetCell': 'Hoja {sheet}, fila {row}',
   // D1: visibilidad del dispatch PAY por lista
+  // Consola de conflictos de pago (inbox transversal)
+  'audit.payConflicts.title': 'Conflictos de pago',
+  'audit.payConflicts.subtitle':
+    'Conflictos de pago abiertos en todos los sets y ejecuciones (contradicción terminal entre el resultado del worker y STATUS). Abrí cada uno para conciliarlo en su set.',
+  'audit.payConflicts.error': 'No se pudieron cargar los conflictos de pago.',
+  'audit.payConflicts.loading': 'Cargando conflictos de pago...',
+  'audit.payConflicts.empty': 'Sin conflictos de pago abiertos.',
+  'audit.payConflicts.caption': 'Conflictos de pago MT101 abiertos en todos los sets y ejecuciones',
+  'audit.payConflicts.col.source': 'Ledger',
+  'audit.payConflicts.source.NORMAL': 'Normal',
+  'audit.payConflicts.source.CORRECTIVE': 'Correctivo',
+  'audit.payConflicts.col.set': 'Set de fragmentos',
+  'audit.payConflicts.col.status': 'Estado',
+  'audit.payConflicts.col.reason': 'Motivo',
+  'audit.payConflicts.col.updated': 'Actualizado',
+  'audit.payConflicts.reconcile': 'Conciliar en el set',
+  'audit.payConflicts.loadMore': 'Cargar más',
   'audit.payDispatch.title': 'Dispatch PAY por lista',
   'audit.payDispatch.subtitle':
     'Pagos por lista en memoria (MT101_BUILD/SPLIT → PAY). Un dispatch incierto o en vuelo bloquea el reenvío hasta conciliar.',

@@ -1004,6 +1004,100 @@ public class Mt101FragmentRepository {
     public record PayConflictRow(String sendersReference, String status, String reason, String updatedAt) {
     }
 
+    /**
+     * Consola de PAY Conflicts: fila de conflicto de pago <b>transversal</b> (across sets/ejecuciones), con el set y la
+     * ejecución que la produjeron para poder abrir la vista por-set (quarantine) y el lineage. {@code source} distingue
+     * el ledger normal ({@code NORMAL}, {@code mt101_build_fragment}) del correctivo ({@code CORRECTIVE},
+     * {@code mt101_corrective_pay_fragment}); para el correctivo {@code fragmentSetId} es el set ORIGINAL (join a
+     * {@code mt101_rebuild_run}) para reusar el mismo deep-link, {@code processExecutionId} es null (es maker-checker,
+     * no una ejecución) y {@code rebuildRunId} da el contexto del run.
+     */
+    public record OpenPayConflictRow(String source, String fragmentSetId, Long processExecutionId,
+                                     String sendersReference, String status, String reason, String updatedAt,
+                                     String rebuildRunId, long id) {
+    }
+
+    /**
+     * Consola de PAY Conflicts (rama NORMAL): conflictos de pago ABIERTOS de {@code mt101_build_fragment}, más recientes
+     * primero. Usa el índice parcial V94 {@code ix_build_fragment_pay_conflict_open} (O(conflictos), sin scan).
+     * Paginación <b>keyset</b> por {@code (updated_at, id)}: {@code afterUpdatedAt} nulo trae la primera página; si no,
+     * trae estrictamente las "más viejas" que el cursor en el orden {@code (updated_at desc, id desc)}.
+     */
+    public List<OpenPayConflictRow> openPayConflicts(DataSource dataSource, java.sql.Timestamp afterUpdatedAt,
+                                                     Long afterId, int limit) throws SQLException {
+        var sql = "select id, fragment_set_id, process_execution_id, senders_reference, status, pay_conflict_reason, "
+                + "updated_at from mt101_build_fragment where pay_conflict = true "
+                + "and (?::timestamp is null or (updated_at, id) < (?::timestamp, ?::bigint)) "
+                + "order by updated_at desc, id desc limit ?";
+        var result = new ArrayList<OpenPayConflictRow>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setTimestamp(1, afterUpdatedAt);
+            statement.setTimestamp(2, afterUpdatedAt);
+            statement.setObject(3, afterId);
+            statement.setInt(4, Math.max(1, limit));
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    var updatedAt = rs.getTimestamp("updated_at");
+                    result.add(new OpenPayConflictRow(
+                            "NORMAL",
+                            rs.getString("fragment_set_id"),
+                            rs.getObject("process_execution_id", Long.class),
+                            rs.getString("senders_reference"),
+                            rs.getString("status"),
+                            rs.getString("pay_conflict_reason"),
+                            updatedAt == null ? null : updatedAt.toInstant().toString(),
+                            null,
+                            rs.getLong("id")));
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Consola de PAY Conflicts (rama CORRECTIVA): conflictos de pago ABIERTOS del ledger correctivo
+     * ({@code mt101_corrective_pay_fragment}), más recientes primero. Une con {@code mt101_rebuild_run} para exponer el
+     * {@code original_fragment_set_id} como {@code fragmentSetId} → mismo deep-link a quarantine que el normal. El
+     * estado es {@code pay_status} y la referencia {@code corrective_senders_reference}. Usa el índice parcial V95
+     * {@code ix_corrective_pay_fragment_conflict_open}. Mismo keyset por {@code (updated_at, id)} de la fila correctiva.
+     */
+    public List<OpenPayConflictRow> openCorrectivePayConflicts(DataSource dataSource, java.sql.Timestamp afterUpdatedAt,
+                                                               Long afterId, int limit) throws SQLException {
+        var sql = "select cpf.id, rr.original_fragment_set_id as fragment_set_id, "
+                + "cpf.corrective_senders_reference as senders_reference, cpf.pay_status as status, "
+                + "cpf.pay_conflict_reason, cpf.updated_at, cpf.rebuild_run_id "
+                + "from mt101_corrective_pay_fragment cpf "
+                + "join mt101_rebuild_run rr on rr.rebuild_run_id = cpf.rebuild_run_id "
+                + "where cpf.pay_conflict = true "
+                + "and (?::timestamp is null or (cpf.updated_at, cpf.id) < (?::timestamp, ?::bigint)) "
+                + "order by cpf.updated_at desc, cpf.id desc limit ?";
+        var result = new ArrayList<OpenPayConflictRow>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setTimestamp(1, afterUpdatedAt);
+            statement.setTimestamp(2, afterUpdatedAt);
+            statement.setObject(3, afterId);
+            statement.setInt(4, Math.max(1, limit));
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    var updatedAt = rs.getTimestamp("updated_at");
+                    result.add(new OpenPayConflictRow(
+                            "CORRECTIVE",
+                            rs.getString("fragment_set_id"),
+                            null,
+                            rs.getString("senders_reference"),
+                            rs.getString("status"),
+                            rs.getString("pay_conflict_reason"),
+                            updatedAt == null ? null : updatedAt.toInstant().toString(),
+                            rs.getString("rebuild_run_id"),
+                            rs.getLong("id")));
+                }
+            }
+        }
+        return result;
+    }
+
     public Map<TransactionKey, FragmentRecordLineage> fragmentRecordLineageByTransactions(
             DataSource dataSource,
             String fragmentSetId,

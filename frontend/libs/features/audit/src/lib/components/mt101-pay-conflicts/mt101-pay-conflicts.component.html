@@ -1,0 +1,78 @@
+<section class="conflicts audit-page">
+  <ih-audit-workspace-nav />
+
+  <div class="conflicts__head">
+    <div>
+      <h1 class="ih-section-title">{{ i18n.t('audit.payConflicts.title') }}</h1>
+      <p class="ih-muted">{{ i18n.t('audit.payConflicts.subtitle') }}</p>
+    </div>
+    <button mat-stroked-button type="button" (click)="load()" [disabled]="loading()">
+      {{ i18n.t('audit.common.refresh') }}
+    </button>
+  </div>
+
+  @if (conflicts().length === 0 && loading()) {
+    <p class="conflicts__empty" role="status">{{ i18n.t('audit.payConflicts.loading') }}</p>
+  } @else if (conflicts().length === 0 && error()) {
+    <p class="conflicts__error" role="alert">{{ error() }}</p>
+  } @else if (conflicts().length === 0) {
+    <p class="conflicts__empty">{{ i18n.t('audit.payConflicts.empty') }}</p>
+  } @else {
+    <div class="conflicts__table">
+      <table class="ih-dense-table">
+        <caption class="ih-visually-hidden">{{ i18n.t('audit.payConflicts.caption') }}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{{ i18n.t('audit.payConflicts.col.source') }}</th>
+            <th scope="col">{{ i18n.t('audit.payConflicts.col.set') }}</th>
+            <th scope="col">{{ i18n.t('audit.lookup.fieldExecution') }}</th>
+            <th scope="col">:20:</th>
+            <th scope="col">{{ i18n.t('audit.payConflicts.col.status') }}</th>
+            <th scope="col">{{ i18n.t('audit.payConflicts.col.reason') }}</th>
+            <th scope="col">{{ i18n.t('audit.payConflicts.col.updated') }}</th>
+            <th scope="col"><span class="ih-visually-hidden">{{ i18n.t('audit.common.actions') }}</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (c of conflicts(); track trackConflict($index, c)) {
+            <tr>
+              <td>
+                <span class="conflicts__source conflicts__source--{{ c.source }}"
+                      [title]="c.source === 'CORRECTIVE' && c.rebuildRunId ? c.rebuildRunId : ''">
+                  {{ i18n.t('audit.payConflicts.source.' + c.source) }}
+                </span>
+              </td>
+              <td class="conflicts__mono" [title]="c.fragmentSetId">{{ c.fragmentSetId }}</td>
+              <td>{{ c.processExecutionId ?? '-' }}</td>
+              <td class="conflicts__mono">{{ c.sendersReference }}</td>
+              <td><span class="conflicts__status">{{ c.status || '-' }}</span></td>
+              <td>{{ c.reason || '-' }}</td>
+              <td>
+                @if (c.updatedAt; as ts) {
+                  <time [attr.datetime]="ts" [title]="ts | ihTime:'absolute'">{{ ts | ihTime }}</time>
+                } @else { - }
+              </td>
+              <td>
+                <!-- Deep-link a la vista por-set (quarantine), donde se concilia el conflicto. -->
+                <a mat-button [routerLink]="['/audit/mt101-quarantine']" [queryParams]="{ fragmentSetId: c.fragmentSetId }">{{ i18n.t('audit.payConflicts.reconcile') }}</a>
+                <!-- Deep-link al lineage E2E de la trama en conflicto (modo 'key' por :20: = paymentReference). -->
+                <a mat-button [routerLink]="['/audit/record-lineage']" [queryParams]="{ key: 'paymentReference', value: c.sendersReference }">{{ i18n.t('audit.lookup.viewLineage') }} ↗</a>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    @if (error()) {
+      <p class="conflicts__error" role="alert">{{ error() }}</p>
+    }
+    @if (nextCursor()) {
+      <div class="conflicts__more">
+        <button mat-stroked-button type="button" (click)="loadMore()" [disabled]="loading()">
+          {{ loading() ? i18n.t('audit.payConflicts.loading') : i18n.t('audit.payConflicts.loadMore') }}
+        </button>
+      </div>
+    }
+  }
+</section>

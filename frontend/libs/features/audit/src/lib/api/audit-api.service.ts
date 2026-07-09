@@ -11,6 +11,7 @@ import {
   Mt101FragmentSetSummary,
   Mt101LoteHeader,
   Mt101NormalPayResolution,
+  Mt101OpenPayConflictsPage,
   Mt101PayConflict,
   Mt101PhysicalLineLineage,
   Mt101PayDispatchIntent,
@@ -210,6 +211,29 @@ export class AuditApiService {
       httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }
     return this.http.get<Mt101PayConflict[]>('/api/query/mt101-fragments/pay-conflicts', { params: httpParams });
+  }
+
+  /**
+   * Consola de PAY Conflicts: inbox transversal de conflictos de pago abiertos (todos los sets/ejecuciones), más
+   * recientes primero. No exige conocer el fragmentSetId de antemano.
+   */
+  mt101OpenPayConflicts(query?: {
+    connectionRef?: string;
+    limit?: number;
+    cursor?: string;
+  }): Observable<Mt101OpenPayConflictsPage> {
+    let httpParams = new HttpParams();
+    if (query?.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    if (query?.limit != null) {
+      httpParams = httpParams.set('limit', String(query.limit));
+    }
+    if (query?.cursor) {
+      httpParams = httpParams.set('cursor', query.cursor);
+    }
+    return this.http.get<Mt101OpenPayConflictsPage>(
+      '/api/query/mt101-fragments/pay-conflicts/open', { params: httpParams });
   }
 
   /**

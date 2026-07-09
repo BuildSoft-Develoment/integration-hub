@@ -151,6 +151,27 @@ public class Mt101FragmentLookupResource {
     }
 
     /**
+     * Consola de PAY Conflicts (inbox transversal): lista los conflictos de pago ABIERTOS de <b>todos</b> los
+     * sets/ejecuciones (más recientes primero), cada uno con su {@code fragmentSetId} y {@code processExecutionId} para
+     * abrir la vista por-set (quarantine) y el lineage. La landing operativa que faltaba: no exige conocer el set de
+     * antemano. Mismo gating que {@code /pay-conflicts}.
+     */
+    @GET
+    @Path("/pay-conflicts/open")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
+    public Mt101FragmentLookupService.OpenPayConflictsPage openPayConflicts(
+            @QueryParam("connectionRef") String connectionRef,
+            @QueryParam("limit") Integer limit,
+            @QueryParam("cursor") String cursor) {
+        try {
+            return service.openPayConflicts(connectionRef, limit, cursor);
+        } catch (IllegalArgumentException error) {
+            // Cursor malformado → 400 claro (no 500).
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /**
      * Línea de tiempo E2E <b>operacional</b> de una fila (instantánea, desde staging /
      * fragmento / cuarentena), independiente del store frío asíncrono.
      */

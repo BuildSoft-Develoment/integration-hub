@@ -191,6 +191,32 @@ export interface Mt101PayConflict {
 }
 
 /**
+ * Consola de PAY Conflicts (inbox transversal): un conflicto de pago abierto de cualquier set/ejecución, con el
+ * fragmentSetId y processExecutionId que lo produjeron para abrir la vista por-set (quarantine) y el lineage.
+ */
+export interface Mt101OpenPayConflict {
+  /** Ledger de origen: NORMAL (mt101_build_fragment) o CORRECTIVE (mt101_corrective_pay_fragment). */
+  source: 'NORMAL' | 'CORRECTIVE';
+  /** Set del deep-link a quarantine; para CORRECTIVE es el set ORIGINAL (join a rebuild_run). */
+  fragmentSetId: string;
+  processExecutionId: number | null;
+  sendersReference: string;
+  status: string;
+  reason: string | null;
+  updatedAt: string | null;
+  /** Solo CORRECTIVE: el run maker-checker que lo produjo (contexto). */
+  rebuildRunId: string | null;
+  /** Id del fragmento en su ledger (para el track-by; el id colisiona entre ledgers → usar junto a source). */
+  id: number;
+}
+
+/** Página del inbox de conflictos: items + cursor opaco para la siguiente página (null = fin). */
+export interface Mt101OpenPayConflictsPage {
+  items: Mt101OpenPayConflict[];
+  nextCursor: string | null;
+}
+
+/**
  * item 2: vista de una fila de staging para corrección, con su posición FÍSICA en el archivo origen (línea física
  * para CSV/TXT/FIN; hoja+fila para Excel). Nullables: readers que no aportan posición los dejan null.
  */

@@ -1066,6 +1066,7 @@ export const en = {
   'audit.breadcrumb.fragments': 'MT101 fragments',
   'audit.breadcrumb.quarantine': 'Quarantine',
   'audit.breadcrumb.payDispatch': 'List PAY dispatch',
+  'audit.breadcrumb.payConflicts': 'PAY conflicts',
   'audit.breadcrumb.spool': 'Spool',
   // Workspace
   'audit.workspace.label': 'Audit workspace navigation',
@@ -1083,6 +1084,8 @@ export const en = {
   'audit.workspace.quarantineHint': 'Correction, rebuild and corrective PAY under operational control.',
   'audit.workspace.payDispatch': 'List PAY dispatch',
   'audit.workspace.payDispatchHint': 'Blocked list-dispatch payments (uncertain/in-flight) awaiting reconciliation.',
+  'audit.workspace.payConflicts': 'PAY conflicts',
+  'audit.workspace.payConflictsHint': 'Open pay conflicts across all sets/executions (worker vs STATUS terminal contradiction).',
   // Spool
   'audit.spool.title': 'Audit spool',
   'audit.spool.subtitle': 'Pending, in-flight and dead-letter events of the async outbox.',
@@ -1170,6 +1173,23 @@ export const en = {
   'audit.quarantine.physicalLine': 'Physical line in file: {line}',
   'audit.quarantine.sheetCell': 'Sheet {sheet}, row {row}',
   // D1: list PAY dispatch visibility
+  // PAY conflicts console (cross-set inbox)
+  'audit.payConflicts.title': 'PAY conflicts',
+  'audit.payConflicts.subtitle':
+    'Open pay conflicts across all sets and executions (a terminal contradiction between the worker result and STATUS). Open each one to reconcile in its set.',
+  'audit.payConflicts.error': 'Could not load pay conflicts.',
+  'audit.payConflicts.loading': 'Loading pay conflicts...',
+  'audit.payConflicts.empty': 'No open pay conflicts.',
+  'audit.payConflicts.caption': 'Open MT101 pay conflicts across sets and executions',
+  'audit.payConflicts.col.source': 'Ledger',
+  'audit.payConflicts.source.NORMAL': 'Normal',
+  'audit.payConflicts.source.CORRECTIVE': 'Corrective',
+  'audit.payConflicts.col.set': 'Fragment set',
+  'audit.payConflicts.col.status': 'Status',
+  'audit.payConflicts.col.reason': 'Reason',
+  'audit.payConflicts.col.updated': 'Updated',
+  'audit.payConflicts.reconcile': 'Reconcile in set',
+  'audit.payConflicts.loadMore': 'Load more',
   'audit.payDispatch.title': 'List PAY dispatch',
   'audit.payDispatch.subtitle':
     'Direct list-dispatch payments (in-memory MT101_BUILD/SPLIT → PAY). Uncertain or in-flight dispatches block re-send until reconciled.',
