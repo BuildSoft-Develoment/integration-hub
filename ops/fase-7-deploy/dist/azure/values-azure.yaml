@@ -1,0 +1,24 @@
+# Values Helm para Azure (AKS + ACR).
+quarkusProfile: "prod,azure"
+
+image:
+  repository: <ACR_NAME>.azurecr.io/integration-hub
+
+serviceAccount:
+  create: true
+  annotations:
+    # Workload Identity (AKS): vincula la SA de K8s a una managed identity de Azure.
+    azure.workload.identity/client-id: <MANAGED_IDENTITY_CLIENT_ID>
+
+ingress:
+  enabled: true
+  className: webapprouting.kubernetes.io
+  host: integration-hub.<TU_DOMINIO>
+
+autoscaling:
+  enabled: true
+
+env:
+  DEPLOY_ENV: prod
+  AZURE_STORAGE_ACCOUNT: <STORAGE_ACCOUNT>
+  PLUGIN_STAGING_CONTAINER: remote-plugin-staging

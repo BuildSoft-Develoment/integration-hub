@@ -1,0 +1,35 @@
+# =====================================================================================
+# Imagen JVM (fast-jar) de platform-app, comun a las 5 nubes.
+#
+# Alternativa a la nativa cuando el build nativo no es viable (p.ej. el choque
+# Quarkus 3.33.2/OTel 1.57 <-> Mandrel jdk-25). Conserva la extension quarkus-opentelemetry
+# y toda la config; solo cambia el arranque (~0.5-1s mas que nativo) y la RAM.
+#
+# Requiere el layout fast-jar YA construido:  mvn -pl platform-app -am package -DskipTests
+# (genera platform-app/target/quarkus-app/).
+#
+# Build desde la raiz del repo:
+#   docker build -f ops/fase-7-deploy/dist/common/Dockerfile.jvm -t integration-hub:jvm .
+#
+# Perfil por env al correr:
+#   docker run -e QUARKUS_PROFILE=prod,onprem --env-file .env ... integration-hub:jvm
+# =====================================================================================
+FROM eclipse-temurin:25-jre
+
+ENV LANGUAGE='en_US:en'
+WORKDIR /work/
+
+ARG APP_DIR=platform-app/target/quarkus-app
+# 0755 para que la JVM pueda recorrer lib/boot al resolver el classpath del fast-jar.
+COPY --chmod=0755 ${APP_DIR}/lib/ /work/lib/
+COPY --chmod=0755 ${APP_DIR}/*.jar /work/
+COPY --chmod=0755 ${APP_DIR}/app/ /work/app/
+COPY --chmod=0755 ${APP_DIR}/quarkus/ /work/quarkus/
+
+# Config externa opcional montable en /work/config/.
+ENV QUARKUS_CONFIG_LOCATIONS=/work/config/
+
+EXPOSE 8080
+USER 185
+
+ENTRYPOINT ["java", "-Dquarkus.http.host=0.0.0.0", "-jar", "/work/quarkus-run.jar"]

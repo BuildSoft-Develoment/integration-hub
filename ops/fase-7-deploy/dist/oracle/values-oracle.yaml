@@ -1,0 +1,29 @@
+# Values Helm para Oracle Cloud (OKE + OCIR).
+quarkusProfile: "prod,oracle"
+
+image:
+  # OCIR: <region-key>.ocir.io/<tenancy-namespace>/integration-hub
+  repository: <REGION_KEY>.ocir.io/<TENANCY_NAMESPACE>/integration-hub
+
+imagePullSecrets:
+  - name: ocir-secret        # docker-registry secret con el auth token de OCIR
+
+serviceAccount:
+  create: true
+  annotations:
+    # OKE Workload Identity / instance principal para OCI Vault + Object Storage.
+    oci.oraclecloud.com/principal-type: workload
+
+ingress:
+  enabled: true
+  className: nginx
+  host: integration-hub.<TU_DOMINIO>
+
+autoscaling:
+  enabled: true
+
+env:
+  DEPLOY_ENV: prod
+  OCI_REGION: us-ashburn-1
+  OCI_S3_ENDPOINT: https://<TENANCY_NAMESPACE>.compat.objectstorage.us-ashburn-1.oraclecloud.com
+  PLUGIN_STAGING_BUCKET: integration-hub-plugin-staging

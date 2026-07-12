@@ -1,0 +1,100 @@
+name: Release deploy (native image per cloud)
+
+# Nivel 3: construye la imagen NATIVA (Quinoa embebido) y la publica al registry de
+# la nube elegida. Manual (workflow_dispatch) o al taggear vX.Y.Z.
+# NO despliega solo: el `helm upgrade` queda como paso humano/aprobado (ver READMEs).
+on:
+  workflow_dispatch:
+    inputs:
+      cloud:
+        description: Nube destino
+        required: true
+        type: choice
+        options: [aws, azure, gcp, oracle, onprem]
+  push:
+    tags: ["v*"]
+
+jobs:
+  build-and-push:
+    name: Build native + push (${{ github.event.inputs.cloud || 'aws' }})
+    runs-on: ubuntu-latest
+    env:
+      CLOUD: ${{ github.event.inputs.cloud || 'aws' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 22: Quinoa compila la UI Angular/Nx durante el package Maven.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+
+      # Build nativo dentro del builder Mandrel (container-build) -> runner Linux amd64.
+      # Se usa `mvn` (preinstalado en los runners) porque el repo no versiona un mvnw wrapper.
+      - name: Maven native build
+        run: mvn -B -pl platform-app -am clean package -DskipTests
+             -Pnative -Dquarkus.native.container-build=true
+
+      - name: Resolve image tag
+        id: tag
+        run: echo "value=${GITHUB_REF_NAME//\//-}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      # ---- Login por nube (usa los secrets del repo/environment) ----
+      - name: Login ECR (aws)
+        if: env.CLOUD == 'aws'
+        uses: aws-actions/amazon-ecr-login@v2
+        env:
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Login ACR (azure)
+        if: env.CLOUD == 'azure'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Login GAR (gcp)
+        if: env.CLOUD == 'gcp'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.GAR_HOST }}
+          username: _json_key
+          password: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Login OCIR (oracle)
+        if: env.CLOUD == 'oracle'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.OCIR_REGISTRY }}
+          username: ${{ secrets.OCIR_USERNAME }}
+          password: ${{ secrets.OCIR_TOKEN }}
+
+      - name: Login registry privado (onprem)
+        if: env.CLOUD == 'onprem'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ONPREM_REGISTRY }}
+          username: ${{ secrets.ONPREM_REGISTRY_USER }}
+          password: ${{ secrets.ONPREM_REGISTRY_PASSWORD }}
+
+      # IMAGE_REPO se define como secret/variable por nube (URL completa del repo).
+      - name: Build & push image
+        run: |
+          REPO="${{ secrets.IMAGE_REPO }}"
+          TAG="${{ steps.tag.outputs.value }}"
+          RUNNER=$(ls platform-app/target/*-runner)
+          docker build -f ops/fase-7-deploy/dist/common/Dockerfile.native \
+            --build-arg RUNNER="$RUNNER" \
+            -t "$REPO:$TAG" -t "$REPO:latest" .
+          docker push "$REPO:$TAG"
+          docker push "$REPO:latest"
+          echo "Publicado $REPO:$TAG"

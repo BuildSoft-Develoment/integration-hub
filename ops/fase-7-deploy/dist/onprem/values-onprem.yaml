@@ -1,0 +1,24 @@
+# Values Helm para on-premise (Kubernetes en PRO, registry privado).
+quarkusProfile: "prod,onprem"
+
+image:
+  repository: <REGISTRY_PRIVADO>/integration-hub
+
+imagePullSecrets:
+  - name: registry-privado
+
+serviceAccount:
+  create: true
+
+ingress:
+  enabled: true
+  className: nginx
+  host: integration-hub.interno
+
+autoscaling:
+  enabled: false      # on-prem: capacidad fija tipica
+
+env:
+  DEPLOY_ENV: prod
+  S3_ENDPOINT: http://minio:9000
+  PLUGIN_STAGING_BUCKET: remote-plugin-staging

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: integration-hub
+description: Integration Hub (platform-app) - imagen nativa Quarkus con UI Quinoa embebida.
+type: application
+version: 0.1.0
+appVersion: "0.0.1"

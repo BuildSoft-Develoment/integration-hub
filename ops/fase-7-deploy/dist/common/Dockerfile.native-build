@@ -1,0 +1,40 @@
+# =====================================================================================
+# Build multistage REPRODUCIBLE: compila el nativo dentro del contenedor.
+# Util cuando el runner no tiene GraalVM/Mandrel (build 100% en Docker).
+#
+# Etapa 1 (builder): Mandrel (GraalVM CE para JDK 25) + Node 22 (lo necesita Quinoa
+# para compilar la UI Angular/Nx durante `mvnw package`).
+# Etapa 2 (runtime): micro-image con solo el binario.
+#
+# Build desde la raiz del repo (ojo: build nativo = lento y pide bastante RAM):
+#   docker build -f ops/fase-7-deploy/dist/common/Dockerfile.native-build -t integration-hub:native .
+# =====================================================================================
+
+# ---- Etapa 1: builder nativo ----
+FROM quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-25 AS build
+USER root
+
+# La imagen Mandrel trae GraalVM pero NO Maven ni Node, y este repo NO versiona un
+# mvnw wrapper -> se instalan maven + nodejs/npm (Quinoa compila frontend/ y lo embebe).
+# Si `maven` no estuviera en los repos de la imagen, usa la ruta canonica en su lugar:
+# `mvn ... -Dquarkus.native.container-build=true` en el host + Dockerfile.native.
+RUN microdnf install -y --nodocs maven nodejs npm && microdnf clean all
+
+WORKDIR /project
+COPY --chown=quarkus:quarkus . /project
+USER quarkus
+
+# container-build=false porque YA estamos dentro del builder image nativo.
+RUN mvn -B -pl platform-app -am clean package -DskipTests \
+      -Pnative -Dquarkus.native.container-build=false
+
+# ---- Etapa 2: runtime ----
+FROM quay.io/quarkus/quarkus-micro-image:2.0
+WORKDIR /work/
+RUN chown 1001 /work && chmod g+rwX /work && chown 1001:root /work
+COPY --from=build --chown=1001:root --chmod=0755 /project/platform-app/target/*-runner /work/application
+
+ENV QUARKUS_CONFIG_LOCATIONS=/work/config/
+EXPOSE 8080
+USER 1001
+ENTRYPOINT ["./application", "-Dquarkus.http.host=0.0.0.0"]
