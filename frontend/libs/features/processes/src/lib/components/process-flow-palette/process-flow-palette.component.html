@@ -14,8 +14,10 @@
                 fExternalItem
                 type="button"
                 class="flow-palette__item"
+                [class.flow-palette__item--disabled]="taskDisabled(taskType)"
+                [disabled]="taskDisabled(taskType)"
                 [fData]="taskType"
-                [matTooltip]="taskLabel(taskType)"
+                [matTooltip]="taskTooltip(taskType)"
                 matTooltipPosition="right"
               >
                 <span class="flow-palette__icon" [ngClass]="presentation(taskType).toneClass" aria-hidden="true">

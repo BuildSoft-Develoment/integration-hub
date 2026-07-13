@@ -67,6 +67,7 @@ import { ProcessToolbarComponent } from '../components/process-toolbar/process-t
 })
 export class ProcessCatalogPageComponent implements OnInit {
   readonly store = inject(ProcessCatalogStore);
+  private readonly taskManager = inject(ProcessTaskManagerService);
   readonly viewModel = computed(() => ({
     drawerOpen: this.store.drawerOpen(),
     toolbar: {
@@ -99,6 +100,7 @@ export class ProcessCatalogPageComponent implements OnInit {
   }));
 
   ngOnInit(): void {
+    void this.taskManager.loadRemoteTaskTypes();
     void this.store.load();
   }
 
