@@ -32,6 +32,9 @@ services:
       - "8180:8180"
     volumes:
       - ./keycloak/integration-hub-realm.json:/opt/keycloak/data/import/integration-hub-realm.json:ro
+      # Themes de login personalizados (white-label). En start-dev el cache de themes esta off,
+      # asi que editar el CSS/logo se refleja al recargar el login.
+      - ./keycloak/themes:/opt/keycloak/themes:ro
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8180'"]
       interval: 15s
