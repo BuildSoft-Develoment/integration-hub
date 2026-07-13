@@ -4,6 +4,7 @@ import com.integrationhub.platform.service.artifact.ArtifactStaging;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginInvoker;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
+import com.integrationhub.platform.spi.config.PluginConfigSchema;
 import com.integrationhub.platform.spi.source.SelectedSourceFile;
 import com.integrationhub.platform.spi.source.SourcePayload;
 import com.integrationhub.platform.spi.source.SourceProvider;
@@ -46,6 +47,12 @@ public class RemoteSourceProvider implements SourceProvider {
     @Override
     public String type() {
         return type;
+    }
+
+    /** Config-schema declarado por el plugin remoto para este source type (o vacío). */
+    @Override
+    public PluginConfigSchema configSchema() {
+        return descriptor.configSchemaFor(type);
     }
 
     @Override

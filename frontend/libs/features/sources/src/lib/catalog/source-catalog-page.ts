@@ -50,6 +50,8 @@ export class SourceCatalogPageComponent implements OnInit {
 
   ngOnInit(): void {
     void this.store.load();
+    // Descubre source types aportados por plugins backend para poblar el selector.
+    void this.sourceManager.loadRemoteSourceTypes();
   }
 
   updateSourceType(type: SourceProviderType): void {
