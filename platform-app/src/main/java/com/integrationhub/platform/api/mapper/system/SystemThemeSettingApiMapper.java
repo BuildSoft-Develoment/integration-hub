@@ -18,7 +18,10 @@ public class SystemThemeSettingApiMapper {
                 setting.sidebarMode,
                 setting.primaryColor,
                 setting.errorColor,
-                setting.neutralColor
+                setting.neutralColor,
+                setting.brandName,
+                setting.brandMark,
+                setting.logoDataUri
         );
     }
 }

@@ -1,0 +1,70 @@
+/* White-label del login (empresa). Superpuesto sobre el CSS base del theme clasico de Keycloak. */
+:root {
+  --ih-brand: #0F766E;
+  --ih-brand-strong: #0b5a54;
+}
+
+/* Fondo de la pagina */
+body.login-pf,
+.login-pf body {
+  background: linear-gradient(160deg, #e6f4f2 0%, #f7f9fb 55%) fixed;
+}
+
+/* Logo en el header (reemplaza el texto del realm por el logo de la empresa) */
+.login-pf-page .login-pf-header {
+  margin-bottom: 26px;
+}
+
+#kc-header-wrapper {
+  background-image: url("../img/logo.svg");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  height: 60px;
+  padding: 0;
+  text-indent: -9999px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* Card del formulario */
+.login-pf-page .card-pf {
+  border-top: 4px solid var(--ih-brand);
+  border-radius: 12px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.12);
+}
+
+/* Boton primario — cubre el theme clasico (.btn-primary) y el nuevo (PatternFly v5). */
+.btn-primary,
+#kc-login,
+.pf-c-button.pf-m-primary,
+.pf-v5-c-button.pf-m-primary {
+  background-color: var(--ih-brand) !important;
+  border-color: var(--ih-brand) !important;
+  --pf-v5-c-button--m-primary--BackgroundColor: var(--ih-brand);
+  --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--ih-brand-strong);
+  --pf-v5-c-button--m-primary--active--BackgroundColor: var(--ih-brand-strong);
+  --pf-v5-c-button--m-primary--focus--BackgroundColor: var(--ih-brand-strong);
+}
+
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+#kc-login:hover,
+.pf-c-button.pf-m-primary:hover,
+.pf-v5-c-button.pf-m-primary:hover {
+  background-color: var(--ih-brand-strong) !important;
+  border-color: var(--ih-brand-strong) !important;
+}
+
+/* Foco de inputs y enlaces */
+.form-control:focus {
+  border-color: var(--ih-brand);
+  box-shadow: 0 0 0 2px rgba(15, 118, 110, 0.2);
+}
+
+a,
+#kc-registration a,
+#kc-info-message a {
+  color: var(--ih-brand);
+}

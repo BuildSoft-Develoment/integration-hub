@@ -49,6 +49,11 @@
         <span class="theme-menu-item__label">{{ i18n.t('shell.sidebar') }}</span>
         <span class="theme-menu-item__value">{{ currentSidebarLabel() }}</span>
       </button>
+
+      <button mat-menu-item type="button" [matMenuTriggerFor]="brandMenu">
+        <span class="theme-menu-item__label">{{ i18n.t('shell.brand') }}</span>
+        <span class="theme-menu-item__value">{{ theme.brandName() }}</span>
+      </button>
     </div>
   </div>
 </mat-menu>
@@ -95,6 +100,56 @@
       {{ i18n.t(option.labelKey) }}
     </button>
   }
+</mat-menu>
+
+<mat-menu #brandMenu="matMenu" panelClass="theme-menu-panel" xPosition="before" yPosition="below" [overlapTrigger]="false">
+  <div class="theme-menu-content ih-theme-menu theme-brand-block" (click)="$event.stopPropagation()">
+    <p class="section-eyebrow ih-section-eyebrow">{{ i18n.t('shell.brand') }}</p>
+
+    <label class="theme-brand-field">
+      <span>{{ i18n.t('shell.brand.name') }}</span>
+      <input
+        type="text"
+        maxlength="120"
+        [value]="theme.brandName()"
+        (change)="onBrandName($any($event.target).value)"
+      />
+    </label>
+
+    <label class="theme-brand-field">
+      <span>{{ i18n.t('shell.brand.mark') }}</span>
+      <input
+        type="text"
+        maxlength="8"
+        [value]="theme.brandMark()"
+        (change)="onBrandMark($any($event.target).value)"
+      />
+    </label>
+
+    <div class="theme-brand-logo">
+      <span class="theme-brand-field__label">{{ i18n.t('shell.brand.logo') }}</span>
+      <div class="theme-brand-logo__row">
+        @if (theme.logoDataUri(); as logo) {
+          <img class="theme-brand-logo__preview" [src]="logo" alt="" />
+        } @else {
+          <span class="theme-brand-logo__mark">{{ theme.brandMark() }}</span>
+        }
+        <label class="theme-brand-logo__upload">
+          {{ i18n.t('shell.brand.logoUpload') }}
+          <input type="file" accept="image/svg+xml,image/png,image/jpeg,image/webp,image/gif" (change)="onLogoSelected($event)" />
+        </label>
+        @if (theme.logoDataUri()) {
+          <button type="button" class="theme-brand-logo__clear" (click)="clearLogo()">
+            {{ i18n.t('shell.brand.logoClear') }}
+          </button>
+        }
+      </div>
+      <small class="theme-brand-logo__hint">{{ i18n.t('shell.brand.logoHint') }}</small>
+      @if (logoError(); as err) {
+        <small class="theme-brand-logo__error" role="alert">{{ err }}</small>
+      }
+    </div>
+  </div>
 </mat-menu>
 
 <mat-menu #customColorsMenu="matMenu" panelClass="theme-menu-panel" xPosition="before" yPosition="below" [overlapTrigger]="false">

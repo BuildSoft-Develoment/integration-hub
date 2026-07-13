@@ -2,6 +2,7 @@
     "realm":  "integration-hub",
     "enabled":  true,
     "displayName":  "Integration Hub",
+    "loginTheme":  "integration-hub",
     "registrationAllowed":  false,
     "resetPasswordAllowed":  false,
     "rememberMe":  true,

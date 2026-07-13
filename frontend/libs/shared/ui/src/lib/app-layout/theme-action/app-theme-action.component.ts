@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
 import {
@@ -91,5 +91,57 @@ export class AppThemeActionComponent {
 
   setCustomPreset(): void {
     this.preferences.updatePreset('custom');
+  }
+
+  // --- White-label: nombre, marca y logo ---
+  private static readonly MAX_LOGO_BYTES = 256 * 1024;
+  private static readonly LOGO_TYPES = /^image\/(svg\+xml|png|jpeg|webp|gif)$/;
+
+  readonly logoError = signal<string | null>(null);
+
+  onBrandName(value: string): void {
+    this.preferences.updateBranding({ brandName: value });
+  }
+
+  onBrandMark(value: string): void {
+    this.preferences.updateBranding({ brandMark: value });
+  }
+
+  clearLogo(): void {
+    this.logoError.set(null);
+    this.preferences.updateBranding({ logoDataUri: '' });
+  }
+
+  async onLogoSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) {
+      return;
+    }
+    if (!AppThemeActionComponent.LOGO_TYPES.test(file.type)) {
+      this.logoError.set(this.i18n.t('shell.brand.logoTypeError'));
+      return;
+    }
+    if (file.size > AppThemeActionComponent.MAX_LOGO_BYTES) {
+      this.logoError.set(this.i18n.t('shell.brand.logoSizeError'));
+      return;
+    }
+    try {
+      const dataUri = await this.readAsDataUri(file);
+      this.logoError.set(null);
+      this.preferences.updateBranding({ logoDataUri: dataUri });
+    } catch {
+      this.logoError.set(this.i18n.t('shell.brand.logoReadError'));
+    }
+  }
+
+  private readAsDataUri(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
   }
 }
