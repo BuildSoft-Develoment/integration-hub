@@ -3,7 +3,9 @@ import { Component, computed, inject, input, output } from '@angular/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { I18nService } from '@integration-hub/core/services';
+import { IconComponent } from '@integration-hub/shared/ui';
 import { AsyncOffloadSupport, AsyncState } from '../../../api/messaging-transports.service';
 
 /**
@@ -24,18 +26,28 @@ import { AsyncOffloadSupport, AsyncState } from '../../../api/messaging-transpor
 @Component({
   selector: 'ih-async-dispatch-section',
   standalone: true,
-  imports: [CommonModule, MatFormFieldModule, MatSelectModule, MatSlideToggleModule],
+  imports: [CommonModule, MatFormFieldModule, MatSelectModule, MatSlideToggleModule, MatTooltipModule, IconComponent],
   template: `
     <div class="async-dispatch">
       <div class="task-section-header">{{ i18n.t('ui.asyncDispatchOptions') }}</div>
 
       @if (toggleShown()) {
-        <mat-slide-toggle
-          [checked]="async()"
-          [disabled]="toggleDisabled()"
-          (change)="asyncChange.emit($event.checked)">
-          {{ i18n.t('ui.asyncDispatch') }}
-        </mat-slide-toggle>
+        <div class="async-dispatch__toggle-row">
+          <mat-slide-toggle
+            [checked]="async()"
+            [disabled]="toggleDisabled()"
+            (change)="asyncChange.emit($event.checked)">
+            {{ i18n.t('ui.asyncDispatch') }}
+          </mat-slide-toggle>
+          <span
+            class="hint-info"
+            [class.hint-info--distributed]="distributed()"
+            [matTooltip]="modeHint()"
+            matTooltipPosition="above"
+            tabindex="0"
+            role="img"
+            [attr.aria-label]="modeHint()">i</span>
+        </div>
       }
 
       @if (!available()) {
@@ -55,12 +67,11 @@ import { AsyncOffloadSupport, AsyncState } from '../../../api/messaging-transpor
           </mat-select>
         </mat-form-field>
 
-        <p class="async-dispatch__hint" [class.async-dispatch__hint--distributed]="distributed()">
-          {{ modeHint() }}
-        </p>
-
         @if (asyncWarningKey(); as key) {
-          <p class="async-dispatch__warning">{{ i18n.t(key) }}</p>
+          <div class="async-dispatch__warning" [matTooltip]="i18n.t(key)" matTooltipPosition="above">
+            <ih-icon name="alert-triangle" [size]="14" />
+            <span>{{ i18n.t(key + 'Short') }}</span>
+          </div>
         }
       }
     </div>
@@ -70,25 +81,51 @@ import { AsyncOffloadSupport, AsyncState } from '../../../api/messaging-transpor
       .async-dispatch {
         display: flex;
         flex-direction: column;
-        gap: 0.75rem;
+        gap: 0.6rem;
+        min-width: 0;
+      }
+      .async-dispatch__toggle-row {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+      }
+      /* Marcador de info: la explicación completa va en el tooltip (no en un párrafo). */
+      .hint-info {
+        display: inline-grid;
+        place-items: center;
+        width: 1.05rem;
+        height: 1.05rem;
+        border-radius: 50%;
+        border: 1px solid var(--ih-border);
+        color: var(--ih-text-soft);
+        font-size: 0.7rem;
+        font-style: italic;
+        font-weight: 700;
+        line-height: 1;
+        cursor: help;
+        user-select: none;
+      }
+      .hint-info--distributed {
+        border-color: var(--ih-accent);
+        color: var(--ih-accent-strong, var(--ih-accent));
       }
       .async-dispatch__hint {
         margin: 0;
-        font-size: 0.85rem;
-        opacity: 0.75;
-      }
-      .async-dispatch__hint--distributed {
-        font-weight: 600;
-        opacity: 0.9;
+        font-size: 0.82rem;
+        opacity: 0.85;
+        font-style: italic;
       }
       .async-dispatch__hint--unavailable {
         opacity: 0.9;
-        font-style: italic;
       }
+      /* Aviso compacto (chip de una línea); el detalle completo va en el tooltip. */
       .async-dispatch__warning {
-        margin: 0;
-        font-size: 0.85rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.8rem;
         color: var(--ih-warning, #b45309);
+        cursor: help;
       }
     `,
   ],

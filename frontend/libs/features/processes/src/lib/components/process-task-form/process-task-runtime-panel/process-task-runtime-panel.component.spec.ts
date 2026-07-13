@@ -90,8 +90,9 @@ describe('ProcessTaskRuntimePanelComponent (async dispatch)', () => {
     fixture.detectChanges();
     const warning = (fixture.nativeElement as HTMLElement).querySelector('.async-dispatch__warning');
     expect(warning).toBeTruthy();
+    // El chip muestra el texto corto; la explicacion completa va en el tooltip (matTooltip).
     expect(warning?.textContent?.trim()).toBe(
-      fixture.componentInstance.i18n.t('ui.asyncFeatureDegraded')
+      fixture.componentInstance.i18n.t('ui.asyncFeatureDegradedShort')
     );
     http.verify();
   });
