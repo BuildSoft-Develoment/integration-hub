@@ -2,6 +2,9 @@ package com.integrationhub.platform.provider.source;
 
 // @trace RF-006, RF-007, RF-008 (catalogo-fuentes: fuente cloud OCI Object Storage) ADR-006
 
+import com.integrationhub.platform.spi.config.PluginConfigField;
+import com.integrationhub.platform.spi.config.PluginConfigOption;
+import com.integrationhub.platform.spi.config.PluginConfigSchema;
 import com.integrationhub.platform.spi.source.SelectedSourceFile;
 import com.integrationhub.platform.spi.source.SourcePayload;
 import com.integrationhub.platform.spi.source.SourceProvider;
@@ -53,6 +56,31 @@ public class OciObjectStorageSourceProvider implements SourceProvider {
     @Override
     public String type() {
         return TYPE;
+    }
+
+    /**
+     * Schema declarativo del tipo: es el camino documentado en {@link SourceProvider#configSchema()}
+     * para que la UI renderice el formulario via {@code ih-schema-form}
+     * ({@code GET /api/plugins/config-schema/OCI_OBJECT_STORAGE}) sin formulario hardcoded en el
+     * frontend. Cuando exista un {@code oci-object-storage-source.provider.ts} dedicado, este
+     * schema queda como contrato de referencia.
+     */
+    @Override
+    public PluginConfigSchema configSchema() {
+        return PluginConfigSchema.of(
+                PluginConfigField.text("namespace", "sources.oci.namespace", true),
+                PluginConfigField.text("region", "sources.oci.region", true),
+                PluginConfigField.text("bucket", "sources.oci.bucket", true),
+                PluginConfigField.text("accessKeyId", "sources.oci.accessKeyId", true),
+                PluginConfigField.secret("secretAccessKey", "sources.oci.secretAccessKey", true),
+                PluginConfigField.text("prefix", "sources.oci.prefix", false),
+                PluginConfigField.text("fileNameTemplate", "sources.oci.fileNameTemplate", false),
+                PluginConfigField.select("selectionMode", "sources.oci.selectionMode", false, List.of(
+                        PluginConfigOption.of("latestModified", "latestModified"),
+                        PluginConfigOption.of("single", "single"),
+                        PluginConfigOption.of("all", "all"))),
+                PluginConfigField.text("mediaType", "sources.oci.mediaType", false),
+                PluginConfigField.text("endpoint", "sources.oci.endpoint", false));
     }
 
     @Override

@@ -60,6 +60,19 @@ class OciObjectStorageSourceProviderTest {
     }
 
     @Test
+    void declaresConfigSchemaForDynamicUiRendering() {
+        var schema = provider.configSchema();
+
+        var keys = schema.fields().stream().map(f -> f.key()).toList();
+        assertEquals(List.of("namespace", "region", "bucket", "accessKeyId", "secretAccessKey",
+                "prefix", "fileNameTemplate", "selectionMode", "mediaType", "endpoint"), keys);
+        assertTrue(schema.fields().stream()
+                        .filter(f -> f.key().equals("secretAccessKey"))
+                        .allMatch(f -> "secret".equals(f.type())),
+                "la credencial se declara como campo secreto");
+    }
+
+    @Test
     void delegatesSelectAndOpenWithTranslatedConfiguration() {
         var seen = new AtomicReference<Map<String, Object>>();
         var marker = new SelectedSourceFile("f.csv", "in/f.csv", "text/csv", null, null);
