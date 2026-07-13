@@ -78,6 +78,23 @@ export function provideAppPluginRemoteTrustedKeys(keyIds: readonly string[]): Pr
   return { provide: APP_PLUGIN_REMOTE_TRUSTED_KEYS, useValue: keyIds };
 }
 
+/** Fetch usado para leer los catalogos de manifests externos. */
+export type AppPluginCatalogFetch = (url: string, init?: RequestInit) => Promise<Response>;
+
+/**
+ * Seam para el fetch de catalogos (mismo patron que APP_PLUGIN_REMOTE_FETCH del verifier):
+ * mantiene shared/ui agnostico de HttpClient. Por defecto usa `fetch` global (sin auth), lo
+ * que basta para catalogos estaticos publicos; para un catalogo backend securizado
+ * (p.ej. /api/plugins/ui-catalog) la app provee un fetch que adjunta el bearer token.
+ */
+export const APP_PLUGIN_CATALOG_FETCH = new InjectionToken<AppPluginCatalogFetch>(
+  'APP_PLUGIN_CATALOG_FETCH'
+);
+
+export function provideAppPluginCatalogFetch(fetchImpl: AppPluginCatalogFetch): Provider {
+  return { provide: APP_PLUGIN_CATALOG_FETCH, useValue: fetchImpl };
+}
+
 @Injectable({ providedIn: 'root' })
 export class AppPluginRuntimeRegistry {
   private readonly staticManifests = inject(APP_PLUGIN_MANIFESTS, { optional: true }) ?? [];
@@ -85,6 +102,8 @@ export class AppPluginRuntimeRegistry {
     inject(APP_PLUGIN_REMOTE_ALLOWED_ORIGINS, { optional: true }) ?? [];
   private readonly trustedRemoteKeys =
     inject(APP_PLUGIN_REMOTE_TRUSTED_KEYS, { optional: true }) ?? [];
+  private readonly catalogFetch: AppPluginCatalogFetch =
+    inject(APP_PLUGIN_CATALOG_FETCH, { optional: true }) ?? ((url, init) => fetch(url, init));
   private readonly externalManifests = signal<readonly AppPluginManifest[]>([]);
   private readonly rejectedManifests = signal<readonly RejectedPluginManifest[]>([]);
   private readonly degradedManifests = signal<readonly RejectedPluginManifest[]>([]);
@@ -251,7 +270,10 @@ export class AppPluginRuntimeRegistry {
   ): Promise<AppPluginManifest[]> {
     let response: Response;
     try {
-      response = await fetch(url, { cache: 'no-store', headers: { Accept: 'application/json' } });
+      response = await this.catalogFetch(url, {
+        cache: 'no-store',
+        headers: { Accept: 'application/json' },
+      });
     } catch (error) {
       if (optional) {
         return [];
@@ -371,9 +393,17 @@ export class AppPluginRuntimeRegistry {
         continue;
       }
 
-      if (!remote.url?.startsWith('https://')) {
+      // https es obligatorio, salvo http hacia un host local (dev). Paridad con la
+      // politica backend (PluginDescriptorTrustPolicy.isLocalHost): permite http en
+      // localhost/127.0.0.1/::1 y exige https fuera de ahi. El origen sigue debiendo
+      // estar en el allowlist mas abajo, asi que http://localhost no es un pase libre.
+      const remoteUrl = remote.url ?? '';
+      const safeScheme =
+        remoteUrl.startsWith('https://') ||
+        (remoteUrl.startsWith('http://') && isLocalRemoteUrl(remoteUrl));
+      if (!safeScheme) {
         throw new Error(
-          `External plugin "${manifest.id}" declares a remote with an unsafe url. Only https:// is allowed.`
+          `External plugin "${manifest.id}" declares a remote with an unsafe url. Use https:// (http:// is allowed only for localhost dev).`
         );
       }
 
@@ -531,6 +561,25 @@ function remoteOrigin(url: string): string | null {
     return new URL(url).origin;
   } catch {
     return null;
+  }
+}
+
+/**
+ * True si el host del remoto es loopback (dev local). Espeja
+ * {@code PluginDescriptorTrustPolicy.isLocalHost} del backend para que http solo se
+ * permita en localhost. `URL.hostname` devuelve `[::1]` con corchetes para IPv6.
+ */
+function isLocalRemoteUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '::1' ||
+      host === '[::1]'
+    );
+  } catch {
+    return false;
   }
 }
 
