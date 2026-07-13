@@ -7,12 +7,13 @@ import { SourceRestFormComponent } from '../source-rest-form/source-rest-form.co
 import { SourceS3FormComponent } from '../source-s3-form/source-s3-form.component';
 import { SourceGcsFormComponent } from '../source-gcs-form/source-gcs-form.component';
 import { SourceAzureBlobFormComponent } from '../source-azure-blob-form/source-azure-blob-form.component';
+import { SourceOciFormComponent } from '../source-oci-form/source-oci-form.component';
 import { SourceSftpFormComponent } from '../source-sftp-form/source-sftp-form.component';
 
 @Component({
   selector: 'ih-source-type-form-host',
   standalone: true,
-  imports: [CommonModule, SourceFilesystemFormComponent, SourceFtpFormComponent, SourceSftpFormComponent, SourceRestFormComponent, SourceS3FormComponent, SourceGcsFormComponent, SourceAzureBlobFormComponent],
+  imports: [CommonModule, SourceFilesystemFormComponent, SourceFtpFormComponent, SourceSftpFormComponent, SourceRestFormComponent, SourceS3FormComponent, SourceGcsFormComponent, SourceAzureBlobFormComponent, SourceOciFormComponent],
   template: `
     @switch (sourceType()) {
       @case ('FILESYSTEM') { <ih-source-filesystem-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" /> }
@@ -22,6 +23,7 @@ import { SourceSftpFormComponent } from '../source-sftp-form/source-sftp-form.co
       @case ('S3') { <ih-source-s3-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" /> }
       @case ('GCS') { <ih-source-gcs-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" /> }
       @case ('AZURE_BLOB') { <ih-source-azure-blob-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" /> }
+      @case ('OCI_OBJECT_STORAGE') { <ih-source-oci-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" /> }
     }
   `,
 })

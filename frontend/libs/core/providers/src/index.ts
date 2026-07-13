@@ -16,7 +16,9 @@ export * from './lib/implementations/sources/rest-source.provider';
 export * from './lib/implementations/sources/s3-source.provider';
 export * from './lib/implementations/sources/gcs-source.provider';
 export * from './lib/implementations/sources/azure-blob-source.provider';
+export * from './lib/implementations/sources/oci-object-storage-source.provider';
 export * from './lib/implementations/readers/reader.providers';
+export * from './lib/implementations/readers/remote-schema-reader.provider';
 export * from './lib/implementations/connections/oracle-connection.provider';
 export * from './lib/implementations/connections/postgresql-connection.provider';
 export * from './lib/implementations/connections/sqlserver-connection.provider';
@@ -28,6 +30,7 @@ export * from './lib/implementations/tasks/db-execute-stored-procedure-task.prov
 export * from './lib/implementations/tasks/db-execute-function-task.provider';
 export * from './lib/implementations/tasks/rest-call-task.provider';
 export * from './lib/implementations/tasks/notification-task.provider';
+export * from './lib/implementations/tasks/remote-schema-task.provider';
 // --- Vertical mensajeria de pagos (spec 008, ADR-009) ---
 export * from './lib/tasks/process-task-form-registry';
 export * from './lib/tasks/process-task-form-bridge.service';

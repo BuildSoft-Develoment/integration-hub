@@ -1,6 +1,6 @@
 // @trace RF-002 (procesos: contrato configuration_json de tarea tipo REST_CALL)
 import { Injectable } from '@angular/core';
-import { HttpRequestDraft, ProcessTaskBodyFieldBindingDraft, ProcessTaskRuntimeDraft } from '../../tasks/process-task-binding.models';
+import { HttpRequestDraft, ProcessTaskBodyFieldBindingDraft, ProcessTaskExecutionMode, ProcessTaskRuntimeDraft } from '../../tasks/process-task-binding.models';
 import {
   applyHttpRequestToPayload,
   buildUrl,
@@ -49,7 +49,7 @@ export class RestCallTaskProvider extends ProcessTaskProvider<RestCallTaskDraft>
   }
 
   toTaskPatch(draft: RestCallTaskDraft): Partial<ProcessTaskFormModel> {
-    const executionMode = draft.executionMode || (draft.mode === 'single-request' ? 'once' : draft.mode) || 'per-record';
+    const executionMode = normalizeExecutionMode(draft.executionMode || draft.mode);
     const payload: any = this.withRuntime({ mode: executionMode }, { ...draft, executionMode }, 'per-record');
     applyHttpRequestToPayload(draft, payload, 20);
     return { configurationJson: this.toPrettyJson(payload) };
@@ -62,4 +62,13 @@ export class RestCallTaskProvider extends ProcessTaskProvider<RestCallTaskDraft>
       .filter(Boolean)
       .join(' | ');
   }
+}
+
+function normalizeExecutionMode(value: string | undefined): ProcessTaskExecutionMode {
+  if (value === 'single-request') {
+    return 'once';
+  }
+  return value === 'once' || value === 'batch' || value === 'per-record'
+    ? value
+    : 'per-record';
 }

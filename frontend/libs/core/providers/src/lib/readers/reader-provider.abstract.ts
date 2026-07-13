@@ -1,4 +1,14 @@
-export type ReaderProviderType = 'TXT' | 'CSV' | 'XLS' | 'XLSX' | 'JSON' | 'XML' | 'SWIFT_MT';
+export type BuiltinReaderProviderType = 'TXT' | 'CSV' | 'XLS' | 'XLSX' | 'JSON' | 'XML' | 'SWIFT_MT';
+
+/**
+ * Tipo de reader. Los built-in estan enumerados; el `(string & {})` mantiene el
+ * autocompletado de los literales pero admite tipos aportados por plugins backend
+ * (readers remotos schema-driven) descubiertos en runtime via `/api/reader-types`.
+ */
+export type ReaderProviderType = BuiltinReaderProviderType | (string & {});
+
+/** Estado de confianza/disponibilidad de un reader type (espejo del catalogo backend). */
+export type ReaderProviderStatus = 'AVAILABLE' | 'DEGRADED' | 'UNTRUSTED' | 'SHADOWED_BY_LOCAL';
 
 export type ReaderFieldVariant = 'position' | 'range';
 
@@ -37,6 +47,14 @@ export interface ReaderProviderDescriptor {
   description: string;
   category: string;
   capabilities: readonly string[];
+  /** Origen del reader type: `LOCAL` (build) o `REMOTE` (plugin backend). Ausente = LOCAL. */
+  origin?: 'LOCAL' | 'REMOTE';
+  pluginId?: string | null;
+  pluginVersion?: string | null;
+  transport?: string | null;
+  /** Estado de confianza/disponibilidad. Ausente = `AVAILABLE`. */
+  status?: ReaderProviderStatus;
+  reason?: string | null;
 }
 
 export abstract class ReaderProvider {

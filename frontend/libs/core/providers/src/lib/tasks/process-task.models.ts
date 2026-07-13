@@ -12,7 +12,7 @@
  * para verticales (M-1b en spec 003, ADR-009) introduce un mecanismo de registro por
  * Injection Token; mientras tanto, los nuevos tipos se documentan aqui con su origen.</p>
  */
-export type ProcessTaskType =
+export type PlatformProcessTaskType =
   // --- Motor (spec 003) ---
   | 'FILE_READ'
   | 'DB_WRITE'
@@ -38,6 +38,15 @@ export type ProcessTaskType =
   // Inbound a escala (table-backed): parse desde staging + entrega final.
   | 'MT101_PARSE_FROM_TABLE'
   | 'MT101_INBOUND_DELIVER';
+
+/**
+ * Tipo de tarea usado por procesos.
+ *
+ * Los tipos de plataforma siguen tipados por union cerrada en {@link PlatformProcessTaskType}.
+ * Los plugins backend aportan tipos remotos en runtime via `/api/task-types`; por eso el
+ * contrato público queda abierto sin relajar los mapas exhaustivos del core.
+ */
+export type ProcessTaskType = PlatformProcessTaskType | (string & {});
 
 export interface SourceRef {
   id: number;

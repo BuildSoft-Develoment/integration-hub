@@ -1,4 +1,12 @@
-export type SourceProviderType = 'FILESYSTEM' | 'FTP' | 'SFTP' | 'REST' | 'S3' | 'GCS' | 'AZURE_BLOB';
+export type SourceProviderType =
+  | 'FILESYSTEM'
+  | 'FTP'
+  | 'SFTP'
+  | 'REST'
+  | 'S3'
+  | 'GCS'
+  | 'AZURE_BLOB'
+  | 'OCI_OBJECT_STORAGE';
 
 export interface SourceDraft {
   type: SourceProviderType;
@@ -30,10 +38,12 @@ export interface SourceDraft {
   fileName?: string;
   headersJson?: string;
   body?: string;
-  // Cloud object stores (S3/GCS/Azure Blob — ADR-006)
+  // Cloud object stores (S3/GCS/Azure Blob/OCI — ADR-006)
   region?: string;
   bucket?: string;
   prefix?: string;
+  // OCI Object Storage (S3-compatible)
+  namespace?: string;
   authMode?:
     | 'default'
     | 'access-key'

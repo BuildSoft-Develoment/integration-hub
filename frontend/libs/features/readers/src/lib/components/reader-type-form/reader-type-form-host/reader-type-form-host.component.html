@@ -21,9 +21,21 @@
         <ih-reader-json-form [draft]="draft()" [readonly]="readonly()" (patchDraft)="patchDraft.emit($event)" />
       }
       @default {
-        <!-- Sin fallback silencioso a JSON para tipos desconocidos. -->
-        <p class="reader-type-form-host__unsupported" role="alert">
-          {{ i18n.t('common.unsupportedType') }}: <code>{{ readerType() }}</code>
-        </p>
+        <!-- Reader aportado por un plugin backend: sin form propio, se renderiza su config-schema. -->
+        @if (schema(); as sc) {
+          <ih-schema-form
+            [schema]="sc"
+            [value]="schemaValue()"
+            [readonly]="readonly()"
+            (valueChange)="onSchemaValue($event)"
+          />
+        } @else if (schemaLoading()) {
+          <p class="reader-type-form-host__loading">{{ i18n.t('ui.loading') }}</p>
+        } @else {
+          <!-- Sin fallback silencioso a JSON para tipos desconocidos sin schema. -->
+          <p class="reader-type-form-host__unsupported" role="alert">
+            {{ i18n.t('common.unsupportedType') }}: <code>{{ readerType() }}</code>
+          </p>
+        }
       }
     }

@@ -34,6 +34,8 @@ export class ReaderCatalogPageComponent implements OnInit {
 
   ngOnInit(): void {
     void this.store.load();
+    // Descubre reader types aportados por plugins backend para poblar el selector.
+    void this.readerManager.loadRemoteReaderTypes();
   }
 
   updateReaderType(type: ReaderProviderType): void {
