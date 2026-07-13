@@ -33,6 +33,9 @@ public class PluginDescriptorVersion {
     @Column(name = "provided_reader_types_json", nullable = false, columnDefinition = "text")
     public String providedReaderTypesJson = "[]";
 
+    @Column(name = "config_schemas_json", columnDefinition = "text")
+    public String configSchemasJson;
+
     @Column(nullable = false, length = 20)
     public String transport;
 

@@ -1,7 +1,9 @@
 package com.integrationhub.platform.api.request.plugin;
 
 import com.integrationhub.platform.service.plugin.PluginDescriptorInstallCommand;
+import com.integrationhub.platform.spi.config.PluginConfigSchema;
 
+import java.util.Map;
 import java.util.Set;
 
 public record PluginInstallRequest(
@@ -20,7 +22,9 @@ public record PluginInstallRequest(
         String marketplaceUrl,
         String channel,
         String pinnedVersion,
-        boolean pinned) {
+        boolean pinned,
+        /** Config-schema por tipo aportado: habilita el formulario auto-generado en la UI. Opcional. */
+        Map<String, PluginConfigSchema> configSchemas) {
 
     public PluginDescriptorInstallCommand toCommand() {
         return new PluginDescriptorInstallCommand(
@@ -39,6 +43,7 @@ public record PluginInstallRequest(
                 marketplaceUrl,
                 channel,
                 pinnedVersion,
-                pinned);
+                pinned,
+                configSchemas);
     }
 }

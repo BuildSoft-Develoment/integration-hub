@@ -90,7 +90,8 @@ public record PluginMarketplaceCatalog(List<PluginMarketplaceEntry> plugins) {
                     trimToNull(marketplaceUrl) != null ? trimToNull(marketplaceUrl) : fallbackMarketplaceUrl,
                     resolvedChannel == null ? null : resolvedChannel.toLowerCase(Locale.ROOT),
                     resolvedPinnedVersion,
-                    pinned || resolvedPinnedVersion != null);
+                    pinned || resolvedPinnedVersion != null,
+                    java.util.Map.of());
         }
 
         private static String trimToNull(String value) {

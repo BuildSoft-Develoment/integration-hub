@@ -19,6 +19,7 @@ import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -188,6 +189,17 @@ public class PluginDiagnosticsResource {
     @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public BackendPluginDiagnosticsResponse deactivate(@PathParam("id") String id) {
         if (!adminService.deactivate(id)) {
+            throw new NotFoundException("Plugin " + id + " not found");
+        }
+        return currentDiagnostics();
+    }
+
+    /** Uninstall real de un plugin backend: borra descriptor + versiones (deactivate solo apaga). */
+    @DELETE
+    @Path("/{id}")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
+    public BackendPluginDiagnosticsResponse uninstall(@PathParam("id") String id) {
+        if (!adminService.uninstall(id)) {
             throw new NotFoundException("Plugin " + id + " not found");
         }
         return currentDiagnostics();

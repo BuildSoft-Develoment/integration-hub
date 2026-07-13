@@ -1,5 +1,8 @@
 package com.integrationhub.platform.service.plugin;
 
+import com.integrationhub.platform.spi.config.PluginConfigSchema;
+
+import java.util.Map;
 import java.util.Set;
 
 public record PluginDescriptorInstallCommand(
@@ -18,5 +21,7 @@ public record PluginDescriptorInstallCommand(
         String marketplaceUrl,
         String channel,
         String pinnedVersion,
-        boolean pinned) {
+        boolean pinned,
+        /** Config-schema por tipo aportado (task/source/reader) que el instalador declara. Opcional. */
+        Map<String, PluginConfigSchema> configSchemas) {
 }

@@ -105,7 +105,8 @@ class RemotePluginSidecarHttpE2EIT {
                 null,
                 "stable",
                 null,
-                false));
+                false,
+                java.util.Map.of()));
         recordHealthyCanaryWindow();
         pluginAdminService.activateVersion(PLUGIN_ID, PLUGIN_VERSION);
     }

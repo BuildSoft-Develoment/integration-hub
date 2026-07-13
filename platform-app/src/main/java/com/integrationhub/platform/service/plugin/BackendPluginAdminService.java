@@ -91,6 +91,7 @@ public class BackendPluginAdminService {
         descriptor.providedTypesJson = candidate.providedTypesJson;
         descriptor.providedSourceTypesJson = candidate.providedSourceTypesJson;
         descriptor.providedReaderTypesJson = candidate.providedReaderTypesJson;
+        descriptor.configSchemasJson = candidate.configSchemasJson;
         descriptor.transport = candidate.transport;
         descriptor.endpoint = candidate.endpoint;
         descriptor.trusted = candidate.trusted;
@@ -175,6 +176,28 @@ public class BackendPluginAdminService {
         return setActive(pluginId, false);
     }
 
+    /**
+     * Desinstala un plugin backend: borra el descriptor y TODAS sus versiones registradas
+     * (a diferencia de {@link #deactivate}, que solo apaga el activo dejando las filas). Recarga
+     * el catálogo en memoria para que el registro deje de exponer sus tipos. Idempotente:
+     * devuelve {@code false} si el plugin no existía.
+     */
+    @Transactional
+    public boolean uninstall(String pluginId) {
+        if (pluginId == null || pluginId.isBlank()) {
+            return false;
+        }
+        var id = pluginId.trim();
+        var removed = repository.deleteById(id);
+        if (versionRepository != null) {
+            versionRepository.deleteVersions(id);
+        }
+        if (removed) {
+            catalogService.reloadInstalledPlugins();
+        }
+        return removed;
+    }
+
     private boolean setActive(String pluginId, boolean active) {
         if (pluginId == null || pluginId.isBlank()) {
             return false;
@@ -213,6 +236,7 @@ public class BackendPluginAdminService {
         descriptor.providedTypesJson = providedTypesJson(command.providedTypes(), "task");
         descriptor.providedSourceTypesJson = providedTypesJson(command.providedSourceTypes(), "source");
         descriptor.providedReaderTypesJson = providedTypesJson(command.providedReaderTypes(), "reader");
+        descriptor.configSchemasJson = configSchemasJson(command.configSchemas());
         descriptor.transport = normalizeTransport(command.transport());
         descriptor.endpoint = trimToNull(command.endpoint());
         descriptor.trusted = command.trusted();
@@ -234,6 +258,7 @@ public class BackendPluginAdminService {
         descriptor.providedTypesJson = version.providedTypesJson;
         descriptor.providedSourceTypesJson = version.providedSourceTypesJson;
         descriptor.providedReaderTypesJson = version.providedReaderTypesJson;
+        descriptor.configSchemasJson = version.configSchemasJson;
         descriptor.transport = version.transport;
         descriptor.endpoint = version.endpoint;
         descriptor.trusted = version.trusted;
@@ -266,6 +291,7 @@ public class BackendPluginAdminService {
         version.providedTypesJson = descriptor.providedTypesJson;
         version.providedSourceTypesJson = descriptor.providedSourceTypesJson;
         version.providedReaderTypesJson = descriptor.providedReaderTypesJson;
+        version.configSchemasJson = descriptor.configSchemasJson;
         version.transport = descriptor.transport;
         version.endpoint = descriptor.endpoint;
         version.trusted = descriptor.trusted;
@@ -294,6 +320,30 @@ public class BackendPluginAdminService {
             return objectMapper.writeValueAsString(normalized);
         } catch (JsonProcessingException error) {
             throw new IllegalArgumentException("Plugin " + capabilityName + " types cannot be serialized", error);
+        }
+    }
+
+    /**
+     * Serializa el config-schema por tipo a JSON `{ "<type>": { "fields": [...] } }` para
+     * persistir en {@code configSchemasJson}. Vacio/nulo → {@code null} (sin schema declarado).
+     */
+    private String configSchemasJson(java.util.Map<String, com.integrationhub.platform.spi.config.PluginConfigSchema> configSchemas) {
+        if (configSchemas == null || configSchemas.isEmpty()) {
+            return null;
+        }
+        var normalized = new java.util.LinkedHashMap<String, com.integrationhub.platform.spi.config.PluginConfigSchema>();
+        configSchemas.forEach((type, schema) -> {
+            if (type != null && !type.isBlank() && schema != null && !schema.isEmpty()) {
+                normalized.put(type.trim().toUpperCase(java.util.Locale.ROOT), schema);
+            }
+        });
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(normalized);
+        } catch (JsonProcessingException error) {
+            throw new IllegalArgumentException("Plugin config schemas cannot be serialized", error);
         }
     }
 

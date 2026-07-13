@@ -10,6 +10,7 @@ import com.integrationhub.platform.spi.reader.ReadBatchConsumer;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.reader.ReadSkip;
+import com.integrationhub.platform.spi.config.PluginConfigSchema;
 import com.integrationhub.platform.spi.reader.ReaderProvider;
 import com.integrationhub.platform.spi.source.SourcePayload;
 import com.integrationhub.platform.spi.task.TaskContext;
@@ -58,6 +59,12 @@ public class RemoteReaderProvider implements ReaderProvider {
     @Override
     public String type() {
         return type;
+    }
+
+    /** Config-schema declarado por el plugin remoto para este reader type (o vacío). */
+    @Override
+    public PluginConfigSchema configSchema() {
+        return descriptor.configSchemaFor(type);
     }
 
     @Override

@@ -10,6 +10,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -67,6 +70,23 @@ public class ReaderProviderRegistry {
             return new RemoteReaderProvider(type, remote.get(), invoker, remotePlugins, staging);
         }
         throw new IllegalArgumentException("Unsupported reader provider: " + type);
+    }
+
+    /** Tipos de reader locales (type -> nombre del provider), para el catalogo de tipos. */
+    public Map<String, String> localReaderTypeProviders() {
+        var types = new LinkedHashMap<String, String>();
+        providerStream().forEach(provider -> {
+            var type = provider.type();
+            if (type != null && !type.isBlank()) {
+                types.putIfAbsent(type, provider.getClass().getSimpleName());
+            }
+        });
+        return Collections.unmodifiableMap(types);
+    }
+
+    /** Schema de configuracion declarado por el provider (local o remoto) de {@code type}, o vacio. */
+    public com.integrationhub.platform.spi.config.PluginConfigSchema configSchema(String type) {
+        return resolve(type).configSchema();
     }
 
     private Stream<ReaderProvider> providerStream() {
