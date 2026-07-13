@@ -83,30 +83,45 @@ export class ThemeService {
         root.style.removeProperty('--ih-accent');
         root.style.removeProperty('--ih-accent-strong');
       }
-      this.applyFavicon(this.logoDataUri());
+      this.applyFavicon(this.logoDataUri(), this.brandMark(), this.primary());
     });
   }
 
-  /** Refleja el logo de la empresa en el favicon del navegador (o restaura el por defecto). */
-  private applyFavicon(logoDataUri: string | null): void {
+  /**
+   * Personaliza el favicon: usa el logo de la empresa si hay; si no, genera un icono SVG con la
+   * marca corta sobre el color primario (asi el ico siempre refleja el branding, nunca el generico).
+   */
+  private applyFavicon(logoDataUri: string | null, brandMark: string, primary: string): void {
     const head = this.document.head;
     if (!head) {
       return;
     }
     let link = head.querySelector<HTMLLinkElement>('link[rel~="icon"]');
-    if (logoDataUri) {
-      if (!link) {
-        link = this.document.createElement('link');
-        link.rel = 'icon';
-        head.appendChild(link);
-      }
-      if (link.dataset['ihDefault'] === undefined) {
-        link.dataset['ihDefault'] = link.getAttribute('href') ?? 'favicon.ico';
-      }
-      link.setAttribute('href', logoDataUri);
-    } else if (link && link.dataset['ihDefault'] !== undefined) {
-      link.setAttribute('href', link.dataset['ihDefault']);
+    if (!link) {
+      link = this.document.createElement('link');
+      link.rel = 'icon';
+      head.appendChild(link);
     }
+    if (logoDataUri) {
+      link.removeAttribute('type');
+      link.setAttribute('href', logoDataUri);
+    } else {
+      link.setAttribute('type', 'image/svg+xml');
+      link.setAttribute('href', this.brandMarkFavicon(brandMark, primary));
+    }
+  }
+
+  /** Favicon SVG (data-URI) con la marca corta centrada sobre el color primario. */
+  private brandMarkFavicon(brandMark: string, primary: string): string {
+    const mark = (brandMark || 'IH').slice(0, 3);
+    const fontSize = mark.length >= 3 ? 26 : 34;
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">` +
+      `<rect width="64" height="64" rx="14" fill="${primary}"/>` +
+      `<text x="32" y="33" font-family="system-ui,Segoe UI,Roboto,sans-serif" font-size="${fontSize}"` +
+      ` font-weight="700" fill="#ffffff" text-anchor="middle" dominant-baseline="central">${escapeXml(mark)}</text>` +
+      `</svg>`;
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
   }
 
   toggleMode(): void {
@@ -188,4 +203,14 @@ export class ThemeService {
       logoDataUri: this.logoDataUri(),
     };
   }
+}
+
+/** Escapa los caracteres reservados de XML para incrustar texto seguro en el SVG del favicon. */
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
