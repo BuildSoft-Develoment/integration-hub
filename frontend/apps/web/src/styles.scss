@@ -1103,34 +1103,54 @@ select {
   background: color-mix(in srgb, var(--ih-surface-alt) 44%, transparent);
 }
 
+/* Compactado del paginador con el sistema de DENSIDAD de Angular Material (tokens propios),
+   en vez de pisar internals de MDC con !important. Reduce de forma estable las alturas del
+   paginador, del form-field ("Filas por pagina") y del select. Scopeado a .ih-catalog-paginator. */
+.ih-catalog-paginator {
+  @include mat.paginator-density(-4);
+  @include mat.form-field-density(-5);
+  @include mat.select-density(-5);
+}
+
 .ih-catalog-paginator .mat-mdc-paginator-container {
-  min-height: 42px;
-  padding: 0.12rem 0.6rem;
-  gap: 0.35rem;
+  min-height: 36px !important;
+  padding: 2px 0.5rem !important;
+  gap: 0.3rem;
 }
 
 .ih-catalog-paginator .mat-mdc-paginator-page-size,
 .ih-catalog-paginator .mat-mdc-paginator-range-actions {
-  gap: 0.3rem;
+  gap: 0.25rem;
 }
 
 .ih-catalog-paginator .mat-mdc-form-field {
-  width: 4.65rem;
+  width: 4.2rem;
 }
 
-.ih-catalog-paginator .mat-mdc-icon-button {
-  width: 1.8rem;
-  height: 1.8rem;
-  padding: 0;
+/* La densidad setea los tokens (container 40px, label/touch-target off), pero el propio
+   Material define el padding del infix con `!important`
+   (`.mat-mdc-form-field-infix{padding-top:.95rem!important;padding-bottom:.55rem!important}`),
+   por lo que para compactar la altura hay que usar `!important` (unica forma de pisar el de
+   Material). La densidad se encarga del resto; este es el unico override forzado. */
+.ih-catalog-paginator .mat-mdc-form-field .mat-mdc-text-field-wrapper {
+  min-height: 30px !important;
+}
+
+.ih-catalog-paginator .mat-mdc-form-field .mat-mdc-form-field-infix {
+  min-height: 30px !important;
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+}
+
+/* Oculta el subscript vacio del form-field (hint/error) que la densidad no elimina. */
+.ih-catalog-paginator .mat-mdc-form-field-subscript-wrapper {
+  display: none;
 }
 
 .ih-catalog-paginator .mat-mdc-paginator-page-size-label,
-.ih-catalog-paginator .mat-mdc-paginator-range-label {
-  font-size: 0.78rem;
-}
-
+.ih-catalog-paginator .mat-mdc-paginator-range-label,
 .ih-catalog-paginator .mat-mdc-select-min-line {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
 }
 
 :root,

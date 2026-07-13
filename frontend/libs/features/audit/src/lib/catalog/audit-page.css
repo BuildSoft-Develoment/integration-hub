@@ -11,6 +11,23 @@
   height: 100%;
 }
 
+/*
+ * El workspace de auditoria tiene una fila extra (el sub-nav ih-audit-workspace-nav) sobre el
+ * patron estandar toolbar+lista. La rejilla global .ih-catalog-workspace define solo 2 filas
+ * (auto minmax(0,1fr)), asi que la lista caia en una fila implicita `auto` sin altura acotada
+ * y se desbordaba/superponia. Se usa flex-column: nav/toolbar/progress a su alto natural y la
+ * lista ocupa el resto con scroll interno (robusto ante la barra de progreso condicional).
+ */
+.audit-workspace.ih-catalog-workspace {
+  display: flex;
+  flex-direction: column;
+}
+
+.audit-list-shell.ih-catalog-list-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .audit-drawer {
   width: min(40rem, 92vw);
   background: color-mix(in srgb, var(--ih-surface-alt) 76%, transparent);
