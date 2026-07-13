@@ -28,11 +28,19 @@ HTTP 200. La imagen JVM (`Dockerfile.jvm`) sigue disponible como alternativa.
 | 4 | RAM | `OutOfMemoryError: GC overhead limit exceeded` en fase de analisis | `.wslconfig` con 12 GB (ver arriba). |
 | 5 | commons-logging duplicado | `Unresolved method ... LogFactoryImpl.handleThrowable` (GraalVM mezcla el commons-logging real 1.3.2 con el shim jboss) | Exclusiones POM del commons-logging real en **cada fuente** (`commons-jexl3`, `artemis-jakarta-client`→beanutils) + shim `commons-logging-jboss-logging` **explicito**. NO usar `quarkus.class-loading.removed-artifacts`: banea el recurso por nombre y bloquea la clase tambien del shim (rompe la augmentacion de quarkus-amazon-*). |
 
+## Validado en nativo (E2E 2026-07-12)
+
+- ✅ **SFTP (jsch)**: E2E real contra `atmoz/sftp` — handshake criptografico, list, get y
+  pipeline FILE_READ->DB_WRITE `COMPLETED` (evidencia:
+  `qa/fase-6-qa/evidencias/sftp-native-e2e-20260712.md`). El E2E ademas cazo y corrigio un
+  bug de runtime nativo: DTOs internos sin registro de reflexion Jackson (ver
+  `NativeReflectionRegistrations` — 15 tipos: payload async, AuditEnvelope [fallaba EN
+  SILENCIO por fail-business-on-error=false], backbone async, Mt101Message, marketplace).
+
 ## Pendiente de validar en nativo
 
-- **SFTP (jsch) en runtime**: el transporte de pagos MT101 (`SftpPaymentTransport`) usa jsch.
-  Compila y la feature carga, pero no se ha ejercitado una transferencia SFTP real en nativo.
-  Antes de confiar el money-path al binario nativo, homologar contra un endpoint SFTP de prueba.
+- Smoke de `MT101_PAY` completo (put + rename al SFTP del banco); el riesgo criptografico
+  de jsch ya quedo descartado por el E2E anterior.
 - Ejercitar POI (lectura XLSX), plugins gRPC remotos y los sources Azure/GCS/S3 en nativo.
 
 ## Cambios que soportan el nativo (rama experiment/quarkus-lts-native)
