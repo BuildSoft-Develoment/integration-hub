@@ -7,6 +7,8 @@ import com.integrationhub.platform.repository.SystemThemeSettingRepository;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -61,7 +63,8 @@ class SystemThemeSettingServiceTest {
         when(repository.findSingleton()).thenReturn(existing);
 
         var request = new SystemThemeSettingRequest(
-                "dark", "  ", null, "en", "", "#AAA", null, "  ");
+                "dark", "  ", null, "en", "", "#AAA", null, "  ",
+                "ACME Corp", "", null);
         var response = new SystemThemeSettingService(repository, apiMapper).update(request);
 
         // Valores provistos se respetan; blancos/nulos caen a default.
@@ -72,5 +75,20 @@ class SystemThemeSettingServiceTest {
         assertEquals("expanded", response.sidebarMode()); // "" -> default
         assertEquals("#AAA", response.primary());
         assertEquals("#E5484D", response.error());        // null -> default
+        assertEquals("ACME Corp", response.brandName());  // marca provista
+        assertEquals("IH", response.brandMark());         // "" -> default
+        assertNull(response.logoDataUri());               // null -> sin logo
+    }
+
+    @Test
+    void updateRejectsInvalidLogoDataUri() {
+        var existing = new SystemThemeSetting();
+        existing.id = 1L;
+        when(repository.findSingleton()).thenReturn(existing);
+        var request = new SystemThemeSettingRequest(
+                "light", "horizon", "comfortable", "es", "expanded", "#0F766E", "#E5484D", "#8B8D98",
+                "ACME", "AC", "not-a-data-uri");
+        var service = new SystemThemeSettingService(repository, apiMapper);
+        assertThrows(IllegalArgumentException.class, () -> service.update(request));
     }
 }

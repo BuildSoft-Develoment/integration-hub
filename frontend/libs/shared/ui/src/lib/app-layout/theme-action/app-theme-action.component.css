@@ -60,3 +60,91 @@
   font-size: 0.85rem;
   white-space: nowrap;
 }
+
+/* --- White-label: panel de marca --- */
+.theme-brand-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 15rem;
+}
+
+.theme-brand-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--ih-text-soft);
+}
+
+.theme-brand-field input {
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--ih-border);
+  border-radius: 8px;
+  background: var(--ih-surface);
+  color: var(--ih-text);
+  font: inherit;
+}
+
+.theme-brand-logo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.theme-brand-field__label {
+  font-size: 0.85rem;
+  color: var(--ih-text-soft);
+}
+
+.theme-brand-logo__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.theme-brand-logo__preview,
+.theme-brand-logo__mark {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 10px;
+  object-fit: contain;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--ih-accent) 14%, transparent);
+  color: var(--ih-accent-strong);
+  font-weight: 800;
+}
+
+.theme-brand-logo__upload {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--ih-border);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--ih-text);
+}
+
+.theme-brand-logo__upload input {
+  display: none;
+}
+
+.theme-brand-logo__clear {
+  border: none;
+  background: transparent;
+  color: var(--ih-error);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.theme-brand-logo__hint {
+  color: var(--ih-text-soft);
+  font-size: 0.75rem;
+}
+
+.theme-brand-logo__error {
+  color: var(--ih-error);
+  font-size: 0.78rem;
+}

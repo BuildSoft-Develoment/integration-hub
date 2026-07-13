@@ -8,9 +8,13 @@
   >
     <div class="shell-sidenav__inner">
       <div class="brand-block ih-shell-brand">
-        <div class="brand-mark">IH</div>
+        @if (theme.logoDataUri(); as logo) {
+          <img class="brand-logo" [src]="logo" [alt]="theme.brandName()" />
+        } @else {
+          <div class="brand-mark">{{ theme.brandMark() }}</div>
+        }
         <div class="brand-copy">
-          <p class="brand-title">{{ i18n.t('shell.title') }}</p>
+          <p class="brand-title">{{ theme.brandName() }}</p>
         </div>
         <div class="brand-actions ih-shell-actions">
           <ih-app-session-action></ih-app-session-action>
@@ -41,7 +45,7 @@
             <span class="hamburger-icon" aria-hidden="true"></span>
           </button>
 
-          <strong class="mobile-toolbar__title">{{ i18n.t('shell.title') }}</strong>
+          <strong class="mobile-toolbar__title">{{ theme.brandName() }}</strong>
 
           <span class="mobile-toolbar__spacer"></span>
 

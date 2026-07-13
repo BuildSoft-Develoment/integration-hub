@@ -55,6 +55,12 @@ export class AppPreferencesFacade {
     this.persistConfiguration();
   }
 
+  /** Actualiza el branding (nombre/marca/logo) y lo persiste. `logoDataUri: ''` limpia el logo. */
+  updateBranding(patch: Partial<Pick<ThemeConfiguration, 'brandName' | 'brandMark' | 'logoDataUri'>>): void {
+    this.theme.setBranding(patch);
+    this.persistConfiguration();
+  }
+
   private persistConfiguration(): void {
     this.saving.set(true);
     const configuration: ThemeConfiguration = {

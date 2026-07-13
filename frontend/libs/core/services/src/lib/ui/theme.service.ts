@@ -16,7 +16,14 @@ export interface ThemeConfiguration {
   primary: string;
   error: string;
   neutral: string;
+  /** White-label del shell: nombre de marca, marca corta y logo opcional (data-URI base64). */
+  brandName: string;
+  brandMark: string;
+  logoDataUri: string | null;
 }
+
+export const DEFAULT_BRAND_NAME = 'Integration Hub';
+export const DEFAULT_BRAND_MARK = 'IH';
 
 @Injectable({ providedIn: 'root' })
 export class ThemeService {
@@ -45,6 +52,9 @@ export class ThemeService {
   readonly primary = signal('#0F766E');
   readonly error = signal('#E5484D');
   readonly neutral = signal('#8B8D98');
+  readonly brandName = signal(DEFAULT_BRAND_NAME);
+  readonly brandMark = signal(DEFAULT_BRAND_MARK);
+  readonly logoDataUri = signal<string | null>(null);
 
   constructor() {
     const mediaQuery = typeof window === 'undefined' ? null : window.matchMedia('(prefers-color-scheme: dark)');
@@ -73,7 +83,30 @@ export class ThemeService {
         root.style.removeProperty('--ih-accent');
         root.style.removeProperty('--ih-accent-strong');
       }
+      this.applyFavicon(this.logoDataUri());
     });
+  }
+
+  /** Refleja el logo de la empresa en el favicon del navegador (o restaura el por defecto). */
+  private applyFavicon(logoDataUri: string | null): void {
+    const head = this.document.head;
+    if (!head) {
+      return;
+    }
+    let link = head.querySelector<HTMLLinkElement>('link[rel~="icon"]');
+    if (logoDataUri) {
+      if (!link) {
+        link = this.document.createElement('link');
+        link.rel = 'icon';
+        head.appendChild(link);
+      }
+      if (link.dataset['ihDefault'] === undefined) {
+        link.dataset['ihDefault'] = link.getAttribute('href') ?? 'favicon.ico';
+      }
+      link.setAttribute('href', logoDataUri);
+    } else if (link && link.dataset['ihDefault'] !== undefined) {
+      link.setAttribute('href', link.dataset['ihDefault']);
+    }
   }
 
   toggleMode(): void {
@@ -115,6 +148,18 @@ export class ThemeService {
     }
   }
 
+  setBranding(patch: Partial<Pick<ThemeConfiguration, 'brandName' | 'brandMark' | 'logoDataUri'>>): void {
+    if (patch.brandName !== undefined) {
+      this.brandName.set(patch.brandName.trim() || DEFAULT_BRAND_NAME);
+    }
+    if (patch.brandMark !== undefined) {
+      this.brandMark.set(patch.brandMark.trim() || DEFAULT_BRAND_MARK);
+    }
+    if (patch.logoDataUri !== undefined) {
+      this.logoDataUri.set(patch.logoDataUri || null);
+    }
+  }
+
   applyConfiguration(configuration: ThemeConfiguration): void {
     this.mode.set(configuration.scheme);
     this.density.set(configuration.density);
@@ -123,6 +168,9 @@ export class ThemeService {
     this.primary.set(configuration.primary);
     this.error.set(configuration.error);
     this.neutral.set(configuration.neutral);
+    this.brandName.set(configuration.brandName?.trim() || DEFAULT_BRAND_NAME);
+    this.brandMark.set(configuration.brandMark?.trim() || DEFAULT_BRAND_MARK);
+    this.logoDataUri.set(configuration.logoDataUri ?? null);
   }
 
   configuration(): ThemeConfiguration {
@@ -135,6 +183,9 @@ export class ThemeService {
       primary: this.primary(),
       error: this.error(),
       neutral: this.neutral(),
+      brandName: this.brandName(),
+      brandMark: this.brandMark(),
+      logoDataUri: this.logoDataUri(),
     };
   }
 }

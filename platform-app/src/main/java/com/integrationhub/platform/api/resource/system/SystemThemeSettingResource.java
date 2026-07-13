@@ -6,6 +6,7 @@ import com.integrationhub.platform.api.request.system.SystemThemeSettingRequest;
 import com.integrationhub.platform.api.response.system.SystemThemeSettingResponse;
 import com.integrationhub.platform.service.system.SystemThemeSettingService;
 import jakarta.annotation.security.RolesAllowed;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PUT;
@@ -37,6 +38,11 @@ public class SystemThemeSettingResource {
     @PUT
     @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public SystemThemeSettingResponse update(SystemThemeSettingRequest request) {
-        return systemThemeSettingService.update(request);
+        try {
+            return systemThemeSettingService.update(request);
+        } catch (IllegalArgumentException invalid) {
+            // Config invalida (p.ej. logo con data-URI/tamano no permitido) -> 400, no 500.
+            throw new BadRequestException(invalid.getMessage(), invalid);
+        }
     }
 }

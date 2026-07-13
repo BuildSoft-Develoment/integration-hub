@@ -35,4 +35,14 @@ public class SystemThemeSetting {
 
     @Column(name = "neutral_color", nullable = false, length = 20)
     public String neutralColor;
+
+    @Column(name = "brand_name", nullable = false, length = 120)
+    public String brandName;
+
+    @Column(name = "brand_mark", nullable = false, length = 8)
+    public String brandMark;
+
+    /** Logo de la empresa embebido como data-URI base64 (opcional). {@code null} = usar brandMark de texto. */
+    @Column(name = "logo_data_uri", columnDefinition = "text")
+    public String logoDataUri;
 }

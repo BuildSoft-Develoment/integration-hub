@@ -8,6 +8,9 @@ public record SystemThemeSettingResponse(
         String sidebarMode,
         String primary,
         String error,
-        String neutral
+        String neutral,
+        String brandName,
+        String brandMark,
+        String logoDataUri
 ) {
 }
