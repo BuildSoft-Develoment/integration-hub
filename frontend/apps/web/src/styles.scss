@@ -1641,6 +1641,7 @@ select {
   box-shadow: 0 16px 36px rgba(2, 6, 23, 0.38) !important;
 }
 
+.payment-rules-page .mat-mdc-form-field,
 .source-page .mat-mdc-form-field,
 .audit-page .mat-mdc-form-field,
 .schedule-page .mat-mdc-form-field,
@@ -1656,6 +1657,7 @@ select {
   display: none;
 }
 
+.payment-rules-page .mat-mdc-text-field-wrapper,
 .source-page .mat-mdc-text-field-wrapper,
 .audit-page .mat-mdc-text-field-wrapper,
 .schedule-page .mat-mdc-text-field-wrapper,
@@ -1673,6 +1675,7 @@ select {
     inset 0 0 0 1px color-mix(in srgb, var(--ih-border) 42%, transparent);
 }
 
+.payment-rules-page .mat-mdc-form-field-infix,
 .source-page .mat-mdc-form-field-infix,
 .audit-page .mat-mdc-form-field-infix,
 .schedule-page .mat-mdc-form-field-infix,
@@ -1686,7 +1689,9 @@ select {
   padding-bottom: 0.55rem !important;
 }
 
+.payment-rules-page .mat-mdc-floating-label,
 .source-page .mat-mdc-floating-label,
+.payment-rules-page .mdc-floating-label,
 .source-page .mdc-floating-label,
 .audit-page .mat-mdc-floating-label,
 .audit-page .mdc-floating-label,
@@ -1707,8 +1712,11 @@ select {
   font-size: 0.82rem !important;
 }
 
+.payment-rules-page .mat-mdc-select-value,
 .source-page .mat-mdc-select-value,
+.payment-rules-page .mat-mdc-input-element,
 .source-page .mat-mdc-input-element,
+.payment-rules-page textarea.mat-mdc-input-element,
 .source-page textarea.mat-mdc-input-element,
 .audit-page .mat-mdc-select-value,
 .audit-page .mat-mdc-input-element,
@@ -1735,7 +1743,9 @@ select {
   font-size: 0.96rem;
 }
 
+.payment-rules-page .mat-mdc-input-element::placeholder,
 .source-page .mat-mdc-input-element::placeholder,
+.payment-rules-page textarea.mat-mdc-input-element::placeholder,
 .source-page textarea.mat-mdc-input-element::placeholder,
 .audit-page .mat-mdc-input-element::placeholder,
 .audit-page textarea.mat-mdc-input-element::placeholder,
@@ -1752,6 +1762,7 @@ select {
   color: color-mix(in srgb, var(--ih-text-soft) 72%, transparent);
 }
 
+.payment-rules-page .mat-mdc-select-arrow,
 .source-page .mat-mdc-select-arrow,
 .audit-page .mat-mdc-select-arrow,
 .schedule-page .mat-mdc-select-arrow,
@@ -1763,6 +1774,7 @@ select {
   color: var(--ih-text-soft);
 }
 
+.payment-rules-page .mdc-line-ripple::before,
 .source-page .mdc-line-ripple::before,
 .audit-page .mdc-line-ripple::before,
 .schedule-page .mdc-line-ripple::before,
@@ -1775,6 +1787,7 @@ select {
   border-bottom-color: color-mix(in srgb, var(--ih-border-strong) 90%, transparent) !important;
 }
 
+.payment-rules-page .mdc-line-ripple::after,
 .source-page .mdc-line-ripple::after,
 .audit-page .mdc-line-ripple::after,
 .schedule-page .mdc-line-ripple::after,
@@ -1787,6 +1800,7 @@ select {
   border-bottom-color: color-mix(in srgb, var(--ih-accent) 22%, var(--ih-border)) !important;
 }
 
+.payment-rules-page .mat-mdc-form-field:hover .mat-mdc-text-field-wrapper,
 .source-page .mat-mdc-form-field:hover .mat-mdc-text-field-wrapper,
 .audit-page .mat-mdc-form-field:hover .mat-mdc-text-field-wrapper,
 .schedule-page .mat-mdc-form-field:hover .mat-mdc-text-field-wrapper,
@@ -1800,6 +1814,7 @@ select {
     inset 0 0 0 1px color-mix(in srgb, var(--ih-accent) 16%, var(--ih-border));
 }
 
+.payment-rules-page .mat-mdc-form-field.mat-focused .mat-mdc-text-field-wrapper,
 .source-page .mat-mdc-form-field.mat-focused .mat-mdc-text-field-wrapper,
 .audit-page .mat-mdc-form-field.mat-focused .mat-mdc-text-field-wrapper,
 .schedule-page .mat-mdc-form-field.mat-focused .mat-mdc-text-field-wrapper,
@@ -1813,6 +1828,7 @@ select {
     inset 0 0 0 1px color-mix(in srgb, var(--ih-accent) 26%, var(--ih-border));
 }
 
+.payment-rules-page .mat-mdc-form-field.mat-focused .mdc-line-ripple::after,
 .source-page .mat-mdc-form-field.mat-focused .mdc-line-ripple::after,
 .audit-page .mat-mdc-form-field.mat-focused .mdc-line-ripple::after,
 .schedule-page .mat-mdc-form-field.mat-focused .mdc-line-ripple::after,
@@ -1824,6 +1840,7 @@ select {
   border-bottom-color: color-mix(in srgb, var(--ih-accent) 42%, var(--ih-border)) !important;
 }
 
+.payment-rules-page .mat-mdc-form-field .mat-mdc-icon-button,
 .source-page .mat-mdc-form-field .mat-mdc-icon-button,
 .audit-page .mat-mdc-form-field .mat-mdc-icon-button,
 .schedule-page .mat-mdc-form-field .mat-mdc-icon-button,
@@ -1833,6 +1850,7 @@ select {
   padding-top: 0.15rem;
 }
 
+.payment-rules-page .mat-mdc-tab-group,
 .source-page .mat-mdc-tab-group,
 .audit-page .mat-mdc-tab-group,
 .schedule-page .mat-mdc-tab-group,
@@ -1852,6 +1870,7 @@ select {
   --mat-tab-header-inactive-ripple-color: color-mix(in srgb, var(--ih-border-strong) 42%, transparent);
 }
 
+.payment-rules-page .mat-mdc-tab-header,
 .source-page .mat-mdc-tab-header,
 .audit-page .mat-mdc-tab-header,
 .schedule-page .mat-mdc-tab-header,
@@ -1864,6 +1883,7 @@ select {
   background: color-mix(in srgb, var(--ih-surface-alt) 96%, transparent);
 }
 
+.payment-rules-page .mat-mdc-tab .mdc-tab__text-label,
 .source-page .mat-mdc-tab .mdc-tab__text-label,
 .audit-page .mat-mdc-tab .mdc-tab__text-label,
 .schedule-page .mat-mdc-tab .mdc-tab__text-label,
@@ -1878,6 +1898,7 @@ select {
   font-weight: 500;
 }
 
+.payment-rules-page .mat-mdc-tab.mdc-tab--active .mdc-tab__text-label,
 .source-page .mat-mdc-tab.mdc-tab--active .mdc-tab__text-label,
 .audit-page .mat-mdc-tab.mdc-tab--active .mdc-tab__text-label,
 .schedule-page .mat-mdc-tab.mdc-tab--active .mdc-tab__text-label,
@@ -1889,6 +1910,7 @@ select {
   color: var(--ih-text) !important;
 }
 
+:root[data-theme-mode='dark'] .payment-rules-page .mat-mdc-tab-header,
 :root[data-theme-mode='dark'] .source-page .mat-mdc-tab-header,
 :root[data-theme-mode='dark'] .audit-page .mat-mdc-tab-header,
 :root[data-theme-mode='dark'] .schedule-page .mat-mdc-tab-header,
@@ -1900,6 +1922,7 @@ select {
   background: color-mix(in srgb, var(--ih-surface-alt) 92%, #020617 8%);
 }
 
+:root[data-theme-mode='dark'] .payment-rules-page .mat-mdc-tab .mdc-tab__text-label,
 :root[data-theme-mode='dark'] .source-page .mat-mdc-tab .mdc-tab__text-label,
 :root[data-theme-mode='dark'] .audit-page .mat-mdc-tab .mdc-tab__text-label,
 :root[data-theme-mode='dark'] .schedule-page .mat-mdc-tab .mdc-tab__text-label,
@@ -1911,6 +1934,7 @@ select {
   text-shadow: none;
 }
 
+.payment-rules-page .mat-mdc-slide-toggle,
 .source-page .mat-mdc-slide-toggle,
 .schedule-page .mat-mdc-slide-toggle,
 .audit-page .mat-mdc-slide-toggle,
@@ -1924,6 +1948,7 @@ select {
   --mdc-switch-selected-pressed-track-color: color-mix(in srgb, var(--ih-accent) 48%, white);
 }
 
+.payment-rules-page .mat-mdc-paginator,
 .source-page .mat-mdc-paginator,
 .audit-page .mat-mdc-paginator,
 .schedule-page .mat-mdc-paginator,
@@ -1935,6 +1960,7 @@ select {
   background: transparent;
 }
 
+.payment-rules-page .mat-mdc-paginator-container,
 .source-page .mat-mdc-paginator-container,
 .audit-page .mat-mdc-paginator-container,
 .schedule-page .mat-mdc-paginator-container,
@@ -1949,6 +1975,7 @@ select {
   gap: 0.75rem;
 }
 
+.payment-rules-page .mat-mdc-paginator-page-size,
 .source-page .mat-mdc-paginator-page-size,
 .audit-page .mat-mdc-paginator-page-size,
 .schedule-page .mat-mdc-paginator-page-size,
@@ -1960,6 +1987,7 @@ select {
   margin-right: 0;
 }
 
+.payment-rules-page .mat-mdc-paginator-page-size .mat-mdc-form-field,
 .source-page .mat-mdc-paginator-page-size .mat-mdc-form-field,
 .audit-page .mat-mdc-paginator-page-size .mat-mdc-form-field,
 .schedule-page .mat-mdc-paginator-page-size .mat-mdc-form-field,
@@ -1971,6 +1999,7 @@ select {
   width: 88px;
 }
 
+.payment-rules-page .mat-mdc-paginator-range-actions,
 .source-page .mat-mdc-paginator-range-actions,
 .audit-page .mat-mdc-paginator-range-actions,
 .schedule-page .mat-mdc-paginator-range-actions,
