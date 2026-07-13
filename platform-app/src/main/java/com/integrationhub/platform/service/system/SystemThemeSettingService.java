@@ -43,6 +43,14 @@ public class SystemThemeSettingService {
         return systemThemeSettingApiMapper.toResponse(getOrCreate());
     }
 
+    /** Branding publico (nombre/marca/logo/color) para pantallas pre-auth (login). */
+    @Transactional
+    public com.integrationhub.platform.api.response.branding.BrandingResponse branding() {
+        var setting = getOrCreate();
+        return new com.integrationhub.platform.api.response.branding.BrandingResponse(
+                setting.brandName, setting.brandMark, setting.logoDataUri, setting.primaryColor);
+    }
+
     @Transactional
     public SystemThemeSettingResponse update(SystemThemeSettingRequest request) {
         var setting = getOrCreate();
