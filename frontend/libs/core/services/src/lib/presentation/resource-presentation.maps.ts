@@ -1,7 +1,7 @@
 import { ResourcePresentation } from '@integration-hub/shared/models';
 import {
   ConnectionProviderType,
-  ProcessTaskType,
+  PlatformProcessTaskType,
   ReaderProviderType,
   SourceProviderType,
 } from '@integration-hub/core/providers';
@@ -34,6 +34,7 @@ export const SOURCE_PRESENTATION: Record<SourceProviderType, ResourcePresentatio
   S3: { icon: 'cloud', toneClass: 'ih-tone-cloud' },
   GCS: { icon: 'cloud', toneClass: 'ih-tone-cloud' },
   AZURE_BLOB: { icon: 'cloud', toneClass: 'ih-tone-cloud' },
+  OCI_OBJECT_STORAGE: { icon: 'cloud', toneClass: 'ih-tone-cloud' },
 };
 
 export const READER_PRESENTATION: Record<ReaderProviderType, ResourcePresentation> = {
@@ -46,7 +47,7 @@ export const READER_PRESENTATION: Record<ReaderProviderType, ResourcePresentatio
   SWIFT_MT: { icon: 'banknote', toneClass: 'ih-tone-payment' },
 };
 
-export const TASK_PRESENTATION: Record<ProcessTaskType, ResourcePresentation> = {
+export const TASK_PRESENTATION: Record<PlatformProcessTaskType, ResourcePresentation> = {
   FILE_READ: { icon: 'file-text', toneClass: 'ih-tone-document' },
   DB_WRITE: { icon: 'database', toneClass: 'ih-tone-database' },
   DB_EXECUTE_SP: { icon: 'database', toneClass: 'ih-tone-database' },

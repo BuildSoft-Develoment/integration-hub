@@ -36,6 +36,7 @@ public class PluginDescriptorCatalogMapper {
         descriptor.providedTypesJson = version.providedTypesJson;
         descriptor.providedSourceTypesJson = version.providedSourceTypesJson;
         descriptor.providedReaderTypesJson = version.providedReaderTypesJson;
+        descriptor.configSchemasJson = version.configSchemasJson;
         descriptor.transport = version.transport;
         descriptor.endpoint = version.endpoint;
         descriptor.trusted = version.trusted;

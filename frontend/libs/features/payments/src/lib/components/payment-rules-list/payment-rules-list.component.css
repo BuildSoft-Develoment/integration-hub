@@ -1,0 +1,66 @@
+:host .table-row {
+  grid-template-columns: var(--ih-catalog-columns);
+  align-items: center;
+  padding-left: 0.5rem;
+}
+
+.row-primary--button {
+  background: none;
+  border: none;
+  padding: 0.5rem 0.25rem;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.row-kind {
+  font-size: 0.85rem;
+  color: var(--ih-text-muted, #667085);
+}
+
+.row-severity,
+.row-status {
+  display: flex;
+  align-items: center;
+}
+
+.row-status {
+  gap: 0.45rem;
+  color: var(--ih-status-success);
+  font-size: 0.86rem;
+  font-weight: 600;
+}
+
+.row-status--inactive {
+  color: var(--ih-status-warning);
+}
+
+.status-dot {
+  width: 0.52rem;
+  height: 0.52rem;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.1rem;
+}
+
+.severity-ch--error {
+  --mdc-chip-elevated-container-color: var(--ih-status-error-bg);
+  --mdc-chip-label-text-color: var(--ih-status-error);
+}
+
+.severity-ch--warn {
+  --mdc-chip-elevated-container-color: var(--ih-status-warning-bg);
+  --mdc-chip-label-text-color: var(--ih-status-warning);
+}
+
+.severity-ch--info {
+  --mdc-chip-elevated-container-color: var(--ih-status-info-bg);
+  --mdc-chip-label-text-color: var(--ih-status-info);
+}

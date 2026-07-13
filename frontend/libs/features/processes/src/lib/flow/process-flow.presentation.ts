@@ -1,14 +1,27 @@
-import { ProcessTaskType } from '../models/process.models';
+import { PlatformProcessTaskType, ProcessTaskType } from '../models/process.models';
 
-export type TaskCategory = 'motor' | 'swift-mt101';
+export type TaskCategory = 'motor' | 'swift-mt101' | 'plugin';
+
+const PLATFORM_TASK_TYPES = new Set<string>([
+  'FILE_READ',
+  'DB_WRITE',
+  'DB_EXECUTE_SP',
+  'DB_EXECUTE_FN',
+  'REST_CALL',
+  'NOTIFICATION',
+]);
 
 export function taskCategory(type: ProcessTaskType): TaskCategory {
-  return type.startsWith('MT101_') ? 'swift-mt101' : 'motor';
+  if (type.startsWith('MT101_')) {
+    return 'swift-mt101';
+  }
+  return PLATFORM_TASK_TYPES.has(type) ? 'motor' : 'plugin';
 }
 
 export const CATEGORY_LABELS: Record<TaskCategory, string> = {
   motor: 'Motor',
   'swift-mt101': 'SWIFT MT101',
+  plugin: 'Plugins',
 };
 
 export interface ProcessFlowNodePresentation {
@@ -17,7 +30,7 @@ export interface ProcessFlowNodePresentation {
   iconPath: string;
 }
 
-const NODE_PRESENTATION: Record<ProcessTaskType, ProcessFlowNodePresentation> = {
+const NODE_PRESENTATION: Record<PlatformProcessTaskType, ProcessFlowNodePresentation> = {
   FILE_READ: {
     badge: 'READ',
     toneClass: 'task-node--source',
@@ -120,5 +133,20 @@ const NODE_PRESENTATION: Record<ProcessTaskType, ProcessFlowNodePresentation> = 
 };
 
 export function getProcessFlowNodePresentation(taskType: ProcessTaskType): ProcessFlowNodePresentation {
-  return NODE_PRESENTATION[taskType];
+  return NODE_PRESENTATION[taskType as PlatformProcessTaskType] ?? remotePresentation(taskType);
+}
+
+function remotePresentation(taskType: ProcessTaskType): ProcessFlowNodePresentation {
+  return {
+    badge: compactRemoteBadge(taskType),
+    toneClass: 'task-node--integration',
+    iconPath: 'M12 2a4 4 0 0 1 4 4v1h1a3 3 0 0 1 3 3v7a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-7a3 3 0 0 1 3-3h1V6a4 4 0 0 1 4-4m-2 5h4V6a2 2 0 1 0-4 0zm-3 5h10M9 16h6',
+  };
+}
+
+function compactRemoteBadge(taskType: ProcessTaskType): string {
+  const parts = String(taskType).split('_').filter(Boolean);
+  const meaningful = parts[0] === 'DEMO' ? parts.slice(1) : parts;
+  const badge = meaningful.map((part) => part.charAt(0)).join('').slice(0, 6);
+  return badge || 'PLUGIN';
 }

@@ -39,4 +39,14 @@ public interface ReaderProvider {
     default PluginConfigSchema configSchema() {
         return PluginConfigSchema.empty();
     }
+
+    /**
+     * #5: valida la configuración del reader al CREAR/ACTUALIZAR la definición (no al leer), para fallar temprano y
+     * claro (400) en vez de aceptar una config inválida y diferir el error a runtime. Default no-op (los readers que
+     * no la implementen no se afectan); cada reader valida solo lo suyo (SRP). Debe lanzar {@link IllegalArgumentException}
+     * con un mensaje accionable si la config es inválida.
+     */
+    default void validateConfiguration(Map<String, Object> configuration) {
+        // no-op por defecto
+    }
 }

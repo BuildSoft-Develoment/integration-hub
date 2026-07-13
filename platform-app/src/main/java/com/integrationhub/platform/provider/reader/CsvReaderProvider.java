@@ -48,6 +48,25 @@ public class CsvReaderProvider implements ReaderProvider {
                         PluginConfigOption.of("US-ASCII", "US-ASCII"))));
     }
 
+    /**
+     * #5: valida al CREAR/ACTUALIZAR la definición que el CSV traiga campos posicionales, para fallar claro (400) en la
+     * consola en vez de aceptar la config y reventar recién al leer el archivo. Reusa exactamente la misma comprobación
+     * que {@link #readInBatches} (una sola fuente de verdad, sin duplicar la regla).
+     */
+    @Override
+    public void validateConfiguration(Map<String, Object> configuration) {
+        requireFields(configuration);
+    }
+
+    /** Campos posicionales configurados; obligatorios para el CSV (un CSV sin campos no sabe qué leer). */
+    private List<ReaderFieldSupport.ConfiguredField> requireFields(Map<String, Object> configuration) {
+        var configuredFields = ReaderFieldSupport.configuredFields(configuration.get("fields"), "CSV");
+        if (configuredFields.isEmpty()) {
+            throw new IllegalArgumentException("CSV requires field definitions");
+        }
+        return configuredFields;
+    }
+
     @Override
     public ReadResult readInBatches(SourcePayload payload,
                                     Map<String, Object> configuration,
@@ -57,10 +76,7 @@ public class CsvReaderProvider implements ReaderProvider {
         var delimiter = "\\t".equals(rawDelimiter) ? "\t" : rawDelimiter;
         var encoding = String.valueOf(configuration.getOrDefault("encoding", "UTF-8"));
         var dataStartRowIndex = ReaderRowSupport.dataStartRowIndex(configuration, 1);
-        var configuredFields = ReaderFieldSupport.configuredFields(configuration.get("fields"), "CSV");
-        if (configuredFields.isEmpty()) {
-            throw new IllegalArgumentException("CSV requires field definitions");
-        }
+        var configuredFields = requireFields(configuration);
 
         var records = new ArrayList<ReadRecord>();
         var skippedRows = new ArrayList<ReadSkip>();

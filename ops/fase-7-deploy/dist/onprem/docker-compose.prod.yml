@@ -1,0 +1,23 @@
+# On-premise DEV/PRO chico via Docker Compose (coherente con stacks/stack-operacion-onprem.md).
+# Solo la app + su config; DB/Keycloak/MinIO/Kafka/OTel se asumen en el docker-compose.yml
+# raiz o en la red del host. Uso:
+#   docker build -f ops/fase-7-deploy/dist/common/Dockerfile.native \
+#     --build-arg RUNNER=platform-app/target/platform-app-0.0.1-SNAPSHOT-runner \
+#     -t integration-hub:native .
+#   docker compose -f ops/fase-7-deploy/dist/onprem/docker-compose.prod.yml --env-file .env up -d
+services:
+  platform-app:
+    # Imagen NATIVA (verificada: arranque 1.5s, ~70 MiB RAM, health UP, UI embebida).
+    # Requisitos de build y fixes en ../NATIVE-STATUS.md. Alternativa JVM: integration-hub:jvm-onprem
+    # (Dockerfile.jvm). Nota: homologar SFTP (pagos MT101) en nativo antes de produccion.
+    image: integration-hub:native
+    env_file: .env
+    environment:
+      QUARKUS_PROFILE: "prod,onprem"
+    ports:
+      - "8080:8080"
+    # Sin healthcheck HTTP aqui: la imagen `quarkus-micro-image` es minima y NO trae
+    # curl/wget, asi que un `test` HTTP daria unhealthy en falso. En K8s las probes
+    # httpGet las ejecuta el kubelet (no el contenedor) y si funcionan -> ver el chart Helm.
+    # Si necesitas healthcheck en Compose, basa la imagen en ubi9-minimal + `microdnf install curl`.
+    restart: unless-stopped

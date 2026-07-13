@@ -103,10 +103,14 @@ public class AsyncTaskConsumer {
      * dead-letter-queue}). Los desenlaces terminales (PROCESSED/DEAD/...) NO se reintentan.
      */
     public ConsumeResult consumeWithRetries(String payload, String brokerType, String topic) {
+        // #4: token de claim por-ENTREGA (no por-consume). El retry in-app reusa el mismo token y re-clama; una
+        // entrega CONCURRENTE distinta trae otro token y no re-clama un lease vivo (no doble efecto). Estable en todos
+        // los intentos in-app de ESTA entrega.
+        var claimToken = java.util.UUID.randomUUID().toString();
         RuntimeException lastTransient = null;
         for (var attempt = 1; attempt <= maxAttempts; attempt++) {
             try {
-                return consume(payload, brokerType, topic);
+                return consume(payload, brokerType, topic, claimToken);
             } catch (RuntimeException transientFailure) {
                 lastTransient = transientFailure;
                 if (attempt < maxAttempts) {
@@ -137,7 +141,7 @@ public class AsyncTaskConsumer {
      * Procesa un work-item (<b>un solo intento</b>). Devuelve el desenlace (testeable). Solo relanza en
      * fallo transitorio de {@code execute}/lectura, para que el caller reintente o el adaptador haga nack.
      */
-    public ConsumeResult consume(String payload, String brokerType, String topic) {
+    public ConsumeResult consume(String payload, String brokerType, String topic, String claimToken) {
         AsyncTaskEnvelope envelope;
         try {
             envelope = AsyncTaskMessageCodec.decode(payload, objectMapper);
@@ -150,12 +154,12 @@ public class AsyncTaskConsumer {
         // Scatter-gather (Opción B): un work-item de slice se procesa por lotes y agrega en el tracker
         // N→1, en vez de completar la tarea de una.
         if ("SLICE".equals(envelope.headers().get("kind"))) {
-            return consumeSlice(envelope);
+            return consumeSlice(envelope, claimToken);
         }
 
         // Scatter por table-streaming (page-chain): esta página encola la siguiente y procesa la suya.
         if ("PAGE".equals(envelope.headers().get("kind"))) {
-            return consumePage(envelope);
+            return consumePage(envelope, claimToken);
         }
 
         if (inbox.isProcessed(envelope.idempotencyKey())) {
@@ -189,43 +193,45 @@ public class AsyncTaskConsumer {
         // §5: claim ATÓMICO antes del efecto. Si no ganamos (otro nodo lo tiene vivo o ya es terminal), NO
         // ejecutamos: una re-entrega tras un claim ajeno no repite el efecto externo. El pre-check isProcessed
         // ya cortó los terminales; aquí se cubre la carrera contra un claim VIVO y se re-toma un lease vencido.
-        if (!inbox.claim(envelope, nodeIdentity.id(), claimLeaseSeconds)) {
-            LOG.debugf("Async task consumer: %s reclamada por otro nodo (claim vivo); skip sin re-ejecutar",
+        if (!inbox.claim(envelope, nodeIdentity.id(), claimToken, claimLeaseSeconds)) {
+            LOG.debugf("Async task consumer: %s reclamada por otra entrega (claim vivo, token distinto); skip",
                     envelope.idempotencyKey());
             return ConsumeResult.DUPLICATE;
         }
         // §6 (F): los ${secret:} se resuelven DESPUÉS de ganar el claim, en el punto-de-uso. Así un consumer que
-        // pierde el claim (otro nodo lo tiene vivo) NO consulta Vault/OpenBao — solo el ganador materializa secretos.
+        // pierde el claim (otra entrega lo tiene vivo) NO consulta Vault/OpenBao — solo el ganador materializa secretos.
         var resolvedConfiguration = resolveSecrets(configuration);
-        // Un throw aquí (fallo transitorio) NO se captura: propaga → nack → reentrega (at-least-once). El claim
-        // queda CLAIMED con lease: la re-entrega la re-toma este mismo nodo (owner) o, si cayó, otro al vencer.
-        // §5 (F3): el heartbeat renueva el lease mientras execute() corre, para que una reentrega durante un
-        // efecto largo NO re-tome el claim en otro nodo (doble efecto). Overhead nulo si termina antes de lease/2.
-        var result = heartbeat.runWithHeartbeat(envelope, nodeIdentity.id(),
-                () -> provider.execute(context, resolvedConfiguration));
+        try {
+            // §5 (F3): el heartbeat renueva el lease (token-scoped) mientras execute() corre, para que una reentrega
+            // durante un efecto largo NO re-tome el claim (doble efecto). Overhead nulo si termina antes de lease/2.
+            var result = heartbeat.runWithHeartbeat(envelope, claimToken,
+                    () -> provider.execute(context, resolvedConfiguration));
 
-        // Aplica el resultado a la tarea suspendida por despacho async y continúa el pipeline (o, si el
-        // provider volvió a suspender —Nivel 3, suspendible—, re-suspende con token/estado nuevos). Se
-        // hace ANTES de registrar el inbox: si hay crash entre completar y registrar, la reentrega
-        // re-ejecuta (at-least-once) y la completación es idempotente (NOT_FOUND), sin colgar el proceso.
-        var outcome = completion.completeFromExternalResult(
-                envelope.processExecutionId(), envelope.taskDefinitionId(), result);
-        LOG.debugf("Async task consumer: completación de %s → %s", envelope.idempotencyKey(), outcome.outcome());
+            // Aplica el resultado a la tarea suspendida por despacho async y continúa el pipeline. Se hace ANTES de
+            // registrar el inbox: si hay crash entre completar y registrar, la reentrega re-ejecuta (at-least-once) y
+            // la completación es idempotente (NOT_FOUND), sin colgar el proceso.
+            var outcome = completion.completeFromExternalResult(
+                    envelope.processExecutionId(), envelope.taskDefinitionId(), result);
+            LOG.debugf("Async task consumer: completación de %s → %s", envelope.idempotencyKey(), outcome.outcome());
 
-        if (result.suspended()) {
-            // Re-suspensión: la tarea quedó SUSPENDED esperando callback/scheduler; el offload cumplió su
-            // trabajo (ejecutó el primer intento). Se marca PROCESSED para deduplicar la reentrega.
-            inbox.recordProcessed(envelope, null, result.details());
+            if (result.suspended()) {
+                // Re-suspensión: la tarea quedó SUSPENDED esperando callback/scheduler; el offload cumplió su trabajo.
+                inbox.recordProcessed(envelope, claimToken, null, result.details());
+                return ConsumeResult.PROCESSED;
+            }
+            if (!result.success()) {
+                inbox.recordFailed(envelope, claimToken, result.details());
+                return ConsumeResult.FAILED;
+            }
+            inbox.recordProcessed(envelope, claimToken, writeOutputs(result.outputs()), result.details());
             return ConsumeResult.PROCESSED;
+        } catch (RuntimeException transientFailure) {
+            // #4 (release-on-failure): un throw transitorio propaga → nack → reentrega (at-least-once). Se LIBERA el
+            // claim de esta entrega para que el retry in-app (mismo token) o la re-entrega del broker (nuevo token) lo
+            // re-clame de inmediato, en vez de esperar a que venza el lease (o que el barrido lo marque DEAD).
+            inbox.releaseClaim(envelope, claimToken);
+            throw transientFailure;
         }
-
-        if (!result.success()) {
-            inbox.recordFailed(envelope, result.details());
-            return ConsumeResult.FAILED;
-        }
-
-        inbox.recordProcessed(envelope, writeOutputs(result.outputs()), result.details());
-        return ConsumeResult.PROCESSED;
     }
 
     /**
@@ -236,11 +242,11 @@ public class AsyncTaskConsumer {
      * transicionar el mismo claim a su terminal (ver {@code SliceGatherService}). Devuelve {@code true} si este
      * consumer ganó el claim y debe ejecutar.
      */
-    private boolean claimScatterUnit(AsyncTaskEnvelope envelope) {
+    private boolean claimScatterUnit(AsyncTaskEnvelope envelope, String claimToken) {
         if (inbox.isProcessed(envelope.idempotencyKey())) {
             return false;
         }
-        return inbox.claim(envelope, nodeIdentity.id(), claimLeaseSeconds);
+        return inbox.claim(envelope, nodeIdentity.id(), claimToken, claimLeaseSeconds);
     }
 
     /**
@@ -248,7 +254,7 @@ public class AsyncTaskConsumer {
      * records de la slice y avanza la agregación N→1. La reanudación de la tarea la dispara solo la
      * slice que cierra el conteo (o la primera que falla); las demás solo cuentan.
      */
-    private ConsumeResult consumeSlice(AsyncTaskEnvelope envelope) {
+    private ConsumeResult consumeSlice(AsyncTaskEnvelope envelope, String claimToken) {
         AsyncSliceWorkItem item;
         try {
             item = objectMapper.readValue(envelope.payload(), AsyncSliceWorkItem.class);
@@ -258,7 +264,7 @@ public class AsyncTaskConsumer {
         }
         var continueOnFailure = asBoolean(item.configuration().get("continueOnFailure"));
 
-        var resolved = resolveBatchProvider(envelope, continueOnFailure);
+        var resolved = resolveBatchProvider(envelope, claimToken, continueOnFailure);
         if (resolved.isEmpty()) {
             return ConsumeResult.DEAD;
         }
@@ -272,7 +278,7 @@ public class AsyncTaskConsumer {
         // §5: claim ATÓMICO de la slice antes del efecto externo. Una reentrega tras un claim ajeno/terminal NO
         // re-ejecuta executeRecords (evita doble efecto en providers no idempotentes). El commit cuenta la slice
         // al finalizar este mismo claim.
-        if (!claimScatterUnit(envelope)) {
+        if (!claimScatterUnit(envelope, claimToken)) {
             return ConsumeResult.DUPLICATE;
         }
 
@@ -282,25 +288,29 @@ public class AsyncTaskConsumer {
         // metadata, variables) para que el provider resuelva variables como en el motor síncrono. NO se
         // rehidrata sourcePayload (no serializable): los providers que lo requieren son UNSUPPORTED.
         hydrateSliceContext(context, item);
-        // §6: re-resuelve los ${secret:} de la config de la slice en el punto-de-uso (viajó con placeholders).
-        // Un throw (fallo transitorio) propaga → nack → reentrega de la slice.
-        // §5 (F3): heartbeat del lease mientras la slice ejecuta su efecto (evita re-toma + doble efecto).
-        var result = heartbeat.runWithHeartbeat(envelope, nodeIdentity.id(),
-                () -> batchProvider.executeRecords(context, resolveSecrets(item.configuration()), records, null));
+        try {
+            // §6: re-resuelve los ${secret:} de la config de la slice en el punto-de-uso (viajó con placeholders).
+            // §5 (F3): heartbeat del lease (token) mientras la slice ejecuta su efecto (evita re-toma + doble efecto).
+            var result = heartbeat.runWithHeartbeat(envelope, claimToken,
+                    () -> batchProvider.executeRecords(context, resolveSecrets(item.configuration()), records, null));
 
-        if (result.suspended()) {
-            failSlice(envelope, "una slice no puede suspenderse en el consumer", continueOnFailure);
-            return ConsumeResult.DEAD;
-        }
-        if (!result.success()) {
-            failSlice(envelope, result.details(), continueOnFailure);
-            return ConsumeResult.FAILED;
-        }
+            if (result.suspended()) {
+                failSlice(envelope, claimToken, "una slice no puede suspenderse en el consumer", continueOnFailure);
+                return ConsumeResult.DEAD;
+            }
+            if (!result.success()) {
+                failSlice(envelope, claimToken, result.details(), continueOnFailure);
+                return ConsumeResult.FAILED;
+            }
 
-        var progress = gather.commitCompletedSlice(envelope, writeOutputs(result.outputs()), result.details());
-        progress.filter(TaskAsyncDispatchRepository.SliceProgress::terminal)
-                .ifPresent(p -> resumeTaskOnTerminal(envelope, p, continueOnFailure));
-        return ConsumeResult.PROCESSED;
+            var progress = gather.commitCompletedSlice(envelope, claimToken, writeOutputs(result.outputs()), result.details());
+            progress.filter(TaskAsyncDispatchRepository.SliceProgress::terminal)
+                    .ifPresent(p -> resumeTaskOnTerminal(envelope, p, continueOnFailure));
+            return ConsumeResult.PROCESSED;
+        } catch (RuntimeException transientFailure) {
+            inbox.releaseClaim(envelope, claimToken); // #4: libera para re-clamar en el retry/reentrega
+            throw transientFailure;
+        }
     }
 
     /**
@@ -309,7 +319,7 @@ public class AsyncTaskConsumer {
      * records, cuenta la slice y —si es la última página— <b>sella</b> el scatter. La reanudación la
      * dispara exactamente uno: la slice/seal que cierra el conteo.
      */
-    private ConsumeResult consumePage(AsyncTaskEnvelope envelope) {
+    private ConsumeResult consumePage(AsyncTaskEnvelope envelope, String claimToken) {
         AsyncPageWorkItem item;
         try {
             item = objectMapper.readValue(envelope.payload(), AsyncPageWorkItem.class);
@@ -319,7 +329,7 @@ public class AsyncTaskConsumer {
         }
         var continueOnFailure = asBoolean(item.configuration().get("continueOnFailure"));
 
-        var resolved = resolveBatchProvider(envelope, continueOnFailure);
+        var resolved = resolveBatchProvider(envelope, claimToken, continueOnFailure);
         if (resolved.isEmpty()) {
             return ConsumeResult.DEAD;
         }
@@ -331,44 +341,48 @@ public class AsyncTaskConsumer {
             return ConsumeResult.DUPLICATE;
         }
         // §5: claim ATÓMICO de la página antes de leer/encadenar/ejecutar. Una reentrega ya contada o con un claim
-        // vivo ajeno NO repite el executeRecords (ni re-lee/encola): la cadena ya propagó en la primera entrega.
-        if (!claimScatterUnit(envelope)) {
+        // vivo de otra entrega (token distinto) NO repite el executeRecords (ni re-lee/encola).
+        if (!claimScatterUnit(envelope, claimToken)) {
             return ConsumeResult.DUPLICATE;
         }
 
-        // Lee esta página y encola la siguiente (auto-propagación). Un throw (BD caída) propaga → reentrega.
-        var page = pageChain.readAndChain(envelope, item);
+        try {
+            // Lee esta página y encola la siguiente (auto-propagación). Un throw (BD caída) propaga → reentrega.
+            var page = pageChain.readAndChain(envelope, item);
 
-        var outcome = ConsumeResult.PROCESSED;
-        if (page.isSlice()) {
-            var records = page.records();
-            var context = new TaskContext(envelope.processExecutionId(), envelope.taskDefinitionId());
-            hydrateContext(context, item.taskOutputs(), item.metadata(), item.executionVariables());
-            // §6: re-resuelve los ${secret:} de la config de la página en el punto-de-uso (viajó con placeholders).
-            // §5 (F3): heartbeat del lease mientras la página ejecuta su efecto (evita re-toma + doble efecto).
-            var result = heartbeat.runWithHeartbeat(envelope, nodeIdentity.id(),
-                    () -> batchProvider.executeRecords(context, resolveSecrets(item.configuration()), records, null));
-            if (result.suspended()) {
-                failSlice(envelope, "una página no puede suspenderse en el consumer", continueOnFailure);
-                return ConsumeResult.DEAD;
+            var outcome = ConsumeResult.PROCESSED;
+            if (page.isSlice()) {
+                var records = page.records();
+                var context = new TaskContext(envelope.processExecutionId(), envelope.taskDefinitionId());
+                hydrateContext(context, item.taskOutputs(), item.metadata(), item.executionVariables());
+                // §5 (F3): heartbeat del lease (token) mientras la página ejecuta su efecto (evita re-toma + doble efecto).
+                var result = heartbeat.runWithHeartbeat(envelope, claimToken,
+                        () -> batchProvider.executeRecords(context, resolveSecrets(item.configuration()), records, null));
+                if (result.suspended()) {
+                    failSlice(envelope, claimToken, "una página no puede suspenderse en el consumer", continueOnFailure);
+                    return ConsumeResult.DEAD;
+                }
+                if (!result.success()) {
+                    failSlice(envelope, claimToken, result.details(), continueOnFailure);
+                    outcome = ConsumeResult.FAILED;
+                } else {
+                    gather.commitCompletedSlice(envelope, claimToken, writeOutputs(result.outputs()), result.details())
+                            .filter(TaskAsyncDispatchRepository.SliceProgress::terminal)
+                            .ifPresent(p -> resumeTaskOnTerminal(envelope, p, continueOnFailure));
+                }
             }
-            if (!result.success()) {
-                failSlice(envelope, result.details(), continueOnFailure);
-                outcome = ConsumeResult.FAILED;
-            } else {
-                gather.commitCompletedSlice(envelope, writeOutputs(result.outputs()), result.details())
+            if (page.last()) {
+                // Última página: fija el total. Si todas las slices ya están contadas, ESTE seal cierra el
+                // scatter (ningún evento de slice futuro lo haría) → reanuda la tarea una vez.
+                gather.sealScatter(envelope.processExecutionId(), envelope.taskDefinitionId(), page.total())
                         .filter(TaskAsyncDispatchRepository.SliceProgress::terminal)
                         .ifPresent(p -> resumeTaskOnTerminal(envelope, p, continueOnFailure));
             }
+            return outcome;
+        } catch (RuntimeException transientFailure) {
+            inbox.releaseClaim(envelope, claimToken); // #4: libera para re-clamar en el retry/reentrega
+            throw transientFailure;
         }
-        if (page.last()) {
-            // Última página: fija el total. Si todas las slices ya están contadas, ESTE seal cierra el
-            // scatter (ningún evento de slice futuro lo haría) → reanuda la tarea una vez.
-            gather.sealScatter(envelope.processExecutionId(), envelope.taskDefinitionId(), page.total())
-                    .filter(TaskAsyncDispatchRepository.SliceProgress::terminal)
-                    .ifPresent(p -> resumeTaskOnTerminal(envelope, p, continueOnFailure));
-        }
-        return outcome;
     }
 
     /**
@@ -377,25 +391,25 @@ public class AsyncTaskConsumer {
      * scatter) y devuelve vacío para que el caller corte con {@code ConsumeResult.DEAD}. Unifica la
      * resolución que antes estaba duplicada verbatim entre {@code consumeSlice} y {@code consumePage} (DRY).
      */
-    private Optional<BatchTaskProvider> resolveBatchProvider(AsyncTaskEnvelope envelope,
+    private Optional<BatchTaskProvider> resolveBatchProvider(AsyncTaskEnvelope envelope, String claimToken,
                                                              boolean continueOnFailure) {
         TaskProvider provider;
         try {
             provider = providers.resolve(envelope.taskType());
         } catch (IllegalArgumentException unknown) {
-            failSlice(envelope, unknown.getMessage(), continueOnFailure);
+            failSlice(envelope, claimToken, unknown.getMessage(), continueOnFailure);
             return Optional.empty();
         }
         if (provider instanceof BatchTaskProvider batchProvider) {
             return Optional.of(batchProvider);
         }
-        failSlice(envelope, "el tipo '" + envelope.taskType() + "' no es BatchTaskProvider", continueOnFailure);
+        failSlice(envelope, claimToken, "el tipo '" + envelope.taskType() + "' no es BatchTaskProvider", continueOnFailure);
         return Optional.empty();
     }
 
     /** Cuenta una slice fallida; si esa slice cierra el scatter, reanuda/falla la tarea una vez. */
-    private void failSlice(AsyncTaskEnvelope envelope, String error, boolean continueOnFailure) {
-        gather.failSlice(envelope, error, continueOnFailure)
+    private void failSlice(AsyncTaskEnvelope envelope, String claimToken, String error, boolean continueOnFailure) {
+        gather.failSlice(envelope, claimToken, error, continueOnFailure)
                 .filter(TaskAsyncDispatchRepository.SliceProgress::terminal)
                 .ifPresent(p -> resumeTaskOnTerminal(envelope, p, continueOnFailure));
     }

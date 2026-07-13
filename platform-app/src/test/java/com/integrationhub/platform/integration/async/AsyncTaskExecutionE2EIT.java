@@ -94,7 +94,7 @@ class AsyncTaskExecutionE2EIT {
         // 2. Simula la entrega por broker: envelope_json == payload de wire.
         var payload = readSingleString("select envelope_json from task_dispatch_outbox order by id desc limit 1");
         assertNotNull(payload);
-        var outcome = asyncTaskConsumer.consume(payload, "KAFKA", "tasks.test_follow_up");
+        var outcome = asyncTaskConsumer.consume(payload, "KAFKA", "tasks.test_follow_up", java.util.UUID.randomUUID().toString());
 
         // 3. El consumer ejecutó el provider, registró el inbox y reanudó el proceso.
         assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED, outcome);
@@ -120,7 +120,7 @@ class AsyncTaskExecutionE2EIT {
         assertEquals(0, RecordingFollowUpTaskProvider.EXECUTIONS.get());
 
         var payload = readSingleString("select envelope_json from task_dispatch_outbox order by id desc limit 1");
-        asyncTaskConsumer.consume(payload, "KAFKA", "tasks.test_follow_up");
+        asyncTaskConsumer.consume(payload, "KAFKA", "tasks.test_follow_up", java.util.UUID.randomUUID().toString());
 
         // task-1 (en el consumer) + task-2 (continuación) → 2 ejecuciones; proceso COMPLETED.
         assertEquals(2, RecordingFollowUpTaskProvider.EXECUTIONS.get(),
@@ -139,10 +139,10 @@ class AsyncTaskExecutionE2EIT {
         var payload = readSingleString("select envelope_json from task_dispatch_outbox order by id desc limit 1");
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED,
-                asyncTaskConsumer.consume(payload, "KAFKA", "tasks.test_follow_up"));
+                asyncTaskConsumer.consume(payload, "KAFKA", "tasks.test_follow_up", java.util.UUID.randomUUID().toString()));
         // Reentrega at-least-once de la misma trama: el inbox la descarta (dedup) y no re-ejecuta.
         assertEquals(AsyncTaskConsumer.ConsumeResult.DUPLICATE,
-                asyncTaskConsumer.consume(payload, "KAFKA", "tasks.test_follow_up"));
+                asyncTaskConsumer.consume(payload, "KAFKA", "tasks.test_follow_up", java.util.UUID.randomUUID().toString()));
 
         assertEquals(1, RecordingFollowUpTaskProvider.EXECUTIONS.get(), "el provider no se re-ejecuta en la reentrega");
         assertEquals("1", readSingleString("select count(*) from task_inbox where status = 'PROCESSED'"));
@@ -172,7 +172,7 @@ class AsyncTaskExecutionE2EIT {
                 "el valor del secreto NO debe persistirse en el outbox: " + payload);
 
         // Round-trip: el consumer re-resuelve → el provider recibe el VALOR real al ejecutar.
-        var outcome = asyncTaskConsumer.consume(payload, "KAFKA", "tasks.test_follow_up");
+        var outcome = asyncTaskConsumer.consume(payload, "KAFKA", "tasks.test_follow_up", java.util.UUID.randomUUID().toString());
         assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED, outcome);
         assertEquals("SUPER_SECRET_XYZ", RecordingFollowUpTaskProvider.SEEN_SECRET_FIELD.get(),
                 "el provider debe recibir el secreto re-resuelto en el consumer");

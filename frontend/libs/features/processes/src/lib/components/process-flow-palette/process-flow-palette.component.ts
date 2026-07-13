@@ -67,4 +67,18 @@ export class ProcessFlowPaletteComponent {
   taskLabel(taskType: ProcessTaskType): string {
     return this.manager.label(taskType);
   }
+
+  taskTooltip(taskType: ProcessTaskType): string {
+    const label = this.taskLabel(taskType);
+    const status = this.manager.status(taskType);
+    const reason = this.manager.statusReason(taskType);
+    if (!status || status === 'AVAILABLE') {
+      return label;
+    }
+    return reason ? `${label} - ${status}: ${reason}` : `${label} - ${status}`;
+  }
+
+  taskDisabled(taskType: ProcessTaskType): boolean {
+    return !this.manager.isAvailable(taskType);
+  }
 }

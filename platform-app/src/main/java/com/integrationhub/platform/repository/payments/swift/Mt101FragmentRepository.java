@@ -1004,6 +1004,204 @@ public class Mt101FragmentRepository {
     public record PayConflictRow(String sendersReference, String status, String reason, String updatedAt) {
     }
 
+    /**
+     * Consola de PAY Conflicts: fila de conflicto de pago <b>transversal</b> (across sets/ejecuciones), con el set y la
+     * ejecución que la produjeron para poder abrir la vista por-set (quarantine) y el lineage. {@code source} distingue
+     * el ledger normal ({@code NORMAL}, {@code mt101_build_fragment}) del correctivo ({@code CORRECTIVE},
+     * {@code mt101_corrective_pay_fragment}); para el correctivo {@code fragmentSetId} es el set ORIGINAL (join a
+     * {@code mt101_rebuild_run}) para reusar el mismo deep-link, {@code processExecutionId} es null (es maker-checker,
+     * no una ejecución) y {@code rebuildRunId} da el contexto del run.
+     */
+    public record OpenPayConflictRow(String source, String fragmentSetId, Long processExecutionId,
+                                     String sendersReference, String status, String reason, String updatedAt,
+                                     String rebuildRunId, long id) {
+    }
+
+    /**
+     * Consola de PAY Conflicts (rama NORMAL): conflictos de pago ABIERTOS de {@code mt101_build_fragment}, más recientes
+     * primero. Usa el índice parcial V94 {@code ix_build_fragment_pay_conflict_open} (O(conflictos), sin scan).
+     * Paginación <b>keyset</b> por {@code (updated_at, id)}: {@code afterUpdatedAt} nulo trae la primera página; si no,
+     * trae estrictamente las "más viejas" que el cursor en el orden {@code (updated_at desc, id desc)}.
+     */
+    public List<OpenPayConflictRow> openPayConflicts(DataSource dataSource, java.sql.Timestamp afterUpdatedAt,
+                                                     Long afterId, int limit) throws SQLException {
+        var sql = "select id, fragment_set_id, process_execution_id, senders_reference, status, pay_conflict_reason, "
+                + "updated_at from mt101_build_fragment where pay_conflict = true "
+                + "and (?::timestamp is null or (updated_at, id) < (?::timestamp, ?::bigint)) "
+                + "order by updated_at desc, id desc limit ?";
+        var result = new ArrayList<OpenPayConflictRow>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setTimestamp(1, afterUpdatedAt);
+            statement.setTimestamp(2, afterUpdatedAt);
+            statement.setObject(3, afterId);
+            statement.setInt(4, Math.max(1, limit));
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    var updatedAt = rs.getTimestamp("updated_at");
+                    result.add(new OpenPayConflictRow(
+                            "NORMAL",
+                            rs.getString("fragment_set_id"),
+                            rs.getObject("process_execution_id", Long.class),
+                            rs.getString("senders_reference"),
+                            rs.getString("status"),
+                            rs.getString("pay_conflict_reason"),
+                            updatedAt == null ? null : updatedAt.toInstant().toString(),
+                            null,
+                            rs.getLong("id")));
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Consola de PAY Conflicts (rama CORRECTIVA): conflictos de pago ABIERTOS del ledger correctivo
+     * ({@code mt101_corrective_pay_fragment}), más recientes primero. Une con {@code mt101_rebuild_run} para exponer el
+     * {@code original_fragment_set_id} como {@code fragmentSetId} → mismo deep-link a quarantine que el normal. El
+     * estado es {@code pay_status} y la referencia {@code corrective_senders_reference}. Usa el índice parcial V95
+     * {@code ix_corrective_pay_fragment_conflict_open}. Mismo keyset por {@code (updated_at, id)} de la fila correctiva.
+     */
+    public List<OpenPayConflictRow> openCorrectivePayConflicts(DataSource dataSource, java.sql.Timestamp afterUpdatedAt,
+                                                               Long afterId, int limit) throws SQLException {
+        var sql = "select cpf.id, rr.original_fragment_set_id as fragment_set_id, "
+                + "cpf.corrective_senders_reference as senders_reference, cpf.pay_status as status, "
+                + "cpf.pay_conflict_reason, cpf.updated_at, cpf.rebuild_run_id "
+                + "from mt101_corrective_pay_fragment cpf "
+                + "join mt101_rebuild_run rr on rr.rebuild_run_id = cpf.rebuild_run_id "
+                + "where cpf.pay_conflict = true "
+                + "and (?::timestamp is null or (cpf.updated_at, cpf.id) < (?::timestamp, ?::bigint)) "
+                + "order by cpf.updated_at desc, cpf.id desc limit ?";
+        var result = new ArrayList<OpenPayConflictRow>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setTimestamp(1, afterUpdatedAt);
+            statement.setTimestamp(2, afterUpdatedAt);
+            statement.setObject(3, afterId);
+            statement.setInt(4, Math.max(1, limit));
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    var updatedAt = rs.getTimestamp("updated_at");
+                    result.add(new OpenPayConflictRow(
+                            "CORRECTIVE",
+                            rs.getString("fragment_set_id"),
+                            null,
+                            rs.getString("senders_reference"),
+                            rs.getString("status"),
+                            rs.getString("pay_conflict_reason"),
+                            updatedAt == null ? null : updatedAt.toInstant().toString(),
+                            rs.getString("rebuild_run_id"),
+                            rs.getLong("id")));
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Consola de PAY Conflicts (A1 — evidencia inline): la(s) confirmación(es) del banco para un {@code :20:}, con su
+     * {@code gatewayReference} y estado confirmado (último STATUS), unidas {@code mt101_confirmation → mt101_archive}
+     * por la referencia SWIFT ({@code senders_reference}). Más recientes primero. Solo lectura: es la evidencia de por
+     * qué el fragmento quedó en conflicto (terminal del ledger vs. respuesta del banco).
+     */
+    public List<OpenPayConflictConfirmation> payConflictConfirmations(DataSource dataSource, String sendersReference,
+                                                                      int limit) throws SQLException {
+        var sql = "select c.confirmation_type, c.gateway_reference, c.confirmed_status, c.received_at "
+                + "from mt101_confirmation c join mt101_archive a on a.id = c.archive_id "
+                + "where a.senders_reference = ? "
+                + "order by c.received_at desc, c.id desc limit ?";
+        var result = new ArrayList<OpenPayConflictConfirmation>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, sendersReference);
+            statement.setInt(2, Math.max(1, limit));
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    var receivedAt = rs.getTimestamp("received_at");
+                    result.add(new OpenPayConflictConfirmation(
+                            rs.getString("confirmation_type"),
+                            rs.getString("gateway_reference"),
+                            rs.getString("confirmed_status"),
+                            receivedAt == null ? null : receivedAt.toInstant().toString()));
+                }
+            }
+        }
+        return result;
+    }
+
+    /** A1: confirmación del banco para la evidencia inline de un conflicto (tipo, gatewayReference, estado, fecha). */
+    public record OpenPayConflictConfirmation(String confirmationType, String gatewayReference, String confirmedStatus,
+                                              String receivedAt) {
+    }
+
+    /** A2 (resolución gobernada): fila reconocida — referencia, terminal conservado y linkage para la trama de audit. */
+    public record AcknowledgedPayConflict(String sendersReference, String retainedStatus, Long processExecutionId,
+                                          Long taskDefinitionId) {
+    }
+
+    /**
+     * A2: <b>reconoce</b> (acknowledge) el conflicto de pago NORMAL de un {@code :20:} en un set: limpia
+     * {@code pay_conflict} y deja el motivo del reconocimiento, <b>sin tocar {@code status}</b> (nunca sobrescribe el
+     * terminal real). {@code UPDATE ... RETURNING} → atómico e idempotente (solo afecta filas actualmente en conflicto).
+     * Devuelve las filas afectadas para emitir la trama append-only {@code PAY_CONFLICT_RESOLVED}. Recibe la
+     * {@code Connection} del caller para que la limpieza del flag y la trama de auditoría commiteen en <b>una sola tx</b>.
+     */
+    public List<AcknowledgedPayConflict> acknowledgeNormalPayConflict(java.sql.Connection connection, String fragmentSetId,
+                                                                      String sendersReference, String reason)
+            throws SQLException {
+        var sql = "update mt101_build_fragment set pay_conflict = false, pay_conflict_reason = ?, "
+                + "updated_at = current_timestamp where fragment_set_id = ? and senders_reference = ? "
+                + "and coalesce(pay_conflict, false) = true "
+                + "returning senders_reference, status, process_execution_id, task_definition_id";
+        var result = new ArrayList<AcknowledgedPayConflict>();
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, reason);
+            statement.setString(2, fragmentSetId);
+            statement.setString(3, sendersReference);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new AcknowledgedPayConflict(
+                            rs.getString("senders_reference"),
+                            rs.getString("status"),
+                            rs.getObject("process_execution_id", Long.class),
+                            rs.getObject("task_definition_id", Long.class)));
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * A2 (espejo correctivo): reconoce el conflicto de pago del ledger correctivo por {@code rebuild_run_id} +
+     * {@code corrective_senders_reference}. Limpia {@code pay_conflict}, conserva {@code pay_status}. Sin
+     * {@code process_execution_id}/{@code task_definition_id} (es maker-checker). Recibe la {@code Connection} del
+     * caller para que la limpieza del flag y la trama de auditoría commiteen en <b>una sola tx</b>.
+     */
+    public List<AcknowledgedPayConflict> acknowledgeCorrectivePayConflict(java.sql.Connection connection, String rebuildRunId,
+                                                                          String sendersReference, String reason)
+            throws SQLException {
+        var sql = "update mt101_corrective_pay_fragment set pay_conflict = false, pay_conflict_reason = ?, "
+                + "updated_at = current_timestamp where rebuild_run_id = ? and corrective_senders_reference = ? "
+                + "and coalesce(pay_conflict, false) = true "
+                + "returning corrective_senders_reference, pay_status";
+        var result = new ArrayList<AcknowledgedPayConflict>();
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, reason);
+            statement.setString(2, rebuildRunId);
+            statement.setString(3, sendersReference);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new AcknowledgedPayConflict(
+                            rs.getString("corrective_senders_reference"),
+                            rs.getString("pay_status"),
+                            null,
+                            null));
+                }
+            }
+        }
+        return result;
+    }
+
     public Map<TransactionKey, FragmentRecordLineage> fragmentRecordLineageByTransactions(
             DataSource dataSource,
             String fragmentSetId,

@@ -89,6 +89,13 @@
         background: color-mix(in srgb, var(--ih-surface-alt) 88%, white 12%);
         color: var(--ih-text);
       }
+      .flow-palette__item--disabled,
+      .flow-palette__item--disabled:hover {
+        background: transparent;
+        color: color-mix(in srgb, var(--ih-text-soft) 54%, transparent);
+        cursor: not-allowed;
+        opacity: 0.62;
+      }
       .flow-palette__item:active {
         cursor: grabbing;
       }

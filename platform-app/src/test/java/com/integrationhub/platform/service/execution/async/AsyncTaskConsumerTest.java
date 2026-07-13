@@ -76,7 +76,7 @@ class AsyncTaskConsumerTest {
         when(registry.resolve("DB_WRITE")).thenReturn(new CapturingProvider(TaskResult.success("ok")));
         inbox.claimResult = false;
 
-        var result = consumer.consume(wire("DB_WRITE", "idem-lost", "{\"limit\":1}"), "KAFKA", "tasks.db_write");
+        var result = consumer.consume(wire("DB_WRITE", "idem-lost", "{\"limit\":1}"), "KAFKA", "tasks.db_write", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.DUPLICATE, result);
         verify(configurationMapper, org.mockito.Mockito.never()).resolveSecretsIn(any());
@@ -94,7 +94,7 @@ class AsyncTaskConsumerTest {
         var captured = new CapturingProvider(TaskResult.success("ok", Map.of("rows", 3)));
         when(registry.resolve("DB_WRITE")).thenReturn(captured);
 
-        var result = consumer.consume(wire("DB_WRITE", "idem-ok", "{\"limit\":10}"), "KAFKA", "tasks.db_write");
+        var result = consumer.consume(wire("DB_WRITE", "idem-ok", "{\"limit\":10}"), "KAFKA", "tasks.db_write", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED, result);
         // El provider recibió la configuration decodificada desde envelope.payload() y el contexto.
@@ -116,7 +116,7 @@ class AsyncTaskConsumerTest {
     void duplicateSkipsProviderExecution() {
         inbox.processedKeys.add("idem-dup");
 
-        var result = consumer.consume(wire("DB_WRITE", "idem-dup", "{}"), "KAFKA", "tasks.db_write");
+        var result = consumer.consume(wire("DB_WRITE", "idem-dup", "{}"), "KAFKA", "tasks.db_write", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.DUPLICATE, result);
         verify(registry, never()).resolve("DB_WRITE");
@@ -132,7 +132,7 @@ class AsyncTaskConsumerTest {
         when(registry.resolve("DB_WRITE")).thenReturn(captured);
         inbox.claimResult = false; // el claim lo tiene otro nodo, vivo
 
-        var result = consumer.consume(wire("DB_WRITE", "idem-claimed", "{}"), "KAFKA", "tasks.db_write");
+        var result = consumer.consume(wire("DB_WRITE", "idem-claimed", "{}"), "KAFKA", "tasks.db_write", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.DUPLICATE, result);
         assertNull(captured.configuration, "el efecto NO debe ejecutarse si se perdió el claim");
@@ -145,7 +145,7 @@ class AsyncTaskConsumerTest {
     void unknownTaskTypeIsDeadLettered() {
         when(registry.resolve("NOPE")).thenThrow(new IllegalArgumentException("Unsupported task provider: NOPE"));
 
-        var result = consumer.consume(wire("NOPE", "idem-dead", "{}"), "KAFKA", "tasks.nope");
+        var result = consumer.consume(wire("NOPE", "idem-dead", "{}"), "KAFKA", "tasks.nope", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.DEAD, result);
         assertEquals("DEAD", inbox.single().status);
@@ -155,7 +155,7 @@ class AsyncTaskConsumerTest {
     void businessFailureIsRecordedAndAcked() {
         when(registry.resolve("DB_WRITE")).thenReturn(new CapturingProvider(TaskResult.failure("saldo insuficiente")));
 
-        var result = consumer.consume(wire("DB_WRITE", "idem-fail", "{}"), "KAFKA", "tasks.db_write");
+        var result = consumer.consume(wire("DB_WRITE", "idem-fail", "{}"), "KAFKA", "tasks.db_write", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.FAILED, result);
         var row = inbox.single();
@@ -171,7 +171,7 @@ class AsyncTaskConsumerTest {
         when(registry.resolve("DB_WRITE")).thenReturn(new ThrowingProvider());
 
         assertThrows(RuntimeException.class,
-                () -> consumer.consume(wire("DB_WRITE", "idem-transient", "{}"), "KAFKA", "tasks.db_write"));
+                () -> consumer.consume(wire("DB_WRITE", "idem-transient", "{}"), "KAFKA", "tasks.db_write", java.util.UUID.randomUUID().toString()));
 
         assertTrue(inbox.records.isEmpty(), "un fallo transitorio no se marca como terminal (permite reentrega)");
         assertTrue(completion.calls.isEmpty(), "un fallo transitorio no completa el proceso");
@@ -182,7 +182,7 @@ class AsyncTaskConsumerTest {
 
     @Test
     void poisonPayloadIsRecordedInDlqAndAcked() {
-        var result = consumer.consume("no-soy-json-de-envelope", "KAFKA", "tasks.db_write");
+        var result = consumer.consume("no-soy-json-de-envelope", "KAFKA", "tasks.db_write", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.POISON, result);
         var row = inbox.single();
@@ -194,7 +194,7 @@ class AsyncTaskConsumerTest {
     void malformedConfigurationIsDeadLettered() {
         when(registry.resolve("DB_WRITE")).thenReturn(new CapturingProvider(TaskResult.success("ok")));
         // envelope válido, pero envelope.payload() no es un objeto JSON → config ilegible.
-        var result = consumer.consume(wire("DB_WRITE", "idem-badcfg", "no-es-json"), "KAFKA", "tasks.db_write");
+        var result = consumer.consume(wire("DB_WRITE", "idem-badcfg", "no-es-json"), "KAFKA", "tasks.db_write", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.DEAD, result);
         assertEquals("DEAD", inbox.single().status);
@@ -232,7 +232,7 @@ class AsyncTaskConsumerTest {
         var provider = new SuspendingProvider(TaskResult.suspended("esperando callback", Map.of("attempt", 1)));
         when(registry.resolve("MT101_STATUS")).thenReturn(provider);
 
-        var result = consumer.consume(wire("MT101_STATUS", "idem-susp", "{}"), "KAFKA", "tasks.mt101_status");
+        var result = consumer.consume(wire("MT101_STATUS", "idem-susp", "{}"), "KAFKA", "tasks.mt101_status", java.util.UUID.randomUUID().toString());
 
         // El provider suspendió → el motor re-suspende (RE_SUSPENDED) y el consumer marca PROCESSED
         // (el offload cumplió), NO DEAD.
@@ -249,7 +249,7 @@ class AsyncTaskConsumerTest {
         completion.suspendedContext = new AsyncTaskCompletion.SuspendedContext(
                 Map.of("task-1.paymentRef", "PMT-9"), Map.of("env", "prod"));
 
-        consumer.consume(wire("MT101_STATUS", "idem-ctx", "{}"), "KAFKA", "tasks.mt101_status");
+        consumer.consume(wire("MT101_STATUS", "idem-ctx", "{}"), "KAFKA", "tasks.mt101_status", java.util.UUID.randomUUID().toString());
 
         assertEquals("PMT-9",
                 ((Map<?, ?>) provider.context.attributes().get("taskOutputs")).get("task-1.paymentRef"),
@@ -274,10 +274,10 @@ class AsyncTaskConsumerTest {
         when(pageChain.readAndChain(any(), any())).thenReturn(new AsyncPageChainService.Page(
                 java.util.List.of(new ReadRecord(Map.of("id", "1"))), true, 1, true));
         // La slice cuenta pero no cierra (unsealed); el seal de la última página cierra (terminal).
-        when(gather.commitCompletedSlice(any(), any(), any())).thenReturn(Optional.of(new SliceProgress(1, 0, -1, false)));
+        when(gather.commitCompletedSlice(any(), any(), any(), any())).thenReturn(Optional.of(new SliceProgress(1, 0, -1, false)));
         when(gather.sealScatter(any(), any(), eq(1))).thenReturn(Optional.of(new SliceProgress(1, 0, 1, true)));
 
-        var result = consumer.consume(pageWire("REST_CALL", 0), "KAFKA", "tasks.rest_call");
+        var result = consumer.consume(pageWire("REST_CALL", 0), "KAFKA", "tasks.rest_call", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED, result);
         assertEquals(1, completion.calls.size(), "el seal de la última página reanuda la tarea una vez");
@@ -288,9 +288,9 @@ class AsyncTaskConsumerTest {
         when(registry.resolve("REST_CALL")).thenReturn(new CapturingBatchProvider(TaskResult.success("ok")));
         when(pageChain.readAndChain(any(), any())).thenReturn(new AsyncPageChainService.Page(
                 java.util.List.of(new ReadRecord(Map.of("id", "1"))), false, -1, true));
-        when(gather.commitCompletedSlice(any(), any(), any())).thenReturn(Optional.of(new SliceProgress(1, 0, -1, false)));
+        when(gather.commitCompletedSlice(any(), any(), any(), any())).thenReturn(Optional.of(new SliceProgress(1, 0, -1, false)));
 
-        consumer.consume(pageWire("REST_CALL", 0), "KAFKA", "tasks.rest_call");
+        consumer.consume(pageWire("REST_CALL", 0), "KAFKA", "tasks.rest_call", java.util.UUID.randomUUID().toString());
 
         verify(gather, never()).sealScatter(any(), any(), anyInt());
         assertTrue(completion.calls.isEmpty(), "una página intermedia no reanuda la tarea");
@@ -303,7 +303,7 @@ class AsyncTaskConsumerTest {
         // El scatter ya cerró (fail-fast de una página previa): esta página tardía no debe hacer nada.
         when(gather.isScatterTerminal(any(), any())).thenReturn(true);
 
-        var result = consumer.consume(pageWire("REST_CALL", 5), "KAFKA", "tasks.rest_call");
+        var result = consumer.consume(pageWire("REST_CALL", 5), "KAFKA", "tasks.rest_call", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.DUPLICATE, result);
         verify(pageChain, never()).readAndChain(any(), any());
@@ -318,10 +318,10 @@ class AsyncTaskConsumerTest {
                 new AsyncPageChainService.Page(java.util.List.of(), true, 0, false));
         when(gather.sealScatter(any(), any(), eq(0))).thenReturn(Optional.of(new SliceProgress(0, 0, 0, true)));
 
-        consumer.consume(pageWire("REST_CALL", 0), "KAFKA", "tasks.rest_call");
+        consumer.consume(pageWire("REST_CALL", 0), "KAFKA", "tasks.rest_call", java.util.UUID.randomUUID().toString());
 
         assertNull(provider.records, "página vacía: no se ejecuta el provider");
-        verify(gather, never()).commitCompletedSlice(any(), any(), any());
+        verify(gather, never()).commitCompletedSlice(any(), any(), any(), any());
         assertEquals(1, completion.calls.size(), "seal(0) cierra y reanuda (tabla vacía)");
     }
 
@@ -347,10 +347,10 @@ class AsyncTaskConsumerTest {
     void sliceCountsButDoesNotResumeTaskUntilBatchCloses() throws Exception {
         var provider = new CapturingBatchProvider(TaskResult.success("slice ok"));
         when(registry.resolve("DB_WRITE")).thenReturn(provider);
-        when(gather.commitCompletedSlice(any(), any(), any())).thenReturn(Optional.of(new SliceProgress(1, 0, 3, false)));
+        when(gather.commitCompletedSlice(any(), any(), any(), any())).thenReturn(Optional.of(new SliceProgress(1, 0, 3, false)));
 
         var result = consumer.consume(sliceWire("DB_WRITE", 0, 3, java.util.List.of(Map.of("id", "a"))),
-                "KAFKA", "tasks.db_write");
+                "KAFKA", "tasks.db_write", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED, result);
         assertEquals("a", provider.records.get(0).values().get("id"), "el provider recibió los records de la slice");
@@ -366,11 +366,11 @@ class AsyncTaskConsumerTest {
         inbox.processedKeys.add(TaskIdempotency.key(1L, 2L, "slice-0"));
 
         var result = consumer.consume(sliceWire("DB_WRITE", 0, 3, java.util.List.of(Map.of("id", "a"))),
-                "KAFKA", "tasks.db_write");
+                "KAFKA", "tasks.db_write", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.DUPLICATE, result);
         assertNull(provider.records, "una slice ya procesada NO re-ejecuta el batch provider");
-        verify(gather, never()).commitCompletedSlice(any(), any(), any());
+        verify(gather, never()).commitCompletedSlice(any(), any(), any(), any());
     }
 
     @Test
@@ -381,21 +381,21 @@ class AsyncTaskConsumerTest {
         inbox.claimResult = false;
 
         var result = consumer.consume(sliceWire("DB_WRITE", 0, 3, java.util.List.of(Map.of("id", "a"))),
-                "KAFKA", "tasks.db_write");
+                "KAFKA", "tasks.db_write", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.DUPLICATE, result);
         assertNull(provider.records, "una slice con claim ajeno vivo NO re-ejecuta el batch provider");
         assertTrue(inbox.claimedKeys.contains(TaskIdempotency.key(1L, 2L, "slice-0")), "se intentó el claim de la slice");
-        verify(gather, never()).commitCompletedSlice(any(), any(), any());
+        verify(gather, never()).commitCompletedSlice(any(), any(), any(), any());
     }
 
     @Test
     void lastSliceResumesTaskExactlyOnce() throws Exception {
         when(registry.resolve("DB_WRITE")).thenReturn(new CapturingBatchProvider(TaskResult.success("slice ok")));
-        when(gather.commitCompletedSlice(any(), any(), any())).thenReturn(Optional.of(new SliceProgress(3, 0, 3, true)));
+        when(gather.commitCompletedSlice(any(), any(), any(), any())).thenReturn(Optional.of(new SliceProgress(3, 0, 3, true)));
 
         var result = consumer.consume(sliceWire("DB_WRITE", 2, 3, java.util.List.of(Map.of("id", "z"))),
-                "KAFKA", "tasks.db_write");
+                "KAFKA", "tasks.db_write", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED, result);
         assertEquals(1, completion.calls.size(), "la última slice reanuda la tarea una vez");
@@ -406,10 +406,10 @@ class AsyncTaskConsumerTest {
     void failedSliceThatTransitionsFailsTheTask() throws Exception {
         when(registry.resolve("DB_WRITE")).thenReturn(new CapturingBatchProvider(TaskResult.failure("boom")));
         // fail-fast: la slice fallida cierra el scatter como terminal → falla la tarea.
-        when(gather.failSlice(any(), any(), anyBoolean())).thenReturn(Optional.of(new SliceProgress(0, 1, 3, true)));
+        when(gather.failSlice(any(), any(), any(), anyBoolean())).thenReturn(Optional.of(new SliceProgress(0, 1, 3, true)));
 
         var result = consumer.consume(sliceWire("DB_WRITE", 1, 3, java.util.List.of(Map.of("id", "b"))),
-                "KAFKA", "tasks.db_write");
+                "KAFKA", "tasks.db_write", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.FAILED, result);
         assertEquals(1, completion.calls.size(), "la primera slice fallida falla la tarea una vez");
@@ -419,7 +419,7 @@ class AsyncTaskConsumerTest {
     @Test
     void continueOnFailureClosingSliceCompletesWithErrorsNotFailure() throws Exception {
         when(registry.resolve("DB_WRITE")).thenReturn(new CapturingBatchProvider(TaskResult.failure("bad row")));
-        when(gather.failSlice(any(), any(), anyBoolean())).thenReturn(Optional.of(new SliceProgress(2, 1, 3, true)));
+        when(gather.failSlice(any(), any(), any(), anyBoolean())).thenReturn(Optional.of(new SliceProgress(2, 1, 3, true)));
 
         var workItem = new AsyncSliceWorkItem(Map.of("continueOnFailure", true),
                 java.util.List.of(Map.of("id", "x")), 2, 3, Map.of(), Map.of(), Map.of());
@@ -428,7 +428,7 @@ class AsyncTaskConsumerTest {
                 Map.of("kind", "SLICE", "sliceIndex", "2"));
         var payload = AsyncTaskMessageCodec.toMessage(envelope, mapper).payload();
 
-        var result = consumer.consume(payload, "KAFKA", "tasks.db_write");
+        var result = consumer.consume(payload, "KAFKA", "tasks.db_write", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.FAILED, result);
         assertEquals(1, completion.calls.size());
@@ -440,13 +440,13 @@ class AsyncTaskConsumerTest {
     void sliceRehydratesPropagatedContextForTheProvider() throws Exception {
         var provider = new CapturingBatchProvider(TaskResult.success("slice ok"));
         when(registry.resolve("REST_CALL")).thenReturn(provider);
-        when(gather.commitCompletedSlice(any(), any(), any())).thenReturn(Optional.of(new SliceProgress(1, 0, 2, false)));
+        when(gather.commitCompletedSlice(any(), any(), any(), any())).thenReturn(Optional.of(new SliceProgress(1, 0, 2, false)));
 
         // Nivel 2: la slice lleva outputs de tarea origen + variables; el consumer los rehidrata.
         var payload = sliceWire("REST_CALL", 0, 2, java.util.List.of(Map.of("id", "a")),
                 Map.of("task-1.status", "SENT"), Map.of("processName", "P"), Map.of("env", "prod"));
 
-        var result = consumer.consume(payload, "KAFKA", "tasks.rest_call");
+        var result = consumer.consume(payload, "KAFKA", "tasks.rest_call", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED, result);
         assertEquals("SENT", ((Map<?, ?>) provider.context.attributes().get("taskOutputs")).get("task-1.status"),
@@ -566,6 +566,7 @@ class AsyncTaskConsumerTest {
         final List<Recorded> records = new ArrayList<>();
         final List<String> processedKeys = new ArrayList<>();
         final List<String> claimedKeys = new ArrayList<>();
+        final List<String> releasedKeys = new ArrayList<>();
         // §5: por defecto este consumer gana el claim (ejecuta); un test puede forzar false (claim ajeno vivo).
         boolean claimResult = true;
 
@@ -575,23 +576,28 @@ class AsyncTaskConsumerTest {
         }
 
         @Override
-        public boolean claim(AsyncTaskEnvelope e, String owner, int leaseSeconds) {
+        public boolean claim(AsyncTaskEnvelope e, String owner, String claimToken, int leaseSeconds) {
             claimedKeys.add(e.idempotencyKey());
             return claimResult;
         }
 
         @Override
-        public boolean renewLease(AsyncTaskEnvelope e, String owner, int leaseSeconds) {
+        public boolean renewLease(AsyncTaskEnvelope e, String claimToken, int leaseSeconds) {
             return true;
         }
 
         @Override
-        public void recordProcessed(AsyncTaskEnvelope e, String outputsJson, String details) {
+        public void releaseClaim(AsyncTaskEnvelope e, String claimToken) {
+            releasedKeys.add(e.idempotencyKey());
+        }
+
+        @Override
+        public void recordProcessed(AsyncTaskEnvelope e, String claimToken, String outputsJson, String details) {
             records.add(new Recorded("PROCESSED", e.idempotencyKey(), outputsJson, details, null, null));
         }
 
         @Override
-        public void recordFailed(AsyncTaskEnvelope e, String details) {
+        public void recordFailed(AsyncTaskEnvelope e, String claimToken, String details) {
             records.add(new Recorded("FAILED", e.idempotencyKey(), null, details, null, null));
         }
 

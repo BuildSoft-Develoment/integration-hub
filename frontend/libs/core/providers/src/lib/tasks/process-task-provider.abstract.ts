@@ -18,6 +18,13 @@ export interface ProcessTaskProviderDescriptor {
   labelKey: string;
   descriptionKey: string;
   modalLayout?: 'workspace' | 'rest';
+  label?: string;
+  origin?: 'BUILTIN' | 'LOCAL' | 'REMOTE';
+  pluginId?: string | null;
+  pluginVersion?: string | null;
+  status?: 'AVAILABLE' | 'DEGRADED' | 'UNTRUSTED' | 'SHADOWED_BY_LOCAL';
+  reason?: string | null;
+  transport?: string | null;
 }
 
 export abstract class ProcessTaskProvider<TDraft> {

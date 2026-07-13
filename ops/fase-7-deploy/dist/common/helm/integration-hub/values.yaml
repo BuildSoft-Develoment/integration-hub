@@ -1,0 +1,67 @@
+# Defaults del chart. Cada nube sobreescribe con values-<nube>.yaml (helm -f).
+replicaCount: 2
+
+image:
+  # repository lo fija cada values-<nube>.yaml (ECR/ACR/GAR/OCIR/registry privado).
+  repository: integration-hub
+  tag: ""          # por defecto usa .Chart.appVersion; CI lo pisa con --set image.tag=<sha/tag>
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# Perfiles Quarkus activos. Se compone prod + la nube.
+quarkusProfile: "prod,onprem"
+
+serviceAccount:
+  create: true
+  name: ""
+  # annotations para identidad de carga (IRSA / Workload Identity / OCI principal).
+  annotations: {}
+
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: integration-hub.example.com
+  tls: []
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi     # nativo arranca con poca RAM
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+# Config NO sensible (se vuelca a un ConfigMap y se inyecta como env).
+env:
+  DEPLOY_ENV: prod
+  DB_POOL_MAX_SIZE: "20"
+  FLYWAY_MIGRATE_AT_START: "true"
+  AUDIT_BROKER_TYPE: KAFKA
+
+# Secretos: se referencian de un Secret ya existente en el namespace (creado por el
+# CSI driver del vault de cada nube, o `kubectl create secret`). NO se ponen valores aqui.
+envFromSecret: integration-hub-secrets
+
+# Sonda de arranque holgada por si el primer boot corre migraciones Flyway.
+probes:
+  startup:
+    path: /q/health/started
+    failureThreshold: 30
+    periodSeconds: 5
+  liveness:
+    path: /q/health/live
+  readiness:
+    path: /q/health/ready

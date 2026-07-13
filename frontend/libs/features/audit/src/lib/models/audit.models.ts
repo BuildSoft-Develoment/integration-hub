@@ -191,6 +191,40 @@ export interface Mt101PayConflict {
 }
 
 /**
+ * Consola de PAY Conflicts (inbox transversal): un conflicto de pago abierto de cualquier set/ejecución, con el
+ * fragmentSetId y processExecutionId que lo produjeron para abrir la vista por-set (quarantine) y el lineage.
+ */
+export interface Mt101OpenPayConflict {
+  /** Ledger de origen: NORMAL (mt101_build_fragment) o CORRECTIVE (mt101_corrective_pay_fragment). */
+  source: 'NORMAL' | 'CORRECTIVE';
+  /** Set del deep-link a quarantine; para CORRECTIVE es el set ORIGINAL (join a rebuild_run). */
+  fragmentSetId: string;
+  processExecutionId: number | null;
+  sendersReference: string;
+  status: string;
+  reason: string | null;
+  updatedAt: string | null;
+  /** Solo CORRECTIVE: el run maker-checker que lo produjo (contexto). */
+  rebuildRunId: string | null;
+  /** Id del fragmento en su ledger (para el track-by; el id colisiona entre ledgers → usar junto a source). */
+  id: number;
+}
+
+/** Página del inbox de conflictos: items + cursor opaco para la siguiente página (null = fin). */
+export interface Mt101OpenPayConflictsPage {
+  items: Mt101OpenPayConflict[];
+  nextCursor: string | null;
+}
+
+/** A1: confirmación del banco (evidencia inline de un conflicto): tipo, gatewayReference, último estado, fecha. */
+export interface Mt101OpenPayConflictConfirmation {
+  confirmationType: string | null;
+  gatewayReference: string | null;
+  confirmedStatus: string | null;
+  receivedAt: string | null;
+}
+
+/**
  * item 2: vista de una fila de staging para corrección, con su posición FÍSICA en el archivo origen (línea física
  * para CSV/TXT/FIN; hoja+fila para Excel). Nullables: readers que no aportan posición los dejan null.
  */
@@ -206,13 +240,24 @@ export interface Mt101StagingRowView {
   sheetRow: number | null;
 }
 
-/** item 2 (búsqueda inversa): match de "archivo + línea física" al registro de staging. */
-export interface Mt101PhysicalLineMatch {
+/**
+ * G-A (búsqueda inversa enriquecida): lineage de un registro localizado por línea física. Incluye el resumen de
+ * cuarentena (regla + motivo + :20:/:21:) si el registro falló validación — un cuarentenado no tiene fragmento, así
+ * que este es el único lugar donde el operador ve, desde una línea física, por qué falló.
+ */
+export interface Mt101PhysicalLineLineage {
   stagingId: number;
   recordIndex: number;
   physicalLine: number | null;
   sourceFileHash: string;
   processExecutionId: number | null;
+  sheetName: string | null;
+  sheetRow: number | null;
+  quarantineRuleCode: string | null;
+  quarantineMessage: string | null;
+  quarantineStatus: string | null;
+  sendersReference: string | null;
+  transactionReference: string | null;
 }
 
 /** v60: resultado de resolver el UNCERTAIN normal de un fragment set (consulta STATUS, no reenvía). */

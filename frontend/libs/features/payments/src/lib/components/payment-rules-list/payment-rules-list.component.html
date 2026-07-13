@@ -1,0 +1,82 @@
+<ih-catalog-list
+  class="list-card"
+  [columns]="columns"
+  gridColumns="minmax(200px, 1.6fr) 1fr 0.8fr 0.8fr auto"
+  [rowCount]="store.rules().length"
+  [loading]="store.loading()"
+  [error]="null"
+  emptyKey="paymentRules.noData"
+  emptyIcon="shield"
+  [total]="store.totalLength()"
+  [pageIndex]="store.pageIndex()"
+  [pageSize]="store.pageSize()"
+  [pageSizeOptions]="pageSizeOptions"
+  (pageChange)="onPageChange($event)"
+  (retry)="store.load()"
+>
+  @for (rule of store.rules(); track rule.id) {
+    <div
+      class="table-row ih-catalog-table-row"
+      [class.ih-catalog-table-row--selected]="store.selectedId() === rule.id"
+      [attr.data-row-index]="$index"
+    >
+      <button
+        type="button"
+        class="row-primary ih-catalog-row-primary row-primary--button"
+        [attr.aria-label]="i18n.t('common.selectItem', { name: rule.code })"
+        [attr.tabindex]="$index === 0 ? 0 : -1"
+        (click)="store.openEdit(rule)"
+      >
+        <div class="row-copy ih-catalog-row-copy">
+          <strong>{{ rule.code }}</strong>
+          <small>{{ rule.ruleSet }} · {{ rule.standard }} / {{ rule.appliesTo }}</small>
+        </div>
+      </button>
+
+      <div class="row-kind ih-catalog-row-meta">{{ rule.predicateKind }}</div>
+
+      <div class="row-severity ih-catalog-row-meta">
+        <mat-chip-set>
+          <mat-chip [class]="severityChipClass(rule.severity)" [disableRipple]="true">
+            {{ severityLabel(rule.severity) }}
+          </mat-chip>
+        </mat-chip-set>
+      </div>
+
+      <div class="row-status" [class.row-status--inactive]="!rule.active">
+        <span class="status-dot" aria-hidden="true"></span>
+        {{ rule.active ? i18n.t('status.active') : i18n.t('status.inactive') }}
+      </div>
+
+      <div class="row-actions">
+        <button
+          mat-icon-button
+          type="button"
+          [matTooltip]="i18n.t('common.edit')"
+          [attr.aria-label]="i18n.t('paymentRules.edit')"
+          (click)="store.openEdit(rule)"
+        >
+          <ih-icon name="edit" [size]="18" />
+        </button>
+        <button
+          mat-icon-button
+          type="button"
+          [matTooltip]="i18n.t('paymentRules.clone')"
+          [attr.aria-label]="i18n.t('paymentRules.clone')"
+          (click)="store.openClone(rule)"
+        >
+          <ih-icon name="copy" [size]="18" />
+        </button>
+        <button
+          mat-icon-button
+          type="button"
+          [matTooltip]="rule.active ? i18n.t('common.disable') : i18n.t('common.enable')"
+          [attr.aria-label]="rule.active ? i18n.t('common.disable') : i18n.t('common.enable')"
+          (click)="store.toggle(rule)"
+        >
+          <ih-icon [name]="rule.active ? 'toggle-on' : 'toggle-off'" [size]="20" />
+        </button>
+      </div>
+    </div>
+  }
+</ih-catalog-list>

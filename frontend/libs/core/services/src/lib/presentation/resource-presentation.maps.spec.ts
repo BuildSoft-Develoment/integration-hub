@@ -7,7 +7,7 @@ import {
 } from './resource-presentation.maps';
 
 const CONNECTION_TYPES = ['ORACLE', 'POSTGRESQL', 'SQLSERVER', 'MYSQL', 'MONGODB'] as const;
-const SOURCE_TYPES = ['FILESYSTEM', 'FTP', 'SFTP', 'REST', 'S3', 'GCS', 'AZURE_BLOB'] as const;
+const SOURCE_TYPES = ['FILESYSTEM', 'FTP', 'SFTP', 'REST', 'S3', 'GCS', 'AZURE_BLOB', 'OCI_OBJECT_STORAGE'] as const;
 const READER_TYPES = ['TXT', 'CSV', 'XLS', 'XLSX', 'JSON', 'XML', 'SWIFT_MT'] as const;
 const TASK_TYPES = [
   'FILE_READ', 'DB_WRITE', 'DB_EXECUTE_SP', 'DB_EXECUTE_FN', 'REST_CALL', 'NOTIFICATION',

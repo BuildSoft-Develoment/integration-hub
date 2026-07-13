@@ -1,4 +1,5 @@
-import { computed, inject, Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { computed, inject, Injectable, signal } from '@angular/core';
 import { ResourcePresentation } from '@integration-hub/shared/models';
 import { I18nService } from '@integration-hub/core/i18n';
 import {
@@ -6,16 +7,65 @@ import {
   ProcessTaskFormModel,
   ProcessTaskProvider,
   ProcessTaskSummaryContext,
+  PlatformProcessTaskType,
   ProcessTaskType,
+  RemoteSchemaTaskProvider,
+  RemoteTaskCatalogItem,
 } from '@integration-hub/core/providers';
+import { firstValueFrom } from 'rxjs';
 import { TASK_PRESENTATION } from '../presentation/resource-presentation.maps';
+
+interface TaskTypeCatalogResponse {
+  readonly taskTypes: RemoteTaskCatalogItem[];
+}
+
+const REMOTE_TASK_PRESENTATION: ResourcePresentation = {
+  icon: 'cpu',
+  toneClass: 'ih-tone-integration',
+};
 
 @Injectable()
 export class ProcessTaskManagerService {
   private readonly i18n = inject(I18nService);
+  private readonly http = inject(HttpClient, { optional: true });
   private readonly providers = inject(PROCESS_TASK_PROVIDERS, { optional: true }) ?? [];
+  private readonly remoteProviders = signal<ProcessTaskProvider<unknown>[]>([]);
+  readonly remoteCatalogLoading = signal(false);
+  readonly remoteCatalogError = signal<string | null>(null);
 
-  readonly availableProviders = computed(() => this.providers.map((provider) => provider.descriptor));
+  private readonly allProviders = computed(() => [
+    ...this.providers,
+    ...this.remoteProviders(),
+  ]);
+
+  readonly availableProviders = computed(() => this.allProviders().map((provider) => provider.descriptor));
+
+  async loadRemoteTaskTypes(): Promise<void> {
+    if (!this.http) {
+      return;
+    }
+    this.remoteCatalogLoading.set(true);
+    try {
+      const response = await firstValueFrom(
+        this.http.get<TaskTypeCatalogResponse>('/api/task-types')
+      );
+      const localTypes = new Set(
+        this.providers.map((provider) => normalizeType(provider.descriptor.type))
+      );
+      const remoteProviders = (response.taskTypes ?? [])
+        .filter((item) => normalizeType(item.origin) === 'REMOTE')
+        .filter((item) => item.type?.trim())
+        .filter((item) => !localTypes.has(normalizeType(item.type)))
+        .map((item) => new RemoteSchemaTaskProvider(item));
+      this.remoteProviders.set(remoteProviders);
+      this.remoteCatalogError.set(null);
+    } catch (error) {
+      this.remoteCatalogError.set('processTask.remoteCatalogError');
+      this.remoteProviders.set([]);
+    } finally {
+      this.remoteCatalogLoading.set(false);
+    }
+  }
 
   /**
    * Presentacion visual (icono + tono) del tipo de tarea. Resolucion total
@@ -23,17 +73,31 @@ export class ProcessTaskManagerService {
    * concreta, sin fallback en runtime.
    */
   presentation(type: ProcessTaskType): ResourcePresentation {
-    return TASK_PRESENTATION[type];
+    return isPlatformTaskType(type)
+      ? TASK_PRESENTATION[type]
+      : REMOTE_TASK_PRESENTATION;
   }
 
   resolve(type: ProcessTaskType): ProcessTaskProvider<any> | null {
-    return this.providers.find((provider) => provider.supports(type)) ?? null;
+    return this.allProviders().find((provider) => provider.supports(type)) ?? null;
   }
 
   label(type: ProcessTaskType): string {
     const provider = this.resolve(type);
     if (!provider) throw new Error(`No provider registered for task type: ${type}`);
-    return this.i18n.t(provider.descriptor.labelKey);
+    return provider.descriptor.label ?? this.i18n.t(provider.descriptor.labelKey);
+  }
+
+  status(type: ProcessTaskType): ProcessTaskProvider<unknown>['descriptor']['status'] {
+    return this.resolve(type)?.descriptor.status ?? 'AVAILABLE';
+  }
+
+  statusReason(type: ProcessTaskType): string | null {
+    return this.resolve(type)?.descriptor.reason ?? null;
+  }
+
+  isAvailable(type: ProcessTaskType): boolean {
+    return this.status(type) === 'AVAILABLE';
   }
 
   modalLayout(type: ProcessTaskType): 'workspace' | 'rest' | undefined {
@@ -73,4 +137,12 @@ export class ProcessTaskManagerService {
     if (!provider) throw new Error(`No provider registered for task type: ${task.taskType}`);
     return provider.summarize(task, context, this.i18n);
   }
+}
+
+function normalizeType(value: unknown): string {
+  return String(value || '').trim().toUpperCase();
+}
+
+function isPlatformTaskType(type: ProcessTaskType): type is PlatformProcessTaskType {
+  return Object.prototype.hasOwnProperty.call(TASK_PRESENTATION, type);
 }

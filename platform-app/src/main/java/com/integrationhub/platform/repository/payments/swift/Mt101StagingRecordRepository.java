@@ -320,17 +320,34 @@ public class Mt101StagingRecordRepository {
     }
 
     /**
-     * item 2 (búsqueda inversa): resuelve una LÍNEA FÍSICA del archivo a su registro de staging (staging_id + índice
-     * lógico), para "archivo + línea X → ¿qué registro/fragmento?". Usa el índice V90 {@code (source_file_hash,
-     * physical_line)}. {@code processExecutionId} opcional desambigua re-procesos del mismo archivo; sin él, la más
-     * reciente. Null si no hay match (línea sin registro, o reader que no aporta línea física).
+     * G-A (búsqueda inversa por línea física, enriquecida): resuelve una LÍNEA FÍSICA del archivo a <b>todos</b> sus
+     * registros de staging (uno por ejecución: un reproceso del mismo archivo produce varias filas con el mismo hash y
+     * línea → todas visibles, no solo la última). Cada match trae el <b>resumen de cuarentena</b> si el registro falló
+     * validación ({@code mt101_failed_record} por {@code (source_file_hash, source_record_number = record_index + 1)},
+     * con su índice): {@code rule_code}, {@code message}, {@code status}, {@code :20:}, {@code :21:}. Así, desde una
+     * línea física, soporte ve DIRECTAMENTE por qué se cuarentenó (un registro cuarentenado no tiene fragmento, así que
+     * el lookup por fragmento no lo mostraría). Usa el índice V90 {@code (source_file_hash, physical_line)}.
+     * {@code processExecutionId} opcional acota a una ejecución. Lista vacía si la línea no tiene registro.
      */
-    public PhysicalLineMatch findByPhysicalLine(DataSource dataSource, String sourceFileHash, long physicalLine,
-                                                Long processExecutionId) throws SQLException {
+    public List<PhysicalLineLineage> findLineageByPhysicalLine(DataSource dataSource, String sourceFileHash,
+                                                               long physicalLine, Long processExecutionId)
+            throws SQLException {
         var hash = requireSourceFileHash(sourceFileHash);
-        var sql = "select id, record_index, physical_line, source_file_hash, process_execution_id from staging_record "
-                + "where source_file_hash = ? and physical_line = ? "
-                + "and (cast(? as bigint) is null or process_execution_id = ?) order by id desc limit 1";
+        var sql = "select sr.id, sr.record_index, sr.physical_line, sr.source_file_hash, sr.process_execution_id, "
+                + "sr.sheet_name, sr.sheet_row, "
+                + "q.rule_code, q.message, q.status as quarantine_status, "
+                + "q.senders_reference, q.transaction_reference "
+                + "from staging_record sr "
+                + "left join lateral ("
+                + "  select rule_code, message, status, senders_reference, transaction_reference "
+                + "  from mt101_failed_record fr "
+                + "  where fr.source_file_hash = sr.source_file_hash and fr.source_record_number = sr.record_index + 1 "
+                + "  order by fr.id desc limit 1"
+                + ") q on true "
+                + "where sr.source_file_hash = ? and sr.physical_line = ? "
+                + "and (cast(? as bigint) is null or sr.process_execution_id = ?) "
+                + "order by sr.process_execution_id desc, sr.id desc";
+        var result = new ArrayList<PhysicalLineLineage>();
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
             statement.setString(1, hash);
@@ -338,19 +355,90 @@ public class Mt101StagingRecordRepository {
             statement.setObject(3, processExecutionId);
             statement.setObject(4, processExecutionId);
             try (var rs = statement.executeQuery()) {
-                if (!rs.next()) {
-                    return null;
+                while (rs.next()) {
+                    result.add(new PhysicalLineLineage(
+                            rs.getLong("id"),
+                            rs.getLong("record_index"),
+                            rs.getObject("physical_line", Long.class),
+                            rs.getString("source_file_hash"),
+                            rs.getObject("process_execution_id", Long.class),
+                            rs.getString("sheet_name"),
+                            rs.getObject("sheet_row", Long.class),
+                            rs.getString("rule_code"),
+                            rs.getString("message"),
+                            rs.getString("quarantine_status"),
+                            rs.getString("senders_reference"),
+                            rs.getString("transaction_reference")));
                 }
-                return new PhysicalLineMatch(rs.getLong("id"), rs.getLong("record_index"),
-                        rs.getObject("physical_line", Long.class), rs.getString("source_file_hash"),
-                        rs.getObject("process_execution_id", Long.class));
             }
         }
+        return result;
     }
 
-    /** Match de la búsqueda inversa por línea física: identifica el registro de staging exacto. */
-    public record PhysicalLineMatch(long stagingId, long recordIndex, Long physicalLine, String sourceFileHash,
-                                    Long processExecutionId) {
+    /**
+     * Lineage de un registro localizado por línea física: identifica el registro exacto (staging_id + índice lógico +
+     * posición Excel) y, si falló validación, su resumen de cuarentena (regla + motivo + :20:/:21:).
+     */
+    public record PhysicalLineLineage(long stagingId, long recordIndex, Long physicalLine, String sourceFileHash,
+                                      Long processExecutionId, String sheetName, Long sheetRow,
+                                      String quarantineRuleCode, String quarantineMessage, String quarantineStatus,
+                                      String sendersReference, String transactionReference) {
+    }
+
+    /**
+     * #4 (búsqueda inversa por HOJA+FILA de Excel): resuelve "archivo + hoja + fila Excel" a <b>todos</b> sus registros
+     * de staging (uno por ejecución: reprocesos visibles), cada uno con su resumen de cuarentena si falló validación.
+     * Espejo de {@link #findLineageByPhysicalLine} pero para la clave operativa de Excel; usa el índice V93
+     * {@code (source_file_hash, sheet_name, sheet_row)}. Para Excel la línea física no aplica; la posición es hoja+fila.
+     */
+    public List<PhysicalLineLineage> findLineageBySheetRow(DataSource dataSource, String sourceFileHash,
+                                                           String sheetName, long sheetRow, Long processExecutionId)
+            throws SQLException {
+        var hash = requireSourceFileHash(sourceFileHash);
+        if (sheetName == null || sheetName.isBlank()) {
+            throw new IllegalArgumentException("sheetName is required for sheet-row staging access");
+        }
+        var sql = "select sr.id, sr.record_index, sr.physical_line, sr.source_file_hash, sr.process_execution_id, "
+                + "sr.sheet_name, sr.sheet_row, "
+                + "q.rule_code, q.message, q.status as quarantine_status, "
+                + "q.senders_reference, q.transaction_reference "
+                + "from staging_record sr "
+                + "left join lateral ("
+                + "  select rule_code, message, status, senders_reference, transaction_reference "
+                + "  from mt101_failed_record fr "
+                + "  where fr.source_file_hash = sr.source_file_hash and fr.source_record_number = sr.record_index + 1 "
+                + "  order by fr.id desc limit 1"
+                + ") q on true "
+                + "where sr.source_file_hash = ? and sr.sheet_name = ? and sr.sheet_row = ? "
+                + "and (cast(? as bigint) is null or sr.process_execution_id = ?) "
+                + "order by sr.process_execution_id desc, sr.id desc";
+        var result = new ArrayList<PhysicalLineLineage>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, hash);
+            statement.setString(2, sheetName.trim());
+            statement.setLong(3, sheetRow);
+            statement.setObject(4, processExecutionId);
+            statement.setObject(5, processExecutionId);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new PhysicalLineLineage(
+                            rs.getLong("id"),
+                            rs.getLong("record_index"),
+                            rs.getObject("physical_line", Long.class),
+                            rs.getString("source_file_hash"),
+                            rs.getObject("process_execution_id", Long.class),
+                            rs.getString("sheet_name"),
+                            rs.getObject("sheet_row", Long.class),
+                            rs.getString("rule_code"),
+                            rs.getString("message"),
+                            rs.getString("quarantine_status"),
+                            rs.getString("senders_reference"),
+                            rs.getString("transaction_reference")));
+                }
+            }
+        }
+        return result;
     }
 
     public StagingRowInfo findStagingRowById(DataSource dataSource, long stagingId) throws SQLException {

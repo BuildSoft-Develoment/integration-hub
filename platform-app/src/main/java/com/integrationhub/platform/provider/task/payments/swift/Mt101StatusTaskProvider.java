@@ -619,7 +619,16 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                 + " pending=" + resolution.stillPending()
                 + " conflicts=" + resolution.conflicts()
                 + " errors=" + resolution.gatewayErrors();
-        return TaskResult.success(summary, outputs);
+        // G1 (opción B): señaliza al motor si el dinero quedó resuelto o sigue ambiguo. Todo cerrado (0 pendientes, 0
+        // conflictos, 0 errores de gateway) -> resolvedReconciliation: limpia el flag y el proceso puede cerrar
+        // COMPLETED. Si queda algo (pending/conflict/gatewayError -> fragmentos UNCERTAIN sin terminal) ->
+        // needsReconciliation: el proceso queda NEEDS_RECONCILIATION (cubre también un STATUS ejecutado standalone).
+        var fullyResolved = resolution.stillPending() == 0
+                && resolution.conflicts() == 0
+                && resolution.gatewayErrors() == 0;
+        return fullyResolved
+                ? TaskResult.resolvedReconciliation(summary, outputs)
+                : TaskResult.needsReconciliation(summary, outputs);
     }
 
     /**

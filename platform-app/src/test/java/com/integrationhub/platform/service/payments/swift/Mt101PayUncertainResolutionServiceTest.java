@@ -19,6 +19,7 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -26,6 +27,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -108,6 +110,65 @@ class Mt101PayUncertainResolutionServiceTest {
         assertEquals(0, result.resolvedRejected());
         assertEquals(1, result.gatewayErrors(), "un gateway no concluyente cuenta como error, no resuelve");
         assertEquals("UNCERTAIN", statusFor(setId, "E1"), "ante error del gateway el fragmento se mantiene");
+    }
+
+    @Test
+    void resolvesLargeUncertainSetInBoundedMemoryLeavingResidualForReconciliation() throws Exception {
+        // #1 (evidencia de escala del PAY normal): el resolutor pagina (PAGE_SIZE=500) -> memoria acotada. Con N
+        // fragmentos UNCERTAIN (mitad ACCEPTED, mitad PENDING en el gateway), transiciona los aceptados a SENT a
+        // traves de MULTIPLES paginas y deja los pendientes sin tocar; el residual (stillPending>0) es lo que hace que
+        // el proceso quede NEEDS_RECONCILIATION (G1 needsReconciliation). N por defecto 3 paginas; stress via
+        // -Dresolve.rows=N (un 1M literal por HTTP no es practico: es 1 llamada al gateway por fragmento).
+        int rows = Integer.getInteger("resolve.rows", 1500);
+        var setId = "PAY-UNC-SCALE";
+        var refs = new ArrayList<String>(rows);
+        var statuses = new ArrayList<String>(rows);
+        int accepted = 0;
+        int pending = 0;
+        for (int i = 0; i < rows; i++) {
+            if (i % 2 == 0) {
+                refs.add("A" + i);
+                accepted++;
+            } else {
+                refs.add("P" + i);
+                pending++;
+            }
+            statuses.add("UNCERTAIN");
+        }
+        seedBatch(setId, refs, statuses);
+        stubFor(get(urlPathMatching("/status/A.*")).willReturn(aResponse().withHeader("Content-Type", "application/json")
+                .withBody("{\"status\":\"ACCEPTED\"}")));
+        stubFor(get(urlPathMatching("/status/P.*")).willReturn(aResponse().withHeader("Content-Type", "application/json")
+                .withBody("{\"status\":\"PENDING\"}")));
+
+        var result = service.resolveUncertainNormalPay(null, setId, "ops", "conciliacion masiva");
+
+        assertEquals(accepted, result.resolvedSent(), "todos los ACCEPTED -> SENT, a traves de multiples paginas");
+        assertEquals(pending, result.stillPending(), "los PENDING quedan sin resolver (residual)");
+        assertEquals(0, result.resolvedRejected());
+        assertEquals(0, result.gatewayErrors());
+        assertEquals(0, result.conflicts());
+        assertTrue(result.stillPending() > 0,
+                "residual > 0 -> el proceso queda NEEDS_RECONCILIATION (G1 needsReconciliation)");
+    }
+
+    private void seedBatch(String setId, List<String> refs, List<String> statuses) throws SQLException {
+        try (Connection connection = dataSource.getConnection();
+             var statement = connection.prepareStatement("insert into mt101_build_fragment (fragment_set_id, "
+                     + "process_execution_id, task_definition_id, source_table, fragment_index, fragment_total, "
+                     + "senders_reference, payload_hash, raw_payload, message_json, status) "
+                     + "values (?, 100, 20, 'staging_record', ?, 3, ?, repeat('a',64), 'raw', ?, ?)")) {
+            for (int i = 0; i < refs.size(); i++) {
+                var ref = refs.get(i);
+                statement.setString(1, setId);
+                statement.setInt(2, i + 1);
+                statement.setString(3, ref);
+                statement.setString(4, "{\"sequenceA\":{\"sendersReference\":\"" + ref + "\"}}");
+                statement.setString(5, statuses.get(i));
+                statement.addBatch();
+            }
+            statement.executeBatch();
+        }
     }
 
     @Test

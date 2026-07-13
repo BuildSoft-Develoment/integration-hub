@@ -72,7 +72,7 @@ class AsyncSuspendableReSuspendE2EIT {
 
         // 2. El consumer ejecuta el primer intento → suspende → el motor RE-SUSPENDE (no DEAD).
         var payload = readSingleString("select envelope_json from task_dispatch_outbox order by id desc limit 1");
-        var outcome = asyncTaskConsumer.consume(payload, "KAFKA", "tasks.test_suspendable");
+        var outcome = asyncTaskConsumer.consume(payload, "KAFKA", "tasks.test_suspendable", java.util.UUID.randomUUID().toString());
 
         assertEquals(AsyncTaskConsumer.ConsumeResult.PROCESSED, outcome);
         assertEquals(1, RecordingSuspendableTaskProvider.EXECUTIONS.get(), "el primer intento corrió en el consumer");

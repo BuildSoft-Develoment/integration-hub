@@ -17,21 +17,26 @@ public interface TaskInboxStore {
      * consumer gana (o re-toma un claim propio/vencido) y debe ejecutar; {@code false} si otro lo tiene vivo
      * o ya es terminal → skip. Con owner+lease, dos entregas de la misma trama no ejecutan el efecto dos veces.
      */
-    boolean claim(AsyncTaskEnvelope envelope, String owner, int leaseSeconds);
+    boolean claim(AsyncTaskEnvelope envelope, String owner, String claimToken, int leaseSeconds);
 
     /**
-     * §5 (F3): renueva el lease de un claim propio y VIVO mientras se ejecuta un efecto largo. Owner-scoped:
-     * devuelve {@code true} si renovó; {@code false} si el claim ya no es de {@code owner} (re-tomado) o dejó de
-     * estar {@code CLAIMED} (finalizó) → el heartbeat debe dejar de renovar. Evita que una reentrega durante una
-     * ejecución larga re-tome el claim y duplique el efecto (complementa el fencing del finalize).
+     * §5 (F3): renueva el lease de un claim propio y VIVO mientras se ejecuta un efecto largo. #4: TOKEN-scoped —
+     * devuelve {@code true} si renovó; {@code false} si el claim ya no lleva {@code claimToken} (re-tomado por otra
+     * entrega) o dejó de estar {@code CLAIMED} (finalizó) → el heartbeat debe dejar de renovar.
      */
-    boolean renewLease(AsyncTaskEnvelope envelope, String owner, int leaseSeconds);
+    boolean renewLease(AsyncTaskEnvelope envelope, String claimToken, int leaseSeconds);
 
-    /** Registra una ejecución exitosa; el {@code outputsJson} lo consumirá la continuación (Etapa 4). */
-    void recordProcessed(AsyncTaskEnvelope envelope, String outputsJson, String details);
+    /**
+     * #4 (release-on-failure): libera el claim de ESTA entrega (token) tras agotar los retries in-app, para que la
+     * re-entrega del broker (nuevo token) lo re-clame de inmediato en vez de esperar a que venza el lease.
+     */
+    void releaseClaim(AsyncTaskEnvelope envelope, String claimToken);
 
-    /** Registra un fallo de negocio determinista (no se reintenta). */
-    void recordFailed(AsyncTaskEnvelope envelope, String details);
+    /** Registra una ejecución exitosa (finaliza el claim del token); el {@code outputsJson} lo consume la continuación. */
+    void recordProcessed(AsyncTaskEnvelope envelope, String claimToken, String outputsJson, String details);
+
+    /** Registra un fallo de negocio determinista (finaliza el claim del token; no se reintenta). */
+    void recordFailed(AsyncTaskEnvelope envelope, String claimToken, String details);
 
     /** Registra un work-item no ejecutable (tipo desconocido o configuración ilegible). */
     void recordDead(AsyncTaskEnvelope envelope, String error);

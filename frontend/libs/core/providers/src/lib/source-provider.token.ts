@@ -6,6 +6,7 @@ import { RestSourceProvider } from './implementations/sources/rest-source.provid
 import { S3SourceProvider } from './implementations/sources/s3-source.provider';
 import { GcsSourceProvider } from './implementations/sources/gcs-source.provider';
 import { AzureBlobSourceProvider } from './implementations/sources/azure-blob-source.provider';
+import { OciObjectStorageSourceProvider } from './implementations/sources/oci-object-storage-source.provider';
 import { SftpSourceProvider } from './implementations/sources/sftp-source.provider';
 
 export const SOURCE_PROVIDERS = new InjectionToken<ReadonlyArray<SourceProvider>>(
@@ -20,6 +21,7 @@ const SOURCE_PROVIDER_TYPES: ReadonlyArray<Type<SourceProvider>> = [
   S3SourceProvider,
   GcsSourceProvider,
   AzureBlobSourceProvider,
+  OciObjectStorageSourceProvider,
 ];
 
 export function provideSourceProviders(): Provider[] {

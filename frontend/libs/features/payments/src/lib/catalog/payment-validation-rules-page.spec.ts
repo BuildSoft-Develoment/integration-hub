@@ -8,9 +8,13 @@ import { PaymentValidationRuleApiService } from '../api/payment-validation-rule-
 import { createPaymentRuleDraft } from '../models/payment-validation-rule.models';
 import { PaymentValidationRulesPageComponent } from './payment-validation-rules-page';
 
+/**
+ * Smoke test del page shell refactorizado (grid + toolbar + list + editor en drawer): al montar renderiza todo el
+ * árbol de presentación y dispara la carga inicial vía el store. La lógica detallada se cubre en
+ * payment-rules-catalog.store.spec.ts.
+ */
 describe('PaymentValidationRulesPageComponent', () => {
   let fixture: ComponentFixture<PaymentValidationRulesPageComponent>;
-  let component: PaymentValidationRulesPageComponent;
   let api: {
     list: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
@@ -18,15 +22,6 @@ describe('PaymentValidationRulesPageComponent', () => {
     setActive: ReturnType<typeof vi.fn>;
     exportRuleSet: ReturnType<typeof vi.fn>;
     importRules: ReturnType<typeof vi.fn>;
-  };
-  let feedback: {
-    error: ReturnType<typeof vi.fn>;
-    info: ReturnType<typeof vi.fn>;
-    created: ReturnType<typeof vi.fn>;
-    updated: ReturnType<typeof vi.fn>;
-    activated: ReturnType<typeof vi.fn>;
-    deactivated: ReturnType<typeof vi.fn>;
-    handleHttpError: ReturnType<typeof vi.fn>;
   };
 
   const activeRule = {
@@ -43,22 +38,7 @@ describe('PaymentValidationRulesPageComponent', () => {
       update: vi.fn().mockReturnValue(of(activeRule)),
       setActive: vi.fn().mockReturnValue(of({ ...activeRule, active: false })),
       exportRuleSet: vi.fn().mockReturnValue(of([activeRule])),
-      importRules: vi.fn().mockReturnValue(
-        of({
-          ruleSet: 'bank:BCP',
-          imported: 1,
-          replacedExisting: true,
-        })
-      ),
-    };
-    feedback = {
-      error: vi.fn(),
-      info: vi.fn(),
-      created: vi.fn(),
-      updated: vi.fn(),
-      activated: vi.fn(),
-      deactivated: vi.fn(),
-      handleHttpError: vi.fn(),
+      importRules: vi.fn().mockReturnValue(of({ ruleSet: 'bank:BCP', imported: 1, replacedExisting: true })),
     };
 
     await TestBed.configureTestingModule({
@@ -66,17 +46,27 @@ describe('PaymentValidationRulesPageComponent', () => {
       providers: [
         provideNoopAnimations(),
         { provide: PaymentValidationRuleApiService, useValue: api },
-        { provide: AppFeedbackService, useValue: feedback },
+        {
+          provide: AppFeedbackService,
+          useValue: {
+            error: vi.fn(),
+            info: vi.fn(),
+            created: vi.fn(),
+            updated: vi.fn(),
+            activated: vi.fn(),
+            deactivated: vi.fn(),
+            handleHttpError: vi.fn(),
+          },
+        },
       ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(PaymentValidationRulesPageComponent);
-    component = fixture.componentInstance;
     fixture.detectChanges();
     await fixture.whenStable();
   });
 
-  it('should load rules with the default filters', () => {
+  it('renders the catalog shell and loads rules on init', () => {
     expect(api.list).toHaveBeenCalledWith({
       ruleSet: 'bank:TEST',
       search: '',
@@ -86,54 +76,6 @@ describe('PaymentValidationRulesPageComponent', () => {
       page: 0,
       size: 10,
     });
-    expect(component.rules()).toEqual([activeRule]);
-    expect(component.totalLength()).toBe(1);
-  });
-
-  it('should reject invalid JSON predicate bodies before saving', async () => {
-    component.patchDraft({
-      predicateKind: 'FIELD_REQUIRED',
-      predicateBody: '{invalid',
-    });
-
-    await component.save();
-
-    expect(feedback.error).toHaveBeenCalledWith('paymentRules.invalidJson');
-    expect(api.create).not.toHaveBeenCalled();
-    expect(api.update).not.toHaveBeenCalled();
-  });
-
-  it('should require a second confirmation before replacing imports', async () => {
-    component.ruleSetFilter.set('bank:BCP');
-    component.replacingImport.set(true);
-    component.importJson.set(JSON.stringify([createPaymentRuleDraft('bank:BCP')]));
-
-    await component.importRules();
-
-    expect(component.armed()).toBe(component.importArmedId);
-    expect(api.importRules).not.toHaveBeenCalled();
-
-    await component.importRules();
-
-    expect(api.importRules).toHaveBeenCalledWith({
-      ruleSet: 'bank:BCP',
-      replaceExisting: true,
-      rules: [createPaymentRuleDraft('bank:BCP')],
-    });
-    expect(feedback.info).toHaveBeenCalledWith('paymentRules.importSuccess', {
-      count: 1,
-    });
-  });
-
-  it('should arm destructive toggles for error severity rules', async () => {
-    await component.toggle(activeRule);
-
-    expect(component.armed()).toBe('rule:toggle:E:17');
-    expect(api.setActive).not.toHaveBeenCalled();
-
-    await component.toggle(activeRule);
-
-    expect(api.setActive).toHaveBeenCalledWith(17, false);
-    expect(feedback.deactivated).toHaveBeenCalledWith('paymentRules.ruleEntity');
+    expect(fixture.componentInstance.store.rules()).toEqual([activeRule]);
   });
 });

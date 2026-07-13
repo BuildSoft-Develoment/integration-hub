@@ -27,4 +27,12 @@ public class PluginDescriptorVersionRepository implements PanacheRepositoryBase<
         }
         return find("pluginId = ?1 order by version asc", pluginId.trim()).list();
     }
+
+    /** Borra todas las versiones registradas de un plugin (parte del uninstall). Devuelve cuántas. */
+    public long deleteVersions(String pluginId) {
+        if (pluginId == null || pluginId.isBlank()) {
+            return 0;
+        }
+        return delete("pluginId = ?1", pluginId.trim());
+    }
 }

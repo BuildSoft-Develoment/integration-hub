@@ -150,6 +150,9 @@ public class ProcessExecutionService {
         try {
             SourcePayload sourcePayload = null;
             ReadResult readResult = null;
+            // G1: alguna tarea del money-path dejó dinero ambiguo (MT101_PAY normal con UNCERTAIN). El proceso NO puede
+            // cerrar COMPLETED silencioso; al final del pipeline se enruta a NEEDS_RECONCILIATION.
+            boolean executionNeedsReconciliation = false;
 
             for (int index = 0; index < tasks.size(); index++) {
                 var taskPlan = tasks.get(index);
@@ -238,6 +241,22 @@ public class ProcessExecutionService {
                     // flujos que siguen con los elementos validos (e.g. masivo donde el
                     // gate de fragmentos VALIDATED/REJECTED ya aisla los invalidos).
                     if (!runResult.suspended() && !runResult.fileRead() && !runResult.success()) {
+                        // G1: dinero ambiguo (MT101_PAY normal con UNCERTAIN). No es fallo técnico ni éxito: la tarea
+                        // queda COMPLETED_WITH_ERRORS y el proceso se cierra NEEDS_RECONCILIATION (nunca COMPLETED
+                        // silencioso ni FAILED opaco). Con continueOnFailure sigue el pipeline (un STATUS/RECONCILE
+                        // posterior puede resolver) y el terminal se decide al final; sin él, cierra ya.
+                        if (runResult.needsReconciliation()) {
+                            executionNeedsReconciliation = true;
+                            processExecutionStateService.completeTaskWithErrors(
+                                    processExecutionId, executionToken, taskExecutionId, taskDetails, taskPayload);
+                            taskSpan.setAttribute("task.needs.reconciliation", true);
+                            if (boolValue(taskConfiguration.get("continueOnFailure"), false)) {
+                                continue;
+                            }
+                            processExecutionStateService.markNeedsReconciliation(processExecutionId, executionToken,
+                                    "Task " + taskPlan.taskType() + " left ambiguous payments: " + runResult.details());
+                            return processExecutionStateService.getExecution(processExecutionId);
+                        }
                         if (boolValue(taskConfiguration.get("continueOnFailure"), false)) {
                             processExecutionStateService.completeTaskWithErrors(
                                     processExecutionId, executionToken, taskExecutionId, taskDetails, taskPayload);
@@ -252,6 +271,11 @@ public class ProcessExecutionService {
                         return processExecutionStateService.getExecution(processExecutionId);
                     }
 
+                    // G1 (opción B): un resolutor (STATUS con resolveNormalPay) que resolvió TODA la ambigüedad limpia
+                    // el flag: si no queda dinero incierto, el proceso puede cerrar COMPLETED en vez de NEEDS_RECONCILIATION.
+                    if (runResult.reconciliationResolved()) {
+                        executionNeedsReconciliation = false;
+                    }
                     processExecutionStateService.completeTask(processExecutionId, executionToken, taskExecutionId, taskDetails, taskPayload);
                 } catch (FencingTokenLostException fence) {
                     // P2: perdimos el token (lease vencido, recuperado por otro nodo). NO fallamos la tarea (eso
@@ -269,6 +293,13 @@ public class ProcessExecutionService {
                 }
             }
 
+            // G1: si alguna tarea (con continueOnFailure) dejó dinero ambiguo, el proceso cierra NEEDS_RECONCILIATION,
+            // no COMPLETED: fuerza conciliación en vez de aparentar éxito con pagos UNCERTAIN pendientes.
+            if (executionNeedsReconciliation) {
+                processExecutionStateService.markNeedsReconciliation(processExecutionId, executionToken,
+                        "Process completed with ambiguous payments pending reconciliation (UNCERTAIN)");
+                return processExecutionStateService.getExecution(processExecutionId);
+            }
             processExecutionStateService.completeProcess(processExecutionId, executionToken, "Process completed successfully");
             return processExecutionStateService.getExecution(processExecutionId);
         } catch (FencingTokenLostException fence) {

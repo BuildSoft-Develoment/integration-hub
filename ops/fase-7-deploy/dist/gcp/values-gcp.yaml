@@ -1,0 +1,25 @@
+# Values Helm para GCP (GKE + Artifact Registry).
+quarkusProfile: "prod,gcp"
+
+image:
+  repository: <REGION>-docker.pkg.dev/<PROJECT_ID>/integration-hub/integration-hub
+
+serviceAccount:
+  create: true
+  annotations:
+    # Workload Identity (GKE): mapea la SA de K8s a una SA de GCP con acceso a
+    # Secret Manager + el bucket GCS del staging.
+    iam.gke.io/gcp-service-account: integration-hub@<PROJECT_ID>.iam.gserviceaccount.com
+
+ingress:
+  enabled: true
+  className: gce
+  host: integration-hub.<TU_DOMINIO>
+
+autoscaling:
+  enabled: true
+
+env:
+  DEPLOY_ENV: prod
+  GCP_PROJECT_ID: <PROJECT_ID>
+  PLUGIN_STAGING_BUCKET: integration-hub-plugin-staging

@@ -1,4 +1,4 @@
-import { HttpClient, HttpContext } from '@angular/common/http';
+import { HttpClient, HttpContext, HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { I18nService, SKIP_GLOBAL_ERROR_FEEDBACK } from '@integration-hub/core/services';
 import {
@@ -199,6 +199,18 @@ interface FrontendPluginRow {
                         {{ i18n.t('plugins.activate') }}
                       </button>
                     }
+                    @if (confirmingUninstall() === plugin.id) {
+                      <button type="button" class="plugins-btn plugins-btn--danger" [disabled]="busy()" (click)="confirmUninstall(plugin.id)">
+                        {{ i18n.t('plugins.uninstall.confirm') }}
+                      </button>
+                      <button type="button" class="plugins-btn" [disabled]="busy()" (click)="cancelUninstall()">
+                        {{ i18n.t('plugins.cancel') }}
+                      </button>
+                    } @else {
+                      <button type="button" class="plugins-btn plugins-btn--danger" [disabled]="busy()" (click)="requestUninstall(plugin.id)">
+                        {{ i18n.t('plugins.uninstall') }}
+                      </button>
+                    }
                   </td>
                 </tr>
               }
@@ -350,6 +362,60 @@ interface FrontendPluginRow {
         }
       </section>
 
+      <section class="plugins-installer">
+        <div class="plugins-installer__head">
+          <h3 class="ih-section-title">{{ i18n.t('plugins.backendInstall.title') }}</h3>
+          <button
+            type="button"
+            class="plugins-btn plugins-btn--ghost"
+            [disabled]="busy()"
+            (click)="loadBackendDescriptorExample()"
+          >
+            {{ i18n.t('plugins.backendInstall.example') }}
+          </button>
+        </div>
+        <p class="ih-muted">{{ i18n.t('plugins.backendInstall.hint') }}</p>
+        <label class="plugins-field-label" for="backend-descriptor">
+          {{ i18n.t('plugins.backendInstall.descriptor') }}
+        </label>
+        <textarea
+          id="backend-descriptor"
+          #backendDescriptor
+          class="plugins-input plugins-textarea plugins-code"
+          [class.plugins-input--invalid]="backendInstallInvalidJson()"
+          rows="9"
+          spellcheck="false"
+          [value]="backendDescriptorJson()"
+          (input)="onBackendDescriptorInput(backendDescriptor.value)"
+          [attr.aria-label]="i18n.t('plugins.backendInstall.descriptor')"
+          [attr.aria-invalid]="backendInstallInvalidJson()"
+          placeholder='{{ "{" }} "id": "...", "version": "1.0.0", "transport": "GRPC", "endpoint": "https://...", "providedTypes": ["..."], "trusted": false {{ "}" }}'
+        ></textarea>
+        <div class="plugins-installer__actions">
+          <button
+            type="button"
+            class="plugins-btn plugins-btn--primary"
+            [disabled]="busy() || !backendDescriptorJson().trim()"
+            (click)="installBackendDescriptor()"
+          >
+            {{ busy() ? i18n.t('plugins.backendInstall.installing') : i18n.t('plugins.backendInstall.install') }}
+          </button>
+          @if (backendInstallInvalidJson()) {
+            <span class="plugins-hint plugins-hint--error" role="alert">
+              {{ i18n.t('plugins.backendInstall.invalidJson') }}
+            </span>
+          }
+        </div>
+        @if (backendInstallMessage(); as msg) {
+          <p class="plugins-hint" [attr.role]="msg.ok ? 'status' : 'alert'" aria-live="polite">
+            <ih-status-badge [status]="msg.ok ? 'success' : 'error'">
+              {{ msg.ok ? i18n.t('plugins.ui.acceptedBadge') : i18n.t('plugins.ui.rejectedBadge') }}
+            </ih-status-badge>
+            {{ msg.text }}
+          </p>
+        }
+      </section>
+
       <section>
         <h3 class="ih-section-title">{{ i18n.t('plugins.marketplace') }}</h3>
         <div class="plugins-market-form">
@@ -491,6 +557,16 @@ interface FrontendPluginRow {
       .plugins-weight { display: inline-block; margin-right: 0.4rem; font-weight: var(--ih-font-weight-medium); }
       .canary-spark { display: inline-block; width: 90px; height: 22px; vertical-align: middle; }
       .plugins-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+      .plugins-installer { border: 1px solid var(--ih-border); border-radius: var(--ih-radius-md); padding: 1rem; background: var(--ih-surface); }
+      .plugins-installer__head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+      .plugins-installer__actions { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem; flex-wrap: wrap; }
+      .plugins-field-label { display: block; margin: 0.4rem 0 0.25rem; font-size: var(--ih-font-size-sm); font-weight: var(--ih-font-weight-medium); }
+      .plugins-code { width: 100%; max-width: 46rem; }
+      .plugins-input--invalid { border-color: var(--ih-status-error); }
+      .plugins-btn--primary { border-color: var(--ih-accent, var(--ih-border-strong)); background: var(--ih-accent, var(--ih-surface-alt)); color: var(--ih-on-accent, inherit); font-weight: var(--ih-font-weight-medium); }
+      .plugins-btn--ghost { background: transparent; }
+      .plugins-hint { display: inline-flex; align-items: center; gap: 0.4rem; font-size: var(--ih-font-size-sm); margin: 0.5rem 0 0; }
+      .plugins-hint--error { color: var(--ih-status-error); }
     `,
   ],
 })
@@ -570,6 +646,7 @@ export class PluginDiagnosticsPageComponent implements OnInit {
   readonly backendVersions = computed(() => this.backendDiagnostics()?.versions ?? []);
   readonly busy = signal(false);
   readonly confirmingDeactivate = signal<string | null>(null);
+  readonly confirmingUninstall = signal<string | null>(null);
   readonly canaryLoading = signal(false);
   readonly canaryError = signal(false);
   readonly canaryMetrics = signal<readonly BackendCanaryMetric[]>([]);
@@ -689,6 +766,19 @@ export class PluginDiagnosticsPageComponent implements OnInit {
     this.deactivate(id);
   }
 
+  requestUninstall(id: string): void {
+    this.confirmingUninstall.set(id);
+  }
+
+  cancelUninstall(): void {
+    this.confirmingUninstall.set(null);
+  }
+
+  confirmUninstall(id: string): void {
+    this.confirmingUninstall.set(null);
+    this.uninstall(id);
+  }
+
   readonly marketplaceCatalogUrl = signal('');
   readonly marketplacePluginId = signal('');
   readonly marketplacePreview = signal<BackendPluginDescriptor | null>(null);
@@ -719,6 +809,103 @@ export class PluginDiagnosticsPageComponent implements OnInit {
   readonly uiManifestJson = signal('');
   readonly uiPreviewResult = signal<{ id: string; accepted: boolean; reason: string } | null>(null);
   readonly uiInvalidJson = signal(false);
+
+  readonly backendDescriptorJson = signal('');
+  readonly backendInstallInvalidJson = signal(false);
+  readonly backendInstallMessage = signal<{ ok: boolean; text: string } | null>(null);
+
+  /**
+   * Instala un plugin backend por descriptor JSON directo (POST /api/plugins/install).
+   * Via cruda (admin/dev), analoga al form de widgets; el marketplace es la via gobernada.
+   * El descriptor queda inactivo/no confiable segun lo declarado: la activacion (canary) y
+   * la confianza se gestionan aparte, igual que via API.
+   */
+  onBackendDescriptorInput(value: string): void {
+    this.backendDescriptorJson.set(value);
+    // Limpiar feedback stale al editar, para no mostrar un error de un intento anterior.
+    if (this.backendInstallInvalidJson()) {
+      this.backendInstallInvalidJson.set(false);
+    }
+    if (this.backendInstallMessage()) {
+      this.backendInstallMessage.set(null);
+    }
+  }
+
+  /** Rellena el textarea con un descriptor de ejemplo listo para editar. */
+  loadBackendDescriptorExample(): void {
+    const example = {
+      id: 'mi-plugin',
+      version: '1.0.0',
+      spiVersion: '2.0.0',
+      transport: 'GRPC',
+      endpoint: 'https://mi-plugin.interno:50051',
+      providedTypes: ['MI_TASK'],
+      providedReaderTypes: ['MI_READER'],
+      trusted: false,
+      active: false,
+      // Config-schema por tipo: la UI lo renderiza con ih-schema-form (sin form hardcoded).
+      // Asi un reader/task aportado por backend obtiene su formulario automaticamente.
+      configSchemas: {
+        MI_READER: {
+          fields: [
+            { key: 'delimiter', labelKey: 'Delimitador', type: 'text', required: true },
+            { key: 'hasHeader', labelKey: '¿Tiene cabecera?', type: 'boolean' },
+            {
+              key: 'encoding',
+              labelKey: 'Encoding',
+              type: 'select',
+              options: [
+                { label: 'UTF-8', value: 'UTF-8' },
+                { label: 'ISO-8859-1', value: 'ISO-8859-1' },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    this.backendInstallInvalidJson.set(false);
+    this.backendInstallMessage.set(null);
+    this.backendDescriptorJson.set(JSON.stringify(example, null, 2));
+  }
+
+  async installBackendDescriptor(): Promise<void> {
+    if (this.busy()) {
+      return;
+    }
+    const raw = this.backendDescriptorJson().trim();
+    this.backendInstallInvalidJson.set(false);
+    this.backendInstallMessage.set(null);
+    if (!raw) {
+      return;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      this.backendInstallInvalidJson.set(true);
+      return;
+    }
+    this.busy.set(true);
+    try {
+      await firstValueFrom(
+        this.http.post('/api/plugins/install', parsed, {
+          context: new HttpContext().set(SKIP_GLOBAL_ERROR_FEEDBACK, true),
+        })
+      );
+      const id = (parsed as { id?: string })?.id ?? '';
+      this.backendInstallMessage.set({ ok: true, text: this.i18n.t('plugins.backendInstall.installed', { id }) });
+      this.backendDescriptorJson.set('');
+      await this.loadBackendDiagnostics();
+      await this.loadCanaryMetrics();
+    } catch (error) {
+      this.backendInstallMessage.set({
+        ok: false,
+        text: this.i18n.t('plugins.backendInstall.error', { reason: backendErrorReason(error) }),
+      });
+    } finally {
+      this.busy.set(false);
+    }
+  }
 
   previewUiManifest(): void {
     const raw = this.uiManifestJson().trim();
@@ -760,6 +947,10 @@ export class PluginDiagnosticsPageComponent implements OnInit {
 
   activate(id: string): void {
     void this.runAction(() => this.http.post(`/api/plugins/${encodeURIComponent(id)}/activate`, {}));
+  }
+
+  uninstall(id: string): void {
+    void this.runAction(() => this.http.delete(`/api/plugins/${encodeURIComponent(id)}`, { responseType: 'json' }));
   }
 
   deactivate(id: string): void {
@@ -813,4 +1004,19 @@ export class PluginDiagnosticsPageComponent implements OnInit {
       this.backendLoading.set(false);
     }
   }
+}
+
+/** Motivo legible del fallo de instalacion: el backend manda {message,details} en el body. */
+function backendErrorReason(error: unknown): string {
+  if (error instanceof HttpErrorResponse) {
+    const body = error.error as { message?: string; details?: string } | string | null;
+    if (body && typeof body === 'object') {
+      return body.details || body.message || `HTTP ${error.status}`;
+    }
+    if (typeof body === 'string' && body.trim()) {
+      return body;
+    }
+    return `HTTP ${error.status}`;
+  }
+  return error instanceof Error ? error.message : String(error);
 }

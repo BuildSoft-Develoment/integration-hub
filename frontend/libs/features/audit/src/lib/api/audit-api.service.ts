@@ -11,8 +11,10 @@ import {
   Mt101FragmentSetSummary,
   Mt101LoteHeader,
   Mt101NormalPayResolution,
+  Mt101OpenPayConflictConfirmation,
+  Mt101OpenPayConflictsPage,
   Mt101PayConflict,
-  Mt101PhysicalLineMatch,
+  Mt101PhysicalLineLineage,
   Mt101PayDispatchIntent,
   Mt101PayDispatchReconcileResult,
   Mt101PayDispatchSummary,
@@ -71,6 +73,7 @@ export class AuditApiService {
     value?: string;
     sourceFileHash?: string;
     recordNumber?: number | string;
+    processExecutionId?: number | string;
     limit?: number;
   }): Observable<RecordLineageEntry[]> {
     let httpParams = new HttpParams().set('limit', String(query.limit ?? 1000));
@@ -87,6 +90,10 @@ export class AuditApiService {
       httpParams = httpParams
         .set('sourceFileHash', query.sourceFileHash.trim())
         .set('recordNumber', String(query.recordNumber).trim());
+      // B: desambigua reprocesos (mismo archivo+fila en varias ejecuciones).
+      if (query.processExecutionId !== undefined && String(query.processExecutionId).trim()) {
+        httpParams = httpParams.set('processExecutionId', String(query.processExecutionId).trim());
+      }
     }
     return this.http.get<RecordLineageEntry[]>('/api/query/record-lineage', { params: httpParams });
   }
@@ -150,13 +157,16 @@ export class AuditApiService {
     return this.http.get<Mt101FragmentSetSummary>('/api/query/mt101-fragments/summary', { params: httpParams });
   }
 
-  /** item 2 (búsqueda inversa): "archivo + línea física" → registro de staging (staging_id + índice lógico). */
+  /**
+   * G-A (búsqueda inversa enriquecida): "archivo + línea física" → LISTA de registros de staging (uno por ejecución:
+   * reprocesos visibles), cada uno con su resumen de cuarentena si falló validación.
+   */
   mt101ByPhysicalLine(query: {
     connectionRef?: string;
     sourceFileHash: string;
     physicalLine: number;
     processExecutionId?: number;
-  }): Observable<Mt101PhysicalLineMatch | null> {
+  }): Observable<Mt101PhysicalLineLineage[]> {
     let httpParams = new HttpParams()
       .set('sourceFileHash', query.sourceFileHash.trim())
       .set('physicalLine', String(query.physicalLine));
@@ -166,8 +176,33 @@ export class AuditApiService {
     if (query.processExecutionId != null) {
       httpParams = httpParams.set('processExecutionId', String(query.processExecutionId));
     }
-    return this.http.get<Mt101PhysicalLineMatch | null>(
+    return this.http.get<Mt101PhysicalLineLineage[]>(
       '/api/query/mt101-fragments/by-physical-line', { params: httpParams });
+  }
+
+  /**
+   * #4 (Excel): "archivo + hoja + fila Excel" → LISTA de registros de staging (uno por ejecución), cada uno con su
+   * resumen de cuarentena. Espejo de {@link mt101ByPhysicalLine} para la clave operativa de Excel.
+   */
+  mt101BySheetRow(query: {
+    connectionRef?: string;
+    sourceFileHash: string;
+    sheetName: string;
+    sheetRow: number;
+    processExecutionId?: number;
+  }): Observable<Mt101PhysicalLineLineage[]> {
+    let httpParams = new HttpParams()
+      .set('sourceFileHash', query.sourceFileHash.trim())
+      .set('sheetName', query.sheetName.trim())
+      .set('sheetRow', String(query.sheetRow));
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    if (query.processExecutionId != null) {
+      httpParams = httpParams.set('processExecutionId', String(query.processExecutionId));
+    }
+    return this.http.get<Mt101PhysicalLineLineage[]>(
+      '/api/query/mt101-fragments/by-sheet-row', { params: httpParams });
   }
 
   /** v60: lista detallada de fragmentos en conflicto de pago del set (:20:, estado real, motivo, fecha). */
@@ -177,6 +212,68 @@ export class AuditApiService {
       httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }
     return this.http.get<Mt101PayConflict[]>('/api/query/mt101-fragments/pay-conflicts', { params: httpParams });
+  }
+
+  /**
+   * Consola de PAY Conflicts: inbox transversal de conflictos de pago abiertos (todos los sets/ejecuciones), más
+   * recientes primero. No exige conocer el fragmentSetId de antemano.
+   */
+  mt101OpenPayConflicts(query?: {
+    connectionRef?: string;
+    limit?: number;
+    cursor?: string;
+  }): Observable<Mt101OpenPayConflictsPage> {
+    let httpParams = new HttpParams();
+    if (query?.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    if (query?.limit != null) {
+      httpParams = httpParams.set('limit', String(query.limit));
+    }
+    if (query?.cursor) {
+      httpParams = httpParams.set('cursor', query.cursor);
+    }
+    return this.http.get<Mt101OpenPayConflictsPage>(
+      '/api/query/mt101-fragments/pay-conflicts/open', { params: httpParams });
+  }
+
+  /**
+   * A1 (evidencia inline): confirmación(es) del banco para un :20: (gatewayReference + último STATUS), la evidencia de
+   * por qué el fragmento quedó en conflicto.
+   */
+  mt101PayConflictConfirmations(query: {
+    connectionRef?: string;
+    sendersReference: string;
+  }): Observable<Mt101OpenPayConflictConfirmation[]> {
+    let httpParams = new HttpParams().set('sendersReference', query.sendersReference);
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.get<Mt101OpenPayConflictConfirmation[]>(
+      '/api/query/mt101-fragments/pay-conflicts/confirmations', { params: httpParams });
+  }
+
+  /**
+   * A2 (resolucion gobernada): reconoce un conflicto con motivo — limpia el flag y deja la trama PAY_CONFLICT_RESOLVED,
+   * sin tocar el terminal real. source=NORMAL usa fragmentSetId; source=CORRECTIVE usa rebuildRunId (ambos en setId).
+   */
+  mt101AcknowledgePayConflict(body: {
+    connectionRef?: string;
+    source: 'NORMAL' | 'CORRECTIVE';
+    setId: string;
+    sendersReference: string;
+    reason: string;
+  }): Observable<{ acknowledged: number }> {
+    let httpParams = new HttpParams()
+      .set('source', body.source)
+      .set('setId', body.setId)
+      .set('sendersReference', body.sendersReference)
+      .set('reason', body.reason);
+    if (body.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', body.connectionRef.trim());
+    }
+    return this.http.post<{ acknowledged: number }>(
+      '/api/query/mt101-fragments/pay-conflicts/acknowledge', null, { params: httpParams });
   }
 
   /**

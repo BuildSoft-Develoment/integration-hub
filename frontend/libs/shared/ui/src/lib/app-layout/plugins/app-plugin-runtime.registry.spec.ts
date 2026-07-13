@@ -5,6 +5,7 @@ import { AppPluginManifest } from '../navigation/app-navigation.models';
 import { provideAppPluginManifests } from './app-plugin.token';
 import {
   AppPluginRuntimeRegistry,
+  provideAppPluginCatalogFetch,
   provideAppPluginRemoteOrigins,
   provideAppPluginRemoteTrustedKeys,
 } from './app-plugin-runtime.registry';
@@ -348,6 +349,57 @@ describe('AppPluginRuntimeRegistry', () => {
     expect(report.rejected[0].reason).toMatch(/not in the allowed plugin origins/);
   });
 
+  it('accepts an http remote on localhost (dev parity with backend) when allowlisted and signed', () => {
+    const registry = configure(platformManifest(), [
+      provideAppPluginRemoteOrigins(['http://localhost:4300']),
+      provideAppPluginRemoteTrustedKeys(['key-1']),
+    ]);
+
+    const report = registry.installExternalManifests([
+      {
+        id: 'remote-local-http',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Remote Local Http',
+        remote: {
+          url: 'http://localhost:4300/remoteEntry.json',
+          exposedModule: './Widget',
+          integrity: VALID_INTEGRITY,
+          signature: VALID_SIGNATURE,
+        },
+      },
+    ]);
+
+    expect(report.accepted).toEqual(['remote-local-http']);
+    expect(report.rejected).toEqual([]);
+  });
+
+  it('still quarantines an http remote on a non-local host', () => {
+    const registry = configure(platformManifest(), [
+      provideAppPluginRemoteOrigins(['http://plugins.example.com']),
+      provideAppPluginRemoteTrustedKeys(['key-1']),
+    ]);
+
+    const report = registry.installExternalManifests([
+      {
+        id: 'remote-http-remote-host',
+        version: '1.0.0',
+        platformVersion: '1.0.0',
+        displayName: 'Remote Http Remote Host',
+        remote: {
+          url: 'http://plugins.example.com/remoteEntry.js',
+          exposedModule: './Widget',
+          integrity: VALID_INTEGRITY,
+          signature: VALID_SIGNATURE,
+        },
+      },
+    ]);
+
+    expect(report.accepted).toEqual([]);
+    expect(report.rejected[0].id).toBe('remote-http-remote-host');
+    expect(report.rejected[0].reason).toMatch(/http:\/\/ is allowed only for localhost/);
+  });
+
   it('quarantines a remote plugin missing provenance fields', () => {
     const registry = configure(platformManifest(), [
       provideAppPluginRemoteOrigins(['https://plugins.example.com']),
@@ -467,6 +519,22 @@ describe('AppPluginRuntimeRegistry', () => {
     const ids = registry.diagnostics().installed.map((plugin) => plugin.id);
     expect(ids).toContain('cat-a');
     expect(ids).toContain('cat-b');
+    vi.unstubAllGlobals();
+  });
+
+  it('uses the injected catalog fetch seam (so the app can attach an auth token)', async () => {
+    const authedFetch = vi
+      .fn()
+      .mockResolvedValue({ ok: true, json: async () => ({ manifests: [commandManifest('cat-auth', 'catAuth')] }) });
+    const globalFetch = vi.fn();
+    vi.stubGlobal('fetch', globalFetch);
+    const registry = configure(platformManifest(), [provideAppPluginCatalogFetch(authedFetch)]);
+
+    await registry.loadExternalManifestCatalogs([{ url: '/api/plugins/ui-catalog' }]);
+
+    expect(authedFetch).toHaveBeenCalledWith('/api/plugins/ui-catalog', expect.anything());
+    expect(globalFetch).not.toHaveBeenCalled();
+    expect(registry.diagnostics().installed.map((plugin) => plugin.id)).toContain('cat-auth');
     vi.unstubAllGlobals();
   });
 

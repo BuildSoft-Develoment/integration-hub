@@ -27,6 +27,12 @@ _frontend_git_backup/
 
 # Bundles distribuibles regenerables
 dist/
+# ...pero el dist de DESPLIEGUE (config/IaC/Helm por entorno) SI se versiona: es fuente,
+# no build output. Se des-ignora explicitamente (su parent no esta excluido, asi que la
+# negacion del directorio basta para re-incluir su contenido).
+!ops/fase-7-deploy/dist/
+# ...salvo los .env reales con secretos (los .env.example SI se versionan).
+ops/fase-7-deploy/dist/**/.env
 
 # Evidencia local regenerable / sensible de Lighthouse y sesiones browser
 lighthouse-report/

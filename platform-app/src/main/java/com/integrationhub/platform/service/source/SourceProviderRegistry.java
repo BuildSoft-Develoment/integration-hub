@@ -10,6 +10,9 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
@@ -58,6 +61,23 @@ public class SourceProviderRegistry {
             return new RemoteSourceProvider(type, remote.get(), invoker, remotePlugins, staging);
         }
         throw new IllegalArgumentException("Unsupported source provider: " + type);
+    }
+
+    /** Tipos de source locales (registrados en el build) → nombre del provider, para el catalogo. */
+    public Map<String, String> localSourceTypeProviders() {
+        var types = new LinkedHashMap<String, String>();
+        providerStream().forEach(provider -> {
+            var type = provider.type();
+            if (type != null && !type.isBlank()) {
+                types.putIfAbsent(type, provider.getClass().getSimpleName());
+            }
+        });
+        return Collections.unmodifiableMap(types);
+    }
+
+    /** Schema de configuracion declarado por el provider (local o remoto) de {@code type}, o vacio. */
+    public com.integrationhub.platform.spi.config.PluginConfigSchema configSchema(String type) {
+        return resolve(type).configSchema();
     }
 
     private Stream<SourceProvider> providerStream() {

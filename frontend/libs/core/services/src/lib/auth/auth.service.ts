@@ -68,7 +68,10 @@ export class AuthService {
         client
           .updateToken(30)
           .then(() => this.syncFromKeycloak(client))
-          .catch(() => this.reset());
+          // (3) Endurecer: un fallo TRANSITORIO del refresh en background NO debe resetear el estado (eso dejaría
+          // los próximos requests sin token → 401 espurio). El refresh proactivo del interceptor (1) o la
+          // recuperación del 401 (2) reintentan; solo el refresh forzado que falla (forceRefresh) resetea.
+          .catch(() => undefined);
       };
     } catch {
       this.reset();
@@ -105,6 +108,46 @@ export class AuthService {
 
     await this.login();
     return false;
+  }
+
+  /**
+   * (1) Refresco proactivo: si el access-token vence dentro de {@code minValidity}s, lo refresca con el refresh-token
+   * (sesión SSO) y sincroniza el estado; devuelve el token vigente. {@code updateToken} NO hace red si el token aún
+   * es válido (solo chequeo local de expiración), así que es barato por-request. Ante un fallo transitorio del
+   * refresh NO resetea el estado: devuelve el token actual y deja que la recuperación del 401 decida.
+   */
+  async freshToken(minValidity = 30): Promise<string> {
+    const client = this.keycloak;
+    if (!client || !this.authenticated()) {
+      return this.accessToken();
+    }
+    try {
+      await client.updateToken(minValidity);
+      this.syncFromKeycloak(client);
+    } catch {
+      // Fallo transitorio: mantené el token actual; si de verdad venció, el back dará 401 y forceRefresh actuará.
+    }
+    return this.accessToken();
+  }
+
+  /**
+   * (2) Recuperación ante 401: fuerza el refresh del token ({@code updateToken(-1)}) ignorando la validez. Devuelve el
+   * token nuevo, o {@code ''} si el refresh-token / sesión SSO ya no es válido (ahí sí es sesión expirada real y hay
+   * que re-loguear) — en ese caso resetea el estado.
+   */
+  async forceRefresh(): Promise<string> {
+    const client = this.keycloak;
+    if (!client || !this.authenticated()) {
+      return this.accessToken();
+    }
+    try {
+      await client.updateToken(-1);
+      this.syncFromKeycloak(client);
+      return this.accessToken();
+    } catch {
+      this.reset();
+      return '';
+    }
   }
 
   hasRole(role: string): boolean {

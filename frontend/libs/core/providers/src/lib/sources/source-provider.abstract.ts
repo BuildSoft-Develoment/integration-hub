@@ -1,4 +1,22 @@
-export type SourceProviderType = 'FILESYSTEM' | 'FTP' | 'SFTP' | 'REST' | 'S3' | 'GCS' | 'AZURE_BLOB';
+export type BuiltinSourceProviderType =
+  | 'FILESYSTEM'
+  | 'FTP'
+  | 'SFTP'
+  | 'REST'
+  | 'S3'
+  | 'GCS'
+  | 'AZURE_BLOB'
+  | 'OCI_OBJECT_STORAGE';
+
+/**
+ * Tipo de source. Los built-in estan enumerados; el `(string & {})` mantiene el
+ * autocompletado de los literales pero admite tipos aportados por plugins backend
+ * (sources remotos schema-driven) descubiertos en runtime via `/api/source-types`.
+ */
+export type SourceProviderType = BuiltinSourceProviderType | (string & {});
+
+/** Estado de confianza/disponibilidad de un source type (espejo del catalogo backend). */
+export type SourceProviderStatus = 'AVAILABLE' | 'DEGRADED' | 'UNTRUSTED' | 'SHADOWED_BY_LOCAL';
 
 export interface SourceDraft {
   type: SourceProviderType;
@@ -30,10 +48,12 @@ export interface SourceDraft {
   fileName?: string;
   headersJson?: string;
   body?: string;
-  // Cloud object stores (S3/GCS/Azure Blob — ADR-006)
+  // Cloud object stores (S3/GCS/Azure Blob/OCI — ADR-006)
   region?: string;
   bucket?: string;
   prefix?: string;
+  // OCI Object Storage (S3-compatible)
+  namespace?: string;
   authMode?:
     | 'default'
     | 'access-key'
@@ -67,6 +87,14 @@ export interface SourceProviderDescriptor {
   category: string;
   capabilities: readonly string[];
   supportsConnectionSecret: boolean;
+  /** Origen del source type: `LOCAL` (build) o `REMOTE` (plugin backend). Ausente = LOCAL. */
+  origin?: 'LOCAL' | 'REMOTE';
+  pluginId?: string | null;
+  pluginVersion?: string | null;
+  transport?: string | null;
+  /** Estado de confianza/disponibilidad. Ausente = `AVAILABLE`. */
+  status?: SourceProviderStatus;
+  reason?: string | null;
 }
 
 export abstract class SourceProvider {

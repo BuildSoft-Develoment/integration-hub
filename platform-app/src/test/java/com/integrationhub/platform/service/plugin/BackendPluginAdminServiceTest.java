@@ -330,7 +330,8 @@ class BackendPluginAdminServiceTest {
                 null,
                 null,
                 null,
-                false)));
+                false,
+                java.util.Map.of())));
 
         verify(repository, never()).persist(any(PluginDescriptor.class));
         verify(catalog, never()).reloadInstalledPlugins();
@@ -418,7 +419,8 @@ class BackendPluginAdminServiceTest {
                 "https://plugins.example.com/catalog/acme.json",
                 "stable",
                 "1.0.0",
-                true);
+                true,
+                java.util.Map.of());
     }
 
     private PluginDescriptorVersion version(String pluginId, String version, String taskType) {

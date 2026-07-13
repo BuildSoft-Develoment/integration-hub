@@ -84,7 +84,64 @@ class ProcessExecutionFailurePropagationIT {
                 "la tarea downstream debe ejecutarse con la politica explicita");
     }
 
+    @Test
+    @TestSecurity(user = "admin", roles = {"platform-admin"})
+    void ambiguousPaymentEndsNeedsReconciliationAndStopsByDefault() throws Exception {
+        // G1: una tarea money-path que deja dinero UNCERTAIN (needsReconciliation) NO debe quedar FAILED opaco ni
+        // COMPLETED silencioso: el proceso cierra NEEDS_RECONCILIATION y (sin continueOnFailure) detiene el pipeline.
+        var processDefinitionId = insertProcess("needs-recon-default-it",
+                "{\"taskRef\":\"task-1\",\"executionMode\":\"once\",\"needsReconciliation\":true}");
+
+        var execution = processExecutionService.execute(processDefinitionId, Map.of(), "MANUAL");
+
+        assertEquals(ExecutionStatus.NEEDS_RECONCILIATION, execution.status,
+                "dinero ambiguo -> NEEDS_RECONCILIATION, no FAILED ni COMPLETED");
+        assertEquals("COMPLETED_WITH_ERRORS", taskStatus(1),
+                "la tarea con dinero ambiguo se audita COMPLETED_WITH_ERRORS, no FAILED (no es fallo técnico)");
+        assertEquals(0, RecordingFollowUpTaskProvider.EXECUTIONS.get(),
+                "sin continueOnFailure el pipeline se detiene tras el dinero ambiguo");
+    }
+
+    @Test
+    @TestSecurity(user = "admin", roles = {"platform-admin"})
+    void ambiguousPaymentWithContinueOnFailureRunsDownstreamButStillEndsNeedsReconciliation() throws Exception {
+        // G1: con continueOnFailure el resolutor posterior (STATUS/RECONCILE, aquí simulado por la tarea downstream)
+        // SÍ corre, pero el proceso NUNCA cierra COMPLETED con dinero UNCERTAIN pendiente: termina NEEDS_RECONCILIATION.
+        var processDefinitionId = insertProcess("needs-recon-continue-it",
+                "{\"taskRef\":\"task-1\",\"executionMode\":\"once\",\"needsReconciliation\":true,\"continueOnFailure\":true}");
+
+        var execution = processExecutionService.execute(processDefinitionId, Map.of(), "MANUAL");
+
+        assertEquals(ExecutionStatus.NEEDS_RECONCILIATION, execution.status,
+                "con continueOnFailure sigue el pipeline pero NO cierra COMPLETED con dinero ambiguo pendiente");
+        assertEquals("COMPLETED_WITH_ERRORS", taskStatus(1));
+        assertEquals(1, RecordingFollowUpTaskProvider.EXECUTIONS.get(),
+                "la tarea posterior (resolutor) sí corre con la política explícita");
+    }
+
+    @Test
+    @TestSecurity(user = "admin", roles = {"platform-admin"})
+    void aDownstreamResolverClearsTheReconciliationFlagAndProcessCompletes() throws Exception {
+        // G1 (opción B): task-1 deja dinero ambiguo (needsReconciliation + continueOnFailure) pero task-2 (resolutor,
+        // espejo de MT101_STATUS que resolvió TODO) emite resolvedReconciliation -> el motor LIMPIA el flag y el
+        // proceso cierra COMPLETED (no NEEDS_RECONCILIATION): el flag no es "pegajoso" cuando un resolutor lo cierra.
+        var processDefinitionId = insertProcess("needs-recon-resolved-it",
+                "{\"taskRef\":\"task-1\",\"executionMode\":\"once\",\"needsReconciliation\":true,\"continueOnFailure\":true}",
+                "{\"taskRef\":\"task-2\",\"executionMode\":\"once\",\"reconciliationResolved\":true}");
+
+        var execution = processExecutionService.execute(processDefinitionId, Map.of(), "MANUAL");
+
+        assertEquals(ExecutionStatus.COMPLETED, execution.status,
+                "un resolutor que resolvió todo limpia el flag -> el proceso cierra COMPLETED");
+        assertEquals(1, RecordingFollowUpTaskProvider.EXECUTIONS.get(), "el resolutor corrió");
+    }
+
     private Long insertProcess(String name, String failingTaskConfigJson) throws Exception {
+        return insertProcess(name, failingTaskConfigJson,
+                "{\"taskRef\":\"task-2\",\"executionMode\":\"once\"}");
+    }
+
+    private Long insertProcess(String name, String failingTaskConfigJson, String followUpConfigJson) throws Exception {
         try (Connection connection = dataSource.getConnection();
              Statement statement = connection.createStatement()) {
             statement.executeUpdate(
@@ -103,7 +160,7 @@ class ProcessExecutionFailurePropagationIT {
                         "insert into process_task_definition "
                                 + "(process_definition_id, task_order, task_type, active, configuration_json) "
                                 + "values (" + processDefinitionId + ", 2, '" + RecordingFollowUpTaskProvider.TASK_TYPE
-                                + "', true, '{\"taskRef\":\"task-2\",\"executionMode\":\"once\"}')");
+                                + "', true, '" + followUpConfigJson + "')");
                 return processDefinitionId;
             }
         }

@@ -1,0 +1,30 @@
+# Values Helm para AWS (EKS + ECR). Uso:
+#   helm upgrade --install ih ops/fase-7-deploy/dist/common/helm/integration-hub \
+#     -f ops/fase-7-deploy/dist/aws/values-aws.yaml \
+#     --set image.tag=$GIT_SHA
+quarkusProfile: "prod,aws"
+
+image:
+  repository: <ACCOUNT_ID>.dkr.ecr.<REGION>.amazonaws.com/integration-hub
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  annotations:
+    # IRSA: rol IAM con acceso a Secrets Manager + S3 del staging.
+    eks.amazonaws.com/role-arn: arn:aws:iam::<ACCOUNT_ID>:role/integration-hub-irsa
+
+ingress:
+  enabled: true
+  className: alb
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+  host: integration-hub.<TU_DOMINIO>
+
+autoscaling:
+  enabled: true
+
+env:
+  DEPLOY_ENV: prod
+  AWS_REGION: <REGION>

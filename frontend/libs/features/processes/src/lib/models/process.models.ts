@@ -1,5 +1,6 @@
 import type {
   ConnectionRef,
+  PlatformProcessTaskType,
   ProcessTaskOutputKind,
   ProcessTaskFormModel,
   ProcessTaskType,
@@ -8,6 +9,7 @@ import type {
 } from '@integration-hub/core/providers';
 export type {
   ConnectionRef,
+  PlatformProcessTaskType,
   ProcessTaskOutputKind,
   ProcessTaskFormModel,
   ProcessTaskType,

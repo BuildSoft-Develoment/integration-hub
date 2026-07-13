@@ -183,6 +183,15 @@ export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {
       mode: 'query',
       requiredCapability: APP_SECTION_CAPABILITIES.audit,
     },
+    {
+      id: 'audit-mt101-pay-conflicts',
+      group: 'audit',
+      route: '/audit/mt101-pay-conflicts',
+      labelKey: 'audit.workspace.payConflicts',
+      descriptionKey: 'audit.workspace.payConflictsHint',
+      mode: 'operation',
+      requiredCapability: APP_SECTION_CAPABILITIES.audit,
+    },
   ],
   actions: [
     {

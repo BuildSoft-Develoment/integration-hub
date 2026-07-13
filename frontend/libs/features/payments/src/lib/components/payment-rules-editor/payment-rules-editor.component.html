@@ -1,0 +1,153 @@
+<ih-managed-editor-shell [dirty]="false" (close)="store.closeDrawer()">
+  <ih-managed-editor-header
+    editor-header
+    [titleKey]="
+      store.drawerView() === 'bulk'
+        ? 'paymentRules.importExport'
+        : store.editing()
+          ? 'paymentRules.edit'
+          : 'paymentRules.create'
+    "
+    [subtitle]="store.drawerView() === 'bulk' ? store.ruleSetFilter() : store.draft().ruleSet"
+    [icon]="store.drawerView() === 'bulk' ? 'upload' : 'shield'"
+    toneClass="ih-tone-payment"
+  />
+
+  <div editor-form class="editor-form">
+    @if (store.drawerView() === 'edit') {
+      <form (ngSubmit)="store.save()">
+        <ih-managed-editor-section eyebrowKey="paymentRules.sectionDefinition" [titleKey]="'paymentRules.title'">
+          <div class="editor-grid">
+            <mat-form-field>
+              <mat-label>{{ i18n.t('paymentRules.ruleSet') }}</mat-label>
+              <input matInput [ngModel]="store.draft().ruleSet" [ngModelOptions]="{ standalone: true }" (ngModelChange)="store.patchDraft({ ruleSet: $event })" />
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>{{ i18n.t('paymentRules.code') }}</mat-label>
+              <input matInput [ngModel]="store.draft().code" [ngModelOptions]="{ standalone: true }" (ngModelChange)="store.patchDraft({ code: $event })" />
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>{{ i18n.t('paymentRules.standard') }}</mat-label>
+              <input matInput [ngModel]="store.draft().standard" [ngModelOptions]="{ standalone: true }" (ngModelChange)="store.patchDraft({ standard: $event })" />
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>{{ i18n.t('paymentRules.appliesTo') }}</mat-label>
+              <input matInput [ngModel]="store.draft().appliesTo" [ngModelOptions]="{ standalone: true }" (ngModelChange)="store.patchDraft({ appliesTo: $event })" />
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>{{ i18n.t('paymentRules.severity') }}</mat-label>
+              <mat-select [ngModel]="store.draft().severity" [ngModelOptions]="{ standalone: true }" (ngModelChange)="store.patchDraft({ severity: $event })">
+                @for (value of severityValues; track value) {
+                  <mat-option [value]="value">{{ i18n.t('paymentRules.severity' + (value === 'E' ? 'Error' : value === 'W' ? 'Warn' : 'Info')) }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>{{ i18n.t('paymentRules.predicateKind') }}</mat-label>
+              <mat-select [ngModel]="store.draft().predicateKind" [ngModelOptions]="{ standalone: true }" (ngModelChange)="store.patchDraft({ predicateKind: $event })">
+                @for (kind of predicateKinds; track kind) {
+                  <mat-option [value]="kind">{{ kind }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          </div>
+        </ih-managed-editor-section>
+
+        <ih-managed-editor-section eyebrowKey="paymentRules.sectionPredicate" [titleKey]="'paymentRules.predicateBody'">
+          <mat-form-field class="json-field">
+            <mat-label>{{ i18n.t('paymentRules.predicateBody') }}</mat-label>
+            <textarea
+              matInput
+              rows="12"
+              class="code-textarea"
+              [ngModel]="store.draft().predicateBody"
+              [ngModelOptions]="{ standalone: true }"
+              (ngModelChange)="store.patchDraft({ predicateBody: $event })"
+            ></textarea>
+            @if (!store.predicateValid()) {
+              <mat-hint class="validation-hint--error">{{ i18n.t('paymentRules.invalidJson') }}</mat-hint>
+            }
+          </mat-form-field>
+          <div class="predicate-actions">
+            <button mat-stroked-button type="button" (click)="store.formatPredicateBody()">
+              <ih-icon name="code" [size]="16" />
+              {{ i18n.t('paymentRules.formatJson') }}
+            </button>
+          </div>
+        </ih-managed-editor-section>
+
+        <div class="editor-actions">
+          <mat-slide-toggle [ngModel]="store.draft().active" [ngModelOptions]="{ standalone: true }" (ngModelChange)="store.patchDraft({ active: $event })">
+            {{ i18n.t('common.active') }}
+          </mat-slide-toggle>
+          <span class="editor-actions__spacer"></span>
+          <button mat-stroked-button type="button" (click)="store.closeDrawer()">{{ i18n.t('common.cancel') }}</button>
+          <button
+            mat-flat-button
+            [color]="store.armed() === store.saveArmedId ? 'warn' : 'primary'"
+            type="submit"
+            [disabled]="!store.predicateValid()"
+          >
+            <ih-icon name="save" [size]="16" />
+            {{ store.armed() === store.saveArmedId ? i18n.t('paymentRules.saveConfirm') : i18n.t('common.saveChanges') }}
+          </button>
+        </div>
+      </form>
+    } @else {
+      <div class="bulk-view">
+        <ih-managed-editor-section eyebrowKey="paymentRules.sectionExport" [titleKey]="'paymentRules.export'">
+          <div class="bulk-row">
+            <button mat-stroked-button type="button" (click)="store.exportCurrentRuleSet()">
+              <ih-icon name="download" [size]="16" />
+              {{ i18n.t('paymentRules.export') }}
+            </button>
+          </div>
+          @if (store.exportJson()) {
+            <div class="export-actions">
+              <button mat-icon-button type="button" [matTooltip]="i18n.t('paymentRules.copyJson')" [attr.aria-label]="i18n.t('paymentRules.copyJson')" (click)="store.copyExport()">
+                <ih-icon name="copy" [size]="18" />
+              </button>
+              <button mat-icon-button type="button" [matTooltip]="i18n.t('paymentRules.downloadJson')" [attr.aria-label]="i18n.t('paymentRules.downloadJson')" (click)="store.downloadExport()">
+                <ih-icon name="download" [size]="18" />
+              </button>
+            </div>
+            <mat-form-field class="json-field">
+              <mat-label>{{ i18n.t('paymentRules.exportJson') }}</mat-label>
+              <textarea matInput rows="7" class="code-textarea" [ngModel]="store.exportJson()" [ngModelOptions]="{ standalone: true }" readonly></textarea>
+            </mat-form-field>
+          }
+        </ih-managed-editor-section>
+
+        <ih-managed-editor-section eyebrowKey="paymentRules.sectionImport" [titleKey]="'paymentRules.import'">
+          <mat-checkbox [ngModel]="store.replacingImport()" [ngModelOptions]="{ standalone: true }" (ngModelChange)="store.replacingImport.set($event)">
+            {{ i18n.t('paymentRules.replaceExisting') }}
+          </mat-checkbox>
+          <mat-form-field class="json-field">
+            <mat-label>{{ i18n.t('paymentRules.importJson') }}</mat-label>
+            <textarea matInput rows="7" class="code-textarea" [ngModel]="store.importJson()" [ngModelOptions]="{ standalone: true }" (ngModelChange)="store.importJson.set($event)"></textarea>
+            @if (!store.importJsonValid()) {
+              <mat-hint class="validation-hint--error">{{ i18n.t('paymentRules.importInvalidJson') }}</mat-hint>
+            }
+            @if (store.importJsonValid() && store.importPreviewCount() > 0) {
+              <mat-hint class="validation-hint--ok">{{ i18n.t('paymentRules.importPreview', { count: store.importPreviewCount() }) }}</mat-hint>
+            }
+          </mat-form-field>
+          <button
+            mat-flat-button
+            [color]="store.replacingImport() && store.armed() === store.importArmedId ? 'warn' : 'primary'"
+            type="button"
+            (click)="store.importRules()"
+            [disabled]="!store.importJsonValid() || store.importPreviewCount() === 0"
+          >
+            <ih-icon name="upload" [size]="16" />
+            @if (store.replacingImport() && store.armed() === store.importArmedId) {
+              {{ i18n.t('paymentRules.importConfirm') }}
+            } @else {
+              {{ i18n.t('paymentRules.import') }}
+            }
+          </button>
+        </ih-managed-editor-section>
+      </div>
+    }
+  </div>
+</ih-managed-editor-shell>
