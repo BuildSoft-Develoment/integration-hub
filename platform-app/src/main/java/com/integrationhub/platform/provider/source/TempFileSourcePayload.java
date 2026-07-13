@@ -8,7 +8,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.DigestInputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.util.HexFormat;
 
 /**
  * {@link SourcePayload} respaldado por un archivo temporal que se descarga en
@@ -37,12 +41,34 @@ public final class TempFileSourcePayload {
         return path;
     }
 
-    /** SourcePayload sobre {@code path}, con auto-borrado al cerrar el stream. */
+    /**
+     * SourcePayload sobre {@code path}, con auto-borrado al cerrar el stream.
+     *
+     * <p>El SHA-256 se precomputa AQUI (un pase de streaming sobre el archivo local recien
+     * descargado) y viaja en el payload: como el temp desaparece cuando el reader cierra su
+     * stream, computar el hash despues re-abriendo el archivo falla (visto con SFTP+XLSX:
+     * el reader consume el zip completo y cierra antes de que DB_WRITE pida el hash).</p>
+     */
     public static SourcePayload of(String name, String location, String mediaType, Path path) throws IOException {
         var size = Files.exists(path) ? Files.size(path) : null;
         var lastModified = Files.exists(path) ? Files.getLastModifiedTime(path).toInstant() : Instant.now();
         var file = new SelectedSourceFile(name, location, mediaType, size, lastModified);
-        return new SourcePayload(file, () -> selfDeletingStream(path));
+        return new SourcePayload(file, () -> selfDeletingStream(path), sha256Hex(path));
+    }
+
+    private static String sha256Hex(Path path) throws IOException {
+        try {
+            var digest = MessageDigest.getInstance("SHA-256");
+            try (var stream = new DigestInputStream(Files.newInputStream(path), digest)) {
+                var buffer = new byte[8192];
+                while (stream.read(buffer) != -1) {
+                    // DigestInputStream actualiza el digest al leer.
+                }
+            }
+            return HexFormat.of().formatHex(digest.digest());
+        } catch (NoSuchAlgorithmException error) {
+            throw new IOException("SHA-256 digest unavailable", error);
+        }
     }
 
     /**

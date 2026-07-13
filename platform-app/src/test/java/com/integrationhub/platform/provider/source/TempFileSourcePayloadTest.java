@@ -1,5 +1,6 @@
 package com.integrationhub.platform.provider.source;
 
+import com.integrationhub.platform.service.source.SourceFingerprintService;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -73,5 +74,50 @@ class TempFileSourcePayloadTest {
                 }));
 
         assertFalse(Files.exists(created.get()), "el temporal parcial se elimina si falla la descarga");
+    }
+
+    @Test
+    void precomputesContentSha256AtCreation() throws Exception {
+        var content = "codigo,monto\nA,100\n";
+        var temp = TempFileSourcePayload.createTempFile("pagos.csv");
+        Files.writeString(temp, content);
+
+        var payload = TempFileSourcePayload.of("pagos.csv", "sftp://host/pagos.csv", "text/csv", temp);
+
+        assertEquals(sha256Hex(content), payload.contentSha256(),
+                "el hash viaja precomputado en el payload");
+        Files.deleteIfExists(temp);
+    }
+
+    /**
+     * Regresion SFTP+XLSX: el reader streaming consume el zip completo y cierra el stream
+     * (=> el temp se borra) ANTES de que DB_WRITE pida el hash para staging. Con el hash
+     * precomputado, {@link SourceFingerprintService#fileHash} debe responder igual aunque
+     * el archivo temporal ya no exista.
+     */
+    @Test
+    void fileHashSurvivesTempFileDeletionAfterReaderConsumesStream() throws Exception {
+        var content = "PK-fake-xlsx-bytes";
+        var temp = TempFileSourcePayload.createTempFile("datos.xlsx");
+        Files.writeString(temp, content);
+        var payload = TempFileSourcePayload.of("datos.xlsx", "sftp://host/in/datos.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", temp);
+
+        // El "reader" consume y cierra: el temporal desaparece.
+        try (var stream = payload.openStream()) {
+            stream.readAllBytes();
+        }
+        assertFalse(Files.exists(temp), "precondicion: el temp ya fue eliminado por el stream");
+
+        var hash = new SourceFingerprintService().fileHash(payload);
+
+        assertEquals(sha256Hex(content), hash,
+                "el hash de staging no depende de re-abrir el temporal");
+    }
+
+    private static String sha256Hex(String content) throws Exception {
+        var digest = java.security.MessageDigest.getInstance("SHA-256");
+        return java.util.HexFormat.of().formatHex(
+                digest.digest(content.getBytes(StandardCharsets.UTF_8)));
     }
 }

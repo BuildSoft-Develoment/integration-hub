@@ -16,10 +16,22 @@ public final class SourcePayload {
 
     private final SelectedSourceFile file;
     private final StreamSupplier streamSupplier;
+    /**
+     * SHA-256 hex del contenido, precomputado por el source cuando el payload es efimero
+     * (p.ej. {@code TempFileSourcePayload}: el temp se borra cuando el reader cierra el
+     * stream consumido, asi que re-abrir despues para hashear falla — visto con SFTP+XLSX).
+     * {@code null} => el consumidor (SourceFingerprintService) lo computa por streaming.
+     */
+    private final String contentSha256;
 
     public SourcePayload(SelectedSourceFile file, StreamSupplier streamSupplier) {
+        this(file, streamSupplier, null);
+    }
+
+    public SourcePayload(SelectedSourceFile file, StreamSupplier streamSupplier, String contentSha256) {
         this.file = file;
         this.streamSupplier = streamSupplier;
+        this.contentSha256 = contentSha256;
     }
 
     public static SourcePayload fromBytes(String name, byte[] content, String mediaType) {
@@ -57,5 +69,10 @@ public final class SourcePayload {
 
     public InputStream openStream() throws IOException {
         return streamSupplier.open();
+    }
+
+    /** SHA-256 hex precomputado del contenido, o {@code null} si debe computarse bajo demanda. */
+    public String contentSha256() {
+        return contentSha256;
     }
 }

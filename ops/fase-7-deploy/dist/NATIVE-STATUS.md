@@ -44,8 +44,10 @@ HTTP 200. La imagen JVM (`Dockerfile.jvm`) sigue disponible como alternativa.
 ## Pendiente / limites conocidos
 
 - **GCS**: `GcsSourceProvider` no soporta endpoint override → solo homologable contra GCP real.
-- **XLSX desde SFTP**: bug preexistente de la app (tambien en JVM): el hash de staging re-abre
-  un temp ya consumido por el reader streaming (`Cannot compute SHA-256`). Fix aparte.
+- ~~XLSX desde SFTP~~: **corregido** (2026-07-13). El hash de staging re-abria un temp ya
+  consumido por el reader streaming; ahora `TempFileSourcePayload` precomputa el SHA-256 al
+  descargar y viaja en el `SourcePayload` (`SourceFingerprintService` lo prefiere). Verificado
+  E2E: SFTP+XLSX `COMPLETED records=3` + tests de regresion en `TempFileSourcePayloadTest`.
 
 ## Cambios que soportan el nativo (rama experiment/quarkus-lts-native)
 

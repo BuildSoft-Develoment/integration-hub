@@ -31,6 +31,12 @@ public class SourceFingerprintService {
      */
     public String fileHash(SourcePayload sourcePayload) {
         Objects.requireNonNull(sourcePayload, "sourcePayload");
+        // Payloads efimeros (TempFileSourcePayload) precomputan el hash al descargarse: su
+        // temp se borra cuando el reader cierra el stream consumido y re-abrirlo aqui falla
+        // (visto con SFTP+XLSX). De paso evita releer el archivo completo por streaming.
+        if (sourcePayload.contentSha256() != null) {
+            return sourcePayload.contentSha256();
+        }
         try (InputStream stream = sourcePayload.openStream()) {
             var digest = MessageDigest.getInstance("SHA-256");
             try (var digestStream = new DigestInputStream(stream, digest)) {

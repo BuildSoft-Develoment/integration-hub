@@ -14,7 +14,7 @@ Binario: `integration-hub:native` (Quarkus 3.37.2, perfil `prod`), API real con 
 | **POI / XLSX** | ✅ PASS | Reader `XLSX` (streaming) desde source `FILESYSTEM` → 3 registros. Valida POI+xmlbeans en nativo. |
 | **Plugin gRPC remoto** | ✅ PASS (tras fix) | Plugin demo Java (`DEMO_TRANSFORM_JAVA`) instalado **trusted** (integrity SRI + firma ECDSA P-256 verificada en nativo), canary 3/3, activado, e invocado por gRPC: `transformed 'hola nativo grpc' with op=upper`. |
 | GCS | ⏸ N/A local | `GcsSourceProvider` no soporta endpoint override → no es testeable contra emulador; requiere GCP real. |
-| XLSX desde SFTP | ⚠️ bug de app (no nativo) | `Cannot compute SHA-256 of source file`: el reader XLSX streaming consume el temp del payload SFTP y `SourceFingerprintService.fileHash` re-abre un archivo ya eliminado. **Falla identico en JVM** (control ejecutado) — preexistente, pendiente de fix aparte. |
+| XLSX desde SFTP | ✅ **corregido mismo dia** | Era bug de app (no nativo, fallaba identico en JVM): `TempFileSourcePayload.selfDeletingStream` borra el temp cuando el reader cierra el stream consumido, y `SourceFingerprintService.fileHash` re-abria un archivo inexistente (XLSX consume el zip completo y cierra antes del hash de staging; CSV sobrevivia por semantica POSIX de unlink). Fix: el SHA-256 se precomputa al descargar y viaja en `SourcePayload.contentSha256`; el servicio lo prefiere. Re-verificado E2E: SFTP+XLSX `COMPLETED records=3`; +2 tests de regresion (`TempFileSourcePayloadTest`), 26/26 tests relacionados en verde. |
 
 ## Bugs de runtime NATIVO cazados y corregidos en este batch
 
