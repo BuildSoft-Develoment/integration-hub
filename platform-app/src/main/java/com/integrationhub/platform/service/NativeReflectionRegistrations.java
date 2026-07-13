@@ -6,6 +6,10 @@ import com.integrationhub.platform.service.execution.async.AsyncPageWorkItem;
 import com.integrationhub.platform.service.execution.async.AsyncSliceWorkItem;
 import com.integrationhub.platform.service.execution.async.QueuedProcessExecutionPayload;
 import com.integrationhub.platform.service.plugin.PluginMarketplaceCatalog;
+import com.integrationhub.platform.spi.reader.ReadRecord;
+import com.integrationhub.platform.spi.reader.ReadResult;
+import com.integrationhub.platform.spi.reader.ReadSkip;
+import com.integrationhub.platform.spi.reader.SourcePosition;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.integrationhub.platform.task.AsyncTaskEnvelope;
 import io.quarkus.runtime.annotations.RegisterForReflection;
@@ -46,6 +50,13 @@ import io.quarkus.runtime.annotations.RegisterForReflection;
         // Catalogo remoto de plugins (HttpPluginMarketplaceCatalogClient)
         PluginMarketplaceCatalog.class,
         PluginMarketplaceCatalog.PluginMarketplaceEntry.class,
+        // Payload gRPC hacia plugins remotos: el motor mete readResult/sourcePayload en
+        // TaskContext.attributes y Grpc/BrokerRemotePluginTransport lo serializa entero
+        // (cazado en smoke nativo 2026-07-13: HashMap["readResult"] -> ReadResult).
+        ReadResult.class,
+        ReadRecord.class,
+        ReadSkip.class,
+        SourcePosition.class,
 })
 public final class NativeReflectionRegistrations {
 

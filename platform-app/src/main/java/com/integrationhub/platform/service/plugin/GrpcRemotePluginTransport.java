@@ -126,7 +126,10 @@ public class GrpcRemotePluginTransport implements RemotePluginTransport {
         try {
             return objectMapper.writeValueAsString(value == null ? Map.of() : value);
         } catch (JsonProcessingException error) {
-            throw new IllegalArgumentException("GRPC plugin payload cannot be serialized", error);
+            // Incluir la causa en el mensaje: este error se convierte en TaskResult.failure y el
+            // stacktrace se pierde; sin la causa es indiagnosticable (p.ej. reflexion faltante en nativo).
+            throw new IllegalArgumentException(
+                    "GRPC plugin payload cannot be serialized: " + error.getMessage(), error);
         }
     }
 

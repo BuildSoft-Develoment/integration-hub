@@ -123,7 +123,9 @@ public class BrokerRemotePluginTransport implements RemotePluginTransport {
         try {
             return objectMapper.writeValueAsString(body);
         } catch (JsonProcessingException error) {
-            throw new IllegalArgumentException("Remote plugin payload cannot be serialized", error);
+            // Causa incluida: el error viaja como TaskResult.failure sin stacktrace (ver GrpcRemotePluginTransport).
+            throw new IllegalArgumentException(
+                    "Remote plugin payload cannot be serialized: " + error.getMessage(), error);
         }
     }
 

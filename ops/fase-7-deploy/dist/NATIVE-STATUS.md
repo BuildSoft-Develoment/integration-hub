@@ -28,20 +28,24 @@ HTTP 200. La imagen JVM (`Dockerfile.jvm`) sigue disponible como alternativa.
 | 4 | RAM | `OutOfMemoryError: GC overhead limit exceeded` en fase de analisis | `.wslconfig` con 12 GB (ver arriba). |
 | 5 | commons-logging duplicado | `Unresolved method ... LogFactoryImpl.handleThrowable` (GraalVM mezcla el commons-logging real 1.3.2 con el shim jboss) | Exclusiones POM del commons-logging real en **cada fuente** (`commons-jexl3`, `artemis-jakarta-client`→beanutils) + shim `commons-logging-jboss-logging` **explicito**. NO usar `quarkus.class-loading.removed-artifacts`: banea el recurso por nombre y bloquea la clase tambien del shim (rompe la augmentacion de quarkus-amazon-*). |
 
-## Validado en nativo (E2E 2026-07-12)
+## Validado en nativo (E2E 2026-07-12 y smokes 2026-07-13)
 
-- ✅ **SFTP (jsch)**: E2E real contra `atmoz/sftp` — handshake criptografico, list, get y
-  pipeline FILE_READ->DB_WRITE `COMPLETED` (evidencia:
-  `qa/fase-6-qa/evidencias/sftp-native-e2e-20260712.md`). El E2E ademas cazo y corrigio un
-  bug de runtime nativo: DTOs internos sin registro de reflexion Jackson (ver
-  `NativeReflectionRegistrations` — 15 tipos: payload async, AuditEnvelope [fallaba EN
-  SILENCIO por fail-business-on-error=false], backbone async, Mt101Message, marketplace).
+- ✅ **SFTP (jsch)**: handshake criptografico, list, get, pipeline completo
+  (`qa/fase-6-qa/evidencias/sftp-native-e2e-20260712.md`).
+- ✅ **MT101_PAY via SFTP** (money-path): BUILD→SPLIT→REPAIR→ARCHIVE→PAY, archivo FIN
+  entregado con upload-with-rename (`qa/fase-6-qa/evidencias/native-smokes-20260713.md`).
+- ✅ **S3/MinIO** (endpoint override + path-style), ✅ **Azure Blob/Azurite**
+  (connection-string), ✅ **POI/XLSX**, ✅ **plugin gRPC remoto trusted** (firma ECDSA
+  verificada + canary + invocacion).
+- Bugs nativos cazados por los smokes (todos corregidos): DTOs sin reflexion Jackson —
+  ver `NativeReflectionRegistrations` (19 tipos: payload async, AuditEnvelope [fallaba EN
+  SILENCIO], backbone async, Mt101Message, marketplace, ReadResult del payload gRPC).
 
-## Pendiente de validar en nativo
+## Pendiente / limites conocidos
 
-- Smoke de `MT101_PAY` completo (put + rename al SFTP del banco); el riesgo criptografico
-  de jsch ya quedo descartado por el E2E anterior.
-- Ejercitar POI (lectura XLSX), plugins gRPC remotos y los sources Azure/GCS/S3 en nativo.
+- **GCS**: `GcsSourceProvider` no soporta endpoint override → solo homologable contra GCP real.
+- **XLSX desde SFTP**: bug preexistente de la app (tambien en JVM): el hash de staging re-abre
+  un temp ya consumido por el reader streaming (`Cannot compute SHA-256`). Fix aparte.
 
 ## Cambios que soportan el nativo (rama experiment/quarkus-lts-native)
 
