@@ -5,6 +5,7 @@
   "scripts": {
     "start": "nx serve web",
     "build": "nx build web --skip-nx-cache",
+    "build:appih": "nx build web --configuration=appih --skip-nx-cache",
     "lint": "nx run-many -t lint",
     "test": "nx test web",
     "e2e": "nx e2e web-e2e",

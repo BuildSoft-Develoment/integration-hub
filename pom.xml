@@ -73,6 +73,16 @@
                 <skipITs>false</skipITs>
             </properties>
         </profile>
+        <!-- Deploy bajo el subpath /appih (integracion detras de nginx). Hornea el
+             base-href del SPA (config 'appih' del build de Nx via Quinoa) + el root-path
+             de Quarkus. Opt-in: solo activo con -Pappih; dev/prod normal quedan en /. -->
+        <profile>
+            <id>appih</id>
+            <properties>
+                <quarkus.http.root-path>/appih</quarkus.http.root-path>
+                <quarkus.quinoa.package-manager-command.build>run build:appih</quarkus.quinoa.package-manager-command.build>
+            </properties>
+        </profile>
     </profiles>
 </project>
 

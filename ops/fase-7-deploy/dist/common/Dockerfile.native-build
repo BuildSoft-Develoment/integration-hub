@@ -29,7 +29,10 @@ RUN mvn -B -pl platform-app -am clean package -DskipTests \
       -Pnative -Dquarkus.native.container-build=false
 
 # ---- Etapa 2: runtime ----
-FROM quay.io/quarkus/quarkus-micro-image:2.0
+# UBI9 (glibc 2.34): DEBE emparejar con el builder Mandrel jdk-25 (ubi9) de la etapa 1.
+# La variante quarkus-micro-image:2.0 es UBI8 (glibc 2.28) y el runner compilado contra
+# glibc 2.34 no arranca ahi ("GLIBC_2.34 not found"). Ver Dockerfile.native.
+FROM quay.io/quarkus/ubi9-quarkus-micro-image:2.0
 WORKDIR /work/
 RUN chown 1001 /work && chmod g+rwX /work && chown 1001:root /work
 COPY --from=build --chown=1001:root --chmod=0755 /project/platform-app/target/*-runner /work/application

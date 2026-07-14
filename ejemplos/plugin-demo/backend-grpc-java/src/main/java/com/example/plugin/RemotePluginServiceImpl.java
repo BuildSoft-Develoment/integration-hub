@@ -4,24 +4,26 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.plugin.grpc.GrpcRemoteTaskRequest;
 import com.integrationhub.platform.plugin.grpc.GrpcRemoteTaskResult;
-import com.integrationhub.platform.plugin.grpc.RemotePluginServiceGrpc;
+import com.integrationhub.platform.plugin.grpc.MutinyRemotePluginServiceGrpc;
 import io.grpc.Status;
-import io.grpc.stub.StreamObserver;
+import io.quarkus.grpc.GrpcService;
+import io.smallrye.common.annotation.Blocking;
+import io.smallrye.mutiny.Uni;
 
 import java.util.Map;
 import java.util.Set;
 import java.util.logging.Logger;
 
 /**
- * Implementacion gRPC del contrato {@code RemotePluginService.Execute} que la plataforma
- * (cliente) invoca. Responsabilidad unica: traducir entre el transporte gRPC (JSON en String)
- * y la logica de negocio {@link TransformTask}. No conoce como se construye el servidor
- * ni el ciclo de vida — eso vive en {@link PluginServer}.
+ * Implementacion QUARKUS gRPC del contrato {@code RemotePluginService.Execute} que la
+ * plataforma invoca. Traduce entre el transporte gRPC (JSON en String) y la logica de negocio
+ * ({@link TransformTask} / {@link DemoRemoteCsvReader}). Quarkus arranca el servidor gRPC
+ * (ver application.properties); ya no hay un {@code main()} propio.
  *
- * <p>Este plugin declara un task type y un reader remoto. Un {@code task_type}
- * desconocido se rechaza (fail-loud) en vez de devolver un exito vacio.</p>
+ * <p>Un {@code task_type} desconocido se rechaza (fail-loud) con INVALID_ARGUMENT.</p>
  */
-public final class RemotePluginServiceImpl extends RemotePluginServiceGrpc.RemotePluginServiceImplBase {
+@GrpcService
+public class RemotePluginServiceImpl extends MutinyRemotePluginServiceGrpc.RemotePluginServiceImplBase {
 
     static final String PLUGIN_ID = "demo-transform-java";
     static final String PLUGIN_VERSION = "1.0.0";
@@ -36,63 +38,61 @@ public final class RemotePluginServiceImpl extends RemotePluginServiceGrpc.Remot
     private final DemoRemoteCsvReader reader = new DemoRemoteCsvReader();
 
     @Override
-    public void execute(GrpcRemoteTaskRequest request, StreamObserver<GrpcRemoteTaskResult> responseObserver) {
+    @Blocking
+    public Uni<GrpcRemoteTaskResult> execute(GrpcRemoteTaskRequest request) {
+        return Uni.createFrom().item(() -> handle(request));
+    }
+
+    private GrpcRemoteTaskResult handle(GrpcRemoteTaskRequest request) {
         var taskType = request.getTaskType();
         LOG.info(() -> "Execute task_type=" + taskType
                 + " plugin=" + request.getPluginId() + "/" + request.getPluginVersion()
                 + " execId=" + request.getProcessExecutionId());
 
         if (!SUPPORTED_TASK_TYPES.contains(taskType)) {
-            // Contrato desconocido: erroramos con INVALID_ARGUMENT en vez de fingir exito.
-            responseObserver.onError(Status.INVALID_ARGUMENT
+            throw Status.INVALID_ARGUMENT
                     .withDescription("Unsupported task_type '" + taskType + "'; this plugin serves "
                             + SUPPORTED_TASK_TYPES)
-                    .asRuntimeException());
-            return;
+                    .asRuntimeException();
         }
 
         final Map<String, Object> configuration;
         try {
             configuration = parseJson(request.getConfigurationJson());
         } catch (RuntimeException error) {
-            responseObserver.onError(Status.INVALID_ARGUMENT
+            throw Status.INVALID_ARGUMENT
                     .withDescription("configuration_json is not valid JSON: " + error.getMessage())
-                    .asRuntimeException());
-            return;
+                    .asRuntimeException();
         }
 
         if (DemoRemoteCsvReader.TASK_TYPE.equals(taskType)) {
             try {
-                responseObserver.onNext(GrpcRemoteTaskResult.newBuilder()
+                return GrpcRemoteTaskResult.newBuilder()
                         .setSuccess(true)
                         .setSuspended(false)
                         .setDetails("DEMO_REMOTE_CSV page read")
                         .setOutputsJson(writeJson(reader.read(configuration)))
                         .setSuspendedStateJson("")
-                        .build());
-                responseObserver.onCompleted();
+                        .build();
             } catch (Exception error) {
-                responseObserver.onNext(GrpcRemoteTaskResult.newBuilder()
+                return GrpcRemoteTaskResult.newBuilder()
                         .setSuccess(false)
                         .setSuspended(false)
                         .setDetails(error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage())
                         .setOutputsJson("{}")
                         .setSuspendedStateJson("")
-                        .build());
-                responseObserver.onCompleted();
+                        .build();
             }
-            return;
         }
 
         var outcome = task.execute(configuration);
-        responseObserver.onNext(GrpcRemoteTaskResult.newBuilder()
+        return GrpcRemoteTaskResult.newBuilder()
                 .setSuccess(outcome.success())
                 .setSuspended(false)
                 .setDetails(outcome.details())
                 .setOutputsJson(writeJson(outcome.outputs()))
                 .setSuspendedStateJson("")
-                .build());
-        responseObserver.onCompleted();
+                .build();
     }
 
     private Map<String, Object> parseJson(String json) {

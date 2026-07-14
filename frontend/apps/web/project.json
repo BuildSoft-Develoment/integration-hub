@@ -14,6 +14,9 @@
         "production": {
           "target": "web:esbuild:production"
         },
+        "appih": {
+          "target": "web:esbuild:appih"
+        },
         "development": {
           "target": "web:esbuild:development",
           "dev": true
@@ -130,6 +133,22 @@
             }
           ],
           "outputHashing": "all"
+        },
+        "appih": {
+          "budgets": [
+            {
+              "type": "initial",
+              "maximumWarning": "1.25mb",
+              "maximumError": "1.5mb"
+            },
+            {
+              "type": "anyComponentStyle",
+              "maximumWarning": "5kb",
+              "maximumError": "8kb"
+            }
+          ],
+          "outputHashing": "all",
+          "baseHref": "/appih/"
         },
         "development": {
           "optimization": false,
