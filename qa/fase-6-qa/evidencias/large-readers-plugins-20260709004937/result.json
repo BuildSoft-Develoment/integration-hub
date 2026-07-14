@@ -1,0 +1,382 @@
+{
+  "runId": "20260709004937",
+  "startedAt": "2026-07-09T00:49:37.445Z",
+  "apiBase": "http://localhost:8080",
+  "dataDir": "C:\\chatgtp\\quarkus\\qa\\fase-6-qa\\evidencias\\large-readers-plugins-20260709004937\\fixtures",
+  "health": {
+    "platform": {
+      "status": "UP",
+      "checks": [
+        {
+          "name": "SmallRye Reactive Messaging - liveness check",
+          "status": "UP",
+          "data": {
+            "audit-out": "[OK]"
+          }
+        },
+        {
+          "name": "Database connections health check",
+          "status": "UP",
+          "data": {
+            "<default>": "UP"
+          }
+        },
+        {
+          "name": "SmallRye Reactive Messaging - readiness check",
+          "status": "UP",
+          "data": {
+            "audit-out": "[OK]"
+          }
+        },
+        {
+          "name": "SmallRye Reactive Messaging - startup check",
+          "status": "UP",
+          "data": {
+            "audit-out": "[OK]"
+          }
+        }
+      ]
+    },
+    "auditConsumer": "{\n    \"status\": \"UP\",\n    \"checks\": [\n        {\n            \"name\": \"SmallRye Reactive Messaging - liveness check\",\n            \"status\": \"UP\",\n            \"data\": {\n                \"audit-in\": \"[OK]\"\n            }\n        },\n        {\n            \"name\": \"Database connections health check\",\n            \"status\": \"UP\",\n            \"data\": {\n                \"<default>\": \"UP\"\n            }\n        },\n        {\n            \"name\": \"SmallRye Reactive Messaging - readiness check\",\n            \"status\": \"UP\",\n            \"data\": {\n                \"audit-in\": \"[OK]\"\n            }\n        },\n        {\n            \"name\": \"SmallRye Reactive Messaging - startup check\",\n            \"status\": \"UP\",\n            \"data\": {\n                \"audit-in\": \"[OK]\"\n            }\n        }\n    ]\n}"
+  },
+  "auth": {
+    "method": "Playwright login + Authorization header capture",
+    "username": "admin",
+    "tokenCaptured": true,
+    "screenshot": "C:\\chatgtp\\quarkus\\qa\\fase-6-qa\\evidencias\\large-readers-plugins-20260709004937\\post-login.png"
+  },
+  "plugins": {
+    "portChecks": [
+      {
+        "port": 50061,
+        "listening": true
+      },
+      {
+        "port": 50062,
+        "listening": true
+      },
+      {
+        "port": 50063,
+        "listening": true
+      },
+      {
+        "port": 4300,
+        "listening": true
+      }
+    ],
+    "backendInstalls": [
+      {
+        "file": "backend-java.json",
+        "originalActive": true,
+        "installed": [],
+        "versions": [
+          "undefined@1.0.0"
+        ],
+        "activated": true
+      },
+      {
+        "file": "backend-node.json",
+        "originalActive": true,
+        "installed": [
+          "demo-transform-java"
+        ],
+        "versions": [
+          "undefined@1.0.0",
+          "undefined@1.0.0"
+        ],
+        "activated": true
+      },
+      {
+        "file": "backend-python.json",
+        "originalActive": true,
+        "installed": [
+          "demo-transform-java",
+          "demo-transform-node"
+        ],
+        "versions": [
+          "undefined@1.0.0",
+          "undefined@1.0.0",
+          "undefined@1.0.0"
+        ],
+        "activated": true
+      }
+    ],
+    "uiCatalogSize": 1,
+    "installed": [
+      {
+        "id": "demo-transform-java",
+        "version": "1.0.0",
+        "spiVersion": "2.0.0",
+        "providedTypes": [
+          "DEMO_TRANSFORM_JAVA"
+        ],
+        "providedSourceTypes": [],
+        "providedReaderTypes": [
+          "DEMO_REMOTE_CSV"
+        ],
+        "transport": "GRPC",
+        "trusted": false,
+        "status": "UNTRUSTED",
+        "degradedReason": null,
+        "marketplaceUrl": null,
+        "channel": null,
+        "pinnedVersion": null,
+        "pinned": false
+      },
+      {
+        "id": "demo-transform-node",
+        "version": "1.0.0",
+        "spiVersion": "2.0.0",
+        "providedTypes": [
+          "DEMO_TRANSFORM_NODE"
+        ],
+        "providedSourceTypes": [],
+        "providedReaderTypes": [
+          "DEMO_REMOTE_CSV_NODE"
+        ],
+        "transport": "GRPC",
+        "trusted": false,
+        "status": "UNTRUSTED",
+        "degradedReason": null,
+        "marketplaceUrl": null,
+        "channel": null,
+        "pinnedVersion": null,
+        "pinned": false
+      },
+      {
+        "id": "demo-transform-python",
+        "version": "1.0.0",
+        "spiVersion": "2.0.0",
+        "providedTypes": [
+          "DEMO_TRANSFORM_PY"
+        ],
+        "providedSourceTypes": [],
+        "providedReaderTypes": [
+          "DEMO_REMOTE_CSV_PY"
+        ],
+        "transport": "GRPC",
+        "trusted": false,
+        "status": "UNTRUSTED",
+        "degradedReason": null,
+        "marketplaceUrl": null,
+        "channel": null,
+        "pinnedVersion": null,
+        "pinned": false
+      }
+    ],
+    "versions": [
+      {
+        "id": "demo-transform-java",
+        "version": "1.0.0",
+        "spiVersion": "2.0.0",
+        "providedTypes": [
+          "DEMO_TRANSFORM_JAVA"
+        ],
+        "providedSourceTypes": [],
+        "providedReaderTypes": [
+          "DEMO_REMOTE_CSV"
+        ],
+        "transport": "GRPC",
+        "trusted": false,
+        "active": true,
+        "marketplaceUrl": null,
+        "channel": null,
+        "pinnedVersion": null,
+        "pinned": false,
+        "canaryWeight": null
+      },
+      {
+        "id": "demo-transform-node",
+        "version": "1.0.0",
+        "spiVersion": "2.0.0",
+        "providedTypes": [
+          "DEMO_TRANSFORM_NODE"
+        ],
+        "providedSourceTypes": [],
+        "providedReaderTypes": [
+          "DEMO_REMOTE_CSV_NODE"
+        ],
+        "transport": "GRPC",
+        "trusted": false,
+        "active": true,
+        "marketplaceUrl": null,
+        "channel": null,
+        "pinnedVersion": null,
+        "pinned": false,
+        "canaryWeight": null
+      },
+      {
+        "id": "demo-transform-python",
+        "version": "1.0.0",
+        "spiVersion": "2.0.0",
+        "providedTypes": [
+          "DEMO_TRANSFORM_PY"
+        ],
+        "providedSourceTypes": [],
+        "providedReaderTypes": [
+          "DEMO_REMOTE_CSV_PY"
+        ],
+        "transport": "GRPC",
+        "trusted": false,
+        "active": true,
+        "marketplaceUrl": null,
+        "channel": null,
+        "pinnedVersion": null,
+        "pinned": false,
+        "canaryWeight": null
+      }
+    ],
+    "degraded": {}
+  },
+  "scenarios": [
+    {
+      "key": "csv-10k-ok",
+      "expectedStatus": "COMPLETED",
+      "actualStatus": "COMPLETED",
+      "expectedRecords": 10000,
+      "processedRecords": 10000,
+      "sourceId": 1,
+      "readerId": 1,
+      "processDefinitionId": 1,
+      "processExecutionId": 1,
+      "taskStatuses": [
+        {
+          "id": 1,
+          "taskType": "FILE_READ",
+          "status": "COMPLETED"
+        },
+        {
+          "id": 2,
+          "taskType": "DB_WRITE",
+          "status": "COMPLETED"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "key": "txt-10k-ok",
+      "expectedStatus": "COMPLETED",
+      "actualStatus": "COMPLETED",
+      "expectedRecords": 10000,
+      "processedRecords": 10000,
+      "sourceId": 2,
+      "readerId": 2,
+      "processDefinitionId": 2,
+      "processExecutionId": 2,
+      "taskStatuses": [
+        {
+          "id": 3,
+          "taskType": "FILE_READ",
+          "status": "COMPLETED"
+        },
+        {
+          "id": 4,
+          "taskType": "DB_WRITE",
+          "status": "COMPLETED"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "key": "xlsx-10k-ok",
+      "expectedStatus": "COMPLETED",
+      "actualStatus": "COMPLETED",
+      "expectedRecords": 10000,
+      "processedRecords": 10000,
+      "sourceId": 3,
+      "readerId": 3,
+      "processDefinitionId": 3,
+      "processExecutionId": 3,
+      "taskStatuses": [
+        {
+          "id": 5,
+          "taskType": "FILE_READ",
+          "status": "COMPLETED"
+        },
+        {
+          "id": 6,
+          "taskType": "DB_WRITE",
+          "status": "COMPLETED"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "key": "swift-mt-10k-ok",
+      "expectedStatus": "COMPLETED",
+      "actualStatus": "COMPLETED",
+      "expectedRecords": 10000,
+      "processedRecords": 10000,
+      "sourceId": 4,
+      "readerId": 4,
+      "processDefinitionId": 4,
+      "processExecutionId": 4,
+      "taskStatuses": [
+        {
+          "id": 7,
+          "taskType": "FILE_READ",
+          "status": "COMPLETED"
+        },
+        {
+          "id": 8,
+          "taskType": "DB_WRITE",
+          "status": "COMPLETED"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "key": "txt-10k-soft-errors",
+      "expectedStatus": "COMPLETED",
+      "actualStatus": "COMPLETED",
+      "expectedRecords": 9900,
+      "processedRecords": 9900,
+      "sourceId": 5,
+      "readerId": 5,
+      "processDefinitionId": 5,
+      "processExecutionId": 5,
+      "taskStatuses": [
+        {
+          "id": 9,
+          "taskType": "FILE_READ",
+          "status": "COMPLETED"
+        },
+        {
+          "id": 10,
+          "taskType": "DB_WRITE",
+          "status": "COMPLETED"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "key": "csv-missing-file-hard-error",
+      "expectedStatus": "FAILED",
+      "actualStatus": "FAILED",
+      "processDefinitionId": 6,
+      "processExecutionId": 6,
+      "taskStatuses": [
+        {
+          "id": 11,
+          "taskType": "FILE_READ",
+          "status": "FAILED"
+        },
+        {
+          "id": 12,
+          "taskType": "DB_WRITE",
+          "status": "FAILED"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "key": "csv-invalid-reader-config-catalog-error",
+      "expectedStatus": "HTTP_4XX_OR_5XX",
+      "actualStatus": "HTTP_200",
+      "responseBody": "{\"id\":7,\"name\":\"e2e-20260709004937-reader-invalid-csv\",\"readerType\":\"CSV\",\"active\":true,\"configurationJson\":\"{\\\"delimiter\\\":\\\";\\\",\\\"rowData\\\":2}\"}",
+      "ok": false
+    }
+  ],
+  "failures": [],
+  "finishedAt": "2026-07-09T00:50:38.085Z"
+}

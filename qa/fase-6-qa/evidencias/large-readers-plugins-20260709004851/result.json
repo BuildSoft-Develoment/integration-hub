@@ -1,0 +1,57 @@
+{
+  "runId": "20260709004851",
+  "startedAt": "2026-07-09T00:48:51.645Z",
+  "apiBase": "http://localhost:8080",
+  "dataDir": "C:\\chatgtp\\quarkus\\qa\\fase-6-qa\\evidencias\\large-readers-plugins-20260709004851\\fixtures",
+  "health": {
+    "platform": {
+      "status": "UP",
+      "checks": [
+        {
+          "name": "SmallRye Reactive Messaging - liveness check",
+          "status": "UP",
+          "data": {
+            "audit-out": "[OK]"
+          }
+        },
+        {
+          "name": "Database connections health check",
+          "status": "UP",
+          "data": {
+            "<default>": "UP"
+          }
+        },
+        {
+          "name": "SmallRye Reactive Messaging - readiness check",
+          "status": "UP",
+          "data": {
+            "audit-out": "[OK]"
+          }
+        },
+        {
+          "name": "SmallRye Reactive Messaging - startup check",
+          "status": "UP",
+          "data": {
+            "audit-out": "[OK]"
+          }
+        }
+      ]
+    },
+    "auditConsumer": "{\n    \"status\": \"UP\",\n    \"checks\": [\n        {\n            \"name\": \"SmallRye Reactive Messaging - liveness check\",\n            \"status\": \"UP\",\n            \"data\": {\n                \"audit-in\": \"[OK]\"\n            }\n        },\n        {\n            \"name\": \"Database connections health check\",\n            \"status\": \"UP\",\n            \"data\": {\n                \"<default>\": \"UP\"\n            }\n        },\n        {\n            \"name\": \"SmallRye Reactive Messaging - readiness check\",\n            \"status\": \"UP\",\n            \"data\": {\n                \"audit-in\": \"[OK]\"\n            }\n        },\n        {\n            \"name\": \"SmallRye Reactive Messaging - startup check\",\n            \"status\": \"UP\",\n            \"data\": {\n                \"audit-in\": \"[OK]\"\n            }\n        }\n    ]\n}"
+  },
+  "auth": {
+    "method": "Playwright login + Authorization header capture",
+    "username": "admin",
+    "tokenCaptured": true,
+    "screenshot": "C:\\chatgtp\\quarkus\\qa\\fase-6-qa\\evidencias\\large-readers-plugins-20260709004851\\post-login.png"
+  },
+  "plugins": {},
+  "scenarios": [],
+  "failures": [
+    {
+      "message": "POST /api/plugins/install failed with HTTP 500: {\"status\":500,\"path\":\"/api/plugins/install\",\"message\":\"Plugin demo-transform-java@1.0.0 requires at least 3 canary sample(s); observed 0\",\"details\":\"Plugin demo-transform-java@1.0.0 requires at least 3 canary sample(s); observed 0\"}",
+      "stack": "Error: POST /api/plugins/install failed with HTTP 500: {\"status\":500,\"path\":\"/api/plugins/install\",\"message\":\"Plugin demo-transform-java@1.0.0 requires at least 3 canary sample(s); observed 0\",\"details\":\"Plugin demo-transform-java@1.0.0 requires at least 3 canary sample(s); observed 0\"}\n    at api (file:///C:/chatgtp/quarkus/scripts/e2e-large-readers-plugins.mjs:473:11)\n    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)\n    at async installAndVerifyPlugins (file:///C:/chatgtp/quarkus/scripts/e2e-large-readers-plugins.mjs:191:22)\n    at async main (file:///C:/chatgtp/quarkus/scripts/e2e-large-readers-plugins.mjs:41:3)"
+    }
+  ],
+  "finishedAt": "2026-07-09T00:49:03.682Z"
+}

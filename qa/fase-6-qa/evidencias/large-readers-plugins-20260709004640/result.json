@@ -1,0 +1,52 @@
+{
+  "runId": "20260709004640",
+  "startedAt": "2026-07-09T00:46:40.167Z",
+  "apiBase": "http://localhost:8080",
+  "dataDir": "C:\\chatgtp\\quarkus\\qa\\fase-6-qa\\evidencias\\large-readers-plugins-20260709004640\\fixtures",
+  "health": {
+    "platform": {
+      "status": "UP",
+      "checks": [
+        {
+          "name": "SmallRye Reactive Messaging - liveness check",
+          "status": "UP",
+          "data": {
+            "audit-out": "[OK]"
+          }
+        },
+        {
+          "name": "Database connections health check",
+          "status": "UP",
+          "data": {
+            "<default>": "UP"
+          }
+        },
+        {
+          "name": "SmallRye Reactive Messaging - readiness check",
+          "status": "UP",
+          "data": {
+            "audit-out": "[OK]"
+          }
+        },
+        {
+          "name": "SmallRye Reactive Messaging - startup check",
+          "status": "UP",
+          "data": {
+            "audit-out": "[OK]"
+          }
+        }
+      ]
+    },
+    "auditConsumer": "{\n    \"status\": \"UP\",\n    \"checks\": [\n        {\n            \"name\": \"SmallRye Reactive Messaging - liveness check\",\n            \"status\": \"UP\",\n            \"data\": {\n                \"audit-in\": \"[OK]\"\n            }\n        },\n        {\n            \"name\": \"Database connections health check\",\n            \"status\": \"UP\",\n            \"data\": {\n                \"<default>\": \"UP\"\n            }\n        },\n        {\n            \"name\": \"SmallRye Reactive Messaging - readiness check\",\n            \"status\": \"UP\",\n            \"data\": {\n                \"audit-in\": \"[OK]\"\n            }\n        },\n        {\n            \"name\": \"SmallRye Reactive Messaging - startup check\",\n            \"status\": \"UP\",\n            \"data\": {\n                \"audit-in\": \"[OK]\"\n            }\n        }\n    ]\n}"
+  },
+  "auth": {},
+  "plugins": {},
+  "scenarios": [],
+  "failures": [
+    {
+      "message": "Timed out waiting for Bearer token captured from Angular API request",
+      "stack": "Error: Timed out waiting for Bearer token captured from Angular API request\n    at waitFor (file:///C:/chatgtp/quarkus/scripts/e2e-large-readers-plugins.mjs:498:9)\n    at async getBearerWithUiLogin (file:///C:/chatgtp/quarkus/scripts/e2e-large-readers-plugins.mjs:144:5)\n    at async main (file:///C:/chatgtp/quarkus/scripts/e2e-large-readers-plugins.mjs:40:17)"
+    }
+  ],
+  "finishedAt": "2026-07-09T00:48:17.809Z"
+}

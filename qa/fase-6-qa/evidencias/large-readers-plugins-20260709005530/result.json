@@ -1,0 +1,471 @@
+{
+  "runId": "20260709005530",
+  "startedAt": "2026-07-09T00:55:30.941Z",
+  "apiBase": "http://localhost:8080",
+  "dataDir": "C:\\chatgtp\\quarkus\\qa\\fase-6-qa\\evidencias\\large-readers-plugins-20260709005530\\fixtures",
+  "health": {
+    "platform": {
+      "status": "UP",
+      "checks": [
+        {
+          "name": "SmallRye Reactive Messaging - liveness check",
+          "status": "UP",
+          "data": {
+            "audit-out": "[OK]"
+          }
+        },
+        {
+          "name": "Database connections health check",
+          "status": "UP",
+          "data": {
+            "<default>": "UP"
+          }
+        },
+        {
+          "name": "SmallRye Reactive Messaging - readiness check",
+          "status": "UP",
+          "data": {
+            "audit-out": "[OK]"
+          }
+        },
+        {
+          "name": "SmallRye Reactive Messaging - startup check",
+          "status": "UP",
+          "data": {
+            "audit-out": "[OK]"
+          }
+        }
+      ]
+    },
+    "auditConsumer": "{\n    \"status\": \"UP\",\n    \"checks\": [\n        {\n            \"name\": \"SmallRye Reactive Messaging - liveness check\",\n            \"status\": \"UP\",\n            \"data\": {\n                \"audit-in\": \"[OK]\"\n            }\n        },\n        {\n            \"name\": \"Database connections health check\",\n            \"status\": \"UP\",\n            \"data\": {\n                \"<default>\": \"UP\"\n            }\n        },\n        {\n            \"name\": \"SmallRye Reactive Messaging - readiness check\",\n            \"status\": \"UP\",\n            \"data\": {\n                \"audit-in\": \"[OK]\"\n            }\n        },\n        {\n            \"name\": \"SmallRye Reactive Messaging - startup check\",\n            \"status\": \"UP\",\n            \"data\": {\n                \"audit-in\": \"[OK]\"\n            }\n        }\n    ]\n}"
+  },
+  "auth": {
+    "method": "Playwright login + Authorization header capture",
+    "username": "admin",
+    "tokenCaptured": true,
+    "screenshot": "C:\\chatgtp\\quarkus\\qa\\fase-6-qa\\evidencias\\large-readers-plugins-20260709005530\\post-login.png"
+  },
+  "plugins": {
+    "portChecks": [
+      {
+        "port": 50061,
+        "listening": true
+      },
+      {
+        "port": 50062,
+        "listening": true
+      },
+      {
+        "port": 50063,
+        "listening": true
+      },
+      {
+        "port": 4300,
+        "listening": true
+      }
+    ],
+    "backendInstalls": [
+      {
+        "file": "backend-java.json",
+        "originalActive": true,
+        "installed": [
+          "demo-transform-java",
+          "demo-transform-node",
+          "demo-transform-python"
+        ],
+        "versions": [
+          "undefined@1.0.0",
+          "undefined@1.0.0",
+          "undefined@1.0.0"
+        ],
+        "activated": true
+      },
+      {
+        "file": "backend-node.json",
+        "originalActive": true,
+        "installed": [
+          "demo-transform-java",
+          "demo-transform-node",
+          "demo-transform-python"
+        ],
+        "versions": [
+          "undefined@1.0.0",
+          "undefined@1.0.0",
+          "undefined@1.0.0"
+        ],
+        "activated": true
+      },
+      {
+        "file": "backend-python.json",
+        "originalActive": true,
+        "installed": [
+          "demo-transform-java",
+          "demo-transform-node",
+          "demo-transform-python"
+        ],
+        "versions": [
+          "undefined@1.0.0",
+          "undefined@1.0.0",
+          "undefined@1.0.0"
+        ],
+        "activated": true
+      }
+    ],
+    "uiCatalogSize": 1,
+    "installed": [
+      {
+        "id": "demo-transform-java",
+        "version": "1.0.0",
+        "spiVersion": "2.0.0",
+        "providedTypes": [
+          "DEMO_TRANSFORM_JAVA"
+        ],
+        "providedSourceTypes": [],
+        "providedReaderTypes": [
+          "DEMO_REMOTE_CSV"
+        ],
+        "transport": "GRPC",
+        "trusted": false,
+        "status": "UNTRUSTED",
+        "degradedReason": null,
+        "marketplaceUrl": null,
+        "channel": null,
+        "pinnedVersion": null,
+        "pinned": false
+      },
+      {
+        "id": "demo-transform-node",
+        "version": "1.0.0",
+        "spiVersion": "2.0.0",
+        "providedTypes": [
+          "DEMO_TRANSFORM_NODE"
+        ],
+        "providedSourceTypes": [],
+        "providedReaderTypes": [
+          "DEMO_REMOTE_CSV_NODE"
+        ],
+        "transport": "GRPC",
+        "trusted": false,
+        "status": "UNTRUSTED",
+        "degradedReason": null,
+        "marketplaceUrl": null,
+        "channel": null,
+        "pinnedVersion": null,
+        "pinned": false
+      },
+      {
+        "id": "demo-transform-python",
+        "version": "1.0.0",
+        "spiVersion": "2.0.0",
+        "providedTypes": [
+          "DEMO_TRANSFORM_PY"
+        ],
+        "providedSourceTypes": [],
+        "providedReaderTypes": [
+          "DEMO_REMOTE_CSV_PY"
+        ],
+        "transport": "GRPC",
+        "trusted": false,
+        "status": "UNTRUSTED",
+        "degradedReason": null,
+        "marketplaceUrl": null,
+        "channel": null,
+        "pinnedVersion": null,
+        "pinned": false
+      }
+    ],
+    "versions": [
+      {
+        "id": "demo-transform-java",
+        "version": "1.0.0",
+        "spiVersion": "2.0.0",
+        "providedTypes": [
+          "DEMO_TRANSFORM_JAVA"
+        ],
+        "providedSourceTypes": [],
+        "providedReaderTypes": [
+          "DEMO_REMOTE_CSV"
+        ],
+        "transport": "GRPC",
+        "trusted": false,
+        "active": true,
+        "marketplaceUrl": null,
+        "channel": null,
+        "pinnedVersion": null,
+        "pinned": false,
+        "canaryWeight": null
+      },
+      {
+        "id": "demo-transform-node",
+        "version": "1.0.0",
+        "spiVersion": "2.0.0",
+        "providedTypes": [
+          "DEMO_TRANSFORM_NODE"
+        ],
+        "providedSourceTypes": [],
+        "providedReaderTypes": [
+          "DEMO_REMOTE_CSV_NODE"
+        ],
+        "transport": "GRPC",
+        "trusted": false,
+        "active": true,
+        "marketplaceUrl": null,
+        "channel": null,
+        "pinnedVersion": null,
+        "pinned": false,
+        "canaryWeight": null
+      },
+      {
+        "id": "demo-transform-python",
+        "version": "1.0.0",
+        "spiVersion": "2.0.0",
+        "providedTypes": [
+          "DEMO_TRANSFORM_PY"
+        ],
+        "providedSourceTypes": [],
+        "providedReaderTypes": [
+          "DEMO_REMOTE_CSV_PY"
+        ],
+        "transport": "GRPC",
+        "trusted": false,
+        "active": true,
+        "marketplaceUrl": null,
+        "channel": null,
+        "pinnedVersion": null,
+        "pinned": false,
+        "canaryWeight": null
+      }
+    ],
+    "degraded": {}
+  },
+  "asyncStatus": {
+    "state": "DISABLED",
+    "executionEnabled": false,
+    "dispatchEnabled": false,
+    "consumerEnabled": false,
+    "consumerLive": false,
+    "dispatchLive": false,
+    "brokersRegistered": true
+  },
+  "scenarios": [
+    {
+      "key": "csv-10k-ok-sync-db-write",
+      "dispatchMode": "sync",
+      "expectedStatus": "COMPLETED",
+      "actualStatus": "COMPLETED",
+      "expectedRecords": 10000,
+      "processedRecords": 10000,
+      "sourceId": 15,
+      "readerId": 17,
+      "processDefinitionId": 15,
+      "processExecutionId": 15,
+      "taskStatuses": [
+        {
+          "id": 29,
+          "taskType": "FILE_READ",
+          "status": "COMPLETED"
+        },
+        {
+          "id": 30,
+          "taskType": "DB_WRITE",
+          "status": "COMPLETED"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "key": "txt-10k-ok-sync-db-write",
+      "dispatchMode": "sync",
+      "expectedStatus": "COMPLETED",
+      "actualStatus": "COMPLETED",
+      "expectedRecords": 10000,
+      "processedRecords": 10000,
+      "sourceId": 16,
+      "readerId": 18,
+      "processDefinitionId": 16,
+      "processExecutionId": 16,
+      "taskStatuses": [
+        {
+          "id": 31,
+          "taskType": "FILE_READ",
+          "status": "COMPLETED"
+        },
+        {
+          "id": 32,
+          "taskType": "DB_WRITE",
+          "status": "COMPLETED"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "key": "xlsx-10k-ok-sync-db-write",
+      "dispatchMode": "sync",
+      "expectedStatus": "COMPLETED",
+      "actualStatus": "COMPLETED",
+      "expectedRecords": 10000,
+      "processedRecords": 10000,
+      "sourceId": 17,
+      "readerId": 19,
+      "processDefinitionId": 17,
+      "processExecutionId": 17,
+      "taskStatuses": [
+        {
+          "id": 33,
+          "taskType": "FILE_READ",
+          "status": "COMPLETED"
+        },
+        {
+          "id": 34,
+          "taskType": "DB_WRITE",
+          "status": "COMPLETED"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "key": "swift-mt-10k-ok-sync-db-write",
+      "dispatchMode": "sync",
+      "expectedStatus": "COMPLETED",
+      "actualStatus": "COMPLETED",
+      "expectedRecords": 10000,
+      "processedRecords": 10000,
+      "sourceId": 18,
+      "readerId": 20,
+      "processDefinitionId": 18,
+      "processExecutionId": 18,
+      "taskStatuses": [
+        {
+          "id": 35,
+          "taskType": "FILE_READ",
+          "status": "COMPLETED"
+        },
+        {
+          "id": 36,
+          "taskType": "DB_WRITE",
+          "status": "COMPLETED"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "key": "txt-10k-soft-errors-sync-db-write",
+      "dispatchMode": "sync",
+      "expectedStatus": "COMPLETED",
+      "actualStatus": "COMPLETED",
+      "expectedRecords": 9900,
+      "processedRecords": 9900,
+      "sourceId": 19,
+      "readerId": 21,
+      "processDefinitionId": 19,
+      "processExecutionId": 19,
+      "taskStatuses": [
+        {
+          "id": 37,
+          "taskType": "FILE_READ",
+          "status": "COMPLETED"
+        },
+        {
+          "id": 38,
+          "taskType": "DB_WRITE",
+          "status": "COMPLETED"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "key": "csv-10k-sync-rest-call-batch",
+      "dispatchMode": "sync",
+      "asyncRequested": false,
+      "asyncState": "DISABLED",
+      "asyncExecutionEnabled": false,
+      "asyncWasReal": false,
+      "expectedStatus": "COMPLETED",
+      "actualStatus": "COMPLETED",
+      "expectedRecords": 10000,
+      "processedRecords": 20000,
+      "reportedProgressRecords": 10000,
+      "expectedHttpCalls": 20,
+      "actualHttpCalls": 20,
+      "sourceId": 20,
+      "readerId": 22,
+      "processDefinitionId": 20,
+      "processExecutionId": 20,
+      "taskStatuses": [
+        {
+          "id": 39,
+          "taskType": "FILE_READ",
+          "status": "COMPLETED"
+        },
+        {
+          "id": 40,
+          "taskType": "REST_CALL",
+          "status": "COMPLETED"
+        }
+      ],
+      "ok": false
+    },
+    {
+      "key": "csv-10k-async-rest-call-batch",
+      "dispatchMode": "async-intent-gated",
+      "asyncRequested": true,
+      "asyncState": "DISABLED",
+      "asyncExecutionEnabled": false,
+      "asyncWasReal": false,
+      "expectedStatus": "COMPLETED",
+      "actualStatus": "COMPLETED",
+      "expectedRecords": 10000,
+      "processedRecords": 10000,
+      "reportedProgressRecords": 1000,
+      "expectedHttpCalls": 10,
+      "actualHttpCalls": 10,
+      "sourceId": 21,
+      "readerId": 23,
+      "processDefinitionId": 21,
+      "processExecutionId": 21,
+      "taskStatuses": [
+        {
+          "id": 41,
+          "taskType": "FILE_READ",
+          "status": "COMPLETED"
+        },
+        {
+          "id": 42,
+          "taskType": "REST_CALL",
+          "status": "COMPLETED"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "key": "csv-missing-file-hard-error",
+      "dispatchMode": "sync",
+      "expectedStatus": "FAILED",
+      "actualStatus": "FAILED",
+      "processDefinitionId": 22,
+      "processExecutionId": 22,
+      "taskStatuses": [
+        {
+          "id": 43,
+          "taskType": "FILE_READ",
+          "status": "FAILED"
+        },
+        {
+          "id": 44,
+          "taskType": "DB_WRITE",
+          "status": "FAILED"
+        }
+      ],
+      "ok": true
+    },
+    {
+      "key": "csv-invalid-reader-config-catalog-error",
+      "expectedStatus": "HTTP_4XX_OR_5XX",
+      "actualStatus": "HTTP_200",
+      "responseBody": "{\"id\":25,\"name\":\"e2e-20260709005530-reader-invalid-csv\",\"readerType\":\"CSV\",\"active\":true,\"configurationJson\":\"{\\\"delimiter\\\":\\\";\\\",\\\"rowData\\\":2}\"}",
+      "ok": false
+    }
+  ],
+  "failures": [],
+  "finishedAt": "2026-07-09T00:56:36.966Z"
+}
