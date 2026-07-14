@@ -1,5 +1,6 @@
 package com.integrationhub.platform.service;
 
+import com.integrationhub.platform.api.response.branding.BrandingResponse;
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.service.execution.async.AsyncPageWorkItem;
@@ -11,6 +12,7 @@ import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.reader.ReadSkip;
 import com.integrationhub.platform.spi.reader.SourcePosition;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.platform.spi.task.payments.ValidationIssue;
 import com.integrationhub.platform.task.AsyncTaskEnvelope;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 
@@ -29,6 +31,11 @@ import io.quarkus.runtime.annotations.RegisterForReflection;
  * de Quarkus: por eso se registran por {@code targets} desde aqui en vez de anotarlos alla.</p>
  */
 @RegisterForReflection(targets = {
+        // White-label: BrandingResource#get devuelve jakarta.ws.rs.core.Response (para setear
+        // el header CORS), no el DTO tipado -> Quarkus NO auto-registra BrandingResponse y en
+        // nativo falla con "No serializer found" (cazado en smoke de integracion 2026-07-13).
+        // El /api/branding es publico y lo consume el login white-label: romperlo mata el branding.
+        BrandingResponse.class,
         // Lanzamiento async de ejecuciones (ProcessExecutionCommandService.startAsync)
         QueuedProcessExecutionPayload.class,
         // Trama de auditoria productor -> MQ -> consumidor (AuditSpoolWriter). Ojo:
@@ -39,6 +46,19 @@ import io.quarkus.runtime.annotations.RegisterForReflection;
         AsyncTaskEnvelope.class,
         AsyncSliceWorkItem.class,
         AsyncPageWorkItem.class,
+        // Cuarentena MT101: Mt101QuarantineResource#stagingRow devuelve jakarta.ws.rs.core.Response
+        // (untyped) -> Quarkus NO auto-registra el DTO y en nativo el GET da 500
+        // ("No serializer found for StagingRowView") => el operador no puede ni LEER la fila para
+        // corregirla. Mismo patron que BrandingResponse. Cazado en el e2e de cuarentena 2026-07-14.
+        com.integrationhub.platform.service.payments.swift.Mt101StagingCorrectionService.StagingRowView.class,
+        com.integrationhub.platform.service.payments.swift.Mt101StagingCorrectionService.CorrectionResult.class,
+        // MT101_VALIDATE mete las issues en outputs["errors"] y el motor serializa los outputs
+        // de la tarea con Jackson. Sin registrar, en nativo falla "No serializer found for
+        // ValidationIssue" -> la tarea revienta. OJO: solo se manifiesta cuando HAY errores de
+        // validacion (con datos limpios la lista va vacia) -> cazado en el e2e de 10k con 100
+        // filas malas (2026-07-14). El enum anidado Severity tambien va.
+        ValidationIssue.class,
+        ValidationIssue.Severity.class,
         // Money-path MT101: Mt101RouteTaskProvider convierte el mensaje a Map via Jackson
         Mt101Message.class,
         Mt101Message.Envelope.class,

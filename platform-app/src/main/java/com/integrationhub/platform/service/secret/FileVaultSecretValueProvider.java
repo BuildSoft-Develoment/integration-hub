@@ -2,15 +2,17 @@ package com.integrationhub.platform.service.secret;
 
 // @trace RF-004 (reingenieria: clase que implementa el/los RF en produccion)
 
-import io.quarkus.arc.DefaultBean;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import java.util.Map;
 import java.util.Optional;
 
+// Sin @DefaultBean: los SecretValueProvider no compiten entre si (SecretResolver los recorre y elige
+// por supports(source)), son una cadena de fuentes. Con @DefaultBean, ArC eliminaba este bean del
+// Instance<SecretValueProvider> por existir beans no-default del mismo tipo (aws/azure/gcp/vault)
+// -> "Unsupported secret source: secret" al resolver ${secret:...} en runtime.
 @ApplicationScoped
-@DefaultBean
 public class FileVaultSecretValueProvider implements SecretValueProvider {
 
     private final FileVaultSecretClient fileVaultSecretClient;

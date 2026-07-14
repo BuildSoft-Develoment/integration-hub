@@ -1,14 +1,14 @@
 package com.integrationhub.platform.service.secret;
 
-import io.quarkus.arc.DefaultBean;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.Config;
 
 import java.util.Optional;
 
+// Sin @DefaultBean: ver FileVaultSecretValueProvider. El bean quedaba fuera del
+// Instance<SecretValueProvider> y ${env:...} era irresoluble en runtime.
 @ApplicationScoped
-@DefaultBean
 public class EnvironmentSecretValueProvider implements SecretValueProvider {
 
     private final Config config;
