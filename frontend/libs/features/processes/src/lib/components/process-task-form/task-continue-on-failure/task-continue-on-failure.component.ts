@@ -1,5 +1,6 @@
 import { Component, inject, input, output } from '@angular/core';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { I18nService } from '@integration-hub/core/services';
 
 /**
@@ -15,7 +16,7 @@ import { I18nService } from '@integration-hub/core/services';
 @Component({
   selector: 'ih-task-continue-on-failure',
   standalone: true,
-  imports: [MatSlideToggleModule],
+  imports: [MatSlideToggleModule, MatTooltipModule],
   template: `
     <div class="continue-on-failure">
       <mat-slide-toggle
@@ -24,20 +25,37 @@ import { I18nService } from '@integration-hub/core/services';
         (change)="continueOnFailureChange.emit($event.checked)">
         {{ i18n.t('ui.continueOnFailure') }}
       </mat-slide-toggle>
-      <p class="continue-on-failure__hint">{{ i18n.t('ui.continueOnFailureHint') }}</p>
+      <span
+        class="hint-info"
+        [matTooltip]="i18n.t('ui.continueOnFailureHint')"
+        matTooltipPosition="above"
+        tabindex="0"
+        role="img"
+        [attr.aria-label]="i18n.t('ui.continueOnFailureHint')">i</span>
     </div>
   `,
   styles: [
     `
       .continue-on-failure {
         display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
+        align-items: center;
+        gap: 0.4rem;
       }
-      .continue-on-failure__hint {
-        margin: 0;
-        font-size: 0.85rem;
-        opacity: 0.75;
+      /* Marcador de info: la explicación completa va en el tooltip (no en un párrafo). */
+      .hint-info {
+        display: inline-grid;
+        place-items: center;
+        width: 1.05rem;
+        height: 1.05rem;
+        border-radius: 50%;
+        border: 1px solid var(--ih-border);
+        color: var(--ih-text-soft);
+        font-size: 0.7rem;
+        font-style: italic;
+        font-weight: 700;
+        line-height: 1;
+        cursor: help;
+        user-select: none;
       }
     `,
   ],

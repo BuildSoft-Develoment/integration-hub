@@ -8,4 +8,6 @@
   grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   gap: 0.95rem;
   min-width: 0;
+  /* Cada celda a su alto natural: una celda alta (p.ej. despacho async) NO estira las vecinas. */
+  align-items: start;
 }
