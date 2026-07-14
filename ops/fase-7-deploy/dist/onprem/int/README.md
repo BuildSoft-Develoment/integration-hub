@@ -1,0 +1,121 @@
+# Ambiente de INTEGRACION (int) — todo dockerizado detras de nginx
+
+Paquete autonomo para levantar la plataforma + todas sus dependencias de prueba en un
+solo `docker compose`, replicando el server real (no es PROD, pero es el mismo shape):
+
+| Servicio        | URL publica                                   |
+|-----------------|-----------------------------------------------|
+| App (appih)     | `http://app.buildsoft.com.pe/appih`           |
+| Keycloak (iam)  | `http://app.buildsoft.com.pe/iam`             |
+| Widget plugin   | `http://app.buildsoft.com.pe/pluginwidget/`   |
+
+Compose: `../docker-compose.int.yml` · soporte en este dir (`nginx/`, `keycloak/`, `smoke/`).
+Todo sale por **nginx**. La app y Keycloak van **detras del reverse proxy**; el issuer del
+token es la URL publica y es consistente entre browser y app (nginx tiene el alias de red
+`app.buildsoft.com.pe`, asi la app resuelve el issuer publico internamente).
+
+## Contenido
+
+- **platform-app** — imagen NATIVA (UPX ~84 MB) con `/appih` horneado. Ancla el netns de plugins.
+- **keycloak** — realm `integration-hub` en `/iam`, detras de proxy.
+- **postgres** — BD operacional (app + audit-consumer).
+- **kafka** — UNICO broker (async dispatch + backbone de auditoria).
+- **clickhouse** (+ `clickhouse-init`) — store FRIO de auditoria (`audit.cold-store=CLICKHOUSE`).
+- **audit-consumer** — NATIVO; consume de Kafka -> persiste en ClickHouse.
+- **minio** (+init de buckets) — S3 (staging de plugins + fuentes).
+- **sftp-source** / **ftp-source** — `SftpSourceProvider` / `FtpSourceProvider`.
+- **sftp-bank** — inbox del "banco" para el money-path **PAY** (FIN MT101 upload-with-rename) + STATUS.
+- **plugin-java / node / python** — 3 backends gRPC; comparten el netns de la app
+  (`network_mode: service:platform-app`) => la app los ve en `127.0.0.1:5006x` (localhost),
+  unica forma que la trust-policy acepta sobre HTTP plano.
+- **frontend-widget** — widget del plugin, servido por nginx en `/pluginwidget/`.
+
+## 1. Build de las imagenes NATIVAS (build-time)
+
+Requisitos (ver `../../NATIVE-STATUS.md`): WSL2 >=12 GB, contenedores pesados parados.
+Compresion UPX (`quarkus.native.compression.level=7`) ya en `application.properties`.
+
+### 1a. platform-app con el subpath `/appih`
+
+> ⚠️ El subpath se **hornea en build-time** (base-href del SPA + `quarkus.http.root-path`).
+> La imagen por defecto sirve en `/`, NO en `/appih`.
+
+Cambios (aislados en una configuracion para no romper dev, que sigue en `/`):
+1. **Frontend base-href** = `/appih/` — configuracion de build de `web` (Nx) o `baseHref` en
+   las options del executor `@angular-architects/native-federation:build`.
+2. **Quarkus root-path** = `/appih` — `-Dquarkus.http.root-path=/appih` en el build.
+
+```bash
+mvn -pl platform-app -am clean package -Dmaven.test.skip=true -Pnative \
+  -Dquarkus.native.container-build=true -Dquarkus.http.root-path=/appih
+# (+ base-href /appih/ en el frontend)
+docker build -f ops/fase-7-deploy/dist/common/Dockerfile.native \
+  --build-arg RUNNER=platform-app/target/platform-app-0.0.1-SNAPSHOT-runner \
+  -t integration-hub:native-appih .
+```
+
+### 1b. audit-consumer NATIVO
+
+> ⚠️ Trae `clickhouse-jdbc`: puede requerir config de reflexion en native-image
+> (tipo "muros"). Verificar el smoke de auditoria tras el primer build.
+
+```bash
+mvn -pl audit-consumer -am clean package -Dmaven.test.skip=true -Pnative \
+  -Dquarkus.native.container-build=true
+docker build -f audit-consumer/src/main/docker/Dockerfile.native \
+  -t integration-hub-audit-consumer:native audit-consumer
+```
+
+## 2. Levantar el ambiente
+
+```bash
+cd ops/fase-7-deploy/dist/onprem
+cp int/.env.example int/.env          # ajustar claves si hace falta
+docker compose -f docker-compose.int.yml --env-file int/.env up -d
+```
+
+En el **host** (test local sin DNS), agregar al hosts file: `127.0.0.1  app.buildsoft.com.pe`.
+Navegar `http://app.buildsoft.com.pe/appih` -> login por `/iam` -> app.
+
+## 3. Smoke tests
+
+| Area        | Como probar |
+|-------------|-------------|
+| Login/OIDC  | Entrar a `/appih`, loguear en Keycloak `/iam`, volver autenticado. |
+| Plugins     | `/appih/#/plugins` -> instalar los 3 (`http://localhost:5006{1,2,3}`, netns compartido) -> invocar. Widget en `/pluginwidget/`. |
+| SFTP source | Dejar archivo en `sftp_source_data` (host `sftp-source`, user `ihsource`) -> fuente SFTP -> leer. |
+| FTP source  | Igual con `ftp-source` (user `ihftp`). |
+| S3 source   | MinIO (`minio:9000`, bucket `ih-source-inbox`). |
+| PAY money-path | Proceso MT101 PAY -> entrega el FIN al `sftp-bank` (`inbox/`), STATUS lo relee. |
+| Auditoria   | `audit-consumer` (nativo) consume de Kafka -> ClickHouse (`audit_record_event`, ReplacingMergeTree). |
+
+### Smoke rapido de INFRA en `/` (sin la imagen /appih)
+
+Valida el wiring de containers con la imagen por defecto `integration-hub:native` (sirve en
+`/`, no `/appih`), usando `smoke/` (nginx-root + realm-root, puerto 8080). Util antes de
+invertir en el build `/appih`:
+
+```bash
+cd ops/fase-7-deploy/dist/onprem
+docker compose -f docker-compose.int.yml --env-file int/smoke/.env up -d \
+  postgres keycloak kafka minio minio-init sftp-source ftp-source sftp-bank \
+  platform-app plugin-java plugin-node plugin-python frontend-widget nginx
+# app: http://localhost:8080/  (o app.buildsoft.com.pe:8080 con hosts entry)
+```
+
+## Plegar en el nginx REAL del servidor
+
+Copiar los tres `location` de `nginx/default.conf` dentro del server block existente,
+apuntando los `proxy_pass` a los upstreams reales. Los `X-Forwarded-*` son los mismos
+(Keycloak los consume con `KC_PROXY_HEADERS=xforwarded`; el issuer se fija con `KC_HOSTNAME`
+= URL publica + `/iam`).
+
+## Notas
+
+- La imagen `quarkus-micro-image` no trae `curl` -> sin healthcheck HTTP en Compose (en K8s
+  lo hace el kubelet). Ver `../../common/Dockerfile.native`.
+- Realm de integracion: `keycloak/integration-hub-realm.json` (redirects al URL publico
+  `/appih`). El de dev (`/keycloak/integration-hub-realm.json`, localhost:8080) queda intacto.
+- Fix nativo aplicado esta ronda: `BrandingResponse` registrado en
+  `NativeReflectionRegistrations` (sin el, `/api/branding` da 500 en nativo -> rompe el
+  white-label del login). Se valida en el build 1a.

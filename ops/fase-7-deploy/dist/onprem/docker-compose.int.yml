@@ -1,0 +1,341 @@
+# =====================================================================================
+# Ambiente de INTEGRACION (int) — todo dockerizado detras de nginx, replicando el server
+# real: app en /appih, Keycloak en /iam, host app.buildsoft.com.pe. No es PROD, pero es
+# la forma mas cercana (mismo shape). Soporte en ./int/ (nginx, keycloak, smoke).
+#
+# Arranque:
+#   1) Build de las imagenes NATIVAS (ver int/README.md > Build):
+#        - integration-hub:native-appih  (platform-app con /appih horneado)
+#        - integration-hub-audit-consumer:native
+#   2) docker compose -f docker-compose.int.yml --env-file int/.env up -d
+#   3) hosts file del host:  127.0.0.1  app.buildsoft.com.pe
+#   4) Navegar http://app.buildsoft.com.pe/appih  -> login por /iam -> app.
+#
+# Notas de diseño:
+#  - nginx es la unica puerta. Alias de red `app.buildsoft.com.pe`, asi la app resuelve el
+#    issuer PUBLICO internamente (issuer consistente browser <-> app).
+#  - Los 3 backends gRPC comparten el netns de la app (network_mode: service:platform-app)
+#    -> la app los ve en 127.0.0.1:5006x = localhost => trusted por la plugin trust-policy.
+#  - Broker: SOLO Kafka (async dispatch + backbone de auditoria).
+#  - Auditoria: audit-consumer (NATIVO) consume de Kafka y persiste el store frio en
+#    ClickHouse (audit.cold-store.type=CLICKHOUSE); postgres es la BD operacional.
+# =====================================================================================
+name: integration-hub-int
+
+networks:
+  ihnet:
+    driver: bridge
+
+volumes:
+  pg_data:
+  minio_data:
+  sftp_source_data:
+  sftp_bank_data:
+  ftp_source_data:
+
+services:
+  # ---------------------------------------------------------------------------------
+  # nginx: reverse proxy publico. App en /appih, Keycloak en /iam.
+  # ---------------------------------------------------------------------------------
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: ih-int-nginx
+    ports:
+      - "${NGINX_PORTS:-80:80}"
+    volumes:
+      - ${NGINX_CONF:-./int/nginx/default.conf}:/etc/nginx/conf.d/default.conf:ro
+      - ./int/nginx/certs:/etc/nginx/certs:ro
+    networks:
+      ihnet:
+        aliases:
+          - app.buildsoft.com.pe
+    depends_on:
+      - platform-app
+      - keycloak
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------------
+  # Postgres — base de datos OPERACIONAL de la plataforma (y del audit-consumer).
+  # ---------------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: ih-int-postgres
+    environment:
+      POSTGRES_DB: integration_hub
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-admin}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks: [ihnet]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d integration_hub"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------------
+  # Keycloak — detras de nginx en /iam. Issuer = <PUBLIC_BASE_URL>/iam/realms/…
+  # ---------------------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.1
+    container_name: ih-int-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD:-admin}
+      KC_HTTP_ENABLED: "true"
+      KC_HTTP_PORT: "8180"
+      KC_HTTP_RELATIVE_PATH: "/iam"
+      KC_PROXY_HEADERS: "xforwarded"
+      # Hostname publico INCLUYENDO el subpath /iam: el issuer queda …/iam/realms/… y
+      # matchea el auth-server-url del app (con KC_HOSTNAME puro origin, KC no lo agrega).
+      KC_HOSTNAME: "${PUBLIC_BASE_URL:-http://app.buildsoft.com.pe}/iam"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ${KC_REALM:-./int/keycloak/integration-hub-realm.json}:/opt/keycloak/data/import/integration-hub-realm.json:ro
+      - ../../../../keycloak/themes:/opt/keycloak/themes:ro
+    networks: [ihnet]
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/127.0.0.1/8180'"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  # ---------------------------------------------------------------------------------
+  # Kafka (KRaft) — UNICO broker: async dispatch + backbone de auditoria.
+  # ---------------------------------------------------------------------------------
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: ih-int-kafka
+    environment:
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@localhost:9093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENERS: "CONTROLLER://:9093,INTERNAL://:9094"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://kafka:9094"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks: [ihnet]
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9094 --list || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+
+  # ---------------------------------------------------------------------------------
+  # MinIO (S3-compatible) — staging de artefactos de plugins + fuentes S3.
+  # ---------------------------------------------------------------------------------
+  minio:
+    image: minio/minio:RELEASE.2024-01-16T16-07-38Z
+    container_name: ih-int-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    volumes:
+      - minio_data:/data
+    networks: [ihnet]
+    healthcheck:
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: minio/mc:RELEASE.2024-01-16T16-06-34Z
+    container_name: ih-int-minio-init
+    depends_on:
+      - minio
+    networks: [ihnet]
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minioadmin} ${MINIO_ROOT_PASSWORD:-minioadmin}; do sleep 1; done;
+      mc mb --ignore-existing local/remote-plugin-staging;
+      mc mb --ignore-existing local/ih-source-inbox;
+      exit 0;
+      "
+
+  # ---------------------------------------------------------------------------------
+  # SFTP fuente — SftpSourceProvider.
+  # ---------------------------------------------------------------------------------
+  sftp-source:
+    image: atmoz/sftp:alpine
+    container_name: ih-int-sftp-source
+    command: ${SFTP_SOURCE_USER:-ihsource}:${SFTP_SOURCE_PASS:-ihsource}:1001:1001:upload
+    volumes:
+      - sftp_source_data:/home/${SFTP_SOURCE_USER:-ihsource}/upload
+    networks: [ihnet]
+
+  # ---------------------------------------------------------------------------------
+  # FTP fuente — FtpSourceProvider (PASV).
+  # ---------------------------------------------------------------------------------
+  ftp-source:
+    image: delfer/alpine-ftp-server:latest
+    container_name: ih-int-ftp-source
+    environment:
+      USERS: "${FTP_SOURCE_USER:-ihftp}|${FTP_SOURCE_PASS:-ihftp}|/ftp/ihftp"
+      ADDRESS: ftp-source
+      MIN_PORT: "21000"
+      MAX_PORT: "21010"
+    volumes:
+      - ftp_source_data:/ftp/${FTP_SOURCE_USER:-ihftp}
+    networks: [ihnet]
+
+  # ---------------------------------------------------------------------------------
+  # SFTP BANCO (PAY) — inbox del "banco" (FIN MT101 upload-with-rename) + STATUS.
+  # ---------------------------------------------------------------------------------
+  sftp-bank:
+    image: atmoz/sftp:alpine
+    container_name: ih-int-sftp-bank
+    command: ${SFTP_BANK_USER:-bank}:${SFTP_BANK_PASS:-bank}:1002:1002:inbox,outbox
+    volumes:
+      - sftp_bank_data:/home/${SFTP_BANK_USER:-bank}
+    networks: [ihnet]
+
+  # ---------------------------------------------------------------------------------
+  # Consumidor de auditoria — NATIVO. Kafka -> cold-store POSTGRES (default; ClickHouse
+  # deferido). Requiere el runner nativo (mvn -pl audit-consumer -am package -Pnative ...)
+  # antes del docker build. Ver int/README.md.
+  # ---------------------------------------------------------------------------------
+  audit-consumer:
+    build:
+      context: ../../../../audit-consumer
+      dockerfile: src/main/docker/Dockerfile.native
+    image: integration-hub-audit-consumer:native
+    container_name: ih-int-audit-consumer
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9094
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:5432/integration_hub
+      QUARKUS_DATASOURCE_USERNAME: postgres
+      QUARKUS_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-admin}
+      # cold-store: POSTGRES por default (audit.cold-store.type). ClickHouse deferido.
+    networks: [ihnet]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------------
+  # Plataforma (imagen NATIVA con /appih horneado). Ancla el netns de plugins.
+  # ---------------------------------------------------------------------------------
+  platform-app:
+    image: ${APP_IMAGE:-integration-hub:native-appih}
+    container_name: ih-int-app
+    volumes:
+      # known_hosts del SFTP source (strictHostKeyChecking=true por default). El form de la
+      # fuente SFTP apunta knownHostsPath aca.
+      - ./int/sftp/known_hosts:/work/sftp/known_hosts:ro
+      # Config externa (la imagen trae QUARKUS_CONFIG_LOCATIONS=/work/config/): properties que
+      # no se pueden pasar por env var (p.ej. canales con guion como tasks-in).
+      - ./int/config/application.properties:/work/config/application.properties:ro
+      # File Vault (PKCS12) para ${secret:...}: el pago correctivo MT101 exige que la password
+      # del SFTP sea una referencia al vault, no texto plano.
+      - ../../../../secrets/dev-secrets.p12:/work/secrets/dev-secrets.p12:ro
+    environment:
+      QUARKUS_PROFILE: "prod,onprem"
+      QUARKUS_HTTP_HOST: "0.0.0.0"
+      QUARKUS_HTTP_PORT: "8080"
+      # Detras de nginx: confiar en X-Forwarded-* para redirects OIDC correctos.
+      QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING: "true"
+      QUARKUS_HTTP_PROXY_ENABLE_FORWARDED_HOST: "true"
+      QUARKUS_HTTP_PROXY_ENABLE_FORWARDED_PREFIX: "true"
+      QUARKUS_DATASOURCE_JDBC_URL: "jdbc:postgresql://postgres:5432/integration_hub"
+      QUARKUS_DATASOURCE_USERNAME: "postgres"
+      QUARKUS_DATASOURCE_PASSWORD: "${POSTGRES_PASSWORD:-admin}"
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:9094"
+      # Despacho async (ADR-015): gate OFF por default. Aca ON para probar tareas async ->
+      # dispatch a Kafka (tasks-out) + consumer in-process (tasks-in, topic pattern tasks..*).
+      TASKS_ASYNC_EXECUTION_ENABLED: "true"
+      TASKS_DISPATCH_ENABLED: "true"
+      MP_MESSAGING_INCOMING_TASKS_IN_ENABLED: "true"
+      # OJO: `auto.offset.reset` del canal tasks-in NO va por env var (el guion de `tasks-in`
+      # mapea mal si la property no esta horneada en la imagen -> inventa un canal `tasks` y el
+      # app no arranca). Va en el properties externo montado en /work/config/ (ver int/config/).
+      # OIDC behind-proxy: el app (resource server, valida bearer tokens) apunta al KC INTERNO
+      # (keycloak:8180, HTTP, sin depender del cert publico) para traer el JWKS, y acepta el
+      # issuer PUBLICO que emiten los tokens (token.issuer). discovery=false + jwks-path interno
+      # evita que el app toque la URL publica HTTPS (self-signed). Sirve igual en prod.
+      QUARKUS_OIDC_AUTH_SERVER_URL: "http://keycloak:8180/iam/realms/integration-hub"
+      QUARKUS_OIDC_DISCOVERY_ENABLED: "false"
+      QUARKUS_OIDC_JWKS_PATH: "protocol/openid-connect/certs"
+      QUARKUS_OIDC_TOKEN_ISSUER: "${PUBLIC_BASE_URL:-http://app.buildsoft.com.pe}/iam/realms/integration-hub"
+      INTEGRATIONHUB_PLUGIN_REMOTE_STAGING_ENDPOINT: "http://minio:9000"
+    networks: [ihnet]
+    # NO publicamos los puertos gRPC de los plugins (50061-63) al host: la app los alcanza en
+    # 127.0.0.1:5006x DENTRO del netns compartido, no hace falta exponerlos. Ademas Windows
+    # reserva rangos de puertos altos (Hyper-V/WSL) que cambian tras cada reinicio y rompian
+    # el bind (ports are not available). Para inspeccionarlos: docker exec en un plugin.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+      kafka:
+        condition: service_started
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------------------------
+  # 3 backends gRPC — comparten el netns de la app => la ve en 127.0.0.1:5006x (localhost).
+  # ---------------------------------------------------------------------------------
+  plugin-java:
+    image: demo-transform-java:1.0.0
+    build: ../../../../ejemplos/plugin-demo/backend-grpc-java
+    container_name: ih-int-plugin-java
+    environment:
+      PLUGIN_GRPC_PORT: "50061"
+      # Comparte el netns del app (que ya usa 8080) -> el HTTP server del plugin Quarkus a
+      # puerto 0 (random) para no chocar; solo importa el gRPC en 50061.
+      QUARKUS_HTTP_PORT: "0"
+    network_mode: "service:platform-app"
+    depends_on:
+      platform-app:
+        condition: service_started
+
+  plugin-node:
+    image: demo-transform-node:1.0.0
+    build: ../../../../ejemplos/plugin-demo/backend-grpc-node
+    container_name: ih-int-plugin-node
+    environment:
+      PLUGIN_GRPC_PORT: "50062"
+    network_mode: "service:platform-app"
+    depends_on:
+      platform-app:
+        condition: service_started
+
+  plugin-python:
+    image: demo-transform-py:1.0.0
+    build: ../../../../ejemplos/plugin-demo/backend-grpc-python
+    container_name: ih-int-plugin-python
+    environment:
+      PLUGIN_GRPC_PORT: "50063"
+    network_mode: "service:platform-app"
+    depends_on:
+      platform-app:
+        condition: service_started
+
+  # ---------------------------------------------------------------------------------
+  # Frontend widget del plugin — lo carga el BROWSER via nginx (/pluginwidget).
+  # ---------------------------------------------------------------------------------
+  frontend-widget:
+    image: demo-transform-widget:1.0.0
+    build: ../../../../ejemplos/plugin-demo/frontend-widget
+    container_name: ih-int-plugin-widget
+    networks: [ihnet]
+
+  # Echo HTTP — destino de las tareas REST_CALL (para probar el offload async). Devuelve
+  # el request como JSON y 200. La app lo alcanza en http://echo.
+  echo:
+    image: ealen/echo-server:latest
+    container_name: ih-int-echo
+    environment:
+      PORT: "80"
+    networks: [ihnet]

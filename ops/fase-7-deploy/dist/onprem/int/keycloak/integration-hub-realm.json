@@ -1,0 +1,172 @@
+{
+    "realm":  "integration-hub",
+    "enabled":  true,
+    "displayName":  "Integration Hub",
+    "loginTheme":  "integration-hub",
+    "registrationAllowed":  false,
+    "resetPasswordAllowed":  false,
+    "rememberMe":  true,
+    "roles":  {
+                  "realm":  [
+                                {
+                                    "name":  "platform-admin"
+                                },
+                                {
+                                    "name":  "integration-admin"
+                                },
+                                {
+                                    "name":  "operator"
+                                },
+                                {
+                                    "name":  "auditor"
+                                },
+                                {
+                                    "name":  "payments-operator",
+                                    "description":  "Ejecuta procesos de mensajeria de pagos (spec 008); sin permisos de edicion de catalogos del motor (RF-019, ADR-009)."
+                                }
+                            ]
+              },
+    "clients":  [
+                    {
+                        "clientId":  "integration-hub-api",
+                        "name":  "Integration Hub API",
+                        "enabled":  true,
+                        "protocol":  "openid-connect",
+                        "publicClient":  false,
+                        "bearerOnly":  false,
+                        "serviceAccountsEnabled":  true,
+                        "standardFlowEnabled":  false,
+                        "directAccessGrantsEnabled":  false,
+                        "implicitFlowEnabled":  false,
+                        "clientAuthenticatorType":  "client-secret",
+                        "secret":  "change-me",
+                        "redirectUris":  [
+
+                                         ],
+                        "webOrigins":  [
+
+                                       ]
+                    },
+                    {
+                        "clientId":  "integration-hub-ui",
+                        "name":  "Integration Hub UI",
+                        "enabled":  true,
+                        "protocol":  "openid-connect",
+                        "publicClient":  true,
+                        "bearerOnly":  false,
+                        "standardFlowEnabled":  true,
+                        "directAccessGrantsEnabled":  true,
+                        "implicitFlowEnabled":  false,
+                        "serviceAccountsEnabled":  false,
+                        "rootUrl":  "http://app.buildsoft.com.pe/appih",
+                        "baseUrl":  "http://app.buildsoft.com.pe/appih/",
+                        "redirectUris":  [
+                                             "http://app.buildsoft.com.pe/appih/*",
+                                             "http://192.168.0.15:8080/appih/*",
+                                             "https://192.168.0.15:8443/appih/*",
+                                             "http://localhost:8080/appih/*"
+                                         ],
+                        "webOrigins":  [
+                                           "http://app.buildsoft.com.pe",
+                                           "http://192.168.0.15:8080",
+                                           "https://192.168.0.15:8443",
+                                           "http://localhost:8080"
+                                       ],
+                        "attributes":  {
+                                           "pkce.code.challenge.method":  "S256",
+                                           "post.logout.redirect.uris":  "https://192.168.0.15:8443##https://192.168.0.15:8443/*##http://app.buildsoft.com.pe##http://app.buildsoft.com.pe/*##http://192.168.0.15:8080##http://192.168.0.15:8080/*##http://localhost:8080##http://localhost:8080/*"
+                                       },
+                        "protocolMappers":  [
+                                                {
+                                                    "name":  "audience-integration-hub-api",
+                                                    "protocol":  "openid-connect",
+                                                    "protocolMapper":  "oidc-audience-mapper",
+                                                    "consentRequired":  false,
+                                                    "config":  {
+                                                                   "included.client.audience":  "integration-hub-api",
+                                                                   "id.token.claim":  "false",
+                                                                   "access.token.claim":  "true",
+                                                                   "introspection.token.claim":  "true"
+                                                               }
+                                                }
+                                            ]
+                    }
+                ],
+    "users":  [
+                  {
+                      "username":  "admin",
+                      "enabled":  true,
+                      "emailVerified":  true,
+                      "firstName":  "Integration",
+                      "lastName":  "Admin",
+                      "email":  "admin@integration-hub.local",
+                      "credentials":  [
+                                          {
+                                              "type":  "password",
+                                              "value":  "admin123",
+                                              "temporary":  false
+                                          }
+                                      ],
+                      "realmRoles":  [
+                                         "platform-admin",
+                                         "integration-admin",
+                                         "operator",
+                                         "auditor"
+                                     ]
+                  },
+                  {
+                      "username":  "operator",
+                      "enabled":  true,
+                      "emailVerified":  true,
+                      "firstName":  "Process",
+                      "lastName":  "Operator",
+                      "email":  "operator@integration-hub.local",
+                      "credentials":  [
+                                          {
+                                              "type":  "password",
+                                              "value":  "operator123",
+                                              "temporary":  false
+                                          }
+                                      ],
+                      "realmRoles":  [
+                                         "operator"
+                                     ]
+                  },
+                  {
+                      "username":  "auditor",
+                      "enabled":  true,
+                      "emailVerified":  true,
+                      "firstName":  "Audit",
+                      "lastName":  "Viewer",
+                      "email":  "auditor@integration-hub.local",
+                      "credentials":  [
+                                          {
+                                              "type":  "password",
+                                              "value":  "auditor123",
+                                              "temporary":  false
+                                          }
+                                      ],
+                      "realmRoles":  [
+                                         "auditor"
+                                     ]
+                  },
+                  {
+                      "username":  "payments-operator",
+                      "enabled":  true,
+                      "emailVerified":  true,
+                      "firstName":  "Payments",
+                      "lastName":  "Operator",
+                      "email":  "payments-operator@integration-hub.local",
+                      "credentials":  [
+                                          {
+                                              "type":  "password",
+                                              "value":  "payments123",
+                                              "temporary":  false
+                                          }
+                                      ],
+                      "realmRoles":  [
+                                         "payments-operator"
+                                     ]
+                  }
+              ]
+}
