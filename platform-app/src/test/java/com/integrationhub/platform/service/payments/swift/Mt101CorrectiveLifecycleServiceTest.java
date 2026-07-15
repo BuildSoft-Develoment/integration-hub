@@ -69,6 +69,7 @@ class Mt101CorrectiveLifecycleServiceTest {
     private AtomicInteger statusInvocations;
     private AtomicInteger reconcileInvocations;
     private boolean rejectSecondPayFragment;
+    private boolean payRejectsOneInvalidatesOne;
     private boolean payUncertain;
     private boolean statusSyncFails;
     private boolean payThrowsAfterDispatch;
@@ -252,6 +253,22 @@ class Mt101CorrectiveLifecycleServiceTest {
                             "dispatchCount", 2,
                             "sentCount", 1,
                             "rejectedCount", 1));
+                }
+                if (payRejectsOneInvalidatesOne) {
+                    // D2-R2: run MIXTO sin envios: RTEST1 rechazado por el banco (REJECTED), RTEST2 invalidado por
+                    // fallo de transporte pre-despacho (INVALIDATED, no salio al banco). sent=0, rejected=1, invalidated=1.
+                    markReference("RTEST1", "REJECTED", "gateway rejected");
+                    markReference("RTEST2", "INVALIDATED", "transport/auth failure before dispatch (not sent)");
+                    return TaskResult.failure("fake mixed reject+invalidate (no sent)", Map.of(
+                            "errors", java.util.List.of(
+                                    Map.of("sendersReference", "RTEST1", "status", "REJECTED",
+                                            "lastError", "gateway rejected", "attempts", 1),
+                                    Map.of("sendersReference", "RTEST2", "status", "INVALIDATED",
+                                            "lastError", "transport/auth failure", "attempts", 1)),
+                            "dispatchCount", 2,
+                            "sentCount", 0,
+                            "rejectedCount", 1,
+                            "invalidatedCount", 1));
                 }
                 markCorrective("SENT");
                 return TaskResult.success("fake pay", Map.of(
@@ -1859,6 +1876,33 @@ class Mt101CorrectiveLifecycleServiceTest {
         // P1-API v23: la respuesta expone la evidencia de resolucion al operador.
         assertEquals("operador", result.payResolvedBy());
         assertTrue(result.payResolutionReason().contains("INC-77"));
+    }
+
+    @Test
+    void mixedRejectedAndInvalidatedNoSentIsPartiallySentNotFailed() throws Exception {
+        // D2-R2: un run correctivo con sent=0, rejected>0, invalidated>0 NO debe quedar FAILED (dead-end). Se
+        // clasifica PARTIALLY_SENT para habilitar AMBAS recuperaciones: request-child (RECHAZADOS) y re-request
+        // (INVALIDADOS). Antes caia en el else -> FAILED, sin ruta de hijo (exige PARTIALLY_SENT).
+        payRejectsOneInvalidatesOne = true;
+        service.advanceCorrective(null, FIX, "executor");
+        service.requestCorrectivePay(null, FIX, "ana", "reproceso aprobado", "TCK-1");
+
+        service.approveAndPayCorrective(null, FIX, "luis");
+
+        // pay_status gobierna la recuperacion: queda PARTIALLY_SENT (habilita request-child y re-request), NO FAILED.
+        assertEquals("PARTIALLY_SENT", payStatus(FIX),
+                "mixto sent=0 rejected>0 invalidated>0 -> pay_status PARTIALLY_SENT (recuperable), no FAILED (dead-end)");
+        // El lifecycle (status) refleja la realidad de los fragmentos (REJECTED sin SENT): PARTIALLY_FAILED, honesto.
+        assertEquals("PARTIALLY_FAILED", runStatus(FIX),
+                "el status (lifecycle) es PARTIALLY_FAILED (fragmentos reales), distinto del pay_status recuperable");
+        assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_fragment "
+                + "where rebuild_run_id = '" + FIX + "' and pay_status = 'REJECTED'"));
+        assertEquals(1L, queryLong("select count(*) from mt101_corrective_pay_fragment "
+                + "where rebuild_run_id = '" + FIX + "' and pay_status = 'INVALIDATED'"));
+
+        // Recuperacion de los RECHAZADOS: request-child (exige pay_status PARTIALLY_SENT) selecciona solo el REJECTED.
+        var child = rebuildService.requestRebuildFromRejectedCorrective(null, FIX, "sofia", "retry rejected");
+        assertEquals(1L, child.selectedRows(), "el child selecciona solo el fragmento REJECTED (no el invalidado)");
     }
 
     @Test

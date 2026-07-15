@@ -428,7 +428,28 @@ public class Mt101CorrectiveLifecycleService {
                     throw new IllegalStateException("MT101_PAY invalidated " + summary.invalidated()
                             + " fragment(s) for run " + runId + " (not sent to the bank; plan drift or transport/auth "
                             + "failure); fix the cause and request/approve again");
+                } else if (summary.invalidated() > 0) {
+                    // D2-R2: run MIXTO sent=0 con REJECTED (rechazo de negocio del banco) + INVALIDATED (fallo de
+                    // transporte, re-solicitable). NO es "todo rechazado" (FAILED terminal): los INVALIDATED se
+                    // re-solicitan (request-pay tras arreglar la causa técnica) y los REJECTED se recuperan con
+                    // request-child. Se clasifica PARTIALLY_SENT (mismo estado recuperable que el mixto sent>0), aunque
+                    // sent=0 — habilita ambas recuperaciones (request-child exige PARTIALLY_SENT + refs REJECTED;
+                    // request-pay admite PARTIALLY_SENT + invalidated>0). La cuarentena se sincroniza por-fragmento
+                    // (deriveLifecycleStatus da PARTIALLY_FAILED -> markPartialSelections), no bulk REBUILD_SENT.
+                    // NO se lanza excepción: el catch re-marcaría FAILED (hasDispatchedPayFragments=false), deshaciéndolo.
+                    rebuildRepository.markPayCompletedWithAction(dataSource, runId, "PARTIALLY_SENT",
+                            "PAY sent 0 of " + summary.total() + " fragment(s); rejected=" + summary.rejected()
+                                    + " invalidated=" + summary.invalidated()
+                                    + " (re-request the INVALIDATED after fixing the transport cause; "
+                                    + "request-child the REJECTED)",
+                            approver, "sent=0 rejected=" + summary.rejected() + " invalidated=" + summary.invalidated(),
+                            payloadHash, configHash);
+                    runPostPaySync(prep, "MT101_STATUS", statusProvider,
+                            correctivePaySource(runId, connectionRef), dataSource, runId, true, frozenStatusConfig);
+                    runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
+                            correctivePaySource(runId, connectionRef), dataSource, runId, false, frozenReconcileConfig);
                 } else {
+                    // sent=0, invalidated=0: TODO rechazado por el banco -> FAILED (corregir contenido + rebuild).
                     rebuildRepository.markPayCompletedWithAction(dataSource, runId, "FAILED",
                             payResult.details() == null ? "MT101_PAY rejected all fragments" : payResult.details(),
                             approver, payResult.details(), payloadHash, configHash);
