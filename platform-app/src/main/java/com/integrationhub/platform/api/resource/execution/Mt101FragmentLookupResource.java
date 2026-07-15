@@ -223,9 +223,53 @@ public class Mt101FragmentLookupResource {
         }
     }
 
+    /**
+     * Maker-checker paso 1 (MAKER): solicita reconocer el conflicto (reason+ticket) SIN apagar la alerta. Solo con
+     * mt101.pay.conflict.acknowledge.maker-checker.enabled=true (si no, 400: usar acknowledge single-actor).
+     */
+    @POST
+    @Path("/pay-conflicts/request-acknowledge")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, PAYMENTS_OPERATOR})
+    public void requestAcknowledgePayConflict(AcknowledgePayConflictRequest request) {
+        if (request == null) {
+            throw new BadRequestException("request body is required");
+        }
+        try {
+            acknowledgeService.requestAcknowledge(request.connectionRef(), request.source(), request.setId(),
+                    request.sendersReference(), actor(), request.reason(), request.ticketRef());
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /**
+     * Maker-checker paso 2 (CHECKER, actor DISTINTO al maker): aprueba la solicitud PENDING -> limpia el flag
+     * pay_conflict + emite PAY_CONFLICT_RESOLVED con ambos actores. 400 si no hay PENDING o si el checker == maker.
+     */
+    @POST
+    @Path("/pay-conflicts/approve-acknowledge")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, PAYMENTS_OPERATOR})
+    public Mt101PayConflictAcknowledgeService.AcknowledgeResult approveAcknowledgePayConflict(
+            ApproveAcknowledgePayConflictRequest request) {
+        if (request == null) {
+            throw new BadRequestException("request body is required");
+        }
+        try {
+            return acknowledgeService.approveAcknowledge(request.connectionRef(), request.source(), request.setId(),
+                    request.sendersReference(), actor());
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
     /** Cuerpo del reconocimiento de conflicto: identifica el conflicto (source+setId+:20:) + gobernanza (reason+ticket). */
     public record AcknowledgePayConflictRequest(String connectionRef, String source, String setId,
                                                 String sendersReference, String reason, String ticketRef) {
+    }
+
+    /** Cuerpo de la aprobación (checker): identifica el conflicto; el approver sale del token OIDC (actor()). */
+    public record ApproveAcknowledgePayConflictRequest(String connectionRef, String source, String setId,
+                                                       String sendersReference) {
     }
 
     /** Actor de la acción gobernada (del token OIDC); "unknown" si no hay principal. */

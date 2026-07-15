@@ -1229,6 +1229,79 @@ public class Mt101FragmentRepository {
         return result;
     }
 
+    // --- Maker-checker OPT-IN del acknowledge de PAY_CONFLICT (V99). Solo activo con
+    //     mt101.pay.conflict.acknowledge.maker-checker.enabled=true. ---
+
+    /** Solicitud PENDING de reconocimiento (maker): reason/ticket del solicitante para que el checker apruebe. */
+    public record PendingAckRequest(long id, String requestedBy, String reason, String ticketRef) {}
+
+    /** ¿Hay un PAY_CONFLICT abierto para este :20:? (fail-loud: no se solicita reconocer un no-conflicto). */
+    public boolean hasOpenPayConflict(java.sql.Connection connection, boolean corrective, String setOrRunId,
+                                      String sendersReference) throws SQLException {
+        var sql = corrective
+                ? "select 1 from mt101_corrective_pay_fragment where rebuild_run_id = ? "
+                        + "and corrective_senders_reference = ? and coalesce(pay_conflict, false) = true"
+                : "select 1 from mt101_build_fragment where fragment_set_id = ? and senders_reference = ? "
+                        + "and coalesce(pay_conflict, false) = true";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, setOrRunId);
+            statement.setString(2, sendersReference);
+            try (var rs = statement.executeQuery()) {
+                return rs.next();
+            }
+        }
+    }
+
+    /** Registra (o reemplaza) la solicitud PENDING del maker; NO limpia el flag. Idempotente: el último maker gobierna. */
+    public void upsertPendingAckRequest(java.sql.Connection connection, String source, String setOrRunId,
+                                        String sendersReference, String requestedBy, String reason, String ticketRef)
+            throws SQLException {
+        var sql = "insert into mt101_pay_conflict_ack_request "
+                + "(source, set_or_run_id, senders_reference, requested_by, reason, ticket_ref, status, requested_at) "
+                + "values (?, ?, ?, ?, ?, ?, 'PENDING', current_timestamp) "
+                + "on conflict (source, set_or_run_id, senders_reference) where status = 'PENDING' "
+                + "do update set requested_by = excluded.requested_by, reason = excluded.reason, "
+                + "ticket_ref = excluded.ticket_ref, requested_at = current_timestamp";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, source);
+            statement.setString(2, setOrRunId);
+            statement.setString(3, sendersReference);
+            statement.setString(4, requestedBy);
+            statement.setString(5, reason);
+            statement.setString(6, ticketRef);
+            statement.executeUpdate();
+        }
+    }
+
+    public PendingAckRequest findPendingAckRequest(java.sql.Connection connection, String source, String setOrRunId,
+                                                   String sendersReference) throws SQLException {
+        var sql = "select id, requested_by, reason, ticket_ref from mt101_pay_conflict_ack_request "
+                + "where source = ? and set_or_run_id = ? and senders_reference = ? and status = 'PENDING'";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, source);
+            statement.setString(2, setOrRunId);
+            statement.setString(3, sendersReference);
+            try (var rs = statement.executeQuery()) {
+                if (rs.next()) {
+                    return new PendingAckRequest(rs.getLong("id"), rs.getString("requested_by"),
+                            rs.getString("reason"), rs.getString("ticket_ref"));
+                }
+                return null;
+            }
+        }
+    }
+
+    public boolean markAckRequestApproved(java.sql.Connection connection, long id, String approvedBy)
+            throws SQLException {
+        var sql = "update mt101_pay_conflict_ack_request set status = 'APPROVED', approved_by = ?, "
+                + "approved_at = current_timestamp where id = ? and status = 'PENDING'";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, approvedBy);
+            statement.setLong(2, id);
+            return statement.executeUpdate() == 1;
+        }
+    }
+
     public Map<TransactionKey, FragmentRecordLineage> fragmentRecordLineageByTransactions(
             DataSource dataSource,
             String fragmentSetId,
