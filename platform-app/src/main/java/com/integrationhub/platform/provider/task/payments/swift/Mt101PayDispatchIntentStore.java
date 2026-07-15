@@ -118,8 +118,8 @@ public class Mt101PayDispatchIntentStore {
      * Registra el resultado terminal del envío en la intención reclamada. Solo transiciona desde {@code DISPATCHING}
      * (la que este intento reclamó); un {@code UNCERTAIN} queda durable (bloquea futuros reenvíos hasta conciliar).
      */
-    public void recordResult(String dispatchKey, String status, String gatewayReference, int attempts,
-                             String errorMessage) {
+    public boolean recordResult(String dispatchKey, String status, String gatewayReference, int attempts,
+                                String errorMessage) {
         var update = "update mt101_pay_dispatch_intent "
                 + "set status = ?, gateway_reference = ?, attempts = ?, error_message = ?, updated_at = current_timestamp "
                 + "where dispatch_key = ? and status = 'DISPATCHING'";
@@ -130,7 +130,9 @@ public class Mt101PayDispatchIntentStore {
             statement.setInt(3, Math.max(attempts, 0));
             statement.setString(4, errorMessage);
             statement.setString(5, dispatchKey);
-            statement.executeUpdate();
+            // Devuelve si transicionó realmente desde DISPATCHING. 0 filas = otro flujo ya movió la intención a un
+            // terminal (guardado: no se pisa) -> el llamador audita la anomalía (#9-equivalente del camino por lista).
+            return statement.executeUpdate() == 1;
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot record MT101 pay dispatch intent result for key " + dispatchKey, error);
         }

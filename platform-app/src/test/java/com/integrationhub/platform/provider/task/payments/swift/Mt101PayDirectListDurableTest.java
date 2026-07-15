@@ -1,5 +1,7 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.audit.AuditEnvelope;
+import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
@@ -20,6 +22,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -115,6 +118,25 @@ class Mt101PayDirectListDurableTest {
                 "solo A2 (INVALIDATED) se re-reclama y re-despacha una vez; A1/A3 SENT no se reenvían (sin doble pago)");
         assertTrue(second.success(), () -> "tras corregir la causa técnica el re-pago funciona: " + second.details());
         assertEquals("SENT", intentStatus("REST||A2"), "tras el re-pago A2 queda SENT");
+    }
+
+    @Test
+    void aConcurrentTerminalWhileSendingEmitsPayConflictAnomaly() throws Exception {
+        // #9-equivalente (camino por lista): mientras este envio esta en vuelo, otro flujo (p.ej. conciliacion) mueve
+        // la intencion DISPATCHING a un terminal. recordResult (guardado por status='DISPATCHING') actualiza 0 filas
+        // -> NO se pisa el terminal, y se emite la trama append-only PAY_CONFLICT para conciliar (cero anomalias
+        // silenciosas). Espejo del #9 del camino persistido.
+        var emitter = new CapturingAuditEmitter();
+        var transport = new IntentRacingTransport("REST", dataSource, Map.of("A1", "REJECTED"));
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport),
+                null, null, emitter, null, null, intentStore);
+
+        provider.execute(singleMessageContext("A1", "{\"amount\":\"1\"}"), payConfig());
+
+        assertEquals("REJECTED", intentStatus("REST||A1"),
+                "la conciliacion concurrente gano: el terminal NO se pisa (recordResult guardado)");
+        assertTrue(emitter.hasStage("PAY_CONFLICT"),
+                "recordResult 0 filas -> se emite PAY_CONFLICT (anomalia auditada, no silenciosa)");
     }
 
     @Test
@@ -329,6 +351,54 @@ class Mt101PayDirectListDurableTest {
         }
 
         int calls() { return calls; }
+    }
+
+    /** Simula una conciliacion CONCURRENTE: al enviar un ref, mueve su intencion DISPATCHING a un terminal (como si
+     *  otro flujo la resolviera mientras el send esta en vuelo), luego devuelve ACCEPTED. Ejercita el #9-equivalente. */
+    private static final class IntentRacingTransport implements PaymentMessageTransport {
+        private final String transportId;
+        private final DataSource dataSource;
+        private final Map<String, String> resolveTo;
+
+        IntentRacingTransport(String transportId, DataSource dataSource, Map<String, String> resolveTo) {
+            this.transportId = transportId;
+            this.dataSource = dataSource;
+            this.resolveTo = resolveTo;
+        }
+
+        @Override public String transport() { return transportId; }
+
+        @Override
+        public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
+            var ref = message.sequenceA() == null ? null : message.sequenceA().sendersReference();
+            var terminal = ref == null ? null : resolveTo.get(ref);
+            if (terminal != null) {
+                try (Connection connection = dataSource.getConnection();
+                     var statement = connection.prepareStatement("update mt101_pay_dispatch_intent set status = ? "
+                             + "where senders_reference = ? and status = 'DISPATCHING'")) {
+                    statement.setString(1, terminal);
+                    statement.setString(2, ref);
+                    statement.executeUpdate();
+                } catch (SQLException error) {
+                    throw new IllegalStateException("racing intent update failed for " + ref, error);
+                }
+            }
+            return TransportResult.accepted("GW-" + ref, 1, 1L);
+        }
+    }
+
+    /** Captura las tramas de auditoria emitidas para verificar la trama append-only PAY_CONFLICT. */
+    private static final class CapturingAuditEmitter implements RecordAuditEmitter {
+        private final List<AuditEnvelope> captured = new ArrayList<>();
+
+        @Override
+        public void emitRecords(java.util.Collection<AuditEnvelope> envelopes) {
+            captured.addAll(envelopes);
+        }
+
+        boolean hasStage(String stage) {
+            return captured.stream().anyMatch(envelope -> stage.equals(envelope.stage()));
+        }
     }
 
     private static final class InstanceOfOne<T> implements Instance<T> {

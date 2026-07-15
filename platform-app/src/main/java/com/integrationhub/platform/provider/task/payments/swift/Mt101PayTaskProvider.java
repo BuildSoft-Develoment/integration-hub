@@ -672,8 +672,17 @@ public class Mt101PayTaskProvider implements TaskProvider {
             case CLAIMED -> {
                 var sent = sendClassified(transport, message, dispatchConfiguration);
                 // DISPATCHING -> SENT/REJECTED/UNCERTAIN. Un UNCERTAIN queda durable y bloquea futuros reenvíos.
-                dispatchIntentStore.recordResult(intentKey, intentStatus(sent), sent.gatewayReference(),
+                var recorded = dispatchIntentStore.recordResult(intentKey, intentStatus(sent), sent.gatewayReference(),
                         sent.attempts(), sent.lastError());
+                if (!recorded) {
+                    // #9-equivalente (camino por lista): la intención ya no estaba DISPATCHING -> otro flujo
+                    // (p.ej. una conciliación) la movió a un terminal. El resultado de ESTE envío NO se registró
+                    // (guardado: no se pisa el terminal). Es anómalo (para un transportFailure nada salió al banco):
+                    // se emite la trama append-only PAY_CONFLICT para conciliar el estado real del intent. Cero
+                    // anomalías silenciosas.
+                    emitRecordAudit(java.util.List.of(payConflictEnvelope(context, sendersReference,
+                            "dispatch intent no longer DISPATCHING (concurrent terminal)", intentStatus(sent))));
+                }
                 yield sent;
             }
             // MISMO pago ya enviado (payload idéntico): NO reenviar (idempotente). Se reporta aceptado (cuenta enviado).
