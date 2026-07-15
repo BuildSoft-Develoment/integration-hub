@@ -64,12 +64,15 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     /** Fragmentos por executeBatch al persistir en fase 2. */
     private static final int INSERT_BATCH_SIZE = 100;
     /**
-     * Tope de BYTES acumulados por executeBatch. El flush por número de filas ({@code INSERT_BATCH_SIZE}) no acota
-     * el tamaño en bytes: con fragmentos grandes (p.ej. maxBytesPerMessage alto) 100 fragmentos pueden ser varios
-     * MB en un solo batch → pgJDBC deadlockea (wait_event Client/ClientWrite, el server bloquea escribiendo la
-     * respuesta mientras el driver sigue enviando). Se flushea por lo que ocurra primero: filas O bytes (~1MB).
+     * Default del tope de BYTES acumulados por executeBatch (200KB). El flush por número de filas
+     * ({@code INSERT_BATCH_SIZE}) no acota el tamaño en bytes: con fragmentos grandes (p.ej. maxBytesPerMessage
+     * alto) 100 fragmentos pueden ser varios MB en un solo batch → pgJDBC deadlockea (wait_event
+     * Client/ClientWrite: el server bloquea escribiendo la respuesta mientras el driver sigue enviando). Se
+     * flushea por lo que ocurra primero: filas O bytes. Se bajó de 1MB a 200KB porque 1MB no acota un batch de
+     * ~640KB (un solo batch para ~80 fragmentos), que fue el que deadlockeó en la evidencia. Overridable en
+     * runtime (sin recompilar, incluso en nativo) via la property {@code mt101.build.insert-batch-max-bytes}.
      */
-    private static final long INSERT_BATCH_MAX_BYTES = 1_000_000L;
+    private static final long DEFAULT_INSERT_BATCH_MAX_BYTES = 200_000L;
 
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
@@ -78,6 +81,20 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     private final Mt101FragmentStore fragmentStore;
     private final Mt101StagingRecordRepository stagingRepository;
     private final RecordAuditEmitter recordAuditEmitter;
+
+    /** Tope efectivo de bytes por batch: {@link #DEFAULT_INSERT_BATCH_MAX_BYTES} salvo override en runtime. */
+    private final long insertBatchMaxBytes = resolveInsertBatchMaxBytes();
+
+    private static long resolveInsertBatchMaxBytes() {
+        try {
+            return org.eclipse.microprofile.config.ConfigProvider.getConfig()
+                    .getOptionalValue("mt101.build.insert-batch-max-bytes", Long.class)
+                    .orElse(DEFAULT_INSERT_BATCH_MAX_BYTES);
+        } catch (RuntimeException ignored) {
+            // Sin contexto de config (p.ej. tests planos que construyen el provider a mano): usar el default.
+            return DEFAULT_INSERT_BATCH_MAX_BYTES;
+        }
+    }
 
     @Inject
     public Mt101BuildFromTableTaskProvider(DataSource defaultDataSource,
@@ -288,10 +305,10 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                         message.sequenceA() == null ? null : message.sequenceA().sendersReference(),
                         boundary, rows.size()));
                 bufferedBytes += payloadBytes;
-                // Flush por lo que ocurra primero: nº de filas O bytes acumulados (~1MB). El tope de bytes evita
-                // el deadlock de pgJDBC con fragmentos grandes; el de filas mantiene el ~100x de reducción de
-                // round-trips con fragmentos pequeños.
-                if (insertBuffer.size() >= INSERT_BATCH_SIZE || bufferedBytes >= INSERT_BATCH_MAX_BYTES) {
+                // Flush por lo que ocurra primero: nº de filas O bytes acumulados (default 200KB). El tope de
+                // bytes evita el deadlock de pgJDBC con fragmentos grandes; el de filas mantiene el ~100x de
+                // reducción de round-trips con fragmentos pequeños.
+                if (insertBuffer.size() >= INSERT_BATCH_SIZE || bufferedBytes >= insertBatchMaxBytes) {
                     fragmentStore.insertFragments(source.connectionRef(), new ArrayList<>(insertBuffer));
                     insertBuffer.clear();
                     bufferedBytes = 0L;
