@@ -68,14 +68,20 @@ transporte de un subconjunto de forma fiable). Queda cubierto por:
 ## Parte D — Hallazgo operativo: deadlock intermitente de pgJDBC (H7)
 
 Durante la evidencia, un money-path se colgó 12 min en `wait_event=Client/ClientWrite` en el insert de
-fragmentos (el deadlock H7). El fix de tanda-1 (flush por bytes, umbral **1MB**) es **demasiado alto** para este
-tamaño: 80 fragmentos ≈ 640KB = un solo batch < 1MB. Es intermitente (otros runs completaron), pero para la
-**evidencia de 1.000.000** hay que **bajar `INSERT_BATCH_MAX_BYTES`** (p.ej. a 200KB) para forzar batches
-menores. Pendiente (requiere rebuild nativo).
+fragmentos (el deadlock H7). El fix de tanda-1 (flush por bytes, umbral **1MB**) era **demasiado alto** para este
+tamaño: 80 fragmentos ≈ 640KB = un solo batch < 1MB. Es intermitente (otros runs completaron).
+
+**Resuelto (2026-07-15, commit `982903cd`):** el umbral se bajó a **200KB** por defecto y se convirtió de
+constante a **property de runtime** `mt101.build.insert-batch-max-bytes` (leída con `ConfigProvider`, fallback
+al default). Ahora es **overridable por env var** (`MT101_BUILD_INSERT_BATCH_MAX_BYTES`) **sin recompilar** —
+incluso en nativo—, así que la evidencia de 1M puede tunearlo (200KB/150KB/100KB) sin un nuevo build. El cambio
+entra a la imagen en el próximo rebuild nativo (el mismo que despliega los swaps de brokers); a partir de ahí es
+env-tuneable de forma permanente.
 
 ## Resumen
 
 - Tandas 1-3: **IT-validadas** (≈175 tests) y **evidenciadas en vivo** (H4 + D.2 end-to-end).
 - Se encontró y arregló un bug pre-existente (`deriveLifecycleStatus` + SUPERSEDED), IT-validado y confirmado en vivo.
 - Propiedad crítica (cero doble pago) confirmada en vivo: el re-envío de invalidados entregó exactamente 40, ni uno más.
-- Pendiente: bajar el umbral de H7 para la evidencia de 1M; D2-R1 en su variante PARTIALLY_SENT exacta (cubierto por IT+análisis+D.2 vivo).
+- H7 (deadlock pgJDBC): **resuelto** — umbral a 200KB y tuneable en runtime por env var (sin rebuild). Entra a la imagen en el próximo build nativo.
+- Pendiente: D2-R1 en su variante PARTIALLY_SENT exacta (cubierto por IT+análisis+D.2 vivo; sin deuda de código).
