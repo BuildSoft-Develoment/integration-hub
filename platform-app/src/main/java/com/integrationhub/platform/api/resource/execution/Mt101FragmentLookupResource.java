@@ -224,6 +224,21 @@ public class Mt101FragmentLookupResource {
     }
 
     /**
+     * Settings del reconocimiento de conflictos para la UI: si maker-checker está activo, la UI muestra el flujo de
+     * dos pasos (solicitar → aprobar); si no, el botón single-actor. Evita que la UI llame al endpoint equivocado.
+     */
+    @GET
+    @Path("/pay-conflicts/settings")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
+    public PayConflictSettings payConflictSettings() {
+        return new PayConflictSettings(acknowledgeService.makerCheckerEnabled());
+    }
+
+    /** Config del reconocimiento de conflictos expuesta a la UI. */
+    public record PayConflictSettings(boolean makerCheckerEnabled) {
+    }
+
+    /**
      * Maker-checker paso 1 (MAKER): solicita reconocer el conflicto (reason+ticket) SIN apagar la alerta. Solo con
      * mt101.pay.conflict.acknowledge.maker-checker.enabled=true (si no, 400: usar acknowledge single-actor).
      */

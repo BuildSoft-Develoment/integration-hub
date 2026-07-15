@@ -129,7 +129,9 @@ public class Mt101PayConflictAcknowledgeService {
     /**
      * Maker-checker paso 1 (MAKER): registra la intención de reconocer el conflicto (reason + ticket) SIN apagar la
      * alerta (pay_conflict sigue true). Requiere maker-checker habilitado. Fail-loud si no hay conflicto abierto.
-     * Idempotente: reemplaza un PENDING previo. Recién con la aprobación de un checker DISTINTO se limpia el flag.
+     * En UNA transacción: superseda cualquier PENDING previo (conserva historial, no sobrescribe) + inserta la nueva
+     * solicitud PENDING + emite la trama append-only {@code PAY_CONFLICT_ACK_REQUESTED}. Recién con la aprobación de
+     * un checker DISTINTO se limpia el flag.
      */
     public void requestAcknowledge(String connectionRef, String source, String setOrRunId, String sendersReference,
                                    String actor, String reason, String ticketRef) {
@@ -139,14 +141,38 @@ public class Mt101PayConflictAcknowledgeService {
         }
         var corrective = requireCommon(source, setOrRunId, sendersReference, reason, ticketRef);
         var maker = actor == null || actor.isBlank() ? "unknown" : actor;
+        var ackReason = reason.trim();
+        var ticket = ticketRef.trim();
+        var normalizedSource = corrective ? "CORRECTIVE" : "NORMAL";
         var dataSource = resolveDataSource(connectionRef);
         try (var connection = dataSource.getConnection()) {
-            if (!repository.hasOpenPayConflict(connection, corrective, setOrRunId.trim(), sendersReference.trim())) {
-                throw new IllegalArgumentException("no open pay conflict for " + sendersReference
-                        + " (nothing to acknowledge)");
+            var previousAutoCommit = connection.getAutoCommit();
+            connection.setAutoCommit(false);
+            try {
+                var conflict = repository.readOpenPayConflict(connection, corrective, setOrRunId.trim(),
+                        sendersReference.trim());
+                if (conflict == null) {
+                    throw new IllegalArgumentException("no open pay conflict for " + sendersReference
+                            + " (nothing to acknowledge)");
+                }
+                // Historial: no se sobrescribe un PENDING previo -> se marca SUPERSEDED y se inserta la nueva solicitud.
+                repository.supersedePendingAckRequests(connection, normalizedSource, setOrRunId.trim(),
+                        sendersReference.trim());
+                repository.insertPendingAckRequest(connection, normalizedSource, setOrRunId.trim(),
+                        sendersReference.trim(), maker, ackReason, ticket);
+                // Trama append-only PAY_CONFLICT_ACK_REQUESTED (gobernanza): la solicitud del maker queda auditada,
+                // aunque el flag NO se apaga hasta que un checker distinto apruebe. Atómico con la escritura del PENDING.
+                var envelope = Mt101PayConflictAudit.requestedEnvelope(conflict.processExecutionId(),
+                        conflict.taskDefinitionId(), conflict.sendersReference(), conflict.retainedStatus(),
+                        maker, ackReason, ticket, conflict.originalReason());
+                auditSpoolWriter.writeBatch(connection, java.util.List.of(envelope));
+                connection.commit();
+            } catch (SQLException | RuntimeException error) {
+                connection.rollback();
+                throw error;
+            } finally {
+                connection.setAutoCommit(previousAutoCommit);
             }
-            repository.upsertPendingAckRequest(connection, corrective ? "CORRECTIVE" : "NORMAL", setOrRunId.trim(),
-                    sendersReference.trim(), maker, reason.trim(), ticketRef.trim());
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot record acknowledge request for " + sendersReference, error);
         }

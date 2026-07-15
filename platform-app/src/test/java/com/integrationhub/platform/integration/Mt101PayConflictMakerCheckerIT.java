@@ -52,6 +52,8 @@ class Mt101PayConflictMakerCheckerIT {
         try (Connection c = dataSource.getConnection(); Statement s = c.createStatement()) {
             s.executeUpdate("truncate table mt101_build_fragment restart identity cascade");
             s.executeUpdate("truncate table mt101_pay_conflict_ack_request restart identity");
+            s.executeUpdate("truncate table mt101_rebuild_run restart identity cascade");
+            s.executeUpdate("truncate table audit_spool restart identity");
         }
     }
 
@@ -104,6 +106,129 @@ class Mt101PayConflictMakerCheckerIT {
         var error = assertThrows(IllegalArgumentException.class, () ->
                 service.requestAcknowledge(null, "NORMAL", "SET-D", "K4", "maria", "sin motivo", "TCK-0"));
         assertTrue(error.getMessage().contains("no open pay conflict"));
+    }
+
+    // --- #7: maker-checker sobre CORRECTIVE (rebuildRunId + corrective_senders_reference) ---
+
+    @Test
+    void correctiveRequestDoesNotClearFlagAndApproveByADifferentActorClearsIt() throws Exception {
+        seedCorrectiveConflict("RUN-B", "CORR-B", "KC2", "SENT", "banco REJECTED sobre SENT (correctivo)");
+
+        service.requestAcknowledge(null, "CORRECTIVE", "RUN-B", "KC2", "maria", "revisado", "TCK-C9");
+        assertTrue(correctivePayConflict("RUN-B", "KC2"), "request no apaga el flag correctivo");
+
+        var same = assertThrows(IllegalArgumentException.class, () ->
+                service.approveAcknowledge(null, "CORRECTIVE", "RUN-B", "KC2", "maria"));
+        assertTrue(same.getMessage().contains("segregation"));
+        assertTrue(correctivePayConflict("RUN-B", "KC2"));
+
+        var result = service.approveAcknowledge(null, "CORRECTIVE", "RUN-B", "KC2", "carlos");
+        assertEquals(1, result.acknowledged());
+        assertFalse(correctivePayConflict("RUN-B", "KC2"), "el checker distinto apaga el flag correctivo");
+        assertEquals("SENT", correctivePayStatus("RUN-B", "KC2"), "el pay_status real se conserva (no se toca)");
+    }
+
+    @Test
+    void correctiveApproveWithoutPendingIsRejected() throws Exception {
+        seedCorrectiveConflict("RUN-C", "CORR-C", "KC3", "SENT", "contradiccion");
+        var error = assertThrows(IllegalArgumentException.class, () ->
+                service.approveAcknowledge(null, "CORRECTIVE", "RUN-C", "KC3", "carlos"));
+        assertTrue(error.getMessage().contains("no pending"));
+        assertTrue(correctivePayConflict("RUN-C", "KC3"));
+    }
+
+    // --- #8: trama append-only PAY_CONFLICT_ACK_REQUESTED + historial (no sobrescribe el PENDING) ---
+
+    @Test
+    void requestEmitsAckRequestedTraceAndSupersedesPreviousPendingKeepingHistory() throws Exception {
+        seedConflict("SET-E", "KE", "SENT", "banco REJECTED sobre SENT");
+
+        service.requestAcknowledge(null, "NORMAL", "SET-E", "KE", "maria", "primera solicitud", "TCK-1");
+        // Trama append-only del request (gobernanza): la solicitud del maker queda auditada aunque el flag siga true.
+        assertTrue(spoolHasStage("PAY_CONFLICT_ACK_REQUESTED"),
+                "request-acknowledge emite la trama append-only PAY_CONFLICT_ACK_REQUESTED");
+
+        // Segundo request (otro maker): NO sobrescribe en silencio -> supersede el previo y deja UN solo PENDING.
+        service.requestAcknowledge(null, "NORMAL", "SET-E", "KE", "jose", "segunda solicitud", "TCK-2");
+        assertEquals(1L, ackRequestCount("SET-E", "KE", "PENDING"), "un solo PENDING (el ultimo maker)");
+        assertEquals(1L, ackRequestCount("SET-E", "KE", "SUPERSEDED"), "el PENDING previo se conserva como SUPERSEDED (historial)");
+
+        // El PENDING vigente es el del ultimo maker (jose): approve usa su reason/ticket.
+        var result = service.approveAcknowledge(null, "NORMAL", "SET-E", "KE", "carlos");
+        assertEquals(1, result.acknowledged());
+        assertFalse(payConflict("SET-E", "KE"));
+    }
+
+    private void seedCorrectiveConflict(String runId, String correctiveSetId, String ref, String payStatus,
+                                        String reason) throws Exception {
+        try (Connection c = dataSource.getConnection()) {
+            try (var st = c.prepareStatement("insert into mt101_rebuild_run "
+                    + "(rebuild_run_id, original_fragment_set_id, corrective_set_id, status) "
+                    + "values (?, ?, ?, 'COMPLETED')")) {
+                st.setString(1, runId);
+                st.setString(2, "ORIG-" + runId);
+                st.setString(3, correctiveSetId);
+                st.executeUpdate();
+            }
+            try (var st = c.prepareStatement("insert into mt101_corrective_pay_fragment "
+                    + "(rebuild_run_id, corrective_set_id, corrective_senders_reference, payload_hash, "
+                    + "idempotency_key, pay_status, pay_conflict, pay_conflict_reason) "
+                    + "values (?, ?, ?, repeat('a', 64), ?, ?, true, ?)")) {
+                st.setString(1, runId);
+                st.setString(2, correctiveSetId);
+                st.setString(3, ref);
+                st.setString(4, "idem-" + ref);
+                st.setString(5, payStatus);
+                st.setString(6, reason);
+                st.executeUpdate();
+            }
+        }
+    }
+
+    private boolean correctivePayConflict(String runId, String ref) throws Exception {
+        return correctiveField(runId, ref, "pay_conflict").equals("true");
+    }
+
+    private String correctivePayStatus(String runId, String ref) throws Exception {
+        return correctiveField(runId, ref, "pay_status");
+    }
+
+    private String correctiveField(String runId, String ref, String field) throws Exception {
+        try (Connection c = dataSource.getConnection();
+             var st = c.prepareStatement("select " + field + " from mt101_corrective_pay_fragment "
+                     + "where rebuild_run_id = ? and corrective_senders_reference = ?")) {
+            st.setString(1, runId);
+            st.setString(2, ref);
+            try (var rs = st.executeQuery()) {
+                rs.next();
+                return String.valueOf(rs.getObject(1));
+            }
+        }
+    }
+
+    private long ackRequestCount(String setOrRunId, String ref, String status) throws Exception {
+        try (Connection c = dataSource.getConnection();
+             var st = c.prepareStatement("select count(*) from mt101_pay_conflict_ack_request "
+                     + "where set_or_run_id = ? and senders_reference = ? and status = ?")) {
+            st.setString(1, setOrRunId);
+            st.setString(2, ref);
+            st.setString(3, status);
+            try (var rs = st.executeQuery()) {
+                rs.next();
+                return rs.getLong(1);
+            }
+        }
+    }
+
+    private boolean spoolHasStage(String stage) throws Exception {
+        try (Connection c = dataSource.getConnection();
+             var st = c.prepareStatement("select count(*) from audit_spool where payload like ?")) {
+            st.setString(1, "%" + stage + "%");
+            try (var rs = st.executeQuery()) {
+                rs.next();
+                return rs.getLong(1) > 0;
+            }
+        }
     }
 
     private void seedConflict(String setId, String ref, String status, String reason) throws Exception {

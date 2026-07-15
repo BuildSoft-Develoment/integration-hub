@@ -78,6 +78,65 @@ public final class Mt101PayConflictAudit {
     }
 
     /**
+     * Maker-checker paso 1: trama append-only {@code PAY_CONFLICT_ACK_REQUESTED} que registra que un MAKER
+     * <b>solicitó</b> reconocer el conflicto (con motivo + ticket), <b>sin</b> limpiar el flag. La aprobación
+     * posterior de un checker distinto emite {@code PAY_CONFLICT_RESOLVED}. Deja el rastro inmutable de la
+     * solicitud (gobernanza / segregación de funciones), aparte del historial en {@code mt101_pay_conflict_ack_request}.
+     */
+    public static AuditEnvelope requestedEnvelope(Long processExecutionId,
+                                                  Long taskDefinitionId,
+                                                  String sendersReference,
+                                                  String retainedStatus,
+                                                  String maker,
+                                                  String reason,
+                                                  String ticketRef,
+                                                  String originalReason) {
+        var attributes = new LinkedHashMap<String, String>();
+        attributes.put("retainedStatus", retainedStatus);
+        if (maker != null && !maker.isBlank()) {
+            attributes.put("maker", maker);
+        }
+        if (reason != null && !reason.isBlank()) {
+            attributes.put("reason", reason);
+        }
+        if (ticketRef != null && !ticketRef.isBlank()) {
+            attributes.put("ticketRef", ticketRef);
+        }
+        if (originalReason != null && !originalReason.isBlank()) {
+            attributes.put("originalConflictReason", originalReason);
+        }
+        var message = "reconocimiento de conflicto PAY SOLICITADO por " + (maker == null ? "?" : maker)
+                + " (pendiente de aprobación de un checker distinto); terminal '" + retainedStatus + "'"
+                + (reason == null || reason.isBlank() ? "" : " — " + reason);
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                processExecutionId == null ? null : "exec-" + processExecutionId,
+                sendersReference,
+                AuditLevel.RECORD,
+                "PAY_CONFLICT_ACK_REQUESTED",
+                "PAY_CONFLICT_ACK_REQUESTED",
+                processExecutionId,
+                taskDefinitionId,
+                message,
+                null,
+                attributes,
+                "SWIFT",
+                "MT101",
+                null,
+                null,
+                null,
+                null,
+                null,
+                sendersReference,
+                null,
+                null,
+                null,
+                null,
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
+    }
+
+    /**
      * A2 (resolución gobernada): trama append-only {@code PAY_CONFLICT_RESOLVED} que registra que un operador
      * <b>reconoció</b> el conflicto (limpió el flag) con su motivo, <b>conservando</b> el terminal real del ledger
      * ({@code retainedStatus}). NO cambia el dinero: es la evidencia auditable de la decisión humana.

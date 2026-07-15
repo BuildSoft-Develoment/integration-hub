@@ -1253,15 +1253,53 @@ public class Mt101FragmentRepository {
     }
 
     /** Registra (o reemplaza) la solicitud PENDING del maker; NO limpia el flag. Idempotente: el último maker gobierna. */
-    public void upsertPendingAckRequest(java.sql.Connection connection, String source, String setOrRunId,
+    /** Lee el conflicto ABIERTO (pay_conflict=true) para armar la trama del maker (PE/task/terminal/motivo), sin tocarlo. */
+    public AcknowledgedPayConflict readOpenPayConflict(java.sql.Connection connection, boolean corrective,
+                                                       String setOrRunId, String sendersReference) throws SQLException {
+        var sql = corrective
+                ? "select corrective_senders_reference as sref, pay_status as st, pay_conflict_reason as rsn, "
+                        + "null::bigint as pe, null::bigint as td from mt101_corrective_pay_fragment "
+                        + "where rebuild_run_id = ? and corrective_senders_reference = ? and coalesce(pay_conflict, false) = true"
+                : "select senders_reference as sref, status as st, pay_conflict_reason as rsn, "
+                        + "process_execution_id as pe, task_definition_id as td from mt101_build_fragment "
+                        + "where fragment_set_id = ? and senders_reference = ? and coalesce(pay_conflict, false) = true";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, setOrRunId);
+            statement.setString(2, sendersReference);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                var pe = rs.getLong("pe");
+                var peNull = rs.wasNull();
+                var td = rs.getLong("td");
+                var tdNull = rs.wasNull();
+                return new AcknowledgedPayConflict(rs.getString("sref"), rs.getString("st"), rs.getString("rsn"),
+                        peNull ? null : pe, tdNull ? null : td);
+            }
+        }
+    }
+
+    /** Marca SUPERSEDED cualquier solicitud PENDING previa para el conflicto (conserva historial, no sobrescribe). */
+    public int supersedePendingAckRequests(java.sql.Connection connection, String source, String setOrRunId,
+                                           String sendersReference) throws SQLException {
+        var sql = "update mt101_pay_conflict_ack_request set status = 'SUPERSEDED', approved_at = current_timestamp "
+                + "where source = ? and set_or_run_id = ? and senders_reference = ? and status = 'PENDING'";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, source);
+            statement.setString(2, setOrRunId);
+            statement.setString(3, sendersReference);
+            return statement.executeUpdate();
+        }
+    }
+
+    /** Inserta una solicitud PENDING nueva del maker (append-only; el PENDING previo se superseded antes). */
+    public void insertPendingAckRequest(java.sql.Connection connection, String source, String setOrRunId,
                                         String sendersReference, String requestedBy, String reason, String ticketRef)
             throws SQLException {
         var sql = "insert into mt101_pay_conflict_ack_request "
                 + "(source, set_or_run_id, senders_reference, requested_by, reason, ticket_ref, status, requested_at) "
-                + "values (?, ?, ?, ?, ?, ?, 'PENDING', current_timestamp) "
-                + "on conflict (source, set_or_run_id, senders_reference) where status = 'PENDING' "
-                + "do update set requested_by = excluded.requested_by, reason = excluded.reason, "
-                + "ticket_ref = excluded.ticket_ref, requested_at = current_timestamp";
+                + "values (?, ?, ?, ?, ?, ?, 'PENDING', current_timestamp)";
         try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, source);
             statement.setString(2, setOrRunId);
