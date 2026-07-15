@@ -174,6 +174,12 @@ public class Mt101PayTaskProvider implements TaskProvider {
                     // INCIERTO: no se sincroniza a SENT ni REJECTED; queda para conciliacion.
                     audit.add(recordEnvelope(context, reference, result));
                     continue;
+                } else if (result.retriable()) {
+                    // D.2: transportFailure pre-despacho (no salio al banco) -> re-solicitable, NO rechazo de negocio.
+                    // NO se sincroniza el archive a REJECTED (seria pintar un fallo tecnico como rechazo bancario);
+                    // el intent quedo INVALIDATED (re-reclamable) y el output cuenta invalidatedCount.
+                    audit.add(recordEnvelope(context, reference, result));
+                    continue;
                 } else {
                     collectArchiveId(configuration, input, rejectedArchiveIds);
                 }
@@ -263,6 +269,9 @@ public class Mt101PayTaskProvider implements TaskProvider {
         // tomo, o ya es terminal/DISPATCHING) NO se reenvia. En el correctivo el claim es por-fragmento contra la
         // revision inmutable (mas abajo), asi que aqui no se toca.
         var uncertainRefs = new ArrayList<String>();
+        // D.2 (PAY normal): refs con transportFailure pre-despacho. El fragmento fue reclamado ARCHIVED->DISPATCHING
+        // pero nada salio al banco -> hay que revertirlo a ARCHIVED (re-pagable). Map ref->error para la auditoria.
+        var invalidatedByRef = new LinkedHashMap<String, String>();
         java.util.Set<String> claimedNormalRefs = null;
         if (rebuildRunId == null && fragmentStore != null) {
             var pageRefs = new ArrayList<String>(page.size());
@@ -369,10 +378,15 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 }
             } else if (result.retriable()) {
                 // D.2: fallo de TRANSPORTE/AUTENTICACION antes del despacho (el banco no recibio nada) -> re-solicitable.
-                // NO es un rechazo de negocio: NO se anade a sentRefs ni rejectedByRef, asi el fragmento build queda
-                // ARCHIVED (re-pagable). El ledger lo registra INVALIDATED (via payStatusOf), que lleva el run a
-                // pay_status=INVALIDATED -> re-solicitable (arreglar credencial y re-pedir). No se reenvia a ciegas.
-                // Intencionalmente sin acción sobre las colecciones: el ledger (payStatusOf) es la fuente de verdad.
+                // NO es un rechazo de negocio: NO se anade a sentRefs ni rejectedByRef.
+                //  - CORRECTIVO: el build_fragment NO se reclamo a DISPATCHING aqui (sigue ARCHIVED); el ledger lo
+                //    marca INVALIDATED (payStatusOf) -> run re-solicitable.
+                //  - NORMAL persistido: el fragmento SI fue reclamado ARCHIVED->DISPATCHING (claimForDispatch, arriba).
+                //    Se REVIERTE a ARCHIVED en finalizeNormalGuarded (guardado, solo-desde-DISPATCHING); sin esto
+                //    quedaria atascado en DISPATCHING (bloquea el cierre de conciliacion, sin ruta de re-solicitud).
+                if (rebuildRunId == null) {
+                    invalidatedByRef.put(reference, result.lastError());
+                }
             } else {
                 rejectedByRef.put(reference, result.lastError());
                 rejectedTargets.add(archiveTarget(message));
@@ -401,7 +415,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
             // durable ante un resultado tardío contradictorio. Reemplaza el markStatusBatch sin guarda, que podía
             // sobrescribir en silencio un terminal ya resuelto por STATUS/RECONCILE (REJECTED→SENT).
             finalizeNormalGuarded(context, configuration, fragmentSource, sentRefs, rejectedByRef, uncertainRefs,
-                    sentTargets, rejectedTargets);
+                    invalidatedByRef, sentTargets, rejectedTargets);
         } else {
             // CORRECTIVO: el ledger correctivo ya filtró conflicts y el fragmento está DISPATCHING del run (claim
             // v37, contra el contrato persistido). El marcado directo mantiene el comportamiento existente.
@@ -423,6 +437,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
     private void finalizeNormalGuarded(TaskContext context, Map<String, Object> configuration,
             Map<String, Object> fragmentSource,
             java.util.List<String> sentRefs, Map<String, String> rejectedByRef, java.util.List<String> uncertainRefs,
+            Map<String, String> invalidatedByRef,
             java.util.List<Mt101ArchiveStatusUpdater.StatusTarget> sentTargets,
             java.util.List<Mt101ArchiveStatusUpdater.StatusTarget> rejectedTargets) {
         var fromUnresolved = java.util.List.of("DISPATCHING", "UNCERTAIN");
@@ -466,6 +481,14 @@ public class Mt101PayTaskProvider implements TaskProvider {
         if (!uncertainRefs.isEmpty()) {
             fragmentStore.resolvePayStatusReturning(fragmentSource, uncertainRefs,
                     java.util.List.of("DISPATCHING"), "UNCERTAIN", null);
+        }
+        // D.2 (PAY normal): transportFailure pre-despacho -> el fragmento fue reclamado a DISPATCHING pero NADA salio
+        // al banco. Se REVIERTE DISPATCHING->ARCHIVED (re-pagable por la proxima ejecucion de PAY, que solo lee
+        // ARCHIVED). Guardado (solo-desde-DISPATCHING): un terminal tardio de STATUS/RECONCILE no se pisa. La
+        // auditoria ya emitio RECORD_INVALIDATED (recordEnvelope). No hay doble pago: retriable ⟺ pre-despacho.
+        if (!invalidatedByRef.isEmpty()) {
+            fragmentStore.resolvePayStatusReturning(fragmentSource, invalidatedByRef,
+                    java.util.List.of("DISPATCHING"), "ARCHIVED");
         }
         if (!conflicts.isEmpty()) {
             fragmentStore.markPayConflict(fragmentSource, conflicts,
@@ -682,7 +705,12 @@ public class Mt101PayTaskProvider implements TaskProvider {
     }
 
     private String intentStatus(TransportResult result) {
-        return result.accepted() ? "SENT" : (result.uncertain() ? "UNCERTAIN" : "REJECTED");
+        // D.2: retriable (transportFailure pre-despacho) -> INVALIDATED (no salio al banco), NO REJECTED (no fue
+        // rechazo de negocio). El intent store re-reclama INVALIDATED igual que REJECTED (mismo "probado no enviado").
+        return result.accepted() ? "SENT"
+                : result.uncertain() ? "UNCERTAIN"
+                : result.retriable() ? "INVALIDATED"
+                : "REJECTED";
     }
 
     /** Despacha un mensaje y acumula el resultado (camino persistido: sin intent, ya tiene claim de fragmento). */

@@ -18,7 +18,8 @@ import java.util.List;
  * <p>Semántica (simétrica con el camino persistido y con la clasificación segura v26/v27):
  * <ul>
  *   <li>fila nueva → se reclama {@code DISPATCHING} y se envía;</li>
- *   <li>{@code REJECTED} (rechazo pre-dispatch: probado que NO salió al banco) → se re-reclama y se permite reintento;</li>
+ *   <li>{@code REJECTED} (rechazo de negocio pre-dispatch) / {@code INVALIDATED} (fallo técnico pre-dispatch,
+ *       transportFailure): ambos "probado que NO salió al banco" → se re-reclama y se permite reintento;</li>
  *   <li>{@code SENT} / {@code UNCERTAIN} / {@code DISPATCHING} → NO se reenvía (ya enviado, ambiguo, o en vuelo).</li>
  * </ul>
  * El {@code DISPATCHING} se commitea ANTES del {@code send()} (durable): un crash entre claim y resultado deja la
@@ -29,7 +30,7 @@ public class Mt101PayDispatchIntentStore {
 
     /** Resultado del claim: si se puede enviar, o por qué NO (para reportar sin reenviar). */
     public enum ClaimResult {
-        /** Se reclamó (fila nueva o re-reclamo de un REJECTED): proceder a enviar. */
+        /** Se reclamó (fila nueva o re-reclamo de un REJECTED/INVALIDATED): proceder a enviar. */
         CLAIMED,
         /** El MISMO pago ya fue enviado (SENT + mismo payload_hash): no reenviar; reportar como aceptado (idempotente). */
         ALREADY_SENT,
@@ -77,7 +78,9 @@ public class Mt101PayDispatchIntentStore {
                 + "on conflict (dispatch_key) do update "
                 + "set status = 'DISPATCHING', payload_hash = excluded.payload_hash, "
                 + "    attempts = mt101_pay_dispatch_intent.attempts + 1, updated_at = current_timestamp "
-                + "where mt101_pay_dispatch_intent.status = 'REJECTED' "
+                // D.2: REJECTED e INVALIDATED son ambos "probado que NO salio al banco" -> re-reclamables. INVALIDATED
+                // = fallo tecnico pre-despacho (transportFailure); REJECTED = rechazo de negocio pre-despacho.
+                + "where mt101_pay_dispatch_intent.status in ('REJECTED', 'INVALIDATED') "
                 + "returning status";
         try (var connection = dataSource.getConnection()) {
             try (var statement = connection.prepareStatement(claim)) {

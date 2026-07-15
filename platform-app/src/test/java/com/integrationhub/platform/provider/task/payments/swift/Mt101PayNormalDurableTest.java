@@ -98,6 +98,39 @@ class Mt101PayNormalDurableTest {
     }
 
     @Test
+    void transportFailurePreDispatchRevertsFragmentToArchivedAndIsRepayable() throws Exception {
+        // D.2 (#7): un transportFailure PRE-DESPACHO (credencial/conexion mala; el banco no recibio nada) en PAY
+        // normal NO debe dejar el fragmento atascado en DISPATCHING. Fue reclamado ARCHIVED->DISPATCHING; se REVIERTE
+        // a ARCHIVED (re-pagable). Sin doble pago: nada salio al banco.
+        var fragmentSetId = "PAY-NORMAL-RETRIABLE";
+        seedArchived(fragmentSetId, "R1", 1, 2);
+        seedArchived(fragmentSetId, "R2", 2, 2);
+
+        // R1 falla el transporte pre-despacho (retriable); R2 se acepta.
+        var transport = new RetriableRefTransport("REST", Set.of("R1"));
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore);
+
+        var result = provider.execute(payContextFor(fragmentSetId, 2), payConfig());
+
+        assertFalse(result.success(), "un transportFailure es no-exito (invalidatedCount>0)");
+        assertEquals(2, transport.calls(), "los 2 ARCHIVED se reclaman y despachan una vez");
+        assertEquals("SENT", statusFor(fragmentSetId, "R2"));
+        assertEquals("ARCHIVED", statusFor(fragmentSetId, "R1"),
+                "el transportFailure revierte DISPATCHING->ARCHIVED (re-pagable), NO queda atascado en DISPATCHING");
+
+        // SEGUNDO PAY (tras corregir la causa tecnica): R1 vuelve a estar ARCHIVED -> se re-selecciona y se acepta.
+        var transport2 = new RetriableRefTransport("REST", Set.of());
+        var provider2 = new Mt101PayTaskProvider(new InstanceOfOne<>(transport2), fragmentStore);
+        var second = provider2.execute(payContextFor(fragmentSetId, 2), payConfig());
+
+        assertTrue(second.success(), () -> "el re-pago tras corregir la causa tecnica funciona: " + second.details());
+        assertEquals(1, transport2.calls(),
+                "solo R1 estaba ARCHIVED -> se re-despacha exactamente una vez (R2 no se reenvia: sin doble pago)");
+        assertEquals("SENT", statusFor(fragmentSetId, "R1"), "tras el re-pago exitoso R1 queda SENT");
+        assertEquals("SENT", statusFor(fragmentSetId, "R2"), "R2 sigue SENT");
+    }
+
+    @Test
     void claimArchivedForDispatchIsAtomicAndClaimsEachFragmentOnlyOnce() throws Exception {
         var fragmentSetId = "PAY-NORMAL-CLAIM";
         seedArchived(fragmentSetId, "C1", 1, 3);
@@ -344,6 +377,32 @@ class Mt101PayNormalDurableTest {
             var ref = message.sequenceA() == null ? null : message.sequenceA().sendersReference();
             if (ref != null && uncertainRefs.contains(ref)) {
                 return TransportResult.uncertain(1, 1L, "respuesta ambigua del banco");
+            }
+            return TransportResult.accepted("GW-" + ref, 1, 1L);
+        }
+
+        int calls() { return calls; }
+    }
+
+    /** Transporte que devuelve transportFailure (retriable, pre-despacho) para un conjunto de refs; acepta el resto. */
+    private static final class RetriableRefTransport implements PaymentMessageTransport {
+        private final String transportId;
+        private final Set<String> failRefs;
+        private int calls;
+
+        RetriableRefTransport(String transportId, Set<String> failRefs) {
+            this.transportId = transportId;
+            this.failRefs = failRefs;
+        }
+
+        @Override public String transport() { return transportId; }
+
+        @Override
+        public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
+            calls++;
+            var ref = message.sequenceA() == null ? null : message.sequenceA().sendersReference();
+            if (ref != null && failRefs.contains(ref)) {
+                return TransportResult.transportFailure(1, 1L, "auth fail before dispatch (no bank call)");
             }
             return TransportResult.accepted("GW-" + ref, 1, 1L);
         }

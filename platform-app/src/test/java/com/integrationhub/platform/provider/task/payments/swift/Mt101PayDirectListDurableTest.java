@@ -88,6 +88,36 @@ class Mt101PayDirectListDurableTest {
     }
 
     @Test
+    void transportFailureOnDirectListRecordsInvalidatedIntentNotRejectedAndIsRepayable() throws Exception {
+        // D.2 (#8a): un transportFailure PRE-DESPACHO en el camino de lista -> intención INVALIDATED (NO REJECTED:
+        // no fue rechazo de negocio del banco) y el archive NO se marca REJECTED. El re-request re-reclama
+        // (INVALIDATED es re-reclamable como REJECTED) y, corregida la causa, se envía. A1/A3 SENT no se reenvían.
+        var transport = new RetriableRefTransport("REST", Set.of("A2"));
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport),
+                null, null, null, null, null, intentStore);
+
+        var result = provider.execute(directListContext(), payConfig());
+
+        assertFalse(result.success(), "un transportFailure es no-éxito (invalidatedCount>0)");
+        assertEquals(3, transport.calls(), "los 3 mensajes de la lista se despachan una vez");
+        assertEquals("SENT", intentStatus("REST||A1"));
+        assertEquals("SENT", intentStatus("REST||A3"));
+        assertEquals("INVALIDATED", intentStatus("REST||A2"),
+                "el transportFailure deja la intención INVALIDATED (no REJECTED): fallo técnico, no rechazo del banco");
+
+        // SEGUNDO PAY (tras corregir la causa técnica): A2 (INVALIDATED) SÍ se re-reclama y esta vez se acepta.
+        var transport2 = new RetriableRefTransport("REST", Set.of());
+        var provider2 = new Mt101PayTaskProvider(new InstanceOfOne<>(transport2),
+                null, null, null, null, null, intentStore);
+        var second = provider2.execute(directListContext(), payConfig());
+
+        assertEquals(1, transport2.calls(),
+                "solo A2 (INVALIDATED) se re-reclama y re-despacha una vez; A1/A3 SENT no se reenvían (sin doble pago)");
+        assertTrue(second.success(), () -> "tras corregir la causa técnica el re-pago funciona: " + second.details());
+        assertEquals("SENT", intentStatus("REST||A2"), "tras el re-pago A2 queda SENT");
+    }
+
+    @Test
     void aDifferentPayloadUnderTheSameKeyIsNotSilencedAsAlreadySent() throws Exception {
         // R1: pago 1 con ref REF y payload P1 -> SENT. Pago 2 con la MISMA ref (misma dispatch_key "REST||REF") pero
         // payload DISTINTO (otro monto) es OTRO pago colisionando con la idempotency key: sin identidad de payload se
@@ -268,6 +298,32 @@ class Mt101PayDirectListDurableTest {
             var ref = message.sequenceA() == null ? null : message.sequenceA().sendersReference();
             if (ref != null && uncertainRefs.contains(ref)) {
                 return TransportResult.uncertain(1, 1L, "respuesta ambigua del banco");
+            }
+            return TransportResult.accepted("GW-" + ref, 1, 1L);
+        }
+
+        int calls() { return calls; }
+    }
+
+    /** Transporte que devuelve transportFailure (retriable, pre-despacho) para un conjunto de refs; acepta el resto. */
+    private static final class RetriableRefTransport implements PaymentMessageTransport {
+        private final String transportId;
+        private final Set<String> failRefs;
+        private int calls;
+
+        RetriableRefTransport(String transportId, Set<String> failRefs) {
+            this.transportId = transportId;
+            this.failRefs = failRefs;
+        }
+
+        @Override public String transport() { return transportId; }
+
+        @Override
+        public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
+            calls++;
+            var ref = message.sequenceA() == null ? null : message.sequenceA().sendersReference();
+            if (ref != null && failRefs.contains(ref)) {
+                return TransportResult.transportFailure(1, 1L, "auth fail before dispatch (no bank call)");
             }
             return TransportResult.accepted("GW-" + ref, 1, 1L);
         }

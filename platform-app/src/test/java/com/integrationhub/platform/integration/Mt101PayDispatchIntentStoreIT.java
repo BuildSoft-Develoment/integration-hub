@@ -99,6 +99,17 @@ class Mt101PayDispatchIntentStoreIT {
         assertEquals("DISPATCHING", statusOf("REST|12|REF-REJ"), "el re-claim vuelve a DISPATCHING");
     }
 
+    @Test
+    void reRequestAfterInvalidatedIsAllowed() {
+        // D.2 (#8a): fallo técnico pre-dispatch (transportFailure) -> INVALIDATED, probado que NO salió al banco.
+        store.claimForDispatch("REST|12|REF-INV", 1L, "REF-INV", ph("REF-INV"));
+        store.recordResult("REST|12|REF-INV", "INVALIDATED", null, 1, "auth fail before dispatch (no bank call)");
+
+        // INVALIDATED es re-reclamable igual que REJECTED (mismo "probado no enviado"): el re-request NO se bloquea.
+        assertEquals(ClaimResult.CLAIMED, store.claimForDispatch("REST|12|REF-INV", 2L, "REF-INV", ph("REF-INV")));
+        assertEquals("DISPATCHING", statusOf("REST|12|REF-INV"), "el re-claim desde INVALIDATED vuelve a DISPATCHING");
+    }
+
     // --- R1 (identidad de pago): un payload DISTINTO bajo la misma clave no se silencia como ALREADY_SENT ---
 
     @Test
