@@ -79,11 +79,15 @@
                       <mat-label>{{ i18n.t('audit.payConflicts.resolveReason') }}</mat-label>
                       <input matInput [(ngModel)]="resolveReason" [disabled]="resolveBusy()" (keyup.enter)="confirmResolve(c)" />
                     </mat-form-field>
+                    <mat-form-field appearance="outline" class="conflicts__reason">
+                      <mat-label>{{ i18n.t('audit.payConflicts.resolveTicket') }}</mat-label>
+                      <input matInput [(ngModel)]="resolveTicket" [disabled]="resolveBusy()" (keyup.enter)="confirmResolve(c)" />
+                    </mat-form-field>
                     @if (resolveError()) {
                       <p class="conflicts__error" role="alert">{{ resolveError() }}</p>
                     }
                     <div class="conflicts__resolve-actions">
-                      <button mat-flat-button color="primary" type="button" [disabled]="!resolveReason.trim() || resolveBusy()" (click)="confirmResolve(c)">
+                      <button mat-flat-button color="primary" type="button" [disabled]="!resolveReason.trim() || !resolveTicket.trim() || resolveBusy()" (click)="confirmResolve(c)">
                         {{ i18n.t('audit.payConflicts.resolveConfirm') }}
                       </button>
                       <button mat-stroked-button type="button" [disabled]="resolveBusy()" (click)="cancelResolve()">

@@ -157,9 +157,10 @@ class SftpPaymentTransportTest {
     }
 
     @Test
-    void connectionFailureBeforeDispatchIsRejectedNotUncertain() {
-        // Contraparte: un fallo ANTES de iniciar el despacho (puerto cerrado) es un rechazo seguro
-        // (reusable), no incierto: el archivo final nunca se toco.
+    void connectionFailureBeforeDispatchIsTransportFailureNotUncertainNorBankRejection() {
+        // D.2: un fallo ANTES de iniciar el despacho (puerto cerrado / auth) es un fallo de TRANSPORTE
+        // re-solicitable (retriable -> INVALIDATED), NO un rechazo de negocio del banco (que dejaria el
+        // correctivo FAILED terminal) ni un INCIERTO: el archivo final nunca se toco, el banco no recibio nada.
         var configuration = new LinkedHashMap<String, Object>();
         configuration.put("sftp", Map.of(
                 "host", "127.0.0.1",
@@ -173,7 +174,9 @@ class SftpPaymentTransportTest {
         var result = transport.send(sampleMessage("PRE"), configuration);
 
         assertFalse(result.accepted());
-        assertFalse(result.uncertain(), "fallo de conexion previo al despacho es REJECTED, no INCIERTO");
+        assertFalse(result.uncertain(), "fallo de conexion previo al despacho NO es INCIERTO");
+        assertTrue(result.retriable(), "fallo de conexion/transporte pre-despacho es re-solicitable");
+        assertFalse(result.bankRejected(), "un fallo de transporte NO es un rechazo de negocio del banco");
     }
 
     @Test

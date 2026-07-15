@@ -97,6 +97,33 @@ public class Mt101RebuildRepository {
         }
     }
 
+    /**
+     * H4: el set ORIGINAL de la RAÍZ de la cadena correctiva de un run. Un run hijo tiene como
+     * {@code original_fragment_set_id} el set correctivo de su padre (no el set de la carga original, que es donde
+     * viven las filas de cuarentena). Se sube por {@code parent_rebuild_run_id} hasta el run sin padre y se devuelve
+     * SU {@code original_fragment_set_id}. Para un run raíz devuelve su propio set original.
+     */
+    public String resolveRootOriginalSet(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = """
+                with recursive chain as (
+                    select rebuild_run_id, parent_rebuild_run_id, original_fragment_set_id
+                      from mt101_rebuild_run where rebuild_run_id = ?
+                    union all
+                    select r.rebuild_run_id, r.parent_rebuild_run_id, r.original_fragment_set_id
+                      from mt101_rebuild_run r
+                      join chain c on r.rebuild_run_id = c.parent_rebuild_run_id
+                )
+                select original_fragment_set_id from chain where parent_rebuild_run_id is null
+                """;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getString(1) : null;
+            }
+        }
+    }
+
     public int nextChildGeneration(DataSource dataSource, String parentRebuildRunId) throws SQLException {
         var sql = """
                 select coalesce(max(corrective_generation), 1) + 1
@@ -327,13 +354,17 @@ public class Mt101RebuildRepository {
         if (rejected > 0) {
             return new LifecycleStatus("PARTIALLY_FAILED", false);
         }
-        if (allIn(fragments, total, "SENT")) {
+        // H4: un fragmento SUPERSEDED fue tomado por un run HIJO (request-child lo reemplaza). Para el lifecycle
+        // del PADRE es "resuelto en otra parte", equivalente a SENT: no está pendiente ni rechazado. Sin esto, un
+        // padre con SENT+SUPERSEDED caía a "BUILT" (ningún allIn lo cubría) y el sync reseteaba su cuarentena a
+        // REBUILD_PENDING_VALIDATION, clobbereando la propagación del hijo (H4).
+        if (allIn(fragments, total, "SENT", "SUPERSEDED")) {
             return archiveLifecycle(dataSource, correctiveSetId, processExecutionId, total);
         }
-        if (allIn(fragments, total, "ARCHIVED", "SENT")) {
+        if (allIn(fragments, total, "ARCHIVED", "SENT", "SUPERSEDED")) {
             return new LifecycleStatus("ARCHIVED", false);
         }
-        if (allIn(fragments, total, "VALIDATED", "ARCHIVED", "SENT")) {
+        if (allIn(fragments, total, "VALIDATED", "ARCHIVED", "SENT", "SUPERSEDED")) {
             return new LifecycleStatus("VALIDATED", false);
         }
         return new LifecycleStatus("BUILT", false);
@@ -699,8 +730,13 @@ public class Mt101RebuildRepository {
                 + "pay_plan_previous_status = case when pay_status = 'PREPARING_PLAN' "
                 + "    then pay_plan_previous_status else pay_status end, "
                 + "pay_plan_reserved_at = current_timestamp, updated_at = current_timestamp "
+                // D2-R1: PARTIALLY_SENT es re-solicitable cuando quedan fragmentos INVALIDATED (fallo de transporte,
+                // build_fragment ARCHIVED). Es money-safe: la preparación (persistPayIntents) sólo re-prepara
+                // pay_status not in (DISPATCHING,SENT,REJECTED,UNCERTAIN) y el dispatch sólo lee build_fragment
+                // ARCHIVED -> los SENT nunca se re-envían. El caller (requestCorrectivePay) exige que HAYA fragmentos
+                // re-enviables antes de re-solicitar un PARTIALLY_SENT (si no, no-op ruidoso).
                 + "where rebuild_run_id = ? and status = 'ARCHIVED' "
-                + "and (pay_status in ('NOT_REQUESTED', 'FAILED', 'INVALIDATED') "
+                + "and (pay_status in ('NOT_REQUESTED', 'FAILED', 'INVALIDATED', 'PARTIALLY_SENT') "
                 + "     or (pay_status = 'PREPARING_PLAN' "
                 + "         and pay_plan_reserved_at < current_timestamp - make_interval(secs => ?)))";
         return inTransaction(dataSource, connection -> {
@@ -2601,6 +2637,23 @@ public class Mt101RebuildRepository {
             }
         }
         return result;
+    }
+
+    /**
+     * D2-R1: cuántos fragmentos correctivos quedaron INVALIDATED (fallo de transporte, no rechazo del banco) y por
+     * tanto son re-enviables (su build_fragment sigue ARCHIVED). Lo usa {@code requestCorrectivePay} para permitir
+     * re-solicitar un run PARTIALLY_SENT sólo si hay algo que re-enviar.
+     */
+    public int countInvalidatedPayFragments(DataSource dataSource, String rebuildRunId) throws SQLException {
+        var sql = "select count(*) from mt101_corrective_pay_fragment "
+                + "where rebuild_run_id = ? and pay_status = 'INVALIDATED'";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, rebuildRunId);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getInt(1) : 0;
+            }
+        }
     }
 
     public List<String> correctivePayRejectedReferences(DataSource dataSource, String rebuildRunId) throws SQLException {

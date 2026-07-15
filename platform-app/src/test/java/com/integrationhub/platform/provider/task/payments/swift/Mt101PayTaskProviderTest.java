@@ -183,7 +183,8 @@ class Mt101PayTaskProviderTest {
     @Test
     void treatsNotAcceptedWithoutErrorAsRejected() {
         var transport = new StubTransport("REST", List.of(
-                new TransportResult(false, false, null, 1, 25L, null)
+                // accepted=false, uncertain=false, retriable=false -> rechazo de negocio
+                new TransportResult(false, false, false, null, 1, 25L, null)
         ));
         var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
         var context = contextWith(List.of(sampleMessage("PROC-NACK")));
@@ -200,6 +201,29 @@ class Mt101PayTaskProviderTest {
         @SuppressWarnings("unchecked")
         var records = (List<Map<String, Object>>) result.outputs().get("records");
         assertEquals("REJECTED", records.get(0).get("status"));
+    }
+
+    @Test
+    void transportFailureIsInvalidatedNotRejected() {
+        // D.2: un fallo de TRANSPORTE/AUTH (retriable) NO es un rechazo de negocio: se cuenta como INVALIDATED
+        // (re-solicitable), no como REJECTED, para no llevar el correctivo a FAILED terminal. La tarea falla
+        // (no salio nada), pero el conteo lo distingue.
+        var transport = new StubTransport("REST", List.of(
+                TransportResult.transportFailure(1, 10L, "connection refused")
+        ));
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
+        var context = contextWith(List.of(sampleMessage("PROC-TRANSPORT")));
+
+        var result = provider.execute(context, Map.of(
+                "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records")
+        ));
+
+        assertFalse(result.success(), "un fallo de transporte no es exito (no salio nada)");
+        assertEquals(0, result.outputs().get("rejectedCount"), "NO se cuenta como rechazo de negocio");
+        assertEquals(1, result.outputs().get("invalidatedCount"), "se cuenta como INVALIDATED (re-solicitable)");
+        @SuppressWarnings("unchecked")
+        var records = (List<Map<String, Object>>) result.outputs().get("records");
+        assertEquals("INVALIDATED", records.get(0).get("status"), "el fragmento queda INVALIDATED (re-solicitable)");
     }
 
     @Test
@@ -227,9 +251,10 @@ class Mt101PayTaskProviderTest {
     }
 
     @Test
-    void capturesTypedPreDispatchConfigErrorAsRejection() {
-        // v27 P1: un error de pre-dispatch TIPADO (PreDispatchTransportException, antes de cualquier I/O)
-        // si es rechazo seguro: el mensaje no salio. Re-solicitable tras corregir la config.
+    void capturesTypedPreDispatchConfigErrorAsInvalidated() {
+        // v27 P1 + D.2: un error de pre-dispatch TIPADO (PreDispatchTransportException, antes de cualquier I/O)
+        // es re-solicitable: el mensaje no salio al banco. Ya no se clasifica como REJECTED (rechazo de negocio,
+        // que llevaria un correctivo a FAILED terminal) sino como INVALIDATED, re-solicitable tras corregir la config.
         var transport = new StubTransport("REST", null) {
             @Override
             public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
@@ -245,9 +270,11 @@ class Mt101PayTaskProviderTest {
         ));
 
         assertFalse(result.success());
+        assertEquals(0, result.outputs().get("rejectedCount"), "un error de config no es rechazo de negocio");
+        assertEquals(1, result.outputs().get("invalidatedCount"), "es INVALIDATED (re-solicitable)");
         @SuppressWarnings("unchecked")
         var records = (List<Map<String, Object>>) result.outputs().get("records");
-        assertEquals("REJECTED", records.get(0).get("status"));
+        assertEquals("INVALIDATED", records.get(0).get("status"));
         assertTrue(((String) records.get(0).get("lastError")).contains("config error"));
     }
 

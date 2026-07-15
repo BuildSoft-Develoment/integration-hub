@@ -79,4 +79,42 @@ class Mt101PayStatusConnectionCoverageValidatorTest {
         assertDoesNotThrow(() -> validator.validate(List.of()));
         assertDoesNotThrow(() -> validator.validate(null));
     }
+
+    @Test
+    void multiplePaysWithExplicitPairingIsAccepted() {
+        // Dos bancos: cada STATUS declara resolvesPayTaskRef → se compara solo con SU PAY. Antes daba falso positivo
+        // (comparaba PAY_A contra STATUS_B).
+        assertDoesNotThrow(() -> validator.validate(List.of(
+                new TaskView("MT101_PAY", 1, "{\"taskRef\":\"pay-a\",\"connectionRef\":\"A\",\"continueOnFailure\":true}"),
+                new TaskView("MT101_PAY", 2, "{\"taskRef\":\"pay-b\",\"connectionRef\":\"B\",\"continueOnFailure\":true}"),
+                new TaskView("MT101_STATUS", 3, "{\"resolveNormalPay\":true,\"resolvesPayTaskRef\":\"pay-a\",\"connectionRef\":\"A\"}"),
+                new TaskView("MT101_STATUS", 4, "{\"resolveNormalPay\":true,\"resolvesPayTaskRef\":\"pay-b\",\"connectionRef\":\"B\"}"))));
+    }
+
+    @Test
+    void multiplePaysWithoutPairingIsAmbiguous() {
+        var error = assertThrows(IllegalArgumentException.class, () -> validator.validate(List.of(
+                new TaskView("MT101_PAY", 1, "{\"taskRef\":\"pay-a\",\"connectionRef\":\"A\",\"continueOnFailure\":true}"),
+                new TaskView("MT101_PAY", 2, "{\"taskRef\":\"pay-b\",\"connectionRef\":\"B\",\"continueOnFailure\":true}"),
+                new TaskView("MT101_STATUS", 3, "{\"resolveNormalPay\":true,\"connectionRef\":\"A\"}"))));
+        assertTrue(error.getMessage().contains("resolvesPayTaskRef"), () -> "mensaje: " + error.getMessage());
+    }
+
+    @Test
+    void resolvesPayTaskRefToNonexistentPayIsRejected() {
+        var error = assertThrows(IllegalArgumentException.class, () -> validator.validate(List.of(
+                new TaskView("MT101_PAY", 1, "{\"taskRef\":\"pay-a\",\"connectionRef\":\"A\",\"continueOnFailure\":true}"),
+                new TaskView("MT101_STATUS", 2, "{\"resolveNormalPay\":true,\"resolvesPayTaskRef\":\"pay-ZZZ\",\"connectionRef\":\"A\"}"))));
+        assertTrue(error.getMessage().contains("no earlier MT101_PAY"), () -> "mensaje: " + error.getMessage());
+    }
+
+    @Test
+    void multiplePaysExplicitPairingDetectsWrongConnection() {
+        // pay-b está en conexión B pero su STATUS lee A → debe rechazarse (leería el ledger equivocado).
+        var error = assertThrows(IllegalArgumentException.class, () -> validator.validate(List.of(
+                new TaskView("MT101_PAY", 1, "{\"taskRef\":\"pay-a\",\"connectionRef\":\"A\",\"continueOnFailure\":true}"),
+                new TaskView("MT101_PAY", 2, "{\"taskRef\":\"pay-b\",\"connectionRef\":\"B\",\"continueOnFailure\":true}"),
+                new TaskView("MT101_STATUS", 3, "{\"resolveNormalPay\":true,\"resolvesPayTaskRef\":\"pay-b\",\"connectionRef\":\"A\"}"))));
+        assertTrue(error.getMessage().contains("connectionRef"), () -> "mensaje: " + error.getMessage());
+    }
 }

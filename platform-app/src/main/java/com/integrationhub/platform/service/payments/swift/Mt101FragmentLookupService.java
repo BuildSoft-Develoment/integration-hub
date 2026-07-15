@@ -126,13 +126,18 @@ public class Mt101FragmentLookupService {
      * + último STATUS), la evidencia de por qué el fragmento quedó en conflicto. Solo lectura.
      */
     public List<Mt101FragmentRepository.OpenPayConflictConfirmation> payConflictConfirmations(String connectionRef,
-                                                                                              String sendersReference) {
+                                                                                              String sendersReference,
+                                                                                              Long processExecutionId) {
         if (sendersReference == null || sendersReference.isBlank()) {
             throw new IllegalArgumentException("sendersReference is required");
         }
+        if (processExecutionId == null) {
+            throw new IllegalArgumentException("processExecutionId is required to scope the confirmation evidence "
+                    + "to this conflict (the SWIFT reference repeats across runs of the same process)");
+        }
         try {
             return repository.payConflictConfirmations(resolveDataSource(connectionRef), sendersReference.trim(),
-                    DEFAULT_CONFLICT_CONFIRMATIONS_LIMIT);
+                    processExecutionId, DEFAULT_CONFLICT_CONFIRMATIONS_LIMIT);
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot list confirmations for " + sendersReference, error);
         }

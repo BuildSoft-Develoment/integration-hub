@@ -199,6 +199,9 @@ public class RestPaymentTransport implements PaymentMessageTransport {
         String lastError = null;
         // Marca si el ultimo fallo dejo el envio en estado INCIERTO (pudo llegar al gateway).
         boolean lastUncertain = false;
+        // D.2: marca si el ultimo fallo fue de TRANSPORTE/conexion ANTES de enviar (el gateway no recibio nada) ->
+        // re-solicitable (transportFailure), distinto de un rechazo de negocio (4xx).
+        boolean lastRetriable = false;
         for (int attempt = 1; attempt <= retry.maxRetries() + 1; attempt++) {
             try {
                 var request = buildRequest(method, url, headers, body, timeoutSeconds);
@@ -235,16 +238,19 @@ public class RestPaymentTransport implements PaymentMessageTransport {
                     return TransportResult.uncertain(attempt, System.currentTimeMillis() - startedAt, lastError);
                 }
             } catch (ConnectException connectException) {
-                // Conexion rechazada ANTES de enviar: fallo DEFINITIVO, seguro reintentar/reenviar.
+                // Conexion rechazada ANTES de enviar: el gateway no recibio nada, seguro re-solicitar. D.2: es un
+                // fallo de TRANSPORTE (transportFailure -> INVALIDATED), no un rechazo de negocio del gateway.
                 lastError = "connection refused: " + connectException.getMessage();
                 lastUncertain = false;
+                lastRetriable = true;
                 if (!retry.shouldRetry("CONNECTION_REFUSED")) {
-                    return TransportResult.rejected(attempt, System.currentTimeMillis() - startedAt, lastError);
+                    return TransportResult.transportFailure(attempt, System.currentTimeMillis() - startedAt, lastError);
                 }
             } catch (IOException ioException) {
                 // Otro IO (p.ej. conexion cortada tras enviar) = INCIERTO: no sabemos si llego.
                 lastError = "IO error: " + ioException.getMessage();
                 lastUncertain = true;
+                lastRetriable = false;
                 if (!retry.shouldRetry("CONNECTION_REFUSED")) {
                     return TransportResult.uncertain(attempt, System.currentTimeMillis() - startedAt, lastError);
                 }
@@ -256,9 +262,13 @@ public class RestPaymentTransport implements PaymentMessageTransport {
             }
             sleepBackoff(retry, attempt);
         }
-        // Reintentos agotados: si el ultimo fallo fue incierto, NO lo reportamos como rechazo.
-        return lastUncertain
-                ? TransportResult.uncertain(retry.maxRetries() + 1, System.currentTimeMillis() - startedAt, lastError)
+        // Reintentos agotados: si el ultimo fallo fue incierto, NO lo reportamos como rechazo; si fue de transporte
+        // (conexion antes de enviar), es re-solicitable (D.2); si no, rechazo de negocio.
+        if (lastUncertain) {
+            return TransportResult.uncertain(retry.maxRetries() + 1, System.currentTimeMillis() - startedAt, lastError);
+        }
+        return lastRetriable
+                ? TransportResult.transportFailure(retry.maxRetries() + 1, System.currentTimeMillis() - startedAt, lastError)
                 : TransportResult.rejected(retry.maxRetries() + 1, System.currentTimeMillis() - startedAt, lastError);
     }
 

@@ -1225,6 +1225,7 @@ export const es = {
   'audit.payConflicts.resolveTitle': 'Reconocer conflicto',
   'audit.payConflicts.resolveHint': 'Limpia el conflicto conservando el terminal actual del ledger (NO cambia el pago). Registra quién y por qué.',
   'audit.payConflicts.resolveReason': 'Motivo',
+  'audit.payConflicts.resolveTicket': 'Ticket',
   'audit.payConflicts.resolveConfirm': 'Reconocer',
   'audit.payConflicts.resolveError': 'No se pudo reconocer el conflicto.',
   'audit.payDispatch.title': 'Dispatch PAY por lista',

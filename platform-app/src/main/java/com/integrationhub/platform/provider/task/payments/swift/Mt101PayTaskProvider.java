@@ -193,6 +193,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
         outputs.put("sentCount", accumulator.acceptedCount);
         outputs.put("acceptedCount", accumulator.acceptedCount);
         outputs.put("rejectedCount", accumulator.rejectedCount);
+        outputs.put("invalidatedCount", accumulator.invalidatedCount);
         outputs.put("uncertainCount", accumulator.uncertainCount);
         outputs.put("retriedCount", accumulator.retriedCount);
         outputs.put("totalDurationMs", accumulator.totalDurationMs);
@@ -213,6 +214,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 + " sent=" + accumulator.acceptedCount
                 + " accepted=" + accumulator.acceptedCount
                 + " rejected=" + accumulator.rejectedCount
+                + " invalidated=" + accumulator.invalidatedCount
                 + " uncertain=" + accumulator.uncertainCount
                 + " retried=" + accumulator.retriedCount;
         // G1: un INCIERTO deja dinero en estado ambiguo -> señal needsReconciliation para que el motor cierre la
@@ -221,7 +223,9 @@ public class Mt101PayTaskProvider implements TaskProvider {
         if (accumulator.uncertainCount > 0) {
             return TaskResult.needsReconciliation(summary, outputs);
         }
-        return accumulator.rejectedCount > 0
+        // D.2: un fallo de transporte/auth (invalidated) NO salió al banco -> failure re-solicitable (no éxito, no
+        // needsReconciliation ambiguo). Un rechazo de negocio también es failure. Éxito solo si todo SENT.
+        return (accumulator.rejectedCount > 0 || accumulator.invalidatedCount > 0)
                 ? TaskResult.failure(summary, outputs)
                 : TaskResult.success(summary, outputs);
     }
@@ -363,12 +367,18 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 if (rebuildRunId == null) {
                     uncertainRefs.add(reference);
                 }
+            } else if (result.retriable()) {
+                // D.2: fallo de TRANSPORTE/AUTENTICACION antes del despacho (el banco no recibio nada) -> re-solicitable.
+                // NO es un rechazo de negocio: NO se anade a sentRefs ni rejectedByRef, asi el fragmento build queda
+                // ARCHIVED (re-pagable). El ledger lo registra INVALIDATED (via payStatusOf), que lleva el run a
+                // pay_status=INVALIDATED -> re-solicitable (arreglar credencial y re-pedir). No se reenvia a ciegas.
+                // Intencionalmente sin acción sobre las colecciones: el ledger (payStatusOf) es la fuente de verdad.
             } else {
                 rejectedByRef.put(reference, result.lastError());
                 rejectedTargets.add(archiveTarget(message));
             }
             pageAudit.add(recordEnvelope(context, reference, result));
-            var payStatus = result.accepted() ? "SENT" : (result.uncertain() ? "UNCERTAIN" : "REJECTED");
+            var payStatus = payStatusOf(result);
             pageLedger.add(new Mt101RebuildRepository.PayFragmentResult(
                     reference, payStatus, result.gatewayReference(), result.attempts(), result.lastError()));
         }
@@ -538,15 +548,17 @@ public class Mt101PayTaskProvider implements TaskProvider {
 
     /** Construye la trama RECORD de despacho para un fragmento (traceId=ejecucion, recordId=:20:). */
     private AuditEnvelope recordEnvelope(TaskContext context, String reference, TransportResult result) {
-        var uncertain = result.uncertain();
-        var accepted = result.accepted();
+        var payStatus = payStatusOf(result);
+        var action = result.accepted() ? "RECORD_SENT"
+                : (result.uncertain() ? "RECORD_SEND_UNCERTAIN"
+                : (result.retriable() ? "RECORD_INVALIDATED" : "RECORD_REJECTED"));
         return new AuditEnvelope(
                 UUID.randomUUID().toString(),
                 context.processExecutionId() == null ? null : "exec-" + context.processExecutionId(),
                 reference,
                 AuditLevel.RECORD,
-                accepted ? "RECORD_SENT" : (uncertain ? "RECORD_SEND_UNCERTAIN" : "RECORD_REJECTED"),
-                accepted ? "SENT" : (uncertain ? "UNCERTAIN" : "REJECTED"),
+                action,
+                payStatus,
                 context.processExecutionId(),
                 context.taskDefinitionId(),
                 result.lastError(),
@@ -592,7 +604,9 @@ public class Mt101PayTaskProvider implements TaskProvider {
         // ALREADY_SENT SIN enviarse (silenciaría un pago que nunca salió). Sin correlación NO se crea intención
         // ambigua: rechazo seguro (re-solicitable), nunca una aceptación silenciosa.
         if (correlationKey == null || correlationKey.isBlank()) {
-            return TransportResult.rejected(0, 0L,
+            // D.2: no salió al banco (config incompleta) -> re-solicitable (transportFailure -> INVALIDATED), no un
+            // rechazo de negocio que dejaría el correctivo FAILED terminal.
+            return TransportResult.transportFailure(0, 0L,
                     "missing per-payment idempotency/correlation key for durable dispatch intent "
                     + "(configure a non-empty idempotencyKeyTemplate for REST or dropPathTemplate for SFTP); not sent");
         }
@@ -601,7 +615,8 @@ public class Mt101PayTaskProvider implements TaskProvider {
         // bajo la misma clave se silenciarían. Espejo del guard de correlación: sin payload NO se crea intención.
         var rawPayload = message == null ? null : message.rawPayload();
         if (rawPayload == null || rawPayload.isBlank()) {
-            return TransportResult.rejected(0, 0L,
+            // D.2: espejo del guard de correlación; no salió al banco -> re-solicitable (transportFailure).
+            return TransportResult.transportFailure(0, 0L,
                     "missing formatted message payload for durable dispatch intent identity "
                     + "(format the MT101 message before PAY so its payload can be hashed); not sent");
         }
@@ -641,14 +656,29 @@ public class Mt101PayTaskProvider implements TaskProvider {
         try {
             return transport.send(message, dispatchConfiguration);
         } catch (PreDispatchTransportException configError) {
-            // v27 P1: error TIPADO de pre-dispatch (validacion/config, antes de cualquier I/O): el mensaje NO salio al
-            // banco -> rechazo seguro (re-solicitable). Clasificacion por TIPO, no por suposicion.
-            return TransportResult.rejected(1, 0L, "transport config error: " + configError.getMessage());
+            // v27 P1 + D.2: error TIPADO de pre-dispatch (validacion/config, antes de cualquier I/O): el mensaje NO
+            // salio al banco -> re-solicitable. Es un fallo tecnico, no un rechazo de negocio del banco: transportFailure
+            // (-> INVALIDATED), para que un correctivo no quede FAILED terminal por un error de configuracion.
+            return TransportResult.transportFailure(1, 0L, "transport config error: " + configError.getMessage());
         } catch (RuntimeException error) {
             // P0 v26+v27: cualquier OTRA excepcion es INCIERTA: si no se puede DEMOSTRAR que no salio al banco, nunca se
             // marca REJECTED reusable (evita doble pago); se resuelve por STATUS/conciliacion.
             return TransportResult.uncertain(1, 0L, "unexpected transport error: " + error.getMessage());
         }
+    }
+
+    /** D.2: mapa único TransportResult → pay_status del ledger. retriable (fallo de transporte) → INVALIDATED. */
+    private static String payStatusOf(TransportResult result) {
+        if (result.accepted()) {
+            return "SENT";
+        }
+        if (result.uncertain()) {
+            return "UNCERTAIN";
+        }
+        if (result.retriable()) {
+            return "INVALIDATED";
+        }
+        return "REJECTED";
     }
 
     private String intentStatus(TransportResult result) {
@@ -692,7 +722,8 @@ public class Mt101PayTaskProvider implements TaskProvider {
         }
         entry.put("uetr", uetr);
         entry.put("idempotencyKey", correlationKey);
-        entry.put("status", result.accepted() ? "ACCEPTED" : (result.uncertain() ? "UNCERTAIN" : "REJECTED"));
+        entry.put("status", result.accepted() ? "ACCEPTED"
+                : (result.uncertain() ? "UNCERTAIN" : (result.retriable() ? "INVALIDATED" : "REJECTED")));
         entry.put("gatewayReference", result.gatewayReference());
         entry.put("attempts", result.attempts());
         entry.put("durationMs", result.durationMs());
@@ -712,6 +743,11 @@ public class Mt101PayTaskProvider implements TaskProvider {
             // exige conciliacion/intervencion. Se reporta aparte para el orquestador.
             accumulator.uncertainCount++;
             accumulator.addUncertainSample(entry);
+        } else if (result.retriable()) {
+            // D.2: fallo de TRANSPORTE/AUTH antes del despacho (no salio al banco) -> re-solicitable, NO un rechazo
+            // de negocio. Se cuenta aparte para no reportarlo como REJECTED (que llevaria el correctivo a FAILED).
+            accumulator.invalidatedCount++;
+            accumulator.addErrorSample(entry);
         } else {
             accumulator.rejectedCount++;
             accumulator.addErrorSample(entry);
@@ -734,6 +770,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
         int acceptedCount;
         int rejectedCount;
         int uncertainCount;
+        int invalidatedCount;
         int retriedCount;
         long totalDurationMs;
 
@@ -760,7 +797,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
         }
 
         int totalCount() {
-            return acceptedCount + rejectedCount + uncertainCount;
+            return acceptedCount + rejectedCount + uncertainCount + invalidatedCount;
         }
     }
 

@@ -87,7 +87,9 @@ public final class Mt101PayConflictAudit {
                                                  String sendersReference,
                                                  String retainedStatus,
                                                  String actor,
-                                                 String reason) {
+                                                 String reason,
+                                                 String ticketRef,
+                                                 String originalReason) {
         var attributes = new LinkedHashMap<String, String>();
         attributes.put("retainedStatus", retainedStatus);
         if (actor != null && !actor.isBlank()) {
@@ -95,6 +97,14 @@ public final class Mt101PayConflictAudit {
         }
         if (reason != null && !reason.isBlank()) {
             attributes.put("reason", reason);
+        }
+        if (ticketRef != null && !ticketRef.isBlank()) {
+            attributes.put("ticketRef", ticketRef);
+        }
+        // El motivo ORIGINAL del conflicto (que dijo el banco) viaja en la trama para lineage completo, aparte
+        // del motivo del reconocimiento.
+        if (originalReason != null && !originalReason.isBlank()) {
+            attributes.put("originalConflictReason", originalReason);
         }
         var message = "conflicto PAY reconocido por " + (actor == null ? "?" : actor) + ": se conserva el terminal '"
                 + retainedStatus + "'" + (reason == null || reason.isBlank() ? "" : " — " + reason);

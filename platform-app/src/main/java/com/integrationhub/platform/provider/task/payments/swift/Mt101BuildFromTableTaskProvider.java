@@ -63,6 +63,13 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     private static final int MAX_FRAGMENTS_PER_SET = 99999;
     /** Fragmentos por executeBatch al persistir en fase 2. */
     private static final int INSERT_BATCH_SIZE = 100;
+    /**
+     * Tope de BYTES acumulados por executeBatch. El flush por número de filas ({@code INSERT_BATCH_SIZE}) no acota
+     * el tamaño en bytes: con fragmentos grandes (p.ej. maxBytesPerMessage alto) 100 fragmentos pueden ser varios
+     * MB en un solo batch → pgJDBC deadlockea (wait_event Client/ClientWrite, el server bloquea escribiendo la
+     * respuesta mientras el driver sigue enviando). Se flushea por lo que ocurra primero: filas O bytes (~1MB).
+     */
+    private static final long INSERT_BATCH_MAX_BYTES = 1_000_000L;
 
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
@@ -224,6 +231,7 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
         // insertFragments (addBatch) para reducir round-trips ~100x.
         var totalFragments = plan.size();
         var totalBytes = 0L;
+        var bufferedBytes = 0L;
         var insertBuffer = new ArrayList<Mt101FragmentStore.FragmentInsert>(INSERT_BATCH_SIZE);
         var auditBuffer = new ArrayList<AuditEnvelope>(INSERT_BATCH_SIZE);
         try (var readConnection = source.dataSource().getConnection()) {
@@ -279,9 +287,14 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
                 auditBuffer.add(recordEnvelope(context,
                         message.sequenceA() == null ? null : message.sequenceA().sendersReference(),
                         boundary, rows.size()));
-                if (insertBuffer.size() >= INSERT_BATCH_SIZE) {
+                bufferedBytes += payloadBytes;
+                // Flush por lo que ocurra primero: nº de filas O bytes acumulados (~1MB). El tope de bytes evita
+                // el deadlock de pgJDBC con fragmentos grandes; el de filas mantiene el ~100x de reducción de
+                // round-trips con fragmentos pequeños.
+                if (insertBuffer.size() >= INSERT_BATCH_SIZE || bufferedBytes >= INSERT_BATCH_MAX_BYTES) {
                     fragmentStore.insertFragments(source.connectionRef(), new ArrayList<>(insertBuffer));
                     insertBuffer.clear();
+                    bufferedBytes = 0L;
                     emitRecordAudit(auditBuffer);
                     auditBuffer.clear();
                 }

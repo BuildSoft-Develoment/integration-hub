@@ -364,6 +364,36 @@ public class Mt101FailedRecordRepository {
     }
 
     /**
+     * H4: propaga el resultado de un run HIJO a la cuarentena de la RAÍZ. Un hijo reconstruye sólo los fragmentos
+     * que su padre dejó {@code REJECTED}; cuando el hijo los ENVÍA, las filas de cuarentena de la raíz (que el padre
+     * dejó {@code REBUILD_REJECTED}) deben pasar a {@code REBUILD_SENT}. El cruce es por la TUPLA ESTABLE
+     * {@code (staging_id, source_file_hash, source_record_number)} — NO por {@code senders_reference}, que cambia en
+     * cada generación (ese es exactamente el motivo por el que la sincronización normal no cruzaba entre generaciones).
+     * Sólo toca filas raíz {@code REBUILD_REJECTED} cuya selección del hijo esté {@code REBUILD_SENT} (idempotente).
+     */
+    public int propagateChildSentToRootQuarantine(DataSource dataSource, String childRebuildRunId, String rootFragmentSetId)
+            throws SQLException {
+        var sql = """
+                update mt101_failed_record fr
+                   set status = 'REBUILD_SENT'
+                  from mt101_rebuild_selection sel
+                 where sel.rebuild_run_id = ?
+                   and sel.status = 'REBUILD_SENT'
+                   and fr.fragment_set_id = ?
+                   and fr.status = 'REBUILD_REJECTED'
+                   and fr.staging_id = sel.staging_id
+                   and fr.source_file_hash = sel.source_file_hash
+                   and fr.source_record_number = sel.source_record_number
+                """;
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, childRebuildRunId);
+            statement.setString(2, rootFragmentSetId);
+            return statement.executeUpdate();
+        }
+    }
+
+    /**
      * B1': reabre una fila rechazada del correctivo ({@code REBUILD_REJECTED -> QUARANTINED})
      * conservando rebuild_run_id y las referencias correctivas, para que vuelva al ciclo
      * corregir->rebuild. Connection-scoped (audita en la misma transaccion).

@@ -512,6 +512,14 @@ public class Mt101RebuildService {
                 // R6: registra el intento de sincronizacion aunque no haya avance.
                 rebuildRepository.touchLifecycleSync(dataSource, run.rebuildRunId());
                 rebuildRepository.syncSelectionStatusesFromCorrective(dataSource, run.rebuildRunId());
+                // H4: si este run es HIJO (su set original es el correctivo de su padre, no la carga original),
+                // propaga sus fragmentos ENVIADOS a la cuarentena de la RAÍZ por la tupla estable. La sincronización
+                // por debajo une la cuarentena con las selecciones por senders_reference, que cambia entre
+                // generaciones, así que sin esto las 52 filas raíz quedaban REBUILD_REJECTED aunque el hijo ya pagó.
+                var rootSet = rebuildRepository.resolveRootOriginalSet(dataSource, run.rebuildRunId());
+                if (rootSet != null && !rootSet.equals(set)) {
+                    failedRecordRepository.propagateChildSentToRootQuarantine(dataSource, run.rebuildRunId(), rootSet);
+                }
                 if (lifecycle.status() == null || lifecycle.status().isBlank()) {
                     continue;
                 }

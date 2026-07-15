@@ -427,7 +427,16 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         } else if (normalized.contains(",")) {
             normalized = normalized.replace(',', '.');
         }
-        return new BigDecimal(normalized);
+        try {
+            return new BigDecimal(normalized);
+        } catch (NumberFormatException notNumeric) {
+            // Un monto no numérico es un dato MALO de una fila, no un fallo del sistema: devolver null en vez de
+            // propagar mata solo esa transacción, no el lote entero. El fragmento se construye con amount=null y
+            // MT101_VALIDATE lo rechaza vía STRUCT.AMOUNT_POSITIVE (que ya trata value==null como issue) -> la fila
+            // cae en cuarentena, exactamente igual que un BIC o una moneda inválidos. Sin fallback silencioso: la
+            // transacción NO se paga (queda rejected), solo se degrada de "cae el lote" a "cae la fila".
+            return null;
+        }
     }
 
     private String resolveDebitAccountMode(Map<String, Object> configuration,

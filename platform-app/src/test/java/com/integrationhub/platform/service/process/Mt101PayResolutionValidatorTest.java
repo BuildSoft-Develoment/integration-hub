@@ -106,4 +106,36 @@ class Mt101PayResolutionValidatorTest {
                 new TaskView("FILE_READ", 1, "{}"),
                 new TaskView("DB_WRITE", 2, "{}"))));
     }
+
+    // ---- #1 (P1): multi-PAY debe emparejar por resolvesPayTaskRef, no "algún resolutor posterior" ----
+
+    @Test
+    void multiPayEachWithItsOwnResolverIsAccepted() {
+        assertDoesNotThrow(() -> requiringResolver.validate(List.of(
+                new TaskView("MT101_PAY", 1, "{\"taskRef\":\"pay-a\",\"continueOnFailure\":true}"),
+                new TaskView("MT101_PAY", 2, "{\"taskRef\":\"pay-b\",\"continueOnFailure\":true}"),
+                new TaskView("MT101_STATUS", 3, "{\"resolveNormalPay\":true,\"resolvesPayTaskRef\":\"pay-a\"}"),
+                new TaskView("MT101_STATUS", 4, "{\"resolveNormalPay\":true,\"resolvesPayTaskRef\":\"pay-b\"}"))));
+    }
+
+    @Test
+    void multiPayWherePayBHasNoResolverIsRejected() {
+        // pay-b no tiene resolutor: el resolutor de orden 3 declara resolver pay-a. Antes esto pasaba en falso
+        // (habia "algun" STATUS resolutor posterior). Ahora falla porque pay-b queda sin su emparejamiento.
+        var error = assertThrows(IllegalArgumentException.class, () -> requiringResolver.validate(List.of(
+                new TaskView("MT101_PAY", 1, "{\"taskRef\":\"pay-a\",\"continueOnFailure\":true}"),
+                new TaskView("MT101_PAY", 2, "{\"taskRef\":\"pay-b\",\"continueOnFailure\":true}"),
+                new TaskView("MT101_STATUS", 3, "{\"resolveNormalPay\":true,\"resolvesPayTaskRef\":\"pay-a\"}"))));
+        assertTrue(error.getMessage().contains("require-normal-pay-resolver"), () -> "mensaje: " + error.getMessage());
+    }
+
+    @Test
+    void multiPayBareResolverDoesNotSatisfyAnyPay() {
+        // Un resolutor "pelado" (sin resolvesPayTaskRef) en un proceso multi-PAY no satisface a ningun PAY concreto.
+        var error = assertThrows(IllegalArgumentException.class, () -> requiringResolver.validate(List.of(
+                new TaskView("MT101_PAY", 1, "{\"taskRef\":\"pay-a\",\"continueOnFailure\":true}"),
+                new TaskView("MT101_PAY", 2, "{\"taskRef\":\"pay-b\",\"continueOnFailure\":true}"),
+                new TaskView("MT101_STATUS", 3, "{\"resolveNormalPay\":true}"))));
+        assertTrue(error.getMessage().contains("require-normal-pay-resolver"), () -> "mensaje: " + error.getMessage());
+    }
 }

@@ -5,7 +5,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import java.util.List;
-import java.util.Objects;
 
 /**
  * #2 (extensión — cobertura semántica de conexión) — validación de definición del money-path MT101_PAY normal.
@@ -17,6 +16,12 @@ import java.util.Objects;
  * → reporta "todo resuelto" → el proceso cierra {@code COMPLETED} mientras el dinero sigue {@code UNCERTAIN} en la otra
  * conexión. Fail-loud (400 al publicar), sin fallback.</p>
  *
+ * <p><b>Emparejamiento explícito (evita el falso positivo multi-banco):</b> con un único {@code MT101_PAY} en el
+ * proceso, el STATUS resolutor se empareja con él sin ambigüedad. Con <b>varios</b> {@code MT101_PAY}, cada STATUS
+ * resolutor <b>debe</b> declarar {@code resolvesPayTaskRef} = el {@code taskRef} del PAY que resuelve; si no lo
+ * declara, es ambigüedad → 400 (no se adivina comparando contra todos los PAY, que rechazaría un grafo válido
+ * PAY_A/STATUS_A + PAY_B/STATUS_B). El par comparado es exactamente (PAY nombrado, STATUS).</p>
+ *
  * <p><b>Alcance (por qué es sano):</b> el {@code connectionRef} es config estática de ambos providers, enumerable en
  * definición. {@code null}/blank normaliza a "conexión por defecto" (ambos sin {@code connectionRef} = misma conexión).
  * NO valida transporte/banco por ruta ni {@code fragmentSetId} (derivado en runtime del output upstream): eso no es
@@ -25,82 +30,48 @@ import java.util.Objects;
 @ApplicationScoped
 public class Mt101PayStatusConnectionCoverageValidator {
 
-    private static final String MT101_PAY = "MT101_PAY";
-    private static final String MT101_STATUS = "MT101_STATUS";
-
-    private final ObjectMapper objectMapper;
+    private final Mt101PayResolverPairing pairing;
 
     @Inject
     public Mt101PayStatusConnectionCoverageValidator(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+        this.pairing = new Mt101PayResolverPairing(objectMapper);
     }
 
     /**
      * Valida el grafo. Lanza {@link IllegalArgumentException} (mapeada a 400 por el recurso) si un
-     * {@code MT101_STATUS(resolveNormalPay=true)} posterior a un {@code MT101_PAY} usa un {@code connectionRef} distinto.
+     * {@code MT101_STATUS(resolveNormalPay=true)} resuelve un {@code MT101_PAY} con {@code connectionRef} distinto, o
+     * si con varios PAY el STATUS no declara a cuál resuelve ({@code resolvesPayTaskRef}).
      */
     public void validate(List<Mt101PayResolutionValidator.TaskView> tasks) {
         if (tasks == null || tasks.isEmpty()) {
             return;
         }
-        for (var pay : tasks) {
-            if (!MT101_PAY.equalsIgnoreCase(pay.taskType()) || pay.taskOrder() == null) {
+        var pays = pairing.pays(tasks);
+        if (pays.isEmpty()) {
+            return;
+        }
+        for (var status : tasks) {
+            if (!pairing.isNormalPayResolver(status)) {
                 continue;
             }
-            var payConnection = normalize(stringConfig(pay.configurationJson(), "connectionRef"));
-            for (var status : tasks) {
-                if (!MT101_STATUS.equalsIgnoreCase(status.taskType())
-                        || status.taskOrder() == null
-                        || status.taskOrder() <= pay.taskOrder()
-                        || !boolConfig(status.configurationJson(), "resolveNormalPay")) {
-                    continue;
-                }
-                var statusConnection = normalize(stringConfig(status.configurationJson(), "connectionRef"));
-                if (!Objects.equals(payConnection, statusConnection)) {
-                    throw new IllegalArgumentException(
-                            "MT101_STATUS (task order " + status.taskOrder() + ") resolves the normal PAY "
-                            + "(resolveNormalPay=true) but reads connection '" + describe(statusConnection)
-                            + "', which differs from the MT101_PAY (task order " + pay.taskOrder() + ") connection '"
-                            + describe(payConnection) + "'. The resolver must use the same connectionRef as the "
-                            + "MT101_PAY; otherwise it reads an empty fragment set from the wrong ledger and would "
-                            + "falsely close the process while the money is still UNCERTAIN.");
-                }
+            var pay = pairing.payForResolver(status, pays);
+            if (pay == null) {
+                // No hay PAY anterior que emparejar: este validador solo cubre la cobertura de conexión PAY→STATUS.
+                // "PAY sin resolutor" o "resolutor sin PAY" son responsabilidad de Mt101PayResolutionValidator.
+                continue;
             }
-        }
-    }
-
-    private static String describe(String connection) {
-        return connection == null ? "<default>" : connection;
-    }
-
-    /** null/blank → null (conexión por defecto), para que dos tareas "sin connectionRef" cuenten como la misma. */
-    private static String normalize(String connection) {
-        return connection == null || connection.isBlank() ? null : connection.trim();
-    }
-
-    private String stringConfig(String configurationJson, String key) {
-        if (configurationJson == null || configurationJson.isBlank()) {
-            return null;
-        }
-        try {
-            var node = objectMapper.readTree(configurationJson);
-            var value = node.get(key);
-            return value == null || value.isNull() ? null : value.asText();
-        } catch (Exception malformed) {
-            return null;
-        }
-    }
-
-    private boolean boolConfig(String configurationJson, String key) {
-        if (configurationJson == null || configurationJson.isBlank()) {
-            return false;
-        }
-        try {
-            var node = objectMapper.readTree(configurationJson);
-            var value = node.get(key);
-            return value != null && value.asBoolean(false);
-        } catch (Exception malformed) {
-            return false;
+            var payConnection = pairing.connectionOf(pay);
+            var statusConnection = pairing.connectionOf(status);
+            if (!java.util.Objects.equals(payConnection, statusConnection)) {
+                throw new IllegalArgumentException(
+                        "MT101_STATUS (task order " + status.taskOrder() + ") resolves the normal PAY "
+                        + "(resolveNormalPay=true) but reads connection '"
+                        + Mt101PayResolverPairing.describeConnection(statusConnection)
+                        + "', which differs from the MT101_PAY (task order " + pay.taskOrder() + ") connection '"
+                        + Mt101PayResolverPairing.describeConnection(payConnection) + "'. The resolver must use the "
+                        + "same connectionRef as the MT101_PAY; otherwise it reads an empty fragment set from the "
+                        + "wrong ledger and would falsely close the process while the money is still UNCERTAIN.");
+            }
         }
     }
 }

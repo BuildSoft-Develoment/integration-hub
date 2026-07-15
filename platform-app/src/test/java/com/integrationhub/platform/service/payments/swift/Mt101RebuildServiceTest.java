@@ -562,6 +562,9 @@ class Mt101RebuildServiceTest {
                     + "pay_completed_at timestamp, pay_error_message text,"
                     + "pay_request_reason text, pay_request_ticket varchar(120),"
                     + "pay_resolved_by varchar(120), pay_resolved_at timestamp, pay_resolution_reason text,"
+                    // H4: la cadena de runs hijos (resolveRootOriginalSet sube por parent_rebuild_run_id).
+                    + "parent_rebuild_run_id varchar(80), parent_corrective_set_id varchar(80),"
+                    + "corrective_generation int not null default 1,"
                     + "created_at timestamp not null default current_timestamp,"
                     + "approved_at timestamp, executed_at timestamp, built_at timestamp, completed_at timestamp,"
                     + "last_lifecycle_sync_at timestamp,"

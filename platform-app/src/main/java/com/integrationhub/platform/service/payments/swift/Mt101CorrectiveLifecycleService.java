@@ -162,6 +162,14 @@ public class Mt101CorrectiveLifecycleService {
                 throw new IllegalArgumentException("rebuild run " + runId
                         + " must be ARCHIVED before requesting corrective pay; current status is " + run.status());
             }
+            // D2-R1: re-solicitar un run PARTIALLY_SENT SOLO tiene sentido si quedan fragmentos INVALIDATED (fallo de
+            // transporte, re-enviables). Si no hay ninguno, es un no-op que confundiria al operador (los REJECTED se
+            // recuperan con request-child, no re-solicitando). Fail-loud con guía.
+            if ("PARTIALLY_SENT".equals(normalize(run.payStatus()))
+                    && rebuildRepository.countInvalidatedPayFragments(dataSource, runId) == 0) {
+                throw new IllegalArgumentException("rebuild run " + runId + " is PARTIALLY_SENT with no INVALIDATED "
+                        + "(transport-failed) fragments to re-send; use request-child for REJECTED fragments.");
+            }
             // v40-bis (P0 inmutabilidad + atomicidad): se RESERVA el run de forma EXCLUSIVA y ATOMICA antes de
             // tocar el ledger (NOT_REQUESTED/FAILED/INVALIDATED -> PREPARING_PLAN; o se reclama una reserva caida).
             // Si ya hay una solicitud/despacho en curso (REQUESTED/EXECUTING/...) o OTRO maker esta preparando, la
@@ -407,15 +415,19 @@ public class Mt101CorrectiveLifecycleService {
                     runPostPaySync(prep, "MT101_RECONCILE", reconcileProvider,
                             correctivePaySource(runId, connectionRef), dataSource, runId, false, frozenReconcileConfig);
                 } else if (summary.invalidated() > 0 && summary.rejected() == 0) {
-                    // P0.3 v25: el plan cambio tras aprobar (drift) y se bloqueo el envio. NO es un rechazo
-                    // bancario (FAILED): es INVALIDATED, re-solicitable, con su propia accion auditada.
+                    // P0.3 v25 + D.2: fragmentos INVALIDATED sin ningún rechazo de negocio. Dos causas posibles, ambas
+                    // re-solicitables (NO es un rechazo bancario -> NO FAILED terminal): (a) el plan cambió tras aprobar
+                    // (drift) y se bloqueó el envío; (b) fallo de TRANSPORTE/AUTENTICACIÓN antes del despacho (el banco
+                    // no recibió nada). En ambas se arregla la causa (re-aprobar el plan / la credencial) y se re-pide.
                     rebuildRepository.markPayCompletedWithAction(dataSource, runId, "INVALIDATED",
-                            "PAY invalidated by plan drift for " + summary.invalidated() + " fragment(s); "
-                                    + "request and approve again", approver,
-                            "invalidated=" + summary.invalidated() + " (payload/route changed after approval)",
+                            "PAY invalidated (not sent to the bank) for " + summary.invalidated() + " fragment(s) "
+                                    + "by plan drift or a transport/auth failure; fix the cause and request/approve "
+                                    + "again", approver,
+                            "invalidated=" + summary.invalidated() + " (re-solicitable: not a bank rejection)",
                             payloadHash, configHash);
                     throw new IllegalStateException("MT101_PAY invalidated " + summary.invalidated()
-                            + " fragment(s) by plan drift for run " + runId + "; request and approve again");
+                            + " fragment(s) for run " + runId + " (not sent to the bank; plan drift or transport/auth "
+                            + "failure); fix the cause and request/approve again");
                 } else {
                     rebuildRepository.markPayCompletedWithAction(dataSource, runId, "FAILED",
                             payResult.details() == null ? "MT101_PAY rejected all fragments" : payResult.details(),

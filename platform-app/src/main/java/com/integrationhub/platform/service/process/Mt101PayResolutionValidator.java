@@ -32,10 +32,7 @@ import java.util.List;
 @ApplicationScoped
 public class Mt101PayResolutionValidator {
 
-    private static final String MT101_PAY = "MT101_PAY";
-    private static final String MT101_STATUS = "MT101_STATUS";
-
-    private final ObjectMapper objectMapper;
+    private final Mt101PayResolverPairing pairing;
     /** #1: si el ambiente exige reconciliación in-line, cada MT101_PAY debe traer su MT101_STATUS(resolveNormalPay). */
     private final boolean requireNormalPayResolver;
 
@@ -44,7 +41,7 @@ public class Mt101PayResolutionValidator {
             ObjectMapper objectMapper,
             @ConfigProperty(name = "mt101.pay.require-normal-pay-resolver", defaultValue = "false")
             boolean requireNormalPayResolver) {
-        this.objectMapper = objectMapper;
+        this.pairing = new Mt101PayResolverPairing(objectMapper);
         this.requireNormalPayResolver = requireNormalPayResolver;
     }
 
@@ -65,43 +62,34 @@ public class Mt101PayResolutionValidator {
         if (tasks == null || tasks.isEmpty()) {
             return;
         }
-        for (var pay : tasks) {
-            if (!MT101_PAY.equalsIgnoreCase(pay.taskType()) || pay.taskOrder() == null) {
-                continue;
-            }
-            var hasDownstreamNormalPayResolver = tasks.stream().anyMatch(candidate ->
-                    MT101_STATUS.equalsIgnoreCase(candidate.taskType())
-                            && candidate.taskOrder() != null
-                            && candidate.taskOrder() > pay.taskOrder()
-                            && boolConfig(candidate.configurationJson(), "resolveNormalPay"));
-            // #1: ambiente con reconciliación in-line obligatoria → cada MT101_PAY debe traer su resolutor posterior.
-            if (requireNormalPayResolver && !hasDownstreamNormalPayResolver) {
+        var pays = pairing.pays(tasks);
+        if (pays.isEmpty()) {
+            return;
+        }
+        // Multi-PAY: la obligatoriedad exige emparejamiento EXACTO por resolvesPayTaskRef, igual que el validador de
+        // conexión. Con un solo PAY, un resolutor "pelado" posterior lo satisface (compat con el flujo simple).
+        var multiPay = pays.size() > 1;
+        for (var pay : pays) {
+            // #1: ¿existe un MT101_STATUS(resolveNormalPay=true) POSTERIOR que resuelva EXACTAMENTE este PAY?
+            // Antes se preguntaba "¿hay ALGÚN resolutor posterior?" sin mirar resolvesPayTaskRef → en multi-PAY, un
+            // PAY sin resolutor propio pasaba en falso porque otro PAY tenía el suyo. Ahora se empareja por taskRef.
+            var hasResolver = pairing.hasResolverFor(pay, tasks, multiPay);
+            // #1: ambiente con reconciliación in-line obligatoria → cada MT101_PAY debe traer SU resolutor posterior.
+            if (requireNormalPayResolver && !hasResolver) {
                 throw new IllegalArgumentException(
                         "MT101_PAY (task order " + pay.taskOrder() + ") requires a later MT101_STATUS with "
-                        + "resolveNormalPay=true because this environment enforces in-line normal-pay reconciliation "
+                        + "resolveNormalPay=true"
+                        + (multiPay ? " and resolvesPayTaskRef matching this PAY's taskRef" : "")
+                        + " because this environment enforces in-line normal-pay reconciliation "
                         + "(mt101.pay.require-normal-pay-resolver=true).");
             }
-            if (hasDownstreamNormalPayResolver && !boolConfig(pay.configurationJson(), "continueOnFailure")) {
+            if (hasResolver && !pairing.boolConfig(pay.configurationJson(), "continueOnFailure")) {
                 throw new IllegalArgumentException(
                         "MT101_PAY (task order " + pay.taskOrder() + ") is followed by an MT101_STATUS with "
                         + "resolveNormalPay=true, so the MT101_PAY must set continueOnFailure=true; otherwise an "
                         + "UNCERTAIN payment stops the process in NEEDS_RECONCILIATION before the resolver runs, "
                         + "leaving the auto-reconciliation stage dead.");
             }
-        }
-    }
-
-    private boolean boolConfig(String configurationJson, String key) {
-        if (configurationJson == null || configurationJson.isBlank()) {
-            return false;
-        }
-        try {
-            var node = objectMapper.readTree(configurationJson);
-            var value = node.get(key);
-            return value != null && value.asBoolean(false);
-        } catch (Exception malformed) {
-            // Config no parseable: tratamos la clave como ausente (no bloquea por sí sola; el resto del pipeline valida).
-            return false;
         }
     }
 }

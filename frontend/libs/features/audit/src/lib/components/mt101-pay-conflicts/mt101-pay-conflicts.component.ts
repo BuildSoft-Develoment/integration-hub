@@ -55,6 +55,7 @@ export class Mt101PayConflictsComponent {
   // A2: resolución gobernada (reconocer con motivo) del conflicto en modo resolución.
   readonly resolvingKey = signal<string | null>(null);
   resolveReason = '';
+  resolveTicket = '';
   readonly resolveBusy = signal(false);
   readonly resolveError = signal<string | null>(null);
 
@@ -119,16 +120,25 @@ export class Mt101PayConflictsComponent {
     this.confirmations.set([]);
     this.confirmationsError.set(null);
     this.confirmationsLoading.set(true);
-    this.api.mt101PayConflictConfirmations({ sendersReference: c.sendersReference }).subscribe({
-      next: (rows) => {
-        this.confirmations.set(rows);
-        this.confirmationsLoading.set(false);
-      },
-      error: () => {
-        this.confirmationsError.set(this.i18n.t('audit.payConflicts.evidenceError'));
-        this.confirmationsLoading.set(false);
-      },
-    });
+    if (c.processExecutionId == null) {
+      // Sin ejecución no se puede acotar la evidencia a ESTE conflicto (la referencia :20: se repite entre
+      // corridas): se avisa en vez de mostrar evidencia potencialmente de otra ejecución.
+      this.confirmationsError.set(this.i18n.t('audit.payConflicts.evidenceError'));
+      this.confirmationsLoading.set(false);
+      return;
+    }
+    this.api
+      .mt101PayConflictConfirmations({ sendersReference: c.sendersReference, processExecutionId: c.processExecutionId })
+      .subscribe({
+        next: (rows) => {
+          this.confirmations.set(rows);
+          this.confirmationsLoading.set(false);
+        },
+        error: () => {
+          this.confirmationsError.set(this.i18n.t('audit.payConflicts.evidenceError'));
+          this.confirmationsLoading.set(false);
+        },
+      });
   }
 
   /** A2: abre/cierra el modo resolución (reconocer con motivo) de un conflicto. */
@@ -140,12 +150,14 @@ export class Mt101PayConflictsComponent {
     }
     this.resolvingKey.set(key);
     this.resolveReason = '';
+    this.resolveTicket = '';
     this.resolveError.set(null);
   }
 
   cancelResolve(): void {
     this.resolvingKey.set(null);
     this.resolveReason = '';
+    this.resolveTicket = '';
     this.resolveError.set(null);
   }
 
@@ -155,7 +167,10 @@ export class Mt101PayConflictsComponent {
    */
   confirmResolve(c: Mt101OpenPayConflict): void {
     const reason = this.resolveReason.trim();
-    if (!reason || this.resolveBusy()) {
+    const ticketRef = this.resolveTicket.trim();
+    // Motivo Y ticket obligatorios: el reconocimiento apaga la alerta de una contradicción ledger↔banco, así que
+    // exige trazabilidad (quién, por qué, contra qué ticket). El backend también lo valida (400 si falta).
+    if (!reason || !ticketRef || this.resolveBusy()) {
       return;
     }
     this.resolveBusy.set(true);
@@ -165,6 +180,7 @@ export class Mt101PayConflictsComponent {
       setId: c.source === 'CORRECTIVE' ? (c.rebuildRunId ?? '') : c.fragmentSetId,
       sendersReference: c.sendersReference,
       reason,
+      ticketRef,
     }).subscribe({
       next: () => {
         this.resolveBusy.set(false);

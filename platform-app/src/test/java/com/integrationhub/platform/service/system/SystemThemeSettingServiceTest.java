@@ -82,6 +82,7 @@ class SystemThemeSettingServiceTest {
 
     @Test
     void updateRejectsInvalidLogoDataUri() {
+        var repository = mock(SystemThemeSettingRepository.class);
         var existing = new SystemThemeSetting();
         existing.id = 1L;
         when(repository.findSingleton()).thenReturn(existing);

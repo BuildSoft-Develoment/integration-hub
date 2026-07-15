@@ -244,8 +244,11 @@ export class AuditApiService {
   mt101PayConflictConfirmations(query: {
     connectionRef?: string;
     sendersReference: string;
+    processExecutionId: number | string;
   }): Observable<Mt101OpenPayConflictConfirmation[]> {
-    let httpParams = new HttpParams().set('sendersReference', query.sendersReference);
+    let httpParams = new HttpParams()
+      .set('sendersReference', query.sendersReference)
+      .set('processExecutionId', String(query.processExecutionId));
     if (query.connectionRef?.trim()) {
       httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }
@@ -256,6 +259,7 @@ export class AuditApiService {
   /**
    * A2 (resolucion gobernada): reconoce un conflicto con motivo — limpia el flag y deja la trama PAY_CONFLICT_RESOLVED,
    * sin tocar el terminal real. source=NORMAL usa fragmentSetId; source=CORRECTIVE usa rebuildRunId (ambos en setId).
+   * El motivo y el ticket viajan en el body JSON (no en la URL); ticketRef es obligatorio.
    */
   mt101AcknowledgePayConflict(body: {
     connectionRef?: string;
@@ -263,17 +267,18 @@ export class AuditApiService {
     setId: string;
     sendersReference: string;
     reason: string;
+    ticketRef: string;
   }): Observable<{ acknowledged: number }> {
-    let httpParams = new HttpParams()
-      .set('source', body.source)
-      .set('setId', body.setId)
-      .set('sendersReference', body.sendersReference)
-      .set('reason', body.reason);
-    if (body.connectionRef?.trim()) {
-      httpParams = httpParams.set('connectionRef', body.connectionRef.trim());
-    }
     return this.http.post<{ acknowledged: number }>(
-      '/api/query/mt101-fragments/pay-conflicts/acknowledge', null, { params: httpParams });
+      '/api/query/mt101-fragments/pay-conflicts/acknowledge',
+      {
+        connectionRef: body.connectionRef?.trim() || undefined,
+        source: body.source,
+        setId: body.setId,
+        sendersReference: body.sendersReference,
+        reason: body.reason,
+        ticketRef: body.ticketRef,
+      });
   }
 
   /**

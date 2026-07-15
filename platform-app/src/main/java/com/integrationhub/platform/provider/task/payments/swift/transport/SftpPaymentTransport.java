@@ -88,6 +88,9 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
         // Marca si el ultimo fallo dejo el envio en estado INCIERTO (el upload/rename del archivo
         // final ya habia comenzado y la red fallo): pudo llegar al banco; no es un rechazo reusable.
         boolean lastUncertain = false;
+        // D.2: marca si el ultimo fallo fue de TRANSPORTE/AUTH antes del despacho (el banco no recibio nada) ->
+        // re-solicitable (transportFailure), distinto de un rechazo de negocio (duplicado/hash, politica FAIL).
+        boolean lastRetriable = false;
         for (int attempt = 1; attempt <= retry.maxRetries() + 1; attempt++) {
             var result = attemptUpload(message, configuration);
             if (result.accepted()) {
@@ -96,14 +99,20 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
             }
             lastError = result.lastError();
             lastUncertain = result.uncertain();
+            lastRetriable = result.retriable();
             if (attempt <= retry.maxRetries()) {
                 sleepBackoff(retry, attempt);
             }
         }
         // Reintentos agotados: si el ultimo fallo fue post-despacho, NO lo reportamos como rechazo
-        // (que el lifecycle reusaria) sino como INCIERTO, a resolver por verificacion remota/STATUS.
-        return lastUncertain
-                ? TransportResult.uncertain(retry.maxRetries() + 1,
+        // (que el lifecycle reusaria) sino como INCIERTO, a resolver por verificacion remota/STATUS. Si fue de
+        // transporte/auth (pre-despacho), es re-solicitable (D.2); si no, rechazo de negocio del banco.
+        if (lastUncertain) {
+            return TransportResult.uncertain(retry.maxRetries() + 1,
+                    System.currentTimeMillis() - startedAt, lastError);
+        }
+        return lastRetriable
+                ? TransportResult.transportFailure(retry.maxRetries() + 1,
                         System.currentTimeMillis() - startedAt, lastError)
                 : TransportResult.rejected(retry.maxRetries() + 1,
                         System.currentTimeMillis() - startedAt, lastError);
@@ -232,11 +241,14 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
             var durationMs = System.currentTimeMillis() - startedAt;
             var detail = "SFTP " + error.getClass().getSimpleName() + ": " + error.getMessage();
             // Sin fallback por texto del error: la clasificacion es por FASE. Antes del despacho
-            // (connect/stat) = REJECTED reusable; durante/despues del put/rename = UNCERTAIN, que el
-            // lifecycle nunca reenvia a ciegas (se resuelve verificando el dropPath remoto / STATUS).
+            // (connect/auth/stat) = fallo de TRANSPORTE (el banco no recibio nada) -> re-solicitable
+            // (transportFailure -> INVALIDATED), NO un rechazo de negocio del banco. Durante/despues del
+            // put/rename = UNCERTAIN, que el lifecycle nunca reenvia a ciegas (se resuelve verificando el
+            // dropPath remoto / STATUS). Los rechazos legitimos (duplicado/hash, politica FAIL) NO pasan por
+            // aqui: se devuelven como rejected() explicito antes del despacho.
             return dispatchStarted
                     ? TransportResult.uncertain(1, durationMs, detail)
-                    : TransportResult.rejected(1, durationMs, detail);
+                    : TransportResult.transportFailure(1, durationMs, detail);
         } finally {
             if (channel != null && channel.isConnected()) {
                 channel.disconnect();

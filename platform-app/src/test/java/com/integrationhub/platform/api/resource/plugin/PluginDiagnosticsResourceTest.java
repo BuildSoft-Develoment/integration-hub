@@ -85,7 +85,8 @@ class PluginDiagnosticsResourceTest {
                 "https://plugins.example.com/catalog/acme.json",
                 "stable",
                 "1.0.0",
-                true);
+                true,
+                null);
 
         var diagnostics = resource.install(request);
 

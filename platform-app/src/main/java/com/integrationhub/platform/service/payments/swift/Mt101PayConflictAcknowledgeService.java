@@ -50,10 +50,12 @@ public class Mt101PayConflictAcknowledgeService {
     /**
      * Reconoce el conflicto de un {@code :20:}. {@code source} = {@code NORMAL} (usa {@code fragmentSetId}) o
      * {@code CORRECTIVE} (usa {@code rebuildRunId}); {@code setOrRunId} es el identificador correspondiente. Requiere
-     * {@code actor} y {@code reason}. Idempotente: si no hay conflicto abierto, no afecta filas ni emite tramas.
+     * {@code actor}, {@code reason} y {@code ticketRef}. Idempotente: si no hay conflicto abierto, no afecta filas ni
+     * emite tramas. {@code source} se valida estrictamente (NORMAL|CORRECTIVE): un valor desconocido es 400, nunca
+     * cae por defecto a NORMAL (eso reconocería el conflicto equivocado).
      */
     public AcknowledgeResult acknowledge(String connectionRef, String source, String setOrRunId,
-                                         String sendersReference, String actor, String reason) {
+                                         String sendersReference, String actor, String reason, String ticketRef) {
         if (sendersReference == null || sendersReference.isBlank()) {
             throw new IllegalArgumentException("sendersReference is required");
         }
@@ -63,8 +65,19 @@ public class Mt101PayConflictAcknowledgeService {
         if (reason == null || reason.isBlank()) {
             throw new IllegalArgumentException("reason is required to acknowledge a pay conflict");
         }
-        var corrective = "CORRECTIVE".equalsIgnoreCase(source);
-        var ackReason = "ACK by " + (actor == null || actor.isBlank() ? "unknown" : actor) + ": " + reason.trim();
+        if (ticketRef == null || ticketRef.isBlank()) {
+            throw new IllegalArgumentException("ticketRef is required to acknowledge a pay conflict (traceability)");
+        }
+        var normalizedSource = source == null ? "" : source.trim().toUpperCase(java.util.Locale.ROOT);
+        var corrective = switch (normalizedSource) {
+            case "CORRECTIVE" -> true;
+            case "NORMAL" -> false;
+            default -> throw new IllegalArgumentException(
+                    "source must be NORMAL or CORRECTIVE, got: '" + source + "'");
+        };
+        var actorName = actor == null || actor.isBlank() ? "unknown" : actor;
+        var ackReason = reason.trim();
+        var ticket = ticketRef.trim();
         var dataSource = resolveDataSource(connectionRef);
         try (var connection = dataSource.getConnection()) {
             var previousAutoCommit = connection.getAutoCommit();
@@ -72,13 +85,13 @@ public class Mt101PayConflictAcknowledgeService {
             try {
                 var rows = corrective
                         ? repository.acknowledgeCorrectivePayConflict(connection, setOrRunId.trim(),
-                                sendersReference.trim(), ackReason)
+                                sendersReference.trim(), actorName, ackReason, ticket)
                         : repository.acknowledgeNormalPayConflict(connection, setOrRunId.trim(),
-                                sendersReference.trim(), ackReason);
+                                sendersReference.trim(), actorName, ackReason, ticket);
                 var envelopes = rows.stream()
                         .map(row -> Mt101PayConflictAudit.resolvedEnvelope(
                                 row.processExecutionId(), row.taskDefinitionId(), row.sendersReference(),
-                                row.retainedStatus(), actor, reason.trim()))
+                                row.retainedStatus(), actor, ackReason, ticket, row.originalReason()))
                         .toList();
                 // Atomicidad: la limpieza del flag y la trama PAY_CONFLICT_RESOLVED se escriben en la MISMA tx.
                 // Si el spool falla, se hace rollback del flag → no queda un conflicto "resuelto" sin su trama.
