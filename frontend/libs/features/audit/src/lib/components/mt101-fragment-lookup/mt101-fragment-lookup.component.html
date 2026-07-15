@@ -177,7 +177,13 @@
                   </td>
                   <td>{{ row.fragmentIndex }} / {{ row.fragmentTotal }}</td>
                   <td class="lookup__mono">{{ row.sendersReference || '-' }}</td>
-                  <td class="lookup__status--{{ row.status }}">{{ row.status || '-' }}</td>
+                  <td class="lookup__status--{{ row.status }}">
+                    {{ row.status || '-' }}
+                    @if (row.status === 'ARCHIVED' && row.errorMessage) {
+                      <span class="lookup__retry-chip" role="note"
+                            [title]="i18n.t('audit.lookup.archivedTechnicalFailure')">{{ i18n.t('audit.lookup.archivedTechnicalFailure') }}</span>
+                    }
+                  </td>
                   <td>{{ row.errorMessage || '-' }}</td>
                   <td>
                     @if (row.updatedAt || row.createdAt; as ts) {

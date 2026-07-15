@@ -1346,6 +1346,7 @@ export const es = {
   'audit.lookup.col.range': 'Rango origen',
   'audit.lookup.col.fragment': 'Fragmento',
   'audit.lookup.col.status': 'Estado',
+  'audit.lookup.archivedTechnicalFailure': 'Re-pagable por fallo tecnico pre-despacho',
   'audit.lookup.col.error': 'Error',
   'audit.lookup.col.updated': 'Actualizado',
   'audit.lookup.goQuarantine': 'Cuarentena',

@@ -12,6 +12,11 @@
     .lookup__error { color:var(--ih-status-error); }
     .lookup__status--SENT,.lookup__status--ARCHIVED,.lookup__status--COMPOSED { color:var(--ih-status-success); }
     .lookup__status--REJECTED,.lookup__status--ERROR { color:var(--ih-status-error); }
+    /* #8: distingue un ARCHIVED revertido por fallo tecnico pre-despacho (re-pagable) de uno recien archivado. */
+    .lookup__retry-chip { display:inline-block; margin-left:.4rem; padding:.05rem .4rem; border-radius:999px;
+      font-size:.68rem; font-weight:600; color:var(--ih-status-warning);
+      background:color-mix(in srgb, var(--ih-status-warning) 15%, transparent);
+      border:1px solid color-mix(in srgb, var(--ih-status-warning) 40%, transparent); vertical-align:middle; }
 
     /* B (página única): panel de lineage E2E embebido. */
     .lookup__lineage { border:1px solid var(--ih-border); border-radius:8px; padding:.75rem 1rem; background:color-mix(in srgb, var(--ih-surface-alt) 88%, transparent); }
