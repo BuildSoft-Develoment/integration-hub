@@ -65,8 +65,9 @@ Priorizados. "Bloqueante" = no homologaría sin cerrarlo; "Fuerte" = muy recomen
 
 | Item | Estado | Nota |
 |---|---|---|
-| D2-R1: reproceso de INVALIDATED en run PARTIALLY_SENT | **Implementado (tanda-3)** | Money-safe verificado; pendiente validación IT (Docker) |
-| D2-R2: reproceso de INVALIDATED en run mixto (con rechazo del banco) | Abierto | Corner raro; coexistir child+re-send necesita diseño |
+| D2-R1: reproceso de INVALIDATED en run PARTIALLY_SENT | **Implementado + IT (tanda-3)** | Money-safe verificado |
+| D2-R2: run mixto sent=0 rejected>0 invalidated>0 | **Implementado + IT (commit `73b6514e`)** | pay_status PARTIALLY_SENT (no FAILED) → habilita request-child (rechazados) + re-request (invalidados); cuarentena por-fragmento |
+| Tandas 4-6 (dureza transporte/PAY normal): #7 DISPATCHING→ARCHIVED, #8a lista→INVALIDATED, tanda-5 uncertain **sticky**, #9 revert-skipped auditado, #9-eq lista + refuerzo bloqueo + gate prod | **Implementado + tests** | Cierra los huecos de v67/v68 con defensa en capas contra doble pago; ~200 tests verdes |
 | Evidencia viva tandas 1-3 en nativo | **Hecha (2026-07-15)** | Ver `evidencias/validacion-viva-tandas-20260715.md`: H4 (100 filas raíz → REBUILD_SENT estable), D.2 (credencial mala → INVALIDATED re-solicitable → re-envío +40 exactos, cero doble pago). Destapó y arregló el hueco `deriveLifecycleStatus`+SUPERSEDED |
 | Validación IT de tandas 2-3 (62 correctivos + nuevos) | **Hecha** | ≈175 tests verdes (62/62 correctivos, 9/9 rebuild, 3/3 H4 IT, D.2, validadores) |
 | Evidencia de **1.000.000** de registros en esta versión | No ejecutada | `Mt101MillionFileProcessE2EIT`: heap, duración, PAY, STATUS, NEEDS_RECONCILIATION, recovery. **H7 desbloqueado (commit `982903cd`):** el tope de batch anti-deadlock es ahora property de runtime (`mt101.build.insert-batch-max-bytes`, default 200KB, env-tuneable sin rebuild) |
@@ -82,7 +83,7 @@ Priorizados. "Bloqueante" = no homologaría sin cerrarlo; "Fuerte" = muy recomen
 
 | Item | Estado |
 |---|---|
-| Maker-checker para `PAY_CONFLICT_RESOLVED` (reconocer un conflicto apaga una alerta crítica) | Decisión de negocio pendiente. Hoy single-actor + ticket obligatorio. Recomendado: opt-in por ambiente, obligatorio en prod bancaria |
+| Maker-checker para `PAY_CONFLICT_RESOLVED` | **Implementado opt-in (commit `c095949c`)** — `mt101.pay.conflict.acknowledge.maker-checker.enabled` (default off; on en prod bancaria): request-acknowledge (maker) + approve-acknowledge (checker ≠ maker). Single-actor intacto con off. IT 5/5. **Falta: activarlo en la config de prod.** |
 
 ## B.4 — Seguridad y entrega — **Operativo, antes de prod**
 
