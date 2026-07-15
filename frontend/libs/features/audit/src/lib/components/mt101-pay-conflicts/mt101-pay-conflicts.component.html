@@ -86,10 +86,22 @@
                     @if (resolveError()) {
                       <p class="conflicts__error" role="alert">{{ resolveError() }}</p>
                     }
+                    @if (makerCheckerEnabled()) {
+                      <p class="ih-muted">{{ i18n.t('audit.payConflicts.makerCheckerHint') }}</p>
+                    }
                     <div class="conflicts__resolve-actions">
-                      <button mat-flat-button color="primary" type="button" [disabled]="!resolveReason.trim() || !resolveTicket.trim() || resolveBusy()" (click)="confirmResolve(c)">
-                        {{ i18n.t('audit.payConflicts.resolveConfirm') }}
-                      </button>
+                      @if (makerCheckerEnabled()) {
+                        <button mat-flat-button color="primary" type="button" [disabled]="!resolveReason.trim() || !resolveTicket.trim() || resolveBusy()" (click)="requestAck(c)">
+                          {{ i18n.t('audit.payConflicts.requestAck') }}
+                        </button>
+                        <button mat-stroked-button color="primary" type="button" [disabled]="resolveBusy()" (click)="approveAck(c)" [matTooltip]="i18n.t('audit.payConflicts.approveAckHint')">
+                          {{ i18n.t('audit.payConflicts.approveAck') }}
+                        </button>
+                      } @else {
+                        <button mat-flat-button color="primary" type="button" [disabled]="!resolveReason.trim() || !resolveTicket.trim() || resolveBusy()" (click)="confirmResolve(c)">
+                          {{ i18n.t('audit.payConflicts.resolveConfirm') }}
+                        </button>
+                      }
                       <button mat-stroked-button type="button" [disabled]="resolveBusy()" (click)="cancelResolve()">
                         {{ i18n.t('audit.common.cancel') }}
                       </button>

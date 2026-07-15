@@ -1228,6 +1228,12 @@ export const en = {
   'audit.payConflicts.resolveTicket': 'Ticket',
   'audit.payConflicts.resolveConfirm': 'Acknowledge',
   'audit.payConflicts.resolveError': 'Could not acknowledge the conflict.',
+  'audit.payConflicts.makerCheckerHint': 'Maker-checker on: one actor REQUESTS the acknowledgement and a DIFFERENT actor approves it (segregation of duties).',
+  'audit.payConflicts.requestAck': 'Request acknowledgement',
+  'audit.payConflicts.requestError': 'Could not record the acknowledgement request.',
+  'audit.payConflicts.approveAck': 'Approve (different checker)',
+  'audit.payConflicts.approveAckHint': 'Approves a pending request. The approver must differ from the requester.',
+  'audit.payConflicts.approveError': 'Could not approve the acknowledgement (no pending request, or the checker is the same maker).',
   'audit.payDispatch.title': 'List PAY dispatch',
   'audit.payDispatch.subtitle':
     'Direct list-dispatch payments (in-memory MT101_BUILD/SPLIT → PAY). Uncertain or in-flight dispatches block re-send until reconciled.',

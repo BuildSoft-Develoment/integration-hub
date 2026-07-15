@@ -59,6 +59,9 @@ export class Mt101PayConflictsComponent {
   readonly resolveBusy = signal(false);
   readonly resolveError = signal<string | null>(null);
 
+  // #6: si maker-checker está activo, la UI cambia el flujo single-actor por dos pasos (solicitar → aprobar).
+  readonly makerCheckerEnabled = signal(false);
+
   constructor() {
     this.breadcrumb.setItems([
       { label: this.i18n.t('audit.breadcrumb.root'), link: ['/audit'] },
@@ -66,6 +69,11 @@ export class Mt101PayConflictsComponent {
     ]);
     this.breadcrumb.setBackLabel(this.i18n.t('audit.common.back'));
     this.load();
+    // La UI pregunta al backend si maker-checker está activo para no llamar al endpoint equivocado (evita el 400).
+    this.api.mt101PayConflictSettings().subscribe({
+      next: (s) => this.makerCheckerEnabled.set(s.makerCheckerEnabled),
+      error: () => this.makerCheckerEnabled.set(false),
+    });
   }
 
   /** Primera página: reinicia la lista y el cursor. */
@@ -190,6 +198,64 @@ export class Mt101PayConflictsComponent {
       error: () => {
         this.resolveBusy.set(false);
         this.resolveError.set(this.i18n.t('audit.payConflicts.resolveError'));
+      },
+    });
+  }
+
+  /**
+   * #6 maker-checker paso 1 (maker): solicita reconocer con motivo+ticket. NO apaga la alerta (el conflicto sigue en
+   * el inbox hasta que un checker distinto apruebe). Requiere motivo y ticket (igual que el single-actor).
+   */
+  requestAck(c: Mt101OpenPayConflict): void {
+    const reason = this.resolveReason.trim();
+    const ticketRef = this.resolveTicket.trim();
+    if (!reason || !ticketRef || this.resolveBusy()) {
+      return;
+    }
+    this.resolveBusy.set(true);
+    this.resolveError.set(null);
+    this.api.mt101RequestAcknowledgePayConflict({
+      source: c.source,
+      setId: c.source === 'CORRECTIVE' ? (c.rebuildRunId ?? '') : c.fragmentSetId,
+      sendersReference: c.sendersReference,
+      reason,
+      ticketRef,
+    }).subscribe({
+      next: () => {
+        this.resolveBusy.set(false);
+        this.cancelResolve();
+        this.load();
+      },
+      error: () => {
+        this.resolveBusy.set(false);
+        this.resolveError.set(this.i18n.t('audit.payConflicts.requestError'));
+      },
+    });
+  }
+
+  /**
+   * #6 maker-checker paso 2 (checker, actor DISTINTO): aprueba la solicitud pendiente -> apaga la alerta. Sin motivo
+   * (usa el del maker). El backend rechaza (400) si no hay solicitud pendiente o si el checker es el mismo maker.
+   */
+  approveAck(c: Mt101OpenPayConflict): void {
+    if (this.resolveBusy()) {
+      return;
+    }
+    this.resolveBusy.set(true);
+    this.resolveError.set(null);
+    this.api.mt101ApproveAcknowledgePayConflict({
+      source: c.source,
+      setId: c.source === 'CORRECTIVE' ? (c.rebuildRunId ?? '') : c.fragmentSetId,
+      sendersReference: c.sendersReference,
+    }).subscribe({
+      next: () => {
+        this.resolveBusy.set(false);
+        this.cancelResolve();
+        this.load();
+      },
+      error: () => {
+        this.resolveBusy.set(false);
+        this.resolveError.set(this.i18n.t('audit.payConflicts.approveError'));
       },
     });
   }

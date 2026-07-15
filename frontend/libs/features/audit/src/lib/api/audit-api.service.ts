@@ -281,6 +281,50 @@ export class AuditApiService {
       });
   }
 
+  /** Config del reconocimiento de conflictos: si maker-checker está activo la UI usa el flujo de dos pasos. */
+  mt101PayConflictSettings(): Observable<{ makerCheckerEnabled: boolean }> {
+    return this.http.get<{ makerCheckerEnabled: boolean }>(
+      '/api/query/mt101-fragments/pay-conflicts/settings');
+  }
+
+  /** Maker-checker paso 1 (maker): solicita reconocer el conflicto (no apaga la alerta). Solo con maker-checker on. */
+  mt101RequestAcknowledgePayConflict(body: {
+    connectionRef?: string;
+    source: 'NORMAL' | 'CORRECTIVE';
+    setId: string;
+    sendersReference: string;
+    reason: string;
+    ticketRef: string;
+  }): Observable<void> {
+    return this.http.post<void>(
+      '/api/query/mt101-fragments/pay-conflicts/request-acknowledge',
+      {
+        connectionRef: body.connectionRef?.trim() || undefined,
+        source: body.source,
+        setId: body.setId,
+        sendersReference: body.sendersReference,
+        reason: body.reason,
+        ticketRef: body.ticketRef,
+      });
+  }
+
+  /** Maker-checker paso 2 (checker, actor distinto): aprueba la solicitud pendiente -> apaga la alerta. */
+  mt101ApproveAcknowledgePayConflict(body: {
+    connectionRef?: string;
+    source: 'NORMAL' | 'CORRECTIVE';
+    setId: string;
+    sendersReference: string;
+  }): Observable<{ acknowledged: number }> {
+    return this.http.post<{ acknowledged: number }>(
+      '/api/query/mt101-fragments/pay-conflicts/approve-acknowledge',
+      {
+        connectionRef: body.connectionRef?.trim() || undefined,
+        source: body.source,
+        setId: body.setId,
+        sendersReference: body.sendersReference,
+      });
+  }
+
   /**
    * v60 (gobernado): resuelve el UNCERTAIN normal del set consultando STATUS (nunca reenvía) y detecta conflictos
    * SENT→banco-REJECTED. Motivo obligatorio (evidencia).

@@ -1228,6 +1228,12 @@ export const es = {
   'audit.payConflicts.resolveTicket': 'Ticket',
   'audit.payConflicts.resolveConfirm': 'Reconocer',
   'audit.payConflicts.resolveError': 'No se pudo reconocer el conflicto.',
+  'audit.payConflicts.makerCheckerHint': 'Maker-checker activo: un actor SOLICITA el reconocimiento y un actor DISTINTO lo aprueba (segregacion de funciones).',
+  'audit.payConflicts.requestAck': 'Solicitar reconocimiento',
+  'audit.payConflicts.requestError': 'No se pudo registrar la solicitud de reconocimiento.',
+  'audit.payConflicts.approveAck': 'Aprobar (checker distinto)',
+  'audit.payConflicts.approveAckHint': 'Aprueba una solicitud pendiente. El aprobador debe ser distinto del solicitante.',
+  'audit.payConflicts.approveError': 'No se pudo aprobar el reconocimiento (falta solicitud pendiente o el checker es el mismo maker).',
   'audit.payDispatch.title': 'Dispatch PAY por lista',
   'audit.payDispatch.subtitle':
     'Pagos por lista en memoria (MT101_BUILD/SPLIT → PAY). Un dispatch incierto o en vuelo bloquea el reenvío hasta conciliar.',
