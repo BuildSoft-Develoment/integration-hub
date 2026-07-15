@@ -1,6 +1,7 @@
 package com.integrationhub.platform.provider.task.payments.swift.transport;
 
 import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.platform.spi.task.payments.TransportResult;
 import com.jcraft.jsch.ChannelSftp;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
@@ -177,6 +178,35 @@ class SftpPaymentTransportTest {
         assertFalse(result.uncertain(), "fallo de conexion previo al despacho NO es INCIERTO");
         assertTrue(result.retriable(), "fallo de conexion/transporte pre-despacho es re-solicitable");
         assertFalse(result.bankRejected(), "un fallo de transporte NO es un rechazo de negocio del banco");
+    }
+
+    @Test
+    void uncertainThenTransportFailureAcrossRetriesStaysUncertain_sticky() {
+        // tanda-5 (STICKY, money-safety): intento 1 = INCIERTO (el despacho ya comenzo, el banco pudo recibir el
+        // archivo); intento 2 = transportFailure (conexion pre-despacho). El agregado NUNCA debe bajar a
+        // re-solicitable (transportFailure), porque tanda-4 lo re-pagaria a ciegas -> doble pago. Debe quedar INCIERTO.
+        // Se scripta attemptUpload (package-private) para forzar la secuencia sin depender del timing del contenedor.
+        var scripted = new java.util.ArrayDeque<TransportResult>(List.of(
+                TransportResult.uncertain(1, 1L, "connection lost after upload started (may have reached the bank)"),
+                TransportResult.transportFailure(1, 1L, "connection refused before dispatch")));
+        var stickyTransport = new SftpPaymentTransport() {
+            @Override
+            TransportResult attemptUpload(Mt101Message message, Map<String, Object> configuration) {
+                return scripted.poll();
+            }
+        };
+        var cfg = new LinkedHashMap<String, Object>();
+        cfg.put("retryPolicy", Map.of("maxRetries", 1, "backoffStrategy", "constant",
+                "initialBackoffSeconds", 0, "maxBackoffSeconds", 0));
+
+        var result = stickyTransport.send(sampleMessage("STICKY-SFTP"), cfg);
+
+        assertFalse(result.accepted());
+        assertTrue(result.uncertain(),
+                () -> "un intento INCIERTO previo NO se degrada a re-solicitable por un fallo pre-despacho posterior: "
+                        + result.lastError());
+        assertFalse(result.retriable(), "no es re-solicitable: pudo haber llegado al banco (evita doble pago)");
+        assertFalse(result.bankRejected());
     }
 
     @Test

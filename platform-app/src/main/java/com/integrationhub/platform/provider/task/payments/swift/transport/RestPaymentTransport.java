@@ -197,10 +197,14 @@ public class RestPaymentTransport implements PaymentMessageTransport {
                                              Map<String, Object> expected) {
         var startedAt = System.currentTimeMillis();
         String lastError = null;
-        // Marca si el ultimo fallo dejo el envio en estado INCIERTO (pudo llegar al gateway).
-        boolean lastUncertain = false;
+        // STICKY: si CUALQUIER intento quedo INCIERTO (la peticion salio y el gateway pudo recibirla), el resultado
+        // final NUNCA baja de INCIERTO -> nunca se degrada a re-solicitable (transportFailure) ni a rechazo reusable,
+        // ni siquiera si un intento POSTERIOR falla pre-envio (connection refused). "Si alguna vez pudimos enviar, no
+        // lo re-pagamos a ciegas" (evita doble pago via la re-solicitud automatica de tanda-4).
+        boolean anyUncertain = false;
+        String uncertainError = null;
         // D.2: marca si el ultimo fallo fue de TRANSPORTE/conexion ANTES de enviar (el gateway no recibio nada) ->
-        // re-solicitable (transportFailure), distinto de un rechazo de negocio (4xx).
+        // re-solicitable (transportFailure), distinto de un rechazo de negocio (4xx). Solo aplica si NUNCA hubo incierto.
         boolean lastRetriable = false;
         for (int attempt = 1; attempt <= retry.maxRetries() + 1; attempt++) {
             try {
@@ -219,13 +223,17 @@ public class RestPaymentTransport implements PaymentMessageTransport {
                     lastError = "gateway returned 2xx but successField is false: "
                             + extractField(bodyResponse, expected, "errorMessageField", "$.error.message");
                     if (!retry.shouldRetry("4xx")) {
-                        return TransportResult.rejected(attempt, System.currentTimeMillis() - startedAt, lastError);
+                        return anyUncertain
+                                ? TransportResult.uncertain(attempt, System.currentTimeMillis() - startedAt, uncertainError)
+                                : TransportResult.rejected(attempt, System.currentTimeMillis() - startedAt, lastError);
                     }
                 } else {
                     lastError = "HTTP " + status + ": " + truncate(bodyResponse, 500);
                     var family = status >= 500 ? "5xx" : "4xx";
                     if (!retry.shouldRetry(family)) {
-                        return TransportResult.rejected(attempt, System.currentTimeMillis() - startedAt, lastError);
+                        return anyUncertain
+                                ? TransportResult.uncertain(attempt, System.currentTimeMillis() - startedAt, uncertainError)
+                                : TransportResult.rejected(attempt, System.currentTimeMillis() - startedAt, lastError);
                     }
                 }
             } catch (java.net.http.HttpTimeoutException timeoutException) {
@@ -233,23 +241,27 @@ public class RestPaymentTransport implements PaymentMessageTransport {
                 // generico de IO no lo capture. Timeout de lectura = INCIERTO: la peticion ya
                 // salio y el gateway pudo recibirla; no es un rechazo.
                 lastError = "timeout: " + timeoutException.getMessage();
-                lastUncertain = true;
+                anyUncertain = true;
+                uncertainError = lastError;
                 if (!retry.shouldRetry("TIMEOUT")) {
                     return TransportResult.uncertain(attempt, System.currentTimeMillis() - startedAt, lastError);
                 }
             } catch (ConnectException connectException) {
-                // Conexion rechazada ANTES de enviar: el gateway no recibio nada, seguro re-solicitar. D.2: es un
-                // fallo de TRANSPORTE (transportFailure -> INVALIDATED), no un rechazo de negocio del gateway.
+                // Conexion rechazada ANTES de enviar: el gateway no recibio nada -> re-solicitable (D.2:
+                // transportFailure). NO borra un uncertain previo (sticky): si un intento anterior pudo llegar, el
+                // agregado sigue INCIERTO y esta salida devuelve uncertain, no transportFailure.
                 lastError = "connection refused: " + connectException.getMessage();
-                lastUncertain = false;
                 lastRetriable = true;
                 if (!retry.shouldRetry("CONNECTION_REFUSED")) {
-                    return TransportResult.transportFailure(attempt, System.currentTimeMillis() - startedAt, lastError);
+                    return anyUncertain
+                            ? TransportResult.uncertain(attempt, System.currentTimeMillis() - startedAt, uncertainError)
+                            : TransportResult.transportFailure(attempt, System.currentTimeMillis() - startedAt, lastError);
                 }
             } catch (IOException ioException) {
                 // Otro IO (p.ej. conexion cortada tras enviar) = INCIERTO: no sabemos si llego.
                 lastError = "IO error: " + ioException.getMessage();
-                lastUncertain = true;
+                anyUncertain = true;
+                uncertainError = lastError;
                 lastRetriable = false;
                 if (!retry.shouldRetry("CONNECTION_REFUSED")) {
                     return TransportResult.uncertain(attempt, System.currentTimeMillis() - startedAt, lastError);
@@ -262,10 +274,11 @@ public class RestPaymentTransport implements PaymentMessageTransport {
             }
             sleepBackoff(retry, attempt);
         }
-        // Reintentos agotados: si el ultimo fallo fue incierto, NO lo reportamos como rechazo; si fue de transporte
-        // (conexion antes de enviar), es re-solicitable (D.2); si no, rechazo de negocio.
-        if (lastUncertain) {
-            return TransportResult.uncertain(retry.maxRetries() + 1, System.currentTimeMillis() - startedAt, lastError);
+        // Reintentos agotados: uncertain es STICKY (si alguna vez pudo llegar, NO se reporta como rechazo ni como
+        // re-solicitable); si NUNCA hubo incierto y el ultimo fallo fue de transporte (conexion pre-envio), es
+        // re-solicitable (D.2); si no, rechazo de negocio.
+        if (anyUncertain) {
+            return TransportResult.uncertain(retry.maxRetries() + 1, System.currentTimeMillis() - startedAt, uncertainError);
         }
         return lastRetriable
                 ? TransportResult.transportFailure(retry.maxRetries() + 1, System.currentTimeMillis() - startedAt, lastError)

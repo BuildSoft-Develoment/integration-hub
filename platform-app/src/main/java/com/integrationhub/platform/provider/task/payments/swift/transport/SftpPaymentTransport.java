@@ -85,11 +85,15 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
         var retry = retryPolicy(configuration.get("retryPolicy"));
         var startedAt = System.currentTimeMillis();
         String lastError = null;
-        // Marca si el ultimo fallo dejo el envio en estado INCIERTO (el upload/rename del archivo
-        // final ya habia comenzado y la red fallo): pudo llegar al banco; no es un rechazo reusable.
-        boolean lastUncertain = false;
+        // STICKY: si CUALQUIER intento quedo INCIERTO (el upload/rename del archivo final ya habia comenzado y la
+        // red fallo: pudo llegar al banco), el resultado final NUNCA baja de INCIERTO. No se degrada a re-solicitable
+        // (transportFailure) ni a rechazo reusable aunque un intento POSTERIOR falle pre-despacho: "si alguna vez
+        // pudimos enviar, no lo re-pagamos a ciegas" (evita doble pago via re-solicitud de tanda-4).
+        boolean anyUncertain = false;
+        String uncertainError = null;
         // D.2: marca si el ultimo fallo fue de TRANSPORTE/AUTH antes del despacho (el banco no recibio nada) ->
         // re-solicitable (transportFailure), distinto de un rechazo de negocio (duplicado/hash, politica FAIL).
+        // Solo aplica si NUNCA hubo un intento incierto.
         boolean lastRetriable = false;
         for (int attempt = 1; attempt <= retry.maxRetries() + 1; attempt++) {
             var result = attemptUpload(message, configuration);
@@ -98,18 +102,21 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
                         System.currentTimeMillis() - startedAt);
             }
             lastError = result.lastError();
-            lastUncertain = result.uncertain();
+            if (result.uncertain()) {
+                anyUncertain = true;
+                uncertainError = result.lastError();
+            }
             lastRetriable = result.retriable();
             if (attempt <= retry.maxRetries()) {
                 sleepBackoff(retry, attempt);
             }
         }
-        // Reintentos agotados: si el ultimo fallo fue post-despacho, NO lo reportamos como rechazo
-        // (que el lifecycle reusaria) sino como INCIERTO, a resolver por verificacion remota/STATUS. Si fue de
-        // transporte/auth (pre-despacho), es re-solicitable (D.2); si no, rechazo de negocio del banco.
-        if (lastUncertain) {
+        // Reintentos agotados: uncertain es STICKY (si alguna vez pudo llegar, NO se reporta como rechazo ni como
+        // re-solicitable: se resuelve por verificacion remota/STATUS). Si NUNCA hubo incierto y el ultimo fallo fue
+        // de transporte/auth (pre-despacho), es re-solicitable (D.2); si no, rechazo de negocio del banco.
+        if (anyUncertain) {
             return TransportResult.uncertain(retry.maxRetries() + 1,
-                    System.currentTimeMillis() - startedAt, lastError);
+                    System.currentTimeMillis() - startedAt, uncertainError);
         }
         return lastRetriable
                 ? TransportResult.transportFailure(retry.maxRetries() + 1,
@@ -118,7 +125,9 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
                         System.currentTimeMillis() - startedAt, lastError);
     }
 
-    private TransportResult attemptUpload(Mt101Message message, Map<String, Object> configuration) {
+    // Package-private (no private) para que los tests puedan scriptear la secuencia de resultados por-intento y
+    // verificar la agregacion sticky del loop de reintentos (uncertain -> retriable debe quedar uncertain).
+    TransportResult attemptUpload(Mt101Message message, Map<String, Object> configuration) {
         var sftpCfg = mapValue(configuration.get("sftp"));
         if (sftpCfg.isEmpty()) {
             throw new PreDispatchTransportException("MT101_PAY transport=SFTP requires configuration.sftp");

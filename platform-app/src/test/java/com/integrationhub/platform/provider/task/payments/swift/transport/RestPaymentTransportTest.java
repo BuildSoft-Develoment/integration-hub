@@ -133,6 +133,36 @@ class RestPaymentTransportTest {
     }
 
     @Test
+    void aReadTimeoutFollowedByABusinessRejectionStaysUncertain_sticky(WireMockRuntimeInfo wm) {
+        // tanda-5 (STICKY, money-safety): intento 1 = read timeout (la peticion salio, el gateway pudo recibirla) ->
+        // INCIERTO; intento 2 = HTTP 400 (rechazo de negocio, no se reintenta en 4xx). El agregado NUNCA debe bajar a
+        // rejected: reportar rechazo permitiria re-solicitar/reusar un pago que pudo haber llegado (doble pago). Debe
+        // quedar INCIERTO. Antes del fix, la salida 4xx inline devolvia rejected ignorando el uncertain previo.
+        stubFor(any(anyUrl()).inScenario("sticky-uncertain")
+                .whenScenarioStateIs(com.github.tomakehurst.wiremock.stubbing.Scenario.STARTED)
+                .willReturn(aResponse().withFixedDelay(3000).withStatus(200).withBody("{\"accepted\":true}"))
+                .willSetStateTo("after-timeout"));
+        stubFor(any(anyUrl()).inScenario("sticky-uncertain")
+                .whenScenarioStateIs("after-timeout")
+                .willReturn(aResponse().withStatus(400).withBody("business rejected")));
+
+        var configuration = new LinkedHashMap<String, Object>();
+        configuration.put("transport", "REST");
+        configuration.put("rest", Map.of("url", wm.getHttpBaseUrl() + "/v1/mt101", "timeoutSeconds", 1));
+        configuration.put("retryPolicy", Map.of(
+                "maxRetries", 1, "backoffStrategy", "constant", "initialBackoffSeconds", 0, "maxBackoffSeconds", 0,
+                "retryOn", List.of("TIMEOUT")));
+
+        var result = transport.send(sampleMessage("STICKY-REST", "u"), configuration);
+
+        assertFalse(result.accepted());
+        assertTrue(result.uncertain(),
+                () -> "un timeout previo (pudo llegar) NO se degrada a rechazo por un 400 posterior: " + result.lastError());
+        assertFalse(result.retriable(), "no es re-solicitable: pudo haber llegado al banco (evita doble pago)");
+        assertEquals(2, getAllServeEvents().size(), "2 intentos: timeout + 400");
+    }
+
+    @Test
     void performsLoginRequestAndUsesReturnedBearerToken(WireMockRuntimeInfo wm) {
         stubFor(any(urlEqualTo("/oauth/token")).willReturn(aResponse()
                 .withStatus(200)
