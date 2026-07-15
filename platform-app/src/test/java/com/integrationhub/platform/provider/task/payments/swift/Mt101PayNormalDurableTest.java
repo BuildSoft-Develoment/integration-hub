@@ -185,6 +185,28 @@ class Mt101PayNormalDurableTest {
     }
 
     @Test
+    void transportFailureRevertSkippedWhenFragmentRacedToTerminalFlagsPayConflict() throws Exception {
+        // Hardening (#9): un transportFailure (probado que NADA salio al banco) cuyo fragmento fue movido a un
+        // terminal por otro flujo (STATUS) mientras estaba DISPATCHING -> la reversion DISPATCHING->ARCHIVED se OMITE
+        // (guardada). Es anomalo (no deberia haber terminal para algo que no salio): NO se re-paga a ciegas y se marca
+        // pay_conflict + trama para conciliar.
+        var setId = "PAY-NORMAL-REVERT-SKIP";
+        seedArchived(setId, "K1", 1, 1);
+        var emitter = new CapturingAuditEmitter();
+        var transport = new StatusRacingRetriableTransport("REST", dataSource, Map.of("K1", "SENT"));
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport), fragmentStore, null, emitter);
+
+        provider.execute(payContextFor(setId, 1), payConfig());
+
+        assertEquals("SENT", statusFor(setId, "K1"),
+                "la reversion NO pisa el terminal ganado por STATUS (guardada): queda SENT, no ARCHIVED");
+        assertTrue(payConflictFor(setId, "K1"),
+                "un transportFailure cuyo fragmento ya no estaba DISPATCHING se marca pay_conflict (anomalia)");
+        assertTrue(emitter.hasStage("PAY_CONFLICT"),
+                "se emite la trama append-only PAY_CONFLICT para conciliacion");
+    }
+
+    @Test
     void concurrentStatusResolvingToSameTerminalIsIdempotentNotConflict() throws Exception {
         // B (falso positivo corregido): si STATUS resuelve el fragmento al MISMO terminal que el worker va a
         // escribir, el resultado del worker es idempotente (SAME_TERMINAL) y NO debe marcarse pay_conflict.
@@ -445,6 +467,40 @@ class Mt101PayNormalDurableTest {
                 }
             }
             return TransportResult.accepted("GW-" + ref, 1, 1L);
+        }
+    }
+
+    /** Como StatusRacingTransport pero devuelve transportFailure tras fijar el terminal: ejercita el hardening #9
+     *  (la reversion DISPATCHING->ARCHIVED se OMITE porque el fragmento ya no esta DISPATCHING). */
+    private static final class StatusRacingRetriableTransport implements PaymentMessageTransport {
+        private final String transportId;
+        private final DataSource dataSource;
+        private final Map<String, String> resolveTo;
+
+        StatusRacingRetriableTransport(String transportId, DataSource dataSource, Map<String, String> resolveTo) {
+            this.transportId = transportId;
+            this.dataSource = dataSource;
+            this.resolveTo = resolveTo;
+        }
+
+        @Override public String transport() { return transportId; }
+
+        @Override
+        public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
+            var ref = message.sequenceA() == null ? null : message.sequenceA().sendersReference();
+            var terminal = ref == null ? null : resolveTo.get(ref);
+            if (terminal != null) {
+                try (Connection connection = dataSource.getConnection();
+                     var statement = connection.prepareStatement(
+                             "update mt101_build_fragment set status = ? where senders_reference = ?")) {
+                    statement.setString(1, terminal);
+                    statement.setString(2, ref);
+                    statement.executeUpdate();
+                } catch (SQLException error) {
+                    throw new IllegalStateException("racing STATUS update failed for " + ref, error);
+                }
+            }
+            return TransportResult.transportFailure(1, 1L, "auth fail before dispatch (no bank call)");
         }
     }
 

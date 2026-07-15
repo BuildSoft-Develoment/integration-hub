@@ -487,8 +487,27 @@ public class Mt101PayTaskProvider implements TaskProvider {
         // ARCHIVED). Guardado (solo-desde-DISPATCHING): un terminal tardio de STATUS/RECONCILE no se pisa. La
         // auditoria ya emitio RECORD_INVALIDATED (recordEnvelope). No hay doble pago: retriable ⟺ pre-despacho.
         if (!invalidatedByRef.isEmpty()) {
-            fragmentStore.resolvePayStatusReturning(fragmentSource, invalidatedByRef,
+            var reverted = fragmentStore.resolvePayStatusReturning(fragmentSource, invalidatedByRef,
                     java.util.List.of("DISPATCHING"), "ARCHIVED");
+            // Hardening (#9): un ref con transportFailure (probado que NADA salió al banco) que NO se revirtió ya no
+            // estaba en DISPATCHING -> otro flujo lo movió a un terminal. Es ANÓMALO: no debería existir un terminal
+            // bancario para algo que no se despachó. NO se re-paga a ciegas (no vuelve a ARCHIVED); se marca
+            // pay_conflict + trama para conciliar el estado real (cero anomalías silenciosas). Reusa el mecanismo
+            // de conflicto existente, sin traza nueva.
+            if (reverted.size() < invalidatedByRef.size()) {
+                var skipped = new java.util.LinkedHashSet<>(invalidatedByRef.keySet());
+                skipped.removeAll(reverted);
+                var currentStatuses = fragmentStore.payStatusesFor(fragmentSource, skipped);
+                var skippedAudit = new ArrayList<AuditEnvelope>(skipped.size());
+                for (var ref : skipped) {
+                    skippedAudit.add(payConflictEnvelope(context, ref, currentStatuses.get(ref),
+                            "ARCHIVED (transport-failure revert skipped)"));
+                }
+                fragmentStore.markPayConflict(fragmentSource, skipped,
+                        "transportFailure pre-despacho pero el fragmento ya no estaba DISPATCHING (otro flujo lo "
+                                + "movió a un terminal); no se re-pagó a ciegas — conciliar el estado real");
+                emitRecordAudit(skippedAudit);
+            }
         }
         if (!conflicts.isEmpty()) {
             fragmentStore.markPayConflict(fragmentSource, conflicts,
