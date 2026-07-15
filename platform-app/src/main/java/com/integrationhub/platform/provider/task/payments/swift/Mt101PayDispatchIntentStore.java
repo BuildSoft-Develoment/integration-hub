@@ -138,6 +138,28 @@ public class Mt101PayDispatchIntentStore {
         }
     }
 
+    /**
+     * Refuerzo del #9-equivalente (camino por lista): ESCALA un intent RE-RECLAMABLE ({@code REJECTED}/
+     * {@code INVALIDATED}) a {@code UNCERTAIN} (no re-reclamable → BLOQUEA un re-envío a ciegas), cuando un envío que
+     * pudo haber llegado al banco (accepted/uncertain) no pudo registrar su resultado porque otro flujo movió la
+     * intención. Guardado: <b>solo desde REJECTED/INVALIDATED</b> — NO pisa {@code SENT} (ya bloquea, correcto) ni
+     * {@code DISPATCHING} (en vuelo). Cierra la ventana teórica de doble pago; el operador concilia el UNCERTAIN.
+     * Devuelve si escaló.
+     */
+    public boolean escalateToUncertainIfReclaimable(String dispatchKey, String reason) {
+        var sql = "update mt101_pay_dispatch_intent set status = 'UNCERTAIN', error_message = ?, "
+                + "updated_at = current_timestamp where dispatch_key = ? and status in ('REJECTED', 'INVALIDATED')";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, reason);
+            statement.setString(2, dispatchKey);
+            return statement.executeUpdate() == 1;
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot escalate MT101 pay dispatch intent to UNCERTAIN for key "
+                    + dispatchKey, error);
+        }
+    }
+
     /** Estado + identidad (payload_hash) persistidos de la intención, para clasificar un claim bloqueado. */
     private IntentIdentity currentIntent(java.sql.Connection connection, String dispatchKey) throws SQLException {
         try (var statement = connection.prepareStatement(

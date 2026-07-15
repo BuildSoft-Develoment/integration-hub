@@ -121,11 +121,11 @@ class Mt101PayDirectListDurableTest {
     }
 
     @Test
-    void aConcurrentTerminalWhileSendingEmitsPayConflictAnomaly() throws Exception {
-        // #9-equivalente (camino por lista): mientras este envio esta en vuelo, otro flujo (p.ej. conciliacion) mueve
-        // la intencion DISPATCHING a un terminal. recordResult (guardado por status='DISPATCHING') actualiza 0 filas
-        // -> NO se pisa el terminal, y se emite la trama append-only PAY_CONFLICT para conciliar (cero anomalias
-        // silenciosas). Espejo del #9 del camino persistido.
+    void aConcurrentTerminalWithADeliveredSendEscalatesToUncertainAndBlocksReclaim() throws Exception {
+        // #9-equivalente + REFUERZO (flag + BLOQUEO): mientras este envio esta en vuelo, otro flujo (conciliacion)
+        // mueve la intencion DISPATCHING a REJECTED (re-reclamable). El envio fue ACCEPTED (pudo llegar al banco) ->
+        // recordResult (guardado) actualiza 0 filas -> se emite PAY_CONFLICT Y se ESCALA el intent REJECTED -> UNCERTAIN
+        // (no re-reclamable) para BLOQUEAR un re-envio a ciegas (cierra la ventana teorica de doble pago).
         var emitter = new CapturingAuditEmitter();
         var transport = new IntentRacingTransport("REST", dataSource, Map.of("A1", "REJECTED"));
         var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport),
@@ -133,10 +133,34 @@ class Mt101PayDirectListDurableTest {
 
         provider.execute(singleMessageContext("A1", "{\"amount\":\"1\"}"), payConfig());
 
-        assertEquals("REJECTED", intentStatus("REST||A1"),
-                "la conciliacion concurrente gano: el terminal NO se pisa (recordResult guardado)");
+        assertEquals("UNCERTAIN", intentStatus("REST||A1"),
+                "envio ACCEPTED + intent movido a un terminal re-reclamable -> se escala a UNCERTAIN (bloquea re-claim)");
         assertTrue(emitter.hasStage("PAY_CONFLICT"),
                 "recordResult 0 filas -> se emite PAY_CONFLICT (anomalia auditada, no silenciosa)");
+
+        // BLOQUEO efectivo: un re-request del MISMO pago NO se re-reclama (UNCERTAIN no es re-reclamable) -> no reenvia.
+        var transport2 = new IntentRacingTransport("REST", dataSource, Map.of());
+        var provider2 = new Mt101PayTaskProvider(new InstanceOfOne<>(transport2),
+                null, null, null, null, null, intentStore);
+        var second = provider2.execute(singleMessageContext("A1", "{\"amount\":\"1\"}"), payConfig());
+        assertFalse(second.success(), "un UNCERTAIN pendiente es no-exito (conciliar), nunca un reenvio a ciegas");
+        assertEquals("UNCERTAIN", intentStatus("REST||A1"), "sigue UNCERTAIN: el re-request no lo re-reclama");
+    }
+
+    @Test
+    void aConcurrentTerminalWithARetriableSendDoesNotEscalate() throws Exception {
+        // Contraparte del refuerzo: si el envio fue transportFailure (retriable, NADA salio al banco) y el intent quedo
+        // en un terminal re-reclamable, NO se escala: re-solicitarlo es seguro (no hay doble pago). Se sigue auditando.
+        var emitter = new CapturingAuditEmitter();
+        var transport = new IntentRacingTransport("REST", dataSource, Map.of("A1", "REJECTED"), true);
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport),
+                null, null, emitter, null, null, intentStore);
+
+        provider.execute(singleMessageContext("A1", "{\"amount\":\"1\"}"), payConfig());
+
+        assertEquals("REJECTED", intentStatus("REST||A1"),
+                "envio retriable (nada salio) -> NO se escala: el intent queda re-reclamable (re-solicitud segura)");
+        assertTrue(emitter.hasStage("PAY_CONFLICT"), "la anomalia se sigue auditando");
     }
 
     @Test
@@ -359,11 +383,18 @@ class Mt101PayDirectListDurableTest {
         private final String transportId;
         private final DataSource dataSource;
         private final Map<String, String> resolveTo;
+        private final boolean retriable;
 
         IntentRacingTransport(String transportId, DataSource dataSource, Map<String, String> resolveTo) {
+            this(transportId, dataSource, resolveTo, false);
+        }
+
+        IntentRacingTransport(String transportId, DataSource dataSource, Map<String, String> resolveTo,
+                              boolean retriable) {
             this.transportId = transportId;
             this.dataSource = dataSource;
             this.resolveTo = resolveTo;
+            this.retriable = retriable;
         }
 
         @Override public String transport() { return transportId; }
@@ -383,7 +414,10 @@ class Mt101PayDirectListDurableTest {
                     throw new IllegalStateException("racing intent update failed for " + ref, error);
                 }
             }
-            return TransportResult.accepted("GW-" + ref, 1, 1L);
+            // retriable=false -> ACCEPTED (pudo llegar al banco); retriable=true -> transportFailure (nada salio).
+            return retriable
+                    ? TransportResult.transportFailure(1, 1L, "auth fail before dispatch (no bank call)")
+                    : TransportResult.accepted("GW-" + ref, 1, 1L);
         }
     }
 

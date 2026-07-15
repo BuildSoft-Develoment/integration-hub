@@ -677,11 +677,19 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 if (!recorded) {
                     // #9-equivalente (camino por lista): la intención ya no estaba DISPATCHING -> otro flujo
                     // (p.ej. una conciliación) la movió a un terminal. El resultado de ESTE envío NO se registró
-                    // (guardado: no se pisa el terminal). Es anómalo (para un transportFailure nada salió al banco):
-                    // se emite la trama append-only PAY_CONFLICT para conciliar el estado real del intent. Cero
-                    // anomalías silenciosas.
+                    // (guardado: no se pisa el terminal). Es anómalo: se emite la trama append-only PAY_CONFLICT para
+                    // conciliar el estado real del intent. Cero anomalías silenciosas.
                     emitRecordAudit(java.util.List.of(payConflictEnvelope(context, sendersReference,
                             "dispatch intent no longer DISPATCHING (concurrent terminal)", intentStatus(sent))));
+                    // Refuerzo (flag + BLOQUEO): si ESTE envío pudo haber llegado al banco (accepted/uncertain) y la
+                    // intención quedó en un terminal RE-RECLAMABLE (REJECTED/INVALIDATED), se ESCALA a UNCERTAIN
+                    // (no re-reclamable) para BLOQUEAR un re-envío a ciegas -> cierra la ventana teórica de doble pago.
+                    // Si el envío fue retriable (nada salió) NO se escala: re-solicitarlo es seguro.
+                    if (sent.accepted() || sent.uncertain()) {
+                        dispatchIntentStore.escalateToUncertainIfReclaimable(intentKey,
+                                "possibly delivered (send=" + intentStatus(sent) + ") but the intent was moved to a "
+                                        + "re-claimable terminal by a concurrent flow; blocked from re-claim — reconcile");
+                    }
                 }
                 yield sent;
             }
