@@ -98,24 +98,37 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-grpc</artifactId>
         </dependency>
-        <!-- Conectores MQ adicionales (SPI): clientes raw con conexion lazy; solo el
-             broker seleccionado por audit.broker.type conecta. Abierto/enchufable. -->
+        <!-- Conectores MQ adicionales (SPI): conexion lazy; solo el broker seleccionado por
+             audit.broker.type conecta. Abierto/enchufable. -->
+        <!-- RabbitMQ: extension Quarkiverse (no el amqp-client crudo) por PARIDAD con audit-consumer y
+             por la config de native-image que trae (el amqp-client crudo no la tiene). El provider sigue
+             usando com.rabbitmq.client.ConnectionFactory (que la extension provee transitivamente), asi que
+             el swap es solo de dependencia. El MeterRegistry que la extension referencia ya lo aporta
+             quarkus-micrometer-registry-prometheus (mas abajo). -->
         <dependency>
-            <groupId>com.rabbitmq</groupId>
-            <artifactId>amqp-client</artifactId>
-            <version>5.21.0</version>
+            <groupId>io.quarkiverse.rabbitmqclient</groupId>
+            <artifactId>quarkus-rabbitmq-client</artifactId>
+            <version>3.3.0</version>
         </dependency>
+        <!-- Redis: extension oficial de Quarkus (no jedis crudo) por PARIDAD con audit-consumer y por la
+             config de native-image que trae (jedis crudo no la tiene). A diferencia de RabbitMQ/Artemis, la
+             extension usa Vert.x Redis (no jedis), asi que el provider se reescribe a RedisDataSource. -->
         <dependency>
-            <groupId>redis.clients</groupId>
-            <artifactId>jedis</artifactId>
-            <version>5.1.5</version>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-redis-client</artifactId>
         </dependency>
+        <!-- Artemis JMS: extension Quarkiverse (no el artemis-jakarta-client crudo) por PARIDAD con
+             audit-consumer y por la config de native-image que trae (incluido el runtime-init de JGroups,
+             que antes se hacia a mano en native-image.properties). El provider sigue usando
+             org.apache.activemq.artemis.jms.client.ActiveMQConnectionFactory (que la extension provee
+             transitivamente via artemis-jakarta-client), asi que el swap es solo de dependencia. -->
         <dependency>
-            <groupId>org.apache.activemq</groupId>
-            <artifactId>artemis-jakarta-client</artifactId>
-            <version>2.33.0</version>
-            <!-- commons-logging real fuera (via beanutils): duplicaria org.apache.commons.logging
-                 con el shim jboss y rompe el build nativo (mezcla de copias). -->
+            <groupId>io.quarkiverse.artemis</groupId>
+            <artifactId>quarkus-artemis-jms</artifactId>
+            <version>3.14.3</version>
+            <!-- commons-logging real fuera (via beanutils): duplicaria org.apache.commons.logging con el
+                 shim jboss y rompe el build nativo (mezcla de copias). platform-app lo trae tambien por
+                 jexl3, asi que se excluye en cada fuente (audit-consumer no lo necesita: no tiene jexl3). -->
             <exclusions>
                 <exclusion>
                     <groupId>commons-logging</groupId>

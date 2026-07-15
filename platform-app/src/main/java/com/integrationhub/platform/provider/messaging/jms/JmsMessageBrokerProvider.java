@@ -16,9 +16,10 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 import java.util.Optional;
 
 /**
- * Conector JMS (Artemis) del SPI de mensajeria. Cliente raw con conexion lazy:
- * solo conecta si {@code audit.broker.type=JMS}. Envia a una cola homonima del
- * {@code topic} como TextMessage persistente (send sincrono = ack del broker).
+ * Conector JMS (Artemis) del SPI de mensajeria. Usa {@link ActiveMQConnectionFactory}
+ * directamente, provisto por la extension {@code quarkus-artemis-jms} (native-ready);
+ * la conexion es lazy: solo conecta si {@code audit.broker.type=JMS}. Envia a una cola
+ * homonima del {@code topic} como TextMessage persistente (send sincrono = ack del broker).
  */
 @ApplicationScoped
 public class JmsMessageBrokerProvider implements MessageBrokerProvider {

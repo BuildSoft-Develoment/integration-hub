@@ -71,6 +71,26 @@
             <properties>
                 <quarkus.native.enabled>true</quarkus.native.enabled>
                 <skipITs>false</skipITs>
+                <!-- Optimizacion/paridad de imagen nativa (production-grade). NOTA de sintaxis: las properties
+                     Maven son <nombre>valor</nombre>; NO <nombre=valor></nombre=valor> (XML invalido). -->
+                <!-- Compila en contenedor (Mandrel) para paridad de OS (Linux glibc); antes iba por -D en el script. -->
+                <quarkus.native.container-build>true</quarkus.native.container-build>
+                <!-- Heap del proceso native-image (Mandrel) dentro del contenedor: NO se fija a proposito.
+                     Por defecto native-image usa el 80% de la RAM que ve el contenedor (~9.5G en la VM WSL2 de
+                     12G), que es exactamente lo que consumieron los builds exitosos. Fijar por debajo (p.ej. 6G)
+                     OOMea en la fase [5/8] analysis de una imagen grande (POI+Azure+gRPC+Kafka+Artemis+Hibernate);
+                     fijar por encima no tiene headroom en 12G. Si algun dia se migra a una VM con mas RAM y se
+                     quiere acotar, ponerlo aqui explicito >= 9.5G: quarkus.native.native-image-xmx. -->
+                <!-- <quarkus.native.native-image-xmx>10g</quarkus.native.native-image-xmx> -->
+                <!-- Compresion UPX: nivel 7 (ya afinado en application.properties). El nivel es 0..10; mas alto =
+                     imagen menor, build algo mas lento. La property vive en application.properties, no aqui. -->
+                <!-- Optimizacion GraalVM: -O2 es el DEFAULT en builds nativos de produccion (no-debug); no hace
+                     falta property extra. Para forzarlo explicito: quarkus.native.additional-build-args=-O2
+                     (NO existe quarkus.native.optimization-level). -->
+                <!-- Limite de hilos del build: se pasa por quarkus.native.additional-build-args (NO
+                     quarkus.native.builder-arguments). El flag depende de la version de Mandrel
+                     (H:NumberOfThreads=4, o parallelism en GraalVM 23+). Se deja fuera hasta validar el flag
+                     exacto contra Mandrel jdk-25: un arg invalido rompe el build de 25 min. -->
             </properties>
         </profile>
         <!-- Deploy bajo el subpath /appih (integracion detras de nginx). Hornea el
