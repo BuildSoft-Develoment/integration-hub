@@ -52,6 +52,25 @@ public class Mt101PayTaskProvider implements TaskProvider {
     /** Muestra de records/errors en el output; los conteos son siempre exactos. */
     private static final int DEFAULT_MAX_RECORDS_IN_OUTPUT = 1000;
 
+    /**
+     * Gate del camino de lista in-memory (no persistido). Default {@code true} (dev/UAT). En prod bancaria poner
+     * {@code false} (env {@code MT101_PAY_DIRECT_LIST_ENABLED=false}): un MT101_PAY sin {@code build_fragment}
+     * (fragmentSource vacío) se RECHAZA (fail-loud) → obliga al money-path persistido (BUILD_FROM_TABLE → archive →
+     * PAY → STATUS → RECONCILE → PAY_CONFLICT), que tiene lineage y conciliación completos que el camino de lista no.
+     * NO es fallback: es el modo por ambiente. Property de runtime (overridable al arranque, sin recompilar).
+     */
+    private final boolean directListEnabled = resolveDirectListEnabled();
+
+    private static boolean resolveDirectListEnabled() {
+        try {
+            return org.eclipse.microprofile.config.ConfigProvider.getConfig()
+                    .getOptionalValue("mt101.pay.direct-list.enabled", Boolean.class).orElse(true);
+        } catch (RuntimeException ignored) {
+            // Sin contexto de config (tests planos que construyen el provider a mano): habilitado (no rompe tests).
+            return true;
+        }
+    }
+
     private final Instance<PaymentMessageTransport> transports;
     private final Mt101FragmentStore fragmentStore;
     private final Mt101ArchiveStatusUpdater archiveStatusUpdater;
@@ -158,6 +177,16 @@ public class Mt101PayTaskProvider implements TaskProvider {
                 });
             }
         } else {
+            // Gate opt-in: en prod (mt101.pay.direct-list.enabled=false) el camino de lista in-memory (sin
+            // build_fragment persistido) se RECHAZA fail-loud -> obliga el money-path persistido. En dev/UAT
+            // (default true) sigue disponible. fragmentStore==null es solo un contexto de test; el gate aplica al
+            // caso real (fragmentSource vacío con fragmentStore inyectado).
+            if (!directListEnabled) {
+                throw new IllegalStateException("MT101_PAY direct-list (in-memory) path is disabled "
+                        + "(mt101.pay.direct-list.enabled=false): this MT101_PAY has no persisted build_fragment "
+                        + "source. Route MT101_PAY after MT101_BUILD_FROM_TABLE so the payment goes through the "
+                        + "durable money-path (lineage + STATUS/RECONCILE), not the direct-list path.");
+            }
             var inputs = Mt101MessageInputResolver.readResolvedMessages(context, configuration, type(), fragmentStore);
             var sentArchiveIds = new LinkedHashMap<String, List<Long>>();
             var rejectedArchiveIds = new LinkedHashMap<String, List<Long>>();

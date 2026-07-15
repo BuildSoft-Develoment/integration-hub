@@ -33,6 +33,7 @@ import java.util.stream.StreamSupport;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -145,6 +146,26 @@ class Mt101PayDirectListDurableTest {
         var second = provider2.execute(singleMessageContext("A1", "{\"amount\":\"1\"}"), payConfig());
         assertFalse(second.success(), "un UNCERTAIN pendiente es no-exito (conciliar), nunca un reenvio a ciegas");
         assertEquals("UNCERTAIN", intentStatus("REST||A1"), "sigue UNCERTAIN: el re-request no lo re-reclama");
+    }
+
+    @Test
+    void directListPathIsRejectedWhenGateDisabled() throws Exception {
+        // Gate opt-in (prod): con mt101.pay.direct-list.enabled=false, un MT101_PAY sin build_fragment (camino de
+        // lista in-memory) se RECHAZA fail-loud -> obliga el money-path persistido. La property se resuelve al
+        // construir el provider (se fija el system property antes; se limpia en finally para no afectar otros tests).
+        System.setProperty("mt101.pay.direct-list.enabled", "false");
+        try {
+            var transport = new RefKeyedTransport("REST", Set.of());
+            var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport),
+                    null, null, null, null, null, intentStore);
+            var error = assertThrows(IllegalStateException.class, () ->
+                    provider.execute(directListContext(), payConfig()));
+            assertTrue(error.getMessage().contains("direct-list"),
+                    () -> "mensaje inesperado: " + error.getMessage());
+            assertEquals(0, transport.calls(), "gate off -> NO se llama al banco por el camino de lista");
+        } finally {
+            System.clearProperty("mt101.pay.direct-list.enabled");
+        }
     }
 
     @Test
