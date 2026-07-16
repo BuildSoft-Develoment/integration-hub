@@ -25,6 +25,8 @@ import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
 import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
 import static com.integrationhub.platform.api.security.PlatformRoles.OPERATOR;
 import static com.integrationhub.platform.api.security.PlatformRoles.PAYMENTS_OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PAY_CONFLICT_CHECKER;
+import static com.integrationhub.platform.api.security.PlatformRoles.PAY_CONFLICT_MAKER;
 import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
 
 @Path("/api/query/mt101-fragments")
@@ -241,10 +243,12 @@ public class Mt101FragmentLookupResource {
     /**
      * Maker-checker paso 1 (MAKER): solicita reconocer el conflicto (reason+ticket) SIN apagar la alerta. Solo con
      * mt101.pay.conflict.acknowledge.maker-checker.enabled=true (si no, 400: usar acknowledge single-actor).
+     * Segregacion por ROL (tanda-9 B): exige {@code pay-conflict-maker} — quien solicita no es quien aprueba. El
+     * platform-admin NO queda implicitamente autorizado; se asigna el rol maker explicitamente.
      */
     @POST
     @Path("/pay-conflicts/request-acknowledge")
-    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, PAYMENTS_OPERATOR})
+    @RolesAllowed({PAY_CONFLICT_MAKER})
     public void requestAcknowledgePayConflict(AcknowledgePayConflictRequest request) {
         if (request == null) {
             throw new BadRequestException("request body is required");
@@ -260,10 +264,12 @@ public class Mt101FragmentLookupResource {
     /**
      * Maker-checker paso 2 (CHECKER, actor DISTINTO al maker): aprueba la solicitud PENDING -> limpia el flag
      * pay_conflict + emite PAY_CONFLICT_RESOLVED con ambos actores. 400 si no hay PENDING o si el checker == maker.
+     * Segregacion por ROL (tanda-9 B): exige {@code pay-conflict-checker} (rol DISTINTO al maker). Doble barrera:
+     * rol de checker + identidad (checker != maker). El platform-admin NO queda implicitamente autorizado.
      */
     @POST
     @Path("/pay-conflicts/approve-acknowledge")
-    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, PAYMENTS_OPERATOR})
+    @RolesAllowed({PAY_CONFLICT_CHECKER})
     public Mt101PayConflictAcknowledgeService.AcknowledgeResult approveAcknowledgePayConflict(
             ApproveAcknowledgePayConflictRequest request) {
         if (request == null) {

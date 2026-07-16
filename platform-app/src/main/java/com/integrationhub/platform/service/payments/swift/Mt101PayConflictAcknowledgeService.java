@@ -155,17 +155,27 @@ public class Mt101PayConflictAcknowledgeService {
                     throw new IllegalArgumentException("no open pay conflict for " + sendersReference
                             + " (nothing to acknowledge)");
                 }
-                // Historial: no se sobrescribe un PENDING previo -> se marca SUPERSEDED y se inserta la nueva solicitud.
+                // Historial: no se sobrescribe un PENDING previo -> se lee (para auditarlo), se marca SUPERSEDED y se
+                // inserta la nueva solicitud. El unico indice parcial (un PENDING por conflicto) serializa concurrencia.
+                var previousPending = repository.findPendingAckRequest(connection, normalizedSource, setOrRunId.trim(),
+                        sendersReference.trim());
                 repository.supersedePendingAckRequests(connection, normalizedSource, setOrRunId.trim(),
                         sendersReference.trim());
                 repository.insertPendingAckRequest(connection, normalizedSource, setOrRunId.trim(),
                         sendersReference.trim(), maker, ackReason, ticket);
-                // Trama append-only PAY_CONFLICT_ACK_REQUESTED (gobernanza): la solicitud del maker queda auditada,
-                // aunque el flag NO se apaga hasta que un checker distinto apruebe. Atómico con la escritura del PENDING.
-                var envelope = Mt101PayConflictAudit.requestedEnvelope(conflict.processExecutionId(),
+                // Tramas append-only (gobernanza), atomicas con la escritura del PENDING:
+                //  - PAY_CONFLICT_ACK_SUPERSEDED (C): SOLO si habia un PENDING previo -> quien quedo reemplazado y por quien.
+                //  - PAY_CONFLICT_ACK_REQUESTED: la nueva solicitud del maker (el flag NO se apaga hasta el checker).
+                var envelopes = new java.util.ArrayList<com.integrationhub.platform.audit.AuditEnvelope>(2);
+                if (previousPending != null) {
+                    envelopes.add(Mt101PayConflictAudit.supersededEnvelope(conflict.processExecutionId(),
+                            conflict.taskDefinitionId(), conflict.sendersReference(), conflict.retainedStatus(),
+                            previousPending.requestedBy(), previousPending.reason(), previousPending.ticketRef(), maker));
+                }
+                envelopes.add(Mt101PayConflictAudit.requestedEnvelope(conflict.processExecutionId(),
                         conflict.taskDefinitionId(), conflict.sendersReference(), conflict.retainedStatus(),
-                        maker, ackReason, ticket, conflict.originalReason());
-                auditSpoolWriter.writeBatch(connection, java.util.List.of(envelope));
+                        maker, ackReason, ticket, conflict.originalReason()));
+                auditSpoolWriter.writeBatch(connection, envelopes);
                 connection.commit();
             } catch (SQLException | RuntimeException error) {
                 connection.rollback();

@@ -60,11 +60,19 @@ export class Mt101PayConflictsComponent {
   readonly resolveBusy = signal(false);
   readonly resolveError = signal<string | null>(null);
 
-  // #6/#8: modo maker-checker con estado explícito (LOADING hasta conocerlo). Evita mostrar el flujo single-actor por
-  // un instante antes de que responda /pay-conflicts/settings; mientras LOADING, las acciones de acknowledge se bloquean.
-  readonly makerCheckerState = signal<'LOADING' | 'OFF' | 'ON'>('LOADING');
+  // #6/#8/D: modo maker-checker con estado explícito. LOADING hasta conocerlo; ERROR si settings falla → fail-closed
+  // (bloquea las acciones de acknowledge en vez de caer a OFF). Evita mostrar un flujo incorrecto antes de conocer la
+  // política del backend.
+  readonly makerCheckerState = signal<'LOADING' | 'OFF' | 'ON' | 'ERROR'>('LOADING');
   readonly makerCheckerEnabled = computed(() => this.makerCheckerState() === 'ON');
   readonly makerCheckerLoading = computed(() => this.makerCheckerState() === 'LOADING');
+  readonly makerCheckerError = computed(() => this.makerCheckerState() === 'ERROR');
+
+  // B (segregación por rol): la UI ofrece SOLICITAR solo a un maker y APROBAR solo a un checker (el backend además
+  // lo exige por @RolesAllowed; esto evita mostrar un botón que daría 403).
+  readonly canRequestAck = computed(() => this.auth.hasRole('pay-conflict-maker'));
+  readonly canApproveAck = computed(() => this.auth.hasRole('pay-conflict-checker'));
+  readonly hasNoMakerCheckerRole = computed(() => !this.canRequestAck() && !this.canApproveAck());
 
   constructor() {
     this.breadcrumb.setItems([
@@ -73,12 +81,24 @@ export class Mt101PayConflictsComponent {
     ]);
     this.breadcrumb.setBackLabel(this.i18n.t('audit.common.back'));
     this.load();
-    // La UI pregunta al backend si maker-checker está activo para no llamar al endpoint equivocado (evita el 400).
-    // En error cae a OFF (el backend igual rechaza el endpoint equivocado con 400): se pierde el matiz, no la seguridad.
+    this.loadSettings();
+  }
+
+  /**
+   * D (fail-closed): consulta la política maker-checker. En error → estado ERROR (la UI bloquea las acciones de
+   * acknowledge y ofrece reintentar), en vez de caer a OFF y mostrar un flujo que podría ser el equivocado.
+   */
+  private loadSettings(): void {
+    this.makerCheckerState.set('LOADING');
     this.api.mt101PayConflictSettings().subscribe({
       next: (s) => this.makerCheckerState.set(s.makerCheckerEnabled ? 'ON' : 'OFF'),
-      error: () => this.makerCheckerState.set('OFF'),
+      error: () => this.makerCheckerState.set('ERROR'),
     });
+  }
+
+  /** D: reintenta conocer la política tras un error de settings. */
+  retrySettings(): void {
+    this.loadSettings();
   }
 
   /** #7: ¿este conflicto ya tiene una solicitud PENDING de reconocimiento (maker)? */

@@ -137,6 +137,65 @@ public final class Mt101PayConflictAudit {
     }
 
     /**
+     * Maker-checker (gobernanza): trama append-only {@code PAY_CONFLICT_ACK_SUPERSEDED} que registra que una solicitud
+     * PENDING previa fue <b>reemplazada</b> por una nueva (otro —o el mismo— maker re-solicitó). El historial ya queda
+     * en {@code mt101_pay_conflict_ack_request} (status SUPERSEDED), pero esta trama lo deja inmutable en el spool:
+     * quién quedó reemplazado, con qué motivo/ticket, y quién lo reemplaza. Auditoría fina de "cuándo y por quién".
+     */
+    public static AuditEnvelope supersededEnvelope(Long processExecutionId,
+                                                   Long taskDefinitionId,
+                                                   String sendersReference,
+                                                   String retainedStatus,
+                                                   String supersededMaker,
+                                                   String supersededReason,
+                                                   String supersededTicketRef,
+                                                   String newMaker) {
+        var attributes = new LinkedHashMap<String, String>();
+        attributes.put("retainedStatus", retainedStatus);
+        if (supersededMaker != null && !supersededMaker.isBlank()) {
+            attributes.put("supersededMaker", supersededMaker);
+        }
+        if (supersededReason != null && !supersededReason.isBlank()) {
+            attributes.put("supersededReason", supersededReason);
+        }
+        if (supersededTicketRef != null && !supersededTicketRef.isBlank()) {
+            attributes.put("supersededTicketRef", supersededTicketRef);
+        }
+        if (newMaker != null && !newMaker.isBlank()) {
+            attributes.put("newMaker", newMaker);
+        }
+        var message = "solicitud de reconocimiento de " + (supersededMaker == null ? "?" : supersededMaker)
+                + " REEMPLAZADA por una nueva de " + (newMaker == null ? "?" : newMaker) + "; terminal '"
+                + retainedStatus + "' (sin cambios en el dinero; historial de gobernanza)";
+        return new AuditEnvelope(
+                UUID.randomUUID().toString(),
+                processExecutionId == null ? null : "exec-" + processExecutionId,
+                sendersReference,
+                AuditLevel.RECORD,
+                "PAY_CONFLICT_ACK_SUPERSEDED",
+                "PAY_CONFLICT_ACK_SUPERSEDED",
+                processExecutionId,
+                taskDefinitionId,
+                message,
+                null,
+                attributes,
+                "SWIFT",
+                "MT101",
+                null,
+                null,
+                null,
+                null,
+                null,
+                sendersReference,
+                null,
+                null,
+                null,
+                null,
+                Instant.now(),
+                AuditEnvelope.CURRENT_SCHEMA_VERSION);
+    }
+
+    /**
      * A2 (resolución gobernada): trama append-only {@code PAY_CONFLICT_RESOLVED} que registra que un operador
      * <b>reconoció</b> el conflicto (limpió el flag) con su motivo, <b>conservando</b> el terminal real del ledger
      * ({@code retainedStatus}). NO cambia el dinero: es la evidencia auditable de la decisión humana.

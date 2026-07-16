@@ -95,8 +95,15 @@
                     @if (resolveError()) {
                       <p class="conflicts__error" role="alert">{{ resolveError() }}</p>
                     }
-                    @if (makerCheckerEnabled()) {
+                    @if (makerCheckerError()) {
+                      <!-- D (fail-closed): no se pudo confirmar la política; se bloquea el acknowledge y se ofrece reintentar. -->
+                      <p class="conflicts__error" role="alert">{{ i18n.t('audit.payConflicts.makerCheckerError') }}</p>
+                    } @else if (makerCheckerEnabled()) {
                       <p class="ih-muted">{{ i18n.t('audit.payConflicts.makerCheckerHint') }}</p>
+                      @if (hasNoMakerCheckerRole()) {
+                        <!-- B: el usuario no tiene rol maker ni checker → se explica por qué no ve acciones. -->
+                        <p class="ih-muted">{{ i18n.t('audit.payConflicts.noMakerCheckerRole') }}</p>
+                      }
                       @if (hasPendingAck(c)) {
                         <!-- #7: la solicitud PENDING visible — el checker sabe qué aprueba (maker, ticket, motivo, cuándo). -->
                         <div class="conflicts__ack-pending">
@@ -120,13 +127,22 @@
                         <button mat-flat-button color="primary" type="button" disabled>
                           {{ i18n.t('audit.payConflicts.makerCheckerLoading') }}
                         </button>
-                      } @else if (makerCheckerEnabled()) {
-                        <button mat-flat-button color="primary" type="button"
-                                [disabled]="!resolveReason.trim() || !resolveTicket.trim() || resolveBusy()"
-                                (click)="requestAck(c)">
-                          {{ hasPendingAck(c) ? i18n.t('audit.payConflicts.requestAckReplace') : i18n.t('audit.payConflicts.requestAck') }}
+                      } @else if (makerCheckerError()) {
+                        <!-- D (fail-closed): sin política conocida no se ofrece acknowledge; solo reintentar. -->
+                        <button mat-stroked-button color="primary" type="button" [disabled]="resolveBusy()" (click)="retrySettings()">
+                          {{ i18n.t('audit.payConflicts.retrySettings') }}
                         </button>
-                        @if (hasPendingAck(c)) {
+                      } @else if (makerCheckerEnabled()) {
+                        <!-- B: SOLICITAR solo si el usuario tiene rol maker. -->
+                        @if (canRequestAck()) {
+                          <button mat-flat-button color="primary" type="button"
+                                  [disabled]="!resolveReason.trim() || !resolveTicket.trim() || resolveBusy()"
+                                  (click)="requestAck(c)">
+                            {{ hasPendingAck(c) ? i18n.t('audit.payConflicts.requestAckReplace') : i18n.t('audit.payConflicts.requestAck') }}
+                          </button>
+                        }
+                        <!-- B: APROBAR solo si hay PENDING y el usuario tiene rol checker (y no es el maker). -->
+                        @if (hasPendingAck(c) && canApproveAck()) {
                           <button mat-stroked-button color="primary" type="button"
                                   [disabled]="resolveBusy() || isMakerOf(c)"
                                   (click)="approveAck(c)"

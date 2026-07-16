@@ -291,6 +291,58 @@ class Mt101OpenPayConflictsConsoleIT {
                 .body("items.sendersReference", not(hasItems("K-ACK-C")));
     }
 
+    // --- tanda-9 B: segregacion por ROL (pay-conflict-maker != pay-conflict-checker) en los endpoints maker-checker ---
+    // La logica del maker-checker se prueba a nivel de servicio (Mt101PayConflictMakerCheckerIT); aqui se prueba la
+    // capa RBAC HTTP: 403 si falta el rol; "pasa el gate" (400 maker-checker-off, no 403) si lo tiene. Cross-role:
+    // el maker NO puede aprobar y el checker NO puede solicitar.
+
+    private static final Map<String, String> ACK_BODY = Map.of(
+            "source", "NORMAL", "setId", "OPEN-CON-A", "sendersReference", "K-ROLE", "reason", "r", "ticketRef", "T");
+
+    @Test
+    @TestSecurity(user = "u", roles = {"pay-conflict-maker"})
+    void requestAcknowledgePassesTheGateForMaker() {
+        // Con el rol maker pasa RBAC; el 400 (maker-checker off en este perfil) prueba que NO fue 403.
+        given().contentType(ContentType.JSON).body(ACK_BODY)
+                .when().post("/api/query/mt101-fragments/pay-conflicts/request-acknowledge")
+                .then().statusCode(400);
+    }
+
+    @Test
+    @TestSecurity(user = "u", roles = {"pay-conflict-checker"})
+    void requestAcknowledgeForbiddenForChecker() {
+        // El checker NO puede SOLICITAR (segregacion por rol).
+        given().contentType(ContentType.JSON).body(ACK_BODY)
+                .when().post("/api/query/mt101-fragments/pay-conflicts/request-acknowledge")
+                .then().statusCode(403);
+    }
+
+    @Test
+    @TestSecurity(user = "u", roles = {"payments-operator"})
+    void requestAcknowledgeForbiddenForPlainOperator() {
+        // El operador general (sin rol maker) ya NO queda implicitamente autorizado.
+        given().contentType(ContentType.JSON).body(ACK_BODY)
+                .when().post("/api/query/mt101-fragments/pay-conflicts/request-acknowledge")
+                .then().statusCode(403);
+    }
+
+    @Test
+    @TestSecurity(user = "u", roles = {"pay-conflict-checker"})
+    void approveAcknowledgePassesTheGateForChecker() {
+        given().contentType(ContentType.JSON).body(ACK_BODY)
+                .when().post("/api/query/mt101-fragments/pay-conflicts/approve-acknowledge")
+                .then().statusCode(400);
+    }
+
+    @Test
+    @TestSecurity(user = "u", roles = {"pay-conflict-maker"})
+    void approveAcknowledgeForbiddenForMaker() {
+        // El maker NO puede APROBAR (segregacion por rol, ademas de la de identidad).
+        given().contentType(ContentType.JSON).body(ACK_BODY)
+                .when().post("/api/query/mt101-fragments/pay-conflicts/approve-acknowledge")
+                .then().statusCode(403);
+    }
+
     @Test
     @TestSecurity(user = "ops", roles = {"payments-operator"})
     void rejectsMalformedCursorWith400() {

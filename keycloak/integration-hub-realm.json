@@ -23,6 +23,14 @@
                                 {
                                     "name":  "payments-operator",
                                     "description":  "Ejecuta procesos de mensajeria de pagos (spec 008); sin permisos de edicion de catalogos del motor (RF-019, ADR-009)."
+                                },
+                                {
+                                    "name":  "pay-conflict-maker",
+                                    "description":  "Maker-checker (tanda-9 B): SOLICITA reconocer un PAY_CONFLICT. Rol distinto al checker (segregacion de funciones)."
+                                },
+                                {
+                                    "name":  "pay-conflict-checker",
+                                    "description":  "Maker-checker (tanda-9 B): APRUEBA la solicitud de reconocimiento. Rol distinto al maker (four-eyes)."
                                 }
                             ]
               },
@@ -161,6 +169,44 @@
                                       ],
                       "realmRoles":  [
                                          "payments-operator"
+                                     ]
+                  },
+                  {
+                      "username":  "pay-maker",
+                      "enabled":  true,
+                      "emailVerified":  true,
+                      "firstName":  "Pay",
+                      "lastName":  "Maker",
+                      "email":  "pay-maker@integration-hub.local",
+                      "credentials":  [
+                                          {
+                                              "type":  "password",
+                                              "value":  "maker123",
+                                              "temporary":  false
+                                          }
+                                      ],
+                      "realmRoles":  [
+                                         "payments-operator",
+                                         "pay-conflict-maker"
+                                     ]
+                  },
+                  {
+                      "username":  "pay-checker",
+                      "enabled":  true,
+                      "emailVerified":  true,
+                      "firstName":  "Pay",
+                      "lastName":  "Checker",
+                      "email":  "pay-checker@integration-hub.local",
+                      "credentials":  [
+                                          {
+                                              "type":  "password",
+                                              "value":  "checker123",
+                                              "temporary":  false
+                                          }
+                                      ],
+                      "realmRoles":  [
+                                         "payments-operator",
+                                         "pay-conflict-checker"
                                      ]
                   }
               ]

@@ -158,11 +158,19 @@ class Mt101PayConflictMakerCheckerIT {
         // Trama append-only del request (gobernanza): la solicitud del maker queda auditada aunque el flag siga true.
         assertTrue(spoolHasStage("PAY_CONFLICT_ACK_REQUESTED"),
                 "request-acknowledge emite la trama append-only PAY_CONFLICT_ACK_REQUESTED");
+        // tanda-9 C: la PRIMERA solicitud (sin PENDING previo) NO emite trama de reemplazo.
+        assertFalse(spoolHasStage("PAY_CONFLICT_ACK_SUPERSEDED"),
+                "sin PENDING previo no hay trama de reemplazo");
 
         // Segundo request (otro maker): NO sobrescribe en silencio -> supersede el previo y deja UN solo PENDING.
         service.requestAcknowledge(null, "NORMAL", "SET-E", "KE", "jose", "segunda solicitud", "TCK-2");
         assertEquals(1L, ackRequestCount("SET-E", "KE", "PENDING"), "un solo PENDING (el ultimo maker)");
         assertEquals(1L, ackRequestCount("SET-E", "KE", "SUPERSEDED"), "el PENDING previo se conserva como SUPERSEDED (historial)");
+        // tanda-9 C: el reemplazo deja una trama append-only PAY_CONFLICT_ACK_SUPERSEDED con el maker reemplazado (maria).
+        assertTrue(spoolHasStage("PAY_CONFLICT_ACK_SUPERSEDED"),
+                "el segundo request emite la trama de reemplazo");
+        assertTrue(spoolStageMentions("PAY_CONFLICT_ACK_SUPERSEDED", "maria"),
+                "la trama de reemplazo nombra al maker reemplazado");
         // Hallazgo 1: una solicitud SUPERSEDED NO fue aprobada -> approved_at y approved_by quedan NULL.
         assertEquals(1L, ackRequestCount("SET-E", "KE", "SUPERSEDED", true),
                 "la fila SUPERSEDED no lleva approved_at/approved_by (no fue aprobada)");
@@ -347,6 +355,19 @@ class Mt101PayConflictMakerCheckerIT {
         try (Connection c = dataSource.getConnection();
              var st = c.prepareStatement("select count(*) from audit_spool where payload like ?")) {
             st.setString(1, "%" + stage + "%");
+            try (var rs = st.executeQuery()) {
+                rs.next();
+                return rs.getLong(1) > 0;
+            }
+        }
+    }
+
+    /** ¿Hay una trama del stage dado cuyo payload contiene además el needle (p.ej. el maker reemplazado)? */
+    private boolean spoolStageMentions(String stage, String needle) throws Exception {
+        try (Connection c = dataSource.getConnection();
+             var st = c.prepareStatement("select count(*) from audit_spool where payload like ? and payload like ?")) {
+            st.setString(1, "%" + stage + "%");
+            st.setString(2, "%" + needle + "%");
             try (var rs = st.executeQuery()) {
                 rs.next();
                 return rs.getLong(1) > 0;
