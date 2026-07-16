@@ -66,23 +66,27 @@
                         "directAccessGrantsEnabled":  true,
                         "implicitFlowEnabled":  false,
                         "serviceAccountsEnabled":  false,
-                        "rootUrl":  "http://app.buildsoft.com.pe/appih",
-                        "baseUrl":  "http://app.buildsoft.com.pe/appih/",
+                        "rootUrl":  "https://app.buildsoft.com.pe/appih",
+                        "baseUrl":  "https://app.buildsoft.com.pe/appih/",
                         "redirectUris":  [
-                                             "http://app.buildsoft.com.pe/appih/*",
-                                             "http://192.168.0.15:8080/appih/*",
                                              "https://192.168.0.15:8443/appih/*",
-                                             "http://localhost:8080/appih/*"
+                                             "https://localhost:8443/appih/*",
+                                             "https://app.buildsoft.com.pe/appih/*",
+                                             "https://190.234.81.197/appih/*",
+                                             "https://192.168.1.38/appih/*",
+                                             "https://localhost/appih/*"
                                          ],
                         "webOrigins":  [
-                                           "http://app.buildsoft.com.pe",
-                                           "http://192.168.0.15:8080",
                                            "https://192.168.0.15:8443",
-                                           "http://localhost:8080"
+                                           "https://localhost:8443",
+                                           "https://app.buildsoft.com.pe",
+                                           "https://190.234.81.197",
+                                           "https://192.168.1.38",
+                                           "https://localhost"
                                        ],
                         "attributes":  {
                                            "pkce.code.challenge.method":  "S256",
-                                           "post.logout.redirect.uris":  "https://192.168.0.15:8443##https://192.168.0.15:8443/*##http://app.buildsoft.com.pe##http://app.buildsoft.com.pe/*##http://192.168.0.15:8080##http://192.168.0.15:8080/*##http://localhost:8080##http://localhost:8080/*"
+                                           "post.logout.redirect.uris":  "https://192.168.0.15:8443##https://192.168.0.15:8443/*##https://localhost:8443##https://localhost:8443/*##https://app.buildsoft.com.pe##https://app.buildsoft.com.pe/*##https://190.234.81.197##https://190.234.81.197/*##https://192.168.1.38##https://192.168.1.38/*##https://localhost##https://localhost/*"
                                        },
                         "protocolMappers":  [
                                                 {
