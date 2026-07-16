@@ -25,6 +25,13 @@ modificación concurrente (optimistic lock).
 | H7 (deadlock pgJDBC) | **estable** — cero `wait_event=Client/ClientWrite`; el umbral de batch a 200KB lo evitó a escala |
 | Money-path | todas las aserciones verdes: 1M filas staged → built → validated → archived → **SENT** |
 
+## Reportes crudos (reproducibilidad)
+
+Los reportes de Surefire **sin editar** de esta corrida quedan archivados en
+[`reportes-crudos-1M-20260715/`](reportes-crudos-1M-20260715/) (XML completo con los 3 `testcase` y sus tiempos —
+money-path 1M 757.1 s + las dos correcciones—, `system-out` y las propiedades de entorno JVM/OS). Ver el
+[README](reportes-crudos-1M-20260715/README.md) del paquete.
+
 ## Validación previa (harness) — 100k
 
 Antes del 1M se validó el harness a 100k (mismo perfil): BUILD SUCCESS, ~2.5 min, cero deadlock/OOM. Confirmó

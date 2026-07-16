@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: com.integrationhub.platform.integration.Mt101MillionFileProcessE2EIT
+-------------------------------------------------------------------------------
+Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 782.5 s -- in com.integrationhub.platform.integration.Mt101MillionFileProcessE2EIT
