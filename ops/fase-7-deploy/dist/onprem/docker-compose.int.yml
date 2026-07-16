@@ -1,5 +1,5 @@
-# =====================================================================================
-# Ambiente de INTEGRACION (int) — todo dockerizado detras de nginx, replicando el server
+﻿# =====================================================================================
+# Ambiente de INTEGRACION (int) â€” todo dockerizado detras de nginx, replicando el server
 # real: app en /appih, Keycloak en /iam, host app.buildsoft.com.pe. No es PROD, pero es
 # la forma mas cercana (mismo shape). Soporte en ./int/ (nginx, keycloak, smoke).
 #
@@ -9,9 +9,9 @@
 #        - integration-hub-audit-consumer:native
 #   2) docker compose -f docker-compose.int.yml --env-file int/.env up -d
 #   3) hosts file del host:  127.0.0.1  app.buildsoft.com.pe
-#   4) Navegar http://app.buildsoft.com.pe/appih  -> login por /iam -> app.
+#   4) Navegar https://app.buildsoft.com.pe/appih  -> login por /iam -> app.
 #
-# Notas de diseño:
+# Notas de diseÃ±o:
 #  - nginx es la unica puerta. Alias de red `app.buildsoft.com.pe`, asi la app resuelve el
 #    issuer PUBLICO internamente (issuer consistente browser <-> app).
 #  - Los 3 backends gRPC comparten el netns de la app (network_mode: service:platform-app)
@@ -55,7 +55,7 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------------
-  # Postgres — base de datos OPERACIONAL de la plataforma (y del audit-consumer).
+  # Postgres â€” base de datos OPERACIONAL de la plataforma (y del audit-consumer).
   # ---------------------------------------------------------------------------------
   postgres:
     image: postgres:16-alpine
@@ -74,7 +74,7 @@ services:
       retries: 10
 
   # ---------------------------------------------------------------------------------
-  # Keycloak — detras de nginx en /iam. Issuer = <PUBLIC_BASE_URL>/iam/realms/…
+  # Keycloak â€” detras de nginx en /iam. Issuer = <PUBLIC_BASE_URL>/iam/realms/â€¦
   # ---------------------------------------------------------------------------------
   keycloak:
     image: quay.io/keycloak/keycloak:26.1
@@ -87,9 +87,9 @@ services:
       KC_HTTP_PORT: "8180"
       KC_HTTP_RELATIVE_PATH: "/iam"
       KC_PROXY_HEADERS: "xforwarded"
-      # Hostname publico INCLUYENDO el subpath /iam: el issuer queda …/iam/realms/… y
+      # Hostname publico INCLUYENDO el subpath /iam: el issuer queda â€¦/iam/realms/â€¦ y
       # matchea el auth-server-url del app (con KC_HOSTNAME puro origin, KC no lo agrega).
-      KC_HOSTNAME: "${PUBLIC_BASE_URL:-http://app.buildsoft.com.pe}/iam"
+      KC_HOSTNAME: "${PUBLIC_BASE_URL:-https://app.buildsoft.com.pe}/iam"
       KC_HOSTNAME_STRICT: "false"
       KC_HEALTH_ENABLED: "true"
     volumes:
@@ -103,7 +103,7 @@ services:
       retries: 20
 
   # ---------------------------------------------------------------------------------
-  # Kafka (KRaft) — UNICO broker: async dispatch + backbone de auditoria.
+  # Kafka (KRaft) â€” UNICO broker: async dispatch + backbone de auditoria.
   # ---------------------------------------------------------------------------------
   kafka:
     image: apache/kafka:3.7.0
@@ -130,7 +130,7 @@ services:
       retries: 10
 
   # ---------------------------------------------------------------------------------
-  # MinIO (S3-compatible) — staging de artefactos de plugins + fuentes S3.
+  # MinIO (S3-compatible) â€” staging de artefactos de plugins + fuentes S3.
   # ---------------------------------------------------------------------------------
   minio:
     image: minio/minio:RELEASE.2024-01-16T16-07-38Z
@@ -163,7 +163,7 @@ services:
       "
 
   # ---------------------------------------------------------------------------------
-  # SFTP fuente — SftpSourceProvider.
+  # SFTP fuente â€” SftpSourceProvider.
   # ---------------------------------------------------------------------------------
   sftp-source:
     image: atmoz/sftp:alpine
@@ -174,7 +174,7 @@ services:
     networks: [ihnet]
 
   # ---------------------------------------------------------------------------------
-  # FTP fuente — FtpSourceProvider (PASV).
+  # FTP fuente â€” FtpSourceProvider (PASV).
   # ---------------------------------------------------------------------------------
   ftp-source:
     image: delfer/alpine-ftp-server:latest
@@ -189,7 +189,7 @@ services:
     networks: [ihnet]
 
   # ---------------------------------------------------------------------------------
-  # SFTP BANCO (PAY) — inbox del "banco" (FIN MT101 upload-with-rename) + STATUS.
+  # SFTP BANCO (PAY) â€” inbox del "banco" (FIN MT101 upload-with-rename) + STATUS.
   # ---------------------------------------------------------------------------------
   sftp-bank:
     image: atmoz/sftp:alpine
@@ -200,7 +200,7 @@ services:
     networks: [ihnet]
 
   # ---------------------------------------------------------------------------------
-  # Consumidor de auditoria — NATIVO. Kafka -> cold-store POSTGRES (default; ClickHouse
+  # Consumidor de auditoria â€” NATIVO. Kafka -> cold-store POSTGRES (default; ClickHouse
   # deferido). Requiere el runner nativo (mvn -pl audit-consumer -am package -Pnative ...)
   # antes del docker build. Ver int/README.md.
   # ---------------------------------------------------------------------------------
@@ -267,7 +267,7 @@ services:
       QUARKUS_OIDC_AUTH_SERVER_URL: "http://keycloak:8180/iam/realms/integration-hub"
       QUARKUS_OIDC_DISCOVERY_ENABLED: "false"
       QUARKUS_OIDC_JWKS_PATH: "protocol/openid-connect/certs"
-      QUARKUS_OIDC_TOKEN_ISSUER: "${PUBLIC_BASE_URL:-http://app.buildsoft.com.pe}/iam/realms/integration-hub"
+      QUARKUS_OIDC_TOKEN_ISSUER: "${PUBLIC_BASE_URL:-https://app.buildsoft.com.pe}/iam/realms/integration-hub"
       INTEGRATIONHUB_PLUGIN_REMOTE_STAGING_ENDPOINT: "http://minio:9000"
     networks: [ihnet]
     # NO publicamos los puertos gRPC de los plugins (50061-63) al host: la app los alcanza en
@@ -284,7 +284,7 @@ services:
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------------
-  # 3 backends gRPC — comparten el netns de la app => la ve en 127.0.0.1:5006x (localhost).
+  # 3 backends gRPC â€” comparten el netns de la app => la ve en 127.0.0.1:5006x (localhost).
   # ---------------------------------------------------------------------------------
   plugin-java:
     image: demo-transform-java:1.0.0
@@ -323,7 +323,7 @@ services:
         condition: service_started
 
   # ---------------------------------------------------------------------------------
-  # Frontend widget del plugin — lo carga el BROWSER via nginx (/pluginwidget).
+  # Frontend widget del plugin â€” lo carga el BROWSER via nginx (/pluginwidget).
   # ---------------------------------------------------------------------------------
   frontend-widget:
     image: demo-transform-widget:1.0.0
@@ -331,7 +331,7 @@ services:
     container_name: ih-int-plugin-widget
     networks: [ihnet]
 
-  # Echo HTTP — destino de las tareas REST_CALL (para probar el offload async). Devuelve
+  # Echo HTTP â€” destino de las tareas REST_CALL (para probar el offload async). Devuelve
   # el request como JSON y 200. La app lo alcanza en http://echo.
   echo:
     image: ealen/echo-server:latest
