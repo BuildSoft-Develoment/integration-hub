@@ -99,3 +99,50 @@
   display: flex;
   gap: 0.5rem;
 }
+
+/* #7: chip de un vistazo cuando ya hay una solicitud PENDING de reconocimiento (maker-checker). */
+.conflicts__ack-chip {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ih-color-warn, #a15c00);
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, var(--ih-color-warn, #a15c00) 12%, transparent);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+/* #7: detalle de la solicitud PENDING dentro del panel de resolución (qué aprueba el checker). */
+.conflicts__ack-pending {
+  border: 1px solid color-mix(in srgb, var(--ih-color-warn, #a15c00) 45%, transparent);
+  border-radius: 0.4rem;
+  background: color-mix(in srgb, var(--ih-color-warn, #a15c00) 8%, transparent);
+  padding: 0.5rem 0.65rem;
+  max-width: 36rem;
+}
+
+.conflicts__ack-meta {
+  margin: 0.35rem 0 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.conflicts__ack-meta > div {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.conflicts__ack-meta dt {
+  min-width: 8.5rem;
+  margin: 0;
+  color: var(--ih-color-muted, #555);
+  font-size: 0.8rem;
+}
+
+.conflicts__ack-meta dd {
+  margin: 0;
+  font-size: 0.85rem;
+}

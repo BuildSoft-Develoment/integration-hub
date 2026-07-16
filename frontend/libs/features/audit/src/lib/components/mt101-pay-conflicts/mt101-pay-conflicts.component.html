@@ -51,7 +51,16 @@
               <td class="conflicts__mono" [title]="c.fragmentSetId">{{ c.fragmentSetId }}</td>
               <td>{{ c.processExecutionId ?? '-' }}</td>
               <td class="conflicts__mono">{{ c.sendersReference }}</td>
-              <td><span class="conflicts__status">{{ c.status || '-' }}</span></td>
+              <td>
+                <span class="conflicts__status">{{ c.status || '-' }}</span>
+                <!-- #7: chip de un vistazo si ya hay una solicitud PENDING de reconocimiento (quién/ticket/motivo en el tooltip). -->
+                @if (hasPendingAck(c)) {
+                  <span class="conflicts__ack-chip"
+                        [matTooltip]="i18n.t('audit.payConflicts.ackPendingTip') + ' ' + (c.ackRequestedBy || '?') + ' · ' + (c.ackTicketRef || '-') + ' · ' + (c.ackReason || '-')">
+                    {{ i18n.t('audit.payConflicts.ackPendingChip') }}
+                  </span>
+                }
+              </td>
               <td>{{ c.reason || '-' }}</td>
               <td>
                 @if (c.updatedAt; as ts) {
@@ -88,15 +97,43 @@
                     }
                     @if (makerCheckerEnabled()) {
                       <p class="ih-muted">{{ i18n.t('audit.payConflicts.makerCheckerHint') }}</p>
+                      @if (hasPendingAck(c)) {
+                        <!-- #7: la solicitud PENDING visible — el checker sabe qué aprueba (maker, ticket, motivo, cuándo). -->
+                        <div class="conflicts__ack-pending">
+                          <strong>{{ i18n.t('audit.payConflicts.ackPendingTitle') }}</strong>
+                          <dl class="conflicts__ack-meta">
+                            <div><dt>{{ i18n.t('audit.payConflicts.ackMaker') }}</dt><dd class="conflicts__mono">{{ c.ackRequestedBy || '-' }}</dd></div>
+                            <div><dt>{{ i18n.t('audit.payConflicts.ackTicket') }}</dt><dd class="conflicts__mono">{{ c.ackTicketRef || '-' }}</dd></div>
+                            <div><dt>{{ i18n.t('audit.payConflicts.ackReason') }}</dt><dd>{{ c.ackReason || '-' }}</dd></div>
+                            @if (c.ackRequestedAt; as ts) {
+                              <div><dt>{{ i18n.t('audit.payConflicts.ackRequestedAt') }}</dt><dd><time [attr.datetime]="ts" [title]="ts | ihTime:'absolute'">{{ ts | ihTime }}</time></dd></div>
+                            }
+                          </dl>
+                        </div>
+                      } @else {
+                        <p class="ih-muted">{{ i18n.t('audit.payConflicts.ackNonePending') }}</p>
+                      }
                     }
                     <div class="conflicts__resolve-actions">
-                      @if (makerCheckerEnabled()) {
-                        <button mat-flat-button color="primary" type="button" [disabled]="!resolveReason.trim() || !resolveTicket.trim() || resolveBusy()" (click)="requestAck(c)">
-                          {{ i18n.t('audit.payConflicts.requestAck') }}
+                      @if (makerCheckerLoading()) {
+                        <!-- #8: hasta conocer el modo, no se ofrece ninguna acción de reconocimiento (evita el flujo equivocado). -->
+                        <button mat-flat-button color="primary" type="button" disabled>
+                          {{ i18n.t('audit.payConflicts.makerCheckerLoading') }}
                         </button>
-                        <button mat-stroked-button color="primary" type="button" [disabled]="resolveBusy()" (click)="approveAck(c)" [matTooltip]="i18n.t('audit.payConflicts.approveAckHint')">
-                          {{ i18n.t('audit.payConflicts.approveAck') }}
+                      } @else if (makerCheckerEnabled()) {
+                        <button mat-flat-button color="primary" type="button"
+                                [disabled]="!resolveReason.trim() || !resolveTicket.trim() || resolveBusy()"
+                                (click)="requestAck(c)">
+                          {{ hasPendingAck(c) ? i18n.t('audit.payConflicts.requestAckReplace') : i18n.t('audit.payConflicts.requestAck') }}
                         </button>
+                        @if (hasPendingAck(c)) {
+                          <button mat-stroked-button color="primary" type="button"
+                                  [disabled]="resolveBusy() || isMakerOf(c)"
+                                  (click)="approveAck(c)"
+                                  [matTooltip]="isMakerOf(c) ? i18n.t('audit.payConflicts.approveAckSelfBlocked') : i18n.t('audit.payConflicts.approveAckHint')">
+                            {{ i18n.t('audit.payConflicts.approveAck') }}
+                          </button>
+                        }
                       } @else {
                         <button mat-flat-button color="primary" type="button" [disabled]="!resolveReason.trim() || !resolveTicket.trim() || resolveBusy()" (click)="confirmResolve(c)">
                           {{ i18n.t('audit.payConflicts.resolveConfirm') }}

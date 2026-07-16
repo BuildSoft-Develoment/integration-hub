@@ -208,6 +208,13 @@ export interface Mt101OpenPayConflict {
   rebuildRunId: string | null;
   /** Id del fragmento en su ledger (para el track-by; el id colisiona entre ledgers → usar junto a source). */
   id: number;
+  /** Maker-checker (#7): solicitud PENDING asociada (o null si no hay). ackStatus === 'PENDING' cuando existe. */
+  ackStatus: string | null;
+  /** Maker que solicitó reconocer (para mostrar y para deshabilitar "Aprobar" si el actor es el mismo). */
+  ackRequestedBy: string | null;
+  ackRequestedAt: string | null;
+  ackTicketRef: string | null;
+  ackReason: string | null;
 }
 
 /** Página del inbox de conflictos: items + cursor opaco para la siguiente página (null = fin). */

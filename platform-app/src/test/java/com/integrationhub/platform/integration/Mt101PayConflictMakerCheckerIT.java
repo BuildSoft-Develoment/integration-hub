@@ -1,5 +1,6 @@
 package com.integrationhub.platform.integration;
 
+import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
 import com.integrationhub.platform.service.payments.swift.Mt101PayConflictAcknowledgeService;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -13,9 +14,16 @@ import java.sql.Connection;
 import java.sql.Statement;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -46,6 +54,9 @@ class Mt101PayConflictMakerCheckerIT {
 
     @Inject
     Mt101PayConflictAcknowledgeService service;
+
+    @Inject
+    Mt101FragmentRepository repository;
 
     @BeforeEach
     void clean() throws Exception {
@@ -160,6 +171,108 @@ class Mt101PayConflictMakerCheckerIT {
         var result = service.approveAcknowledge(null, "NORMAL", "SET-E", "KE", "carlos");
         assertEquals(1, result.acknowledged());
         assertFalse(payConflict("SET-E", "KE"));
+    }
+
+    // --- tanda-8 #7: la consola de open-conflicts expone la solicitud PENDING (LEFT JOIN sin fan-out) ---
+
+    @Test
+    void openPayConflictsExposesThePendingAckRequestAndNullWhenNone() throws Exception {
+        seedConflict("SET-P", "KP", "SENT", "banco REJECTED sobre SENT");
+        seedConflict("SET-N", "KN", "SENT", "sin solicitud aun");
+        service.requestAcknowledge(null, "NORMAL", "SET-P", "KP", "maria", "revisado y conservado SENT", "TCK-P7");
+
+        var rows = repository.openPayConflicts(dataSource, null, null, 50);
+        var withPending = rows.stream().filter(r -> "KP".equals(r.sendersReference())).findFirst().orElseThrow();
+        assertEquals("PENDING", withPending.ackStatus(), "el LEFT JOIN trae la solicitud PENDING");
+        assertEquals("maria", withPending.ackRequestedBy());
+        assertEquals("TCK-P7", withPending.ackTicketRef());
+        assertEquals("revisado y conservado SENT", withPending.ackReason());
+        assertNotNull(withPending.ackRequestedAt(), "requested_at se expone como instante");
+
+        var withoutPending = rows.stream().filter(r -> "KN".equals(r.sendersReference())).findFirst().orElseThrow();
+        assertNull(withoutPending.ackStatus(), "sin PENDING el LEFT JOIN deja los campos ack en null (no fan-out)");
+        assertNull(withoutPending.ackRequestedBy());
+    }
+
+    @Test
+    void openCorrectivePayConflictsExposesThePendingAckRequest() throws Exception {
+        seedCorrectiveConflict("RUN-P", "CORR-P", "KCP", "SENT", "contradiccion correctiva");
+        service.requestAcknowledge(null, "CORRECTIVE", "RUN-P", "KCP", "maria", "correctivo revisado", "TCK-CP");
+
+        var rows = repository.openCorrectivePayConflicts(dataSource, null, null, 50);
+        var row = rows.stream().filter(r -> "KCP".equals(r.sendersReference())).findFirst().orElseThrow();
+        assertEquals("PENDING", row.ackStatus());
+        assertEquals("maria", row.ackRequestedBy());
+        assertEquals("TCK-CP", row.ackTicketRef());
+        assertEquals("correctivo revisado", row.ackReason());
+    }
+
+    // --- tanda-8 #9: approve-acknowledge fail-loud (rows/marked explícito), sin doble-cierre silencioso ---
+
+    @Test
+    void approveIsFailLoudWhenTheConflictWasAlreadyResolvedOutOfBand() throws Exception {
+        seedConflict("SET-F", "KF", "SENT", "banco REJECTED");
+        service.requestAcknowledge(null, "NORMAL", "SET-F", "KF", "maria", "revisado", "TCK-F");
+        // El flag ya se limpió por otra vía (p.ej. un checker concurrente que ganó): el PENDING sigue, el flag no.
+        clearFlag("SET-F", "KF");
+
+        var error = assertThrows(IllegalArgumentException.class, () ->
+                service.approveAcknowledge(null, "NORMAL", "SET-F", "KF", "carlos"));
+        assertTrue(error.getMessage().contains("already resolved"), "aborta explícito, no retorna 0 en silencio");
+        // Rollback: la solicitud NO quedó marcada APPROVED en falso (sigue PENDING). Sin doble-cierre.
+        assertEquals(1L, ackRequestCount("SET-F", "KF", "PENDING"));
+        assertEquals(0L, ackRequestCount("SET-F", "KF", "APPROVED"));
+    }
+
+    @Test
+    void concurrentApproveByTwoDifferentCheckersGrantsExactlyOne() throws Exception {
+        seedConflict("SET-RACE", "KR", "SENT", "banco REJECTED sobre SENT");
+        service.requestAcknowledge(null, "NORMAL", "SET-RACE", "KR", "maria", "revisado", "TCK-R");
+
+        var start = new CountDownLatch(1);
+        var successes = new AtomicInteger(0);
+        var failures = new AtomicInteger(0);
+        ExecutorService pool = Executors.newFixedThreadPool(2);
+        try {
+            Runnable attempt = () -> {
+                try {
+                    start.await();
+                    var result = service.approveAcknowledge(null, "NORMAL", "SET-RACE", "KR",
+                            Thread.currentThread().getName());
+                    if (result.acknowledged() == 1) {
+                        successes.incrementAndGet();
+                    }
+                } catch (RuntimeException expectedForLoser) {
+                    // El perdedor de la carrera falla fuerte (already resolved / no pending), no un no-op silencioso.
+                    failures.incrementAndGet();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            };
+            var f1 = pool.submit(attempt);   // checker "pool-...-thread-1"
+            var f2 = pool.submit(attempt);   // checker "pool-...-thread-2"
+            start.countDown();
+            f1.get(15, TimeUnit.SECONDS);
+            f2.get(15, TimeUnit.SECONDS);
+        } finally {
+            pool.shutdownNow();
+        }
+
+        assertEquals(1, successes.get(), "exactamente UN checker aprueba (contención real)");
+        assertEquals(1, failures.get(), "el otro falla fuerte (cero doble-cierre silencioso)");
+        assertFalse(payConflict("SET-RACE", "KR"), "el flag queda limpio una sola vez");
+        assertEquals(1L, ackRequestCount("SET-RACE", "KR", "APPROVED"), "una sola aprobación queda registrada");
+        assertEquals(0L, ackRequestCount("SET-RACE", "KR", "PENDING"), "no queda PENDING colgado");
+    }
+
+    private void clearFlag(String setId, String ref) throws Exception {
+        try (Connection c = dataSource.getConnection();
+             var st = c.prepareStatement("update mt101_build_fragment set pay_conflict = false "
+                     + "where fragment_set_id = ? and senders_reference = ?")) {
+            st.setString(1, setId);
+            st.setString(2, ref);
+            st.executeUpdate();
+        }
     }
 
     private void seedCorrectiveConflict(String runId, String correctiveSetId, String ref, String payStatus,

@@ -215,7 +215,20 @@ public class Mt101PayConflictAcknowledgeService {
                                 sendersReference.trim(), checker, pending.reason(), pending.ticketRef())
                         : repository.acknowledgeNormalPayConflict(connection, setOrRunId.trim(),
                                 sendersReference.trim(), checker, pending.reason(), pending.ticketRef());
-                repository.markAckRequestApproved(connection, pending.id(), checker);
+                // Hardening (tanda-8 #9): la aprobación mueve DOS terminales que deben cerrar juntos o abortar —
+                // limpiar el flag pay_conflict (rows) y marcar la solicitud APPROVED (guarded where status='PENDING').
+                // En una carrera de dos checkers, el 2º lee el mismo PENDING pero el 1º ya cerró ambos: acknowledge*
+                // devuelve 0 filas y markAckRequestApproved devuelve false. Sin este chequeo el 2º marcaría/retornaría
+                // en silencio (0). Fail-loud → el catch hace rollback y el resource lo mapea a 400.
+                var approved = repository.markAckRequestApproved(connection, pending.id(), checker);
+                if (!approved) {
+                    throw new IllegalArgumentException("the acknowledge request for " + sendersReference
+                            + " was already resolved by another checker (no PENDING request left to approve)");
+                }
+                if (rows.isEmpty()) {
+                    throw new IllegalArgumentException("no open pay conflict to acknowledge for " + sendersReference
+                            + " (it was already resolved concurrently)");
+                }
                 var makerChecker = pending.reason() + " (maker: " + pending.requestedBy() + ", checker: " + checker + ")";
                 var envelopes = rows.stream()
                         .map(row -> Mt101PayConflictAudit.resolvedEnvelope(

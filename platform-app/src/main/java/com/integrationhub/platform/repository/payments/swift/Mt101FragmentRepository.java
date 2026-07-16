@@ -1014,7 +1014,13 @@ public class Mt101FragmentRepository {
      */
     public record OpenPayConflictRow(String source, String fragmentSetId, Long processExecutionId,
                                      String sendersReference, String status, String reason, String updatedAt,
-                                     String rebuildRunId, long id) {
+                                     String rebuildRunId, long id,
+                                     // Maker-checker (tanda-8 #7): la solicitud PENDING asociada (null si no hay). El
+                                     // índice parcial ux_mt101_ack_request_pending garantiza a lo sumo UNA → el LEFT
+                                     // JOIN no abre filas. Deja a la consola mostrar quién solicitó/ticket/motivo y
+                                     // decidir el botón (Aprobar si hay PENDING y el actor ≠ maker; Solicitar si no hay).
+                                     String ackStatus, String ackRequestedBy, String ackRequestedAt,
+                                     String ackTicketRef, String ackReason) {
     }
 
     /**
@@ -1025,10 +1031,20 @@ public class Mt101FragmentRepository {
      */
     public List<OpenPayConflictRow> openPayConflicts(DataSource dataSource, java.sql.Timestamp afterUpdatedAt,
                                                      Long afterId, int limit) throws SQLException {
-        var sql = "select id, fragment_set_id, process_execution_id, senders_reference, status, pay_conflict_reason, "
-                + "updated_at from mt101_build_fragment where pay_conflict = true "
-                + "and (?::timestamp is null or (updated_at, id) < (?::timestamp, ?::bigint)) "
-                + "order by updated_at desc, id desc limit ?";
+        // LEFT JOIN a la solicitud PENDING (tanda-8 #7): expone maker/ticket/motivo/estado del maker-checker sin
+        // fan-out (índice parcial ux_mt101_ack_request_pending = a lo sumo 1 PENDING por conflicto). Aliaso las tablas
+        // (bf/ar) porque updated_at, id, status, reason existen en ambas.
+        var sql = "select bf.id, bf.fragment_set_id, bf.process_execution_id, bf.senders_reference, bf.status, "
+                + "bf.pay_conflict_reason, bf.updated_at, "
+                + "ar.status as ack_status, ar.requested_by as ack_requested_by, ar.requested_at as ack_requested_at, "
+                + "ar.ticket_ref as ack_ticket_ref, ar.reason as ack_reason "
+                + "from mt101_build_fragment bf "
+                + "left join mt101_pay_conflict_ack_request ar on ar.source = 'NORMAL' "
+                + "and ar.set_or_run_id = bf.fragment_set_id and ar.senders_reference = bf.senders_reference "
+                + "and ar.status = 'PENDING' "
+                + "where bf.pay_conflict = true "
+                + "and (?::timestamp is null or (bf.updated_at, bf.id) < (?::timestamp, ?::bigint)) "
+                + "order by bf.updated_at desc, bf.id desc limit ?";
         var result = new ArrayList<OpenPayConflictRow>();
         try (var connection = dataSource.getConnection();
              var statement = connection.prepareStatement(sql)) {
@@ -1039,6 +1055,7 @@ public class Mt101FragmentRepository {
             try (var rs = statement.executeQuery()) {
                 while (rs.next()) {
                     var updatedAt = rs.getTimestamp("updated_at");
+                    var ackRequestedAt = rs.getTimestamp("ack_requested_at");
                     result.add(new OpenPayConflictRow(
                             "NORMAL",
                             rs.getString("fragment_set_id"),
@@ -1048,7 +1065,12 @@ public class Mt101FragmentRepository {
                             rs.getString("pay_conflict_reason"),
                             updatedAt == null ? null : updatedAt.toInstant().toString(),
                             null,
-                            rs.getLong("id")));
+                            rs.getLong("id"),
+                            rs.getString("ack_status"),
+                            rs.getString("ack_requested_by"),
+                            ackRequestedAt == null ? null : ackRequestedAt.toInstant().toString(),
+                            rs.getString("ack_ticket_ref"),
+                            rs.getString("ack_reason")));
                 }
             }
         }
@@ -1067,13 +1089,20 @@ public class Mt101FragmentRepository {
         // El process_execution_id sale del fragmento correctivo en mt101_build_fragment (el ledger correctivo no
         // lo lleva): sin el, la evidencia bancaria no se puede acotar a ESTA ejecucion y mezclaria confirmaciones
         // de otra corrida con el mismo :20:.
+        // LEFT JOIN a la solicitud PENDING correctiva (tanda-8 #7): source='CORRECTIVE', set_or_run_id=rebuild_run_id,
+        // :20:=corrective_senders_reference. Sin fan-out por el índice parcial (a lo sumo 1 PENDING por conflicto).
         var sql = "select cpf.id, rr.original_fragment_set_id as fragment_set_id, bf.process_execution_id, "
                 + "cpf.corrective_senders_reference as senders_reference, cpf.pay_status as status, "
-                + "cpf.pay_conflict_reason, cpf.updated_at, cpf.rebuild_run_id "
+                + "cpf.pay_conflict_reason, cpf.updated_at, cpf.rebuild_run_id, "
+                + "ar.status as ack_status, ar.requested_by as ack_requested_by, ar.requested_at as ack_requested_at, "
+                + "ar.ticket_ref as ack_ticket_ref, ar.reason as ack_reason "
                 + "from mt101_corrective_pay_fragment cpf "
                 + "join mt101_rebuild_run rr on rr.rebuild_run_id = cpf.rebuild_run_id "
                 + "left join mt101_build_fragment bf on bf.fragment_set_id = rr.corrective_set_id "
                 + "and bf.senders_reference = cpf.corrective_senders_reference "
+                + "left join mt101_pay_conflict_ack_request ar on ar.source = 'CORRECTIVE' "
+                + "and ar.set_or_run_id = cpf.rebuild_run_id and ar.senders_reference = cpf.corrective_senders_reference "
+                + "and ar.status = 'PENDING' "
                 + "where cpf.pay_conflict = true "
                 + "and (?::timestamp is null or (cpf.updated_at, cpf.id) < (?::timestamp, ?::bigint)) "
                 + "order by cpf.updated_at desc, cpf.id desc limit ?";
@@ -1087,6 +1116,7 @@ public class Mt101FragmentRepository {
             try (var rs = statement.executeQuery()) {
                 while (rs.next()) {
                     var updatedAt = rs.getTimestamp("updated_at");
+                    var ackRequestedAt = rs.getTimestamp("ack_requested_at");
                     result.add(new OpenPayConflictRow(
                             "CORRECTIVE",
                             rs.getString("fragment_set_id"),
@@ -1096,7 +1126,12 @@ public class Mt101FragmentRepository {
                             rs.getString("pay_conflict_reason"),
                             updatedAt == null ? null : updatedAt.toInstant().toString(),
                             rs.getString("rebuild_run_id"),
-                            rs.getLong("id")));
+                            rs.getLong("id"),
+                            rs.getString("ack_status"),
+                            rs.getString("ack_requested_by"),
+                            ackRequestedAt == null ? null : ackRequestedAt.toInstant().toString(),
+                            rs.getString("ack_ticket_ref"),
+                            rs.getString("ack_reason")));
                 }
             }
         }

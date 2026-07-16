@@ -1,12 +1,12 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
-import { BreadcrumbService, I18nService } from '@integration-hub/core/services';
+import { AuthService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { IconComponent, RelativeTimePipe } from '@integration-hub/shared/ui';
 import { AuditApiService } from '../../api/audit-api.service';
 import { Mt101OpenPayConflict, Mt101OpenPayConflictConfirmation } from '../../models/audit.models';
@@ -39,6 +39,7 @@ import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspa
 export class Mt101PayConflictsComponent {
   private readonly api = inject(AuditApiService);
   private readonly breadcrumb = inject(BreadcrumbService);
+  private readonly auth = inject(AuthService);
   readonly i18n = inject(I18nService);
 
   readonly conflicts = signal<Mt101OpenPayConflict[]>([]);
@@ -59,8 +60,11 @@ export class Mt101PayConflictsComponent {
   readonly resolveBusy = signal(false);
   readonly resolveError = signal<string | null>(null);
 
-  // #6: si maker-checker está activo, la UI cambia el flujo single-actor por dos pasos (solicitar → aprobar).
-  readonly makerCheckerEnabled = signal(false);
+  // #6/#8: modo maker-checker con estado explícito (LOADING hasta conocerlo). Evita mostrar el flujo single-actor por
+  // un instante antes de que responda /pay-conflicts/settings; mientras LOADING, las acciones de acknowledge se bloquean.
+  readonly makerCheckerState = signal<'LOADING' | 'OFF' | 'ON'>('LOADING');
+  readonly makerCheckerEnabled = computed(() => this.makerCheckerState() === 'ON');
+  readonly makerCheckerLoading = computed(() => this.makerCheckerState() === 'LOADING');
 
   constructor() {
     this.breadcrumb.setItems([
@@ -70,10 +74,25 @@ export class Mt101PayConflictsComponent {
     this.breadcrumb.setBackLabel(this.i18n.t('audit.common.back'));
     this.load();
     // La UI pregunta al backend si maker-checker está activo para no llamar al endpoint equivocado (evita el 400).
+    // En error cae a OFF (el backend igual rechaza el endpoint equivocado con 400): se pierde el matiz, no la seguridad.
     this.api.mt101PayConflictSettings().subscribe({
-      next: (s) => this.makerCheckerEnabled.set(s.makerCheckerEnabled),
-      error: () => this.makerCheckerEnabled.set(false),
+      next: (s) => this.makerCheckerState.set(s.makerCheckerEnabled ? 'ON' : 'OFF'),
+      error: () => this.makerCheckerState.set('OFF'),
     });
+  }
+
+  /** #7: ¿este conflicto ya tiene una solicitud PENDING de reconocimiento (maker)? */
+  hasPendingAck(c: Mt101OpenPayConflict): boolean {
+    return c.ackStatus === 'PENDING';
+  }
+
+  /**
+   * #7: ¿el actor actual es el MISMO maker que solicitó? Deshabilita "Aprobar" (segregación de funciones); el backend
+   * también lo rechaza con 400, pero la UI lo previene y lo explica.
+   */
+  isMakerOf(c: Mt101OpenPayConflict): boolean {
+    const maker = (c.ackRequestedBy ?? '').trim().toLowerCase();
+    return maker.length > 0 && maker === this.auth.username().trim().toLowerCase();
   }
 
   /** Primera página: reinicia la lista y el cursor. */
