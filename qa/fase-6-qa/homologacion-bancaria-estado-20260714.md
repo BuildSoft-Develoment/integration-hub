@@ -76,7 +76,7 @@ Priorizados. "Bloqueante" = no homologaría sin cerrarlo; "Fuerte" = muy recomen
 
 | Item | Estado |
 |---|---|
-| Prueba de **dos nodos** (claim por token, heartbeat, recovery, CERO reenvío físico bajo timeout) | No ejecutada |
+| Prueba de **dos nodos** (claim por token, heartbeat, recovery, CERO reenvío físico bajo timeout) | **(A) IT hecho (2026-07-15)** — `TwoNodeClaimFencingIT` 2/2: lease vivo exclusivo, vencido re-clamable, nodo caído fenced (cero doble-ejecución), heartbeat bloquea robo. PAY lease-expiry→UNCERTAIN sin reenvío cubierto por `payLateAcceptanceAfterLeaseExpiry`. **(B) real de 2 contenedores: pendiente** (confirmación operativa) |
 | Validación **banco-a-banco real** (UAT con el banco, ACK/NACK reales, no simulados) | No hecha |
 
 ## B.3 — Gobierno y controles — **Requiere tu decisión (D.1)**
