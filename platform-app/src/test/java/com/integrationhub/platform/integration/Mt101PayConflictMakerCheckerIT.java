@@ -152,6 +152,9 @@ class Mt101PayConflictMakerCheckerIT {
         service.requestAcknowledge(null, "NORMAL", "SET-E", "KE", "jose", "segunda solicitud", "TCK-2");
         assertEquals(1L, ackRequestCount("SET-E", "KE", "PENDING"), "un solo PENDING (el ultimo maker)");
         assertEquals(1L, ackRequestCount("SET-E", "KE", "SUPERSEDED"), "el PENDING previo se conserva como SUPERSEDED (historial)");
+        // Hallazgo 1: una solicitud SUPERSEDED NO fue aprobada -> approved_at y approved_by quedan NULL.
+        assertEquals(1L, ackRequestCount("SET-E", "KE", "SUPERSEDED", true),
+                "la fila SUPERSEDED no lleva approved_at/approved_by (no fue aprobada)");
 
         // El PENDING vigente es el del ultimo maker (jose): approve usa su reason/ticket.
         var result = service.approveAcknowledge(null, "NORMAL", "SET-E", "KE", "carlos");
@@ -207,9 +210,16 @@ class Mt101PayConflictMakerCheckerIT {
     }
 
     private long ackRequestCount(String setOrRunId, String ref, String status) throws Exception {
+        return ackRequestCount(setOrRunId, ref, status, false);
+    }
+
+    private long ackRequestCount(String setOrRunId, String ref, String status, boolean requireNullApproval)
+            throws Exception {
+        var sql = "select count(*) from mt101_pay_conflict_ack_request "
+                + "where set_or_run_id = ? and senders_reference = ? and status = ?"
+                + (requireNullApproval ? " and approved_at is null and approved_by is null" : "");
         try (Connection c = dataSource.getConnection();
-             var st = c.prepareStatement("select count(*) from mt101_pay_conflict_ack_request "
-                     + "where set_or_run_id = ? and senders_reference = ? and status = ?")) {
+             var st = c.prepareStatement(sql)) {
             st.setString(1, setOrRunId);
             st.setString(2, ref);
             st.setString(3, status);

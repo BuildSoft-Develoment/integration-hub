@@ -1280,10 +1280,14 @@ public class Mt101FragmentRepository {
         }
     }
 
-    /** Marca SUPERSEDED cualquier solicitud PENDING previa para el conflicto (conserva historial, no sobrescribe). */
+    /**
+     * Marca SUPERSEDED cualquier solicitud PENDING previa para el conflicto (conserva historial, no sobrescribe).
+     * NO setea {@code approved_at}: una solicitud superseded NO fue aprobada (approved_at/approved_by quedan NULL,
+     * solo se llenan al aprobar). La fila conserva su {@code requested_at}.
+     */
     public int supersedePendingAckRequests(java.sql.Connection connection, String source, String setOrRunId,
                                            String sendersReference) throws SQLException {
-        var sql = "update mt101_pay_conflict_ack_request set status = 'SUPERSEDED', approved_at = current_timestamp "
+        var sql = "update mt101_pay_conflict_ack_request set status = 'SUPERSEDED' "
                 + "where source = ? and set_or_run_id = ? and senders_reference = ? and status = 'PENDING'";
         try (var statement = connection.prepareStatement(sql)) {
             statement.setString(1, source);
