@@ -83,14 +83,15 @@ Priorizados. "Bloqueante" = no homologaría sin cerrarlo; "Fuerte" = muy recomen
 
 | Item | Estado |
 |---|---|
-| Maker-checker para `PAY_CONFLICT_RESOLVED` | **Implementado opt-in (commit `c095949c`)** — `mt101.pay.conflict.acknowledge.maker-checker.enabled` (default off; on en prod bancaria): request-acknowledge (maker) + approve-acknowledge (checker ≠ maker). Single-actor intacto con off. IT 5/5. **Falta: activarlo en la config de prod.** |
+| Maker-checker para `PAY_CONFLICT_RESOLVED` | **Implementado + operable + activo en prod** — opt-in (`mt101.pay.conflict.acknowledge.maker-checker.enabled`): request-acknowledge (maker) + approve-acknowledge (checker ≠ maker, fail-loud). Consola muestra la solicitud PENDING (tanda-8 #7). IT `Mt101PayConflictMakerCheckerIT` 12/12. **Activado por default en `application-prod.properties` (#10).** |
 
 ## B.4 — Seguridad y entrega — **Operativo, antes de prod**
 
 | Item | Estado |
 |---|---|
-| Revertir config de test: `directAccessGrants`, cert self-signed, usuarios fixture (`admin`/`approver`) | Pendiente |
-| Separar `ops/…/onprem/int-lab` (demo) de `prod-template` (sin secretos, `.env.example`) | Pendiente |
+| **prod-template: controles bancarios activos en prod** (`direct-list=false`, `maker-checker=true`, `insert-batch=200000`) | **Hecho (#10, 2026-07-16)** — `application-prod.properties`, común a todas las nubes. Ver [`prod-template-10-20260716.md`](prod-template-10-20260716.md) |
+| Separar `int-lab` (demo) de `prod-template` (sin secretos, `.env.example`) | **Frontera documentada (#10)** — prod usa `.env.example` sin secretos; `int/.env` demo aislado, marcado "nunca en prod" |
+| Revertir config de test del lab: `directAccessGrants`, cert self-signed, usuarios fixture (`admin`/`approver`) | Pendiente (aislado en el int-lab demo) |
 | Rotar credenciales/cert demo si alguna se reusara (viven en el historial de git) | Recordatorio |
 
 ## B.5 — Calidad / claridad — **Recomendado, no bloqueante**
