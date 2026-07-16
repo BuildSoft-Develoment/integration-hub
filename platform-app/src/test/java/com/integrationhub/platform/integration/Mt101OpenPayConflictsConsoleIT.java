@@ -11,6 +11,9 @@ import org.junit.jupiter.api.Test;
 import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.Statement;
+import java.util.Map;
+
+import io.restassured.http.ContentType;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
@@ -41,6 +44,7 @@ class Mt101OpenPayConflictsConsoleIT {
             // El endpoint es GLOBAL (todos los conflictos abiertos): se limpian TODOS para que cada test sea determinista.
             s.execute("delete from mt101_build_fragment where pay_conflict = true");
             s.execute("delete from mt101_corrective_pay_fragment where pay_conflict = true");
+            s.execute("delete from mt101_pay_conflict_ack_request");
             s.execute("delete from mt101_build_fragment where fragment_set_id in ('OPEN-CON-A', 'OPEN-CON-B')");
             s.execute("delete from mt101_corrective_pay_fragment where rebuild_run_id = 'OPEN-CON-RUN'");
             s.execute("delete from mt101_rebuild_run where rebuild_run_id = 'OPEN-CON-RUN'");
@@ -103,6 +107,42 @@ class Mt101OpenPayConflictsConsoleIT {
                 .body("items.find { it.sendersReference == 'K-C1' }.rebuildRunId", is("OPEN-CON-RUN"))
                 .body("items.find { it.sendersReference == 'K-C1' }.processExecutionId", is(nullValue()))
                 .body("items.find { it.sendersReference == 'K-C1' }.reason", containsString("REJECTED"));
+    }
+
+    @Test
+    @TestSecurity(user = "ops", roles = {"payments-operator"})
+    void exposesPendingAckRequestFieldsThroughTheEndpoint() throws Exception {
+        // tanda-8 #7: el LEFT JOIN a la solicitud PENDING viaja por el stack HTTP completo (query → serialización del
+        // record). Un conflicto CON solicitud PENDING trae los campos ack poblados; otro SIN solicitud los trae null.
+        seedConflict("OPEN-CON-A", 1, "K-ACK", "SENT", true, "banco REJECTED sobre SENT", peId);
+        seedConflict("OPEN-CON-B", 1, "K-NOACK", "SENT", true, "sin solicitud aun", null);
+        insertPendingAck("NORMAL", "OPEN-CON-A", "K-ACK", "maria", "revisado y conservado", "TCK-HTTP");
+
+        given().when().get("/api/query/mt101-fragments/pay-conflicts/open")
+                .then().statusCode(200)
+                .body("items.find { it.sendersReference == 'K-ACK' }.ackStatus", is("PENDING"))
+                .body("items.find { it.sendersReference == 'K-ACK' }.ackRequestedBy", is("maria"))
+                .body("items.find { it.sendersReference == 'K-ACK' }.ackTicketRef", is("TCK-HTTP"))
+                .body("items.find { it.sendersReference == 'K-ACK' }.ackReason", is("revisado y conservado"))
+                // Sin solicitud PENDING el LEFT JOIN deja los campos en null (no fan-out, no basura de otra fila).
+                .body("items.find { it.sendersReference == 'K-NOACK' }.ackStatus", is(nullValue()))
+                .body("items.find { it.sendersReference == 'K-NOACK' }.ackRequestedBy", is(nullValue()));
+    }
+
+    private void insertPendingAck(String source, String setOrRunId, String ref, String maker, String reason,
+                                  String ticket) throws Exception {
+        try (Connection c = dataSource.getConnection();
+             var st = c.prepareStatement("insert into mt101_pay_conflict_ack_request "
+                     + "(source, set_or_run_id, senders_reference, requested_by, reason, ticket_ref, status, requested_at) "
+                     + "values (?, ?, ?, ?, ?, ?, 'PENDING', current_timestamp)")) {
+            st.setString(1, source);
+            st.setString(2, setOrRunId);
+            st.setString(3, ref);
+            st.setString(4, maker);
+            st.setString(5, reason);
+            st.setString(6, ticket);
+            st.executeUpdate();
+        }
     }
 
     @Test
@@ -173,7 +213,8 @@ class Mt101OpenPayConflictsConsoleIT {
         long archiveId = seedArchive("K-EVID");
         seedConfirmation(archiveId, "STATUS_API", "GW-1", "REJECTED");
 
-        given().queryParam("sendersReference", "K-EVID")
+        // La evidencia se acota por processExecutionId (obligatorio): el :20: se repite entre corridas.
+        given().queryParam("sendersReference", "K-EVID").queryParam("processExecutionId", peId)
                 .when().get("/api/query/mt101-fragments/pay-conflicts/confirmations")
                 .then().statusCode(200)
                 .body("size()", org.hamcrest.Matchers.greaterThanOrEqualTo(1))
@@ -182,7 +223,8 @@ class Mt101OpenPayConflictsConsoleIT {
                 .body("[0].confirmationType", is("STATUS_API"));
 
         // Sin sendersReference -> 400.
-        given().when().get("/api/query/mt101-fragments/pay-conflicts/confirmations")
+        given().queryParam("processExecutionId", peId)
+                .when().get("/api/query/mt101-fragments/pay-conflicts/confirmations")
                 .then().statusCode(400);
     }
 
@@ -192,8 +234,10 @@ class Mt101OpenPayConflictsConsoleIT {
         // A2: reconocer un conflicto NORMAL con motivo -> limpia el flag (desaparece del inbox), sin tocar el status.
         seedConflict("OPEN-CON-A", 1, "K-ACK", "SENT", true, "banco REJECTED", peId);
 
-        given().queryParam("source", "NORMAL").queryParam("setId", "OPEN-CON-A")
-                .queryParam("sendersReference", "K-ACK").queryParam("reason", "revisado, se conserva SENT")
+        // El reason NO viaja en la URL (no queremos el motivo en access-logs): cuerpo JSON + ticketRef obligatorio.
+        given().contentType(ContentType.JSON)
+                .body(Map.of("source", "NORMAL", "setId", "OPEN-CON-A", "sendersReference", "K-ACK",
+                        "reason", "revisado, se conserva SENT", "ticketRef", "TCK-ACK"))
                 .when().post("/api/query/mt101-fragments/pay-conflicts/acknowledge")
                 .then().statusCode(200)
                 .body("acknowledged", is(1));
@@ -221,8 +265,10 @@ class Mt101OpenPayConflictsConsoleIT {
                     "la trama de resolución debe persistir junto a la limpieza del flag");
         }
 
-        // Sin motivo -> 400.
-        given().queryParam("source", "NORMAL").queryParam("setId", "OPEN-CON-A").queryParam("sendersReference", "K-ACK")
+        // Sin motivo -> 400 (el body omite reason).
+        given().contentType(ContentType.JSON)
+                .body(Map.of("source", "NORMAL", "setId", "OPEN-CON-A", "sendersReference", "K-ACK",
+                        "ticketRef", "TCK-ACK"))
                 .when().post("/api/query/mt101-fragments/pay-conflicts/acknowledge")
                 .then().statusCode(400);
     }
@@ -233,8 +279,9 @@ class Mt101OpenPayConflictsConsoleIT {
         seedRebuildRun("OPEN-CON-RUN", "OPEN-CON-ORIG", "OPEN-CON-CORR");
         seedCorrectiveConflict("OPEN-CON-RUN", "OPEN-CON-CORR", "K-ACK-C", "SENT", "contradiccion");
 
-        given().queryParam("source", "CORRECTIVE").queryParam("setId", "OPEN-CON-RUN")
-                .queryParam("sendersReference", "K-ACK-C").queryParam("reason", "revisado")
+        given().contentType(ContentType.JSON)
+                .body(Map.of("source", "CORRECTIVE", "setId", "OPEN-CON-RUN", "sendersReference", "K-ACK-C",
+                        "reason", "revisado", "ticketRef", "TCK-ACK-C"))
                 .when().post("/api/query/mt101-fragments/pay-conflicts/acknowledge")
                 .then().statusCode(200)
                 .body("acknowledged", is(1));
@@ -292,9 +339,10 @@ class Mt101OpenPayConflictsConsoleIT {
 
     private long seedArchive(String sendersReference) throws Exception {
         try (Connection c = dataSource.getConnection();
-             var st = c.prepareStatement("insert into mt101_archive (senders_reference, status) "
-                     + "values (?, 'SENT') returning id")) {
+             var st = c.prepareStatement("insert into mt101_archive (senders_reference, status, process_execution_id) "
+                     + "values (?, 'SENT', ?) returning id")) {
             st.setString(1, sendersReference);
+            st.setLong(2, peId);
             try (var rs = st.executeQuery()) {
                 rs.next();
                 return rs.getLong(1);
