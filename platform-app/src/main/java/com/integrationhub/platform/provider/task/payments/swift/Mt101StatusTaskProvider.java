@@ -488,6 +488,14 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         if (!corrective.isEmpty()) {
             return executeCorrectiveQuery(context, configuration, corrective);
         }
+        // Paged-aware: si el input apunta al output `fragments` del build (un store-ref Map paginado,
+        // igual que lo consumen VALIDATE/ARCHIVE/PAY), reconcilia el fragment set COMPLETO via el
+        // servicio de resolucion (paged, keyset) en vez de intentar materializarlo como List en
+        // memoria. Sin esto, readRecords fallaba con "expected <ref>.fragments to be List but got Map".
+        // Deriva el fragmentSetId del output del build upstream (mismo mecanismo que resolveNormalPay).
+        if (payUncertainResolutionService != null && inputIsFragmentSetRef(context, configuration)) {
+            return resolveNormalPay(context, configuration);
+        }
         var records = readRecords(context, configuration);
         if (records.isEmpty()) {
             return TaskResult.success("MT101_STATUS skipped because there are no messages to query");
@@ -1139,6 +1147,26 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         var source = new LinkedHashMap<String, Object>();
         rawMap.forEach((key, value) -> source.put(String.valueOf(key), value));
         return source;
+    }
+
+    /**
+     * True si el {@code input} apunta al output {@code fragments} del build: un store-ref paginado
+     * (un {@code Map} con {@code fragmentSetId}), no una {@code List} de records en memoria. En ese
+     * caso STATUS reconcilia el fragment set completo (paged) via {@link #resolveNormalPay} en vez de
+     * materializar records. Espeja como VALIDATE/ARCHIVE/PAY consumen {@code <build>.fragments}.
+     */
+    @SuppressWarnings("unchecked")
+    private boolean inputIsFragmentSetRef(TaskContext context, Map<String, Object> configuration) {
+        if (!(context.attributes().get("taskOutputs") instanceof Map<?, ?> taskOutputs) || taskOutputs.isEmpty()
+                || !(configuration.get("input") instanceof Map<?, ?> rawInput)) {
+            return false;
+        }
+        var sourceTaskRef = stringValue(((Map<String, Object>) rawInput).get("sourceTaskRef"), "");
+        if (sourceTaskRef.isBlank()) {
+            return false;
+        }
+        var sourceOutput = stringValue(((Map<String, Object>) rawInput).get("sourceOutput"), "records");
+        return taskOutputs.get(sourceTaskRef + "." + sourceOutput) instanceof Map;
     }
 
     private DataSource resolveDataSource(String connectionRef) {

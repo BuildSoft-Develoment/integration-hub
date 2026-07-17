@@ -26,7 +26,7 @@ export class ProcessTaskBindingContextService {
       this.availableOutputsForTask(sourceTask)
         .filter((output) => output !== 'metadata')
         .forEach((output) => {
-          options.push(...this.optionsForOutput(sourceTask, output, readers));
+          options.push(...this.optionsForOutput(sourceTask, output, readers, tasks));
         });
     }
     return options;
@@ -258,7 +258,7 @@ export class ProcessTaskBindingContextService {
     return [];
   }
 
-  private optionsForOutput(sourceTask: ProcessTaskFormModel, sourceOutput: ProcessTaskOutputKind, readers: readonly ReaderRef[]): ProcessTaskBindingOption[] {
+  private optionsForOutput(sourceTask: ProcessTaskFormModel, sourceOutput: ProcessTaskOutputKind, readers: readonly ReaderRef[], tasks: readonly ProcessTaskFormModel[]): ProcessTaskBindingOption[] {
     const config = this.parseJson(sourceTask.configurationJson);
     switch (sourceOutput) {
       case 'records':
@@ -269,8 +269,18 @@ export class ProcessTaskBindingContextService {
           return this.mt101RecordOptions(sourceTask.taskType);
         }
         return [];
-      case 'table':
-        return this.tableColumnOptions(config);
+      case 'table': {
+        const columns = this.tableColumnOptions(config);
+        if (columns.length > 0) {
+          return columns;
+        }
+        // Staging JSON: un DB_WRITE a staging_record sin columnMappings vuelca el record
+        // completo como payload_json, asi que las claves del JSON = los campos del reader
+        // upstream. Se traza el linaje DB_WRITE.input -> FILE_READ y se ofrecen esos campos
+        // (referenciados por nombre desde el JSON). Sin esto el selector queda vacio al
+        // consumir el `table` de staging (p.ej. MT101_BUILD_FROM_TABLE).
+        return this.stagingFieldOptions(sourceTask, tasks, readers);
+      }
       case 'out':
         return this.routineOutputNames(config).map((name) => ({
           key: name,
@@ -328,6 +338,22 @@ export class ProcessTaskBindingContextService {
         });
       });
     return options;
+  }
+
+  /**
+   * Campos disponibles cuando una tarea consume el `table` de un DB_WRITE que volca el record
+   * en JSON (staging_record.payload_json) sin columnMappings: se traza el linaje al FILE_READ
+   * upstream y se ofrecen los campos de su reader (las claves del JSON), re-etiquetados como
+   * `table` porque se referencian por nombre desde el payload_json, no desde una columna fisica.
+   */
+  private stagingFieldOptions(dbWriteTask: ProcessTaskFormModel, tasks: readonly ProcessTaskFormModel[], readers: readonly ReaderRef[]): ProcessTaskBindingOption[] {
+    const upstream = this.resolveTaskByRef(this.configuredInput(dbWriteTask, tasks)?.sourceTaskRef || '', tasks);
+    if (upstream?.taskType !== 'FILE_READ') {
+      return [];
+    }
+    return this.readerFieldOptions(upstream, readers)
+      .filter((option) => option.kind === 'records')
+      .map((option) => ({ ...option, kind: 'table' as const, groupKey: 'ui.dbWriteGroup.table' }));
   }
 
   private tableColumnOptions(config: Record<string, unknown>): ProcessTaskBindingOption[] {

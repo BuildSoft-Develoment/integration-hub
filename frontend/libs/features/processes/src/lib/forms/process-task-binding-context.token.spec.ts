@@ -97,6 +97,44 @@ describe('ProcessTaskBindingContextService.tokenForOption (P1.c)', () => {
     );
   });
 
+  it('traces to the FILE_READ reader fields when the staging DB_WRITE dumps JSON (no columnMappings)', () => {
+    // Camino paginado real: FILE_READ -> DB_WRITE(staging_record, sin columnMappings, vuelca el
+    // record en payload_json) -> MT101_BUILD_FROM_TABLE. Como el JSON guarda los records del reader
+    // verbatim, el selector debe trazar el linaje al FILE_READ y ofrecer los campos del reader
+    // (kind 'table'). Sin el fix, tableColumnOptions salia vacio y no se podia elegir campo.
+    (service as unknown as { readerManager: unknown }).readerManager = {
+      hydrateDraft: () => ({ fields: [{ name: 'dni' }, { name: 'monto' }, { name: 'cuenta' }] }),
+    };
+    const reader = { id: 7, name: 'reader-csv', readerType: 'CSV', configurationJson: '{}' };
+    const fileRead: ProcessTaskFormModel = {
+      ...taskForm('FILE_READ'), clientId: 'file-read', taskOrder: 1, readerDefinitionId: 7,
+      configurationJson: JSON.stringify({ taskRef: 'file-read' }),
+    };
+    const stage: ProcessTaskFormModel = {
+      ...taskForm('DB_WRITE'), clientId: 'stage', taskOrder: 2,
+      configurationJson: JSON.stringify({
+        taskRef: 'stage', targetTable: 'staging_record',
+        input: { source: 'task-output', sourceTaskRef: 'file-read', sourceOutput: 'records' },
+      }),
+    };
+    const build: ProcessTaskFormModel = {
+      ...taskForm('MT101_BUILD_FROM_TABLE'), clientId: 'build', taskOrder: 3,
+      configurationJson: JSON.stringify({
+        taskRef: 'build', input: { source: 'task-output', sourceTaskRef: 'stage', sourceOutput: 'table' },
+      }),
+    };
+
+    const options = service.buildOptions(build, [fileRead, stage, build], [reader as never], undefined);
+
+    expect(options).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ kind: 'table', key: 'dni' }),
+        expect.objectContaining({ kind: 'table', key: 'monto' }),
+        expect.objectContaining({ kind: 'table', key: 'cuenta' }),
+      ]),
+    );
+  });
+
   it('infers SWIFT_MT reader from source metadata and filename', () => {
     const source: SourceRef = {
       id: 1,
