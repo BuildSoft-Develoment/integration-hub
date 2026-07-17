@@ -48,7 +48,7 @@ export interface Mt101TransactionMappingsDraft {
   detailsOfChargesField: string;
 }
 
-/** Draft completo del formulario MT101_BUILD. */
+/** Draft de construccion MT101 (base compartida + MT101_BUILD_FROM_TABLE). */
 export interface Mt101BuildTaskDraft extends ProcessTaskRuntimeDraft {
   format: 'JSON' | 'XML' | 'FIN';
   debitAccountMode: 'singleDebit' | 'multipleDebit' | 'subsidiary';
@@ -60,15 +60,18 @@ export interface Mt101BuildTaskDraft extends ProcessTaskRuntimeDraft {
 }
 
 /**
- * Provider del task type {@code MT101_BUILD}: convierte entre el draft del
- * formulario y el {@code configuration_json} que persiste el backend.
+ * Base compartida de construccion MT101: convierte entre el draft del formulario y
+ * el {@code configuration_json}. <b>No se registra como task type propio</b>: el
+ * tipo en memoria {@code MT101_BUILD} se removio (no escala); la unica subclase
+ * concreta y registrada es {@link Mt101BuildFromTableTaskProvider} (paginado desde
+ * staging), que reusa este draft, esta serializacion y el mismo formulario.
  */
 @Injectable()
 export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDraft> {
   readonly descriptor: ProcessTaskProviderDescriptor = {
-    type: 'MT101_BUILD' as const,
-    labelKey: 'processTask.MT101_BUILD',
-    descriptionKey: 'processTaskDescription.MT101_BUILD',
+    type: 'MT101_BUILD_FROM_TABLE' as const,
+    labelKey: 'processTask.MT101_BUILD_FROM_TABLE',
+    descriptionKey: 'processTaskDescription.MT101_BUILD_FROM_TABLE',
     modalLayout: 'workspace' as const,
   };
 

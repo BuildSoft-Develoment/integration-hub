@@ -54,7 +54,6 @@ export const TASK_PRESENTATION: Record<PlatformProcessTaskType, ResourcePresenta
   DB_EXECUTE_FN: { icon: 'database', toneClass: 'ih-tone-database' },
   REST_CALL: { icon: 'globe', toneClass: 'ih-tone-integration' },
   NOTIFICATION: { icon: 'bell', toneClass: 'ih-tone-document' },
-  MT101_BUILD: { icon: 'file', toneClass: 'ih-tone-payment' },
   MT101_BUILD_FROM_TABLE: { icon: 'table', toneClass: 'ih-tone-payment' },
   MT101_VALIDATE: { icon: 'check', toneClass: 'ih-tone-payment' },
   MT101_ARCHIVE: { icon: 'download', toneClass: 'ih-tone-payment' },

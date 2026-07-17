@@ -24,9 +24,9 @@ import java.util.TreeMap;
  * en cada fragmento y opcionalmente la {@code sendersReference} para distinguirlos.
  *
  * <p>Caso de uso: el banco impone cuota de 100 transacciones por archivo, o el
- * limite SWIFT de 10k chars en block 4 se excede. Esta tarea se inserta entre
- * {@code MT101_BUILD} y {@code MT101_ARCHIVE}/{@code MT101_PAY} para que cada
- * fragmento se archive y despache como mensaje independiente.</p>
+ * limite SWIFT de 10k chars en block 4 se excede. Tarea <b>legacy</b> de la cadena
+ * en memoria (el build {@code MT101_BUILD} se removio); hoy {@code MT101_BUILD_FROM_TABLE}
+ * ya fragmenta por bytes/transacciones y absorbe este split.</p>
  *
  * <p><b>Configuracion</b>:</p>
  * <pre>{@code

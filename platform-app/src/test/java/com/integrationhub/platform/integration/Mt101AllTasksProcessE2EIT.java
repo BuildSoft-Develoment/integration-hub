@@ -35,9 +35,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * E2E de cobertura funcional para la vertical SWIFT/MT101:
  *
  * <ul>
- *   <li>Outbound: CSV comun del usuario -> MT101_* completo.</li>
+ *   <li>Outbound (camino estandar paginado): CSV comun -> DB_WRITE(staging_record)
+ *       -> MT101_BUILD_FROM_TABLE -> MT101_VALIDATE -> MT101_ARCHIVE -> MT101_PAY.</li>
  *   <li>Inbound: archivo SWIFT FIN -> reader SWIFT_MT -> MT101_PARSE -> MT101_ROUTE.</li>
  * </ul>
+ *
+ * <p>El build en memoria {@code MT101_BUILD} se removio (no escala a alto volumen);
+ * la unica ruta de construccion es la paginada {@code MT101_BUILD_FROM_TABLE}, que
+ * lee de {@code staging_record} y absorbe el split por bytes/transacciones.</p>
  *
  * @covers spec 003-procesos RF-003, RF-004
  * @covers spec 008-mensajeria-pagos RF-001, RF-005, RF-006, RF-007, RF-008
@@ -83,7 +88,7 @@ class Mt101AllTasksProcessE2EIT {
 
     @Test
     @TestSecurity(user = "admin", roles = {"platform-admin"})
-    void runsCommonCsvThroughAllOutboundMt101Tasks() throws Exception {
+    void runsCommonCsvThroughStandardPagedMt101Pipeline() throws Exception {
         var inputFile = Path.of("C:/tmp/integration-hub-e2e/mt101-all-tasks-outbound.csv");
         writeOutboundCsv(inputFile);
 
@@ -95,25 +100,18 @@ class Mt101AllTasksProcessE2EIT {
             var executionId = executeProcess(processId);
             awaitExecutionCompleted(executionId);
 
-            assertAllTasksCompleted(executionId, 10);
-            assertTaskDetailsContain(executionId,
-                    "MT101_BUILD composed 1 message with 6 transactions",
-                    "MT101_SPLIT",
-                    "MT101_REPAIR",
-                    "MT101_VALIDATE ruleSet=structural-mvp messages=3 invalid=0 issues=0",
-                    "MT101_ROUTE routed=3",
-                    "MT101_ARCHIVE archived 3 messages",
-                    "MT101_PAY via REST dispatch=3 sent=3 accepted=3 rejected=0 uncertain=0 retried=0",
-                    "MT101_STATUS queried=3 confirmed=3 errors=0",
-                    "MT101_RECONCILE");
+            // Camino estandar paginado: FILE_READ -> DB_WRITE(staging) -> BUILD_FROM_TABLE
+            // -> VALIDATE -> ARCHIVE -> PAY (6 tareas). Con 6 filas y
+            // maxTransactionsPerMessage=2 el build produce 3 fragmentos MT101.
+            assertAllTasksCompleted(executionId, 6);
 
-            assertEquals(3, countRows("mt101_archive"));
-            assertEquals(6, countRows("mt101_transaction"));
-            assertEquals(0, countRows("mt101_validation_issue"));
-            assertEquals(3, countRows("mt101_confirmation"));
-            assertEquals(0, countRows("mt101_reconciliation_exception"));
-            assertEquals(3, gateway.payRequests());
-            assertEquals(3, gateway.statusRequests());
+            var fragments = countRows("mt101_build_fragment");
+            assertEquals(3, fragments, "6 filas / maxTransactionsPerMessage=2 -> 3 fragmentos MT101");
+            assertEquals(6, countRows("staging_record"), "DB_WRITE carga las 6 filas en staging");
+            assertEquals(6, countRows("mt101_transaction"), "ARCHIVE persiste una transaccion por fila");
+            assertEquals(fragments, countRows("mt101_archive"), "ARCHIVE guarda un registro por fragmento");
+            assertEquals(0, countRows("mt101_validation_issue"), "el CSV valido no produce issues");
+            assertEquals(fragments, gateway.payRequests(), "PAY envia un POST por fragmento MT101");
         }
     }
 
@@ -142,7 +140,7 @@ class Mt101AllTasksProcessE2EIT {
                 .contentType(ContentType.JSON)
                 .body(Map.of(
                         "name", "process-mt101-all-outbound-e2e",
-                        "description", "CSV to all MT101 outbound tasks",
+                        "description", "CSV -> staging -> BUILD_FROM_TABLE -> VALIDATE -> ARCHIVE -> PAY (paginado)",
                         "active", true,
                         "scheduled", false,
                         "scheduleEvery", "",
@@ -150,74 +148,39 @@ class Mt101AllTasksProcessE2EIT {
                                 task(1, "FILE_READ", sourceId, readerId, Map.of(
                                         "taskRef", "file-read",
                                         "executionMode", "batch")),
-                                task(2, "MT101_BUILD", null, null, buildConfig()),
-                                task(3, "MT101_SPLIT", null, null, Map.of(
-                                        "taskRef", "split-mt101",
-                                        "executionMode", "once",
-                                        "input", input("build-mt101", "records"),
-                                        "maxTransactionsPerFragment", 2,
-                                        "fragmentReferenceTemplate", "${sendersReference}${fragmentIndex}")),
-                                task(4, "MT101_REPAIR", null, null, Map.of(
-                                        "taskRef", "repair-mt101",
-                                        "executionMode", "once",
-                                        "input", input("split-mt101", "records"),
-                                        "repairs", List.of(Map.of(
-                                                "action", "stripNonSwiftXChars",
-                                                "targetFields", List.of("transactions.remittanceInformation"))))),
-                                task(5, "MT101_VALIDATE", null, null, Map.of(
+                                task(2, "DB_WRITE", null, null, Map.of(
+                                        "taskRef", "stage",
+                                        "executionMode", "batch",
+                                        "input", input("file-read", "records"),
+                                        "mode", "insert",
+                                        "targetTable", "staging_record")),
+                                task(3, "MT101_BUILD_FROM_TABLE", null, null, buildFromTableConfig()),
+                                task(4, "MT101_VALIDATE", null, null, Map.of(
                                         "taskRef", "validate-mt101",
                                         "executionMode", "once",
-                                        "input", input("repair-mt101", "records"),
+                                        "input", input("build-mt101", "fragments"),
                                         "ruleSet", "structural-mvp",
                                         "standard", "SWIFT",
                                         "appliesTo", "MT101",
                                         "failOn", "ERROR",
                                         "publishIssuesTo", "table:mt101_validation_issue")),
-                                task(6, "MT101_ROUTE", null, null, Map.of(
-                                        "taskRef", "route-mt101",
-                                        "executionMode", "once",
-                                        "input", input("repair-mt101", "records"),
-                                        "rules", List.of(Map.of(
-                                                "name", "fin-outbound",
-                                                "predicate", "format == 'FIN'",
-                                                "routeTo", "REST_SWIFT_GATEWAY")),
-                                        "defaultRoute", "MANUAL_REVIEW")),
-                                task(7, "MT101_ARCHIVE", null, null, Map.of(
+                                task(5, "MT101_ARCHIVE", null, null, Map.of(
                                         "taskRef", "archive-mt101",
                                         "executionMode", "once",
-                                        "input", input("repair-mt101", "records"),
-                                        "retentionDays", 3650)),
-                                task(8, "MT101_PAY", null, null, Map.of(
+                                        "input", input("build-mt101", "fragments"),
+                                        "retentionDays", 3650,
+                                        "pageSize", 200)),
+                                task(6, "MT101_PAY", null, null, Map.of(
                                         "taskRef", "pay-mt101",
                                         "executionMode", "once",
                                         "transport", "REST",
-                                        "input", input("archive-mt101", "records"),
+                                        "input", input("build-mt101", "fragments"),
                                         "rest", Map.of(
                                                 "url", gateway.payUrl(),
                                                 "method", "POST",
                                                 "contentType", "text/plain; charset=utf-8"),
-                                        "retryPolicy", Map.of("maxRetries", 0, "retryOn", List.of()))),
-                                task(9, "MT101_STATUS", null, null, Map.of(
-                                        "taskRef", "status-mt101",
-                                        "executionMode", "once",
-                                        "mode", "query",
-                                        "input", input("archive-mt101", "records"),
-                                        "query", Map.of(
-                                                "url", gateway.statusUrl() + "/${sendersReference}",
-                                                "method", "GET",
-                                                "timeoutSeconds", 5),
-                                        "expectedGatewayResponse", Map.of(
-                                                "statusField", "$.status",
-                                                "referenceField", "$.gatewayReference"))),
-                                task(10, "MT101_RECONCILE", null, null, Map.of(
-                                        "taskRef", "reconcile-mt101",
-                                        "executionMode", "once",
-                                        "sentTable", "mt101_archive",
-                                        "confirmationTable", "mt101_confirmation",
-                                        "matchKeys", List.of("id=archive_id"),
-                                        "asOfDate", "${today}",
-                                        "lookbackDays", 1,
-                                        "publishExceptionsTo", "table:mt101_reconciliation_exception")))))
+                                        "retryPolicy", Map.of("maxRetries", 0, "retryOn", List.of()),
+                                        "pageSize", 200)))))
         .when()
                 .post("/api/process-definitions")
         .then()
@@ -260,20 +223,25 @@ class Mt101AllTasksProcessE2EIT {
                 .path("id");
     }
 
-    private Map<String, Object> buildConfig() {
+    private Map<String, Object> buildFromTableConfig() {
         var configuration = new LinkedHashMap<String, Object>();
         configuration.put("taskRef", "build-mt101");
-        configuration.put("executionMode", "batch");
-        configuration.put("input", input("file-read", "records"));
+        configuration.put("executionMode", "once");
+        configuration.put("input", input("stage", "table"));
         configuration.put("format", "FIN");
-        configuration.put("batchSize", 100);
+        // 6 filas / 2 tx por mensaje -> 3 fragmentos MT101 (BUILD_FROM_TABLE absorbe el split).
+        configuration.put("maxTransactionsPerMessage", 2);
+        configuration.put("maxBytesPerMessage", 10000);
+        configuration.put("fragmentSetIdTemplate", "E2E-${_processExecutionId}");
+        configuration.put("replaceExisting", true);
         configuration.put("envelope", Map.of(
                 "senderLt", "SGOBFRPPAXXX",
                 "receiverLt", "BCPLPEPLXXXX",
-                "uetrStrategy", "none",
+                "uetrStrategy", "perMessage",
                 "priority", "N"));
         configuration.put("sequenceA", Map.of(
-                "sendersReferenceTemplate", "S${_processExecutionId}",
+                // ${messageIndex} obligatorio con >1 fragmento: :20: unico por fragmento.
+                "sendersReferenceTemplate", "P${messageIndex}",
                 "requestedExecutionDate", LocalDate.now().plusDays(1).toString(),
                 "orderingCustomer", Map.of(
                         "option", "H",
@@ -460,7 +428,7 @@ class Mt101AllTasksProcessE2EIT {
                         + ",00100000000" + i
                         + ",PEN,"
                         + (100 + i) + ".50"
-                        + ",BCPLPEPLXXX,PAGO ~ " + i
+                        + ",BCPLPEPLXXX,PAGO " + i
                         + ",SHA");
                 writer.newLine();
             }

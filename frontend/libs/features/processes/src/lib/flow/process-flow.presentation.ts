@@ -62,11 +62,6 @@ const NODE_PRESENTATION: Record<PlatformProcessTaskType, ProcessFlowNodePresenta
     iconPath: 'M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 0 0-5-5.91V4a1 1 0 1 0-2 0v1.09A6 6 0 0 0 6 11v3.2a2 2 0 0 1-.59 1.4L4 17h5m6 0a3 3 0 1 1-6 0m6 0H9',
   },
   // --- Vertical mensajeria de pagos sub-catalogo swift/ (spec 008, ADR-009) ---
-  MT101_BUILD: {
-    badge: 'BUILD',
-    toneClass: 'task-node--payment',
-    iconPath: 'M4 6h16M4 10h10M4 14h16M4 18h10M18 8l3 3-3 3M18 16l3-3',
-  },
   MT101_BUILD_FROM_TABLE: {
     badge: 'BUILD DB',
     toneClass: 'task-node--payment',

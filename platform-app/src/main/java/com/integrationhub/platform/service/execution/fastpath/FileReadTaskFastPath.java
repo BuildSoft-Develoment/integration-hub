@@ -21,11 +21,11 @@ import java.util.Set;
 public class FileReadTaskFastPath implements ExecutionFastPath {
 
     // Transforms que publican un output `records` consumido por tareas downstream
-    // (p.ej. MT101_PARSE -> MT101_ROUTE, MT101_BUILD -> MT101_SPLIT). El fast path solo
-    // materializa un summary (processedCount), no la lista de records, asi que fusionarlos
-    // romperia la resolucion de `<taskRef>.records` aguas abajo. Su sink natural en el
-    // fast path es DB_WRITE (staging), que no produce records consumibles.
-    private static final Set<String> RECORDS_PRODUCING_SINKS = Set.of("MT101_BUILD", "MT101_PARSE");
+    // (p.ej. MT101_PARSE -> MT101_ROUTE). El fast path solo materializa un summary
+    // (processedCount), no la lista de records, asi que fusionarlos romperia la
+    // resolucion de `<taskRef>.records` aguas abajo. Su sink natural en el fast path
+    // es DB_WRITE (staging), que no produce records consumibles.
+    private static final Set<String> RECORDS_PRODUCING_SINKS = Set.of("MT101_PARSE");
 
     private final StreamingPipelineService pipelineService;
     private final ProcessExecutionStateService stateService;

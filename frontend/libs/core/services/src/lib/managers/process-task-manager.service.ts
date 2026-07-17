@@ -84,7 +84,10 @@ export class ProcessTaskManagerService {
 
   label(type: ProcessTaskType): string {
     const provider = this.resolve(type);
-    if (!provider) throw new Error(`No provider registered for task type: ${type}`);
+    // Tolera tipos sin provider (removidos como MT101_BUILD, o plugins remotos no
+    // disponibles): en vez de romper el render de la lista de tareas, muestra el
+    // tipo crudo. La creacion de tareas sigue restringida a tipos registrados.
+    if (!provider) return type;
     return provider.descriptor.label ?? this.i18n.t(provider.descriptor.labelKey);
   }
 
@@ -101,9 +104,8 @@ export class ProcessTaskManagerService {
   }
 
   modalLayout(type: ProcessTaskType): 'workspace' | 'rest' | undefined {
-    const provider = this.resolve(type);
-    if (!provider) throw new Error(`No provider registered for task type: ${type}`);
-    return provider.descriptor.modalLayout;
+    // Sin provider (tipo removido / plugin no disponible): no rompas; sin layout.
+    return this.resolve(type)?.descriptor.modalLayout;
   }
 
   hydrateDraft<TDraft>(task: ProcessTaskFormModel): TDraft | null {
@@ -134,7 +136,8 @@ export class ProcessTaskManagerService {
 
   summarize(task: ProcessTaskFormModel, context: ProcessTaskSummaryContext): string {
     const provider = this.resolve(task.taskType);
-    if (!provider) throw new Error(`No provider registered for task type: ${task.taskType}`);
+    // Sin provider: no rompas la lista; el chip igual muestra el tipo crudo (label).
+    if (!provider) return '';
     return provider.summarize(task, context, this.i18n);
   }
 }

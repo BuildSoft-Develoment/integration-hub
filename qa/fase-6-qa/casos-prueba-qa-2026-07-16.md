@@ -2,7 +2,7 @@
 
 Documento de casos de prueba **exhaustivo** para el Equipo de QA. Acompaña al tracker `casos-prueba-qa-2026-07-16.xlsx`.
 
-**Total: 228 casos.** Cada caso indica su **Ejecutor**:
+**Total: 236 casos.** Cada caso indica su **Ejecutor**:
 
 - **Manual-QA** — lo ejecuta un QA humano en la UI con esta guía.
 - **Tecnico/Dev** — requiere apoyo de dev/ops (inducir fallos, comandos, backend).
@@ -129,31 +129,31 @@ Los casos están **ordenados por secuencia de ejecución** (columna **Orden** y 
 |---|---|---|
 | **F0. Infra / Deploy / Acceso** | INFRA | 14 |
 | **F1. Autenticacion / Roles** | AUTH | 14 |
-| **F2. Configuracion (catalogo)** | CSRC, CCON, CRDR, CPRO | 32 |
-| **F3. Flujo E2E (money-path)** | E2E | 20 |
-| **F4. Profundizacion por etapa** | SRC, MP, PAY, CORR, STAT | 65 |
-| **F5. Maker-checker / Consolas** | MC, UI | 35 |
+| **F2. Configuracion (catalogo)** | CSRC, CCON, CRDR, CPRO | 33 |
+| **F3. Flujo E2E (money-path)** | E2E | 23 |
+| **F4. Profundizacion por etapa** | SRC, MP, PAY, CORR, STAT | 68 |
+| **F5. Maker-checker / Consolas** | MC, UI | 36 |
 | **F6. Plataforma / Auditoria** | PLG, AUD | 14 |
 | **F7. No funcionales** | NF | 12 |
 | **F8. Aceptacion bancaria (homologacion)** | BANK | 22 |
 
-> La columna **Orden** (1..228) da la secuencia sugerida de punta a punta. Dentro de una fase los casos son en su mayoría independientes; las dependencias fuertes están dentro de **Configuración → E2E**.
+> La columna **Orden** (1..236) da la secuencia sugerida de punta a punta. Dentro de una fase los casos son en su mayoría independientes; las dependencias fuertes están dentro de **Configuración → E2E**.
 
 ## Índice de módulos (en orden de ejecución)
 
 - **INFRA** (F0) — Deploy / Infraestructura / Acceso (nginx, TLS, /appih) (14)
 - **AUTH** (F1) — Autenticacion / OIDC / Roles (Keycloak) (14)
-- **CSRC** (F2) — Config CRUD: Fuentes (/appih/#/sources) con valores por campo (11)
+- **CSRC** (F2) — Config CRUD: Fuentes (/appih/#/sources) con valores por campo (12)
 - **CCON** (F2) — Config CRUD: Conexiones JDBC (/appih/#/connections) (6)
 - **CRDR** (F2) — Config CRUD: Readers (/appih/#/readers) (7)
 - **CPRO** (F2) — Config CRUD: Procesos + Ejecuciones (/appih/#/processes) (8)
-- **E2E** (F3) — Flujo E2E: configurar -> dejar archivo -> ejecutar -> verificar -> reprocesar (20)
+- **E2E** (F3) — Flujo E2E: configurar -> dejar archivo -> ejecutar -> verificar -> reprocesar (23)
 - **SRC** (F4) — Fuentes (SFTP / FTP / S3-MinIO) (11)
-- **MP** (F4) — MT101 Money-path (lectura -> construccion -> validacion -> archivo) (16)
-- **PAY** (F4) — PAY / Anti-doble-pago (money-safety, dos nodos) (20)
+- **MP** (F4) — MT101 Money-path (lectura -> construccion -> validacion -> archivo) (17)
+- **PAY** (F4) — PAY / Anti-doble-pago (money-safety, dos nodos) (21)
 - **CORR** (F4) — PAY Correctivo (rechazo, run hijo, parcial) (10)
-- **STAT** (F4) — STATUS / RECONCILE / Confirmaciones del banco (8)
-- **MC** (F5) — Maker-checker / PAY_CONFLICT (tanda-8/9) (23)
+- **STAT** (F4) — STATUS / RECONCILE / Confirmaciones del banco (9)
+- **MC** (F5) — Maker-checker / PAY_CONFLICT (tanda-8/9) (24)
 - **UI** (F5) — Consolas de UI (PAY conflicts, quarantine, lineage) (12)
 - **PLG** (F6) — Plugins out-of-process (gRPC + widget) (8)
 - **AUD** (F6) — Auditoria asincrona (Kafka -> store frio) (6)
@@ -204,7 +204,7 @@ Los casos están **ordenados por secuencia de ejecución** (columna **Orden** y 
 | ID | Ejecutor | Escenario | Precondición | Pasos | Resultado esperado | Prio | Tipo |
 |---|---|---|---|---|---|---|---|
 | CSRC-01 | Manual-QA | Listar, buscar y filtrar fuentes | Login como admin (P); menu Fuentes (/appih/#/sources) | 1) Abrir Fuentes  2) Ver la lista (nombre, tipo, estado)  3) Escribir en Buscar un texto  4) Usar el filtro Tipo (SFTP / FTP / Amazon S3 / REST...)  5) Usar el filtro Estado (Activo / Inactivo) | La lista se filtra por texto, por tipo y por estado; cada fila muestra nombre, tipo y si esta activa | Media | Funcional |
-| CSRC-02 | Manual-QA | Crear fuente SFTP (Probar + Guardar) | Login admin (P); sftp-source arriba | 1) Fuentes > Nueva fuente  2) Nombre = Fuente SFTP QA  3) Tipo = SFTP  4) Host = sftp-source ; Port = 22 ; Username = ihsource ; Password = ihsource ; Remote path = /upload  5) Media type = text/plain ; Strict host key checking = OFF ; Timeout (ms) = 10000  6) Click Probar (Test)  7) Click Guardar (Save) | Probar devuelve conexion OK; al Guardar la fuente aparece en la lista como Activa | Alta | Funcional |
+| CSRC-02 | Manual-QA | Crear fuente SFTP (Probar + Guardar) | Login admin (P); sftp-source arriba | 1) Fuentes > Nueva fuente  2) Nombre = Fuente SFTP QA  3) Tipo = SFTP  4) Host = sftp-source ; Port = 22 ; Username = ihsource ; Password = ihsource ; Remote path = /upload/mt101-10k.csv (RUTA COMPLETA al archivo, no el directorio)  5) Media type = text/plain ; Strict host key checking = OFF ; Timeout (ms) = 10000  6) Click Probar (Test)  7) Click Guardar (Save) | Probar devuelve conexion OK; al Guardar la fuente aparece en la lista como Activa. Nota (verificado en int): la fuente SFTP lee la RUTA COMPLETA del Remote path (sin fileNameTemplate en el form) | Alta | Funcional |
 | CSRC-03 | Manual-QA | Crear fuente Amazon S3 / MinIO | Login admin (P); minio arriba (bucket ih-source-inbox) | 1) Nueva fuente  2) Nombre = Fuente S3 QA ; Tipo = Amazon S3  3) Region = us-east-1 ; Bucket = ih-source-inbox ; Endpoint = http://minio:9000  4) Auth mode = access-key -> Access key ID = minioadmin ; Secret access key = minioadmin  5) Path-style access = ON ; Selection mode = all ; Media type = text/plain  6) Probar  7) Guardar | Probar OK contra MinIO; se guarda como Activa. Nota: MinIO exige Path-style access = ON | Alta | Funcional |
 | CSRC-04 | Manual-QA | Crear fuente FTP | Login admin (P); ftp-source arriba | 1) Nueva fuente  2) Nombre = Fuente FTP QA ; Tipo = FTP  3) Host = ftp-source ; Port = 21 ; Username = ihftp ; Password = ihftp ; Remote path = /  4) Passive mode = ON ; Timeout (ms) = 10000 ; Media type = text/plain  5) Probar  6) Guardar | Probar OK; se guarda Activa | Media | Funcional |
 | CSRC-05 | Manual-QA | Crear fuente REST | Login admin (P); servicio echo arriba | 1) Nueva fuente  2) Nombre = Fuente REST QA ; Tipo = REST  3) URL = http://echo ; Method = GET ; Auth type = No authentication  4) File name = echo-payload.json ; Timeout (s) = 10 ; Media type = application/json  5) Probar  6) Guardar | Probar OK contra echo (HTTP 200); se guarda Activa | Media | Funcional |
@@ -214,6 +214,7 @@ Los casos están **ordenados por secuencia de ejecución** (columna **Orden** y 
 | CSRC-09 | Manual-QA | Validacion de campos requeridos | Login admin (P) | 1) Nueva fuente  2) Dejar Nombre vacio y/o Host vacio  3) Intentar Guardar | No deja guardar incompleto: el boton Guardar esta deshabilitado o marca el campo requerido | Media | Negativo |
 | CSRC-10 | Manual-QA | Cambiar de Tipo re-dibuja el formulario | Login admin (P) | 1) Nueva fuente  2) Tipo = SFTP (aparecen Host/Port/Username...)  3) Cambiar Tipo = Amazon S3 | El formulario cambia a los campos de S3 (Bucket/Region/Endpoint/Auth mode) sin romperse | Baja | Funcional |
 | CSRC-11 | Tecnico/Dev | Fuente File system (requiere ruta montada) | Login admin (P) | 1) Nueva fuente Tipo = File system  2) Path = /data/inbox ; Selection mode = all  3) Guardar / Probar | En el stack int NO hay volumen de archivos montado en el contenedor de la app por defecto; para lectura real montar un volumen o usar SFTP/S3/FTP. Marcar N/A si no aplica en el ambiente | Baja | Funcional |
+| CSRC-12 | Manual-QA | Ruta del archivo por tipo de fuente | Login admin (P) | 1) SFTP: Remote path = ruta COMPLETA al archivo (/upload/archivo.csv)  2) FTP: Remote path = directorio (/ftp/ihftp) + File template  3) S3: Bucket + File template (+ Prefix) | Cada tipo resuelve el archivo con su regla (verificado en int); si falta el File template en FTP/S3 da error claro | Media | Funcional |
 
 ## CCON — Config CRUD: Conexiones JDBC (/appih/#/connections)  ·  F2. Configuracion (catalogo)
 
@@ -257,12 +258,12 @@ Los casos están **ordenados por secuencia de ejecución** (columna **Orden** y 
 |---|---|---|---|---|---|---|---|
 | E2E-01 | Manual-QA | A1. Configurar la Conexion (Postgres, staging) | Login admin (P); postgres arriba | 1) Conexiones > Nueva conexion (ver Datos-Formularios / CCON-02): Nombre=Conexion Postgres QA ; Motor=PostgreSQL ; JDBC URL=jdbc:postgresql://postgres:5432/integration_hub ; Usuario=postgres ; Password=admin  2) Probar  3) Guardar | Probar OK; la conexion queda Activa. Es la base para staging y tablas del pipeline | Alta | Funcional |
 | E2E-02 | Manual-QA | A2. Configurar el Reader CSV MT101 | Login admin (P) | 1) Readers > Nuevo reader (ver CRDR-03): Nombre=Reader CSV MT101 QA ; Tipo=CSV ; Delimiter=, ; Encoding=UTF-8 ; Data starts at row=2  2) Agregar 8 campos por posicion: dni(1), nombre(2), cuenta(3), moneda(4), monto(5 NUMBER), bic(6), concepto(7), cargos(8)  3) Guardar | El reader guarda las 8 columnas; es el que parsea el CSV del banco a staging | Alta | Funcional |
-| E2E-03 | Manual-QA | A3. Configurar la Fuente SFTP (de donde se lee) | Login admin (P); sftp-source arriba | 1) Fuentes > Nueva fuente (ver CSRC-02): Nombre=Fuente SFTP QA ; Tipo=SFTP ; Host=sftp-source ; Port=22 ; Username=ihsource ; Password=ihsource ; Remote path=/upload ; Strict host key checking=OFF  2) Probar  3) Guardar | Probar OK; la fuente queda Activa apuntando a la carpeta /upload del sftp-source | Alta | Funcional |
-| E2E-04 | Tecnico/Dev | A4. Provisionar el Proceso MT101 outbound (10 tareas) | Fuente (E2E-03) y Reader (E2E-02) creados; sus IDs | 1) Dev crea el proceso via API POST /api/process-definitions con 10 tareas EN ORDEN: FILE_READ(usa sourceId+readerId) -> MT101_BUILD (mapea moneda/monto/cuenta/nombre/dni/bic/concepto/cargos; envelope senderLt=SGOBFRPPAXXX receiverLt=BCPLPEPLXXXX) -> MT101_SPLIT (maxTransactionsPerFragment=2) -> MT101_REPAIR (stripNonSwiftXChars) -> MT101_VALIDATE (ruleSet=structural-mvp, failOn=ERROR) -> MT101_ROUTE -> MT101_ARCHIVE -> MT101_PAY -> MT101_STATUS -> MT101_RECONCILE  2) QA: /appih/#/processes, abrir el proceso y verificar que existe, esta Activo y su FILE_READ apunta a la Fuente+Reader correctos | El proceso MT101 queda disponible y Activo. Armarlo tarea-por-tarea en la UI es avanzado (paleta del editor); en la practica lo provisiona dev via API | Alta | Funcional |
+| E2E-03 | Manual-QA | A3. Configurar la Fuente SFTP (de donde se lee) | Login admin (P); sftp-source arriba | 1) Fuentes > Nueva fuente (ver CSRC-02): Nombre=Fuente SFTP QA ; Tipo=SFTP ; Host=sftp-source ; Port=22 ; Username=ihsource ; Password=ihsource ; Remote path=/upload/mt101-10k.csv (ruta COMPLETA al archivo) ; Strict host key checking=OFF  2) Probar  3) Guardar | Probar OK; la fuente queda Activa apuntando al archivo /upload/mt101-10k.csv del sftp-source | Alta | Funcional |
+| E2E-04 | Tecnico/Dev | A4. Provisionar el Proceso MT101 outbound (8 tareas, paginado) | Fuente (E2E-03) y Reader (E2E-02) creados; sus IDs | 1) Dev crea el proceso via API POST /api/process-definitions con 8 tareas EN ORDEN (camino estandar paginado): FILE_READ(usa sourceId+readerId) -> DB_WRITE (targetTable=staging_record, input=file-read.records) -> MT101_BUILD_FROM_TABLE (lee la tabla staging; mapea moneda/monto/cuenta/nombre/dni/bic/concepto/cargos; envelope senderLt=SGOBFRPPAXXX receiverLt=BCPLPEPLXXXX; maxTransactionsPerMessage=2, sendersReferenceTemplate con ${messageIndex}) -> MT101_VALIDATE (ruleSet=structural-mvp, failOn=ERROR) -> MT101_ARCHIVE -> MT101_PAY -> MT101_STATUS -> MT101_RECONCILE  (NOTA: el build en memoria MT101_BUILD se removio; la unica ruta de construccion es la paginada MT101_BUILD_FROM_TABLE, que absorbe el split)  2) QA: /appih/#/processes, abrir el proceso y verificar que existe, esta Activo y su FILE_READ apunta a la Fuente+Reader correctos | El proceso MT101 queda disponible y Activo. Armarlo tarea-por-tarea en la UI es avanzado (paleta del editor); el boton 'MT101 masivo desde archivo' scaffolda exactamente este camino paginado con conectores | Alta | Funcional |
 | E2E-05 | Tecnico/Dev | B. Dejar el archivo en la fuente (docker) | Acceso al host docker; archivo de datos ya entregado en qa/fase-6-qa/datos-prueba/ | 1) Usar el archivo entregado: mt101-10k.csv (10.000 filas, volumen) o mt101-6.csv (humo, 6 filas)  2) Como los puertos SFTP/FTP/MinIO NO estan expuestos al host, copiar con: docker cp mt101-10k.csv ih-int-sftp-source:/home/ihsource/upload/  3) (Alternativas: FTP -> ih-int-ftp-source:/ftp/ihftp ; S3 -> mc cp al bucket ih-source-inbox) | El archivo queda en /upload, la carpeta exacta que lee la Fuente SFTP (E2E-03). Ver LEEME-datos.md para XLSX/TXT y la config de reader por formato | Alta | Funcional |
 | E2E-06 | Manual-QA | C1. Ejecutar el proceso (Run) | Archivo dejado (E2E-05); login (P) | 1) Menu Procesos  2) Abrir el proceso MT101 outbound  3) Click Ejecutar | Aviso 'Proceso ejecutado con exito'; en el menu Ejecuciones aparece una corrida nueva (la mas reciente arriba) | Alta | Funcional |
-| E2E-07 | Manual-QA | C2. FILE_READ -> staging (vista Ejecuciones) | Una corrida creada (E2E-06) | 1) Menu Ejecuciones  2) Abrir la corrida (la mas reciente)  3) Pestana 'Tareas' (Tareas ejecutadas)  4) Seleccionar la tarea FILE_READ  5) Leer las columnas Procesados / Escritos | FILE_READ muestra Procesados=6 y Escritos=6 (las 6 filas del CSV entraron a staging). Verificado por la vista, sin API | Alta | Funcional |
-| E2E-08 | Manual-QA | C3. BUILD/SPLIT -> fragmentos (vista Fragmentos MT101) | Corrida abierta | 1) En la corrida > pestana 'Tareas': ver MT101_BUILD y MT101_SPLIT (Procesados/Escritos)  2) Menu Auditoria > Fragmentos MT101  3) Buscar por la fila origen o la ejecucion | BUILD arma 1 mensaje con 6 transacciones; SPLIT genera 3 fragmentos (2 tx por fragmento). La vista Fragmentos MT101 lista los 3 | Alta | Funcional |
+| E2E-07 | Manual-QA | C2. FILE_READ + DB_WRITE -> staging (vista Ejecuciones) | Una corrida creada (E2E-06) | 1) Menu Ejecuciones  2) Abrir la corrida (la mas reciente)  3) Pestana 'Tareas' (Tareas ejecutadas)  4) Seleccionar FILE_READ y luego DB_WRITE  5) Leer las columnas Procesados / Escritos | FILE_READ muestra Procesados=6; DB_WRITE muestra Escritos=6 (las 6 filas del CSV entraron a la tabla staging_record). Verificado por la vista, sin API | Alta | Funcional |
+| E2E-08 | Manual-QA | C3. BUILD_FROM_TABLE -> fragmentos (vista Fragmentos MT101) | Corrida abierta | 1) En la corrida > pestana 'Tareas': ver MT101_BUILD_FROM_TABLE (Procesados/Escritos)  2) Menu Auditoria > Fragmentos MT101  3) Buscar por la fila origen o la ejecucion | MT101_BUILD_FROM_TABLE lee las 6 filas de staging y genera 3 fragmentos (2 tx por fragmento) directamente -- absorbe el split (ya no hay tarea SPLIT). La vista Fragmentos MT101 lista los 3 | Alta | Funcional |
 | E2E-09 | Manual-QA | C4. VALIDATE -> 0 invalidos | Corrida abierta | 1) Pestana 'Tareas' > seleccionar MT101_VALIDATE  2) Ver el resumen de la tarea | MT101_VALIDATE sin invalidos (0 issues). Si hubiera una fila mala, apareceria en Auditoria > Cuarentena MT101 (ver E2E-15) | Alta | Funcional |
 | E2E-10 | Manual-QA | C5. ARCHIVE -> archivado | Corrida abierta | 1) Pestana 'Tareas' > seleccionar MT101_ARCHIVE  2) Ver Procesados/Escritos | MT101_ARCHIVE archiva los 3 mensajes (Escritos=3) | Alta | Funcional |
 | E2E-11 | Manual-QA | C6. PAY -> SENT (vista Fragmentos MT101) | Corrida abierta; canal (sftp-bank/REST) OK | 1) Pestana 'Tareas' > MT101_PAY: ver el resumen (enviados/aceptados)  2) Menu Auditoria > Fragmentos MT101  3) Ver el estado de los 3 fragmentos | MT101_PAY: enviados=3 aceptados=3 rechazados=0; en Fragmentos MT101 los 3 quedan en estado SENT (entregado al banco) | Alta | Funcional |
@@ -275,6 +276,9 @@ Los casos están **ordenados por secuencia de ejecución** (columna **Orden** y 
 | E2E-18 | Manual-QA | D4. Reproceso: pago no enviado -> re-solicitar | Un pago quedo invalidado (dev corta el canal pre-dispatch) | 1) Menu Auditoria > Fragmentos MT101: el fragmento figura invalidado (no llego al banco)  2) Re-solicitar el pago desde la vista (Cuarentena MT101 / Fragmentos)  3) Menu Ejecuciones > corrida > pestana 'Tareas' > MT101_PAY | Se envia exactamente 1: en Fragmentos MT101 el pago pasa a SENT una sola vez (el banco tiene 1 pago por :20:). Verificado por la UI | Alta | Seguridad |
 | E2E-19 | Manual-QA | D5. Reproceso gobernado: maker-checker (four-eyes) | maker-checker ON; pay-maker/pay-checker (P); un conflicto abierto | 1) Como pay-maker: Auditoria > Conflictos de pago > Resolver > Solicitar reconocimiento (motivo+ticket)  2) Como pay-checker (distinto): abrir el conflicto > Aprobar  3) Auditoria > Spool: ver las tramas | El conflicto se resuelve con doble control; en Spool se ven las tramas ACK_REQUESTED/RESOLVED (ver modulo MC). Todo por la UI | Alta | Seguridad |
 | E2E-20 | Manual-QA | E. Inbound: SWIFT FIN -> parse -> route (opcional) | Reader SWIFT_MT y proceso inbound provisionados (dev); un FIN dejado en la fuente | 1) Menu Procesos > Ejecutar el proceso inbound  2) Menu Ejecuciones > abrir la corrida > pestana 'Tareas'  3) Ver MT101_PARSE y MT101_ROUTE | En la pestana 'Tareas': MT101_PARSE parsea el FIN y MT101_ROUTE lo enruta (INBOUND_REVIEW/UNMATCHED). Verificado por la UI | Media | Funcional |
+| E2E-21 | Tecnico/Dev | Escala 1.000.000: preparar el archivo | Acceso al host docker | 1) Generar mt101-1m.csv con datos-prueba/gen-mt101-1m.cjs (1.000.000 filas, ~94 MB; no se commitea, se regenera)  2) docker cp mt101-1m.csv ih-int-sftp-source:/home/ihsource/upload/  3) Apuntar la Fuente SFTP a Remote path=/upload/mt101-1m.csv | El archivo de 1M queda en /upload, la carpeta que lee la fuente | Media | No-funcional |
+| E2E-22 | Tecnico/Dev | Escala 1.000.000: ejecutar el money-path | Archivo 1M dejado (E2E-21); heap acotado | 1) Ejecutar el proceso MT101 (batchSize alto para drenar en una, o el scheduler iterando por lotes)  2) Monitorear memoria y tiempo | 1.000.000 -> construidos/archivados sin OOM ni deadlock; ~14 min de referencia (cubierto por Mt101MillionFileProcessE2EIT) | Alta | No-funcional |
+| E2E-23 | Manual-QA | Escala 1.000.000: verificar por la vista | Corrida 1M terminada; login (P) | 1) Ejecuciones > la corrida > pestana Tareas: FILE_READ Escritos=1.000.000  2) Auditoria > Fragmentos MT101 (buscar por fila origen)  3) Conteos de fragmentos/archivo | FILE_READ=1.000.000, 0 saltados; fragmentos y archivo coherentes; 0 fallidos | Alta | No-funcional |
 
 ## SRC — Fuentes (SFTP / FTP / S3-MinIO)  ·  F4. Profundizacion por etapa
 
@@ -312,6 +316,7 @@ Los casos están **ordenados por secuencia de ejecución** (columna **Orden** y 
 | MP-14 | Tecnico/Dev | Referencia :20: por transaccion | Set con varias transacciones | 1) Construir  2) Revisar cada fragmento | Cada transaccion tiene su propia referencia :20: | Media | Funcional |
 | MP-15 | Tecnico/Dev | Division en fragmentos | Un set grande | 1) Ejecutar la division | El set se parte en varios fragmentos coherentes | Media | Funcional |
 | MP-16 | Automatizado-IT | Reprocesar una fila exacta en un lote grande | Lote grande con 1 fila fallida | 1) Localizar esa fila y reprocesarla | Se reprocesa exactamente esa fila, sin duplicar ni afectar otras. Cubierto por los ITs H4 | Alta | Funcional |
+| MP-17 | Tecnico/Dev | Semantica de lotes (batchSize) | Archivo grande (10k/1M) | 1) Ejecutar el BUILD con batchSize=N  2) Ver cuantos registros procesa por corrida | Cada ejecucion procesa hasta batchSize registros (lotes reanudables); para drenar todo se re-ejecuta o el scheduler itera. Verificado: batchSize=100 -> 100/corrida; batchSize=20000 -> 10000 en una | Media | No-funcional |
 
 ## PAY — PAY / Anti-doble-pago (money-safety, dos nodos)  ·  F4. Profundizacion por etapa
 
@@ -337,6 +342,7 @@ Los casos están **ordenados por secuencia de ejecución** (columna **Orden** y 
 | PAY-18 | Tecnico/Dev | Gate: sin lista en memoria en prod | direct-list.enabled=false | 1) Intentar un pago por lista sin fragmento persistido | Rechazado (prod exige fragmento persistido) | Alta | Seguridad |
 | PAY-19 | Automatizado-IT | Auditar lo saltado en un revert | Refs saltadas en un revert | 1) Ejecutar (test) | Las saltadas quedan en conflicto + trama PAY_CONFLICT. Cubierto por los ITs de PAY | Media | Funcional |
 | PAY-20 | Automatizado-IT | 'Incierto' pegajoso | Varios intentos, uno incierto | 1) Ejecutar (test) | El 'incierto' no se sobrescribe por un intento posterior. Cubierto por los ITs de transporte | Alta | Funcional |
+| PAY-21 | Tecnico/Dev | Mapeo de respuesta del gateway (PAY) | Gateway REST de pago | 1) El gateway responde accepted=true en el POST de PAY | El fragmento pasa a SENT. Estados aceptados: ACCEPTED/CONFIRMED/SETTLED/ACSC/ACCP. Verificado con gateway mock (dispatch=3 sent=3) | Alta | Funcional |
 
 ## CORR — PAY Correctivo (rechazo, run hijo, parcial)  ·  F4. Profundizacion por etapa
 
@@ -365,6 +371,7 @@ Los casos están **ordenados por secuencia de ejecución** (columna **Orden** y 
 | STAT-06 | Tecnico/Dev | Cuadre (reconcile) | Fin de ventana | 1) Ejecutar la conciliacion | Total enviado == confirmado; diferencias -> incierto/conflicto | Alta | Funcional |
 | STAT-07 | Tecnico/Dev | STATUS re-lee la respuesta del banco | Respuesta en el buzon del banco | 1) Ejecutar STATUS | Re-lee la respuesta (FIN) del banco | Media | Funcional |
 | STAT-08 | Automatizado-IT | Rechazo sobre un enviado -> conflicto | Un enviado; STATUS trae rechazado | 1) Ejecutar STATUS | Se crea un PAY_CONFLICT (no sobrescribe el estado). Cubierto por los ITs | Alta | Funcional |
+| STAT-09 | Tecnico/Dev | Mapeo de status del banco (STATUS) | STATUS query al gateway; un fragmento SENT | 1) STATUS devuelve status=REJECTED (o FAILED/DECLINED/RJCT) sobre el SENT | Se interpreta como rechazo terminal -> contradiccion SENT-vs-REJECTED. Aceptados: ACCEPTED/CONFIRMED/SETTLED/ACSC/ACCP. Verificado con gateway mock | Alta | Funcional |
 
 ## MC — Maker-checker / PAY_CONFLICT (tanda-8/9)  ·  F5. Maker-checker / Consolas
 
@@ -393,6 +400,7 @@ Los casos están **ordenados por secuencia de ejecución** (columna **Orden** y 
 | MC-21 | Manual-QA | Maker-checker sobre un correctivo | maker-checker ON; un conflicto CORRECTIVO; usuarios maker/checker (P) | 1) Solicitar (maker) y aprobar (checker) sobre el conflicto correctivo | Funciona igual que el normal | Media | Funcional |
 | MC-22 | Manual-QA | Tramas de auditoria completas | Un flujo request->approve realizado | 1) Audit > Spool: buscar las tramas del conflicto | Se ven ACK_REQUESTED, (reemplazo si aplica) y RESOLVED, con actores/motivo/ticket | Alta | Funcional |
 | MC-23 | Manual-QA | El inbox trae los datos de la solicitud | Un PENDING; login (P) | 1) PAY Conflicts > la fila del conflicto | La fila trae el estado de la solicitud, quien la hizo, ticket, motivo y fecha | Alta | Funcional |
+| MC-24 | Tecnico/Dev | Generar un PAY_CONFLICT para pruebas | Stack arriba | 1) Con dev: money-path con gateway que da accepted en PAY y REJECTED en STATUS  2) (o) sembrar mt101_build_fragment con pay_conflict=true y refs reales (metodo de Mt101OpenPayConflictsConsoleIT) | Aparece un conflicto en la consola Conflictos de pago (contradiccion SENT vs REJECTED); habilita probar el maker-checker | Media | Funcional |
 
 ## UI — Consolas de UI (PAY conflicts, quarantine, lineage)  ·  F5. Maker-checker / Consolas
 

@@ -26,7 +26,7 @@ import java.util.Map;
  * </ul>
  *
  * <p>Esta clase no decide formato del {@code rawPayload}; ese stays bajo control
- * del {@code MT101_BUILD} si downstream se quiere re-emitir el mensaje en otro
+ * del {@code MT101_BUILD_FROM_TABLE} si downstream se quiere re-emitir el mensaje en otro
  * formato. Aqui solo poblamos el modelo en memoria.</p>
  *
  * @trace spec 008-mensajeria-pagos RF-008 (inbound pain.001)

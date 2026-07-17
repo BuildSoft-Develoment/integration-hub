@@ -11,7 +11,7 @@ import java.util.Map;
  * Resuelve mensajes MT101 publicados por tareas previas.
  *
  * <p>Las tareas de la vertical SWIFT pueden recibir directamente
- * {@code List<Mt101Message>} desde {@code MT101_BUILD}/{@code MT101_SPLIT},
+ * {@code List<Mt101Message>} desde {@code MT101_BUILD_FROM_TABLE}/{@code MT101_SPLIT},
  * records de archivo como {@code Map} que embeben el mensaje en la clave
  * {@code message}, o una fuente persistida de fragmentos
  * {@code {fragmentSetId, connectionRef}} publicada por {@code MT101_BUILD_FROM_TABLE}.

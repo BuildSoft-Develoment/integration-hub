@@ -55,7 +55,7 @@ describe('ProcessTaskBindingContextService.tokenForOption (P1.c)', () => {
     expect(service.defaultOutputForTask(task)).toBe('records');
   });
 
-  it('exposes table columns when MT101_BUILD consumes a DB_WRITE table output', () => {
+  it('exposes table columns when MT101_BUILD_FROM_TABLE consumes a DB_WRITE table output', () => {
     const dbWrite: ProcessTaskFormModel = {
       ...taskForm('DB_WRITE'),
       clientId: 'db-write',
@@ -71,7 +71,7 @@ describe('ProcessTaskBindingContextService.tokenForOption (P1.c)', () => {
       }),
     };
     const build: ProcessTaskFormModel = {
-      ...taskForm('MT101_BUILD'),
+      ...taskForm('MT101_BUILD_FROM_TABLE'),
       clientId: 'build-mt101',
       taskOrder: 2,
       configurationJson: JSON.stringify({

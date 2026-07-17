@@ -39,7 +39,7 @@ export const PROCESS_TASK_FORM_REGISTRY = new InjectionToken<readonly ProcessTas
  *
  * <pre>
  *   providers: [
- *     provideProcessTaskForm({ type: 'MT101_BUILD', component: Mt101BuildFormComponent }),
+ *     provideProcessTaskForm({ type: 'MT101_BUILD_FROM_TABLE', component: Mt101BuildFormComponent }),
  *   ],
  * </pre>
  */

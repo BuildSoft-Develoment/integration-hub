@@ -27,7 +27,7 @@ class TaskTypeRegistryTest {
     @Test
     void allCombinesBuiltinTypesWithProviderRegisteredTypes() {
         var providerRegistry = new TaskProviderRegistry(new ListInstance<>(List.of(
-                stubProvider("MT101_BUILD"),
+                stubProvider("MT101_BUILD_FROM_TABLE"),
                 stubProvider("PAIN001_BUILD"),
                 stubProvider("CUSTOM_TYPE"))));
         var registry = new TaskTypeRegistry(providerRegistry);
@@ -41,7 +41,7 @@ class TaskTypeRegistryTest {
         assertTrue(all.contains(TaskType.REST_CALL));
         assertTrue(all.contains(TaskType.NOTIFICATION));
         // Tipos de verticales descubiertos via CDI.
-        assertTrue(all.contains("MT101_BUILD"));
+        assertTrue(all.contains("MT101_BUILD_FROM_TABLE"));
         assertTrue(all.contains("PAIN001_BUILD"));
         assertTrue(all.contains("CUSTOM_TYPE"));
     }
@@ -49,11 +49,11 @@ class TaskTypeRegistryTest {
     @Test
     void isRegisteredAcceptsBuiltinAndProviderTypes() {
         var providerRegistry = new TaskProviderRegistry(new ListInstance<>(List.of(
-                stubProvider("MT101_BUILD"))));
+                stubProvider("MT101_BUILD_FROM_TABLE"))));
         var registry = new TaskTypeRegistry(providerRegistry);
 
         assertTrue(registry.isRegistered(TaskType.FILE_READ));
-        assertTrue(registry.isRegistered("MT101_BUILD"));
+        assertTrue(registry.isRegistered("MT101_BUILD_FROM_TABLE"));
         assertFalse(registry.isRegistered("UNKNOWN_TYPE"));
         assertFalse(registry.isRegistered(null));
         assertFalse(registry.isRegistered(""));
@@ -63,12 +63,12 @@ class TaskTypeRegistryTest {
     @Test
     void isBuiltinOnlyAcceptsMotorTypes() {
         var providerRegistry = new TaskProviderRegistry(new ListInstance<>(List.of(
-                stubProvider("MT101_BUILD"))));
+                stubProvider("MT101_BUILD_FROM_TABLE"))));
         var registry = new TaskTypeRegistry(providerRegistry);
 
         assertTrue(registry.isBuiltin(TaskType.FILE_READ));
         assertTrue(registry.isBuiltin(TaskType.NOTIFICATION));
-        assertFalse(registry.isBuiltin("MT101_BUILD"));
+        assertFalse(registry.isBuiltin("MT101_BUILD_FROM_TABLE"));
         assertFalse(registry.isBuiltin(null));
     }
 
@@ -79,7 +79,7 @@ class TaskTypeRegistryTest {
 
         assertTrue(registry.all().containsAll(TaskType.BUILTIN));
         // Sin verticales no rompe.
-        assertFalse(registry.isRegistered("MT101_BUILD"));
+        assertFalse(registry.isRegistered("MT101_BUILD_FROM_TABLE"));
     }
 
     // --- helpers ---

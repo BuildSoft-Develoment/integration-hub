@@ -225,12 +225,20 @@ export class ProcessEditorStore {
     // Reusa applyFlowState: sincroniza el layout creando nodos para las nuevas
     // tareas. Parte de un layout vacio (mismo viewport/version actual) para
     // reemplazar el contenido del editor con la cadena masiva completa.
-    const emptyLayout = {
+    // Conecta las tareas en cadena lineal (task[i] -> task[i+1]) para que el
+    // flujo quede con sus conectores; sin esto los nodos aparecian sueltos.
+    // El id se completa en normalizeEdges (edge.id || edgeId(source,target)).
+    const chainEdges = tasks.slice(0, -1).map((task, index) => ({
+      id: '',
+      source: task.clientId,
+      target: tasks[index + 1].clientId,
+    }));
+    const layout = {
       ...this.form().flowLayout,
       nodes: [],
-      edges: [],
+      edges: chainEdges,
     };
-    this.applyFlowState(emptyLayout, tasks);
+    this.applyFlowState(layout, tasks);
   }
 
   updateTask(
@@ -340,7 +348,6 @@ export class ProcessEditorStore {
       case 'DB_EXECUTE_FN':
         return 'out';
       case 'FILE_READ':
-      case 'MT101_BUILD':
       case 'MT101_PARSE':
       case 'MT101_SPLIT':
       case 'MT101_REPAIR':

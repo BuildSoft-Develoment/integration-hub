@@ -6,23 +6,17 @@ const baseTask: ProcessTaskFormModel = {
   clientId: 'client-1',
   id: null,
   taskOrder: 3,
-  taskType: 'MT101_BUILD',
+  taskType: 'MT101_BUILD_FROM_TABLE',
   active: true,
   sourceDefinitionId: null,
   readerDefinitionId: null,
   configurationJson: '{}',
 };
 
-describe('Mt101BuildTaskProvider', () => {
-  describe('descriptor', () => {
-    it('declares MT101_BUILD as type and workspace layout', () => {
-      const provider = new Mt101BuildTaskProvider();
-      expect(provider.descriptor.type).toBe('MT101_BUILD');
-      expect(provider.descriptor.modalLayout).toBe('workspace');
-      expect(provider.descriptor.labelKey).toBe('processTask.MT101_BUILD');
-    });
-  });
-
+// Base compartida de construccion MT101 (la unica subclase registrada es
+// Mt101BuildFromTableTaskProvider). Aqui se cubre la serializacion draft <-> config_json
+// que ambas comparten; la identidad del task type se prueba en el spec de from-table.
+describe('Mt101BuildTaskProvider (base compartida de construccion MT101)', () => {
   describe('createDraft', () => {
     it('returns sensible defaults for a new task', () => {
       const draft = new Mt101BuildTaskProvider().createDraft();

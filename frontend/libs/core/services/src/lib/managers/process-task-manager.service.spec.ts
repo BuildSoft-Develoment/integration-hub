@@ -93,4 +93,26 @@ describe('ProcessTaskManagerService remote task catalog', () => {
     });
     http.verify();
   });
+
+  it('degrades gracefully for a task type without a provider (removed/unavailable)', () => {
+    // Regresion: al remover MT101_BUILD, los procesos viejos que aun lo referencian
+    // NO deben romper el render de la lista de tareas (antes label/summarize/modalLayout
+    // lanzaban "No provider registered..."). label = tipo crudo, summarize = '',
+    // modalLayout = undefined.
+    const { manager } = setup();
+    const task: ProcessTaskFormModel = {
+      clientId: 'c1', id: null, taskOrder: 1, taskType: 'MT101_BUILD',
+      active: true, sourceDefinitionId: null, readerDefinitionId: null, configurationJson: '{}',
+    };
+    const ctx = { sources: [], readers: [], connections: [] };
+
+    expect(() => manager.label('MT101_BUILD')).not.toThrow();
+    expect(manager.label('MT101_BUILD')).toBe('MT101_BUILD');
+    expect(() => manager.summarize(task, ctx)).not.toThrow();
+    expect(manager.summarize(task, ctx)).toBe('');
+    expect(() => manager.modalLayout('MT101_BUILD')).not.toThrow();
+    expect(manager.modalLayout('MT101_BUILD')).toBeUndefined();
+    // La creacion sigue restringida a tipos registrados (esto SI debe lanzar).
+    expect(() => manager.defaultConfigurationJson('MT101_BUILD', 'x')).toThrow();
+  });
 });

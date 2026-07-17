@@ -1,4 +1,4 @@
-// @trace spec 008-mensajeria-pagos RF-001, T-011 (UI MT101_BUILD)
+// @trace spec 008-mensajeria-pagos RF-001, T-011 (UI construccion MT101, base compartida por MT101_BUILD_FROM_TABLE)
 // @trace ADR-009
 import { CommonModule } from '@angular/common';
 import { Component, computed, inject, input, signal } from '@angular/core';
@@ -24,7 +24,8 @@ import {
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
 /**
- * Formulario de configuracion para tareas {@code MT101_BUILD}.
+ * Formulario de configuracion para la construccion MT101 (base compartida, usada por
+ * {@code MT101_BUILD_FROM_TABLE}; el tipo en memoria {@code MT101_BUILD} se removio).
  *
  * <p>Componente standalone que se registra en {@code PROCESS_TASK_FORM_REGISTRY} via
  * {@code provideMt101BuildForm()}. El host lo instancia dinamicamente con

@@ -11,6 +11,7 @@ Todos traen el MISMO esquema de 8 columnas que lee el pipeline:
 | **mt101-10k.xlsx** | Excel | 10.000 | Abrir/inspeccionar la data; o probar el reader Excel |
 | **mt101-10k.txt** | TXT ancho fijo | 10.000 | Probar el reader TXT (posiciones fijas) |
 | **mt101-6.csv** | CSV | 6 | Humo rápido (idéntico al ejemplo del documento) |
+| **mt101-1m.csv** | CSV | 1.000.000 | Escala (E2E‑22/NF‑01). **No se commitea** (~94 MB); se genera con `node gen-mt101-1m.cjs` (o `node gen-mt101-1m.cjs 100000` para 100k) |
 
 > Los datos son sintéticos y válidos: `monto` siempre > 0 con 2 decimales; 80% PEN / 20% USD; `cargos` en OUR/SHA/BEN; `bic`, `concepto` y `nombre` en juego de caracteres SWIFT-X (sin acentos ni ñ). Con esta data las 10.000 filas deben terminar en **SENT** (camino feliz).
 
@@ -21,7 +22,7 @@ Todos traen el MISMO esquema de 8 columnas que lee el pipeline:
 Los puertos SFTP/FTP/MinIO **no están expuestos al host**, así que se copia dentro del contenedor:
 
 ```bash
-# SFTP (recomendado) — la Fuente SFTP lee /upload
+# SFTP (recomendado) — la Fuente SFTP apunta a /upload/mt101-10k.csv (ruta COMPLETA al archivo)
 docker cp mt101-10k.csv ih-int-sftp-source:/home/ihsource/upload/
 
 # alternativas

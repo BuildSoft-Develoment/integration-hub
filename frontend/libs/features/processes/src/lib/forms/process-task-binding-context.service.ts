@@ -60,7 +60,6 @@ export class ProcessTaskBindingContextService {
       case 'DB_EXECUTE_SP':
       case 'DB_EXECUTE_FN':
         return ['metadata', 'summary', 'out', 'errors'];
-      case 'MT101_BUILD':
       case 'MT101_PARSE':
       case 'MT101_SPLIT':
       case 'MT101_REPAIR':
@@ -99,7 +98,6 @@ export class ProcessTaskBindingContextService {
       case 'MT101_BUILD_FROM_TABLE':
         return 'fragments';
       case 'FILE_READ':
-      case 'MT101_BUILD':
       case 'MT101_PARSE':
       case 'MT101_SPLIT':
       case 'MT101_REPAIR':
@@ -357,7 +355,6 @@ export class ProcessTaskBindingContextService {
       DB_EXECUTE_FN: ['batchCount'],
       REST_CALL: ['processedCount', 'batchCount'],
       NOTIFICATION: ['batchCount'],
-      MT101_BUILD: ['builtCount', 'messageCount', 'transactionCount'],
       MT101_VALIDATE: ['validCount', 'invalidCount', 'issueCount'],
       MT101_ARCHIVE: ['archivedCount', 'targetTable'],
       MT101_PAY: ['dispatchCount', 'sentCount', 'acceptedCount', 'rejectedCount', 'retriedCount', 'transport'],

@@ -45,15 +45,15 @@ class TaskOutputRegistryTest {
 
     @Test
     void publishesRecordsOutputUnderQualifiedTaskRefKey() {
-        // Contrato critico del pipeline MT101 (spec 008): MT101_VALIDATE/ARCHIVE/PAY
-        // consumen `<taskRef>.records` via Mt101MessageInputResolver. Si esta clave
-        // calificada deja de publicarse, toda la cadena downstream se rompe en
-        // silencio ("skipped because there are no messages").
+        // Contrato critico del pipeline MT101 (spec 008): las tareas que consumen
+        // `<taskRef>.records` (p.ej. MT101_PARSE -> MT101_ROUTE) via Mt101MessageInputResolver
+        // dependen de que esta clave calificada se publique. Si deja de publicarse, la
+        // cadena downstream se rompe en silencio ("skipped because there are no messages").
         var registry = new TaskOutputRegistry(new JsonConfigurationMapper());
         var taskPlan = new ProcessExecutionStateService.TaskPlan(
                 30L,
                 2,
-                "MT101_BUILD",
+                "MT101_PARSE",
                 "{\"taskRef\":\"build-mt101\"}",
                 null,
                 null,

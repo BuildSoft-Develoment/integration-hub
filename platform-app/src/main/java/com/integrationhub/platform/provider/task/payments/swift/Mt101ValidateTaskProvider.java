@@ -32,7 +32,7 @@ import java.util.UUID;
 /**
  * Task provider {@code MT101_VALIDATE}: aplica los predicados activos del
  * {@code ruleSet} configurado sobre cada {@link Mt101Message} producido por la tarea
- * anterior (tipicamente {@code MT101_BUILD} o {@code MT101_BUILD_FROM_TABLE}).
+ * anterior (tipicamente {@code MT101_BUILD_FROM_TABLE}).
  *
  * <p>{@code executionMode} esperado: {@code once}. Bypassa el
  * {@code TaskInputResolver} (que solo sabe convertir {@code ReadRecord}/{@code Map})

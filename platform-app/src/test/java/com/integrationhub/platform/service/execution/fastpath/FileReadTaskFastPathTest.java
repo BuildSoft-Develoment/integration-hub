@@ -74,7 +74,7 @@ class FileReadTaskFastPathTest {
     }
 
     @Test
-    void doesNotSupportMt101BuildBecauseItProducesMaterialOutputs() {
+    void doesNotSupportRecordsProducingSinkBecauseItProducesMaterialOutputs() {
         var fastPath = new FileReadTaskFastPath(
                 new FailingStreamingPipelineService(),
                 new RecordingStateService(new ProcessExecution()),
@@ -86,7 +86,6 @@ class FileReadTaskFastPathTest {
                 new com.integrationhub.platform.service.execution.async.TaskDispatchPlanner()
         );
 
-        assertFalse(fastPath.supports(fileReadPlan("fail"), mt101BuildPlan()));
         // MT101_PARSE publica un output `records` consumido downstream (p.ej. MT101_ROUTE);
         // el fast path no lo materializa, por eso no debe fusionarlo.
         assertFalse(fastPath.supports(fileReadPlan("fail"), mt101ParsePlan()));
@@ -187,22 +186,6 @@ class FileReadTaskFastPathTest {
                 2,
                 TaskType.DB_WRITE,
                 "{\"taskRef\":\"task-2-db-write\",\"executionMode\":\"batch\",\"input\":{\"source\":\"task-output\",\"sourceTaskRef\":\"task-1-file-read\",\"sourceOutput\":\"records\"},\"targetTable\":\"public.cliente_target\",\"mode\":\"insert\"}",
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null
-        );
-    }
-
-    private ProcessExecutionStateService.TaskPlan mt101BuildPlan() {
-        return new ProcessExecutionStateService.TaskPlan(
-                20L,
-                2,
-                "MT101_BUILD",
-                "{\"taskRef\":\"build-mt101\",\"executionMode\":\"batch\",\"input\":{\"source\":\"task-output\",\"sourceTaskRef\":\"task-1-file-read\",\"sourceOutput\":\"records\"},\"sequenceA\":{},\"transactionMappings\":{}}",
                 null,
                 null,
                 null,

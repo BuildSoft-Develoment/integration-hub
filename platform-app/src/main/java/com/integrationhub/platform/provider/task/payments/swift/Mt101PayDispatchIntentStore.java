@@ -10,7 +10,7 @@ import java.util.List;
 
 /**
  * P3 — ledger de INTENCIÓN de dispatch para el camino de <b>lista en memoria</b> de {@code MT101_PAY}
- * ({@code MT101_BUILD}/{@code MT101_SPLIT} → PAY), que llama {@code transport.send()} sin el claim durable del camino
+ * ({@code MT101_SPLIT} → PAY), que llama {@code transport.send()} sin el claim durable del camino
  * persistido ({@code mt101_build_fragment}). Le da la misma <b>re-request-safety</b> sin cambiar la topología: se reclama
  * la clave de dispatch (la idempotency key del banco, determinista por-pago) <b>antes</b> de enviar; un re-request del
  * mismo pago encuentra la fila y NO reenvía.

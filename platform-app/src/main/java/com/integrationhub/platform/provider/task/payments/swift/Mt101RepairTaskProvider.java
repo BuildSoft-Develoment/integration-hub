@@ -22,9 +22,9 @@ import java.util.regex.Pattern;
  * aplicando acciones de reparacion configurables.
  *
  * <p>Slice 3.2 implementa <b>reparacion preventiva</b>: las acciones se aplican
- * incondicionalmente a cada mensaje, antes del envio. Util como sanitizer entre
- * {@code MT101_BUILD} y {@code MT101_PAY} para evitar rechazos por charset o
- * longitudes.</p>
+ * incondicionalmente a cada mensaje, antes del envio. Sanitizer de la cadena en
+ * memoria (el build {@code MT101_BUILD} se removio) para evitar rechazos por charset
+ * o longitudes.</p>
  *
  * <p><b>Reparacion reactiva</b> (aplicar solo si el mensaje fue rechazado por
  * cierta {@code ruleCode}) queda como evolucion: requiere consumir el output

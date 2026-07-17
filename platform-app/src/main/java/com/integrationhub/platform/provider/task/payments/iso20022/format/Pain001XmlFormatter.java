@@ -13,7 +13,7 @@ import java.util.UUID;
  * Initiation) sub-catalogo {@code iso20022/} de spec 008-mensajeria-pagos.
  *
  * <p>Bootstrap del sub-catalogo iso20022/ siguiendo ADR-009: reutiliza el SPI
- * {@link PaymentMessageFormatter} existente. El task type {@code MT101_BUILD}
+ * {@link PaymentMessageFormatter} existente. El task type {@code MT101_BUILD_FROM_TABLE}
  * con {@code configuration.format = "PAIN001_XML"} emite ISO 20022 sin
  * necesidad de un nuevo task type ni cambios al motor.</p>
  *

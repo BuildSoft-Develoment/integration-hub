@@ -79,6 +79,16 @@ describe('ProcessEditorStore', () => {
       });
       expect(configOf(i).executionMode).toBe('once');
     }
+
+    // El flujo queda CONECTADO en cadena (regresion: antes los nodos aparecian
+    // sueltos, sin conectores, al aplicar el template masivo).
+    const edges = store.form().flowLayout.edges;
+    expect(edges).toHaveLength(tasks.length - 1);
+    for (let i = 0; i < tasks.length - 1; i++) {
+      expect(
+        edges.some((e) => e.source === tasks[i].clientId && e.target === tasks[i + 1].clientId)
+      ).toBe(true);
+    }
   });
 
   it('should clear scheduleEvery when scheduled is disabled', () => {

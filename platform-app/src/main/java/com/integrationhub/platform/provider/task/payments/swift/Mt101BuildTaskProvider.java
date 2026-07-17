@@ -10,7 +10,6 @@ import com.integrationhub.platform.spi.task.payments.Mt101Message;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.source.SourcePayload;
-import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -28,32 +27,36 @@ import java.util.TreeMap;
 import java.util.UUID;
 
 /**
- * Task provider {@code MT101_BUILD}: compone uno o varios MT101 a partir de un
- * header logico (declarado en {@code configuration.envelope} + {@code configuration.sequenceA})
- * y de N transacciones (records consumidos como {@code BatchTaskProvider}).
+ * Motor interno de construccion MT101: compone un MT101 a partir de un header
+ * logico ({@code configuration.envelope} + {@code configuration.sequenceA}) y de
+ * N transacciones (records).
+ *
+ * <p><b>Ya no es un task type registrado.</b> El tipo {@code MT101_BUILD}
+ * (construccion en memoria) se removio por no escalar a alto volumen; la unica
+ * ruta de construccion es {@code MT101_BUILD_FROM_TABLE}, que pagina desde
+ * {@code staging_record} e invoca {@link #executeRecords} por fragmento. Esta
+ * clase queda como colaborador {@code @ApplicationScoped} de aquella (no
+ * implementa {@code TaskProvider}, asi el {@code TaskProviderRegistry} no la
+ * expone como tipo seleccionable).</p>
  *
  * <p>Delega el formateo (JSON/XML/FIN) a las implementaciones de
  * {@link PaymentMessageFormatter} registradas; selecciona la correcta por
  * {@code configuration.format} (default {@code "JSON"}).</p>
  *
- * <p><b>Outputs publicados</b> (siguen el patron de
- * {@link com.integrationhub.platform.service.execution.TaskOutputRegistry}):</p>
+ * <p><b>Outputs publicados</b> por {@link #executeRecords}:</p>
  * <ul>
  *   <li>{@code messageCount}, {@code transactionCount}, {@code format}: claves
  *       planas (compat).</li>
  *   <li>{@code totalsByCurrency}: mapa moneda -> total.</li>
  *   <li>{@code records}: lista de {@link Mt101Message} con {@code rawPayload}
- *       ya formateado, lista para {@code MT101_ARCHIVE} y {@code MT101_PAY}.</li>
+ *       ya formateado.</li>
  * </ul>
- *
- * <p>Slice 1 del sprint 1: solo {@code splitBy.strategy = "none"}. Estrategias
- * {@code debitAccount} y {@code maxTransactions} llegan en slice posterior.</p>
  *
  * @trace spec 008-mensajeria-pagos RF-001, T-003
  * @trace ADR-009, ADR-004
  */
 @ApplicationScoped
-public class Mt101BuildTaskProvider implements BatchTaskProvider {
+public class Mt101BuildTaskProvider {
 
     private static final String DEFAULT_FORMAT = "JSON";
     private static final String DEFAULT_PRIORITY = "N";
@@ -73,12 +76,19 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         this.recordAuditEmitter = null;
     }
 
-    @Override
-    public String type() {
-        return "MT101_BUILD";
+    /**
+     * Conveniencia para pruebas del motor: toma los records del {@code readResult}
+     * en el contexto y delega a {@link #executeRecords}. No proviene de ninguna SPI
+     * (esta clase ya no es {@code BatchTaskProvider}); la ruta de produccion es
+     * {@code MT101_BUILD_FROM_TABLE}.
+     */
+    public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
+        ReadResult readResult = (ReadResult) context.attributes().get("readResult");
+        SourcePayload sourcePayload = (SourcePayload) context.attributes().get("sourcePayload");
+        List<ReadRecord> records = readResult == null ? List.of() : readResult.records();
+        return executeRecords(context, configuration, records, sourcePayload);
     }
 
-    @Override
     public TaskResult executeRecords(TaskContext context,
                                      Map<String, Object> configuration,
                                      List<ReadRecord> records,
@@ -92,13 +102,13 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         var debitAccountMode = resolveDebitAccountMode(configuration, sequenceACfg, mappingsCfg);
 
         if (sequenceACfg.isEmpty()) {
-            throw new IllegalArgumentException("MT101_BUILD requires configuration.sequenceA");
+            throw new IllegalArgumentException("MT101 build requires configuration.sequenceA");
         }
         if (mappingsCfg.isEmpty()) {
-            throw new IllegalArgumentException("MT101_BUILD requires configuration.transactionMappings");
+            throw new IllegalArgumentException("MT101 build requires configuration.transactionMappings");
         }
         if (records == null || records.isEmpty()) {
-            return TaskResult.success("MT101_BUILD skipped because there are no records to compose");
+            return TaskResult.success("MT101 build skipped because there are no records to compose");
         }
 
         var effectiveRecords = enrichRecordsWithRuntime(context, records, sourcePayload);
@@ -127,7 +137,7 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         emitRecordAudit(List.of(recordEnvelope(context, formatted, sourcePayload, recordOffset, transactions.size())));
 
         return TaskResult.success(
-                "MT101_BUILD composed 1 message with " + transactions.size() + " transactions in " + format,
+                "MT101 build composed 1 message with " + transactions.size() + " transactions in " + format,
                 outputs
         );
     }
@@ -286,14 +296,14 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
                 return direct;
             }
             throw new IllegalArgumentException(
-                    "MT101_BUILD requires sequenceA.sendersReferenceTemplate or sequenceA.sendersReference");
+                    "MT101 build requires sequenceA.sendersReferenceTemplate or sequenceA.sendersReference");
         }
         var resolved = template
                 .replace("${_processExecutionId}", String.valueOf(context.processExecutionId()))
                 .replace("${batchCode}", batchCode(context))
                 .replace("${messageIndex}", String.valueOf(messageIndex));
         if (resolved.length() > 16) {
-            throw new IllegalArgumentException("MT101_BUILD sendersReference exceeds 16 characters: " + resolved);
+            throw new IllegalArgumentException("MT101 build sendersReference exceeds 16 characters: " + resolved);
         }
         return resolved;
     }
@@ -399,7 +409,7 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
             resolved = resolved.replace(placeholder, entry.getValue() == null ? "" : String.valueOf(entry.getValue()));
         }
         if (resolved.length() > 16) {
-            throw new IllegalArgumentException("MT101_BUILD transactionReference exceeds 16 characters: " + resolved);
+            throw new IllegalArgumentException("MT101 build transactionReference exceeds 16 characters: " + resolved);
         }
         return resolved;
     }
@@ -471,25 +481,25 @@ public class Mt101BuildTaskProvider implements BatchTaskProvider {
         switch (normalized) {
             case "singleDebit" -> {
                 if (!hasSequenceADebit) {
-                    throw new IllegalArgumentException("MT101_BUILD debitAccountMode=singleDebit requires sequenceA.orderingCustomer");
+                    throw new IllegalArgumentException("MT101 build debitAccountMode=singleDebit requires sequenceA.orderingCustomer");
                 }
                 if (transactionsWithDebit > 0) {
-                    throw new IllegalArgumentException("MT101_BUILD debitAccountMode=singleDebit cannot use transactionMappings.orderingCustomer");
+                    throw new IllegalArgumentException("MT101 build debitAccountMode=singleDebit cannot use transactionMappings.orderingCustomer");
                 }
             }
             case "multipleDebit", "subsidiary" -> {
                 if (hasSequenceADebit) {
-                    throw new IllegalArgumentException("MT101_BUILD debitAccountMode=" + normalized
+                    throw new IllegalArgumentException("MT101 build debitAccountMode=" + normalized
                             + " requires orderingCustomer only in transactionMappings");
                 }
                 if (transactionsWithDebit != transactions.size()) {
-                    throw new IllegalArgumentException("MT101_BUILD debitAccountMode=" + normalized
+                    throw new IllegalArgumentException("MT101 build debitAccountMode=" + normalized
                             + " requires orderingCustomer in every transaction");
                 }
             }
             case "mixed" -> throw new IllegalArgumentException(
-                    "MT101_BUILD cannot place orderingCustomer in Sequence A and Sequence B at the same time");
-            default -> throw new IllegalArgumentException("Unsupported MT101_BUILD debitAccountMode: " + mode);
+                    "MT101 build cannot place orderingCustomer in Sequence A and Sequence B at the same time");
+            default -> throw new IllegalArgumentException("Unsupported MT101 build debitAccountMode: " + mode);
         }
     }
 

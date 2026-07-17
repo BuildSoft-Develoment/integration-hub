@@ -9,7 +9,6 @@ import {
 } from '../../tasks/process-task-form-registry';
 import { Mt101ArchiveTaskProvider } from './mt101-archive-task.provider';
 import { Mt101BuildFromTableTaskProvider } from './mt101-build-from-table-task.provider';
-import { Mt101BuildTaskProvider } from './mt101-build-task.provider';
 import { Mt101InboundDeliverTaskProvider } from './mt101-inbound-deliver-task.provider';
 import { Mt101ParseFromTableTaskProvider } from './mt101-parse-from-table-task.provider';
 import { Mt101ParseTaskProvider } from './mt101-parse-task.provider';
@@ -47,7 +46,6 @@ export interface PaymentsSwiftFormComponents {
  */
 export function providePaymentsSwiftForms(components: PaymentsSwiftFormComponents): Provider[] {
   const taskProviderClasses = [
-    Mt101BuildTaskProvider,
     Mt101BuildFromTableTaskProvider,
     Mt101ValidateTaskProvider,
     Mt101ArchiveTaskProvider,
@@ -73,7 +71,8 @@ export function providePaymentsSwiftForms(components: PaymentsSwiftFormComponent
     })),
     // Componentes de formulario (UI) - todos con layout workspace.
     ...provideProcessTaskForms(
-      { type: 'MT101_BUILD',     component: components.mt101Build,     layout: 'workspace' },
+      // El form `mt101Build` es la base compartida de construccion MT101; solo lo
+      // usa la ruta paginada (MT101_BUILD ya no se registra como task type).
       { type: 'MT101_BUILD_FROM_TABLE', component: components.mt101Build, layout: 'workspace' },
       { type: 'MT101_VALIDATE',  component: components.mt101Validate,  layout: 'workspace' },
       { type: 'MT101_ARCHIVE',   component: components.mt101Archive,   layout: 'workspace' },

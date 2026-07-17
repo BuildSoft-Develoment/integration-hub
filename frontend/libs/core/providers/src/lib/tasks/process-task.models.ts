@@ -4,7 +4,7 @@
  * <p>Tipos base del motor: {@code FILE_READ}, {@code DB_WRITE}, {@code DB_EXECUTE_SP},
  * {@code DB_EXECUTE_FN}, {@code REST_CALL}, {@code NOTIFICATION}.</p>
  *
- * <p>Tipos de la vertical mensajeria de pagos (spec 008): {@code MT101_BUILD},
+ * <p>Tipos de la vertical mensajeria de pagos (spec 008): {@code MT101_BUILD_FROM_TABLE},
  * {@code MT101_VALIDATE}, {@code MT101_ARCHIVE}, {@code MT101_PAY}.</p>
  *
  * <p><b>Deuda temporal</b>: este union sigue siendo cerrado por parsimonia, en paralelo
@@ -21,8 +21,8 @@ export type PlatformProcessTaskType =
   | 'REST_CALL'
   | 'NOTIFICATION'
   // --- Vertical mensajeria de pagos sub-catalogo swift/ (spec 008) ---
-  // Sprint 1 (outbound MVP):
-  | 'MT101_BUILD'
+  // Sprint 1 (outbound MVP): la construccion en memoria MT101_BUILD se removio (no
+  // escala); la unica ruta de construccion es la paginada MT101_BUILD_FROM_TABLE.
   | 'MT101_BUILD_FROM_TABLE'
   | 'MT101_VALIDATE'
   | 'MT101_ARCHIVE'

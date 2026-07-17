@@ -25,7 +25,7 @@ import java.util.UUID;
 
 /**
  * Task provider {@code MT101_PAY}: itera la lista de {@link Mt101Message} consumida
- * de una tarea anterior (tipicamente {@code MT101_ARCHIVE} o {@code MT101_BUILD}) y
+ * de una tarea anterior (tipicamente {@code MT101_ARCHIVE} o {@code MT101_BUILD_FROM_TABLE}) y
  * la despacha al banco/gateway via el {@link PaymentMessageTransport} configurado.
  *
  * <p>{@code executionMode} esperado: {@code per-record} en uso normal. Para slice 3
