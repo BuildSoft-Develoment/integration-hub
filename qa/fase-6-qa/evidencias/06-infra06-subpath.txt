@@ -1,0 +1,2 @@
+=== EV-INFRA06 subpath /appih base href ===
+<base href="/appih/"

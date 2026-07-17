@@ -1,0 +1,5 @@
+=== EV-INFRA05 cert self-signed (SAN) ===
+subject=CN=app.buildsoft.com.pe, O=Integration Hub
+issuer=CN=app.buildsoft.com.pe, O=Integration Hub
+X509v3 Subject Alternative Name: 
+    DNS:app.buildsoft.com.pe, DNS:localhost, IP Address:192.168.0.15, IP Address:190.234.81.197, IP Address:192.168.1.38

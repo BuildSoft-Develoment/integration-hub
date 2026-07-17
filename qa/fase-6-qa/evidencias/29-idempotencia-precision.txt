@@ -1,0 +1,10 @@
+=== EV idempotencia (PAY-09/SRC-11/BANK-08/E2E-16): reingreso de mt101-6.csv ===
+mt101_transaction antes=10106
+-[ RECORD 1 ]--------------------------------------------------------------------------
+task_type | FILE_READ
+status    | COMPLETED
+details   | Read completed for source Fuente SFTP QA with 6 valid records and 0 skipped
+
+mt101_transaction despues=10112 (debe ser IGUAL = dedup)
+
+=== EV precision monto/moneda (BANK-11): tx vs archivo ===

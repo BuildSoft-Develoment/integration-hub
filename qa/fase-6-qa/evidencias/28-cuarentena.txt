@@ -1,0 +1,82 @@
+=== EV: cuarentena (MP-05/06/07, BANK-10) ===
+failed_record antes=0
+-[ RECORD 1 ]--------------------------------------------------------------------------
+task_type | FILE_READ
+status    | COMPLETED
+details   | Read completed for source Fuente SFTP QA with 3 valid records and 0 skipped
+-[ RECORD 2 ]--------------------------------------------------------------------------
+task_type | MT101_BUILD
+status    | COMPLETED
+details   | MT101_BUILD composed 1 message with 3 transactions in FIN
+-[ RECORD 3 ]--------------------------------------------------------------------------
+task_type | MT101_SPLIT
+status    | COMPLETED
+details   | MT101_SPLIT input=1 split=1 passthrough=0 fragments=2
+-[ RECORD 4 ]--------------------------------------------------------------------------
+task_type | MT101_REPAIR
+status    | COMPLETED
+details   | MT101_REPAIR processed=2 changes=0 attempt=1
+-[ RECORD 5 ]--------------------------------------------------------------------------
+task_type | MT101_VALIDATE
+status    | FAILED
+details   | MT101_VALIDATE ruleSet=structural-mvp messages=2 invalid=2 issues=2
+
+--- mt101_failed_record (cuarentena) ---
+ total_failed 
+--------------
+            0
+(1 row)
+
+ERROR:  column "failure_reason" does not exist
+LINE 1: select failure_reason, left(raw_payload,60) raw from mt101_f...
+               ^
+=== mt101_validation_issue (cuarentena de validacion) ===
+ total_issues 
+--------------
+            2
+(1 row)
+
+      column_name      
+-----------------------
+ id
+ archive_id
+ transaction_id
+ rule_code
+ rule_set
+ severity
+ message
+ detected_at
+ fragment_set_id
+ senders_reference
+ fragment_index
+ transaction_reference
+(12 rows)
+
+--- detalle de los issues ---
+-[ RECORD 1 ]---------+---------------------------------
+id                    | 2
+archive_id            | 
+transaction_id        | 
+rule_code             | STRUCT.AMOUNT_POSITIVE
+rule_set              | structural-mvp
+severity              | E
+message               | amount must be greater than zero
+detected_at           | 2026-07-16 20:58:59.006525
+fragment_set_id       | 
+senders_reference     | 
+fragment_index        | 
+transaction_reference | T3
+-[ RECORD 2 ]---------+---------------------------------
+id                    | 1
+archive_id            | 
+transaction_id        | 
+rule_code             | STRUCT.AMOUNT_POSITIVE
+rule_set              | structural-mvp
+severity              | E
+message               | amount must be greater than zero
+detected_at           | 2026-07-16 20:58:58.936296
+fragment_set_id       | 
+senders_reference     | 
+fragment_index        | 
+transaction_reference | T2
+

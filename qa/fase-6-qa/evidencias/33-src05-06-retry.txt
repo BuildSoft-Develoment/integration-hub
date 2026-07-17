@@ -1,0 +1,6 @@
+--- SRC-06 (S3 + fileNameTemplate) ---
+PUT s2=200 proc=200 exec=200
+FILE_READ: COMPLETED | Read completed for source Fuente S3 QA with 6 valid records and 0 skipped
+--- SRC-05 (FTP: dir + fileNameTemplate + activo) ---
+PUT s3=200 proc=200 exec=200
+FILE_READ: FAILED | No FTP files match selector mt101-6.csv in /

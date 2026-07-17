@@ -1,0 +1,13 @@
+=== precision: montos de las primeras tx (deben coincidir con el archivo) ===
+ amount_value | original_amount_value | amount_currency | original_amount_currency 
+--------------+-----------------------+-----------------+--------------------------
+      101.500 |                       | PEN             | 
+      102.500 |                       | PEN             | 
+      103.500 |                       | PEN             | 
+      104.500 |                       | PEN             | 
+      105.500 |                       | PEN             | 
+      106.500 |                       | PEN             | 
+     7238.230 |                       | PEN             | 
+     7238.960 |                       | PEN             | 
+(8 rows)
+

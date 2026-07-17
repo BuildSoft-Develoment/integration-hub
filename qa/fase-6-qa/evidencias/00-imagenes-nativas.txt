@@ -1,0 +1,16 @@
+=== EV-00: imagenes nativas usadas (compilados) ===
+integration-hub:native-appih  b3e1b12eced4  209MB  11 hours ago
+quarkus-audit-consumer:latest  a29cc460355f  623MB  35 hours ago
+integration-hub-audit-consumer:native  2247144e6ecb  107MB  2 days ago
+demo-transform-java:1.0.0  401c83017ddc  76.3MB  2 days ago
+demo-transform-widget:1.0.0  8b35da864742  74.8MB  7 days ago
+demo-transform-py:1.0.0  7d36e8720dc1  237MB  7 days ago
+demo-transform-node:1.0.0  0add7b48c96d  271MB  7 days ago
+atmoz/sftp:alpine  db00e1e60659  35.2MB  3 months ago
+postgres:16-alpine  8ffca822c193  394MB  11 months ago
+quay.io/keycloak/keycloak:26.1  be6a86215213  702MB  15 months ago
+provectuslabs/kafka-ui:latest  8f2ff02d64b0  449MB  2 years ago
+apache/kafka:3.7.0  41c20d65b0a2  612MB  2 years ago
+ealen/echo-server:latest  ec8a6e95890d  196MB  2 years ago
+minio/minio:RELEASE.2024-01-16T16-07-38Z  4c4a4876193f  207MB  2 years ago
+minio/mc:RELEASE.2024-01-16T16-06-34Z  591b097ea2d4  107MB  2 years ago

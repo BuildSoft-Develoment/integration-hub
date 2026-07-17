@@ -1,0 +1,2 @@
+=== EV-INFRA11 branding ===
+GET /appih/api/branding -> HTTP 200

@@ -1,0 +1,4 @@
+=== dejar mt101-6.csv en sftp-source (docker cp) ===
+ls: C:/Program Files/Git/home/ihsource/upload/: No such file or directory
+{"details":"Execution queued","finishedAt":null,"id":1,"sourceExecutionId":null,"startedAt":"2026-07-16T20:17:30.560343","status":"RUNNING","triggerSource":"MANUAL"}
+[HTTP 200]

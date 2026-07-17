@@ -1,0 +1,28 @@
+=== INTENTO LIVE 1M (PARCIAL, ~10k) — NO es la evidencia de 1M ===
+
+NOTA (corregido 2026-07-17): este snapshot de la BD del stack int se tituló
+originalmente "RESULTADO 1M" pero las cuentas de abajo son de escala ~10k
+(mt101_transaction=10118, mt101_archive=5059), NO 1.000.000. El intento live
+sobre el stack de integracion no llego a 1M en la vista.
+
+La evidencia REAL y solida del millon esta en:
+  - evidencias/evidencia-1M-20260715.md
+  - evidencias/reportes-crudos-1M-20260715/  (Surefire XML sin editar)
+Corrida por Mt101MillionFileProcessE2EIT: 1.000.000 filas -> SENT, BUILD SUCCESS,
+pipeline PAGINADO (FILE_READ -> DB_WRITE staging -> MT101_BUILD_FROM_TABLE ->
+VALIDATE -> ARCHIVE -> PAY), -Xmx768m sin OutOfMemoryError, ~14 min.
+
+Caso QA: E2E-22 (1M paginado) = Pass POR EL IT. E2E-23 (verificar 1M por la
+vista/UI del stack live) sigue Blocked: requiere correr el 1M en int live + login UI.
+
+--- snapshot crudo de la BD int (intento parcial ~10k) — 2669s ---
+          t          | count
+---------------------+-------
+ mt101_archive       |  5059
+ mt101_failed_record |     0
+ mt101_transaction   | 10118
+ staging_record      |     0
+(4 rows)
+
+--- ultima corrida (tareas) ---
+(0 rows)

@@ -1,0 +1,9 @@
+=== EV-INFRA10: openid-config issuer (https + hostname publico) ===
+{"issuer":"https://192.168.0.15:8443/iam/realms/integration-hub"
+"authorization_endpoint":"https://192.168.0.15:8443/iam/realms/integration-hub/protocol/openid-connect/auth"
+"token_endpoint":"https://192.168.0.15:8443/iam/realms/integration-hub/protocol/openid-connect/token"
+"token_endpoint_auth_methods_supported":["private_key_jwt"
+"token_endpoint_auth_signing_alg_values_supported":["PS384"
+"device_authorization_endpoint":"https://192.168.0.15:8443/iam/realms/integration-hub/protocol/openid-connect/auth/device"
+"mtls_endpoint_aliases":{"token_endpoint":"https://192.168.0.15:8443/iam/realms/integration-hub/protocol/openid-connect/token"
+"device_authorization_endpoint":"https://192.168.0.15:8443/iam/realms/integration-hub/protocol/openid-connect/auth/device"

@@ -1,0 +1,2 @@
+=== EV-AUTH04: authorize SIN code_challenge (PKCE S256 obligatorio) ===
+HTTP 302  Location: https://localhost:8443/appih/?error=invalid_request&error_description=Missing+parameter%3A+code_challenge_method&iss=https%3A%2F%2F192.168.0.15%3A8443%2Fiam%2Frealms%2Fintegration-hub

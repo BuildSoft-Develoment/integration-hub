@@ -1,0 +1,36 @@
+=== EJECUCION 4 (10k volumen, batchSize=20000) FINAL: COMPLETED ===
+(transacciones antes=106, archive antes=53)
+-[ RECORD 1 ]------------------------------------------------------------------------------
+task_type | FILE_READ
+status    | COMPLETED
+details   | Read completed for source Fuente SFTP QA with 10000 valid records and 0 skipped
+-[ RECORD 2 ]------------------------------------------------------------------------------
+task_type | MT101_BUILD
+status    | COMPLETED
+details   | MT101_BUILD composed 1 message with 10000 transactions in FIN
+-[ RECORD 3 ]------------------------------------------------------------------------------
+task_type | MT101_SPLIT
+status    | COMPLETED
+details   | MT101_SPLIT input=1 split=1 passthrough=0 fragments=5000
+-[ RECORD 4 ]------------------------------------------------------------------------------
+task_type | MT101_REPAIR
+status    | COMPLETED
+details   | MT101_REPAIR processed=5000 changes=0 attempt=1
+-[ RECORD 5 ]------------------------------------------------------------------------------
+task_type | MT101_VALIDATE
+status    | COMPLETED
+details   | MT101_VALIDATE ruleSet=structural-mvp messages=5000 invalid=0 issues=0
+-[ RECORD 6 ]------------------------------------------------------------------------------
+task_type | MT101_ARCHIVE
+status    | COMPLETED
+details   | MT101_ARCHIVE archived 5000 messages (2129103 bytes)
+
+=== conteos BD finales ===
+           t            | count 
+------------------------+-------
+ mt101_archive          |  5053
+ mt101_failed_record    |     0
+ mt101_transaction      | 10106
+ mt101_validation_issue |     0
+(4 rows)
+

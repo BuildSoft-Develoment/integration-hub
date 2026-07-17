@@ -1,0 +1,8 @@
+=== CSRC-07: test fuente SFTP (buena) ===
+
+=== CSRC-07: test fuente SFTP (password MALA -> fail-loud) ===
+
+=== CCON-03: test conexion Postgres (buena) ===
+
+=== CCON-03: test conexion Postgres (password MALA -> fail-loud) ===
+

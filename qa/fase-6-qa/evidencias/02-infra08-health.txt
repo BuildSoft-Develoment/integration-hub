@@ -1,0 +1,2 @@
+=== EV INFRA-08: health/ready (desde el contenedor app) ===
+sh: line 1: curl: command not found

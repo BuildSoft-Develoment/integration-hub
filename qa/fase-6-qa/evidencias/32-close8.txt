@@ -1,0 +1,41 @@
+===== CIERRE DE LOS 8 PENDIENTES =====
+--- CSRC-07: test fuente SFTP (buena / mala) ---
+{"message":"Source configuration validated successfully","success":true} [200]
+{"status":500,"path":"/appih/api/source-definitions/test","message":"Cannot inspect SFTP source","details":"Cannot inspect SFTP source"} [500]
+--- CCON-03: test conexion Postgres (buena / mala) ---
+{"message":"Connection successful","success":true} [200]
+{"status":500,"path":"/appih/api/connection-definitions/test","message":"Cannot connect using the provided JDBC configuration","details":"Cannot connect using the provided JDBC configuration"} [500]
+--- crear Reader Excel (id esperado 5) ---
+{"active":true,"configurationJson":"{\"sheetIndex\":0,\"rowData\":2,\"trimValues\":true,\"fields\":[{\"name\":\"dni\",\"position\":1},{\"name\":\"nombre\",\"position\":2},{\"name\":\"cuenta\",\"position\":3},{\"name\":\"moneda\",\"position\":4},{\"name\":\"monto\",\"position\":5},{\"name\":\"bic\",\"position\":6},{\"name\":\"concepto\",\"position\":7},{\"name\":\"cargos\",\"position\":8}]}","id":5,"name":"Reader Excel QA","readerType":"XLSX"} [200]
+--- crear proceso read-only (id esperado 2) ---
+{"active":true,"description":"read-only proc-ro","flowLayoutJson":null,"id":2,"lastRunAt":null,"name":"proc-ro","nextRunAt":null,"scheduleEvery":null,"scheduled":false,"tasks":[{"active":true,"configurationJson":"{\"taskRef\":\"file-read\",\"executionMode\":\"batch\"}","id":25,"readerDefinition":{"id":1,"name":"Reader CSV MT101 QA"},"sourceDefinition":{"id":1,"name":"Fuente SFTP QA"},"taskOrder":1,"taskType":"FILE_READ"}]} [200]
+proceso read-only id=2
+
+--- SRC-08 (TXT): source1->txt, reader TXT(4) ---
+PUT src=200 proc=200 exec=200
+FILE_READ: COMPLETED | Read completed for source Fuente SFTP QA with 10000 valid records and 0 skipped
+
+--- SRC-09 (Excel): source1->xlsx, reader Excel(5) ---
+PUT src=200 proc=200 exec=200
+FILE_READ: COMPLETED | Read completed for source Fuente SFTP QA with 10000 valid records and 0 skipped
+
+--- SRC-10 (corrupto): source1->corrupto, reader CSV(1) ---
+PUT src=200 proc=200 exec=200
+FILE_READ: COMPLETED | Read completed for source Fuente SFTP QA with 2 valid records and 0 skipped
+
+--- SRC-05 (FTP): source FTP(3), reader CSV(1) ---
+PUT proc=200 exec=200
+FILE_READ: FAILED | Cannot read file from FTP source
+
+--- SRC-06 (S3): reactivar S3(2), source S3(2), reader CSV(1) ---
+PUT s2on=200 proc=200 exec=200
+FILE_READ: FAILED | S3 source requires 'fileNameTemplate' when 'prefix' is a folder
+
+--- E2E-20 (inbound SWIFT): FILE_READ(fin,SWIFT)->PARSE->ROUTE ---
+PUT src1fin=200
+{"active":true,"description":"inbound SWIFT FIN","flowLayoutJson":null,"id":3,"lastRunAt":null,"name":"proc-inbound-qa","nextRunAt":null,"scheduleEvery":null,"scheduled":false,"tasks":[{"active":true,"configurationJson":"{\"taskRef\":\"read-swift\",\"executionMode\":\"batch\"}","id":31,"readerDefinition":{"id":2,"name":"Reader SWIFT MT101 QA"},"sourceDefinition":{"id":1,"name":"Fuente SFTP QA"},"taskOrder":1,"taskType":"FILE_READ"},{"active":true,"configurationJson":"{\"taskRef\":\"parse-mt101\",\"executionMode\":\"batch\",\"input\":{\"source\":\"task-output\",\"sourceTaskRef\":\"read-swift\",\"sourceOutput\":\"records\"}}","id":32,"readerDefinition":null,"sourceDefinition":null,"taskOrder":2,"taskType":"MT101_PARSE"},{"active":true,"configurationJson":"{\"taskRef\":\"route-inbound\",\"executionMode\":\"once\",\"input\":{\"source\":\"task-output\",\"sourceTaskRef\":\"parse-mt101\",\"sourceOutput\":\"records\"},\"rules\":[{\"name\":\"same-bank-inbound\",\"predicate\":\"sequenceA.sendersReference == 'INB1'\",\"routeTo\":\"INBOUND_REVIEW\"}],\"defaultRoute\":\"UNMATCHED\"}","id":33,"readerDefinition":null,"sourceDefinition":null,"taskOrder":3,"taskType":"MT101_ROUTE"}]} [200]
+proc inbound id=3 exec=200
+FILE_READ: COMPLETED | Read completed for source Fuente SFTP QA with 1 valid records and 0 skipped
+MT101_PARSE: COMPLETED | MT101_PARSE parsed=1 transactions=2 errors=0
+MT101_ROUTE: COMPLETED | MT101_ROUTE routed=1 errors=0 distribution={INBOUND_REVIEW=1}
+===== FIN =====

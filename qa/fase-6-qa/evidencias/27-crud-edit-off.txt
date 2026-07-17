@@ -1,0 +1,7 @@
+CCON-01 GET connection-definitions -> 200
+CCON-04 PUT edit pool maxSize=20 -> 200
+CCON-05 PUT desactivar conexion -> 200
+CSRC-08 PUT desactivar fuente S3 -> 200
+CRDR-06 PUT editar reader SWIFT -> 200
+CRDR-07 PUT desactivar reader JSON -> 200
+CPRO-06 PUT desactivar proceso -> 

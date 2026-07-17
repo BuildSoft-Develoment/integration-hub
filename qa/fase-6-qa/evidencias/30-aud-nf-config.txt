@@ -1,0 +1,36 @@
+=== AUD-01: audit-consumer -> store frio ===
+       table_name        
+-------------------------
+ audit_event
+ audit_spool
+ audit_record_event
+ audit_dead_letter_event
+ mt101_reprocess_audit
+(5 rows)
+
+tabla audit: audit_event
+ eventos_auditoria 
+-------------------
+                74
+(1 row)
+
+
+=== NF-05: secretos NO en logs (buscar passwords en claro) ===
+ocurrencias de passwords en claro en el log del app: 0 (esperado 0)
+
+=== NF-06/BANK-16: flags de control en config PROD (archivo) ===
+mt101.pay.conflict.acknowledge.maker-checker.enabled=${MT101_MAKER_CHECKER_ENABLED:true}
+mt101.pay.direct-list.enabled=${MT101_DIRECT_LIST_ENABLED:false}
+mt101.build.insert-batch-max-bytes=${MT101_INSERT_BATCH_MAX_BYTES:200000}
+mt101.pay.require-normal-pay-resolver=${MT101_REQUIRE_NORMAL_PAY_RESOLVER:false}
+
+=== MP-14: sendersReference (:20:) por fragmento ===
+ senders_reference | count 
+-------------------+-------
+(0 rows)
+
+    column_name    
+-------------------
+ senders_reference
+(1 row)
+

@@ -47,7 +47,8 @@ Luego: **menú Procesos → abrir el proceso MT101 outbound → Ejecutar** y ver
 - Mismos 8 campos por posición que el CSV
 
 ### TXT ancho fijo — `mt101-10k.txt`  (ancho total = 111)
-- Tipo = **TXT** · Encoding = `UTF-8` · Campos por Start/End:
+- Tipo = **TXT** · **Modo = `Ancho fijo` (`mode: "fixed-length"`)** · Encoding = `UTF-8` · Campos por Start/End:
+  > ⚠️ El modo por defecto del reader TXT es `delimited`. Si no se cambia a `fixed-length` los campos salen `null` (parsea toda la línea como un solo valor delimitado).
 
 | Campo | Start | End | Ancho |
 |---|---|---|---|

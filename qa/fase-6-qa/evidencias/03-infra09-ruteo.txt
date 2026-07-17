@@ -1,0 +1,5 @@
+=== EV-INFRA09 RUTEO NGINX ===
+/appih/ -> HTTP 200
+/iam/realms/integration-hub -> HTTP 200
+/pluginwidget/ -> HTTP 200
+/api/query/mt101-fragments/pay-conflicts/open -> HTTP 401

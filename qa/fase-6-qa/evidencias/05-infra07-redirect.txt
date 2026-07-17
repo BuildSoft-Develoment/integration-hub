@@ -1,0 +1,2 @@
+=== EV-INFRA07 raiz redirige a /appih ===
+GET / -> HTTP 302  Location: https://localhost:8443/appih/

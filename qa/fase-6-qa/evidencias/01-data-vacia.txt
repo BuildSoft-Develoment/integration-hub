@@ -1,0 +1,13 @@
+=== EV-01 DATA VACIA (BD recien migrada, 0 filas de negocio) ===
+ connection_definition        = 0
+ mt101_archive                = 0
+ mt101_build_fragment         = 0
+ mt101_confirmation           = 0
+ mt101_failed_record          = 0
+ mt101_pay_conflict_ack_reque = 0
+ mt101_transaction            = 0
+ process_definition           = 0
+ process_task_definition      = 0
+ reader_definition            = 0
+ source_definition            = 0
+

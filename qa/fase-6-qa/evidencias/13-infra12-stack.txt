@@ -1,0 +1,16 @@
+=== EV-INFRA12 contenedores (stack nativo arriba) ===
+ih-int-app	integration-hub:native-appih	Up 5 minutes
+ih-int-audit-consumer	integration-hub-audit-consumer:native	Up 5 minutes
+ih-int-echo	ealen/echo-server:latest	Up 5 minutes
+ih-int-ftp-source	delfer/alpine-ftp-server:latest	Up 5 minutes
+ih-int-kafka	apache/kafka:3.7.0	Up 5 minutes (healthy)
+ih-int-keycloak	quay.io/keycloak/keycloak:26.1	Up 5 minutes (healthy)
+ih-int-minio	minio/minio:RELEASE.2024-01-16T16-07-38Z	Up 5 minutes (healthy)
+ih-int-nginx	nginx:1.27-alpine	Up 5 minutes
+ih-int-plugin-java	demo-transform-java:1.0.0	Up 5 minutes
+ih-int-plugin-node	demo-transform-node:1.0.0	Up 5 minutes
+ih-int-plugin-python	demo-transform-py:1.0.0	Up 5 minutes
+ih-int-plugin-widget	demo-transform-widget:1.0.0	Up 5 minutes
+ih-int-postgres	postgres:16-alpine	Up 5 minutes (healthy)
+ih-int-sftp-bank	atmoz/sftp:alpine	Up 5 minutes
+ih-int-sftp-source	atmoz/sftp:alpine	Up 5 minutes

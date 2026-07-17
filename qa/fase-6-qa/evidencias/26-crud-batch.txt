@@ -1,0 +1,35 @@
+=== CCON-02/E2E-01: conexion Postgres ===
+"connectionType":"POSTGRESQL"
+"id":1
+"name":"Conexion Postgres QA"
+[200]
+=== CSRC-03: fuente S3 ===
+"id":2
+"name":"Fuente S3 QA"
+"sourceType":"S3"
+[200]
+=== CSRC-04: fuente FTP ===
+"id":3
+"name":"Fuente FTP QA"
+"sourceType":"FTP"
+[200]
+=== CSRC-05: fuente REST ===
+"id":4
+"name":"Fuente REST QA"
+"sourceType":"REST"
+[200]
+=== CRDR-02: reader SWIFT MT ===
+"id":2
+"name":"Reader SWIFT MT101 QA"
+"readerType":"SWIFT_MT"
+[200]
+=== CRDR-04: reader JSON ===
+"id":3
+"name":"Reader JSON QA"
+"readerType":"JSON"
+[200]
+=== CRDR-05: reader TXT ===
+"id":4
+"name":"Reader TXT QA"
+"readerType":"TXT"
+[200]
