@@ -218,6 +218,7 @@ export const es = {
   'common.create': 'Crear',
   'common.saveChanges': 'Guardar cambios',
   'common.cancel': 'Cancelar',
+  'common.discard': 'Descartar',
   'common.discardConfirm': 'Tienes cambios sin guardar. Descartar y continuar?',
   'common.edit': 'Editar',
   'common.enable': 'Activar',

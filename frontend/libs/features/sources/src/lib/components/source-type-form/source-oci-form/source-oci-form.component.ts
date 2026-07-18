@@ -28,7 +28,7 @@ import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
       </mat-form-field>
 
       <mat-form-field><mat-label>{{ i18n.t('ui.accessKeyId') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().accessKeyId" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('accessKeyId', $event)" /></mat-form-field>
-      <mat-form-field><mat-label>{{ i18n.t('ui.secretAccessKey') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().secretAccessKey" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('secretAccessKey', $event)" /></mat-form-field>
+      <mat-form-field><mat-label>{{ i18n.t('ui.secretAccessKey') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().secretAccessKey" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('secretAccessKey', $event)" /></mat-form-field>
 
       <mat-form-field class="full"><mat-label>{{ i18n.t('ui.endpoint') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().endpoint" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('endpoint', $event)" /></mat-form-field>
       <mat-form-field><mat-label>{{ i18n.t('ui.mediaType') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().mediaType" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('mediaType', $event)" /></mat-form-field>

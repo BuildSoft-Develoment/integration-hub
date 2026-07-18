@@ -218,6 +218,7 @@ export const en = {
   'common.create': 'Create',
   'common.saveChanges': 'Save changes',
   'common.cancel': 'Cancel',
+  'common.discard': 'Discard',
   'common.discardConfirm': 'You have unsaved changes. Discard and continue?',
   'common.edit': 'Edit',
   'common.enable': 'Enable',

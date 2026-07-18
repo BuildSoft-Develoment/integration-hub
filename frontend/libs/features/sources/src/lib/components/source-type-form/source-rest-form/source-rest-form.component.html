@@ -19,7 +19,7 @@
       </mat-form-field>
       @if (draft().authType === 'basic') {
         <mat-form-field><mat-label>{{ i18n.t('ui.username') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().username" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('username', $event)" /></mat-form-field>
-        <mat-form-field><mat-label>{{ i18n.t('ui.password') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().password" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('password', $event)" /></mat-form-field>
+        <mat-form-field><mat-label>{{ i18n.t('ui.password') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().password" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('password', $event)" /></mat-form-field>
       }
       @if (draft().authType === 'bearer') {
         <mat-form-field class="full"><mat-label>{{ i18n.t('ui.bearerToken') }}</mat-label><textarea matInput [disabled]="readonly()" rows="3" [ngModel]="draft().token" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('token', $event)"></textarea></mat-form-field>

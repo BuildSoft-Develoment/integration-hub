@@ -36,13 +36,13 @@ import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
       <mat-form-field><mat-label>{{ i18n.t('ui.mediaType') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().mediaType" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('mediaType', $event)" /></mat-form-field>
 
       @if (draft().authMode === 'account-key') {
-        <mat-form-field class="full"><mat-label>{{ i18n.t('ui.accountKey') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().accountKey" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('accountKey', $event)" /></mat-form-field>
+        <mat-form-field class="full"><mat-label>{{ i18n.t('ui.accountKey') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().accountKey" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('accountKey', $event)" /></mat-form-field>
       }
       @if (draft().authMode === 'sas-token') {
-        <mat-form-field class="full"><mat-label>{{ i18n.t('ui.sasToken') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().sasToken" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('sasToken', $event)" /></mat-form-field>
+        <mat-form-field class="full"><mat-label>{{ i18n.t('ui.sasToken') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().sasToken" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('sasToken', $event)" /></mat-form-field>
       }
       @if (draft().authMode === 'connection-string') {
-        <mat-form-field class="full"><mat-label>{{ i18n.t('ui.connectionString') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().connectionString" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('connectionString', $event)" /></mat-form-field>
+        <mat-form-field class="full"><mat-label>{{ i18n.t('ui.connectionString') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().connectionString" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('connectionString', $event)" /></mat-form-field>
       }
 
       <mat-form-field class="full"><mat-label>{{ i18n.t('ui.templateVariablesText') }}</mat-label><textarea matInput [disabled]="readonly()" rows="4" [ngModel]="draft().templateVariablesText" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('templateVariablesText', $event)"></textarea></mat-form-field>
