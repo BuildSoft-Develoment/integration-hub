@@ -63,7 +63,8 @@ export class SourceCatalogCommandService {
       };
       const result = await firstValueFrom(this.api.test(payload));
       if (result.success) {
-        this.editor.testResult.set(result);
+        // 003: tambien el mensaje de exito localizado (el backend lo devuelve en ingles).
+        this.editor.testResult.set({ success: true, message: this.i18n.t('sources.test.SUCCESS'), code: result.code });
         this.feedback.testSuccess('entities.source');
       } else {
         // 003: el backend devuelve success=false + code; mostramos el texto localizado, no el mensaje ingles.

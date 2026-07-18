@@ -184,6 +184,7 @@ export const es = {
   'overview.noAudit': 'Sin eventos de auditoria recientes.',
   'sources.title': 'Fuentes',
   'sources.subtitle': 'Configura FILE_SYSTEM, FTP, SFTP y REST.',
+  'sources.test.SUCCESS': 'La configuración de la fuente es válida.',
   'sources.test.PATH_NOT_FOUND': 'La ruta indicada no existe o no es accesible. Verifica que exista en el servidor.',
   'sources.test.NO_MATCH': 'La ruta existe pero no hay archivos que coincidan con el selector o la plantilla de nombre.',
   'sources.test.AUTH_FAILED': 'No se pudo autenticar. Revisa el usuario, la contraseña o la clave.',

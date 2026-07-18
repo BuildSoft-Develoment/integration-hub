@@ -184,6 +184,7 @@ export const en = {
   'overview.noAudit': 'No recent audit events.',
   'sources.title': 'Sources',
   'sources.subtitle': 'Configure FILE_SYSTEM, FTP, SFTP, and REST.',
+  'sources.test.SUCCESS': 'The source configuration is valid.',
   'sources.test.PATH_NOT_FOUND': 'The path does not exist or is not accessible. Make sure it exists on the server.',
   'sources.test.NO_MATCH': 'The path exists but no files match the selector or name template.',
   'sources.test.AUTH_FAILED': 'Authentication failed. Check the username, password, or key.',
