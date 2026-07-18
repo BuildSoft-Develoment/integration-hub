@@ -1685,7 +1685,9 @@ select {
 .execution-page .mat-mdc-form-field-infix,
 .process-page .mat-mdc-form-field-infix {
   min-height: 52px;
-  padding-top: 0.95rem !important;
+  /* 005: 0.95rem era muy chico -> el label flotado se superponia ~8px con el valor. 1.5rem (24px,
+     estandar MDC fill) da la holgura para que el label libre el valor. Verificado en vivo. */
+  padding-top: 1.5rem !important;
   padding-bottom: 0.55rem !important;
 }
 
