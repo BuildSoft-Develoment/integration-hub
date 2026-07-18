@@ -64,6 +64,13 @@ public class SftpSourceProvider implements SourceProvider {
             channel.connect(timeoutMillis);
 
             if (fileNameRule == null) {
+                // 015: verificar que la ruta remota EXISTE. Antes "Probar" solo validaba la conexion
+                // (usuario/clave) y aceptaba cualquier remotePath; stat() falla fail-loud si no existe.
+                try {
+                    channel.stat(resolvedRemotePath);
+                } catch (SftpException notFound) {
+                    throw new IllegalStateException("Remote path not found on SFTP server: " + resolvedRemotePath, notFound);
+                }
                 String fileName = Path.of(resolvedRemotePath).getFileName().toString();
                 return List.of(new SelectedSourceFile(fileName, resolvedRemotePath, SourceConfigurationSupport.detectMediaType(fileName, mediaType), null, null));
             }

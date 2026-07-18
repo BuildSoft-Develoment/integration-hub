@@ -23,6 +23,9 @@ import { ProcessDbWriteSourcePaletteComponent } from '../process-db-write-source
 import { ProcessDbWriteTableSelectorComponent } from '../process-db-write-table-selector/process-db-write-table-selector.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
+// 011: tabla por defecto cuando se usa el datasource de la plataforma (la tabla de staging del money-path).
+const DEFAULT_PLATFORM_TABLE = 'staging_record';
+
 @Component({
   selector: 'ih-process-db-write-task-form',
   standalone: true,
@@ -69,7 +72,8 @@ export class ProcessDbWriteTaskFormComponent {
     connectionRef: '',
     mode: 'insert',
     targetSchema: '',
-    targetTable: '',
+    // 011: una tarea nueva usa el datasource de la plataforma (connectionRef vacio) -> tabla por defecto.
+    targetTable: DEFAULT_PLATFORM_TABLE,
     jdbcBatchSize: '1000',
     mappings: [],
   });
@@ -147,10 +151,13 @@ export class ProcessDbWriteTaskFormComponent {
     this.tableQuery.set('');
     this.tables.set([]);
     this.columns.set([]);
+    // 011: al elegir el "Datasource de la plataforma" (connectionRef vacio) se pre-rellena la tabla destino
+    // con staging_record (la tabla de staging por defecto del money-path). Con una conexion externa queda
+    // vacio para que el usuario la elija.
     this.updateDraft({
       connectionRef,
       targetSchema: '',
-      targetTable: '',
+      targetTable: connectionRef === '' ? DEFAULT_PLATFORM_TABLE : '',
       mappings: [],
     });
   }
