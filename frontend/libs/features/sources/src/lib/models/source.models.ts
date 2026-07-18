@@ -19,6 +19,8 @@ export interface SourceFormModel {
 export interface SourceTestResult {
   success: boolean;
   message: string;
+  // 003: codigo estable del backend para mostrar un mensaje localizado en "Probar fuente".
+  code?: string;
 }
 
 export function toSourceFormModel(source: SourceRecord): SourceFormModel {

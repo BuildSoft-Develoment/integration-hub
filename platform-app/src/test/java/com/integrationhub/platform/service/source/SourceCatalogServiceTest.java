@@ -68,7 +68,34 @@ class SourceCatalogServiceTest {
                 """
         );
 
-        assertEquals(new SourceTestResponse(true, "Source configuration validated successfully"), response);
+        assertEquals(new SourceTestResponse(true, "Source configuration validated successfully", "OK"), response);
+    }
+
+    @Test
+    void testClassifiesMissingPathAsPathNotFound() {
+        // 003: si el provider falla porque la ruta no existe, test() devuelve success=false + code PATH_NOT_FOUND
+        // (no una excepcion HTTP 500) para que el frontend muestre un texto localizado.
+        var service = new SourceCatalogService(null, new StubSourceProviderRegistry(new SourceProvider() {
+            @Override
+            public String type() {
+                return "FILESYSTEM";
+            }
+
+            @Override
+            public List<SelectedSourceFile> selectFiles(Map<String, Object> configuration) {
+                throw new IllegalStateException("Filesystem path does not exist: /dropzone/no-existe");
+            }
+
+            @Override
+            public SourcePayload openFile(SelectedSourceFile selectedFile, Map<String, Object> configuration) {
+                throw new UnsupportedOperationException("Not needed for test");
+            }
+        }), mapper());
+
+        SourceTestResponse response = service.test("Clientes", "filesystem", "{ \"path\": \"/dropzone/no-existe\" }");
+
+        assertEquals(false, response.success());
+        assertEquals("PATH_NOT_FOUND", response.code());
     }
 
     @Test

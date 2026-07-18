@@ -57,8 +57,43 @@ public class SourceCatalogService {
     public SourceTestResponse test(String name, String sourceType, String configurationJson) {
         var normalizedType = requireType(sourceType, "Source type is required");
         var configuration = jsonConfigurationMapper.toMap(configurationJson);
-        sourceProviderRegistry.resolve(normalizedType).selectFiles(configuration);
-        return new SourceTestResponse(true, "Source configuration validated successfully");
+        // 003: no dejamos que la excepcion del provider (mensaje tecnico en ingles) escape como HTTP 500.
+        // La atrapamos, la clasificamos en un codigo estable y el frontend muestra un texto localizado.
+        try {
+            sourceProviderRegistry.resolve(normalizedType).selectFiles(configuration);
+            return new SourceTestResponse(true, "Source configuration validated successfully", "OK");
+        } catch (RuntimeException e) {
+            return new SourceTestResponse(false, e.getMessage(), classifyTestFailure(e));
+        }
+    }
+
+    /** 003: clasifica el fallo de "Probar fuente" en un codigo estable que el frontend traduce. */
+    private static String classifyTestFailure(Throwable error) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (cause instanceof java.nio.file.NoSuchFileException) {
+                return "PATH_NOT_FOUND";
+            }
+            if (cause instanceof java.net.UnknownHostException || cause instanceof java.net.ConnectException) {
+                return "CONNECTION_FAILED";
+            }
+            String message = cause.getMessage() == null ? "" : cause.getMessage().toLowerCase(java.util.Locale.ROOT);
+            if (message.contains("does not exist") || message.contains("no such file")
+                    || message.contains("not found") || message.contains("must be a directory")) {
+                return "PATH_NOT_FOUND";
+            }
+            if (message.contains("no files match") || message.contains("expected exactly one")
+                    || message.contains("match selector")) {
+                return "NO_MATCH";
+            }
+            if (message.contains("auth") || message.contains("password") || message.contains("credential")) {
+                return "AUTH_FAILED";
+            }
+            if (message.contains("connect") || message.contains("timed out") || message.contains("timeout")
+                    || message.contains("unreachable")) {
+                return "CONNECTION_FAILED";
+            }
+        }
+        return "GENERIC";
     }
 
     private void apply(SourceDefinition definition, String name, String sourceType, boolean active, String configurationJson) {

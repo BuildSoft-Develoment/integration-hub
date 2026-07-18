@@ -4,13 +4,14 @@ import { firstValueFrom } from 'rxjs';
 
 import {
   AppFeedbackService,
+  I18nService,
   SourceManagerService,
 } from '@integration-hub/core/services';
 
 import { SourceApiService } from '../api/source-api.service';
 import { SourceCatalogQueryStore } from './source-catalog-query.store';
 import { SourceEditorStateService } from '../editor/source-editor-state.service';
-import { SourceRecord } from '../models/source.models';
+import { SourceRecord, SourceTestResult } from '../models/source.models';
 
 @Injectable()
 export class SourceCatalogCommandService {
@@ -19,6 +20,7 @@ export class SourceCatalogCommandService {
   private readonly editor = inject(SourceEditorStateService);
   private readonly query = inject(SourceCatalogQueryStore);
   private readonly feedback = inject(AppFeedbackService);
+  private readonly i18n = inject(I18nService);
 
   async save(): Promise<void> {
     const form = this.editor.form();
@@ -60,9 +62,16 @@ export class SourceCatalogCommandService {
         configurationJson,
       };
       const result = await firstValueFrom(this.api.test(payload));
-      this.editor.testResult.set(result);
       if (result.success) {
+        this.editor.testResult.set(result);
         this.feedback.testSuccess('entities.source');
+      } else {
+        // 003: el backend devuelve success=false + code; mostramos el texto localizado, no el mensaje ingles.
+        this.editor.testResult.set({
+          success: false,
+          message: this.localizeTestFailure(result),
+          code: result.code,
+        });
       }
     } catch (error) {
       this.editor.testResult.set({
@@ -70,6 +79,17 @@ export class SourceCatalogCommandService {
         message: this.resolveErrorMessage(error),
       });
     }
+  }
+
+  // 003: traduce el codigo del backend a un mensaje claro en el idioma del usuario. Para GENERIC (sin
+  // clasificar) añade el detalle tecnico del backend como respaldo para diagnostico.
+  private localizeTestFailure(result: SourceTestResult): string {
+    const code = result.code || 'GENERIC';
+    const localized = this.i18n.t(`sources.test.${code}`);
+    if (code === 'GENERIC' && result.message?.trim()) {
+      return `${localized}: ${result.message}`;
+    }
+    return localized;
   }
 
   async toggleActive(source: SourceRecord): Promise<void> {

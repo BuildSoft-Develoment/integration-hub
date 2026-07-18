@@ -32,6 +32,12 @@ public class FilesystemSourceProvider implements SourceProvider {
         String selectionMode = SourceConfigurationSupport.selectionMode(configuration);
         String mediaType = SourceConfigurationSupport.optionalString(configuration, "mediaType", null);
 
+        // 003: si la ruta no existe, mensaje claro (antes: "must be a directory" con selector, o IOException
+        // tecnica sin selector). Se clasifica como PATH_NOT_FOUND para el texto localizado en "Probar fuente".
+        if (!Files.exists(Path.of(resolvedPath))) {
+            throw new IllegalStateException("Filesystem path does not exist: " + resolvedPath);
+        }
+
         try {
             if (fileNameRule == null) {
                 Path filePath = Path.of(resolvedPath);
