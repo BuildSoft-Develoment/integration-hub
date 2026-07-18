@@ -64,6 +64,12 @@ export class SourceEditorComponent {
     return this.sourceManager.presentation(this.form().sourceType);
   }
 
+  // CSRC-09: el Nombre es obligatorio; sin el, Guardar/Crear queda deshabilitado (defensa UI;
+  // el backend igual rechaza con 400). Se usa trim para no aceptar solo espacios.
+  nameValid(): boolean {
+    return (this.form().name ?? '').trim().length > 0;
+  }
+
   changeSourceType(value: string): void {
     this.sourceTypeChange.emit(value as SourceProviderType);
   }

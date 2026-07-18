@@ -62,10 +62,17 @@ public class SourceCatalogService {
     }
 
     private void apply(SourceDefinition definition, String name, String sourceType, boolean active, String configurationJson) {
-        definition.name = name;
+        definition.name = requireName(name);
         definition.sourceType = requireType(sourceType, "Source type is required");
         definition.active = active;
         definition.configurationJson = configurationJson;
+    }
+
+    private static String requireName(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("Source name is required");
+        }
+        return value.trim();
     }
 
     private static String requireType(String value, String message) {

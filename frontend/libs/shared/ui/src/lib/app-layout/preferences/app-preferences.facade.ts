@@ -22,6 +22,9 @@ export class AppPreferencesFacade {
   constructor() {
     this.systemThemeConfig.get().subscribe({
       next: (configuration) => this.applyConfiguration(configuration),
+      // Degradar silencioso: si no se puede leer el tema (403 por rol, o red), se conserva el
+      // default local sin propagar un error no manejado a la consola en cada carga.
+      error: () => undefined,
     });
   }
 

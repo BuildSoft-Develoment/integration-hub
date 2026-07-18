@@ -47,6 +47,11 @@ public class ApiExceptionMapper implements ExceptionMapper<Throwable> {
         if (exception instanceof WebApplicationException webApplicationException) {
             return webApplicationException.getResponse().getStatus();
         }
+        // Validacion de entrada del cliente (p.ej. campo requerido vacio, tipo/JSON invalido) -> 400, no 500.
+        // Los servicios lanzan IllegalArgumentException para estos casos; sin esto caian a 500 (fail feo).
+        if (exception instanceof IllegalArgumentException) {
+            return Response.Status.BAD_REQUEST.getStatusCode();
+        }
         return Response.Status.INTERNAL_SERVER_ERROR.getStatusCode();
     }
 }

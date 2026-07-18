@@ -16,6 +16,8 @@ import jakarta.ws.rs.core.MediaType;
 
 import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
 import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.api.security.PlatformRoles.OPERATOR;
+import static com.integrationhub.platform.api.security.PlatformRoles.PAYMENTS_OPERATOR;
 import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
 
 @Path("/api/system/theme")
@@ -29,8 +31,12 @@ public class SystemThemeSettingResource {
         this.systemThemeSettingService = systemThemeSettingService;
     }
 
+    // El tema es una config de display singleton que la UI consulta al cargar para CUALQUIER usuario
+    // (app-preferences.facade). Lectura por el read-set operativo estandar (como el resto de GETs y como el
+    // hermano /api/branding que es PermitAll); antes restringia a admin/auditor y los demas roles (operator,
+    // payments-operator, maker/checker) recibian 403 y no se les aplicaba el tema. La escritura (PUT) sigue admin-only.
     @GET
-    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, AUDITOR})
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
     public SystemThemeSettingResponse get() {
         return systemThemeSettingService.get();
     }

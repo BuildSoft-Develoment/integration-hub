@@ -45,6 +45,7 @@
           [readonly]="readonly()"
           [saving]="saving()"
           [dirty]="dirty()"
+          [canSave]="nameValid()"
           [entityExists]="!!form().id"
           [showTest]="true"
           [testing]="testing()"

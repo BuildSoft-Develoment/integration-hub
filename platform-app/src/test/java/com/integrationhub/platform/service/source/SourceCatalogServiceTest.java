@@ -91,6 +91,16 @@ class SourceCatalogServiceTest {
         assertEquals("Source type is required", error.getMessage());
     }
 
+    @Test
+    void createRejectsBlankName() {
+        // CSRC-09: no se puede crear una fuente con el nombre vacio/en blanco (validacion server-side).
+        var service = new SourceCatalogService(null, new StubSourceProviderRegistry(new NoopSourceProvider()), mapper());
+
+        var error = assertThrows(IllegalArgumentException.class, () -> service.create("   ", "sftp", true, "{}"));
+
+        assertEquals("Source name is required", error.getMessage());
+    }
+
     private JsonConfigurationMapper mapper() {
         var config = ConfigProvider.getConfig();
         var configProvider = new ConfigSecretValueProvider(config);

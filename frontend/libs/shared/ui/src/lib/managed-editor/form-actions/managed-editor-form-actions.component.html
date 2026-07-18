@@ -6,7 +6,7 @@
       </button>
     }
 
-    <button mat-flat-button type="submit" [disabled]="saving() || !dirty()">
+    <button mat-flat-button type="submit" [disabled]="saving() || !dirty() || !canSave()">
       {{ entityExists() ? i18n.t('common.saveChanges') : i18n.t('common.create') }}
     </button>
 

@@ -22,6 +22,9 @@ export class ManagedEditorFormActionsComponent {
   readonly testing = input(false);
   readonly testLabelKey = input('common.test');
   readonly testingLabelKey = input('common.testing');
+  // Gate de validez del formulario: con false se deshabilita Guardar/Crear (p.ej. Nombre requerido vacio).
+  // Default true para no cambiar el comportamiento de los editores que aun no lo cablean.
+  readonly canSave = input(true);
 
   readonly test = output<void>();
   readonly cancel = output<void>();
