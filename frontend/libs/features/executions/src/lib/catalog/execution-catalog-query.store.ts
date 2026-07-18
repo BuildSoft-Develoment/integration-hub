@@ -32,6 +32,9 @@ export class ExecutionCatalogQueryStore implements OnDestroy {
   readonly search = signal('');
   readonly modeFilter = signal<ExecutionModeFilter>('ALL');
   readonly statusFilter = signal<ExecutionStatusFilter>('ALL');
+  // 014: rango de fecha de inicio (formato datetime-local 'yyyy-MM-ddTHH:mm'; '' = sin filtro).
+  readonly startedFrom = signal('');
+  readonly startedTo = signal('');
   readonly currentPage = signal(0);
   readonly pageSize = signal(8);
 
@@ -74,6 +77,18 @@ export class ExecutionCatalogQueryStore implements OnDestroy {
     void this.loadExecutions(true);
   }
 
+  // 014: aplica el rango de fecha de inicio y recarga (vuelve a la primera pagina).
+  updateDateFilter(patch: { startedFrom?: string; startedTo?: string }): void {
+    if (patch.startedFrom !== undefined) {
+      this.startedFrom.set(patch.startedFrom);
+    }
+    if (patch.startedTo !== undefined) {
+      this.startedTo.set(patch.startedTo);
+    }
+    this.clearSearchDebounce();
+    void this.loadExecutions(true);
+  }
+
   updatePagination(pageIndex: number, pageSize: number): void {
     this.clearSearchDebounce();
     this.pageSize.set(pageSize);
@@ -111,6 +126,9 @@ export class ExecutionCatalogQueryStore implements OnDestroy {
           status,
           search: this.search(),
           mode: this.modeFilter(),
+          // '' -> undefined para no enviar el parametro (y no romper el assert exacto del spec).
+          startedFrom: this.startedFrom() || undefined,
+          startedTo: this.startedTo() || undefined,
           page: this.currentPage(),
           size: this.pageSize(),
         })

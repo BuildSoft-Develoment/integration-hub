@@ -69,7 +69,8 @@ public class ExecutionQueryService {
         return executionApiMapper.toResponse(processExecutionRepository.findRequired(processExecutionId));
     }
 
-    public PageResponse<ProcessExecutionResponse> listExecutions(Long processDefinitionId, String status, String queryText, String mode, int page, int size) {
+    public PageResponse<ProcessExecutionResponse> listExecutions(Long processDefinitionId, String status, String queryText, String mode,
+                                                                 LocalDateTime startedFrom, LocalDateTime startedTo, int page, int size) {
         var query = new StringBuilder("from ProcessExecution e where 1=1");
         var parameters = new HashMap<String, Object>();
 
@@ -84,6 +85,15 @@ public class ExecutionQueryService {
         applyExecutionMode(query, parameters, mode);
         if (queryText != null && !queryText.isBlank()) {
             applyExecutionSearch(query, parameters, queryText);
+        }
+        // 014: filtro por rango de fecha de inicio de la ejecucion (startedAt).
+        if (startedFrom != null) {
+            query.append(" and e.startedAt >= :startedFrom");
+            parameters.put("startedFrom", startedFrom);
+        }
+        if (startedTo != null) {
+            query.append(" and e.startedAt <= :startedTo");
+            parameters.put("startedTo", startedTo);
         }
         query.append(" order by e.id desc");
 

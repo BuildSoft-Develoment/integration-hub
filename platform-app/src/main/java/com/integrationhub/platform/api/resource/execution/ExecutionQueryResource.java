@@ -55,10 +55,12 @@ public class ExecutionQueryResource {
             @QueryParam("status") String status,
             @QueryParam("q") String queryText,
             @QueryParam("mode") String mode,
+            @QueryParam("startedFrom") LocalDateTime startedFrom,
+            @QueryParam("startedTo") LocalDateTime startedTo,
             @DefaultValue("0") @QueryParam("page") int page,
             @DefaultValue("10") @QueryParam("size") int size
     ) {
-        return executionQueryService.listExecutions(processDefinitionId, status, queryText, mode, page, size);
+        return executionQueryService.listExecutions(processDefinitionId, status, queryText, mode, startedFrom, startedTo, page, size);
     }
 
     @GET

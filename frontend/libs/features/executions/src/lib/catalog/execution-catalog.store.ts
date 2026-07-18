@@ -34,6 +34,8 @@ export class ExecutionCatalogStore {
   readonly search = this.query.search;
   readonly modeFilter = this.query.modeFilter;
   readonly statusFilter = this.query.statusFilter;
+  readonly startedFrom = this.query.startedFrom;
+  readonly startedTo = this.query.startedTo;
   readonly selectedExecutionId = this.detail.selectedExecutionId;
   readonly selectedExecution = this.detail.selectedExecution;
   readonly drawerOpen = this.detail.drawerOpen;
@@ -74,6 +76,10 @@ export class ExecutionCatalogStore {
 
   updateStatusFilter(value: ExecutionStatusFilter): void {
     this.query.updateStatusFilter(value);
+  }
+
+  updateDateFilter(patch: { startedFrom?: string; startedTo?: string }): void {
+    this.query.updateDateFilter(patch);
   }
 
   toggleSort(field: string): void {

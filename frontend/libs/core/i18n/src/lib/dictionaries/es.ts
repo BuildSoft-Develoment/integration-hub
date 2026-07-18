@@ -932,6 +932,8 @@ export const es = {
   'executions.sourceExecutionId': 'Ejecucion origen',
   'executions.startedAt': 'Inicio',
   'executions.finishedAt': 'Fin',
+  'executions.startedFrom': 'Inicio desde',
+  'executions.startedTo': 'Inicio hasta',
   'executions.executedAt': 'Ejecutado en',
   'executions.details': 'Detalles',
   'executions.payloadJson': 'Payload JSON',

@@ -20,6 +20,8 @@ export class ExecutionApiService {
     status?: string | null;
     search?: string;
     mode?: ExecutionModeFilter;
+    startedFrom?: string | null;
+    startedTo?: string | null;
     page?: number;
     size?: number;
   }): Observable<ExecutionPageResponse> {
@@ -28,6 +30,9 @@ export class ExecutionApiService {
     if (params.status) query.set('status', params.status);
     if (params.search?.trim()) query.set('q', params.search.trim());
     if (params.mode && params.mode !== 'ALL') query.set('mode', params.mode);
+    // 014: rango de fecha de inicio (datetime-local 'yyyy-MM-ddTHH:mm' -> LocalDateTime en el backend).
+    if (params.startedFrom) query.set('startedFrom', params.startedFrom);
+    if (params.startedTo) query.set('startedTo', params.startedTo);
     query.set('page', String(params.page ?? 0));
     query.set('size', String(params.size ?? 8));
     return this.http.get<ExecutionPageResponse>(`${this.baseUrl}?${query.toString()}`);

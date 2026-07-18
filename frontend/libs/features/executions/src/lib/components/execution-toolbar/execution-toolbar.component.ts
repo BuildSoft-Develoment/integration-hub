@@ -23,9 +23,13 @@ export class ExecutionToolbarComponent {
   readonly search = input('');
   readonly modeFilter = input<ExecutionModeFilter>('ALL');
   readonly statusFilter = input<ExecutionStatusFilter>('ALL');
+  readonly startedFrom = input('');
+  readonly startedTo = input('');
   readonly loading = input(false);
   readonly searchChange = output<string>();
   readonly modeFilterChange = output<ExecutionModeFilter>();
   readonly statusFilterChange = output<ExecutionStatusFilter>();
+  readonly startedFromChange = output<string>();
+  readonly startedToChange = output<string>();
   readonly refresh = output<void>();
 }

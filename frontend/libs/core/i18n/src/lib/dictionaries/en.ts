@@ -932,6 +932,8 @@ export const en = {
   'executions.sourceExecutionId': 'Source execution',
   'executions.startedAt': 'Started at',
   'executions.finishedAt': 'Finished at',
+  'executions.startedFrom': 'Started from',
+  'executions.startedTo': 'Started to',
   'executions.executedAt': 'Executed at',
   'executions.details': 'Details',
   'executions.payloadJson': 'Payload JSON',

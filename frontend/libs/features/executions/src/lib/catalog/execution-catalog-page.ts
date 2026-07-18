@@ -54,6 +54,8 @@ export class ExecutionCatalogPageComponent implements OnInit {
       search: this.store.search(),
       modeFilter: this.store.modeFilter(),
       statusFilter: this.store.statusFilter(),
+      startedFrom: this.store.startedFrom(),
+      startedTo: this.store.startedTo(),
       loading: this.store.loading(),
     },
     list: {
@@ -93,6 +95,14 @@ export class ExecutionCatalogPageComponent implements OnInit {
     value: 'ALL' | 'RUNNING' | 'COMPLETED' | 'FAILED' | 'COMPLETED_WITH_ERRORS'
   ): void {
     this.store.updateStatusFilter(value);
+  }
+
+  updateStartedFrom(value: string): void {
+    this.store.updateDateFilter({ startedFrom: value });
+  }
+
+  updateStartedTo(value: string): void {
+    this.store.updateDateFilter({ startedTo: value });
   }
 
   selectExecution(execution: ProcessExecutionRecord): void {

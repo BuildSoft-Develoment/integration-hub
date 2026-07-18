@@ -6,10 +6,14 @@
           [search]="viewModel().toolbar.search"
           [modeFilter]="viewModel().toolbar.modeFilter"
           [statusFilter]="viewModel().toolbar.statusFilter"
+          [startedFrom]="viewModel().toolbar.startedFrom"
+          [startedTo]="viewModel().toolbar.startedTo"
           [loading]="viewModel().toolbar.loading"
           (searchChange)="updateSearch($event)"
           (modeFilterChange)="updateModeFilter($event)"
           (statusFilterChange)="updateStatusFilter($event)"
+          (startedFromChange)="updateStartedFrom($event)"
+          (startedToChange)="updateStartedTo($event)"
           (refresh)="refresh()"
         />
 

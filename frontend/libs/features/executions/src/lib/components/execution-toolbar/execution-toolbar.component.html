@@ -35,5 +35,15 @@
             <mat-option value="COMPLETED_WITH_ERRORS">{{ i18n.t('executionStatus.COMPLETED_WITH_ERRORS') }}</mat-option>
           </mat-select>
         </mat-form-field>
+
+        <mat-form-field class="toolbar-date">
+          <mat-label>{{ i18n.t('executions.startedFrom') }}</mat-label>
+          <input matInput type="datetime-local" [ngModel]="startedFrom()" (ngModelChange)="startedFromChange.emit($event)" />
+        </mat-form-field>
+
+        <mat-form-field class="toolbar-date">
+          <mat-label>{{ i18n.t('executions.startedTo') }}</mat-label>
+          <input matInput type="datetime-local" [ngModel]="startedTo()" (ngModelChange)="startedToChange.emit($event)" />
+        </mat-form-field>
       </div>
     </section>
