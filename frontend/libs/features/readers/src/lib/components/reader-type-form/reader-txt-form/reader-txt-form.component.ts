@@ -7,13 +7,14 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { ReaderDraft } from '@integration-hub/core/providers';
 import { I18nService } from '@integration-hub/core/services';
+import { SuggestInputComponent } from '@integration-hub/shared/ui';
 import { ReaderFieldDefinitionsEditorComponent } from '../reader-field-definitions-editor/reader-field-definitions-editor.component';
 import { ReaderTypeFormBaseComponent } from '../reader-type-form.abstract';
 
 @Component({
   selector: 'ih-reader-txt-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, ReaderFieldDefinitionsEditorComponent],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, ReaderFieldDefinitionsEditorComponent, SuggestInputComponent],
   styles: [
     `
       .form-grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:0.8rem; }

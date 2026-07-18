@@ -4,26 +4,18 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
 import { ReaderDraft } from '@integration-hub/core/providers';
 import { I18nService } from '@integration-hub/core/services';
+import { SuggestInputComponent } from '@integration-hub/shared/ui';
 import { ReaderTypeFormBaseComponent } from '../reader-type-form.abstract';
 
 @Component({
   selector: 'ih-reader-swift-mt-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatCheckboxModule, MatFormFieldModule, MatInputModule],
+  imports: [CommonModule, FormsModule, MatCheckboxModule, SuggestInputComponent],
   template: `
     <div class="form-grid">
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('ui.encoding') }}</mat-label>
-        <input
-          matInput
-          [disabled]="readonly()"
-          [ngModel]="draft().encoding || 'UTF-8'"
-          (ngModelChange)="patchDraft.emit({ encoding: $event })" />
-      </mat-form-field>
+      <ih-suggest-input [label]="i18n.t('ui.encoding')" [hint]="i18n.t('ui.encodingHint')" [suggestions]="encodings" [disabled]="readonly()" [value]="draft().encoding || 'UTF-8'" (valueChange)="patchDraft.emit({ encoding: $event })" />
 
       <div class="checkbox-wrap">
         <mat-checkbox

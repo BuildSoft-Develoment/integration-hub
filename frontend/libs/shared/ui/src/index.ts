@@ -42,6 +42,7 @@ export * from './lib/managed-editor/shell/managed-editor-shell.component';
 export * from './lib/managed-editor/test-result/managed-editor-test-result.component';
 export * from './lib/actions/action-dispatcher.service';
 export * from './lib/duration-input/duration-input.component';
+export * from './lib/suggest-input/suggest-input.component';
 export * from './lib/pipes/relative-time.pipe';
 // §Fase0: los contratos de presentación (ResourcePresentation, IhBreadcrumbItem) viven ahora en la leaf
 // @integration-hub/shared/models y el snackbar en @integration-hub/plugin-ui-kit (ya re-exportado arriba),

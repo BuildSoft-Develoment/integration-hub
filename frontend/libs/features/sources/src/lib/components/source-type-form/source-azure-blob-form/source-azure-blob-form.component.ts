@@ -5,12 +5,13 @@ import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { SuggestInputComponent } from '@integration-hub/shared/ui';
 import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
 
 @Component({
   selector: 'ih-source-azure-blob-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, SuggestInputComponent],
   template: `
     <div class="form-grid">
       <mat-form-field><mat-label>{{ i18n.t('ui.accountName') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().accountName" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('accountName', $event)" /></mat-form-field>
@@ -33,7 +34,7 @@ import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
           <mat-option value="connection-string">connection-string</mat-option>
         </mat-select>
       </mat-form-field>
-      <mat-form-field><mat-label>{{ i18n.t('ui.mediaType') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().mediaType" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('mediaType', $event)" /></mat-form-field>
+      <ih-suggest-input [label]="i18n.t('ui.mediaType')" [hint]="i18n.t('ui.mediaTypeHint')" [suggestions]="mediaTypes" [disabled]="readonly()" [value]="draft().mediaType" (valueChange)="update('mediaType', $event)" />
 
       @if (draft().authMode === 'account-key') {
         <mat-form-field class="full"><mat-label>{{ i18n.t('ui.accountKey') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().accountKey" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('accountKey', $event)" /></mat-form-field>
@@ -45,7 +46,7 @@ import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
         <mat-form-field class="full"><mat-label>{{ i18n.t('ui.connectionString') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().connectionString" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('connectionString', $event)" /></mat-form-field>
       }
 
-      <mat-form-field class="full"><mat-label>{{ i18n.t('ui.templateVariablesText') }}</mat-label><textarea matInput [disabled]="readonly()" rows="4" [ngModel]="draft().templateVariablesText" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('templateVariablesText', $event)"></textarea></mat-form-field>
+      <mat-form-field class="full"><mat-label>{{ i18n.t('ui.templateVariablesText') }}</mat-label><textarea matInput [disabled]="readonly()" rows="4" [ngModel]="draft().templateVariablesText" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('templateVariablesText', $event)"></textarea><mat-hint>{{ i18n.t('ui.templateVariablesHint') }}</mat-hint></mat-form-field>
     </div>
   `,
   styleUrl: './source-azure-blob-form.component.css',

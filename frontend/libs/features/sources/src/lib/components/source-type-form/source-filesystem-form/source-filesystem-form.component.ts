@@ -5,12 +5,13 @@ import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { SuggestInputComponent } from '@integration-hub/shared/ui';
 import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
 
 @Component({
   selector: 'ih-source-filesystem-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, SuggestInputComponent],
   styleUrl: './source-filesystem-form.component.css',
     templateUrl: './source-filesystem-form.component.html'
 })

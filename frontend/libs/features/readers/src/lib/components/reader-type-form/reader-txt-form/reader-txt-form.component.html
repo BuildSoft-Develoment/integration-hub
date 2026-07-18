@@ -6,10 +6,7 @@
           <mat-option value="fixed-length">fixed-length</mat-option>
         </mat-select>
       </mat-form-field>
-      <mat-form-field>
-        <mat-label>{{ i18n.t('ui.encoding') }}</mat-label>
-        <input matInput [disabled]="readonly()" [ngModel]="draft().encoding" (ngModelChange)="patchDraft.emit({ encoding: $event })" />
-      </mat-form-field>
+      <ih-suggest-input [label]="i18n.t('ui.encoding')" [hint]="i18n.t('ui.encodingHint')" [suggestions]="encodings" [disabled]="readonly()" [value]="draft().encoding" (valueChange)="patchDraft.emit({ encoding: $event })" />
       <mat-form-field>
         <mat-label>{{ i18n.t('ui.dataStartsAtRow') }}</mat-label>
         <input matInput [disabled]="readonly()" [ngModel]="draft().rowData" (ngModelChange)="patchDraft.emit({ rowData: $event })" />
