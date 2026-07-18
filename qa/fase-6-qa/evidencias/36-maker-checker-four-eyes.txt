@@ -1,0 +1,54 @@
+=== FOUR-EYES / MAKER-CHECKER PAY_CONFLICT ACK — end-to-end por API (int nativo) — 2026-07-17 ===
+
+Ambiente: int nativo (integration-hub:native-appih) tras nginx en https://192.168.0.15:8443/appih
+Modo activado para homologar: mt101.pay.conflict.acknowledge.maker-checker.enabled=true
+  (via ops/fase-7-deploy/dist/onprem/int/config/application.properties -> restart ih-int-app)
+Login lo hace el usuario (no se ingresan credenciales); se usan access_tokens pegados en chat.
+Usuarios: pay-maker (rol pay-conflict-maker) y pay-checker (rol pay-conflict-checker), actores DISTINTOS.
+
+--- 0) settings ---
+GET /pay-conflicts/settings           -> {"makerCheckerEnabled":true}
+
+--- 1) conflicto sembrado (fragmento SENT que el banco confirmo REJECTED) ---
+mt101_build_fragment: fragment_set_id=MC-QA-SET, senders_reference=MCQA20A, status=SENT, pay_conflict=true
+GET /pay-conflicts/open               -> item MC-QA-SET/MCQA20A source=NORMAL ackStatus=null
+
+--- 2) SEGREGACION POR ROL (negativos) ---
+[pre, modo OFF] checker -> approve-acknowledge  -> 400 "maker-checker is disabled: use single-actor acknowledge"
+checker -> request-acknowledge (rol solo maker) -> 403  (el checker NO puede solicitar)
+maker   -> approve-acknowledge (rol solo checker)-> 403  (el maker NO puede aprobar su propia solicitud)
+
+--- 3) PASO 1: MAKER solicita ---
+maker -> POST /pay-conflicts/request-acknowledge
+  body {source:NORMAL, setId:MC-QA-SET, sendersReference:MCQA20A, reason:"reconciliacion QA four-eyes...", ticketRef:QA-MC-001}
+  -> HTTP 204
+GET /pay-conflicts/open -> ackStatus=PENDING, ackRequestedBy=pay-maker, ackReason+ackTicketRef presentes
+  (la ALERTA sigue abierta: pay_conflict aun true; el paso 1 no apaga nada)
+mt101_pay_conflict_ack_request: id=1 source=NORMAL set_or_run_id=MC-QA-SET senders_reference=MCQA20A
+  requested_by=pay-maker status=PENDING approved_by=NULL  (durable, sobrevive al vencimiento del token)
+
+--- 4) PASO 2: CHECKER aprueba (actor DISTINTO) ---
+checker -> POST /pay-conflicts/approve-acknowledge
+  body {source:NORMAL, setId:MC-QA-SET, sendersReference:MCQA20A}
+  -> HTTP 200 {"acknowledged":1}
+GET /pay-conflicts/open -> {"items":[],"nextCursor":null}   (conflicto RESUELTO)
+
+--- 5) RASTRO FINAL (BD) ---
+mt101_build_fragment MC-QA-SET/MCQA20A:
+  pay_conflict=false, pay_conflict_ack_by=pay-checker,
+  pay_conflict_ack_reason="reconciliacion QA four-eyes: banco confirmo REJECTED sobre SENT", ack_ticket=QA-MC-001
+mt101_pay_conflict_ack_request:
+  requested_by=pay-maker, approved_by=pay-checker, status=APPROVED
+  requested_at=23:01:57, approved_at=23:15:41   (maker != checker)
+
+--- 6) AUDITORIA append-only (audit_spool) ---
+trama PAY_CONFLICT_RESOLVED (event_id 97bf26b7-...):
+  stage=status=PAY_CONFLICT_RESOLVED, recordId/paymentReference=MCQA20A
+  message: "conflicto PAY reconocido por pay-checker: se conserva el terminal 'SENT' —
+            reconciliacion QA four-eyes: banco confirmo REJECTED sobre SENT (maker: pay-maker, checker: pay-checker)"
+  attributes: actor=pay-checker, ticketRef=QA-MC-001, retainedStatus=SENT,
+              originalConflictReason="banco confirmo REJECTED sobre un SENT (QA four-eyes)"
+
+RESULTADO: four-eyes COMPLETO. Segregacion por rol (checker!=maker, doble barrera rol+identidad) +
+resolucion gobernada que NO toca el terminal real (SENT) + no-repudio con ambos actores en el spool.
+Gate G-04 (segregacion de funciones / maker-checker) cubierto a nivel API/backend.

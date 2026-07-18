@@ -1,0 +1,50 @@
+=== FOUR-EYES / MAKER-CHECKER PAY_CONFLICT — verificado POR LA VISTA (UI, Chrome) — 2026-07-18 ===
+
+Ambiente: int nativo, https://192.168.0.15:8443/appih (Chrome real; login lo hace el usuario).
+Modo maker-checker ACTIVO (makerCheckerEnabled=true). Consola: Auditoria > Conflictos de pago.
+El usuario alterna sesion en el navegador (admin -> pay-checker -> pay-maker); Assistant conduce la UI, no ingresa credenciales.
+
+--- Consola PAY Conflicts (sesion admin) ---
+MC-01  El conflicto se lista con Ledger/Set/:20:/Estado(SENT)/Motivo + link "Evidencia".            OK
+MC-13  Chip naranja "Pendiente aprob." en la fila del conflicto con solicitud PENDING.               OK
+UI-01  Inbox transversal: lista conflictos abiertos de todos los sets (landing sin conocer el set).  OK
+MC-19  Panel Resolver consciente del modo: "Maker-checker activo: un actor SOLICITA... y un actor
+       DISTINTO lo aprueba (segregacion de funciones)".                                              OK
+MC-23  Tarjeta "Solicitud de reconocimiento pendiente": Solicito(maker)=pay-maker, Ticket=QA-MC-UI-1,
+       Motivo, Solicitado (cuando).                                                                  OK
+AUTH-13 admin (sin rol maker/checker): "No tienes rol de maker ni de checker: no puedes solicitar ni
+       aprobar reconocimientos" + SOLO boton Cancelar (sin Solicitar/Aprobar).                       OK
+
+--- Segregacion por rol VISIBLE en la UI ---
+MC-11  sesion pay-maker: el panel ofrece "Solicitar reconocimiento" (NO Aprobar).                    OK
+MC-12  sesion pay-checker: el panel ofrece "Aprobar (checker distinto)"; admin/maker NO lo ven.      OK
+MC-03/04 (validacion) el boton "Solicitar reconocimiento" queda deshabilitado (gris) hasta que se
+       llenan Motivo Y Ticket (obligatorios).                                                        OK
+
+--- PASO 1 por la vista: MAKER solicita (sesion pay-maker) ---   [conflicto MC-M-SET / MCM20A]
+MC-06  Maker llena Motivo="reconciliacion QA maker por la vista" + Ticket="QA-MC-M-1" y clic
+       "Solicitar reconocimiento" -> aparece chip "Pendiente aprob." y el conflicto SIGUE en el inbox.
+       BD: mt101_pay_conflict_ack_request requested_by=pay-maker status=PENDING;
+       trama PAY_CONFLICT_ACK_REQUESTED con maker=pay-maker.                                          OK
+
+--- PASO 2 por la vista: CHECKER aprueba (sesion pay-checker) ---  [conflicto MC-UI-SET / MCUI20A]
+MC-07  Checker (distinto del maker) clic "Aprobar (checker distinto)" -> el conflicto se RESUELVE y
+       DESAPARECE del inbox ("Sin conflictos de pago abiertos").
+       BD: pay_conflict=false, ack_by=pay-checker, request APPROVED (requested_by=pay-maker,
+       approved_by=pay-checker); trama PAY_CONFLICT_RESOLVED "(maker: pay-maker, checker: pay-checker)".OK
+
+--- Otras consolas (sesion admin) ---
+AUD-02 Spool de auditoria: cola sana (PENDING=0, IN_FLIGHT=0, SENT=45049 en store frio, DEAD=0),
+       operacion gobernada "Cleanup SENT" (permiso audit-admin, confirmacion en dos pasos).          OK
+       Consolas Eventos / Fragmentos MT101 renderizan OK.
+NOTA:  El buscador de "Eventos" NO expone las tramas nivel-RECORD (PAY_CONFLICT_*); se acceden por el
+       boton "Evidencia" del conflicto. No es bug, es otra via de acceso.
+
+--- NO testeable con los fixtures actuales (documentado) ---
+MC-08 / MC-14  "Aprobar deshabilitado porque soy el maker" (barrera de IDENTIDAD checker==maker -> 400).
+       Con maker y checker como usuarios SEPARADOS, el maker no tiene rol checker y directamente NO ve
+       el boton Aprobar (no llega al chequeo de identidad). Requiere un usuario con AMBOS roles.
+
+RESULTADO: four-eyes maker-checker verificado END-TO-END POR LA VISTA (maker solicita -> checker aprueba),
+con segregacion por rol visible en la UI (admin/maker/checker ven acciones distintas) y persistencia +
+tramas append-only confirmadas en BD. Complementa la evidencia por API (36-maker-checker-four-eyes.txt).

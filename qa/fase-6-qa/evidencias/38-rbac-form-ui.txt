@@ -1,0 +1,39 @@
+=== RBAC por rol + validacion de form (por la vista, Chrome) — 2026-07-18 ===
+
+Ambiente: int nativo, https://192.168.0.15:8443/appih. El usuario alterna sesion (admin/pay-maker/auditor);
+Assistant conduce la UI, no ingresa credenciales.
+
+--- AUTH-09: rol payments-operator (sesion pay-maker) ---
+Menu RECORTADO vs admin: faltan Fuentes, Conexiones, Lectores, Reglas pago, Plugins (todo el CRUD de config).
+Ve PAY Conflicts y vistas operativas/auditoria. Al navegar a /sources el guard REDIRIGE a Auditoria
+(sin acceso al CRUD). RBAC por la vista.                                                              OK
+
+--- AUTH-10: rol auditor es solo-lectura (sesion auditor) ---
+Menu aun mas restringido (Resumen, Schedules, Auditoria, Trazabilidad, Spool, Fragmentos, Cuarentena).
+En PAY Conflicts: el auditor VE el conflicto (MC-A-SET/MCA20A listado con motivo/evidencia), pero al abrir
+Resolver -> "No tienes rol de maker ni de checker: no puedes solicitar ni aprobar" + SOLO boton Cancelar
+(sin Solicitar/Aprobar). Acciones que mueven dinero bloqueadas por la vista (por API darian 403).        OK
+
+--- CSRC-10: cambiar de Tipo redibuja el formulario (sesion admin) ---
+Nueva fuente: File system -> SFTP (Host/Puerto/Usuario/Password/Ruta remota/known_hosts/Timeout...) ->
+Amazon S3 (Region/Bucket/Prefijo/Modo de seleccion/Modo de autenticacion/Endpoint/Path-style). El PROVIDER
+redibuja completo sin romperse. (Bonus: el "Modo de autenticacion" default es "IAM role" -> corrobora el
+hallazgo S3 del doc: sin access-key da "Unable to load credentials").                                    OK
+
+--- CSRC-09: validacion de campos requeridos (sesion admin) ---
+HALLAZGO (FAIL) y CORRECCION:
+  ANTES: con Nombre vacio (y Region/Bucket vacios) el boton "Crear" estaba habilitado; al pulsarlo devolvio
+         "fuente creada correctamente" y CREO la fuente con name='' (id=10, verificado en BD). Sin validacion
+         de requeridos ni en front (boton) ni en back (acepta name vacio; ademas IllegalArgumentException
+         caia a 500 por el ApiExceptionMapper).
+  FIX (pendiente de rebuild para verse en vivo):
+    - backend ApiExceptionMapper: IllegalArgumentException -> 400 (validaciones 400, no 500) en toda la app.
+    - backend SourceCatalogService.requireName(): rechaza name vacio/blank -> 400 "Source name is required".
+      Test SourceCatalogServiceTest.createRejectsBlankName (4 tests verdes).
+    - frontend managed-editor-form-actions: input canSave + [disabled]="... || !canSave()".
+    - frontend source-editor: nameValid() (trim) + [canSave]="nameValid()" -> "Crear" deshabilitado sin Nombre.
+  Estado: FIX aplicado + backend verificado por test; re-verificar por la vista tras el rebuild.
+
+Nota fixtures: MC-08/MC-14 (boton Aprobar deshabilitado "porque soy el maker", barrera de identidad 400)
+no testeables con usuarios maker/checker separados: el maker no tiene rol checker y no ve el boton. Requiere
+un usuario con ambos roles. Documentado.
