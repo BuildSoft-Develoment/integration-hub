@@ -3,7 +3,7 @@
         <mat-label>{{ i18n.t('ui.sourceDefinition') }}</mat-label>
         <mat-select [disabled]="readonly()" [ngModel]="draft().sourceDefinitionId" (ngModelChange)="updateDraft({ sourceDefinitionId: $event })">
           <mat-option [value]="null">{{ i18n.t('ui.selectSource') }}</mat-option>
-          @for (source of sources(); track source.id) {
+          @for (source of filteredSources(); track source.id) {
             <mat-option [value]="source.id">{{ source.id }} - {{ source.name }}</mat-option>
           }
         </mat-select>

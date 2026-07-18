@@ -43,12 +43,26 @@ export class ProcessFileReadTaskFormComponent {
   });
   readonly selectedSource = computed(() => this.sources().find((item) => item.id === this.draft().sourceDefinitionId) ?? null);
   readonly compatibleReaderTypes = computed(() => this.bindingContext.inferCompatibleReaders(this.selectedSource()));
+  // 010: en el picker de la tarea FILE_READ solo aparecen readers ACTIVOS y COMPATIBLES con la fuente
+  // seleccionada. Se mantiene siempre el reader ya seleccionado (aunque quede inactivo/incompatible) para
+  // no perder la seleccion al editar una tarea existente.
   readonly filteredReaders = computed(() => {
     const compatible = this.compatibleReaderTypes();
-    if (!compatible.length) {
-      return this.readers();
-    }
-    return this.readers().filter((reader) => !!reader.readerType && compatible.includes(reader.readerType as any));
+    const selectedId = this.draft().readerDefinitionId;
+    return this.readers().filter((reader) => {
+      if (reader.id === selectedId) {
+        return true;
+      }
+      if (reader.active === false) {
+        return false;
+      }
+      return !compatible.length || (!!reader.readerType && compatible.includes(reader.readerType as any));
+    });
+  });
+  // 010: el picker de fuente tampoco muestra las inactivas (salvo la ya seleccionada).
+  readonly filteredSources = computed(() => {
+    const selectedId = this.draft().sourceDefinitionId;
+    return this.sources().filter((source) => source.active !== false || source.id === selectedId);
   });
   readonly selectedSourceHint = computed(() => this.bindingContext.sourceCompatibilityHint(this.selectedSource()));
   readonly showReaderWarning = computed(() => {
