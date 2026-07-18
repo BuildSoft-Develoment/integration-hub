@@ -1675,18 +1675,12 @@ select {
     inset 0 0 0 1px color-mix(in srgb, var(--ih-border) 42%, transparent);
 }
 
-.payment-rules-page .mat-mdc-form-field-infix,
-.source-page .mat-mdc-form-field-infix,
-.audit-page .mat-mdc-form-field-infix,
-.schedule-page .mat-mdc-form-field-infix,
-.reader-page .mat-mdc-form-field-infix,
-.connection-page .mat-mdc-form-field-infix,
-.overview-page .mat-mdc-form-field-infix,
-.execution-page .mat-mdc-form-field-infix,
-.process-page .mat-mdc-form-field-infix {
+/* 005 (TRANSVERSAL): aplica a TODOS los mat-form-field del proyecto (antes estaba enumerado por 9
+   paginas con padding-top:0.95rem, muy chico -> el label flotado se superponia ~8px con el valor y no
+   se leia lo tipeado). Global a 1.5rem (24px, estandar MDC fill). Los contextos compactos intencionales
+   (.ih-theme-menu, .ih-catalog-paginator) tienen mayor especificidad y siguen ganando. Verificado en vivo. */
+.mat-mdc-form-field-infix {
   min-height: 52px;
-  /* 005: 0.95rem era muy chico -> el label flotado se superponia ~8px con el valor. 1.5rem (24px,
-     estandar MDC fill) da la holgura para que el label libre el valor. Verificado en vivo. */
   padding-top: 1.5rem !important;
   padding-bottom: 0.55rem !important;
 }
