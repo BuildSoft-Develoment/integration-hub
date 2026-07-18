@@ -6,8 +6,8 @@
     "registrationAllowed":  false,
     "resetPasswordAllowed":  false,
     "rememberMe":  true,
-    "ssoSessionIdleTimeoutRememberMe":  2592000,
-    "ssoSessionMaxLifespanRememberMe":  2592000,
+    "ssoSessionIdleTimeoutRememberMe":  604800,
+    "ssoSessionMaxLifespanRememberMe":  604800,
     "roles":  {
                   "realm":  [
                                 {
