@@ -25,10 +25,12 @@ export class ReaderToolbarComponent {
 
   readonly search = input('');
   readonly typeFilter = input<'ALL' | ReaderProviderType>('ALL');
+  readonly statusFilter = input<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   readonly canEdit = input(false);
   readonly providerOptions = input.required<readonly ReaderProviderDescriptor[]>();
 
   readonly searchChange = output<string>();
   readonly typeFilterChange = output<'ALL' | ReaderProviderType>();
+  readonly statusFilterChange = output<'ALL' | 'ACTIVE' | 'INACTIVE'>();
   readonly create = output<void>();
 }

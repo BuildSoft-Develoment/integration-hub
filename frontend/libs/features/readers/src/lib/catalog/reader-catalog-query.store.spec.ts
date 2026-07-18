@@ -44,7 +44,7 @@ describe('ReaderCatalogQueryStore', () => {
     await store.load();
 
     expect(listCalls).toEqual([
-      { search: '', type: 'ALL', page: 0, size: 8 },
+      { search: '', type: 'ALL', status: 'ALL', page: 0, size: 8 },
     ]);
   });
 });

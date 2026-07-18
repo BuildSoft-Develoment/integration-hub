@@ -22,6 +22,7 @@ export class ReaderCatalogStore {
   readonly totalLength = this.query.totalLength;
   readonly search = this.query.search;
   readonly typeFilter = this.query.typeFilter;
+  readonly statusFilter = this.query.statusFilter;
   readonly selectedReaderId = this.query.selectedReaderId;
   readonly selectedReader = this.query.selectedReader;
   readonly sortField = this.query.sortField;
@@ -70,6 +71,10 @@ export class ReaderCatalogStore {
 
   updateTypeFilter(value: 'ALL' | ReaderProviderType): void {
     this.query.updateTypeFilter(value);
+  }
+
+  updateStatusFilter(value: 'ALL' | 'ACTIVE' | 'INACTIVE'): void {
+    this.query.updateStatusFilter(value);
   }
 
   toggleSort(field: string): void {

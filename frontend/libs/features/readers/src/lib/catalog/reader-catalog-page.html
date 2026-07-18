@@ -5,10 +5,12 @@
         <ih-reader-toolbar
           [search]="store.search()"
           [typeFilter]="store.typeFilter()"
+          [statusFilter]="store.statusFilter()"
           [canEdit]="store.canEdit()"
           [providerOptions]="providerOptions()"
           (searchChange)="store.updateSearch($event)"
           (typeFilterChange)="store.updateTypeFilter($event)"
+          (statusFilterChange)="store.updateStatusFilter($event)"
           (create)="store.startCreate()"
         />
 

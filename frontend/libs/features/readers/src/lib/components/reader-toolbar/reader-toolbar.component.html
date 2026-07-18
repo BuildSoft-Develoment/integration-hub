@@ -27,5 +27,14 @@
             }
           </mat-select>
         </mat-form-field>
+
+        <mat-form-field class="toolbar-select">
+          <mat-label>{{ i18n.t('common.status') }}</mat-label>
+          <mat-select [ngModel]="statusFilter()" (ngModelChange)="statusFilterChange.emit($event)">
+            <mat-option value="ALL">{{ i18n.t('readers.allStatuses') }}</mat-option>
+            <mat-option value="ACTIVE">{{ i18n.t('status.active') }}</mat-option>
+            <mat-option value="INACTIVE">{{ i18n.t('status.inactive') }}</mat-option>
+          </mat-select>
+        </mat-form-field>
       </div>
     </section>

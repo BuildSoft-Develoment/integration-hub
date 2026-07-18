@@ -293,6 +293,7 @@ export const es = {
   'readers.detail': 'Detalle de lector',
   'readers.search': 'Buscar por nombre o ID',
   'readers.allTypes': 'Todos los tipos',
+  'readers.allStatuses': 'Todos los estados',
   'readers.noData': 'No hay lectores para mostrar con los filtros actuales.',
   'readers.loadError': 'No se pudieron cargar los lectores.',
   'readers.emptySelection': 'Selecciona un lector para ver el detalle.',

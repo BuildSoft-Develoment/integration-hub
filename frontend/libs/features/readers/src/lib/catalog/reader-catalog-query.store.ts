@@ -23,6 +23,7 @@ export class ReaderCatalogQueryStore implements OnDestroy {
   readonly totalLength = signal(0);
   readonly search = signal('');
   readonly typeFilter = signal<'ALL' | ReaderProviderType>('ALL');
+  readonly statusFilter = signal<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
   readonly selectedReaderId = signal<number | null>(null);
   readonly selectedReader = signal<ReaderRecord | null>(null);
   readonly drawerOpen = signal(false);
@@ -83,6 +84,12 @@ export class ReaderCatalogQueryStore implements OnDestroy {
     void this.loadReaders(true);
   }
 
+  updateStatusFilter(value: 'ALL' | 'ACTIVE' | 'INACTIVE'): void {
+    this.statusFilter.set(value);
+    this.clearSearchDebounce();
+    void this.loadReaders(true);
+  }
+
   markSelectedReader(reader: ReaderRecord): void {
     this.selectedReaderId.set(reader.id);
     this.selectedReader.set(reader);
@@ -116,6 +123,7 @@ export class ReaderCatalogQueryStore implements OnDestroy {
         this.api.list({
           search: this.search(),
           type: this.typeFilter(),
+          status: this.statusFilter(),
           page: this.currentPage(),
           size: this.pageSize(),
         })
