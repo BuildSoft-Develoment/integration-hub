@@ -65,6 +65,17 @@ export class KeyboardShortcutsService {
       return true;
     }
 
+    // 012: ignorar los atajos globales (c/r/...) cuando hay un editor o dialog abierto. El foco puede no
+    // estar en un input (p.ej. un boton dentro del editor) y la 'c' clickearia el "Nuevo" del fondo,
+    // llevando a "Nuevo Proceso" mientras se edita una tarea.
+    if (
+      document.querySelector(
+        'ih-managed-editor-shell, ih-process-task-modal, [role="dialog"], .mat-mdc-dialog-container, .cdk-dialog-container',
+      )
+    ) {
+      return true;
+    }
+
     const target = event.target;
     if (!(target instanceof HTMLElement)) {
       return false;
