@@ -25,6 +25,7 @@
 - [ADR-013 Frontend Module Federation para plugins remotos con codigo](ADR-013-frontend-module-federation-remote-plugins.md)
 - [ADR-014 Backend modular extensible por plugins instalables](ADR-014-backend-modular-extensible-plugins.md)
 - [ADR-015 Ejecucion de tareas asincrona por broker (Kafka por defecto)](ADR-015-backend-task-async-broker-execution.md)
+- [ADR-016 Salida generica: escritura de archivos y entrega por transporte](ADR-016-salida-generica-escritura-archivo-y-entrega.md)
 
 ## Regla
 
