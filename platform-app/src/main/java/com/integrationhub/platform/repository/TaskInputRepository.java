@@ -27,6 +27,36 @@ public class TaskInputRepository {
         OFFSET_FETCH
     }
 
+    /**
+     * ADR-016: conteo de filas de la tabla (con los mismos filtros que {@link #readBatch}). Lo usa {@code FILE_WRITE}
+     * para resolver un agregado {@code count} de cabecera por pre-query (la cabecera se escribe antes del detalle).
+     */
+    public long count(DataSource dataSource, String table, Map<String, Object> filters) {
+        var tableName = DbTaskSupport.sanitizeQualifiedIdentifier(table);
+        var effectiveFilters = filters == null ? Map.<String, Object>of() : filters;
+        try (Connection connection = dataSource.getConnection()) {
+            var conditions = new ArrayList<String>();
+            for (var column : effectiveFilters.keySet()) {
+                conditions.add(DbTaskSupport.sanitizeIdentifier(column) + " = ?");
+            }
+            var sql = new StringBuilder("select count(*) from ").append(tableName);
+            if (!conditions.isEmpty()) {
+                sql.append(" where ").append(String.join(" and ", conditions));
+            }
+            try (var statement = connection.prepareStatement(sql.toString())) {
+                var parameterIndex = 1;
+                for (var value : effectiveFilters.values()) {
+                    statement.setObject(parameterIndex++, value);
+                }
+                try (var resultSet = statement.executeQuery()) {
+                    return resultSet.next() ? resultSet.getLong(1) : 0L;
+                }
+            }
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot count task input table " + table, error);
+        }
+    }
+
     public List<ReadRecord> readBatch(DataSource dataSource, String table, String orderBy,
                                       Map<String, Object> filters, Object lastKey, int batchSize) {
         var tableName = DbTaskSupport.sanitizeQualifiedIdentifier(table);

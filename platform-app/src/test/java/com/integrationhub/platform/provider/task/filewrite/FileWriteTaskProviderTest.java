@@ -2,32 +2,48 @@ package com.integrationhub.platform.provider.task.filewrite;
 
 import com.integrationhub.platform.provider.artifact.LocalTempArtifactStore;
 import com.integrationhub.platform.provider.writer.CsvWriter;
+import com.integrationhub.platform.repository.TaskInputRepository;
 import com.integrationhub.platform.service.artifact.ArtifactStoreRegistry;
 import com.integrationhub.platform.service.writer.FileFormatWriterRegistry;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.task.TaskContext;
 import org.junit.jupiter.api.Test;
 
+import javax.sql.DataSource;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class FileWriteTaskProviderTest {
 
-    private static FileWriteTaskProvider provider() {
+    private static FileWriteTaskProvider recordsProvider() {
         return new FileWriteTaskProvider(
                 new FileFormatWriterRegistry(List.of(new CsvWriter())),
                 new ArtifactStoreRegistry(List.of(new LocalTempArtifactStore())));
     }
 
+    private static ReadRecord row(long id, String dni, String monto) {
+        var values = new LinkedHashMap<String, Object>();
+        values.put("id", id);
+        values.put("dni", dni);
+        values.put("monto", monto);
+        return new ReadRecord(values);
+    }
+
     @Test
-    void writesCsvWithHeaderDetailTrailerAndAggregates() throws Exception {
+    void writesCsvFromRecordsWithHeaderDetailTrailerAndAggregates() throws Exception {
         var context = new TaskContext(123L, 45L);
         context.attributes().put("taskOutputs", Map.of("sp1.records", List.of(
                 new ReadRecord(Map.of("dni", "111", "monto", "1000.00")),
@@ -40,28 +56,90 @@ class FileWriteTaskProviderTest {
                         "detail", Map.of("delimiter", ",", "columns", List.of(Map.of("field", "dni"), Map.of("field", "monto"))),
                         "trailer", List.of(Map.of("value", "T"), Map.of("aggregate", "sum", "field", "monto"))));
 
-        var result = provider().execute(context, config);
+        var result = recordsProvider().execute(context, config);
 
         assertTrue(result.success());
-        assertEquals(2, result.outputs().get("recordCount"));
+        assertEquals(2L, ((Number) result.outputs().get("recordCount")).longValue());
 
         var path = String.valueOf(result.outputs().get("archivePath"));
-        var content = Files.readString(Path.of(path), StandardCharsets.UTF_8);
-        // header (constante + metadata + count) / detalle / trailer (constante + sum de monto)
-        assertEquals("H,123,2\n111,1000.00\n222,2500.50\nT,3500.50\n", content);
-
-        var files = (List<?>) result.outputs().get("files");
-        assertEquals(1, files.size(), "handoff multi-archivo: un elemento en fase 1");
-
+        assertEquals("H,123,2\n111,1000.00\n222,2500.50\nT,3500.50\n",
+                Files.readString(Path.of(path), StandardCharsets.UTF_8));
+        assertEquals(1, ((List<?>) result.outputs().get("files")).size());
         Files.deleteIfExists(Path.of(path));
     }
 
     @Test
+    void writesCsvFromTableWithKeysetPagingAndTrailerAggregates() throws Exception {
+        var repository = mock(TaskInputRepository.class);
+        var dataSource = mock(DataSource.class);
+        // batchSize=2: pagina 1 (llena) -> pagina 2 (corta, corta el loop)
+        when(repository.readBatch(eq(dataSource), eq("ventas"), eq("id"), anyMap(), isNull(), eq(2)))
+                .thenReturn(List.of(row(1, "111", "1000.00"), row(2, "222", "2000.00")));
+        when(repository.readBatch(eq(dataSource), eq("ventas"), eq("id"), anyMap(), eq(2L), eq(2)))
+                .thenReturn(List.of(row(3, "333", "500.50")));
+        when(repository.count(eq(dataSource), eq("ventas"), anyMap())).thenReturn(3L);
+
+        var provider = new FileWriteTaskProvider(
+                new FileFormatWriterRegistry(List.of(new CsvWriter())),
+                new ArtifactStoreRegistry(List.of(new LocalTempArtifactStore())),
+                repository, dataSource, null);
+
+        var context = new TaskContext(7L, 8L);
+        var config = Map.<String, Object>of(
+                "format", "CSV",
+                "input", Map.of("sourceOutput", "table", "table", "ventas",
+                        "cursor", Map.of("orderBy", "id"), "batchSize", 2),
+                "layout", Map.of(
+                        "header", List.of(Map.of("value", "H"), Map.of("aggregate", "count")),
+                        "detail", Map.of("delimiter", ",", "columns", List.of(Map.of("field", "dni"), Map.of("field", "monto"))),
+                        "trailer", List.of(Map.of("value", "T"), Map.of("aggregate", "count"), Map.of("aggregate", "sum", "field", "monto"))));
+
+        var result = provider.execute(context, config);
+
+        assertTrue(result.success());
+        assertEquals(3L, ((Number) result.outputs().get("recordCount")).longValue());
+
+        var path = String.valueOf(result.outputs().get("archivePath"));
+        // header count por pre-query = 3; trailer count acumulado = 3; trailer sum = 3500.50
+        assertEquals("H,3\n111,1000.00\n222,2000.00\n333,500.50\nT,3,3500.50\n",
+                Files.readString(Path.of(path), StandardCharsets.UTF_8));
+        Files.deleteIfExists(Path.of(path));
+    }
+
+    @Test
+    void tableSourceRejectsHeaderSum() {
+        var repository = mock(TaskInputRepository.class);
+        var provider = new FileWriteTaskProvider(
+                new FileFormatWriterRegistry(List.of(new CsvWriter())),
+                new ArtifactStoreRegistry(List.of(new LocalTempArtifactStore())),
+                repository, mock(DataSource.class), null);
+        var config = Map.<String, Object>of(
+                "format", "CSV",
+                "input", Map.of("sourceOutput", "table", "table", "ventas", "cursor", Map.of("orderBy", "id")),
+                "layout", Map.of(
+                        "header", List.of(Map.of("aggregate", "sum", "field", "monto")),
+                        "detail", Map.of("columns", List.of(Map.of("field", "dni")))));
+        assertThrows(IllegalArgumentException.class, () -> provider.execute(new TaskContext(1L, 1L), config));
+    }
+
+    @Test
+    void tableSourceRequiresOrderBy() {
+        var provider = new FileWriteTaskProvider(
+                new FileFormatWriterRegistry(List.of(new CsvWriter())),
+                new ArtifactStoreRegistry(List.of(new LocalTempArtifactStore())),
+                mock(TaskInputRepository.class), mock(DataSource.class), null);
+        var config = Map.<String, Object>of(
+                "format", "CSV",
+                "input", Map.of("sourceOutput", "table", "table", "ventas"),
+                "layout", Map.of("detail", Map.of("columns", List.of(Map.of("field", "dni")))));
+        assertThrows(IllegalArgumentException.class, () -> provider.execute(new TaskContext(1L, 1L), config));
+    }
+
+    @Test
     void requiresSourceTaskRef() {
-        var context = new TaskContext(1L, 1L);
         var config = Map.<String, Object>of(
                 "format", "CSV",
                 "layout", Map.of("detail", Map.of("columns", List.of(Map.of("field", "a")))));
-        assertThrows(IllegalArgumentException.class, () -> provider().execute(context, config));
+        assertThrows(IllegalArgumentException.class, () -> recordsProvider().execute(new TaskContext(1L, 1L), config));
     }
 }

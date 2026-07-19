@@ -1,8 +1,12 @@
 package com.integrationhub.platform.provider.task.filewrite;
 
-// @trace ADR-016 (salida generica: tarea FILE_WRITE - serializa registros a un archivo)
+// @trace ADR-016 (salida generica: tarea FILE_WRITE - serializa registros/tabla a un archivo)
 
+import com.integrationhub.platform.repository.TaskInputRepository;
+import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.artifact.ArtifactStoreRegistry;
+import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.service.execution.TaskInputResolver;
 import com.integrationhub.platform.service.writer.FileFormatWriterRegistry;
 import com.integrationhub.platform.spi.artifact.StoredArtifact;
 import com.integrationhub.platform.spi.reader.ReadRecord;
@@ -15,6 +19,7 @@ import com.integrationhub.platform.spi.writer.FileWriteSession;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
+import javax.sql.DataSource;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -28,21 +33,56 @@ import java.util.Map;
  * {@code summary} la referencia del archivo ({@code archivePath}/{@code archiveSize}/{@code recordCount}) y {@code files}
  * (lista de rutas, para que {@code FILE_COMPRESS}/{@code FILE_DELIVER} lo consuman).
  *
- * <p>Fase 1: fuente {@code records} en memoria (volumenes chicos), un unico archivo ordenado (header/detalle/trailer)
- * con agregados calculados en memoria. La fuente-tabla con paginado keyset (&gt;1M) y el pre-query de agregados llegan
- * en el siguiente slice (mismo patron que {@code MT101_BUILD_FROM_TABLE}). {@code asyncOffloadSupport} default =
- * {@code UNSUPPORTED} (escritor secuencial unico).</p>
+ * <p>Dos fuentes (contrato ADR-004):</p>
+ * <ul>
+ *   <li><b>records</b> (volumenes chicos): lee la lista de {@code taskOutputs} y agrega en memoria.</li>
+ *   <li><b>table</b> (&gt;1M): pagina keyset por {@code cursor.orderBy} (memoria = una pagina), opcionalmente parsea
+ *       una columna JSON ({@code payloadColumn}, p. ej. {@code payload_json} de staging_record). Cabecera con
+ *       {@code count} por pre-query; trailer ({@code count}/{@code sum}) acumulado durante el streaming.</li>
+ * </ul>
+ *
+ * <p>Un unico archivo ordenado (escritor secuencial). {@code asyncOffloadSupport} default = {@code UNSUPPORTED}.</p>
  */
 @ApplicationScoped
 public class FileWriteTaskProvider implements TaskProvider {
 
+    private static final int DEFAULT_BATCH_SIZE = 5000;
+    private static final String DEFAULT_TABLE = "staging_record";
+
     private final FileFormatWriterRegistry writers;
     private final ArtifactStoreRegistry artifactStores;
+    private final TaskInputRepository taskInputRepository;
+    private final ConnectionPoolManager connectionPoolManager;
+    private final DataSource defaultDataSource;
+    private final JsonConfigurationMapper jsonConfigurationMapper;
 
     @Inject
-    public FileWriteTaskProvider(FileFormatWriterRegistry writers, ArtifactStoreRegistry artifactStores) {
+    public FileWriteTaskProvider(FileFormatWriterRegistry writers,
+                                 ArtifactStoreRegistry artifactStores,
+                                 TaskInputRepository taskInputRepository,
+                                 ConnectionPoolManager connectionPoolManager,
+                                 DataSource defaultDataSource,
+                                 JsonConfigurationMapper jsonConfigurationMapper) {
         this.writers = writers;
         this.artifactStores = artifactStores;
+        this.taskInputRepository = taskInputRepository;
+        this.connectionPoolManager = connectionPoolManager;
+        this.defaultDataSource = defaultDataSource;
+        this.jsonConfigurationMapper = jsonConfigurationMapper;
+    }
+
+    /** Constructor de test para el camino de records (sin DB). */
+    public FileWriteTaskProvider(FileFormatWriterRegistry writers, ArtifactStoreRegistry artifactStores) {
+        this(writers, artifactStores, null, null, null, null);
+    }
+
+    /** Constructor de test para el camino de tabla (repo/DataSource/mapper mockeados; sin ConnectionPoolManager). */
+    public FileWriteTaskProvider(FileFormatWriterRegistry writers,
+                                 ArtifactStoreRegistry artifactStores,
+                                 TaskInputRepository taskInputRepository,
+                                 DataSource defaultDataSource,
+                                 JsonConfigurationMapper jsonConfigurationMapper) {
+        this(writers, artifactStores, taskInputRepository, null, defaultDataSource, jsonConfigurationMapper);
     }
 
     @Override
@@ -56,22 +96,21 @@ public class FileWriteTaskProvider implements TaskProvider {
         var writer = writers.resolve(format);
         writer.validateConfiguration(configuration);
 
-        var records = resolveRecords(context, configuration);
         var layout = mapValue(configuration.get("layout"));
-        var aggregates = computeAggregates(records, layout);
+        var input = mapValue(configuration.get("input"));
+        var sourceOutput = stringValue(input.get("sourceOutput"), "records");
+        var tableMode = "table".equalsIgnoreCase(sourceOutput) || "targetTable".equalsIgnoreCase(sourceOutput);
+
         var archiveName = resolveArchiveName(context, configuration, format);
         var store = artifactStores.forExecution(boolValue(configuration.get("async"), false));
 
+        long recordCount;
         StoredArtifact stored;
         try (var artifact = store.create(archiveName)) {
             try (FileWriteSession session = writer.open(artifact.outputStream(), configuration)) {
-                if (layout.containsKey("header")) {
-                    session.writeHeader(resolveCells(cellList(layout.get("header")), context, aggregates));
-                }
-                session.writeDetail(records);
-                if (layout.containsKey("trailer")) {
-                    session.writeTrailer(resolveCells(cellList(layout.get("trailer")), context, aggregates));
-                }
+                recordCount = tableMode
+                        ? writeFromTable(context, configuration, input, layout, session)
+                        : writeFromRecords(context, input, sourceOutput, layout, session);
             }
             stored = artifact.finish();
         } catch (IOException error) {
@@ -83,10 +122,146 @@ public class FileWriteTaskProvider implements TaskProvider {
         outputs.put("archiveName", stored.name());
         outputs.put("archiveSize", stored.size());
         outputs.put("store", stored.store());
-        outputs.put("recordCount", records.size());
-        // files: contrato de handoff multi-archivo (FILE_COMPRESS/FILE_DELIVER lo leen). En fase 1 es de un elemento.
+        outputs.put("recordCount", recordCount);
         outputs.put("files", List.of(fileRef(stored)));
-        return TaskResult.success("FILE_WRITE wrote " + records.size() + " records to " + stored.name(), outputs);
+        return TaskResult.success("FILE_WRITE wrote " + recordCount + " records to " + stored.name(), outputs);
+    }
+
+    // --- fuente records (en memoria) ---
+
+    private long writeFromRecords(TaskContext context, Map<String, Object> input, String sourceOutput,
+                                  Map<String, Object> layout, FileWriteSession session) throws IOException {
+        var sourceTaskRef = stringValue(input.get("sourceTaskRef"), "");
+        if (sourceTaskRef.isBlank()) {
+            throw new IllegalArgumentException("FILE_WRITE requires input.sourceTaskRef");
+        }
+        var records = toRecords(taskOutputs(context).get(sourceTaskRef + "." + sourceOutput));
+        var aggregates = computeAggregates(records, layout);
+        writeHeaderIfPresent(session, layout, context, aggregates);
+        session.writeDetail(records);
+        writeTrailerIfPresent(session, layout, context, aggregates);
+        return records.size();
+    }
+
+    // --- fuente tabla (keyset paging, >1M) ---
+
+    private long writeFromTable(TaskContext context, Map<String, Object> configuration, Map<String, Object> input,
+                                Map<String, Object> layout, FileWriteSession session) throws IOException {
+        var taskOutputs = taskOutputs(context);
+        var sourceTaskRef = stringValue(input.get("sourceTaskRef"), "");
+        var source = mapValue(configuration.get("source"));
+
+        var table = firstNonBlank(input.get("table"), source.get("table"),
+                sourceTaskRef.isBlank() ? null : taskOutputs.get(sourceTaskRef + ".table"), DEFAULT_TABLE);
+        var connectionRef = firstNonBlank(input.get("connectionRef"), source.get("connectionRef"),
+                sourceTaskRef.isBlank() ? null : taskOutputs.get(sourceTaskRef + ".table.connectionRef"),
+                configuration.get("connectionRef"));
+        var orderBy = stringValue(mapValue(input.get("cursor")).get("orderBy"), stringValue(source.get("idColumn"), ""));
+        if (orderBy.isBlank()) {
+            throw new IllegalArgumentException("FILE_WRITE table source requires input.cursor.orderBy (keyset pagination)");
+        }
+        var payloadColumn = stringValue(firstNonBlank(input.get("payloadColumn"), source.get("payloadColumn")), "");
+        var batchSize = Math.max(intValue(input.get("batchSize"), DEFAULT_BATCH_SIZE), 1);
+        var filters = resolveFilters(input.get("filters"), context);
+        var dataSource = resolveDataSource(connectionRef);
+
+        // Cabecera: sum sobre tabla no se soporta (requeriria SQL/JSON por dialecto); usar el trailer. count via pre-query.
+        guardNoTableHeaderSum(layout);
+        var headerCount = headerNeedsCount(layout) ? taskInputRepository.count(dataSource, table, filters) : 0L;
+        writeHeaderIfPresent(session, layout, context, new Aggregates(headerCount, Map.of()));
+
+        var sums = initialSums(layout);
+        Object lastKey = null;
+        long total = 0;
+        while (true) {
+            var rawPage = taskInputRepository.readBatch(dataSource, table, orderBy, filters, lastKey, batchSize);
+            if (rawPage.isEmpty()) {
+                break;
+            }
+            lastKey = TaskInputResolver.cursorValue(rawPage, orderBy);
+            var detailPage = payloadColumn.isBlank() ? rawPage : parsePayloadColumn(rawPage, payloadColumn);
+            session.writeDetail(detailPage);
+            accumulateSums(detailPage, sums);
+            total += detailPage.size();
+            if (rawPage.size() < batchSize) {
+                break;
+            }
+        }
+        writeTrailerIfPresent(session, layout, context, new Aggregates(total, sums));
+        return total;
+    }
+
+    private List<ReadRecord> parsePayloadColumn(List<ReadRecord> rawPage, String payloadColumn) {
+        var parsed = new ArrayList<ReadRecord>(rawPage.size());
+        for (var row : rawPage) {
+            var payload = row.values().get(payloadColumn);
+            if (payload == null || String.valueOf(payload).isBlank()) {
+                parsed.add(new ReadRecord(new LinkedHashMap<>()));
+            } else {
+                parsed.add(new ReadRecord(new LinkedHashMap<>(jsonConfigurationMapper.toMap(String.valueOf(payload)))));
+            }
+        }
+        return parsed;
+    }
+
+    private DataSource resolveDataSource(String connectionRef) {
+        if (connectionRef == null || connectionRef.isBlank() || connectionPoolManager == null) {
+            return defaultDataSource;
+        }
+        return connectionPoolManager.resolveJdbcDataSource(connectionRef);
+    }
+
+    private Map<String, Object> resolveFilters(Object raw, TaskContext context) {
+        if (!(raw instanceof Map<?, ?> rawMap)) {
+            return Map.of();
+        }
+        var filters = new LinkedHashMap<String, Object>();
+        rawMap.forEach((key, value) -> filters.put(String.valueOf(key), resolveFilterValue(value, context)));
+        return filters;
+    }
+
+    private Object resolveFilterValue(Object value, TaskContext context) {
+        if ("${_processExecutionId}".equals(value)) {
+            return context.processExecutionId();
+        }
+        if ("${_taskDefinitionId}".equals(value)) {
+            return context.taskDefinitionId();
+        }
+        return value;
+    }
+
+    private void guardNoTableHeaderSum(Map<String, Object> layout) {
+        for (var cell : cellList(layout.get("header"))) {
+            if ("sum".equalsIgnoreCase(stringValue(cell.get("aggregate"), ""))) {
+                throw new IllegalArgumentException("FILE_WRITE: aggregate 'sum' is not supported in the header for a "
+                        + "table source; put the sum in the trailer (accumulated during streaming)");
+            }
+        }
+    }
+
+    private boolean headerNeedsCount(Map<String, Object> layout) {
+        for (var cell : cellList(layout.get("header"))) {
+            if ("count".equalsIgnoreCase(stringValue(cell.get("aggregate"), ""))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // --- salida comun ---
+
+    private void writeHeaderIfPresent(FileWriteSession session, Map<String, Object> layout, TaskContext context,
+                                      Aggregates aggregates) throws IOException {
+        if (layout.containsKey("header")) {
+            session.writeHeader(resolveCells(cellList(layout.get("header")), context, aggregates));
+        }
+    }
+
+    private void writeTrailerIfPresent(FileWriteSession session, Map<String, Object> layout, TaskContext context,
+                                       Aggregates aggregates) throws IOException {
+        if (layout.containsKey("trailer")) {
+            session.writeTrailer(resolveCells(cellList(layout.get("trailer")), context, aggregates));
+        }
     }
 
     private static Map<String, Object> fileRef(StoredArtifact artifact) {
@@ -96,19 +271,6 @@ public class FileWriteTaskProvider implements TaskProvider {
         ref.put("size", artifact.size());
         ref.put("store", artifact.store());
         return ref;
-    }
-
-    // --- resolucion de la fuente de registros (fase 1: records en memoria) ---
-
-    private List<ReadRecord> resolveRecords(TaskContext context, Map<String, Object> configuration) {
-        var input = mapValue(configuration.get("input"));
-        var sourceTaskRef = stringValue(input.get("sourceTaskRef"), "");
-        var sourceOutput = stringValue(input.get("sourceOutput"), "records");
-        if (sourceTaskRef.isBlank()) {
-            throw new IllegalArgumentException("FILE_WRITE requires input.sourceTaskRef");
-        }
-        var raw = taskOutputs(context).get(sourceTaskRef + "." + sourceOutput);
-        return toRecords(raw);
     }
 
     @SuppressWarnings("unchecked")
@@ -169,6 +331,12 @@ public class FileWriteTaskProvider implements TaskProvider {
     }
 
     private Aggregates computeAggregates(List<ReadRecord> records, Map<String, Object> layout) {
+        var sums = initialSums(layout);
+        accumulateSums(records, sums);
+        return new Aggregates(records.size(), sums);
+    }
+
+    private LinkedHashMap<String, BigDecimal> initialSums(Map<String, Object> layout) {
         var sumFields = new ArrayList<String>();
         collectSumFields(layout.get("header"), sumFields);
         collectSumFields(layout.get("trailer"), sumFields);
@@ -176,16 +344,21 @@ public class FileWriteTaskProvider implements TaskProvider {
         for (var field : sumFields) {
             sums.putIfAbsent(field, BigDecimal.ZERO);
         }
+        return sums;
+    }
+
+    private void accumulateSums(List<ReadRecord> records, Map<String, BigDecimal> sums) {
+        if (sums.isEmpty()) {
+            return;
+        }
         for (var record : records) {
             for (var field : sums.keySet()) {
-                var value = record.values().get(field);
-                var amount = toBigDecimal(value);
+                var amount = toBigDecimal(record.values().get(field));
                 if (amount != null) {
                     sums.put(field, sums.get(field).add(amount));
                 }
             }
         }
-        return new Aggregates(records.size(), sums);
     }
 
     private void collectSumFields(Object cells, List<String> out) {
@@ -262,12 +435,29 @@ public class FileWriteTaskProvider implements TaskProvider {
         return result;
     }
 
+    private String firstNonBlank(Object... values) {
+        for (var value : values) {
+            var normalized = stringValue(value, "");
+            if (!normalized.isBlank()) {
+                return normalized;
+            }
+        }
+        return "";
+    }
+
     private String stringValue(Object raw, String defaultValue) {
         if (raw == null) {
             return defaultValue;
         }
         var value = String.valueOf(raw).trim();
         return value.isEmpty() ? defaultValue : value;
+    }
+
+    private int intValue(Object raw, int defaultValue) {
+        if (raw == null || String.valueOf(raw).isBlank()) {
+            return defaultValue;
+        }
+        return Integer.parseInt(String.valueOf(raw).trim());
     }
 
     private boolean boolValue(Object raw, boolean defaultValue) {
@@ -277,7 +467,7 @@ public class FileWriteTaskProvider implements TaskProvider {
         return Boolean.parseBoolean(String.valueOf(raw));
     }
 
-    /** Agregados calculados sobre los registros: conteo y sumas por campo (BigDecimal para precision monetaria). */
+    /** Agregados: conteo y sumas por campo (BigDecimal para precision monetaria). */
     private record Aggregates(long count, Map<String, BigDecimal> sums) {
     }
 }
