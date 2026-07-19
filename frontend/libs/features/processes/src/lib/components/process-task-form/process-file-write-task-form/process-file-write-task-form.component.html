@@ -54,6 +54,20 @@
           <mat-label>{{ i18n.t('ui.write.field') }}</mat-label>
           <input matInput [disabled]="readonly()" [ngModel]="column.field" (ngModelChange)="updateColumn($index, { field: $event })" />
         </mat-form-field>
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.write.type') }}</mat-label>
+          <mat-select [disabled]="readonly()" [ngModel]="column.type || 'STRING'" (ngModelChange)="updateColumn($index, { type: $event })">
+            <mat-option value="STRING">STRING</mat-option>
+            <mat-option value="NUMBER">NUMBER</mat-option>
+            <mat-option value="DATE">DATE</mat-option>
+          </mat-select>
+        </mat-form-field>
+        @if (column.type && column.type !== 'STRING') {
+          <mat-form-field>
+            <mat-label>{{ i18n.t('ui.write.pattern') }}</mat-label>
+            <input matInput [disabled]="readonly()" [ngModel]="column.format" (ngModelChange)="updateColumn($index, { format: $event })" [placeholder]="column.type === 'DATE' ? 'yyyyMMdd' : '0.00'" />
+          </mat-form-field>
+        }
         @if (isTxt()) {
           <mat-form-field>
             <mat-label>{{ i18n.t('ui.write.length') }}</mat-label>

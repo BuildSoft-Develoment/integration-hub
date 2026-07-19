@@ -907,6 +907,8 @@ export const en = {
   'ui.write.lineEnding': 'Line ending',
   'ui.write.columns': 'Detail columns',
   'ui.write.field': 'Field',
+  'ui.write.type': 'Type',
+  'ui.write.pattern': 'Pattern',
   'ui.write.length': 'Width',
   'ui.write.align': 'Alignment',
   'ui.write.pad': 'Padding',

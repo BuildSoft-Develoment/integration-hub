@@ -6,10 +6,13 @@ import { ProcessTaskFormModel } from '../../tasks/process-task.models';
 
 export type FileWriteFormat = 'CSV' | 'TXT' | 'XLSX';
 export type FileWriteAlign = 'left' | 'right';
+export type FileWriteColumnType = 'STRING' | 'NUMBER' | 'DATE';
 export type FileWriteCellKind = 'value' | 'metadata' | 'aggregate';
 
 export interface FileWriteColumnDraft {
   field: string;
+  type?: FileWriteColumnType;
+  format?: string;
   length?: string;
   align?: FileWriteAlign;
   pad?: string;
@@ -127,6 +130,9 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
 
   private columnToConfig(column: FileWriteColumnDraft, format: FileWriteFormat): Record<string, unknown> {
     const config: any = { field: column.field.trim() };
+    // type/format aplican a CSV y TXT (formateo de campos): NUMBER con patron decimal, DATE con patron.
+    if (column.type && column.type !== 'STRING') config.type = column.type;
+    if (column.format?.trim()) config.format = column.format.trim();
     if (format === 'TXT') {
       const length = this.numOrUndefined(column.length);
       if (length != null) config.length = length;
@@ -165,12 +171,19 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
     return normalized === 'TXT' || normalized === 'XLSX' ? normalized : 'CSV';
   }
 
+  private normalizeColumnType(value: unknown): FileWriteColumnType {
+    const normalized = String(value || 'STRING').toUpperCase();
+    return normalized === 'NUMBER' || normalized === 'DATE' ? normalized : 'STRING';
+  }
+
   private hydrateColumns(raw: unknown): FileWriteColumnDraft[] {
     if (!Array.isArray(raw)) return [];
     return raw
       .filter((item) => item && typeof item === 'object')
       .map((item: any) => ({
         field: String(item.field || ''),
+        ...(item.type ? { type: this.normalizeColumnType(item.type) } : {}),
+        ...(item.format != null ? { format: String(item.format) } : {}),
         ...(item.length != null ? { length: String(item.length) } : {}),
         ...(item.align === 'right' ? { align: 'right' as const } : {}),
         ...(item.pad != null ? { pad: String(item.pad) } : {}),
