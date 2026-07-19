@@ -163,8 +163,9 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
     if (cell.kind === 'value') {
       config.value = cell.value ?? '';
     } else if (cell.kind === 'metadata') {
-      if (!cell.metadata?.trim()) return null;
-      config.metadata = cell.metadata.trim();
+      // Default (igual que el <mat-select> del template) para que la celda sobreviva el round-trip apenas se
+      // elige 'metadata', antes de seleccionar el valor concreto — si no, se filtraba y la celda desaparecia.
+      config.metadata = cell.metadata?.trim() || '_processExecutionId';
     } else if (cell.kind === 'aggregate') {
       config.aggregate = cell.aggregate === 'sum' ? 'sum' : 'count';
       if (config.aggregate === 'sum' && cell.field?.trim()) config.field = cell.field.trim();

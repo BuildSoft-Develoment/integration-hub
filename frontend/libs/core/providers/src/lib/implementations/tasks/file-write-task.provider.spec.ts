@@ -27,6 +27,18 @@ describe('FileWriteTaskProvider', () => {
     expect(rehydrated.columns[1].field).toBe('');
   });
 
+  it('preserva una celda de cabecera cambiada a metadata sin valor (regresion: se filtraba)', () => {
+    const draft = provider.createDraft();
+    // El usuario cambio el kind a 'metadata' pero aun no eligio el valor concreto.
+    draft.header = [{ kind: 'metadata' }];
+
+    const rehydrated = roundTrip(draft);
+
+    expect(rehydrated.header.length).toBe(1);
+    expect(rehydrated.header[0].kind).toBe('metadata');
+    expect(rehydrated.header[0].metadata).toBe('_processExecutionId');
+  });
+
   it('round-trips type/format/rounding de una columna NUMBER', () => {
     const draft = provider.createDraft();
     draft.columns = [{ field: 'monto', type: 'NUMBER', format: '0.00', rounding: 'HALF_EVEN' }];
