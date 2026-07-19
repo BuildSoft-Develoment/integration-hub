@@ -22,6 +22,21 @@ class CsvWriterTest {
     }
 
     @Test
+    void appliesFieldTypeFormatting() throws Exception {
+        var config = Map.<String, Object>of("layout", Map.of("detail", Map.of(
+                "delimiter", ",",
+                "columns", List.of(
+                        Map.of("field", "monto", "type", "NUMBER", "format", "0.00"),
+                        Map.of("field", "fecha", "type", "DATE", "format", "yyyyMMdd")))));
+        var out = new ByteArrayOutputStream();
+        try (var session = new CsvWriter().open(out, config)) {
+            session.writeDetail(List.of(new ReadRecord(Map.of("monto", "1000.5", "fecha", "2026-07-19"))));
+        }
+        // monto -> 2 decimales; fecha -> yyyyMMdd
+        assertEquals("1000.50,20260719\n", out.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
     void writesHeaderDetailTrailerWithRfc4180Quoting() throws Exception {
         var out = new ByteArrayOutputStream();
         var writer = new CsvWriter();

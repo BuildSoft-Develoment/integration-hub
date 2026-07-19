@@ -165,6 +165,13 @@
             <artifactId>zip4j</artifactId>
             <version>2.11.5</version>
         </dependency>
+        <!-- ADR-016: FastCSV para el CsvWriter (RFC-4180 robusto + quoteStrategy + rendimiento). Java puro, MIT,
+             cero dependencias; smoke test en nativo. -->
+        <dependency>
+            <groupId>de.siegmar</groupId>
+            <artifactId>fastcsv</artifactId>
+            <version>3.4.0</version>
+        </dependency>
         <dependency>
             <groupId>io.quarkiverse.amazonservices</groupId>
             <artifactId>quarkus-amazon-s3</artifactId>

@@ -1,6 +1,6 @@
 package com.integrationhub.platform.provider.task.writer;
 
-// @trace ADR-016 (salida generica: escritor de formato CSV, espejo del CsvReaderProvider)
+// @trace ADR-016 (salida generica: escritor CSV sobre FastCSV - RFC-4180 robusto + formateo por tipo)
 
 import com.integrationhub.platform.spi.config.PluginConfigField;
 import com.integrationhub.platform.spi.config.PluginConfigOption;
@@ -8,22 +8,23 @@ import com.integrationhub.platform.spi.config.PluginConfigSchema;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.task.writer.FileFormatWriter;
 import com.integrationhub.platform.spi.task.writer.FileWriteSession;
+import de.siegmar.fastcsv.writer.LineDelimiter;
+import de.siegmar.fastcsv.writer.QuoteStrategies;
 import jakarta.enterprise.context.ApplicationScoped;
 
-import java.io.BufferedWriter;
+import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.io.Writer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
- * ADR-016: escritor CSV streaming (espejo de {@code CsvReaderProvider}). Serializa cada fila (cabecera/detalle/trailer)
- * con comillado RFC-4180, linea a linea, sin materializar el archivo en memoria. El detalle mapea columnas
- * configuradas (`layout.detail.columns[].field`) sobre los valores de cada {@link ReadRecord}.
+ * ADR-016: escritor CSV sobre <b>FastCSV</b> ({@code de.siegmar.fastcsv}) — RFC-4180 robusto (quoting, newlines
+ * embebidos) con {@code quoteStrategy} configurable. El detalle mapea las columnas configuradas y aplica
+ * {@link FieldValueFormatter} (type/format: NUMBER con patron decimal, DATE con patron) antes de escribir. Streaming.
  */
 @ApplicationScoped
 public class CsvWriter implements FileFormatWriter {
@@ -56,18 +57,27 @@ public class CsvWriter implements FileFormatWriter {
         var encoding = String.valueOf(configuration.getOrDefault("encoding", "UTF-8"));
         var rawDelimiter = detailString(configuration, "delimiter", ",");
         var delimiter = "\\t".equals(rawDelimiter) ? "\t" : rawDelimiter;
-        // Fin de linea configurable: LF por defecto, CRLF para archivos de banca/mainframe.
-        var lineEnding = "CRLF".equalsIgnoreCase(detailString(configuration, "lineEnding", "LF")) ? "\r\n" : "\n";
+        var separator = delimiter.isEmpty() ? ',' : delimiter.charAt(0);
+        var lineDelimiter = "CRLF".equalsIgnoreCase(detailString(configuration, "lineEnding", "LF"))
+                ? LineDelimiter.CRLF : LineDelimiter.LF;
+        var quoteAll = "ALWAYS".equalsIgnoreCase(detailString(configuration, "quoteStrategy", "REQUIRED"));
         var columns = detailColumns(configuration);
-        // El session NO es dueno del OutputStream del artefacto: lo envolvemos en un filtro que solo hace flush en
-        // close(), para que el dueno (WritableArtifact.finish()) lo cierre y lea el tamano sin doble-close.
-        var writer = new BufferedWriter(new OutputStreamWriter(nonClosing(out), Charset.forName(encoding)));
-        return new CsvWriteSession(writer, delimiter, lineEnding, columns);
+
+        // nonClosing: el csv.close() cierra su Writer (encoder flush) pero NO el OutputStream del artefacto (su dueno).
+        var writer = new OutputStreamWriter(nonClosing(out), Charset.forName(encoding));
+        // El default de FastCSV es quoting "requerido" (RFC-4180); ALWAYS entrecomilla todo (opt-in).
+        var builder = de.siegmar.fastcsv.writer.CsvWriter.builder()
+                .fieldSeparator(separator)
+                .lineDelimiter(lineDelimiter);
+        if (quoteAll) {
+            builder = builder.quoteStrategy(QuoteStrategies.ALWAYS);
+        }
+        return new CsvWriteSession(builder.build(writer), columns);
     }
 
     /** Filtro que hace flush pero NO cierra el delegate (el {@code WritableArtifact} es el dueno del stream). */
     private static OutputStream nonClosing(OutputStream delegate) {
-        return new java.io.FilterOutputStream(delegate) {
+        return new FilterOutputStream(delegate) {
             @Override
             public void write(byte[] bytes, int off, int len) throws IOException {
                 out.write(bytes, off, len);
@@ -97,86 +107,76 @@ public class CsvWriter implements FileFormatWriter {
         return value == null ? fallback : String.valueOf(value);
     }
 
-    private static List<String> detailColumns(Map<String, Object> configuration) {
+    private static List<DetailColumn> detailColumns(Map<String, Object> configuration) {
         var columns = detail(configuration).get("columns");
         if (!(columns instanceof List<?> list)) {
             return List.of();
         }
-        var fields = new ArrayList<String>(list.size());
+        var fields = new ArrayList<DetailColumn>(list.size());
         for (var raw : list) {
             if (raw instanceof Map<?, ?> column) {
                 var field = column.get("field");
                 if (field != null && !String.valueOf(field).isBlank()) {
-                    fields.add(String.valueOf(field));
+                    fields.add(new DetailColumn(
+                            String.valueOf(field),
+                            column.get("type") == null ? null : String.valueOf(column.get("type")),
+                            column.get("format") == null ? null : String.valueOf(column.get("format"))));
                 }
             } else if (raw != null && !String.valueOf(raw).isBlank()) {
-                fields.add(String.valueOf(raw));
+                fields.add(new DetailColumn(String.valueOf(raw), null, null));
             }
         }
         return List.copyOf(fields);
     }
 
-    /** Sesion streaming: un {@link Writer} sobre el OutputStream + el delimitador + las columnas del detalle. */
+    /** Columna de detalle: campo + type/format opcionales para {@link FieldValueFormatter}. */
+    private record DetailColumn(String field, String type, String format) {
+    }
+
+    /** Sesion streaming sobre el CsvWriter de FastCSV. */
     private static final class CsvWriteSession implements FileWriteSession {
 
-        private final Writer writer;
-        private final String delimiter;
-        private final String lineEnding;
-        private final List<String> columns;
+        private final de.siegmar.fastcsv.writer.CsvWriter csv;
+        private final List<DetailColumn> columns;
 
-        private CsvWriteSession(Writer writer, String delimiter, String lineEnding, List<String> columns) {
-            this.writer = writer;
-            this.delimiter = delimiter;
-            this.lineEnding = lineEnding;
+        private CsvWriteSession(de.siegmar.fastcsv.writer.CsvWriter csv, List<DetailColumn> columns) {
+            this.csv = csv;
             this.columns = columns;
         }
 
         @Override
-        public void writeHeader(List<Object> headerCells) throws IOException {
-            writeRow(headerCells);
+        public void writeHeader(List<Object> headerCells) {
+            csv.writeRecord(toStrings(headerCells));
         }
 
         @Override
-        public void writeDetail(List<ReadRecord> batch) throws IOException {
+        public void writeDetail(List<ReadRecord> batch) {
             for (var record : batch) {
                 var values = record.values();
-                var row = new ArrayList<Object>(columns.size());
+                var row = new ArrayList<String>(columns.size());
                 for (var column : columns) {
-                    row.add(values.get(column));
+                    row.add(FieldValueFormatter.format(values.get(column.field()), column.type(), column.format()));
                 }
-                writeRow(row);
+                csv.writeRecord(row);
             }
         }
 
         @Override
-        public void writeTrailer(List<Object> trailerCells) throws IOException {
-            writeRow(trailerCells);
+        public void writeTrailer(List<Object> trailerCells) {
+            csv.writeRecord(toStrings(trailerCells));
         }
 
         @Override
         public void close() throws IOException {
-            writer.flush();
-            writer.close();
+            csv.close();
         }
 
-        private void writeRow(List<Object> cells) throws IOException {
-            for (var i = 0; i < cells.size(); i++) {
-                if (i > 0) {
-                    writer.write(delimiter);
-                }
-                writer.write(escape(cells.get(i)));
+        private static List<String> toStrings(List<Object> cells) {
+            var strings = new ArrayList<String>(cells.size());
+            for (var cell : cells) {
+                strings.add(cell == null ? "" : String.valueOf(cell));
             }
-            writer.write(lineEnding);
-        }
-
-        /** Comillado RFC-4180: entrecomilla si el valor tiene el delimitador, comilla, CR o LF; duplica comillas. */
-        private String escape(Object value) {
-            var text = value == null ? "" : String.valueOf(value);
-            var needsQuote = text.contains(delimiter) || text.contains("\"") || text.contains("\n") || text.contains("\r");
-            if (!needsQuote) {
-                return text;
-            }
-            return '"' + text.replace("\"", "\"\"") + '"';
+            return strings;
         }
     }
 }

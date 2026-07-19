@@ -185,6 +185,14 @@ public class TxtWriter implements FileFormatWriter {
         ColumnSpec spec() {
             return ColumnSpec.of(cell);
         }
+
+        String type() {
+            return cell.get("type") == null ? null : String.valueOf(cell.get("type"));
+        }
+
+        String format() {
+            return cell.get("format") == null ? null : String.valueOf(cell.get("format"));
+        }
     }
 
     /** Sesion streaming de ancho fijo. */
@@ -216,7 +224,9 @@ public class TxtWriter implements FileFormatWriter {
                 var values = record.values();
                 var line = new StringBuilder();
                 for (var column : detail) {
-                    line.append(fixed(values.get(column.field()), column.spec()));
+                    // ADR-016: formateo por tipo/patron antes del ancho fijo (NUMBER decimal, DATE patron).
+                    var formatted = FieldValueFormatter.format(values.get(column.field()), column.type(), column.format());
+                    line.append(fixed(formatted, column.spec()));
                 }
                 writer.write(line.toString());
                 writer.write(lineEnding);
