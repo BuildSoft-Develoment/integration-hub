@@ -1,4 +1,5 @@
 export * from './lib/sources/source-provider.abstract';
+export * from './lib/sources/secret-reference.util';
 export * from './lib/source-provider.token';
 export * from './lib/readers/reader-provider.abstract';
 export * from './lib/reader-provider.token';

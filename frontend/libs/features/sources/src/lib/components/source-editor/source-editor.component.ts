@@ -2,11 +2,12 @@ import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import {
+  plaintextCredentialKeys,
   SourceDraft,
   SourceProviderDescriptor,
   SourceProviderType,
 } from '@integration-hub/core/providers';
-import { SourceManagerService } from '@integration-hub/core/services';
+import { I18nService, SourceManagerService } from '@integration-hub/core/services';
 import { ManagedEditorFormActionsComponent, ManagedEditorHeaderComponent, ManagedEditorOverviewComponent, ManagedEditorReadonlyActionsComponent, ManagedEditorSectionComponent, ManagedEditorShellComponent, ManagedEditorTestResultComponent } from '@integration-hub/shared/ui';
 import { SourceFormModel, SourceTestResult } from '../../models/source.models';
 import { SourceTypeFormHostComponent } from '../source-type-form/source-type-form-host/source-type-form-host.component';
@@ -31,6 +32,7 @@ import { SourceTypeFormHostComponent } from '../source-type-form/source-type-for
 })
 export class SourceEditorComponent {
   private readonly sourceManager = inject(SourceManagerService);
+  readonly i18n = inject(I18nService);
 
   readonly form = input.required<SourceFormModel>();
   readonly draft = input.required<SourceDraft>();
@@ -68,6 +70,23 @@ export class SourceEditorComponent {
   // el backend igual rechaza con 400). Se usa trim para no aceptar solo espacios.
   nameValid(): boolean {
     return (this.form().name ?? '').trim().length > 0;
+  }
+
+  // QA-006: no se permite persistir credenciales en texto plano; deben ser referencias vault ${secret:...}.
+  // Se valida sobre el config SERIALIZADO (lo que realmente se guarda), respetando el modo activo (authType,
+  // authMode) para no bloquear campos que ese modo no persiste.
+  credentialFieldsInPlaintext(): string[] {
+    let config: Record<string, unknown>;
+    try {
+      config = JSON.parse(this.sourceManager.serializeDraft(this.form().sourceType, this.draft()));
+    } catch {
+      config = {};
+    }
+    return plaintextCredentialKeys(config, this.form().sourceType);
+  }
+
+  credentialsValid(): boolean {
+    return this.credentialFieldsInPlaintext().length === 0;
   }
 
   changeSourceType(value: string): void {

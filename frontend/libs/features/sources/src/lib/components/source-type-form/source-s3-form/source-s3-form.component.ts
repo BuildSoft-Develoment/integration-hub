@@ -40,7 +40,7 @@ import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
 
       @if (draft().authMode === 'access-key') {
         <mat-form-field><mat-label>{{ i18n.t('ui.accessKeyId') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().accessKeyId" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('accessKeyId', $event)" /></mat-form-field>
-        <mat-form-field><mat-label>{{ i18n.t('ui.secretAccessKey') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().secretAccessKey" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('secretAccessKey', $event)" /></mat-form-field>
+        <mat-form-field><mat-label>{{ i18n.t('ui.secretAccessKey') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().secretAccessKey" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('secretAccessKey', $event)" /><mat-hint>{{ i18n.t(credentialHintKey(draft().secretAccessKey)) }}</mat-hint></mat-form-field>
       }
       @if (draft().authMode === 'assume-role') {
         <mat-form-field class="full"><mat-label>{{ i18n.t('ui.roleArn') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().roleArn" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('roleArn', $event)" /></mat-form-field>

@@ -216,6 +216,8 @@ export const en = {
   'sources.count': '{count} sources',
   'sources.test': 'Test source',
   'sources.testing': 'Testing...',
+  'sources.credentialPlaintext': '⚠ Plaintext credential — use a ${secret:...} reference',
+  'sources.credentialPlaintextBlock': 'Cannot save: plaintext credentials present. Use ${secret:...} vault references.',
   'common.name': 'Name',
   'common.type': 'Type',
   'common.active': 'Active',

@@ -216,6 +216,8 @@ export const es = {
   'sources.count': '{count} fuentes',
   'sources.test': 'Probar fuente',
   'sources.testing': 'Probando...',
+  'sources.credentialPlaintext': '⚠ Credencial en texto plano — usa una referencia ${secret:...}',
+  'sources.credentialPlaintextBlock': 'No se puede guardar: hay credenciales en texto plano. Usa referencias vault ${secret:...}.',
   'common.name': 'Nombre',
   'common.type': 'Tipo',
   'common.active': 'Activo',

@@ -29,7 +29,7 @@ import { SourceTypeFormComponentBase } from '../source-type-form.abstract';
       </mat-form-field>
 
       <mat-form-field><mat-label>{{ i18n.t('ui.accessKeyId') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().accessKeyId" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('accessKeyId', $event)" /></mat-form-field>
-      <mat-form-field><mat-label>{{ i18n.t('ui.secretAccessKey') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().secretAccessKey" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('secretAccessKey', $event)" /></mat-form-field>
+      <mat-form-field><mat-label>{{ i18n.t('ui.secretAccessKey') }}</mat-label><input matInput type="password" [disabled]="readonly()" [ngModel]="draft().secretAccessKey" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('secretAccessKey', $event)" /><mat-hint>{{ i18n.t(credentialHintKey(draft().secretAccessKey)) }}</mat-hint></mat-form-field>
 
       <mat-form-field class="full"><mat-label>{{ i18n.t('ui.endpoint') }}</mat-label><input matInput [disabled]="readonly()" [ngModel]="draft().endpoint" [ngModelOptions]="{ standalone: true }" (ngModelChange)="update('endpoint', $event)" /></mat-form-field>
       <ih-suggest-input [label]="i18n.t('ui.mediaType')" [hint]="i18n.t('ui.mediaTypeHint')" [suggestions]="mediaTypes" [disabled]="readonly()" [value]="draft().mediaType" (valueChange)="update('mediaType', $event)" />
