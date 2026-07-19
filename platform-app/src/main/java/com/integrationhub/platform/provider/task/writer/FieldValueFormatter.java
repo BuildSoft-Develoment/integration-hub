@@ -26,18 +26,22 @@ final class FieldValueFormatter {
     }
 
     static String format(Object value, String type, String pattern) {
+        return format(value, type, pattern, null);
+    }
+
+    static String format(Object value, String type, String pattern, String rounding) {
         if (value == null) {
             return "";
         }
         var normalizedType = type == null ? "STRING" : type.trim().toUpperCase(Locale.ROOT);
         return switch (normalizedType) {
-            case "NUMBER", "DECIMAL", "INTEGER" -> formatNumber(value, pattern);
+            case "NUMBER", "DECIMAL", "INTEGER" -> formatNumber(value, pattern, rounding);
             case "DATE", "DATETIME" -> formatDate(value, pattern);
             default -> String.valueOf(value);
         };
     }
 
-    private static String formatNumber(Object value, String pattern) {
+    private static String formatNumber(Object value, String pattern, String rounding) {
         BigDecimal number;
         try {
             number = value instanceof BigDecimal decimal ? decimal : new BigDecimal(String.valueOf(value).trim());
@@ -50,11 +54,26 @@ final class FieldValueFormatter {
         try {
             // Locale.ROOT: punto decimal y sin agrupacion salvo que el patron la pida ('#,##0.00').
             var decimalFormat = new DecimalFormat(pattern, DecimalFormatSymbols.getInstance(Locale.ROOT));
-            // HALF_UP: redondeo bancario/half-up (0.005 -> 0.01), no el HALF_EVEN por defecto de DecimalFormat.
-            decimalFormat.setRoundingMode(RoundingMode.HALF_UP);
+            decimalFormat.setRoundingMode(roundingMode(rounding));
             return decimalFormat.format(number);
         } catch (IllegalArgumentException badPattern) {
             return number.toPlainString();
+        }
+    }
+
+    /**
+     * Modo de redondeo por nombre ({@link RoundingMode}: {@code HALF_UP}, {@code HALF_EVEN}, {@code DOWN}, ...).
+     * Default {@code HALF_UP} (redondeo comercial: 0.005 -> 0.01), no el {@code HALF_EVEN} por defecto de DecimalFormat.
+     * Fail-safe: un nombre invalido cae a {@code HALF_UP}.
+     */
+    private static RoundingMode roundingMode(String rounding) {
+        if (rounding == null || rounding.isBlank()) {
+            return RoundingMode.HALF_UP;
+        }
+        try {
+            return RoundingMode.valueOf(rounding.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException unknown) {
+            return RoundingMode.HALF_UP;
         }
     }
 

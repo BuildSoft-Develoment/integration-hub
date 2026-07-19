@@ -7,12 +7,15 @@ import { ProcessTaskFormModel } from '../../tasks/process-task.models';
 export type FileWriteFormat = 'CSV' | 'TXT' | 'XLSX';
 export type FileWriteAlign = 'left' | 'right';
 export type FileWriteColumnType = 'STRING' | 'NUMBER' | 'DATE';
+// Modo de redondeo (RoundingMode de Java) para columnas NUMBER; el backend acepta cualquier nombre valido.
+export type FileWriteRounding = 'HALF_UP' | 'HALF_EVEN' | 'DOWN';
 export type FileWriteCellKind = 'value' | 'metadata' | 'aggregate';
 
 export interface FileWriteColumnDraft {
   field: string;
   type?: FileWriteColumnType;
   format?: string;
+  rounding?: FileWriteRounding;
   length?: string;
   align?: FileWriteAlign;
   pad?: string;
@@ -135,6 +138,8 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
     if (column.type && column.type !== 'STRING') {
       config.type = column.type;
       if (column.format?.trim()) config.format = column.format.trim();
+      // rounding solo aplica a NUMBER; se emite unicamente si difiere del default backend (HALF_UP).
+      if (column.type === 'NUMBER' && column.rounding && column.rounding !== 'HALF_UP') config.rounding = column.rounding;
     }
     if (format === 'TXT') {
       const length = this.numOrUndefined(column.length);
@@ -179,6 +184,11 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
     return normalized === 'NUMBER' || normalized === 'DATE' ? normalized : 'STRING';
   }
 
+  private normalizeRounding(value: unknown): FileWriteRounding {
+    const normalized = String(value || 'HALF_UP').toUpperCase();
+    return normalized === 'HALF_EVEN' || normalized === 'DOWN' ? normalized : 'HALF_UP';
+  }
+
   private hydrateColumns(raw: unknown): FileWriteColumnDraft[] {
     if (!Array.isArray(raw)) return [];
     return raw
@@ -187,6 +197,7 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
         field: String(item.field || ''),
         ...(item.type ? { type: this.normalizeColumnType(item.type) } : {}),
         ...(item.format != null ? { format: String(item.format) } : {}),
+        ...(item.rounding != null ? { rounding: this.normalizeRounding(item.rounding) } : {}),
         ...(item.length != null ? { length: String(item.length) } : {}),
         ...(item.align === 'right' ? { align: 'right' as const } : {}),
         ...(item.pad != null ? { pad: String(item.pad) } : {}),

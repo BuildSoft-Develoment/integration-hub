@@ -193,6 +193,10 @@ public class TxtWriter implements FileFormatWriter {
         String format() {
             return cell.get("format") == null ? null : String.valueOf(cell.get("format"));
         }
+
+        String rounding() {
+            return cell.get("rounding") == null ? null : String.valueOf(cell.get("rounding"));
+        }
     }
 
     /** Sesion streaming de ancho fijo. */
@@ -224,8 +228,8 @@ public class TxtWriter implements FileFormatWriter {
                 var values = record.values();
                 var line = new StringBuilder();
                 for (var column : detail) {
-                    // ADR-016: formateo por tipo/patron antes del ancho fijo (NUMBER decimal, DATE patron).
-                    var formatted = FieldValueFormatter.format(values.get(column.field()), column.type(), column.format());
+                    // ADR-016: formateo por tipo/patron/redondeo antes del ancho fijo (NUMBER decimal, DATE patron).
+                    var formatted = FieldValueFormatter.format(values.get(column.field()), column.type(), column.format(), column.rounding());
                     line.append(fixed(formatted, column.spec()));
                 }
                 writer.write(line.toString());

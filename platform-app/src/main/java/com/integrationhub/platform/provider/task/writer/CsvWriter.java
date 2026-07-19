@@ -120,17 +120,18 @@ public class CsvWriter implements FileFormatWriter {
                     fields.add(new DetailColumn(
                             String.valueOf(field),
                             column.get("type") == null ? null : String.valueOf(column.get("type")),
-                            column.get("format") == null ? null : String.valueOf(column.get("format"))));
+                            column.get("format") == null ? null : String.valueOf(column.get("format")),
+                            column.get("rounding") == null ? null : String.valueOf(column.get("rounding"))));
                 }
             } else if (raw != null && !String.valueOf(raw).isBlank()) {
-                fields.add(new DetailColumn(String.valueOf(raw), null, null));
+                fields.add(new DetailColumn(String.valueOf(raw), null, null, null));
             }
         }
         return List.copyOf(fields);
     }
 
-    /** Columna de detalle: campo + type/format opcionales para {@link FieldValueFormatter}. */
-    private record DetailColumn(String field, String type, String format) {
+    /** Columna de detalle: campo + type/format/rounding opcionales para {@link FieldValueFormatter}. */
+    private record DetailColumn(String field, String type, String format, String rounding) {
     }
 
     /** Sesion streaming sobre el CsvWriter de FastCSV. */
@@ -155,7 +156,7 @@ public class CsvWriter implements FileFormatWriter {
                 var values = record.values();
                 var row = new ArrayList<String>(columns.size());
                 for (var column : columns) {
-                    row.add(FieldValueFormatter.format(values.get(column.field()), column.type(), column.format()));
+                    row.add(FieldValueFormatter.format(values.get(column.field()), column.type(), column.format(), column.rounding()));
                 }
                 csv.writeRecord(row);
             }

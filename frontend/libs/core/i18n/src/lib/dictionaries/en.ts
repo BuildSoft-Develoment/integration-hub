@@ -909,6 +909,7 @@ export const en = {
   'ui.write.field': 'Field',
   'ui.write.type': 'Type',
   'ui.write.pattern': 'Pattern',
+  'ui.write.rounding': 'Rounding',
   'ui.write.length': 'Width',
   'ui.write.align': 'Alignment',
   'ui.write.pad': 'Padding',

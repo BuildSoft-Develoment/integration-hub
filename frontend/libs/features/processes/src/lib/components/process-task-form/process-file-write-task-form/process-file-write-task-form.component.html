@@ -68,6 +68,16 @@
             <input matInput [disabled]="readonly()" [ngModel]="column.format" (ngModelChange)="updateColumn($index, { format: $event })" [placeholder]="column.type === 'DATE' ? 'yyyyMMdd' : '0.00'" />
           </mat-form-field>
         }
+        @if (column.type === 'NUMBER') {
+          <mat-form-field>
+            <mat-label>{{ i18n.t('ui.write.rounding') }}</mat-label>
+            <mat-select [disabled]="readonly()" [ngModel]="column.rounding || 'HALF_UP'" (ngModelChange)="updateColumn($index, { rounding: $event })">
+              <mat-option value="HALF_UP">HALF_UP</mat-option>
+              <mat-option value="HALF_EVEN">HALF_EVEN</mat-option>
+              <mat-option value="DOWN">DOWN</mat-option>
+            </mat-select>
+          </mat-form-field>
+        }
         @if (isTxt()) {
           <mat-form-field>
             <mat-label>{{ i18n.t('ui.write.length') }}</mat-label>
