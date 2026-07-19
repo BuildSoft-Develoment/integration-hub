@@ -24,6 +24,7 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
     ProcessTaskRuntimePanelComponent,
   ],
   templateUrl: './process-file-compress-task-form.component.html',
+  styleUrl: '../file-task-form.shared.css',
 })
 export class ProcessFileCompressTaskFormComponent {
   readonly i18n = inject(I18nService);

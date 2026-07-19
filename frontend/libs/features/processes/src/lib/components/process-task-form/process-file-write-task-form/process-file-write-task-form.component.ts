@@ -31,6 +31,7 @@ type CellSection = 'header' | 'trailer';
     ProcessTaskRuntimePanelComponent,
   ],
   templateUrl: './process-file-write-task-form.component.html',
+  styleUrl: '../file-task-form.shared.css',
 })
 export class ProcessFileWriteTaskFormComponent {
   readonly i18n = inject(I18nService);

@@ -1,0 +1,53 @@
+/* @trace ADR-016 (procesos: estilos compartidos de los forms FILE_WRITE/FILE_COMPRESS/FILE_DELIVER).
+   Sin esto los campos se apilan a todo el ancho: las clases del template (.task-grid, .cell-row, ...) viven
+   por-componente y la encapsulacion de Angular no las hereda de otros forms. */
+:host {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.task-form-stack {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  align-content: start;
+}
+/* Grilla responsiva: los campos fluyen en columnas de >=220px en vez de apilarse a todo el ancho. */
+.task-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 0.95rem;
+  min-width: 0;
+}
+/* Secciones (Columnas de detalle / Cabecera / Trailer) con su encabezado + boton "Agregar". */
+.task-section {
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.task-section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 600;
+  color: var(--ih-text);
+}
+/* Fila de celda/columna: los sub-campos (campo/tipo/patron/ancho/...) en linea, no apilados. */
+.cell-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  gap: 0.6rem;
+  align-items: center;
+  min-width: 0;
+}
+.toggle-wrap {
+  display: flex;
+  align-items: center;
+  min-height: 3.25rem;
+}
+/* Campos que deben ocupar toda la fila de la grilla. */
+.full,
+.full-width {
+  grid-column: 1 / -1;
+  width: 100%;
+}
