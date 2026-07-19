@@ -8,7 +8,9 @@ import jakarta.inject.Inject;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /**
@@ -18,19 +20,20 @@ import java.util.stream.Stream;
 @ApplicationScoped
 public class FileFormatWriterRegistry {
 
-    private final Instance<FileFormatWriter> writers;
+    private final Supplier<Stream<FileFormatWriter>> writers;
 
     @Inject
     public FileFormatWriterRegistry(Instance<FileFormatWriter> writers) {
-        this.writers = writers;
+        this.writers = () -> writers == null ? Stream.empty() : writers.stream();
     }
 
-    public FileFormatWriterRegistry(Instance<FileFormatWriter> writers, boolean ignored) {
-        this.writers = writers;
+    /** Constructor de test: beans ya resueltos (sin CDI). */
+    public FileFormatWriterRegistry(List<FileFormatWriter> writers) {
+        this.writers = () -> writers == null ? Stream.empty() : writers.stream();
     }
 
     public FileFormatWriter resolve(String format) {
-        return writerStream()
+        return writers.get()
                 .filter(writer -> writer.format().equalsIgnoreCase(format))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported file format writer: " + format));
@@ -39,7 +42,7 @@ public class FileFormatWriterRegistry {
     /** Formatos disponibles (format -> nombre del provider), para el catalogo de tipos. */
     public Map<String, String> localWriterFormats() {
         var formats = new LinkedHashMap<String, String>();
-        writerStream().forEach(writer -> {
+        writers.get().forEach(writer -> {
             var format = writer.format();
             if (format != null && !format.isBlank()) {
                 formats.putIfAbsent(format, writer.getClass().getSimpleName());
@@ -50,9 +53,5 @@ public class FileFormatWriterRegistry {
 
     public PluginConfigSchema configSchema(String format) {
         return resolve(format).configSchema();
-    }
-
-    private Stream<FileFormatWriter> writerStream() {
-        return writers == null ? Stream.empty() : writers.stream();
     }
 }

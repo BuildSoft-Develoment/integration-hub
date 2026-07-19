@@ -6,6 +6,8 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
+import java.util.List;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /**
@@ -16,15 +18,20 @@ import java.util.stream.Stream;
 @ApplicationScoped
 public class ArtifactStoreRegistry {
 
-    private final Instance<ArtifactStore> stores;
+    private final Supplier<Stream<ArtifactStore>> stores;
 
     @Inject
     public ArtifactStoreRegistry(Instance<ArtifactStore> stores) {
-        this.stores = stores;
+        this.stores = () -> stores == null ? Stream.empty() : stores.stream();
+    }
+
+    /** Constructor de test: stores ya resueltos (sin CDI). */
+    public ArtifactStoreRegistry(List<ArtifactStore> stores) {
+        this.stores = () -> stores == null ? Stream.empty() : stores.stream();
     }
 
     public ArtifactStore resolve(String type) {
-        return storeStream()
+        return stores.get()
                 .filter(store -> store.type().equalsIgnoreCase(type))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported artifact store: " + type));
@@ -36,15 +43,11 @@ public class ArtifactStoreRegistry {
      */
     public ArtifactStore forExecution(boolean async) {
         if (async) {
-            var shared = storeStream().filter(store -> "S3".equalsIgnoreCase(store.type())).findFirst();
+            var shared = stores.get().filter(store -> "S3".equalsIgnoreCase(store.type())).findFirst();
             if (shared.isPresent()) {
                 return shared.get();
             }
         }
         return resolve(LocalTempArtifactStore.STORE_TYPE);
-    }
-
-    private Stream<ArtifactStore> storeStream() {
-        return stores == null ? Stream.empty() : stores.stream();
     }
 }
