@@ -45,12 +45,20 @@ El engine procesa slices **en paralelo e independientes** (scatter N->1 suma out
 - **Fuente:** para >1M, `FILE_WRITE` **lee de una TABLA** (`input.sourceOutput:"table"`), no de `records` en memoria (que no escala). Cadena canonica: `FILE_READ -> DB_WRITE(staging_record) -> [SP/FN] -> FILE_WRITE(lee tabla) -> FILE_DELIVER`, identica a como `MT101_BUILD_FROM_TABLE` lee la tabla. Se soporta `records` solo para volumenes chicos.
 - **Agregados:** un `header` con `count`/`sum` de TODAS las filas se conoce recien al final. Con fuente-tabla se resuelve con **pre-query** barato (`SELECT count(*), sum(x)`) antes de escribir la cabecera; el `trailer` se **acumula durante** el streaming. (El contrato del ADR mostraba `aggregate:count` en el header sin resolver este orden; esta es la regla.)
 
-### C. Handoff del artefacto entre `FILE_WRITE` y `FILE_DELIVER`
+### C. Ejecucion sync/async y handoff del artefacto
 
-El temp file producido por `FILE_WRITE` debe sobrevivir entre dos ejecuciones de tarea:
+Las tres tareas deben correr **en modo sincrono Y asincrono**, como el resto del motor. Ojo con distinguir dos "async":
 
-- **Fase 1 (sync, mismo JVM):** temp file local + su ruta en el output `summary`. Simple y correcto. Implica declarar ambas tareas `asyncOffloadSupport = UNSUPPORTED` (no async en fase 1).
-- **Async/distribuido (fase futura):** hace falta persistir el artefacto en un store compartido; ya existe `ArtifactStagingProducer` (S3) usado por los plugins remotos. Se adopta cuando se quiera `FILE_WRITE`/`FILE_DELIVER` async o multi-nodo.
+- **Proceso async** (el proceso corre en background): ya funciona; `FILE_WRITE`/`FILE_COMPRESS`/`FILE_DELIVER` corren como **pasos secuenciales** dentro. Sin diseno extra.
+- **Task offload async** (la tarea se reparte a workers del broker, scatter/page-chain, ADR-015, gobernado por `asyncOffloadSupport`): aqui **cambia el handoff**, porque un worker en otro nodo **no ve el temp local**.
+
+Diseno dual (reemplaza el "no-async" previo, que era demasiado restrictivo):
+
+- **`ArtifactStore` (abstraccion nueva, elegida por el modo):** `LocalTempArtifactStore` (temp file, sync/mismo-JVM) | `S3ArtifactStore` (reusa `ArtifactStagingProducer`, ya existente, para async/multi-nodo). `FILE_WRITE` escribe el artefacto al store y publica su referencia en `summary`; `FILE_COMPRESS`/`FILE_DELIVER` lo leen del store. Flujo async -> handoff por S3; sync -> temp local.
+- **`asyncOffloadSupport` por tarea:**
+  - `FILE_WRITE` (un archivo ordenado, A1) = **`UNSUPPORTED`** para scatter (writer secuencial unico), pero **corre dentro de un proceso async** como paso. En modo shardeado (A2) seria `SLICE_ONLY`.
+  - `FILE_COMPRESS` = **`SUPPORTED`** (unidad self-contained dado el store): offload-able como un work item async.
+  - `FILE_DELIVER` = **`SUPPORTED`** (o `SLICE_ONLY` para entregar N archivos en paralelo, como `MT101_PAY`): offload-able.
 
 ## Decision
 
@@ -149,7 +157,7 @@ Una salida OUTPUT **saca datos** a sistemas externos: es una superficie de **exf
 - **Compresion (`FILE_COMPRESS`)**: streaming por entrada (`putNextEntry` + `Files.copy(origen, zipOut)`), nunca cargando el archivo en heap. Multi-archivo via `summary.files` de la tarea previa (no cambia el contrato de input, que es de un solo `sourceTaskRef`). ZIP soporta N entradas; GZIP solo 1. Password de cifrado como `${secret:...}`.
 - **Credenciales**: `password`/`knownHosts` del sink como `${secret:...}`/`${config:...}` (regla `COMPLETE_REF`), nunca literal.
 - **`direction`** en sources: `FILE_READ` exige `INPUT|BOTH`; `FILE_DELIVER` exige `OUTPUT|BOTH`.
-- **No-async en fase 1**: `FILE_WRITE`/`FILE_DELIVER` declaran `asyncOffloadSupport = UNSUPPORTED` (handoff por temp file local). El async/distribuido llega con `ArtifactStaging`.
+- **Sync/async dual**: el handoff del artefacto usa `ArtifactStore` segun el modo (temp local si sync | S3 `ArtifactStaging` si async/multi-nodo). `asyncOffloadSupport`: `FILE_WRITE` = `UNSUPPORTED` para scatter (secuencial; igual corre como paso dentro de un proceso async); `FILE_COMPRESS`/`FILE_DELIVER` = `SUPPORTED` (offload-able desde el store compartido).
 - Ningun flujo > 1.000.000 registros materializa el archivo completo en memoria (ADR-004).
 
 ## Consecuencias
@@ -169,6 +177,7 @@ Costos:
 - Rework de streaming en la entrega (evitar el `ByteArrayInputStream`).
 - Migracion: nueva columna `direction` en `source_definition` (V100).
 - **`FILE_COMPRESS`**: medio-bajo. ZIP via `zip4j` (**+1 dependencia**, Java puro, plano + AES config-driven) + GZIP via `java.util.zip` (JDK); el bundling multi-archivo se resuelve con `summary.files` sin tocar el contrato. TAR_GZ (`commons-compress`) suma dependencia (fase 2).
+- **Sync/async dual**: sync (`LocalTempArtifactStore`) es directo; el async offload real (`S3ArtifactStore` sobre `ArtifactStaging`) es el costo mayor (handoff por store compartido, dedup/idempotencia de work items). Se disena en fase 1 (abstraccion `ArtifactStore` + `asyncOffloadSupport` correcto) y se hace funcional en fase 2.
 - **Native**: SXSSF (escritura) **no esta ejercitado** por los paths de lectura (quarkiverse-poi cubre lectura/event) -> **smoke test native obligatorio** para el writer XLSX (fase 2). CSV/TXT + `java.util.zip` (GZIP) = I/O puro (sin reflexion, sin riesgo). **`zip4j` (Java puro) requiere smoke test native** (bajo riesgo). SFTP sink reusa JSch (ya configurado), S3 sink reusa el SDK de `S3SourceProvider` (ya OK).
 - SP/FN **ya existen** (no son costo): la cadena READ->WRITE->SP->FN es construible hoy.
 
@@ -180,9 +189,9 @@ Costos:
 
 ## Plan por fases
 
-1. **MVP (alto valor, riesgo medio)**: `FILE_WRITE` CSV/TXT (fuente-tabla, secuencial, cabecera/detalle/trailer con pre-query de agregados) + **`FILE_COMPRESS` ZIP (zip4j, plano + AES-256 config-driven) + GZIP (`java.util.zip`)** + `FILE_DELIVER` **SFTP + Filesystem** + `direction` V100 + **QA-006 password->vault en paralelo**. Smoke test native de `zip4j`. E2E de punta a punta con el **bank-sim** (`ops/.../int/bank-sim/README.md`).
-2. `XlsxWriter` (SXSSF) + **smoke test native** + sinks **S3, FTP** + `FILE_COMPRESS` **`TAR_GZ`** (`commons-compress`).
-3. Sources bidireccionales (UI), **`FILE_DECOMPRESS` de entrada** (leer un source `.zip`/`.gz`, espejo simetrico), handoff async via `ArtifactStaging`, evaluar salida shardeada (A2) y compartir codigo con MT101 (`BUILD_FROM_TABLE`/`PAY`) sin regresionar money-safety.
+1. **MVP (alto valor, riesgo medio)**: `FILE_WRITE` CSV/TXT (fuente-tabla, secuencial, cabecera/detalle/trailer con pre-query de agregados) + **`FILE_COMPRESS` ZIP (zip4j, plano + AES-256 config-driven) + GZIP (`java.util.zip`)** + `FILE_DELIVER` **SFTP + Filesystem** + `direction` V100 + **QA-006 password->vault en paralelo**. **Modo SYNC funcional (`LocalTempArtifactStore`)** + la abstraccion `ArtifactStore` en su sitio y `asyncOffloadSupport` declarado correcto (async es drop-in). Smoke test native de `zip4j`. E2E con el **bank-sim** (`ops/.../int/bank-sim/README.md`).
+2. **Async offload funcional** (`S3ArtifactStore` sobre `ArtifactStaging`) para `FILE_COMPRESS`/`FILE_DELIVER` + `XlsxWriter` (SXSSF) + **smoke test native** + sinks **S3, FTP** + `FILE_COMPRESS` **`TAR_GZ`** (`commons-compress`).
+3. Sources bidireccionales (UI), **`FILE_DECOMPRESS` de entrada** (leer un source `.zip`/`.gz`, espejo simetrico), salida **shardeada A2 async** (`FILE_WRITE` `SLICE_ONLY`), y compartir codigo con MT101 (`BUILD_FROM_TABLE`/`PAY`) sin regresionar money-safety.
 
 ## Puntos de anclaje en codigo (para implementar)
 
@@ -190,6 +199,7 @@ Costos:
 - Contrato I/O: `service/execution/TaskInputResolver.java` (input `task-output`, table paging keyset `executeTableBatches`), `service/execution/TaskOutputRegistry.java` (publicar `summary`).
 - Mapeo columnas: `provider/task/dbwrite/DbTaskSupport.ColumnAssignment`; UI `process-db-write-mapping-board`.
 - Streaming/temp: `provider/source/TempFileSourcePayload.java` (patron a espejar por writers, compresor y sinks).
+- Sync/async: `spi/task/AsyncOffloadSupport.java` (enum a declarar por tarea) + `service/execution/async/` (`AsyncSliceDispatchService`, `AsyncPageChainService`, `TaskDispatchPlanner`); `ArtifactStore` net-new (`LocalTempArtifactStore` | `S3ArtifactStore` sobre `service/artifact/ArtifactStagingProducer.java`).
 - Compresion: net-new; `FileCompressor` (registry CDI como los otros) + `ZipCompressor` con **`zip4j`** (`ZipFile`/`ZipParameters`, plano + AES streaming por entrada) + `GzipCompressor` con `java.util.zip.GZIPOutputStream`; multi-archivo via `summary.files` (publicado por `FILE_WRITE`, leido por `FILE_COMPRESS`). `configSchema()` para el auto-form. Sin compresion previa en el repo (grep vacio); `zip4j` = dependencia nueva + smoke test native.
 - Sink SFTP referencia: `provider/task/payments/swift/transport/SftpPaymentTransport.java` (upload-with-rename + dup-policy; **corregir el byte-array**).
 - Gobernanza: `service/JsonConfigurationMapper.java` (`${secret:...}`), `provider/task/payments/swift/Mt101DispatchPlanCompiler.java` (`COMPLETE_REF`).
