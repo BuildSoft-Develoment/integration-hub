@@ -8,6 +8,7 @@ import {
 import { ProcessDbExecuteFnTaskFormComponent } from './components/process-task-form/process-db-execute-fn-task-form/process-db-execute-fn-task-form.component';
 import { ProcessDbExecuteSpTaskFormComponent } from './components/process-task-form/process-db-execute-sp-task-form/process-db-execute-sp-task-form.component';
 import { ProcessDbWriteTaskFormComponent } from './components/process-task-form/process-db-write-task-form/process-db-write-task-form.component';
+import { ProcessFileCompressTaskFormComponent } from './components/process-task-form/process-file-compress-task-form/process-file-compress-task-form.component';
 import { ProcessFileReadTaskFormComponent } from './components/process-task-form/process-file-read-task-form/process-file-read-task-form.component';
 import { ProcessNotificationTaskFormComponent } from './components/process-task-form/process-notification-task-form/process-notification-task-form.component';
 import { ProcessRestCallTaskFormComponent } from './components/process-task-form/process-rest-call-task-form/process-rest-call-task-form.component';
@@ -38,6 +39,7 @@ export function provideMotorProcessForms(): Provider[] {
       { type: 'DB_EXECUTE_FN', component: ProcessDbExecuteFnTaskFormComponent, layout: 'workspace' },
       { type: 'REST_CALL', component: ProcessRestCallTaskFormComponent, layout: 'workspace' },
       { type: 'NOTIFICATION', component: ProcessNotificationTaskFormComponent, layout: 'workspace' },
+      { type: 'FILE_COMPRESS', component: ProcessFileCompressTaskFormComponent, layout: 'workspace' },
     ),
   ];
 }

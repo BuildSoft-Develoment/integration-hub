@@ -20,6 +20,10 @@ export type PlatformProcessTaskType =
   | 'DB_EXECUTE_FN'
   | 'REST_CALL'
   | 'NOTIFICATION'
+  // --- Capa de salida generica (ADR-016) ---
+  | 'FILE_WRITE'
+  | 'FILE_COMPRESS'
+  | 'FILE_DELIVER'
   // --- Vertical mensajeria de pagos sub-catalogo swift/ (spec 008) ---
   // Sprint 1 (outbound MVP): la construccion en memoria MT101_BUILD se removio (no
   // escala); la unica ruta de construccion es la paginada MT101_BUILD_FROM_TABLE.

@@ -36,6 +36,21 @@ const NODE_PRESENTATION: Record<PlatformProcessTaskType, ProcessFlowNodePresenta
     toneClass: 'task-node--source',
     iconPath: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm0 0v6h6M8 13h8M8 17h8M8 9h3',
   },
+  FILE_WRITE: {
+    badge: 'FILE',
+    toneClass: 'task-node--source',
+    iconPath: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm0 0v6h6M8 13h8M8 17h8M8 9h3',
+  },
+  FILE_COMPRESS: {
+    badge: 'ZIP',
+    toneClass: 'task-node--source',
+    iconPath: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm0 0v6h6M8 13h8M8 17h8M8 9h3',
+  },
+  FILE_DELIVER: {
+    badge: 'DROP',
+    toneClass: 'task-node--source',
+    iconPath: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zm0 0v6h6M8 13h8M8 17h8M8 9h3',
+  },
   DB_WRITE: {
     badge: 'WRITE',
     toneClass: 'task-node--database',
