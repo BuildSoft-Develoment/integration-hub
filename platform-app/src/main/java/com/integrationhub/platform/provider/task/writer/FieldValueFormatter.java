@@ -3,6 +3,7 @@ package com.integrationhub.platform.provider.task.writer;
 // @trace ADR-016 (salida generica: formateo de campos por tipo/patron para writers CSV/TXT)
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.time.Instant;
@@ -48,7 +49,10 @@ final class FieldValueFormatter {
         }
         try {
             // Locale.ROOT: punto decimal y sin agrupacion salvo que el patron la pida ('#,##0.00').
-            return new DecimalFormat(pattern, DecimalFormatSymbols.getInstance(Locale.ROOT)).format(number);
+            var decimalFormat = new DecimalFormat(pattern, DecimalFormatSymbols.getInstance(Locale.ROOT));
+            // HALF_UP: redondeo bancario/half-up (0.005 -> 0.01), no el HALF_EVEN por defecto de DecimalFormat.
+            decimalFormat.setRoundingMode(RoundingMode.HALF_UP);
+            return decimalFormat.format(number);
         } catch (IllegalArgumentException badPattern) {
             return number.toPlainString();
         }

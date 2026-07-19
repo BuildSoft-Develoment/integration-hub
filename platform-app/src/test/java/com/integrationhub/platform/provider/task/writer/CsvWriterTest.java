@@ -37,6 +37,18 @@ class CsvWriterTest {
     }
 
     @Test
+    void numberFormattingRoundsHalfUp() throws Exception {
+        var config = Map.<String, Object>of("layout", Map.of("detail", Map.of(
+                "columns", List.of(Map.of("field", "monto", "type", "NUMBER", "format", "0.00")))));
+        var out = new ByteArrayOutputStream();
+        try (var session = new CsvWriter().open(out, config)) {
+            // 1000.505 -> HALF_UP redondea a 1000.51 (HALF_EVEN daria 1000.50 por el '0' par previo).
+            session.writeDetail(List.of(new ReadRecord(Map.of("monto", "1000.505"))));
+        }
+        assertEquals("1000.51\n", out.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
     void writesHeaderDetailTrailerWithRfc4180Quoting() throws Exception {
         var out = new ByteArrayOutputStream();
         var writer = new CsvWriter();
