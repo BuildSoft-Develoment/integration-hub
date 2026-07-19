@@ -3,12 +3,12 @@ package com.integrationhub.platform.provider.task.filecompress;
 // @trace ADR-016 (salida generica: tarea FILE_COMPRESS - comprime uno o varios archivos)
 
 import com.integrationhub.platform.service.JsonConfigurationMapper;
-import com.integrationhub.platform.service.artifact.ArtifactStoreRegistry;
-import com.integrationhub.platform.service.compress.FileCompressorRegistry;
-import com.integrationhub.platform.spi.artifact.StoredArtifact;
-import com.integrationhub.platform.spi.compress.CompressionEntry;
-import com.integrationhub.platform.spi.compress.CompressionOptions;
-import com.integrationhub.platform.spi.compress.FileCompressor;
+import com.integrationhub.platform.service.task.artifact.ArtifactStoreRegistry;
+import com.integrationhub.platform.service.task.compress.FileCompressorRegistry;
+import com.integrationhub.platform.spi.task.artifact.StoredArtifact;
+import com.integrationhub.platform.spi.task.compress.CompressionEntry;
+import com.integrationhub.platform.spi.task.compress.CompressionOptions;
+import com.integrationhub.platform.spi.task.compress.FileCompressor;
 import com.integrationhub.platform.spi.task.AsyncOffloadSupport;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;

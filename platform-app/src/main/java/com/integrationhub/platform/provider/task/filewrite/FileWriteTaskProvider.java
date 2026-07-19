@@ -4,18 +4,18 @@ package com.integrationhub.platform.provider.task.filewrite;
 
 import com.integrationhub.platform.repository.TaskInputRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
-import com.integrationhub.platform.service.artifact.ArtifactStoreRegistry;
+import com.integrationhub.platform.service.task.artifact.ArtifactStoreRegistry;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.execution.TaskInputResolver;
-import com.integrationhub.platform.service.writer.FileFormatWriterRegistry;
-import com.integrationhub.platform.spi.artifact.StoredArtifact;
+import com.integrationhub.platform.service.task.writer.FileFormatWriterRegistry;
+import com.integrationhub.platform.spi.task.artifact.StoredArtifact;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
-import com.integrationhub.platform.spi.writer.FileFormatWriter;
-import com.integrationhub.platform.spi.writer.FileWriteSession;
+import com.integrationhub.platform.spi.task.writer.FileFormatWriter;
+import com.integrationhub.platform.spi.task.writer.FileWriteSession;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -29,7 +29,7 @@ import java.util.Map;
 
 /**
  * ADR-016: tarea {@code FILE_WRITE}. Serializa los registros de una tarea previa a un archivo (via {@link FileFormatWriter})
- * y lo materializa en el {@link com.integrationhub.platform.spi.artifact.ArtifactStore} (temp local en sync). Publica en
+ * y lo materializa en el {@link com.integrationhub.platform.spi.task.artifact.ArtifactStore} (temp local en sync). Publica en
  * {@code summary} la referencia del archivo ({@code archivePath}/{@code archiveSize}/{@code recordCount}) y {@code files}
  * (lista de rutas, para que {@code FILE_COMPRESS}/{@code FILE_DELIVER} lo consuman).
  *

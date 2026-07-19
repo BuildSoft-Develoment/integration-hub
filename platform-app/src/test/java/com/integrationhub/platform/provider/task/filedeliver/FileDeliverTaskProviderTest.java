@@ -1,13 +1,13 @@
 package com.integrationhub.platform.provider.task.filedeliver;
 
-import com.integrationhub.platform.provider.artifact.LocalTempArtifactStore;
-import com.integrationhub.platform.provider.sink.FilesystemSink;
+import com.integrationhub.platform.provider.task.artifact.LocalTempArtifactStore;
+import com.integrationhub.platform.provider.task.sink.FilesystemSink;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
-import com.integrationhub.platform.service.artifact.ArtifactStoreRegistry;
-import com.integrationhub.platform.service.sink.OutputSinkRegistry;
-import com.integrationhub.platform.service.sink.SinkDefinitionService;
-import com.integrationhub.platform.service.sink.SinkDefinitionService.SinkDefinition;
-import com.integrationhub.platform.spi.artifact.StoredArtifact;
+import com.integrationhub.platform.service.task.artifact.ArtifactStoreRegistry;
+import com.integrationhub.platform.service.task.sink.OutputSinkRegistry;
+import com.integrationhub.platform.service.task.sink.SinkDefinitionService;
+import com.integrationhub.platform.service.task.sink.SinkDefinitionService.SinkDefinition;
+import com.integrationhub.platform.spi.task.artifact.StoredArtifact;
 import com.integrationhub.platform.spi.task.TaskContext;
 import org.junit.jupiter.api.Test;
 

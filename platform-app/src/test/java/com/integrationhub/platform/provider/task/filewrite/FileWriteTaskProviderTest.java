@@ -1,10 +1,10 @@
 package com.integrationhub.platform.provider.task.filewrite;
 
-import com.integrationhub.platform.provider.artifact.LocalTempArtifactStore;
-import com.integrationhub.platform.provider.writer.CsvWriter;
+import com.integrationhub.platform.provider.task.artifact.LocalTempArtifactStore;
+import com.integrationhub.platform.provider.task.writer.CsvWriter;
 import com.integrationhub.platform.repository.TaskInputRepository;
-import com.integrationhub.platform.service.artifact.ArtifactStoreRegistry;
-import com.integrationhub.platform.service.writer.FileFormatWriterRegistry;
+import com.integrationhub.platform.service.task.artifact.ArtifactStoreRegistry;
+import com.integrationhub.platform.service.task.writer.FileFormatWriterRegistry;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.task.TaskContext;
 import org.junit.jupiter.api.Test;

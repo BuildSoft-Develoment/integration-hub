@@ -3,10 +3,10 @@ package com.integrationhub.platform.provider.task.filedeliver;
 // @trace ADR-016 (salida generica: tarea FILE_DELIVER - entrega archivos a un sink /sources OUTPUT)
 
 import com.integrationhub.platform.service.JsonConfigurationMapper;
-import com.integrationhub.platform.service.artifact.ArtifactStoreRegistry;
-import com.integrationhub.platform.service.sink.OutputSinkRegistry;
-import com.integrationhub.platform.service.sink.SinkDefinitionService;
-import com.integrationhub.platform.spi.artifact.StoredArtifact;
+import com.integrationhub.platform.service.task.artifact.ArtifactStoreRegistry;
+import com.integrationhub.platform.service.task.sink.OutputSinkRegistry;
+import com.integrationhub.platform.service.task.sink.SinkDefinitionService;
+import com.integrationhub.platform.spi.task.artifact.StoredArtifact;
 import com.integrationhub.platform.spi.task.AsyncOffloadSupport;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
@@ -22,7 +22,7 @@ import java.util.Map;
 
 /**
  * ADR-016: tarea {@code FILE_DELIVER}. Consume {@code summary.files} de una tarea previa y entrega cada archivo a un
- * {@link com.integrationhub.platform.spi.sink.OutputSink} resuelto por {@code sinkRef} — una definicion {@code /sources}
+ * {@link com.integrationhub.platform.spi.task.sink.OutputSink} resuelto por {@code sinkRef} — una definicion {@code /sources}
  * con {@code direction} de salida ({@code OUTPUT}/{@code BOTH}). Reutiliza la config de conexion del source (host/
  * credenciales/vault) y streamea desde el artefacto (nunca el archivo completo en memoria).
  */

@@ -1,11 +1,11 @@
 package com.integrationhub.platform.provider.task.filecompress;
 
-import com.integrationhub.platform.provider.artifact.LocalTempArtifactStore;
-import com.integrationhub.platform.provider.compress.GzipCompressor;
-import com.integrationhub.platform.provider.compress.ZipCompressor;
-import com.integrationhub.platform.service.artifact.ArtifactStoreRegistry;
-import com.integrationhub.platform.service.compress.FileCompressorRegistry;
-import com.integrationhub.platform.spi.artifact.StoredArtifact;
+import com.integrationhub.platform.provider.task.artifact.LocalTempArtifactStore;
+import com.integrationhub.platform.provider.task.compress.GzipCompressor;
+import com.integrationhub.platform.provider.task.compress.ZipCompressor;
+import com.integrationhub.platform.service.task.artifact.ArtifactStoreRegistry;
+import com.integrationhub.platform.service.task.compress.FileCompressorRegistry;
+import com.integrationhub.platform.spi.task.artifact.StoredArtifact;
 import com.integrationhub.platform.spi.task.TaskContext;
 import net.lingala.zip4j.io.inputstream.ZipInputStream;
 import net.lingala.zip4j.model.LocalFileHeader;
