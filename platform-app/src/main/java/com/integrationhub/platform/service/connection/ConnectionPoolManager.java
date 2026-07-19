@@ -9,6 +9,7 @@ import io.agroal.api.security.NamePrincipal;
 import io.agroal.api.security.SimplePassword;
 import jakarta.annotation.PreDestroy;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.context.control.ActivateRequestContext;
 import javax.sql.DataSource;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -27,11 +28,18 @@ public class ConnectionPoolManager {
         this.connectionDefinitionRepository = connectionDefinitionRepository;
         this.jsonConfigurationMapper = jsonConfigurationMapper;
     }
+    // @ActivateRequestContext: la resolucion lee connection_definition via Panache (sesion Hibernate). Los task
+    // providers pueden invocarla desde el hilo offloadeado de una tarea 'once' (p.ej. FILE_WRITE en streaming),
+    // donde el request context del ProcessExecutionRunner no propaga -> "no CDI request context is active". La
+    // anotacion activa (o reutiliza, es reentrante) un contexto para el lookup en cualquier hilo. El pool
+    // resultante se cachea, asi que el lookup solo ocurre en el primer resolve por connectionRef.
+    @ActivateRequestContext
     public JdbcConnectionTarget resolveJdbcTarget(String connectionRef) {
         var definition = findRequiredJdbcDefinition(connectionRef);
         var dataSource = dataSources.computeIfAbsent(definition.id, ignored -> createJdbcDataSource(definition));
         return new JdbcConnectionTarget(dataSource, definition.connectionType);
     }
+    @ActivateRequestContext
     public DataSource resolveJdbcDataSource(String connectionRef) {
         return resolveJdbcTarget(connectionRef).dataSource();
     }
