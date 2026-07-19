@@ -13,7 +13,8 @@ public class SourceApiMapper {
                 definition.name,
                 definition.sourceType,
                 definition.active,
-                definition.configurationJson
+                definition.configurationJson,
+                definition.direction
         );
     }
 }

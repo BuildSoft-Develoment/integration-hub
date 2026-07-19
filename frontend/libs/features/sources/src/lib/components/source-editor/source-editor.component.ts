@@ -1,6 +1,8 @@
 import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatSelectModule } from '@angular/material/select';
 import {
   plaintextCredentialKeys,
   SourceDraft,
@@ -18,6 +20,8 @@ import { SourceTypeFormHostComponent } from '../source-type-form/source-type-for
   imports: [
     CommonModule,
     FormsModule,
+    MatFormFieldModule,
+    MatSelectModule,
     ManagedEditorFormActionsComponent,
     ManagedEditorHeaderComponent,
     ManagedEditorOverviewComponent,

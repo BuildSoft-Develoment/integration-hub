@@ -40,8 +40,16 @@ export class ProcessFileDeliverTaskFormComponent {
     dropPathTemplate: '${originalName}',
   });
 
-  // Solo fuentes activas: el destino (sinkRef) debe ser una fuente con direction OUTPUT/BOTH; el backend lo valida.
-  readonly sinkOptions = computed(() => this.sources().filter((source) => source.active !== false));
+  // El destino (sinkRef) debe ser una fuente activa con direction OUTPUT/BOTH (un sink). El backend lo valida
+  // igual, pero el picker ya ofrece solo candidatos validos para no dejar elegir una fuente de solo lectura.
+  readonly sinkOptions = computed(() =>
+    this.sources().filter((source) => source.active !== false && this.isSink(source.direction)),
+  );
+
+  private isSink(direction?: string): boolean {
+    const normalized = (direction ?? 'INPUT').toUpperCase();
+    return normalized === 'OUTPUT' || normalized === 'BOTH';
+  }
 
   updateDraft(patch: Partial<FileDeliverTaskDraft>): void {
     this.bridge.emit(this.manager.toTaskPatch(this.task().taskType, { ...this.draft(), ...patch }));

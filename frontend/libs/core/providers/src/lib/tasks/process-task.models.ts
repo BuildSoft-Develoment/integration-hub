@@ -58,6 +58,8 @@ export interface SourceRef {
   sourceType?: string;
   active?: boolean;
   configurationJson?: string;
+  // ADR-016: INPUT / OUTPUT (sink) / BOTH. El picker de FILE_DELIVER ofrece solo OUTPUT/BOTH.
+  direction?: string;
 }
 
 export interface ReaderRef {

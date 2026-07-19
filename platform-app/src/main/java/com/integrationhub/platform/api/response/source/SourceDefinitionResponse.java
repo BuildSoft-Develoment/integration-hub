@@ -5,6 +5,8 @@ public record SourceDefinitionResponse(
         String name,
         String sourceType,
         boolean active,
-        String configurationJson
+        String configurationJson,
+        // ADR-016: INPUT / OUTPUT (sink) / BOTH. El picker de FILE_DELIVER filtra por OUTPUT/BOTH.
+        String direction
 ) {
 }

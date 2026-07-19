@@ -1,11 +1,15 @@
 import { SourceDraft, SourceProviderType } from '@integration-hub/core/providers';
 
+export type SourceDirection = 'INPUT' | 'OUTPUT' | 'BOTH';
+
 export interface SourceRecord {
   id: number;
   name: string;
   sourceType: SourceProviderType;
   active: boolean;
   configurationJson: string;
+  // ADR-016: INPUT (lectura) / OUTPUT (sink de FILE_DELIVER) / BOTH.
+  direction?: SourceDirection;
 }
 
 export interface SourceFormModel {
@@ -14,6 +18,7 @@ export interface SourceFormModel {
   sourceType: SourceProviderType;
   active: boolean;
   configurationJson: string;
+  direction: SourceDirection;
 }
 
 export interface SourceTestResult {
@@ -30,6 +35,7 @@ export function toSourceFormModel(source: SourceRecord): SourceFormModel {
     sourceType: source.sourceType,
     active: source.active,
     configurationJson: source.configurationJson,
+    direction: source.direction ?? 'INPUT',
   };
 }
 
@@ -40,6 +46,7 @@ export function createSourceForm(sourceType: SourceProviderType): SourceFormMode
     sourceType,
     active: true,
     configurationJson: '{}',
+    direction: 'INPUT',
   };
 }
 

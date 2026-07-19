@@ -31,6 +31,16 @@
         />
 
         <ih-managed-editor-section [eyebrowKey]="'ui.provider'" [title]="providerLabel()">
+          <mat-form-field class="source-direction-field">
+            <mat-label>{{ i18n.t('sources.direction') }}</mat-label>
+            <mat-select [disabled]="readonly()" [ngModel]="form().direction" [ngModelOptions]="{ standalone: true }" (ngModelChange)="patchForm.emit({ direction: $event })">
+              <mat-option value="INPUT">{{ i18n.t('sources.directionInput') }}</mat-option>
+              <mat-option value="OUTPUT">{{ i18n.t('sources.directionOutput') }}</mat-option>
+              <mat-option value="BOTH">{{ i18n.t('sources.directionBoth') }}</mat-option>
+            </mat-select>
+            <mat-hint>{{ i18n.t('sources.directionHint') }}</mat-hint>
+          </mat-form-field>
+
           <ih-source-type-form-host
             [sourceType]="form().sourceType"
             [draft]="draft()"

@@ -42,6 +42,7 @@ export class SourceCatalogCommandService {
       sourceType: form.sourceType,
       active: form.active,
       configurationJson,
+      direction: form.direction,
     };
 
     const saved = form.id

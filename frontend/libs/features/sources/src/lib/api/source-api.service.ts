@@ -47,6 +47,7 @@ export class SourceApiService {
     sourceType: string;
     active: boolean;
     configurationJson: string;
+    direction: string;
   }): Observable<SourceRecord> {
     return this.http.post<SourceRecord>(this.baseUrl, payload, {
       context: new HttpContext().set(SKIP_GLOBAL_ERROR_FEEDBACK, false),
@@ -60,6 +61,7 @@ export class SourceApiService {
       sourceType: string;
       active: boolean;
       configurationJson: string;
+      direction: string;
     }
   ): Observable<SourceRecord> {
     return this.http.put<SourceRecord>(

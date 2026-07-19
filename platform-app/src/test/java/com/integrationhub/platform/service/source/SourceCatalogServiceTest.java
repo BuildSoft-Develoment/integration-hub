@@ -103,9 +103,11 @@ class SourceCatalogServiceTest {
         var repository = org.mockito.Mockito.mock(com.integrationhub.platform.repository.SourceDefinitionRepository.class);
         var service = new SourceCatalogService(repository, new StubSourceProviderRegistry(new NoopSourceProvider()), mapper());
 
-        var definition = service.create("Remota", "remote_fs", true, "{}");
+        var definition = service.create("Remota", "remote_fs", true, "{}", "output");
 
         assertEquals("REMOTE_FS", definition.sourceType);
+        // ADR-016: la direccion se normaliza (case-insensitive) para el sink de FILE_DELIVER.
+        assertEquals("OUTPUT", definition.direction);
         org.mockito.Mockito.verify(repository).persist(definition);
     }
 
@@ -123,7 +125,7 @@ class SourceCatalogServiceTest {
         // CSRC-09: no se puede crear una fuente con el nombre vacio/en blanco (validacion server-side).
         var service = new SourceCatalogService(null, new StubSourceProviderRegistry(new NoopSourceProvider()), mapper());
 
-        var error = assertThrows(IllegalArgumentException.class, () -> service.create("   ", "sftp", true, "{}"));
+        var error = assertThrows(IllegalArgumentException.class, () -> service.create("   ", "sftp", true, "{}", "INPUT"));
 
         assertEquals("Source name is required", error.getMessage());
     }

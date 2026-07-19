@@ -29,17 +29,17 @@ public class SourceCatalogService {
     }
 
     @Transactional
-    public SourceDefinition create(String name, String sourceType, boolean active, String configurationJson) {
+    public SourceDefinition create(String name, String sourceType, boolean active, String configurationJson, String direction) {
         var definition = new SourceDefinition();
-        apply(definition, name, sourceType, active, configurationJson);
+        apply(definition, name, sourceType, active, configurationJson, direction);
         sourceDefinitionRepository.persist(definition);
         return definition;
     }
 
     @Transactional
-    public SourceDefinition update(Long sourceDefinitionId, String name, String sourceType, boolean active, String configurationJson) {
+    public SourceDefinition update(Long sourceDefinitionId, String name, String sourceType, boolean active, String configurationJson, String direction) {
         var definition = sourceDefinitionRepository.findRequired(sourceDefinitionId);
-        apply(definition, name, sourceType, active, configurationJson);
+        apply(definition, name, sourceType, active, configurationJson, direction);
         return definition;
     }
 
@@ -96,11 +96,24 @@ public class SourceCatalogService {
         return "GENERIC";
     }
 
-    private void apply(SourceDefinition definition, String name, String sourceType, boolean active, String configurationJson) {
+    private void apply(SourceDefinition definition, String name, String sourceType, boolean active, String configurationJson, String direction) {
         definition.name = requireName(name);
         definition.sourceType = requireType(sourceType, "Source type is required");
         definition.active = active;
         definition.configurationJson = configurationJson;
+        definition.direction = normalizeDirection(direction);
+    }
+
+    /** ADR-016: INPUT (default) / OUTPUT / BOTH. null/blank/desconocido -> INPUT (compat + fail-safe). */
+    private static String normalizeDirection(String direction) {
+        if (direction == null) {
+            return "INPUT";
+        }
+        var normalized = direction.trim().toUpperCase(java.util.Locale.ROOT);
+        return switch (normalized) {
+            case "OUTPUT", "BOTH" -> normalized;
+            default -> "INPUT";
+        };
     }
 
     private static String requireName(String value) {
