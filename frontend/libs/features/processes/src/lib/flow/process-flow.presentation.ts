@@ -4,6 +4,9 @@ export type TaskCategory = 'motor' | 'swift-mt101' | 'plugin';
 
 const PLATFORM_TASK_TYPES = new Set<string>([
   'FILE_READ',
+  'FILE_WRITE',
+  'FILE_COMPRESS',
+  'FILE_DELIVER',
   'DB_WRITE',
   'DB_EXECUTE_SP',
   'DB_EXECUTE_FN',
