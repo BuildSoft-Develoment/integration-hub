@@ -131,8 +131,11 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
   private columnToConfig(column: FileWriteColumnDraft, format: FileWriteFormat): Record<string, unknown> {
     const config: any = { field: column.field.trim() };
     // type/format aplican a CSV y TXT (formateo de campos): NUMBER con patron decimal, DATE con patron.
-    if (column.type && column.type !== 'STRING') config.type = column.type;
-    if (column.format?.trim()) config.format = column.format.trim();
+    // El patron solo tiene sentido con un type != STRING; si no, se descarta (no ensuciar el config).
+    if (column.type && column.type !== 'STRING') {
+      config.type = column.type;
+      if (column.format?.trim()) config.format = column.format.trim();
+    }
     if (format === 'TXT') {
       const length = this.numOrUndefined(column.length);
       if (length != null) config.length = length;

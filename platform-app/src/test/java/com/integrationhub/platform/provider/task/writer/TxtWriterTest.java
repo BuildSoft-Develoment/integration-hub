@@ -34,6 +34,20 @@ class TxtWriterTest {
     }
 
     @Test
+    void appliesFieldTypeFormattingBeforeFixedWidth() throws Exception {
+        // NUMBER -> "0.00" (2 decimales) luego right-align pad '0'; DATE -> "yyyyMMdd" luego left-align.
+        var config = Map.<String, Object>of("layout", Map.of("detail", Map.of("columns", List.of(
+                Map.of("field", "monto", "type", "NUMBER", "format", "0.00", "length", 10, "align", "right", "pad", "0"),
+                Map.of("field", "fecha", "type", "DATE", "format", "yyyyMMdd", "length", 10)))));
+        var out = new ByteArrayOutputStream();
+        try (var session = new TxtWriter().open(out, config)) {
+            session.writeDetail(List.of(new ReadRecord(Map.of("monto", "1000.5", "fecha", "2026-07-19"))));
+        }
+        // monto "1000.5" -> "1000.50" (7) -> "0001000.50" ; fecha "2026-07-19" -> "20260719" (8) -> "20260719  "
+        assertEquals("0001000.5020260719  \n", out.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
     void crlfLineEnding() throws Exception {
         var config = Map.<String, Object>of("layout", Map.of(
                 "detail", Map.of("lineEnding", "CRLF", "columns", List.of(Map.of("field", "a", "length", 3)))));
