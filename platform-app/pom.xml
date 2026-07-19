@@ -158,6 +158,13 @@
             <artifactId>quarkus-poi</artifactId>
             <version>2.2.1</version>
         </dependency>
+        <!-- ADR-016: compresion ZIP (plano + AES-256) para la tarea FILE_COMPRESS. Java puro; requiere smoke test
+             en nativo (bajo riesgo, sin reflexion pesada). GZIP usa java.util.zip (JDK, sin dependencia). -->
+        <dependency>
+            <groupId>net.lingala.zip4j</groupId>
+            <artifactId>zip4j</artifactId>
+            <version>2.11.5</version>
+        </dependency>
         <dependency>
             <groupId>io.quarkiverse.amazonservices</groupId>
             <artifactId>quarkus-amazon-s3</artifactId>
