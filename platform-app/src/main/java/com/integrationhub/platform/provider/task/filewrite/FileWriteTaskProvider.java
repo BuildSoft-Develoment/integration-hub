@@ -47,6 +47,8 @@ import java.util.Map;
 public class FileWriteTaskProvider implements TaskProvider {
 
     private static final int DEFAULT_BATCH_SIZE = 5000;
+    // Tope de pagina: acota memoria (una pagina en heap) aunque la config pida un batchSize desmesurado.
+    private static final int MAX_BATCH_SIZE = 50_000;
     private static final String DEFAULT_TABLE = "staging_record";
 
     private final FileFormatWriterRegistry writers;
@@ -161,7 +163,7 @@ public class FileWriteTaskProvider implements TaskProvider {
             throw new IllegalArgumentException("FILE_WRITE table source requires input.cursor.orderBy (keyset pagination)");
         }
         var payloadColumn = stringValue(firstNonBlank(input.get("payloadColumn"), source.get("payloadColumn")), "");
-        var batchSize = Math.max(intValue(input.get("batchSize"), DEFAULT_BATCH_SIZE), 1);
+        var batchSize = Math.min(Math.max(intValue(input.get("batchSize"), DEFAULT_BATCH_SIZE), 1), MAX_BATCH_SIZE);
         var filters = resolveFilters(input.get("filters"), context);
         var dataSource = resolveDataSource(connectionRef);
 
@@ -178,7 +180,13 @@ public class FileWriteTaskProvider implements TaskProvider {
             if (rawPage.isEmpty()) {
                 break;
             }
-            lastKey = TaskInputResolver.cursorValue(rawPage, orderBy);
+            var nextKey = TaskInputResolver.cursorValue(rawPage, orderBy);
+            if (nextKey == null) {
+                // Cursor nulo -> el siguiente readBatch re-leeria la primera pagina (bucle infinito). Fail-loud.
+                throw new IllegalStateException("FILE_WRITE table source: cursor column '" + orderBy
+                        + "' produced a null value; keyset pagination requires a non-null, unique ordering column (e.g. the PK)");
+            }
+            lastKey = nextKey;
             var detailPage = payloadColumn.isBlank() ? rawPage : parsePayloadColumn(rawPage, payloadColumn);
             session.writeDetail(detailPage);
             accumulateSums(detailPage, sums);

@@ -123,6 +123,25 @@ class FileWriteTaskProviderTest {
     }
 
     @Test
+    void tableSourceFailsOnNullCursor() {
+        var repository = mock(TaskInputRepository.class);
+        var dataSource = mock(DataSource.class);
+        // fila sin columna 'id' -> cursorValue null -> guard fail-loud (evita el re-leer la primera pagina)
+        var rowWithoutId = new ReadRecord(new LinkedHashMap<>(Map.of("dni", "1")));
+        when(repository.readBatch(eq(dataSource), eq("t"), eq("id"), anyMap(), isNull(), eq(5000)))
+                .thenReturn(List.of(rowWithoutId));
+        var provider = new FileWriteTaskProvider(
+                new FileFormatWriterRegistry(List.of(new CsvWriter())),
+                new ArtifactStoreRegistry(List.of(new LocalTempArtifactStore())),
+                repository, dataSource, null);
+        var config = Map.<String, Object>of(
+                "format", "CSV",
+                "input", Map.of("sourceOutput", "table", "table", "t", "cursor", Map.of("orderBy", "id")),
+                "layout", Map.of("detail", Map.of("columns", List.of(Map.of("field", "dni")))));
+        assertThrows(IllegalStateException.class, () -> provider.execute(new TaskContext(1L, 1L), config));
+    }
+
+    @Test
     void tableSourceRequiresOrderBy() {
         var provider = new FileWriteTaskProvider(
                 new FileFormatWriterRegistry(List.of(new CsvWriter())),
