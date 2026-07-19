@@ -56,9 +56,28 @@ public class CsvWriter implements FileFormatWriter {
         var encoding = String.valueOf(configuration.getOrDefault("encoding", "UTF-8"));
         var rawDelimiter = detailString(configuration, "delimiter", ",");
         var delimiter = "\\t".equals(rawDelimiter) ? "\t" : rawDelimiter;
+        // Fin de linea configurable: LF por defecto, CRLF para archivos de banca/mainframe.
+        var lineEnding = "CRLF".equalsIgnoreCase(detailString(configuration, "lineEnding", "LF")) ? "\r\n" : "\n";
         var columns = detailColumns(configuration);
-        var writer = new BufferedWriter(new OutputStreamWriter(out, Charset.forName(encoding)));
-        return new CsvWriteSession(writer, delimiter, columns);
+        // El session NO es dueno del OutputStream del artefacto: lo envolvemos en un filtro que solo hace flush en
+        // close(), para que el dueno (WritableArtifact.finish()) lo cierre y lea el tamano sin doble-close.
+        var writer = new BufferedWriter(new OutputStreamWriter(nonClosing(out), Charset.forName(encoding)));
+        return new CsvWriteSession(writer, delimiter, lineEnding, columns);
+    }
+
+    /** Filtro que hace flush pero NO cierra el delegate (el {@code WritableArtifact} es el dueno del stream). */
+    private static OutputStream nonClosing(OutputStream delegate) {
+        return new java.io.FilterOutputStream(delegate) {
+            @Override
+            public void write(byte[] bytes, int off, int len) throws IOException {
+                out.write(bytes, off, len);
+            }
+
+            @Override
+            public void close() throws IOException {
+                flush();
+            }
+        };
     }
 
     // --- parsing de config (layout.detail.*) ---
@@ -102,11 +121,13 @@ public class CsvWriter implements FileFormatWriter {
 
         private final Writer writer;
         private final String delimiter;
+        private final String lineEnding;
         private final List<String> columns;
 
-        private CsvWriteSession(Writer writer, String delimiter, List<String> columns) {
+        private CsvWriteSession(Writer writer, String delimiter, String lineEnding, List<String> columns) {
             this.writer = writer;
             this.delimiter = delimiter;
+            this.lineEnding = lineEnding;
             this.columns = columns;
         }
 
@@ -145,7 +166,7 @@ public class CsvWriter implements FileFormatWriter {
                 }
                 writer.write(escape(cells.get(i)));
             }
-            writer.write('\n');
+            writer.write(lineEnding);
         }
 
         /** Comillado RFC-4180: entrecomilla si el valor tiene el delimitador, comilla, CR o LF; duplica comillas. */

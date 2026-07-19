@@ -50,6 +50,35 @@ class CsvWriterTest {
     }
 
     @Test
+    void crlfLineEndingWhenConfigured() throws Exception {
+        var config = Map.<String, Object>of("layout", Map.of("detail", Map.of(
+                "delimiter", ",", "lineEnding", "CRLF",
+                "columns", List.of(Map.of("field", "a")))));
+        var out = new ByteArrayOutputStream();
+        try (var session = new CsvWriter().open(out, config)) {
+            session.writeDetail(List.of(new ReadRecord(Map.of("a", "1")), new ReadRecord(Map.of("a", "2"))));
+        }
+        assertEquals("1\r\n2\r\n", out.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void sessionCloseFlushesButDoesNotCloseTheArtifactStream() throws Exception {
+        var closed = new boolean[]{false};
+        var out = new ByteArrayOutputStream() {
+            @Override
+            public void close() {
+                closed[0] = true;
+            }
+        };
+        try (var session = new CsvWriter().open(out, configWithColumns())) {
+            session.writeDetail(List.of(new ReadRecord(Map.of("dni", "1", "monto", "10"))));
+        }
+        // el dueno del stream (WritableArtifact) es quien cierra; el session solo flushea
+        assertEquals("1,10\n", out.toString(StandardCharsets.UTF_8));
+        org.junit.jupiter.api.Assertions.assertFalse(closed[0], "el session no debe cerrar el stream del artefacto");
+    }
+
+    @Test
     void validateRejectsMissingColumns() {
         var writer = new CsvWriter();
         assertThrows(IllegalArgumentException.class, () -> writer.validateConfiguration(Map.of()));

@@ -23,8 +23,9 @@ public interface FileFormatWriter {
 
     /**
      * Abre una sesion de escritura streaming sobre {@code out}. El caller escribe cabecera (una vez), detalle (N lotes)
-     * y trailer (una vez), y cierra la sesion (flush). {@code out} NO se cierra aqui salvo que la sesion lo haga en
-     * {@link FileWriteSession#close()} (el escritor es dueno de su Writer/wrapper).
+     * y trailer (una vez), y cierra la sesion. <b>El {@code close()} de la sesion hace flush de todo a {@code out} pero
+     * NO cierra {@code out}</b>: el dueno del stream (p. ej. {@code WritableArtifact}) lo cierra y lee su tamano. Asi se
+     * evita el doble-close entre el escritor y el store del artefacto.
      */
     FileWriteSession open(OutputStream out, Map<String, Object> configuration) throws IOException;
 
