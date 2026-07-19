@@ -1,16 +1,20 @@
 /* @trace ADR-016 (procesos: estilos compartidos de los forms FILE_WRITE/FILE_COMPRESS/FILE_DELIVER).
    Sin esto los campos se apilan a todo el ancho: las clases del template (.task-grid, .cell-row, ...) viven
    por-componente y la encapsulacion de Angular no las hereda de otros forms. */
+/* El modal 'workspace' fija la altura del form y no scrollea (overflow: hidden). Un form alto
+   (FILE_WRITE con muchas columnas) se clipearia; el :host debe scrollear su propio contenido. */
 :host {
-  display: grid;
-  gap: 1rem;
+  display: block;
   min-width: 0;
+  max-height: 100%;
+  overflow: hidden auto;
 }
 .task-form-stack {
   display: grid;
   gap: 1rem;
   min-width: 0;
   align-content: start;
+  padding-bottom: 0.25rem;
 }
 /* Grilla responsiva: los campos fluyen en columnas de >=220px en vez de apilarse a todo el ancho. */
 .task-grid {
