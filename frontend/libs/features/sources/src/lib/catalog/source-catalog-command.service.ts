@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 
+import { plaintextCredentialKeys } from '@integration-hub/core/providers';
 import {
   AppFeedbackService,
   I18nService,
@@ -28,6 +29,13 @@ export class SourceCatalogCommandService {
       form.sourceType,
       this.editor.draft()
     );
+
+    // QA-006: no persistir credenciales en texto plano (defensa en el comando, no solo en el form).
+    // Fail-closed: si el config no parsea, se bloquea igual (no se puede verificar que no haya secretos en claro).
+    if (!this.credentialsAreReferences(configurationJson, form.sourceType)) {
+      this.feedback.error('sources.credentialPlaintextBlock');
+      return;
+    }
 
     const payload = {
       name: form.name,
@@ -80,6 +88,20 @@ export class SourceCatalogCommandService {
         message: this.resolveErrorMessage(error),
       });
     }
+  }
+
+  /**
+   * QA-006: true si el config serializado NO tiene credenciales en texto plano (solo referencias ${secret:...}
+   * o vacio). Fail-closed: si el JSON no parsea, devuelve false (bloquea) porque no se puede verificar.
+   */
+  private credentialsAreReferences(configurationJson: string, sourceType: string): boolean {
+    let config: Record<string, unknown>;
+    try {
+      config = JSON.parse(configurationJson);
+    } catch {
+      return false;
+    }
+    return plaintextCredentialKeys(config, sourceType).length === 0;
   }
 
   // 003: traduce el codigo del backend a un mensaje claro en el idioma del usuario. Para GENERIC (sin
