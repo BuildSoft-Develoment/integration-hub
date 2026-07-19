@@ -26,6 +26,10 @@ public class SourceDefinition {
 
     @Column(name = "configuration_json", nullable = false, columnDefinition = "text")
     public String configurationJson;
+
+    // ADR-016: sentido de la definicion. INPUT (leer, FILE_READ) | OUTPUT (escribir, FILE_DELIVER) | BOTH.
+    @Column(nullable = false, length = 10)
+    public String direction = "INPUT";
 }
 
 
