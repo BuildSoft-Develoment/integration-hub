@@ -67,7 +67,8 @@ export class FileCompressTaskProvider extends ProcessTaskProvider<FileCompressTa
       draft,
       'once',
     );
-    // FILE_COMPRESS consume la lista de archivos: el output de la tarea previa es siempre `summary`.
+    // FILE_COMPRESS es once-task; el output de la tarea previa es siempre `summary`.
+    payload.executionMode = 'once';
     if (payload.input) {
       payload.input.sourceOutput = 'summary';
     }

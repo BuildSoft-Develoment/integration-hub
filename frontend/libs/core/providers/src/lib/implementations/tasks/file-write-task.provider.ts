@@ -107,7 +107,20 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       draft,
       'once',
     );
+    // Backend FILE_WRITE es once-task (pagina la tabla el mismo); nunca batch/per-record.
+    payload.executionMode = 'once';
+    // Fuente-tabla: el backend exige cursor.orderBy (paginacion keyset). Default 'id' (PK de staging_record).
+    if (payload.input && payload.input.sourceOutput === 'table' && !payload.input.cursor) {
+      payload.input.cursor = { orderBy: 'id' };
+    }
     return { configurationJson: this.toPrettyJson(payload) };
+  }
+
+  private numOrUndefined(value: unknown): number | undefined {
+    const text = String(value ?? '').trim();
+    if (!text) return undefined;
+    const parsed = Number(text);
+    return Number.isNaN(parsed) ? undefined : parsed;
   }
 
   // --- helpers de serializacion ---
@@ -115,9 +128,10 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
   private columnToConfig(column: FileWriteColumnDraft, format: FileWriteFormat): Record<string, unknown> {
     const config: any = { field: column.field.trim() };
     if (format === 'TXT') {
-      if (column.length?.trim()) config.length = Number(column.length);
+      const length = this.numOrUndefined(column.length);
+      if (length != null) config.length = length;
       if (column.align) config.align = column.align;
-      if (column.pad != null && column.pad !== '') config.pad = column.pad;
+      if (column.pad != null && String(column.pad) !== '') config.pad = String(column.pad);
     }
     return config;
   }
@@ -136,9 +150,10 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       return null;
     }
     if (format === 'TXT') {
-      if (cell.length?.trim()) config.length = Number(cell.length);
+      const length = this.numOrUndefined(cell.length);
+      if (length != null) config.length = length;
       if (cell.align) config.align = cell.align;
-      if (cell.pad != null && cell.pad !== '') config.pad = cell.pad;
+      if (cell.pad != null && String(cell.pad) !== '') config.pad = String(cell.pad);
     }
     return config;
   }

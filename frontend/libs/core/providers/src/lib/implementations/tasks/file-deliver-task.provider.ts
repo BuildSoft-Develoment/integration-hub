@@ -32,15 +32,18 @@ export class FileDeliverTaskProvider extends ProcessTaskProvider<FileDeliverTask
   }
 
   toTaskPatch(draft: FileDeliverTaskDraft): Partial<ProcessTaskFormModel> {
+    // sinkRef llega como number desde el mat-select -> coercion a string antes de operar (evita number.trim()).
+    const sinkRef = String(draft.sinkRef ?? '').trim();
     const payload: any = this.withRuntime(
       {
-        ...(draft.sinkRef?.trim() ? { sinkRef: Number(draft.sinkRef) } : {}),
+        ...(sinkRef ? { sinkRef: Number(sinkRef) } : {}),
         dropPathTemplate: draft.dropPathTemplate || '${originalName}',
       },
       draft,
       'once',
     );
-    // FILE_DELIVER consume la lista de archivos: el output de la tarea previa es siempre `summary`.
+    // FILE_DELIVER es once-task en el backend; el output de la tarea previa es siempre `summary`.
+    payload.executionMode = 'once';
     if (payload.input) {
       payload.input.sourceOutput = 'summary';
     }
