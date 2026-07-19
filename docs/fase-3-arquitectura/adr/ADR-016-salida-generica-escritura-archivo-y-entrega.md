@@ -56,16 +56,18 @@ El temp file producido por `FILE_WRITE` debe sobrevivir entre dos ejecuciones de
 
 Completar la **mitad de salida** de forma **generica y agnostica de dominio**, como espejo de la entrada.
 
-### 1) Dos tareas BUILTIN nuevas
+### 1) Tres tareas BUILTIN nuevas
 
-- **`FILE_WRITE`** (`BatchTaskProvider`): consume `records`/`table` de una tarea previa (contrato ADR-004) y produce un **archivo** materializado en temp file. Config: formato (`CSV`/`TXT` ancho-fijo/`XLSX`), **layout cabecera + detalle (+ trailer)**, encoding, delimitador/posiciones, y **mapeo de columnas reutilizando el board drag-and-drop de `DB_WRITE`**. Publica `summary` (ruta/tamano/conteo) y `errors`. **Streaming secuencial obligatorio (A1).**
-- **`FILE_DELIVER`** (transporte de salida generico, **fuera del dominio pay**): consume la ruta del archivo de `FILE_WRITE` y lo **entrega** a un sink. Config: `sinkRef` (referencia a un source Entrada/Salida) + `dropPathTemplate`. Publica `summary` (destino/estado) y `errors`. **Streamea desde el temp file (nunca `ByteArrayInputStream`).**
+- **`FILE_WRITE`** (`BatchTaskProvider`): consume `records`/`table` de una tarea previa (contrato ADR-004) y produce un **archivo** materializado en temp file. Config: formato (`CSV`/`TXT` ancho-fijo/`XLSX`), **layout cabecera + detalle (+ trailer)**, encoding, delimitador/posiciones, y **mapeo de columnas reutilizando el board drag-and-drop de `DB_WRITE`**. Publica `summary` (ruta/tamano/conteo **+ `files:[...]` lista de rutas producidas**) y `errors`. **Streaming secuencial obligatorio (A1).**
+- **`FILE_COMPRESS`** (compresor generico, task **dinamico**): consume `summary.files` (una o varias rutas) de una tarea previa y produce **un archivo comprimido** (temp). Config: `algorithm` (`ZIP` default / `GZIP` / `TAR_GZ`), `archiveNameTemplate`, `entryNameTemplate`, `deleteSourcesAfter`, y (opcional) `password` (`${secret:...}`) para cifrado. Publica `summary` (`archivePath`/`archiveSize`/`entryCount`) y `errors`. **Streaming obligatorio.** Es una tarea aparte (no un flag) para responsabilidad unica y composicion: comprimir **varios** `FILE_WRITE` en un archivo, o entregar sin comprimir. Cadena tipica: `FILE_WRITE -> FILE_COMPRESS -> FILE_DELIVER`.
+- **`FILE_DELIVER`** (transporte de salida generico, **fuera del dominio pay**): consume la ruta del archivo (de `FILE_WRITE` o `FILE_COMPRESS`) y lo **entrega** a un sink. Config: `sinkRef` (referencia a un source Entrada/Salida) + `dropPathTemplate`. Publica `summary` (destino/estado) y `errors`. **Streamea desde el temp file (nunca `ByteArrayInputStream`).**
 
-### 2) Dos familias de providers nuevas (SPIs, espejo de la entrada)
+### 2) Tres familias de providers nuevas (SPIs, espejo de la entrada)
 
 - **`FileFormatWriter`** (espejo de `ReaderProvider`): `CsvWriter`, `TxtWriter` (ancho fijo), `XlsxWriter` (SXSSF streaming). Serializa `List<ReadRecord>` -> stream, pagina a pagina (write-side de `ReadBatchConsumer`).
+- **`FileCompressor`** (familia de compresion resuelta por `algorithm`): `ZipCompressor` (`java.util.zip.ZipOutputStream`, **JDK, sin dependencia**, soporta multiples entradas), `GzipCompressor` (`GZIPOutputStream`, un solo archivo), `TarGzCompressor` (`commons-compress`, fase 2). Streamea `Files.copy(origen, zipOut)` por entrada (sin heap). Cifrado AES via `zip4j` = fase 2 (password como `${secret:...}`).
 - **`OutputSink`** (espejo de `SourceProvider`, **sin tocar** el SPI read-only): `openSink(target, config) -> OutputStream` streaming. Impls SFTP/Filesystem (MVP), luego S3/FTP. Reutiliza `SourceConfigurationSupport` para parsear config.
-- Ambas con su **registry CDI** (`Instance<T>` + `resolve(type)` + fallback remoto), copiando `SourceProviderRegistry`/`ReaderProviderRegistry`.
+- Las tres con su **registry CDI** (`Instance<T>` + `resolve(type)` + fallback remoto), copiando `SourceProviderRegistry`/`ReaderProviderRegistry`.
 - Se generalizan (no se fusionan) los transportes pay: la logica upload-with-temp-then-rename + duplicate-policy (`SKIP_IF_SAME_HASH`/`FAIL`/`OVERWRITE`/`RENAME_WITH_SUFFIX`) de `SftpPaymentTransport` es la referencia del `SftpSink`, **pero streameando desde archivo** (el `new ByteArrayInputStream(bytes)` de `SftpPaymentTransport` haria OOM con un CSV/Excel pesado).
 
 ### 3) `/sources` como Entrada/Salida
@@ -105,6 +107,22 @@ Una salida OUTPUT **saca datos** a sistemas externos: es una superficie de **exf
 }
 ```
 
+`FILE_COMPRESS`:
+
+```json
+{
+  "taskRef": "zip-export",
+  "taskType": "FILE_COMPRESS",
+  "executionMode": "once",
+  "input": { "source": "task-output", "sourceTaskRef": "write-file", "sourceOutput": "summary" },
+  "algorithm": "ZIP",
+  "archiveNameTemplate": "export-${_processExecutionId}.zip",
+  "entryNameTemplate": "${originalName}",
+  "deleteSourcesAfter": false,
+  "outputs": [ { "name": "summary", "type": "summary" }, { "name": "errors", "type": "errors" } ]
+}
+```
+
 `FILE_DELIVER`:
 
 ```json
@@ -125,6 +143,7 @@ Una salida OUTPUT **saca datos** a sistemas externos: es una superficie de **exf
 - **Streaming secuencial (A1) obligatorio**: `FILE_WRITE` es un unico writer que pagina keyset sobre la tabla (requiere `cursor.orderBy`) y serializa incremental a un temp file (CSV/TXT linea a linea; XLSX con SXSSF y ventana de flush acotada). `FILE_DELIVER` hace `put` **streaming desde el temp file**.
 - **Agregados**: `header.aggregate` (count/sum) via **pre-query** a la tabla; `trailer.aggregate` **acumulado** durante el streaming.
 - **Layout** cabecera/detalle/trailer: constantes, metadata transversal (`_processExecutionId`, ...) o agregados; detalle por mapeo de columnas (mismo contrato `ColumnAssignment` de `DB_WRITE`).
+- **Compresion (`FILE_COMPRESS`)**: streaming por entrada (`putNextEntry` + `Files.copy(origen, zipOut)`), nunca cargando el archivo en heap. Multi-archivo via `summary.files` de la tarea previa (no cambia el contrato de input, que es de un solo `sourceTaskRef`). ZIP soporta N entradas; GZIP solo 1. Password de cifrado como `${secret:...}`.
 - **Credenciales**: `password`/`knownHosts` del sink como `${secret:...}`/`${config:...}` (regla `COMPLETE_REF`), nunca literal.
 - **`direction`** en sources: `FILE_READ` exige `INPUT|BOTH`; `FILE_DELIVER` exige `OUTPUT|BOTH`.
 - **No-async en fase 1**: `FILE_WRITE`/`FILE_DELIVER` declaran `asyncOffloadSupport = UNSUPPORTED` (handoff por temp file local). El async/distribuido llega con `ArtifactStaging`.
@@ -146,7 +165,8 @@ Costos:
 - **Sinks net-new por tipo**: hoy solo salidas REST/SFTP (pay); Filesystem/S3/FTP como salida generica son ~4 implementaciones nuevas en las primeras fases.
 - Rework de streaming en la entrega (evitar el `ByteArrayInputStream`).
 - Migracion: nueva columna `direction` en `source_definition` (V100).
-- **Native**: SXSSF (escritura) **no esta ejercitado** por los paths de lectura (quarkiverse-poi cubre lectura/event) -> **smoke test native obligatorio** para el writer XLSX (fase 2). CSV/TXT = I/O puro (sin riesgo). SFTP sink reusa JSch (ya configurado), S3 sink reusa el SDK de `S3SourceProvider` (ya OK).
+- **`FILE_COMPRESS`**: bajo. ZIP/GZIP con `java.util.zip` (JDK, sin dependencia); el bundling multi-archivo se resuelve con `summary.files` sin tocar el contrato. TAR_GZ (`commons-compress`) y cifrado (`zip4j`) suman dependencia + config native (fase 2).
+- **Native**: SXSSF (escritura) **no esta ejercitado** por los paths de lectura (quarkiverse-poi cubre lectura/event) -> **smoke test native obligatorio** para el writer XLSX (fase 2). CSV/TXT + `java.util.zip` = I/O puro (sin reflexion, sin riesgo native). SFTP sink reusa JSch (ya configurado), S3 sink reusa el SDK de `S3SourceProvider` (ya OK).
 - SP/FN **ya existen** (no son costo): la cadena READ->WRITE->SP->FN es construible hoy.
 
 ## Migracion
@@ -157,16 +177,17 @@ Costos:
 
 ## Plan por fases
 
-1. **MVP (alto valor, riesgo medio)**: `FILE_WRITE` CSV/TXT (fuente-tabla, secuencial, cabecera/detalle/trailer con pre-query de agregados) + `FILE_DELIVER` **SFTP + Filesystem** + `direction` V100 + **QA-006 password->vault en paralelo**. E2E de punta a punta con el **bank-sim** (`ops/.../int/bank-sim/README.md`).
-2. `XlsxWriter` (SXSSF) + **smoke test native** + sinks **S3, FTP**.
-3. Sources bidireccionales (UI), handoff async via `ArtifactStaging`, evaluar salida shardeada (A2) y compartir codigo con MT101 (`BUILD_FROM_TABLE`/`PAY`) sin regresionar money-safety.
+1. **MVP (alto valor, riesgo medio)**: `FILE_WRITE` CSV/TXT (fuente-tabla, secuencial, cabecera/detalle/trailer con pre-query de agregados) + **`FILE_COMPRESS` ZIP/GZIP** (`java.util.zip`, JDK, sin dependencia, bajo riesgo native) + `FILE_DELIVER` **SFTP + Filesystem** + `direction` V100 + **QA-006 password->vault en paralelo**. E2E de punta a punta con el **bank-sim** (`ops/.../int/bank-sim/README.md`).
+2. `XlsxWriter` (SXSSF) + **smoke test native** + sinks **S3, FTP** + `FILE_COMPRESS` **`TAR_GZ`** (`commons-compress`) y **cifrado AES** (`zip4j`, password `${secret:...}`).
+3. Sources bidireccionales (UI), **`FILE_DECOMPRESS` de entrada** (leer un source `.zip`/`.gz`, espejo simetrico), handoff async via `ArtifactStaging`, evaluar salida shardeada (A2) y compartir codigo con MT101 (`BUILD_FROM_TABLE`/`PAY`) sin regresionar money-safety.
 
 ## Puntos de anclaje en codigo (para implementar)
 
 - SPI tarea: `platform-app/.../spi/task/TaskProvider.java` + `BatchTaskProvider.java`; registro por bean CDI (mirror `Mt101InboundDeliverTaskProvider.type()`); `domain/TaskType.java` (constantes + `BUILTIN`).
 - Contrato I/O: `service/execution/TaskInputResolver.java` (input `task-output`, table paging keyset `executeTableBatches`), `service/execution/TaskOutputRegistry.java` (publicar `summary`).
 - Mapeo columnas: `provider/task/dbwrite/DbTaskSupport.ColumnAssignment`; UI `process-db-write-mapping-board`.
-- Streaming/temp: `provider/source/TempFileSourcePayload.java` (patron a espejar).
+- Streaming/temp: `provider/source/TempFileSourcePayload.java` (patron a espejar por writers, compresor y sinks).
+- Compresion: net-new; `FileCompressor` (registry CDI como los otros) + `ZipCompressor` con `java.util.zip.ZipOutputStream` + `Files.copy` por entrada; multi-archivo via `summary.files` (publicado por `FILE_WRITE`, leido por `FILE_COMPRESS`). Sin compresion previa en el repo (grep vacio).
 - Sink SFTP referencia: `provider/task/payments/swift/transport/SftpPaymentTransport.java` (upload-with-rename + dup-policy; **corregir el byte-array**).
 - Gobernanza: `service/JsonConfigurationMapper.java` (`${secret:...}`), `provider/task/payments/swift/Mt101DispatchPlanCompiler.java` (`COMPLETE_REF`).
 - Frontend: registries `PROCESS_TASK_PROVIDERS` + `PROCESS_TASK_FORM_REGISTRY`; union `PlatformProcessTaskType`.
