@@ -62,7 +62,9 @@ export class FileCompressTaskProvider extends ProcessTaskProvider<FileCompressTa
         entryNameTemplate: draft.entryNameTemplate || '${originalName}',
         deleteSourcesAfter: draft.deleteSourcesAfter,
         ...(draft.archiveNameTemplate?.trim() ? { archiveNameTemplate: draft.archiveNameTemplate.trim() } : {}),
-        ...(draft.encryption !== 'NONE' ? { encryption: draft.encryption, password: draft.password } : {}),
+        // El cifrado solo aplica a ZIP; con GZIP el backend rechaza encryption. Se atan a algorithm==='ZIP'
+        // para no emitir un AES256 stale si el usuario eligio cifrado y luego cambio a GZIP.
+        ...(draft.algorithm === 'ZIP' && draft.encryption !== 'NONE' ? { encryption: draft.encryption, password: draft.password } : {}),
       },
       draft,
       'once',
