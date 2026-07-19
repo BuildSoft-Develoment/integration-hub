@@ -87,7 +87,10 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
 
   toTaskPatch(draft: FileWriteTaskDraft): Partial<ProcessTaskFormModel> {
     const detail: any = {
-      columns: (draft.columns || []).filter((column) => column.field?.trim()).map((column) => this.columnToConfig(column, draft.format)),
+      // NO filtrar columnas con field vacio: el draft hace round-trip por el configurationJson en cada cambio,
+      // y filtrar aqui borraria la columna recien agregada (nace vacia para llenar) antes de poder editarla
+      // ("Agregar" no hacia nada). El backend (CsvWriter/TxtWriter) ya ignora columnas con field en blanco al escribir.
+      columns: (draft.columns || []).map((column) => this.columnToConfig(column, draft.format)),
     };
     if (draft.format === 'CSV') {
       detail.delimiter = draft.delimiter || ',';
