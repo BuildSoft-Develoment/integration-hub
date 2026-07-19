@@ -139,6 +139,8 @@ public class CsvWriter implements FileFormatWriter {
 
         private final de.siegmar.fastcsv.writer.CsvWriter csv;
         private final List<DetailColumn> columns;
+        // Formatter confinado a esta sesion (no thread-safe): cachea DecimalFormat por (patron, rounding).
+        private final FieldValueFormatter formatter = new FieldValueFormatter();
 
         private CsvWriteSession(de.siegmar.fastcsv.writer.CsvWriter csv, List<DetailColumn> columns) {
             this.csv = csv;
@@ -156,7 +158,7 @@ public class CsvWriter implements FileFormatWriter {
                 var values = record.values();
                 var row = new ArrayList<String>(columns.size());
                 for (var column : columns) {
-                    row.add(FieldValueFormatter.format(values.get(column.field()), column.type(), column.format(), column.rounding()));
+                    row.add(formatter.format(values.get(column.field()), column.type(), column.format(), column.rounding()));
                 }
                 csv.writeRecord(row);
             }

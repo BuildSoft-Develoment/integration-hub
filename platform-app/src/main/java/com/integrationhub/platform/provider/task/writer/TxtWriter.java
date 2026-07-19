@@ -207,6 +207,8 @@ public class TxtWriter implements FileFormatWriter {
         private final List<DetailColumn> detail;
         private final List<ColumnSpec> headerSpecs;
         private final List<ColumnSpec> trailerSpecs;
+        // Formatter confinado a esta sesion (no thread-safe): cachea DecimalFormat por (patron, rounding).
+        private final FieldValueFormatter formatter = new FieldValueFormatter();
 
         private TxtWriteSession(Writer writer, String lineEnding, List<DetailColumn> detail,
                                List<ColumnSpec> headerSpecs, List<ColumnSpec> trailerSpecs) {
@@ -229,7 +231,7 @@ public class TxtWriter implements FileFormatWriter {
                 var line = new StringBuilder();
                 for (var column : detail) {
                     // ADR-016: formateo por tipo/patron/redondeo antes del ancho fijo (NUMBER decimal, DATE patron).
-                    var formatted = FieldValueFormatter.format(values.get(column.field()), column.type(), column.format(), column.rounding());
+                    var formatted = formatter.format(values.get(column.field()), column.type(), column.format(), column.rounding());
                     line.append(fixed(formatted, column.spec()));
                 }
                 writer.write(line.toString());
