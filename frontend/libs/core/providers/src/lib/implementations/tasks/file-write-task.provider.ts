@@ -7,7 +7,8 @@ import { ProcessTaskFormModel } from '../../tasks/process-task.models';
 export type FileWriteFormat = 'CSV' | 'TXT' | 'XLSX';
 export type FileWriteAlign = 'left' | 'right';
 export type FileWriteColumnType = 'STRING' | 'NUMBER' | 'DATE';
-// Modo de redondeo (RoundingMode de Java) para columnas NUMBER; el backend acepta cualquier nombre valido.
+// Modos de redondeo (RoundingMode de Java) que ofrece la UI; el backend acepta cualquier nombre valido, por eso
+// el campo es passthrough (string): un modo agregado o hand-edited se preserva en el round-trip, no se colapsa.
 export type FileWriteRounding = 'HALF_UP' | 'HALF_EVEN' | 'DOWN';
 export type FileWriteCellKind = 'value' | 'metadata' | 'aggregate';
 
@@ -15,7 +16,7 @@ export interface FileWriteColumnDraft {
   field: string;
   type?: FileWriteColumnType;
   format?: string;
-  rounding?: FileWriteRounding;
+  rounding?: FileWriteRounding | (string & {});
   length?: string;
   align?: FileWriteAlign;
   pad?: string;
@@ -138,8 +139,12 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
     if (column.type && column.type !== 'STRING') {
       config.type = column.type;
       if (column.format?.trim()) config.format = column.format.trim();
-      // rounding solo aplica a NUMBER; se emite unicamente si difiere del default backend (HALF_UP).
-      if (column.type === 'NUMBER' && column.rounding && column.rounding !== 'HALF_UP') config.rounding = column.rounding;
+      // rounding solo aplica a NUMBER; se emite unicamente si difiere del default backend (HALF_UP). Passthrough:
+      // se preserva cualquier modo (no solo los del dropdown) para que el round-trip no pierda datos.
+      if (column.type === 'NUMBER') {
+        const rounding = this.normalizeRounding(column.rounding);
+        if (rounding && rounding !== 'HALF_UP') config.rounding = rounding;
+      }
     }
     if (format === 'TXT') {
       const length = this.numOrUndefined(column.length);
@@ -184,9 +189,9 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
     return normalized === 'NUMBER' || normalized === 'DATE' ? normalized : 'STRING';
   }
 
-  private normalizeRounding(value: unknown): FileWriteRounding {
-    const normalized = String(value || 'HALF_UP').toUpperCase();
-    return normalized === 'HALF_EVEN' || normalized === 'DOWN' ? normalized : 'HALF_UP';
+  // Passthrough: normaliza a mayusculas sin colapsar modos desconocidos (el backend valida y hace fail-safe).
+  private normalizeRounding(value: unknown): string {
+    return String(value ?? '').trim().toUpperCase();
   }
 
   private hydrateColumns(raw: unknown): FileWriteColumnDraft[] {
@@ -197,7 +202,7 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
         field: String(item.field || ''),
         ...(item.type ? { type: this.normalizeColumnType(item.type) } : {}),
         ...(item.format != null ? { format: String(item.format) } : {}),
-        ...(item.rounding != null ? { rounding: this.normalizeRounding(item.rounding) } : {}),
+        ...(this.normalizeRounding(item.rounding) ? { rounding: this.normalizeRounding(item.rounding) } : {}),
         ...(item.length != null ? { length: String(item.length) } : {}),
         ...(item.align === 'right' ? { align: 'right' as const } : {}),
         ...(item.pad != null ? { pad: String(item.pad) } : {}),

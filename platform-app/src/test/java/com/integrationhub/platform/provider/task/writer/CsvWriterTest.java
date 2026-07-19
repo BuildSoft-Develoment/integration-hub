@@ -61,6 +61,19 @@ class CsvWriterTest {
     }
 
     @Test
+    void numberFormattingFailsSafeOnUnnecessaryRounding() throws Exception {
+        var config = Map.<String, Object>of("layout", Map.of("detail", Map.of(
+                "columns", List.of(Map.of("field", "monto", "type", "NUMBER", "format", "0.00", "rounding", "UNNECESSARY")))));
+        var out = new ByteArrayOutputStream();
+        try (var session = new CsvWriter().open(out, config)) {
+            // UNNECESSARY sobre un valor que requiere redondeo lanza ArithmeticException en DecimalFormat;
+            // el formatter es fail-safe -> cae al valor crudo (1000.505), nunca aborta la escritura del archivo.
+            session.writeDetail(List.of(new ReadRecord(Map.of("monto", "1000.505"))));
+        }
+        assertEquals("1000.505\n", out.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
     void writesHeaderDetailTrailerWithRfc4180Quoting() throws Exception {
         var out = new ByteArrayOutputStream();
         var writer = new CsvWriter();

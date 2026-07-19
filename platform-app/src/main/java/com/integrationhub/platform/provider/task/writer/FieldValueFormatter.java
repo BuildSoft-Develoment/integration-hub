@@ -56,7 +56,9 @@ final class FieldValueFormatter {
             var decimalFormat = new DecimalFormat(pattern, DecimalFormatSymbols.getInstance(Locale.ROOT));
             decimalFormat.setRoundingMode(roundingMode(rounding));
             return decimalFormat.format(number);
-        } catch (IllegalArgumentException badPattern) {
+        } catch (RuntimeException fallback) {
+            // Fail-safe (igual que formatDate): patron invalido (IllegalArgumentException) o rounding UNNECESSARY
+            // sobre un valor que requiere redondeo (ArithmeticException) -> valor crudo, nunca aborta la escritura.
             return number.toPlainString();
         }
     }

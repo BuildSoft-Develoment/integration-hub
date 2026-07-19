@@ -75,6 +75,9 @@
               <mat-option value="HALF_UP">HALF_UP</mat-option>
               <mat-option value="HALF_EVEN">HALF_EVEN</mat-option>
               <mat-option value="DOWN">DOWN</mat-option>
+              @if (column.rounding && column.rounding !== 'HALF_UP' && column.rounding !== 'HALF_EVEN' && column.rounding !== 'DOWN') {
+                <mat-option [value]="column.rounding">{{ column.rounding }}</mat-option>
+              }
             </mat-select>
           </mat-form-field>
         }
