@@ -1,0 +1,137 @@
+<div class="task-form-stack ih-compact-section">
+  <ih-process-task-runtime-panel
+    [task]="task()"
+    [tasks]="tasks()"
+    [draft]="draft()"
+    [readonly]="readonly()"
+    (runtimeChange)="updateDraft($event)"
+  />
+
+  <div class="task-grid">
+    <mat-form-field>
+      <mat-label>{{ i18n.t('ui.write.format') }}</mat-label>
+      <mat-select [disabled]="readonly()" [ngModel]="draft().format" (ngModelChange)="updateDraft({ format: $event })">
+        <mat-option value="CSV">CSV</mat-option>
+        <mat-option value="TXT">TXT ({{ i18n.t('ui.write.fixedWidth') }})</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field>
+      <mat-label>{{ i18n.t('ui.encoding') }}</mat-label>
+      <input matInput [disabled]="readonly()" [ngModel]="draft().encoding" (ngModelChange)="updateDraft({ encoding: $event })" />
+    </mat-form-field>
+
+    <mat-form-field>
+      <mat-label>{{ i18n.t('ui.write.lineEnding') }}</mat-label>
+      <mat-select [disabled]="readonly()" [ngModel]="draft().lineEnding" (ngModelChange)="updateDraft({ lineEnding: $event })">
+        <mat-option value="LF">LF</mat-option>
+        <mat-option value="CRLF">CRLF</mat-option>
+      </mat-select>
+    </mat-form-field>
+
+    @if (draft().format === 'CSV') {
+      <mat-form-field>
+        <mat-label>{{ i18n.t('ui.delimiter') }}</mat-label>
+        <input matInput [disabled]="readonly()" [ngModel]="draft().delimiter" (ngModelChange)="updateDraft({ delimiter: $event })" />
+      </mat-form-field>
+    }
+
+    <mat-form-field>
+      <mat-label>{{ i18n.t('ui.compress.archiveNameTemplate') }}</mat-label>
+      <input matInput [disabled]="readonly()" [ngModel]="draft().archiveNameTemplate" (ngModelChange)="updateDraft({ archiveNameTemplate: $event })" placeholder="export-${_processExecutionId}.csv" />
+    </mat-form-field>
+  </div>
+
+  <!-- Columnas de detalle -->
+  <div class="task-section">
+    <div class="task-section-header">
+      {{ i18n.t('ui.write.columns') }}
+      <button mat-stroked-button type="button" [disabled]="readonly()" (click)="addColumn()">{{ i18n.t('common.add') }}</button>
+    </div>
+    @for (column of draft().columns; track $index) {
+      <div class="cell-row">
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.write.field') }}</mat-label>
+          <input matInput [disabled]="readonly()" [ngModel]="column.field" (ngModelChange)="updateColumn($index, { field: $event })" />
+        </mat-form-field>
+        @if (isTxt()) {
+          <mat-form-field>
+            <mat-label>{{ i18n.t('ui.write.length') }}</mat-label>
+            <input matInput type="number" [disabled]="readonly()" [ngModel]="column.length" (ngModelChange)="updateColumn($index, { length: $event })" />
+          </mat-form-field>
+          <mat-form-field>
+            <mat-label>{{ i18n.t('ui.write.align') }}</mat-label>
+            <mat-select [disabled]="readonly()" [ngModel]="column.align || 'left'" (ngModelChange)="updateColumn($index, { align: $event })">
+              <mat-option value="left">left</mat-option>
+              <mat-option value="right">right</mat-option>
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field>
+            <mat-label>{{ i18n.t('ui.write.pad') }}</mat-label>
+            <input matInput maxlength="1" [disabled]="readonly()" [ngModel]="column.pad" (ngModelChange)="updateColumn($index, { pad: $event })" />
+          </mat-form-field>
+        }
+        <button mat-stroked-button type="button" [disabled]="readonly()" (click)="removeColumn($index)">✕</button>
+      </div>
+    }
+  </div>
+
+  <!-- Cabecera + trailer (misma estructura de celdas) -->
+  @for (section of ['header', 'trailer']; track section) {
+    <div class="task-section">
+      <div class="task-section-header">
+        {{ i18n.t(section === 'header' ? 'ui.write.header' : 'ui.write.trailer') }}
+        <button mat-stroked-button type="button" [disabled]="readonly()" (click)="addCell($any(section))">{{ i18n.t('common.add') }}</button>
+      </div>
+      @for (cell of cells($any(section)); track $index) {
+        <div class="cell-row">
+          <mat-form-field>
+            <mat-label>{{ i18n.t('ui.write.cellKind') }}</mat-label>
+            <mat-select [disabled]="readonly()" [ngModel]="cell.kind" (ngModelChange)="updateCell($any(section), $index, { kind: $event })">
+              <mat-option value="value">{{ i18n.t('ui.write.kindValue') }}</mat-option>
+              <mat-option value="metadata">{{ i18n.t('ui.write.kindMetadata') }}</mat-option>
+              <mat-option value="aggregate">{{ i18n.t('ui.write.kindAggregate') }}</mat-option>
+            </mat-select>
+          </mat-form-field>
+          @if (cell.kind === 'value') {
+            <mat-form-field>
+              <mat-label>{{ i18n.t('ui.write.constant') }}</mat-label>
+              <input matInput [disabled]="readonly()" [ngModel]="cell.value" (ngModelChange)="updateCell($any(section), $index, { value: $event })" />
+            </mat-form-field>
+          }
+          @if (cell.kind === 'metadata') {
+            <mat-form-field>
+              <mat-label>Metadata</mat-label>
+              <mat-select [disabled]="readonly()" [ngModel]="cell.metadata || '_processExecutionId'" (ngModelChange)="updateCell($any(section), $index, { metadata: $event })">
+                <mat-option value="_processExecutionId">_processExecutionId</mat-option>
+                <mat-option value="_taskDefinitionId">_taskDefinitionId</mat-option>
+              </mat-select>
+            </mat-form-field>
+          }
+          @if (cell.kind === 'aggregate') {
+            <mat-form-field>
+              <mat-label>{{ i18n.t('ui.write.aggregate') }}</mat-label>
+              <mat-select [disabled]="readonly()" [ngModel]="cell.aggregate || 'count'" (ngModelChange)="updateCell($any(section), $index, { aggregate: $event })">
+                <mat-option value="count">count</mat-option>
+                <mat-option value="sum">sum</mat-option>
+              </mat-select>
+            </mat-form-field>
+            @if (cell.aggregate === 'sum') {
+              <mat-form-field>
+                <mat-label>{{ i18n.t('ui.write.field') }}</mat-label>
+                <input matInput [disabled]="readonly()" [ngModel]="cell.field" (ngModelChange)="updateCell($any(section), $index, { field: $event })" />
+              </mat-form-field>
+            }
+          }
+          @if (isTxt()) {
+            <mat-form-field>
+              <mat-label>{{ i18n.t('ui.write.length') }}</mat-label>
+              <input matInput type="number" [disabled]="readonly()" [ngModel]="cell.length" (ngModelChange)="updateCell($any(section), $index, { length: $event })" />
+            </mat-form-field>
+          }
+          <button mat-stroked-button type="button" [disabled]="readonly()" (click)="removeCell($any(section), $index)">✕</button>
+        </div>
+      }
+    </div>
+  }
+</div>

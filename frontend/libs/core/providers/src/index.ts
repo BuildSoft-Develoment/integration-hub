@@ -33,6 +33,7 @@ export * from './lib/implementations/tasks/rest-call-task.provider';
 export * from './lib/implementations/tasks/notification-task.provider';
 export * from './lib/implementations/tasks/file-compress-task.provider';
 export * from './lib/implementations/tasks/file-deliver-task.provider';
+export * from './lib/implementations/tasks/file-write-task.provider';
 export * from './lib/implementations/tasks/remote-schema-task.provider';
 // --- Vertical mensajeria de pagos (spec 008, ADR-009) ---
 export * from './lib/tasks/process-task-form-registry';

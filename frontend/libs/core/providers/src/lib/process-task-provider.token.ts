@@ -6,6 +6,7 @@ import { DbWriteTaskProvider } from './implementations/tasks/db-write-task.provi
 import { FileCompressTaskProvider } from './implementations/tasks/file-compress-task.provider';
 import { FileDeliverTaskProvider } from './implementations/tasks/file-deliver-task.provider';
 import { FileReadTaskProvider } from './implementations/tasks/file-read-task.provider';
+import { FileWriteTaskProvider } from './implementations/tasks/file-write-task.provider';
 import { NotificationTaskProvider } from './implementations/tasks/notification-task.provider';
 import { RestCallTaskProvider } from './implementations/tasks/rest-call-task.provider';
 
@@ -22,6 +23,7 @@ const PROCESS_TASK_PROVIDER_TYPES: ReadonlyArray<Type<ProcessTaskProvider<unknow
   NotificationTaskProvider,
   FileCompressTaskProvider,
   FileDeliverTaskProvider,
+  FileWriteTaskProvider,
 ];
 
 export function provideProcessTaskProviders(): Provider[] {
