@@ -5,7 +5,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [ADR-015 Backend task async broker execution](ADR-015-backend-task-async-broker-execution.md)
-- Siguiente: [Indice docs](../../README.md)
+- Siguiente: [ADR-017 Conexion de salida unificada (FILE_DELIVER y MT101_PAY/STATUS)](ADR-017-conexion-salida-unificada-file-deliver-mt101-pay.md)
 <!-- nav-guided:end -->
 
 ## Estado
