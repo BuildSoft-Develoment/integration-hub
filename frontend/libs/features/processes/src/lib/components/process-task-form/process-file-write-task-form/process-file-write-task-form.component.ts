@@ -10,10 +10,13 @@ import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/se
 import {
   FileWriteCellDraft,
   FileWriteColumnDraft,
+  FileWriteSourceMode,
+  FileWriteTableSourceDraft,
   FileWriteTaskDraft,
   ProcessTaskFormBridgeService,
 } from '@integration-hub/core/providers';
-import { ProcessTaskFormModel } from '../../../models/process.models';
+import { COMMON_ENCODINGS, SuggestInputComponent } from '@integration-hub/shared/ui';
+import { ConnectionRef, ProcessTaskFormModel } from '../../../models/process.models';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
 type CellSection = 'header' | 'trailer';
@@ -28,6 +31,7 @@ type CellSection = 'header' | 'trailer';
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    SuggestInputComponent,
     ProcessTaskRuntimePanelComponent,
   ],
   templateUrl: './process-file-write-task-form.component.html',
@@ -40,6 +44,7 @@ export class ProcessFileWriteTaskFormComponent {
 
   readonly task = input.required<ProcessTaskFormModel>();
   readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
+  readonly connections = input<readonly ConnectionRef[]>([]);
   readonly readonly = input(false);
 
   readonly draft = computed<FileWriteTaskDraft>(() => this.manager.hydrateDraft<FileWriteTaskDraft>(this.task()) ?? {
@@ -53,9 +58,26 @@ export class ProcessFileWriteTaskFormComponent {
     header: [],
     trailer: [],
     archiveNameTemplate: '',
+    sourceMode: 'records',
+    tableSource: { table: '', connectionRef: '', orderBy: 'id', payloadColumn: '', batchSize: '' },
   });
 
+  // 008: sugerencias del combo de codificacion (editable), consistente con los readers.
+  readonly encodings = COMMON_ENCODINGS;
+  // ADR-016: FILE_WRITE es once-task -> el selector de modo de ejecucion se restringe a 'once' (evita ofrecer
+  // batch/per-record, que toTaskPatch igual fuerza a 'once' y rebotarian).
+  readonly executionModes = ['once'] as const;
+
   readonly isTxt = computed(() => this.draft().format === 'TXT');
+  readonly isTableSource = computed(() => this.draft().sourceMode === 'table');
+
+  setSourceMode(mode: FileWriteSourceMode): void {
+    this.updateDraft({ sourceMode: mode });
+  }
+
+  updateTableSource(patch: Partial<FileWriteTableSourceDraft>): void {
+    this.updateDraft({ tableSource: { ...this.draft().tableSource, ...patch } });
+  }
 
   updateDraft(patch: Partial<FileWriteTaskDraft>): void {
     this.bridge.emit(this.manager.toTaskPatch(this.task().taskType, { ...this.draft(), ...patch }));

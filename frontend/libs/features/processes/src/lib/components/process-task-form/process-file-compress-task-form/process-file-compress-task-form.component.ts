@@ -34,6 +34,8 @@ export class ProcessFileCompressTaskFormComponent {
   readonly task = input.required<ProcessTaskFormModel>();
   readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
   readonly readonly = input(false);
+  // ADR-016: once-task -> el selector de modo de ejecucion se restringe a 'once' (toTaskPatch igual lo fuerza).
+  readonly executionModes = ['once'] as const;
 
   readonly draft = computed<FileCompressTaskDraft>(() => this.manager.hydrateDraft<FileCompressTaskDraft>(this.task()) ?? {
     taskRef: this.task().clientId,

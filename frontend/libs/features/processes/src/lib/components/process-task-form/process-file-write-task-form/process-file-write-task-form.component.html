@@ -4,8 +4,61 @@
     [tasks]="tasks()"
     [draft]="draft()"
     [readonly]="readonly()"
+    [executionModes]="executionModes"
+    [showInput]="!isTableSource()"
     (runtimeChange)="updateDraft($event)"
   />
+
+  <!-- Fuente de datos (ADR-004/ADR-016): de dónde salen los registros a serializar. -->
+  <div class="task-section">
+    <div class="task-section-header">{{ i18n.t('ui.write.dataSource') }}</div>
+    <div class="task-grid">
+      <mat-form-field>
+        <mat-label>{{ i18n.t('ui.write.sourceMode') }}</mat-label>
+        <mat-select [disabled]="readonly()" [ngModel]="draft().sourceMode" (ngModelChange)="setSourceMode($event)">
+          <mat-option value="records">{{ i18n.t('ui.write.sourceModeRecords') }}</mat-option>
+          <mat-option value="table">{{ i18n.t('ui.write.sourceModeTable') }}</mat-option>
+        </mat-select>
+        <mat-hint>{{ isTableSource() ? i18n.t('ui.write.sourceTableHint') : i18n.t('ui.write.sourceRecordsHint') }}</mat-hint>
+      </mat-form-field>
+    </div>
+
+    @if (isTableSource()) {
+      <div class="task-grid">
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.connection') }}</mat-label>
+          <mat-select [disabled]="readonly()" [ngModel]="draft().tableSource.connectionRef" (ngModelChange)="updateTableSource({ connectionRef: $event })">
+            <mat-option value="">{{ i18n.t('ui.write.defaultConnection') }}</mat-option>
+            @for (conn of connections(); track conn.id) {
+              <mat-option [value]="conn.name">{{ conn.name }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.write.table') }}</mat-label>
+          <input matInput [disabled]="readonly()" [ngModel]="draft().tableSource.table" (ngModelChange)="updateTableSource({ table: $event })" placeholder="staging_record" />
+        </mat-form-field>
+
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.write.orderBy') }}</mat-label>
+          <input matInput [disabled]="readonly()" [ngModel]="draft().tableSource.orderBy" (ngModelChange)="updateTableSource({ orderBy: $event })" placeholder="id" />
+          <mat-hint>{{ i18n.t('ui.write.orderByHint') }}</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.write.payloadColumn') }}</mat-label>
+          <input matInput [disabled]="readonly()" [ngModel]="draft().tableSource.payloadColumn" (ngModelChange)="updateTableSource({ payloadColumn: $event })" placeholder="payload_json" />
+          <mat-hint>{{ i18n.t('ui.write.payloadColumnHint') }}</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.write.batchSize') }}</mat-label>
+          <input matInput type="number" min="1" [disabled]="readonly()" [ngModel]="draft().tableSource.batchSize" (ngModelChange)="updateTableSource({ batchSize: $event })" placeholder="5000" />
+        </mat-form-field>
+      </div>
+    }
+  </div>
 
   <div class="task-grid">
     <mat-form-field>
@@ -16,10 +69,13 @@
       </mat-select>
     </mat-form-field>
 
-    <mat-form-field>
-      <mat-label>{{ i18n.t('ui.encoding') }}</mat-label>
-      <input matInput [disabled]="readonly()" [ngModel]="draft().encoding" (ngModelChange)="updateDraft({ encoding: $event })" />
-    </mat-form-field>
+    <ih-suggest-input
+      [label]="i18n.t('ui.encoding')"
+      [hint]="i18n.t('ui.encodingHint')"
+      [suggestions]="encodings"
+      [disabled]="readonly()"
+      [value]="draft().encoding"
+      (valueChange)="updateDraft({ encoding: $event })" />
 
     <mat-form-field>
       <mat-label>{{ i18n.t('ui.write.lineEnding') }}</mat-label>
@@ -154,6 +210,17 @@
             <mat-form-field>
               <mat-label>{{ i18n.t('ui.write.length') }}</mat-label>
               <input matInput type="number" [disabled]="readonly()" [ngModel]="cell.length" (ngModelChange)="updateCell($any(section), $index, { length: $event })" />
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>{{ i18n.t('ui.write.align') }}</mat-label>
+              <mat-select [disabled]="readonly()" [ngModel]="cell.align || 'left'" (ngModelChange)="updateCell($any(section), $index, { align: $event })">
+                <mat-option value="left">left</mat-option>
+                <mat-option value="right">right</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field>
+              <mat-label>{{ i18n.t('ui.write.pad') }}</mat-label>
+              <input matInput maxlength="1" [disabled]="readonly()" [ngModel]="cell.pad" (ngModelChange)="updateCell($any(section), $index, { pad: $event })" />
             </mat-form-field>
           }
           <button mat-stroked-button type="button" [disabled]="readonly()" (click)="removeCell($any(section), $index)">✕</button>

@@ -33,6 +33,21 @@ export interface FileWriteCellDraft {
   pad?: string;
 }
 
+// ADR-016 / ADR-004: modo de origen de los datos que se serializan.
+//  - 'records': la salida (en memoria) de una tarea previa (X -> FILE_WRITE); la tarea de origen se elige en el
+//    runtime panel (input.sourceTaskRef). Volumenes chicos/medianos.
+//  - 'table': lectura DIRECTA de una tabla con paginacion keyset (input.sourceOutput='table'); escala a >1M.
+export type FileWriteSourceMode = 'records' | 'table';
+
+/** Config del modo 'table' (se serializa bajo `input`). */
+export interface FileWriteTableSourceDraft {
+  table: string;
+  connectionRef: string;
+  orderBy: string;
+  payloadColumn: string;
+  batchSize: string;
+}
+
 export interface FileWriteTaskDraft extends ProcessTaskRuntimeDraft {
   format: FileWriteFormat;
   encoding: string;
@@ -42,6 +57,8 @@ export interface FileWriteTaskDraft extends ProcessTaskRuntimeDraft {
   header: FileWriteCellDraft[];
   trailer: FileWriteCellDraft[];
   archiveNameTemplate: string;
+  sourceMode: FileWriteSourceMode;
+  tableSource: FileWriteTableSourceDraft;
 }
 
 @Injectable()
@@ -65,7 +82,13 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       header: [],
       trailer: [],
       archiveNameTemplate: '',
+      sourceMode: 'records',
+      tableSource: this.defaultTableSource(),
     };
+  }
+
+  private defaultTableSource(): FileWriteTableSourceDraft {
+    return { table: '', connectionRef: '', orderBy: 'id', payloadColumn: '', batchSize: '' };
   }
 
   hydrateDraft(task: ProcessTaskFormModel): FileWriteTaskDraft {
@@ -82,6 +105,26 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       header: this.hydrateCells(layout.header),
       trailer: this.hydrateCells(layout.trailer),
       archiveNameTemplate: String(config.archiveNameTemplate || ''),
+      ...this.hydrateSource(config.input),
+    };
+  }
+
+  // Deriva el modo de origen y la config de tabla del bloque `input` crudo (hydrateRuntime solo conserva input si
+  // hay sourceTaskRef, y no arrastra cursor/payloadColumn; para el modo tabla standalone se lee aqui directo).
+  private hydrateSource(rawInput: unknown): Pick<FileWriteTaskDraft, 'sourceMode' | 'tableSource'> {
+    const input = rawInput && typeof rawInput === 'object' && !Array.isArray(rawInput) ? (rawInput as any) : {};
+    const sourceOutput = String(input.sourceOutput || '').trim().toLowerCase();
+    const isTable = sourceOutput === 'table' || sourceOutput === 'targettable';
+    const cursor = input.cursor && typeof input.cursor === 'object' ? input.cursor : {};
+    return {
+      sourceMode: isTable ? 'table' : 'records',
+      tableSource: {
+        table: String(input.table || ''),
+        connectionRef: String(input.connectionRef || ''),
+        orderBy: String(cursor.orderBy || 'id'),
+        payloadColumn: String(input.payloadColumn || ''),
+        batchSize: input.batchSize != null && String(input.batchSize).trim() ? String(input.batchSize) : '',
+      },
     };
   }
 
@@ -119,9 +162,22 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
     );
     // Backend FILE_WRITE es once-task (pagina la tabla el mismo); nunca batch/per-record.
     payload.executionMode = 'once';
-    // Fuente-tabla: el backend exige cursor.orderBy (paginacion keyset). Default 'id' (PK de staging_record).
-    if (payload.input && payload.input.sourceOutput === 'table' && !payload.input.cursor) {
-      payload.input.cursor = { orderBy: 'id' };
+    // ADR-016 / ADR-004: fuente de datos.
+    if (draft.sourceMode === 'table') {
+      // Modo tabla (directa, keyset). El motor (TaskInputResolver) exige input.source='task-output' e
+      // input.sourceOutput='table'; FILE_WRITE pagina la tabla el mismo (cursor.orderBy requerido). Se OMITE
+      // cualquier input basado en sourceTaskRef del runtime panel: en modo tabla no hay tarea de origen.
+      const ts = draft.tableSource;
+      const batchSize = this.numOrUndefined(ts.batchSize);
+      payload.input = {
+        source: 'task-output',
+        sourceOutput: 'table',
+        ...(ts.table?.trim() ? { table: ts.table.trim() } : {}),
+        ...(ts.connectionRef?.trim() ? { connectionRef: ts.connectionRef.trim() } : {}),
+        cursor: { orderBy: ts.orderBy?.trim() || 'id' },
+        ...(ts.payloadColumn?.trim() ? { payloadColumn: ts.payloadColumn.trim() } : {}),
+        ...(batchSize != null ? { batchSize } : {}),
+      };
     }
     return { configurationJson: this.toPrettyJson(payload) };
   }

@@ -47,4 +47,63 @@ describe('FileWriteTaskProvider', () => {
 
     expect(rehydrated.columns[0]).toMatchObject({ field: 'monto', type: 'NUMBER', format: '0.00', rounding: 'HALF_EVEN' });
   });
+
+  // --- ADR-004: fuente de datos (records vs table) ---
+
+  it('modo records (default) no escribe un input de tabla', () => {
+    const config = JSON.parse(provider.toTaskPatch(provider.createDraft()).configurationJson as string);
+    expect(config.input?.sourceOutput).not.toBe('table');
+  });
+
+  it('serializa el modo tabla a input con source=task-output, sourceOutput=table y cursor.orderBy', () => {
+    const draft = provider.createDraft();
+    draft.sourceMode = 'table';
+    draft.tableSource = { table: 'staging_record', connectionRef: 'bank-db', orderBy: 'record_id', payloadColumn: 'payload_json', batchSize: '2000' };
+
+    const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+
+    // El motor (TaskInputResolver) exige source=task-output; FILE_WRITE lee sourceOutput=table + cursor.orderBy.
+    expect(config.input).toMatchObject({
+      source: 'task-output',
+      sourceOutput: 'table',
+      table: 'staging_record',
+      connectionRef: 'bank-db',
+      cursor: { orderBy: 'record_id' },
+      payloadColumn: 'payload_json',
+      batchSize: 2000,
+    });
+  });
+
+  it('modo tabla: cursor.orderBy default a "id" cuando esta vacio', () => {
+    const draft = provider.createDraft();
+    draft.sourceMode = 'table';
+    draft.tableSource = { table: 't', connectionRef: '', orderBy: '', payloadColumn: '', batchSize: '' };
+
+    const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+
+    expect(config.input.cursor.orderBy).toBe('id');
+    expect(config.input.connectionRef).toBeUndefined(); // vacio = datasource plataforma, no se emite
+  });
+
+  it('round-trips el modo tabla (sourceMode + tableSource)', () => {
+    const draft = provider.createDraft();
+    draft.sourceMode = 'table';
+    draft.tableSource = { table: 'staging_record', connectionRef: '', orderBy: 'id', payloadColumn: 'payload_json', batchSize: '' };
+
+    const rehydrated = roundTrip(draft);
+
+    expect(rehydrated.sourceMode).toBe('table');
+    expect(rehydrated.tableSource).toMatchObject({ table: 'staging_record', orderBy: 'id', payloadColumn: 'payload_json' });
+  });
+
+  it('round-trips align/pad en una celda de cabecera TXT (simetria con el detalle)', () => {
+    const draft = provider.createDraft();
+    draft.format = 'TXT';
+    draft.columns = [{ field: 'a', length: '10' }];
+    draft.header = [{ kind: 'value', value: 'H', length: '10', align: 'right', pad: '0' }];
+
+    const rehydrated = roundTrip(draft);
+
+    expect(rehydrated.header[0]).toMatchObject({ kind: 'value', length: '10', align: 'right', pad: '0' });
+  });
 });
