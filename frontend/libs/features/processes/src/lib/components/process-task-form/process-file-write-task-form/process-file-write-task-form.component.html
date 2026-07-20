@@ -27,18 +27,30 @@
       <div class="task-grid">
         <mat-form-field>
           <mat-label>{{ i18n.t('ui.connection') }}</mat-label>
-          <mat-select [disabled]="readonly()" [ngModel]="draft().tableSource.connectionRef" (ngModelChange)="updateTableSource({ connectionRef: $event })">
+          <mat-select [disabled]="readonly()" [ngModel]="draft().tableSource.connectionRef" (ngModelChange)="handleConnectionChange($event)">
             <mat-option value="">{{ i18n.t('ui.write.defaultConnection') }}</mat-option>
             @for (conn of connections(); track conn.id) {
-              <mat-option [value]="conn.name">{{ conn.name }}</mat-option>
+              <mat-option [value]="conn.name">{{ conn.name }} ({{ conn.connectionType }})</mat-option>
             }
           </mat-select>
         </mat-form-field>
 
-        <mat-form-field>
-          <mat-label>{{ i18n.t('ui.write.table') }}</mat-label>
-          <input matInput [disabled]="readonly()" [ngModel]="draft().tableSource.table" (ngModelChange)="updateTableSource({ table: $event })" placeholder="staging_record" />
-        </mat-form-field>
+        @if (selectedConnection()) {
+          <!-- Con conexion: autocomplete de tablas reales (patron DB_WRITE). -->
+          <ih-process-db-write-table-selector
+            [disabled]="readonly()"
+            [query]="tableQuery()"
+            [tables]="tables()"
+            (queryChange)="onTableQuery($event)"
+            (tableSelect)="onTablePick($event)"
+          />
+        } @else {
+          <!-- Datasource de la plataforma (sin conexion nombrada): texto libre (ej. staging_record). -->
+          <mat-form-field>
+            <mat-label>{{ i18n.t('ui.write.table') }}</mat-label>
+            <input matInput [disabled]="readonly()" [ngModel]="draft().tableSource.table" (ngModelChange)="updateTableSource({ table: $event })" placeholder="staging_record" />
+          </mat-form-field>
+        }
 
         <mat-form-field>
           <mat-label>{{ i18n.t('ui.write.orderBy') }}</mat-label>
@@ -99,18 +111,21 @@
   </div>
 
   <!-- Columnas de detalle -->
-  <div class="task-section">
+  <div class="task-section detail-columns">
     <div class="task-section-header">
       {{ i18n.t('ui.write.columns') }}
       <button mat-stroked-button type="button" [disabled]="readonly()" (click)="addColumn()">{{ i18n.t('common.add') }}</button>
     </div>
     @for (column of draft().columns; track $index) {
-      <div class="cell-row">
-        <mat-form-field>
-          <mat-label>{{ i18n.t('ui.write.field') }}</mat-label>
-          <input matInput [disabled]="readonly()" [ngModel]="column.field" (ngModelChange)="updateColumn($index, { field: $event })" />
-        </mat-form-field>
-        <mat-form-field>
+      <div class="detail-row" [class.detail-row--txt]="isTxt()">
+        <ih-suggest-input
+          class="dt-field"
+          [label]="i18n.t('ui.write.field')"
+          [suggestions]="fieldSuggestions()"
+          [disabled]="readonly()"
+          [value]="column.field"
+          (valueChange)="updateColumn($index, { field: $event })" />
+        <mat-form-field class="dt-type">
           <mat-label>{{ i18n.t('ui.write.type') }}</mat-label>
           <mat-select [disabled]="readonly()" [ngModel]="column.type || 'STRING'" (ngModelChange)="updateColumn($index, { type: $event })">
             <mat-option value="STRING">STRING</mat-option>
@@ -119,13 +134,13 @@
           </mat-select>
         </mat-form-field>
         @if (column.type && column.type !== 'STRING') {
-          <mat-form-field>
+          <mat-form-field class="dt-pattern">
             <mat-label>{{ i18n.t('ui.write.pattern') }}</mat-label>
             <input matInput [disabled]="readonly()" [ngModel]="column.format" (ngModelChange)="updateColumn($index, { format: $event })" [placeholder]="column.type === 'DATE' ? 'yyyyMMdd' : '0.00'" />
           </mat-form-field>
         }
         @if (column.type === 'NUMBER') {
-          <mat-form-field>
+          <mat-form-field class="dt-rounding">
             <mat-label>{{ i18n.t('ui.write.rounding') }}</mat-label>
             <mat-select [disabled]="readonly()" [ngModel]="column.rounding || 'HALF_UP'" (ngModelChange)="updateColumn($index, { rounding: $event })">
               <mat-option value="HALF_UP">HALF_UP</mat-option>
@@ -138,23 +153,23 @@
           </mat-form-field>
         }
         @if (isTxt()) {
-          <mat-form-field>
+          <mat-form-field class="dt-length">
             <mat-label>{{ i18n.t('ui.write.length') }}</mat-label>
             <input matInput type="number" [disabled]="readonly()" [ngModel]="column.length" (ngModelChange)="updateColumn($index, { length: $event })" />
           </mat-form-field>
-          <mat-form-field>
+          <mat-form-field class="dt-align">
             <mat-label>{{ i18n.t('ui.write.align') }}</mat-label>
             <mat-select [disabled]="readonly()" [ngModel]="column.align || 'left'" (ngModelChange)="updateColumn($index, { align: $event })">
               <mat-option value="left">left</mat-option>
               <mat-option value="right">right</mat-option>
             </mat-select>
           </mat-form-field>
-          <mat-form-field>
+          <mat-form-field class="dt-pad">
             <mat-label>{{ i18n.t('ui.write.pad') }}</mat-label>
             <input matInput maxlength="1" [disabled]="readonly()" [ngModel]="column.pad" (ngModelChange)="updateColumn($index, { pad: $event })" />
           </mat-form-field>
         }
-        <button mat-stroked-button type="button" [disabled]="readonly()" (click)="removeColumn($index)">✕</button>
+        <button class="dt-rm" mat-stroked-button type="button" [disabled]="readonly()" (click)="removeColumn($index)">✕</button>
       </div>
     }
   </div>

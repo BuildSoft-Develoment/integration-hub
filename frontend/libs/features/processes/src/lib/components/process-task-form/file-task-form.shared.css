@@ -49,6 +49,42 @@
   align-items: center;
   min-height: 3.25rem;
 }
+/* FILE_WRITE detalle: grid de columnas FIJAS -> los campos de TODAS las filas alinean vertical (a diferencia
+   de .cell-row auto-fit, que empaqueta distinto cada fila segun cuantos campos tenga: STRING=2, NUMBER/TXT=7).
+   Cada sub-campo tiene su grid-column fijo; los @if ausentes dejan su track vacio y los presentes siguen alineados. */
+.detail-columns {
+  overflow-x: auto;
+}
+.detail-row {
+  display: grid;
+  grid-template-columns:
+    minmax(140px, 2fr)   /* campo */
+    minmax(96px, 1fr)    /* tipo */
+    minmax(104px, 1.2fr) /* patron */
+    minmax(104px, 1.2fr) /* redondeo */
+    auto;                /* ✕ */
+  gap: 0.6rem;
+  align-items: center;
+}
+.detail-row--txt {
+  grid-template-columns:
+    minmax(140px, 2fr)   /* campo */
+    minmax(96px, 1fr)    /* tipo */
+    minmax(104px, 1.2fr) /* patron */
+    minmax(104px, 1.2fr) /* redondeo */
+    minmax(70px, 0.8fr)  /* ancho */
+    minmax(80px, 0.9fr)  /* alineacion */
+    minmax(58px, 0.7fr)  /* relleno */
+    auto;                /* ✕ */
+}
+.dt-field { grid-column: 1; min-width: 0; }
+.dt-type { grid-column: 2; }
+.dt-pattern { grid-column: 3; }
+.dt-rounding { grid-column: 4; }
+.dt-length { grid-column: 5; }
+.dt-align { grid-column: 6; }
+.dt-pad { grid-column: 7; }
+.dt-rm { grid-column: -1; justify-self: end; }
 /* Campos que deben ocupar toda la fila de la grilla. */
 .full,
 .full-width {

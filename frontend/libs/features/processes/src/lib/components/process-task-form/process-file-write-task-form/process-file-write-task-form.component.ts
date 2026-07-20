@@ -1,6 +1,6 @@
 // @trace ADR-016 (procesos: formulario de la tarea FILE_WRITE - layout header/detalle/trailer)
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, input } from '@angular/core';
+import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -16,7 +16,11 @@ import {
   ProcessTaskFormBridgeService,
 } from '@integration-hub/core/providers';
 import { COMMON_ENCODINGS, SuggestInputComponent } from '@integration-hub/shared/ui';
+import { firstValueFrom } from 'rxjs';
 import { ConnectionRef, ProcessTaskFormModel } from '../../../models/process.models';
+import { ProcessApiService } from '../../../api/process-api.service';
+import { DbWriteColumnRef, DbWriteTableRef } from '../../../models/process-db-write.models';
+import { ProcessDbWriteTableSelectorComponent } from '../process-db-write-table-selector/process-db-write-table-selector.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
 type CellSection = 'header' | 'trailer';
@@ -32,6 +36,7 @@ type CellSection = 'header' | 'trailer';
     MatInputModule,
     MatSelectModule,
     SuggestInputComponent,
+    ProcessDbWriteTableSelectorComponent,
     ProcessTaskRuntimePanelComponent,
   ],
   templateUrl: './process-file-write-task-form.component.html',
@@ -41,6 +46,7 @@ export class ProcessFileWriteTaskFormComponent {
   readonly i18n = inject(I18nService);
   private readonly manager = inject(ProcessTaskManagerService);
   private readonly bridge = inject(ProcessTaskFormBridgeService);
+  private readonly api = inject(ProcessApiService);
 
   readonly task = input.required<ProcessTaskFormModel>();
   readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
@@ -71,12 +77,102 @@ export class ProcessFileWriteTaskFormComponent {
   readonly isTxt = computed(() => this.draft().format === 'TXT');
   readonly isTableSource = computed(() => this.draft().sourceMode === 'table');
 
+  // --- introspeccion de la fuente-tabla (patron DB_WRITE): elegir la tabla por autocomplete y sugerir
+  //     las columnas REALES de la tabla en cada `field` del detalle ("alinear campos" con la fuente). ---
+  readonly tables = signal<readonly DbWriteTableRef[]>([]);
+  readonly columns = signal<readonly DbWriteColumnRef[]>([]);
+  // Texto del autocomplete (mientras se escribe/filtra); el valor COMMITEADO vive en draft.tableSource.table.
+  readonly tableQuery = signal('');
+
+  readonly selectedConnection = computed(() =>
+    this.connections().find((c) => c.name === this.draft().tableSource.connectionRef) ?? null,
+  );
+  // Sugerencias del `field` de cada columna de detalle = columnas reales de la tabla introspectada. Combo
+  // EDITABLE: si la fuente es un JSON por fila (payloadColumn) el usuario escribe las claves manualmente.
+  readonly fieldSuggestions = computed(() => this.columns().map((c) => c.name));
+
+  private lastTablesKey = '';
+  private lastColumnsKey = '';
+
+  constructor() {
+    // Sincroniza el texto del autocomplete con el valor commiteado (hidratacion / seleccion). NO se dispara al
+    // TIPEAR (tipear cambia tableQuery, no draft.table), asi que no pisa lo que el usuario escribe.
+    effect(() => {
+      const table = this.draft().tableSource.table;
+      untracked(() => {
+        if (this.tableQuery() !== table) this.tableQuery.set(table);
+      });
+    });
+    // Al cambiar la conexion (o entrar en modo tabla), recargar la lista de tablas del autocomplete.
+    effect(() => {
+      const connId = this.isTableSource() ? this.selectedConnection()?.id ?? null : null;
+      const key = String(connId ?? '');
+      if (key === this.lastTablesKey) return;
+      this.lastTablesKey = key;
+      untracked(() => {
+        this.tables.set([]);
+        if (connId != null) void this.loadTables(connId, '');
+      });
+    });
+    // Introspecciona columnas al cambiar conexion + tabla COMMITEADA (select/hidratacion), no al tipear.
+    effect(() => {
+      const connId = this.isTableSource() ? this.selectedConnection()?.id ?? null : null;
+      const table = this.draft().tableSource.table.trim();
+      const key = `${connId ?? 'none'}|${table}`;
+      if (key === this.lastColumnsKey) return;
+      this.lastColumnsKey = key;
+      untracked(() => {
+        if (connId != null && table) void this.loadColumns(connId, table);
+        else this.columns.set([]);
+      });
+    });
+  }
+
   setSourceMode(mode: FileWriteSourceMode): void {
     this.updateDraft({ sourceMode: mode });
   }
 
   updateTableSource(patch: Partial<FileWriteTableSourceDraft>): void {
     this.updateDraft({ tableSource: { ...this.draft().tableSource, ...patch } });
+  }
+
+  handleConnectionChange(connectionRef: string): void {
+    this.tables.set([]);
+    this.columns.set([]);
+    this.updateTableSource({ connectionRef });
+  }
+
+  // Autocomplete: al tipear filtra las tablas del server; NO commitea (evita introspeccionar columnas por tecla).
+  onTableQuery(query: string): void {
+    this.tableQuery.set(query);
+    const connId = this.selectedConnection()?.id;
+    if (connId != null) void this.loadTables(connId, String(query || '').trim());
+  }
+
+  // Al elegir una tabla del autocomplete se commitea el nombre CALIFICADO (schema.tabla) -> el effect carga columnas.
+  onTablePick(table: DbWriteTableRef): void {
+    this.updateTableSource({ table: table.qualifiedName });
+  }
+
+  private async loadTables(connectionId: number, query: string): Promise<void> {
+    // Introspeccion best-effort: si falla (rol insuficiente / conexion caida) se degrada a lista vacia
+    // (el autocomplete no ofrece nada, pero el form sigue usable con texto libre).
+    try {
+      this.tables.set(await firstValueFrom(this.api.listConnectionTables(connectionId, { query })));
+    } catch {
+      this.tables.set([]);
+    }
+  }
+
+  private async loadColumns(connectionId: number, qualifiedTable: string): Promise<void> {
+    const dot = qualifiedTable.lastIndexOf('.');
+    const schema = dot > 0 ? qualifiedTable.slice(0, dot) : undefined;
+    const table = dot > 0 ? qualifiedTable.slice(dot + 1) : qualifiedTable;
+    try {
+      this.columns.set(await firstValueFrom(this.api.listConnectionColumns(connectionId, { schema, table })));
+    } catch {
+      this.columns.set([]);
+    }
   }
 
   updateDraft(patch: Partial<FileWriteTaskDraft>): void {
