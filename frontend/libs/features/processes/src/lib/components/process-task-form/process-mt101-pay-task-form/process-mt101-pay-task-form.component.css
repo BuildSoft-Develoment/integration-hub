@@ -76,16 +76,6 @@
   resize: vertical;
 }
 
-.mt101-pay__notice {
-  margin: 0;
-  padding: 0.85rem 1rem;
-  border: 1px dashed var(--ih-border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--ih-surface-alt) 76%, transparent);
-  color: var(--ih-text-soft);
-  font-size: 0.86rem;
-}
-
 @media (max-width: 720px) {
   .mt101-pay__header,
   .mt101-pay__grid {

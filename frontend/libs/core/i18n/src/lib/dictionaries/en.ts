@@ -794,7 +794,6 @@ export const en = {
   'mt101Archive.encryptColumn': 'Encrypted column',
   'mt101Archive.encryptionSecretRef': 'Secret reference',
   'mt101Pay.transport': 'Transport',
-  'mt101Pay.transportNotImplementedFront': 'This transport is prepared for a later integration phase.',
   'mt101Pay.section.rest': 'REST',
   'mt101Pay.section.sftp': 'SFTP (bank)',
   'mt101Pay.section.idempotency': 'Idempotency',
