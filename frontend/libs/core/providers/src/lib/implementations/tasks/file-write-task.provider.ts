@@ -114,7 +114,11 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
   private hydrateSource(rawInput: unknown): Pick<FileWriteTaskDraft, 'sourceMode' | 'tableSource'> {
     const input = rawInput && typeof rawInput === 'object' && !Array.isArray(rawInput) ? (rawInput as any) : {};
     const sourceOutput = String(input.sourceOutput || '').trim().toLowerCase();
-    const isTable = sourceOutput === 'table' || sourceOutput === 'targettable';
+    // El modo 'table' de la UI es la tabla DIRECTA/standalone (sin tarea de origen). Un sourceOutput='table' CON
+    // sourceTaskRef es el caso "X produce una tabla" (p.ej. DB_WRITE -> FILE_WRITE, que lee taskOutputs[X.table]):
+    // ese sigue siendo modo 'records' (lo maneja el selector de tarea de origen del runtime panel), no standalone.
+    const hasSourceTask = !!String(input.sourceTaskRef || '').trim();
+    const isTable = (sourceOutput === 'table' || sourceOutput === 'targettable') && !hasSourceTask;
     const cursor = input.cursor && typeof input.cursor === 'object' ? input.cursor : {};
     return {
       sourceMode: isTable ? 'table' : 'records',
@@ -178,6 +182,10 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
         ...(ts.payloadColumn?.trim() ? { payloadColumn: ts.payloadColumn.trim() } : {}),
         ...(batchSize != null ? { batchSize } : {}),
       };
+    } else if (payload.input && payload.input.sourceOutput === 'table' && !payload.input.cursor) {
+      // Modo records donde la tarea de origen PRODUCE una tabla (p.ej. DB_WRITE -> FILE_WRITE): se conserva el
+      // sourceTaskRef que puso el runtime panel; el backend exige cursor.orderBy para la paginacion keyset.
+      payload.input.cursor = { orderBy: 'id' };
     }
     return { configurationJson: this.toPrettyJson(payload) };
   }

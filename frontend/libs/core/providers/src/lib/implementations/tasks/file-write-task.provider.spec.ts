@@ -96,6 +96,22 @@ describe('FileWriteTaskProvider', () => {
     expect(rehydrated.tableSource).toMatchObject({ table: 'staging_record', orderBy: 'id', payloadColumn: 'payload_json' });
   });
 
+  it('preserva "X produce una tabla" (DB_WRITE -> FILE_WRITE): records + sourceTaskRef + cursor.orderBy default', () => {
+    const draft = provider.createDraft();
+    // El runtime panel eligio DB_WRITE como origen -> sourceOutput='table' CON sourceTaskRef (no standalone).
+    draft.input = { source: 'task-output', sourceTaskRef: 'dbwrite1', sourceOutput: 'table' } as any;
+
+    const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+
+    expect(config.input.sourceTaskRef).toBe('dbwrite1'); // NO se pierde la tarea de origen
+    expect(config.input.sourceOutput).toBe('table');
+    expect(config.input.cursor.orderBy).toBe('id'); // el backend exige cursor.orderBy (keyset)
+
+    // Y al re-hidratar sigue en modo records (no se cambia a la tabla standalone, que ocultaria el selector).
+    const rehydrated = provider.hydrateDraft({ taskType: 'FILE_WRITE', configurationJson: JSON.stringify(config) } as any);
+    expect(rehydrated.sourceMode).toBe('records');
+  });
+
   it('round-trips align/pad en una celda de cabecera TXT (simetria con el detalle)', () => {
     const draft = provider.createDraft();
     draft.format = 'TXT';
