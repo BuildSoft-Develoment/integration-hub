@@ -88,6 +88,21 @@ class CatalogQueryServiceTest {
     }
 
     @Test
+    void listSourcesDirectionFilterOutputIncludesBoth() {
+        var emptyQuery = pagedQuery(0L, List.<SourceDefinition>of());
+        when(sourceRepository.find(any(String.class), any(Map.class))).thenReturn(emptyQuery);
+        var queryCaptor = ArgumentCaptor.forClass(String.class);
+        var paramsCaptor = ArgumentCaptor.forClass(Map.class);
+
+        // ADR-016: "Salida" (OUTPUT) por capacidad -> incluye BOTH (un sink valido), consistente con el picker de FILE_DELIVER.
+        service.listSources(null, null, "ALL", "output", 0, 10);
+
+        verify(sourceRepository).find(queryCaptor.capture(), paramsCaptor.capture());
+        assertTrue(queryCaptor.getValue().contains("e.direction in :directions"), queryCaptor.getValue());
+        assertEquals(List.of("OUTPUT", "BOTH"), paramsCaptor.getValue().get("directions"));
+    }
+
+    @Test
     void listReadersNormalizesReaderTypeString() {
         var emptyQuery = pagedQuery(0L, List.<ReaderDefinition>of());
         when(readerRepository.find(any(String.class), any(Map.class))).thenReturn(emptyQuery);

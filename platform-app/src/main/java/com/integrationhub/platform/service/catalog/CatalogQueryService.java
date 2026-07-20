@@ -50,10 +50,19 @@ public class CatalogQueryService {
             query.append(" and e.sourceType = :sourceType");
             parameters.put("sourceType", sourceType.trim().toUpperCase(java.util.Locale.ROOT));
         }
-        // ADR-016: filtro por direccion (INPUT/OUTPUT/BOTH); ALL/blank no filtra.
+        // ADR-016: filtro por direccion. ENTRADA/SALIDA son por CAPACIDAD e incluyen BOTH (que sirve para ambas),
+        // consistente con el picker de FILE_DELIVER (isSink = OUTPUT || BOTH); AMBAS es exacto (solo BOTH). ALL/blank no filtra.
         if (direction != null && !direction.isBlank() && !"ALL".equalsIgnoreCase(direction)) {
-            query.append(" and e.direction = :direction");
-            parameters.put("direction", direction.trim().toUpperCase(java.util.Locale.ROOT));
+            var directions = switch (direction.trim().toUpperCase(java.util.Locale.ROOT)) {
+                case "INPUT" -> List.of("INPUT", "BOTH");
+                case "OUTPUT" -> List.of("OUTPUT", "BOTH");
+                case "BOTH" -> List.of("BOTH");
+                default -> List.<String>of();
+            };
+            if (!directions.isEmpty()) {
+                query.append(" and e.direction in :directions");
+                parameters.put("directions", directions);
+            }
         }
         applyActiveStatus(query, parameters, status);
         query.append(" order by e.name");
