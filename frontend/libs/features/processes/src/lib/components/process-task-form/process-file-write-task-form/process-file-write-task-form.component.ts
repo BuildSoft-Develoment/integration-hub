@@ -93,14 +93,19 @@ export class ProcessFileWriteTaskFormComponent {
 
   private lastTablesKey = '';
   private lastColumnsKey = '';
+  private lastHydratedTable = '';
 
   constructor() {
-    // Sincroniza el texto del autocomplete con el valor commiteado (hidratacion / seleccion). NO se dispara al
-    // TIPEAR (tipear cambia tableQuery, no draft.table), asi que no pisa lo que el usuario escribe.
+    // Hidrata el texto del autocomplete desde el valor COMMITEADO (config al abrir / seleccion). Guard tipo DB_WRITE:
+    // solo sincroniza si NO hay tipeo en progreso (tableQuery vacio o igual al ultimo hidratado) -> editar otro campo
+    // NO pisa lo que el usuario esta escribiendo en la tabla. La seleccion (onTablePick) actualiza tableQuery aparte.
     effect(() => {
       const table = this.draft().tableSource.table;
       untracked(() => {
-        if (this.tableQuery() !== table) this.tableQuery.set(table);
+        if (this.tableQuery() === '' || this.tableQuery() === this.lastHydratedTable) {
+          this.tableQuery.set(table);
+        }
+        this.lastHydratedTable = table;
       });
     });
     // Al cambiar la conexion (o entrar en modo tabla), recargar la lista de tablas del autocomplete.
@@ -137,9 +142,11 @@ export class ProcessFileWriteTaskFormComponent {
   }
 
   handleConnectionChange(connectionRef: string): void {
+    // Al cambiar de conexion la tabla anterior puede no existir en la nueva -> se resetea (como DB_WRITE).
     this.tables.set([]);
     this.columns.set([]);
-    this.updateTableSource({ connectionRef });
+    this.tableQuery.set('');
+    this.updateTableSource({ connectionRef, table: '' });
   }
 
   // Autocomplete: al tipear filtra las tablas del server; NO commitea (evita introspeccionar columnas por tecla).
@@ -150,7 +157,9 @@ export class ProcessFileWriteTaskFormComponent {
   }
 
   // Al elegir una tabla del autocomplete se commitea el nombre CALIFICADO (schema.tabla) -> el effect carga columnas.
+  // Se actualiza tambien tableQuery para que el texto mostrado coincida con lo commiteado.
   onTablePick(table: DbWriteTableRef): void {
+    this.tableQuery.set(table.qualifiedName);
     this.updateTableSource({ table: table.qualifiedName });
   }
 
