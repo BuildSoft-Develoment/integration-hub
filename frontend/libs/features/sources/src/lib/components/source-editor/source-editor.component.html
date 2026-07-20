@@ -30,7 +30,8 @@
           (activeChange)="patchForm.emit({ active: $event })"
         />
 
-        <ih-managed-editor-section [eyebrowKey]="'ui.provider'" [title]="providerLabel()">
+        <!-- Direccion: atributo de nivel-fuente (junto al Perfil de conexion), no config del provider. -->
+        <ih-managed-editor-section [eyebrowKey]="'sources.direction'" [title]="i18n.t('sources.directionSectionTitle')">
           <mat-form-field class="source-direction-field">
             <mat-label>{{ i18n.t('sources.direction') }}</mat-label>
             <mat-select [disabled]="readonly()" [ngModel]="form().direction" [ngModelOptions]="{ standalone: true }" (ngModelChange)="patchForm.emit({ direction: $event })">
@@ -40,7 +41,9 @@
             </mat-select>
             <mat-hint>{{ i18n.t('sources.directionHint') }}</mat-hint>
           </mat-form-field>
+        </ih-managed-editor-section>
 
+        <ih-managed-editor-section [eyebrowKey]="'ui.provider'" [title]="providerLabel()">
           <ih-source-type-form-host
             [sourceType]="form().sourceType"
             [draft]="draft()"

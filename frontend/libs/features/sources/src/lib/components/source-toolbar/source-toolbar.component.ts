@@ -9,6 +9,7 @@ import { SourceProviderDescriptor, SourceProviderType } from '@integration-hub/c
 import { I18nService } from '@integration-hub/core/services';
 
 type SourceStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
+type SourceDirectionFilter = 'ALL' | 'INPUT' | 'OUTPUT' | 'BOTH';
 
 @Component({
   selector: 'ih-source-toolbar',
@@ -28,11 +29,13 @@ export class SourceToolbarComponent {
   readonly search = input('');
   readonly typeFilter = input<'ALL' | SourceProviderType>('ALL');
   readonly statusFilter = input<SourceStatusFilter>('ALL');
+  readonly directionFilter = input<SourceDirectionFilter>('ALL');
   readonly canEdit = input(false);
   readonly providerOptions = input.required<readonly SourceProviderDescriptor[]>();
 
   readonly searchChange = output<string>();
   readonly typeFilterChange = output<'ALL' | SourceProviderType>();
   readonly statusFilterChange = output<SourceStatusFilter>();
+  readonly directionFilterChange = output<SourceDirectionFilter>();
   readonly create = output<void>();
 }

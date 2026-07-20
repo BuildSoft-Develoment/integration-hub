@@ -41,7 +41,7 @@ public class CatalogQueryService {
     }
 
     @Transactional
-    public PageResponse<SourceDefinition> listSources(String queryText, String sourceType, String status, int page, int size) {
+    public PageResponse<SourceDefinition> listSources(String queryText, String sourceType, String status, String direction, int page, int size) {
         var query = new StringBuilder("from SourceDefinition e where 1=1");
         var parameters = new HashMap<String, Object>();
 
@@ -49,6 +49,11 @@ public class CatalogQueryService {
         if (sourceType != null && !sourceType.isBlank()) {
             query.append(" and e.sourceType = :sourceType");
             parameters.put("sourceType", sourceType.trim().toUpperCase(java.util.Locale.ROOT));
+        }
+        // ADR-016: filtro por direccion (INPUT/OUTPUT/BOTH); ALL/blank no filtra.
+        if (direction != null && !direction.isBlank() && !"ALL".equalsIgnoreCase(direction)) {
+            query.append(" and e.direction = :direction");
+            parameters.put("direction", direction.trim().toUpperCase(java.util.Locale.ROOT));
         }
         applyActiveStatus(query, parameters, status);
         query.append(" order by e.name");

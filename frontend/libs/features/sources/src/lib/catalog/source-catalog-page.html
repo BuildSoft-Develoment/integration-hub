@@ -6,11 +6,13 @@
           [search]="store.search()"
           [typeFilter]="store.typeFilter()"
           [statusFilter]="store.statusFilter()"
+          [directionFilter]="store.directionFilter()"
           [canEdit]="store.canEdit()"
           [providerOptions]="providerOptions()"
           (searchChange)="store.updateSearch($event)"
           (typeFilterChange)="store.updateTypeFilter($event)"
           (statusFilterChange)="store.updateStatusFilter($event)"
+          (directionFilterChange)="store.updateDirectionFilter($event)"
           (create)="store.startCreate()"
         />
 

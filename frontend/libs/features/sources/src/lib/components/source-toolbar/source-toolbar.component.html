@@ -46,5 +46,18 @@
             <mat-option value="INACTIVE">{{ i18n.t('status.inactive') }}</mat-option>
           </mat-select>
         </mat-form-field>
+
+        <mat-form-field class="toolbar-select">
+          <mat-label>{{ i18n.t('sources.direction') }}</mat-label>
+          <mat-select
+            [ngModel]="directionFilter()"
+            (ngModelChange)="directionFilterChange.emit($event)"
+          >
+            <mat-option value="ALL">{{ i18n.t('sources.allDirections') }}</mat-option>
+            <mat-option value="INPUT">{{ i18n.t('sources.directionInput') }}</mat-option>
+            <mat-option value="OUTPUT">{{ i18n.t('sources.directionOutput') }}</mat-option>
+            <mat-option value="BOTH">{{ i18n.t('sources.directionBoth') }}</mat-option>
+          </mat-select>
+        </mat-form-field>
       </div>
     </section>

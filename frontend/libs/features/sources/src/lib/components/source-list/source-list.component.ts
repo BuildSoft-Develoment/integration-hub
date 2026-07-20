@@ -44,6 +44,14 @@ export class SourceListComponent {
     return descriptor.label;
   }
 
+  // ADR-016: badge de direccion SOLO para sinks (OUTPUT/BOTH). INPUT es el default (mayoria) -> sin badge, sin ruido.
+  directionBadge(direction?: string): string | null {
+    const normalized = (direction ?? 'INPUT').toUpperCase();
+    if (normalized === 'OUTPUT') return this.i18n.t('sources.directionBadgeOutput');
+    if (normalized === 'BOTH') return this.i18n.t('sources.directionBadgeBoth');
+    return null;
+  }
+
   readonly sources = input.required<readonly SourceRecord[]>();
   readonly totalLength = input.required<number>();
   readonly selectedSourceId = input<number | null>(null);

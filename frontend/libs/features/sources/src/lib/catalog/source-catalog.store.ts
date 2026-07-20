@@ -13,7 +13,7 @@ import {
   SourceStatusFilter,
 } from './source-catalog-query.store';
 import { SourceEditorStateService } from '../editor/source-editor-state.service';
-import { SourceFormModel, SourceRecord } from '../models/source.models';
+import { SourceDirection, SourceFormModel, SourceRecord } from '../models/source.models';
 
 @Injectable()
 export class SourceCatalogStore {
@@ -32,6 +32,7 @@ export class SourceCatalogStore {
   readonly search = this.query.search;
   readonly typeFilter = this.query.typeFilter;
   readonly statusFilter = this.query.statusFilter;
+  readonly directionFilter = this.query.directionFilter;
   readonly selectedSourceId = this.query.selectedSourceId;
   readonly selectedSource = this.query.selectedSource;
   readonly sortField = this.query.sortField;
@@ -99,6 +100,10 @@ export class SourceCatalogStore {
 
   updateTypeFilter(value: 'ALL' | SourceProviderType): void {
     this.query.updateTypeFilter(value);
+  }
+
+  updateDirectionFilter(value: 'ALL' | SourceDirection): void {
+    this.query.updateDirectionFilter(value);
   }
 
   updateStatusFilter(value: SourceStatusFilter): void {

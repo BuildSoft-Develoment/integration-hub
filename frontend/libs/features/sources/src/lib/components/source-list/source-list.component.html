@@ -41,6 +41,9 @@
       <div class="row-type ih-catalog-row-meta">
         <mat-chip-set>
           <mat-chip>{{ providerLabel(source.sourceType) }}</mat-chip>
+          @if (directionBadge(source.direction); as badge) {
+            <mat-chip class="direction-chip" [attr.aria-label]="i18n.t('sources.direction')">{{ badge }}</mat-chip>
+          }
         </mat-chip-set>
       </div>
 

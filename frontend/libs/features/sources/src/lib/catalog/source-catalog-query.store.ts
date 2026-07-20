@@ -5,7 +5,7 @@ import { SourceProviderType } from '@integration-hub/core/providers';
 import { TablePreferencesService, sortData, SortState } from '@integration-hub/core/services';
 
 import { SourceApiService } from '../api/source-api.service';
-import { SourceRecord } from '../models/source.models';
+import { SourceDirection, SourceRecord } from '../models/source.models';
 
 export type SourceStatusFilter = 'ALL' | 'ACTIVE' | 'INACTIVE';
 const TABLE_ID = 'sources';
@@ -25,6 +25,7 @@ export class SourceCatalogQueryStore implements OnDestroy {
   readonly search = signal('');
   readonly typeFilter = signal<'ALL' | SourceProviderType>('ALL');
   readonly statusFilter = signal<SourceStatusFilter>('ALL');
+  readonly directionFilter = signal<'ALL' | SourceDirection>('ALL');
   readonly selectedSourceId = signal<number | null>(null);
   readonly selectedSource = signal<SourceRecord | null>(null);
   readonly drawerOpen = signal(false);
@@ -91,6 +92,12 @@ export class SourceCatalogQueryStore implements OnDestroy {
     void this.loadSources(true);
   }
 
+  updateDirectionFilter(value: 'ALL' | SourceDirection): void {
+    this.directionFilter.set(value);
+    this.clearSearchDebounce();
+    void this.loadSources(true);
+  }
+
   markSelectedSource(source: SourceRecord): void {
     this.selectedSourceId.set(source.id);
     this.selectedSource.set(source);
@@ -126,6 +133,7 @@ export class SourceCatalogQueryStore implements OnDestroy {
           search: this.search(),
           type: this.typeFilter(),
           status: this.statusFilter(),
+          direction: this.directionFilter(),
           page: this.currentPage(),
           size: this.pageSize(),
         })

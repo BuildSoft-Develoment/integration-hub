@@ -8,6 +8,12 @@
         display: flex;
         align-items: center;
       }
+      /* ADR-016: badge de sink (OUTPUT/BOTH) con acento para que resalte entre las fuentes de solo lectura. */
+      .direction-chip {
+        --mdc-chip-label-text-color: var(--ih-status-integration, #0369a1);
+        background: color-mix(in srgb, var(--ih-status-integration, #0369a1) 14%, transparent) !important;
+        font-weight: 700;
+      }
       .row-status {
         gap: 0.45rem;
         color: var(--ih-status-success);

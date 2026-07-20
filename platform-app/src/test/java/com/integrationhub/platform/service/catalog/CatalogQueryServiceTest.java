@@ -55,7 +55,7 @@ class CatalogQueryServiceTest {
         var queryCaptor = ArgumentCaptor.forClass(String.class);
         var paramsCaptor = ArgumentCaptor.forClass(Map.class);
 
-        var page = service.listSources("clientes", "FILESYSTEM", "ACTIVE", 0, 10);
+        var page = service.listSources("clientes", "FILESYSTEM", "ACTIVE", null, 0, 10);
 
         assertEquals(1L, page.total());
         assertEquals(1, page.items().size());
@@ -78,7 +78,7 @@ class CatalogQueryServiceTest {
         var queryCaptor = ArgumentCaptor.forClass(String.class);
         var paramsCaptor = ArgumentCaptor.forClass(Map.class);
 
-        service.listSources("123", null, "ALL", 0, 10);
+        service.listSources("123", null, "ALL", null, 0, 10);
 
         verify(sourceRepository).find(queryCaptor.capture(), paramsCaptor.capture());
         assertTrue(queryCaptor.getValue().contains("e.id = :searchId"));

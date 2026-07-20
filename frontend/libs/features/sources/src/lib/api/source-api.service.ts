@@ -13,6 +13,7 @@ export interface SourceQueryParams {
   search?: string;
   type?: string;
   status?: string;
+  direction?: string;
   page?: number;
   size?: number;
 }
@@ -35,6 +36,9 @@ export class SourceApiService {
     }
     if (params.status && params.status !== 'ALL') {
       httpParams = httpParams.set('status', params.status);
+    }
+    if (params.direction && params.direction !== 'ALL') {
+      httpParams = httpParams.set('direction', params.direction);
     }
 
     return this.http.get<SourcePageResponse>('/api/query/source-definitions', {

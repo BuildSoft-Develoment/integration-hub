@@ -50,10 +50,11 @@ public class CatalogQueryResource {
             @QueryParam("q") String queryText,
             @QueryParam("type") String sourceType,
             @QueryParam("status") String status,
+            @QueryParam("direction") String direction,
             @DefaultValue("0") @QueryParam("page") int page,
             @DefaultValue("8") @QueryParam("size") int size
     ) {
-        return mapPage(catalogQueryService.listSources(queryText, sourceType, status, page, size), sourceApiMapper::toResponse);
+        return mapPage(catalogQueryService.listSources(queryText, sourceType, status, direction, page, size), sourceApiMapper::toResponse);
     }
 
     @GET
