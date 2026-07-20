@@ -381,7 +381,7 @@ class Mt101CorrectiveLifecycleServiceTest {
 
         service = new Mt101CorrectiveLifecycleService(dataSource, null,
                 new Mt101RebuildRepository(), new Mt101FragmentRepository(), rebuildService,
-                configSource, validate, repair, route, archive, pay, status, reconcile);
+                configSource, validate, repair, route, archive, pay, status, reconcile, null);
     }
 
     @Test

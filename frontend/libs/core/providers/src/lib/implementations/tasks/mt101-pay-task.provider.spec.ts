@@ -133,6 +133,64 @@ describe('Mt101PayTaskProvider', () => {
     expect(rehydrated).toEqual(initial);
   });
 
+  it('serializes SFTP transport with sinkRef and operational fields (ADR-017)', () => {
+    const provider = new Mt101PayTaskProvider();
+    const draft: Mt101PayTaskDraft = {
+      ...provider.createDraft(),
+      taskRef: 'pay-sftp',
+      transport: 'SFTP',
+      sftp: {
+        sinkRef: '11',
+        dropPathTemplate: '/inbox/${sendersReference}.fin',
+        tmpExtension: '.part',
+        remoteDuplicatePolicy: 'FAIL',
+      },
+    };
+    const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+    expect(config.transport).toBe('SFTP');
+    expect(config.sftp.sinkRef).toBe(11); // se persiste numerico para el backend
+    expect(config.sftp.dropPathTemplate).toBe('/inbox/${sendersReference}.fin');
+    expect(config.sftp.tmpExtension).toBe('.part');
+    expect(config.sftp.remoteDuplicatePolicy).toBe('FAIL');
+    // no se filtra host/credenciales desde el front: el backend los resuelve desde el sinkRef
+    expect(config.sftp.host).toBeUndefined();
+    expect(config.sftp.password).toBeUndefined();
+    // SFTP no emite el bloque REST
+    expect(config.rest).toBeUndefined();
+  });
+
+  it('roundtrip preserves SFTP fields (ADR-017)', () => {
+    const provider = new Mt101PayTaskProvider();
+    const initial: Mt101PayTaskDraft = {
+      ...provider.createDraft(),
+      taskRef: 'p-sftp',
+      transport: 'SFTP',
+      sftp: {
+        sinkRef: '11',
+        dropPathTemplate: '/inbox/${uetr}.fin',
+        tmpExtension: '.tmp',
+        remoteDuplicatePolicy: 'OVERWRITE',
+      },
+    };
+    const patch = provider.toTaskPatch(initial);
+    const rehydrated = provider.hydrateDraft({ ...baseTask, configurationJson: patch.configurationJson as string });
+    expect(rehydrated.transport).toBe('SFTP');
+    expect(rehydrated.sftp).toEqual(initial.sftp);
+  });
+
+  it('normalizes an invalid remoteDuplicatePolicy to SKIP_IF_SAME_HASH', () => {
+    const provider = new Mt101PayTaskProvider();
+    const draft = provider.hydrateDraft({
+      ...baseTask,
+      configurationJson: JSON.stringify({
+        taskRef: 'p', executionMode: 'once', transport: 'SFTP',
+        sftp: { sinkRef: 7, remoteDuplicatePolicy: 'NUKE' },
+      }),
+    });
+    expect(draft.sftp.sinkRef).toBe('7');
+    expect(draft.sftp.remoteDuplicatePolicy).toBe('SKIP_IF_SAME_HASH');
+  });
+
   it('hydrateDraft accepts retryOn as array OR as string', () => {
     const provider = new Mt101PayTaskProvider();
     const fromArray = provider.hydrateDraft({

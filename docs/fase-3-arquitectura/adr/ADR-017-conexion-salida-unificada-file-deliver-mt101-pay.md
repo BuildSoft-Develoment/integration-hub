@@ -10,7 +10,7 @@
 
 ## Estado
 
-Propuesto (analisis profundo verificado contra codigo, 2026-07-20). Depende de ADR-016 (capa de salida generica + columna `direction` en `source_definition`). Alcance: fase posterior de integracion del transporte SFTP de pagos.
+**Implementado — fase 1: `MT101_PAY` (2026-07-20).** Depende de ADR-016 (capa de salida generica + columna `direction` en `source_definition`). `MT101_STATUS` queda para una sub-fase posterior (ver *Alcance de implementacion*). El analisis profundo se verifico contra codigo antes de implementar y corrigio una premisa: **no todos los despachos de PAY pasan por `compile`** — solo el correctivo; el pago original resuelve en vivo (ver *Como queda el flujo*).
 
 ## Contexto
 
@@ -74,6 +74,19 @@ Opcionalmente la spec puede guardar `sinkRef` **ademas** del snapshot, solo como
 **Despacho / correctivo:** sin cambios. `SftpPaymentTransport` + `materialize()` reciben exactamente el mismo shape que hoy.
 
 **STATUS:** su `routeQuery.<ruta>` referencia la misma fuente `BOTH`; se resuelve la conexion (host/creds) y se combina con lo operacional de lectura (`responseFileTemplate` del outbox).
+
+## Implementacion (fase 1, PAY)
+
+Un unico bean `Mt101PaySinkConnectionResolver` (reusa `SinkDefinitionService` como `FILE_DELIVER`) resuelve `sftp.sinkRef` -> fuente OUTPUT/BOTH, valida `allowsOutput()` + tipo SFTP (fail-loud), y mergea la conexion (host/puerto/credenciales-como-refs `${secret:...}` via `JsonConfigurationMapper.toMapUnresolved`, sin resolver) en el bloque `sftp`, conservando lo operacional y descartando `sinkRef` + las claves de LECTURA de la fuente. Se invoca en **dos** puntos, no uno, porque el analisis mostro que PAY tiene dos caminos de dispatch:
+
+1. **Congelado (correctivo):** `Mt101CorrectiveLifecycleService.preparePayIntents`, ANTES de `Mt101DispatchPlanCompiler.compile`. El compiler congela el host resuelto (literal) + credenciales como refs + hashea. El dispatch correctivo materializa ese spec y **NUNCA re-resuelve** la fuente (materialize no toca `SinkDefinitionService`): el destino aprobado sobrevive a que un operador edite/borre la fuente -> invariante anti doble-pago.
+2. **En vivo (pago original/lista):** top de `Mt101PayTaskProvider.execute`, **gated a NO-correctivo** (`correctivePayRunId == null`). Resuelve la fuente vigente al ejecutar, consistente con el modelo de config-viva del pago original (que ya resolvia el `sftp` inline en vivo). El correctivo se salta este merge: re-resolver aqui podria mover el destino o fallar si la fuente fue borrada.
+
+`SftpPaymentTransport`, `Mt101DispatchPlanCompiler.compile/materialize` y el nucleo money-safety (hash/claim) **no cambiaron**. `@ActivateRequestContext` en el resolver cubre la lectura Panache de la fuente en el hilo offloaded del dispatch (mismo patron que el fix de `connectionRef`).
+
+**Frontend:** el form de `MT101_PAY` reemplaza el aviso "fase posterior" (transporte SFTP) por un picker de `sinkRef` (reusa el filtro OUTPUT/BOTH de `FILE_DELIVER`) + campos operacionales `dropPathTemplate`/`tmpExtension`/`remoteDuplicatePolicy`. El front NO expone host/credenciales: los resuelve el backend desde la fuente.
+
+**Tests:** `Mt101PaySinkConnectionResolverTest` (merge, rechazos INPUT/no-SFTP, no-mutacion, per-ruta, **paridad de hash sinkRef-resuelto == inline**, **destino congelado sobrevive borrado de fuente**, rechazo de credencial literal por el compiler) + round-trip del provider frontend.
 
 ## Consecuencias
 

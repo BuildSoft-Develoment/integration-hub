@@ -83,6 +83,10 @@ public class Mt101PayTaskProvider implements TaskProvider {
             new Mt101DispatchPlanCompiler(new com.fasterxml.jackson.databind.ObjectMapper());
     // v37: re-resuelve SOLO las referencias ${secret:...} del plan persistido al materializarlo en el dispatch.
     private final java.util.function.UnaryOperator<Map<String, Object>> correctiveSecretResolver;
+    // ADR-017: resuelve la conexion SFTP desde una fuente OUTPUT/BOTH (sftp.sinkRef) en el dispatch EN VIVO del pago
+    // normal/lista. Nullable en constructores de test (sin CDI) -> se omite el merge (modo inline). El correctivo NO
+    // usa esto (materializa el spec congelado): la resolucion+congelado del correctivo ocurre en preparePayIntents.
+    private final Mt101PaySinkConnectionResolver sinkConnectionResolver;
 
     @Inject
     public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports,
@@ -91,7 +95,8 @@ public class Mt101PayTaskProvider implements TaskProvider {
                                 RecordAuditEmitter recordAuditEmitter,
                                 Mt101CorrectivePayStore correctivePayStore,
                                 com.integrationhub.platform.service.JsonConfigurationMapper configurationMapper,
-                                Mt101PayDispatchIntentStore dispatchIntentStore) {
+                                Mt101PayDispatchIntentStore dispatchIntentStore,
+                                Mt101PaySinkConnectionResolver sinkConnectionResolver) {
         this.transports = transports;
         this.fragmentStore = fragmentStore;
         this.archiveStatusUpdater = archiveStatusUpdater;
@@ -99,6 +104,18 @@ public class Mt101PayTaskProvider implements TaskProvider {
         this.correctivePayStore = correctivePayStore;
         this.correctiveSecretResolver = configurationMapper == null ? null : configurationMapper::resolveSecretsIn;
         this.dispatchIntentStore = dispatchIntentStore;
+        this.sinkConnectionResolver = sinkConnectionResolver;
+    }
+
+    public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports,
+                                Mt101FragmentStore fragmentStore,
+                                Mt101ArchiveStatusUpdater archiveStatusUpdater,
+                                RecordAuditEmitter recordAuditEmitter,
+                                Mt101CorrectivePayStore correctivePayStore,
+                                com.integrationhub.platform.service.JsonConfigurationMapper configurationMapper,
+                                Mt101PayDispatchIntentStore dispatchIntentStore) {
+        this(transports, fragmentStore, archiveStatusUpdater, recordAuditEmitter, correctivePayStore,
+                configurationMapper, dispatchIntentStore, null);
     }
 
     public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports,
@@ -148,13 +165,25 @@ public class Mt101PayTaskProvider implements TaskProvider {
 
     @Override
     @Transactional(Transactional.TxType.NOT_SUPPORTED)
-    public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
+    public TaskResult execute(TaskContext context, Map<String, Object> rawConfiguration) {
+        var fragmentSource = Mt101MessageInputResolver.fragmentSource(context, rawConfiguration, type());
+
+        // ADR-017: en el pago NORMAL/lista (no correctivo) la conexion SFTP se resuelve EN VIVO desde la fuente
+        // OUTPUT/BOTH (sftp.sinkRef) antes de que Mt101PayRouteResolver.resolve lea el bloque sftp. El correctivo se
+        // salta esto (materializa el spec CONGELADO en preparePayIntents): re-resolver aqui podria mover el destino o
+        // fallar si la fuente fue borrada tras el pago -> romperia el invariante "el correctivo usa el destino congelado".
+        // (final para poder capturarse en las lambdas de forEachPage/forEachRoutedPage.)
+        final Map<String, Object> configuration =
+                (sinkConnectionResolver != null
+                        && stringValue(fragmentSource.get("correctivePayRunId"), null) == null)
+                        ? sinkConnectionResolver.withResolvedSink(rawConfiguration)
+                        : rawConfiguration;
+
         var routedPay = Mt101PayRouteResolver.hasRouteTransports(configuration);
         var transportId = routedPay
                 ? "ROUTED"
                 : stringValue(configuration.get("transport"), Mt101PayRouteResolver.DEFAULT_TRANSPORT).toUpperCase();
         var transport = routedPay ? null : resolveTransport(transportId);
-        var fragmentSource = Mt101MessageInputResolver.fragmentSource(context, configuration, type());
 
         var accumulator = new DispatchAccumulator(
                 intValue(configuration.get("maxRecordsInOutput"), DEFAULT_MAX_RECORDS_IN_OUTPUT));

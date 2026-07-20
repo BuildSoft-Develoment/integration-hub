@@ -167,6 +167,60 @@
         </div>
       }
     </section>
+  } @else if (draft().transport === 'SFTP') {
+    <section class="mt101-pay__section">
+      <h4>{{ i18n.t('mt101Pay.section.sftp') }}</h4>
+      <div class="mt101-pay__grid">
+        <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101Pay.sftp.sink') }}</mat-label>
+          <mat-select
+            [ngModel]="draft().sftp.sinkRef"
+            (ngModelChange)="updateSftp({ sinkRef: $event })"
+            [disabled]="readonly()">
+            <mat-option value="">{{ i18n.t('mt101Pay.sftp.selectSink') }}</mat-option>
+            @for (sink of sinkOptions(); track sink.id) {
+              <mat-option [value]="sink.id">{{ sink.id }} - {{ sink.name }}</mat-option>
+            }
+          </mat-select>
+          <mat-hint>{{ i18n.t('mt101Pay.sftp.sinkHint') }}</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101Pay.sftp.dropPathTemplate') }}</mat-label>
+          <input
+            matInput
+            type="text"
+            placeholder="/inbox/${sendersReference}.fin"
+            [ngModel]="draft().sftp.dropPathTemplate"
+            (ngModelChange)="updateSftp({ dropPathTemplate: $event })"
+            [disabled]="readonly()" />
+          <mat-hint>{{ i18n.t('mt101Pay.sftp.dropPathHint') }}</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101Pay.sftp.tmpExtension') }}</mat-label>
+          <input
+            matInput
+            type="text"
+            placeholder=".part"
+            [ngModel]="draft().sftp.tmpExtension"
+            (ngModelChange)="updateSftp({ tmpExtension: $event })"
+            [disabled]="readonly()" />
+        </mat-form-field>
+
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101Pay.sftp.remoteDuplicatePolicy') }}</mat-label>
+          <mat-select
+            [ngModel]="draft().sftp.remoteDuplicatePolicy"
+            (ngModelChange)="updateSftp({ remoteDuplicatePolicy: $event })"
+            [disabled]="readonly()">
+            @for (p of duplicatePolicies; track p) {
+              <mat-option [value]="p">{{ p }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      </div>
+    </section>
   } @else {
     <p class="mt101-pay__notice">
       {{ i18n.t('mt101Pay.transportNotImplementedFront') }}: <code>{{ draft().transport }}</code>

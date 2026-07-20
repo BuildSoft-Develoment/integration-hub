@@ -10,6 +10,19 @@ export type Mt101PayTransport = 'REST' | 'SFTP';
 export type Mt101PayAuthType = '' | 'bearer' | 'login-request';
 export type Mt101PayConfirmationMode = 'sync' | 'async-callback' | 'async-poll';
 export type Mt101PayBackoffStrategy = 'exponential' | 'constant';
+export type Mt101PayDuplicatePolicy = 'SKIP_IF_SAME_HASH' | 'FAIL' | 'OVERWRITE' | 'RENAME_WITH_SUFFIX';
+
+/**
+ * Sub-draft del transporte SFTP (ADR-017). La CONEXION al banco se toma de una fuente {@code /sources} OUTPUT/BOTH
+ * via {@code sinkRef} (el backend resuelve+congela host/credenciales); aqui solo se configura lo OPERACIONAL de la
+ * entrega (ruta destino, extension temporal, politica de duplicado remoto).
+ */
+export interface Mt101PaySftpDraft {
+  sinkRef: string;
+  dropPathTemplate: string;
+  tmpExtension: string;
+  remoteDuplicatePolicy: Mt101PayDuplicatePolicy;
+}
 
 /** Sub-draft del transporte REST. */
 export interface Mt101PayRestDraft {
@@ -47,6 +60,7 @@ export interface Mt101PayExpectedResponseDraft {
 export interface Mt101PayTaskDraft extends ProcessTaskRuntimeDraft {
   transport: Mt101PayTransport;
   rest: Mt101PayRestDraft;
+  sftp: Mt101PaySftpDraft;
   idempotencyKeyTemplate: string;
   retryPolicy: Mt101PayRetryPolicyDraft;
   confirmationMode: Mt101PayConfirmationMode;
@@ -87,6 +101,7 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
         contentType: 'auto',
         timeoutSeconds: 60,
       },
+      sftp: this.defaultSftp(),
       idempotencyKeyTemplate: '${sendersReference}',
       retryPolicy: {
         maxRetries: 5,
@@ -104,12 +119,23 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
     };
   }
 
+  private defaultSftp(): Mt101PaySftpDraft {
+    return {
+      sinkRef: '',
+      dropPathTemplate: '/inbox/${sendersReference}.fin',
+      tmpExtension: '.part',
+      remoteDuplicatePolicy: 'SKIP_IF_SAME_HASH',
+    };
+  }
+
   hydrateDraft(task: ProcessTaskFormModel): Mt101PayTaskDraft {
     const config: Record<string, any> = this.parseJson(task.configurationJson);
     const runtime = this.hydrateRuntime(task, 'once');
     const rest = (config['rest'] || {}) as Record<string, any>;
+    const sftp = (config['sftp'] || {}) as Record<string, any>;
     const retry = (config['retryPolicy'] || {}) as Record<string, any>;
     const expected = (config['expectedGatewayResponse'] || {}) as Record<string, any>;
+    const defaultSftp = this.defaultSftp();
     return {
       ...runtime,
       transport: this.normalizeTransport(config['transport']),
@@ -126,6 +152,12 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
         extraHeadersJson: this.stringifyObject(rest['extraHeaders']),
         contentType: String(rest['contentType'] || 'auto'),
         timeoutSeconds: Number(rest['timeoutSeconds']) || 60,
+      },
+      sftp: {
+        sinkRef: sftp['sinkRef'] == null ? '' : String(sftp['sinkRef']),
+        dropPathTemplate: String(sftp['dropPathTemplate'] || defaultSftp.dropPathTemplate),
+        tmpExtension: String(sftp['tmpExtension'] || defaultSftp.tmpExtension),
+        remoteDuplicatePolicy: this.normalizeDuplicatePolicy(sftp['remoteDuplicatePolicy']),
       },
       idempotencyKeyTemplate: String(config['idempotencyKeyTemplate'] ?? '${sendersReference}'),
       retryPolicy: {
@@ -167,6 +199,18 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
         })
       : undefined;
 
+    // ADR-017: en SFTP la conexion se toma de una fuente OUTPUT/BOTH (sinkRef); solo se persiste lo operacional +
+    // el sinkRef (numerico). El backend resuelve+congela host/credenciales desde la fuente. Sin transporte SFTP no
+    // se emite el bloque.
+    const sftpPayload = draft.transport === 'SFTP'
+      ? this.compactObject({
+          sinkRef: draft.sftp.sinkRef ? Number(draft.sftp.sinkRef) : undefined,
+          dropPathTemplate: draft.sftp.dropPathTemplate,
+          tmpExtension: draft.sftp.tmpExtension,
+          remoteDuplicatePolicy: draft.sftp.remoteDuplicatePolicy,
+        })
+      : undefined;
+
     const retryOn = draft.retryPolicy.retryOnFamilies
       .split(',')
       .map((s) => s.trim())
@@ -176,6 +220,7 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
       {
         transport: draft.transport,
         ...(restPayload ? { rest: restPayload } : {}),
+        ...(sftpPayload ? { sftp: sftpPayload } : {}),
         idempotencyKeyTemplate: draft.idempotencyKeyTemplate,
         retryPolicy: {
           maxRetries: draft.retryPolicy.maxRetries,
@@ -199,7 +244,15 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
 
   override summarize(task: ProcessTaskFormModel, _context: ProcessTaskSummaryContext, i18n: I18nService): string {
     const config = this.hydrateDraft(task);
-    const target = config.transport === 'REST' ? config.rest.url : config.transport;
+    let target: string;
+    if (config.transport === 'REST') {
+      target = config.rest.url;
+    } else if (config.transport === 'SFTP') {
+      const sink = config.sftp.sinkRef ? `sink#${config.sftp.sinkRef}` : '';
+      target = [sink, config.sftp.dropPathTemplate].filter((part) => part).join(' ');
+    } else {
+      target = config.transport;
+    }
     return [i18n.t(this.descriptor.labelKey), `${config.transport} ${target || '?'}`].join(' | ');
   }
 
@@ -208,6 +261,13 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
   private normalizeTransport(value: unknown): Mt101PayTransport {
     const v = String(value || 'REST').toUpperCase();
     return v === 'SFTP' ? 'SFTP' : 'REST';
+  }
+
+  private normalizeDuplicatePolicy(value: unknown): Mt101PayDuplicatePolicy {
+    const v = String(value || 'SKIP_IF_SAME_HASH').toUpperCase();
+    return v === 'FAIL' || v === 'OVERWRITE' || v === 'RENAME_WITH_SUFFIX'
+      ? (v as Mt101PayDuplicatePolicy)
+      : 'SKIP_IF_SAME_HASH';
   }
 
   private normalizeAuthType(value: unknown): Mt101PayAuthType {

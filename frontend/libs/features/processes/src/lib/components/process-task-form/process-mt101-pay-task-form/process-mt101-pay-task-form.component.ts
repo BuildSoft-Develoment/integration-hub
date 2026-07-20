@@ -10,12 +10,14 @@ import {
   Mt101PayAuthType,
   Mt101PayBackoffStrategy,
   Mt101PayConfirmationMode,
+  Mt101PayDuplicatePolicy,
+  Mt101PaySftpDraft,
   Mt101PayTaskDraft,
   Mt101PayTransport,
   ProcessTaskFormBridgeService,
 } from '@integration-hub/core/providers';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
-import { ProcessTaskFormModel } from '../../../models/process.models';
+import { ProcessTaskFormModel, SourceRef } from '../../../models/process.models';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
 @Component({
@@ -32,6 +34,7 @@ export class ProcessMt101PayTaskFormComponent {
 
   readonly task = input.required<ProcessTaskFormModel>();
   readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
+  readonly sources = input<readonly SourceRef[]>([]);
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101PayTaskDraft>(
@@ -42,7 +45,21 @@ export class ProcessMt101PayTaskFormComponent {
   readonly authTypes: ReadonlyArray<Mt101PayAuthType> = ['', 'bearer', 'login-request'];
   readonly confirmationModes: ReadonlyArray<Mt101PayConfirmationMode> = ['sync', 'async-callback', 'async-poll'];
   readonly backoffStrategies: ReadonlyArray<Mt101PayBackoffStrategy> = ['exponential', 'constant'];
+  readonly duplicatePolicies: ReadonlyArray<Mt101PayDuplicatePolicy> = [
+    'SKIP_IF_SAME_HASH', 'FAIL', 'OVERWRITE', 'RENAME_WITH_SUFFIX',
+  ];
   readonly httpMethods: ReadonlyArray<string> = ['POST', 'PUT', 'PATCH'];
+
+  // ADR-017: el destino SFTP (sinkRef) debe ser una fuente activa OUTPUT/BOTH (un sink), igual que FILE_DELIVER.
+  // El backend valida allowsOutput(); el picker ya ofrece solo candidatos validos.
+  readonly sinkOptions = computed(() =>
+    this.sources().filter((source) => source.active !== false && this.isSink(source.direction)),
+  );
+
+  private isSink(direction?: string): boolean {
+    const normalized = (direction ?? 'INPUT').toUpperCase();
+    return normalized === 'OUTPUT' || normalized === 'BOTH';
+  }
 
   updateDraft(patch: Partial<Mt101PayTaskDraft>): void {
     const next: Mt101PayTaskDraft = { ...this.draft(), ...patch };
@@ -51,6 +68,10 @@ export class ProcessMt101PayTaskFormComponent {
 
   updateRest(patch: Partial<Mt101PayTaskDraft['rest']>): void {
     this.updateDraft({ rest: { ...this.draft().rest, ...patch } });
+  }
+
+  updateSftp(patch: Partial<Mt101PaySftpDraft>): void {
+    this.updateDraft({ sftp: { ...this.draft().sftp, ...patch } });
   }
 
   updateRetry(patch: Partial<Mt101PayTaskDraft['retryPolicy']>): void {
@@ -79,6 +100,12 @@ export class ProcessMt101PayTaskFormComponent {
         extraHeadersJson: '',
         contentType: 'application/json',
         timeoutSeconds: 60,
+      },
+      sftp: {
+        sinkRef: '',
+        dropPathTemplate: '/inbox/${sendersReference}.fin',
+        tmpExtension: '.part',
+        remoteDuplicatePolicy: 'SKIP_IF_SAME_HASH',
       },
       idempotencyKeyTemplate: '${sendersReference}',
       retryPolicy: {

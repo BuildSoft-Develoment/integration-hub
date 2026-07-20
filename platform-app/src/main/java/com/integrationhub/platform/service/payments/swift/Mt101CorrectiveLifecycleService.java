@@ -7,6 +7,7 @@ import com.integrationhub.platform.provider.task.payments.swift.Mt101ArchiveTask
 import com.integrationhub.platform.provider.task.payments.swift.Mt101PayTaskProvider;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101DispatchPlanCompiler;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101PayRouteResolver;
+import com.integrationhub.platform.provider.task.payments.swift.Mt101PaySinkConnectionResolver;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101PaymentCorrelation;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101ReconcileTaskProvider;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101RepairTaskProvider;
@@ -64,6 +65,9 @@ public class Mt101CorrectiveLifecycleService {
     private final Mt101PayTaskProvider payProvider;
     private final Mt101StatusTaskProvider statusProvider;
     private final Mt101ReconcileTaskProvider reconcileProvider;
+    // ADR-017: resuelve+congela la conexion SFTP desde una fuente OUTPUT/BOTH (sftp.sinkRef) ANTES de compilar el
+    // spec ejecutable del correctivo, para que el host resuelto quede snapshotteado (no el sinkRef como ref viva).
+    private final Mt101PaySinkConnectionResolver sinkConnectionResolver;
     private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @Inject
@@ -79,7 +83,8 @@ public class Mt101CorrectiveLifecycleService {
                                            Mt101ArchiveTaskProvider archiveProvider,
                                            Mt101PayTaskProvider payProvider,
                                            Mt101StatusTaskProvider statusProvider,
-                                           Mt101ReconcileTaskProvider reconcileProvider) {
+                                           Mt101ReconcileTaskProvider reconcileProvider,
+                                           Mt101PaySinkConnectionResolver sinkConnectionResolver) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.rebuildRepository = rebuildRepository;
@@ -93,6 +98,7 @@ public class Mt101CorrectiveLifecycleService {
         this.payProvider = payProvider;
         this.statusProvider = statusProvider;
         this.reconcileProvider = reconcileProvider;
+        this.sinkConnectionResolver = sinkConnectionResolver;
     }
 
     /**
@@ -934,6 +940,14 @@ public class Mt101CorrectiveLifecycleService {
         }
         if (unresolvedPayConfig == null) {
             throw new IllegalStateException("MT101_PAY unresolved config required to compile the executable plan");
+        }
+        // ADR-017: resuelve la conexion SFTP (sftp.sinkRef -> fuente OUTPUT/BOTH) y la mergea en el bloque sftp ANTES
+        // de compilar, para que el compiler CONGELE el host resuelto (literal) + credenciales como ${secret:...} refs.
+        // El dispatch correctivo materializa ese spec congelado y NUNCA re-resuelve la fuente: el destino aprobado no
+        // cambia aunque un operador edite/borre la fuente entre el pago original y el correctivo (anti doble-pago).
+        // (nullable solo en tests planos sin CDI: sin resolver no hay merge -> modo inline, como antes de ADR-017.)
+        if (sinkConnectionResolver != null) {
+            unresolvedPayConfig = sinkConnectionResolver.withResolvedSink(unresolvedPayConfig);
         }
         // v37: compila la especificacion EJECUTABLE por fragmento desde la config SIN resolver (refs intactas)
         // -> el ledger pasa a ser el contrato de despacho; el dispatch correctivo ya no resuelve la ruta.
