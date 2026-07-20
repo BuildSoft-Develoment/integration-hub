@@ -122,4 +122,40 @@ describe('FileWriteTaskProvider', () => {
 
     expect(rehydrated.header[0]).toMatchObject({ kind: 'value', length: '10', align: 'right', pad: '0' });
   });
+
+  // --- opciones de formato (CSV quoteStrategy, XLSX) ---
+
+  it('serializa quoteStrategy=ALWAYS en CSV y omite el default REQUIRED', () => {
+    const always = { ...provider.createDraft(), columns: [{ field: 'a' }], quoteStrategy: 'ALWAYS' as const };
+    const config = JSON.parse(provider.toTaskPatch(always).configurationJson as string);
+    expect(config.layout.detail.quoteStrategy).toBe('ALWAYS');
+
+    const req = { ...provider.createDraft(), columns: [{ field: 'a' }] }; // REQUIRED default
+    const configReq = JSON.parse(provider.toTaskPatch(req).configurationJson as string);
+    expect(configReq.layout.detail.quoteStrategy).toBeUndefined();
+  });
+
+  it('serializa la config XLSX (solo no-defaults) y round-trip', () => {
+    const draft = provider.createDraft();
+    draft.format = 'XLSX';
+    draft.columns = [{ field: 'monto', type: 'NUMBER', format: '0.00' }];
+    draft.xlsx = { sheetName: 'Reporte', headerStyle: 'PLAIN', freezeHeader: false, autoFilter: true, autoSizeColumns: true };
+
+    const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+    expect(config.format).toBe('XLSX');
+    expect(config.xlsx).toEqual({ sheetName: 'Reporte', headerStyle: 'PLAIN', freezeHeader: false, autoFilter: true, autoSizeColumns: true });
+
+    const rehydrated = roundTrip(draft);
+    expect(rehydrated.format).toBe('XLSX');
+    expect(rehydrated.xlsx).toEqual(draft.xlsx);
+  });
+
+  it('XLSX con defaults no emite bloque xlsx', () => {
+    const draft = { ...provider.createDraft(), format: 'XLSX' as const, columns: [{ field: 'a' }] };
+    const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+    expect(config.xlsx).toBeUndefined();
+    // y al re-hidratar vuelve a los defaults (sheetName vacio, BOLD, freeze true, filtros off)
+    const rehydrated = roundTrip(draft);
+    expect(rehydrated.xlsx).toEqual({ sheetName: '', headerStyle: 'BOLD', freezeHeader: true, autoFilter: false, autoSizeColumns: false });
+  });
 });

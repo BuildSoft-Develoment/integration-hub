@@ -78,36 +78,75 @@
       <mat-select [disabled]="readonly()" [ngModel]="draft().format" (ngModelChange)="updateDraft({ format: $event })">
         <mat-option value="CSV">CSV</mat-option>
         <mat-option value="TXT">TXT ({{ i18n.t('ui.write.fixedWidth') }})</mat-option>
+        <mat-option value="XLSX">XLSX ({{ i18n.t('ui.write.excel') }})</mat-option>
       </mat-select>
     </mat-form-field>
-
-    <ih-suggest-input
-      [label]="i18n.t('ui.encoding')"
-      [hint]="i18n.t('ui.encodingHint')"
-      [suggestions]="encodings"
-      [disabled]="readonly()"
-      [value]="draft().encoding"
-      (valueChange)="updateDraft({ encoding: $event })" />
-
-    <mat-form-field>
-      <mat-label>{{ i18n.t('ui.write.lineEnding') }}</mat-label>
-      <mat-select [disabled]="readonly()" [ngModel]="draft().lineEnding" (ngModelChange)="updateDraft({ lineEnding: $event })">
-        <mat-option value="LF">LF</mat-option>
-        <mat-option value="CRLF">CRLF</mat-option>
-      </mat-select>
-    </mat-form-field>
-
-    @if (draft().format === 'CSV') {
-      <mat-form-field>
-        <mat-label>{{ i18n.t('ui.delimiter') }}</mat-label>
-        <input matInput [disabled]="readonly()" [ngModel]="draft().delimiter" (ngModelChange)="updateDraft({ delimiter: $event })" />
-      </mat-form-field>
-    }
 
     <mat-form-field>
       <mat-label>{{ i18n.t('ui.compress.archiveNameTemplate') }}</mat-label>
       <input matInput [disabled]="readonly()" [ngModel]="draft().archiveNameTemplate" (ngModelChange)="updateDraft({ archiveNameTemplate: $event })" placeholder="export-${_processExecutionId}.csv" />
     </mat-form-field>
+  </div>
+
+  <!-- Opciones de formato: casuisticas especificas del formato elegido -->
+  <div class="task-section">
+    <div class="task-section-header">{{ i18n.t('ui.write.formatOptions') }}</div>
+    <div class="task-grid">
+      @if (isCsv() || isTxt()) {
+        <ih-suggest-input
+          [label]="i18n.t('ui.encoding')"
+          [hint]="i18n.t('ui.encodingHint')"
+          [suggestions]="encodings"
+          [disabled]="readonly()"
+          [value]="draft().encoding"
+          (valueChange)="updateDraft({ encoding: $event })" />
+
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.write.lineEnding') }}</mat-label>
+          <mat-select [disabled]="readonly()" [ngModel]="draft().lineEnding" (ngModelChange)="updateDraft({ lineEnding: $event })">
+            <mat-option value="LF">LF</mat-option>
+            <mat-option value="CRLF">CRLF</mat-option>
+          </mat-select>
+        </mat-form-field>
+      }
+
+      @if (isCsv()) {
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.delimiter') }}</mat-label>
+          <input matInput [disabled]="readonly()" [ngModel]="draft().delimiter" (ngModelChange)="updateDraft({ delimiter: $event })" placeholder="," />
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.write.quoteStrategy') }}</mat-label>
+          <mat-select [disabled]="readonly()" [ngModel]="draft().quoteStrategy" (ngModelChange)="updateDraft({ quoteStrategy: $event })">
+            <mat-option value="REQUIRED">{{ i18n.t('ui.write.quoteRequired') }}</mat-option>
+            <mat-option value="ALWAYS">{{ i18n.t('ui.write.quoteAlways') }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+      }
+
+      @if (isXlsx()) {
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.write.sheetName') }}</mat-label>
+          <input matInput [disabled]="readonly()" [ngModel]="draft().xlsx.sheetName" (ngModelChange)="updateXlsx({ sheetName: $event })" placeholder="Sheet1" />
+        </mat-form-field>
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.write.headerStyle') }}</mat-label>
+          <mat-select [disabled]="readonly()" [ngModel]="draft().xlsx.headerStyle" (ngModelChange)="updateXlsx({ headerStyle: $event })">
+            <mat-option value="BOLD">{{ i18n.t('ui.write.headerBold') }}</mat-option>
+            <mat-option value="PLAIN">{{ i18n.t('ui.write.headerPlain') }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <div class="toggle-wrap">
+          <mat-slide-toggle [disabled]="readonly()" [ngModel]="draft().xlsx.freezeHeader" (ngModelChange)="updateXlsx({ freezeHeader: $event })">{{ i18n.t('ui.write.freezeHeader') }}</mat-slide-toggle>
+        </div>
+        <div class="toggle-wrap">
+          <mat-slide-toggle [disabled]="readonly()" [ngModel]="draft().xlsx.autoFilter" (ngModelChange)="updateXlsx({ autoFilter: $event })">{{ i18n.t('ui.write.autoFilter') }}</mat-slide-toggle>
+        </div>
+        <div class="toggle-wrap">
+          <mat-slide-toggle [disabled]="readonly()" [ngModel]="draft().xlsx.autoSizeColumns" (ngModelChange)="updateXlsx({ autoSizeColumns: $event })">{{ i18n.t('ui.write.autoSizeColumns') }}</mat-slide-toggle>
+        </div>
+      }
+    </div>
   </div>
 
   <!-- Columnas de detalle -->

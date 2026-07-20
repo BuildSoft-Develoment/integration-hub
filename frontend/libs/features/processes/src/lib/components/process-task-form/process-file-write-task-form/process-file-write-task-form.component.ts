@@ -6,6 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import {
   FileWriteCellDraft,
@@ -13,6 +14,7 @@ import {
   FileWriteSourceMode,
   FileWriteTableSourceDraft,
   FileWriteTaskDraft,
+  FileWriteXlsxDraft,
   ProcessTaskFormBridgeService,
 } from '@integration-hub/core/providers';
 import { COMMON_ENCODINGS, SuggestInputComponent } from '@integration-hub/shared/ui';
@@ -35,6 +37,7 @@ type CellSection = 'header' | 'trailer';
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    MatSlideToggleModule,
     SuggestInputComponent,
     ProcessDbWriteTableSelectorComponent,
     ProcessTaskRuntimePanelComponent,
@@ -60,6 +63,8 @@ export class ProcessFileWriteTaskFormComponent {
     encoding: 'UTF-8',
     lineEnding: 'LF',
     delimiter: ',',
+    quoteStrategy: 'REQUIRED',
+    xlsx: { sheetName: '', headerStyle: 'BOLD', freezeHeader: true, autoFilter: false, autoSizeColumns: false },
     columns: [],
     header: [],
     trailer: [],
@@ -75,7 +80,13 @@ export class ProcessFileWriteTaskFormComponent {
   readonly executionModes = ['once'] as const;
 
   readonly isTxt = computed(() => this.draft().format === 'TXT');
+  readonly isCsv = computed(() => this.draft().format === 'CSV');
+  readonly isXlsx = computed(() => this.draft().format === 'XLSX');
   readonly isTableSource = computed(() => this.draft().sourceMode === 'table');
+
+  updateXlsx(patch: Partial<FileWriteXlsxDraft>): void {
+    this.updateDraft({ xlsx: { ...this.draft().xlsx, ...patch } });
+  }
 
   // --- introspeccion de la fuente-tabla (patron DB_WRITE): elegir la tabla por autocomplete y sugerir
   //     las columnas REALES de la tabla en cada `field` del detalle ("alinear campos" con la fuente). ---

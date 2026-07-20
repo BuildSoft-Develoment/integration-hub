@@ -11,6 +11,18 @@ export type FileWriteColumnType = 'STRING' | 'NUMBER' | 'DATE';
 // el campo es passthrough (string): un modo agregado o hand-edited se preserva en el round-trip, no se colapsa.
 export type FileWriteRounding = 'HALF_UP' | 'HALF_EVEN' | 'DOWN';
 export type FileWriteCellKind = 'value' | 'metadata' | 'aggregate';
+// CSV: estrategia de comillas de FastCSV. REQUIRED (RFC-4180, default) solo entrecomilla cuando hace falta;
+// ALWAYS entrecomilla todos los campos.
+export type FileWriteQuoteStrategy = 'REQUIRED' | 'ALWAYS';
+
+/** Opciones especificas del formato XLSX (POI). Se serializan bajo `xlsx`. */
+export interface FileWriteXlsxDraft {
+  sheetName: string;
+  headerStyle: 'BOLD' | 'PLAIN';
+  freezeHeader: boolean;
+  autoFilter: boolean;
+  autoSizeColumns: boolean;
+}
 
 export interface FileWriteColumnDraft {
   field: string;
@@ -53,6 +65,8 @@ export interface FileWriteTaskDraft extends ProcessTaskRuntimeDraft {
   encoding: string;
   lineEnding: 'LF' | 'CRLF';
   delimiter: string;
+  quoteStrategy: FileWriteQuoteStrategy;
+  xlsx: FileWriteXlsxDraft;
   columns: FileWriteColumnDraft[];
   header: FileWriteCellDraft[];
   trailer: FileWriteCellDraft[];
@@ -78,6 +92,8 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       encoding: 'UTF-8',
       lineEnding: 'LF',
       delimiter: ',',
+      quoteStrategy: 'REQUIRED',
+      xlsx: this.defaultXlsx(),
       columns: [],
       header: [],
       trailer: [],
@@ -91,6 +107,10 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
     return { table: '', connectionRef: '', orderBy: 'id', payloadColumn: '', batchSize: '' };
   }
 
+  private defaultXlsx(): FileWriteXlsxDraft {
+    return { sheetName: '', headerStyle: 'BOLD', freezeHeader: true, autoFilter: false, autoSizeColumns: false };
+  }
+
   hydrateDraft(task: ProcessTaskFormModel): FileWriteTaskDraft {
     const config: any = this.parseJson(task.configurationJson);
     const layout = config.layout && typeof config.layout === 'object' ? config.layout : {};
@@ -101,11 +121,25 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       encoding: String(config.encoding || 'UTF-8'),
       lineEnding: String(detail.lineEnding || 'LF').toUpperCase() === 'CRLF' ? 'CRLF' : 'LF',
       delimiter: String(detail.delimiter || ','),
+      quoteStrategy: String(detail.quoteStrategy || 'REQUIRED').toUpperCase() === 'ALWAYS' ? 'ALWAYS' : 'REQUIRED',
+      xlsx: this.hydrateXlsx(config.xlsx),
       columns: this.hydrateColumns(detail.columns),
       header: this.hydrateCells(layout.header),
       trailer: this.hydrateCells(layout.trailer),
       archiveNameTemplate: String(config.archiveNameTemplate || ''),
       ...this.hydrateSource(config.input),
+    };
+  }
+
+  private hydrateXlsx(raw: unknown): FileWriteXlsxDraft {
+    const xlsx = raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as any) : {};
+    const d = this.defaultXlsx();
+    return {
+      sheetName: String(xlsx.sheetName || ''),
+      headerStyle: String(xlsx.headerStyle || 'BOLD').toUpperCase() === 'PLAIN' ? 'PLAIN' : 'BOLD',
+      freezeHeader: xlsx.freezeHeader != null ? xlsx.freezeHeader !== false && xlsx.freezeHeader !== 'false' : d.freezeHeader,
+      autoFilter: xlsx.autoFilter === true || xlsx.autoFilter === 'true',
+      autoSizeColumns: xlsx.autoSizeColumns === true || xlsx.autoSizeColumns === 'true',
     };
   }
 
@@ -141,6 +175,10 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
     };
     if (draft.format === 'CSV') {
       detail.delimiter = draft.delimiter || ',';
+      // quoteStrategy solo se emite si difiere del default backend (REQUIRED), para no ensuciar la config.
+      if (draft.quoteStrategy === 'ALWAYS') {
+        detail.quoteStrategy = 'ALWAYS';
+      }
     }
     if (draft.lineEnding === 'CRLF') {
       detail.lineEnding = 'CRLF';
@@ -166,6 +204,18 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
     );
     // Backend FILE_WRITE es once-task (pagina la tabla el mismo); nunca batch/per-record.
     payload.executionMode = 'once';
+    // XLSX (ADR-016): opciones de formato bajo `xlsx`. Se emiten solo los valores != default (el XlsxWriter aplica
+    // sheetName=Sheet1, headerStyle=BOLD, freezeHeader=true, autoFilter/autoSize=false por defecto).
+    if (draft.format === 'XLSX') {
+      const x = draft.xlsx;
+      const xlsx: any = {};
+      if (x.sheetName?.trim()) xlsx.sheetName = x.sheetName.trim();
+      if (x.headerStyle === 'PLAIN') xlsx.headerStyle = 'PLAIN';
+      if (x.freezeHeader === false) xlsx.freezeHeader = false;
+      if (x.autoFilter) xlsx.autoFilter = true;
+      if (x.autoSizeColumns) xlsx.autoSizeColumns = true;
+      if (Object.keys(xlsx).length) payload.xlsx = xlsx;
+    }
     // ADR-016 / ADR-004: fuente de datos.
     if (draft.sourceMode === 'table') {
       // Modo tabla (directa, keyset). El motor (TaskInputResolver) exige input.source='task-output' e
