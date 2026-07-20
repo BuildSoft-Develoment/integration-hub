@@ -44,7 +44,7 @@ describe('SourceCatalogQueryStore', () => {
     await store.load();
 
     expect(listCalls).toEqual([
-      { search: '', type: 'ALL', status: 'ALL', page: 0, size: 8 },
+      { search: '', type: 'ALL', direction: 'ALL', status: 'ALL', page: 0, size: 8 },
     ]);
     expect(store.totalLength()).toBe(1);
   });
@@ -57,6 +57,7 @@ describe('SourceCatalogQueryStore', () => {
     expect(listCalls[listCalls.length - 1]).toEqual({
       search: '',
       type: 'REST',
+      direction: 'ALL',
       status: 'ALL',
       page: 0,
       size: 8,

@@ -130,11 +130,13 @@ describe('SourceCatalogStore', () => {
   });
 
   it('should emit success feedback when the source test succeeds', async () => {
+    // El store LOCALIZA el mensaje de exito (commit 36a75452): ignora el mensaje crudo de la API y usa el
+    // texto localizado; el detalle de la API solo se usa en el caso de error.
     testImpl = () => of({ success: true, message: 'Fuente OK' });
 
     await store.testSource();
 
-    expect(store.testResult()).toEqual({ success: true, message: 'Fuente OK' });
+    expect(store.testResult()).toEqual({ success: true, message: 'La configuración de la fuente es válida.' });
     expect(feedbackCalls).toEqual(['tested:entities.source']);
   });
 });
