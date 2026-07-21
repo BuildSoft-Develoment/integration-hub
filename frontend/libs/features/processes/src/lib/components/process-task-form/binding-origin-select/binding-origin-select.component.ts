@@ -29,6 +29,8 @@ export class BindingOriginSelectComponent {
 
   readonly picked = output<ProcessTaskBindingOption>();
   readonly cleared = output<void>();
+  /** true al entrar el drag sobre la zona, false al salir/soltar. Lo usa DB_WRITE para su papelera; FILE_WRITE lo ignora. */
+  readonly hoverChange = output<boolean>();
 
   readonly hovered = signal(false);
 
@@ -49,8 +51,11 @@ export class BindingOriginSelectComponent {
   }
 
   onPicked(option: ProcessTaskBindingOption | null): void {
+    // Elegir "Ninguno" (null) limpia el destino — coherente con el boton de limpiar.
     if (option) {
       this.picked.emit(option);
+    } else {
+      this.cleared.emit();
     }
   }
 
@@ -63,11 +68,13 @@ export class BindingOriginSelectComponent {
   handleDragEnter(): void {
     if (!this.readonly() && this.draggingSource()) {
       this.hovered.set(true);
+      this.hoverChange.emit(true);
     }
   }
 
   handleDragLeave(): void {
     this.hovered.set(false);
+    this.hoverChange.emit(false);
   }
 
   handleDrop(event: DragEvent): void {
@@ -76,6 +83,7 @@ export class BindingOriginSelectComponent {
     }
     event.preventDefault();
     this.hovered.set(false);
+    this.hoverChange.emit(false);
     const source = this.draggingSource() ?? this.readFromTransfer(event);
     if (source) {
       this.picked.emit(source);

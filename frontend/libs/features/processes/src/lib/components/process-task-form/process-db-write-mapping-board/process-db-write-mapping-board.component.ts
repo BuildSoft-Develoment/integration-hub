@@ -1,20 +1,20 @@
-﻿import { CommonModule } from '@angular/common';
+import { CommonModule } from '@angular/common';
 import { Component, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
+import { DbWriteMappingDraft, ProcessTaskBindingOption } from '@integration-hub/core/providers';
 import { I18nService } from '@integration-hub/core/services';
-import { DbWriteMappingDraft } from '@integration-hub/core/providers';
 import { DbWriteColumnRef, DbWriteSourceItem } from '../../../models/process-db-write.models';
+import { BindingOriginSelectComponent } from '../binding-origin-select/binding-origin-select.component';
 
 @Component({
   selector: 'ih-process-db-write-mapping-board',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatCheckboxModule, MatFormFieldModule, MatInputModule, MatSelectModule],
-    templateUrl: './process-db-write-mapping-board.component.html',
-    styleUrl: './process-db-write-mapping-board.component.css'
+  imports: [CommonModule, FormsModule, MatCheckboxModule, MatFormFieldModule, MatInputModule, BindingOriginSelectComponent],
+  templateUrl: './process-db-write-mapping-board.component.html',
+  styleUrl: './process-db-write-mapping-board.component.css',
 })
 export class ProcessDbWriteMappingBoardComponent {
   readonly i18n = inject(I18nService);
@@ -48,52 +48,24 @@ export class ProcessDbWriteMappingBoardComponent {
     return !!mapping.sourceKey && !mapping.expression;
   }
 
-  displaySourceLabel(columnName: string): string {
-    const mapping = this.mappingFor(columnName);
-    if (mapping.sourceKey && !mapping.expression) {
-      return mapping.sourceLabel;
-    }
-    return this.draggingSource() ? this.i18n.t('ui.dbWriteDropReady') : this.i18n.t('ui.dbWriteDropAction');
+  handleSourcePicked(columnName: string, source: ProcessTaskBindingOption): void {
+    // El composite compartido emite ProcessTaskBindingOption; en runtime es un DbWriteSourceItem (de sourceGroups).
+    this.sourceDrop.emit({ columnName, source: source as DbWriteSourceItem });
   }
 
-  handleSourcePicked(columnName: string, source: DbWriteSourceItem | null): void {
-    if (!source) {
-      return;
-    }
-    this.sourceDrop.emit({ columnName, source });
-  }
-
-  allowDrop(event: DragEvent): void {
-    if (this.readonly()) {
-      return;
-    }
-    event.preventDefault();
-  }
-
-  handleDragEnter(columnName: string): void {
-    if (this.readonly() || !this.draggingSource()) {
-      return;
-    }
-    this.hoveredColumn.set(columnName);
-  }
-
-  handleDragLeave(columnName: string): void {
-    if (this.hoveredColumn() === columnName) {
+  // Rastrea la columna bajo el drag (para la papelera): la emite el composite compartido via hoverChange.
+  onRowHover(columnName: string, hovering: boolean): void {
+    if (hovering) {
+      this.hoveredColumn.set(columnName);
+    } else if (this.hoveredColumn() === columnName) {
       this.hoveredColumn.set(null);
     }
   }
 
-  handleDrop(event: DragEvent, columnName: string): void {
-    if (this.readonly()) {
-      return;
+  allowDrop(event: DragEvent): void {
+    if (!this.readonly()) {
+      event.preventDefault();
     }
-    event.preventDefault();
-    this.hoveredColumn.set(null);
-    const source = this.draggingSource() ?? this.readFromTransfer(event);
-    if (!source) {
-      return;
-    }
-    this.sourceDrop.emit({ columnName, source });
   }
 
   handleTrashDrop(event: DragEvent): void {
@@ -116,30 +88,6 @@ export class ProcessDbWriteMappingBoardComponent {
 
   groupLabel(groupKey: string): string {
     const translated = this.i18n.t(groupKey);
-    if (translated !== groupKey) {
-      return translated;
-    }
-    switch (groupKey) {
-      case 'ui.dbWriteGroup.fields':
-        return this.i18n.t('ui.dbWriteGroup.fields');
-      case 'ui.dbWriteGroup.variables':
-        return this.i18n.t('ui.dbWriteGroup.variables');
-      case 'ui.dbWriteGroup.metadata':
-        return this.i18n.t('ui.dbWriteGroup.metadata');
-      default:
-        return groupKey;
-    }
-  }
-
-  private readFromTransfer(event: DragEvent): DbWriteSourceItem | null {
-    const raw = event.dataTransfer?.getData('text/plain');
-    if (!raw) {
-      return null;
-    }
-    try {
-      return JSON.parse(raw) as DbWriteSourceItem;
-    } catch {
-      return null;
-    }
+    return translated === groupKey ? groupKey : translated;
   }
 }

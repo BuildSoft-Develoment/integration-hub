@@ -65,8 +65,7 @@
       }
       .mapping-row__target,
       .mapping-row__assign,
-      .mapping-row__expression,
-      .mapping-select {
+      .mapping-row__expression {
         min-width: 0;
       }
       .mapping-row__target,
@@ -77,91 +76,6 @@
       .mapping-row__target small {
         color: var(--ih-text-soft);
         overflow-wrap: anywhere;
-      }
-      .mapping-select {
-        position: relative;
-        min-height: 3rem;
-        border: 1px dashed var(--ih-border);
-        border-radius: 14px;
-        padding: 0.4rem 0.45rem 0.4rem 0.7rem;
-        background: color-mix(in srgb, var(--ih-surface-alt) 82%, transparent);
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
-        gap: 0.5rem;
-        transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
-      }
-      .mapping-select--filled {
-        border-style: solid;
-        border-color: color-mix(in srgb, var(--ih-accent) 45%, var(--ih-border));
-      }
-      .mapping-select--ready {
-        border-color: color-mix(in srgb, var(--ih-accent) 32%, var(--ih-border));
-        background: color-mix(in srgb, var(--ih-accent) 7%, var(--ih-surface-alt));
-      }
-      .mapping-select--hover {
-        border-style: solid;
-        border-color: color-mix(in srgb, var(--ih-accent) 55%, var(--ih-border));
-        background: color-mix(in srgb, var(--ih-accent) 11%, var(--ih-surface-alt));
-        box-shadow: 0 0 0 3px color-mix(in srgb, var(--ih-accent) 14%, transparent);
-        transform: translateY(-1px);
-      }
-      .mapping-select__value {
-        min-width: 0;
-        color: var(--ih-text-soft);
-        font-size: 0.86rem;
-        font-weight: 600;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .mapping-select--filled .mapping-select__value {
-        color: var(--ih-text);
-      }
-      .mapping-select__actions {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.22rem;
-      }
-      .mapping-select__icon {
-        width: 1.65rem;
-        height: 1.65rem;
-        border: 0;
-        border-radius: 999px;
-        background: transparent;
-        color: var(--ih-text-soft);
-        display: inline-grid;
-        place-items: center;
-        cursor: pointer;
-      }
-      .mapping-select__icon:hover {
-        background: color-mix(in srgb, var(--ih-accent) 10%, transparent);
-        color: var(--ih-text);
-      }
-      .mapping-select__icon--clear {
-        color: var(--ih-danger);
-      }
-      .mapping-select__icon--clear:hover {
-        background: color-mix(in srgb, var(--ih-danger) 14%, transparent);
-        color: var(--ih-danger);
-      }
-      .mapping-select__icon svg {
-        width: 0.95rem;
-        height: 0.95rem;
-        stroke: currentColor;
-        fill: none;
-        stroke-width: 2.2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-      }
-      .mapping-select__field {
-        position: absolute;
-        inset: 0;
-        opacity: 0;
-        pointer-events: none;
-      }
-      .mapping-select__field .mat-mdc-form-field-subscript-wrapper {
-        display: none;
       }
       .mapping-row__expression {
         width: 100%;
