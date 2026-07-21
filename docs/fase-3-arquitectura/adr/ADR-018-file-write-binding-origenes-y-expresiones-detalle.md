@@ -38,7 +38,7 @@ El invariante que lo hace correcto es un **hallazgo del backend** (`FileWriteTas
 
 ### Binding de agregados a celdas (backend)
 
-Nueva forma de celda `{sourceOutput, sourceTaskRef, sourceKey}`. `resolveCell` lee de `taskOutputs` el Map publicado por el motor bajo `<ref>.summary` / `<ref>.out` (ver `TaskOutputRegistry.registerTypedOutput`) y extrae el campo. Binding no resuelto -> celda vacia (consistente con `metadata`/`aggregate`). `metadata` queda en los 2 tokens que `TaskContext` expone (`_processExecutionId`, `_taskDefinitionId`); los de lote no aplican (`FILE_WRITE` es once-task).
+Nueva forma de celda `{sourceOutput, sourceTaskRef, sourceKey}`. `resolveCell` lee de `taskOutputs` el Map publicado por el motor bajo `<ref>.summary` / `<ref>.out` (ver `TaskOutputRegistry.registerTypedOutput`) y extrae el campo. Binding no resuelto -> celda vacia (consistente con `metadata`/`aggregate`). **`metadata`** (celdas Y columnas de detalle): FILE_WRITE lee el mapa COMPLETO que el motor publica en `attributes["metadata"]` (`ProcessTaskRuntimeService`/`taskMetadata`) -> 7 tokens (`_processExecutionId`, `_taskDefinitionId`, `_taskOrder`, `_taskType`, `_taskRef`, `_executionMode`, `_triggerSource`), paridad con DB_WRITE. En una columna de DETALLE, un `field` = token de metadata se resuelve al mismo valor en cada fila (`project()` inyecta los `metaFields` referenciados). Los de lote (`_batch*`) se omiten: `FILE_WRITE` es once-task.
 
 ## El evaluador de expresiones (guardarraíles money-path)
 
@@ -55,7 +55,7 @@ Guardarraíles (money-path):
 - **BigDecimal**: `FileWriteArithmetic extends JexlArithmetic` hace `+ - * /` en BigDecimal (MathContext DECIMAL128) cuando ambos operandos son numericos. Evita la imprecision de double **y** el gotcha de JEXL de concatenar strings numericas en `+` (`"0.1" + "0.2"` da `0.3`, no `"0.10.2"` ni `0.30000000000000004`). Con un operando no numerico, `+` delega a la base (concatenacion, p.ej. `first + ' ' + last`). Se dispatch-ea por metodo directo (no reflexion) -> native-safe.
 - **Fail-loud**: `strict(true).silent(false)`. Una variable indefinida (typo) o un error de tipo lanza `IllegalStateException` con contexto columna+expresion; nunca una celda incorrecta en silencio (a diferencia de `MT101_ROUTE`, null-tolerant para rutear).
 - **Determinismo**: sin funciones -> sin `now()`/`uuid()`/random. Misma entrada = misma salida (requisito del re-run correctivo byte-identico).
-- **Campos crudos**: cada expresion ve los campos del registro (mas `_processExecutionId`/`_taskDefinitionId`), no las columnas ya computadas (sin encadenamiento -> sin orden implicito).
+- **Campos crudos**: cada expresion ve los campos del registro (mas los 7 tokens de `metadata`), no las columnas ya computadas (sin encadenamiento -> sin orden implicito).
 
 ### Integracion por proyeccion (SPI del writer intacto)
 
@@ -87,7 +87,8 @@ La primera version daba a elegir el origen de forma pobre: el detalle era un aut
   | Destino | Origenes en el picker |
   |---|---|
   | Columna de **detalle** | campos del STREAM elegido (`records`/`table`/`errors` del `sourceOutput`) — o el autocomplete free-entry en modo tabla (columnas introspectadas / claves de un payload JSON) |
-  | Celda **cabecera/trailer** | ESPECIAL (constante / `count` / `sum`) · `metadata` (2 tokens) · `summary` / `out` de la tarea de origen |
+  | Columna de **detalle** (metadata) | `metadata` (7 tokens) tambien es un origen valido de detalle: mismo valor en cada fila |
+  | Celda **cabecera/trailer** | ESPECIAL (constante / `count` / `sum`) · `metadata` (7 tokens) · `summary` / `out` de la tarea de origen |
 
 - **Redistribucion del form**: la paleta de origenes dejo de estar arriba (lejos de sus destinos) y pasa a un workspace de 2 columnas — paleta STICKY a la izquierda, estructura (detalle + cabecera + trailer) a la derecha — asi se arrastra AL LADO del destino. El grid huerfano de formato se integro a la seccion de opciones. Colapsa a 1 columna en <=1080px.
 
