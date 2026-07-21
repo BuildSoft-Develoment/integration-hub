@@ -27,6 +27,7 @@
 - [ADR-015 Ejecucion de tareas asincrona por broker (Kafka por defecto)](ADR-015-backend-task-async-broker-execution.md)
 - [ADR-016 Salida generica: escritura de archivos y entrega por transporte](ADR-016-salida-generica-escritura-archivo-y-entrega.md)
 - [ADR-017 Conexion de salida unificada: fuente OUTPUT reutilizada por FILE_DELIVER y MT101_PAY/STATUS (SFTP)](ADR-017-conexion-salida-unificada-file-deliver-mt101-pay.md)
+- [ADR-018 FILE_WRITE: binding de origenes y expresiones de detalle (paridad DB_WRITE + evaluador JEXL money-safe)](ADR-018-file-write-binding-origenes-y-expresiones-detalle.md)
 
 ## Regla
 

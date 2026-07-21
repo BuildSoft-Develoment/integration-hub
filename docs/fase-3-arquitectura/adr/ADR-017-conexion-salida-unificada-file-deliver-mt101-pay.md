@@ -5,7 +5,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [ADR-016 Salida generica: escritura de archivos y entrega por transporte](ADR-016-salida-generica-escritura-archivo-y-entrega.md)
-- Siguiente: [Indice docs](../../README.md)
+- Siguiente: [ADR-018 FILE_WRITE: binding de origenes y expresiones de detalle (paridad DB_WRITE + evaluador JEXL money-safe)](ADR-018-file-write-binding-origenes-y-expresiones-detalle.md)
 <!-- nav-guided:end -->
 
 ## Estado
