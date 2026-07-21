@@ -57,6 +57,9 @@ public class FileWriteTaskProvider implements TaskProvider {
     private final ConnectionPoolManager connectionPoolManager;
     private final DataSource defaultDataSource;
     private final JsonConfigurationMapper jsonConfigurationMapper;
+    // Evaluador de expresiones por columna de detalle (ADR-004). Stateless (engine + cache estaticos); se instancia
+    // aqui para no tocar los constructores de test ni el grafo CDI.
+    private final FileWriteExpressionEvaluator expressions = new FileWriteExpressionEvaluator();
 
     @Inject
     public FileWriteTaskProvider(FileFormatWriterRegistry writers,
@@ -137,7 +140,8 @@ public class FileWriteTaskProvider implements TaskProvider {
         if (sourceTaskRef.isBlank()) {
             throw new IllegalArgumentException("FILE_WRITE requires input.sourceTaskRef");
         }
-        var records = toRecords(taskOutputs(context).get(sourceTaskRef + "." + sourceOutput));
+        var records = project(toRecords(taskOutputs(context).get(sourceTaskRef + "." + sourceOutput)),
+                expressionColumns(layout), metadataVars(context));
         var aggregates = computeAggregates(records, layout);
         writeHeaderIfPresent(session, layout, context, aggregates);
         session.writeDetail(records);
@@ -172,6 +176,8 @@ public class FileWriteTaskProvider implements TaskProvider {
         var headerCount = headerNeedsCount(layout) ? taskInputRepository.count(dataSource, table, filters) : 0L;
         writeHeaderIfPresent(session, layout, context, new Aggregates(headerCount, Map.of()));
 
+        var exprCols = expressionColumns(layout);
+        var metadata = metadataVars(context);
         var sums = initialSums(layout);
         Object lastKey = null;
         long total = 0;
@@ -187,7 +193,10 @@ public class FileWriteTaskProvider implements TaskProvider {
                         + "' produced a null value; keyset pagination requires a non-null, unique ordering column (e.g. the PK)");
             }
             lastKey = nextKey;
-            var detailPage = payloadColumn.isBlank() ? rawPage : parsePayloadColumn(rawPage, payloadColumn);
+            // El cursor keyset usa la columna cruda 'orderBy'; se toma el nextKey de rawPage ANTES de proyectar
+            // (la proyeccion puede reescribir/omitir esa columna). Recien despues se computa la pagina de detalle.
+            var detailPage = project(payloadColumn.isBlank() ? rawPage : parsePayloadColumn(rawPage, payloadColumn),
+                    exprCols, metadata);
             session.writeDetail(detailPage);
             accumulateSums(detailPage, sums);
             total += detailPage.size();
@@ -210,6 +219,64 @@ public class FileWriteTaskProvider implements TaskProvider {
             }
         }
         return parsed;
+    }
+
+    // --- expresiones por columna de detalle (ADR-004) ---
+
+    /** Columna de detalle con expresion: {@code {field, expression}}. */
+    private record ExprColumn(String field, String expression) {
+    }
+
+    @SuppressWarnings("unchecked")
+    private List<ExprColumn> expressionColumns(Map<String, Object> layout) {
+        var detail = mapValue(layout.get("detail"));
+        if (!(detail.get("columns") instanceof List<?> list)) {
+            return List.of();
+        }
+        var columns = new ArrayList<ExprColumn>();
+        for (var raw : list) {
+            if (raw instanceof Map<?, ?> map) {
+                var column = (Map<String, Object>) map;
+                var field = stringValue(column.get("field"), "");
+                var expression = stringValue(column.get("expression"), "");
+                if (!field.isBlank() && !expression.isBlank()) {
+                    columns.add(new ExprColumn(field, expression));
+                }
+            }
+        }
+        return columns;
+    }
+
+    private Map<String, Object> metadataVars(TaskContext context) {
+        var metadata = new LinkedHashMap<String, Object>();
+        if (context.processExecutionId() != null) {
+            metadata.put("_processExecutionId", context.processExecutionId());
+        }
+        if (context.taskDefinitionId() != null) {
+            metadata.put("_taskDefinitionId", context.taskDefinitionId());
+        }
+        return metadata;
+    }
+
+    /**
+     * Proyecta cada registro computando las columnas con expresion: {@code out[col.field] = eval(col.expression, rec)}.
+     * Sin columnas-expresion es un no-op (devuelve la lista tal cual -> el camino sin expresiones queda byte-identico).
+     * Cada expresion ve los campos CRUDOS del registro (no las columnas ya computadas); se conservan los campos crudos
+     * (los usan otras columnas por nombre y los agregados {@code sum}/{@code count}).
+     */
+    private List<ReadRecord> project(List<ReadRecord> records, List<ExprColumn> exprColumns, Map<String, Object> metadata) {
+        if (exprColumns.isEmpty()) {
+            return records;
+        }
+        var projected = new ArrayList<ReadRecord>(records.size());
+        for (var record : records) {
+            var values = new LinkedHashMap<String, Object>(record.values());
+            for (var column : exprColumns) {
+                values.put(column.field(), expressions.evaluate(column.expression(), column.field(), record.values(), metadata));
+            }
+            projected.add(new ReadRecord(values));
+        }
+        return projected;
     }
 
     private DataSource resolveDataSource(String connectionRef) {

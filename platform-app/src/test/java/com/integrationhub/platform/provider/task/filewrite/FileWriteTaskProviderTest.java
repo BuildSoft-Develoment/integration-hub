@@ -113,6 +113,85 @@ class FileWriteTaskProviderTest {
         Files.deleteIfExists(Path.of(path));
     }
 
+    // --- ADR-004: expresiones por columna de detalle (evaluador JEXL plano money-safe) ---
+
+    @Test
+    void detailColumnExpressionsConcatAndBigDecimalArithmetic() throws Exception {
+        var context = new TaskContext(1L, 2L);
+        context.attributes().put("taskOutputs", Map.of("sp1.records", List.of(
+                new ReadRecord(Map.of("first", "John", "last", "Doe", "bruto", "1000.10", "comision", "0.05")))));
+        var config = Map.<String, Object>of(
+                "format", "CSV",
+                "input", Map.of("sourceTaskRef", "sp1", "sourceOutput", "records"),
+                "layout", Map.of("detail", Map.of("columns", List.of(
+                        Map.of("field", "nombre", "expression", "first + ' ' + last"),
+                        Map.of("field", "neto", "type", "NUMBER", "format", "0.00", "expression", "bruto - comision")))));
+
+        var result = recordsProvider().execute(context, config);
+
+        var path = String.valueOf(result.outputs().get("archivePath"));
+        // Concat de strings ('+' de no-numericas) + resta BigDecimal EXACTA (1000.10 - 0.05 = 1000.05),
+        // formateada 0.00 por el type=NUMBER de la columna.
+        assertEquals("John Doe,1000.05\n", Files.readString(Path.of(path), StandardCharsets.UTF_8));
+        Files.deleteIfExists(Path.of(path));
+    }
+
+    @Test
+    void bigDecimalAdditionAvoidsDoubleErrorAndStringConcatGotcha() throws Exception {
+        var context = new TaskContext(1L, 2L);
+        // 0.1 + 0.2: double daria 0.30000000000000004; concatenacion daria '0.10.2'. BigDecimal da 0.3.
+        context.attributes().put("taskOutputs", Map.of("sp1.records", List.of(
+                new ReadRecord(Map.of("a", "0.1", "b", "0.2")))));
+        var config = Map.<String, Object>of(
+                "format", "CSV",
+                "input", Map.of("sourceTaskRef", "sp1", "sourceOutput", "records"),
+                "layout", Map.of("detail", Map.of("columns", List.of(
+                        Map.of("field", "suma", "expression", "a + b")))));
+
+        var result = recordsProvider().execute(context, config);
+
+        var path = String.valueOf(result.outputs().get("archivePath"));
+        assertEquals("0.3\n", Files.readString(Path.of(path), StandardCharsets.UTF_8));
+        Files.deleteIfExists(Path.of(path));
+    }
+
+    @Test
+    void detailExpressionTernaryHandlesPresentButNullField() throws Exception {
+        var context = new TaskContext(1L, 2L);
+        var nullMoneda = new LinkedHashMap<String, Object>();
+        nullMoneda.put("moneda", null);
+        context.attributes().put("taskOutputs", Map.of("sp1.records", List.of(
+                new ReadRecord(nullMoneda),
+                new ReadRecord(Map.of("moneda", "usd")))));
+        // Ternario simple SIN funciones (money-safe / native-safe): campo presente-pero-null -> rama else.
+        var config = Map.<String, Object>of(
+                "format", "CSV",
+                "input", Map.of("sourceTaskRef", "sp1", "sourceOutput", "records"),
+                "layout", Map.of("detail", Map.of("columns", List.of(
+                        Map.of("field", "cur", "expression", "moneda != null ? moneda : 'PEN'")))));
+
+        var result = recordsProvider().execute(context, config);
+
+        var path = String.valueOf(result.outputs().get("archivePath"));
+        // Fila 1: moneda presente-pero-null -> 'PEN'; fila 2: 'usd'.
+        assertEquals("PEN\nusd\n", Files.readString(Path.of(path), StandardCharsets.UTF_8));
+        Files.deleteIfExists(Path.of(path));
+    }
+
+    @Test
+    void detailExpressionFailsLoudOnUndefinedVariable() {
+        var context = new TaskContext(1L, 2L);
+        context.attributes().put("taskOutputs", Map.of("sp1.records", List.of(new ReadRecord(Map.of("a", "1")))));
+        var config = Map.<String, Object>of(
+                "format", "CSV",
+                "input", Map.of("sourceTaskRef", "sp1", "sourceOutput", "records"),
+                "layout", Map.of("detail", Map.of("columns", List.of(
+                        Map.of("field", "x", "expression", "undefinedVar + 1")))));
+
+        var error = assertThrows(IllegalStateException.class, () -> recordsProvider().execute(context, config));
+        assertTrue(error.getMessage().contains("expression failed"), error.getMessage());
+    }
+
     @Test
     void writesCsvFromTableWithKeysetPagingAndTrailerAggregates() throws Exception {
         var repository = mock(TaskInputRepository.class);
