@@ -21,6 +21,18 @@
         </mat-select>
         <mat-hint>{{ isTableSource() ? i18n.t('ui.write.sourceTableHint') : i18n.t('ui.write.sourceRecordsHint') }}</mat-hint>
       </mat-form-field>
+
+      @if (!isTableSource() && availableSourceOutputs().length) {
+        <mat-form-field>
+          <mat-label>{{ i18n.t('ui.write.sourceOutput') }}</mat-label>
+          <mat-select [disabled]="readonly()" [ngModel]="selectedSourceOutput()" (ngModelChange)="setSourceOutput($event)">
+            @for (kind of availableSourceOutputs(); track kind) {
+              <mat-option [value]="kind">{{ i18n.t('ui.write.output.' + kind) }}</mat-option>
+            }
+          </mat-select>
+          <mat-hint>{{ i18n.t('ui.write.sourceOutputHint') }}</mat-hint>
+        </mat-form-field>
+      }
     </div>
 
     @if (isTableSource()) {

@@ -16,12 +16,14 @@ import {
   FileWriteTaskDraft,
   FileWriteXlsxDraft,
   ProcessTaskFormBridgeService,
+  ProcessTaskOutputKind,
 } from '@integration-hub/core/providers';
 import { COMMON_ENCODINGS, SuggestInputComponent } from '@integration-hub/shared/ui';
 import { firstValueFrom } from 'rxjs';
-import { ConnectionRef, ProcessTaskFormModel } from '../../../models/process.models';
+import { ConnectionRef, ProcessTaskFormModel, ReaderRef } from '../../../models/process.models';
 import { ProcessApiService } from '../../../api/process-api.service';
 import { DbWriteColumnRef, DbWriteTableRef } from '../../../models/process-db-write.models';
+import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
 import { ProcessDbWriteTableSelectorComponent } from '../process-db-write-table-selector/process-db-write-table-selector.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
@@ -50,10 +52,14 @@ export class ProcessFileWriteTaskFormComponent {
   private readonly manager = inject(ProcessTaskManagerService);
   private readonly bridge = inject(ProcessTaskFormBridgeService);
   private readonly api = inject(ProcessApiService);
+  private readonly bindingContext = inject(ProcessTaskBindingContextService);
 
   readonly task = input.required<ProcessTaskFormModel>();
   readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
   readonly connections = input<readonly ConnectionRef[]>([]);
+  // El host pasa `readers` a todos los forms (registeredInputs); FILE_WRITE los usa para sugerir los campos
+  // del `records` de un FILE_READ de origen (buildOptions del motor de binding ADR-004).
+  readonly readers = input<readonly ReaderRef[]>([]);
   readonly readonly = input(false);
 
   readonly draft = computed<FileWriteTaskDraft>(() => this.manager.hydrateDraft<FileWriteTaskDraft>(this.task()) ?? {
@@ -84,8 +90,33 @@ export class ProcessFileWriteTaskFormComponent {
   readonly isXlsx = computed(() => this.draft().format === 'XLSX');
   readonly isTableSource = computed(() => this.draft().sourceMode === 'table');
 
+  // ADR-004: FILE_WRITE escribe un STREAM de filas al detalle, y solo `records`/`table`/`errors` son streams
+  // consumibles (el backend FileWriteTaskProvider.toRecords acepta ReadResult/List). `summary`/`metadata`/`out`
+  // son Map-shaped (0 filas) -> su lugar es la celda header/trailer, no el detalle. Por eso el selector de salida
+  // de origen se restringe a estos tres, interseccion con lo que la tarea de origen realmente publica.
+  private readonly consumableOutputs: readonly ProcessTaskOutputKind[] = ['records', 'table', 'errors'];
+
+  readonly sourceTask = computed(() =>
+    this.bindingContext.resolveTaskByRef(this.draft().input?.sourceTaskRef || '', this.tasks()),
+  );
+  readonly availableSourceOutputs = computed<ProcessTaskOutputKind[]>(() => {
+    const task = this.sourceTask();
+    if (!task) return [];
+    return this.bindingContext.availableOutputsForTask(task).filter((kind) => this.consumableOutputs.includes(kind));
+  });
+  readonly selectedSourceOutput = computed<ProcessTaskOutputKind>(
+    () => (this.draft().input?.sourceOutput as ProcessTaskOutputKind) || 'records',
+  );
+
   updateXlsx(patch: Partial<FileWriteXlsxDraft>): void {
     this.updateDraft({ xlsx: { ...this.draft().xlsx, ...patch } });
+  }
+
+  // Cambia la salida de origen (records/table/errors) que alimenta el detalle; conserva la tarea de origen.
+  setSourceOutput(output: ProcessTaskOutputKind): void {
+    const input = this.draft().input;
+    if (!input?.sourceTaskRef) return;
+    this.updateDraft({ input: { ...input, source: 'task-output', sourceOutput: output } });
   }
 
   // --- introspeccion de la fuente-tabla (patron DB_WRITE): elegir la tabla por autocomplete y sugerir
@@ -98,9 +129,22 @@ export class ProcessFileWriteTaskFormComponent {
   readonly selectedConnection = computed(() =>
     this.connections().find((c) => c.name === this.draft().tableSource.connectionRef) ?? null,
   );
-  // Sugerencias del `field` de cada columna de detalle = columnas reales de la tabla introspectada. Combo
-  // EDITABLE: si la fuente es un JSON por fila (payloadColumn) el usuario escribe las claves manualmente.
-  readonly fieldSuggestions = computed(() => this.columns().map((c) => c.name));
+  // Sugerencias del `field` de cada columna de detalle. Combo EDITABLE en ambos modos:
+  //  - modo tabla: columnas REALES de la tabla introspectada (o claves libres si hay payloadColumn JSON).
+  //  - modo records: los campos del output-kind elegido de la tarea de origen (buildOptions del motor de
+  //    binding ADR-004): p.ej. los campos del reader de un FILE_READ, o las columnas de un DB_WRITE.table.
+  readonly fieldSuggestions = computed(() =>
+    this.isTableSource() ? this.columns().map((c) => c.name) : this.recordFieldSuggestions(),
+  );
+
+  private readonly recordFieldSuggestions = computed<string[]>(() => {
+    if (this.isTableSource() || !this.sourceTask()) return [];
+    const kind = this.selectedSourceOutput();
+    return this.bindingContext
+      .buildOptions(this.task(), this.tasks(), this.readers(), this.draft().input)
+      .filter((option) => option.kind === kind)
+      .map((option) => option.key);
+  });
 
   private lastTablesKey = '';
   private lastColumnsKey = '';

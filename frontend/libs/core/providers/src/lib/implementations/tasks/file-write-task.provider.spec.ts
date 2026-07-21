@@ -112,6 +112,21 @@ describe('FileWriteTaskProvider', () => {
     expect(rehydrated.sourceMode).toBe('records');
   });
 
+  it('modo records: preserva un sourceOutput no-default (errors) elegido en el selector de salida de origen', () => {
+    const draft = provider.createDraft();
+    // El runtime panel eligio la tarea de origen; el selector de salida cambio records -> errors.
+    draft.input = { source: 'task-output', sourceTaskRef: 'read1', sourceOutput: 'errors' } as any;
+
+    const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+    expect(config.input).toMatchObject({ source: 'task-output', sourceTaskRef: 'read1', sourceOutput: 'errors' });
+    // 'errors' no es un stream de tabla -> no se inyecta cursor keyset (solo 'table' lo lleva).
+    expect(config.input.cursor).toBeUndefined();
+
+    const rehydrated = provider.hydrateDraft({ taskType: 'FILE_WRITE', configurationJson: JSON.stringify(config) } as any);
+    expect(rehydrated.sourceMode).toBe('records');
+    expect(rehydrated.input?.sourceOutput).toBe('errors');
+  });
+
   it('round-trips align/pad en una celda de cabecera TXT (simetria con el detalle)', () => {
     const draft = provider.createDraft();
     draft.format = 'TXT';
