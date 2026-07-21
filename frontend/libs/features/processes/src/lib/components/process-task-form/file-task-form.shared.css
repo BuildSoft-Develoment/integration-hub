@@ -76,6 +76,37 @@
   color: var(--ih-primary, #6366f1);
   border-color: var(--ih-primary, #6366f1);
 }
+/* Estructura del archivo (FILE_WRITE): la paleta de origenes queda PEGADA a sus destinos (detalle + celdas).
+   Con paleta -> 2 columnas (paleta sticky | estructura); sin paleta (modo tabla / sin tarea origen) -> 1 columna
+   a todo el ancho. Colapsa a 1 columna en viewports angostos (mismo breakpoint que la paleta DB_WRITE). */
+.write-workspace {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+  align-items: start;
+}
+.write-workspace--paletted {
+  grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+}
+.write-workspace__palette {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  min-width: 0;
+}
+.write-workspace__structure {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+@media (max-width: 1080px) {
+  .write-workspace--paletted {
+    grid-template-columns: 1fr;
+  }
+  .write-workspace__palette {
+    position: static;
+  }
+}
 /* FILE_WRITE detalle: grid de columnas FIJAS -> los campos de TODAS las filas alinean vertical (a diferencia
    de .cell-row auto-fit, que empaqueta distinto cada fila segun cuantos campos tenga: STRING=2, NUMBER/TXT=7).
    Cada sub-campo tiene su grid-column fijo; los @if ausentes dejan su track vacio y los presentes siguen alineados. */
