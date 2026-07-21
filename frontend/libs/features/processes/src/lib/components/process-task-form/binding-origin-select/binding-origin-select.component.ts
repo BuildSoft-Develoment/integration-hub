@@ -57,7 +57,10 @@ export class BindingOriginSelectComponent {
   startCustom(): void {
     if (!this.readonly()) this.editing.set(true);
   }
-  commitCustom(value: string): void {
+  // event opcional (Enter): se frena la propagacion para que el modal-host (keydown.escape/enter) NO cierre ni
+  // submitee mientras se edita el input inline. El blur no lleva event (no burbujea al HostListener del modal).
+  commitCustom(value: string, event?: Event): void {
+    event?.stopPropagation();
     if (!this.editing()) return; // Enter ya commiteo -> el blur posterior no re-emite; Escape dejo editing=false.
     this.editing.set(false);
     const next = (value || '').trim();
@@ -65,7 +68,9 @@ export class BindingOriginSelectComponent {
       this.customEntered.emit(next);
     }
   }
-  cancelCustom(): void {
+  // Escape: cancelar la edicion SIN dejar que el evento cierre el modal (onEscape del process-task-modal).
+  cancelCustom(event?: Event): void {
+    event?.stopPropagation();
     this.editing.set(false);
   }
 

@@ -103,4 +103,29 @@ describe('BindingOriginSelectComponent', () => {
 
     expect(component.editing()).toBe(false);
   });
+
+  it('Escape frena la propagacion (no cierra el modal-host) y cancela la edicion', () => {
+    const { component, custom } = setup();
+    component.startCustom();
+    let stopped = false;
+    const event = { stopPropagation: () => (stopped = true) } as unknown as Event;
+
+    component.cancelCustom(event);
+
+    expect(stopped).toBe(true);
+    expect(component.editing()).toBe(false);
+    expect(custom).toEqual([]);
+  });
+
+  it('Enter (commitCustom con event) frena la propagacion y emite', () => {
+    const { component, custom } = setup();
+    component.startCustom();
+    let stopped = false;
+    const event = { stopPropagation: () => (stopped = true) } as unknown as Event;
+
+    component.commitCustom('neto', event);
+
+    expect(stopped).toBe(true);
+    expect(custom).toEqual(['neto']);
+  });
 });

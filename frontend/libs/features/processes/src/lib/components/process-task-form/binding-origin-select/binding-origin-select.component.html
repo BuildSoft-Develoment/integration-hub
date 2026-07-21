@@ -15,8 +15,8 @@
       class="mapping-select__custom"
       [value]="label()"
       [placeholder]="i18n.t('ui.bindingCustomPlaceholder')"
-      (keydown.enter)="commitCustom(customInput.value)"
-      (keydown.escape)="cancelCustom()"
+      (keydown.enter)="commitCustom(customInput.value, $event)"
+      (keydown.escape)="cancelCustom($event)"
       (blur)="commitCustom(customInput.value)"
     />
   } @else {
