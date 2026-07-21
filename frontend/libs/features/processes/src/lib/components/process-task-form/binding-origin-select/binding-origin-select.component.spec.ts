@@ -23,10 +23,12 @@ describe('BindingOriginSelectComponent', () => {
     const fixture = TestBed.createComponent(BindingOriginSelectComponent);
     fixture.componentRef.setInput('groups', []);
     const picked: ProcessTaskBindingOption[] = [];
+    const custom: string[] = [];
     let clearedCount = 0;
     fixture.componentInstance.picked.subscribe((o) => picked.push(o));
+    fixture.componentInstance.customEntered.subscribe((v) => custom.push(v));
     fixture.componentInstance.cleared.subscribe(() => (clearedCount += 1));
-    return { component: fixture.componentInstance, picked, cleared: () => clearedCount };
+    return { component: fixture.componentInstance, componentRef: fixture.componentRef, picked, custom, cleared: () => clearedCount };
   }
 
   it('emite picked con la opcion elegida (sin crashear aunque no haya mat-select renderizado)', () => {
@@ -57,5 +59,48 @@ describe('BindingOriginSelectComponent', () => {
     component.handleDrop(event);
 
     expect(picked).toEqual([opt]);
+  });
+
+  // --- Valor personalizado (allowCustom) ---
+  it('commitCustom emite customEntered (con trim) y sale de edicion', () => {
+    const { component, custom } = setup();
+
+    component.startCustom();
+    expect(component.editing()).toBe(true);
+    component.commitCustom('  monto_neto  ');
+
+    expect(custom).toEqual(['monto_neto']);
+    expect(component.editing()).toBe(false);
+  });
+
+  it('commitCustom NO emite si el valor coincide con el label actual', () => {
+    const { component, componentRef, custom } = setup();
+    componentRef.setInput('label', 'monto');
+
+    component.startCustom();
+    component.commitCustom('monto');
+
+    expect(custom).toEqual([]);
+    expect(component.editing()).toBe(false);
+  });
+
+  it('cancelCustom (Escape) sale sin emitir y el blur posterior queda guardado', () => {
+    const { component, custom } = setup();
+
+    component.startCustom();
+    component.cancelCustom();
+    expect(component.editing()).toBe(false);
+    component.commitCustom('algo'); // blur tras Escape -> editing=false -> no re-emite
+
+    expect(custom).toEqual([]);
+  });
+
+  it('startCustom no entra en edicion si es readonly', () => {
+    const { component, componentRef } = setup();
+    componentRef.setInput('readonly', true);
+
+    component.startCustom();
+
+    expect(component.editing()).toBe(false);
   });
 });

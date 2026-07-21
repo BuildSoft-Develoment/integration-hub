@@ -572,6 +572,8 @@ export const en = {
   'ui.dbWriteDropAction': 'Drag',
   'ui.dbWriteDropReady': 'Drop here',
   'ui.dbWriteSelectNone': 'Unassigned',
+  'ui.bindingCustomPlaceholder': 'Custom field…',
+  'ui.bindingCustomAria': 'Enter a custom field',
   'ui.dbWriteExpression': 'Free expression',
   'ui.dbWriteConnectionHint': 'Select a JDBC connection first to inspect real schemas, tables and columns.',
   'ui.fileReadCompatibilityHint': 'The source suggests this pattern or format: {value}',

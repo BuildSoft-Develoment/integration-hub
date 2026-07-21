@@ -43,6 +43,22 @@
 .mapping-select--filled .mapping-select__value {
   color: var(--ih-text);
 }
+/* Input inline de valor personalizado (allowCustom): mismo look que el value, sin borde/fondo propios. */
+.mapping-select__custom {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--ih-text);
+  font-size: 0.86rem;
+  font-weight: 600;
+  padding: 0;
+  outline: none;
+}
+.mapping-select__custom::placeholder {
+  color: var(--ih-text-soft);
+  font-weight: 500;
+}
 .mapping-select__actions {
   display: inline-flex;
   align-items: center;

@@ -165,14 +165,17 @@
           <div class="detail-row" [class.detail-row--txt]="isTxt()" [class.row-drop]="draggingSource()" (dragover)="allowDrop($event)" (drop)="dropOnColumn($index, $event)">
             <!-- Un UNICO estandar para el campo de origen del detalle (records y tabla): el composite combo + arrastrar
                  (drop-target real, no un <input>). En modo tabla ofrece las columnas introspectadas + metadata; se
-                 arrastra desde la paleta o se elige del combo. Igual que DB_WRITE. -->
+                 arrastra desde la paleta o se elige del combo. allowCustom (solo tabla) habilita tipear un campo
+                 libre: columnas de un datasource sin introspeccion o claves de un payloadColumn JSON. Igual que DB_WRITE. -->
             <ih-binding-origin-select
               class="dt-field"
               [groups]="detailOriginGroups()"
               [draggingSource]="draggingSource()"
               [readonly]="readonly()"
               [label]="column.field"
+              [allowCustom]="isTableSource()"
               (picked)="onDetailOriginPicked($index, $event)"
+              (customEntered)="updateColumn($index, { field: $event })"
               (cleared)="updateColumn($index, { field: '' })" />
             <mat-form-field class="dt-type">
               <mat-label>{{ i18n.t('ui.write.type') }}</mat-label>

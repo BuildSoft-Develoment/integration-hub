@@ -8,12 +8,31 @@
   (dragleave)="handleDragLeave()"
   (drop)="handleDrop($event)"
 >
-  <span class="mapping-select__value">{{ displayLabel() }}</span>
+  @if (editing()) {
+    <input
+      #customInput
+      type="text"
+      class="mapping-select__custom"
+      [value]="label()"
+      [placeholder]="i18n.t('ui.bindingCustomPlaceholder')"
+      (keydown.enter)="commitCustom(customInput.value)"
+      (keydown.escape)="cancelCustom()"
+      (blur)="commitCustom(customInput.value)"
+    />
+  } @else {
+    <span class="mapping-select__value">{{ displayLabel() }}</span>
+  }
 
   <div class="mapping-select__actions">
     @if (filled() && !readonly()) {
       <button type="button" class="mapping-select__icon mapping-select__icon--clear" (click)="cleared.emit()">
         <span aria-hidden="true">×</span>
+      </button>
+    }
+
+    @if (allowCustom() && !readonly() && !editing()) {
+      <button type="button" class="mapping-select__icon" [attr.aria-label]="i18n.t('ui.bindingCustomAria')" (click)="startCustom()">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
       </button>
     }
 

@@ -572,6 +572,8 @@ export const es = {
   'ui.dbWriteDropAction': 'Arrastrar',
   'ui.dbWriteDropReady': 'Soltar aqui',
   'ui.dbWriteSelectNone': 'Sin asignar',
+  'ui.bindingCustomPlaceholder': 'Campo personalizado…',
+  'ui.bindingCustomAria': 'Escribir un campo personalizado',
   'ui.dbWriteExpression': 'Expresion libre',
   'ui.dbWriteConnectionHint': 'Primero selecciona una conexion JDBC para consultar esquemas, tablas y columnas reales.',
   'ui.fileReadCompatibilityHint': 'El source sugiere el patron o formato: {value}',

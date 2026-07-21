@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, input, output, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, effect, inject, input, output, signal, viewChild } from '@angular/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelect, MatSelectModule } from '@angular/material/select';
 import { ProcessTaskBindingOption } from '@integration-hub/core/providers';
@@ -26,14 +26,48 @@ export class BindingOriginSelectComponent {
   readonly readonly = input(false);
   /** Etiqueta del origen actualmente elegido; vacio = sin origen (muestra el hint de drop). */
   readonly label = input('');
+  /** Opt-in: habilita un boton "lapiz" para TIPEAR un valor libre (columnas no introspectables, claves JSON).
+   *  Default off -> DB_WRITE/MT101 no cambian; solo FILE_WRITE (modo tabla) lo activa. */
+  readonly allowCustom = input(false);
 
   readonly picked = output<ProcessTaskBindingOption>();
   readonly cleared = output<void>();
+  /** Valor libre confirmado (Enter/blur) cuando allowCustom. El padre decide su significado (aca: el `field`). */
+  readonly customEntered = output<string>();
   /** true al entrar el drag sobre la zona, false al salir/soltar. Lo usa DB_WRITE para su papelera; FILE_WRITE lo ignora. */
   readonly hoverChange = output<boolean>();
 
   readonly hovered = signal(false);
+  readonly editing = signal(false);
   private readonly picker = viewChild<MatSelect>('picker');
+  private readonly customInput = viewChild<ElementRef<HTMLInputElement>>('customInput');
+
+  constructor() {
+    // Al entrar en modo edicion, enfocar+seleccionar el input inline (reactivo a que el @if lo renderice).
+    effect(() => {
+      const el = this.customInput()?.nativeElement;
+      if (this.editing() && el) {
+        el.focus();
+        el.select();
+      }
+    });
+  }
+
+  // --- Valor personalizado (allowCustom): tipear un `field` que no esta en la lista (ni introspectado). ---
+  startCustom(): void {
+    if (!this.readonly()) this.editing.set(true);
+  }
+  commitCustom(value: string): void {
+    if (!this.editing()) return; // Enter ya commiteo -> el blur posterior no re-emite; Escape dejo editing=false.
+    this.editing.set(false);
+    const next = (value || '').trim();
+    if (next && next !== this.label().trim()) {
+      this.customEntered.emit(next);
+    }
+  }
+  cancelCustom(): void {
+    this.editing.set(false);
+  }
 
   filled(): boolean {
     return !!this.label().trim();
