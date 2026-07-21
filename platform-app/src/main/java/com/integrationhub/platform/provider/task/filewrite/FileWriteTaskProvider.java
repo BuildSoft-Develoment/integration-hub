@@ -140,8 +140,9 @@ public class FileWriteTaskProvider implements TaskProvider {
         if (sourceTaskRef.isBlank()) {
             throw new IllegalArgumentException("FILE_WRITE requires input.sourceTaskRef");
         }
+        var metadata = metadataVars(context);
         var records = project(toRecords(taskOutputs(context).get(sourceTaskRef + "." + sourceOutput)),
-                expressionColumns(layout), metadataVars(context));
+                expressionColumns(layout), metadataColumns(layout, metadata), metadata);
         var aggregates = computeAggregates(records, layout);
         writeHeaderIfPresent(session, layout, context, aggregates);
         session.writeDetail(records);
@@ -178,6 +179,7 @@ public class FileWriteTaskProvider implements TaskProvider {
 
         var exprCols = expressionColumns(layout);
         var metadata = metadataVars(context);
+        var metaFields = metadataColumns(layout, metadata);
         var sums = initialSums(layout);
         Object lastKey = null;
         long total = 0;
@@ -196,7 +198,7 @@ public class FileWriteTaskProvider implements TaskProvider {
             // El cursor keyset usa la columna cruda 'orderBy'; se toma el nextKey de rawPage ANTES de proyectar
             // (la proyeccion puede reescribir/omitir esa columna). Recien despues se computa la pagina de detalle.
             var detailPage = project(payloadColumn.isBlank() ? rawPage : parsePayloadColumn(rawPage, payloadColumn),
-                    exprCols, metadata);
+                    exprCols, metaFields, metadata);
             session.writeDetail(detailPage);
             accumulateSums(detailPage, sums);
             total += detailPage.size();
@@ -247,7 +249,18 @@ public class FileWriteTaskProvider implements TaskProvider {
         return columns;
     }
 
+    // Metadata transversal (ADR-004): el motor (ProcessTaskRuntimeService) publica el mapa COMPLETO en
+    // attributes["metadata"] (_processExecutionId, _taskDefinitionId, _taskOrder, _taskType, _taskRef,
+    // _executionMode, _triggerSource) -> se lee de ahi para paridad con DB_WRITE. Fallback a los getters del
+    // TaskContext (p.ej. tests que lo construyen sin el mapa del motor). Los tokens de lote (_batch*) no aplican
+    // a FILE_WRITE (once-task, no hay slices).
+    @SuppressWarnings("unchecked")
     private Map<String, Object> metadataVars(TaskContext context) {
+        if (context.attributes().get("metadata") instanceof Map<?, ?> raw) {
+            var metadata = new LinkedHashMap<String, Object>();
+            raw.forEach((key, value) -> metadata.put(String.valueOf(key), value));
+            return metadata;
+        }
         var metadata = new LinkedHashMap<String, Object>();
         if (context.processExecutionId() != null) {
             metadata.put("_processExecutionId", context.processExecutionId());
@@ -259,18 +272,47 @@ public class FileWriteTaskProvider implements TaskProvider {
     }
 
     /**
-     * Proyecta cada registro computando las columnas con expresion: {@code out[col.field] = eval(col.expression, rec)}.
-     * Sin columnas-expresion es un no-op (devuelve la lista tal cual -> el camino sin expresiones queda byte-identico).
-     * Cada expresion ve los campos CRUDOS del registro (no las columnas ya computadas); se conservan los campos crudos
-     * (los usan otras columnas por nombre y los agregados {@code sum}/{@code count}).
+     * Columnas de detalle cuyo {@code field} es un token de metadata (p.ej. {@code _processExecutionId}) SIN expresion:
+     * se resuelven al mismo valor de metadata en CADA fila (la expresion, si la hay, ya resuelve metadata por su cuenta).
      */
-    private List<ReadRecord> project(List<ReadRecord> records, List<ExprColumn> exprColumns, Map<String, Object> metadata) {
-        if (exprColumns.isEmpty()) {
+    @SuppressWarnings("unchecked")
+    private List<String> metadataColumns(Map<String, Object> layout, Map<String, Object> metadata) {
+        var detail = mapValue(layout.get("detail"));
+        if (!(detail.get("columns") instanceof List<?> list)) {
+            return List.of();
+        }
+        var fields = new ArrayList<String>();
+        for (var raw : list) {
+            if (raw instanceof Map<?, ?> map) {
+                var column = (Map<String, Object>) map;
+                var field = stringValue(column.get("field"), "");
+                var expression = stringValue(column.get("expression"), "");
+                if (expression.isBlank() && metadata.containsKey(field)) {
+                    fields.add(field);
+                }
+            }
+        }
+        return fields;
+    }
+
+    /**
+     * Proyecta cada registro: inyecta los tokens de metadata referenciados como columna ({@code metaFields}) y computa
+     * las columnas con expresion ({@code out[col.field] = eval(col.expression, rec)}). Sin nada de eso es un no-op
+     * (devuelve la lista tal cual -> el camino sin expresiones/metadata queda byte-identico). Cada expresion ve los
+     * campos CRUDOS del registro (no las columnas ya computadas); se conservan los campos crudos (los usan otras
+     * columnas por nombre y los agregados {@code sum}/{@code count}).
+     */
+    private List<ReadRecord> project(List<ReadRecord> records, List<ExprColumn> exprColumns, List<String> metaFields,
+                                     Map<String, Object> metadata) {
+        if (exprColumns.isEmpty() && metaFields.isEmpty()) {
             return records;
         }
         var projected = new ArrayList<ReadRecord>(records.size());
         for (var record : records) {
             var values = new LinkedHashMap<String, Object>(record.values());
+            for (var metaField : metaFields) {
+                values.put(metaField, metadata.getOrDefault(metaField, ""));
+            }
             for (var column : exprColumns) {
                 values.put(column.field(), expressions.evaluate(column.expression(), column.field(), record.values(), metadata));
             }
@@ -423,11 +465,9 @@ public class FileWriteTaskProvider implements TaskProvider {
     }
 
     private Object resolveMetadata(String key, TaskContext context) {
-        return switch (key) {
-            case "_processExecutionId" -> context.processExecutionId();
-            case "_taskDefinitionId" -> context.taskDefinitionId();
-            default -> "";
-        };
+        // Cualquier token que el motor haya publicado (ver metadataVars); no resuelto -> celda vacia.
+        var value = metadataVars(context).get(key);
+        return value != null ? value : "";
     }
 
     private Aggregates computeAggregates(List<ReadRecord> records, Map<String, Object> layout) {

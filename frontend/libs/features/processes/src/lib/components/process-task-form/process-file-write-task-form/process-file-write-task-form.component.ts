@@ -36,8 +36,17 @@ type CellSection = 'header' | 'trailer';
 const STREAM_KINDS: ReadonlyArray<ProcessTaskOutputKind> = ['records', 'table', 'errors'];
 // Origenes AGREGADOS que van a una celda de cabecera/trailer (Map-shaped).
 const CELL_KINDS: ReadonlyArray<ProcessTaskOutputKind> = ['summary', 'out'];
-// metadata que el backend FILE_WRITE resuelve (TaskContext) -> solo estos dos tokens se ofrecen en la paleta.
-const SUPPORTED_METADATA = ['_processExecutionId', '_taskDefinitionId'];
+// metadata transversal que FILE_WRITE resuelve (el motor la publica en attributes["metadata"], igual que DB_WRITE).
+// Los tokens de lote (_batch*) se omiten: FILE_WRITE es once-task, no hay slices.
+const SUPPORTED_METADATA = [
+  '_processExecutionId',
+  '_taskDefinitionId',
+  '_taskOrder',
+  '_taskType',
+  '_taskRef',
+  '_executionMode',
+  '_triggerSource',
+];
 
 @Component({
   selector: 'ih-process-file-write-task-form',
@@ -173,12 +182,12 @@ export class ProcessFileWriteTaskFormComponent {
     if (!this.readonly() && this.showPalette()) event.preventDefault();
   }
 
-  // Drop sobre una columna de detalle: solo acepta streams (records/table/errors) -> setea el `field`.
+  // Drop sobre una columna de detalle: acepta stream (records/table/errors) o metadata -> setea el `field`.
   dropOnColumn(index: number, event: DragEvent): void {
     event.preventDefault();
     const option = this.readOption(event);
     this.draggingSource.set(null);
-    if (option && STREAM_KINDS.includes(option.kind as ProcessTaskOutputKind)) {
+    if (option && this.acceptsDetailOrigin(option.kind)) {
       this.updateColumn(index, { field: option.key });
     }
   }
@@ -283,17 +292,29 @@ export class ProcessFileWriteTaskFormComponent {
       .map((option) => option.key);
   });
 
-  // Origenes del picker composite de una columna de detalle: los campos del stream elegido (records/table/errors
-  // del sourceOutput actual), agrupados. En modo records se ELIGE de esta lista; en modo tabla se usa el
-  // autocomplete free-entry (columnas introspectadas / claves de un payload JSON no listadas).
+  // Origenes del picker composite de una columna de detalle: los campos del stream elegido (records/table/errors del
+  // sourceOutput actual) + metadata(2 tokens, mismo valor en cada fila). En modo records se ELIGE de esta lista; en
+  // modo tabla se usa el autocomplete free-entry (columnas introspectadas / claves de un payload JSON no listadas).
   readonly detailOriginGroups = computed(() => {
     const kind = this.selectedSourceOutput();
-    return this.bindingContext.groupOptions(this.paletteOptions().filter((option) => option.kind === kind));
+    const stream = this.paletteOptions().filter((option) => option.kind === kind);
+    const metadata: ProcessTaskBindingOption[] = SUPPORTED_METADATA.map((key) => ({
+      key,
+      label: key,
+      kind: 'metadata' as const,
+      groupKey: 'ui.dbWriteGroup.metadata',
+    }));
+    return this.bindingContext.groupOptions([...stream, ...metadata]);
   });
 
+  // Stream (records/table/errors) o metadata alimentan una columna de detalle -> setean el `field` (el backend
+  // inyecta el token de metadata por fila). Un origen agregado summary/out mal arrastrado se ignora (va a celda).
+  private acceptsDetailOrigin(kind: string): boolean {
+    return STREAM_KINDS.includes(kind as ProcessTaskOutputKind) || kind === 'metadata';
+  }
+
   onDetailOriginPicked(index: number, option: ProcessTaskBindingOption): void {
-    // Solo stream (records/table/errors) alimenta el detalle; un chip agregado mal arrastrado se ignora.
-    if (STREAM_KINDS.includes(option.kind as ProcessTaskOutputKind)) {
+    if (this.acceptsDetailOrigin(option.kind)) {
       this.updateColumn(index, { field: option.key });
     }
   }

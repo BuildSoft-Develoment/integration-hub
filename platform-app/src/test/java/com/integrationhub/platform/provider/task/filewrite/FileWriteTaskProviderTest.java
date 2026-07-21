@@ -193,6 +193,49 @@ class FileWriteTaskProviderTest {
     }
 
     @Test
+    void resolvesMetadataTokenAsADetailColumn() throws Exception {
+        // metadata en una columna de DETALLE: el mismo valor de metadata en cada fila (traza el _processExecutionId).
+        var context = new TaskContext(777L, 9L);
+        context.attributes().put("taskOutputs", Map.of("sp1.records", List.of(
+                new ReadRecord(Map.of("dni", "111")),
+                new ReadRecord(Map.of("dni", "222")))));
+        var config = Map.<String, Object>of(
+                "format", "CSV",
+                "input", Map.of("sourceTaskRef", "sp1", "sourceOutput", "records"),
+                "layout", Map.of("detail", Map.of("columns", List.of(
+                        Map.of("field", "dni"),
+                        Map.of("field", "_processExecutionId")))));
+
+        var result = recordsProvider().execute(context, config);
+
+        var path = String.valueOf(result.outputs().get("archivePath"));
+        assertEquals("111,777\n222,777\n", Files.readString(Path.of(path), StandardCharsets.UTF_8));
+        Files.deleteIfExists(Path.of(path));
+    }
+
+    @Test
+    void resolvesEngineMetadataMapTokensAsDetailColumns() throws Exception {
+        // Paridad DB_WRITE: el motor publica el mapa COMPLETO de metadata en attributes["metadata"]; FILE_WRITE lo
+        // lee (no solo _processExecutionId/_taskDefinitionId): aqui _taskRef y _triggerSource.
+        var context = new TaskContext(5L, 6L);
+        context.attributes().put("taskOutputs", Map.of("sp1.records", List.of(new ReadRecord(Map.of("dni", "111")))));
+        context.attributes().put("metadata", Map.of("_taskRef", "write-1", "_triggerSource", "SCHEDULED"));
+        var config = Map.<String, Object>of(
+                "format", "CSV",
+                "input", Map.of("sourceTaskRef", "sp1", "sourceOutput", "records"),
+                "layout", Map.of("detail", Map.of("columns", List.of(
+                        Map.of("field", "dni"),
+                        Map.of("field", "_taskRef"),
+                        Map.of("field", "_triggerSource")))));
+
+        var result = recordsProvider().execute(context, config);
+
+        var path = String.valueOf(result.outputs().get("archivePath"));
+        assertEquals("111,write-1,SCHEDULED\n", Files.readString(Path.of(path), StandardCharsets.UTF_8));
+        Files.deleteIfExists(Path.of(path));
+    }
+
+    @Test
     void writesCsvFromTableWithKeysetPagingAndTrailerAggregates() throws Exception {
         var repository = mock(TaskInputRepository.class);
         var dataSource = mock(DataSource.class);
