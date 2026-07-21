@@ -57,13 +57,11 @@ export interface FileWriteCellDraft {
   pad?: string;
 }
 
-// ADR-016 / ADR-004: modo de origen de los datos que se serializan.
-//  - 'records': la salida (en memoria) de una tarea previa (X -> FILE_WRITE); la tarea de origen se elige en el
-//    runtime panel (input.sourceTaskRef). Volumenes chicos/medianos.
-//  - 'table': lectura DIRECTA de una tabla con paginacion keyset (input.sourceOutput='table'); escala a >1M.
-export type FileWriteSourceMode = 'records' | 'table';
-
-/** Config del modo 'table' (se serializa bajo `input`). */
+// ADR-016 / ADR-004: el modo de origen se DERIVA (no hay toggle, paridad con DB_WRITE):
+//  - con tarea de origen (input.sourceTaskRef, elegida en el runtime panel) -> records: la salida de una tarea
+//    previa (X -> FILE_WRITE).
+//  - SIN tarea de origen -> tabla DIRECTA (input.sourceOutput='table', paginacion keyset; escala a >1M).
+// Config de la tabla directa (se serializa bajo `input` cuando no hay tarea de origen):
 export interface FileWriteTableSourceDraft {
   table: string;
   connectionRef: string;
@@ -83,7 +81,6 @@ export interface FileWriteTaskDraft extends ProcessTaskRuntimeDraft {
   header: FileWriteCellDraft[];
   trailer: FileWriteCellDraft[];
   archiveNameTemplate: string;
-  sourceMode: FileWriteSourceMode;
   tableSource: FileWriteTableSourceDraft;
 }
 
@@ -110,7 +107,6 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       header: [],
       trailer: [],
       archiveNameTemplate: '',
-      sourceMode: 'records',
       tableSource: this.defaultTableSource(),
     };
   }
@@ -155,19 +151,13 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
     };
   }
 
-  // Deriva el modo de origen y la config de tabla del bloque `input` crudo (hydrateRuntime solo conserva input si
-  // hay sourceTaskRef, y no arrastra cursor/payloadColumn; para el modo tabla standalone se lee aqui directo).
-  private hydrateSource(rawInput: unknown): Pick<FileWriteTaskDraft, 'sourceMode' | 'tableSource'> {
+  // Hidrata la config de tabla directa del bloque `input` crudo (hydrateRuntime solo conserva input si hay
+  // sourceTaskRef, y no arrastra cursor/payloadColumn; la tabla directa se lee aqui). El MODO ya no se guarda:
+  // se deriva de la presencia de sourceTaskRef (con tarea = records; sin tarea = tabla directa).
+  private hydrateSource(rawInput: unknown): Pick<FileWriteTaskDraft, 'tableSource'> {
     const input = rawInput && typeof rawInput === 'object' && !Array.isArray(rawInput) ? (rawInput as any) : {};
-    const sourceOutput = String(input.sourceOutput || '').trim().toLowerCase();
-    // El modo 'table' de la UI es la tabla DIRECTA/standalone (sin tarea de origen). Un sourceOutput='table' CON
-    // sourceTaskRef es el caso "X produce una tabla" (p.ej. DB_WRITE -> FILE_WRITE, que lee taskOutputs[X.table]):
-    // ese sigue siendo modo 'records' (lo maneja el selector de tarea de origen del runtime panel), no standalone.
-    const hasSourceTask = !!String(input.sourceTaskRef || '').trim();
-    const isTable = (sourceOutput === 'table' || sourceOutput === 'targettable') && !hasSourceTask;
     const cursor = input.cursor && typeof input.cursor === 'object' ? input.cursor : {};
     return {
-      sourceMode: isTable ? 'table' : 'records',
       tableSource: {
         table: String(input.table || ''),
         connectionRef: String(input.connectionRef || ''),
@@ -228,11 +218,10 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       if (x.autoSizeColumns) xlsx.autoSizeColumns = true;
       if (Object.keys(xlsx).length) payload.xlsx = xlsx;
     }
-    // ADR-016 / ADR-004: fuente de datos.
-    if (draft.sourceMode === 'table') {
-      // Modo tabla (directa, keyset). El motor (TaskInputResolver) exige input.source='task-output' e
-      // input.sourceOutput='table'; FILE_WRITE pagina la tabla el mismo (cursor.orderBy requerido). Se OMITE
-      // cualquier input basado en sourceTaskRef del runtime panel: en modo tabla no hay tarea de origen.
+    // ADR-016 / ADR-004: fuente de datos (modo DERIVADO). SIN tarea de origen -> tabla directa (keyset); el motor
+    // exige input.source='task-output' + input.sourceOutput='table', y FILE_WRITE pagina la tabla el mismo
+    // (cursor.orderBy requerido). CON tarea de origen -> records (withRuntime ya emitio el input arriba).
+    if (!draft.input?.sourceTaskRef) {
       const ts = draft.tableSource;
       const batchSize = this.numOrUndefined(ts.batchSize);
       payload.input = {

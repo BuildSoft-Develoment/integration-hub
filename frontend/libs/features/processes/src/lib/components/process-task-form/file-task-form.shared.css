@@ -36,6 +36,12 @@
   font-weight: 600;
   color: var(--ih-text);
 }
+/* Hint de la fuente de datos (modo derivado): texto suave, sin margenes que rompan el gap de la seccion. */
+.source-hint {
+  margin: 0;
+  color: var(--ih-text-soft);
+  font-size: 0.82rem;
+}
 /* Fila de celda/columna: los sub-campos (campo/tipo/patron/ancho/...) en linea, no apilados. */
 .cell-row {
   display: grid;

@@ -49,6 +49,9 @@ export class ProcessTaskRuntimePanelComponent {
   readonly draft = input.required<ProcessTaskRuntimeDraft>();
   readonly readonly = input(false);
   readonly showInput = input(true);
+  // FILE_WRITE: permite "Ninguna" tarea de origen (sin tarea = leer una tabla directa). No auto-deriva un origen
+  // (no fallback a configuredInput) para respetar el estado vacio. Otras tareas (DB_WRITE/SP/FN) NO lo activan.
+  readonly allowClearInput = input(false);
   readonly executionModes = input<readonly ProcessTaskExecutionMode[]>(['once', 'per-record', 'batch']);
   readonly runtimeChange = output<Partial<ProcessTaskRuntimeDraft>>();
 
@@ -113,7 +116,10 @@ export class ProcessTaskRuntimePanelComponent {
   }
 
   readonly taskOptions = computed(() => this.bindingContext.previousTaskOptions(this.task(), this.tasks()));
-  readonly selectedInput = computed(() => this.draft().input ?? this.bindingContext.configuredInput(this.task(), this.tasks()));
+  // Con allowClearInput no se auto-deriva una tarea de origen: el selector refleja el estado real (vacio = "Ninguna").
+  readonly selectedInput = computed(() =>
+    this.draft().input ?? (this.allowClearInput() ? undefined : this.bindingContext.configuredInput(this.task(), this.tasks())),
+  );
   readonly showBatchSize = computed(() => this.draft().executionMode === 'batch' && !this.bindingContext.isFileInput(this.selectedInput(), this.tasks()));
 
   updateExecutionMode(executionMode: ProcessTaskExecutionMode): void {
@@ -126,6 +132,11 @@ export class ProcessTaskRuntimePanelComponent {
   }
 
   updateSourceTask(sourceTaskRef: string): void {
+    if (!sourceTaskRef) {
+      // "Ninguna" -> se limpia la tarea de origen (FILE_WRITE: pasa a leer una tabla directa).
+      this.runtimeChange.emit({ input: undefined });
+      return;
+    }
     const sourceTask = this.bindingContext.resolveTaskByRef(sourceTaskRef, this.tasks());
     this.runtimeChange.emit({
       input: this.sanitizeInput(this.withCurrentBatchSize({

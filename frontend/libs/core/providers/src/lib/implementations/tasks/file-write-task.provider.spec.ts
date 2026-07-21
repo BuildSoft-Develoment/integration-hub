@@ -64,16 +64,25 @@ describe('FileWriteTaskProvider', () => {
     expect(rehydrated.columns[1].expression).toBe(''); // fx sigue activo tras el round-trip
   });
 
-  // --- ADR-004: fuente de datos (records vs table) ---
+  // --- ADR-004: fuente de datos DERIVADA (sin tarea de origen = tabla directa; con tarea = records) ---
 
-  it('modo records (default) no escribe un input de tabla', () => {
+  it('sin tarea de origen (default) -> tabla directa (input.sourceOutput=table + cursor.orderBy)', () => {
     const config = JSON.parse(provider.toTaskPatch(provider.createDraft()).configurationJson as string);
-    expect(config.input?.sourceOutput).not.toBe('table');
+    expect(config.input.source).toBe('task-output');
+    expect(config.input.sourceOutput).toBe('table');
+    expect(config.input.cursor.orderBy).toBe('id');
   });
 
-  it('serializa el modo tabla a input con source=task-output, sourceOutput=table y cursor.orderBy', () => {
+  it('con tarea de origen -> records (input con sourceTaskRef, no tabla standalone)', () => {
     const draft = provider.createDraft();
-    draft.sourceMode = 'table';
+    draft.input = { source: 'task-output', sourceTaskRef: 'read1', sourceOutput: 'records' } as any;
+    const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+    expect(config.input.sourceTaskRef).toBe('read1');
+    expect(config.input.sourceOutput).toBe('records');
+  });
+
+  it('modo tabla: serializa table/connectionRef/cursor/payloadColumn/batchSize desde tableSource', () => {
+    const draft = provider.createDraft();
     draft.tableSource = { table: 'staging_record', connectionRef: 'bank-db', orderBy: 'record_id', payloadColumn: 'payload_json', batchSize: '2000' };
 
     const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
@@ -92,7 +101,6 @@ describe('FileWriteTaskProvider', () => {
 
   it('modo tabla: cursor.orderBy default a "id" cuando esta vacio', () => {
     const draft = provider.createDraft();
-    draft.sourceMode = 'table';
     draft.tableSource = { table: 't', connectionRef: '', orderBy: '', payloadColumn: '', batchSize: '' };
 
     const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
@@ -101,14 +109,14 @@ describe('FileWriteTaskProvider', () => {
     expect(config.input.connectionRef).toBeUndefined(); // vacio = datasource plataforma, no se emite
   });
 
-  it('round-trips el modo tabla (sourceMode + tableSource)', () => {
+  it('round-trips el modo tabla (el modo se deriva de la ausencia de sourceTaskRef)', () => {
     const draft = provider.createDraft();
-    draft.sourceMode = 'table';
     draft.tableSource = { table: 'staging_record', connectionRef: '', orderBy: 'id', payloadColumn: 'payload_json', batchSize: '' };
 
     const rehydrated = roundTrip(draft);
 
-    expect(rehydrated.sourceMode).toBe('table');
+    // Sin sourceTaskRef en el input rehidratado = modo tabla (derivado).
+    expect(rehydrated.input?.sourceTaskRef).toBeUndefined();
     expect(rehydrated.tableSource).toMatchObject({ table: 'staging_record', orderBy: 'id', payloadColumn: 'payload_json' });
   });
 
@@ -123,9 +131,9 @@ describe('FileWriteTaskProvider', () => {
     expect(config.input.sourceOutput).toBe('table');
     expect(config.input.cursor.orderBy).toBe('id'); // el backend exige cursor.orderBy (keyset)
 
-    // Y al re-hidratar sigue en modo records (no se cambia a la tabla standalone, que ocultaria el selector).
+    // Rehidratado conserva la tarea de origen (records-derived), no pasa a tabla standalone.
     const rehydrated = provider.hydrateDraft({ taskType: 'FILE_WRITE', configurationJson: JSON.stringify(config) } as any);
-    expect(rehydrated.sourceMode).toBe('records');
+    expect(rehydrated.input?.sourceTaskRef).toBe('dbwrite1');
   });
 
   it('modo records: preserva un sourceOutput no-default (errors) elegido en el selector de salida de origen', () => {
@@ -139,7 +147,7 @@ describe('FileWriteTaskProvider', () => {
     expect(config.input.cursor).toBeUndefined();
 
     const rehydrated = provider.hydrateDraft({ taskType: 'FILE_WRITE', configurationJson: JSON.stringify(config) } as any);
-    expect(rehydrated.sourceMode).toBe('records');
+    expect(rehydrated.input?.sourceTaskRef).toBe('read1'); // records-derived = conserva la tarea de origen
     expect(rehydrated.input?.sourceOutput).toBe('errors');
   });
 

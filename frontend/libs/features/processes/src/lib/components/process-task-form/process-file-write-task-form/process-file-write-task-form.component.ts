@@ -12,7 +12,6 @@ import {
   FileWriteBindingOutput,
   FileWriteCellDraft,
   FileWriteColumnDraft,
-  FileWriteSourceMode,
   FileWriteTableSourceDraft,
   FileWriteTaskDraft,
   FileWriteXlsxDraft,
@@ -96,7 +95,6 @@ export class ProcessFileWriteTaskFormComponent {
     header: [],
     trailer: [],
     archiveNameTemplate: '',
-    sourceMode: 'records',
     tableSource: { table: '', connectionRef: '', orderBy: 'id', payloadColumn: '', batchSize: '' },
   });
 
@@ -109,35 +107,21 @@ export class ProcessFileWriteTaskFormComponent {
   readonly isTxt = computed(() => this.draft().format === 'TXT');
   readonly isCsv = computed(() => this.draft().format === 'CSV');
   readonly isXlsx = computed(() => this.draft().format === 'XLSX');
-  readonly isTableSource = computed(() => this.draft().sourceMode === 'table');
+  // El modo se DERIVA (no hay toggle, paridad con DB_WRITE): con tarea de origen -> records; sin tarea -> tabla directa.
+  readonly isTableSource = computed(() => !this.draft().input?.sourceTaskRef);
 
-  // ADR-004: FILE_WRITE escribe un STREAM de filas al detalle, y solo `records`/`table`/`errors` son streams
-  // consumibles (el backend FileWriteTaskProvider.toRecords acepta ReadResult/List). `summary`/`metadata`/`out`
-  // son Map-shaped (0 filas) -> su lugar es la celda header/trailer, no el detalle. Por eso el selector de salida
-  // de origen se restringe a estos tres, interseccion con lo que la tarea de origen realmente publica.
-  private readonly consumableOutputs: readonly ProcessTaskOutputKind[] = ['records', 'table', 'errors'];
-
+  // El detalle de FILE_WRITE lee la salida POR DEFECTO de la tarea de origen (records para FILE_READ/MT101, table
+  // para DB_WRITE, etc.) — el runtime panel la setea al elegir la tarea (defaultOutputForTask). No hay selector de
+  // "salida de origen" (paridad con DB_WRITE); selectedSourceOutput solo determina que campos ofrece el composite.
   readonly sourceTask = computed(() =>
     this.bindingContext.resolveTaskByRef(this.draft().input?.sourceTaskRef || '', this.tasks()),
   );
-  readonly availableSourceOutputs = computed<ProcessTaskOutputKind[]>(() => {
-    const task = this.sourceTask();
-    if (!task) return [];
-    return this.bindingContext.availableOutputsForTask(task).filter((kind) => this.consumableOutputs.includes(kind));
-  });
   readonly selectedSourceOutput = computed<ProcessTaskOutputKind>(
     () => (this.draft().input?.sourceOutput as ProcessTaskOutputKind) || 'records',
   );
 
   updateXlsx(patch: Partial<FileWriteXlsxDraft>): void {
     this.updateDraft({ xlsx: { ...this.draft().xlsx, ...patch } });
-  }
-
-  // Cambia la salida de origen (records/table/errors) que alimenta el detalle; conserva la tarea de origen.
-  setSourceOutput(output: ProcessTaskOutputKind): void {
-    const input = this.draft().input;
-    if (!input?.sourceTaskRef) return;
-    this.updateDraft({ input: { ...input, source: 'task-output', sourceOutput: output } });
   }
 
   // --- Paleta de origenes + drag&drop (patron DB_WRITE: reusa la paleta y el motor de binding ADR-004) ---
@@ -359,10 +343,6 @@ export class ProcessFileWriteTaskFormComponent {
         else this.columns.set([]);
       });
     });
-  }
-
-  setSourceMode(mode: FileWriteSourceMode): void {
-    this.updateDraft({ sourceMode: mode });
   }
 
   updateTableSource(patch: Partial<FileWriteTableSourceDraft>): void {
