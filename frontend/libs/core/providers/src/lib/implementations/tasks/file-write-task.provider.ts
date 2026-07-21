@@ -29,6 +29,10 @@ export interface FileWriteXlsxDraft {
 
 export interface FileWriteColumnDraft {
   field: string;
+  // Expresion JEXL por registro (ADR-004): si esta presente, el valor de la columna se COMPUTA (backend
+  // FileWriteExpressionEvaluator) en vez de leer `field` directo. `field` sigue siendo el nombre de salida.
+  // El type/format/rounding se aplican encima del resultado. '' (presente-vacia) = modo 'fx' activo sin formula.
+  expression?: string;
   type?: FileWriteColumnType;
   format?: string;
   rounding?: FileWriteRounding | (string & {});
@@ -259,6 +263,9 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
 
   private columnToConfig(column: FileWriteColumnDraft, format: FileWriteFormat): Record<string, unknown> {
     const config: any = { field: column.field.trim() };
+    // Expresion: se emite si esta PRESENTE aunque sea vacia, para que el modo 'fx' sobreviva el round-trip (el
+    // draft round-trips en cada cambio; filtrarla apagaria el toggle al instante). El backend ignora las vacias.
+    if (column.expression != null) config.expression = column.expression.trim();
     // type/format aplican a CSV y TXT (formateo de campos): NUMBER con patron decimal, DATE con patron.
     // El patron solo tiene sentido con un type != STRING; si no, se descarta (no ensuciar el config).
     if (column.type && column.type !== 'STRING') {
@@ -332,6 +339,7 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       .filter((item) => item && typeof item === 'object')
       .map((item: any) => ({
         field: String(item.field || ''),
+        ...(item.expression != null ? { expression: String(item.expression) } : {}),
         ...(item.type ? { type: this.normalizeColumnType(item.type) } : {}),
         ...(item.format != null ? { format: String(item.format) } : {}),
         ...(this.normalizeRounding(item.rounding) ? { rounding: this.normalizeRounding(item.rounding) } : {}),

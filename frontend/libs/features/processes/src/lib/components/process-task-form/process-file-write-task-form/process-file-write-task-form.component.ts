@@ -360,6 +360,12 @@ export class ProcessFileWriteTaskFormComponent {
     this.updateDraft({ columns: this.draft().columns.map((column, i) => (i === index ? { ...column, ...patch } : column)) });
   }
 
+  // Activa/desactiva el modo expresion (fx) de una columna: ON = expression '' (input visible); OFF = undefined.
+  toggleExpression(index: number): void {
+    const on = this.draft().columns[index].expression != null;
+    this.updateColumn(index, { expression: on ? undefined : '' });
+  }
+
   // --- celdas de cabecera / trailer ---
   cells(section: CellSection): FileWriteCellDraft[] {
     return section === 'header' ? this.draft().header : this.draft().trailer;

@@ -233,6 +233,17 @@
           </mat-form-field>
         }
         <button class="dt-rm" mat-stroked-button type="button" [disabled]="readonly()" (click)="removeColumn($index)">✕</button>
+        <!-- Expresion por columna (ADR-004): fila propia a todo el ancho; el `field` queda como nombre de salida. -->
+        <div class="dt-expr">
+          <button type="button" mat-stroked-button class="dt-fx" [class.dt-fx--on]="column.expression != null" [disabled]="readonly()" [attr.title]="i18n.t('ui.write.useExpression')" (click)="toggleExpression($index)">fx</button>
+          @if (column.expression != null) {
+            <mat-form-field class="dt-expr-field">
+              <mat-label>{{ i18n.t('ui.write.expression') }}</mat-label>
+              <input matInput [disabled]="readonly()" [ngModel]="column.expression" (ngModelChange)="updateColumn($index, { expression: $event })" placeholder="bruto - comision" />
+              <mat-hint>{{ i18n.t('ui.write.expressionHint') }}</mat-hint>
+            </mat-form-field>
+          }
+        </div>
       </div>
     }
   </div>

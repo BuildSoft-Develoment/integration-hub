@@ -48,6 +48,22 @@ describe('FileWriteTaskProvider', () => {
     expect(rehydrated.columns[0]).toMatchObject({ field: 'monto', type: 'NUMBER', format: '0.00', rounding: 'HALF_EVEN' });
   });
 
+  it('round-trips una columna con expresion (modo fx), incluso vacia', () => {
+    const draft = provider.createDraft();
+    draft.columns = [
+      { field: 'neto', type: 'NUMBER', format: '0.00', expression: 'bruto - comision' },
+      { field: 'x', expression: '' }, // fx activado sin formula todavia: debe sobrevivir el round-trip (si no, el toggle se apaga solo)
+    ];
+
+    const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+    expect(config.layout.detail.columns[0]).toMatchObject({ field: 'neto', type: 'NUMBER', format: '0.00', expression: 'bruto - comision' });
+    expect(config.layout.detail.columns[1].expression).toBe(''); // presente-pero-vacia se emite
+
+    const rehydrated = roundTrip(draft);
+    expect(rehydrated.columns[0].expression).toBe('bruto - comision');
+    expect(rehydrated.columns[1].expression).toBe(''); // fx sigue activo tras el round-trip
+  });
+
   // --- ADR-004: fuente de datos (records vs table) ---
 
   it('modo records (default) no escribe un input de tabla', () => {

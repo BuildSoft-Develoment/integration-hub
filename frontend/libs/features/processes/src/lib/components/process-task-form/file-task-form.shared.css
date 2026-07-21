@@ -55,6 +55,27 @@
   outline-offset: 3px;
   border-radius: 6px;
 }
+/* Expresion por columna (fx): ocupa toda la fila del grid de detalle, debajo de los controles. */
+.dt-expr {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.dt-expr-field {
+  flex: 1;
+  min-width: 0;
+}
+.dt-fx {
+  min-width: 2.5rem;
+  font-style: italic;
+  font-weight: 700;
+}
+.dt-fx--on {
+  color: var(--ih-primary, #6366f1);
+  border-color: var(--ih-primary, #6366f1);
+}
 /* FILE_WRITE detalle: grid de columnas FIJAS -> los campos de TODAS las filas alinean vertical (a diferencia
    de .cell-row auto-fit, que empaqueta distinto cada fila segun cuantos campos tenga: STRING=2, NUMBER/TXT=7).
    Cada sub-campo tiene su grid-column fijo; los @if ausentes dejan su track vacio y los presentes siguen alineados. */
