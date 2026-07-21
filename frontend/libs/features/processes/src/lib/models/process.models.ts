@@ -77,7 +77,10 @@ export function createTaskForm(
   taskOrder = 1,
   configurationJson?: string,
 ): ProcessTaskFormModel {
-  const clientId = `task-${nextTaskClientId++}`;
+  // Namespace SEPARADO del de las tareas cargadas (`task-<id de BD>`): un contador `task-N` a secas colisionaba
+  // con un `task-<id>` cuando el contador alcanzaba ese id (dos nodos con el mismo clientId -> el flow @foblex
+  // tiraba "Node already exists: task-3"). El prefijo `task-new-` no puede igualar a `task-<numero>`.
+  const clientId = `task-new-${nextTaskClientId++}`;
   return {
     clientId,
     id: null,
@@ -96,7 +99,8 @@ export function createTaskForm(
 
 export function toProcessTaskFormModel(task: ProcessTaskRecord): ProcessTaskFormModel {
   return {
-    clientId: `task-${task.id ?? nextTaskClientId++}`,
+    // Con id de BD: `task-<id>` (unico). Sin id (defensivo): el mismo namespace `task-new-` de las nuevas.
+    clientId: task.id != null ? `task-${task.id}` : `task-new-${nextTaskClientId++}`,
     id: task.id,
     taskOrder: task.taskOrder,
     taskType: task.taskType,
