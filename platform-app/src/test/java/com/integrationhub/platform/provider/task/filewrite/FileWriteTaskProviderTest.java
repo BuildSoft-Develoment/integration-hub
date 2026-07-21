@@ -69,6 +69,51 @@ class FileWriteTaskProviderTest {
     }
 
     @Test
+    void resolvesHeaderTrailerCellBoundToSummaryOutputOfAPreviousTask() throws Exception {
+        // ADR-004: una celda de cabecera/trailer puede ligarse a un output AGREGADO (summary/out) de una tarea
+        // previa; se lee del Map publicado en taskOutputs bajo ref.<output>. Es el lugar natural de estos origenes
+        // (no son un stream de filas para el detalle).
+        var context = new TaskContext(9L, 1L);
+        var taskOutputs = new LinkedHashMap<String, Object>();
+        taskOutputs.put("sp1.records", List.of(new ReadRecord(Map.of("dni", "111"))));
+        taskOutputs.put("sp1.summary", Map.of("processedCount", 42, "targetTable", "pagos"));
+        context.attributes().put("taskOutputs", taskOutputs);
+        var config = Map.<String, Object>of(
+                "format", "CSV",
+                "input", Map.of("sourceTaskRef", "sp1", "sourceOutput", "records"),
+                "layout", Map.of(
+                        "header", List.of(Map.of("sourceOutput", "summary", "sourceTaskRef", "sp1", "sourceKey", "processedCount")),
+                        "detail", Map.of("columns", List.of(Map.of("field", "dni"))),
+                        "trailer", List.of(Map.of("sourceOutput", "summary", "sourceTaskRef", "sp1", "sourceKey", "targetTable"))));
+
+        var result = recordsProvider().execute(context, config);
+
+        var path = String.valueOf(result.outputs().get("archivePath"));
+        // Cabecera = summary.processedCount (42); detalle = dni; trailer = summary.targetTable (pagos).
+        assertEquals("42\n111\npagos\n", Files.readString(Path.of(path), StandardCharsets.UTF_8));
+        Files.deleteIfExists(Path.of(path));
+    }
+
+    @Test
+    void unresolvedSummaryBindingRendersEmptyCell() throws Exception {
+        var context = new TaskContext(9L, 1L);
+        context.attributes().put("taskOutputs", Map.of("sp1.records", List.of(new ReadRecord(Map.of("dni", "111")))));
+        var config = Map.<String, Object>of(
+                "format", "CSV",
+                "input", Map.of("sourceTaskRef", "sp1", "sourceOutput", "records"),
+                "layout", Map.of(
+                        "detail", Map.of("columns", List.of(Map.of("field", "dni"))),
+                        // Clave inexistente en el summary (o summary ausente) -> celda vacia (consistente con metadata/aggregate).
+                        "trailer", List.of(Map.of("sourceOutput", "summary", "sourceTaskRef", "sp1", "sourceKey", "nope"))));
+
+        var result = recordsProvider().execute(context, config);
+
+        var path = String.valueOf(result.outputs().get("archivePath"));
+        assertEquals("111\n\n", Files.readString(Path.of(path), StandardCharsets.UTF_8));
+        Files.deleteIfExists(Path.of(path));
+    }
+
+    @Test
     void writesCsvFromTableWithKeysetPagingAndTrailerAggregates() throws Exception {
         var repository = mock(TaskInputRepository.class);
         var dataSource = mock(DataSource.class);

@@ -327,6 +327,31 @@ public class FileWriteTaskProvider implements TaskProvider {
                 return aggregates.sums().getOrDefault(field, BigDecimal.ZERO).toPlainString();
             }
         }
+        if (cell.containsKey("sourceOutput")) {
+            return resolveBinding(cell, context);
+        }
+        return "";
+    }
+
+    /**
+     * ADR-004: celda ligada a un output AGREGADO (Map) de una tarea previa. Los outputs {@code summary}/{@code out}
+     * se publican como Map en {@code taskOutputs} bajo {@code ref.<output>}; aqui se extrae el campo pedido. Es el
+     * lugar natural de estos origenes en un archivo (una celda de cabecera/trailer), ya que no son un stream de filas
+     * (el detalle solo consume {@code records}/{@code table}). Binding no resuelto -&gt; celda vacia (consistente con
+     * {@code metadata}/{@code aggregate}); el front solo ofrece combos validos via {@code buildOptions}.
+     */
+    private Object resolveBinding(Map<String, Object> cell, TaskContext context) {
+        var sourceOutput = stringValue(cell.get("sourceOutput"), "");
+        var sourceTaskRef = stringValue(cell.get("sourceTaskRef"), "");
+        var sourceKey = stringValue(cell.get("sourceKey"), "");
+        if (sourceOutput.isBlank() || sourceTaskRef.isBlank() || sourceKey.isBlank()) {
+            return "";
+        }
+        var output = taskOutputs(context).get(sourceTaskRef + "." + sourceOutput);
+        if (output instanceof Map<?, ?> map) {
+            var value = map.get(sourceKey);
+            return value != null ? value : "";
+        }
         return "";
     }
 
