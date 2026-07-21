@@ -9,12 +9,15 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import {
+  FileWriteBindingOutput,
   FileWriteCellDraft,
+  FileWriteCellKind,
   FileWriteColumnDraft,
   FileWriteSourceMode,
   FileWriteTableSourceDraft,
   FileWriteTaskDraft,
   FileWriteXlsxDraft,
+  ProcessTaskBindingOption,
   ProcessTaskFormBridgeService,
   ProcessTaskOutputKind,
 } from '@integration-hub/core/providers';
@@ -22,12 +25,19 @@ import { COMMON_ENCODINGS, SuggestInputComponent } from '@integration-hub/shared
 import { firstValueFrom } from 'rxjs';
 import { ConnectionRef, ProcessTaskFormModel, ReaderRef } from '../../../models/process.models';
 import { ProcessApiService } from '../../../api/process-api.service';
-import { DbWriteColumnRef, DbWriteTableRef } from '../../../models/process-db-write.models';
+import { DbWriteColumnRef, DbWriteSourceItem, DbWriteTableRef } from '../../../models/process-db-write.models';
 import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
+import { ProcessDbWriteSourcePaletteComponent } from '../process-db-write-source-palette/process-db-write-source-palette.component';
 import { ProcessDbWriteTableSelectorComponent } from '../process-db-write-table-selector/process-db-write-table-selector.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 
 type CellSection = 'header' | 'trailer';
+// Origenes que FILE_WRITE consume como STREAM de filas (van al detalle).
+const STREAM_KINDS: ReadonlyArray<ProcessTaskOutputKind> = ['records', 'table', 'errors'];
+// Origenes AGREGADOS que van a una celda de cabecera/trailer (Map-shaped).
+const CELL_KINDS: ReadonlyArray<ProcessTaskOutputKind> = ['summary', 'out'];
+// metadata que el backend FILE_WRITE resuelve (TaskContext) -> solo estos dos tokens se ofrecen en la paleta.
+const SUPPORTED_METADATA = ['_processExecutionId', '_taskDefinitionId'];
 
 @Component({
   selector: 'ih-process-file-write-task-form',
@@ -41,6 +51,7 @@ type CellSection = 'header' | 'trailer';
     MatSelectModule,
     MatSlideToggleModule,
     SuggestInputComponent,
+    ProcessDbWriteSourcePaletteComponent,
     ProcessDbWriteTableSelectorComponent,
     ProcessTaskRuntimePanelComponent,
   ],
@@ -117,6 +128,99 @@ export class ProcessFileWriteTaskFormComponent {
     const input = this.draft().input;
     if (!input?.sourceTaskRef) return;
     this.updateDraft({ input: { ...input, source: 'task-output', sourceOutput: output } });
+  }
+
+  // --- Paleta de origenes + drag&drop (patron DB_WRITE: reusa la paleta y el motor de binding ADR-004) ---
+  readonly draggingSource = signal<DbWriteSourceItem | null>(null);
+
+  // Opciones de la paleta, filtradas a lo que FILE_WRITE consume: streams (records/table/errors) para el detalle,
+  // agregados (summary/out) + metadata(2 soportados) para celdas. Se excluye fragments y el resto de metadata
+  // (que el backend no resuelve) para no ofrecer origenes muertos (no-fallback).
+  private readonly paletteOptions = computed<ProcessTaskBindingOption[]>(() => {
+    if (this.isTableSource() || !this.sourceTask()) return [];
+    return this.bindingContext
+      .buildOptions(this.task(), this.tasks(), this.readers(), this.draft().input)
+      .filter(
+        (option) =>
+          STREAM_KINDS.includes(option.kind as ProcessTaskOutputKind) ||
+          CELL_KINDS.includes(option.kind as ProcessTaskOutputKind) ||
+          (option.kind === 'metadata' && SUPPORTED_METADATA.includes(option.key)),
+      );
+  });
+  readonly groupedSources = computed(
+    () =>
+      this.bindingContext.groupOptions(this.paletteOptions()) as ReadonlyArray<{
+        key: string;
+        items: readonly DbWriteSourceItem[];
+      }>,
+  );
+  readonly showPalette = computed(() => !this.isTableSource() && this.paletteOptions().length > 0);
+
+  private readOption(event: DragEvent): ProcessTaskBindingOption | null {
+    const source = this.draggingSource();
+    if (source) return source;
+    const raw = event.dataTransfer?.getData('text/plain');
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as ProcessTaskBindingOption;
+    } catch {
+      return null;
+    }
+  }
+
+  allowDrop(event: DragEvent): void {
+    if (!this.readonly() && this.showPalette()) event.preventDefault();
+  }
+
+  // Drop sobre una columna de detalle: solo acepta streams (records/table/errors) -> setea el `field`.
+  dropOnColumn(index: number, event: DragEvent): void {
+    event.preventDefault();
+    const option = this.readOption(event);
+    this.draggingSource.set(null);
+    if (option && STREAM_KINDS.includes(option.kind as ProcessTaskOutputKind)) {
+      this.updateColumn(index, { field: option.key });
+    }
+  }
+
+  // Drop sobre una celda header/trailer: metadata -> celda metadata; summary/out -> celda binding.
+  dropOnCell(section: CellSection, index: number, event: DragEvent): void {
+    event.preventDefault();
+    const option = this.readOption(event);
+    this.draggingSource.set(null);
+    if (!option) return;
+    if (option.kind === 'metadata') {
+      this.updateCell(section, index, { kind: 'metadata', metadata: option.key });
+    } else if (CELL_KINDS.includes(option.kind as ProcessTaskOutputKind)) {
+      this.updateCell(section, index, {
+        kind: 'binding',
+        sourceOutput: option.kind as FileWriteBindingOutput,
+        sourceTaskRef: this.draft().input?.sourceTaskRef || '',
+        sourceKey: option.key,
+      });
+    }
+  }
+
+  // Campos ofrecidos para una celda 'binding' segun su sourceOutput (summary/out) de la tarea de origen.
+  bindingFieldOptions(output: FileWriteBindingOutput | undefined): string[] {
+    const kind = output || 'summary';
+    return this.paletteOptions()
+      .filter((option) => option.kind === kind)
+      .map((option) => option.key);
+  }
+
+  // La tarea de origen publica summary/out -> se puede ligar una celda (habilita el kind 'binding').
+  readonly canBindCells = computed(() =>
+    this.paletteOptions().some((option) => CELL_KINDS.includes(option.kind as ProcessTaskOutputKind)),
+  );
+
+  // Al elegir kind='binding' se pre-rellena la tarea de origen (la del detalle) y el output por defecto.
+  setCellKind(section: CellSection, index: number, kind: FileWriteCellKind): void {
+    const patch: Partial<FileWriteCellDraft> = { kind };
+    if (kind === 'binding') {
+      patch.sourceOutput = 'summary';
+      patch.sourceTaskRef = this.draft().input?.sourceTaskRef || '';
+    }
+    this.updateCell(section, index, patch);
   }
 
   // --- introspeccion de la fuente-tabla (patron DB_WRITE): elegir la tabla por autocomplete y sugerir

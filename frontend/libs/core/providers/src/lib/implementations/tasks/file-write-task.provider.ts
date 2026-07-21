@@ -10,7 +10,10 @@ export type FileWriteColumnType = 'STRING' | 'NUMBER' | 'DATE';
 // Modos de redondeo (RoundingMode de Java) que ofrece la UI; el backend acepta cualquier nombre valido, por eso
 // el campo es passthrough (string): un modo agregado o hand-edited se preserva en el round-trip, no se colapsa.
 export type FileWriteRounding = 'HALF_UP' | 'HALF_EVEN' | 'DOWN';
-export type FileWriteCellKind = 'value' | 'metadata' | 'aggregate';
+// 'binding': celda ligada a un output AGREGADO (summary/out) de una tarea previa. El backend
+// (FileWriteTaskProvider.resolveBinding) lo resuelve leyendo taskOutputs[sourceTaskRef.sourceOutput][sourceKey].
+export type FileWriteCellKind = 'value' | 'metadata' | 'aggregate' | 'binding';
+export type FileWriteBindingOutput = 'summary' | 'out';
 // CSV: estrategia de comillas de FastCSV. REQUIRED (RFC-4180, default) solo entrecomilla cuando hace falta;
 // ALWAYS entrecomilla todos los campos.
 export type FileWriteQuoteStrategy = 'REQUIRED' | 'ALWAYS';
@@ -40,6 +43,11 @@ export interface FileWriteCellDraft {
   metadata?: string;
   aggregate?: 'count' | 'sum';
   field?: string;
+  // Celda 'binding' (summary/out de una tarea previa): sourceOutput = kind del output; sourceTaskRef = tarea
+  // productora; sourceKey = campo dentro del Map de ese output.
+  sourceOutput?: FileWriteBindingOutput;
+  sourceTaskRef?: string;
+  sourceKey?: string;
   length?: string;
   align?: FileWriteAlign;
   pad?: string;
@@ -283,6 +291,12 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
     } else if (cell.kind === 'aggregate') {
       config.aggregate = cell.aggregate === 'sum' ? 'sum' : 'count';
       if (config.aggregate === 'sum' && cell.field?.trim()) config.field = cell.field.trim();
+    } else if (cell.kind === 'binding') {
+      // Se emiten siempre las 3 claves (aunque sourceKey este vacio) para que la celda sobreviva el round-trip
+      // mientras se configura; el backend resuelve a celda vacia si sourceKey no matchea.
+      config.sourceOutput = cell.sourceOutput === 'out' ? 'out' : 'summary';
+      config.sourceTaskRef = cell.sourceTaskRef?.trim() || '';
+      config.sourceKey = cell.sourceKey?.trim() || '';
     } else {
       return null;
     }
@@ -342,6 +356,15 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
         }
         if (item.metadata != null) {
           return { kind: 'metadata', metadata: String(item.metadata), ...base };
+        }
+        if (item.sourceOutput != null || item.sourceKey != null) {
+          return {
+            kind: 'binding',
+            sourceOutput: String(item.sourceOutput) === 'out' ? 'out' : 'summary',
+            sourceTaskRef: String(item.sourceTaskRef ?? ''),
+            sourceKey: String(item.sourceKey ?? ''),
+            ...base,
+          };
         }
         return { kind: 'value', value: String(item.value ?? ''), ...base };
       });

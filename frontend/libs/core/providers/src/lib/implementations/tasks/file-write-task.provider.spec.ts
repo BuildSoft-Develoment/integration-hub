@@ -127,6 +127,18 @@ describe('FileWriteTaskProvider', () => {
     expect(rehydrated.input?.sourceOutput).toBe('errors');
   });
 
+  it('round-trips una celda binding (summary/out de una tarea previa) en header/trailer', () => {
+    const draft = provider.createDraft();
+    draft.trailer = [{ kind: 'binding', sourceOutput: 'summary', sourceTaskRef: 'sp1', sourceKey: 'processedCount' }];
+
+    const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+    // El backend (resolveBinding) lee taskOutputs[sp1.summary][processedCount].
+    expect(config.layout.trailer[0]).toMatchObject({ sourceOutput: 'summary', sourceTaskRef: 'sp1', sourceKey: 'processedCount' });
+
+    const rehydrated = roundTrip(draft);
+    expect(rehydrated.trailer[0]).toMatchObject({ kind: 'binding', sourceOutput: 'summary', sourceTaskRef: 'sp1', sourceKey: 'processedCount' });
+  });
+
   it('round-trips align/pad en una celda de cabecera TXT (simetria con el detalle)', () => {
     const draft = provider.createDraft();
     draft.format = 'TXT';

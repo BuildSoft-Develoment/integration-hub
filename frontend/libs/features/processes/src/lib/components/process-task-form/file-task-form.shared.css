@@ -49,6 +49,12 @@
   align-items: center;
   min-height: 3.25rem;
 }
+/* Drop-target activo mientras se arrastra un origen desde la paleta: resalta la fila de detalle/celda. */
+.row-drop {
+  outline: 1px dashed var(--ih-primary, #6366f1);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
 /* FILE_WRITE detalle: grid de columnas FIJAS -> los campos de TODAS las filas alinean vertical (a diferencia
    de .cell-row auto-fit, que empaqueta distinto cada fila segun cuantos campos tenga: STRING=2, NUMBER/TXT=7).
    Cada sub-campo tiene su grid-column fijo; los @if ausentes dejan su track vacio y los presentes siguen alineados. */
