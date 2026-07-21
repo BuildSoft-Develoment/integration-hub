@@ -272,61 +272,25 @@
           </div>
           @for (cell of cells($any(section)); track $index) {
             <div class="cell-row" [class.row-drop]="draggingSource()" (dragover)="allowDrop($event)" (drop)="dropOnCell($any(section), $index, $event)">
-              <mat-form-field>
-                <mat-label>{{ i18n.t('ui.write.cellKind') }}</mat-label>
-                <mat-select [disabled]="readonly()" [ngModel]="cell.kind" (ngModelChange)="setCellKind($any(section), $index, $event)">
-                  <mat-option value="value">{{ i18n.t('ui.write.kindValue') }}</mat-option>
-                  <mat-option value="metadata">{{ i18n.t('ui.write.kindMetadata') }}</mat-option>
-                  <mat-option value="aggregate">{{ i18n.t('ui.write.kindAggregate') }}</mat-option>
-                  @if (canBindCells() || cell.kind === 'binding') {
-                    <mat-option value="binding">{{ i18n.t('ui.write.kindBinding') }}</mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
+              <!-- Un solo picker composite para el origen de la celda (especiales + metadata + summary/out). -->
+              <ih-binding-origin-select
+                [groups]="cellOriginGroups()"
+                [draggingSource]="draggingSource()"
+                [readonly]="readonly()"
+                [label]="cellOriginLabel(cell)"
+                (picked)="onCellOriginPicked($any(section), $index, $event)"
+                (cleared)="updateCell($any(section), $index, { kind: 'value' })" />
               @if (cell.kind === 'value') {
                 <mat-form-field>
                   <mat-label>{{ i18n.t('ui.write.constant') }}</mat-label>
                   <input matInput [disabled]="readonly()" [ngModel]="cell.value" (ngModelChange)="updateCell($any(section), $index, { value: $event })" />
                 </mat-form-field>
               }
-              @if (cell.kind === 'metadata') {
+              @if (cell.kind === 'aggregate' && cell.aggregate === 'sum') {
                 <mat-form-field>
-                  <mat-label>Metadata</mat-label>
-                  <mat-select [disabled]="readonly()" [ngModel]="cell.metadata || '_processExecutionId'" (ngModelChange)="updateCell($any(section), $index, { metadata: $event })">
-                    <mat-option value="_processExecutionId">_processExecutionId</mat-option>
-                    <mat-option value="_taskDefinitionId">_taskDefinitionId</mat-option>
-                  </mat-select>
+                  <mat-label>{{ i18n.t('ui.write.field') }}</mat-label>
+                  <input matInput [disabled]="readonly()" [ngModel]="cell.field" (ngModelChange)="updateCell($any(section), $index, { field: $event })" placeholder="monto" />
                 </mat-form-field>
-              }
-              @if (cell.kind === 'aggregate') {
-                <mat-form-field>
-                  <mat-label>{{ i18n.t('ui.write.aggregate') }}</mat-label>
-                  <mat-select [disabled]="readonly()" [ngModel]="cell.aggregate || 'count'" (ngModelChange)="updateCell($any(section), $index, { aggregate: $event })">
-                    <mat-option value="count">count</mat-option>
-                    <mat-option value="sum">sum</mat-option>
-                  </mat-select>
-                </mat-form-field>
-                @if (cell.aggregate === 'sum') {
-                  <mat-form-field>
-                    <mat-label>{{ i18n.t('ui.write.field') }}</mat-label>
-                    <input matInput [disabled]="readonly()" [ngModel]="cell.field" (ngModelChange)="updateCell($any(section), $index, { field: $event })" />
-                  </mat-form-field>
-                }
-              }
-              @if (cell.kind === 'binding') {
-                <mat-form-field>
-                  <mat-label>{{ i18n.t('ui.write.bindingOutput') }}</mat-label>
-                  <mat-select [disabled]="readonly()" [ngModel]="cell.sourceOutput || 'summary'" (ngModelChange)="updateCell($any(section), $index, { sourceOutput: $event })">
-                    <mat-option value="summary">summary</mat-option>
-                    <mat-option value="out">out</mat-option>
-                  </mat-select>
-                </mat-form-field>
-                <ih-suggest-input
-                  [label]="i18n.t('ui.write.field')"
-                  [suggestions]="bindingFieldOptions(cell.sourceOutput)"
-                  [disabled]="readonly()"
-                  [value]="cell.sourceKey || ''"
-                  (valueChange)="updateCell($any(section), $index, { sourceKey: $event })" />
               }
               @if (isTxt()) {
                 <mat-form-field>

@@ -11,7 +11,6 @@ import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/se
 import {
   FileWriteBindingOutput,
   FileWriteCellDraft,
-  FileWriteCellKind,
   FileWriteColumnDraft,
   FileWriteSourceMode,
   FileWriteTableSourceDraft,
@@ -202,27 +201,59 @@ export class ProcessFileWriteTaskFormComponent {
     }
   }
 
-  // Campos ofrecidos para una celda 'binding' segun su sourceOutput (summary/out) de la tarea de origen.
-  bindingFieldOptions(output: FileWriteBindingOutput | undefined): string[] {
-    const kind = output || 'summary';
-    return this.paletteOptions()
-      .filter((option) => option.kind === kind)
-      .map((option) => option.key);
+  // --- Picker composite de origen para celdas de cabecera/trailer (paridad con el detalle y DB_WRITE) ---
+  // Origenes de una celda: ESPECIALES (constante/count/sum) + metadata(2 soportados) + summary/out de la tarea de
+  // origen. Los per-registro (records/table) NO aplican a una celda (once, sin "registro actual"). El picker unifica
+  // lo que antes eran el selector de kind + 4 ramas de subcontroles.
+  readonly cellOriginGroups = computed(() => {
+    // Los especiales se rutean por `key` (no por `kind`); `kind:'field'` es solo un valor neutro valido.
+    const specials: ProcessTaskBindingOption[] = [
+      { key: '__value__', label: this.i18n.t('ui.write.kindValue'), kind: 'field', groupKey: 'ui.write.cellSpecialGroup' },
+      { key: '__count__', label: 'count', kind: 'field', groupKey: 'ui.write.cellSpecialGroup' },
+      { key: '__sum__', label: 'sum', kind: 'field', groupKey: 'ui.write.cellSpecialGroup' },
+    ];
+    const metadata: ProcessTaskBindingOption[] = SUPPORTED_METADATA.map((key) => ({
+      key,
+      label: key,
+      kind: 'metadata' as const,
+      groupKey: 'ui.dbWriteGroup.metadata',
+    }));
+    const aggregates = this.paletteOptions().filter((option) => CELL_KINDS.includes(option.kind as ProcessTaskOutputKind));
+    return this.bindingContext.groupOptions([...specials, ...metadata, ...aggregates]);
+  });
+
+  // Etiqueta del origen actual de una celda (lo que muestra el composite cuando esta "filled").
+  cellOriginLabel(cell: FileWriteCellDraft): string {
+    switch (cell.kind) {
+      case 'metadata':
+        return cell.metadata || '_processExecutionId';
+      case 'aggregate':
+        return cell.aggregate === 'sum' ? `sum(${cell.field || ''})` : 'count';
+      case 'binding':
+        return `${cell.sourceOutput || 'summary'}.${cell.sourceKey || ''}`;
+      default:
+        return this.i18n.t('ui.write.kindValue');
+    }
   }
 
-  // La tarea de origen publica summary/out -> se puede ligar una celda (habilita el kind 'binding').
-  readonly canBindCells = computed(() =>
-    this.paletteOptions().some((option) => CELL_KINDS.includes(option.kind as ProcessTaskOutputKind)),
-  );
-
-  // Al elegir kind='binding' se pre-rellena la tarea de origen (la del detalle) y el output por defecto.
-  setCellKind(section: CellSection, index: number, kind: FileWriteCellKind): void {
-    const patch: Partial<FileWriteCellDraft> = { kind };
-    if (kind === 'binding') {
-      patch.sourceOutput = 'summary';
-      patch.sourceTaskRef = this.draft().input?.sourceTaskRef || '';
+  // Mapea el origen elegido/arrastrado al kind + valor de la celda.
+  onCellOriginPicked(section: CellSection, index: number, option: ProcessTaskBindingOption): void {
+    if (option.key === '__value__') {
+      this.updateCell(section, index, { kind: 'value' });
+    } else if (option.key === '__count__') {
+      this.updateCell(section, index, { kind: 'aggregate', aggregate: 'count' });
+    } else if (option.key === '__sum__') {
+      this.updateCell(section, index, { kind: 'aggregate', aggregate: 'sum' });
+    } else if (option.kind === 'metadata') {
+      this.updateCell(section, index, { kind: 'metadata', metadata: option.key });
+    } else if (CELL_KINDS.includes(option.kind as ProcessTaskOutputKind)) {
+      this.updateCell(section, index, {
+        kind: 'binding',
+        sourceOutput: option.kind as FileWriteBindingOutput,
+        sourceTaskRef: this.draft().input?.sourceTaskRef || '',
+        sourceKey: option.key,
+      });
     }
-    this.updateCell(section, index, patch);
   }
 
   // --- introspeccion de la fuente-tabla (patron DB_WRITE): elegir la tabla por autocomplete y sugerir

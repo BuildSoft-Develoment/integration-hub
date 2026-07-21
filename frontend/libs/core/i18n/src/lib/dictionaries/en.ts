@@ -942,6 +942,7 @@ export const en = {
   'ui.write.kindAggregate': 'Aggregate',
   'ui.write.kindBinding': 'Task output',
   'ui.write.bindingOutput': 'Output',
+  'ui.write.cellSpecialGroup': 'Special',
   'ui.write.constant': 'Value',
   'ui.write.aggregate': 'Aggregate',
   'ui.write.dataSource': 'Data source',

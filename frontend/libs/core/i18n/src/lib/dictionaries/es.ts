@@ -942,6 +942,7 @@ export const es = {
   'ui.write.kindAggregate': 'Agregado',
   'ui.write.kindBinding': 'Salida de tarea',
   'ui.write.bindingOutput': 'Salida',
+  'ui.write.cellSpecialGroup': 'Especial',
   'ui.write.constant': 'Valor',
   'ui.write.aggregate': 'Agregado',
   'ui.write.dataSource': 'Fuente de datos',
