@@ -10,7 +10,7 @@
 
 ## Estado
 
-**Implementado (2026-07-21).** Depende de ADR-004 (motor de inputs/outputs tipados) y ADR-016 (capa de salida generica / `FILE_WRITE`). Extiende `FILE_WRITE` para consumir datos con el mismo binding que `DB_WRITE` y para computar columnas con expresiones. El diseno se verifico contra codigo antes de implementar; el doble check de la propuesta corrigio dos premisas (ver *El evaluador de expresiones*). Commits: `c5d0fa8c` (salida de origen + campos), `0f3b7cbc` (binding summary/out a celdas, backend), `9defc2c8` (paleta drag&drop + celda binding, frontend), `e02e35f4` (evaluador de expresiones, backend), `ab19ce98` (expresiones en la UI).
+**Implementado (2026-07-21).** Depende de ADR-004 (motor de inputs/outputs tipados) y ADR-016 (capa de salida generica / `FILE_WRITE`). Extiende `FILE_WRITE` para consumir datos con el mismo binding que `DB_WRITE` y para computar columnas con expresiones. El diseno se verifico contra codigo antes de implementar; el doble check de la propuesta corrigio dos premisas (ver *El evaluador de expresiones*). Commits: `c5d0fa8c` (salida de origen + campos), `0f3b7cbc` (binding summary/out a celdas, backend), `9defc2c8` (paleta drag&drop + celda binding, frontend), `e02e35f4` (evaluador de expresiones, backend), `ab19ce98` (expresiones en la UI). **Tanda UI composite** (ver *UI: selector de origen composite*): `59a7515d` (redistribucion del form), `687b9235` (picker composite en detalle + control compartido `ih-binding-origin-select`), `7117d9c4` (picker composite en celdas), `61148810` (DB_WRITE migra al compartido: dedup).
 
 ## Contexto
 
@@ -77,6 +77,22 @@ Guardarraíles (money-path):
 }
 ```
 
+## UI: selector de origen composite (paridad de eleccion + control compartido)
+
+La primera version daba a elegir el origen de forma pobre: el detalle era un autocomplete de texto (habia que TIPEAR el campo) y las celdas eran un selector de `kind` + 4 ramas de subcontroles. DB_WRITE en cambio ofrece, por destino, un control **composite** (`.mapping-select`): una zona que recibe DRAG y, al tocar el chevron, abre un `mat-select` AGRUPADO con TODOS los origenes para ELEGIR uno. Se llevo esa paridad a FILE_WRITE.
+
+- **Control compartido `ih-binding-origin-select`**: se EXTRAJO el `.mapping-select` de DB_WRITE a un componente reusable (drop-zone + `mat-select` agrupado + chevron + boton limpiar). Lo usan **DB_WRITE, FILE_WRITE (detalle y celdas) y MT101_BUILD** por igual (no-fallback/SOLID: el control de origen vive en UN solo lugar). Recibe `groups` + `label` y emite `picked`/`cleared` (+ `hoverChange`, que DB_WRITE usa para su papelera drag-to-clear).
+- **Origenes CONTEXTUALES por destino** (lo que hace que no sea "copiar el board"): el picker filtra los grupos segun el destino.
+
+  | Destino | Origenes en el picker |
+  |---|---|
+  | Columna de **detalle** | campos del STREAM elegido (`records`/`table`/`errors` del `sourceOutput`) — o el autocomplete free-entry en modo tabla (columnas introspectadas / claves de un payload JSON) |
+  | Celda **cabecera/trailer** | ESPECIAL (constante / `count` / `sum`) · `metadata` (2 tokens) · `summary` / `out` de la tarea de origen |
+
+- **Redistribucion del form**: la paleta de origenes dejo de estar arriba (lejos de sus destinos) y pasa a un workspace de 2 columnas — paleta STICKY a la izquierda, estructura (detalle + cabecera + trailer) a la derecha — asi se arrastra AL LADO del destino. El grid huerfano de formato se integro a la seccion de opciones. Colapsa a 1 columna en <=1080px.
+
+Nota (bug latente PRE-EXISTENTE, heredado de DB_WRITE): el `mat-select` del composite usa `[value]="null"` constante; tras elegir A, Angular no re-aplica el `null`, asi que re-elegir A despues de limpiar no dispara `selectionChange`. Impacto bajo (elegir otra opcion y volver). Documentado para un fix posterior. Advertencia de verificacion: el mapping-board no tiene spec y la interaccion (drag/pick/papelera) no se verifico visualmente en esta tanda -> requiere re-test visual de los 3 consumidores.
+
 ## Consecuencias
 
 Positivas:
@@ -99,4 +115,4 @@ Costos:
 
 - [ADR-004 Motor de tareas con inputs y outputs tipados](ADR-004-motor-input-output-tareas.md)
 - [ADR-016 Salida generica: escritura de archivos y entrega por transporte](ADR-016-salida-generica-escritura-archivo-y-entrega.md)
-- Codigo: `FileWriteExpressionEvaluator`, `FileWriteTaskProvider` (proyeccion + `resolveBinding`), `TaskOutputRegistry.registerTypedOutput`, `Mt101RouteTaskProvider` (patron JEXL plano native-proven), `ProcessTaskBindingContextService` (motor de binding reusado).
+- Codigo: `FileWriteExpressionEvaluator`, `FileWriteTaskProvider` (proyeccion + `resolveBinding`), `TaskOutputRegistry.registerTypedOutput`, `Mt101RouteTaskProvider` (patron JEXL plano native-proven), `ProcessTaskBindingContextService` (motor de binding reusado), `ih-binding-origin-select` (control composite de origen compartido DB_WRITE/FILE_WRITE/MT101_BUILD).
