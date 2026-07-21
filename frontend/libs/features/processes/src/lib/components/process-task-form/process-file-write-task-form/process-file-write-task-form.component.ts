@@ -309,14 +309,24 @@ export class ProcessFileWriteTaskFormComponent {
       .map((option) => option.key);
   });
 
-  // Origenes del picker composite de una columna de detalle (modo records): los campos del stream elegido
-  // (records/table/errors del sourceOutput actual) + metadata(7 tokens, mismo valor en cada fila). En modo tabla el
-  // detalle usa el autocomplete free-entry (columnas introspectadas + metadata / claves de un payload JSON).
+  // Origenes del picker composite de una columna de detalle + metadata(7 tokens, mismo valor en cada fila):
+  //  - modo tabla directa: las columnas introspectadas de la tabla (kind 'table').
+  //  - modo records: los campos del stream elegido (records/table/errors del sourceOutput actual).
   readonly detailOriginGroups = computed(() => {
+    if (this.isTableSource()) {
+      return this.bindingContext.groupOptions([...this.tableColumnOptions(), ...this.metadataOptions]);
+    }
     const kind = this.selectedSourceOutput();
     const stream = this.paletteOptions().filter((option) => option.kind === kind);
     return this.bindingContext.groupOptions([...stream, ...this.metadataOptions]);
   });
+
+  // El detalle usa el composite (drop-target real -> DnD confiable) SIEMPRE en records, y en modo tabla cuando hay
+  // columnas introspectadas y NO hay payloadColumn JSON. Si no (payload JSON o introspeccion vacia) cae al autocomplete
+  // de entrada libre, para poder tipear una clave/expresion que no esta en la lista.
+  readonly detailUsesComposite = computed(
+    () => !this.isTableSource() || (this.columns().length > 0 && !this.draft().tableSource.payloadColumn?.trim()),
+  );
 
   // Stream (records/table/errors) o metadata alimentan una columna de detalle -> setean el `field` (el backend
   // inyecta el token de metadata por fila). Un origen agregado summary/out mal arrastrado se ignora (va a celda).
