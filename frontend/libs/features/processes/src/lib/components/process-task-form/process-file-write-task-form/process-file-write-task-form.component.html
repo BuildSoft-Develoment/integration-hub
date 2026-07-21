@@ -61,30 +61,6 @@
           <input matInput type="number" min="1" [disabled]="readonly()" [ngModel]="draft().tableSource.batchSize" (ngModelChange)="updateTableSource({ batchSize: $event })" placeholder="5000" />
         </mat-form-field>
       </div>
-
-      <!-- Columnas detectadas de la tabla (introspeccion): confirma que la tabla se leyo y muestra los campos
-           disponibles (los mismos que ofrece el detalle + la paleta). Arrastrables al detalle como en la paleta. -->
-      @if (columns().length) {
-        <div class="detected-columns">
-          <span class="detected-columns__label">{{ i18n.t('ui.write.detectedColumns') }} · {{ columns().length }}</span>
-          <div class="detected-columns__chips">
-            @for (col of columns(); track col.name) {
-              <span
-                class="detected-columns__chip"
-                [class.detected-columns__chip--readonly]="readonly()"
-                [attr.draggable]="!readonly()"
-                (dragstart)="startColumnDrag(col, $event)"
-                (dragend)="draggingSource.set(null)"
-                [title]="col.dataType || ''">
-                {{ col.name }}
-                @if (col.dataType) { <em>{{ col.dataType }}</em> }
-              </span>
-            }
-          </div>
-        </div>
-      } @else if (selectedConnection() && draft().tableSource.table.trim()) {
-        <p class="source-hint">{{ i18n.t('ui.write.noColumnsDetected') }}</p>
-      }
     }
   </div>
 

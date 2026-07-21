@@ -945,8 +945,6 @@ export const es = {
   'ui.write.bindingOutput': 'Salida',
   'ui.write.cellSpecialGroup': 'Especial',
   'ui.write.tableColumnsGroup': 'Columnas de la tabla',
-  'ui.write.detectedColumns': 'Columnas detectadas',
-  'ui.write.noColumnsDetected': 'No se detectaron columnas (revisá la conexión o el nombre de la tabla).',
   'ui.write.constant': 'Valor',
   'ui.write.aggregate': 'Agregado',
   'ui.write.dataSource': 'Fuente de datos',
