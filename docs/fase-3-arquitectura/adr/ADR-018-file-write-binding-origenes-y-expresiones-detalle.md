@@ -91,7 +91,7 @@ La primera version daba a elegir el origen de forma pobre: el detalle era un aut
 
 - **Redistribucion del form**: la paleta de origenes dejo de estar arriba (lejos de sus destinos) y pasa a un workspace de 2 columnas — paleta STICKY a la izquierda, estructura (detalle + cabecera + trailer) a la derecha — asi se arrastra AL LADO del destino. El grid huerfano de formato se integro a la seccion de opciones. Colapsa a 1 columna en <=1080px.
 
-Nota (bug latente PRE-EXISTENTE, heredado de DB_WRITE): el `mat-select` del composite usa `[value]="null"` constante; tras elegir A, Angular no re-aplica el `null`, asi que re-elegir A despues de limpiar no dispara `selectionChange`. Impacto bajo (elegir otra opcion y volver). Documentado para un fix posterior. Advertencia de verificacion: el mapping-board no tiene spec y la interaccion (drag/pick/papelera) no se verifico visualmente en esta tanda -> requiere re-test visual de los 3 consumidores.
+Nota (bug latente PRE-EXISTENTE, heredado de DB_WRITE): el `mat-select` del composite usaba `[value]="null"` constante; tras elegir A, Angular no re-aplicaba el `null`, asi que re-elegir A despues de limpiar no disparaba `selectionChange`. **ARREGLADO (commit `9139fd96`)**: el control compartido resetea el `mat-select` a `null` tras cada eleccion (`viewChild<MatSelect>`; el set programatico de value no emite `selectionChange`). Beneficia a los 3 consumidores. El componente compartido gano su primer spec (routing picked/cleared + drop). Advertencia de verificacion: el mapping-board no tiene spec y la interaccion (drag/pick/papelera) no se verifico visualmente en esta tanda -> requiere re-test visual de los 3 consumidores.
 
 ## Consecuencias
 
