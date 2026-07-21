@@ -127,10 +127,26 @@ export class ProcessFileWriteTaskFormComponent {
   // --- Paleta de origenes + drag&drop (patron DB_WRITE: reusa la paleta y el motor de binding ADR-004) ---
   readonly draggingSource = signal<DbWriteSourceItem | null>(null);
 
-  // Opciones de la paleta, filtradas a lo que FILE_WRITE consume: streams (records/table/errors) para el detalle,
-  // agregados (summary/out) + metadata(2 soportados) para celdas. Se excluye fragments y el resto de metadata
-  // (que el backend no resuelve) para no ofrecer origenes muertos (no-fallback).
-  private readonly paletteOptions = computed<ProcessTaskBindingOption[]>(() => {
+  // metadata transversal como opciones de origen (el motor la publica en attributes["metadata"], igual que DB_WRITE).
+  // Reusada por la paleta, el picker del detalle y el de celdas para no duplicar la lista de 7 tokens.
+  private readonly metadataOptions: ProcessTaskBindingOption[] = SUPPORTED_METADATA.map((key) => ({
+    key,
+    label: key,
+    kind: 'metadata' as const,
+    groupKey: 'ui.dbWriteGroup.metadata',
+  }));
+
+  // Modo tabla directa (sin tarea de origen): las columnas introspectadas de la tabla SON los origenes -> se ofrecen
+  // como fuentes (paleta + detalle), igual que los campos de una tarea de origen en modo records. kind:'table' para
+  // que acceptsDetailOrigin las acepte (STREAM_KINDS) al arrastrarlas a una columna de detalle.
+  private readonly tableColumnOptions = computed<ProcessTaskBindingOption[]>(() =>
+    this.columns().map((c) => ({ key: c.name, label: c.name, kind: 'table' as const, groupKey: 'ui.write.tableColumnsGroup' })),
+  );
+
+  // Origenes de la TAREA de origen (modo records), filtrados a lo que FILE_WRITE consume: streams (records/table/
+  // errors) para el detalle, agregados (summary/out) + metadata(7 soportados) para celdas. Se excluye fragments y el
+  // resto de metadata (que el backend no resuelve) para no ofrecer origenes muertos (no-fallback).
+  private readonly recordsPaletteOptions = computed<ProcessTaskBindingOption[]>(() => {
     if (this.isTableSource() || !this.sourceTask()) return [];
     return this.bindingContext
       .buildOptions(this.task(), this.tasks(), this.readers(), this.draft().input)
@@ -141,6 +157,11 @@ export class ProcessFileWriteTaskFormComponent {
           (option.kind === 'metadata' && SUPPORTED_METADATA.includes(option.key)),
       );
   });
+  // Paleta segun el modo derivado: tabla directa -> columnas de la tabla + metadata (no hay tarea -> no summary/out);
+  // records -> origenes de la tarea de origen.
+  private readonly paletteOptions = computed<ProcessTaskBindingOption[]>(() =>
+    this.isTableSource() ? [...this.tableColumnOptions(), ...this.metadataOptions] : this.recordsPaletteOptions(),
+  );
   readonly groupedSources = computed(
     () =>
       this.bindingContext.groupOptions(this.paletteOptions()) as ReadonlyArray<{
@@ -148,7 +169,9 @@ export class ProcessFileWriteTaskFormComponent {
         items: readonly DbWriteSourceItem[];
       }>,
   );
-  readonly showPalette = computed(() => !this.isTableSource() && this.paletteOptions().length > 0);
+  // La paleta se muestra en AMBOS modos (paridad total): records = origenes de la tarea; tabla directa = columnas
+  // introspectadas + metadata. Sin conexion/tabla aun, ofrece al menos la metadata (siempre resoluble).
+  readonly showPalette = computed(() => this.paletteOptions().length > 0);
 
   private readOption(event: DragEvent): ProcessTaskBindingOption | null {
     const source = this.draggingSource();
@@ -205,14 +228,8 @@ export class ProcessFileWriteTaskFormComponent {
       { key: '__count__', label: 'count', kind: 'field', groupKey: 'ui.write.cellSpecialGroup' },
       { key: '__sum__', label: 'sum', kind: 'field', groupKey: 'ui.write.cellSpecialGroup' },
     ];
-    const metadata: ProcessTaskBindingOption[] = SUPPORTED_METADATA.map((key) => ({
-      key,
-      label: key,
-      kind: 'metadata' as const,
-      groupKey: 'ui.dbWriteGroup.metadata',
-    }));
     const aggregates = this.paletteOptions().filter((option) => CELL_KINDS.includes(option.kind as ProcessTaskOutputKind));
-    return this.bindingContext.groupOptions([...specials, ...metadata, ...aggregates]);
+    return this.bindingContext.groupOptions([...specials, ...this.metadataOptions, ...aggregates]);
   });
 
   // Etiqueta del origen actual de una celda (lo que muestra el composite cuando esta "filled").
@@ -259,12 +276,19 @@ export class ProcessFileWriteTaskFormComponent {
   readonly selectedConnection = computed(() =>
     this.connections().find((c) => c.name === this.draft().tableSource.connectionRef) ?? null,
   );
-  // Sugerencias del `field` de cada columna de detalle. Combo EDITABLE en ambos modos:
-  //  - modo tabla: columnas REALES de la tabla introspectada (o claves libres si hay payloadColumn JSON).
-  //  - modo records: los campos del output-kind elegido de la tarea de origen (buildOptions del motor de
-  //    binding ADR-004): p.ej. los campos del reader de un FILE_READ, o las columnas de un DB_WRITE.table.
-  readonly fieldSuggestions = computed(() =>
+  // Campos de DATOS disponibles (sin metadata) para el `field`: columnas REALES de la tabla introspectada (modo
+  // tabla) o los campos del output-kind de la tarea de origen (modo records). Se usa como argumento de sum() y como
+  // base de las sugerencias del detalle.
+  readonly dataFieldSuggestions = computed<string[]>(() =>
     this.isTableSource() ? this.columns().map((c) => c.name) : this.recordFieldSuggestions(),
+  );
+
+  // Sugerencias del `field` de cada columna de detalle. Combo EDITABLE en ambos modos:
+  //  - modo tabla: columnas de la tabla + metadata (7 tokens) -> se puede ELEGIR metadata igual que en records;
+  //    tambien admite entrada libre (claves de un payloadColumn JSON no introspectables).
+  //  - modo records: los campos del output-kind elegido de la tarea de origen (el composite ya ofrece metadata).
+  readonly fieldSuggestions = computed(() =>
+    this.isTableSource() ? [...this.dataFieldSuggestions(), ...SUPPORTED_METADATA] : this.recordFieldSuggestions(),
   );
 
   private readonly recordFieldSuggestions = computed<string[]>(() => {
@@ -276,19 +300,13 @@ export class ProcessFileWriteTaskFormComponent {
       .map((option) => option.key);
   });
 
-  // Origenes del picker composite de una columna de detalle: los campos del stream elegido (records/table/errors del
-  // sourceOutput actual) + metadata(2 tokens, mismo valor en cada fila). En modo records se ELIGE de esta lista; en
-  // modo tabla se usa el autocomplete free-entry (columnas introspectadas / claves de un payload JSON no listadas).
+  // Origenes del picker composite de una columna de detalle (modo records): los campos del stream elegido
+  // (records/table/errors del sourceOutput actual) + metadata(7 tokens, mismo valor en cada fila). En modo tabla el
+  // detalle usa el autocomplete free-entry (columnas introspectadas + metadata / claves de un payload JSON).
   readonly detailOriginGroups = computed(() => {
     const kind = this.selectedSourceOutput();
     const stream = this.paletteOptions().filter((option) => option.kind === kind);
-    const metadata: ProcessTaskBindingOption[] = SUPPORTED_METADATA.map((key) => ({
-      key,
-      label: key,
-      kind: 'metadata' as const,
-      groupKey: 'ui.dbWriteGroup.metadata',
-    }));
-    return this.bindingContext.groupOptions([...stream, ...metadata]);
+    return this.bindingContext.groupOptions([...stream, ...this.metadataOptions]);
   });
 
   // Stream (records/table/errors) o metadata alimentan una columna de detalle -> setean el `field` (el backend

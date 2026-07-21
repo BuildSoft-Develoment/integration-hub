@@ -267,10 +267,14 @@
                 </mat-form-field>
               }
               @if (cell.kind === 'aggregate' && cell.aggregate === 'sum') {
-                <mat-form-field>
-                  <mat-label>{{ i18n.t('ui.write.field') }}</mat-label>
-                  <input matInput [disabled]="readonly()" [ngModel]="cell.field" (ngModelChange)="updateCell($any(section), $index, { field: $event })" placeholder="monto" />
-                </mat-form-field>
+                <!-- Argumento de sum(): se ELIGE un campo de datos disponible (columnas de la tabla / campos del
+                     stream de origen); editable -> tambien admite una clave/expresion libre. -->
+                <ih-suggest-input
+                  [label]="i18n.t('ui.write.field')"
+                  [suggestions]="dataFieldSuggestions()"
+                  [disabled]="readonly()"
+                  [value]="cell.field || ''"
+                  (valueChange)="updateCell($any(section), $index, { field: $event })" />
               }
               @if (isTxt()) {
                 <mat-form-field>

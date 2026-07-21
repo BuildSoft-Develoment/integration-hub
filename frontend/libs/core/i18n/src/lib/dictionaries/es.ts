@@ -944,6 +944,7 @@ export const es = {
   'ui.write.kindBinding': 'Salida de tarea',
   'ui.write.bindingOutput': 'Salida',
   'ui.write.cellSpecialGroup': 'Especial',
+  'ui.write.tableColumnsGroup': 'Columnas de la tabla',
   'ui.write.constant': 'Valor',
   'ui.write.aggregate': 'Agregado',
   'ui.write.dataSource': 'Fuente de datos',
