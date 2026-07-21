@@ -1,0 +1,39 @@
+<div
+  class="mapping-select"
+  [class.mapping-select--filled]="filled()"
+  [class.mapping-select--ready]="!!draggingSource()"
+  [class.mapping-select--hover]="hovered()"
+  (dragover)="allowDrop($event)"
+  (dragenter)="handleDragEnter()"
+  (dragleave)="handleDragLeave()"
+  (drop)="handleDrop($event)"
+>
+  <span class="mapping-select__value">{{ displayLabel() }}</span>
+
+  <div class="mapping-select__actions">
+    @if (filled() && !readonly()) {
+      <button type="button" class="mapping-select__icon mapping-select__icon--clear" (click)="cleared.emit()">
+        <span aria-hidden="true">×</span>
+      </button>
+    }
+
+    @if (!readonly()) {
+      <button type="button" class="mapping-select__icon" [attr.aria-label]="i18n.t('ui.dbWriteOpenPicker')" (click)="picker.open()">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+      </button>
+    }
+
+    <mat-form-field class="mapping-select__field" subscriptSizing="dynamic">
+      <mat-select #picker [disabled]="readonly()" [value]="null" (selectionChange)="onPicked($event.value)">
+        <mat-option [value]="null">{{ i18n.t('ui.dbWriteSelectNone') }}</mat-option>
+        @for (group of groups(); track group.key) {
+          <mat-optgroup [label]="groupLabel(group.key)">
+            @for (item of group.items; track item.kind + ':' + item.key) {
+              <mat-option [value]="item">{{ item.label }}</mat-option>
+            }
+          </mat-optgroup>
+        }
+      </mat-select>
+    </mat-form-field>
+  </div>
+</div>

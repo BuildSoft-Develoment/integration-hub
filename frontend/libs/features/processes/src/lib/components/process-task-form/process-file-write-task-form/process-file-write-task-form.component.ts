@@ -27,6 +27,7 @@ import { ConnectionRef, ProcessTaskFormModel, ReaderRef } from '../../../models/
 import { ProcessApiService } from '../../../api/process-api.service';
 import { DbWriteColumnRef, DbWriteSourceItem, DbWriteTableRef } from '../../../models/process-db-write.models';
 import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
+import { BindingOriginSelectComponent } from '../binding-origin-select/binding-origin-select.component';
 import { ProcessDbWriteSourcePaletteComponent } from '../process-db-write-source-palette/process-db-write-source-palette.component';
 import { ProcessDbWriteTableSelectorComponent } from '../process-db-write-table-selector/process-db-write-table-selector.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
@@ -51,6 +52,7 @@ const SUPPORTED_METADATA = ['_processExecutionId', '_taskDefinitionId'];
     MatSelectModule,
     MatSlideToggleModule,
     SuggestInputComponent,
+    BindingOriginSelectComponent,
     ProcessDbWriteSourcePaletteComponent,
     ProcessDbWriteTableSelectorComponent,
     ProcessTaskRuntimePanelComponent,
@@ -249,6 +251,21 @@ export class ProcessFileWriteTaskFormComponent {
       .filter((option) => option.kind === kind)
       .map((option) => option.key);
   });
+
+  // Origenes del picker composite de una columna de detalle: los campos del stream elegido (records/table/errors
+  // del sourceOutput actual), agrupados. En modo records se ELIGE de esta lista; en modo tabla se usa el
+  // autocomplete free-entry (columnas introspectadas / claves de un payload JSON no listadas).
+  readonly detailOriginGroups = computed(() => {
+    const kind = this.selectedSourceOutput();
+    return this.bindingContext.groupOptions(this.paletteOptions().filter((option) => option.kind === kind));
+  });
+
+  onDetailOriginPicked(index: number, option: ProcessTaskBindingOption): void {
+    // Solo stream (records/table/errors) alimenta el detalle; un chip agregado mal arrastrado se ignora.
+    if (STREAM_KINDS.includes(option.kind as ProcessTaskOutputKind)) {
+      this.updateColumn(index, { field: option.key });
+    }
+  }
 
   private lastTablesKey = '';
   private lastColumnsKey = '';

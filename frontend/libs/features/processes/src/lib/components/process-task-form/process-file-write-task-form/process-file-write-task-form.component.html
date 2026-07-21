@@ -183,13 +183,26 @@
         </div>
         @for (column of draft().columns; track $index) {
           <div class="detail-row" [class.detail-row--txt]="isTxt()" [class.row-drop]="draggingSource()" (dragover)="allowDrop($event)" (drop)="dropOnColumn($index, $event)">
-            <ih-suggest-input
-              class="dt-field"
-              [label]="i18n.t('ui.write.field')"
-              [suggestions]="fieldSuggestions()"
-              [disabled]="readonly()"
-              [value]="column.field"
-              (valueChange)="updateColumn($index, { field: $event })" />
+            @if (isTableSource()) {
+              <!-- Modo tabla: autocomplete free-entry (columnas introspectadas / claves de un payload JSON). -->
+              <ih-suggest-input
+                class="dt-field"
+                [label]="i18n.t('ui.write.field')"
+                [suggestions]="fieldSuggestions()"
+                [disabled]="readonly()"
+                [value]="column.field"
+                (valueChange)="updateColumn($index, { field: $event })" />
+            } @else {
+              <!-- Modo records: se ELIGE el campo de origen del stream (o se arrastra), patron composite de DB_WRITE. -->
+              <ih-binding-origin-select
+                class="dt-field"
+                [groups]="detailOriginGroups()"
+                [draggingSource]="draggingSource()"
+                [readonly]="readonly()"
+                [label]="column.field"
+                (picked)="onDetailOriginPicked($index, $event)"
+                (cleared)="updateColumn($index, { field: '' })" />
+            }
             <mat-form-field class="dt-type">
               <mat-label>{{ i18n.t('ui.write.type') }}</mat-label>
               <mat-select [disabled]="readonly()" [ngModel]="column.type || 'STRING'" (ngModelChange)="updateColumn($index, { type: $event })">
