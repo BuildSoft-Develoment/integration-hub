@@ -199,6 +199,15 @@ export class ProcessFileWriteTaskFormComponent {
     }
   }
 
+  // Arrastrar una columna DETECTADA (chip del recuadro "Origen de datos") al detalle: mismo payload que la paleta
+  // (kind 'table', key = nombre de columna) -> reusa dropOnColumn/allowDrop sin ruta especial.
+  startColumnDrag(col: DbWriteColumnRef, event: DragEvent): void {
+    if (this.readonly()) return;
+    const item: DbWriteSourceItem = { key: col.name, label: col.name, kind: 'table', groupKey: 'ui.write.tableColumnsGroup' };
+    this.draggingSource.set(item);
+    event.dataTransfer?.setData('text/plain', JSON.stringify(item));
+  }
+
   // Drop sobre una celda header/trailer: metadata -> celda metadata; summary/out -> celda binding.
   dropOnCell(section: CellSection, index: number, event: DragEvent): void {
     event.preventDefault();

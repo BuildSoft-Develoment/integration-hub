@@ -945,6 +945,8 @@ export const en = {
   'ui.write.bindingOutput': 'Output',
   'ui.write.cellSpecialGroup': 'Special',
   'ui.write.tableColumnsGroup': 'Table columns',
+  'ui.write.detectedColumns': 'Detected columns',
+  'ui.write.noColumnsDetected': 'No columns detected (check the connection or table name).',
   'ui.write.constant': 'Value',
   'ui.write.aggregate': 'Aggregate',
   'ui.write.dataSource': 'Data source',

@@ -42,6 +42,42 @@
   color: var(--ih-text-soft);
   font-size: 0.82rem;
 }
+/* Columnas detectadas por introspeccion, dentro del recuadro "Origen de datos" (modo tabla): chips con nombre + tipo
+   que confirman que la tabla se leyo y muestran los campos disponibles. Arrastrables al detalle (como la paleta). */
+.detected-columns {
+  display: grid;
+  gap: 0.4rem;
+}
+.detected-columns__label {
+  color: var(--ih-text-soft);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.detected-columns__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+.detected-columns__chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--ih-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ih-surface-alt) 70%, transparent);
+  font-size: 0.8rem;
+  color: var(--ih-text);
+  cursor: grab;
+}
+.detected-columns__chip--readonly {
+  cursor: default;
+}
+.detected-columns__chip em {
+  color: var(--ih-text-soft);
+  font-style: normal;
+  font-size: 0.72rem;
+}
 /* Fila de celda/columna: los sub-campos (campo/tipo/patron/ancho/...) en linea, no apilados. */
 .cell-row {
   display: grid;
