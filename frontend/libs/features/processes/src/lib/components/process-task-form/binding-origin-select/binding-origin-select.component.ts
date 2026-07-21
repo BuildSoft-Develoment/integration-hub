@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, inject, input, output, signal } from '@angular/core';
+import { Component, inject, input, output, signal, viewChild } from '@angular/core';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatSelectModule } from '@angular/material/select';
+import { MatSelect, MatSelectModule } from '@angular/material/select';
 import { ProcessTaskBindingOption } from '@integration-hub/core/providers';
 import { I18nService } from '@integration-hub/core/services';
 
@@ -33,6 +33,7 @@ export class BindingOriginSelectComponent {
   readonly hoverChange = output<boolean>();
 
   readonly hovered = signal(false);
+  private readonly picker = viewChild<MatSelect>('picker');
 
   filled(): boolean {
     return !!this.label().trim();
@@ -56,6 +57,14 @@ export class BindingOriginSelectComponent {
       this.picked.emit(option);
     } else {
       this.cleared.emit();
+    }
+    // Reset del mat-select a null tras cada eleccion. Sin esto el select "recuerda" la ultima opcion (el binding
+    // [value]="null" es constante y Angular no lo re-aplica), asi que re-elegir la MISMA opcion tras limpiar no
+    // disparaba selectionChange. El set PROGRAMATICO de value NO emite selectionChange (solo la interaccion), asi
+    // que este reset no re-invoca onPicked.
+    const select = this.picker();
+    if (select) {
+      select.value = null;
     }
   }
 
