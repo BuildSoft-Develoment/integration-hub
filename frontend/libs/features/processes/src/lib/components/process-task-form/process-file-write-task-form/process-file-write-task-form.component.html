@@ -163,29 +163,17 @@
         </div>
         @for (column of draft().columns; track $index) {
           <div class="detail-row" [class.detail-row--txt]="isTxt()" [class.row-drop]="draggingSource()" (dragover)="allowDrop($event)" (drop)="dropOnColumn($index, $event)">
-            @if (detailUsesComposite()) {
-              <!-- Composite (records, o tabla con columnas introspectadas): se ELIGE o se ARRASTRA el campo de origen.
-                   Es un drop-target real (un div, no un <input>) -> drag&drop confiable desde la paleta y desde los
-                   chips de "Columnas detectadas". Mismo patron que DB_WRITE. -->
-              <ih-binding-origin-select
-                class="dt-field"
-                [groups]="detailOriginGroups()"
-                [draggingSource]="draggingSource()"
-                [readonly]="readonly()"
-                [label]="column.field"
-                (picked)="onDetailOriginPicked($index, $event)"
-                (cleared)="updateColumn($index, { field: '' })" />
-            } @else {
-              <!-- Fallback de ENTRADA LIBRE: payloadColumn JSON (claves no introspectables) o introspeccion vacia.
-                   El drop igual funciona por el (drop) de la .detail-row, pero aca se puede tipear una clave/expresion. -->
-              <ih-suggest-input
-                class="dt-field"
-                [label]="i18n.t('ui.write.field')"
-                [suggestions]="fieldSuggestions()"
-                [disabled]="readonly()"
-                [value]="column.field"
-                (valueChange)="updateColumn($index, { field: $event })" />
-            }
+            <!-- Un UNICO estandar para el campo de origen del detalle (records y tabla): el composite combo + arrastrar
+                 (drop-target real, no un <input>). En modo tabla ofrece las columnas introspectadas + metadata; se
+                 arrastra desde la paleta o se elige del combo. Igual que DB_WRITE. -->
+            <ih-binding-origin-select
+              class="dt-field"
+              [groups]="detailOriginGroups()"
+              [draggingSource]="draggingSource()"
+              [readonly]="readonly()"
+              [label]="column.field"
+              (picked)="onDetailOriginPicked($index, $event)"
+              (cleared)="updateColumn($index, { field: '' })" />
             <mat-form-field class="dt-type">
               <mat-label>{{ i18n.t('ui.write.type') }}</mat-label>
               <mat-select [disabled]="readonly()" [ngModel]="column.type || 'STRING'" (ngModelChange)="updateColumn($index, { type: $event })">

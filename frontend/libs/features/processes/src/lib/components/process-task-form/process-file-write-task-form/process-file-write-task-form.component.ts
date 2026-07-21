@@ -276,19 +276,10 @@ export class ProcessFileWriteTaskFormComponent {
   readonly selectedConnection = computed(() =>
     this.connections().find((c) => c.name === this.draft().tableSource.connectionRef) ?? null,
   );
-  // Campos de DATOS disponibles (sin metadata) para el `field`: columnas REALES de la tabla introspectada (modo
-  // tabla) o los campos del output-kind de la tarea de origen (modo records). Se usa como argumento de sum() y como
-  // base de las sugerencias del detalle.
+  // Campos de DATOS disponibles (sin metadata) para el argumento de sum() de una celda: columnas REALES de la tabla
+  // introspectada (modo tabla) o los campos del output-kind de la tarea de origen (modo records).
   readonly dataFieldSuggestions = computed<string[]>(() =>
     this.isTableSource() ? this.columns().map((c) => c.name) : this.recordFieldSuggestions(),
-  );
-
-  // Sugerencias del `field` de cada columna de detalle. Combo EDITABLE en ambos modos:
-  //  - modo tabla: columnas de la tabla + metadata (7 tokens) -> se puede ELEGIR metadata igual que en records;
-  //    tambien admite entrada libre (claves de un payloadColumn JSON no introspectables).
-  //  - modo records: los campos del output-kind elegido de la tarea de origen (el composite ya ofrece metadata).
-  readonly fieldSuggestions = computed(() =>
-    this.isTableSource() ? [...this.dataFieldSuggestions(), ...SUPPORTED_METADATA] : this.recordFieldSuggestions(),
   );
 
   private readonly recordFieldSuggestions = computed<string[]>(() => {
@@ -311,13 +302,6 @@ export class ProcessFileWriteTaskFormComponent {
     const stream = this.paletteOptions().filter((option) => option.kind === kind);
     return this.bindingContext.groupOptions([...stream, ...this.metadataOptions]);
   });
-
-  // El detalle usa el composite (drop-target real -> DnD confiable) SIEMPRE en records, y en modo tabla cuando hay
-  // columnas introspectadas y NO hay payloadColumn JSON. Si no (payload JSON o introspeccion vacia) cae al autocomplete
-  // de entrada libre, para poder tipear una clave/expresion que no esta en la lista.
-  readonly detailUsesComposite = computed(
-    () => !this.isTableSource() || (this.columns().length > 0 && !this.draft().tableSource.payloadColumn?.trim()),
-  );
 
   // Stream (records/table/errors) o metadata alimentan una columna de detalle -> setean el `field` (el backend
   // inyecta el token de metadata por fila). Un origen agregado summary/out mal arrastrado se ignora (va a celda).
