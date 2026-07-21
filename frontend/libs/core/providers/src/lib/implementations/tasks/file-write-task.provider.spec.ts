@@ -136,9 +136,10 @@ describe('FileWriteTaskProvider', () => {
     expect(rehydrated.input?.sourceTaskRef).toBe('dbwrite1');
   });
 
-  it('modo records: preserva un sourceOutput no-default (errors) elegido en el selector de salida de origen', () => {
+  it('modo records: preserva un sourceOutput no-default (errors) de una config legacy (backward-compat)', () => {
     const draft = provider.createDraft();
-    // El runtime panel eligio la tarea de origen; el selector de salida cambio records -> errors.
+    // Ya no hay selector de salida de origen (el detalle usa el default de la tarea); pero una config guardada con
+    // un sourceOutput no-default debe round-trippear sin clobbering (no se pisa 'errors' -> 'records').
     draft.input = { source: 'task-output', sourceTaskRef: 'read1', sourceOutput: 'errors' } as any;
 
     const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
