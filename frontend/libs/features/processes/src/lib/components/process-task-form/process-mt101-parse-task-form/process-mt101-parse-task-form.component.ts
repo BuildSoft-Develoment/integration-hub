@@ -17,7 +17,7 @@ import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.compo
   standalone: true,
   imports: [CommonModule, FormsModule, MatCheckboxModule, ProcessTaskRuntimePanelComponent, TaskFormShellComponent],
   template: `
-    <ih-task-form-shell [title]="i18n.t('processTask.MT101_PARSE')">
+    <ih-task-form-shell [title]="i18n.t('processTask.' + task().taskType)">
       <ih-process-task-runtime-panel
         shellRuntime
         [task]="task()"

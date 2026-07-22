@@ -1,4 +1,4 @@
-<ih-task-form-shell [title]="i18n.t('processTask.MT101_PAY')">
+<ih-task-form-shell [title]="i18n.t('processTask.' + task().taskType)">
   <mat-form-field shellSwitch class="mt101-pay__header-field" subscriptSizing="dynamic">
     <mat-label>{{ i18n.t('mt101Pay.transport') }}</mat-label>
     <mat-select
