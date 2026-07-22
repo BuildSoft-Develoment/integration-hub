@@ -1,0 +1,43 @@
+<div class="rfv">
+  <table class="rfv__table">
+    <thead>
+      <tr>
+        <th>{{ i18n.t('ui.fieldName') }}</th>
+        @if (variant() === 'range') {
+          <th>{{ i18n.t('ui.start') }}</th>
+          <th>{{ i18n.t('ui.end') }}</th>
+        } @else {
+          <th>{{ i18n.t('ui.position') }}</th>
+        }
+        <th>{{ i18n.t('ui.type') }}</th>
+        <th>{{ i18n.t('ui.size') }}</th>
+        <th class="rfv__center">{{ i18n.t('ui.required') }}</th>
+        <th>{{ i18n.t('ui.datePattern') }}</th>
+        <th>{{ i18n.t('ui.defaultValue') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (field of fields(); track $index) {
+        <tr>
+          <td class="rfv__name">
+            <span class="rfv__name-text">{{ field.name || '—' }}</span>
+            @if (field.script) {
+              <span class="rfv__fx" [attr.title]="field.script">fx</span>
+            }
+          </td>
+          @if (variant() === 'range') {
+            <td>{{ field.start || '—' }}</td>
+            <td>{{ field.end || '—' }}</td>
+          } @else {
+            <td>{{ field.position || '—' }}</td>
+          }
+          <td><span class="rfv__type">{{ field.type }}</span></td>
+          <td>{{ field.size || '—' }}</td>
+          <td class="rfv__center">{{ field.required ? '✓' : '—' }}</td>
+          <td>{{ field.pattern || '—' }}</td>
+          <td>{{ field.defaultValue || '—' }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>

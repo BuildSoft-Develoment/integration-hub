@@ -7,20 +7,22 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { I18nService } from '@integration-hub/core/services';
 import { ProcessTaskFormModel, ReaderRef, SourceRef } from '../../../models/process.models';
-import { FileReadTaskDraft, ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
-import { ProcessTaskManagerService } from '@integration-hub/core/services';
+import { FileReadTaskDraft, ProcessTaskFormBridgeService, ReaderFieldDraft, ReaderProviderType } from '@integration-hub/core/providers';
+import { ProcessTaskManagerService, ReaderManagerService } from '@integration-hub/core/services';
 import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
+import { ProcessReaderFieldsViewComponent } from '../process-reader-fields-view/process-reader-fields-view.component';
 
 @Component({
   selector: 'ih-process-file-read-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule, ProcessReaderFieldsViewComponent],
     templateUrl: './process-file-read-task-form.component.html',
     styleUrl: './process-file-read-task-form.component.css'
 })
 export class ProcessFileReadTaskFormComponent {
   readonly i18n = inject(I18nService);
   private readonly manager = inject(ProcessTaskManagerService);
+  private readonly readerManager = inject(ReaderManagerService);
   private readonly bindingContext = inject(ProcessTaskBindingContextService);
   // M-1b: outputs viajan al host via bridge (no via @Output()).
   private readonly bridge = inject(ProcessTaskFormBridgeService);
@@ -40,6 +42,19 @@ export class ProcessFileReadTaskFormComponent {
     parallel: false,
     parallelMode: 'file',
     maxConcurrency: null,
+  });
+  readonly selectedReader = computed(() => this.readers().find((item) => item.id === this.draft().readerDefinitionId) ?? null);
+  // Definicion de campos (read-only) del reader elegido: se hidrata su config a ReaderDraft y se toma la
+  // variante segun el modo (fixed-length -> range/fixedFields; delimitado -> position/fields). El mismo
+  // origen que downstream ve como `records` del FILE_READ, mostrado aca para no tener que abrir el reader.
+  readonly readerFields = computed<{ fields: readonly ReaderFieldDraft[]; variant: 'position' | 'range' }>(() => {
+    const reader = this.selectedReader();
+    if (!reader?.readerType) {
+      return { fields: [], variant: 'position' };
+    }
+    const draft = this.readerManager.hydrateDraft(reader.readerType as ReaderProviderType, reader.configurationJson ?? '{}');
+    const fixed = draft.mode === 'fixed-length';
+    return { fields: (fixed ? draft.fixedFields : draft.fields) ?? [], variant: fixed ? 'range' : 'position' };
   });
   readonly selectedSource = computed(() => this.sources().find((item) => item.id === this.draft().sourceDefinitionId) ?? null);
   readonly compatibleReaderTypes = computed(() => this.bindingContext.inferCompatibleReaders(this.selectedSource()));

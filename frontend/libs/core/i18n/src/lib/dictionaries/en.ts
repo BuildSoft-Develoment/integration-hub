@@ -401,6 +401,8 @@ export const en = {
   'paymentRules.importPreview': '{count} rules ready to import.',
   'ui.overview': 'Overview',
   'ui.fieldDefinitions': 'Field definitions ({count})',
+  'ui.readerNoFieldDefinitions': 'This reader defines no explicit fields (the record is built per its type).',
+  'ui.fileReadFieldDefinitionsReadonly': 'Read-only — configured in the reader.',
   'ui.addField': 'Add field',
   'ui.remove': 'Remove',
   'ui.field': 'Field {index}',

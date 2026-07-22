@@ -26,3 +26,15 @@
       textarea {
         min-height: 8rem;
       }
+      /* Header de "Definicion de campos": titulo + nota read-only en la misma linea. */
+      .file-read__fields-header {
+        display: flex;
+        align-items: baseline;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+      .file-read__ro-hint {
+        font-weight: 400;
+        font-size: 0.78rem;
+        color: var(--ih-text-soft);
+      }

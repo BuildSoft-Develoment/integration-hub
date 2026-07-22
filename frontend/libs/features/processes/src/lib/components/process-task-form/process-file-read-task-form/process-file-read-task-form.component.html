@@ -32,6 +32,22 @@
       </div>
     }
 
+    <!-- Definicion de campos del reader elegido (READ-ONLY): que campos produce el record. Se edita en el
+         reader, no aca; se muestra para no tener que abrir el reader al armar la tarea. -->
+    @if (draft().readerDefinitionId != null) {
+      <div class="task-section">
+        <div class="task-section-header file-read__fields-header">
+          <span>{{ i18n.t('ui.fieldDefinitions', { count: readerFields().fields.length }) }}</span>
+          <span class="file-read__ro-hint">{{ i18n.t('ui.fileReadFieldDefinitionsReadonly') }}</span>
+        </div>
+        @if (readerFields().fields.length) {
+          <ih-process-reader-fields-view [fields]="readerFields().fields" [variant]="readerFields().variant" />
+        } @else {
+          <div class="task-note">{{ i18n.t('ui.readerNoFieldDefinitions') }}</div>
+        }
+      </div>
+    }
+
     <mat-form-field class="full-width">
       <mat-label>{{ i18n.t('ui.sourceVariablesText') }}</mat-label>
       <textarea matInput [disabled]="readonly()" [ngModel]="draft().sourceVariablesText" (ngModelChange)="updateDraft({ sourceVariablesText: $event })"></textarea>

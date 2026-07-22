@@ -1,0 +1,78 @@
+/* Vista read-only de la definicion de campos del reader: tabla compacta que scrollea horizontal en
+   viewports angostos (nunca empuja el ancho del form). */
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.rfv {
+  min-width: 0;
+  overflow-x: auto;
+  border: 1px solid var(--ih-border);
+  border-radius: 10px;
+}
+
+.rfv__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.rfv__table th,
+.rfv__table td {
+  padding: 0.45rem 0.7rem;
+  text-align: left;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--ih-border);
+}
+
+.rfv__table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--ih-surface-alt);
+  color: var(--ih-text-soft);
+  font-weight: 700;
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rfv__table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.rfv__center {
+  text-align: center;
+}
+
+.rfv__name {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.rfv__name-text {
+  font-weight: 600;
+  color: var(--ih-text);
+}
+
+.rfv__type {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--ih-accent) 12%, transparent);
+  color: color-mix(in srgb, var(--ih-accent) 70%, var(--ih-text));
+}
+
+.rfv__fx {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 0.72rem;
+  padding: 1px 5px;
+  border-radius: 5px;
+  border: 1px solid var(--ih-primary, #6366f1);
+  color: var(--ih-primary, #6366f1);
+  cursor: help;
+}

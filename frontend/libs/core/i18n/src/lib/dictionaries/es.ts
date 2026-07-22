@@ -401,6 +401,8 @@ export const es = {
   'paymentRules.importPreview': '{count} reglas listas para importar.',
   'ui.overview': 'Resumen',
   'ui.fieldDefinitions': 'Definicion de campos ({count})',
+  'ui.readerNoFieldDefinitions': 'Este reader no define campos explicitos (el record se arma segun su tipo).',
+  'ui.fileReadFieldDefinitionsReadonly': 'Solo lectura — se configura en el reader.',
   'ui.addField': 'Agregar campo',
   'ui.remove': 'Quitar',
   'ui.field': 'Campo {index}',
