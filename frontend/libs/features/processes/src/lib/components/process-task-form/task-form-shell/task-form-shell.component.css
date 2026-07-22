@@ -1,0 +1,91 @@
+/* Shell de formularios de tarea: header persistente (fila fija) + tabs que scrollean su contenido.
+   El topbar es una fila de grid (no sticky) -> siempre visible sin fondo opaco. El CSS de las tabs
+   (::ng-deep .mat-mdc-tab-body-*) vive aca para que TODOS los forms tengan el mismo scroll/altura. */
+:host {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.75rem;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.tfs__topbar {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid var(--ih-border);
+}
+
+.tfs__title-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.tfs__title {
+  margin: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  font-size: 1.02rem;
+  font-weight: 700;
+  color: var(--ih-text);
+  overflow-wrap: anywhere;
+}
+
+/* Switch primario proyectado (Formato/Transporte/Modo/Canal): a la derecha del titulo. */
+.tfs__switch {
+  margin-left: auto;
+  min-width: 0;
+}
+
+.tfs__tabs {
+  min-width: 0;
+  min-height: 0;
+}
+.tfs__tabs ::ng-deep .mat-mdc-tab-group {
+  min-height: 0;
+  height: 100%;
+}
+.tfs__tabs ::ng-deep .mat-mdc-tab-body-wrapper,
+.tfs__tabs ::ng-deep .mat-mdc-tab-body,
+.tfs__tabs ::ng-deep .mat-mdc-tab-body-content {
+  min-height: 0;
+  height: 100%;
+}
+.tfs__tabs ::ng-deep .mat-mdc-tab-body-content {
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.9rem 0.35rem 0.4rem 0.1rem;
+}
+.tfs__tabs ::ng-deep .mat-mdc-tab-body-content > * {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+/* Un hijo directo de una tab con .tfs-fill toma la altura restante (workspace de mapeo paleta+board). */
+.tfs__tabs ::ng-deep .mat-mdc-tab-body-content > .tfs-fill {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+@media (max-width: 1080px) {
+  :host {
+    grid-template-rows: auto;
+    height: auto;
+    overflow: visible;
+  }
+  .tfs__tabs ::ng-deep .mat-mdc-tab-group,
+  .tfs__tabs ::ng-deep .mat-mdc-tab-body-wrapper,
+  .tfs__tabs ::ng-deep .mat-mdc-tab-body,
+  .tfs__tabs ::ng-deep .mat-mdc-tab-body-content {
+    height: auto;
+  }
+  .tfs__tabs ::ng-deep .mat-mdc-tab-body-content {
+    overflow: visible;
+  }
+}

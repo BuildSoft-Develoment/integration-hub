@@ -1,35 +1,30 @@
-<div class="mt101-build">
-  <!-- Header PERSISTENTE (siempre visible sobre las tabs): formato de salida + panel de runtime
-       (modo de ejecucion / trama origen / despacho async / continua si falla). Son I/O + operacion
-       transversales al mensaje, por eso no van dentro de ninguna pestaña. -->
-  <header class="mt101-build__topbar">
-    <div class="mt101-build__title-row">
-      <h3>{{ i18n.t('processTask.MT101_BUILD_FROM_TABLE') }}</h3>
-      <mat-form-field class="mt101-build__format-field" subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101.format') }}</mat-label>
-        <mat-select
-          [ngModel]="draft().format"
-          (ngModelChange)="updateDraft({ format: $event })"
-          [disabled]="readonly()">
-          @for (option of formatOptions; track option) {
-            <mat-option [value]="option">{{ option }}</mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-    </div>
+<ih-task-form-shell [title]="i18n.t('processTask.MT101_BUILD_FROM_TABLE')">
+  <!-- Switch primario del header: el formato de salida (JSON/XML/FIN). -->
+  <mat-form-field shellSwitch class="mt101-build__format-field" subscriptSizing="dynamic">
+    <mat-label>{{ i18n.t('mt101.format') }}</mat-label>
+    <mat-select
+      [ngModel]="draft().format"
+      (ngModelChange)="updateDraft({ format: $event })"
+      [disabled]="readonly()">
+      @for (option of formatOptions; track option) {
+        <mat-option [value]="option">{{ option }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
 
-    <ih-process-task-runtime-panel
-      [task]="task()"
-      [tasks]="tasks()"
-      [draft]="draft()"
-      [readonly]="readonly()"
-      [executionModes]="buildExecutionModes"
-      (runtimeChange)="updateDraft($event)"
-    />
-  </header>
+  <!-- Runtime persistente: modo de ejecucion / trama origen / despacho async / continua si falla. -->
+  <ih-process-task-runtime-panel
+    shellRuntime
+    [task]="task()"
+    [tasks]="tasks()"
+    [draft]="draft()"
+    [readonly]="readonly()"
+    [executionModes]="buildExecutionModes"
+    (runtimeChange)="updateDraft($event)"
+  />
 
   <!-- Tabs por ANATOMIA del mensaje MT101: General (envelope + division) · Sequence A · Sequence B. -->
-  <mat-tab-group class="mt101-build__tabs" animationDuration="0ms" mat-stretch-tabs="false">
+  <mat-tab-group animationDuration="0ms" mat-stretch-tabs="false">
     <mat-tab [label]="i18n.t('mt101.tab.general')">
       <section class="mt101-build__section">
         <h4>{{ i18n.t('mt101.section.envelope') }}</h4>
@@ -184,7 +179,7 @@
 
       <!-- Workspace: paleta (izq) + PARTIES unificadas (der): cada parte = nombre + tag + su opcion + sus
            field-bindings (board por-parte, showHeader=false). Se elimina el salto opcion-arriba / campos-abajo. -->
-      <div class="mt101-build__mapping-workspace mt101-build__fill">
+      <div class="mt101-build__mapping-workspace tfs-fill">
         <ih-process-db-write-source-palette
           [groups]="sourceGroups()"
           [draggingSource]="draggingSource()"
@@ -279,4 +274,4 @@
       </div>
     </mat-tab>
   </mat-tab-group>
-</div>
+</ih-task-form-shell>

@@ -23,6 +23,7 @@ import {
   ProcessMt101FieldMappingBoardComponent,
 } from '../process-mt101-field-mapping-board/process-mt101-field-mapping-board.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
+import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.component';
 
 /**
  * Formulario de configuracion para la construccion MT101 (base compartida, usada por
@@ -46,6 +47,7 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
     ProcessDbWriteSourcePaletteComponent,
     ProcessMt101FieldMappingBoardComponent,
     ProcessTaskRuntimePanelComponent,
+    TaskFormShellComponent,
   ],
   templateUrl: './process-mt101-build-task-form.component.html',
   styleUrl: './process-mt101-build-task-form.component.css',

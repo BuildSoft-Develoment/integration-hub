@@ -1,0 +1,16 @@
+<header class="tfs__topbar">
+  <div class="tfs__title-row">
+    @if (title()) {
+      <h3 class="tfs__title">{{ title() }}</h3>
+    }
+    <div class="tfs__switch">
+      <ng-content select="[shellSwitch]"></ng-content>
+    </div>
+  </div>
+
+  <ng-content select="[shellRuntime]"></ng-content>
+</header>
+
+<div class="tfs__tabs">
+  <ng-content></ng-content>
+</div>
