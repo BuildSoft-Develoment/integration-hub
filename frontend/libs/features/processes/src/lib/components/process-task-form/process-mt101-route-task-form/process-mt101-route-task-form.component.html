@@ -1,9 +1,6 @@
-<div class="mt101-route ih-thin-scroll">
-  <header class="mt101-route__header">
-    <h3>{{ i18n.t('processTask.MT101_ROUTE') }}</h3>
-  </header>
-
+<ih-task-form-shell [title]="i18n.t('processTask.MT101_ROUTE')">
   <ih-process-task-runtime-panel
+    shellRuntime
     [task]="task()"
     [tasks]="tasks()"
     [draft]="draft()"
@@ -11,82 +8,84 @@
     (runtimeChange)="updateDraft($event)"
   />
 
-  <section class="mt101-route__section">
-    <h4>{{ i18n.t('mt101Route.section.rules') }}</h4>
-    <p class="mt101-route__hint">{{ i18n.t('mt101Route.predicateHint') }}</p>
-    <ul class="mt101-route__rules">
-      @for (rule of draft().rules; let i = $index; track i) {
-        <li class="mt101-route__rule">
-          <mat-form-field subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('mt101Route.rule.name') }}</mat-label>
-            <input
-              matInput
-              type="text"
-              [ngModel]="rule.name"
-              (ngModelChange)="updateRule(i, { name: $event })"
-              [disabled]="readonly()" />
-          </mat-form-field>
+  <div class="tfs-body">
+    <section class="mt101-route__section">
+      <h4>{{ i18n.t('mt101Route.section.rules') }}</h4>
+      <p class="mt101-route__hint">{{ i18n.t('mt101Route.predicateHint') }}</p>
+      <ul class="mt101-route__rules">
+        @for (rule of draft().rules; let i = $index; track i) {
+          <li class="mt101-route__rule">
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Route.rule.name') }}</mat-label>
+              <input
+                matInput
+                type="text"
+                [ngModel]="rule.name"
+                (ngModelChange)="updateRule(i, { name: $event })"
+                [disabled]="readonly()" />
+            </mat-form-field>
 
-          <mat-form-field class="mt101-route__rule-predicate" subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('mt101Route.rule.predicate') }}</mat-label>
-            <input
-              matInput
-              type="text"
-              placeholder="beneficiaryBic == 'BCPLPEPL'"
-              [ngModel]="rule.predicate"
-              (ngModelChange)="updateRule(i, { predicate: $event })"
-              [disabled]="readonly()" />
-          </mat-form-field>
+            <mat-form-field class="mt101-route__rule-predicate" subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Route.rule.predicate') }}</mat-label>
+              <input
+                matInput
+                type="text"
+                placeholder="beneficiaryBic == 'BCPLPEPL'"
+                [ngModel]="rule.predicate"
+                (ngModelChange)="updateRule(i, { predicate: $event })"
+                [disabled]="readonly()" />
+            </mat-form-field>
 
-          <mat-form-field subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('mt101Route.rule.routeTo') }}</mat-label>
-            <input
-              matInput
-              type="text"
-              [ngModel]="rule.routeTo"
-              (ngModelChange)="updateRule(i, { routeTo: $event })"
-              [disabled]="readonly()" />
-          </mat-form-field>
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Route.rule.routeTo') }}</mat-label>
+              <input
+                matInput
+                type="text"
+                [ngModel]="rule.routeTo"
+                (ngModelChange)="updateRule(i, { routeTo: $event })"
+                [disabled]="readonly()" />
+            </mat-form-field>
 
-          <button
-            mat-icon-button
-            type="button"
-            class="mt101-route__rule-remove"
-            [attr.aria-label]="i18n.t('ui.remove')"
-            (click)="removeRule(i)"
-            [disabled]="readonly() || draft().rules.length === 1">
-            x
-          </button>
-        </li>
-      }
-    </ul>
-    <button mat-stroked-button type="button" class="mt101-route__add" (click)="addRule()" [disabled]="readonly()">
-      + {{ i18n.t('mt101Route.addRule') }}
-    </button>
-  </section>
+            <button
+              mat-icon-button
+              type="button"
+              class="mt101-route__rule-remove"
+              [attr.aria-label]="i18n.t('ui.remove')"
+              (click)="removeRule(i)"
+              [disabled]="readonly() || draft().rules.length === 1">
+              x
+            </button>
+          </li>
+        }
+      </ul>
+      <button mat-stroked-button type="button" class="mt101-route__add" (click)="addRule()" [disabled]="readonly()">
+        + {{ i18n.t('mt101Route.addRule') }}
+      </button>
+    </section>
 
-  <section class="mt101-route__section">
-    <h4>{{ i18n.t('mt101Route.section.fallback') }}</h4>
-    <div class="mt101-route__grid">
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Route.defaultRoute') }}</mat-label>
-        <input
-          matInput
-          type="text"
-          [ngModel]="draft().defaultRoute"
-          (ngModelChange)="updateDraft({ defaultRoute: $event })"
-          [disabled]="readonly()" />
-      </mat-form-field>
+    <section class="mt101-route__section">
+      <h4>{{ i18n.t('mt101Route.section.fallback') }}</h4>
+      <div class="mt101-route__grid">
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101Route.defaultRoute') }}</mat-label>
+          <input
+            matInput
+            type="text"
+            [ngModel]="draft().defaultRoute"
+            (ngModelChange)="updateDraft({ defaultRoute: $event })"
+            [disabled]="readonly()" />
+        </mat-form-field>
 
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Route.routeField') }}</mat-label>
-        <input
-          matInput
-          type="text"
-          [ngModel]="draft().routeField"
-          (ngModelChange)="updateDraft({ routeField: $event })"
-          [disabled]="readonly()" />
-      </mat-form-field>
-    </div>
-  </section>
-</div>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101Route.routeField') }}</mat-label>
+          <input
+            matInput
+            type="text"
+            [ngModel]="draft().routeField"
+            (ngModelChange)="updateDraft({ routeField: $event })"
+            [disabled]="readonly()" />
+        </mat-form-field>
+      </div>
+    </section>
+  </div>
+</ih-task-form-shell>

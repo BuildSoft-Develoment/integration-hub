@@ -6,29 +6,7 @@
   overflow: hidden;
 }
 
-.mt101-archive {
-  display: grid;
-  gap: 1rem;
-  align-content: start;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  overflow: auto;
-  padding: 0 0.25rem 0.25rem 0;
-}
-
-.mt101-archive__header {
-  padding-bottom: 0.35rem;
-  border-bottom: 1px solid var(--ih-border);
-}
-
-.mt101-archive__header h3 {
-  margin: 0;
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--ih-text);
-}
-
+/* El scroll wrapper y el header los provee ih-task-form-shell (.tfs-body + header). */
 .mt101-archive__section {
   display: grid;
   gap: 0.65rem;

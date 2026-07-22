@@ -1,9 +1,6 @@
-<div class="mt101-archive ih-thin-scroll">
-  <header class="mt101-archive__header">
-    <h3>{{ i18n.t('processTask.MT101_ARCHIVE') }}</h3>
-  </header>
-
+<ih-task-form-shell [title]="i18n.t('processTask.MT101_ARCHIVE')">
   <ih-process-task-runtime-panel
+    shellRuntime
     [task]="task()"
     [tasks]="tasks()"
     [draft]="draft()"
@@ -11,86 +8,88 @@
     (runtimeChange)="updateDraft($event)"
   />
 
-  <section class="mt101-archive__section">
-    <h4>{{ i18n.t('mt101Archive.section.destination') }}</h4>
-    <div class="mt101-archive__grid">
-      <ih-connection-select
-        [connections]="connections()"
-        [value]="draft().connectionRef"
-        valueBy="id"
-        [label]="i18n.t('mt101Archive.connection')"
-        emptyLabel="-"
-        subscriptSizing="dynamic"
-        [disabled]="readonly()"
-        (valueChange)="updateDraft({ connectionRef: $event })" />
-
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Archive.table') }}</mat-label>
-        <input
-          matInput
-          type="text"
-          [ngModel]="draft().table"
-          (ngModelChange)="updateDraft({ table: $event })"
-          [disabled]="readonly()" />
-      </mat-form-field>
-
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Archive.hashAlgorithm') }}</mat-label>
-        <mat-select
-          [ngModel]="draft().hashAlgorithm"
-          (ngModelChange)="updateDraft({ hashAlgorithm: $event })"
-          [disabled]="readonly()">
-          @for (h of hashAlgorithms; track h) {
-            <mat-option [value]="h">{{ h }}</mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Archive.retentionDays') }}</mat-label>
-        <input
-          matInput
-          type="number"
-          min="1"
-          [ngModel]="draft().retentionDays"
-          (ngModelChange)="updateDraft({ retentionDays: $event })"
-          [disabled]="readonly()" />
-      </mat-form-field>
-    </div>
-  </section>
-
-  <section class="mt101-archive__section">
-    <h4>{{ i18n.t('mt101Archive.section.encryption') }}</h4>
-    <mat-checkbox
-      [ngModel]="draft().encryptionEnabled"
-      (ngModelChange)="updateDraft({ encryptionEnabled: $event })"
-      [disabled]="readonly()">
-      {{ i18n.t('mt101Archive.encryptionEnabled') }}
-    </mat-checkbox>
-
-    @if (draft().encryptionEnabled) {
+  <div class="tfs-body">
+    <section class="mt101-archive__section">
+      <h4>{{ i18n.t('mt101Archive.section.destination') }}</h4>
       <div class="mt101-archive__grid">
+        <ih-connection-select
+          [connections]="connections()"
+          [value]="draft().connectionRef"
+          valueBy="id"
+          [label]="i18n.t('mt101Archive.connection')"
+          emptyLabel="-"
+          subscriptSizing="dynamic"
+          [disabled]="readonly()"
+          (valueChange)="updateDraft({ connectionRef: $event })" />
+
         <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101Archive.encryptColumn') }}</mat-label>
+          <mat-label>{{ i18n.t('mt101Archive.table') }}</mat-label>
           <input
             matInput
             type="text"
-            [ngModel]="draft().encryptColumn"
-            (ngModelChange)="updateDraft({ encryptColumn: $event })"
+            [ngModel]="draft().table"
+            (ngModelChange)="updateDraft({ table: $event })"
             [disabled]="readonly()" />
         </mat-form-field>
 
         <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101Archive.encryptionSecretRef') }}</mat-label>
+          <mat-label>{{ i18n.t('mt101Archive.hashAlgorithm') }}</mat-label>
+          <mat-select
+            [ngModel]="draft().hashAlgorithm"
+            (ngModelChange)="updateDraft({ hashAlgorithm: $event })"
+            [disabled]="readonly()">
+            @for (h of hashAlgorithms; track h) {
+              <mat-option [value]="h">{{ h }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101Archive.retentionDays') }}</mat-label>
           <input
             matInput
-            type="text"
-            placeholder="${secret:archive_key}"
-            [ngModel]="draft().encryptionSecretRef"
-            (ngModelChange)="updateDraft({ encryptionSecretRef: $event })"
+            type="number"
+            min="1"
+            [ngModel]="draft().retentionDays"
+            (ngModelChange)="updateDraft({ retentionDays: $event })"
             [disabled]="readonly()" />
         </mat-form-field>
       </div>
-    }
-  </section>
-</div>
+    </section>
+
+    <section class="mt101-archive__section">
+      <h4>{{ i18n.t('mt101Archive.section.encryption') }}</h4>
+      <mat-checkbox
+        [ngModel]="draft().encryptionEnabled"
+        (ngModelChange)="updateDraft({ encryptionEnabled: $event })"
+        [disabled]="readonly()">
+        {{ i18n.t('mt101Archive.encryptionEnabled') }}
+      </mat-checkbox>
+
+      @if (draft().encryptionEnabled) {
+        <div class="mt101-archive__grid">
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('mt101Archive.encryptColumn') }}</mat-label>
+            <input
+              matInput
+              type="text"
+              [ngModel]="draft().encryptColumn"
+              (ngModelChange)="updateDraft({ encryptColumn: $event })"
+              [disabled]="readonly()" />
+          </mat-form-field>
+
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('mt101Archive.encryptionSecretRef') }}</mat-label>
+            <input
+              matInput
+              type="text"
+              placeholder="${secret:archive_key}"
+              [ngModel]="draft().encryptionSecretRef"
+              (ngModelChange)="updateDraft({ encryptionSecretRef: $event })"
+              [disabled]="readonly()" />
+          </mat-form-field>
+        </div>
+      }
+    </section>
+  </div>
+</ih-task-form-shell>

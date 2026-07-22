@@ -16,11 +16,12 @@ import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/se
 import { ConnectionRef, ProcessTaskFormModel } from '../../../models/process.models';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 import { ConnectionSelectComponent } from '../connection-select/connection-select.component';
+import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.component';
 
 @Component({
   selector: 'ih-process-mt101-archive-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatCheckboxModule, MatFormFieldModule, MatInputModule, MatSelectModule, ProcessTaskRuntimePanelComponent, ConnectionSelectComponent],
+  imports: [CommonModule, FormsModule, MatCheckboxModule, MatFormFieldModule, MatInputModule, MatSelectModule, ProcessTaskRuntimePanelComponent, ConnectionSelectComponent, TaskFormShellComponent],
   templateUrl: './process-mt101-archive-task-form.component.html',
   styleUrl: './process-mt101-archive-task-form.component.css',
 })
