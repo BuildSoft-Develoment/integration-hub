@@ -1,0 +1,10 @@
+/* El atomo se comporta como un item de grid (igual que el mat-form-field que reemplaza): ocupa su celda. */
+:host {
+  display: block;
+  min-width: 0;
+}
+
+mat-form-field {
+  width: 100%;
+  min-width: 0;
+}

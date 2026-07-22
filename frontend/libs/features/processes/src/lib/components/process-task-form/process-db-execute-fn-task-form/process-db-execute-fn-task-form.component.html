@@ -7,15 +7,13 @@
         (runtimeChange)="updateDraft($event)"
       />
 
-      <mat-form-field>
-        <mat-label>{{ i18n.t('ui.connection') }}</mat-label>
-        <mat-select [disabled]="readonly()" [ngModel]="draft().connectionRef" (ngModelChange)="handleConnectionChange($event)">
-          <mat-option value="">{{ i18n.t('ui.platformDatasource') }}</mat-option>
-          @for (connection of connections(); track connection.id) {
-            <mat-option [value]="connection.name">{{ connection.name }} ({{ connection.connectionType }})</mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
+      <ih-connection-select
+        [connections]="connections()"
+        [value]="draft().connectionRef"
+        [label]="i18n.t('ui.connection')"
+        [emptyLabel]="i18n.t('ui.platformDatasource')"
+        [disabled]="readonly()"
+        (valueChange)="handleConnectionChange($event)" />
 
       <mat-form-field>
         <mat-label>{{ i18n.t('ui.schema') }}</mat-label>

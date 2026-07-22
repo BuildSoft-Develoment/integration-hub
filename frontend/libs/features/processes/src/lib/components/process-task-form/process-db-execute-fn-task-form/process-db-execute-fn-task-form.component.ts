@@ -16,11 +16,12 @@ import { DbWriteSchemaRef } from '../../../models/process-db-write.models';
 import { ProcessDbRoutineSelectorComponent } from '../process-db-routine-selector/process-db-routine-selector.component';
 import { ProcessTaskBindingBoardComponent } from '../process-task-binding-board/process-task-binding-board.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
+import { ConnectionSelectComponent } from '../connection-select/connection-select.component';
 
 @Component({
   selector: 'ih-process-db-execute-fn-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatAutocompleteModule, MatFormFieldModule, MatInputModule, MatSelectModule, ProcessDbRoutineSelectorComponent, ProcessTaskBindingBoardComponent, ProcessTaskRuntimePanelComponent],
+  imports: [CommonModule, FormsModule, MatAutocompleteModule, MatFormFieldModule, MatInputModule, MatSelectModule, ProcessDbRoutineSelectorComponent, ProcessTaskBindingBoardComponent, ProcessTaskRuntimePanelComponent, ConnectionSelectComponent],
     templateUrl: './process-db-execute-fn-task-form.component.html',
     styleUrl: './process-db-execute-fn-task-form.component.css'
 })
@@ -105,12 +106,14 @@ export class ProcessDbExecuteFnTaskFormComponent {
     });
   }
 
-  handleConnectionChange(connectionRef: string): void {
+  // El atomo ih-connection-select emite string|number (variante name|id); aqui el connectionRef es el nombre
+  // (variante DB), asi que se coacciona a string al persistir en el draft.
+  handleConnectionChange(connectionRef: string | number): void {
     this.routineQuery.set('');
     this.schemas.set([]);
     this.routines.set([]);
     this.updateDraft({
-      connectionRef,
+      connectionRef: String(connectionRef),
       functionSchema: '',
       functionName: '',
       parameters: [],

@@ -1,0 +1,15 @@
+<mat-form-field [subscriptSizing]="subscriptSizing()">
+  @if (label()) {
+    <mat-label>{{ label() }}</mat-label>
+  }
+  <mat-select [disabled]="disabled()" [ngModel]="value()" (ngModelChange)="valueChange.emit($event)">
+    @if (emptyLabel() !== null) {
+      <mat-option value="">{{ emptyLabel() }}</mat-option>
+    }
+    @for (connection of connections(); track connection.id) {
+      <mat-option [value]="valueBy() === 'id' ? connection.id : connection.name">
+        {{ connection.name }} ({{ connection.connectionType }})
+      </mat-option>
+    }
+  </mat-select>
+</mat-form-field>
