@@ -1,21 +1,18 @@
-<div class="mt101-pay ih-thin-scroll">
-  <header class="mt101-pay__header">
-    <h3>{{ i18n.t('processTask.MT101_PAY') }}</h3>
-
-    <mat-form-field class="mt101-pay__header-field" subscriptSizing="dynamic">
-      <mat-label>{{ i18n.t('mt101Pay.transport') }}</mat-label>
-      <mat-select
-        [ngModel]="draft().transport"
-        (ngModelChange)="updateDraft({ transport: $event })"
-        [disabled]="readonly()">
-        @for (t of transports; track t) {
-          <mat-option [value]="t">{{ t }}</mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-  </header>
+<ih-task-form-shell [title]="i18n.t('processTask.MT101_PAY')">
+  <mat-form-field shellSwitch class="mt101-pay__header-field" subscriptSizing="dynamic">
+    <mat-label>{{ i18n.t('mt101Pay.transport') }}</mat-label>
+    <mat-select
+      [ngModel]="draft().transport"
+      (ngModelChange)="updateDraft({ transport: $event })"
+      [disabled]="readonly()">
+      @for (t of transports; track t) {
+        <mat-option [value]="t">{{ t }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
 
   <ih-process-task-runtime-panel
+    shellRuntime
     [task]="task()"
     [tasks]="tasks()"
     [draft]="draft()"
@@ -23,325 +20,333 @@
     (runtimeChange)="updateDraft($event)"
   />
 
-  @if (draft().transport === 'REST') {
-    <section class="mt101-pay__section">
-      <h4>{{ i18n.t('mt101Pay.section.rest') }}</h4>
-      <div class="mt101-pay__grid">
-        <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101Pay.rest.url') }}</mat-label>
-          <input
-            matInput
-            type="text"
-            placeholder="https://gateway.banco.local/v1/swift/mt101"
-            [ngModel]="draft().rest.url"
-            (ngModelChange)="updateRest({ url: $event })"
-            [disabled]="readonly()" />
-        </mat-form-field>
+  <mat-tab-group animationDuration="0ms" mat-stretch-tabs="false">
+    <mat-tab [label]="i18n.t('mt101Pay.tab.transport')">
+      @if (draft().transport === 'REST') {
+        <section class="mt101-pay__section">
+          <h4>{{ i18n.t('mt101Pay.section.rest') }}</h4>
+          <div class="mt101-pay__grid">
+            <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Pay.rest.url') }}</mat-label>
+              <input
+                matInput
+                type="text"
+                placeholder="https://gateway.banco.local/v1/swift/mt101"
+                [ngModel]="draft().rest.url"
+                (ngModelChange)="updateRest({ url: $event })"
+                [disabled]="readonly()" />
+            </mat-form-field>
 
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101Pay.rest.method') }}</mat-label>
-          <mat-select
-            [ngModel]="draft().rest.method"
-            (ngModelChange)="updateRest({ method: $event })"
-            [disabled]="readonly()">
-            @for (m of httpMethods; track m) {
-              <mat-option [value]="m">{{ m }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Pay.rest.method') }}</mat-label>
+              <mat-select
+                [ngModel]="draft().rest.method"
+                (ngModelChange)="updateRest({ method: $event })"
+                [disabled]="readonly()">
+                @for (m of httpMethods; track m) {
+                  <mat-option [value]="m">{{ m }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
 
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101Pay.rest.timeoutSeconds') }}</mat-label>
-          <input
-            matInput
-            type="number"
-            min="1"
-            [ngModel]="draft().rest.timeoutSeconds"
-            (ngModelChange)="updateRest({ timeoutSeconds: $event })"
-            [disabled]="readonly()" />
-        </mat-form-field>
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Pay.rest.timeoutSeconds') }}</mat-label>
+              <input
+                matInput
+                type="number"
+                min="1"
+                [ngModel]="draft().rest.timeoutSeconds"
+                (ngModelChange)="updateRest({ timeoutSeconds: $event })"
+                [disabled]="readonly()" />
+            </mat-form-field>
 
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101Pay.rest.contentType') }}</mat-label>
-          <input
-            matInput
-            type="text"
-            [ngModel]="draft().rest.contentType"
-            (ngModelChange)="updateRest({ contentType: $event })"
-            [disabled]="readonly()" />
-        </mat-form-field>
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Pay.rest.contentType') }}</mat-label>
+              <input
+                matInput
+                type="text"
+                [ngModel]="draft().rest.contentType"
+                (ngModelChange)="updateRest({ contentType: $event })"
+                [disabled]="readonly()" />
+            </mat-form-field>
 
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101Pay.rest.authType') }}</mat-label>
-          <mat-select
-            [ngModel]="draft().rest.authType"
-            (ngModelChange)="updateRest({ authType: $event })"
-            [disabled]="readonly()">
-            @for (a of authTypes; track a) {
-              <mat-option [value]="a">{{ a || '-' }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Pay.rest.authType') }}</mat-label>
+              <mat-select
+                [ngModel]="draft().rest.authType"
+                (ngModelChange)="updateRest({ authType: $event })"
+                [disabled]="readonly()">
+                @for (a of authTypes; track a) {
+                  <mat-option [value]="a">{{ a || '-' }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
 
-        <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101Pay.rest.extraHeaders') }}</mat-label>
-          <textarea
-            matInput
-            rows="3"
-            placeholder="{ &quot;X-Origin&quot;: &quot;integration-hub&quot; }"
-            [ngModel]="draft().rest.extraHeadersJson"
-            (ngModelChange)="updateRest({ extraHeadersJson: $event })"
-            [disabled]="readonly()"></textarea>
-        </mat-form-field>
-      </div>
+            <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Pay.rest.extraHeaders') }}</mat-label>
+              <textarea
+                matInput
+                rows="3"
+                placeholder="{ &quot;X-Origin&quot;: &quot;integration-hub&quot; }"
+                [ngModel]="draft().rest.extraHeadersJson"
+                (ngModelChange)="updateRest({ extraHeadersJson: $event })"
+                [disabled]="readonly()"></textarea>
+            </mat-form-field>
+          </div>
 
-      @if (draft().rest.authType === 'bearer') {
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101Pay.rest.token') }}</mat-label>
-          <input
-            matInput
-            type="text"
-            placeholder="${secret:gateway_token}"
-            [ngModel]="draft().rest.token"
-            (ngModelChange)="updateRest({ token: $event })"
-            [disabled]="readonly()" />
-        </mat-form-field>
+          @if (draft().rest.authType === 'bearer') {
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Pay.rest.token') }}</mat-label>
+              <input
+                matInput
+                type="text"
+                placeholder="${secret:gateway_token}"
+                [ngModel]="draft().rest.token"
+                (ngModelChange)="updateRest({ token: $event })"
+                [disabled]="readonly()" />
+            </mat-form-field>
+          }
+
+          @if (draft().rest.authType === 'login-request') {
+            <div class="mt101-pay__grid">
+              <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('mt101Pay.rest.loginUrl') }}</mat-label>
+                <input
+                  matInput
+                  type="text"
+                  placeholder="https://auth.banco.local/oauth/token"
+                  [ngModel]="draft().rest.loginUrl"
+                  (ngModelChange)="updateRest({ loginUrl: $event })"
+                  [disabled]="readonly()" />
+              </mat-form-field>
+
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('mt101Pay.rest.loginMethod') }}</mat-label>
+                <mat-select
+                  [ngModel]="draft().rest.loginMethod"
+                  (ngModelChange)="updateRest({ loginMethod: $event })"
+                  [disabled]="readonly()">
+                  @for (m of httpMethods; track m) {
+                    <mat-option [value]="m">{{ m }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('mt101Pay.rest.tokenPath') }}</mat-label>
+                <input
+                  matInput
+                  type="text"
+                  [ngModel]="draft().rest.tokenPath"
+                  (ngModelChange)="updateRest({ tokenPath: $event })"
+                  [disabled]="readonly()" />
+              </mat-form-field>
+
+              <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('mt101Pay.rest.loginHeaders') }}</mat-label>
+                <textarea
+                  matInput
+                  rows="3"
+                  placeholder="{ &quot;Content-Type&quot;: &quot;application/x-www-form-urlencoded&quot; }"
+                  [ngModel]="draft().rest.loginHeadersJson"
+                  (ngModelChange)="updateRest({ loginHeadersJson: $event })"
+                  [disabled]="readonly()"></textarea>
+              </mat-form-field>
+
+              <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('mt101Pay.rest.loginBodyTemplate') }}</mat-label>
+                <textarea
+                  matInput
+                  rows="3"
+                  placeholder="grant_type=client_credentials&client_id=${secret:cid}&client_secret=${secret:csecret}"
+                  [ngModel]="draft().rest.loginBodyTemplate"
+                  (ngModelChange)="updateRest({ loginBodyTemplate: $event })"
+                  [disabled]="readonly()"></textarea>
+              </mat-form-field>
+            </div>
+          }
+        </section>
+      } @else if (draft().transport === 'SFTP') {
+        <section class="mt101-pay__section">
+          <h4>{{ i18n.t('mt101Pay.section.sftp') }}</h4>
+          <div class="mt101-pay__grid">
+            <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Pay.sftp.sink') }}</mat-label>
+              <mat-select
+                [ngModel]="draft().sftp.sinkRef"
+                (ngModelChange)="updateSftp({ sinkRef: $event })"
+                [disabled]="readonly()">
+                <mat-option value="">{{ i18n.t('mt101Pay.sftp.selectSink') }}</mat-option>
+                @for (sink of sinkOptions(); track sink.id) {
+                  <mat-option [value]="sink.id">{{ sink.id }} - {{ sink.name }}</mat-option>
+                }
+              </mat-select>
+              <mat-hint>{{ i18n.t('mt101Pay.sftp.sinkHint') }}</mat-hint>
+            </mat-form-field>
+
+            <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Pay.sftp.dropPathTemplate') }}</mat-label>
+              <input
+                matInput
+                type="text"
+                placeholder="/inbox/${sendersReference}.fin"
+                [ngModel]="draft().sftp.dropPathTemplate"
+                (ngModelChange)="updateSftp({ dropPathTemplate: $event })"
+                [disabled]="readonly()" />
+              <mat-hint>{{ i18n.t('mt101Pay.sftp.dropPathHint') }}</mat-hint>
+            </mat-form-field>
+
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Pay.sftp.tmpExtension') }}</mat-label>
+              <input
+                matInput
+                type="text"
+                placeholder=".part"
+                [ngModel]="draft().sftp.tmpExtension"
+                (ngModelChange)="updateSftp({ tmpExtension: $event })"
+                [disabled]="readonly()" />
+            </mat-form-field>
+
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Pay.sftp.remoteDuplicatePolicy') }}</mat-label>
+              <mat-select
+                [ngModel]="draft().sftp.remoteDuplicatePolicy"
+                (ngModelChange)="updateSftp({ remoteDuplicatePolicy: $event })"
+                [disabled]="readonly()">
+                @for (p of duplicatePolicies; track p) {
+                  <mat-option [value]="p">{{ p }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+          </div>
+        </section>
       }
+    </mat-tab>
 
-      @if (draft().rest.authType === 'login-request') {
+    <mat-tab [label]="i18n.t('mt101Pay.tab.delivery')">
+      <section class="mt101-pay__section">
+        <h4>{{ i18n.t('mt101Pay.section.idempotency') }}</h4>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101Pay.idempotencyKeyTemplate') }}</mat-label>
+          <input
+            matInput
+            type="text"
+            placeholder="${sendersReference}"
+            [ngModel]="draft().idempotencyKeyTemplate"
+            (ngModelChange)="updateDraft({ idempotencyKeyTemplate: $event })"
+            [disabled]="readonly()" />
+        </mat-form-field>
+      </section>
+
+      <section class="mt101-pay__section">
+        <h4>{{ i18n.t('mt101Pay.section.retry') }}</h4>
         <div class="mt101-pay__grid">
-          <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('mt101Pay.rest.loginUrl') }}</mat-label>
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('mt101Pay.retry.maxRetries') }}</mat-label>
             <input
               matInput
-              type="text"
-              placeholder="https://auth.banco.local/oauth/token"
-              [ngModel]="draft().rest.loginUrl"
-              (ngModelChange)="updateRest({ loginUrl: $event })"
+              type="number"
+              min="0"
+              [ngModel]="draft().retryPolicy.maxRetries"
+              (ngModelChange)="updateRetry({ maxRetries: $event })"
               [disabled]="readonly()" />
           </mat-form-field>
 
           <mat-form-field subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('mt101Pay.rest.loginMethod') }}</mat-label>
+            <mat-label>{{ i18n.t('mt101Pay.retry.backoffStrategy') }}</mat-label>
             <mat-select
-              [ngModel]="draft().rest.loginMethod"
-              (ngModelChange)="updateRest({ loginMethod: $event })"
+              [ngModel]="draft().retryPolicy.backoffStrategy"
+              (ngModelChange)="updateRetry({ backoffStrategy: $event })"
               [disabled]="readonly()">
-              @for (m of httpMethods; track m) {
+              @for (s of backoffStrategies; track s) {
+                <mat-option [value]="s">{{ s }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('mt101Pay.retry.initialBackoffSeconds') }}</mat-label>
+            <input
+              matInput
+              type="number"
+              min="0"
+              [ngModel]="draft().retryPolicy.initialBackoffSeconds"
+              (ngModelChange)="updateRetry({ initialBackoffSeconds: $event })"
+              [disabled]="readonly()" />
+          </mat-form-field>
+
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('mt101Pay.retry.maxBackoffSeconds') }}</mat-label>
+            <input
+              matInput
+              type="number"
+              min="0"
+              [ngModel]="draft().retryPolicy.maxBackoffSeconds"
+              (ngModelChange)="updateRetry({ maxBackoffSeconds: $event })"
+              [disabled]="readonly()" />
+          </mat-form-field>
+
+          <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('mt101Pay.retry.retryOnFamilies') }}</mat-label>
+            <input
+              matInput
+              type="text"
+              placeholder="TIMEOUT,5xx,CONNECTION_REFUSED"
+              [ngModel]="draft().retryPolicy.retryOnFamilies"
+              (ngModelChange)="updateRetry({ retryOnFamilies: $event })"
+              [disabled]="readonly()" />
+          </mat-form-field>
+        </div>
+      </section>
+    </mat-tab>
+
+    <mat-tab [label]="i18n.t('mt101Pay.tab.confirmation')">
+      <section class="mt101-pay__section">
+        <h4>{{ i18n.t('mt101Pay.section.confirmation') }}</h4>
+        <div class="mt101-pay__grid">
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('mt101Pay.confirmationMode') }}</mat-label>
+            <mat-select
+              [ngModel]="draft().confirmationMode"
+              (ngModelChange)="updateDraft({ confirmationMode: $event })"
+              [disabled]="readonly()">
+              @for (m of confirmationModes; track m) {
                 <mat-option [value]="m">{{ m }}</mat-option>
               }
             </mat-select>
           </mat-form-field>
 
           <mat-form-field subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('mt101Pay.rest.tokenPath') }}</mat-label>
+            <mat-label>{{ i18n.t('mt101Pay.response.successField') }}</mat-label>
             <input
               matInput
               type="text"
-              [ngModel]="draft().rest.tokenPath"
-              (ngModelChange)="updateRest({ tokenPath: $event })"
+              [ngModel]="draft().expectedGatewayResponse.successField"
+              (ngModelChange)="updateResponse({ successField: $event })"
               [disabled]="readonly()" />
           </mat-form-field>
 
-          <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('mt101Pay.rest.loginHeaders') }}</mat-label>
-            <textarea
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('mt101Pay.response.referenceField') }}</mat-label>
+            <input
               matInput
-              rows="3"
-              placeholder="{ &quot;Content-Type&quot;: &quot;application/x-www-form-urlencoded&quot; }"
-              [ngModel]="draft().rest.loginHeadersJson"
-              (ngModelChange)="updateRest({ loginHeadersJson: $event })"
-              [disabled]="readonly()"></textarea>
+              type="text"
+              [ngModel]="draft().expectedGatewayResponse.referenceField"
+              (ngModelChange)="updateResponse({ referenceField: $event })"
+              [disabled]="readonly()" />
           </mat-form-field>
 
-          <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('mt101Pay.rest.loginBodyTemplate') }}</mat-label>
-            <textarea
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('mt101Pay.response.errorMessageField') }}</mat-label>
+            <input
               matInput
-              rows="3"
-              placeholder="grant_type=client_credentials&client_id=${secret:cid}&client_secret=${secret:csecret}"
-              [ngModel]="draft().rest.loginBodyTemplate"
-              (ngModelChange)="updateRest({ loginBodyTemplate: $event })"
-              [disabled]="readonly()"></textarea>
+              type="text"
+              [ngModel]="draft().expectedGatewayResponse.errorMessageField"
+              (ngModelChange)="updateResponse({ errorMessageField: $event })"
+              [disabled]="readonly()" />
           </mat-form-field>
         </div>
-      }
-    </section>
-  } @else if (draft().transport === 'SFTP') {
-    <section class="mt101-pay__section">
-      <h4>{{ i18n.t('mt101Pay.section.sftp') }}</h4>
-      <div class="mt101-pay__grid">
-        <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101Pay.sftp.sink') }}</mat-label>
-          <mat-select
-            [ngModel]="draft().sftp.sinkRef"
-            (ngModelChange)="updateSftp({ sinkRef: $event })"
-            [disabled]="readonly()">
-            <mat-option value="">{{ i18n.t('mt101Pay.sftp.selectSink') }}</mat-option>
-            @for (sink of sinkOptions(); track sink.id) {
-              <mat-option [value]="sink.id">{{ sink.id }} - {{ sink.name }}</mat-option>
-            }
-          </mat-select>
-          <mat-hint>{{ i18n.t('mt101Pay.sftp.sinkHint') }}</mat-hint>
-        </mat-form-field>
-
-        <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101Pay.sftp.dropPathTemplate') }}</mat-label>
-          <input
-            matInput
-            type="text"
-            placeholder="/inbox/${sendersReference}.fin"
-            [ngModel]="draft().sftp.dropPathTemplate"
-            (ngModelChange)="updateSftp({ dropPathTemplate: $event })"
-            [disabled]="readonly()" />
-          <mat-hint>{{ i18n.t('mt101Pay.sftp.dropPathHint') }}</mat-hint>
-        </mat-form-field>
-
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101Pay.sftp.tmpExtension') }}</mat-label>
-          <input
-            matInput
-            type="text"
-            placeholder=".part"
-            [ngModel]="draft().sftp.tmpExtension"
-            (ngModelChange)="updateSftp({ tmpExtension: $event })"
-            [disabled]="readonly()" />
-        </mat-form-field>
-
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101Pay.sftp.remoteDuplicatePolicy') }}</mat-label>
-          <mat-select
-            [ngModel]="draft().sftp.remoteDuplicatePolicy"
-            (ngModelChange)="updateSftp({ remoteDuplicatePolicy: $event })"
-            [disabled]="readonly()">
-            @for (p of duplicatePolicies; track p) {
-              <mat-option [value]="p">{{ p }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-      </div>
-    </section>
-  }
-
-  <section class="mt101-pay__section">
-    <h4>{{ i18n.t('mt101Pay.section.idempotency') }}</h4>
-    <mat-form-field subscriptSizing="dynamic">
-      <mat-label>{{ i18n.t('mt101Pay.idempotencyKeyTemplate') }}</mat-label>
-      <input
-        matInput
-        type="text"
-        placeholder="${sendersReference}"
-        [ngModel]="draft().idempotencyKeyTemplate"
-        (ngModelChange)="updateDraft({ idempotencyKeyTemplate: $event })"
-        [disabled]="readonly()" />
-    </mat-form-field>
-  </section>
-
-  <section class="mt101-pay__section">
-    <h4>{{ i18n.t('mt101Pay.section.retry') }}</h4>
-    <div class="mt101-pay__grid">
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Pay.retry.maxRetries') }}</mat-label>
-        <input
-          matInput
-          type="number"
-          min="0"
-          [ngModel]="draft().retryPolicy.maxRetries"
-          (ngModelChange)="updateRetry({ maxRetries: $event })"
-          [disabled]="readonly()" />
-      </mat-form-field>
-
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Pay.retry.backoffStrategy') }}</mat-label>
-        <mat-select
-          [ngModel]="draft().retryPolicy.backoffStrategy"
-          (ngModelChange)="updateRetry({ backoffStrategy: $event })"
-          [disabled]="readonly()">
-          @for (s of backoffStrategies; track s) {
-            <mat-option [value]="s">{{ s }}</mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Pay.retry.initialBackoffSeconds') }}</mat-label>
-        <input
-          matInput
-          type="number"
-          min="0"
-          [ngModel]="draft().retryPolicy.initialBackoffSeconds"
-          (ngModelChange)="updateRetry({ initialBackoffSeconds: $event })"
-          [disabled]="readonly()" />
-      </mat-form-field>
-
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Pay.retry.maxBackoffSeconds') }}</mat-label>
-        <input
-          matInput
-          type="number"
-          min="0"
-          [ngModel]="draft().retryPolicy.maxBackoffSeconds"
-          (ngModelChange)="updateRetry({ maxBackoffSeconds: $event })"
-          [disabled]="readonly()" />
-      </mat-form-field>
-
-      <mat-form-field class="mt101-pay__col-2" subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Pay.retry.retryOnFamilies') }}</mat-label>
-        <input
-          matInput
-          type="text"
-          placeholder="TIMEOUT,5xx,CONNECTION_REFUSED"
-          [ngModel]="draft().retryPolicy.retryOnFamilies"
-          (ngModelChange)="updateRetry({ retryOnFamilies: $event })"
-          [disabled]="readonly()" />
-      </mat-form-field>
-    </div>
-  </section>
-
-  <section class="mt101-pay__section">
-    <h4>{{ i18n.t('mt101Pay.section.confirmation') }}</h4>
-    <div class="mt101-pay__grid">
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Pay.confirmationMode') }}</mat-label>
-        <mat-select
-          [ngModel]="draft().confirmationMode"
-          (ngModelChange)="updateDraft({ confirmationMode: $event })"
-          [disabled]="readonly()">
-          @for (m of confirmationModes; track m) {
-            <mat-option [value]="m">{{ m }}</mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Pay.response.successField') }}</mat-label>
-        <input
-          matInput
-          type="text"
-          [ngModel]="draft().expectedGatewayResponse.successField"
-          (ngModelChange)="updateResponse({ successField: $event })"
-          [disabled]="readonly()" />
-      </mat-form-field>
-
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Pay.response.referenceField') }}</mat-label>
-        <input
-          matInput
-          type="text"
-          [ngModel]="draft().expectedGatewayResponse.referenceField"
-          (ngModelChange)="updateResponse({ referenceField: $event })"
-          [disabled]="readonly()" />
-      </mat-form-field>
-
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Pay.response.errorMessageField') }}</mat-label>
-        <input
-          matInput
-          type="text"
-          [ngModel]="draft().expectedGatewayResponse.errorMessageField"
-          (ngModelChange)="updateResponse({ errorMessageField: $event })"
-          [disabled]="readonly()" />
-      </mat-form-field>
-    </div>
-  </section>
-</div>
+      </section>
+    </mat-tab>
+  </mat-tab-group>
+</ih-task-form-shell>

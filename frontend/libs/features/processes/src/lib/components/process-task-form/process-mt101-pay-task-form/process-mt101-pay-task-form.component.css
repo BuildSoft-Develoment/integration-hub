@@ -1,3 +1,5 @@
+/* El header persistente + el runtime + las tabs (y su scroll) los provee ih-task-form-shell.
+   Aca solo quedan los estilos de CONTENIDO del form PAY (secciones y grillas). */
 :host {
   display: block;
   min-width: 0;
@@ -6,38 +8,9 @@
   overflow: hidden;
 }
 
-.mt101-pay {
-  display: grid;
-  gap: 1rem;
-  align-content: start;
-  min-width: 0;
-  min-height: 0;
-  height: 100%;
-  overflow: auto;
-  padding: 0 0.25rem 0.25rem 0;
-}
-
-.mt101-pay__header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.35fr);
-  align-items: start;
-  gap: 1rem;
-  min-width: 0;
-  padding-bottom: 0.35rem;
-  border-bottom: 1px solid var(--ih-border);
-}
-
-.mt101-pay__header h3 {
-  margin: 0.35rem 0 0;
-  min-width: 0;
-  font-size: 1.05rem;
-  font-weight: 700;
-  color: var(--ih-text);
-  overflow-wrap: anywhere;
-}
-
+/* Switch primario proyectado al header del shell (Transporte REST/SFTP). */
 .mt101-pay__header-field {
-  width: 100%;
+  width: 12rem;
   min-width: 0;
 }
 
@@ -72,12 +45,11 @@
   grid-column: span 2;
 }
 
-.mt101-pay textarea {
+.mt101-pay__section textarea {
   resize: vertical;
 }
 
 @media (max-width: 720px) {
-  .mt101-pay__header,
   .mt101-pay__grid {
     grid-template-columns: 1fr;
   }
