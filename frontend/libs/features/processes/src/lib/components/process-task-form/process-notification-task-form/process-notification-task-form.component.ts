@@ -10,11 +10,12 @@ import { createHttpRequestDraft, NotificationTaskDraft, ProcessTaskBindingOption
 import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
 import { ProcessHttpRequestComponent } from '../process-http-request/process-http-request.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
+import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.component';
 
 @Component({
   selector: 'ih-process-notification-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, ProcessHttpRequestComponent, ProcessTaskRuntimePanelComponent],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, ProcessHttpRequestComponent, ProcessTaskRuntimePanelComponent, TaskFormShellComponent],
   styleUrl: './process-notification-task-form.component.css',
     templateUrl: './process-notification-task-form.component.html'
 })

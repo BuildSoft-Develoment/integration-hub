@@ -1,20 +1,26 @@
-<ih-process-task-runtime-panel
-      [task]="task()"
-      [tasks]="tasks()"
-      [draft]="draft()"
-      [readonly]="readonly()"
-      (runtimeChange)="updateDraft($event)"
-    />
+<ih-task-form-shell [title]="i18n.t('processTask.NOTIFICATION')">
+  <!-- Switch primario: el canal (log/webhook/email) elige el modo excluyente del form -> header persistente. -->
+  <mat-form-field shellSwitch class="notif-channel-field">
+    <mat-label>{{ i18n.t('ui.channel') }}</mat-label>
+    <mat-select [disabled]="readonly()" [ngModel]="draft().channel" (ngModelChange)="updateDraft({ channel: $event })">
+      <mat-option value="log">{{ i18n.t('ui.notificationChannel.log') }}</mat-option>
+      <mat-option value="webhook">{{ i18n.t('ui.notificationChannel.webhook') }}</mat-option>
+      <mat-option value="email">{{ i18n.t('ui.notificationChannel.email') }}</mat-option>
+    </mat-select>
+  </mat-form-field>
 
-<mat-form-field>
-      <mat-label>{{ i18n.t('ui.channel') }}</mat-label>
-      <mat-select [disabled]="readonly()" [ngModel]="draft().channel" (ngModelChange)="updateDraft({ channel: $event })">
-        <mat-option value="log">{{ i18n.t('ui.notificationChannel.log') }}</mat-option>
-        <mat-option value="webhook">{{ i18n.t('ui.notificationChannel.webhook') }}</mat-option>
-        <mat-option value="email">{{ i18n.t('ui.notificationChannel.email') }}</mat-option>
-      </mat-select>
-    </mat-form-field>
+  <ih-process-task-runtime-panel
+    shellRuntime
+    [task]="task()"
+    [tasks]="tasks()"
+    [draft]="draft()"
+    [readonly]="readonly()"
+    (runtimeChange)="updateDraft($event)"
+  />
 
+  <!-- Cuerpo del canal activo: sin tabs (los canales son excluyentes). Llena la altura del shell y scrollea;
+       log/email usan un workspace fill-height (editor + tokens), webhook fluye con el http-request. -->
+  <div class="notif-shell-body">
     @if (draft().channel === 'log') {
       <div class="notif-body-workspace">
         <div class="notif-editor">
@@ -221,3 +227,5 @@
         </aside>
       </div>
     }
+  </div>
+</ih-task-form-shell>

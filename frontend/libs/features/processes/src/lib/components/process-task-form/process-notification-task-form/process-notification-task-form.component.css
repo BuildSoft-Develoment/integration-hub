@@ -1,10 +1,30 @@
+/* El header persistente (titulo + switch de canal + runtime) lo provee ih-task-form-shell; el :host pasa a
+   altura fija sin scroll (el cuerpo del canal scrollea). */
 :host {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Switch primario proyectado al header del shell (canal log/webhook/email). */
+.notif-channel-field {
+  width: 12rem;
+  min-width: 0;
+}
+
+/* Cuerpo del canal activo (slot por defecto del shell, sin tabs): llena la 2da fila del grid del shell y
+   scrollea su propio contenido. En columna con gap para que log/email (workspace flex:1) llenen la altura. */
+.notif-shell-body {
   display: flex;
   flex-direction: column;
   gap: 1rem;
   min-width: 0;
   min-height: 0;
   height: 100%;
+  overflow: auto;
+  padding-right: 0.2rem;
 }
 .task-grid {
   display: grid;
