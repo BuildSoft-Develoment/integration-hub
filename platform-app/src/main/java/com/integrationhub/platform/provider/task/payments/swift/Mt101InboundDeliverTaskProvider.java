@@ -1,6 +1,7 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.integrationhub.platform.provider.task.http.HttpRequestSupport;
 import com.integrationhub.platform.repository.payments.swift.InboundRoutedTransactionRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.task.TaskContext;
@@ -12,7 +13,6 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
 import javax.sql.DataSource;
-import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -135,13 +135,22 @@ public class Mt101InboundDeliverTaskProvider implements TaskProvider {
     }
 
     private TaskResult deliverToRest(Map<String, Object> configuration, Map<String, Object> inboundSource, int pageSize) {
-        var rest = mapValue(configuration.get("rest"));
-        var url = stringValue(rest.get("url"), "");
+        // El slice HTTP (url/method/auth/login/headers) viene en el top-level del config (contrato comun con
+        // REST_CALL / webhook NOTIFICATION); se delega en HttpRequestSupport, que resuelve auth/login.
+        var url = stringValue(configuration.get("url"), "");
         if (url.isBlank()) {
-            throw new IllegalArgumentException("MT101_INBOUND_DELIVER transport=REST requires rest.url");
+            throw new IllegalArgumentException("MT101_INBOUND_DELIVER transport=REST requires url");
         }
-        var contentType = stringValue(rest.get("contentType"), "application/json");
-        var timeoutSeconds = intValue(rest.get("timeoutSeconds"), 15);
+        var method = stringValue(configuration.get("method"), "POST").toUpperCase();
+        var timeoutSeconds = intValue(configuration.get("timeoutSeconds"), 15);
+        var headers = new LinkedHashMap<String, String>();
+        if (configuration.get("headers") instanceof Map<?, ?> rawHeaders) {
+            rawHeaders.forEach((key, value) -> {
+                if (key != null && value != null) {
+                    headers.put(String.valueOf(key), String.valueOf(value));
+                }
+            });
+        }
         var stats = new long[]{0L, 0L}; // [0]=delivered, [1]=failed
 
         inboundStore.forEachPage(inboundSource, SwiftInboundStore.READ_ROUTED, pageSize, page -> {
@@ -150,11 +159,8 @@ public class Mt101InboundDeliverTaskProvider implements TaskProvider {
             for (var item : page) {
                 try {
                     var body = objectMapper.writeValueAsString(item.message());
-                    var request = HttpRequest.newBuilder(URI.create(url))
-                            .timeout(Duration.ofSeconds(timeoutSeconds))
-                            .header("Content-Type", contentType)
-                            .POST(HttpRequest.BodyPublishers.ofString(body))
-                            .build();
+                    var request = HttpRequestSupport.build(httpClient, objectMapper, configuration, method, url,
+                            body, timeoutSeconds, headers);
                     var response = httpClient.send(request, HttpResponse.BodyHandlers.discarding());
                     if (response.statusCode() >= 200 && response.statusCode() < 300) {
                         deliveredIds.add(item.id());

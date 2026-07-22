@@ -43,42 +43,16 @@
         <p class="ind__target-hint">{{ i18n.t('mt101InboundDeliver.dbTargetHint') }}</p>
       </div>
     } @else {
-      <section class="ind__section">
-        <h4>{{ i18n.t('mt101InboundDeliver.section.rest') }}</h4>
-        <div class="ind__grid">
-          <mat-form-field class="ind__col-2" subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('mt101InboundDeliver.rest.url') }}</mat-label>
-            <input
-              matInput
-              type="text"
-              placeholder="https://gateway.banco.local/v1/inbound/mt101"
-              [ngModel]="draft().rest.url"
-              (ngModelChange)="updateRest({ url: $event })"
-              [disabled]="readonly()" />
-          </mat-form-field>
-
-          <mat-form-field subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('mt101InboundDeliver.rest.contentType') }}</mat-label>
-            <input
-              matInput
-              type="text"
-              [ngModel]="draft().rest.contentType"
-              (ngModelChange)="updateRest({ contentType: $event })"
-              [disabled]="readonly()" />
-          </mat-form-field>
-
-          <mat-form-field subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('mt101InboundDeliver.rest.timeoutSeconds') }}</mat-label>
-            <input
-              matInput
-              type="number"
-              min="1"
-              [ngModel]="draft().rest.timeoutSeconds"
-              (ngModelChange)="updateRest({ timeoutSeconds: $event })"
-              [disabled]="readonly()" />
-          </mat-form-field>
-        </div>
-      </section>
+      <!-- REST: contrato HTTP comun (url/method/auth/login/headers), reusado de REST_CALL / webhook. -->
+      <ih-process-http-request
+        [httpRequest]="draft()"
+        [task]="task()"
+        [tasks]="tasks()"
+        [readers]="readers()"
+        [runtimeInput]="draft().input"
+        [readonly]="readonly()"
+        (httpRequestChange)="updateDraft($event)"
+      />
     }
   </div>
 </ih-task-form-shell>

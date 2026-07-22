@@ -26,25 +26,6 @@
   min-width: 0;
 }
 
-.ind__col-2 {
-  grid-column: span 2;
-}
-
-.ind__section {
-  display: grid;
-  gap: 0.65rem;
-  min-width: 0;
-}
-
-.ind__section h4 {
-  margin: 0;
-  font-size: 0.78rem;
-  font-weight: 800;
-  color: var(--ih-text-soft);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
 /* Tabla destino DB (read-only, informativa). */
 .ind__target {
   display: grid;
@@ -80,8 +61,5 @@
 @media (max-width: 720px) {
   .ind__grid {
     grid-template-columns: 1fr;
-  }
-  .ind__col-2 {
-    grid-column: auto;
   }
 }

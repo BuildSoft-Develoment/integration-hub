@@ -5,19 +5,22 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import {
+  createHttpRequestDraft,
   Mt101InboundDeliverTaskDraft,
   Mt101InboundDeliverTransport,
   MT101_INBOUND_DELIVER_DB_TABLE,
   ProcessTaskFormBridgeService,
 } from '@integration-hub/core/providers';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
-import { ProcessTaskFormModel } from '../../../models/process.models';
+import { ProcessTaskFormModel, ReaderRef } from '../../../models/process.models';
+import { ProcessHttpRequestComponent } from '../process-http-request/process-http-request.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.component';
 
 /**
- * Form propio de MT101_INBOUND_DELIVER (ya no reusa el de MT101_PAY). Refleja lo que el backend lee:
- * transporte DB/REST + pageSize (+ config REST). En DB la tabla destino es fija (informativa, read-only).
+ * Form propio de MT101_INBOUND_DELIVER. Expone lo que el backend lee: transporte DB/REST + pageSize. Para REST
+ * reusa ih-process-http-request (auth/login/headers), igual que REST_CALL y el webhook de NOTIFICATION; en DB
+ * la tabla destino es fija (informativa, read-only).
  */
 @Component({
   selector: 'ih-process-mt101-inbound-deliver-task-form',
@@ -28,6 +31,7 @@ import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.compo
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    ProcessHttpRequestComponent,
     ProcessTaskRuntimePanelComponent,
     TaskFormShellComponent,
   ],
@@ -41,6 +45,7 @@ export class ProcessMt101InboundDeliverTaskFormComponent {
 
   readonly task = input.required<ProcessTaskFormModel>();
   readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
+  readonly readers = input.required<readonly ReaderRef[]>();
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101InboundDeliverTaskDraft>(
@@ -55,17 +60,13 @@ export class ProcessMt101InboundDeliverTaskFormComponent {
     this.bridge.emit(this.manager.toTaskPatch(this.task().taskType, { ...this.draft(), ...patch }));
   }
 
-  updateRest(patch: Partial<Mt101InboundDeliverTaskDraft['rest']>): void {
-    this.updateDraft({ rest: { ...this.draft().rest, ...patch } });
-  }
-
   private defaultDraft(): Mt101InboundDeliverTaskDraft {
     return {
+      ...createHttpRequestDraft('POST', '15'),
       taskRef: this.task().clientId,
       executionMode: 'once',
       transport: 'DB',
       pageSize: 500,
-      rest: { url: '', contentType: 'application/json', timeoutSeconds: 15 },
     };
   }
 }
