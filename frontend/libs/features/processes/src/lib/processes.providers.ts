@@ -35,7 +35,7 @@ export function provideMotorProcessForms(): Provider[] {
     // Bridge compartido entre todos los formularios y el host.
     ProcessTaskFormBridgeService,
     ...provideProcessTaskForms(
-      { type: 'FILE_READ', component: ProcessFileReadTaskFormComponent },
+      { type: 'FILE_READ', component: ProcessFileReadTaskFormComponent, layout: 'workspace' },
       { type: 'DB_WRITE', component: ProcessDbWriteTaskFormComponent, layout: 'workspace' },
       { type: 'DB_EXECUTE_SP', component: ProcessDbExecuteSpTaskFormComponent, layout: 'workspace' },
       { type: 'DB_EXECUTE_FN', component: ProcessDbExecuteFnTaskFormComponent, layout: 'workspace' },
