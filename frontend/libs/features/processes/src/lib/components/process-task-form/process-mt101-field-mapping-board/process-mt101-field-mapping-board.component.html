@@ -1,8 +1,10 @@
 <section class="mapping-board">
-  <div class="mapping-board__header ih-section-header">
-    <p class="ih-section-eyebrow">{{ i18n.t('mt101.section.transactionMappings') }}</p>
-    <h5>{{ i18n.t('mt101.mappingBoardHint') }}</h5>
-  </div>
+  @if (showHeader()) {
+    <div class="mapping-board__header ih-section-header">
+      <p class="ih-section-eyebrow">{{ i18n.t('mt101.section.transactionMappings') }}</p>
+      <h5>{{ i18n.t('mt101.mappingBoardHint') }}</h5>
+    </div>
+  }
 
   <div class="mapping-board__rows ih-thin-scroll">
     @for (target of targets(); track target.field) {

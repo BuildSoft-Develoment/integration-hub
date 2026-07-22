@@ -173,44 +173,17 @@
 
     <mat-tab [label]="i18n.t('mt101.tab.sequenceB')">
       <section class="mt101-build__section">
-        <h4>{{ i18n.t('mt101.section.transactionMappings') }}</h4>
         <div class="mt101-build__grid">
           <mat-form-field class="mt101-build__col-2" subscriptSizing="dynamic">
             <mat-label>{{ i18n.t('mt101.mappings.transactionReferenceTemplate') }}</mat-label>
             <input matInput type="text"
               [ngModel]="draft().transactionMappings.transactionReferenceTemplate" (ngModelChange)="updateMappings({ transactionReferenceTemplate: $event })" [disabled]="readonly()" />
           </mat-form-field>
-
-          <mat-form-field subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('mt101.mappings.beneficiaryOption') }}</mat-label>
-            <mat-select [ngModel]="draft().transactionMappings.beneficiaryOption" (ngModelChange)="updateMappings({ beneficiaryOption: $event })" [disabled]="readonly()">
-              @for (option of beneficiaryOptions; track option) {
-                <mat-option [value]="option">{{ option || '-' }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-
-          <mat-form-field subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('mt101.mappings.orderingCustomerOption') }}</mat-label>
-            <mat-select [ngModel]="draft().transactionMappings.orderingCustomerOption" (ngModelChange)="updateMappings({ orderingCustomerOption: $event })"
-              [disabled]="readonly() || !usesTransactionDebit()">
-              @for (option of transactionOrderingOptions; track option) {
-                <mat-option [value]="option">{{ option || '-' }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
-
-          <mat-form-field subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('mt101.mappings.accountServicingOption') }}</mat-label>
-            <mat-select [ngModel]="draft().transactionMappings.accountServicingOption" (ngModelChange)="updateMappings({ accountServicingOption: $event })" [disabled]="readonly()">
-              @for (option of servicingOptions; track option) {
-                <mat-option [value]="option">{{ option || '-' }}</mat-option>
-              }
-            </mat-select>
-          </mat-form-field>
         </div>
       </section>
 
+      <!-- Workspace: paleta (izq) + PARTIES unificadas (der): cada parte = nombre + tag + su opcion + sus
+           field-bindings (board por-parte, showHeader=false). Se elimina el salto opcion-arriba / campos-abajo. -->
       <div class="mt101-build__mapping-workspace mt101-build__fill">
         <ih-process-db-write-source-palette
           [groups]="sourceGroups()"
@@ -222,16 +195,87 @@
           (sourceDragEnd)="draggingSource.set(null)"
         />
 
-        <ih-process-mt101-field-mapping-board
-          [targets]="mappingTargets()"
-          [mappings]="draft().transactionMappings"
-          [sourceGroups]="sourceGroups()"
-          [readonly]="readonly()"
-          [draggingSource]="draggingSource()"
-          (sourceDrop)="assignMapping($event.field, $event.source)"
-          (valueChange)="setMappingValue($event.field, $event.value)"
-          (clear)="clearMapping($event)"
-        />
+        <div class="mt101-build__parties ih-thin-scroll">
+          <div class="mt101-build__party">
+            <div class="mt101-build__party-head">
+              <span class="mt101-build__party-name">{{ i18n.t('mt101.party.amount') }}</span>
+              <span class="mt101-build__party-tag">:32B:</span>
+            </div>
+            <ih-process-mt101-field-mapping-board [targets]="amountTargets" [showHeader]="false"
+              [mappings]="draft().transactionMappings" [sourceGroups]="sourceGroups()" [readonly]="readonly()" [draggingSource]="draggingSource()"
+              (sourceDrop)="assignMapping($event.field, $event.source)" (valueChange)="setMappingValue($event.field, $event.value)" (clear)="clearMapping($event)" />
+          </div>
+
+          <div class="mt101-build__party">
+            <div class="mt101-build__party-head">
+              <span class="mt101-build__party-name">{{ i18n.t('mt101.party.beneficiary') }}</span>
+              <span class="mt101-build__party-tag">:59a</span>
+              <mat-form-field class="mt101-build__party-opt" subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('mt101.party.option') }}</mat-label>
+                <mat-select [ngModel]="draft().transactionMappings.beneficiaryOption" (ngModelChange)="updateMappings({ beneficiaryOption: $event })" [disabled]="readonly()">
+                  @for (option of beneficiaryOptions; track option) { <mat-option [value]="option">{{ option || '-' }}</mat-option> }
+                </mat-select>
+              </mat-form-field>
+            </div>
+            <ih-process-mt101-field-mapping-board [targets]="beneficiaryTargets" [showHeader]="false"
+              [mappings]="draft().transactionMappings" [sourceGroups]="sourceGroups()" [readonly]="readonly()" [draggingSource]="draggingSource()"
+              (sourceDrop)="assignMapping($event.field, $event.source)" (valueChange)="setMappingValue($event.field, $event.value)" (clear)="clearMapping($event)" />
+          </div>
+
+          <div class="mt101-build__party">
+            <div class="mt101-build__party-head">
+              <span class="mt101-build__party-name">{{ i18n.t('mt101.party.accountWith') }}</span>
+              <span class="mt101-build__party-tag">:57A:</span>
+            </div>
+            <ih-process-mt101-field-mapping-board [targets]="accountWithTargets" [showHeader]="false"
+              [mappings]="draft().transactionMappings" [sourceGroups]="sourceGroups()" [readonly]="readonly()" [draggingSource]="draggingSource()"
+              (sourceDrop)="assignMapping($event.field, $event.source)" (valueChange)="setMappingValue($event.field, $event.value)" (clear)="clearMapping($event)" />
+          </div>
+
+          @if (usesTransactionDebit()) {
+            <div class="mt101-build__party">
+              <div class="mt101-build__party-head">
+                <span class="mt101-build__party-name">{{ i18n.t('mt101.party.ordering') }}</span>
+                <span class="mt101-build__party-tag">:50a</span>
+                <mat-form-field class="mt101-build__party-opt" subscriptSizing="dynamic">
+                  <mat-label>{{ i18n.t('mt101.party.option') }}</mat-label>
+                  <mat-select [ngModel]="draft().transactionMappings.orderingCustomerOption" (ngModelChange)="updateMappings({ orderingCustomerOption: $event })" [disabled]="readonly()">
+                    @for (option of transactionOrderingOptions; track option) { <mat-option [value]="option">{{ option || '-' }}</mat-option> }
+                  </mat-select>
+                </mat-form-field>
+              </div>
+              <ih-process-mt101-field-mapping-board [targets]="orderingTargets" [showHeader]="false"
+                [mappings]="draft().transactionMappings" [sourceGroups]="sourceGroups()" [readonly]="readonly()" [draggingSource]="draggingSource()"
+                (sourceDrop)="assignMapping($event.field, $event.source)" (valueChange)="setMappingValue($event.field, $event.value)" (clear)="clearMapping($event)" />
+            </div>
+          }
+
+          <div class="mt101-build__party">
+            <div class="mt101-build__party-head">
+              <span class="mt101-build__party-name">{{ i18n.t('mt101.party.servicing') }}</span>
+              <span class="mt101-build__party-tag">:52a</span>
+              <mat-form-field class="mt101-build__party-opt" subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('mt101.party.option') }}</mat-label>
+                <mat-select [ngModel]="draft().transactionMappings.accountServicingOption" (ngModelChange)="updateMappings({ accountServicingOption: $event })" [disabled]="readonly()">
+                  @for (option of servicingOptions; track option) { <mat-option [value]="option">{{ option || '-' }}</mat-option> }
+                </mat-select>
+              </mat-form-field>
+            </div>
+            <ih-process-mt101-field-mapping-board [targets]="servicingTargets" [showHeader]="false"
+              [mappings]="draft().transactionMappings" [sourceGroups]="sourceGroups()" [readonly]="readonly()" [draggingSource]="draggingSource()"
+              (sourceDrop)="assignMapping($event.field, $event.source)" (valueChange)="setMappingValue($event.field, $event.value)" (clear)="clearMapping($event)" />
+          </div>
+
+          <div class="mt101-build__party">
+            <div class="mt101-build__party-head">
+              <span class="mt101-build__party-name">{{ i18n.t('mt101.party.remittanceCharges') }}</span>
+              <span class="mt101-build__party-tag">:70: :71A:</span>
+            </div>
+            <ih-process-mt101-field-mapping-board [targets]="remittanceTargets" [showHeader]="false"
+              [mappings]="draft().transactionMappings" [sourceGroups]="sourceGroups()" [readonly]="readonly()" [draggingSource]="draggingSource()"
+              (sourceDrop)="assignMapping($event.field, $event.source)" (valueChange)="setMappingValue($event.field, $event.value)" (clear)="clearMapping($event)" />
+          </div>
+        </div>
       </div>
     </mat-tab>
   </mat-tab-group>

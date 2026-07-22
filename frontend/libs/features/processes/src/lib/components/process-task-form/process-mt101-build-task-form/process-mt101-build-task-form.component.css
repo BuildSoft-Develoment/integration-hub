@@ -127,6 +127,56 @@
   max-height: 100%;
 }
 
+/* Columna de PARTIES (derecha del workspace): tarjetas por parte (Monto/Beneficiario/Ordenante/...),
+   cada una con su encabezado (nombre + tag + opcion) y su board slice debajo. Scrollea internamente. */
+.mt101-build__parties {
+  display: grid;
+  gap: 0.75rem;
+  align-content: start;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 0 0.25rem 0.4rem 0;
+}
+
+.mt101-build__party {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.6rem 0.7rem;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--ih-surface-alt) 45%, transparent);
+}
+
+.mt101-build__party-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.mt101-build__party-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--ih-text);
+}
+
+.mt101-build__party-tag {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ih-accent) 14%, transparent);
+  color: color-mix(in srgb, var(--ih-accent) 72%, var(--ih-text));
+  white-space: nowrap;
+}
+
+.mt101-build__party-opt {
+  margin-left: auto;
+  width: 6.5rem;
+}
+
 @media (max-width: 1080px) {
   :host {
     height: auto;

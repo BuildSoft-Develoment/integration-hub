@@ -19,6 +19,9 @@ export interface Mt101BuildMappingTarget {
   readonly hintKey?: string;
   readonly multi?: boolean;
   readonly required?: boolean;
+  /** Parte MT101 a la que pertenece (amount/beneficiary/ordering/servicing/accountWith/remittance/charges).
+   *  Lo usa el form para agrupar los targets en tarjetas por-parte (opcion + campos juntos). */
+  readonly party?: string;
 }
 
 @Component({
@@ -36,6 +39,9 @@ export class ProcessMt101FieldMappingBoardComponent {
   readonly sourceGroups = input.required<ReadonlyArray<{ key: string; items: readonly ProcessTaskBindingOption[] }>>();
   readonly readonly = input(false);
   readonly draggingSource = input<ProcessTaskBindingOption | null>(null);
+  /** Opt-out del encabezado interno del board: al instanciarlo POR-PARTE (varias tarjetas) el titulo lo pone
+   *  el form, no cada board, para no duplicarlo. Default true = conserva el board completo (uso legacy). */
+  readonly showHeader = input(true);
 
   readonly sourceDrop = output<{ field: Mt101BuildMappingField; source: ProcessTaskBindingOption }>();
   readonly valueChange = output<{ field: Mt101BuildMappingField; value: string }>();

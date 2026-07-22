@@ -98,37 +98,45 @@ export class ProcessMt101BuildTaskFormComponent {
   readonly usesSequenceADebit = computed(() => this.draft().debitAccountMode === 'singleDebit');
   readonly usesTransactionDebit = computed(() => this.draft().debitAccountMode !== 'singleDebit');
   private readonly allMappingTargets: readonly Mt101BuildMappingTarget[] = [
-    { field: 'amountCurrencyField', labelKey: 'mt101.mappings.amountCurrencyField', path: 'amount.currency', required: true },
-    { field: 'amountValueField', labelKey: 'mt101.mappings.amountValueField', path: 'amount.value', required: true },
-    { field: 'orderingCustomerAccountField', labelKey: 'mt101.mappings.orderingCustomerAccountField', path: 'orderingCustomer.account' },
-    { field: 'orderingCustomerBicField', labelKey: 'mt101.mappings.orderingCustomerBicField', path: 'orderingCustomer.bic' },
+    { field: 'amountCurrencyField', labelKey: 'mt101.mappings.amountCurrencyField', path: 'amount.currency', required: true, party: 'amount' },
+    { field: 'amountValueField', labelKey: 'mt101.mappings.amountValueField', path: 'amount.value', required: true, party: 'amount' },
+    { field: 'orderingCustomerAccountField', labelKey: 'mt101.mappings.orderingCustomerAccountField', path: 'orderingCustomer.account', party: 'ordering' },
+    { field: 'orderingCustomerBicField', labelKey: 'mt101.mappings.orderingCustomerBicField', path: 'orderingCustomer.bic', party: 'ordering' },
     {
       field: 'orderingCustomerNameAddressFields',
       labelKey: 'mt101.mappings.orderingCustomerNameAddressFields',
       path: 'orderingCustomer.nameAndAddress',
       hintKey: 'mt101.mappingMultiHint',
       multi: true,
+      party: 'ordering',
     },
-    { field: 'accountServicingAccountField', labelKey: 'mt101.mappings.accountServicingAccountField', path: 'accountServicingInstitution.account' },
-    { field: 'accountServicingBicField', labelKey: 'mt101.mappings.accountServicingBicField', path: 'accountServicingInstitution.bic' },
-    { field: 'beneficiaryAccountField', labelKey: 'mt101.mappings.beneficiaryAccountField', path: 'beneficiary.account' },
-    { field: 'beneficiaryBicField', labelKey: 'mt101.mappings.beneficiaryBicField', path: 'beneficiary.bic' },
+    { field: 'accountServicingAccountField', labelKey: 'mt101.mappings.accountServicingAccountField', path: 'accountServicingInstitution.account', party: 'servicing' },
+    { field: 'accountServicingBicField', labelKey: 'mt101.mappings.accountServicingBicField', path: 'accountServicingInstitution.bic', party: 'servicing' },
+    { field: 'beneficiaryAccountField', labelKey: 'mt101.mappings.beneficiaryAccountField', path: 'beneficiary.account', party: 'beneficiary' },
+    { field: 'beneficiaryBicField', labelKey: 'mt101.mappings.beneficiaryBicField', path: 'beneficiary.bic', party: 'beneficiary' },
     {
       field: 'beneficiaryNameAddressFields',
       labelKey: 'mt101.mappings.beneficiaryNameAddressFields',
       path: 'beneficiary.nameAndAddress',
       hintKey: 'mt101.mappingMultiHint',
       multi: true,
+      party: 'beneficiary',
     },
-    { field: 'accountWithBicField', labelKey: 'mt101.mappings.accountWithBicField', path: 'accountWithInstitution.bic' },
-    { field: 'remittanceInformationField', labelKey: 'mt101.mappings.remittanceInformationField', path: 'remittanceInformation' },
-    { field: 'detailsOfChargesField', labelKey: 'mt101.mappings.detailsOfChargesField', path: 'detailsOfCharges' },
+    { field: 'accountWithBicField', labelKey: 'mt101.mappings.accountWithBicField', path: 'accountWithInstitution.bic', party: 'accountWith' },
+    { field: 'remittanceInformationField', labelKey: 'mt101.mappings.remittanceInformationField', path: 'remittanceInformation', party: 'remittance' },
+    { field: 'detailsOfChargesField', labelKey: 'mt101.mappings.detailsOfChargesField', path: 'detailsOfCharges', party: 'charges' },
   ];
-  readonly mappingTargets = computed(() =>
-    this.usesTransactionDebit()
-      ? this.allMappingTargets
-      : this.allMappingTargets.filter((target) => !target.field.startsWith('orderingCustomer')),
-  );
+  // Subconjuntos por parte MT101 -> cada tarjeta de Sequence B instancia el board con SU slice (+ showHeader=false).
+  // Estaticos (allMappingTargets es const); la tarjeta "ordenante" se muestra condicional por debitAccountMode en el HTML.
+  private targetsFor(party: string): Mt101BuildMappingTarget[] {
+    return this.allMappingTargets.filter((target) => target.party === party);
+  }
+  readonly amountTargets = this.targetsFor('amount');
+  readonly beneficiaryTargets = this.targetsFor('beneficiary');
+  readonly accountWithTargets = this.targetsFor('accountWith');
+  readonly orderingTargets = this.targetsFor('ordering');
+  readonly servicingTargets = this.targetsFor('servicing');
+  readonly remittanceTargets = [...this.targetsFor('remittance'), ...this.targetsFor('charges')];
 
   /**
    * Emite el draft completo cada vez que cambia. El parent NO escucha esto via
