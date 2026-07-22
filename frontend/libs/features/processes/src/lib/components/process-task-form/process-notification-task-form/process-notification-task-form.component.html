@@ -18,9 +18,9 @@
     (runtimeChange)="updateDraft($event)"
   />
 
-  <!-- Cuerpo del canal activo: sin tabs (los canales son excluyentes). Llena la altura del shell y scrollea;
-       log/email usan un workspace fill-height (editor + tokens), webhook fluye con el http-request. -->
-  <div class="notif-shell-body">
+  <!-- Cuerpo del canal activo: sin tabs (los canales son excluyentes). Usa el helper .tfs-body del shell
+       (fill+scroll); log/email usan un workspace fill-height (editor + tokens), webhook fluye con el request. -->
+  <div class="tfs-body">
     @if (draft().channel === 'log') {
       <div class="notif-body-workspace">
         <div class="notif-editor">
