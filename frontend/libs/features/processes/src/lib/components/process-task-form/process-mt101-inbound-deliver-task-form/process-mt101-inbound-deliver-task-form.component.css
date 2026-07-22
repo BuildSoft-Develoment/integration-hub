@@ -1,0 +1,87 @@
+/* El header persistente (titulo + switch de transporte + runtime) lo provee ih-task-form-shell; el cuerpo va
+   en .tfs-body (helper del shell). Aca solo quedan los estilos de contenido. */
+:host {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Switch primario proyectado al header (transporte DB/REST). */
+.ind__transport-field {
+  width: 12rem;
+  min-width: 0;
+}
+
+.ind__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+  min-width: 0;
+}
+
+.ind__grid mat-form-field {
+  width: 100%;
+  min-width: 0;
+}
+
+.ind__col-2 {
+  grid-column: span 2;
+}
+
+.ind__section {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.ind__section h4 {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--ih-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Tabla destino DB (read-only, informativa). */
+.ind__target {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+}
+
+.ind__target-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--ih-text-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.ind__target-table {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.9rem;
+  padding: 3px 9px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--ih-accent) 12%, transparent);
+  color: color-mix(in srgb, var(--ih-accent) 72%, var(--ih-text));
+  justify-self: start;
+}
+
+.ind__target-hint {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ih-text-soft);
+}
+
+@media (max-width: 720px) {
+  .ind__grid {
+    grid-template-columns: 1fr;
+  }
+  .ind__col-2 {
+    grid-column: auto;
+  }
+}

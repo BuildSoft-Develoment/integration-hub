@@ -27,6 +27,7 @@ export interface PaymentsSwiftFormComponents {
   readonly mt101Validate: Type<unknown>;
   readonly mt101Archive: Type<unknown>;
   readonly mt101Pay: Type<unknown>;
+  readonly mt101InboundDeliver: Type<unknown>;
   // Sprint 2
   readonly mt101Route: Type<unknown>;
   readonly mt101Reconcile: Type<unknown>;
@@ -86,7 +87,7 @@ export function providePaymentsSwiftForms(components: PaymentsSwiftFormComponent
       // Inbound a escala: reusan el form de PARSE / PAY respectivamente (el config
       // table-driven / transporte lo gestiona el backend; aqui basta render + binding).
       { type: 'MT101_PARSE_FROM_TABLE', component: components.mt101Parse, layout: 'workspace' },
-      { type: 'MT101_INBOUND_DELIVER',  component: components.mt101Pay,   layout: 'workspace' },
+      { type: 'MT101_INBOUND_DELIVER',  component: components.mt101InboundDeliver, layout: 'workspace' },
     ),
   ];
 }

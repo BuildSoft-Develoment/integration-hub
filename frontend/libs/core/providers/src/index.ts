@@ -44,6 +44,7 @@ export * from './lib/implementations/tasks/mt101-build-from-table-task.provider'
 export * from './lib/implementations/tasks/mt101-validate-task.provider';
 export * from './lib/implementations/tasks/mt101-archive-task.provider';
 export * from './lib/implementations/tasks/mt101-pay-task.provider';
+export * from './lib/implementations/tasks/mt101-inbound-deliver-task.provider';
 export * from './lib/implementations/tasks/mt101-route-task.provider';
 export * from './lib/implementations/tasks/mt101-reconcile-task.provider';
 export * from './lib/implementations/tasks/mt101-status-task.provider';

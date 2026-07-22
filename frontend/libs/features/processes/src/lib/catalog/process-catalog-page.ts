@@ -7,6 +7,7 @@ import { ProcessMt101ArchiveTaskFormComponent } from '../components/process-task
 import { ProcessMt101BuildTaskFormComponent } from '../components/process-task-form/process-mt101-build-task-form/process-mt101-build-task-form.component';
 import { ProcessMt101ParseTaskFormComponent } from '../components/process-task-form/process-mt101-parse-task-form/process-mt101-parse-task-form.component';
 import { ProcessMt101PayTaskFormComponent } from '../components/process-task-form/process-mt101-pay-task-form/process-mt101-pay-task-form.component';
+import { ProcessMt101InboundDeliverTaskFormComponent } from '../components/process-task-form/process-mt101-inbound-deliver-task-form/process-mt101-inbound-deliver-task-form.component';
 import { ProcessMt101ReconcileTaskFormComponent } from '../components/process-task-form/process-mt101-reconcile-task-form/process-mt101-reconcile-task-form.component';
 import { ProcessMt101RepairTaskFormComponent } from '../components/process-task-form/process-mt101-repair-task-form/process-mt101-repair-task-form.component';
 import { ProcessMt101RouteTaskFormComponent } from '../components/process-task-form/process-mt101-route-task-form/process-mt101-route-task-form.component';
@@ -52,6 +53,7 @@ import { ProcessToolbarComponent } from '../components/process-toolbar/process-t
       mt101Validate: ProcessMt101ValidateTaskFormComponent,
       mt101Archive: ProcessMt101ArchiveTaskFormComponent,
       mt101Pay: ProcessMt101PayTaskFormComponent,
+      mt101InboundDeliver: ProcessMt101InboundDeliverTaskFormComponent,
       mt101Route: ProcessMt101RouteTaskFormComponent,
       mt101Reconcile: ProcessMt101ReconcileTaskFormComponent,
       mt101Status: ProcessMt101StatusTaskFormComponent,
