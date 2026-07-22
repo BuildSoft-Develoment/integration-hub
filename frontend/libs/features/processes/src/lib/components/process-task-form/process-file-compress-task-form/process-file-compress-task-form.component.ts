@@ -10,6 +10,7 @@ import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/se
 import { FileCompressTaskDraft, ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
 import { ProcessTaskFormModel } from '../../../models/process.models';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
+import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.component';
 
 @Component({
   selector: 'ih-process-file-compress-task-form',
@@ -22,9 +23,12 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
     MatSelectModule,
     MatSlideToggleModule,
     ProcessTaskRuntimePanelComponent,
+    TaskFormShellComponent,
   ],
   templateUrl: './process-file-compress-task-form.component.html',
-  styleUrl: '../file-task-form.shared.css',
+  // shared css = clases de contenido (task-grid/toggle-wrap); css propio (2do, gana) solo pasa el :host al
+  // modelo del shell (altura fija; la .tfs-body scrollea) sin tocar el shared de FILE_WRITE/FILE_DELIVER.
+  styleUrls: ['../file-task-form.shared.css', './process-file-compress-task-form.component.css'],
 })
 export class ProcessFileCompressTaskFormComponent {
   readonly i18n = inject(I18nService);

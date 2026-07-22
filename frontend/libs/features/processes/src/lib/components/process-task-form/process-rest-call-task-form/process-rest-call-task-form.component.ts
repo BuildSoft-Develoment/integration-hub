@@ -5,11 +5,12 @@ import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/se
 import { ProcessTaskFormModel, ReaderRef } from '../../../models/process.models';
 import { ProcessHttpRequestComponent } from '../process-http-request/process-http-request.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
+import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.component';
 
 @Component({
   selector: 'ih-process-rest-call-task-form',
   standalone: true,
-  imports: [CommonModule, ProcessHttpRequestComponent, ProcessTaskRuntimePanelComponent],
+  imports: [CommonModule, ProcessHttpRequestComponent, ProcessTaskRuntimePanelComponent, TaskFormShellComponent],
     templateUrl: './process-rest-call-task-form.component.html',
     styleUrl: './process-rest-call-task-form.component.css'
 })

@@ -1,20 +1,12 @@
+/* El header (titulo + runtime) lo provee ih-task-form-shell; el :host pasa a altura fija (la .tfs-body scrollea). */
 :host {
-  display: grid;
-  grid-template-rows: auto auto;
-  gap: 1rem;
+  display: block;
   min-width: 0;
   min-height: 0;
-  align-self: start;
+  height: 100%;
+  overflow: hidden;
 }
-.task-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
-  gap: 0.95rem;
-  min-width: 0;
-}
-ih-process-task-runtime-panel {
-  grid-column: 1 / -1;
-}
+
 ih-process-http-request {
   min-width: 0;
   min-height: 0;

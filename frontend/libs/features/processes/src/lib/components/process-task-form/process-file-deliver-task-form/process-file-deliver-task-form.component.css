@@ -1,0 +1,10 @@
+/* CSS propio de FILE_DELIVER al adoptar ih-task-form-shell. Se aplica DESPUES del shared (styleUrls) y solo
+   redefine el :host al modelo del shell (altura fija; la .tfs-body maneja el scroll). El resto de clases de
+   contenido (task-grid/full-width) siguen viniendo del shared. */
+:host {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}

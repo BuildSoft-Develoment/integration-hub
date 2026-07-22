@@ -1,19 +1,22 @@
-<div class="task-grid">
+<ih-task-form-shell [title]="i18n.t('processTask.REST_CALL')">
   <ih-process-task-runtime-panel
+    shellRuntime
     [task]="task()"
     [tasks]="tasks()"
     [draft]="draft()"
     [readonly]="readonly()"
     (runtimeChange)="updateDraft($event)"
   />
-</div>
 
-<ih-process-http-request
-  [httpRequest]="draft()"
-  [task]="task()"
-  [tasks]="tasks()"
-  [readers]="readers()"
-  [runtimeInput]="draft().input"
-  [readonly]="readonly()"
-  (httpRequestChange)="updateDraft($event)"
-/>
+  <div class="tfs-body">
+    <ih-process-http-request
+      [httpRequest]="draft()"
+      [task]="task()"
+      [tasks]="tasks()"
+      [readers]="readers()"
+      [runtimeInput]="draft().input"
+      [readonly]="readonly()"
+      (httpRequestChange)="updateDraft($event)"
+    />
+  </div>
+</ih-task-form-shell>

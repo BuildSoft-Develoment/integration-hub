@@ -1,5 +1,6 @@
-<div class="task-form-stack ih-compact-section">
+<ih-task-form-shell [title]="i18n.t('processTask.FILE_DELIVER')">
   <ih-process-task-runtime-panel
+    shellRuntime
     [task]="task()"
     [tasks]="tasks()"
     [draft]="draft()"
@@ -8,7 +9,8 @@
     (runtimeChange)="updateDraft($event)"
   />
 
-  <div class="task-grid">
+  <div class="tfs-body">
+    <div class="task-grid">
     <mat-form-field>
       <mat-label>{{ i18n.t('ui.deliver.sink') }}</mat-label>
       <mat-select [disabled]="readonly()" [ngModel]="draft().sinkRef" (ngModelChange)="updateDraft({ sinkRef: $event })">
@@ -25,5 +27,6 @@
       <input matInput [disabled]="readonly()" [ngModel]="draft().dropPathTemplate" (ngModelChange)="updateDraft({ dropPathTemplate: $event })" placeholder="/outbox/${originalName}" />
       <mat-hint>{{ i18n.t('ui.deliver.dropPathHint') }}</mat-hint>
     </mat-form-field>
+    </div>
   </div>
-</div>
+</ih-task-form-shell>

@@ -73,6 +73,19 @@
   min-height: 0;
 }
 
+/* Cuerpo SIN tabs: los consumidores que proyectan contenido plano (no un mat-tab-group) en el slot por
+   defecto lo envuelven en .tfs-body para heredar el mismo fill+scroll que da el cuerpo de una tab. */
+.tfs__tabs ::ng-deep .tfs-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  padding: 0.1rem 0.35rem 0.4rem 0.1rem;
+}
+
 @media (max-width: 1080px) {
   :host {
     grid-template-rows: auto;

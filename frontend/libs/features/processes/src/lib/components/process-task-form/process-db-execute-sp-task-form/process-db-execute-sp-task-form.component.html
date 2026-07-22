@@ -1,12 +1,15 @@
-<div class="task-grid">
-      <ih-process-task-runtime-panel
-        [task]="task()"
-        [tasks]="tasks()"
-        [draft]="draft()"
-        [readonly]="readonly()"
-        (runtimeChange)="updateDraft($event)"
-      />
+<ih-task-form-shell [title]="i18n.t('processTask.DB_EXECUTE_SP')">
+  <ih-process-task-runtime-panel
+    shellRuntime
+    [task]="task()"
+    [tasks]="tasks()"
+    [draft]="draft()"
+    [readonly]="readonly()"
+    (runtimeChange)="updateDraft($event)"
+  />
 
+  <div class="tfs-body">
+    <div class="task-grid">
       <ih-connection-select
         [connections]="connections()"
         [value]="draft().connectionRef"
@@ -56,3 +59,5 @@
       [nameLabelKey]="'ui.parameterName'"
       (entriesChange)="updateDraft({ parameters: $event })"
     />
+  </div>
+</ih-task-form-shell>

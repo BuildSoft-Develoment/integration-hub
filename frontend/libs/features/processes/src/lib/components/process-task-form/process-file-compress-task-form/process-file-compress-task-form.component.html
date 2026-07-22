@@ -1,5 +1,6 @@
-<div class="task-form-stack ih-compact-section">
+<ih-task-form-shell [title]="i18n.t('processTask.FILE_COMPRESS')">
   <ih-process-task-runtime-panel
+    shellRuntime
     [task]="task()"
     [tasks]="tasks()"
     [draft]="draft()"
@@ -8,7 +9,8 @@
     (runtimeChange)="updateDraft($event)"
   />
 
-  <div class="task-grid">
+  <div class="tfs-body">
+    <div class="task-grid">
     <mat-form-field>
       <mat-label>{{ i18n.t('ui.compress.algorithm') }}</mat-label>
       <mat-select [disabled]="readonly()" [ngModel]="draft().algorithm" (ngModelChange)="updateDraft({ algorithm: $event })">
@@ -60,5 +62,6 @@
         {{ i18n.t('ui.compress.deleteSourcesAfter') }}
       </mat-slide-toggle>
     </div>
+    </div>
   </div>
-</div>
+</ih-task-form-shell>

@@ -1,29 +1,20 @@
+/* El header (titulo + runtime) lo provee ih-task-form-shell; :host a altura fija (la .tfs-body scrollea). */
 :host {
-        display: grid;
-        grid-template-rows: auto minmax(0, 1fr);
-        gap: 1rem;
-        min-width: 0;
-        min-height: 0;
-        height: 100%;
-        overflow: hidden;
-      }
-      .task-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
-        gap: 0.95rem;
-        min-width: 0;
-      }
-      ih-process-task-runtime-panel {
-        grid-column: 1 / -1;
-      }
-      ih-process-task-binding-board {
-        min-height: 0;
-        align-self: start;
-      }
-      @media (max-width: 1080px) {
-        :host {
-          grid-template-rows: auto;
-          height: auto;
-          overflow: visible;
-        }
-      }
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+.task-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+  gap: 0.95rem;
+  min-width: 0;
+}
+/* El board de parametros llena el alto restante de la .tfs-body (flex column) y scrollea internamente
+   (scrollRows), igual que antes ocupaba la fila 1fr del grid del :host. */
+ih-process-task-binding-board {
+  flex: 1 1 auto;
+  min-height: 0;
+}

@@ -9,6 +9,7 @@ import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/se
 import { FileDeliverTaskDraft, ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
 import { ProcessTaskFormModel, SourceRef } from '../../../models/process.models';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
+import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.component';
 
 @Component({
   selector: 'ih-process-file-deliver-task-form',
@@ -20,9 +21,12 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
     MatInputModule,
     MatSelectModule,
     ProcessTaskRuntimePanelComponent,
+    TaskFormShellComponent,
   ],
   templateUrl: './process-file-deliver-task-form.component.html',
-  styleUrl: '../file-task-form.shared.css',
+  // shared css = clases de contenido (task-grid/full-width); css propio (2do, gana) solo pasa el :host al
+  // modelo del shell (altura fija; la .tfs-body scrollea) sin tocar el shared de FILE_WRITE/FILE_COMPRESS.
+  styleUrls: ['../file-task-form.shared.css', './process-file-deliver-task-form.component.css'],
 })
 export class ProcessFileDeliverTaskFormComponent {
   readonly i18n = inject(I18nService);

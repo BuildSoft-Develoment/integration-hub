@@ -17,11 +17,12 @@ import { ProcessDbRoutineSelectorComponent } from '../process-db-routine-selecto
 import { ProcessTaskBindingBoardComponent } from '../process-task-binding-board/process-task-binding-board.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 import { ConnectionSelectComponent } from '../connection-select/connection-select.component';
+import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.component';
 
 @Component({
   selector: 'ih-process-db-execute-sp-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatAutocompleteModule, MatFormFieldModule, MatInputModule, MatSelectModule, ProcessDbRoutineSelectorComponent, ProcessTaskBindingBoardComponent, ProcessTaskRuntimePanelComponent, ConnectionSelectComponent],
+  imports: [CommonModule, FormsModule, MatAutocompleteModule, MatFormFieldModule, MatInputModule, MatSelectModule, ProcessDbRoutineSelectorComponent, ProcessTaskBindingBoardComponent, ProcessTaskRuntimePanelComponent, ConnectionSelectComponent, TaskFormShellComponent],
     templateUrl: './process-db-execute-sp-task-form.component.html',
     styleUrl: './process-db-execute-sp-task-form.component.css'
 })
