@@ -31,15 +31,13 @@
 
         @if (isTableSource()) {
           <div class="task-grid">
-            <mat-form-field>
-              <mat-label>{{ i18n.t('ui.connection') }}</mat-label>
-              <mat-select [disabled]="readonly()" [ngModel]="draft().tableSource.connectionRef" (ngModelChange)="handleConnectionChange($event)">
-                <mat-option value="">{{ i18n.t('ui.write.defaultConnection') }}</mat-option>
-                @for (conn of connections(); track conn.id) {
-                  <mat-option [value]="conn.name">{{ conn.name }} ({{ conn.connectionType }})</mat-option>
-                }
-              </mat-select>
-            </mat-form-field>
+            <ih-connection-select
+              [connections]="connections()"
+              [value]="draft().tableSource.connectionRef"
+              [label]="i18n.t('ui.connection')"
+              [emptyLabel]="i18n.t('ui.write.defaultConnection')"
+              [disabled]="readonly()"
+              (valueChange)="handleConnectionChange($event)" />
 
             @if (selectedConnection()) {
               <!-- Con conexion: autocomplete de tablas reales (patron DB_WRITE). -->

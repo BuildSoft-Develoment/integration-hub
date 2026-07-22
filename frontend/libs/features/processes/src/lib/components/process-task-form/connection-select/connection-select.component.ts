@@ -28,9 +28,9 @@ import { ConnectionRef } from '../../../models/process.models';
 })
 export class ConnectionSelectComponent {
   readonly connections = input<readonly ConnectionRef[]>([]);
-  /** Valor actual (el {@code connectionRef} del draft): el nombre (DB) o el id (MT101). */
-  readonly value = input<string | number | null>(null);
-  /** Que campo de la conexion es el valor de la opcion. */
+  /** Valor actual (el {@code connectionRef} del draft; todos los forms lo tipan {@code string}). */
+  readonly value = input<string | null>(null);
+  /** Que campo de la conexion es el valor de la opcion: {@code 'name'} (DB) o {@code 'id'} (MT101). */
   readonly valueBy = input<'name' | 'id'>('name');
   /** Texto del {@code <mat-label>} (ya traducido). */
   readonly label = input('');
@@ -40,5 +40,9 @@ export class ConnectionSelectComponent {
   /** Paridad de layout: los forms MT101 usan {@code subscriptSizing="dynamic"}; los DB, el default. */
   readonly subscriptSizing = input<'fixed' | 'dynamic'>('fixed');
 
-  readonly valueChange = output<string | number>();
+  // Emite string, igual que el ngModelChange original (que fluia a un connectionRef:string en todos los
+  // forms). En la variante id, el valor de la opcion es numerico en runtime pero el destino es string:
+  // se preserva ese comportamiento suelto tal cual (drop-in fiel), sin coaccionar (coaccionar deseleccionaria
+  // la opcion, porque las opciones comparan por identidad numerica).
+  readonly valueChange = output<string>();
 }

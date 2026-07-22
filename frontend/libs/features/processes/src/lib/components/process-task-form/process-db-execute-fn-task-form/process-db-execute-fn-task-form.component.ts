@@ -106,14 +106,12 @@ export class ProcessDbExecuteFnTaskFormComponent {
     });
   }
 
-  // El atomo ih-connection-select emite string|number (variante name|id); aqui el connectionRef es el nombre
-  // (variante DB), asi que se coacciona a string al persistir en el draft.
-  handleConnectionChange(connectionRef: string | number): void {
+  handleConnectionChange(connectionRef: string): void {
     this.routineQuery.set('');
     this.schemas.set([]);
     this.routines.set([]);
     this.updateDraft({
-      connectionRef: String(connectionRef),
+      connectionRef,
       functionSchema: '',
       functionName: '',
       parameters: [],

@@ -22,6 +22,7 @@ import { ProcessDbWriteMappingBoardComponent } from '../process-db-write-mapping
 import { ProcessDbWriteSourcePaletteComponent } from '../process-db-write-source-palette/process-db-write-source-palette.component';
 import { ProcessDbWriteTableSelectorComponent } from '../process-db-write-table-selector/process-db-write-table-selector.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
+import { ConnectionSelectComponent } from '../connection-select/connection-select.component';
 
 // 011: tabla por defecto cuando se usa el datasource de la plataforma (la tabla de staging del money-path).
 const DEFAULT_PLATFORM_TABLE = 'staging_record';
@@ -41,6 +42,7 @@ const DEFAULT_PLATFORM_TABLE = 'staging_record';
     ProcessDbWriteMappingBoardComponent,
     ProcessDbWriteTableSelectorComponent,
     ProcessTaskRuntimePanelComponent,
+    ConnectionSelectComponent,
   ],
     templateUrl: './process-db-write-task-form.component.html',
     styleUrl: './process-db-write-task-form.component.css'

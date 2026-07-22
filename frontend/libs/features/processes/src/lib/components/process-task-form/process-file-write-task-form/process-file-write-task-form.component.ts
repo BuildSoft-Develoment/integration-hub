@@ -31,6 +31,7 @@ import { ProcessDbWriteSourcePaletteComponent } from '../process-db-write-source
 import { ProcessDbWriteTableSelectorComponent } from '../process-db-write-table-selector/process-db-write-table-selector.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.component';
+import { ConnectionSelectComponent } from '../connection-select/connection-select.component';
 
 type CellSection = 'header' | 'trailer';
 // Origenes que FILE_WRITE consume como STREAM de filas (van al detalle).
@@ -67,6 +68,7 @@ const SUPPORTED_METADATA = [
     ProcessDbWriteTableSelectorComponent,
     ProcessTaskRuntimePanelComponent,
     TaskFormShellComponent,
+    ConnectionSelectComponent,
   ],
   templateUrl: './process-file-write-task-form.component.html',
   // El shared css trae las clases de CONTENIDO (task-grid/detail-row/write-workspace/...) compartidas con

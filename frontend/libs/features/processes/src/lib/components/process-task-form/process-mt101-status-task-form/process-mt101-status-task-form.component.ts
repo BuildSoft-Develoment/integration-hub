@@ -13,6 +13,7 @@ import {
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { ConnectionRef, ProcessTaskFormModel } from '../../../models/process.models';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
+import { ConnectionSelectComponent } from '../connection-select/connection-select.component';
 
 @Component({
   selector: 'ih-process-mt101-status-task-form',
@@ -24,6 +25,7 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
     MatInputModule,
     MatSelectModule,
     ProcessTaskRuntimePanelComponent,
+    ConnectionSelectComponent,
   ],
   templateUrl: './process-mt101-status-task-form.component.html',
   styleUrl: './process-mt101-status-task-form.component.css',
