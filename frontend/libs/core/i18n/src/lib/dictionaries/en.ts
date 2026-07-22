@@ -831,6 +831,7 @@ export const en = {
   'mt101ParseFromTable.inboundSetIdTemplateHint': 'Identifies the inbound batch; max 80 chars once resolved.',
   'mt101ParseFromTable.source.table': 'Staging table',
   'mt101ParseFromTable.source.connectionRef': 'Connection',
+  'mt101ParseFromTable.source.connectionInherit': 'Inherit from source task',
   'mt101ParseFromTable.source.payloadColumn': 'Payload column',
   'mt101ParseFromTable.source.idColumn': 'Id column',
   'mt101Pay.tab.transport': 'Transport',

@@ -62,15 +62,14 @@
             [disabled]="readonly()" />
         </mat-form-field>
 
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101ParseFromTable.source.connectionRef') }}</mat-label>
-          <input
-            matInput
-            type="text"
-            [ngModel]="draft().source.connectionRef"
-            (ngModelChange)="updateSource({ connectionRef: $event })"
-            [disabled]="readonly()" />
-        </mat-form-field>
+        <ih-connection-select
+          [connections]="connections()"
+          [value]="draft().source.connectionRef"
+          [label]="i18n.t('mt101ParseFromTable.source.connectionRef')"
+          [emptyLabel]="i18n.t('mt101ParseFromTable.source.connectionInherit')"
+          subscriptSizing="dynamic"
+          [disabled]="readonly()"
+          (valueChange)="updateSource({ connectionRef: $event })" />
 
         <mat-form-field subscriptSizing="dynamic">
           <mat-label>{{ i18n.t('mt101ParseFromTable.source.payloadColumn') }}</mat-label>

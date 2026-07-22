@@ -831,6 +831,7 @@ export const es = {
   'mt101ParseFromTable.inboundSetIdTemplateHint': 'Identifica el lote inbound; max 80 chars tras resolver.',
   'mt101ParseFromTable.source.table': 'Tabla de staging',
   'mt101ParseFromTable.source.connectionRef': 'Conexion',
+  'mt101ParseFromTable.source.connectionInherit': 'Heredar de la tarea de origen',
   'mt101ParseFromTable.source.payloadColumn': 'Columna del payload',
   'mt101ParseFromTable.source.idColumn': 'Columna id',
   'mt101Pay.tab.transport': 'Transporte',

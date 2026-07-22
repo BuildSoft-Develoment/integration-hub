@@ -6,9 +6,10 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { Mt101ParseFromTableTaskDraft, ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
-import { ProcessTaskFormModel } from '../../../models/process.models';
+import { ConnectionRef, ProcessTaskFormModel } from '../../../models/process.models';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.component';
+import { ConnectionSelectComponent } from '../connection-select/connection-select.component';
 
 /**
  * Form propio de MT101_PARSE_FROM_TABLE (ya no reusa el de MT101_PARSE). Expone lo que el backend table-backed
@@ -27,6 +28,7 @@ import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.compo
     MatInputModule,
     ProcessTaskRuntimePanelComponent,
     TaskFormShellComponent,
+    ConnectionSelectComponent,
   ],
   templateUrl: './process-mt101-parse-from-table-task-form.component.html',
   styleUrl: './process-mt101-parse-from-table-task-form.component.css',
@@ -38,6 +40,8 @@ export class ProcessMt101ParseFromTableTaskFormComponent {
 
   readonly task = input.required<ProcessTaskFormModel>();
   readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
+  // El host pasa `connections` a todos los forms; se usa en el picker de la conexion (override) de la fuente.
+  readonly connections = input<readonly ConnectionRef[]>([]);
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101ParseFromTableTaskDraft>(
