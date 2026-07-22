@@ -1,20 +1,18 @@
-<div class="mt101-status ih-thin-scroll">
-  <header class="mt101-status__header">
-    <h3>{{ i18n.t('processTask.MT101_STATUS') }}</h3>
-    <mat-form-field class="mt101-status__mode" subscriptSizing="dynamic">
-      <mat-label>{{ i18n.t('mt101Status.mode') }}</mat-label>
-      <mat-select
-        [ngModel]="draft().mode"
-        (ngModelChange)="updateDraft({ mode: $event })"
-        [disabled]="readonly()">
-        @for (m of modes; track m) {
-          <mat-option [value]="m">{{ m }}</mat-option>
-        }
-      </mat-select>
-    </mat-form-field>
-  </header>
+<ih-task-form-shell [title]="i18n.t('processTask.MT101_STATUS')">
+  <mat-form-field shellSwitch class="mt101-status__mode" subscriptSizing="dynamic">
+    <mat-label>{{ i18n.t('mt101Status.mode') }}</mat-label>
+    <mat-select
+      [ngModel]="draft().mode"
+      (ngModelChange)="updateDraft({ mode: $event })"
+      [disabled]="readonly()">
+      @for (m of modes; track m) {
+        <mat-option [value]="m">{{ m }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
 
   <ih-process-task-runtime-panel
+    shellRuntime
     [task]="task()"
     [tasks]="tasks()"
     [draft]="draft()"
@@ -22,108 +20,107 @@
     (runtimeChange)="updateDraft($event)"
   />
 
-  @if (draft().mode === 'query') {
-    <section class="mt101-status__section">
-      <h4>{{ i18n.t('mt101Status.section.query') }}</h4>
+  <mat-tab-group animationDuration="0ms" mat-stretch-tabs="false">
+    <mat-tab [label]="i18n.t('mt101Status.section.query')">
+      @if (draft().mode === 'query') {
+        <div class="mt101-status__grid">
+          <mat-form-field class="mt101-status__col-2" subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('mt101Status.query.url') }}</mat-label>
+            <input
+              matInput
+              type="text"
+              placeholder="https://gateway.banco/v1/swift/status/${gatewayReference}"
+              [ngModel]="draft().queryUrl"
+              (ngModelChange)="updateDraft({ queryUrl: $event })"
+              [disabled]="readonly()" />
+          </mat-form-field>
+
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('mt101Status.query.method') }}</mat-label>
+            <mat-select
+              [ngModel]="draft().queryMethod"
+              (ngModelChange)="updateDraft({ queryMethod: $event })"
+              [disabled]="readonly()">
+              @for (m of httpMethods; track m) {
+                <mat-option [value]="m">{{ m }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('mt101Status.query.timeoutSeconds') }}</mat-label>
+            <input
+              matInput
+              type="number"
+              min="1"
+              [ngModel]="draft().queryTimeoutSeconds"
+              (ngModelChange)="updateDraft({ queryTimeoutSeconds: $event })"
+              [disabled]="readonly()" />
+          </mat-form-field>
+        </div>
+      } @else {
+        <p class="mt101-status__notice">
+          {{ i18n.t('mt101Status.modeRequiresM2') }}: <code>{{ draft().mode }}</code>
+        </p>
+      }
+    </mat-tab>
+
+    <mat-tab [label]="i18n.t('mt101Status.section.response')">
       <div class="mt101-status__grid">
-        <mat-form-field class="mt101-status__col-2" subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101Status.query.url') }}</mat-label>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101Status.statusField') }}</mat-label>
           <input
             matInput
             type="text"
-            placeholder="https://gateway.banco/v1/swift/status/${gatewayReference}"
-            [ngModel]="draft().queryUrl"
-            (ngModelChange)="updateDraft({ queryUrl: $event })"
+            [ngModel]="draft().statusField"
+            (ngModelChange)="updateDraft({ statusField: $event })"
             [disabled]="readonly()" />
         </mat-form-field>
 
         <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101Status.query.method') }}</mat-label>
-          <mat-select
-            [ngModel]="draft().queryMethod"
-            (ngModelChange)="updateDraft({ queryMethod: $event })"
-            [disabled]="readonly()">
-            @for (m of httpMethods; track m) {
-              <mat-option [value]="m">{{ m }}</mat-option>
-            }
-          </mat-select>
-        </mat-form-field>
-
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('mt101Status.query.timeoutSeconds') }}</mat-label>
+          <mat-label>{{ i18n.t('mt101Status.referenceField') }}</mat-label>
           <input
             matInput
-            type="number"
-            min="1"
-            [ngModel]="draft().queryTimeoutSeconds"
-            (ngModelChange)="updateDraft({ queryTimeoutSeconds: $event })"
+            type="text"
+            [ngModel]="draft().referenceField"
+            (ngModelChange)="updateDraft({ referenceField: $event })"
+            [disabled]="readonly()" />
+        </mat-form-field>
+
+        <mat-form-field class="mt101-status__col-2" subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101Status.errorMessageField') }}</mat-label>
+          <input
+            matInput
+            type="text"
+            [ngModel]="draft().errorMessageField"
+            (ngModelChange)="updateDraft({ errorMessageField: $event })"
             [disabled]="readonly()" />
         </mat-form-field>
       </div>
-    </section>
-  } @else {
-    <p class="mt101-status__notice">
-      {{ i18n.t('mt101Status.modeRequiresM2') }}: <code>{{ draft().mode }}</code>
-    </p>
-  }
+    </mat-tab>
 
-  <section class="mt101-status__section">
-    <h4>{{ i18n.t('mt101Status.section.response') }}</h4>
-    <div class="mt101-status__grid">
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Status.statusField') }}</mat-label>
-        <input
-          matInput
-          type="text"
-          [ngModel]="draft().statusField"
-          (ngModelChange)="updateDraft({ statusField: $event })"
-          [disabled]="readonly()" />
-      </mat-form-field>
+    <mat-tab [label]="i18n.t('mt101Status.section.persistence')">
+      <div class="mt101-status__grid">
+        <ih-connection-select
+          [connections]="connections()"
+          [value]="draft().connectionRef"
+          valueBy="id"
+          [label]="i18n.t('mt101Status.connection')"
+          emptyLabel="-"
+          subscriptSizing="dynamic"
+          [disabled]="readonly()"
+          (valueChange)="updateDraft({ connectionRef: $event })" />
 
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Status.referenceField') }}</mat-label>
-        <input
-          matInput
-          type="text"
-          [ngModel]="draft().referenceField"
-          (ngModelChange)="updateDraft({ referenceField: $event })"
-          [disabled]="readonly()" />
-      </mat-form-field>
-
-      <mat-form-field class="mt101-status__col-2" subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Status.errorMessageField') }}</mat-label>
-        <input
-          matInput
-          type="text"
-          [ngModel]="draft().errorMessageField"
-          (ngModelChange)="updateDraft({ errorMessageField: $event })"
-          [disabled]="readonly()" />
-      </mat-form-field>
-    </div>
-  </section>
-
-  <section class="mt101-status__section">
-    <h4>{{ i18n.t('mt101Status.section.persistence') }}</h4>
-    <div class="mt101-status__grid">
-      <ih-connection-select
-        [connections]="connections()"
-        [value]="draft().connectionRef"
-        valueBy="id"
-        [label]="i18n.t('mt101Status.connection')"
-        emptyLabel="-"
-        subscriptSizing="dynamic"
-        [disabled]="readonly()"
-        (valueChange)="updateDraft({ connectionRef: $event })" />
-
-      <mat-form-field subscriptSizing="dynamic">
-        <mat-label>{{ i18n.t('mt101Status.confirmationTable') }}</mat-label>
-        <input
-          matInput
-          type="text"
-          [ngModel]="draft().confirmationTable"
-          (ngModelChange)="updateDraft({ confirmationTable: $event })"
-          [disabled]="readonly()" />
-      </mat-form-field>
-    </div>
-  </section>
-</div>
+        <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('mt101Status.confirmationTable') }}</mat-label>
+          <input
+            matInput
+            type="text"
+            [ngModel]="draft().confirmationTable"
+            (ngModelChange)="updateDraft({ confirmationTable: $event })"
+            [disabled]="readonly()" />
+        </mat-form-field>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</ih-task-form-shell>
