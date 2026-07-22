@@ -66,9 +66,12 @@ export class Mt101RouteTaskProvider extends ProcessTaskProvider<Mt101RouteTaskDr
   toTaskPatch(draft: Mt101RouteTaskDraft): Partial<ProcessTaskFormModel> {
     const payload: Record<string, unknown> = this.withRuntime(
       {
-        rules: draft.rules
-          .filter((r) => r.name.trim() && r.predicate.trim() && r.routeTo.trim())
-          .map((r) => ({ name: r.name, predicate: r.predicate, routeTo: r.routeTo })),
+        // Se persisten TODAS las reglas tal cual (incluidas las incompletas en edicion), igual que las filas
+        // repetibles de MT101_REPAIR / FILE_WRITE. Filtrar las incompletas aca rompia el "Agregar regla": el
+        // draft se recomputa desde el task persistido, asi que una regla recien agregada (vacia) se descartaba
+        // en el round-trip y desaparecia (ni siquiera se podia tipear). El backend valida/ignora las
+        // incompletas en ejecucion.
+        rules: draft.rules.map((r) => ({ name: r.name, predicate: r.predicate, routeTo: r.routeTo })),
         defaultRoute: draft.defaultRoute,
         routeField: draft.routeField,
       },

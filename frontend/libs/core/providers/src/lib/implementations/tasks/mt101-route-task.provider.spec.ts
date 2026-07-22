@@ -22,21 +22,22 @@ describe('Mt101RouteTaskProvider', () => {
     expect(draft.routeField).toBe('routedAs');
   });
 
-  it('serializes only rules with all required fields populated', () => {
+  it('serializa TODAS las reglas tal cual, incluidas las incompletas (para no romper la edicion inline)', () => {
+    // Las filas repetibles no se filtran al serializar (igual que MT101_REPAIR/FILE_WRITE): una regla recien
+    // agregada (vacia) debe SOBREVIVIR el round-trip para poder tipearla. El backend valida en ejecucion.
     const p = new Mt101RouteTaskProvider();
     const draft: Mt101RouteTaskDraft = {
       ...p.createDraft(),
       taskRef: 'route',
       rules: [
         { name: 'r1', predicate: 'a == 1', routeTo: 'A' },
-        { name: '', predicate: 'b == 2', routeTo: 'B' }, // sin name -> drop
-        { name: 'r3', predicate: '', routeTo: 'C' },     // sin predicate -> drop
-        { name: 'r4', predicate: 'd == 4', routeTo: '' }, // sin routeTo -> drop
+        { name: '', predicate: '', routeTo: '' },        // recien agregada -> se conserva
+        { name: 'r3', predicate: '', routeTo: 'C' },     // en edicion -> se conserva
       ],
     };
     const config = JSON.parse(p.toTaskPatch(draft).configurationJson as string);
-    expect(config.rules).toHaveLength(1);
-    expect(config.rules[0]).toEqual({ name: 'r1', predicate: 'a == 1', routeTo: 'A' });
+    expect(config.rules).toHaveLength(3);
+    expect(config.rules).toEqual(draft.rules);
   });
 
   it('roundtrip preserves rules + defaultRoute + routeField', () => {
