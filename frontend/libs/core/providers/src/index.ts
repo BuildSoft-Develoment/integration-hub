@@ -49,6 +49,7 @@ export * from './lib/implementations/tasks/mt101-route-task.provider';
 export * from './lib/implementations/tasks/mt101-reconcile-task.provider';
 export * from './lib/implementations/tasks/mt101-status-task.provider';
 export * from './lib/implementations/tasks/mt101-parse-task.provider';
+export * from './lib/implementations/tasks/mt101-parse-from-table-task.provider';
 export * from './lib/implementations/tasks/mt101-split-task.provider';
 export * from './lib/implementations/tasks/mt101-repair-task.provider';
 export * from './lib/implementations/tasks/payments-swift.providers';

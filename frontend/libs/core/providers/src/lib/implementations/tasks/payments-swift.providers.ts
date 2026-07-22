@@ -33,6 +33,7 @@ export interface PaymentsSwiftFormComponents {
   readonly mt101Reconcile: Type<unknown>;
   readonly mt101Status: Type<unknown>;
   readonly mt101Parse: Type<unknown>;
+  readonly mt101ParseFromTable: Type<unknown>;
   // Sprint 3
   readonly mt101Split: Type<unknown>;
   readonly mt101Repair: Type<unknown>;
@@ -86,7 +87,7 @@ export function providePaymentsSwiftForms(components: PaymentsSwiftFormComponent
       { type: 'MT101_REPAIR',    component: components.mt101Repair,    layout: 'workspace' },
       // Inbound a escala: reusan el form de PARSE / PAY respectivamente (el config
       // table-driven / transporte lo gestiona el backend; aqui basta render + binding).
-      { type: 'MT101_PARSE_FROM_TABLE', component: components.mt101Parse, layout: 'workspace' },
+      { type: 'MT101_PARSE_FROM_TABLE', component: components.mt101ParseFromTable, layout: 'workspace' },
       { type: 'MT101_INBOUND_DELIVER',  component: components.mt101InboundDeliver, layout: 'workspace' },
     ),
   ];

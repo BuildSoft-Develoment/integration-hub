@@ -6,6 +6,7 @@ import { provideMotorProcessForms } from '../processes.providers';
 import { ProcessMt101ArchiveTaskFormComponent } from '../components/process-task-form/process-mt101-archive-task-form/process-mt101-archive-task-form.component';
 import { ProcessMt101BuildTaskFormComponent } from '../components/process-task-form/process-mt101-build-task-form/process-mt101-build-task-form.component';
 import { ProcessMt101ParseTaskFormComponent } from '../components/process-task-form/process-mt101-parse-task-form/process-mt101-parse-task-form.component';
+import { ProcessMt101ParseFromTableTaskFormComponent } from '../components/process-task-form/process-mt101-parse-from-table-task-form/process-mt101-parse-from-table-task-form.component';
 import { ProcessMt101PayTaskFormComponent } from '../components/process-task-form/process-mt101-pay-task-form/process-mt101-pay-task-form.component';
 import { ProcessMt101InboundDeliverTaskFormComponent } from '../components/process-task-form/process-mt101-inbound-deliver-task-form/process-mt101-inbound-deliver-task-form.component';
 import { ProcessMt101ReconcileTaskFormComponent } from '../components/process-task-form/process-mt101-reconcile-task-form/process-mt101-reconcile-task-form.component';
@@ -58,6 +59,7 @@ import { ProcessToolbarComponent } from '../components/process-toolbar/process-t
       mt101Reconcile: ProcessMt101ReconcileTaskFormComponent,
       mt101Status: ProcessMt101StatusTaskFormComponent,
       mt101Parse: ProcessMt101ParseTaskFormComponent,
+      mt101ParseFromTable: ProcessMt101ParseFromTableTaskFormComponent,
       mt101Split: ProcessMt101SplitTaskFormComponent,
       mt101Repair: ProcessMt101RepairTaskFormComponent,
     }),
