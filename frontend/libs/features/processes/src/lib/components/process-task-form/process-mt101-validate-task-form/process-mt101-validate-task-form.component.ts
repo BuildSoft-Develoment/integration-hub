@@ -6,6 +6,7 @@ import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatTabsModule } from '@angular/material/tabs';
 import {
   Mt101ValidateSeverity,
   Mt101ValidateStandard,
@@ -16,11 +17,12 @@ import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/se
 import { ConnectionRef, ProcessTaskFormModel } from '../../../models/process.models';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 import { ConnectionSelectComponent } from '../connection-select/connection-select.component';
+import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.component';
 
 @Component({
   selector: 'ih-process-mt101-validate-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, ProcessTaskRuntimePanelComponent, ConnectionSelectComponent],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatTabsModule, ProcessTaskRuntimePanelComponent, ConnectionSelectComponent, TaskFormShellComponent],
   templateUrl: './process-mt101-validate-task-form.component.html',
   styleUrl: './process-mt101-validate-task-form.component.css',
 })
