@@ -12,6 +12,7 @@ import {
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { ProcessTaskFormModel } from '../../../models/process.models';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
+import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.component';
 
 @Component({
   selector: 'ih-process-mt101-split-task-form',
@@ -23,12 +24,12 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
     MatFormFieldModule,
     MatInputModule,
     ProcessTaskRuntimePanelComponent,
+    TaskFormShellComponent,
   ],
   template: `
-    <div class="mt101-split ih-thin-scroll">
-      <header class="mt101-split__header"><h3>{{ i18n.t('processTask.MT101_SPLIT') }}</h3></header>
-
+    <ih-task-form-shell [title]="i18n.t('processTask.MT101_SPLIT')">
       <ih-process-task-runtime-panel
+        shellRuntime
         [task]="task()"
         [tasks]="tasks()"
         [draft]="draft()"
@@ -36,6 +37,7 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
         (runtimeChange)="updateDraft($event)"
       />
 
+      <div class="tfs-body">
       <p class="mt101-split__description">{{ i18n.t('mt101Split.description') }}</p>
 
       <section class="mt101-split__section">
@@ -85,7 +87,8 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
             [disabled]="readonly()" />
         </mat-form-field>
       </section>
-    </div>
+      </div>
+    </ih-task-form-shell>
   `,
   styleUrl: './process-mt101-split-task-form.component.css',
 })

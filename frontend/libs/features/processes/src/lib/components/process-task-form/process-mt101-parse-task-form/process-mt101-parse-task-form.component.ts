@@ -10,18 +10,16 @@ import {
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { ProcessTaskFormModel } from '../../../models/process.models';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
+import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.component';
 
 @Component({
   selector: 'ih-process-mt101-parse-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatCheckboxModule, ProcessTaskRuntimePanelComponent],
+  imports: [CommonModule, FormsModule, MatCheckboxModule, ProcessTaskRuntimePanelComponent, TaskFormShellComponent],
   template: `
-    <div class="mt101-parse ih-thin-scroll">
-      <header class="mt101-parse__header">
-        <h3>{{ i18n.t('processTask.MT101_PARSE') }}</h3>
-      </header>
-
+    <ih-task-form-shell [title]="i18n.t('processTask.MT101_PARSE')">
       <ih-process-task-runtime-panel
+        shellRuntime
         [task]="task()"
         [tasks]="tasks()"
         [draft]="draft()"
@@ -29,6 +27,7 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
         (runtimeChange)="updateDraft($event)"
       />
 
+      <div class="tfs-body">
       <p class="mt101-parse__description">{{ i18n.t('mt101Parse.description') }}</p>
 
       <section class="mt101-parse__section">
@@ -49,25 +48,13 @@ import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/
           {{ i18n.t('mt101Parse.publishMultiOutputBlocked') }}
         </p>
       </section>
-    </div>
+      </div>
+    </ih-task-form-shell>
   `,
   styles: [
     `
-      :host { display: block; height: 100%; min-height: 0; overflow: hidden; }
-      .mt101-parse {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-        height: 100%;
-        min-height: 0;
-        overflow: auto;
-        padding: 0 0.25rem 0.25rem 0;
-      }
-      .mt101-parse__header {
-        padding-bottom: 0.5rem;
-        border-bottom: 1px solid var(--ih-border-subtle, var(--color-border, #e2e8f0));
-      }
-      .mt101-parse__header h3 { margin: 0; font-size: 1.05rem; font-weight: 600; }
+      /* El scroll wrapper y el header los provee ih-task-form-shell (.tfs-body + header). */
+      :host { display: block; min-width: 0; min-height: 0; height: 100%; overflow: hidden; }
       .mt101-parse__description {
         margin: 0;
         color: var(--ih-text-soft, var(--color-text-muted, #475569));
