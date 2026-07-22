@@ -1,0 +1,17 @@
+/* CSS propio de FILE_WRITE al adoptar ih-task-form-shell. Se aplica DESPUES del shared (styleUrls) y solo
+   redefine el :host: el shared usa `overflow: hidden auto` (el host scrollea todo el stack), pero con el shell
+   cada tab scrollea su propio contenido, asi que el host pasa a altura fija sin scroll. El resto de clases de
+   contenido (task-grid/task-section/write-workspace/detail-row/cell-row/...) siguen viniendo del shared. */
+:host {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Switch primario proyectado al header del shell (Formato de salida CSV/TXT/XLSX). */
+.fw-format-field {
+  width: 12rem;
+  min-width: 0;
+}

@@ -7,6 +7,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatTabsModule } from '@angular/material/tabs';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import {
   FileWriteBindingOutput,
@@ -29,6 +30,7 @@ import { BindingOriginSelectComponent } from '../binding-origin-select/binding-o
 import { ProcessDbWriteSourcePaletteComponent } from '../process-db-write-source-palette/process-db-write-source-palette.component';
 import { ProcessDbWriteTableSelectorComponent } from '../process-db-write-table-selector/process-db-write-table-selector.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
+import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.component';
 
 type CellSection = 'header' | 'trailer';
 // Origenes que FILE_WRITE consume como STREAM de filas (van al detalle).
@@ -58,14 +60,19 @@ const SUPPORTED_METADATA = [
     MatInputModule,
     MatSelectModule,
     MatSlideToggleModule,
+    MatTabsModule,
     SuggestInputComponent,
     BindingOriginSelectComponent,
     ProcessDbWriteSourcePaletteComponent,
     ProcessDbWriteTableSelectorComponent,
     ProcessTaskRuntimePanelComponent,
+    TaskFormShellComponent,
   ],
   templateUrl: './process-file-write-task-form.component.html',
-  styleUrl: '../file-task-form.shared.css',
+  // El shared css trae las clases de CONTENIDO (task-grid/detail-row/write-workspace/...) compartidas con
+  // FILE_COMPRESS/FILE_DELIVER; el css propio (segundo, gana) solo cambia el :host al modelo del shell
+  // (altura fija; el scroll lo maneja cada tab), sin tocar el shared que usan los otros forms.
+  styleUrls: ['../file-task-form.shared.css', './process-file-write-task-form.component.css'],
 })
 export class ProcessFileWriteTaskFormComponent {
   readonly i18n = inject(I18nService);

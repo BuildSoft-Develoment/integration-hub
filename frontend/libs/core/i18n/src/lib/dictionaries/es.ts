@@ -974,6 +974,8 @@ export const es = {
   'ui.write.batchSize': 'Tamano de lote',
   'ui.write.excel': 'Excel',
   'ui.write.formatOptions': 'Opciones de formato',
+  'ui.write.tab.sourceFormat': 'Origen y formato',
+  'ui.write.tab.structure': 'Estructura',
   'ui.write.quoteStrategy': 'Estrategia de comillas',
   'ui.write.quoteRequired': 'Requerido (RFC-4180)',
   'ui.write.quoteAlways': 'Siempre',

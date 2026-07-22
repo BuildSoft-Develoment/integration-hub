@@ -974,6 +974,8 @@ export const en = {
   'ui.write.batchSize': 'Batch size',
   'ui.write.excel': 'Excel',
   'ui.write.formatOptions': 'Format options',
+  'ui.write.tab.sourceFormat': 'Source & format',
+  'ui.write.tab.structure': 'Structure',
   'ui.write.quoteStrategy': 'Quote strategy',
   'ui.write.quoteRequired': 'Required (RFC-4180)',
   'ui.write.quoteAlways': 'Always',
