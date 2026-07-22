@@ -11,11 +11,13 @@ import { FileReadTaskDraft, ProcessTaskFormBridgeService, ReaderFieldDraft, Read
 import { ProcessTaskManagerService, ReaderManagerService } from '@integration-hub/core/services';
 import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
 import { ProcessReaderFieldsViewComponent } from '../process-reader-fields-view/process-reader-fields-view.component';
+import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
+import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.component';
 
 @Component({
   selector: 'ih-process-file-read-task-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule, ProcessReaderFieldsViewComponent],
+  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatSelectModule, MatSlideToggleModule, ProcessReaderFieldsViewComponent, ProcessTaskRuntimePanelComponent, TaskFormShellComponent],
     templateUrl: './process-file-read-task-form.component.html',
     styleUrl: './process-file-read-task-form.component.css'
 })
@@ -28,9 +30,14 @@ export class ProcessFileReadTaskFormComponent {
   private readonly bridge = inject(ProcessTaskFormBridgeService);
 
   readonly task = input.required<ProcessTaskFormModel>();
+  // El host pasa `tasks` a todos los forms via ngComponentOutlet; FILE_READ lo declara para alimentar el
+  // runtime-panel (aunque con showInput=false no se usa el picker de tarea de origen).
+  readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
   readonly sources = input.required<readonly SourceRef[]>();
   readonly readers = input.required<readonly ReaderRef[]>();
   readonly readonly = input(false);
+  // FILE_READ es un lector batch (entry task); el selector de modo del panel queda fijo en 'batch'.
+  readonly executionModes = ['batch'] as const;
 
   readonly draft = computed<FileReadTaskDraft>(() => this.manager.hydrateDraft<FileReadTaskDraft>(this.task()) ?? {
     taskRef: this.task().clientId,

@@ -1,4 +1,19 @@
-<div class="task-grid">
+<ih-task-form-shell [title]="i18n.t('processTask.FILE_READ')">
+  <!-- FILE_READ es source (no consume tarea de origen) -> showInput=false; modo fijo 'batch'. El panel
+       aporta ademas despacho async (se auto-oculta si el tipo no lo soporta) + continuar-en-fallo. -->
+  <ih-process-task-runtime-panel
+    shellRuntime
+    [task]="task()"
+    [tasks]="tasks()"
+    [draft]="draft()"
+    [readonly]="readonly()"
+    [showInput]="false"
+    [executionModes]="executionModes"
+    (runtimeChange)="updateDraft($event)"
+  />
+
+  <div class="tfs-body">
+    <div class="task-grid">
       <mat-form-field>
         <mat-label>{{ i18n.t('ui.sourceDefinition') }}</mat-label>
         <mat-select [disabled]="readonly()" [ngModel]="draft().sourceDefinitionId" (ngModelChange)="updateDraft({ sourceDefinitionId: $event })">
@@ -81,3 +96,5 @@
         }
       </div>
     </div>
+  </div>
+</ih-task-form-shell>
