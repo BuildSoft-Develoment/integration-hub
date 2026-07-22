@@ -443,6 +443,8 @@ export const es = {
   'ui.scriptExample.skipRecord': 'Omitir registro',
   'ui.addFieldEmpty': 'Agrega al menos una definicion de campo.',
   'ui.modeLabel': 'Modo',
+  'ui.dbWrite.tab.config': 'Configuracion',
+  'ui.dbWrite.tab.mapping': 'Mapeo',
   'ui.encoding': 'Codificacion',
   'ui.encodingHint': 'Elige de la lista o escribe la codificacion del archivo',
   'ui.dataStartsAtRow': 'Los datos empiezan en la fila',

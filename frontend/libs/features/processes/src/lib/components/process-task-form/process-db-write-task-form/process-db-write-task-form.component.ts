@@ -6,6 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatTabsModule } from '@angular/material/tabs';
 import { DbWriteMappingDraft, DbWriteTaskDraft, ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { firstValueFrom } from 'rxjs';
@@ -23,6 +24,7 @@ import { ProcessDbWriteSourcePaletteComponent } from '../process-db-write-source
 import { ProcessDbWriteTableSelectorComponent } from '../process-db-write-table-selector/process-db-write-table-selector.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
 import { ConnectionSelectComponent } from '../connection-select/connection-select.component';
+import { TaskFormShellComponent } from '../task-form-shell/task-form-shell.component';
 
 // 011: tabla por defecto cuando se usa el datasource de la plataforma (la tabla de staging del money-path).
 const DEFAULT_PLATFORM_TABLE = 'staging_record';
@@ -43,6 +45,8 @@ const DEFAULT_PLATFORM_TABLE = 'staging_record';
     ProcessDbWriteTableSelectorComponent,
     ProcessTaskRuntimePanelComponent,
     ConnectionSelectComponent,
+    MatTabsModule,
+    TaskFormShellComponent,
   ],
     templateUrl: './process-db-write-task-form.component.html',
     styleUrl: './process-db-write-task-form.component.css'

@@ -1,62 +1,59 @@
+/* El header persistente (titulo + switch de modo + runtime) y las tabs los provee ih-task-form-shell.
+   Aca solo quedan los estilos de CONTENIDO (grillas de config, notas, workspace de mapeo). */
 :host {
-        display: grid;
-        grid-template-rows: auto minmax(0, 1fr);
-        gap: 1rem;
-        min-width: 0;
-        min-height: 0;
-        height: 100%;
-        overflow: hidden;
-      }
-      .task-form-stack {
-        display: grid;
-        gap: 1rem;
-        min-width: 0;
-        align-content: start;
-      }
-      .task-grid {
-        display: grid;
-        gap: 0.95rem;
-        min-width: 0;
-      }
-      .task-grid--primary {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-      .task-grid--metadata {
-        grid-template-columns: minmax(min(160px, 100%), 0.75fr) minmax(min(180px, 100%), 0.95fr) minmax(min(220px, 100%), 1.2fr);
-      }
-      .mapping-workspace {
-        display: grid;
-        grid-template-columns: minmax(min(260px, 100%), 0.9fr) minmax(0, 1.4fr);
-        gap: 1rem;
-        align-items: stretch;
-        min-height: 0;
-        height: 100%;
-        overflow: hidden;
-      }
-      .mapping-workspace > * {
-        min-height: 0;
-        max-height: 100%;
-      }
-      .task-note {
-        padding: 0.85rem 1rem;
-        border-radius: 16px;
-        border: 1px dashed var(--ih-border);
-        color: var(--ih-text-soft);
-        background: color-mix(in srgb, var(--ih-surface-alt) 76%, transparent);
-      }
-      @media (max-width: 1080px) {
-        :host {
-          grid-template-rows: auto;
-          height: auto;
-          overflow: visible;
-        }
-        .task-grid--primary,
-        .task-grid--metadata,
-        .mapping-workspace {
-          grid-template-columns: 1fr;
-        }
-        .mapping-workspace {
-          height: auto;
-          min-height: auto;
-        }
-      }
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Switch primario proyectado al header (modo de escritura). */
+.dbw-mode-field {
+  width: 13rem;
+  min-width: 0;
+}
+
+.task-grid {
+  display: grid;
+  gap: 0.95rem;
+  min-width: 0;
+}
+/* El modo se movio al header; la grilla primaria queda con conexion + batch. */
+.task-grid--primary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.task-grid--metadata {
+  grid-template-columns: minmax(min(160px, 100%), 0.75fr) minmax(min(180px, 100%), 0.95fr) minmax(min(220px, 100%), 1.2fr);
+}
+.mapping-workspace {
+  display: grid;
+  grid-template-columns: minmax(min(260px, 100%), 0.9fr) minmax(0, 1.4fr);
+  gap: 1rem;
+  align-items: stretch;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+.mapping-workspace > * {
+  min-height: 0;
+  max-height: 100%;
+}
+.task-note {
+  padding: 0.85rem 1rem;
+  border-radius: 16px;
+  border: 1px dashed var(--ih-border);
+  color: var(--ih-text-soft);
+  background: color-mix(in srgb, var(--ih-surface-alt) 76%, transparent);
+}
+@media (max-width: 1080px) {
+  .task-grid--primary,
+  .task-grid--metadata,
+  .mapping-workspace {
+    grid-template-columns: 1fr;
+  }
+  .mapping-workspace {
+    height: auto;
+    min-height: auto;
+  }
+}

@@ -443,6 +443,8 @@ export const en = {
   'ui.scriptExample.skipRecord': 'Skip record',
   'ui.addFieldEmpty': 'Add at least one field definition.',
   'ui.modeLabel': 'Mode',
+  'ui.dbWrite.tab.config': 'Configuration',
+  'ui.dbWrite.tab.mapping': 'Mapping',
   'ui.encoding': 'Encoding',
   'ui.encodingHint': 'Pick from the list or type the file encoding',
   'ui.dataStartsAtRow': 'Data starts at row',

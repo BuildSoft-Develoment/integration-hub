@@ -1,12 +1,26 @@
-<div class="task-form-stack ih-compact-section">
-      <ih-process-task-runtime-panel
-        [task]="task()"
-        [tasks]="tasks()"
-        [draft]="draft()"
-        [readonly]="readonly()"
-        (runtimeChange)="updateDraft($event)"
-      />
+<ih-task-form-shell [title]="i18n.t('processTask.DB_WRITE')">
+  <!-- Switch primario: el modo de escritura (insert/update/upsert/batch) -> header persistente. -->
+  <mat-form-field shellSwitch class="dbw-mode-field">
+    <mat-label>{{ i18n.t('ui.modeLabel') }}</mat-label>
+    <mat-select [disabled]="readonly()" [ngModel]="draft().mode" (ngModelChange)="updateDraft({ mode: $event })">
+      <mat-option value="insert">{{ i18n.t('ui.dbWriteMode.insert') }}</mat-option>
+      <mat-option value="update">{{ i18n.t('ui.dbWriteMode.update') }}</mat-option>
+      <mat-option value="upsert">{{ i18n.t('ui.dbWriteMode.upsert') }}</mat-option>
+      <mat-option value="batch-update">{{ i18n.t('ui.dbWriteMode.batchUpdate') }}</mat-option>
+    </mat-select>
+  </mat-form-field>
 
+  <ih-process-task-runtime-panel
+    shellRuntime
+    [task]="task()"
+    [tasks]="tasks()"
+    [draft]="draft()"
+    [readonly]="readonly()"
+    (runtimeChange)="updateDraft($event)"
+  />
+
+  <mat-tab-group animationDuration="0ms" mat-stretch-tabs="false">
+    <mat-tab [label]="i18n.t('ui.dbWrite.tab.config')">
       <div class="task-grid task-grid--primary">
         <ih-connection-select
           [connections]="connections()"
@@ -15,16 +29,6 @@
           [emptyLabel]="i18n.t('ui.platformDatasource')"
           [disabled]="readonly()"
           (valueChange)="handleConnectionChange($event)" />
-
-        <mat-form-field>
-          <mat-label>{{ i18n.t('ui.modeLabel') }}</mat-label>
-          <mat-select [disabled]="readonly()" [ngModel]="draft().mode" (ngModelChange)="updateDraft({ mode: $event })">
-            <mat-option value="insert">{{ i18n.t('ui.dbWriteMode.insert') }}</mat-option>
-            <mat-option value="update">{{ i18n.t('ui.dbWriteMode.update') }}</mat-option>
-            <mat-option value="upsert">{{ i18n.t('ui.dbWriteMode.upsert') }}</mat-option>
-            <mat-option value="batch-update">{{ i18n.t('ui.dbWriteMode.batchUpdate') }}</mat-option>
-          </mat-select>
-        </mat-form-field>
 
         <mat-form-field>
           <mat-label>{{ i18n.t('ui.jdbcBatchSize') }}</mat-label>
@@ -58,26 +62,30 @@
       } @else if (loadingColumns()) {
         <div class="task-note ih-soft-panel">{{ i18n.t('ui.loading') }}</div>
       }
-    </div>
+    </mat-tab>
 
-    <div class="mapping-workspace">
-      <ih-process-db-write-source-palette
-        [groups]="groupedSources()"
-        [draggingSource]="draggingSource()"
-        [readonly]="readonly()"
-        (sourceDragStart)="draggingSource.set($event)"
-        (sourceDragEnd)="draggingSource.set(null)"
-      />
+    <mat-tab [label]="i18n.t('ui.dbWrite.tab.mapping')">
+      <div class="mapping-workspace tfs-fill">
+        <ih-process-db-write-source-palette
+          [groups]="groupedSources()"
+          [draggingSource]="draggingSource()"
+          [readonly]="readonly()"
+          (sourceDragStart)="draggingSource.set($event)"
+          (sourceDragEnd)="draggingSource.set(null)"
+        />
 
-      <ih-process-db-write-mapping-board
-        [columns]="columns()"
-        [mappings]="draft().mappings"
-        [sourceGroups]="groupedSources()"
-        [readonly]="readonly()"
-        [draggingSource]="draggingSource()"
-        (sourceDrop)="assignSource($event.columnName, $event.source)"
-        (expressionChange)="updateExpression($event.columnName, $event.expression)"
-        (keyChange)="updateKey($event.columnName, $event.value)"
-        (clear)="clearMapping($event)"
-      />
-    </div>
+        <ih-process-db-write-mapping-board
+          [columns]="columns()"
+          [mappings]="draft().mappings"
+          [sourceGroups]="groupedSources()"
+          [readonly]="readonly()"
+          [draggingSource]="draggingSource()"
+          (sourceDrop)="assignSource($event.columnName, $event.source)"
+          (expressionChange)="updateExpression($event.columnName, $event.expression)"
+          (keyChange)="updateKey($event.columnName, $event.value)"
+          (clear)="clearMapping($event)"
+        />
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</ih-task-form-shell>
