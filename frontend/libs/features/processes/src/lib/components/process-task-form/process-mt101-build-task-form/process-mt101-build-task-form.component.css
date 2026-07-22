@@ -6,40 +6,38 @@
   overflow: hidden;
 }
 
+/* Layout: header PERSISTENTE (fila fija) + tabs que scrollean adentro. El topbar es una fila de grid
+   (no sticky) -> queda siempre visible sin depender de un fondo opaco. */
 .mt101-build {
   display: grid;
-  grid-template-rows: minmax(0, auto) minmax(0, 1fr);
-  gap: 1rem;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.75rem;
   min-width: 0;
   min-height: 0;
   height: 100%;
   overflow: hidden;
 }
 
-.mt101-build__settings {
+.mt101-build__topbar {
   display: grid;
-  gap: 0.95rem;
-  align-content: start;
+  gap: 0.75rem;
   min-width: 0;
-  max-height: min(42vh, 29rem);
-  overflow: auto;
-  padding: 0 0.25rem 0.15rem 0;
-}
-
-.mt101-build__header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(180px, 0.28fr);
-  align-items: start;
-  gap: 1rem;
-  min-width: 0;
-  padding-bottom: 0.35rem;
+  padding-bottom: 0.55rem;
   border-bottom: 1px solid var(--ih-border);
 }
 
-.mt101-build__header h3 {
-  margin: 0.35rem 0 0;
+.mt101-build__title-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 0.3fr);
+  align-items: center;
+  gap: 1rem;
   min-width: 0;
-  font-size: 1.05rem;
+}
+
+.mt101-build__title-row h3 {
+  margin: 0;
+  min-width: 0;
+  font-size: 1.02rem;
   font-weight: 700;
   color: var(--ih-text);
   overflow-wrap: anywhere;
@@ -47,6 +45,40 @@
 
 .mt101-build__format-field {
   width: 100%;
+  min-width: 0;
+}
+
+/* --- Tabs (patron ::ng-deep como en process-http-request): la tab-group llena la fila y el contenido
+       de cada tab scrollea internamente; el hijo marcado --fill (workspace de mapeo) toma la altura. --- */
+.mt101-build__tabs {
+  min-width: 0;
+  min-height: 0;
+  display: block;
+}
+.mt101-build__tabs ::ng-deep .mat-mdc-tab-group {
+  min-height: 0;
+  height: 100%;
+}
+.mt101-build__tabs ::ng-deep .mat-mdc-tab-body-wrapper,
+.mt101-build__tabs ::ng-deep .mat-mdc-tab-body,
+.mt101-build__tabs ::ng-deep .mat-mdc-tab-body-content {
+  min-height: 0;
+  height: 100%;
+}
+.mt101-build__tabs ::ng-deep .mat-mdc-tab-body-content {
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 0.9rem 0.35rem 0.4rem 0.1rem;
+}
+.mt101-build__tabs ::ng-deep .mat-mdc-tab-body-content > * {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+.mt101-build__tabs ::ng-deep .mat-mdc-tab-body-content > .mt101-build__fill {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .mt101-build__section {
@@ -71,8 +103,7 @@
   min-width: 0;
 }
 
-.mt101-build__grid > mat-form-field,
-.mt101-build__format-field {
+.mt101-build__grid > mat-form-field {
   min-width: 0;
 }
 
@@ -80,21 +111,13 @@
   grid-column: span 2;
 }
 
-.mt101-build__mapping-section {
-  display: grid;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
 .mt101-build__mapping-workspace {
   display: grid;
-  grid-template-columns: minmax(min(260px, 100%), 0.9fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(min(240px, 100%), 0.9fr) minmax(0, 1.5fr);
   gap: 1rem;
   align-items: stretch;
   min-width: 0;
   min-height: 0;
-  height: 100%;
   overflow: hidden;
 }
 
@@ -109,30 +132,28 @@
     height: auto;
     overflow: visible;
   }
-
   .mt101-build {
     grid-template-rows: auto;
     height: auto;
     overflow: visible;
   }
-
-  .mt101-build__settings {
-    max-height: none;
-    overflow: visible;
-    padding-right: 0;
+  .mt101-build__tabs ::ng-deep .mat-mdc-tab-group,
+  .mt101-build__tabs ::ng-deep .mat-mdc-tab-body-wrapper,
+  .mt101-build__tabs ::ng-deep .mat-mdc-tab-body,
+  .mt101-build__tabs ::ng-deep .mat-mdc-tab-body-content {
+    height: auto;
   }
-
-  .mt101-build__header,
+  .mt101-build__tabs ::ng-deep .mat-mdc-tab-body-content {
+    overflow: visible;
+  }
+  .mt101-build__title-row,
   .mt101-build__grid,
   .mt101-build__mapping-workspace {
     grid-template-columns: 1fr;
   }
-
   .mt101-build__col-2 {
     grid-column: auto;
   }
-
-  .mt101-build__mapping-section,
   .mt101-build__mapping-workspace {
     height: auto;
     min-height: auto;
