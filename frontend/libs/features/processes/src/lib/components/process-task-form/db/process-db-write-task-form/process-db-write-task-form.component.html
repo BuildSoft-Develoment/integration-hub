@@ -57,10 +57,20 @@
         />
       </div>
 
-      @if (!selectedConnection()) {
-        <div class="task-note ih-soft-panel">{{ i18n.t('ui.dbWriteConnectionHint') }}</div>
-      } @else if (loadingColumns()) {
-        <div class="task-note ih-soft-panel">{{ i18n.t('ui.loading') }}</div>
+      @switch (connectionState()) {
+        @case ('platform') {
+          <div class="task-note ih-soft-panel">{{ i18n.t('ui.dbWritePlatformDatasourceHint') }}</div>
+        }
+        @case ('missing') {
+          <div class="task-note ih-soft-panel">
+            {{ i18n.t('ui.dbWriteConnectionMissing', { value: draft().connectionRef }) }}
+          </div>
+        }
+        @case ('jdbc') {
+          @if (loadingColumns()) {
+            <div class="task-note ih-soft-panel">{{ i18n.t('ui.loading') }}</div>
+          }
+        }
       }
     </mat-tab>
 

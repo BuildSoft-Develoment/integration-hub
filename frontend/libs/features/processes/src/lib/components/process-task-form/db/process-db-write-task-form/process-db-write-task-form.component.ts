@@ -73,6 +73,23 @@ export class ProcessDbWriteTaskFormComponent {
 
   readonly selectedConnection = computed(() => this.connections().find((item) => item.name === this.draft().connectionRef) ?? null);
 
+  /**
+   * Estado del destino, para no mostrar el MISMO mensaje en tres situaciones distintas (antes las tres caian en
+   * "Primero selecciona una conexion JDBC", que ademas es falso en dos de ellas):
+   * - `platform`: {@code connectionRef} vacio = "Datasource de la plataforma". Es una opcion EXPLICITA —y el
+   *   default de una tarea nueva—, asi que pedirle al usuario que elija una conexion contradice lo que ya eligio.
+   *   La introspeccion no aplica: los endpoints de esquemas/tablas/columnas se resuelven por id de conexion.
+   * - `missing`: hay un {@code connectionRef} que no matchea ninguna conexion de la lista (borrada, desactivada o
+   *   renombrada). Es una referencia ROTA y antes quedaba invisible, disfrazada de "todavia no elegiste nada".
+   * - `jdbc`: conexion resuelta; hay introspeccion.
+   */
+  readonly connectionState = computed<'platform' | 'missing' | 'jdbc'>(() => {
+    if (this.selectedConnection()) {
+      return 'jdbc';
+    }
+    return this.draft().connectionRef ? 'missing' : 'platform';
+  });
+
   readonly groupedSources = computed(() => {
     const groups = new Map<string, DbWriteSourceItem[]>();
     this.availableSources().forEach((item) => {
