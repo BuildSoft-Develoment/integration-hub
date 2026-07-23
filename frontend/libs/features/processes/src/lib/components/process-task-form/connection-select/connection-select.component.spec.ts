@@ -35,20 +35,13 @@ describe('ConnectionSelectComponent', () => {
     expect((setup().componentInstance as ConnectionSelectComponent).emptyLabel()).toBeNull();
   });
 
-  it('variante DB: valueBy=name (default) con el valor actual seleccionado', () => {
+  it('refleja el valor actual seleccionado (el nombre de la conexion)', () => {
     const cmp = setup({ value: 'core-oracle' }).componentInstance as ConnectionSelectComponent;
-    expect(cmp.valueBy()).toBe('name');
     expect(cmp.value()).toBe('core-oracle');
   });
 
-  it('variante MT101: valueBy=id (la opcion usa el id como valor)', () => {
-    const cmp = setup({ valueBy: 'id', value: '2' }).componentInstance as ConnectionSelectComponent;
-    expect(cmp.valueBy()).toBe('id');
-    expect(cmp.value()).toBe('2');
-  });
-
-  it('emite valueChange con el valor elegido', () => {
-    const fixture = setup({ valueBy: 'name' });
+  it('emite valueChange con el nombre elegido', () => {
+    const fixture = setup();
     let emitted: string | undefined;
     fixture.componentInstance.valueChange.subscribe((v) => (emitted = v));
     fixture.componentInstance.valueChange.emit('reporting-pg');

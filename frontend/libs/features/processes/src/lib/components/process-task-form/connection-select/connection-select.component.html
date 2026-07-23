@@ -7,7 +7,7 @@
       <mat-option value="">{{ emptyLabel() }}</mat-option>
     }
     @for (connection of connections(); track connection.id) {
-      <mat-option [value]="valueBy() === 'id' ? connection.id : connection.name">
+      <mat-option [value]="connection.name">
         {{ connection.name }} ({{ connection.connectionType }})
       </mat-option>
     }
