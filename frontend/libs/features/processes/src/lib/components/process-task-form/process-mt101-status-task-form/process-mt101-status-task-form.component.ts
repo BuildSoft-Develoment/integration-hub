@@ -9,6 +9,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 import {
   Mt101StatusMode,
   Mt101StatusTaskDraft,
+  ProcessTaskExecutionMode,
   ProcessTaskFormBridgeService,
 } from '@integration-hub/core/providers';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
@@ -50,6 +51,24 @@ export class ProcessMt101StatusTaskFormComponent {
 
   readonly modes: ReadonlyArray<Mt101StatusMode> = ['query', 'poll', 'callback'];
   readonly httpMethods: ReadonlyArray<string> = ['GET', 'POST'];
+
+  /**
+   * G1: restriccion POR CAMINO, no por tarea. 'poll' y 'callback' SUSPENDEN la tarea, y el motor descarta el flag
+   * 'suspended' fuera de 'once' (cerraria COMPLETADA sin esperar al banco), asi que el backend los rechaza
+   * fail-loud (Mt101StatusTaskProvider.guardOnceExecutionMode). El camino 'query' simple —una consulta HTTP por
+   * mensaje, el uso normal de STATUS y el motivo de su default 'per-record'— si soporta los tres modos.
+   */
+  readonly executionModes = computed<readonly ProcessTaskExecutionMode[]>(() =>
+    this.draft().mode === 'query' ? ['once', 'per-record', 'batch'] : ['once'],
+  );
+
+  /**
+   * Al pasar a un modo que suspende se fuerza executionMode 'once' en el mismo patch: dejar un 'per-record'
+   * guardado haria que el backend rechazara la tarea recien en ejecucion.
+   */
+  updateMode(mode: Mt101StatusMode): void {
+    this.updateDraft(mode === 'query' ? { mode } : { mode, executionMode: 'once' });
+  }
 
   updateDraft(patch: Partial<Mt101StatusTaskDraft>): void {
     const next: Mt101StatusTaskDraft = { ...this.draft(), ...patch };

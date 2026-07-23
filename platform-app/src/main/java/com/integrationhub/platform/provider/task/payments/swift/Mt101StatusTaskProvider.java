@@ -221,13 +221,52 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         return AsyncOffloadSupport.SUPPORTED;
     }
 
+    private static final String SUSPENDS_REASON =
+            "este camino SUSPENDE la tarea (espera el callback/poll del banco) y el motor descarta el flag "
+            + "'suspended' fuera de 'once' (TaskRunResult.generic de 5 args en ProcessTaskRuntimeService). "
+            + "Como TaskResult.suspended() tiene success=true, la tarea cerraria como COMPLETADA y el proceso "
+            + "seguiria sin esperar nunca la confirmacion.";
+    private static final String RECONCILIATION_REASON =
+            "este camino emite la señal de conciliacion (needsReconciliation/resolvedReconciliation) y el motor "
+            + "la descarta fuera de 'once'. Con dinero ambiguo la ejecucion cerraria como FAILED opaco en vez de "
+            + "NEEDS_RECONCILIATION; y al resolverlo todo, el flag no se limpiaria y el proceso quedaria marcado "
+            + "para conciliar de por vida.";
+
+    /**
+     * Guard POR CAMINO de {@code executionMode} (G1 money-path). A diferencia de {@code MT101_PAY} —que exige
+     * {@code once} siempre— {@code MT101_STATUS} SI soporta {@code per-record}/{@code batch} en su camino
+     * principal: {@code mode=query} simple hace una consulta HTTP por mensaje y es su uso normal (de ahi que su
+     * default sea {@code per-record}). Solo se restringen los caminos que el motor no sabe acarrear fuera de
+     * {@code once}: los que suspenden ({@code callback}/{@code poll}) y el que concilia ({@code resolveNormalPay}).
+     *
+     * <p>Se valida en el backend y no solo en el formulario porque la configuracion puede llegar por la API o
+     * por un seed.</p>
+     */
+    private void guardOnceExecutionMode(Map<String, Object> configuration, String path, String reason) {
+        var executionMode = stringValue(configuration.get("executionMode"), "once").toLowerCase(Locale.ROOT);
+        if (!"once".equals(executionMode)) {
+            throw new IllegalStateException("MT101_STATUS " + path + " requiere executionMode 'once' (recibido: '"
+                    + executionMode + "'): " + reason + " El camino 'query' simple si soporta per-record/batch; "
+                    + "este no. Configure la tarea en executionMode 'once'.");
+        }
+    }
+
     @Override
     public TaskResult execute(TaskContext context, Map<String, Object> configuration) {
         var mode = stringValue(configuration.get("mode"), "query").toLowerCase(Locale.ROOT);
         return switch (mode) {
+            // 'query' simple (una consulta por mensaje) es el UNICO camino que soporta per-record/batch: ni
+            // suspende ni emite señal de conciliacion. Sus sub-caminos que si lo hacen se guardan adentro
+            // (ver executeQuery -> resolveNormalPay).
             case "query" -> executeQuery(context, configuration);
-            case "callback" -> suspendForCallback(context, configuration);
-            case "poll" -> pollRound(context, configuration, readRecords(context, configuration), 0);
+            case "callback" -> {
+                guardOnceExecutionMode(configuration, "mode=callback", SUSPENDS_REASON);
+                yield suspendForCallback(context, configuration);
+            }
+            case "poll" -> {
+                guardOnceExecutionMode(configuration, "mode=poll", SUSPENDS_REASON);
+                yield pollRound(context, configuration, readRecords(context, configuration), 0);
+            }
             default -> throw new IllegalArgumentException(
                     "Unsupported MT101_STATUS mode '" + mode + "'; expected query, callback or poll");
         };
@@ -601,6 +640,10 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
      * propaga fallo si no puede leer el set (excepcion del servicio).</p>
      */
     private TaskResult resolveNormalPay(TaskContext context, Map<String, Object> configuration) {
+        // Guard por camino: este es el punto donde convergen los DOS caminos que emiten señal de conciliacion
+        // (resolveNormalPay=true y el fragment-set-ref de executeQuery). Guardarlo aqui —y no en cada call site—
+        // lo hace inevadible si aparece un tercer llamador.
+        guardOnceExecutionMode(configuration, "resolveNormalPay", RECONCILIATION_REASON);
         if (payUncertainResolutionService == null) {
             throw new IllegalStateException(
                     "MT101_STATUS resolveNormalPay requires the PAY resolution service, which is not wired");

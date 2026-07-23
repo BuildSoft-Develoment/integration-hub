@@ -3,7 +3,7 @@
     <mat-label>{{ i18n.t('mt101Status.mode') }}</mat-label>
     <mat-select
       [ngModel]="draft().mode"
-      (ngModelChange)="updateDraft({ mode: $event })"
+      (ngModelChange)="updateMode($event)"
       [disabled]="readonly()">
       @for (m of modes; track m) {
         <mat-option [value]="m">{{ m }}</mat-option>
@@ -16,6 +16,7 @@
     [task]="task()"
     [tasks]="tasks()"
     [draft]="draft()"
+    [executionModes]="executionModes()"
     [readonly]="readonly()"
     (runtimeChange)="updateDraft($event)"
   />
