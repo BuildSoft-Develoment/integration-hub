@@ -72,17 +72,7 @@ export class ProcessDbWriteTaskFormComponent {
   readonly draggingSource = signal<DbWriteSourceItem | null>(null);
   readonly loadingColumns = signal(false);
 
-  readonly draft = computed<DbWriteTaskDraft>(() => this.manager.hydrateDraft<DbWriteTaskDraft>(this.task()) ?? {
-    taskRef: this.task().clientId,
-    executionMode: 'batch',
-    connectionRef: '',
-    mode: 'insert',
-    targetSchema: '',
-    // 011: una tarea nueva usa el datasource de la plataforma (connectionRef vacio) -> tabla por defecto.
-    targetTable: DEFAULT_PLATFORM_TABLE,
-    jdbcBatchSize: '1000',
-    mappings: [],
-  });
+  readonly draft = computed<DbWriteTaskDraft>(() => this.manager.draftFor<DbWriteTaskDraft>(this.task()));
 
   readonly selectedConnection = computed(() => this.connections().find((item) => item.name === this.draft().connectionRef) ?? null);
 

@@ -44,16 +44,7 @@ export class ProcessDbExecuteFnTaskFormComponent {
   readonly routines = signal<DbRoutineRef[]>([]);
   readonly routineQuery = signal('');
 
-  readonly draft = computed<DbExecuteFunctionTaskDraft>(() => this.manager.hydrateDraft<DbExecuteFunctionTaskDraft>(this.task()) ?? {
-    taskRef: this.task().clientId,
-    executionMode: 'once',
-    connectionRef: '',
-    functionSchema: '',
-    functionName: '',
-    resultAlias: '',
-    timeoutSeconds: '30',
-    parameters: [],
-  });
+  readonly draft = computed<DbExecuteFunctionTaskDraft>(() => this.manager.draftFor<DbExecuteFunctionTaskDraft>(this.task()));
   readonly groupedSources = computed(() => this.bindingContext.groupOptions(this.bindingContext.buildOptions(this.task(), this.tasks(), this.readers(), this.draft().input)));
   readonly selectedConnection = computed(() => this.connections().find((item) => item.name === this.draft().connectionRef) ?? null);
   readonly functionSchema = computed(() => this.draft().functionSchema || this.parseQualifiedName(this.draft().functionName).schema || '');

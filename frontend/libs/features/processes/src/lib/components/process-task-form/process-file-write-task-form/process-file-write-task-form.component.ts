@@ -91,21 +91,7 @@ export class ProcessFileWriteTaskFormComponent {
   readonly readers = input<readonly ReaderRef[]>([]);
   readonly readonly = input(false);
 
-  readonly draft = computed<FileWriteTaskDraft>(() => this.manager.hydrateDraft<FileWriteTaskDraft>(this.task()) ?? {
-    taskRef: this.task().clientId,
-    executionMode: 'once',
-    format: 'CSV',
-    encoding: 'UTF-8',
-    lineEnding: 'LF',
-    delimiter: ',',
-    quoteStrategy: 'REQUIRED',
-    xlsx: { sheetName: '', headerStyle: 'BOLD', freezeHeader: true, autoFilter: false, autoSizeColumns: false },
-    columns: [],
-    header: [],
-    trailer: [],
-    archiveNameTemplate: '',
-    tableSource: { table: '', connectionRef: '', orderBy: 'id', payloadColumn: '', batchSize: '' },
-  });
+  readonly draft = computed<FileWriteTaskDraft>(() => this.manager.draftFor<FileWriteTaskDraft>(this.task()));
 
   // 008: sugerencias del combo de codificacion (editable), consistente con los readers.
   readonly encodings = COMMON_ENCODINGS;

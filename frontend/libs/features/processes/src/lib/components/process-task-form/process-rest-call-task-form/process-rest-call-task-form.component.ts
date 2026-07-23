@@ -25,31 +25,7 @@ export class ProcessRestCallTaskFormComponent {
   readonly readers = input.required<readonly ReaderRef[]>();
   readonly readonly = input(false);
 
-  readonly draft = computed<RestCallTaskDraft>(() => this.manager.hydrateDraft<RestCallTaskDraft>(this.task()) ?? {
-    taskRef: this.task().clientId,
-    executionMode: 'per-record',
-    mode: 'per-record',
-    method: 'POST',
-    baseUrl: '',
-    pathTemplate: '',
-    url: '',
-    pathParameters: [],
-    queryParameters: [],
-    headerMappings: [],
-    bodyTemplate: '',
-    bodyMappings: [],
-    timeoutSeconds: '20',
-    authType: '',
-    username: '',
-    password: '',
-    token: '',
-    headersJson: '{}',
-    loginUrl: '',
-    loginMethod: 'POST',
-    loginHeadersJson: '{}',
-    loginBodyTemplate: '',
-    tokenPath: '$.access_token',
-  });
+  readonly draft = computed<RestCallTaskDraft>(() => this.manager.draftFor<RestCallTaskDraft>(this.task()));
 
   updateDraft(patch: Partial<RestCallTaskDraft> | Partial<HttpRequestDraft>): void {
     const next = { ...this.draft(), ...patch } as RestCallTaskDraft;

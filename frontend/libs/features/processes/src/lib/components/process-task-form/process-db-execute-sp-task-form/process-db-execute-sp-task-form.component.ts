@@ -44,15 +44,7 @@ export class ProcessDbExecuteSpTaskFormComponent {
   readonly routines = signal<DbRoutineRef[]>([]);
   readonly routineQuery = signal('');
 
-  readonly draft = computed<DbExecuteStoredProcedureTaskDraft>(() => this.manager.hydrateDraft<DbExecuteStoredProcedureTaskDraft>(this.task()) ?? {
-    taskRef: this.task().clientId,
-    executionMode: 'once',
-    connectionRef: '',
-    procedureSchema: '',
-    procedureName: '',
-    timeoutSeconds: '30',
-    parameters: [],
-  });
+  readonly draft = computed<DbExecuteStoredProcedureTaskDraft>(() => this.manager.draftFor<DbExecuteStoredProcedureTaskDraft>(this.task()));
   readonly groupedSources = computed(() => this.bindingContext.groupOptions(this.bindingContext.buildOptions(this.task(), this.tasks(), this.readers(), this.draft().input)));
   readonly selectedConnection = computed(() => this.connections().find((item) => item.name === this.draft().connectionRef) ?? null);
   readonly procedureSchema = computed(() => this.draft().procedureSchema || this.parseQualifiedName(this.draft().procedureName).schema || '');

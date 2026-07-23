@@ -6,7 +6,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { ProcessTaskFormModel, ReaderRef } from '../../../models/process.models';
-import { createHttpRequestDraft, NotificationTaskDraft, ProcessTaskBindingOption, ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
+import { NotificationTaskDraft, ProcessTaskBindingOption, ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
 import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
 import { ProcessHttpRequestComponent } from '../process-http-request/process-http-request.component';
 import { ProcessTaskRuntimePanelComponent } from '../process-task-runtime-panel/process-task-runtime-panel.component';
@@ -31,17 +31,7 @@ export class ProcessNotificationTaskFormComponent {
   readonly readers = input.required<readonly ReaderRef[]>();
   readonly readonly = input(false);
 
-  readonly draft = computed<NotificationTaskDraft>(() => this.manager.hydrateDraft<NotificationTaskDraft>(this.task()) ?? {
-    ...createHttpRequestDraft('POST', '15'),
-    taskRef: this.task().clientId,
-    executionMode: 'once',
-    channel: 'log',
-    message: '',
-    bodyTemplate: '{"message":"${message}"}',
-    to: '',
-    subject: '',
-    body: '',
-  });
+  readonly draft = computed<NotificationTaskDraft>(() => this.manager.draftFor<NotificationTaskDraft>(this.task()));
   readonly groupedSources = computed(() => this.bindingContext.groupOptions(this.bindingContext.buildOptions(this.task(), this.tasks(), this.readers(), this.draft().input)));
 
   readonly bodyAutocompleteVisible = signal(false);

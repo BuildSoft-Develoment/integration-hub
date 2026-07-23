@@ -39,17 +39,7 @@ export class ProcessFileReadTaskFormComponent {
   // FILE_READ es un lector batch (entry task); el selector de modo del panel queda fijo en 'batch'.
   readonly executionModes = ['batch'] as const;
 
-  readonly draft = computed<FileReadTaskDraft>(() => this.manager.hydrateDraft<FileReadTaskDraft>(this.task()) ?? {
-    taskRef: this.task().clientId,
-    executionMode: 'batch',
-    sourceDefinitionId: null,
-    readerDefinitionId: null,
-    sourceVariablesText: '',
-    batchSize: '500',
-    parallel: false,
-    parallelMode: 'file',
-    maxConcurrency: null,
-  });
+  readonly draft = computed<FileReadTaskDraft>(() => this.manager.draftFor<FileReadTaskDraft>(this.task()));
   readonly selectedReader = computed(() => this.readers().find((item) => item.id === this.draft().readerDefinitionId) ?? null);
   // Definicion de campos (read-only) del reader elegido: se hidrata su config a ReaderDraft y se toma la
   // variante segun el modo (fixed-length -> range/fixedFields; delimitado -> position/fields). El mismo

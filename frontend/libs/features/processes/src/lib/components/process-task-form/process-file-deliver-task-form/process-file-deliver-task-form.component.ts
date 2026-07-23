@@ -40,12 +40,7 @@ export class ProcessFileDeliverTaskFormComponent {
   // ADR-016: once-task -> el selector de modo de ejecucion se restringe a 'once' (toTaskPatch igual lo fuerza).
   readonly executionModes = ['once'] as const;
 
-  readonly draft = computed<FileDeliverTaskDraft>(() => this.manager.hydrateDraft<FileDeliverTaskDraft>(this.task()) ?? {
-    taskRef: this.task().clientId,
-    executionMode: 'once',
-    sinkRef: '',
-    dropPathTemplate: '${originalName}',
-  });
+  readonly draft = computed<FileDeliverTaskDraft>(() => this.manager.draftFor<FileDeliverTaskDraft>(this.task()));
 
   // El destino (sinkRef) debe ser una fuente activa con direction OUTPUT/BOTH (un sink). El backend lo valida
   // igual, pero el picker ya ofrece solo candidatos validos para no dejar elegir una fuente de solo lectura.
