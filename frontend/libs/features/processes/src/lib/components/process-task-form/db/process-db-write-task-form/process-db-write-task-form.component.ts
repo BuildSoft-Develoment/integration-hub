@@ -108,11 +108,22 @@ export class ProcessDbWriteTaskFormComponent {
   private lastHydratedTableQualifiedName = '';
 
   constructor() {
+    // Mantiene el texto visible de "Tabla destino" (tableQuery) en sync con la tabla del draft, sin pisar lo que
+    // el usuario este tipeando. Solo se toca lo que hidrato este mismo efecto.
     effect(() => {
-      const qualifiedName = [this.draft().targetSchema, this.draft().targetTable].filter(Boolean).join('.');
+      // Sin tabla NO hay nombre calificado: un esquema suelto no es una tabla. Antes se calificaba con
+      // [schema, table] a secas, asi que elegir esquema 'ventas' con la tabla vacia terminaba escribiendo
+      // "ventas" en el campo de tabla.
+      const table = this.draft().targetTable;
+      const qualifiedName = table ? [this.draft().targetSchema, table].filter(Boolean).join('.') : '';
       if (!qualifiedName) {
+        // El draft se quedo sin tabla (p.ej. al cambiar a una conexion externa, que la vacia a proposito).
+        // Hay que leer el valor hidratado PREVIO antes de resetearlo: al reasignarlo primero, la comparacion
+        // quedaba contra '' y solo "limpiaba" lo que ya estaba vacio — un no-op que dejaba el nombre viejo
+        // pegado en pantalla mientras la configuracion real ya no tenia tabla.
+        const previouslyHydrated = this.lastHydratedTableQualifiedName;
         this.lastHydratedTableQualifiedName = '';
-        if (!this.draft().targetTable && this.tableQuery() === this.lastHydratedTableQualifiedName) {
+        if (this.tableQuery() === previouslyHydrated) {
           this.tableQuery.set('');
         }
         return;
