@@ -8,7 +8,11 @@ import { ProcessTaskRuntimePanelComponent } from './process-task-runtime-panel.c
 function setup(
   draft: Record<string, unknown>,
   asyncState: AsyncState = 'READY',
-  options: { taskType?: string; capabilities?: Array<{ type: string; asyncOffload: string }> } = {}
+  options: {
+    taskType?: string;
+    capabilities?: Array<{ type: string; asyncOffload: string }>;
+    tasks?: readonly unknown[];
+  } = {}
 ) {
   TestBed.configureTestingModule({
     imports: [ProcessTaskRuntimePanelComponent],
@@ -18,9 +22,10 @@ function setup(
   fixture.componentRef.setInput('task', {
     clientId: 'c1',
     taskType: options.taskType ?? 'DB_WRITE',
+    taskOrder: 2,
     configurationJson: '{}',
   });
-  fixture.componentRef.setInput('tasks', []);
+  fixture.componentRef.setInput('tasks', options.tasks ?? []);
   fixture.componentRef.setInput('draft', draft);
   const http = TestBed.inject(HttpTestingController);
   // El panel consulta al iniciar los transportes, el estado del feature async y las capacidades por tipo.
@@ -119,6 +124,34 @@ describe('ProcessTaskRuntimePanelComponent (async dispatch)', () => {
       capabilities: [{ type: 'REST_CALL', asyncOffload: 'SLICE_ONLY' }],
     });
     expect(fixture.componentInstance.asyncOffloadSupport()).toBe('SUPPORTED');
+    http.verify();
+  });
+});
+
+describe('ProcessTaskRuntimePanelComponent (tarea origen)', () => {
+  const previousTask = {
+    clientId: 'c0',
+    taskType: 'MT101_BUILD_FROM_TABLE',
+    taskOrder: 1,
+    configurationJson: '{"taskRef":"task-10"}',
+  };
+
+  it('expone la etiqueta completa de la tarea origen para el tooltip', () => {
+    // El trigger del select recorta con elipsis cuando el taskRef + tipo no entra en el ancho del campo
+    // (paso con "task-10 - MT101_BUILD_FROM_TABLE"): sin title el valor completo era ilegible sin desplegar.
+    const { fixture, http } = setup(
+      { taskRef: 't', executionMode: 'once', input: { source: 'task-output', sourceTaskRef: 'task-10', sourceOutput: 'records' } },
+      'READY',
+      { tasks: [previousTask] },
+    );
+
+    expect(fixture.componentInstance.selectedTaskLabel()).toBe('task-10 - MT101_BUILD_FROM_TABLE');
+    http.verify();
+  });
+
+  it('sin tarea origen elegida la etiqueta queda vacia (no rompe el title)', () => {
+    const { fixture, http } = setup({ taskRef: 't', executionMode: 'once' }, 'READY', { tasks: [] });
+    expect(fixture.componentInstance.selectedTaskLabel()).toBe('');
     http.verify();
   });
 });

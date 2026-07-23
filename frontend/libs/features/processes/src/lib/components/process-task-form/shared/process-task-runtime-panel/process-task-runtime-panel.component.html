@@ -11,7 +11,11 @@
   @if (showInput() && taskOptions().length) {
     <mat-form-field>
       <mat-label>{{ i18n.t('ui.taskInputSourceTask') }}</mat-label>
-      <mat-select [disabled]="readonly()" [ngModel]="selectedInput()?.sourceTaskRef || ''" (ngModelChange)="updateSourceTask($event)">
+      <mat-select
+        [disabled]="readonly()"
+        [title]="selectedTaskLabel()"
+        [ngModel]="selectedInput()?.sourceTaskRef || ''"
+        (ngModelChange)="updateSourceTask($event)">
         @if (allowClearInput()) {
           <mat-option [value]="''">{{ i18n.t('ui.taskInputNone') }}</mat-option>
         }

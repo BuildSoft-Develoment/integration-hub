@@ -122,6 +122,16 @@ export class ProcessTaskRuntimePanelComponent {
   );
   readonly showBatchSize = computed(() => this.draft().executionMode === 'batch' && !this.bindingContext.isFileInput(this.selectedInput(), this.tasks()));
 
+  /**
+   * Etiqueta COMPLETA de la tarea origen, para el tooltip nativo del selector. El trigger la recorta con elipsis
+   * cuando el taskRef + tipo es largo (p.ej. "task-10 - MT101_BUILD_FROM_TABLE" no entra en el ancho del campo),
+   * y sin title no habia forma de leerla sin desplegar la lista.
+   */
+  readonly selectedTaskLabel = computed(() => {
+    const sourceTaskRef = this.selectedInput()?.sourceTaskRef ?? '';
+    return this.taskOptions().find((option) => option.taskRef === sourceTaskRef)?.label ?? '';
+  });
+
   updateExecutionMode(executionMode: ProcessTaskExecutionMode): void {
     const input = this.sanitizeInput(this.selectedInput());
     this.runtimeChange.emit(input ? { executionMode, input } : { executionMode });
