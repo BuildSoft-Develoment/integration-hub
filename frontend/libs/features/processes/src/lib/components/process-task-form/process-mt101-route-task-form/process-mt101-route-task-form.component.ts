@@ -40,7 +40,7 @@ export class ProcessMt101RouteTaskFormComponent {
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101RouteTaskDraft>(
-    () => this.manager.hydrateDraft<Mt101RouteTaskDraft>(this.task()) ?? this.defaultDraft(),
+    () => this.manager.draftFor<Mt101RouteTaskDraft>(this.task()),
   );
 
   updateDraft(patch: Partial<Mt101RouteTaskDraft>): void {
@@ -64,15 +64,5 @@ export class ProcessMt101RouteTaskFormComponent {
   removeRule(index: number): void {
     const rules = this.draft().rules.filter((_, i) => i !== index);
     this.updateDraft({ rules });
-  }
-
-  private defaultDraft(): Mt101RouteTaskDraft {
-    return {
-      taskRef: this.task().clientId,
-      executionMode: 'once',
-      rules: [{ name: 'internal-book-transfer', predicate: '', routeTo: 'BOOK_TRANSFER' }],
-      defaultRoute: 'UNROUTED',
-      routeField: 'routedAs',
-    };
   }
 }

@@ -45,7 +45,7 @@ export class ProcessMt101ParseFromTableTaskFormComponent {
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101ParseFromTableTaskDraft>(
-    () => this.manager.hydrateDraft<Mt101ParseFromTableTaskDraft>(this.task()) ?? this.defaultDraft(),
+    () => this.manager.draftFor<Mt101ParseFromTableTaskDraft>(this.task()),
   );
 
   updateDraft(patch: Partial<Mt101ParseFromTableTaskDraft>): void {
@@ -54,16 +54,5 @@ export class ProcessMt101ParseFromTableTaskFormComponent {
 
   updateSource(patch: Partial<Mt101ParseFromTableTaskDraft['source']>): void {
     this.updateDraft({ source: { ...this.draft().source, ...patch } });
-  }
-
-  private defaultDraft(): Mt101ParseFromTableTaskDraft {
-    return {
-      taskRef: this.task().clientId,
-      executionMode: 'once',
-      pageSize: 500,
-      replaceExisting: true,
-      inboundSetIdTemplate: 'INB-${_processExecutionId}-${_taskDefinitionId}',
-      source: { table: '', connectionRef: '', payloadColumn: 'payload_json', idColumn: 'id' },
-    };
   }
 }

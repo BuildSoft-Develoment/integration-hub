@@ -49,7 +49,7 @@ export class ProcessMt101PayTaskFormComponent {
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101PayTaskDraft>(
-    () => this.manager.hydrateDraft<Mt101PayTaskDraft>(this.task()) ?? this.defaultDraft(),
+    () => this.manager.draftFor<Mt101PayTaskDraft>(this.task()),
   );
 
   readonly transports: ReadonlyArray<Mt101PayTransport> = ['REST', 'SFTP'];
@@ -91,47 +91,5 @@ export class ProcessMt101PayTaskFormComponent {
 
   updateResponse(patch: Partial<Mt101PayTaskDraft['expectedGatewayResponse']>): void {
     this.updateDraft({ expectedGatewayResponse: { ...this.draft().expectedGatewayResponse, ...patch } });
-  }
-
-  private defaultDraft(): Mt101PayTaskDraft {
-    return {
-      taskRef: this.task().clientId,
-      executionMode: 'per-record',
-      transport: 'REST',
-      rest: {
-        url: '',
-        method: 'POST',
-        authType: '',
-        token: '',
-        loginUrl: '',
-        loginMethod: 'POST',
-        loginHeadersJson: '',
-        loginBodyTemplate: '',
-        tokenPath: '$.access_token',
-        extraHeadersJson: '',
-        contentType: 'application/json',
-        timeoutSeconds: 60,
-      },
-      sftp: {
-        sinkRef: '',
-        dropPathTemplate: '/inbox/${sendersReference}.fin',
-        tmpExtension: '.part',
-        remoteDuplicatePolicy: 'SKIP_IF_SAME_HASH',
-      },
-      idempotencyKeyTemplate: '${sendersReference}',
-      retryPolicy: {
-        maxRetries: 5,
-        backoffStrategy: 'exponential',
-        initialBackoffSeconds: 30,
-        maxBackoffSeconds: 900,
-        retryOnFamilies: 'TIMEOUT,5xx,CONNECTION_REFUSED',
-      },
-      confirmationMode: 'sync',
-      expectedGatewayResponse: {
-        successField: '$.accepted',
-        referenceField: '$.gatewayReference',
-        errorMessageField: '$.error.message',
-      },
-    };
   }
 }

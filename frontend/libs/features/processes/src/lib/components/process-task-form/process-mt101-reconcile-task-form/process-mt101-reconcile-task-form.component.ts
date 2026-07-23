@@ -42,26 +42,11 @@ export class ProcessMt101ReconcileTaskFormComponent {
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101ReconcileTaskDraft>(
-    () => this.manager.hydrateDraft<Mt101ReconcileTaskDraft>(this.task()) ?? this.defaultDraft(),
+    () => this.manager.draftFor<Mt101ReconcileTaskDraft>(this.task()),
   );
 
   updateDraft(patch: Partial<Mt101ReconcileTaskDraft>): void {
     const next: Mt101ReconcileTaskDraft = { ...this.draft(), ...patch };
     this.bridge.emit(this.manager.toTaskPatch(this.task().taskType, next));
-  }
-
-  private defaultDraft(): Mt101ReconcileTaskDraft {
-    return {
-      taskRef: this.task().clientId,
-      executionMode: 'once',
-      connectionRef: '',
-      sentTable: 'mt101_archive',
-      confirmationTable: 'mt101_confirmation',
-      matchKeys: 'senders_reference',
-      asOfDate: '${today}',
-      lookbackDays: 5,
-      exceptionConnectionRef: '',
-      exceptionTable: 'mt101_reconciliation_exception',
-    };
   }
 }

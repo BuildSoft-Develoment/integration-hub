@@ -45,7 +45,7 @@ export class ProcessMt101StatusTaskFormComponent {
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101StatusTaskDraft>(
-    () => this.manager.hydrateDraft<Mt101StatusTaskDraft>(this.task()) ?? this.defaultDraft(),
+    () => this.manager.draftFor<Mt101StatusTaskDraft>(this.task()),
   );
 
   readonly modes: ReadonlyArray<Mt101StatusMode> = ['query', 'poll', 'callback'];
@@ -54,21 +54,5 @@ export class ProcessMt101StatusTaskFormComponent {
   updateDraft(patch: Partial<Mt101StatusTaskDraft>): void {
     const next: Mt101StatusTaskDraft = { ...this.draft(), ...patch };
     this.bridge.emit(this.manager.toTaskPatch(this.task().taskType, next));
-  }
-
-  private defaultDraft(): Mt101StatusTaskDraft {
-    return {
-      taskRef: this.task().clientId,
-      executionMode: 'per-record',
-      mode: 'query',
-      queryUrl: '',
-      queryMethod: 'GET',
-      queryTimeoutSeconds: 30,
-      statusField: '$.status',
-      referenceField: '$.gatewayReference',
-      errorMessageField: '$.error.message',
-      connectionRef: '',
-      confirmationTable: 'mt101_confirmation',
-    };
   }
 }

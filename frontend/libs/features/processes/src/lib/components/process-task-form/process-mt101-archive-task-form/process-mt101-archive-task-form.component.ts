@@ -36,7 +36,7 @@ export class ProcessMt101ArchiveTaskFormComponent {
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101ArchiveTaskDraft>(
-    () => this.manager.hydrateDraft<Mt101ArchiveTaskDraft>(this.task()) ?? this.defaultDraft(),
+    () => this.manager.draftFor<Mt101ArchiveTaskDraft>(this.task()),
   );
 
   readonly hashAlgorithms: ReadonlyArray<Mt101ArchiveHashAlgorithm> = ['SHA-256', 'SHA-512'];
@@ -44,19 +44,5 @@ export class ProcessMt101ArchiveTaskFormComponent {
   updateDraft(patch: Partial<Mt101ArchiveTaskDraft>): void {
     const next: Mt101ArchiveTaskDraft = { ...this.draft(), ...patch };
     this.bridge.emit(this.manager.toTaskPatch(this.task().taskType, next));
-  }
-
-  private defaultDraft(): Mt101ArchiveTaskDraft {
-    return {
-      taskRef: this.task().clientId,
-      executionMode: 'batch',
-      connectionRef: '',
-      table: 'mt101_archive',
-      hashAlgorithm: 'SHA-256',
-      encryptionEnabled: false,
-      encryptColumn: 'raw_payload',
-      encryptionSecretRef: '',
-      retentionDays: 3650,
-    };
   }
 }

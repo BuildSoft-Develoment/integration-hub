@@ -26,7 +26,7 @@ class LocalTaskProvider extends ProcessTaskProvider<Record<string, unknown>> {
   }
 
   hydrateDraft(): Record<string, unknown> {
-    return {};
+    return { taskRef: 'hydrated', executionMode: 'once' };
   }
 
   toTaskPatch(): Partial<ProcessTaskFormModel> {
@@ -92,6 +92,26 @@ describe('ProcessTaskManagerService remote task catalog', () => {
       executionMode: 'once',
     });
     http.verify();
+  });
+
+  it('draftFor hydrates via the registered provider', () => {
+    const { manager } = setup();
+    const task: ProcessTaskFormModel = {
+      clientId: 'c1', id: null, taskOrder: 1, taskType: 'FILE_READ',
+      active: true, sourceDefinitionId: null, readerDefinitionId: null, configurationJson: '{}',
+    };
+    expect(manager.draftFor(task)).toEqual({ taskRef: 'hydrated', executionMode: 'once' });
+  });
+
+  it('draftFor throws (no-fallback) for a task type without a provider', () => {
+    // Politica no-fallback: un form dedicado siempre corresponde a un type registrado; un provider ausente
+    // es un bug de registro, no un estado a enmascarar con un draft por defecto.
+    const { manager } = setup();
+    const task: ProcessTaskFormModel = {
+      clientId: 'c1', id: null, taskOrder: 1, taskType: 'MT101_BUILD',
+      active: true, sourceDefinitionId: null, readerDefinitionId: null, configurationJson: '{}',
+    };
+    expect(() => manager.draftFor(task)).toThrow();
   });
 
   it('degrades gracefully for a task type without a provider (removed/unavailable)', () => {

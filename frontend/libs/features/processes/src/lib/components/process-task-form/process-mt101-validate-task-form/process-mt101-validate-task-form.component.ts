@@ -38,7 +38,7 @@ export class ProcessMt101ValidateTaskFormComponent {
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101ValidateTaskDraft>(
-    () => this.manager.hydrateDraft<Mt101ValidateTaskDraft>(this.task()) ?? this.defaultDraft(),
+    () => this.manager.draftFor<Mt101ValidateTaskDraft>(this.task()),
   );
 
   readonly standards: ReadonlyArray<Mt101ValidateStandard> = ['SWIFT', 'ISO20022', 'OPENBANKING', '*'];
@@ -48,19 +48,5 @@ export class ProcessMt101ValidateTaskFormComponent {
   updateDraft(patch: Partial<Mt101ValidateTaskDraft>): void {
     const next: Mt101ValidateTaskDraft = { ...this.draft(), ...patch };
     this.bridge.emit(this.manager.toTaskPatch(this.task().taskType, next));
-  }
-
-  private defaultDraft(): Mt101ValidateTaskDraft {
-    return {
-      taskRef: this.task().clientId,
-      executionMode: 'once',
-      ruleSet: 'structural-mvp',
-      standard: 'SWIFT',
-      appliesTo: 'MT101',
-      businessCalendar: 'PE',
-      failOn: 'ERROR',
-      publishIssuesConnectionRef: '',
-      publishIssuesTable: 'mt101_validation_issue',
-    };
   }
 }

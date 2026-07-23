@@ -112,6 +112,21 @@ export class ProcessTaskManagerService {
     return (this.resolve(task.taskType)?.hydrateDraft(task) as TDraft | undefined) ?? null;
   }
 
+  /**
+   * Draft hidratado de una tarea existente, resuelto por su provider registrado. Politica no-fallback (SOLID):
+   * si el task type no tiene provider, LANZA (igual que {@link defaultConfigurationJson}) — un form dedicado
+   * siempre corresponde a un task type registrado, asi que un provider ausente aqui seria un bug de registro,
+   * no un estado normal a enmascarar con un draft por defecto. Es la fuente unica del draft inicial del form:
+   * reemplaza los defaultDraft() locales, que duplicaban createDraft() (y habian derivado en silencio).
+   */
+  draftFor<TDraft>(task: ProcessTaskFormModel): TDraft {
+    const provider = this.resolve(task.taskType);
+    if (!provider) {
+      throw new Error(`No provider registered for task type: ${task.taskType}`);
+    }
+    return provider.hydrateDraft(task) as TDraft;
+  }
+
   toTaskPatch<TDraft>(type: ProcessTaskType, draft: TDraft): Partial<ProcessTaskFormModel> {
     return this.resolve(type)?.toTaskPatch(draft) ?? {};
   }

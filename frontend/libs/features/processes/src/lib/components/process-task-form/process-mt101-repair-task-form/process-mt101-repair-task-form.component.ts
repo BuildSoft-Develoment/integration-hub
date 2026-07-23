@@ -43,7 +43,7 @@ export class ProcessMt101RepairTaskFormComponent {
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101RepairTaskDraft>(
-    () => this.manager.hydrateDraft<Mt101RepairTaskDraft>(this.task()) ?? this.defaultDraft(),
+    () => this.manager.draftFor<Mt101RepairTaskDraft>(this.task()),
   );
 
   readonly actions: ReadonlyArray<Mt101RepairAction> = [
@@ -73,17 +73,5 @@ export class ProcessMt101RepairTaskFormComponent {
   removeRepair(index: number): void {
     const repairs = this.draft().repairs.filter((_, i) => i !== index);
     this.updateDraft({ repairs });
-  }
-
-  private defaultDraft(): Mt101RepairTaskDraft {
-    return {
-      taskRef: this.task().clientId,
-      executionMode: 'once',
-      repairs: [
-        { action: 'stripNonSwiftXChars', targetFields: 'transactions.remittanceInformation', maxLength: 35 },
-      ],
-      newReferenceTemplate: '',
-      repairAttempt: 1,
-    };
   }
 }

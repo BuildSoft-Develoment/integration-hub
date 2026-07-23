@@ -80,20 +80,11 @@ export class ProcessMt101ParseTaskFormComponent {
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101ParseTaskDraft>(
-    () => this.manager.hydrateDraft<Mt101ParseTaskDraft>(this.task()) ?? this.defaultDraft(),
+    () => this.manager.draftFor<Mt101ParseTaskDraft>(this.task()),
   );
 
   updateDraft(patch: Partial<Mt101ParseTaskDraft>): void {
     const next: Mt101ParseTaskDraft = { ...this.draft(), ...patch };
     this.bridge.emit(this.manager.toTaskPatch(this.task().taskType, next));
-  }
-
-  private defaultDraft(): Mt101ParseTaskDraft {
-    return {
-      taskRef: this.task().clientId,
-      executionMode: 'once',
-      interpretSequenceAB: true,
-      publishMultiOutput: false,
-    };
   }
 }

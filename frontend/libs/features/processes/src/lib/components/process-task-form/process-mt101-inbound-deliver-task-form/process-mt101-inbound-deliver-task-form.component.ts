@@ -5,7 +5,6 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import {
-  createHttpRequestDraft,
   Mt101InboundDeliverTaskDraft,
   Mt101InboundDeliverTransport,
   MT101_INBOUND_DELIVER_DB_TABLE,
@@ -49,7 +48,7 @@ export class ProcessMt101InboundDeliverTaskFormComponent {
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101InboundDeliverTaskDraft>(
-    () => this.manager.hydrateDraft<Mt101InboundDeliverTaskDraft>(this.task()) ?? this.defaultDraft(),
+    () => this.manager.draftFor<Mt101InboundDeliverTaskDraft>(this.task()),
   );
 
   readonly transports: ReadonlyArray<Mt101InboundDeliverTransport> = ['DB', 'REST'];
@@ -58,15 +57,5 @@ export class ProcessMt101InboundDeliverTaskFormComponent {
 
   updateDraft(patch: Partial<Mt101InboundDeliverTaskDraft>): void {
     this.bridge.emit(this.manager.toTaskPatch(this.task().taskType, { ...this.draft(), ...patch }));
-  }
-
-  private defaultDraft(): Mt101InboundDeliverTaskDraft {
-    return {
-      ...createHttpRequestDraft('POST', '15'),
-      taskRef: this.task().clientId,
-      executionMode: 'once',
-      transport: 'DB',
-      pageSize: 500,
-    };
   }
 }

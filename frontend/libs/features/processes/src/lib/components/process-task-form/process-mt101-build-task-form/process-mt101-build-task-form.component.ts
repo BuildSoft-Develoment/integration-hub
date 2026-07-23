@@ -66,7 +66,7 @@ export class ProcessMt101BuildTaskFormComponent {
 
   readonly draft = computed<Mt101BuildTaskDraft>(
     () =>
-      this.manager.hydrateDraft<Mt101BuildTaskDraft>(this.task()) ?? this.defaultDraft(),
+      this.manager.draftFor<Mt101BuildTaskDraft>(this.task()),
   );
 
   readonly formatOptions: ReadonlyArray<'JSON' | 'XML' | 'FIN'> = ['JSON', 'XML', 'FIN'];
@@ -209,47 +209,5 @@ export class ProcessMt101BuildTaskFormComponent {
       return this.bindingContext.tokenForOption(source, this.draft().input?.sourceTaskRef || '');
     }
     return source.key;
-  }
-
-  private defaultDraft(): Mt101BuildTaskDraft {
-    return {
-      taskRef: this.task().clientId,
-      executionMode: 'once',
-      format: 'JSON',
-      debitAccountMode: 'singleDebit',
-      envelope: { senderLt: '', receiverLt: '', uetrStrategy: 'perMessage', priority: 'N' },
-      sequenceA: {
-        sendersReferenceTemplate: 'PROC-${_processExecutionId}',
-        requestedExecutionDate: '${today+1bd}',
-        instructingPartyOption: '',
-        instructingPartyIdentifier: '',
-        orderingCustomerOption: 'H',
-        orderingCustomerAccount: '',
-        orderingCustomerNameAddress: '',
-        accountServicingOption: '',
-        accountServicingBic: '',
-      },
-      transactionMappings: {
-        transactionReferenceTemplate: 'TX-${_processExecutionId}-${recordNumber}',
-        amountCurrencyField: '',
-        amountValueField: '',
-        orderingCustomerOption: '',
-        orderingCustomerAccountField: '',
-        orderingCustomerBicField: '',
-        orderingCustomerNameAddressFields: '',
-        accountServicingOption: '',
-        accountServicingAccountField: '',
-        accountServicingBicField: '',
-        beneficiaryOption: '',
-        beneficiaryAccountField: '',
-        beneficiaryBicField: '',
-        beneficiaryNameAddressFields: '',
-        accountWithBicField: '',
-        remittanceInformationField: '',
-        detailsOfChargesField: '',
-      },
-      splitStrategy: 'none',
-      maxTransactionsPerMessage: 999,
-    };
   }
 }
