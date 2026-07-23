@@ -53,12 +53,23 @@ public class Mt101InboundDeliverTaskProvider implements TaskProvider {
                                            DataSource defaultDataSource,
                                            ConnectionPoolManager connectionPoolManager,
                                            ObjectMapper objectMapper) {
+        this(inboundStore, routedRepository, defaultDataSource, connectionPoolManager, objectMapper,
+                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build());
+    }
+
+    /** Costura de test: permite inyectar un {@link HttpClient} mockeado para cubrir la rama REST. */
+    Mt101InboundDeliverTaskProvider(SwiftInboundStore inboundStore,
+                                    InboundRoutedTransactionRepository routedRepository,
+                                    DataSource defaultDataSource,
+                                    ConnectionPoolManager connectionPoolManager,
+                                    ObjectMapper objectMapper,
+                                    HttpClient httpClient) {
         this.inboundStore = inboundStore;
         this.routedRepository = routedRepository;
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.objectMapper = objectMapper;
-        this.httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+        this.httpClient = httpClient;
     }
 
     @Override
