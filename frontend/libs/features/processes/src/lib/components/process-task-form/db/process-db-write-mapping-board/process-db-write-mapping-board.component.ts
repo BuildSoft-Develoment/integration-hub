@@ -24,6 +24,12 @@ export class ProcessDbWriteMappingBoardComponent {
   readonly sourceGroups = input.required<ReadonlyArray<{ key: string; items: readonly DbWriteSourceItem[] }>>();
   readonly readonly = input(false);
   readonly draggingSource = input<DbWriteSourceItem | null>(null);
+  /**
+   * Clave i18n del estado vacio. El MOTIVO de que no haya columnas lo conoce el form padre (no hay conexion
+   * elegida, o se eligio el datasource de la plataforma, que no las expone); este tablero es tonto y solo las
+   * pinta, asi que recibe el mensaje en vez de adivinarlo.
+   */
+  readonly emptyMessageKey = input('ui.dbWriteNoColumns');
 
   readonly sourceDrop = output<{ columnName: string; source: DbWriteSourceItem }>();
   readonly expressionChange = output<{ columnName: string; expression: string }>();

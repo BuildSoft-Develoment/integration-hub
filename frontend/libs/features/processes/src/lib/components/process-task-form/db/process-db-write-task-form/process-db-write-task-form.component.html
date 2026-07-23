@@ -47,9 +47,12 @@
           </mat-select>
         </mat-form-field>
 
+        <!-- Editable tambien con el datasource de la plataforma: ahi no hay autocomplete, pero el usuario tiene
+             que poder escribir la tabla (antes quedaba clavado en la que hubiera). Solo se bloquea si el
+             connectionRef apunta a una conexion que no existe: primero hay que arreglar esa referencia. -->
         <ih-process-db-write-table-selector
           class="task-grid__table-field"
-          [disabled]="readonly() || !selectedConnection()"
+          [disabled]="readonly() || connectionState() === 'missing'"
           [query]="tableQuery()"
           [tables]="tables()"
           (queryChange)="handleTableQueryChange($event)"
@@ -86,6 +89,7 @@
 
         <ih-process-db-write-mapping-board
           [columns]="columns()"
+          [emptyMessageKey]="columnsEmptyMessageKey()"
           [mappings]="draft().mappings"
           [sourceGroups]="groupedSources()"
           [readonly]="readonly()"

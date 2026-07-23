@@ -90,6 +90,14 @@ export class ProcessDbWriteTaskFormComponent {
     return this.draft().connectionRef ? 'missing' : 'platform';
   });
 
+  /** Solo con una conexion resuelta hay endpoints de esquemas/tablas/columnas (se resuelven por id). */
+  readonly canIntrospect = computed(() => this.connectionState() === 'jdbc');
+
+  /** El tablero de mapeo es tonto: el motivo de que no haya columnas lo sabe este form. */
+  readonly columnsEmptyMessageKey = computed(() =>
+    this.connectionState() === 'platform' ? 'ui.dbWriteNoColumnsPlatform' : 'ui.dbWriteNoColumns',
+  );
+
   readonly groupedSources = computed(() => {
     const groups = new Map<string, DbWriteSourceItem[]>();
     this.availableSources().forEach((item) => {
@@ -196,6 +204,19 @@ export class ProcessDbWriteTaskFormComponent {
   handleTableQueryChange(query: string): void {
     this.tableQuery.set(query);
     const normalizedQuery = String(query || '').trim();
+    // Sin introspeccion (datasource de la plataforma) no hay lista de donde elegir, asi que lo tipeado ES la
+    // tabla. Con conexion JDBC se mantiene el contrato original —el texto solo filtra el autocomplete y la tabla
+    // se fija al elegir una opcion REAL—, para no dar por buena una tabla que no existe en esa conexion.
+    if (!this.canIntrospect()) {
+      if (normalizedQuery !== this.draft().targetTable) {
+        this.updateDraft({
+          targetTable: normalizedQuery,
+          mappings: this.draft().targetTable ? [] : this.draft().mappings,
+        });
+        this.columns.set([]);
+      }
+      return;
+    }
     const selectedQualifiedName = [this.draft().targetSchema, this.draft().targetTable].filter(Boolean).join('.');
     if (normalizedQuery !== selectedQualifiedName) {
       this.updateDraft({

@@ -572,6 +572,7 @@ export const en = {
   'ui.dbWriteTargetColumns': 'Target columns',
   'ui.dbWriteTargetColumnsHint': 'Select a real table and assign a source or free expression per column.',
   'ui.dbWriteNoColumns': 'Select a JDBC connection and table to load available columns.',
+  'ui.dbWriteNoColumnsPlatform': 'The platform datasource cannot list columns. Type the target table above; to map real columns, select a JDBC connection.',
   'ui.dbWriteDropHere': 'Drop a field, variable or metadata here',
   'ui.dbWriteDropAction': 'Drag',
   'ui.dbWriteDropReady': 'Drop here',

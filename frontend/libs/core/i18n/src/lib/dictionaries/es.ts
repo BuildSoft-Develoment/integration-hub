@@ -572,6 +572,7 @@ export const es = {
   'ui.dbWriteTargetColumns': 'Columnas destino',
   'ui.dbWriteTargetColumnsHint': 'Selecciona una tabla real y asigna el origen o una expresion para cada columna.',
   'ui.dbWriteNoColumns': 'Selecciona una conexion y una tabla para cargar las columnas disponibles.',
+  'ui.dbWriteNoColumnsPlatform': 'El datasource de la plataforma no permite listar columnas. Escribe la tabla destino arriba; para mapear columnas reales, selecciona una conexion JDBC.',
   'ui.dbWriteDropHere': 'Suelta aqui un campo, variable o metadata',
   'ui.dbWriteDropAction': 'Arrastrar',
   'ui.dbWriteDropReady': 'Soltar aqui',

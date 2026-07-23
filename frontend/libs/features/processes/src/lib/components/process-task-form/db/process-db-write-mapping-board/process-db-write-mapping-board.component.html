@@ -12,7 +12,7 @@
       }
 
       @if (!columns().length) {
-        <div class="mapping-board__empty">{{ i18n.t('ui.dbWriteNoColumns') }}</div>
+        <div class="mapping-board__empty">{{ i18n.t(emptyMessageKey()) }}</div>
       } @else {
         <div class="mapping-board__rows ih-thin-scroll">
           @for (column of columns(); track column.name) {
