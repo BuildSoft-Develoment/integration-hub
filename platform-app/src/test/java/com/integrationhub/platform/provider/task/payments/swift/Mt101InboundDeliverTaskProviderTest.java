@@ -1,41 +1,29 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import jakarta.enterprise.inject.Instance;
 import org.junit.jupiter.api.Test;
 
-import java.net.http.HttpClient;
-import java.net.http.HttpResponse;
+import java.lang.annotation.Annotation;
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 /**
- * Cubre la rama REST de MT101_INBOUND_DELIVER (la feature nueva): entrega los mensajes ruteados por HTTP y
- * traduce el status HTTP a DELIVERED/FAILED. Usa la costura de test del provider (constructor con HttpClient
- * inyectable) + mock del SwiftInboundStore, sin red ni DB.
+ * Cubre el despacho del provider MT101_INBOUND_DELIVER: resuelve el {@link InboundDeliveryTransport} que matchea
+ * el {@code transport} de la config via {@code Instance<>} (default DB) y delega; skip cuando no hay fuente
+ * inbound; y fail-loud ante un transporte desconocido. La logica de entrega de cada transporte se prueba en su
+ * propio test (p.ej. {@link RestInboundDeliveryTransportTest}); aca solo el ruteo.
  */
 class Mt101InboundDeliverTaskProviderTest {
-
-    private final ObjectMapper objectMapper = new ObjectMapper();
-
-    private Mt101Message sampleMessage() {
-        return new Mt101Message(null, null, List.of(), null, "{}", "JSON");
-    }
 
     private TaskContext contextWithInbound() {
         var context = new TaskContext(100L, 30L);
@@ -44,80 +32,105 @@ class Mt101InboundDeliverTaskProviderTest {
         return context;
     }
 
-    private Map<String, Object> restConfig() {
+    private Map<String, Object> config(String transport) {
         return Map.of(
-                "transport", "REST",
-                "url", "https://gateway.banco.local/v1/inbound/mt101",
+                "transport", transport,
                 "input", Map.of("sourceTaskRef", "src", "sourceOutput", "records"));
     }
 
-    @SuppressWarnings("unchecked")
-    private void stubOnePage(SwiftInboundStore store, long id) {
-        doAnswer(invocation -> {
-            java.util.function.Consumer<List<SwiftInboundStore.InboundMessage>> consumer = invocation.getArgument(3);
-            consumer.accept(List.of(new SwiftInboundStore.InboundMessage(id, sampleMessage(), "BOOK_TRANSFER")));
-            return null;
-        }).when(store).forEachPage(any(), any(), anyInt(), any());
+    @Test
+    void dispatchesToTransportMatchingConfig() {
+        var db = new RecordingTransport("DB");
+        var rest = new RecordingTransport("REST");
+        var provider = new Mt101InboundDeliverTaskProvider(new ListInstance<>(List.of(db, rest)));
+
+        var result = provider.execute(contextWithInbound(), config("REST"));
+
+        assertTrue(result.success());
+        assertEquals(1, rest.calls, "el transporte REST debio recibir la entrega");
+        assertEquals(0, db.calls, "el transporte DB no debio ser invocado");
     }
 
     @Test
-    void restDelivery2xxMarksDelivered() throws Exception {
-        var store = mock(SwiftInboundStore.class);
-        var httpClient = mock(HttpClient.class);
-        @SuppressWarnings("unchecked")
-        HttpResponse<Void> response = mock(HttpResponse.class);
-        when(response.statusCode()).thenReturn(202);
-        doReturn(response).when(httpClient).send(any(), any());
-        stubOnePage(store, 7L);
+    void defaultsToDbTransportWhenUnset() {
+        var db = new RecordingTransport("DB");
+        var rest = new RecordingTransport("REST");
+        var provider = new Mt101InboundDeliverTaskProvider(new ListInstance<>(List.of(db, rest)));
 
-        var provider = new Mt101InboundDeliverTaskProvider(store, null, null, null, objectMapper, httpClient);
-        TaskResult result = provider.execute(contextWithInbound(), restConfig());
-
-        assertTrue(result.success(), result.details());
-        assertEquals(1L, result.outputs().get("delivered"));
-        assertEquals(0L, result.outputs().get("failed"));
-        verify(store).markStatusBatch(any(), eq(List.of(7L)), eq("DELIVERED"), isNull());
-    }
-
-    @Test
-    void restDeliveryNon2xxMarksFailedAndReturnsFailure() throws Exception {
-        var store = mock(SwiftInboundStore.class);
-        var httpClient = mock(HttpClient.class);
-        @SuppressWarnings("unchecked")
-        HttpResponse<Void> response = mock(HttpResponse.class);
-        when(response.statusCode()).thenReturn(500);
-        doReturn(response).when(httpClient).send(any(), any());
-        stubOnePage(store, 9L);
-
-        var provider = new Mt101InboundDeliverTaskProvider(store, null, null, null, objectMapper, httpClient);
-        TaskResult result = provider.execute(contextWithInbound(), restConfig());
-
-        assertFalse(result.success(), "un non-2xx debe hacer fallar la tarea");
-        assertEquals(0L, result.outputs().get("delivered"));
-        assertEquals(1L, result.outputs().get("failed"));
-    }
-
-    @Test
-    void restRequiresUrl() {
-        var store = mock(SwiftInboundStore.class);
-        stubOnePage(store, 1L);
-        var provider = new Mt101InboundDeliverTaskProvider(store, null, null, null, objectMapper, mock(HttpClient.class));
-
-        var config = Map.<String, Object>of(
-                "transport", "REST",
+        var configWithoutTransport = Map.<String, Object>of(
                 "input", Map.of("sourceTaskRef", "src", "sourceOutput", "records"));
-        var error = org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
-                () -> provider.execute(contextWithInbound(), config));
-        assertTrue(error.getMessage().contains("requires url"), () -> "mensaje inesperado: " + error.getMessage());
+        provider.execute(contextWithInbound(), configWithoutTransport);
+
+        assertEquals(1, db.calls, "sin transport explicito debe usar DB por default");
+        assertEquals(0, rest.calls);
     }
 
     @Test
     void skipsWhenNoInboundSource() {
-        var store = mock(SwiftInboundStore.class);
-        var provider = new Mt101InboundDeliverTaskProvider(store, null, null, null, objectMapper, mock(HttpClient.class));
-        // Sin taskOutputs -> inboundSource vacio -> skip (no explota).
-        var result = provider.execute(new TaskContext(1L, 1L), restConfig());
+        var db = new RecordingTransport("DB");
+        var provider = new Mt101InboundDeliverTaskProvider(new ListInstance<>(List.of(db)));
+        // Sin taskOutputs -> inboundSource vacio -> skip (no despacha).
+        var result = provider.execute(new TaskContext(1L, 1L), config("DB"));
         assertTrue(result.success());
         assertTrue(result.details().contains("skipped"));
+        assertEquals(0, db.calls, "el skip no debe invocar ningun transporte");
+    }
+
+    @Test
+    void failsLoudOnUnknownTransport() {
+        var db = new RecordingTransport("DB");
+        var provider = new Mt101InboundDeliverTaskProvider(new ListInstance<>(List.of(db)));
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> provider.execute(contextWithInbound(), config("KAFKA")));
+        assertTrue(error.getMessage().contains("Unsupported"), () -> "mensaje inesperado: " + error.getMessage());
+        assertTrue(error.getMessage().contains("KAFKA"));
+    }
+
+    /** Transporte de prueba: registra que fue invocado y devuelve un exito trivial. */
+    private static final class RecordingTransport implements InboundDeliveryTransport {
+        private final String id;
+        private int calls;
+
+        RecordingTransport(String id) {
+            this.id = id;
+        }
+
+        @Override
+        public String transport() {
+            return id;
+        }
+
+        @Override
+        public TaskResult deliver(TaskContext context, Map<String, Object> configuration,
+                                  Map<String, Object> inboundSource, int pageSize) {
+            calls++;
+            return TaskResult.success("delivered via " + id);
+        }
+    }
+
+    /** Instance CDI minima sobre una lista, para no arrancar el contenedor en el unit test. */
+    private static final class ListInstance<T> implements Instance<T> {
+        private final List<T> items;
+
+        ListInstance(List<T> items) {
+            this.items = new ArrayList<>(items);
+        }
+
+        @Override public Instance<T> select(Annotation... q) { return this; }
+        @Override public <U extends T> Instance<U> select(Class<U> s, Annotation... q) { throw new UnsupportedOperationException(); }
+        @Override public <U extends T> Instance<U> select(jakarta.enterprise.util.TypeLiteral<U> s, Annotation... q) { throw new UnsupportedOperationException(); }
+        @Override public boolean isUnsatisfied() { return items.isEmpty(); }
+        @Override public boolean isAmbiguous() { return items.size() > 1; }
+        @Override public void destroy(T inst) {}
+        @Override public Handle<T> getHandle() { throw new UnsupportedOperationException(); }
+        @Override public Iterable<? extends Handle<T>> handles() { throw new UnsupportedOperationException(); }
+        @Override public Iterator<T> iterator() { return items.iterator(); }
+        @Override public T get() {
+            if (items.isEmpty()) {
+                throw new IllegalStateException("No items");
+            }
+            return items.get(0);
+        }
+        @Override public Stream<T> stream() { return StreamSupport.stream(spliterator(), false); }
     }
 }
