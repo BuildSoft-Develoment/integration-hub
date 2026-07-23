@@ -1,14 +1,14 @@
 import { InjectionToken, Provider, Type } from '@angular/core';
 import { ProcessTaskProvider } from './tasks/process-task-provider.abstract';
-import { DbExecuteFunctionTaskProvider } from './implementations/tasks/db-execute-function-task.provider';
-import { DbExecuteStoredProcedureTaskProvider } from './implementations/tasks/db-execute-stored-procedure-task.provider';
-import { DbWriteTaskProvider } from './implementations/tasks/db-write-task.provider';
-import { FileCompressTaskProvider } from './implementations/tasks/file-compress-task.provider';
-import { FileDeliverTaskProvider } from './implementations/tasks/file-deliver-task.provider';
-import { FileReadTaskProvider } from './implementations/tasks/file-read-task.provider';
-import { FileWriteTaskProvider } from './implementations/tasks/file-write-task.provider';
-import { NotificationTaskProvider } from './implementations/tasks/notification-task.provider';
-import { RestCallTaskProvider } from './implementations/tasks/rest-call-task.provider';
+import { DbExecuteFunctionTaskProvider } from './implementations/tasks/db/db-execute-function-task.provider';
+import { DbExecuteStoredProcedureTaskProvider } from './implementations/tasks/db/db-execute-stored-procedure-task.provider';
+import { DbWriteTaskProvider } from './implementations/tasks/db/db-write-task.provider';
+import { FileCompressTaskProvider } from './implementations/tasks/file/file-compress-task.provider';
+import { FileDeliverTaskProvider } from './implementations/tasks/file/file-deliver-task.provider';
+import { FileReadTaskProvider } from './implementations/tasks/file/file-read-task.provider';
+import { FileWriteTaskProvider } from './implementations/tasks/file/file-write-task.provider';
+import { NotificationTaskProvider } from './implementations/tasks/notification/notification-task.provider';
+import { RestCallTaskProvider } from './implementations/tasks/rest/rest-call-task.provider';
 
 export const PROCESS_TASK_PROVIDERS = new InjectionToken<ReadonlyArray<ProcessTaskProvider<unknown>>>(
   'PROCESS_TASK_PROVIDERS'
