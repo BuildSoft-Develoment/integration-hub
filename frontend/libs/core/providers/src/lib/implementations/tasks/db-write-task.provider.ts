@@ -23,6 +23,14 @@ export interface DbWriteTaskDraft extends ProcessTaskRuntimeDraft {
   mappings: DbWriteMappingDraft[];
 }
 
+/**
+ * 011: tabla de staging por defecto del money-path. Es el destino cuando la tarea usa el "Datasource de la
+ * plataforma" ({@code connectionRef} vacio); con una conexion externa la tabla queda vacia para que el usuario
+ * la elija. Fuente unica: la usa este provider en {@link DbWriteTaskProvider.createDraft} y el form al cambiar
+ * de conexion (no duplicar el literal).
+ */
+export const DB_WRITE_DEFAULT_PLATFORM_TABLE = 'staging_record';
+
 @Injectable()
 export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
   readonly descriptor = {
@@ -39,7 +47,9 @@ export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
       connectionRef: '',
       mode: 'insert',
       targetSchema: '',
-      targetTable: '',
+      // 011: una tarea nueva arranca con el datasource de la plataforma (connectionRef vacio) -> tabla por
+      // defecto. Antes quedaba vacia y el prefill solo aparecia si el usuario tocaba el selector de conexion.
+      targetTable: DB_WRITE_DEFAULT_PLATFORM_TABLE,
       jdbcBatchSize: '1000',
       mappings: [],
     };
