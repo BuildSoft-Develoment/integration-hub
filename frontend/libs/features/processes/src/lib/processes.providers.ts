@@ -5,15 +5,15 @@ import {
   ProcessTaskFormBridgeService,
   provideProcessTaskForms,
 } from '@integration-hub/core/providers';
-import { ProcessDbExecuteFnTaskFormComponent } from './components/process-task-form/process-db-execute-fn-task-form/process-db-execute-fn-task-form.component';
-import { ProcessDbExecuteSpTaskFormComponent } from './components/process-task-form/process-db-execute-sp-task-form/process-db-execute-sp-task-form.component';
-import { ProcessDbWriteTaskFormComponent } from './components/process-task-form/process-db-write-task-form/process-db-write-task-form.component';
-import { ProcessFileCompressTaskFormComponent } from './components/process-task-form/process-file-compress-task-form/process-file-compress-task-form.component';
-import { ProcessFileDeliverTaskFormComponent } from './components/process-task-form/process-file-deliver-task-form/process-file-deliver-task-form.component';
-import { ProcessFileReadTaskFormComponent } from './components/process-task-form/process-file-read-task-form/process-file-read-task-form.component';
-import { ProcessFileWriteTaskFormComponent } from './components/process-task-form/process-file-write-task-form/process-file-write-task-form.component';
-import { ProcessNotificationTaskFormComponent } from './components/process-task-form/process-notification-task-form/process-notification-task-form.component';
-import { ProcessRestCallTaskFormComponent } from './components/process-task-form/process-rest-call-task-form/process-rest-call-task-form.component';
+import { ProcessDbExecuteFnTaskFormComponent } from './components/process-task-form/db/process-db-execute-fn-task-form/process-db-execute-fn-task-form.component';
+import { ProcessDbExecuteSpTaskFormComponent } from './components/process-task-form/db/process-db-execute-sp-task-form/process-db-execute-sp-task-form.component';
+import { ProcessDbWriteTaskFormComponent } from './components/process-task-form/db/process-db-write-task-form/process-db-write-task-form.component';
+import { ProcessFileCompressTaskFormComponent } from './components/process-task-form/file/process-file-compress-task-form/process-file-compress-task-form.component';
+import { ProcessFileDeliverTaskFormComponent } from './components/process-task-form/file/process-file-deliver-task-form/process-file-deliver-task-form.component';
+import { ProcessFileReadTaskFormComponent } from './components/process-task-form/file/process-file-read-task-form/process-file-read-task-form.component';
+import { ProcessFileWriteTaskFormComponent } from './components/process-task-form/file/process-file-write-task-form/process-file-write-task-form.component';
+import { ProcessNotificationTaskFormComponent } from './components/process-task-form/notification/process-notification-task-form/process-notification-task-form.component';
+import { ProcessRestCallTaskFormComponent } from './components/process-task-form/rest/process-rest-call-task-form/process-rest-call-task-form.component';
 
 /**
  * Registra los formularios del motor (spec 003) en {@code PROCESS_TASK_FORM_REGISTRY}.

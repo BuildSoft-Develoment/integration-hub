@@ -18,9 +18,9 @@ import {
 import { PluginConfigSchemaService } from '../../../api/plugin-config-schema.service';
 import { ProcessSchemaFieldContextService } from '../../../forms/process-schema-field-context.service';
 import { ConnectionRef, ProcessTaskFormModel, ReaderRef, SourceRef } from '../../../models/process.models';
-import { ProcessTokenFieldComponent } from '../process-token-field/process-token-field.component';
-import { ProcessHttpRequestFieldComponent } from '../process-http-request-field/process-http-request-field.component';
-import { ProcessRuntimeFieldComponent } from '../process-runtime-field/process-runtime-field.component';
+import { ProcessTokenFieldComponent } from '../shared/process-token-field/process-token-field.component';
+import { ProcessHttpRequestFieldComponent } from '../shared/process-http-request-field/process-http-request-field.component';
+import { ProcessRuntimeFieldComponent } from '../shared/process-runtime-field/process-runtime-field.component';
 
 /**
  * Host del formulario de configuracion de tarea.
