@@ -27,16 +27,19 @@ public class DbInboundDeliveryTransport implements InboundDeliveryTransport {
     private final InboundRoutedTransactionRepository routedRepository;
     private final DataSource defaultDataSource;
     private final ConnectionPoolManager connectionPoolManager;
+    private final InboundRoutedTransactionMapper rowMapper;
 
     @Inject
     public DbInboundDeliveryTransport(SwiftInboundStore inboundStore,
                                       InboundRoutedTransactionRepository routedRepository,
                                       DataSource defaultDataSource,
-                                      ConnectionPoolManager connectionPoolManager) {
+                                      ConnectionPoolManager connectionPoolManager,
+                                      InboundRoutedTransactionMapper rowMapper) {
         this.inboundStore = inboundStore;
         this.routedRepository = routedRepository;
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
+        this.rowMapper = rowMapper;
     }
 
     @Override
@@ -57,26 +60,8 @@ public class DbInboundDeliveryTransport implements InboundDeliveryTransport {
             var ids = new ArrayList<Long>(page.size());
             for (var item : page) {
                 ids.add(item.id());
-                var message = item.message();
-                var sendersReference = message.sequenceA() == null ? null : message.sequenceA().sendersReference();
-                var uetr = message.envelope() == null ? null : message.envelope().uetr();
-                for (var tx : message.transactions()) {
-                    var beneficiary = tx.beneficiary();
-                    var beneficiaryName = beneficiary == null || beneficiary.nameAndAddress() == null
-                            || beneficiary.nameAndAddress().isEmpty()
-                            ? null : beneficiary.nameAndAddress().get(0);
-                    rows.add(new InboundRoutedTransactionRepository.Row(
-                            inboundSetId,
-                            context.processExecutionId(),
-                            sendersReference,
-                            tx.transactionReference(),
-                            beneficiary == null ? null : beneficiary.account(),
-                            beneficiaryName,
-                            tx.amount() == null ? null : tx.amount().currency(),
-                            tx.amount() == null ? null : tx.amount().value(),
-                            uetr,
-                            item.routedAs()));
-                }
+                rows.addAll(rowMapper.toRows(item.message(), inboundSetId, context.processExecutionId(),
+                        item.routedAs()));
             }
             try {
                 routedRepository.insertBatch(dataSource, rows);
