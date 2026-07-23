@@ -14,7 +14,6 @@ import jakarta.transaction.Transactional;
 
 import javax.sql.DataSource;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.sql.SQLException;
 import java.time.Duration;
@@ -193,16 +192,6 @@ public class Mt101InboundDeliverTaskProvider implements TaskProvider {
             return defaultDataSource;
         }
         return connectionPoolManager.resolveJdbcDataSource(connectionRef);
-    }
-
-    @SuppressWarnings("unchecked")
-    private Map<String, Object> mapValue(Object raw) {
-        if (raw instanceof Map<?, ?> map) {
-            var result = new LinkedHashMap<String, Object>();
-            map.forEach((key, value) -> result.put(String.valueOf(key), value));
-            return result;
-        }
-        return Map.of();
     }
 
     private String stringValue(Object raw, String defaultValue) {
