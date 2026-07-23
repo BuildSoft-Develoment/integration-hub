@@ -53,6 +53,10 @@ export class ProcessMt101PayTaskFormComponent {
   );
 
   readonly transports: ReadonlyArray<Mt101PayTransport> = ['REST', 'SFTP'];
+  // G1 (money-path): MT101_PAY solo corre en 'once' y el backend lo valida fail-loud
+  // (Mt101PayTaskProvider.guardExecutionMode). En batch/per-record el motor descarta needsReconciliation, asi que
+  // un pago UNCERTAIN cerraria como FAILED opaco en vez de NEEDS_RECONCILIATION. No se ofrecen los otros modos.
+  readonly executionModes = ['once'] as const;
   readonly authTypes: ReadonlyArray<Mt101PayAuthType> = ['', 'bearer', 'login-request'];
   readonly confirmationModes: ReadonlyArray<Mt101PayConfirmationMode> = ['sync', 'async-callback', 'async-poll'];
   readonly backoffStrategies: ReadonlyArray<Mt101PayBackoffStrategy> = ['exponential', 'constant'];

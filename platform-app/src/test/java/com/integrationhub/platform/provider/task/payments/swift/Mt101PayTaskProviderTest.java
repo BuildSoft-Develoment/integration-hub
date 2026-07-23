@@ -63,6 +63,47 @@ class Mt101PayTaskProviderTest {
     }
 
     @Test
+    void rejectsNonOnceExecutionModeFailLoud() {
+        // G1 (money-path): en batch/per-record el motor arma el TaskRunResult de 5 args y DESCARTA
+        // needsReconciliation -> un pago UNCERTAIN cerraria como FAILED opaco en vez de NEEDS_RECONCILIATION.
+        // Ademas el provider se reinvocaria por slice re-leyendo el fragment store completo. Se rechaza
+        // fail-loud (la config puede venir de la API o de un seed, no solo del form).
+        var transport = new StubTransport("REST", List.of(TransportResult.accepted("GW-1", 1, 100L)));
+        var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
+        var context = contextWith(List.of(sampleMessage("PROC-1")));
+
+        for (var mode : List.of("per-record", "batch", "PER-RECORD")) {
+            var config = Map.<String, Object>of(
+                    "transport", "REST",
+                    "executionMode", mode,
+                    "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records"),
+                    "rest", Map.of("url", "https://test.example/mt101"));
+            var error = assertThrows(IllegalStateException.class, () -> provider.execute(context, config));
+            assertTrue(error.getMessage().contains("executionMode 'once'"),
+                    () -> "mensaje inesperado: " + error.getMessage());
+        }
+        assertEquals(0, transport.callsReceived(), "no debe salir NADA al banco si el modo es invalido");
+    }
+
+    @Test
+    void acceptsOnceExecutionModeExplicitOrAbsent() {
+        // 'once' explicito y ausente (default) son equivalentes y si despachan.
+        for (var config : List.of(
+                Map.<String, Object>of("transport", "REST", "executionMode", "once",
+                        "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records"),
+                        "rest", Map.of("url", "https://test.example/mt101")),
+                Map.<String, Object>of("transport", "REST",
+                        "input", Map.of("sourceTaskRef", "archive-mt101", "sourceOutput", "records"),
+                        "rest", Map.of("url", "https://test.example/mt101")))) {
+            var transport = new StubTransport("REST", List.of(TransportResult.accepted("GW-1", 1, 100L)));
+            var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
+            var result = provider.execute(contextWith(List.of(sampleMessage("PROC-1"))), config);
+            assertTrue(result.success(), result.details());
+            assertEquals(1, transport.callsReceived());
+        }
+    }
+
+    @Test
     void emitsRecordLevelAuditPerDispatch() {
         // Fase 3: trazabilidad E2E por registro -> una trama RECORD por fragmento
         // despachado (recordId = :20:), emitida en lote fuera de la TX de negocio.

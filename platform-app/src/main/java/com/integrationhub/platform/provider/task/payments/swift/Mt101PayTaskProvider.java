@@ -28,10 +28,12 @@ import java.util.UUID;
  * de una tarea anterior (tipicamente {@code MT101_ARCHIVE} o {@code MT101_BUILD_FROM_TABLE}) y
  * la despacha al banco/gateway via el {@link PaymentMessageTransport} configurado.
  *
- * <p>{@code executionMode} esperado: {@code per-record} en uso normal. Para slice 3
- * el provider procesa la lista entera de mensajes secuencialmente (un mensaje SWIFT
- * por archivo es lo comun). En slice 4+, cuando el motor exponga {@code per-record}
- * sobre objetos no-{@code ReadRecord}, el motor mismo iterara.</p>
+ * <p><b>{@code executionMode} REQUERIDO: {@code once}</b> (se valida fail-loud, ver
+ * {@link #guardExecutionMode}). El provider itera el/los mensajes el mismo — paginando el fragment store en el
+ * camino persistido — y NO delega la iteracion al motor. La nota historica que decia "per-record esperado, en
+ * slice 4+ el motor iterara" describia un diseno que nunca aterrizo: el motor sigue sin iterar objetos que no
+ * son {@code ReadRecord}, y correr esta tarea en {@code batch}/{@code per-record} rompe la senal de
+ * conciliacion del money-path.</p>
  *
  * <p><b>Outputs</b>: {@code summary} (dispatchCount/sentCount/acceptedCount/rejectedCount/retriedCount),
  * {@code records} (status por mensaje) y {@code errors} (mensajes rechazados con causa).</p>
@@ -166,6 +168,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
     @Override
     @Transactional(Transactional.TxType.NOT_SUPPORTED)
     public TaskResult execute(TaskContext context, Map<String, Object> rawConfiguration) {
+        guardExecutionMode(rawConfiguration);
         var fragmentSource = Mt101MessageInputResolver.fragmentSource(context, rawConfiguration, type());
 
         // ADR-017: en el pago NORMAL/lista (no correctivo) la conexion SFTP se resuelve EN VIVO desde la fuente
@@ -977,6 +980,34 @@ public class Mt101PayTaskProvider implements TaskProvider {
             return defaultValue;
         }
         return Boolean.parseBoolean(String.valueOf(raw));
+    }
+
+    /**
+     * G1 (money-path, fail-loud): {@code MT101_PAY} SOLO corre en {@code executionMode='once'}.
+     *
+     * <p>Motivo 1 (el grave): en {@code batch}/{@code per-record} el motor arma el resultado con el
+     * {@code TaskRunResult.generic} de 5 argumentos ({@code ProcessTaskRuntimeService}), que DESCARTA
+     * {@code needsReconciliation}. Un pago {@code UNCERTAIN} — dinero en estado ambiguo — cerraria como
+     * {@code FAILED} opaco en vez de enrutar a {@code NEEDS_RECONCILIATION}, que es exactamente lo que
+     * {@link TaskResult#needsReconciliation} existe para evitar. Tambien se pierde {@code suspended}.</p>
+     *
+     * <p>Motivo 2: el motor no itera objetos que no son {@code ReadRecord}. Aguas abajo de {@code MT101_ARCHIVE}
+     * (que publica {@code List<Map>}) cada slice reinvoca este provider, que re-lee el fragment store COMPLETO:
+     * son N pasadas de despacho, no N despachos unitarios. Solo el claim atomico {@code ARCHIVED->DISPATCHING}
+     * evita que eso sea un doble pago; no se debe depender de esa red.</p>
+     *
+     * <p>Se rechaza fail-loud en vez de degradar en silencio porque la configuracion puede llegar por API o por
+     * un seed, no solo desde el formulario (que ya ofrece unicamente {@code once}).</p>
+     */
+    private void guardExecutionMode(Map<String, Object> configuration) {
+        var executionMode = stringValue(configuration.get("executionMode"), "once").toLowerCase();
+        if (!"once".equals(executionMode)) {
+            throw new IllegalStateException("MT101_PAY solo soporta executionMode 'once' (recibido: '"
+                    + executionMode + "'). En 'batch'/'per-record' el motor descarta la senal needsReconciliation, "
+                    + "asi que un pago UNCERTAIN cerraria como FAILED opaco en vez de NEEDS_RECONCILIATION, y este "
+                    + "provider se reinvocaria una vez por slice re-leyendo el fragment store completo. "
+                    + "Configure la tarea en executionMode 'once'.");
+        }
     }
 
     private PaymentMessageTransport resolveTransport(String transportId) {
