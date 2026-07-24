@@ -57,6 +57,26 @@ export abstract class ProcessTaskProvider<TDraft> {
     return JSON.stringify(payload, null, 2);
   }
 
+  /**
+   * Copia verbatim las {@code keys} presentes en el config (ausente sigue ausente), para transportarlas en el
+   * draft y re-emitirlas en {@code toTaskPatch}.
+   *
+   * <p>Existe porque {@code toTaskPatch} reconstruye el {@code configurationJson} desde cero: toda clave que el
+   * backend lee y el draft no carga se BORRA al guardar. No se les inventa un default a proposito — varias son
+   * tri-estado o listas cuyo "ausente" tiene semantica propia en el backend, y asignarles un valor al
+   * serializar cambiaria el comportamiento. Cuando un formulario pase a gobernar una clave, se la saca de su
+   * lista y se la tipa en el draft.</p>
+   */
+  protected preserveKeys(config: Record<string, any>, keys: readonly string[]): Record<string, unknown> {
+    const preserved: Record<string, unknown> = {};
+    keys.forEach((key) => {
+      if (config[key] !== undefined) {
+        preserved[key] = config[key];
+      }
+    });
+    return preserved;
+  }
+
   protected hydrateRuntime(task: ProcessTaskFormModel, defaultExecutionMode: ProcessTaskExecutionMode): ProcessTaskRuntimeDraft {
     const config = this.parseJson(task.configurationJson);
     return {

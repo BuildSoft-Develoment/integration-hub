@@ -17,7 +17,22 @@ export type Mt101InboundDeliverTransport = 'DB' | 'REST';
 export interface Mt101InboundDeliverTaskDraft extends ProcessTaskRuntimeDraft, HttpRequestDraft {
   transport: Mt101InboundDeliverTransport;
   pageSize: number;
+  /** Slice HTTP cuando el transporte activo es DB; viaja verbatim para no destruirlo al cambiar de transporte. */
+  preserved: Record<string, unknown>;
 }
+
+/**
+ * Claves del slice HTTP. applyHttpRequestToPayload solo corre en REST, asi que cambiar el transporte a DB y
+ * guardar borraba el endpoint y las credenciales — y NO era recuperable: al volver a REST se guardaba url:'' y
+ * el backend lanza 'requires url'. Que el backend IGNORE el HTTP en DB no es razon para BORRARLO al guardar.
+ */
+const INBOUND_DELIVER_PRESERVED_KEYS = [
+  'url', 'method', 'timeoutSeconds', 'headers', 'baseUrl', 'pathTemplate',
+  'pathParameters', 'queryParameters', 'headerMappings', 'bodyTemplate',
+  'authType', 'username', 'password', 'token',
+  'loginUrl', 'loginMethod', 'loginBodyTemplate', 'tokenPath', 'loginHeaders',
+  'loginTimeoutSeconds', 'tokenTtlSeconds',
+] as const;
 
 /** Tabla de negocio fija a la que el backend entrega el inbound ruteado (transporte DB). Solo informativa. */
 export const MT101_INBOUND_DELIVER_DB_TABLE = 'inbound_routed_transaction';
@@ -44,6 +59,7 @@ export class Mt101InboundDeliverTaskProvider extends ProcessTaskProvider<Mt101In
       executionMode: 'once',
       transport: 'DB',
       pageSize: DEFAULT_PAGE_SIZE,
+      preserved: {},
     };
   }
 
@@ -55,12 +71,13 @@ export class Mt101InboundDeliverTaskProvider extends ProcessTaskProvider<Mt101In
       ...runtime,
       transport: this.normalizeTransport(config['transport']),
       pageSize: Number(config['pageSize']) || DEFAULT_PAGE_SIZE,
+      preserved: this.preserveKeys(config, INBOUND_DELIVER_PRESERVED_KEYS),
     };
   }
 
   toTaskPatch(draft: Mt101InboundDeliverTaskDraft): Partial<ProcessTaskFormModel> {
     const payload: Record<string, any> = this.withRuntime(
-      { transport: draft.transport, pageSize: draft.pageSize },
+      { ...draft.preserved, transport: draft.transport, pageSize: draft.pageSize },
       draft,
       'once',
     );

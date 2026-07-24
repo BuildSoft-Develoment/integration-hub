@@ -57,6 +57,8 @@ export interface Mt101BuildTaskDraft extends ProcessTaskRuntimeDraft {
   transactionMappings: Mt101TransactionMappingsDraft;
   splitStrategy: 'none' | 'debitAccount' | 'maxTransactions';
   maxTransactionsPerMessage: number;
+  /** Claves que el backend lee y el form no gobierna; viajan verbatim (ver BUILD_PRESERVED_KEYS). */
+  preserved: Record<string, unknown>;
 }
 
 /**
@@ -66,6 +68,18 @@ export interface Mt101BuildTaskDraft extends ProcessTaskRuntimeDraft {
  * concreta y registrada es {@link Mt101BuildFromTableTaskProvider} (paginado desde
  * staging), que reusa este draft, esta serializacion y el mismo formulario.
  */
+
+/**
+ * Claves que MT101_BUILD_FROM_TABLE lee del backend y el formulario no gobierna:
+ * - `source`: define DE QUE tabla/columna/conexion se construyen los pagos. Al perderlo cae a
+ *   `staging_record` + datasource por defecto, y `recordIndexIn` vacio DES-ACOTA un rebuild selectivo
+ *   (reconstruye todo en vez de solo las filas corregidas).
+ * - `connectionRef`: ultimo eslabon del fallback del datasource de origen.
+ * - `fragmentSetIdTemplate`: identidad del set producido, que consumen VALIDATE/ARCHIVE/PAY. Combinado con
+ *   `replaceExisting` (que el form fuerza a true) tambien cambia QUE set existente se borra.
+ */
+const BUILD_PRESERVED_KEYS = ['source', 'connectionRef', 'fragmentSetIdTemplate'] as const;
+
 @Injectable()
 export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDraft> {
   readonly descriptor: ProcessTaskProviderDescriptor = {
@@ -119,6 +133,7 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
       },
       splitStrategy: 'none',
       maxTransactionsPerMessage: 999,
+      preserved: {},
     };
   }
 
@@ -181,12 +196,14 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
       },
       splitStrategy: this.normalizeSplitStrategy(split['strategy']),
       maxTransactionsPerMessage: Number(split['maxTransactionsPerMessage']) || 999,
+      preserved: this.preserveKeys(config, BUILD_PRESERVED_KEYS),
     };
   }
 
   toTaskPatch(draft: Mt101BuildTaskDraft): Partial<ProcessTaskFormModel> {
     const payload: Record<string, unknown> = this.withRuntime(
       {
+        ...draft.preserved,
         format: draft.format,
         debitAccountMode: draft.debitAccountMode,
         envelope: {

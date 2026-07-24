@@ -16,7 +16,16 @@ export interface Mt101ReconcileTaskDraft extends ProcessTaskRuntimeDraft {
   lookbackDays: number;
   exceptionConnectionRef: string;
   exceptionTable: string;
+  /** Claves que el backend lee y el form no gobierna; viajan verbatim. */
+  preserved: Record<string, unknown>;
 }
+
+/**
+ * archiveStatusSync lo lee Mt101ReconcileTaskProvider:143 con boolValue(x, TRUE): ausente == true. Perderlo
+ * REACTIVA la escritura de vuelta a la tabla de archivo que el operador apago — misma clave y mismo modo de
+ * fallo ya corregidos en MT101_PAY.
+ */
+const RECONCILE_PRESERVED_KEYS = ['archiveStatusSync'] as const;
 
 /**
  * Provider del task type {@code MT101_RECONCILE}.
@@ -42,6 +51,7 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
       lookbackDays: 5,
       exceptionConnectionRef: '',
       exceptionTable: 'mt101_reconciliation_exception',
+      preserved: {},
     };
   }
 
@@ -62,6 +72,7 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
       lookbackDays: Number(config['lookbackDays']) || 5,
       exceptionConnectionRef: exceptionRef.connRef,
       exceptionTable: exceptionRef.table || 'mt101_reconciliation_exception',
+      preserved: this.preserveKeys(config, RECONCILE_PRESERVED_KEYS),
     };
   }
 
@@ -76,6 +87,7 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
         : undefined;
     const payload: Record<string, unknown> = this.withRuntime(
       {
+        ...draft.preserved,
         connectionRef: draft.connectionRef || undefined,
         sentTable: draft.sentTable,
         confirmationTable: draft.confirmationTable,
