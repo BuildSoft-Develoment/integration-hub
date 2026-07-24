@@ -1,8 +1,9 @@
 // @trace spec 008-mensajeria-pagos RF-001, T-011 (UI construccion MT101, base compartida por MT101_BUILD_FROM_TABLE)
 // @trace ADR-009
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, input, signal } from '@angular/core';
+import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
@@ -14,8 +15,13 @@ import {
   ProcessTaskFormBridgeService,
 } from '@integration-hub/core/providers';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
+import { firstValueFrom } from 'rxjs';
 import { ProcessTaskBindingContextService } from '../../../../../forms/process-task-binding-context.service';
-import { ProcessTaskFormModel, ReaderRef } from '../../../../../models/process.models';
+import { ConnectionRef, ProcessTaskFormModel, ReaderRef } from '../../../../../models/process.models';
+import { DbWriteTableRef } from '../../../../../models/process-db-write.models';
+import { ProcessApiService } from '../../../../../api/process-api.service';
+import { ConnectionSelectComponent } from '../../../shared/connection-select/connection-select.component';
+import { ProcessDbWriteTableSelectorComponent } from '../../../shared/process-db-write-table-selector/process-db-write-table-selector.component';
 import { ProcessDbWriteSourcePaletteComponent } from '../../../shared/process-db-write-source-palette/process-db-write-source-palette.component';
 import {
   Mt101BuildMappingField,
@@ -44,6 +50,9 @@ import { TaskFormShellComponent } from '../../../shared/task-form-shell/task-for
     MatInputModule,
     MatSelectModule,
     MatTabsModule,
+    MatAutocompleteModule,
+    ConnectionSelectComponent,
+    ProcessDbWriteTableSelectorComponent,
     ProcessDbWriteSourcePaletteComponent,
     ProcessMt101FieldMappingBoardComponent,
     ProcessTaskRuntimePanelComponent,
@@ -57,10 +66,13 @@ export class ProcessMt101BuildTaskFormComponent {
   private readonly manager = inject(ProcessTaskManagerService);
   private readonly bridge = inject(ProcessTaskFormBridgeService);
   private readonly bindingContext = inject(ProcessTaskBindingContextService);
+  private readonly api = inject(ProcessApiService);
 
   readonly task = input.required<ProcessTaskFormModel>();
   readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
   readonly readers = input.required<readonly ReaderRef[]>();
+  // El host pasa `connections` a todos los forms; se usa en el picker de la conexion de la tabla de origen.
+  readonly connections = input<readonly ConnectionRef[]>([]);
   readonly readonly = input(false);
   readonly draggingSource = signal<ProcessTaskBindingOption | null>(null);
 
@@ -68,6 +80,76 @@ export class ProcessMt101BuildTaskFormComponent {
     () =>
       this.manager.draftFor<Mt101BuildTaskDraft>(this.task()),
   );
+
+  // Introspeccion de la tabla de origen (patron DB_WRITE/FILE_WRITE): autocomplete solo con conexion nombrada.
+  readonly tables = signal<readonly DbWriteTableRef[]>([]);
+  readonly tableQuery = signal('');
+  readonly selectedConnection = computed(
+    () => this.connections().find((c) => c.name === this.draft().sourceConnectionRef) ?? null,
+  );
+  private lastTablesKey = '';
+  private lastHydratedTable = '';
+
+  constructor() {
+    // Hidrata el texto del autocomplete desde el valor COMMITEADO. Guard tipo DB_WRITE: editar otro campo NO
+    // pisa lo que el usuario esta tipeando en la tabla.
+    effect(() => {
+      const table = this.draft().sourceTable;
+      untracked(() => {
+        if (this.tableQuery() === '' || this.tableQuery() === this.lastHydratedTable) {
+          this.tableQuery.set(table);
+        }
+        this.lastHydratedTable = table;
+      });
+    });
+    // Al cambiar la conexion, recargar la lista de tablas del autocomplete.
+    effect(() => {
+      const connId = this.selectedConnection()?.id ?? null;
+      const key = String(connId ?? '');
+      if (key === this.lastTablesKey) return;
+      this.lastTablesKey = key;
+      untracked(() => {
+        this.tables.set([]);
+        if (connId != null) void this.loadTables(connId, '');
+      });
+    });
+  }
+
+  updateSource(patch: { table?: string; connectionRef?: string; payloadColumn?: string; idColumn?: string }): void {
+    const map: Partial<Mt101BuildTaskDraft> = {};
+    if (patch.table !== undefined) map.sourceTable = patch.table;
+    if (patch.connectionRef !== undefined) map.sourceConnectionRef = patch.connectionRef;
+    if (patch.payloadColumn !== undefined) map.sourcePayloadColumn = patch.payloadColumn;
+    if (patch.idColumn !== undefined) map.sourceIdColumn = patch.idColumn;
+    this.updateDraft(map);
+  }
+
+  handleSourceConnectionChange(connectionRef: string): void {
+    // Al cambiar de conexion la tabla anterior puede no existir en la nueva -> se resetea (como DB_WRITE).
+    this.tables.set([]);
+    this.tableQuery.set('');
+    this.updateSource({ connectionRef, table: '' });
+  }
+
+  onTableQuery(query: string): void {
+    this.tableQuery.set(query);
+    const connId = this.selectedConnection()?.id;
+    if (connId != null) void this.loadTables(connId, String(query || '').trim());
+  }
+
+  // Commitea el nombre CALIFICADO (schema.tabla), que el backend acepta (DbTaskSupport.sanitizeQualifiedIdentifier).
+  onTablePick(table: DbWriteTableRef): void {
+    this.tableQuery.set(table.qualifiedName);
+    this.updateSource({ table: table.qualifiedName });
+  }
+
+  private async loadTables(connectionId: number, query: string): Promise<void> {
+    try {
+      this.tables.set(await firstValueFrom(this.api.listConnectionTables(connectionId, { query })));
+    } catch {
+      this.tables.set([]);
+    }
+  }
 
   readonly formatOptions: ReadonlyArray<'JSON' | 'XML' | 'FIN'> = ['JSON', 'XML', 'FIN'];
   readonly uetrStrategies: ReadonlyArray<{ value: string; labelKey: string }> = [

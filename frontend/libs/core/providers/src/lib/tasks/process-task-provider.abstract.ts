@@ -77,6 +77,21 @@ export abstract class ProcessTaskProvider<TDraft> {
     return preserved;
   }
 
+  /**
+   * Complemento de {@code preserveKeys}: devuelve TODAS las claves de {@code config} MENOS las que el
+   * formulario pasa a gobernar. Se usa cuando un OBJETO anidado (p.ej. {@code source}) tiene unos pocos campos
+   * expuestos por el form y un resto de scope/tuning que debe viajar verbatim.
+   */
+  protected omitKeys(config: Record<string, any>, keys: readonly string[]): Record<string, unknown> {
+    const rest: Record<string, unknown> = {};
+    Object.keys(config || {}).forEach((key) => {
+      if (!keys.includes(key)) {
+        rest[key] = config[key];
+      }
+    });
+    return rest;
+  }
+
   protected hydrateRuntime(task: ProcessTaskFormModel, defaultExecutionMode: ProcessTaskExecutionMode): ProcessTaskRuntimeDraft {
     const config = this.parseJson(task.configurationJson);
     return {

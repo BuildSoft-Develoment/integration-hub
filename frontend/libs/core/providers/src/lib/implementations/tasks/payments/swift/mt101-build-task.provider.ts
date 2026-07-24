@@ -57,6 +57,18 @@ export interface Mt101BuildTaskDraft extends ProcessTaskRuntimeDraft {
   transactionMappings: Mt101TransactionMappingsDraft;
   splitStrategy: 'none' | 'debitAccount' | 'maxTransactions';
   maxTransactionsPerMessage: number;
+  /** Tabla de staging de la que se construyen los pagos (override; en blanco el backend la deriva de la tarea de origen). */
+  sourceTable: string;
+  /** Conexion de la tabla de origen (vacia = datasource de la plataforma / se hereda de la tarea de origen). */
+  sourceConnectionRef: string;
+  sourcePayloadColumn: string;
+  sourceIdColumn: string;
+  /**
+   * Resto del objeto {@code source} que el backend lee y el form no expone: {@code processExecutionId},
+   * {@code taskDefinitionId} (scope del lote) y {@code recordIndexIn}/{@code rebuildRunId} (acotan un rebuild
+   * selectivo). Se preservan verbatim: exponer la tabla no debe des-acotar un rebuild.
+   */
+  preservedSource: Record<string, unknown>;
   /** Claves que el backend lee y el form no gobierna; viajan verbatim (ver BUILD_PRESERVED_KEYS). */
   preserved: Record<string, unknown>;
   /** Claves ANIDADAS que el backend lee y el form no gobierna (ver BUILD_ENVELOPE_KEYS / BUILD_SEQUENCE_A_KEYS). */
@@ -73,21 +85,24 @@ export interface Mt101BuildTaskDraft extends ProcessTaskRuntimeDraft {
  */
 
 /**
- * Claves que MT101_BUILD_FROM_TABLE lee del backend y el formulario no gobierna:
- * - `source`: define DE QUE tabla/columna/conexion se construyen los pagos. Al perderlo cae a
- *   `staging_record` + datasource por defecto, y `recordIndexIn` vacio DES-ACOTA un rebuild selectivo
- *   (reconstruye todo en vez de solo las filas corregidas).
- * - `connectionRef`: ultimo eslabon del fallback del datasource de origen.
+ * Claves de nivel superior que MT101_BUILD_FROM_TABLE lee del backend y el formulario no gobierna:
  * - `fragmentSetIdTemplate`: identidad del set producido, que consumen VALIDATE/ARCHIVE/PAY. Combinado con
  *   `replaceExisting` (que el form fuerza a true) tambien cambia QUE set existente se borra.
+ * - `maxBytesPerMessage` y `replaceExisting` los FIJA la subclase a una constante (10000 / true) y el form no
+ *   los expone: una config con otro valor se reescribia al guardar. `replaceExisting=false` en particular es lo
+ *   que impide borrar el fragment set anterior; forzarlo a true lo BORRA.
+ *
+ * <p>{@code source} y {@code connectionRef} salieron de aca: ahora los gobierna el form (tabla de origen +
+ * conexion), con el resto del objeto {@code source} preservado en {@code preservedSource}.</p>
  */
-const BUILD_PRESERVED_KEYS = [
-  'source', 'connectionRef', 'fragmentSetIdTemplate',
-  // maxBytesPerMessage y replaceExisting los FIJA la subclase a una constante (10000 / true) y el form no los
-  // expone: una config con otro valor se reescribia al guardar. replaceExisting=false en particular es lo que
-  // impide borrar el fragment set anterior; forzarlo a true lo BORRA.
-  'maxBytesPerMessage', 'replaceExisting',
-] as const;
+const BUILD_PRESERVED_KEYS = ['fragmentSetIdTemplate', 'maxBytesPerMessage', 'replaceExisting'] as const;
+
+/**
+ * Sub-claves de {@code source} que el FORM gobierna. El resto del objeto ({@code processExecutionId},
+ * {@code taskDefinitionId}, {@code recordIndexIn}, {@code rebuildRunId}) se preserva verbatim: exponer la
+ * tabla no debe des-acotar un rebuild selectivo.
+ */
+const BUILD_SOURCE_EXPOSED_KEYS = ['table', 'payloadColumn', 'idColumn'] as const;
 
 /**
  * {@code envelope.uetr} lo lee {@code resolveUetr} cuando {@code uetrStrategy === 'fixed'}. El form rearma el
@@ -162,6 +177,11 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
       },
       splitStrategy: 'none',
       maxTransactionsPerMessage: DEFAULT_MAX_TRANSACTIONS,
+      sourceTable: '',
+      sourceConnectionRef: '',
+      sourcePayloadColumn: '',
+      sourceIdColumn: '',
+      preservedSource: {},
       preserved: {},
       preservedEnvelope: {},
       preservedSequenceA: {},
@@ -183,6 +203,7 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
     const beneficiary = (mappings['beneficiary'] || {}) as Record<string, any>;
     const accountWith = (mappings['accountWithInstitution'] || {}) as Record<string, any>;
     const split = (config['splitBy'] || {}) as Record<string, any>;
+    const source = (config['source'] || {}) as Record<string, any>;
 
     return {
       ...runtime,
@@ -232,6 +253,13 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
       // legacy: es donde lo dejaron las configs guardadas por la version con el bug.
       maxTransactionsPerMessage:
         Number(config['maxTransactionsPerMessage'] ?? split['maxTransactionsPerMessage']) || DEFAULT_MAX_TRANSACTIONS,
+      sourceTable: String(source['table'] || ''),
+      sourceConnectionRef: String(config['connectionRef'] || ''),
+      sourcePayloadColumn: String(source['payloadColumn'] || ''),
+      sourceIdColumn: String(source['idColumn'] || ''),
+      // Todo el objeto source MENOS lo que el form expone (table/payloadColumn/idColumn): scope del lote y
+      // acotado del rebuild. Se preserva para que exponer la tabla no des-acote un rebuild selectivo.
+      preservedSource: this.omitKeys(source, BUILD_SOURCE_EXPOSED_KEYS),
       preserved: this.preserveKeys(config, BUILD_PRESERVED_KEYS),
       preservedEnvelope: this.preserveKeys(envelope, BUILD_ENVELOPE_KEYS),
       preservedSequenceA: this.preserveKeys(sequenceA, BUILD_SEQUENCE_A_KEYS),
@@ -239,9 +267,19 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
   }
 
   toTaskPatch(draft: Mt101BuildTaskDraft): Partial<ProcessTaskFormModel> {
+    // source = lo preservado (scope del lote + acotado del rebuild) + lo que el form gobierna (tabla/columnas).
+    // Se OMITE si queda vacio para que el backend lo derive de la tarea de origen (comportamiento actual).
+    const source = this.compactObject({
+      ...draft.preservedSource,
+      table: draft.sourceTable,
+      payloadColumn: draft.sourcePayloadColumn,
+      idColumn: draft.sourceIdColumn,
+    } as Record<string, unknown>);
     const payload: Record<string, unknown> = this.withRuntime(
       {
         ...draft.preserved,
+        ...(draft.sourceConnectionRef ? { connectionRef: draft.sourceConnectionRef } : {}),
+        ...(Object.keys(source).length ? { source } : {}),
         format: draft.format,
         debitAccountMode: draft.debitAccountMode,
         envelope: {
