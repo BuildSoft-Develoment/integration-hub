@@ -184,4 +184,38 @@ describe('DB task binding serialization (motor ADR-004)', () => {
       expect(config.async).toBeUndefined();
     });
   });
+
+  describe('input.filters / input.cursor sobreviven el guardado (clase base)', () => {
+    // Regresion (auditoria 2026-07-24): withRuntime/normalizeInput reconstruian `input` con 6 campos, pero el
+    // motor lee DOS mas en TaskInputResolver. Como vive en la clase base, el bug afectaba a los 23 providers.
+    // El peor es `filters`: sin el no hay WHERE y la tarea pasa a consumir la TABLA ENTERA, en silencio.
+    const inputConIntencion = {
+      source: 'task-output',
+      sourceTaskRef: 'read',
+      sourceOutput: 'table',
+      table: 'staging_record',
+      cursor: { orderBy: 'id_externo' },
+      filters: { process_execution_id: '${_processExecutionId}', estado: 'PENDIENTE' },
+    };
+
+    it.each([
+      ['DB_WRITE', () => new DbWriteTaskProvider()],
+      ['DB_EXECUTE_SP', () => new DbExecuteStoredProcedureTaskProvider()],
+      ['DB_EXECUTE_FN', () => new DbExecuteFunctionTaskProvider()],
+    ])('%s conserva cursor y filters', (_label, make) => {
+      const p = make() as { hydrateDraft: (t: unknown) => unknown; toTaskPatch: (d: unknown) => { configurationJson?: string } };
+      const task = {
+        clientId: 'c1', id: null, taskOrder: 2, taskType: 'X', active: true,
+        sourceDefinitionId: null, readerDefinitionId: null,
+        configurationJson: JSON.stringify({ taskRef: 't', executionMode: 'batch', input: inputConIntencion }),
+      };
+
+      const saved = JSON.parse(p.toTaskPatch(p.hydrateDraft(task)).configurationJson as string);
+
+      expect(saved.input?.filters, 'se perdio input.filters: la tarea leeria la tabla entera')
+        .toEqual(inputConIntencion.filters);
+      expect(saved.input?.cursor, 'se perdio input.cursor: rompe la paginacion keyset')
+        .toEqual(inputConIntencion.cursor);
+    });
+  });
 });

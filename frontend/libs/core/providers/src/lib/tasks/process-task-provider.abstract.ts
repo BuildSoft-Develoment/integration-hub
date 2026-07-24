@@ -103,6 +103,11 @@ export abstract class ProcessTaskProvider<TDraft> {
         ...(input.batchSize ? { batchSize: Number(input.batchSize) } : {}),
         ...(input.connectionRef ? { connectionRef: input.connectionRef } : {}),
         ...(input.table ? { table: input.table } : {}),
+        // El motor lee estos dos y NINGUN formulario los edita. Sin re-emitirlos, cualquier guardado los
+        // borraba: perder `filters` elimina el WHERE y la tarea pasa a consumir la TABLA ENTERA en vez del
+        // subconjunto acotado; perder `cursor.orderBy` rompe la paginacion keyset (obligatoria por tabla).
+        ...(input.cursor ? { cursor: input.cursor } : {}),
+        ...(input.filters ? { filters: input.filters } : {}),
       };
     }
     return next;
@@ -131,7 +136,15 @@ export abstract class ProcessTaskProvider<TDraft> {
       ...(raw['batchSize'] != null && String(raw['batchSize']).trim() ? { batchSize: String(raw['batchSize']) } : {}),
       ...(raw['connectionRef'] != null && String(raw['connectionRef']).trim() ? { connectionRef: String(raw['connectionRef']) } : {}),
       ...(raw['table'] != null && String(raw['table']).trim() ? { table: String(raw['table']) } : {}),
+      // cursor/filters: ningun formulario los edita, pero el motor SI los lee (TaskInputResolver). Se
+      // transportan tal cual para que guardar no los borre — ver withRuntime.
+      ...(this.isPlainObject(raw['cursor']) ? { cursor: raw['cursor'] as { orderBy?: string } } : {}),
+      ...(this.isPlainObject(raw['filters']) ? { filters: raw['filters'] as Record<string, unknown> } : {}),
     };
+  }
+
+  private isPlainObject(value: unknown): boolean {
+    return !!value && typeof value === 'object' && !Array.isArray(value);
   }
 
   private normalizeSourceOutput(value: unknown): ProcessTaskOutputKind {

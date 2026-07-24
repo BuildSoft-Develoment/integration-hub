@@ -11,6 +11,18 @@ export interface ProcessTaskInputDraft {
   batchSize?: string;
   connectionRef?: string;
   table?: string;
+  /**
+   * Paginacion keyset de la lectura por tabla. Lo lee el motor en
+   * {@code TaskInputResolver} (`input.cursor.orderBy`) y es OBLIGATORIO para el batching por tabla.
+   * Ningun formulario lo edita todavia: se transporta para no borrarlo al guardar.
+   */
+  cursor?: { orderBy?: string };
+  /**
+   * Predicados columna→valor que acotan QUE FILAS lee la tarea (admite tokens como
+   * {@code ${_processExecutionId}}). Lo lee el motor en {@code TaskInputResolver}.
+   * Perderlo NO falla: elimina el WHERE y la tarea pasa a consumir la TABLA ENTERA. Por eso se transporta.
+   */
+  filters?: Record<string, unknown>;
 }
 
 export interface ProcessTaskRuntimeDraft {
