@@ -19,14 +19,47 @@ export interface Mt101StatusTaskDraft extends ProcessTaskRuntimeDraft {
   errorMessageField: string;
   connectionRef: string;
   confirmationTable: string;
+  /** Conciliacion in-line del PAY normal (money-path). Gobernado por el formulario. */
+  resolveNormalPay: boolean;
+  /** taskRef del MT101_PAY que resuelve este STATUS; obligatorio en procesos multi-PAY. */
+  resolvesPayTaskRef: string;
+  /** Claves que el backend lee pero el formulario todavia no gobierna; viajan verbatim (ver PRESERVED_KEYS). */
+  preserved: Record<string, unknown>;
 }
+
+/**
+ * Claves de configuracion que el backend LEE pero el formulario aun no expone. Se transportan verbatim en el
+ * draft para que un round-trip por la UI no las borre.
+ *
+ * <p>No se tipan con un default propio a proposito: varias son tri-estado o listas cuyo "ausente" tiene
+ * semantica propia en el backend ({@code archiveStatusSync} default true, {@code correctivePayStatuses},
+ * {@code acceptedStatuses}…). Inventarles un valor al serializar CAMBIARIA el comportamiento; copiarlas tal
+ * cual lo preserva. Cuando el formulario pase a gobernar alguna, se saca de esta lista y se tipa arriba.</p>
+ */
+const PRESERVED_KEYS = [
+  'acceptedStatuses',
+  'archiveStatusSync',
+  'archiveStatusTable',
+  'callback',
+  'correctivePayStatuses',
+  'executedBy',
+  'fragmentSetId',
+  'maxRecordsInOutput',
+  'pageSize',
+  'poll',
+  'reason',
+  'rejectedStatuses',
+  'resolveCorrectivePay',
+  'routeQuery',
+] as const;
 
 /**
  * Provider del task type {@code MT101_STATUS}.
  *
- * <p>Slice 2.2 backend implementa solo {@code mode: "query"} (single-shot HTTP
- * por record). Los modos {@code poll} y {@code callback} requieren M-2
- * (long-running) y son rechazados explicitamente por el backend.</p>
+ * <p>El backend implementa los TRES modos: {@code query} (single-shot por record), {@code poll} y
+ * {@code callback} — estos dos suspenden la tarea ({@code Mt101StatusTaskProvider implements
+ * SuspendableTaskProvider}) y por eso exigen {@code executionMode='once'}, igual que el camino
+ * {@code resolveNormalPay}. El {@code query} simple si admite {@code per-record}/{@code batch}.</p>
  */
 @Injectable()
 export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTaskDraft> {
@@ -50,6 +83,9 @@ export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTask
       errorMessageField: '$.error.message',
       connectionRef: '',
       confirmationTable: 'mt101_confirmation',
+      resolveNormalPay: false,
+      resolvesPayTaskRef: '',
+      preserved: {},
     };
   }
 
@@ -69,7 +105,21 @@ export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTask
       errorMessageField: String(expected['errorMessageField'] || '$.error.message'),
       connectionRef: String(config['connectionRef'] || ''),
       confirmationTable: String(config['confirmationTable'] || 'mt101_confirmation'),
+      resolveNormalPay: config['resolveNormalPay'] === true,
+      resolvesPayTaskRef: String(config['resolvesPayTaskRef'] || ''),
+      preserved: this.readPreserved(config),
     };
+  }
+
+  /** Copia verbatim las claves de {@link PRESERVED_KEYS} presentes en el config (ausente sigue ausente). */
+  private readPreserved(config: Record<string, any>): Record<string, unknown> {
+    const preserved: Record<string, unknown> = {};
+    PRESERVED_KEYS.forEach((key) => {
+      if (config[key] !== undefined) {
+        preserved[key] = config[key];
+      }
+    });
+    return preserved;
   }
 
   toTaskPatch(draft: Mt101StatusTaskDraft): Partial<ProcessTaskFormModel> {
@@ -88,6 +138,15 @@ export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTask
         },
         ...(draft.connectionRef ? { connectionRef: draft.connectionRef } : {}),
         confirmationTable: draft.confirmationTable,
+        // Money-path: solo se emiten cuando estan activos, para no ensuciar la config de un STATUS que no
+        // concilia (ausente == false en el backend). resolvesPayTaskRef solo tiene sentido con el flag ON.
+        ...(draft.resolveNormalPay ? { resolveNormalPay: true } : {}),
+        ...(draft.resolveNormalPay && draft.resolvesPayTaskRef
+          ? { resolvesPayTaskRef: draft.resolvesPayTaskRef }
+          : {}),
+        // Claves que el formulario aun no gobierna: se re-emiten tal cual llegaron. Sin esto, editar cualquier
+        // campo del form BORRABA poll/callback/routeQuery/resolveCorrectivePay y 10 mas.
+        ...draft.preserved,
       },
       draft,
       'per-record',
