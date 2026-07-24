@@ -105,10 +105,26 @@ export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTask
       errorMessageField: String(expected['errorMessageField'] || '$.error.message'),
       connectionRef: String(config['connectionRef'] || ''),
       confirmationTable: String(config['confirmationTable'] || 'mt101_confirmation'),
-      resolveNormalPay: config['resolveNormalPay'] === true,
+      resolveNormalPay: this.parseBackendBoolean(config['resolveNormalPay']),
       resolvesPayTaskRef: String(config['resolvesPayTaskRef'] || ''),
       preserved: this.readPreserved(config),
     };
+  }
+
+  /**
+   * Espejo EXACTO de como el backend lee un booleano de la config:
+   * {@code Boolean.parseBoolean(String.valueOf(raw))} (Mt101StatusTaskProvider.boolValue), o sea true solo
+   * para "true" sin distinguir mayusculas — y acepta el STRING "true", no solo el booleano.
+   *
+   * <p>Un {@code === true} estricto aqui seria un bug silencioso: una config sembrada por API/seed con
+   * {@code "resolveNormalPay": "true"} vale true para el backend, pero la UI la leeria como false y al guardar
+   * la OMITIRIA, apagando la conciliacion in-line del money-path sin avisar.</p>
+   */
+  private parseBackendBoolean(raw: unknown): boolean {
+    if (raw === null || raw === undefined) {
+      return false;
+    }
+    return String(raw).trim().toLowerCase() === 'true';
   }
 
   /** Copia verbatim las claves de {@link PRESERVED_KEYS} presentes en el config (ausente sigue ausente). */

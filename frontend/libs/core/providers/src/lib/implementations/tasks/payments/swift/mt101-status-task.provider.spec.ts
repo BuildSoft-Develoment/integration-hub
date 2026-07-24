@@ -95,6 +95,33 @@ describe('Mt101StatusTaskProvider', () => {
     });
   });
 
+  it('resolveNormalPay sembrado como STRING "true" no se pierde (espejo de Boolean.parseBoolean)', () => {
+    // Doble check del propio fix: con `=== true` estricto, una config sembrada por API/seed con el string
+    // "true" se leia como false y al guardar se OMITIA -> apagaba la conciliacion in-line en silencio. El
+    // backend la lee con Boolean.parseBoolean(String.valueOf(raw)), que si acepta el string.
+    const p = new Mt101StatusTaskProvider();
+    ['true', 'TRUE', ' True '].forEach((raw) => {
+      const draft = p.hydrateDraft({
+        ...baseTask,
+        configurationJson: JSON.stringify({ taskRef: 's', mode: 'query', resolveNormalPay: raw }),
+      });
+      expect(draft.resolveNormalPay, `no interpreto '${raw}' como true`).toBe(true);
+      const saved = JSON.parse(p.toTaskPatch(draft).configurationJson as string);
+      expect(saved['resolveNormalPay'], `se perdio con '${raw}'`).toBe(true);
+    });
+  });
+
+  it('un valor que NO es "true" queda en false (no se inventa activacion)', () => {
+    const p = new Mt101StatusTaskProvider();
+    ['false', '', 'si', '1'].forEach((raw) => {
+      const draft = p.hydrateDraft({
+        ...baseTask,
+        configurationJson: JSON.stringify({ taskRef: 's', mode: 'query', resolveNormalPay: raw }),
+      });
+      expect(draft.resolveNormalPay, `'${raw}' no deberia activar la conciliacion`).toBe(false);
+    });
+  });
+
   it('resolveNormalPay solo se emite cuando esta activo (ausente == false en el backend)', () => {
     const p = new Mt101StatusTaskProvider();
     const saved = JSON.parse(p.toTaskPatch({ ...p.createDraft(), taskRef: 's' }).configurationJson as string);

@@ -57,9 +57,16 @@ export class ProcessMt101StatusTaskFormComponent {
    * 'suspended' fuera de 'once' (cerraria COMPLETADA sin esperar al banco), asi que el backend los rechaza
    * fail-loud (Mt101StatusTaskProvider.guardOnceExecutionMode). El camino 'query' simple —una consulta HTTP por
    * mensaje, el uso normal de STATUS y el motivo de su default 'per-record'— si soporta los tres modos.
+   *
+   * <p>Tambien se restringe cuando la tarea trae {@code resolveNormalPay} (conciliacion in-line del PAY
+   * normal), porque ese camino EMITE la señal de conciliacion y el backend lo guarda igual. Sin esto se podia
+   * guardar un STATUS con resolveNormalPay + per-record que solo reventaba AL EJECUTARSE, en pleno money-path.
+   * El flag hoy llega por config sembrada (el form todavia no lo expone), pero el selector ya lo respeta.</p>
    */
   readonly executionModes = computed<readonly ProcessTaskExecutionMode[]>(() =>
-    this.draft().mode === 'query' ? ['once', 'per-record', 'batch'] : ['once'],
+    this.draft().mode === 'query' && !this.draft().resolveNormalPay
+      ? ['once', 'per-record', 'batch']
+      : ['once'],
   );
 
   /**
