@@ -12,7 +12,27 @@ export interface NotificationTaskDraft extends ProcessTaskRuntimeDraft, HttpRequ
   to: string;
   subject: string;
   body: string;
+  /** Config de los canales INACTIVOS + claves HTTP sin campo propio; viaja verbatim (ver NOTIFICATION_CHANNEL_KEYS). */
+  preserved: Record<string, unknown>;
 }
+
+/**
+ * Claves de configuracion propias de los canales. {@code toTaskPatch} emite solo la rama del canal ACTIVO, asi
+ * que sin transportarlas, cambiar de canal y guardar borraba la config de los otros: pasar un webhook a
+ * {@code log} para probar destruia la {@code url} de destino y las credenciales, y sin {@code authType} el
+ * request sale SIN header Authorization — eso es desactivar una proteccion, no perder un tuning.
+ *
+ * <p>Incluye {@code loginTimeoutSeconds} y {@code tokenTtlSeconds}, que el backend lee
+ * ({@code HttpRequestSupport}) pero no tienen campo en {@code HttpRequestDraft}, asi que se perdian SIEMPRE,
+ * incluso guardando en webhook.</p>
+ */
+const NOTIFICATION_CHANNEL_KEYS = [
+  'message', 'bodyTemplate', 'to', 'subject', 'body',
+  'url', 'method', 'timeoutSeconds', 'headers',
+  'authType', 'username', 'password', 'token',
+  'loginUrl', 'loginMethod', 'loginBodyTemplate', 'tokenPath', 'loginHeaders',
+  'loginTimeoutSeconds', 'tokenTtlSeconds',
+] as const;
 
 @Injectable()
 export class NotificationTaskProvider extends ProcessTaskProvider<NotificationTaskDraft> {
@@ -34,6 +54,7 @@ export class NotificationTaskProvider extends ProcessTaskProvider<NotificationTa
       to: '',
       subject: 'Proceso ${processExecutionId}',
       body: 'Proceso ${processExecutionId} finalizado con ${recordCount} registros',
+      preserved: {},
     };
   }
 
@@ -42,6 +63,12 @@ export class NotificationTaskProvider extends ProcessTaskProvider<NotificationTa
     return {
       ...this.hydrateRuntime(task, 'once'),
       ...hydrateHttpRequest(config, 15),
+      preserved: NOTIFICATION_CHANNEL_KEYS.reduce<Record<string, unknown>>((acc, key) => {
+        if (config[key] !== undefined) {
+          acc[key] = config[key];
+        }
+        return acc;
+      }, {}),
       channel: String(config.channel || 'log'),
       message: String(config.message || 'Proceso ${processExecutionId} finalizado con ${recordCount} registros'),
       bodyTemplate: String(config.bodyTemplate || '{"message":"${message}"}'),
@@ -52,14 +79,19 @@ export class NotificationTaskProvider extends ProcessTaskProvider<NotificationTa
   }
 
   toTaskPatch(draft: NotificationTaskDraft): Partial<ProcessTaskFormModel> {
+    // `preserved` va PRIMERO en cada rama: la config del canal activo pisa lo que venia, y la de los canales
+    // inactivos sobrevive en vez de borrarse (cambiar de canal para probar no debe destruir la url ni las
+    // credenciales del webhook).
     if (draft.channel === 'webhook') {
-      const payload: any = this.withRuntime({ channel: 'webhook', message: draft.message || '' }, draft, 'once');
+      const payload: any = this.withRuntime(
+        { ...draft.preserved, channel: 'webhook', message: draft.message || '' }, draft, 'once');
       applyHttpRequestToPayload(draft, payload, 15);
       return { configurationJson: this.toPrettyJson(payload) };
     }
     if (draft.channel === 'email') {
       return {
         configurationJson: this.toPrettyJson(this.withRuntime({
+            ...draft.preserved,
             channel: 'email',
             to: draft.to || '',
             subject: draft.subject || '',
@@ -69,6 +101,7 @@ export class NotificationTaskProvider extends ProcessTaskProvider<NotificationTa
     }
     return {
       configurationJson: this.toPrettyJson(this.withRuntime({
+        ...draft.preserved,
         channel: 'log',
         message: draft.message || 'Proceso ${processExecutionId} finalizado con ${recordCount} registros',
       }, draft, 'once')),
