@@ -65,7 +65,27 @@ export interface Mt101PayTaskDraft extends ProcessTaskRuntimeDraft {
   retryPolicy: Mt101PayRetryPolicyDraft;
   confirmationMode: Mt101PayConfirmationMode;
   expectedGatewayResponse: Mt101PayExpectedResponseDraft;
+  /** Claves que el backend lee pero el formulario no gobierna; viajan verbatim (ver PAY_PRESERVED_KEYS). */
+  preserved: Record<string, unknown>;
 }
+
+/**
+ * Claves que {@code Mt101PayTaskProvider} (backend) LEE de la config y el formulario no expone. Se transportan
+ * verbatim para que editar cualquier campo del form no las borre.
+ *
+ * <p>Mismo hallazgo que en MT101_STATUS (ver analisis v72), y aca pega en la sincronizacion del estado del
+ * pago: perder {@code archiveStatusSync} lo devuelve a su default {@code true} —reactivando una sync que el
+ * operador apago— y perder {@code archiveStatusTable}/{@code archiveStatusConnectionRef} manda el SENT/REJECTED
+ * a la tabla/conexion por DEFECTO en vez de la configurada. No se les inventa default por eso mismo.</p>
+ */
+const PAY_PRESERVED_KEYS = [
+  'archiveStatusConnectionRef',
+  'archiveStatusSync',
+  'archiveStatusTable',
+  'connectionRef',
+  'maxRecordsInOutput',
+  'pageSize',
+] as const;
 
 /**
  * Provider del task type {@code MT101_PAY}.
@@ -116,6 +136,7 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
         referenceField: '$.gatewayReference',
         errorMessageField: '$.error.message',
       },
+      preserved: {},
     };
   }
 
@@ -175,6 +196,12 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
         referenceField: String(expected['referenceField'] || '$.gatewayReference'),
         errorMessageField: String(expected['errorMessageField'] || '$.error.message'),
       },
+      preserved: PAY_PRESERVED_KEYS.reduce<Record<string, unknown>>((acc, key) => {
+        if (config[key] !== undefined) {
+          acc[key] = config[key];
+        }
+        return acc;
+      }, {}),
     };
   }
 
@@ -235,6 +262,9 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
           referenceField: draft.expectedGatewayResponse.referenceField,
           errorMessageField: draft.expectedGatewayResponse.errorMessageField,
         }),
+        // Sin esto, editar cualquier campo del form devolvia archiveStatusSync/Table/ConnectionRef,
+        // connectionRef, pageSize y maxRecordsInOutput a sus defaults (ver PAY_PRESERVED_KEYS).
+        ...draft.preserved,
       },
       draft,
       'once',

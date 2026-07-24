@@ -241,4 +241,40 @@ describe('Mt101PayTaskProvider', () => {
 
     expect(draft.transport).toBe('REST');
   });
+
+  it('un round-trip por la UI NO devuelve la sync de estado del pago a sus defaults', () => {
+    // Mismo hallazgo que en MT101_STATUS (analisis v72): toTaskPatch reconstruia el payload desde cero, asi que
+    // editar cualquier campo del form borraba las 6 claves que el backend SI lee y no estan en el draft. La mas
+    // sensible: archiveStatusSync vuelve a su default true (reactiva una sync apagada a proposito) y
+    // archiveStatusTable/ConnectionRef mandan el SENT/REJECTED a la tabla/conexion por DEFECTO.
+    const p = new Mt101PayTaskProvider();
+    const configurationJson = JSON.stringify({
+      taskRef: 'pay', executionMode: 'once', transport: 'REST',
+      rest: { url: 'https://gw/pay', method: 'POST' },
+      archiveStatusSync: false,
+      archiveStatusTable: 'mt101_archive_custom',
+      archiveStatusConnectionRef: 'conn-archivo',
+      connectionRef: 'conn-pay',
+      pageSize: 250,
+      maxRecordsInOutput: 50,
+    });
+
+    const draft = p.hydrateDraft({ ...baseTask, configurationJson });
+    const saved = JSON.parse(p.toTaskPatch(draft).configurationJson as string);
+
+    // archiveStatusSync=false es el caso limite: compactObject descarta '' y [], pero NO false.
+    expect(saved['archiveStatusSync'], 'se perdio archiveStatusSync=false').toBe(false);
+    expect(saved['archiveStatusTable']).toBe('mt101_archive_custom');
+    expect(saved['archiveStatusConnectionRef']).toBe('conn-archivo');
+    expect(saved['connectionRef']).toBe('conn-pay');
+    expect(saved['pageSize']).toBe(250);
+    expect(saved['maxRecordsInOutput']).toBe(50);
+  });
+
+  it('sin esas claves en la config, no se inventan al guardar', () => {
+    const p = new Mt101PayTaskProvider();
+    const saved = JSON.parse(p.toTaskPatch({ ...p.createDraft(), taskRef: 'pay' }).configurationJson as string);
+    ['archiveStatusSync', 'archiveStatusTable', 'archiveStatusConnectionRef', 'pageSize', 'maxRecordsInOutput']
+      .forEach((key) => expect(saved[key], `no deberia aparecer '${key}'`).toBeUndefined());
+  });
 });
