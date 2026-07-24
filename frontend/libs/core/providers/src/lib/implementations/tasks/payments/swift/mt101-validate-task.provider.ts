@@ -35,6 +35,14 @@ export interface Mt101ValidateTaskDraft extends ProcessTaskRuntimeDraft {
 const VALIDATE_PRESERVED_KEYS = ['maxIssuesInOutput', 'pageSize'] as const;
 
 /**
+ * Tabla por defecto del sink de incidencias. El backend ({@code IssueSink.enabled}) SOLO acepta esta tabla:
+ * lanza {@code IllegalArgumentException} con cualquier otra. Por eso es efectivamente fija y una tarea nueva
+ * arranca con ella + el Data Source de la plataforma (conexion vacia), igual que DB_WRITE arranca con
+ * {@code staging_record}. Vaciarla sigue APAGANDO el sink (la tabla es el interruptor).
+ */
+const DEFAULT_ISSUE_TABLE = 'mt101_validation_issue';
+
+/**
  * Provider del task type {@code MT101_VALIDATE}: convierte entre el draft del
  * formulario y el {@code configuration_json}.
  */
@@ -57,9 +65,10 @@ export class Mt101ValidateTaskProvider extends ProcessTaskProvider<Mt101Validate
       businessCalendar: 'PE',
       failOn: 'ERROR',
       publishIssuesConnectionRef: '',
-      // Vacio = sin sink, que es lo que hace hoy una tarea nueva (IssueSink.from(null) -> disabled). La tabla
-      // es el interruptor del sink: rellenarla con el default aca lo prenderia solo, sin que nadie lo pida.
-      publishIssuesTable: '',
+      // Arranca con la tabla por defecto + Data Source de la plataforma (conexion vacia), como DB_WRITE con
+      // staging_record: validar un camino de dinero deberia registrar sus incidencias por defecto. Para
+      // apagar el sink, vaciar la tabla.
+      publishIssuesTable: DEFAULT_ISSUE_TABLE,
       publishIssuesToRaw: undefined,
       preserved: {},
     };
@@ -68,7 +77,9 @@ export class Mt101ValidateTaskProvider extends ProcessTaskProvider<Mt101Validate
   hydrateDraft(task: ProcessTaskFormModel): Mt101ValidateTaskDraft {
     const config: Record<string, any> = this.parseJson(task.configurationJson);
     const runtime = this.hydrateRuntime(task, 'once');
-    const { connRef, table } = this.parsePublishIssuesTo(String(config['publishIssuesTo'] || ''));
+    const rawIssues = config['publishIssuesTo'];
+    const rawPresent = rawIssues !== undefined && String(rawIssues).trim().length > 0;
+    const { connRef, table } = this.parsePublishIssuesTo(String(rawIssues || ''));
     return {
       ...runtime,
       executionMode: 'once',
@@ -78,11 +89,12 @@ export class Mt101ValidateTaskProvider extends ProcessTaskProvider<Mt101Validate
       businessCalendar: String(config['businessCalendar'] || 'PE'),
       failOn: this.normalizeFailOn(config['failOn']),
       publishIssuesConnectionRef: connRef,
-      // Sin default: la tabla vacia significa "no hay sink parseado". Rellenarla hacia indistinguibles
-      // "no habia sink" y "habia uno que no supe leer", y el crudo preservado no se podia re-emitir nunca.
-      publishIssuesTable: table,
-      // El crudo se guarda SOLO si el parseo fallo. Si parseo, manda el form (y se puede vaciar de verdad).
-      publishIssuesToRaw: table ? undefined : config['publishIssuesTo'],
+      // El default (tabla fija) se aplica SOLO cuando publishIssuesTo esta AUSENTE. Si vino pero no se pudo
+      // parsear (mapa / nombre suelto), la tabla queda vacia para que el crudo preservado gobierne el emit y no
+      // lo pise el default.
+      publishIssuesTable: table || (rawPresent ? '' : DEFAULT_ISSUE_TABLE),
+      // El crudo se guarda SOLO si vino y el parseo fallo. Si parseo, manda el form (y se puede vaciar).
+      publishIssuesToRaw: table ? undefined : (rawPresent ? rawIssues : undefined),
       preserved: this.preserveKeys(config, VALIDATE_PRESERVED_KEYS),
     };
   }

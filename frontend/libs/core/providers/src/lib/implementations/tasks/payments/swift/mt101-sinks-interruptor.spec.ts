@@ -44,10 +44,55 @@ describe('Interruptor del sink (la tabla, no la conexion)', () => {
     expect(saved.publishExceptionsTo).toBeUndefined();
   });
 
-  it('VALIDATE: una conexion SIN tabla no se persiste (por eso la UI la deshabilita)', () => {
+  it('VALIDATE: una tarea NUEVA publica en la tabla por defecto via Data Source de la plataforma', () => {
+    // Default tipo DB_WRITE: la tabla arranca poblada (fija en el backend) y la conexion vacia = plataforma.
     const p = new Mt101ValidateTaskProvider();
 
-    const saved = save(p, { ...p.createDraft(), taskRef: 'v', publishIssuesConnectionRef: 'conn-audit' });
+    const saved = save(p, { ...p.createDraft(), taskRef: 'v' });
+
+    expect(saved.publishIssuesTo, 'el sink deberia venir activo en la tabla por defecto')
+      .toBe('table:mt101_validation_issue');
+  });
+
+  it('RECONCILE: una tarea NUEVA apunta a la tabla de excepciones por defecto', () => {
+    const p = new Mt101ReconcileTaskProvider();
+
+    const saved = save(p, { ...p.createDraft(), taskRef: 'r' });
+
+    expect(saved.publishExceptionsTo).toBe('table:mt101_reconciliation_exception');
+  });
+
+  it('VALIDATE: un publishIssuesTo AUSENTE hidrata a la tabla por defecto (no queda vacio)', () => {
+    // Antes: ausente -> tabla vacia -> sink apagado. Ahora: ausente -> default poblado -> sink activo al guardar.
+    const p = new Mt101ValidateTaskProvider();
+    const draft = p.hydrateDraft(task('MT101_VALIDATE', { taskRef: 'v', ruleSet: 'structural-mvp' }));
+    expect(draft.publishIssuesTable).toBe('mt101_validation_issue');
+
+    const saved = save(p, draft);
+    expect(saved.publishIssuesTo).toBe('table:mt101_validation_issue');
+  });
+
+  it('VALIDATE: un mapa preservado NO es pisado por el default de tabla', () => {
+    // Regresion del default nuevo contra el fix anti-corrupcion: si publishIssuesTo vino como mapa (no
+    // parseable), la tabla NO debe defaultearse — el crudo se re-emite verbatim.
+    const p = new Mt101ValidateTaskProvider();
+    const draft = p.hydrateDraft(task('MT101_VALIDATE', {
+      taskRef: 'v', publishIssuesTo: { table: 'mt101_validation_issue', connectionRef: 'externa' },
+    }));
+    expect(draft.publishIssuesTable, 'el mapa no se parsea; la tabla queda vacia, no defaulteada').toBe('');
+
+    const saved = save(p, draft);
+    expect(saved.publishIssuesTo).toEqual({ table: 'mt101_validation_issue', connectionRef: 'externa' });
+  });
+
+  it('VALIDATE: una conexion SIN tabla no se persiste (por eso la UI la deshabilita)', () => {
+    // La tabla por defecto se vacia explicitamente para simular el sink apagado: sin tabla, la conexion suelta
+    // no se emite.
+    const p = new Mt101ValidateTaskProvider();
+
+    const saved = save(p, {
+      ...p.createDraft(), taskRef: 'v', publishIssuesTable: '', publishIssuesConnectionRef: 'conn-audit',
+    });
 
     expect(saved.publishIssuesTo).toBeUndefined();
   });

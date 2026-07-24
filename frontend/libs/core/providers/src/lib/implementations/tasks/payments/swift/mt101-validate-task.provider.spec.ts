@@ -27,8 +27,10 @@ describe('Mt101ValidateTaskProvider', () => {
     expect(draft.standard).toBe('SWIFT');
     expect(draft.appliesTo).toBe('MT101');
     expect(draft.failOn).toBe('ERROR');
-    // Vacia = sin sink. La tabla es el interruptor del sink de incidencias (ver 'omite publishIssuesTo...').
-    expect(draft.publishIssuesTable).toBe('');
+    // Arranca con la tabla por defecto (fija en el backend) + Data Source de la plataforma, como DB_WRITE con
+    // staging_record. Vaciarla apaga el sink.
+    expect(draft.publishIssuesTable).toBe('mt101_validation_issue');
+    expect(draft.publishIssuesConnectionRef).toBe('');
   });
 
   it('serializes draft to configuration_json with publishIssuesTo composed', () => {

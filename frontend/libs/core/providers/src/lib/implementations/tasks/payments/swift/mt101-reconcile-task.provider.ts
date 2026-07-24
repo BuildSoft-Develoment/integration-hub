@@ -34,6 +34,14 @@ export interface Mt101ReconcileTaskDraft extends ProcessTaskRuntimeDraft {
 const RECONCILE_PRESERVED_KEYS = ['archiveStatusSync'] as const;
 
 /**
+ * Tabla por defecto del sink de excepciones. El backend ({@code parseExceptionTable}) cae a ella cuando la
+ * clave esta ausente, asi que una tarea nueva arranca con ella + el Data Source de la plataforma (conexion
+ * vacia), igual que DB_WRITE con {@code staging_record}. Vaciarla NO apaga el sink (el backend igual escribe
+ * en la default): documenta el destino real en el form. La conexion es lo variable.
+ */
+const DEFAULT_EXCEPTION_TABLE = 'mt101_reconciliation_exception';
+
+/**
  * Provider del task type {@code MT101_RECONCILE}.
  */
 @Injectable()
@@ -56,9 +64,9 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
       asOfDate: '${today}',
       lookbackDays: 5,
       exceptionConnectionRef: '',
-      // Vacio = sin clave, que es lo que hace hoy una tarea nueva: parseExceptionTable cae a
-      // mt101_reconciliation_exception. La tabla es el interruptor; el default vive en el backend.
-      exceptionTable: '',
+      // Arranca con la tabla por defecto + Data Source de la plataforma (conexion vacia), como DB_WRITE con
+      // staging_record: hace visible en el form el destino real de las excepciones (el backend cae ahi igual).
+      exceptionTable: DEFAULT_EXCEPTION_TABLE,
       publishExceptionsToRaw: undefined,
       preserved: {},
     };
@@ -70,7 +78,9 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
     const matchKeys = Array.isArray(config['matchKeys'])
       ? config['matchKeys'].join(',')
       : String(config['matchKeys'] || 'senders_reference');
-    const exceptionRef = this.parsePublishExceptionsTo(String(config['publishExceptionsTo'] || ''));
+    const rawExc = config['publishExceptionsTo'];
+    const rawPresent = rawExc !== undefined && String(rawExc).trim().length > 0;
+    const exceptionRef = this.parsePublishExceptionsTo(String(rawExc || ''));
     return {
       ...runtime,
       connectionRef: String(config['connectionRef'] || ''),
@@ -80,10 +90,11 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
       asOfDate: String(config['asOfDate'] || '${today}'),
       lookbackDays: Number(config['lookbackDays']) || 5,
       exceptionConnectionRef: exceptionRef.connRef,
-      // Sin default: vacia significa "no hay tabla parseada" y deja al crudo preservado re-emitirse.
-      exceptionTable: exceptionRef.table,
-      // Solo si el parseo fallo. Si parseo, manda el form.
-      publishExceptionsToRaw: exceptionRef.table ? undefined : config['publishExceptionsTo'],
+      // El default se aplica SOLO cuando publishExceptionsTo esta AUSENTE. Si vino pero no se pudo parsear
+      // (mapa / nombre suelto), la tabla queda vacia para que el crudo preservado gobierne el emit.
+      exceptionTable: exceptionRef.table || (rawPresent ? '' : DEFAULT_EXCEPTION_TABLE),
+      // El crudo se guarda SOLO si vino y el parseo fallo. Si parseo, manda el form.
+      publishExceptionsToRaw: exceptionRef.table ? undefined : (rawPresent ? rawExc : undefined),
       preserved: this.preserveKeys(config, RECONCILE_PRESERVED_KEYS),
     };
   }

@@ -76,15 +76,15 @@
     <mat-tab [label]="i18n.t('mt101Validate.section.publishIssues')">
       <div class="mt101-validate__grid">
         <!--
-          La conexion se deshabilita sin tabla: sin tabla no hay sink, y una conexion sin sink NO se persiste
-          (toTaskPatch no emite publishIssuesTo). Habilitarla haria que elegirla no tuviera ningun efecto y
-          desapareciera al recargar — descarte silencioso, justo lo que esta auditoria vino a sacar.
+          Conexion vacia = Data Source de la plataforma (patron DB_WRITE). Se deshabilita si se vacia la tabla:
+          sin tabla no hay sink y una conexion sin sink NO se persiste (toTaskPatch no emite publishIssuesTo),
+          asi que elegirla no tendria efecto y desapareceria al recargar (descarte silencioso).
         -->
         <ih-connection-select
           [connections]="connections()"
           [value]="draft().publishIssuesConnectionRef"
           [label]="i18n.t('mt101Validate.publishIssuesConnection')"
-          emptyLabel="-"
+          [emptyLabel]="i18n.t('ui.platformDatasource')"
           subscriptSizing="dynamic"
           [disabled]="readonly() || !draft().publishIssuesTable"
           (valueChange)="updateDraft({ publishIssuesConnectionRef: $event })" />
