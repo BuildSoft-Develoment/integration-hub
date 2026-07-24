@@ -56,17 +56,15 @@ describe('MT101_VALIDATE — sink de incidencias', () => {
     expect(saved.publishIssuesTo).toBe('none');
   });
 
-  it('cuando el form SI parseo, manda el form y vaciar la tabla apaga el sink', () => {
-    // Doble check del propio fix: preservar el crudo no debe impedir apagar el sink desde la UI.
-    const p = new Mt101ValidateTaskProvider();
-    const draft = p.hydrateDraft(task('MT101_VALIDATE', {
+  it('parsea la conexion de la forma de tres partes', () => {
+    // Que preservar el crudo no impida gobernar —ni APAGAR— el sink desde el form esta cubierto en
+    // mt101-sinks-interruptor.spec.ts, que es donde vive la semantica del interruptor.
+    const draft = new Mt101ValidateTaskProvider().hydrateDraft(task('MT101_VALIDATE', {
       taskRef: 'val', publishIssuesTo: 'table:conn-audit:mt101_validation_issue',
     }));
     expect(draft.publishIssuesConnectionRef).toBe('conn-audit');
-
-    const saved = JSON.parse(p.toTaskPatch({ ...draft, publishIssuesTable: '' }).configurationJson as string);
-
-    expect(saved.publishIssuesTo, 'el sink borrado revivio').toBeUndefined();
+    expect(draft.publishIssuesTable).toBe('mt101_validation_issue');
+    expect(draft.publishIssuesToRaw, 'parseo bien: no hay que preservar el crudo').toBeUndefined();
   });
 
   it('conserva maxIssuesInOutput y pageSize', () => {

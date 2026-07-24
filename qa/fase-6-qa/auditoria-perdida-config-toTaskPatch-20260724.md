@@ -199,6 +199,21 @@ Dos tests preexistentes cambiaron de expectativa junto con el contrato, no para 
 `omits publishIssuesTo when connectionRef is empty` → renombrado a *"omite publishIssuesTo cuando no hay tabla
 (la tabla es el interruptor, no la conexión)"*, más uno nuevo que fija la forma sin conexión.
 
+### Doble check profundo (2026-07-24) — un defecto que introdujo el propio arreglo #5
+
+Una sonda adversarial sobre las interacciones que los tests no cubrían encontró que **al hacer la tabla el
+interruptor, dejé el selector de CONEXIÓN inerte**: elegir una conexión con la tabla vacía no persistía nada
+(`toTaskPatch` no emite el sink sin tabla), así que la selección desaparecía al recargar — un descarte
+silencioso, exactamente la clase de bug que esta auditoría vino a sacar. Afectaba a VALIDATE y RECONCILE, y con
+la forma-mapa el crudo preservado tapaba encima la conexión recién elegida.
+
+Descarté el arreglo tentador —emitir el sink con la tabla por defecto cuando solo hay conexión— porque es
+**peor**: vaciar la tabla para apagar el sink pasaría a *redirigirlo* a otra tabla en silencio, en vez de
+apagarlo. El arreglo correcto es en la UI: el `ih-connection-select` se deshabilita mientras la tabla esté
+vacía (en ambos forms), y la semántica "la tabla es el interruptor, la conexión es opcional" queda fijada en
+`mt101-sinks-interruptor.spec.ts` — incluidos los dos casos peligrosos (vaciar la tabla *apaga*, no redirige).
+Los hints de ambos campos se corrigieron para decir "ponela para habilitar la conexión".
+
 Evidencia comprometida por cada arreglo: test que **falla sin él** (verificado revirtiendo), suite completa en
 verde, y anotación en `qa/fase-6-qa/evidencias/`.
 
