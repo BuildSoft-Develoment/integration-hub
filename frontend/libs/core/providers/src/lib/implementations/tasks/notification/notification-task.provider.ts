@@ -34,6 +34,18 @@ const NOTIFICATION_CHANNEL_KEYS = [
   'loginTimeoutSeconds', 'tokenTtlSeconds',
 ] as const;
 
+/**
+ * Subconjunto HTTP: en el canal webhook lo gobierna {@code applyHttpRequestToPayload}, que escribe varias de
+ * estas claves de forma CONDICIONAL ({@code if (authType === 'bearer' && token)}, etc.). Si ademas se
+ * spreadeara lo preservado, borrar un token —o apagar {@code authType}— no surtiria efecto: el valor viejo
+ * sobreviviria debajo. Por eso en webhook se preserva solo el contenido de los OTROS canales, no esto.
+ */
+const NOTIFICATION_HTTP_KEYS: readonly string[] = [
+  'url', 'method', 'timeoutSeconds', 'headers', 'bodyTemplate',
+  'authType', 'username', 'password', 'token',
+  'loginUrl', 'loginMethod', 'loginBodyTemplate', 'tokenPath', 'loginHeaders',
+];
+
 @Injectable()
 export class NotificationTaskProvider extends ProcessTaskProvider<NotificationTaskDraft> {
   readonly descriptor = {
@@ -83,8 +95,12 @@ export class NotificationTaskProvider extends ProcessTaskProvider<NotificationTa
     // inactivos sobrevive en vez de borrarse (cambiar de canal para probar no debe destruir la url ni las
     // credenciales del webhook).
     if (draft.channel === 'webhook') {
+      // En webhook el form gobierna el HTTP: se preserva solo el contenido de los otros canales.
+      const soloOtrosCanales = Object.fromEntries(
+        Object.entries(draft.preserved).filter(([key]) => !NOTIFICATION_HTTP_KEYS.includes(key)),
+      );
       const payload: any = this.withRuntime(
-        { ...draft.preserved, channel: 'webhook', message: draft.message || '' }, draft, 'once');
+        { ...soloOtrosCanales, channel: 'webhook', message: draft.message || '' }, draft, 'once');
       applyHttpRequestToPayload(draft, payload, 15);
       return { configurationJson: this.toPrettyJson(payload) };
     }

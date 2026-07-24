@@ -77,7 +77,15 @@ export class Mt101InboundDeliverTaskProvider extends ProcessTaskProvider<Mt101In
 
   toTaskPatch(draft: Mt101InboundDeliverTaskDraft): Partial<ProcessTaskFormModel> {
     const payload: Record<string, any> = this.withRuntime(
-      { ...draft.preserved, transport: draft.transport, pageSize: draft.pageSize },
+      // El slice HTTP preservado se re-emite SOLO cuando el form no lo gobierna (transporte DB). En REST manda
+      // applyHttpRequestToPayload, y ese helper escribe varias claves de forma CONDICIONAL
+      // (`if (authType === 'bearer' && token)`, etc.): spreadear lo preservado tambien en REST haria que borrar
+      // un token —o apagar authType— no surtiera efecto, porque el valor viejo sobreviviria debajo.
+      {
+        ...(draft.transport === 'REST' ? {} : draft.preserved),
+        transport: draft.transport,
+        pageSize: draft.pageSize,
+      },
       draft,
       'once',
     );

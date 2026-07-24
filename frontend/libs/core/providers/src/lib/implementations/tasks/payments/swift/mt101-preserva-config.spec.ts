@@ -74,6 +74,23 @@ describe('MT101_INBOUND_DELIVER', () => {
     expect(saved.url, 'se perdio el endpoint al pasar a DB').toBe(restConfig.url);
     expect(saved.token, 'se perdieron las credenciales al pasar a DB').toBe(restConfig.token);
   });
+
+  it('en REST SI se puede borrar el token (el form gobierna el HTTP)', () => {
+    // Doble check del propio fix: applyHttpRequestToPayload escribe el token CONDICIONALMENTE, asi que
+    // preservar tambien en REST haria que borrarlo no surtiera efecto — cambiar "la UI pierde credenciales"
+    // por "la UI no puede quitarlas".
+    const p = new Mt101InboundDeliverTaskProvider();
+    const draft = p.hydrateDraft(task('MT101_INBOUND_DELIVER', {
+      taskRef: 'ind', transport: 'REST', pageSize: 500,
+      url: 'https://gw.banco/inbound', authType: 'bearer', token: 'viejo',
+    }));
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const saved: any = JSON.parse(p.toTaskPatch({ ...draft, token: '', authType: '' }).configurationJson as string);
+
+    expect(saved.token, 'el token borrado revivio').toBeUndefined();
+    expect(saved.authType, 'authType apagado revivio').toBeUndefined();
+  });
 });
 
 describe('MT101_BUILD_FROM_TABLE', () => {

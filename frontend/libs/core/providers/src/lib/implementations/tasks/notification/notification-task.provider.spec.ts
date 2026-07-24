@@ -65,4 +65,16 @@ describe('NotificationTaskProvider — cambio de canal', () => {
     expect(saved.token).toBeUndefined();
     expect(saved.to).toBeUndefined();
   });
+  it('en webhook SI se puede borrar el token (el form gobierna el HTTP)', () => {
+    // Doble check del propio fix: applyHttpRequestToPayload escribe el token de forma CONDICIONAL, asi que
+    // spreadear lo preservado tambien en webhook haria que borrarlo no surtiera efecto — cambiar 'la UI pierde
+    // credenciales' por 'la UI no puede quitarlas'. En webhook solo se preserva el contenido de OTROS canales.
+    const p = new NotificationTaskProvider();
+    const draft = p.hydrateDraft({ ...baseTask, configurationJson: JSON.stringify(webhookConfig) });
+
+    const saved = JSON.parse(p.toTaskPatch({ ...draft, token: '', authType: '' }).configurationJson as string);
+
+    expect(saved.token, 'el token borrado revivio').toBeUndefined();
+    expect(saved.authType, 'authType apagado revivio').toBeUndefined();
+  });
 });
