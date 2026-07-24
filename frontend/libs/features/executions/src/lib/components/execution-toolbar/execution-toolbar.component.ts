@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -15,8 +15,9 @@ type ExecutionModeFilter = 'ALL' | 'MANUAL' | 'SCHEDULED';
   selector: 'ih-execution-toolbar',
   standalone: true,
   imports: [CommonModule, FormsModule, MatButtonModule, MatFormFieldModule, MatInputModule, MatSelectModule, RouterLink],
-    templateUrl: './execution-toolbar.component.html',
-    changeDetection: ChangeDetectionStrategy.OnPush,
+  templateUrl: './execution-toolbar.component.html',
+  styleUrl: './execution-toolbar.component.css',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ExecutionToolbarComponent {
   readonly i18n = inject(I18nService);
@@ -32,4 +33,11 @@ export class ExecutionToolbarComponent {
   readonly startedFromChange = output<string>();
   readonly startedToChange = output<string>();
   readonly refresh = output<void>();
+  readonly clearFilters = output<void>();
+
+  /** Habilita "Limpiar" solo si hay algun filtro activo (evita un boton muerto). */
+  readonly hasActiveFilters = computed(
+    () => !!this.search() || this.modeFilter() !== 'ALL' || this.statusFilter() !== 'ALL'
+      || !!this.startedFrom() || !!this.startedTo(),
+  );
 }

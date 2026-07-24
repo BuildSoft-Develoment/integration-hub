@@ -1,49 +1,61 @@
 <section class="toolbar-shell ih-catalog-toolbar">
-      <div class="toolbar-copy ih-catalog-toolbar__copy">
-        <h1 class="ih-section-title">{{ i18n.t('executions.title') }}</h1>
-        <p class="ih-muted">{{ i18n.t('executions.subtitle') }}</p>
-      </div>
+  <div class="toolbar-head">
+    <div class="toolbar-copy ih-catalog-toolbar__copy">
+      <h1 class="ih-section-title">{{ i18n.t('executions.title') }}</h1>
+      <p class="ih-muted">{{ i18n.t('executions.subtitle') }}</p>
+    </div>
 
-      <div class="toolbar-filters ih-catalog-toolbar__filters">
-        <button mat-stroked-button type="button" class="ih-catalog-action" (click)="refresh.emit()" [disabled]="loading()">
-          {{ i18n.t('common.refresh') }}
-        </button>
-        <a mat-stroked-button class="ih-catalog-action" routerLink="/executions/async-dlq">
-          {{ i18n.t('executions.dlq.link') }}
-        </a>
-        <mat-form-field class="toolbar-search">
-          <mat-label>{{ i18n.t('executions.search') }}</mat-label>
-          <input matInput [ngModel]="search()" (ngModelChange)="searchChange.emit($event)" />
-        </mat-form-field>
+    <div class="toolbar-actions">
+      <button mat-stroked-button type="button" class="ih-catalog-action" (click)="refresh.emit()" [disabled]="loading()">
+        {{ i18n.t('common.refresh') }}
+      </button>
+      <a mat-stroked-button class="ih-catalog-action" routerLink="/executions/async-dlq">
+        {{ i18n.t('executions.dlq.link') }}
+      </a>
+    </div>
+  </div>
 
-        <mat-form-field class="toolbar-select">
-          <mat-label>{{ i18n.t('processes.mode') }}</mat-label>
-          <mat-select [ngModel]="modeFilter()" (ngModelChange)="modeFilterChange.emit($event)">
-            <mat-option value="ALL">{{ i18n.t('processes.selectScheduleMode') }}</mat-option>
-            <mat-option value="MANUAL">{{ i18n.t('status.manual') }}</mat-option>
-            <mat-option value="SCHEDULED">{{ i18n.t('status.scheduled') }}</mat-option>
-          </mat-select>
-        </mat-form-field>
+  <!-- Grilla simetrica de filtros: 3 columnas x 2 filas, anchos parejos. -->
+  <div class="exec-filters">
+    <mat-form-field class="exec-filters__field" subscriptSizing="dynamic">
+      <mat-label>{{ i18n.t('executions.search') }}</mat-label>
+      <input matInput [ngModel]="search()" (ngModelChange)="searchChange.emit($event)" />
+    </mat-form-field>
 
-        <mat-form-field class="toolbar-select">
-          <mat-label>{{ i18n.t('common.status') }}</mat-label>
-          <mat-select [ngModel]="statusFilter()" (ngModelChange)="statusFilterChange.emit($event)">
-            <mat-option value="ALL">{{ i18n.t('sources.allStatuses') }}</mat-option>
-            <mat-option value="RUNNING">{{ i18n.t('executionStatus.RUNNING') }}</mat-option>
-            <mat-option value="COMPLETED">{{ i18n.t('executionStatus.COMPLETED') }}</mat-option>
-            <mat-option value="FAILED">{{ i18n.t('executionStatus.FAILED') }}</mat-option>
-            <mat-option value="COMPLETED_WITH_ERRORS">{{ i18n.t('executionStatus.COMPLETED_WITH_ERRORS') }}</mat-option>
-          </mat-select>
-        </mat-form-field>
+    <mat-form-field class="exec-filters__field" subscriptSizing="dynamic">
+      <mat-label>{{ i18n.t('common.status') }}</mat-label>
+      <mat-select [ngModel]="statusFilter()" (ngModelChange)="statusFilterChange.emit($event)">
+        <mat-option value="ALL">{{ i18n.t('sources.allStatuses') }}</mat-option>
+        <mat-option value="RUNNING">{{ i18n.t('executionStatus.RUNNING') }}</mat-option>
+        <mat-option value="COMPLETED">{{ i18n.t('executionStatus.COMPLETED') }}</mat-option>
+        <mat-option value="FAILED">{{ i18n.t('executionStatus.FAILED') }}</mat-option>
+        <mat-option value="COMPLETED_WITH_ERRORS">{{ i18n.t('executionStatus.COMPLETED_WITH_ERRORS') }}</mat-option>
+      </mat-select>
+    </mat-form-field>
 
-        <mat-form-field class="toolbar-date">
-          <mat-label>{{ i18n.t('executions.startedFrom') }}</mat-label>
-          <input matInput type="datetime-local" [ngModel]="startedFrom()" (ngModelChange)="startedFromChange.emit($event)" />
-        </mat-form-field>
+    <mat-form-field class="exec-filters__field" subscriptSizing="dynamic">
+      <mat-label>{{ i18n.t('processes.mode') }}</mat-label>
+      <mat-select [ngModel]="modeFilter()" (ngModelChange)="modeFilterChange.emit($event)">
+        <mat-option value="ALL">{{ i18n.t('processes.selectScheduleMode') }}</mat-option>
+        <mat-option value="MANUAL">{{ i18n.t('status.manual') }}</mat-option>
+        <mat-option value="SCHEDULED">{{ i18n.t('status.scheduled') }}</mat-option>
+      </mat-select>
+    </mat-form-field>
 
-        <mat-form-field class="toolbar-date">
-          <mat-label>{{ i18n.t('executions.startedTo') }}</mat-label>
-          <input matInput type="datetime-local" [ngModel]="startedTo()" (ngModelChange)="startedToChange.emit($event)" />
-        </mat-form-field>
-      </div>
-    </section>
+    <mat-form-field class="exec-filters__field" subscriptSizing="dynamic">
+      <mat-label>{{ i18n.t('executions.startedFrom') }}</mat-label>
+      <input matInput type="datetime-local" [ngModel]="startedFrom()" (ngModelChange)="startedFromChange.emit($event)" />
+    </mat-form-field>
+
+    <mat-form-field class="exec-filters__field" subscriptSizing="dynamic">
+      <mat-label>{{ i18n.t('executions.startedTo') }}</mat-label>
+      <input matInput type="datetime-local" [ngModel]="startedTo()" (ngModelChange)="startedToChange.emit($event)" />
+    </mat-form-field>
+
+    <div class="exec-filters__clear">
+      <button mat-stroked-button type="button" class="ih-catalog-action" (click)="clearFilters.emit()" [disabled]="!hasActiveFilters()">
+        {{ i18n.t('executions.clearFilters') }}
+      </button>
+    </div>
+  </div>
+</section>

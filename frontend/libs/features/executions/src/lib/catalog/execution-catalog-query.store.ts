@@ -89,6 +89,17 @@ export class ExecutionCatalogQueryStore implements OnDestroy {
     void this.loadExecutions(true);
   }
 
+  // Resetea TODOS los filtros a su valor neutro y recarga desde la primera pagina. No toca orden ni tamano de pagina.
+  clearFilters(): void {
+    this.clearSearchDebounce();
+    this.search.set('');
+    this.modeFilter.set('ALL');
+    this.statusFilter.set('ALL');
+    this.startedFrom.set('');
+    this.startedTo.set('');
+    void this.loadExecutions(true);
+  }
+
   updatePagination(pageIndex: number, pageSize: number): void {
     this.clearSearchDebounce();
     this.pageSize.set(pageSize);

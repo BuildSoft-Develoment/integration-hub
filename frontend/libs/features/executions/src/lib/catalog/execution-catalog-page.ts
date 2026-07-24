@@ -105,6 +105,10 @@ export class ExecutionCatalogPageComponent implements OnInit {
     this.store.updateDateFilter({ startedTo: value });
   }
 
+  clearFilters(): void {
+    this.store.clearFilters();
+  }
+
   selectExecution(execution: ProcessExecutionRecord): void {
     void this.store.selectExecution(execution);
   }

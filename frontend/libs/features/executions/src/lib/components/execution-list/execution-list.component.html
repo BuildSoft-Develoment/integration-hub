@@ -1,7 +1,7 @@
 <ih-catalog-list
   class="list-card"
   [columns]="columns"
-  gridColumns="minmax(200px, 1.5fr) 0.9fr 0.8fr"
+  gridColumns="minmax(180px, 1.3fr) 0.8fr minmax(260px, 1.5fr)"
   [sortField]="sortField()"
   [sortDirection]="sortDirection()"
   [rowCount]="executions().length"
@@ -51,9 +51,27 @@
       </div>
 
       <div class="row-status ih-catalog-row-meta">
-        <div class="row-dates">
-          <time [attr.datetime]="execution.finishedAt || execution.startedAt" [title]="(execution.finishedAt || execution.startedAt) | ihTime:'absolute'" [attr.aria-label]="(execution.finishedAt || execution.startedAt) | ihTime:'absolute'">{{ (execution.finishedAt || execution.startedAt) | ihTime }}</time>
-          <small>{{ i18n.t('executions.startedAt') }} <time [attr.datetime]="execution.startedAt" [title]="execution.startedAt | ihTime:'absolute'" [attr.aria-label]="execution.startedAt | ihTime:'absolute'">{{ execution.startedAt | ihTime }}</time></small>
+        <div class="row-timing">
+          <div class="row-timing__when">
+            <span class="row-timing__label">{{ i18n.t('executions.startedAt') }}</span>
+            <time class="row-timing__value"
+              [attr.datetime]="execution.startedAt"
+              [title]="execution.startedAt | ihTime:'absolute'">{{ (execution.startedAt | ihTime:'absolute') || '—' }}</time>
+          </div>
+          <div class="row-timing__when">
+            <span class="row-timing__label">{{ i18n.t('executions.finishedAt') }}</span>
+            @if (execution.finishedAt) {
+              <time class="row-timing__value"
+                [attr.datetime]="execution.finishedAt"
+                [title]="execution.finishedAt | ihTime:'absolute'">{{ execution.finishedAt | ihTime:'absolute' }}</time>
+            } @else {
+              <span class="row-timing__value row-timing__value--pending">{{ i18n.t('executions.running') }}</span>
+            }
+          </div>
+          <div class="row-timing__dur" [class.row-timing__dur--running]="isRunning(execution)">
+            <span class="row-timing__label">{{ i18n.t('executions.duration') }}</span>
+            <span class="row-timing__value">{{ duration(execution) || '—' }}{{ isRunning(execution) ? '…' : '' }}</span>
+          </div>
         </div>
       </div>
     </button>

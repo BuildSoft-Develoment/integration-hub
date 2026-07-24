@@ -1,0 +1,47 @@
+:host {
+  display: block;
+}
+.toolbar-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.toolbar-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* Grilla pareja: 3 columnas x 2 filas. Cada campo ocupa una celda igual. */
+.exec-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem 1rem;
+  margin-top: 0.85rem;
+  align-items: end;
+}
+.exec-filters__field {
+  width: 100%;
+  min-width: 0;
+}
+.exec-filters__clear {
+  display: flex;
+  align-items: center;
+  min-height: 3.5rem;
+}
+.exec-filters__clear .ih-catalog-action {
+  width: 100%;
+}
+
+@media (max-width: 760px) {
+  .exec-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 480px) {
+  .exec-filters {
+    grid-template-columns: 1fr;
+  }
+}

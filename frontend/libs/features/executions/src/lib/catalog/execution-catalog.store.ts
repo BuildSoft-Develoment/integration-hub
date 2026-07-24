@@ -82,6 +82,10 @@ export class ExecutionCatalogStore {
     this.query.updateDateFilter(patch);
   }
 
+  clearFilters(): void {
+    this.query.clearFilters();
+  }
+
   toggleSort(field: string): void {
     this.query.toggleSort(field);
   }

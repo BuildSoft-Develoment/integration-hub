@@ -29,7 +29,7 @@ export class ExecutionListComponent {
   readonly columns: readonly CatalogListColumn[] = [
     { labelKey: 'common.name', sortKey: 'name' },
     { labelKey: 'common.status', sortKey: 'status' },
-    { labelKey: 'executions.finishedAt', sortKey: 'createdAt' },
+    { labelKey: 'executions.timing', sortKey: 'createdAt' },
   ];
 
   readonly executions = input.required<readonly ProcessExecutionRecord[]>();
@@ -58,5 +58,41 @@ export class ExecutionListComponent {
 
   triggerLabel(status: string): string {
     return formatTriggerSourceLabel(status);
+  }
+
+  /** Sin fin y con inicio = todavia corriendo. */
+  isRunning(execution: ProcessExecutionRecord): boolean {
+    return !!execution.startedAt && !execution.finishedAt;
+  }
+
+  /**
+   * Cuanto demoro la corrida = fin - inicio. Si sigue corriendo, se mide contra el ahora (snapshot; se refresca
+   * al recargar la lista). El backend no expone `duration`: no hace falta, se computa aca. Devuelve '' si no hay
+   * inicio o los timestamps no parsean.
+   */
+  duration(execution: ProcessExecutionRecord): string {
+    if (!execution.startedAt) {
+      return '';
+    }
+    const start = Date.parse(execution.startedAt);
+    const end = execution.finishedAt ? Date.parse(execution.finishedAt) : Date.now();
+    if (Number.isNaN(start) || Number.isNaN(end) || end < start) {
+      return '';
+    }
+    return this.formatDuration(end - start);
+  }
+
+  private formatDuration(ms: number): string {
+    const totalSeconds = Math.floor(ms / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) {
+      return `${hours}h ${minutes}m`;
+    }
+    if (minutes > 0) {
+      return `${minutes}m ${seconds}s`;
+    }
+    return `${seconds}s`;
   }
 }
