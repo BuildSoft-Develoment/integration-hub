@@ -1,6 +1,11 @@
 import { Injectable } from '@angular/core';
 import { ProcessTaskFormModel } from '../../../../tasks/process-task.models';
-import { Mt101BuildTaskDraft, Mt101BuildTaskProvider } from './mt101-build-task.provider';
+import {
+  DEFAULT_MAX_BYTES,
+  DEFAULT_MAX_TRANSACTIONS,
+  Mt101BuildTaskDraft,
+  Mt101BuildTaskProvider,
+} from './mt101-build-task.provider';
 
 @Injectable()
 export class Mt101BuildFromTableTaskProvider extends Mt101BuildTaskProvider {
@@ -16,7 +21,6 @@ export class Mt101BuildFromTableTaskProvider extends Mt101BuildTaskProvider {
     return {
       ...draft,
       executionMode: 'once',
-      maxTransactionsPerMessage: 100,
       sequenceA: {
         ...draft.sequenceA,
         // ${batchCode} (base36 del processExecutionId) hace la referencia unica
@@ -32,9 +36,16 @@ export class Mt101BuildFromTableTaskProvider extends Mt101BuildTaskProvider {
   override toTaskPatch(draft: Mt101BuildTaskDraft): Partial<ProcessTaskFormModel> {
     const patch = super.toTaskPatch(draft);
     const config = this.parseJson(patch.configurationJson as string) as Record<string, unknown>;
-    config['maxTransactionsPerMessage'] = draft.maxTransactionsPerMessage || 100;
-    config['maxBytesPerMessage'] = 10000;
-    config['replaceExisting'] = true;
+    config['maxTransactionsPerMessage'] = draft.maxTransactionsPerMessage || DEFAULT_MAX_TRANSACTIONS;
+    // Estas dos las lee el backend y el form NO las expone. Antes se fijaban a la constante en cada guardado,
+    // asi que una config con otro valor se reescribia sola — y `replaceExisting: false` volvia a true, lo que
+    // BORRA el fragment set anterior. Ahora solo se siembran si no venian (super ya spreadeo lo preservado).
+    if (config['maxBytesPerMessage'] === undefined) {
+      config['maxBytesPerMessage'] = DEFAULT_MAX_BYTES;
+    }
+    if (config['replaceExisting'] === undefined) {
+      config['replaceExisting'] = true;
+    }
     return { configurationJson: this.toPrettyJson(config) };
   }
 }

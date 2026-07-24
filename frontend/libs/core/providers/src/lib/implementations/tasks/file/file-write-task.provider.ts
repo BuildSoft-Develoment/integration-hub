@@ -68,6 +68,13 @@ export interface FileWriteTableSourceDraft {
   orderBy: string;
   payloadColumn: string;
   batchSize: string;
+  /**
+   * Predicado que acota QUE filas se exportan. El backend lo pasa a `count` y a `readBatch`
+   * ({@code FileWriteTaskProvider:172}); tipicamente {@code {process_execution_id: '${_processExecutionId}'}}
+   * para exportar solo la corrida actual. La rama de tabla directa reconstruia `input` entero, asi que se
+   * PERDIA: el export pasaba a volcar la tabla COMPLETA en cada corrida. Ningun campo del form lo edita.
+   */
+  filters?: Record<string, unknown>;
 }
 
 export interface FileWriteTaskDraft extends ProcessTaskRuntimeDraft {
@@ -82,7 +89,18 @@ export interface FileWriteTaskDraft extends ProcessTaskRuntimeDraft {
   trailer: FileWriteCellDraft[];
   archiveNameTemplate: string;
   tableSource: FileWriteTableSourceDraft;
+  /** Claves de nivel superior que el backend lee y ningun campo del form escribe (ver FILE_WRITE_PRESERVED_KEYS). */
+  preserved: Record<string, unknown>;
 }
+
+/**
+ * - `source`: mapa {table, idColumn, payloadColumn} que el backend usa como SEGUNDO eslabon del fallback de
+ *   tabla/orderBy ({@code FileWriteTaskProvider:158-169}). Al perderlo, una config que solo lo tenia ahi cae a
+ *   la tabla por defecto y exporta OTRA tabla.
+ * - `connectionRef`: ULTIMO eslabon del fallback del datasource; sin el, la lectura cae al datasource de la
+ *   plataforma.
+ */
+const FILE_WRITE_PRESERVED_KEYS = ['source', 'connectionRef'] as const;
 
 @Injectable()
 export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraft> {
@@ -108,6 +126,7 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       trailer: [],
       archiveNameTemplate: '',
       tableSource: this.defaultTableSource(),
+      preserved: {},
     };
   }
 
@@ -136,6 +155,7 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       trailer: this.hydrateCells(layout.trailer),
       archiveNameTemplate: String(config.archiveNameTemplate || ''),
       ...this.hydrateSource(config.input),
+      preserved: this.preserveKeys(config, FILE_WRITE_PRESERVED_KEYS),
     };
   }
 
@@ -164,6 +184,9 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
         orderBy: String(cursor.orderBy || 'id'),
         payloadColumn: String(input.payloadColumn || ''),
         batchSize: input.batchSize != null && String(input.batchSize).trim() ? String(input.batchSize) : '',
+        ...(input.filters && typeof input.filters === 'object' && !Array.isArray(input.filters)
+          ? { filters: input.filters as Record<string, unknown> }
+          : {}),
       },
     };
   }
@@ -196,6 +219,7 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
     }
     const payload: any = this.withRuntime(
       {
+        ...draft.preserved,
         format: draft.format,
         ...(draft.encoding?.trim() ? { encoding: draft.encoding.trim() } : {}),
         layout,
@@ -232,6 +256,8 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
         cursor: { orderBy: ts.orderBy?.trim() || 'id' },
         ...(ts.payloadColumn?.trim() ? { payloadColumn: ts.payloadColumn.trim() } : {}),
         ...(batchSize != null ? { batchSize } : {}),
+        // Se re-emite aparte porque esta rama RECONSTRUYE input entero (pisa lo que emitio withRuntime).
+        ...(ts.filters ? { filters: ts.filters } : {}),
       };
     } else if (payload.input && payload.input.sourceOutput === 'table' && !payload.input.cursor) {
       // Modo records donde la tarea de origen PRODUCE una tabla (p.ej. DB_WRITE -> FILE_WRITE): se conserva el

@@ -62,8 +62,9 @@ describe('ProcessEditorStore', () => {
       replaceExisting: true,
       maxTransactionsPerMessage: 100,
       maxBytesPerMessage: 10000,
-      maxRecordsInOutput: 1000,
     });
+    // BUILD_FROM_TABLE no lee maxRecordsInOutput (solo lo leen ARCHIVE y PAY): sembrarlo aca era config muerta.
+    expect(configOf(2).maxRecordsInOutput).toBeUndefined();
     expect(configOf(3)).toMatchObject({
       pageSize: 200,
       publishIssuesTo: 'table:mt101_validation_issue',

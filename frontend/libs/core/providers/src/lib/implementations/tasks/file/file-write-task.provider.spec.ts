@@ -210,4 +210,38 @@ describe('FileWriteTaskProvider', () => {
     const rehydrated = roundTrip(draft);
     expect(rehydrated.xlsx).toEqual({ sheetName: '', headerStyle: 'BOLD', freezeHeader: true, autoFilter: false, autoSizeColumns: false });
   });
+it('modo tabla directa: conserva input.filters (si no, el export vuelca la tabla COMPLETA)', () => {
+    // La rama de tabla directa RECONSTRUYE input entero, pisando lo que emitio withRuntime. filters es el
+    // predicado que acota que filas se exportan (FileWriteTaskProvider:172 lo pasa a count y a readBatch);
+    // tipicamente acota a la corrida actual. Perderlo convierte el export incremental en un volcado total.
+    const task: any = { taskType: 'FILE_WRITE', configurationJson: JSON.stringify({
+      taskRef: 'fw', executionMode: 'once', format: 'CSV',
+      layout: { detail: { columns: [{ field: 'id' }] } },
+      input: { source: 'task-output', sourceOutput: 'table', table: 'mt101_archive',
+        cursor: { orderBy: 'id' }, filters: { process_execution_id: '' } },
+    }) };
+
+    const saved = JSON.parse(provider.toTaskPatch(provider.hydrateDraft(task)).configurationJson as string);
+
+    expect(saved.input.filters, 'se perdio el filtro: el export pasa a volcar la tabla entera')
+      .toEqual({ process_execution_id: '' });
+    expect(saved.input.table).toBe('mt101_archive');
+  });
+
+  it('conserva source y connectionRef de nivel superior (eslabones del fallback del backend)', () => {
+    const task: any = { taskType: 'FILE_WRITE', configurationJson: JSON.stringify({
+      taskRef: 'fw', executionMode: 'once', format: 'CSV',
+      layout: { detail: { columns: [{ field: 'id' }] } },
+      connectionRef: 'conn-reportes',
+      source: { table: 'mt101_archive', idColumn: 'id', payloadColumn: 'raw_payload' },
+      input: { source: 'task-output', sourceOutput: 'table', cursor: { orderBy: 'id' } },
+    }) };
+
+    const saved = JSON.parse(provider.toTaskPatch(provider.hydrateDraft(task)).configurationJson as string);
+
+    expect(saved.connectionRef, 'sin connectionRef la lectura cae al datasource de la plataforma')
+      .toBe('conn-reportes');
+    expect(saved.source, 'sin source la tabla cae al default y se exporta OTRA tabla')
+      .toEqual({ table: 'mt101_archive', idColumn: 'id', payloadColumn: 'raw_payload' });
+  });
 });

@@ -138,6 +138,40 @@ Orden por riesgo, no por esfuerzo:
 5. **Hidrataciones que no parsean** (§4) — preservar el valor crudo cuando no se lo puede interpretar.
 6. **Tuning BAJO** — misma lista de preservación, sin urgencia propia.
 
+### Estado del resto de 4 — HECHO (2026-07-24)
+
+Lo encontró un **diagnóstico sobre la plantilla del propio producto** (`applyMassiveMt101Template`), no una
+lectura más del código: se hizo el round-trip de la config que la plantilla siembra para cada tarea y se
+comparó clave por clave. Resultado: `DB_WRITE`, `VALIDATE`, `ARCHIVE` y `PAY` ya sobrevivían intactas tras los
+arreglos previos; **`MT101_BUILD_FROM_TABLE` no**.
+
+- **`maxTransactionsPerMessage: 100 → 999`.** No se perdía: se **reescribía**. El formulario lo hidrataba de
+  `splitBy.maxTransactionsPerMessage` — una rama que **el backend no lee en ninguna parte** — así que siempre
+  mostraba el default, y al guardar re-emitía ese default en el nivel superior, que es de donde el backend sí
+  lo lee (`Mt101BuildFromTableTaskProvider:196`). Además el default del frontend era 999 contra el 100 del
+  backend. Efecto: abrir la tarea y guardar multiplicaba por ~10 las transacciones por mensaje MT101. Ahora se
+  lee del nivel superior (con `splitBy` como lectura *legacy*, que es donde lo dejaron las configs guardadas
+  por la versión con el bug) y el default espeja al backend.
+- **`maxBytesPerMessage` y `replaceExisting`** se fijaban a una constante en cada guardado. `replaceExisting:
+  false` es lo que EVITA borrar el fragment set anterior; forzarlo a `true` lo borra. Ahora solo se siembran si
+  no venían.
+- **`envelope.uetr`** (con `uetrStrategy: 'fixed'`) y **`sequenceA.customerSpecifiedReference` / `authorisation`**
+  (campos MT101 21R y 25) — el formulario rearma esos objetos anidados desde cero y los borraba. Van **dentro
+  del mensaje que se envía al banco**.
+- **`maxRecordsInOutput` en BUILD era config muerta**: solo lo leen ARCHIVE y PAY. Se **eliminó del seed** de la
+  plantilla en vez de "arreglarlo", con un test que fija que no vuelve.
+
+**FILE_WRITE** — la rama de tabla directa reconstruye `input` entero, pisando lo que emitió `withRuntime`, y
+perdía **`input.filters`**: el predicado que acota qué filas se exportan (`FileWriteTaskProvider:172` lo pasa a
+`count` y a `readBatch`). Perderlo convierte un export incremental en un **volcado de la tabla completa** en
+cada corrida. También se preservan ahora `source` y `connectionRef` de nivel superior, eslabones del fallback
+de tabla y de datasource. En cambio `lineEnding` —que el §4 listaba— **ya estaba bien** hidratado y emitido: se
+descarta como hallazgo.
+
+**Evidencia:** 11 tests nuevos (4 BUILD, 2 FILE_WRITE, 5 de la plantilla completa). Los **7 que cubren código
+tocado fallan al revertir** — verificado; los otros 4 son las tareas de la plantilla que ya estaban sanas y
+quedan como guarda. Suite `web` **681/681** y `nx build web` en verde.
+
 ### Estado de 5 y 6 — HECHO (2026-07-24)
 
 **5.** Parser y emisor de `publishIssuesTo` / `publishExceptionsTo` alineados con el backend (la conexión es

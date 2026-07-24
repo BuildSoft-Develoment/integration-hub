@@ -188,7 +188,6 @@ export class ProcessEditorStore {
           replaceExisting: true,
           maxTransactionsPerMessage: 100,
           maxBytesPerMessage: 10000,
-          maxRecordsInOutput: 1000,
         } },
       { taskType: 'MT101_VALIDATE', ref: 'validar', overrides: {
           executionMode: 'once',

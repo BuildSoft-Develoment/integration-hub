@@ -59,6 +59,9 @@ export interface Mt101BuildTaskDraft extends ProcessTaskRuntimeDraft {
   maxTransactionsPerMessage: number;
   /** Claves que el backend lee y el form no gobierna; viajan verbatim (ver BUILD_PRESERVED_KEYS). */
   preserved: Record<string, unknown>;
+  /** Claves ANIDADAS que el backend lee y el form no gobierna (ver BUILD_ENVELOPE_KEYS / BUILD_SEQUENCE_A_KEYS). */
+  preservedEnvelope: Record<string, unknown>;
+  preservedSequenceA: Record<string, unknown>;
 }
 
 /**
@@ -78,7 +81,33 @@ export interface Mt101BuildTaskDraft extends ProcessTaskRuntimeDraft {
  * - `fragmentSetIdTemplate`: identidad del set producido, que consumen VALIDATE/ARCHIVE/PAY. Combinado con
  *   `replaceExisting` (que el form fuerza a true) tambien cambia QUE set existente se borra.
  */
-const BUILD_PRESERVED_KEYS = ['source', 'connectionRef', 'fragmentSetIdTemplate'] as const;
+const BUILD_PRESERVED_KEYS = [
+  'source', 'connectionRef', 'fragmentSetIdTemplate',
+  // maxBytesPerMessage y replaceExisting los FIJA la subclase a una constante (10000 / true) y el form no los
+  // expone: una config con otro valor se reescribia al guardar. replaceExisting=false en particular es lo que
+  // impide borrar el fragment set anterior; forzarlo a true lo BORRA.
+  'maxBytesPerMessage', 'replaceExisting',
+] as const;
+
+/**
+ * {@code envelope.uetr} lo lee {@code resolveUetr} cuando {@code uetrStrategy === 'fixed'}. El form rearma el
+ * envelope con cuatro campos y no incluye la UETR, asi que guardar con la estrategia 'fixed' la BORRABA y el
+ * mensaje salia sin la referencia unica punta a punta (la que sirve para rastrear el pago).
+ */
+const BUILD_ENVELOPE_KEYS = ['uetr'] as const;
+
+/**
+ * Campos MT101 de Sequence A que el backend lee ({@code buildSequenceA}) y el form no tiene: 21R
+ * ({@code customerSpecifiedReference}, la referencia de lote del cliente) y 25 ({@code authorisation}). Van
+ * dentro del mensaje que se envia al banco; el form rearma sequenceA desde cero y los borraba.
+ */
+const BUILD_SEQUENCE_A_KEYS = ['customerSpecifiedReference', 'authorisation'] as const;
+
+/** Espeja {@code DEFAULT_MAX_TRANSACTIONS} del backend. El 999 que habia aca NO era el default real. */
+export const DEFAULT_MAX_TRANSACTIONS = 100;
+
+/** Espeja {@code DEFAULT_MAX_BYTES} del backend. */
+export const DEFAULT_MAX_BYTES = 10000;
 
 @Injectable()
 export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDraft> {
@@ -132,8 +161,10 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
         detailsOfChargesField: '',
       },
       splitStrategy: 'none',
-      maxTransactionsPerMessage: 999,
+      maxTransactionsPerMessage: DEFAULT_MAX_TRANSACTIONS,
       preserved: {},
+      preservedEnvelope: {},
+      preservedSequenceA: {},
     };
   }
 
@@ -195,8 +226,15 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
         detailsOfChargesField: String(mappings['detailsOfChargesField'] || ''),
       },
       splitStrategy: this.normalizeSplitStrategy(split['strategy']),
-      maxTransactionsPerMessage: Number(split['maxTransactionsPerMessage']) || 999,
+      // El backend lo lee en el NIVEL SUPERIOR (Mt101BuildFromTableTaskProvider:196), no dentro de splitBy —
+      // que ademas no lo lee nadie. Leerlo de splitBy daba SIEMPRE el default, y como toTaskPatch lo re-emite
+      // arriba, guardar reescribia el limite real de transacciones por mensaje MT101. splitBy queda como lectura
+      // legacy: es donde lo dejaron las configs guardadas por la version con el bug.
+      maxTransactionsPerMessage:
+        Number(config['maxTransactionsPerMessage'] ?? split['maxTransactionsPerMessage']) || DEFAULT_MAX_TRANSACTIONS,
       preserved: this.preserveKeys(config, BUILD_PRESERVED_KEYS),
+      preservedEnvelope: this.preserveKeys(envelope, BUILD_ENVELOPE_KEYS),
+      preservedSequenceA: this.preserveKeys(sequenceA, BUILD_SEQUENCE_A_KEYS),
     };
   }
 
@@ -207,12 +245,14 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
         format: draft.format,
         debitAccountMode: draft.debitAccountMode,
         envelope: {
+          ...draft.preservedEnvelope,
           senderLt: draft.envelope.senderLt,
           receiverLt: draft.envelope.receiverLt,
           uetrStrategy: draft.envelope.uetrStrategy,
           priority: draft.envelope.priority,
         },
         sequenceA: {
+          ...draft.preservedSequenceA,
           sendersReferenceTemplate: draft.sequenceA.sendersReferenceTemplate,
           requestedExecutionDate: draft.sequenceA.requestedExecutionDate,
           instructingParty: draft.debitAccountMode === 'subsidiary'

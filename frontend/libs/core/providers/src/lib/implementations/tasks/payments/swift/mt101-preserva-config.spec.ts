@@ -107,6 +107,51 @@ describe('MT101_INBOUND_DELIVER', () => {
   });
 });
 
+describe('MT101_BUILD_FROM_TABLE — limites del mensaje y campos SWIFT', () => {
+  it('NO reescribe maxTransactionsPerMessage (el backend lo lee del nivel superior, no de splitBy)', () => {
+    // El form lo hidrataba de `splitBy.maxTransactionsPerMessage` —que no lee nadie— asi que SIEMPRE veia el
+    // default, y al guardar re-emitia ese default arriba: el limite real de transacciones por mensaje MT101
+    // cambiaba solo con abrir el formulario. La plantilla del producto siembra 100.
+    const saved = roundTrip(new Mt101BuildFromTableTaskProvider(), 'MT101_BUILD_FROM_TABLE', {
+      taskRef: 'bft', executionMode: 'once', maxTransactionsPerMessage: 100,
+    });
+    expect(saved.maxTransactionsPerMessage, 'se reescribio el limite de transacciones por mensaje').toBe(100);
+  });
+
+  it('conserva maxBytesPerMessage y replaceExisting=false', () => {
+    // Los fijaba a una constante en cada guardado. replaceExisting=false es lo que EVITA borrar el fragment set
+    // anterior: forzarlo a true lo borra.
+    const saved = roundTrip(new Mt101BuildFromTableTaskProvider(), 'MT101_BUILD_FROM_TABLE', {
+      taskRef: 'bft', maxBytesPerMessage: 4000, replaceExisting: false,
+    });
+    expect(saved.maxBytesPerMessage).toBe(4000);
+    expect(saved.replaceExisting, 'se reactivo el borrado del fragment set').toBe(false);
+  });
+
+  it('conserva envelope.uetr con la estrategia fixed', () => {
+    // resolveUetr solo lee envelope.uetr cuando uetrStrategy === 'fixed'. El form rearmaba el envelope con
+    // cuatro campos y la borraba: el mensaje salia sin la referencia unica punta a punta.
+    const saved = roundTrip(new Mt101BuildFromTableTaskProvider(), 'MT101_BUILD_FROM_TABLE', {
+      taskRef: 'bft',
+      envelope: { senderLt: 'BANKPEPLXXX', receiverLt: 'BANKUS33XXX', uetrStrategy: 'fixed',
+        uetr: '7d4a1f52-0c2e-4c9f-9a1b-2f8e6d3c4b5a', priority: 'N' },
+    });
+    expect(saved.envelope.uetrStrategy).toBe('fixed');
+    expect(saved.envelope.uetr, 'se perdio la UETR fija').toBe('7d4a1f52-0c2e-4c9f-9a1b-2f8e6d3c4b5a');
+  });
+
+  it('conserva los campos 21R y 25 de Sequence A', () => {
+    // customerSpecifiedReference (21R) y authorisation (25) viajan DENTRO del mensaje al banco.
+    const saved = roundTrip(new Mt101BuildFromTableTaskProvider(), 'MT101_BUILD_FROM_TABLE', {
+      taskRef: 'bft',
+      sequenceA: { sendersReferenceTemplate: 'PROC-${_processExecutionId}',
+        customerSpecifiedReference: 'LOTE-TESORERIA-Q3', authorisation: 'AUTH-2026-07' },
+    });
+    expect(saved.sequenceA.customerSpecifiedReference, 'se perdio el 21R').toBe('LOTE-TESORERIA-Q3');
+    expect(saved.sequenceA.authorisation, 'se perdio el 25').toBe('AUTH-2026-07');
+  });
+});
+
 describe('MT101_BUILD_FROM_TABLE', () => {
   it('conserva source, connectionRef y fragmentSetIdTemplate', () => {
     // `source` define DE QUE tabla/columna/conexion se construyen los pagos; recordIndexIn acota un rebuild
