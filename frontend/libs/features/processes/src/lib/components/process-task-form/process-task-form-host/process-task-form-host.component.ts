@@ -158,8 +158,28 @@ export class ProcessTaskFormHostComponent {
     });
   }
 
-  /** Persiste el valor del schema-form como {@code configurationJson} de la tarea. */
+  /**
+   * Persiste el valor del schema-form como {@code configurationJson} de la tarea, MERGEANDO sobre lo que ya
+   * habia en vez de reemplazarlo.
+   *
+   * <p>El schema-form emite {@code group.getRawValue()}: solo los controles que declara el config-schema del
+   * plugin. Las claves de PLATAFORMA no las declara ningun plugin, asi que un reemplazo directo las borraba al
+   * editar cualquier campo — y con ellas el cableado del pipeline: {@code taskRef} es la identidad que las
+   * tareas aguas abajo referencian por {@code input.sourceTaskRef}, y sin {@code executionMode} el motor
+   * rechaza la tarea ({@code TaskOutputRegistry} lo exige). Tambien se iban {@code input}, {@code async},
+   * {@code asyncTransport} y {@code continueOnFailure}.</p>
+   *
+   * <p>El merge es en un solo nivel y el schema MANDA: lo que el plugin declara pisa lo anterior (incluso a
+   * vacio, que es una edicion legitima); lo que no declara se conserva.</p>
+   */
   onSchemaValue(value: SchemaFormValue): void {
-    this.patchTask.emit({ configurationJson: JSON.stringify(value) });
+    let previous: Record<string, unknown> = {};
+    try {
+      const parsed = JSON.parse(this.task().configurationJson || '{}');
+      previous = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      previous = {};
+    }
+    this.patchTask.emit({ configurationJson: JSON.stringify({ ...previous, ...value }) });
   }
 }

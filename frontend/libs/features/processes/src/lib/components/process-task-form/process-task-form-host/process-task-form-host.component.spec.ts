@@ -72,4 +72,33 @@ describe('ProcessTaskFormHostComponent (schema-driven path)', () => {
     });
     http.verify();
   });
+
+  it('keeps the platform keys the plugin schema does not declare', () => {
+    // Regresion (auditoria 2026-07-24): el schema-form emite group.getRawValue(), o sea SOLO los controles que
+    // declara el config-schema del plugin. Ningun plugin declara las claves de plataforma, asi que reemplazar
+    // el config las borraba: sin taskRef se rompe el cableado (las tareas aguas abajo lo referencian por
+    // input.sourceTaskRef) y sin executionMode el motor rechaza la tarea.
+    const seeded = JSON.stringify({
+      taskRef: 'plugin-1',
+      executionMode: 'batch',
+      input: { source: 'task-output', sourceTaskRef: 'read', sourceOutput: 'records' },
+      continueOnFailure: true,
+      endpoint: 'https://viejo.example',
+    });
+    const { fixture, http } = createHost(task('ACME_DO', seeded));
+    http.expectOne('/api/plugins/config-schema/ACME_DO').flush({ fields: [] });
+
+    const patches: Partial<ProcessTaskFormModel>[] = [];
+    fixture.componentInstance.patchTask.subscribe((p) => patches.push(p));
+    fixture.componentInstance.onSchemaValue({ endpoint: 'https://nuevo.example' });
+
+    const saved = JSON.parse(patches[0].configurationJson as string);
+    expect(saved.taskRef, 'se perdio taskRef: rompe el cableado del pipeline').toBe('plugin-1');
+    expect(saved.executionMode, 'se perdio executionMode: el motor rechaza la tarea').toBe('batch');
+    expect(saved.input).toEqual({ source: 'task-output', sourceTaskRef: 'read', sourceOutput: 'records' });
+    expect(saved.continueOnFailure).toBe(true);
+    // Lo que el schema SI declara manda sobre lo anterior.
+    expect(saved.endpoint).toBe('https://nuevo.example');
+    http.verify();
+  });
 });
