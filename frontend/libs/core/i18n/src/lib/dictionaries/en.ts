@@ -992,7 +992,6 @@ export const en = {
   'ui.write.dataSource': 'Data source',
   'ui.write.sourceRecordsHint': 'Source: the output of the task chosen above, in "Source task".',
   'ui.write.sourceTableHint': 'No source task: reads a table directly (keyset pagination, scales to >1M). Pick a "Source task" above to read its output instead.',
-  'ui.write.defaultConnection': 'Platform datasource',
   'ui.write.table': 'Table',
   'ui.write.orderBy': 'Order column (cursor)',
   'ui.write.orderByHint': 'Unique/orderable PK for keyset pagination (e.g. id).',

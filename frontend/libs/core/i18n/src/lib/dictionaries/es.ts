@@ -992,7 +992,6 @@ export const es = {
   'ui.write.dataSource': 'Fuente de datos',
   'ui.write.sourceRecordsHint': 'Origen: la salida de la tarea elegida arriba, en "Tarea de origen".',
   'ui.write.sourceTableHint': 'Sin tarea de origen: se lee una tabla directa (paginacion keyset, escala a >1M). Elegi una "Tarea de origen" arriba para leer su salida.',
-  'ui.write.defaultConnection': 'Datasource de la plataforma',
   'ui.write.table': 'Tabla',
   'ui.write.orderBy': 'Columna de orden (cursor)',
   'ui.write.orderByHint': 'PK unica/ordenable para paginacion keyset (ej. id).',

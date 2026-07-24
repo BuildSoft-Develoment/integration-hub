@@ -106,7 +106,7 @@
           [connections]="connections()"
           [value]="draft().connectionRef"
           [label]="i18n.t('mt101Status.connection')"
-          emptyLabel="-"
+          [emptyLabel]="i18n.t('ui.platformDatasource')"
           subscriptSizing="dynamic"
           [disabled]="readonly()"
           (valueChange)="updateDraft({ connectionRef: $event })" />

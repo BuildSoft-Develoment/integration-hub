@@ -35,7 +35,7 @@
               [connections]="connections()"
               [value]="draft().tableSource.connectionRef"
               [label]="i18n.t('ui.connection')"
-              [emptyLabel]="i18n.t('ui.write.defaultConnection')"
+              [emptyLabel]="i18n.t('ui.platformDatasource')"
               [disabled]="readonly()"
               (valueChange)="handleConnectionChange($event)" />
 
