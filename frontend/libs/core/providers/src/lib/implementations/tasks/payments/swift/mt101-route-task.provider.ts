@@ -18,7 +18,15 @@ export interface Mt101RouteTaskDraft extends ProcessTaskRuntimeDraft {
   rules: Mt101RouteRuleDraft[];
   defaultRoute: string;
   routeField: string;
+  /** Tuning que el backend lee y el form no expone. */
+  preserved: Record<string, unknown>;
 }
+
+/**
+ * {@code pageSize} lo lee el backend en las dos ramas ({@code Mt101RouteTaskProvider:168,215}) para acotar la
+ * memoria del streaming. Sin transportarlo volvia a su default en cada guardado.
+ */
+const ROUTE_PRESERVED_KEYS = ['pageSize'] as const;
 
 /**
  * Provider del task type {@code MT101_ROUTE}: clasifica records segun reglas
@@ -42,6 +50,7 @@ export class Mt101RouteTaskProvider extends ProcessTaskProvider<Mt101RouteTaskDr
       ],
       defaultRoute: 'UNROUTED',
       routeField: 'routedAs',
+      preserved: {},
     };
   }
 
@@ -60,12 +69,14 @@ export class Mt101RouteTaskProvider extends ProcessTaskProvider<Mt101RouteTaskDr
         })),
       defaultRoute: String(config['defaultRoute'] || 'UNROUTED'),
       routeField: String(config['routeField'] || 'routedAs'),
+      preserved: this.preserveKeys(config, ROUTE_PRESERVED_KEYS),
     };
   }
 
   toTaskPatch(draft: Mt101RouteTaskDraft): Partial<ProcessTaskFormModel> {
     const payload: Record<string, unknown> = this.withRuntime(
       {
+        ...draft.preserved,
         // Se persisten TODAS las reglas tal cual (incluidas las incompletas en edicion), igual que las filas
         // repetibles de MT101_REPAIR / FILE_WRITE. Filtrar las incompletas aca rompia el "Agregar regla": el
         // draft se recomputa desde el task persistido, asi que una regla recien agregada (vacia) se descartaba

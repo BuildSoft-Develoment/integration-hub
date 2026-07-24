@@ -95,6 +95,32 @@ valor válido, `toTaskPatch` lo emite vacío o lo omite, y se pierde igual.
   `encryptionSecretRef` en blanco, hidrata a `false` y `toTaskPatch` **borra ambas**: el archivado revierte a
   texto plano en silencio.
 
+### 4.b Corrección al propio §4 (encontrada al implementar, 2026-07-24)
+
+Dos de las tres afirmaciones de arriba estaban **mal calibradas**. Lo que encontró la implementación:
+
+1. **Hay una cuarta forma, y no se borra: se CORROMPE.** El backend acepta también `table:<tabla>` (una sola
+   parte, sin conexión) — es la que usan los propios ITs (`Mt101AllTasksProcessE2EIT:166`,
+   `Mt101MillionFileProcessE2EIT:549`). El parser del frontend leía siempre `parts[1]` como tabla, así que
+   `"table:mt101_validation_issue"` hidrataba a `connRef = "mt101_validation_issue"`, `table = ""`; el default
+   rellenaba la tabla y se guardaba **`"table:mt101_validation_issue:mt101_validation_issue"`**: el nombre de
+   la tabla terminaba en el slot de la **conexión**, que en ejecución no resuelve. Peor que perder la clave.
+   Lo detectó el test al fallar con un valor inesperado, no la lectura del código.
+2. **La raíz no era "no sabe parsear", era que el interruptor estaba en el campo equivocado.** `toTaskPatch`
+   exigía `connectionRef` **y** `table` para emitir, pero en el backend la conexión es **opcional**
+   (`IssueSink.from` la deja en `null`; `parseExceptionTable` ni la mira). El arreglo correcto no es preservar
+   el crudo: es que el **parser y el emisor espejen al backend**, y que el interruptor del sink sea la TABLA.
+   La preservación del crudo queda solo para lo que sigue sin ser representable: el **mapa**, el nombre suelto
+   y el apagado explícito (`"none"` / `"false"`).
+3. **ARCHIVE estaba sobrevendido.** `resolveEncryptor` exige las dos claves, así que sin el par completo el
+   backend **no cifra en ninguno de los dos casos**: no hay reversión a texto plano ni pérdida de
+   confidencialidad. Lo real es que el operador **perdía su configuración a medio hacer** (columna elegida,
+   secreto todavía sin dar de alta) sin aviso. Severidad BAJA, no ALTA.
+
+Efecto colateral del arreglo (2): la tabla vacía pasa a significar "sin sink", así que el default dejó de
+rellenarse en `hydrateDraft`/`createDraft` y el formulario lo dice con un `mat-hint` en ambos forms. Una tarea
+**nueva** sigue guardándose sin la clave, exactamente como antes.
+
 ---
 
 ## 5. Plan propuesto — requiere autorización
@@ -111,6 +137,33 @@ Orden por riesgo, no por esfuerzo:
    ya usado en PAY/STATUS, más preservación de claves anidadas donde aplique.
 5. **Hidrataciones que no parsean** (§4) — preservar el valor crudo cuando no se lo puede interpretar.
 6. **Tuning BAJO** — misma lista de preservación, sin urgencia propia.
+
+### Estado de 5 y 6 — HECHO (2026-07-24)
+
+**5.** Parser y emisor de `publishIssuesTo` / `publishExceptionsTo` alineados con el backend (la conexión es
+opcional; la tabla es el interruptor), más preservación verbatim del crudo para el mapa / nombre suelto /
+`"none"`. Se guarda como `unknown`, no como `String`: stringificar el mapa escribiría `"[object Object]"`, que
+`IssueSink.enabled` rechaza con `IllegalArgumentException` en ejecución — corromper la config es peor que
+perderla. ARCHIVE: se preserva el par de cifrado **solo cuando está a medias**; con el par completo manda la
+casilla, para que desmarcarla siga pudiendo apagar el cifrado de verdad.
+
+**6.** `ARCHIVE` (`maxRecordsInOutput`, `pageSize`), `VALIDATE` (`maxIssuesInOutput`, `pageSize`), `ROUTE`
+(`pageSize`), `REST_CALL` (`loginTimeoutSeconds`, `tokenTtlSeconds`).
+
+Además, corrección de un defecto **introducido por el arreglo #4** de este mismo plan: al saltear todo lo
+preservado en transporte REST, `MT101_INBOUND_DELIVER` volvía a perder `loginTimeoutSeconds` /
+`tokenTtlSeconds` — justo las claves que ningún campo del form escribe, o sea las que la preservación venía a
+rescatar. Se re-emiten también en REST vía `INBOUND_DELIVER_ALWAYS_PRESERVED`.
+
+**Evidencia:** 15 tests nuevos (`mt101-preserva-sinks-tuning.spec.ts` + 1 en `mt101-preserva-config.spec.ts`).
+**12 de los 15 fallan al revertir los seis arreglos** — verificado revirtiendo y volviendo a correr; los otros
+3 son guardas del sentido inverso (que el fix no impida apagar el sink, borrar el token ni desmarcar el
+cifrado) y por diseño pasan en ambos estados. Suite `web` **670/670** y `nx build web` en verde.
+
+Dos tests preexistentes cambiaron de expectativa junto con el contrato, no para acomodar el código:
+`createDraft returns sensible defaults` (la tabla arranca vacía = sin sink) y
+`omits publishIssuesTo when connectionRef is empty` → renombrado a *"omite publishIssuesTo cuando no hay tabla
+(la tabla es el interruptor, no la conexión)"*, más uno nuevo que fija la forma sin conexión.
 
 Evidencia comprometida por cada arreglo: test que **falla sin él** (verificado revirtiendo), suite completa en
 verde, y anotación en `qa/fase-6-qa/evidencias/`.

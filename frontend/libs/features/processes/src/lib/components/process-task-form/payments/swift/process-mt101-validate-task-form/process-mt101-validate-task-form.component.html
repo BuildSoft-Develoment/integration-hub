@@ -92,6 +92,7 @@
             [ngModel]="draft().publishIssuesTable"
             (ngModelChange)="updateDraft({ publishIssuesTable: $event })"
             [disabled]="readonly()" />
+          <mat-hint>{{ i18n.t('mt101Validate.publishIssuesTableHint') }}</mat-hint>
         </mat-form-field>
       </div>
     </mat-tab>

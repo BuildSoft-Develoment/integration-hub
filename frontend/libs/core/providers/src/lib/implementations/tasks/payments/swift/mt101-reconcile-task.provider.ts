@@ -16,6 +16,12 @@ export interface Mt101ReconcileTaskDraft extends ProcessTaskRuntimeDraft {
   lookbackDays: number;
   exceptionConnectionRef: string;
   exceptionTable: string;
+  /**
+   * Valor crudo de publishExceptionsTo cuando el hydrate NO supo parsearlo. {@code parseExceptionTable} del
+   * backend acepta tambien {@code "table:tabla"} (sin conexion) y el nombre suelto; el form solo lee
+   * {@code "table:conn:tabla"}. Viaja verbatim.
+   */
+  publishExceptionsToRaw: unknown;
   /** Claves que el backend lee y el form no gobierna; viajan verbatim. */
   preserved: Record<string, unknown>;
 }
@@ -50,7 +56,10 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
       asOfDate: '${today}',
       lookbackDays: 5,
       exceptionConnectionRef: '',
-      exceptionTable: 'mt101_reconciliation_exception',
+      // Vacio = sin clave, que es lo que hace hoy una tarea nueva: parseExceptionTable cae a
+      // mt101_reconciliation_exception. La tabla es el interruptor; el default vive en el backend.
+      exceptionTable: '',
+      publishExceptionsToRaw: undefined,
       preserved: {},
     };
   }
@@ -71,7 +80,10 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
       asOfDate: String(config['asOfDate'] || '${today}'),
       lookbackDays: Number(config['lookbackDays']) || 5,
       exceptionConnectionRef: exceptionRef.connRef,
-      exceptionTable: exceptionRef.table || 'mt101_reconciliation_exception',
+      // Sin default: vacia significa "no hay tabla parseada" y deja al crudo preservado re-emitirse.
+      exceptionTable: exceptionRef.table,
+      // Solo si el parseo fallo. Si parseo, manda el form.
+      publishExceptionsToRaw: exceptionRef.table ? undefined : config['publishExceptionsTo'],
       preserved: this.preserveKeys(config, RECONCILE_PRESERVED_KEYS),
     };
   }
@@ -81,10 +93,13 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
       .split(',')
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
-    const publishExceptionsTo =
-      draft.exceptionConnectionRef && draft.exceptionTable
-        ? `table:${draft.exceptionConnectionRef}:${draft.exceptionTable}`
-        : undefined;
+    // La conexion es OPCIONAL (parseExceptionTable ni la mira). Exigirla para emitir borraba la tabla de
+    // excepciones configurada de toda config sin conexion explicita.
+    const publishExceptionsTo = draft.exceptionTable
+      ? (draft.exceptionConnectionRef
+          ? `table:${draft.exceptionConnectionRef}:${draft.exceptionTable}`
+          : `table:${draft.exceptionTable}`)
+      : undefined;
     const payload: Record<string, unknown> = this.withRuntime(
       {
         ...draft.preserved,
@@ -94,7 +109,13 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
         matchKeys: matchKeysArray,
         asOfDate: draft.asOfDate,
         lookbackDays: draft.lookbackDays,
-        ...(publishExceptionsTo ? { publishExceptionsTo } : {}),
+        // Perderlo NO apaga el sink: parseExceptionTable cae a mt101_reconciliation_exception, asi que las
+        // excepciones de conciliacion se irian a una tabla DISTINTA de la configurada, sin aviso.
+        ...(publishExceptionsTo !== undefined
+          ? { publishExceptionsTo }
+          : draft.publishExceptionsToRaw !== undefined
+            ? { publishExceptionsTo: draft.publishExceptionsToRaw }
+            : {}),
       },
       draft,
       'once',
@@ -110,11 +131,19 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
     ].join(' | ');
   }
 
+  /**
+   * Espeja {@code parseExceptionTable} del backend: {@code parts.length >= 2 ? parts[1] : parts[0]}. Leer
+   * siempre parts[1] como tabla dejaba {@code "table:mi_tabla"} con connRef=mi_tabla y tabla vacia -> el
+   * default rellenaba la tabla y se guardaba {@code "table:mi_tabla:mt101_reconciliation_exception"}: las
+   * excepciones pasaban a escribirse en la tabla por defecto, no en la configurada.
+   */
   private parsePublishExceptionsTo(value: string): { connRef: string; table: string } {
     if (!value.startsWith('table:')) {
       return { connRef: '', table: '' };
     }
     const parts = value.substring('table:'.length).split(':');
-    return { connRef: parts[0] || '', table: parts[1] || '' };
+    return parts.length >= 2
+      ? { connRef: parts[0] || '', table: parts[1] || '' }
+      : { connRef: '', table: parts[0] || '' };
   }
 }

@@ -34,6 +34,13 @@ const INBOUND_DELIVER_PRESERVED_KEYS = [
   'loginTimeoutSeconds', 'tokenTtlSeconds',
 ] as const;
 
+/**
+ * Claves que el backend lee ({@code HttpRequestSupport}) pero que NINGUN campo del formulario escribe: no estan
+ * en {@code HttpRequestDraft}, asi que {@code applyHttpRequestToPayload} nunca las emite. Se preservan SIEMPRE,
+ * tambien en REST — a diferencia del resto del slice HTTP, que en REST gobierna el form.
+ */
+const INBOUND_DELIVER_ALWAYS_PRESERVED: readonly string[] = ['loginTimeoutSeconds', 'tokenTtlSeconds'];
+
 /** Tabla de negocio fija a la que el backend entrega el inbound ruteado (transporte DB). Solo informativa. */
 export const MT101_INBOUND_DELIVER_DB_TABLE = 'inbound_routed_transaction';
 const DEFAULT_PAGE_SIZE = 500;
@@ -82,7 +89,12 @@ export class Mt101InboundDeliverTaskProvider extends ProcessTaskProvider<Mt101In
       // (`if (authType === 'bearer' && token)`, etc.): spreadear lo preservado tambien en REST haria que borrar
       // un token —o apagar authType— no surtiera efecto, porque el valor viejo sobreviviria debajo.
       {
-        ...(draft.transport === 'REST' ? {} : draft.preserved),
+        ...(draft.transport === 'REST'
+          // En REST el form gobierna el HTTP, EXCEPTO las claves que ningun campo escribe: esas se preservan
+          // igual, si no volverian a perderse siempre (que es lo que este preservado vino a arreglar).
+          ? Object.fromEntries(
+              Object.entries(draft.preserved).filter(([k]) => INBOUND_DELIVER_ALWAYS_PRESERVED.includes(k)))
+          : draft.preserved),
         transport: draft.transport,
         pageSize: draft.pageSize,
       },

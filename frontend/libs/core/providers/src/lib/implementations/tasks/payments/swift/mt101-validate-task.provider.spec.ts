@@ -27,7 +27,8 @@ describe('Mt101ValidateTaskProvider', () => {
     expect(draft.standard).toBe('SWIFT');
     expect(draft.appliesTo).toBe('MT101');
     expect(draft.failOn).toBe('ERROR');
-    expect(draft.publishIssuesTable).toBe('mt101_validation_issue');
+    // Vacia = sin sink. La tabla es el interruptor del sink de incidencias (ver 'omite publishIssuesTo...').
+    expect(draft.publishIssuesTable).toBe('');
   });
 
   it('serializes draft to configuration_json with publishIssuesTo composed', () => {
@@ -53,11 +54,20 @@ describe('Mt101ValidateTaskProvider', () => {
     expect(config.rules).toEqual(['__catalog__']);
   });
 
-  it('omits publishIssuesTo when connectionRef is empty', () => {
+  it('omite publishIssuesTo cuando no hay tabla (la tabla es el interruptor, no la conexion)', () => {
     const provider = new Mt101ValidateTaskProvider();
-    const draft = { ...provider.createDraft(), taskRef: 'x', publishIssuesConnectionRef: '' };
+    const draft = { ...provider.createDraft(), taskRef: 'x', publishIssuesTable: '' };
     const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
     expect(config.publishIssuesTo).toBeUndefined();
+  });
+
+  it('emite el sink SIN conexion cuando solo hay tabla (IssueSink.from la deja en null)', () => {
+    // Antes se exigia connectionRef para emitir, asi que la forma "table:<tabla>" —la que usan los propios
+    // ITs— no se podia representar: al guardar se perdia y el sink quedaba disabled().
+    const provider = new Mt101ValidateTaskProvider();
+    const draft = { ...provider.createDraft(), taskRef: 'x', publishIssuesTable: 'mt101_validation_issue' };
+    const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+    expect(config.publishIssuesTo).toBe('table:mt101_validation_issue');
   });
 
   it('roundtrip preserves all fields', () => {

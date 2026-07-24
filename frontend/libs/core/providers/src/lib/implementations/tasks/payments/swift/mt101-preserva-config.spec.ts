@@ -91,6 +91,20 @@ describe('MT101_INBOUND_DELIVER', () => {
     expect(saved.token, 'el token borrado revivio').toBeUndefined();
     expect(saved.authType, 'authType apagado revivio').toBeUndefined();
   });
+
+  it('en REST conserva loginTimeoutSeconds y tokenTtlSeconds (ningun campo los escribe)', () => {
+    // Doble check del doble check: al saltear TODO lo preservado en REST se volvian a perder justamente las
+    // claves que ningun campo del form escribe — que son las que la preservacion vino a rescatar. Por eso el
+    // subconjunto ALWAYS_PRESERVED se re-emite tambien en REST.
+    const p = new Mt101InboundDeliverTaskProvider();
+    const saved = roundTrip(p, 'MT101_INBOUND_DELIVER', {
+      taskRef: 'ind', transport: 'REST', pageSize: 500,
+      url: 'https://gw.banco/inbound', authType: 'login', loginUrl: 'https://gw.banco/login',
+      loginTimeoutSeconds: 45, tokenTtlSeconds: 900,
+    });
+    expect(saved.loginTimeoutSeconds).toBe(45);
+    expect(saved.tokenTtlSeconds).toBe(900);
+  });
 });
 
 describe('MT101_BUILD_FROM_TABLE', () => {

@@ -17,7 +17,25 @@ export interface Mt101ArchiveTaskDraft extends ProcessTaskRuntimeDraft {
   encryptColumn: string;
   encryptionSecretRef: string;
   retentionDays: number;
+  /** Tuning que el backend lee y el form no expone + el par de cifrado a medio configurar. */
+  preserved: Record<string, unknown>;
 }
+
+/**
+ * Tuning que el backend lee ({@code Mt101ArchiveTaskProvider:152,158}) y el form no expone: cap de la muestra
+ * de registros en el output y tamano de pagina del streaming. Sin transportarlos volvian a sus defaults.
+ */
+const ARCHIVE_PRESERVED_KEYS = ['maxRecordsInOutput', 'pageSize'] as const;
+
+/**
+ * El backend solo cifra si {@code encryptColumn} Y {@code encryptionSecretRef} estan presentes
+ * ({@code resolveEncryptor}), asi que {@code encryptionEnabled} deriva del par completo. Cuando el par esta a
+ * MEDIAS (tipico: la columna elegida, el secreto todavia sin dar de alta) el round-trip borraba las dos claves.
+ * El comportamiento del backend no cambia —sin par no hay cifrado en ninguno de los dos casos—, pero el
+ * operador perdia su configuracion a medio hacer sin aviso. Se preserva SOLO en ese caso: si el par estaba
+ * completo, la casilla del form manda y desmarcarla tiene que poder APAGAR el cifrado de verdad.
+ */
+const ARCHIVE_ENCRYPTION_KEYS = ['encryptColumn', 'encryptionSecretRef'] as const;
 
 /**
  * Provider del task type {@code MT101_ARCHIVE}.
@@ -42,6 +60,7 @@ export class Mt101ArchiveTaskProvider extends ProcessTaskProvider<Mt101ArchiveTa
       encryptColumn: 'raw_payload',
       encryptionSecretRef: '',
       retentionDays: 3650,
+      preserved: {},
     };
   }
 
@@ -60,12 +79,18 @@ export class Mt101ArchiveTaskProvider extends ProcessTaskProvider<Mt101ArchiveTa
       encryptColumn: String(config['encryptColumn'] || 'raw_payload'),
       encryptionSecretRef: String(config['encryptionSecretRef'] || ''),
       retentionDays: Number(config['retentionDays']) || 3650,
+      preserved: {
+        ...this.preserveKeys(config, ARCHIVE_PRESERVED_KEYS),
+        ...(hasEncryptColumn !== hasSecretRef ? this.preserveKeys(config, ARCHIVE_ENCRYPTION_KEYS) : {}),
+      },
     };
   }
 
   toTaskPatch(draft: Mt101ArchiveTaskDraft): Partial<ProcessTaskFormModel> {
     const payload: Record<string, unknown> = this.withRuntime(
       {
+        // Va PRIMERO: lo que el form gobierna pisa lo preservado.
+        ...draft.preserved,
         connectionRef: draft.connectionRef,
         table: draft.table,
         hashAlgorithm: draft.hashAlgorithm,
