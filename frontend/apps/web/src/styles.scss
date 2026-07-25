@@ -943,6 +943,23 @@ select {
   line-height: 1.55;
 }
 
+/* Fila superior: copy (izquierda) + acciones (derecha). Las acciones (refresh/export) NO van en la grilla de
+   filtros, para que los filtros queden simetricos (patron #/executions). */
+.ih-catalog-toolbar__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.ih-catalog-toolbar__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
 .ih-catalog-toolbar__filters {
   display: grid;
   grid-template-columns: minmax(280px, 1.6fr) repeat(2, minmax(170px, 0.8fr));
