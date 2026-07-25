@@ -2,8 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute } from '@angular/router';
 import { of } from 'rxjs';
 
-import { AuditApiService } from '../../api/audit-api.service';
-import { RecordLineageEntry } from '../../models/audit.models';
+import { RecordLineageApiService, RecordLineageEntry } from '@integration-hub/shared/audit-kit';
 import { RecordLineageComponent } from './record-lineage.component';
 
 describe('RecordLineageComponent', () => {
@@ -17,12 +16,12 @@ describe('RecordLineageComponent', () => {
         lastQuery = q;
         return of([] as RecordLineageEntry[]);
       },
-    } as unknown as AuditApiService;
+    } as unknown as RecordLineageApiService;
     const route = { snapshot: { queryParamMap: { get: () => null } } } as unknown as ActivatedRoute;
 
     TestBed.configureTestingModule({
       providers: [
-        { provide: AuditApiService, useValue: api },
+        { provide: RecordLineageApiService, useValue: api },
         { provide: ActivatedRoute, useValue: route },
       ],
     });

@@ -9,7 +9,7 @@ import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-
 import { RelativeTimePipe } from '@integration-hub/shared/ui';
 import { AuditApiService } from '../../api/audit-api.service';
 import { Mt101PayDispatchIntent, Mt101PayDispatchSummary } from '../../models/audit.models';
-import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspace-nav.component';
+import { AuditWorkspaceNavComponent } from '@integration-hub/shared/audit-kit';
 
 /**
  * D1 (visibilidad): superficie de lectura del PAY directo por lista. Un dispatch que queda UNCERTAIN (o DISPATCHING

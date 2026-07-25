@@ -1,0 +1,7 @@
+{
+  "name": "shared-audit-kit",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/shared/audit-kit/src",
+  "tags": ["type:shared", "scope:audit"]
+}

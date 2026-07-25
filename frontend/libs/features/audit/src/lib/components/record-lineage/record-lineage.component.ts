@@ -10,10 +10,14 @@ import { MatSelectModule } from '@angular/material/select';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { IconComponent, RelativeTimePipe } from '@integration-hub/shared/ui';
-import { AuditApiService } from '../../api/audit-api.service';
-import { RecordLineageEntry } from '../../models/audit.models';
-import { durationBetween, timelineStatusIcon, timelineStatusKind } from '../../utils/timeline-format';
-import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspace-nav.component';
+import {
+  AuditWorkspaceNavComponent,
+  RecordLineageApiService,
+  RecordLineageEntry,
+  durationBetween,
+  timelineStatusIcon,
+  timelineStatusKind,
+} from '@integration-hub/shared/audit-kit';
 
 type SearchMode = 'record' | 'trace' | 'key' | 'sourceRow';
 
@@ -42,7 +46,7 @@ type SearchMode = 'record' | 'trace' | 'key' | 'sourceRow';
   templateUrl: './record-lineage.component.html',
 })
 export class RecordLineageComponent {
-  private readonly api = inject(AuditApiService);
+  private readonly api = inject(RecordLineageApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly breadcrumb = inject(BreadcrumbService);
   readonly i18n = inject(I18nService);

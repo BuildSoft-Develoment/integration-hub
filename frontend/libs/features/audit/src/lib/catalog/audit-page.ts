@@ -6,7 +6,7 @@ import { PageEvent } from '@angular/material/paginator';
 import { AuditEditorComponent } from '../components/audit-editor/audit-editor.component';
 import { AuditListComponent } from '../components/audit-list/audit-list.component';
 import { AuditToolbarComponent } from '../components/audit-toolbar/audit-toolbar.component';
-import { AuditWorkspaceNavComponent } from '../components/audit-workspace-nav/audit-workspace-nav.component';
+import { AuditWorkspaceNavComponent } from '@integration-hub/shared/audit-kit';
 import { AuditStore } from './audit.store';
 import { downloadText, eventsToCsv, eventsToJson } from '../utils/download-utils';
 

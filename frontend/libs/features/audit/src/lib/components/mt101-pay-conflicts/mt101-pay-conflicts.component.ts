@@ -10,7 +10,7 @@ import { AuthService, BreadcrumbService, I18nService } from '@integration-hub/co
 import { IconComponent, RelativeTimePipe } from '@integration-hub/shared/ui';
 import { AuditApiService } from '../../api/audit-api.service';
 import { Mt101OpenPayConflict, Mt101OpenPayConflictConfirmation } from '../../models/audit.models';
-import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspace-nav.component';
+import { AuditWorkspaceNavComponent } from '@integration-hub/shared/audit-kit';
 
 /**
  * Consola de PAY Conflicts (inbox transversal): landing operativa de los conflictos de pago ABIERTOS de todos los

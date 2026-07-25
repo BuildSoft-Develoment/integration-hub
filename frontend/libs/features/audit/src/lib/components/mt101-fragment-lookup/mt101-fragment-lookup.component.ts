@@ -9,9 +9,14 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { IconComponent, RelativeTimePipe } from '@integration-hub/shared/ui';
 import { AuditApiService } from '../../api/audit-api.service';
-import { Mt101FragmentLink, Mt101PhysicalLineLineage, RecordLineageEntry } from '../../models/audit.models';
-import { timelineStatusIcon, timelineStatusKind } from '../../utils/timeline-format';
-import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspace-nav.component';
+import { Mt101FragmentLink, Mt101PhysicalLineLineage } from '../../models/audit.models';
+import {
+  AuditWorkspaceNavComponent,
+  RecordLineageApiService,
+  RecordLineageEntry,
+  timelineStatusIcon,
+  timelineStatusKind,
+} from '@integration-hub/shared/audit-kit';
 
 @Component({
   selector: 'ih-mt101-fragment-lookup',
@@ -32,6 +37,7 @@ import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspa
 })
 export class Mt101FragmentLookupComponent {
   private readonly api = inject(AuditApiService);
+  private readonly lineageApi = inject(RecordLineageApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly breadcrumb = inject(BreadcrumbService);
   readonly i18n = inject(I18nService);
@@ -70,7 +76,7 @@ export class Mt101FragmentLookupComponent {
     this.lineageEntries.set([]);
     this.lineageError.set(null);
     this.lineageLoading.set(true);
-    this.api.recordLineage({
+    this.lineageApi.recordLineage({
       sourceFileHash: match.sourceFileHash,
       recordNumber: match.recordIndex + 1,
       processExecutionId: match.processExecutionId ?? undefined,

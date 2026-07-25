@@ -26,7 +26,6 @@ import {
   Mt101RebuildRunSummary,
   Mt101ReprocessResult,
   Mt101RowTimelineEntry,
-  RecordLineageEntry,
 } from '../models/audit.models';
 
 export interface AuditPageResponse {
@@ -63,39 +62,6 @@ export class AuditApiService {
     }
 
     return this.http.get<AuditPageResponse>('/api/query/audit-events', { params: httpParams });
-  }
-
-  /** Trazabilidad E2E a nivel de registro: linea de tiempo por recordId, traceId o claves operativas. */
-  recordLineage(query: {
-    recordId?: string;
-    traceId?: string;
-    key?: string;
-    value?: string;
-    sourceFileHash?: string;
-    recordNumber?: number | string;
-    processExecutionId?: number | string;
-    limit?: number;
-  }): Observable<RecordLineageEntry[]> {
-    let httpParams = new HttpParams().set('limit', String(query.limit ?? 1000));
-    if (query.recordId?.trim()) {
-      httpParams = httpParams.set('recordId', query.recordId.trim());
-    }
-    if (query.traceId?.trim()) {
-      httpParams = httpParams.set('traceId', query.traceId.trim());
-    }
-    if (query.key?.trim() && query.value?.trim()) {
-      httpParams = httpParams.set('key', query.key.trim()).set('value', query.value.trim());
-    }
-    if (query.sourceFileHash?.trim() && query.recordNumber !== undefined && String(query.recordNumber).trim()) {
-      httpParams = httpParams
-        .set('sourceFileHash', query.sourceFileHash.trim())
-        .set('recordNumber', String(query.recordNumber).trim());
-      // B: desambigua reprocesos (mismo archivo+fila en varias ejecuciones).
-      if (query.processExecutionId !== undefined && String(query.processExecutionId).trim()) {
-        httpParams = httpParams.set('processExecutionId', String(query.processExecutionId).trim());
-      }
-    }
-    return this.http.get<RecordLineageEntry[]>('/api/query/record-lineage', { params: httpParams });
   }
 
   auditSpoolSummary(): Observable<AuditSpoolSummary> {

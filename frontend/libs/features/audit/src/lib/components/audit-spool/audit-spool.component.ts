@@ -12,8 +12,7 @@ import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-
 import { forkJoin } from 'rxjs';
 import { AuditApiService } from '../../api/audit-api.service';
 import { AuditSpoolEntry, AuditSpoolSummary } from '../../models/audit.models';
-import { AuditOperationRisk, auditEvidenceLabelKey, auditOperationRisk } from '../../utils/audit-operation-risk';
-import { AuditWorkspaceNavComponent } from '../audit-workspace-nav/audit-workspace-nav.component';
+import { AuditOperationRisk, AuditWorkspaceNavComponent, auditEvidenceLabelKey, auditOperationRisk } from '@integration-hub/shared/audit-kit';
 
 @Component({
   selector: 'ih-audit-spool',
