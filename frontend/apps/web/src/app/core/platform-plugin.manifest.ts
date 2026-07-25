@@ -147,7 +147,7 @@ export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {
       domain: 'platform',
       domainLabelKey: 'audit.domain.platform',
       domainOrder: 10,
-      route: '/audit',
+      route: '/audit/events',
       labelKey: 'audit.workspace.events',
       descriptionKey: 'audit.workspace.eventsHint',
       mode: 'query',

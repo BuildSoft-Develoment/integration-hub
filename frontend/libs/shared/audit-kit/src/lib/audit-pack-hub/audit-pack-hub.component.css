@@ -1,0 +1,104 @@
+.pack-hub {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1rem;
+}
+
+.pack-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ih-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--ih-surface-alt) 94%, transparent);
+  overflow: hidden;
+}
+
+.pack-card__head {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--ih-border);
+}
+
+.pack-card__title {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ih-text-soft);
+}
+
+.pack-card__count {
+  margin-left: auto;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.4rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ih-accent) 12%, transparent);
+  color: var(--ih-accent-strong);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.pack-card__tools {
+  display: flex;
+  flex-direction: column;
+}
+
+.pack-tool {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--ih-border) 60%, transparent);
+  border-left: 3px solid transparent;
+  color: var(--ih-text);
+  text-decoration: none;
+}
+.pack-tool:last-child {
+  border-bottom: none;
+}
+.pack-tool:hover,
+.pack-tool:focus-visible {
+  background: color-mix(in srgb, var(--ih-accent) 6%, var(--ih-surface));
+}
+.pack-tool--operation {
+  border-left-color: var(--ih-status-warning);
+}
+.pack-tool--query {
+  border-left-color: var(--ih-accent);
+}
+
+.pack-tool__copy {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.pack-tool__label {
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.pack-tool__hint {
+  font-size: 0.74rem;
+  color: var(--ih-text-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pack-tool__mode {
+  margin-left: auto;
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ih-text-soft);
+  white-space: nowrap;
+}
+.pack-tool__arrow {
+  color: var(--ih-text-soft);
+  font-size: 1rem;
+}

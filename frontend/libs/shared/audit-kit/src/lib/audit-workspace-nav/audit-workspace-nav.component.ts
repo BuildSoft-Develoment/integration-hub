@@ -1,12 +1,17 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { RouterLink, RouterLinkActive } from '@angular/router';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { filter, map } from 'rxjs';
 import { AuthAccessService, I18nService } from '@integration-hub/core/services';
-import {
-  AppWorkspaceContribution,
-  AppPluginRuntimeRegistry,
-} from '@integration-hub/shared/ui';
+import { AppWorkspaceContribution, AppPluginRuntimeRegistry } from '@integration-hub/shared/ui';
+import { AuditDomainGroup, groupAuditWorkspacesByDomain } from '../audit-workspace-groups';
 
+/**
+ * Sub-nav del pack activo (ADR-019 hub de dos niveles): dentro de un pack muestra SOLO las herramientas
+ * de ese dominio + un "volver al hub". El dominio activo se detecta por la contribucion cuyo `route`
+ * prefija la URL (match mas largo), asi una pagina nueva no necesita declarar su dominio.
+ */
 @Component({
   selector: 'ih-audit-workspace-nav',
   standalone: true,
@@ -19,41 +24,42 @@ export class AuditWorkspaceNavComponent {
   readonly i18n = inject(I18nService);
   readonly access = inject(AuthAccessService);
   private readonly plugins = inject(AppPluginRuntimeRegistry);
+  private readonly router = inject(Router);
 
-  /**
-   * Cajas de auditoria agrupadas por dominio (ADR-019): generico de plataforma vs herramientas de un
-   * estandar (SWIFT MT101, y a futuro ISO 20022/MT103). Los grupos se ordenan por `domainOrder`; dentro
-   * de cada grupo se respeta el orden del registro. El `mode` baja a tag secundario dentro de la caja.
-   */
-  readonly groups = computed(() => {
-    const items = this.plugins
-      .workspaces()
-      .filter((item) => item.group === 'audit')
-      .filter(
-        (item) =>
-          item.requiredCapability == null ||
-          this.access.hasCapability(item.requiredCapability)
-      );
+  private readonly currentUrl = toSignal(
+    this.router.events.pipe(
+      filter((event): event is NavigationEnd => event instanceof NavigationEnd),
+      map((event) => event.urlAfterRedirects)
+    ),
+    { initialValue: this.router.url }
+  );
 
-    const byDomain = new Map<
-      string,
-      { domain: string; labelKey: string | null; order: number; items: AppWorkspaceContribution[] }
-    >();
-    for (const item of items) {
-      const domain = item.domain ?? 'other';
-      let group = byDomain.get(domain);
-      if (!group) {
-        group = { domain, labelKey: item.domainLabelKey ?? null, order: item.domainOrder ?? 999, items: [] };
-        byDomain.set(domain, group);
+  private readonly domains = computed<AuditDomainGroup[]>(() =>
+    groupAuditWorkspacesByDomain(
+      this.plugins
+        .workspaces()
+        .filter((item) => item.group === 'audit')
+        .filter((item) => item.requiredCapability == null || this.access.hasCapability(item.requiredCapability))
+    )
+  );
+
+  readonly activeGroup = computed<AuditDomainGroup | null>(() => {
+    const url = this.currentUrl().split('?')[0];
+    let best: AuditDomainGroup | null = null;
+    let bestLen = -1;
+    for (const group of this.domains()) {
+      for (const item of group.items) {
+        const matches = url === item.route || url.startsWith(item.route + '/');
+        if (matches && item.route.length > bestLen) {
+          best = group;
+          bestLen = item.route.length;
+        }
       }
-      group.items.push(item);
     }
-    return [...byDomain.values()].sort((a, b) => a.order - b.order);
+    return best;
   });
 
   modeLabelKey(mode: AppWorkspaceContribution['mode']): string {
-    return mode === 'operation'
-      ? 'audit.workspace.modeOperation'
-      : 'audit.workspace.modeQuery';
+    return mode === 'operation' ? 'audit.workspace.modeOperation' : 'audit.workspace.modeQuery';
   }
 }

@@ -1,16 +1,26 @@
+import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
 import { AuthAccessService, I18nService } from '@integration-hub/core/services';
 import { provideAppPluginManifests } from '@integration-hub/shared/ui';
 
 import { AuditWorkspaceNavComponent } from './audit-workspace-nav.component';
 
+@Component({ standalone: true, template: '' })
+class DummyComponent {}
+
 describe('AuditWorkspaceNavComponent', () => {
-  function render() {
+  async function renderAt(url: string) {
     TestBed.configureTestingModule({
       imports: [AuditWorkspaceNavComponent],
       providers: [
-        provideRouter([]),
+        provideRouter([
+          { path: 'audit/events', component: DummyComponent },
+          { path: 'audit/record-lineage', component: DummyComponent },
+          { path: 'audit/spool', component: DummyComponent },
+          { path: 'swift-mt101/fragments', component: DummyComponent },
+          { path: 'swift-mt101/quarantine', component: DummyComponent },
+        ]),
         { provide: I18nService, useValue: { t: (key: string) => key } },
         { provide: AuthAccessService, useValue: { hasCapability: () => true } },
         ...provideAppPluginManifests([
@@ -20,123 +30,40 @@ describe('AuditWorkspaceNavComponent', () => {
             platformVersion: '1.0.0',
             displayName: 'Platform',
             workspaces: [
-              {
-                id: 'audit-events',
-                group: 'audit',
-                domain: 'platform',
-                domainLabelKey: 'audit.domain.platform',
-                domainOrder: 10,
-                route: '/audit',
-                labelKey: 'audit.workspace.events',
-                descriptionKey: 'audit.workspace.eventsHint',
-                mode: 'query',
-                requiredCapability: 'audit',
-              },
-              {
-                id: 'audit-record-lineage',
-                group: 'audit',
-                domain: 'platform',
-                domainLabelKey: 'audit.domain.platform',
-                domainOrder: 10,
-                route: '/audit/record-lineage',
-                labelKey: 'audit.workspace.lineage',
-                descriptionKey: 'audit.workspace.lineageHint',
-                mode: 'query',
-                requiredCapability: 'audit',
-              },
-              {
-                id: 'audit-mt101-fragments',
-                group: 'audit',
-                domain: 'swift-mt101',
-                domainLabelKey: 'audit.domain.swiftMt101',
-                domainOrder: 20,
-                route: '/audit/mt101-fragments',
-                labelKey: 'audit.workspace.fragments',
-                descriptionKey: 'audit.workspace.fragmentsHint',
-                mode: 'query',
-                requiredCapability: 'audit',
-              },
-              {
-                id: 'audit-spool',
-                group: 'audit',
-                domain: 'platform',
-                domainLabelKey: 'audit.domain.platform',
-                domainOrder: 10,
-                route: '/audit/spool',
-                labelKey: 'audit.workspace.spool',
-                descriptionKey: 'audit.workspace.spoolHint',
-                mode: 'operation',
-                requiredCapability: 'audit',
-              },
-              {
-                id: 'audit-mt101-quarantine',
-                group: 'audit',
-                domain: 'swift-mt101',
-                domainLabelKey: 'audit.domain.swiftMt101',
-                domainOrder: 20,
-                route: '/audit/mt101-quarantine',
-                labelKey: 'audit.workspace.quarantine',
-                descriptionKey: 'audit.workspace.quarantineHint',
-                mode: 'operation',
-                requiredCapability: 'audit',
-              },
-              {
-                id: 'payments-rules',
-                group: 'payments',
-                route: '/payment-rules',
-                labelKey: 'nav.paymentRules',
-                mode: 'configuration',
-                requiredCapability: 'operate',
-              },
+              { id: 'audit-events', group: 'audit', domain: 'platform', domainLabelKey: 'audit.domain.platform', domainOrder: 10, route: '/audit/events', labelKey: 'audit.workspace.events', mode: 'query', requiredCapability: 'audit' },
+              { id: 'audit-lineage', group: 'audit', domain: 'platform', domainLabelKey: 'audit.domain.platform', domainOrder: 10, route: '/audit/record-lineage', labelKey: 'audit.workspace.lineage', mode: 'query', requiredCapability: 'audit' },
+              { id: 'audit-spool', group: 'audit', domain: 'platform', domainLabelKey: 'audit.domain.platform', domainOrder: 10, route: '/audit/spool', labelKey: 'audit.workspace.spool', mode: 'operation', requiredCapability: 'audit' },
+              { id: 'mt101-fragments', group: 'audit', domain: 'swift-mt101', domainLabelKey: 'audit.domain.swiftMt101', domainOrder: 20, route: '/swift-mt101/fragments', labelKey: 'audit.workspace.fragments', mode: 'query', requiredCapability: 'audit' },
+              { id: 'mt101-quarantine', group: 'audit', domain: 'swift-mt101', domainLabelKey: 'audit.domain.swiftMt101', domainOrder: 20, route: '/swift-mt101/quarantine', labelKey: 'audit.workspace.quarantine', mode: 'operation', requiredCapability: 'audit' },
             ],
           },
         ]),
       ],
     });
+    await TestBed.inject(Router).navigateByUrl(url);
     const fixture = TestBed.createComponent(AuditWorkspaceNavComponent);
     fixture.detectChanges();
     return fixture;
   }
 
-  it('agrupa las superficies del workspace audit por dominio (ADR-019)', () => {
-    const component = render().componentInstance;
-    const groups = component.groups();
-
-    // Dos dominios, ordenados por domainOrder: platform (10) antes que swift-mt101 (20).
-    expect(groups.map((g) => g.domain)).toEqual(['platform', 'swift-mt101']);
-    // El generico agrupa events/lineage/spool aunque spool se declare despues de un item SWIFT.
-    expect(groups[0].items.map((item) => item.route)).toEqual([
-      '/audit',
-      '/audit/record-lineage',
-      '/audit/spool',
+  it('scopes al pack SWIFT MT101 cuando la ruta es /swift-mt101/*', async () => {
+    const group = (await renderAt('/swift-mt101/fragments')).componentInstance.activeGroup();
+    expect(group?.domain).toBe('swift-mt101');
+    expect(group?.items.map((item) => item.route)).toEqual([
+      '/swift-mt101/fragments',
+      '/swift-mt101/quarantine',
     ]);
-    expect(groups[1].items.map((item) => item.route)).toEqual([
-      '/audit/mt101-fragments',
-      '/audit/mt101-quarantine',
-    ]);
-    expect(groups[1].labelKey).toBe('audit.domain.swiftMt101');
   });
 
-  it('separa consulta de operacion gobernada (modo como tag secundario)', () => {
-    const component = render().componentInstance;
-    const operationRoutes = component
-      .groups()
-      .flatMap((g) => g.items)
-      .filter((item) => item.mode === 'operation')
-      .map((item) => item.route);
-
-    expect(operationRoutes).toEqual(['/audit/spool', '/audit/mt101-quarantine']);
-    expect(component.modeLabelKey('operation')).toBe('audit.workspace.modeOperation');
-    expect(component.modeLabelKey('query')).toBe('audit.workspace.modeQuery');
+  it('scopes al pack Generico cuando la ruta es /audit/*', async () => {
+    const group = (await renderAt('/audit/record-lineage')).componentInstance.activeGroup();
+    expect(group?.domain).toBe('platform');
+    expect(group?.items.length).toBe(3);
   });
 
-  it('renderiza navegacion con nombre accesible, 2 grupos y 5 cajas', () => {
-    const nav: HTMLElement = render().nativeElement.querySelector('nav.audit-ws');
-
-    expect(nav).toBeTruthy();
-    expect(nav.getAttribute('aria-label')).toBe('audit.workspace.label');
-    expect(nav.querySelectorAll('.audit-ws__group').length).toBe(2);
-    expect(nav.querySelectorAll('.audit-ws__group-label').length).toBe(2);
-    expect(nav.querySelectorAll('a.audit-ws__item').length).toBe(5);
+  it('renderiza el volver al hub y solo las tools del pack activo', async () => {
+    const nav: HTMLElement = (await renderAt('/swift-mt101/fragments')).nativeElement.querySelector('nav.audit-ws');
+    expect(nav.querySelector('.audit-ws__back')).toBeTruthy();
+    expect(nav.querySelectorAll('a.audit-ws__item').length).toBe(2);
   });
 });

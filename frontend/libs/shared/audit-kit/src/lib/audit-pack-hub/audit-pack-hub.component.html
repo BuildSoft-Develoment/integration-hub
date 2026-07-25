@@ -1,0 +1,28 @@
+<section class="pack-hub" [attr.aria-label]="i18n.t('audit.hub.label')">
+  @for (group of domains(); track group.domain) {
+    <article class="pack-card">
+      <header class="pack-card__head">
+        <h2 class="pack-card__title">{{ group.labelKey ? i18n.t(group.labelKey) : group.domain }}</h2>
+        <span class="pack-card__count">{{ group.items.length }}</span>
+      </header>
+      <div class="pack-card__tools">
+        @for (item of group.items; track item.route) {
+          <a
+            class="pack-tool pack-tool--{{ item.mode }}"
+            [routerLink]="item.route"
+            [attr.title]="item.descriptionKey ? i18n.t(item.descriptionKey) : null"
+          >
+            <span class="pack-tool__copy">
+              <span class="pack-tool__label">{{ i18n.t(item.labelKey) }}</span>
+              @if (item.descriptionKey) {
+                <span class="pack-tool__hint">{{ i18n.t(item.descriptionKey) }}</span>
+              }
+            </span>
+            <span class="pack-tool__mode">{{ i18n.t(modeLabelKey(item.mode)) }}</span>
+            <span class="pack-tool__arrow" aria-hidden="true">→</span>
+          </a>
+        }
+      </div>
+    </article>
+  }
+</section>

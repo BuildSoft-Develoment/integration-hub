@@ -1,11 +1,13 @@
 import { Route } from '@angular/router';
 import { AuditSpoolComponent } from '../components/audit-spool/audit-spool.component';
 import { RecordLineageComponent } from '../components/record-lineage/record-lineage.component';
+import { AuditHubPageComponent } from './audit-hub-page';
 import { AuditPageComponent } from './audit-page';
 
 export const auditRoutes: Route[] = [
-  { path: '', component: AuditPageComponent },
-  { path: 'events', redirectTo: '', pathMatch: 'full' },
+  // ADR-019 hub de dos niveles: /audit = landing de packs; el log de eventos pasa a /audit/events.
+  { path: '', component: AuditHubPageComponent },
+  { path: 'events', component: AuditPageComponent },
   { path: 'record-lineage', component: RecordLineageComponent },
   { path: 'spool', component: AuditSpoolComponent },
   // ADR-019 Fase 2: las herramientas MT101 se movieron al pack /swift-mt101/*; los deep-links viejos redirigen.

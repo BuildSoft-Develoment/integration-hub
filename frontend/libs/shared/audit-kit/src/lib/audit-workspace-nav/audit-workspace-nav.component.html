@@ -1,23 +1,24 @@
 <nav class="audit-ws" [attr.aria-label]="i18n.t('audit.workspace.label')">
-  @for (group of groups(); track group.domain) {
-    <div class="audit-ws__group">
-      @if (group.labelKey) {
-        <span class="audit-ws__group-label">{{ i18n.t(group.labelKey) }}</span>
+  <a class="audit-ws__back" routerLink="/audit">
+    <span aria-hidden="true">←</span> {{ i18n.t('audit.hub.back') }}
+  </a>
+
+  @if (activeGroup(); as group) {
+    @if (group.labelKey) {
+      <span class="audit-ws__group-label">{{ i18n.t(group.labelKey) }}</span>
+    }
+    <div class="audit-ws__items">
+      @for (item of group.items; track item.route) {
+        <a
+          class="audit-ws__item audit-ws__item--{{ item.mode }}"
+          [routerLink]="item.route"
+          routerLinkActive="audit-ws__item--active"
+          [attr.title]="item.descriptionKey ? i18n.t(item.descriptionKey) : null"
+        >
+          <span class="audit-ws__label">{{ i18n.t(item.labelKey) }}</span>
+          <span class="audit-ws__mode">{{ i18n.t(modeLabelKey(item.mode)) }}</span>
+        </a>
       }
-      <div class="audit-ws__items">
-        @for (item of group.items; track item.route) {
-          <a
-            class="audit-ws__item audit-ws__item--{{ item.mode }}"
-            [routerLink]="item.route"
-            routerLinkActive="audit-ws__item--active"
-            [routerLinkActiveOptions]="{ exact: item.route === '/audit' }"
-            [attr.title]="item.descriptionKey ? i18n.t(item.descriptionKey) : null"
-          >
-            <span class="audit-ws__label">{{ i18n.t(item.labelKey) }}</span>
-            <span class="audit-ws__mode">{{ i18n.t(modeLabelKey(item.mode)) }}</span>
-          </a>
-        }
-      </div>
     </div>
   }
 </nav>
