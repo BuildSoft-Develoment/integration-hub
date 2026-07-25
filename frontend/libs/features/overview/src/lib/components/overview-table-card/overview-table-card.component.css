@@ -8,6 +8,11 @@
 .table-card__copy strong, .table-card__copy small { overflow-wrap:anywhere; }
 .table-card__copy small { color:var(--ih-text-soft); }
 .table-card__meta { display:grid; justify-items:end; gap:0.2rem; text-align:right; }
-.table-card__badge { display:inline-flex; padding:0.22rem 0.55rem; border-radius:999px; background:color-mix(in srgb, var(--ih-accent) 10%, transparent); color:var(--ih-accent-strong); font-size:0.78rem; font-weight:700; }
+.table-card__badge { display:inline-flex; padding:0.22rem 0.55rem; border-radius:999px; border:1px solid transparent; background:color-mix(in srgb, var(--ih-accent) 10%, transparent); color:var(--ih-accent-strong); font-size:0.74rem; font-weight:700; letter-spacing:0.02em; }
+.table-card__badge--success { color:var(--ih-status-success); background:var(--ih-status-success-bg); border-color:color-mix(in srgb, var(--ih-status-success) 30%, transparent); }
+.table-card__badge--warning { color:var(--ih-status-warning); background:var(--ih-status-warning-bg); border-color:color-mix(in srgb, var(--ih-status-warning) 30%, transparent); }
+.table-card__badge--info { color:var(--ih-status-info); background:var(--ih-status-info-bg); border-color:color-mix(in srgb, var(--ih-status-info) 30%, transparent); }
+.table-card__badge--danger { color:var(--ih-status-error); background:var(--ih-status-error-bg); border-color:color-mix(in srgb, var(--ih-status-error) 30%, transparent); }
+.table-card__badge--neutral { color:var(--ih-text-soft); background:color-mix(in srgb, var(--ih-text-soft) 12%, transparent); }
 .empty-state { min-height:12rem; display:grid; place-items:center; padding:1rem; text-align:center; }
 @media (max-width: 760px) { .table-card__row { grid-template-columns:1fr; } .table-card__meta { justify-items:start; text-align:left; } }

@@ -1,17 +1,7 @@
-<article class="metric-card" [class.metric-card--warn]="alertLevel() === 'warn'" [class.metric-card--error]="alertLevel() === 'error'">
-  <p class="metric-label">
-    @if (alertLevel() === 'warn' || alertLevel() === 'error') {
-      <ih-icon name="alert-triangle" class="metric-alert-icon" />
-    }
-    {{ i18n.t(titleKey()) }}
-  </p>
+<article class="metric-card">
+  <p class="metric-label">{{ i18n.t(titleKey()) }}</p>
   <strong class="metric-value">{{ value() }}</strong>
-  @if (detail() !== null) {
-    <p class="metric-detail ih-muted">{{ i18n.t('overview.metric.activeDetail', { count: detail()! }) }}</p>
-  }
-  @if (actionLink(); as link) {
-    @if (actionLabelKey(); as labelKey) {
-      <a mat-button class="metric-action" [routerLink]="link">{{ i18n.t(labelKey) }} →</a>
-    }
+  @if (activeCount() !== null) {
+    <p class="metric-detail ih-muted">{{ i18n.t('overview.metric.activeDetail', { count: activeCount()! }) }}</p>
   }
 </article>

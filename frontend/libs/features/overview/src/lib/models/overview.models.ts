@@ -3,17 +3,44 @@ export interface OverviewMetricRecord {
   active: number;
 }
 
-export type OverviewAlertLevel = 'ok' | 'warn' | 'error';
+/** Severidad/tono de una faceta o señal de salud. */
+export type OverviewSeverity = 'ok' | 'warn' | 'error';
 
-/** Card de métrica enriquecida del overview (valor + alerta + acción directa). */
-export interface OverviewMetric {
+/** KPI de inventario del overview: número grande + total activo (o `null` si no aplica). */
+export interface OverviewKpi {
   key: string;
   titleKey: string;
   value: number;
-  detail: number | null;
-  alertLevel: OverviewAlertLevel | null;
-  actionLink: string[] | null;
-  actionLabelKey: string | null;
+  activeCount: number | null;
+}
+
+/** Una faceta de una señal de salud: etiqueta + valor + tono (color). */
+export interface OverviewHealthStat {
+  readonly labelKey: string;
+  readonly value: number;
+  readonly tone: OverviewSeverity;
+}
+
+/**
+ * Señal de salud operativa del overview (ejecuciones, reintentos, archivos, plugins, backbone async).
+ * `alert` es la severidad agregada de la señal; `stats` son sus facetas; el resto es la acción directa.
+ * El store es la única fuente de verdad de la severidad → banner agregado y card nunca divergen.
+ */
+export interface OverviewHealthSignal {
+  key: string;
+  titleKey: string;
+  alert: 'warn' | 'error' | null;
+  stats: readonly OverviewHealthStat[];
+  linkRoute: readonly string[];
+  linkLabelKey: string;
+}
+
+/** Resumen agregado de la salud operativa para el banner de estado. */
+export interface OverviewHealthSummary {
+  critical: number;
+  warning: number;
+  stable: number;
+  worst: 'warn' | 'error' | null;
 }
 
 export interface OverviewExecutionRecord {

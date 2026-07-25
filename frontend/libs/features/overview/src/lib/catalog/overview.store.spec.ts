@@ -80,46 +80,83 @@ describe('OverviewStore', () => {
     store = TestBed.inject(OverviewStore);
   });
 
-  it('should load the summary and expose mapped metric cards', async () => {
+  it('exposes inventory KPIs (count + active, no alerts)', async () => {
     await store.load();
 
-    expect(store.summary()?.sources.total).toBe(5);
-    expect(store.metrics()).toEqual([
-      { key: 'sources', titleKey: 'overview.metric.sources', value: 5, detail: 4, alertLevel: null, actionLink: null, actionLabelKey: null },
-      { key: 'readers', titleKey: 'overview.metric.readers', value: 4, detail: 3, alertLevel: null, actionLink: null, actionLabelKey: null },
-      { key: 'processes', titleKey: 'overview.metric.processes', value: 6, detail: 5, alertLevel: null, actionLink: null, actionLabelKey: null },
-      { key: 'running', titleKey: 'overview.metric.running', value: 3, detail: 1, alertLevel: 'error', actionLink: ['/executions'], actionLabelKey: 'overview.action.viewExecutions' },
-      { key: 'retry', titleKey: 'overview.metric.retries', value: 1, detail: 2, alertLevel: 'warn', actionLink: null, actionLabelKey: null },
-      { key: 'files', titleKey: 'overview.metric.fileHealth', value: 7, detail: 9, alertLevel: 'error', actionLink: ['/audit'], actionLabelKey: 'overview.action.viewAudit' },
-      { key: 'scheduled', titleKey: 'overview.metric.scheduled', value: 2, detail: null, alertLevel: null, actionLink: null, actionLabelKey: null },
+    expect(store.inventory()).toEqual([
+      { key: 'sources', titleKey: 'overview.metric.sources', value: 5, activeCount: 4 },
+      { key: 'readers', titleKey: 'overview.metric.readers', value: 4, activeCount: 3 },
+      { key: 'processes', titleKey: 'overview.metric.processes', value: 6, activeCount: 5 },
+      { key: 'scheduled', titleKey: 'overview.metric.scheduled', value: 2, activeCount: null },
     ]);
   });
 
-  it('marca alerta y acción solo cuando hay fallos', async () => {
+  it('maps count-based health signals with severity and facets', async () => {
     await store.load();
-    const byKey = (k: string) => store.metrics().find((m) => m.key === k);
-    // failedExecutions=1 -> running en alerta con enlace a ejecuciones
-    expect(byKey('running')?.alertLevel).toBe('error');
-    expect(byKey('running')?.actionLink).toEqual(['/executions']);
-    // failedProcessedFiles=7 -> files en alerta con enlace a auditoría
-    expect(byKey('files')?.alertLevel).toBe('error');
-    expect(byKey('files')?.actionLink).toEqual(['/audit']);
-    // métricas sanas sin alerta ni acción
-    expect(byKey('sources')?.alertLevel).toBeNull();
-    expect(byKey('sources')?.actionLink).toBeNull();
+    const byKey = (k: string) => store.healthPrimary().find((s) => s.key === k);
+
+    // failedExecutions=1 -> executions crítico, con las dos facetas
+    expect(byKey('executions')?.alert).toBe('error');
+    expect(byKey('executions')?.stats).toEqual([
+      { labelKey: 'overview.exec.running', value: 3, tone: 'ok' },
+      { labelKey: 'overview.exec.failed', value: 1, tone: 'error' },
+    ]);
+    expect(byKey('executions')?.linkRoute).toEqual(['/executions']);
+
+    // retryExecutions=1 o completedWithErrors=2 -> atención (nueva regla)
+    expect(byKey('retries')?.alert).toBe('warn');
+    expect(byKey('retries')?.stats).toEqual([
+      { labelKey: 'overview.retries.count', value: 1, tone: 'ok' },
+      { labelKey: 'overview.retries.withErrors', value: 2, tone: 'warn' },
+    ]);
+
+    // failedProcessedFiles=7 -> archivos crítico con enlace a auditoría
+    expect(byKey('files')?.alert).toBe('error');
+    expect(byKey('files')?.linkRoute).toEqual(['/audit']);
+  });
+
+  it('retries stays clear only when there are no retries nor errored executions', () => {
+    // Sin summary aún → no hay señales.
+    expect(store.healthPrimary()).toEqual([]);
+  });
+
+  it('maps composite health signals (plugins + async) from their sources', async () => {
+    await store.load();
+    const byKey = (k: string) => store.healthComposite().find((s) => s.key === k);
+
+    // installed: 2 ACTIVE + 1 DEGRADED; canary: 1 not promotable -> blocked. degraded>0 -> error.
+    expect(byKey('plugins')?.alert).toBe('error');
+    expect(byKey('plugins')?.stats).toEqual([
+      { labelKey: 'overview.plugins.active', value: 2, tone: 'ok' },
+      { labelKey: 'overview.plugins.degraded', value: 1, tone: 'error' },
+      { labelKey: 'overview.plugins.blocked', value: 1, tone: 'warn' },
+    ]);
+
+    // async: dead=2 -> error; enlace a la consola DLQ.
+    expect(byKey('async')?.alert).toBe('error');
+    expect(byKey('async')?.linkRoute).toEqual(['/executions/async-dlq']);
+  });
+
+  it('composite signals are hidden until their source is available', () => {
+    // Sin summary ni pluginHealth aún → sin señales compuestas.
+    expect(store.healthComposite()).toEqual([]);
+  });
+
+  it('aggregates all health signals into the banner summary', async () => {
+    await store.load();
+
+    // críticas: executions, files, plugins, async (4); atención: retries (1); estables: 0.
+    expect(store.healthSummary()).toEqual({ critical: 4, warning: 1, stable: 0, worst: 'error' });
+  });
+
+  it('has no summary before loading', () => {
+    expect(store.healthSummary()).toBeNull();
   });
 
   it('aggregates backend plugin diagnostics and canary metrics into plugin health', async () => {
     await store.load();
 
-    // installed: 2 ACTIVE + 1 DEGRADED; canary: 1 not promotable -> blocked.
     expect(store.pluginHealth()).toEqual({ active: 2, degraded: 1, blocked: 1 });
-  });
-
-  it('derives async backbone health from the summary (no extra call)', async () => {
-    expect(store.asyncHealth()).toBeNull(); // sin summary aún → card oculto
-    await store.load();
-    expect(store.asyncHealth()).toEqual({ dead: 2, stalled: 1 });
   });
 
   it('should expose recent rows for cards', async () => {

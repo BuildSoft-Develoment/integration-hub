@@ -25,43 +25,103 @@
       </div>
     } @else {
 
-    <section class="metrics-grid">
-      @for (metric of store.metrics(); track metric.key) {
-        <ih-overview-metric-card
-          [titleKey]="metric.titleKey"
-          [value]="metric.value"
-          [detail]="metric.detail"
-          [alertLevel]="metric.alertLevel"
-          [actionLink]="metric.actionLink"
-          [actionLabelKey]="metric.actionLabelKey"
-        />
-      }
-      @if (store.pluginHealth(); as health) {
-        <ih-overview-plugin-health-card [health]="health" />
-      }
-      @if (store.asyncHealth(); as asyncHealth) {
-        <ih-overview-async-health-card [health]="asyncHealth" />
-      }
-      <!-- Extension point: plugins/features can register widgets into this slot. -->
-      <ih-slot name="overview.widgets" />
+    <!-- Banner de estado agregado: lo importante primero, el detalle despues. -->
+    @if (store.healthSummary(); as health) {
+      <div
+        class="overview-banner"
+        [class.overview-banner--ok]="health.worst === null"
+        [class.overview-banner--warn]="health.worst === 'warn'"
+        [class.overview-banner--error]="health.worst === 'error'"
+        role="status"
+      >
+        <span class="overview-banner__mark">
+          <ih-icon [name]="health.worst === null ? 'check' : 'alert-triangle'" [size]="18" />
+        </span>
+        <div class="overview-banner__copy">
+          <strong class="overview-banner__title">
+            @if (health.worst === null) {
+              {{ i18n.t('overview.health.allClear') }}
+            } @else {
+              {{ i18n.t('overview.health.attention', { count: health.critical + health.warning }) }}
+            }
+          </strong>
+        </div>
+        <div class="overview-banner__legend">
+          <span class="overview-legend overview-legend--error"><i></i>{{ i18n.t('overview.health.critical') }}: {{ health.critical }}</span>
+          <span class="overview-legend overview-legend--warn"><i></i>{{ i18n.t('overview.health.warning') }}: {{ health.warning }}</span>
+          <span class="overview-legend overview-legend--ok"><i></i>{{ i18n.t('overview.health.stable') }}: {{ health.stable }}</span>
+        </div>
+      </div>
+    }
+
+    <!-- Zona 1: Inventario -->
+    <section class="overview-zone">
+      <div class="overview-zone__head">
+        <h2 class="overview-zone__title">{{ i18n.t('overview.zone.inventory') }}</h2>
+        <span class="overview-zone__rule"></span>
+      </div>
+      <div class="inventory-grid">
+        @for (kpi of store.inventory(); track kpi.key) {
+          <ih-overview-metric-card [titleKey]="kpi.titleKey" [value]="kpi.value" [activeCount]="kpi.activeCount" />
+        }
+      </div>
     </section>
 
-    <section class="tables-grid">
-      <ih-overview-table-card
-        [titleKey]="'overview.recentExecutions'"
-        [emptyKey]="'overview.noExecutions'"
-        [rows]="store.recentExecutionsRows()"
-      />
-      <ih-overview-table-card
-        [titleKey]="'overview.failedHighlights'"
-        [emptyKey]="'overview.noFailures'"
-        [rows]="store.failedHighlightsRows()"
-      />
-      <ih-overview-table-card
-        [titleKey]="'overview.recentAudit'"
-        [emptyKey]="'overview.noAudit'"
-        [rows]="store.recentAuditRows()"
-      />
+    <!-- Zona 2: Salud operativa -->
+    <section class="overview-zone">
+      <div class="overview-zone__head">
+        <h2 class="overview-zone__title">{{ i18n.t('overview.zone.health') }}</h2>
+        <span class="overview-zone__rule"></span>
+      </div>
+      <div class="health-grid health-grid--primary">
+        @for (signal of store.healthPrimary(); track signal.key) {
+          <ih-overview-health-card
+            [titleKey]="signal.titleKey"
+            [alert]="signal.alert"
+            [stats]="signal.stats"
+            [linkRoute]="signal.linkRoute"
+            [linkLabelKey]="signal.linkLabelKey"
+          />
+        }
+      </div>
+      <div class="health-grid health-grid--composite">
+        @for (signal of store.healthComposite(); track signal.key) {
+          <ih-overview-health-card
+            [titleKey]="signal.titleKey"
+            [alert]="signal.alert"
+            [stats]="signal.stats"
+            [linkRoute]="signal.linkRoute"
+            [linkLabelKey]="signal.linkLabelKey"
+          />
+        }
+        <!-- Extension point: plugins/features can register widgets into this slot. -->
+        <ih-slot name="overview.widgets" />
+      </div>
+    </section>
+
+    <!-- Zona 3: Actividad reciente -->
+    <section class="overview-zone">
+      <div class="overview-zone__head">
+        <h2 class="overview-zone__title">{{ i18n.t('overview.zone.activity') }}</h2>
+        <span class="overview-zone__rule"></span>
+      </div>
+      <div class="tables-grid">
+        <ih-overview-table-card
+          [titleKey]="'overview.recentExecutions'"
+          [emptyKey]="'overview.noExecutions'"
+          [rows]="store.recentExecutionsRows()"
+        />
+        <ih-overview-table-card
+          [titleKey]="'overview.failedHighlights'"
+          [emptyKey]="'overview.noFailures'"
+          [rows]="store.failedHighlightsRows()"
+        />
+        <ih-overview-table-card
+          [titleKey]="'overview.recentAudit'"
+          [emptyKey]="'overview.noAudit'"
+          [rows]="store.recentAuditRows()"
+        />
+      </div>
     </section>
     }
   </section>

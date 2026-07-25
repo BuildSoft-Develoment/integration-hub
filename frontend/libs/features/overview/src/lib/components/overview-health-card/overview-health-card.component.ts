@@ -4,13 +4,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { RouterLink } from '@angular/router';
 import { I18nService } from '@integration-hub/core/services';
 import { IconComponent } from '@integration-hub/shared/ui';
-
-/** Una métrica del card de salud: etiqueta + valor + tono (color). */
-export interface OverviewHealthStat {
-  readonly labelKey: string;
-  readonly value: number;
-  readonly tone: 'ok' | 'error' | 'warn';
-}
+import { OverviewHealthStat } from '../../models/overview.models';
 
 /**
  * Card de salud genérico y presentacional del overview (DRY): estructura + estilo compartidos por los

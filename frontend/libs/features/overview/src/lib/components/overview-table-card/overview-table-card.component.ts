@@ -28,4 +28,20 @@ export class OverviewTableCardComponent {
   formatDate(value: string | null): string {
     return value ? this.dateTime.formatIso(value) : '-';
   }
+
+  /** Tono semántico del estado para colorear el badge (misma convención que la lista de ejecuciones). */
+  statusTone(status: string | null | undefined): 'success' | 'warning' | 'info' | 'danger' | 'neutral' {
+    switch ((status ?? '').toUpperCase()) {
+      case 'COMPLETED':
+        return 'success';
+      case 'FAILED':
+        return 'danger';
+      case 'PENDING':
+        return 'warning';
+      case 'RUNNING':
+        return 'info';
+      default:
+        return 'neutral';
+    }
+  }
 }
