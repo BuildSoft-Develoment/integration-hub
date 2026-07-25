@@ -3,8 +3,8 @@ import { AuthAccessService } from '@integration-hub/core/services';
 import { ActivatedRoute } from '@angular/router';
 import { of } from 'rxjs';
 
-import { AuditApiService } from '../../api/audit-api.service';
-import { Mt101FailedRecord } from '../../models/audit.models';
+import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
+import { Mt101FailedRecord } from '../../models/mt101.models';
 import { Mt101QuarantineComponent } from './mt101-quarantine.component';
 
 function failed(p: Partial<Mt101FailedRecord>): Mt101FailedRecord {
@@ -87,7 +87,7 @@ describe('Mt101QuarantineComponent', () => {
         normalPayCalls.push(query.reason ?? '');
         return of({ resolvedSent: 2, resolvedRejected: 1, stillPending: 0, gatewayErrors: 0, conflicts: 1 });
       },
-    } as unknown as AuditApiService;
+    } as unknown as Mt101AuditApiService;
     const route = { snapshot: { queryParamMap: { get: () => null } } } as unknown as ActivatedRoute;
     const access = {
       canAuditAdmin: () => canAuditAdmin,
@@ -96,7 +96,7 @@ describe('Mt101QuarantineComponent', () => {
 
     TestBed.configureTestingModule({
       providers: [
-        { provide: AuditApiService, useValue: api },
+        { provide: Mt101AuditApiService, useValue: api },
         { provide: ActivatedRoute, useValue: route },
         { provide: AuthAccessService, useValue: access },
       ],

@@ -99,6 +99,18 @@ export const PLATFORM_ROUTE_CONTRIBUTIONS: readonly AppRouteContribution[] = [
       ),
   },
   {
+    // ADR-019 Fase 2: pack SWIFT MT101 con namespace propio. Misma capability que auditoria por ahora
+    // (la separacion RBAC swift-mt101-read queda para una fase posterior).
+    id: 'swift-mt101',
+    path: '/swift-mt101',
+    titleKey: 'audit.domain.swiftMt101',
+    requiredCapability: APP_SECTION_CAPABILITIES.audit,
+    loadChildren: () =>
+      import('@integration-hub/features/swift-mt101').then(
+        (module) => module.swiftMt101Routes
+      ),
+  },
+  {
     id: 'plugins',
     path: '/plugins',
     titleKey: 'plugins.title',
@@ -159,7 +171,7 @@ export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {
       domain: 'swift-mt101',
       domainLabelKey: 'audit.domain.swiftMt101',
       domainOrder: 20,
-      route: '/audit/mt101-fragments',
+      route: '/swift-mt101/fragments',
       labelKey: 'audit.workspace.fragments',
       descriptionKey: 'audit.workspace.fragmentsHint',
       mode: 'query',
@@ -183,7 +195,7 @@ export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {
       domain: 'swift-mt101',
       domainLabelKey: 'audit.domain.swiftMt101',
       domainOrder: 20,
-      route: '/audit/mt101-quarantine',
+      route: '/swift-mt101/quarantine',
       labelKey: 'audit.workspace.quarantine',
       descriptionKey: 'audit.workspace.quarantineHint',
       mode: 'operation',
@@ -195,7 +207,7 @@ export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {
       domain: 'swift-mt101',
       domainLabelKey: 'audit.domain.swiftMt101',
       domainOrder: 20,
-      route: '/audit/mt101-pay-dispatch',
+      route: '/swift-mt101/pay-dispatch',
       labelKey: 'audit.workspace.payDispatch',
       descriptionKey: 'audit.workspace.payDispatchHint',
       mode: 'query',
@@ -207,7 +219,7 @@ export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {
       domain: 'swift-mt101',
       domainLabelKey: 'audit.domain.swiftMt101',
       domainOrder: 20,
-      route: '/audit/mt101-pay-conflicts',
+      route: '/swift-mt101/pay-conflicts',
       labelKey: 'audit.workspace.payConflicts',
       descriptionKey: 'audit.workspace.payConflictsHint',
       mode: 'operation',

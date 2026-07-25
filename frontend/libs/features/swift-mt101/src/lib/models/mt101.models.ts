@@ -1,0 +1,257 @@
+// @trace SWIFT-MT101 (ADR-019): modelos del pack de auditoria/operaciones del estandar SWIFT MT101,
+// extraidos del core de auditoria (features/audit) para separar el vertical del estandar de la
+// observabilidad generica de plataforma.
+
+export interface Mt101FragmentLink {
+  fragmentSetId: string | null;
+  processExecutionId: number | null;
+  taskDefinitionId: number | null;
+  sourceTable: string | null;
+  stagingIdFrom: number;
+  stagingIdTo: number;
+  sourceRecordFrom: number | null;
+  sourceRecordTo: number | null;
+  sourceFileHash: string | null;
+  fragmentIndex: number;
+  fragmentTotal: number;
+  sendersReference: string | null;
+  status: string | null;
+  errorMessage: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface Mt101ReprocessResult {
+  fragmentSetId: string;
+  fromStatus: string;
+  toStatus: string;
+  affected: number;
+}
+
+export interface Mt101FailedRecord {
+  id: number;
+  fragmentSetId: string;
+  sendersReference: string | null;
+  transactionReference: string | null;
+  sourceFileHash: string | null;
+  sourceRecordNumber: number | null;
+  stagingId: number | null;
+  sourceTaskDefinitionId: number | null;
+  sourceName: string | null;
+  ruleCode: string | null;
+  ruleSet: string | null;
+  severity: string | null;
+  message: string | null;
+  status: string;
+  createdAt: string | null;
+  resolvedAt: string | null;
+}
+
+export interface Mt101QuarantineBuildResult {
+  fragmentSetId: string;
+  quarantined: number;
+}
+
+export interface Mt101RebuildResult {
+  rebuildRunId?: string;
+  correctiveSetId: string;
+  fragmentCount: number;
+  rebuiltRows: number;
+  supersededFragments: number;
+  resolvedQuarantine: number;
+}
+
+/** B2': estado del ciclo bancario del correctivo tras avanzar/enviar (BUILT/VALIDATED/ARCHIVED/SENT/...). */
+export interface Mt101CorrectiveLifecycle {
+  rebuildRunId: string;
+  correctiveSetId: string;
+  status: string;
+  /** P2/P1-API v23: estado real del PAY (NOT_REQUESTED/REQUESTED/.../SENT/UNCERTAIN), reflejando el update recién aplicado. */
+  payStatus?: string;
+  /** P2 v20: resultado de MT101_STATUS tras el PAY (separado de status; PENDING/OK/FAILED/SKIPPED). */
+  statusSyncStatus?: string;
+  /** P2 v20: resultado de MT101_RECONCILE tras el PAY (separado de status). */
+  reconciliationStatus?: string;
+  /** P1-API v23: evidencia de gobierno del PAY, visible para el operador (no solo en BD). */
+  payRequestReason?: string;
+  payRequestTicket?: string;
+  payResolvedBy?: string;
+  payResolutionReason?: string;
+}
+
+/** v24: una accion del historial append-only de PAY (mt101_corrective_pay_action). */
+export interface Mt101PayAction {
+  actionType: string;
+  previousStatus?: string;
+  newStatus?: string;
+  actor?: string;
+  reason?: string;
+  ticket?: string;
+  /** v25: hashes aprobados visibles para auditoría operativa (qué payload/config aprobó el checker). */
+  payloadHash?: string;
+  configHash?: string;
+  /** v25: cadena tamper-evident del historial (action_hash encadena el previous_action_hash). */
+  previousActionHash?: string;
+  actionHash?: string;
+  createdAt?: string;
+}
+
+/** Estado de un rebuild run gobernado: REQUESTED -> APPROVED -> BUILT -> VALIDATED/ARCHIVED/SENT/CONFIRMED/RECONCILED. */
+export interface Mt101RebuildRunSummary {
+  rebuildRunId: string;
+  originalFragmentSetId: string;
+  correctiveSetId: string;
+  status: string;
+  selectedRows: number;
+  affectedFragments: number;
+  connectionRef: string | null;
+  payStatus: string | null;
+  payRequestedBy: string | null;
+  payApprovedBy: string | null;
+}
+
+export interface Mt101FragmentSetSummary {
+  fragmentSetId: string;
+  total: number;
+  byStatus: Record<string, number>;
+  /** Item 3: fragmentos en conflicto de pago (contradicción terminal worker↔STATUS) que exigen conciliación. */
+  conflicts?: number;
+}
+
+/** Item 3: fragmento en conflicto de pago, para listarlo con su motivo en la UI de conciliación. */
+export interface Mt101PayConflict {
+  sendersReference: string;
+  status: string;
+  reason: string | null;
+  updatedAt: string | null;
+}
+
+/**
+ * Consola de PAY Conflicts (inbox transversal): un conflicto de pago abierto de cualquier set/ejecución, con el
+ * fragmentSetId y processExecutionId que lo produjeron para abrir la vista por-set (quarantine) y el lineage.
+ */
+export interface Mt101OpenPayConflict {
+  /** Ledger de origen: NORMAL (mt101_build_fragment) o CORRECTIVE (mt101_corrective_pay_fragment). */
+  source: 'NORMAL' | 'CORRECTIVE';
+  /** Set del deep-link a quarantine; para CORRECTIVE es el set ORIGINAL (join a rebuild_run). */
+  fragmentSetId: string;
+  processExecutionId: number | null;
+  sendersReference: string;
+  status: string;
+  reason: string | null;
+  updatedAt: string | null;
+  /** Solo CORRECTIVE: el run maker-checker que lo produjo (contexto). */
+  rebuildRunId: string | null;
+  /** Id del fragmento en su ledger (para el track-by; el id colisiona entre ledgers → usar junto a source). */
+  id: number;
+  /** Maker-checker (#7): solicitud PENDING asociada (o null si no hay). ackStatus === 'PENDING' cuando existe. */
+  ackStatus: string | null;
+  /** Maker que solicitó reconocer (para mostrar y para deshabilitar "Aprobar" si el actor es el mismo). */
+  ackRequestedBy: string | null;
+  ackRequestedAt: string | null;
+  ackTicketRef: string | null;
+  ackReason: string | null;
+}
+
+/** Página del inbox de conflictos: items + cursor opaco para la siguiente página (null = fin). */
+export interface Mt101OpenPayConflictsPage {
+  items: Mt101OpenPayConflict[];
+  nextCursor: string | null;
+}
+
+/** A1: confirmación del banco (evidencia inline de un conflicto): tipo, gatewayReference, último estado, fecha. */
+export interface Mt101OpenPayConflictConfirmation {
+  confirmationType: string | null;
+  gatewayReference: string | null;
+  confirmedStatus: string | null;
+  receivedAt: string | null;
+}
+
+/**
+ * item 2: vista de una fila de staging para corrección, con su posición FÍSICA en el archivo origen (línea física
+ * para CSV/TXT/FIN; hoja+fila para Excel). Nullables: readers que no aportan posición los dejan null.
+ */
+export interface Mt101StagingRowView {
+  fragmentSetId: string;
+  sourceFileHash: string;
+  recordNumber: number;
+  stagingId: number;
+  payloadJson: string;
+  version: number;
+  physicalLine: number | null;
+  sheetName: string | null;
+  sheetRow: number | null;
+}
+
+/**
+ * G-A (búsqueda inversa enriquecida): lineage de un registro localizado por línea física. Incluye el resumen de
+ * cuarentena (regla + motivo + :20:/:21:) si el registro falló validación — un cuarentenado no tiene fragmento, así
+ * que este es el único lugar donde el operador ve, desde una línea física, por qué falló.
+ */
+export interface Mt101PhysicalLineLineage {
+  stagingId: number;
+  recordIndex: number;
+  physicalLine: number | null;
+  sourceFileHash: string;
+  processExecutionId: number | null;
+  sheetName: string | null;
+  sheetRow: number | null;
+  quarantineRuleCode: string | null;
+  quarantineMessage: string | null;
+  quarantineStatus: string | null;
+  sendersReference: string | null;
+  transactionReference: string | null;
+}
+
+/** v60: resultado de resolver el UNCERTAIN normal de un fragment set (consulta STATUS, no reenvía). */
+export interface Mt101NormalPayResolution {
+  resolvedSent: number;
+  resolvedRejected: number;
+  stillPending: number;
+  gatewayErrors: number;
+  conflicts: number;
+}
+
+export interface Mt101RowTimelineEntry {
+  stage: string;
+  status: string;
+  detail: string;
+  eventTs: string | null;
+}
+
+/** D1: resumen del ledger de dispatch del PAY directo por lista (visibilidad de atascos). */
+export interface Mt101PayDispatchSummary {
+  total: number;
+  byStatus: Record<string, number>;
+  /** Intenciones atascadas (UNCERTAIN/DISPATCHING) que bloquean el reenvío del pago hasta conciliar. */
+  stuck: number;
+}
+
+/** D2: resultado de reconciliar una intención atascada desde el terminal del archive. */
+export interface Mt101PayDispatchReconcileResult {
+  outcome: 'RECONCILED' | 'NOT_STUCK' | 'NO_EXECUTION' | 'NO_TERMINAL';
+  newStatus: string | null;
+}
+
+/** D1: intención de dispatch atascada, para listarla con su motivo en la UI de conciliación. */
+export interface Mt101PayDispatchIntent {
+  dispatchKey: string;
+  processExecutionId: number | null;
+  sendersReference: string | null;
+  status: string;
+  gatewayReference: string | null;
+  attempts: number;
+  errorMessage: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+export interface Mt101LoteHeader {
+  fragmentSetId: string;
+  processExecutionId: number | null;
+  sourceFileName: string | null;
+  sourceFileHash: string | null;
+  rowCount: number;
+  totalFragments: number;
+  byStatus: Record<string, number>;
+}

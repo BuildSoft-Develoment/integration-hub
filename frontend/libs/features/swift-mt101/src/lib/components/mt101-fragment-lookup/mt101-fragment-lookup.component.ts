@@ -8,8 +8,8 @@ import { MatInputModule } from '@angular/material/input';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { IconComponent, RelativeTimePipe } from '@integration-hub/shared/ui';
-import { AuditApiService } from '../../api/audit-api.service';
-import { Mt101FragmentLink, Mt101PhysicalLineLineage } from '../../models/audit.models';
+import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
+import { Mt101FragmentLink, Mt101PhysicalLineLineage } from '../../models/mt101.models';
 import {
   AuditWorkspaceNavComponent,
   RecordLineageApiService,
@@ -36,7 +36,7 @@ import {
   templateUrl: './mt101-fragment-lookup.component.html',
 })
 export class Mt101FragmentLookupComponent {
-  private readonly api = inject(AuditApiService);
+  private readonly api = inject(Mt101AuditApiService);
   private readonly lineageApi = inject(RecordLineageApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly breadcrumb = inject(BreadcrumbService);

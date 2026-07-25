@@ -1,0 +1,7 @@
+{
+  "name": "feature-swift-mt101",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/features/swift-mt101/src",
+  "tags": ["type:feature", "scope:swift-mt101"]
+}

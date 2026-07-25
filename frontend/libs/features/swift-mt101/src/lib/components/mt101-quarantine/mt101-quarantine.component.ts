@@ -10,8 +10,8 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { ActionDispatcherService, IconComponent } from '@integration-hub/shared/ui';
 import { Observable } from 'rxjs';
-import { AuditApiService } from '../../api/audit-api.service';
-import { Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101NormalPayResolution, Mt101PayAction, Mt101PayConflict, Mt101RebuildRunSummary, Mt101RowTimelineEntry, Mt101StagingRowView } from '../../models/audit.models';
+import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
+import { Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101NormalPayResolution, Mt101PayAction, Mt101PayConflict, Mt101RebuildRunSummary, Mt101RowTimelineEntry, Mt101StagingRowView } from '../../models/mt101.models';
 import {
   AuditOperationRisk,
   AuditWorkspaceNavComponent,
@@ -40,7 +40,7 @@ import {
   templateUrl: './mt101-quarantine.component.html',
 })
 export class Mt101QuarantineComponent {
-  private readonly api = inject(AuditApiService);
+  private readonly api = inject(Mt101AuditApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly breadcrumb = inject(BreadcrumbService);
   private readonly access = inject(AuthAccessService);

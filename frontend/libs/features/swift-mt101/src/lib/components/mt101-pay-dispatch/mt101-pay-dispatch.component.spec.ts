@@ -2,12 +2,12 @@ import { TestBed } from '@angular/core/testing';
 import { AuthAccessService } from '@integration-hub/core/services';
 import { of } from 'rxjs';
 
-import { AuditApiService } from '../../api/audit-api.service';
+import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
 import {
   Mt101PayDispatchIntent,
   Mt101PayDispatchReconcileResult,
   Mt101PayDispatchSummary,
-} from '../../models/audit.models';
+} from '../../models/mt101.models';
 import { Mt101PayDispatchComponent } from './mt101-pay-dispatch.component';
 
 interface Overrides {
@@ -24,11 +24,11 @@ function build(summary: Mt101PayDispatchSummary, stuck: Mt101PayDispatchIntent[]
       o.reconcileCalls?.push(`${dispatchKey}|${reason}`);
       return of(o.reconcile ?? { outcome: 'RECONCILED', newStatus: 'SENT' });
     },
-  } as unknown as AuditApiService;
+  } as unknown as Mt101AuditApiService;
   const access = { canAuditOperate: () => o.canOperate ?? true } as unknown as AuthAccessService;
   TestBed.configureTestingModule({
     providers: [
-      { provide: AuditApiService, useValue: api },
+      { provide: Mt101AuditApiService, useValue: api },
       { provide: AuthAccessService, useValue: access },
     ],
   });

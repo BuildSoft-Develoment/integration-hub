@@ -8,8 +8,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { RouterLink } from '@angular/router';
 import { AuthService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { IconComponent, RelativeTimePipe } from '@integration-hub/shared/ui';
-import { AuditApiService } from '../../api/audit-api.service';
-import { Mt101OpenPayConflict, Mt101OpenPayConflictConfirmation } from '../../models/audit.models';
+import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
+import { Mt101OpenPayConflict, Mt101OpenPayConflictConfirmation } from '../../models/mt101.models';
 import { AuditWorkspaceNavComponent } from '@integration-hub/shared/audit-kit';
 
 /**
@@ -37,7 +37,7 @@ import { AuditWorkspaceNavComponent } from '@integration-hub/shared/audit-kit';
   templateUrl: './mt101-pay-conflicts.component.html',
 })
 export class Mt101PayConflictsComponent {
-  private readonly api = inject(AuditApiService);
+  private readonly api = inject(Mt101AuditApiService);
   private readonly breadcrumb = inject(BreadcrumbService);
   private readonly auth = inject(AuthService);
   readonly i18n = inject(I18nService);

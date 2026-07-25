@@ -7,8 +7,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { RelativeTimePipe } from '@integration-hub/shared/ui';
-import { AuditApiService } from '../../api/audit-api.service';
-import { Mt101PayDispatchIntent, Mt101PayDispatchSummary } from '../../models/audit.models';
+import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
+import { Mt101PayDispatchIntent, Mt101PayDispatchSummary } from '../../models/mt101.models';
 import { AuditWorkspaceNavComponent } from '@integration-hub/shared/audit-kit';
 
 /**
@@ -33,7 +33,7 @@ import { AuditWorkspaceNavComponent } from '@integration-hub/shared/audit-kit';
   templateUrl: './mt101-pay-dispatch.component.html',
 })
 export class Mt101PayDispatchComponent {
-  private readonly api = inject(AuditApiService);
+  private readonly api = inject(Mt101AuditApiService);
   private readonly breadcrumb = inject(BreadcrumbService);
   private readonly access = inject(AuthAccessService);
   readonly i18n = inject(I18nService);
