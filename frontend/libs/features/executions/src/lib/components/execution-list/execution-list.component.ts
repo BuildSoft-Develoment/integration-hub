@@ -56,6 +56,22 @@ export class ExecutionListComponent {
     return this.i18n.t(`executionStatus.${status}`);
   }
 
+  /** Tono del estado, misma convencion que el detalle (summary-pill): success/warning/info/danger/neutral. */
+  statusTone(status: string): 'success' | 'warning' | 'info' | 'danger' | 'neutral' {
+    switch (status) {
+      case 'COMPLETED':
+        return 'success';
+      case 'FAILED':
+        return 'danger';
+      case 'COMPLETED_WITH_ERRORS':
+        return 'warning';
+      case 'RUNNING':
+        return 'info';
+      default:
+        return 'neutral';
+    }
+  }
+
   triggerLabel(status: string): string {
     return formatTriggerSourceLabel(status);
   }

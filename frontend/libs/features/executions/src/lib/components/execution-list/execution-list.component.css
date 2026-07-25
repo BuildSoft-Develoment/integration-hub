@@ -54,6 +54,27 @@
 .row-timing__dur--running .row-timing__value {
   color: var(--ih-color-warning, #b45309);
 }
+
+/* Chip de estado coloreado por tono, misma convencion que el detalle (summary-pill). */
+.status-chip {
+  font-weight: 600;
+}
+.status-chip--success {
+  --mdc-chip-elevated-container-color: var(--ih-status-success-bg);
+  --mdc-chip-label-text-color: var(--ih-status-success);
+}
+.status-chip--warning {
+  --mdc-chip-elevated-container-color: var(--ih-status-warning-bg);
+  --mdc-chip-label-text-color: var(--ih-status-warning);
+}
+.status-chip--info {
+  --mdc-chip-elevated-container-color: var(--ih-status-info-bg);
+  --mdc-chip-label-text-color: var(--ih-status-info);
+}
+.status-chip--danger {
+  --mdc-chip-elevated-container-color: var(--ih-status-error-bg);
+  --mdc-chip-label-text-color: var(--ih-status-error);
+}
 @media (max-height: 700px) and (min-width: 761px) {
   .row-copy small,
   .row-status {
