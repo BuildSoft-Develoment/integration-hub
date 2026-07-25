@@ -1,11 +1,9 @@
-// @trace RF-002 (tema: actualizar preset/density/locale/sidebarMode desde la UI de preferencias)
+// @trace RF-002 (tema: actualizar preset/locale/colores desde la UI de preferencias)
 import { Injectable, inject, signal } from '@angular/core';
 import {
   I18nService,
-  SidebarMode,
   SystemThemeConfigService,
   ThemeConfiguration,
-  ThemeDensity,
   ThemeMode,
   ThemePreset,
   ThemeService,
@@ -38,18 +36,8 @@ export class AppPreferencesFacade {
     this.persistConfiguration();
   }
 
-  updateDensity(density: ThemeDensity): void {
-    this.theme.setDensity(density);
-    this.persistConfiguration();
-  }
-
   updateLocale(locale: 'es' | 'en'): void {
     this.i18n.setLocale(locale);
-    this.persistConfiguration();
-  }
-
-  updateSidebarMode(sidebarMode: SidebarMode): void {
-    this.theme.setSidebarMode(sidebarMode);
     this.persistConfiguration();
   }
 

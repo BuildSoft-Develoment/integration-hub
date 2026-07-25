@@ -31,9 +31,7 @@ describe('AppComponent', () => {
               of({
                 scheme: 'light',
                 preset: 'horizon',
-                density: 'comfortable',
                 locale: 'es',
-                sidebarMode: 'expanded',
                 primary: '#0F766E',
                 error: '#E5484D',
                 neutral: '#8B8D98',
@@ -42,9 +40,7 @@ describe('AppComponent', () => {
               of({
                 scheme: 'light',
                 preset: 'horizon',
-                density: 'comfortable',
                 locale: 'es',
-                sidebarMode: 'expanded',
                 primary: '#0F766E',
                 error: '#E5484D',
                 neutral: '#8B8D98',

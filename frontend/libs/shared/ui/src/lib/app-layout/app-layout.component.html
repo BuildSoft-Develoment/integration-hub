@@ -1,9 +1,8 @@
 ﻿<mat-sidenav-container class="shell-layout">
   <mat-sidenav
     class="shell-sidenav"
-    [class.shell-sidenav--compact]="desktopMode() && theme.sidebarMode() === 'compact'"
     [mode]="desktopMode() ? 'side' : 'over'"
-    [opened]="desktopMode() || mobileNavOpen()"
+    [opened]="desktopMode() ? !desktopNavCollapsed() : mobileNavOpen()"
     (closedStart)="mobileNavOpen.set(false)"
   >
     <div class="shell-sidenav__inner">
@@ -19,6 +18,20 @@
         <div class="brand-actions ih-shell-actions">
           <ih-app-session-action></ih-app-session-action>
           <ih-app-theme-action></ih-app-theme-action>
+          @if (desktopMode()) {
+            <button
+              mat-icon-button
+              type="button"
+              class="nav-collapse-button"
+              [attr.aria-label]="i18n.t('shell.collapseNav')"
+              [attr.title]="i18n.t('shell.collapseNav')"
+              (click)="toggleNavigation()"
+            >
+              <svg class="nav-collapse-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+          }
         </div>
       </div>
 
@@ -26,20 +39,21 @@
     </div>
   </mat-sidenav>
 
-  <mat-sidenav-content [style.--ih-shell-content-left]="contentLeftInset()">
+  <mat-sidenav-content [style.--ih-shell-sidebar-width]="sidebarWidthPx()">
     @if (!auth.ready()) {
       <mat-progress-bar mode="indeterminate"></mat-progress-bar>
     }
 
     <a class="ih-skip-link" href="#main-content" [attr.aria-label]="i18n.t('shell.skipToMain')">{{ i18n.t('shell.skipToMain') }}</a>
     <section class="shell-content">
-      @if (!desktopMode()) {
+      @if (!desktopMode() || desktopNavCollapsed()) {
         <div class="mobile-toolbar">
           <button
             mat-icon-button
             type="button"
             class="mobile-nav-button"
-            [attr.aria-label]="i18n.t('shell.openNavigation')"
+            [attr.aria-label]="i18n.t(desktopMode() ? 'shell.expandNav' : 'shell.openNavigation')"
+            [attr.title]="i18n.t(desktopMode() ? 'shell.expandNav' : 'shell.openNavigation')"
             (click)="toggleNavigation()"
           >
             <span class="hamburger-icon" aria-hidden="true"></span>

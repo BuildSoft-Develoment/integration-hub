@@ -38,20 +38,19 @@ export class AppLayoutComponent implements OnDestroy {
 
   readonly desktopMode = signal(this.resolveDesktopMode());
   readonly mobileNavOpen = signal(false);
+  /** Colapso on-demand del nav en desktop (estado efimero de UI, no se persiste). */
+  readonly desktopNavCollapsed = signal(false);
   private unregisterShortcuts: (() => void) | null = null;
 
   /**
-   * Left inset of the content column, mirroring the side-nav width so that
-   * viewport-fixed overlays (e.g. the floating action bar) can align with the
-   * content instead of slipping behind the nav. `0px` when the nav overlays
-   * (mobile) rather than pushing content.
+   * Ancho actual del nav lateral, publicado como `--ih-shell-sidebar-width` en el arbol de
+   * contenido para que los overlays viewport-fixed (barra de acciones, overlays de processes)
+   * se alineen con el contenido en vez de quedar detras del nav. `0px` cuando el nav esta
+   * colapsado (desktop) o se superpone (mobile), casos en que el contenido ocupa todo el ancho.
    */
-  readonly contentLeftInset = computed(() => {
-    if (!this.desktopMode()) {
-      return '0px';
-    }
-    return this.theme.sidebarMode() === 'compact' ? '248px' : '308px';
-  });
+  readonly sidebarWidthPx = computed(() =>
+    !this.desktopMode() || this.desktopNavCollapsed() ? '0px' : '308px'
+  );
 
   constructor() {
     this.unregisterShortcuts = this.shortcuts.register([
@@ -94,7 +93,9 @@ export class AppLayoutComponent implements OnDestroy {
   }
 
   toggleNavigation(): void {
-    if (!this.desktopMode()) {
+    if (this.desktopMode()) {
+      this.desktopNavCollapsed.update((collapsed) => !collapsed);
+    } else {
       this.mobileNavOpen.update((value) => !value);
     }
   }

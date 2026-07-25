@@ -1,12 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatMenuModule } from '@angular/material/menu';
-import {
-  SidebarMode,
-  ThemeDensity,
-  ThemeMode,
-  ThemePreset,
-} from '@integration-hub/core/services';
+import { ThemeMode, ThemePreset } from '@integration-hub/core/services';
 
 import { AppPreferencesFacade } from '../preferences/app-preferences.facade';
 
@@ -38,19 +33,9 @@ export class AppThemeActionComponent {
     { value: 'atlas', labelKey: 'shell.preset.atlas' },
   ];
 
-  readonly densityOptions: readonly ThemeOption<ThemeDensity>[] = [
-    { value: 'comfortable', labelKey: 'shell.density.comfortable' },
-    { value: 'compact', labelKey: 'shell.density.compact' },
-  ];
-
   readonly localeOptions: readonly ThemeOption<'es' | 'en'>[] = [
     { value: 'es', labelKey: 'ES' },
     { value: 'en', labelKey: 'EN' },
-  ];
-
-  readonly sidebarOptions: readonly ThemeOption<SidebarMode>[] = [
-    { value: 'expanded', labelKey: 'shell.sidebar.expanded' },
-    { value: 'compact', labelKey: 'shell.sidebar.compact' },
   ];
 
   readonly customColorFields: readonly ThemeOption<'primary' | 'error' | 'neutral'>[] = [
@@ -67,14 +52,6 @@ export class AppThemeActionComponent {
         : mode === 'dark'
           ? 'shell.mode.dark'
           : 'shell.mode.light'
-    );
-  }
-
-  currentSidebarLabel(): string {
-    return this.i18n.t(
-      this.theme.sidebarMode() === 'compact'
-        ? 'shell.sidebar.compact'
-        : 'shell.sidebar.expanded'
     );
   }
 

@@ -13,9 +13,7 @@ public class SystemThemeSettingApiMapper {
         return new SystemThemeSettingResponse(
                 setting.scheme,
                 setting.preset,
-                setting.density,
                 setting.locale,
-                setting.sidebarMode,
                 setting.primaryColor,
                 setting.errorColor,
                 setting.neutralColor,

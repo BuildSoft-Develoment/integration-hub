@@ -12,8 +12,16 @@
   border-radius: 0 !important;
 }
 
-.shell-sidenav--compact {
-  width: 248px;
+.nav-collapse-button {
+  width: 2.25rem;
+  height: 2.25rem;
+  color: var(--ih-muted, #64748b);
+}
+
+.nav-collapse-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
 }
 
 .shell-sidenav__inner {

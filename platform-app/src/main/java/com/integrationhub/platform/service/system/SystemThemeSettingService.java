@@ -16,9 +16,7 @@ public class SystemThemeSettingService {
     private static final long SINGLETON_ID = 1L;
     private static final String DEFAULT_SCHEME = "light";
     private static final String DEFAULT_PRESET = "horizon";
-    private static final String DEFAULT_DENSITY = "comfortable";
     private static final String DEFAULT_LOCALE = "es";
-    private static final String DEFAULT_SIDEBAR_MODE = "expanded";
     private static final String DEFAULT_PRIMARY = "#0F766E";
     private static final String DEFAULT_ERROR = "#E5484D";
     private static final String DEFAULT_NEUTRAL = "#8B8D98";
@@ -56,9 +54,7 @@ public class SystemThemeSettingService {
         var setting = getOrCreate();
         setting.scheme = normalize(request.scheme(), DEFAULT_SCHEME);
         setting.preset = normalize(request.preset(), DEFAULT_PRESET);
-        setting.density = normalize(request.density(), DEFAULT_DENSITY);
         setting.locale = normalize(request.locale(), DEFAULT_LOCALE);
-        setting.sidebarMode = normalize(request.sidebarMode(), DEFAULT_SIDEBAR_MODE);
         setting.primaryColor = normalize(request.primary(), DEFAULT_PRIMARY);
         setting.errorColor = normalize(request.error(), DEFAULT_ERROR);
         setting.neutralColor = normalize(request.neutral(), DEFAULT_NEUTRAL);
@@ -77,9 +73,7 @@ public class SystemThemeSettingService {
         setting.id = SINGLETON_ID;
         setting.scheme = DEFAULT_SCHEME;
         setting.preset = DEFAULT_PRESET;
-        setting.density = DEFAULT_DENSITY;
         setting.locale = DEFAULT_LOCALE;
-        setting.sidebarMode = DEFAULT_SIDEBAR_MODE;
         setting.primaryColor = DEFAULT_PRIMARY;
         setting.errorColor = DEFAULT_ERROR;
         setting.neutralColor = DEFAULT_NEUTRAL;

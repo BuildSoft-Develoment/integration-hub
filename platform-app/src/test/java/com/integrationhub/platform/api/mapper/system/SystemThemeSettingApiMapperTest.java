@@ -16,9 +16,7 @@ class SystemThemeSettingApiMapperTest {
         setting.id = 1L;
         setting.scheme = "dark";
         setting.preset = "default";
-        setting.density = "comfortable";
         setting.locale = "es";
-        setting.sidebarMode = "expanded";
         setting.primaryColor = "#1565C0";
         setting.errorColor = "#C62828";
         setting.neutralColor = "#455A64";
@@ -27,9 +25,7 @@ class SystemThemeSettingApiMapperTest {
 
         assertEquals("dark", response.scheme());
         assertEquals("default", response.preset());
-        assertEquals("comfortable", response.density());
         assertEquals("es", response.locale());
-        assertEquals("expanded", response.sidebarMode());
         assertEquals("#1565C0", response.primary());
         assertEquals("#C62828", response.error());
         assertEquals("#455A64", response.neutral());

@@ -18,14 +18,8 @@ public class SystemThemeSetting {
     @Column(nullable = false, length = 20)
     public String preset;
 
-    @Column(nullable = false, length = 20)
-    public String density;
-
     @Column(nullable = false, length = 10)
     public String locale;
-
-    @Column(name = "sidebar_mode", nullable = false, length = 20)
-    public String sidebarMode;
 
     @Column(name = "primary_color", nullable = false, length = 20)
     public String primaryColor;

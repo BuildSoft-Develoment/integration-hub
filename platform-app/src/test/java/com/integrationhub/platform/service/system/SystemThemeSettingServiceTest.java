@@ -40,9 +40,7 @@ class SystemThemeSettingServiceTest {
         existing.id = 1L;
         existing.scheme = "dark";
         existing.preset = "horizon";
-        existing.density = "compact";
         existing.locale = "en";
-        existing.sidebarMode = "collapsed";
         existing.primaryColor = "#111111";
         existing.errorColor = "#222222";
         existing.neutralColor = "#333333";
@@ -52,7 +50,7 @@ class SystemThemeSettingServiceTest {
 
         assertEquals("dark", response.scheme());
         assertEquals("en", response.locale());
-        assertEquals("collapsed", response.sidebarMode());
+        assertEquals("horizon", response.preset());
     }
 
     @Test
@@ -63,16 +61,14 @@ class SystemThemeSettingServiceTest {
         when(repository.findSingleton()).thenReturn(existing);
 
         var request = new SystemThemeSettingRequest(
-                "dark", "  ", null, "en", "", "#AAA", null, "  ",
+                "dark", "  ", "en", "#AAA", null, "  ",
                 "ACME Corp", "", null);
         var response = new SystemThemeSettingService(repository, apiMapper).update(request);
 
         // Valores provistos se respetan; blancos/nulos caen a default.
         assertEquals("dark", response.scheme());
         assertEquals("horizon", response.preset());      // "  " -> default
-        assertEquals("comfortable", response.density());  // null -> default
         assertEquals("en", response.locale());
-        assertEquals("expanded", response.sidebarMode()); // "" -> default
         assertEquals("#AAA", response.primary());
         assertEquals("#E5484D", response.error());        // null -> default
         assertEquals("ACME Corp", response.brandName());  // marca provista
@@ -87,7 +83,7 @@ class SystemThemeSettingServiceTest {
         existing.id = 1L;
         when(repository.findSingleton()).thenReturn(existing);
         var request = new SystemThemeSettingRequest(
-                "light", "horizon", "comfortable", "es", "expanded", "#0F766E", "#E5484D", "#8B8D98",
+                "light", "horizon", "es", "#0F766E", "#E5484D", "#8B8D98",
                 "ACME", "AC", "not-a-data-uri");
         var service = new SystemThemeSettingService(repository, apiMapper);
         assertThrows(IllegalArgumentException.class, () -> service.update(request));

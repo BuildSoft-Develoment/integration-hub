@@ -100,7 +100,6 @@ $ih-dark-theme: mat.define-theme((
   --ih-shadow: 0 22px 60px rgba(15, 23, 42, 0.08);
   --ih-radius-xl: 28px;
   --ih-radius-lg: 18px;
-  --ih-density-gap: 1rem;
   --ih-shell-sidebar-width: 308px;
   --ih-theme-primary: #0f766e;
   --ih-theme-error: #e5484d;
@@ -197,14 +196,6 @@ $ih-dark-theme: mat.define-theme((
 :root[data-theme-preset='custom'] {
   --ih-accent: var(--ih-theme-primary);
   --ih-accent-strong: var(--ih-theme-primary);
-}
-
-:root[data-sidebar-mode='compact'] {
-  --ih-shell-sidebar-width: 248px;
-}
-
-:root[data-theme-density='compact'] {
-  --ih-density-gap: 0.72rem;
 }
 
 html,

@@ -35,19 +35,9 @@
         <span class="theme-menu-item__value">{{ i18n.t('shell.preset.' + theme.preset()) }}</span>
       </button>
 
-      <button mat-menu-item type="button" [matMenuTriggerFor]="densityMenu">
-        <span class="theme-menu-item__label">{{ i18n.t('shell.density') }}</span>
-        <span class="theme-menu-item__value">{{ i18n.t('shell.density.' + theme.density()) }}</span>
-      </button>
-
       <button mat-menu-item type="button" [matMenuTriggerFor]="localeMenu">
         <span class="theme-menu-item__label">{{ i18n.t('shell.locale') }}</span>
         <span class="theme-menu-item__value">{{ i18n.locale().toUpperCase() }}</span>
-      </button>
-
-      <button mat-menu-item type="button" [matMenuTriggerFor]="sidebarMenu">
-        <span class="theme-menu-item__label">{{ i18n.t('shell.sidebar') }}</span>
-        <span class="theme-menu-item__value">{{ currentSidebarLabel() }}</span>
       </button>
 
       <button mat-menu-item type="button" [matMenuTriggerFor]="brandMenu">
@@ -78,26 +68,10 @@
   </button>
 </mat-menu>
 
-<mat-menu #densityMenu="matMenu" panelClass="theme-menu-panel" xPosition="before" yPosition="below" [overlapTrigger]="false">
-  @for (option of densityOptions; track option.value) {
-    <button mat-menu-item type="button" (click)="preferences.updateDensity(option.value)">
-      {{ i18n.t(option.labelKey) }}
-    </button>
-  }
-</mat-menu>
-
 <mat-menu #localeMenu="matMenu" panelClass="theme-menu-panel" xPosition="before" yPosition="below" [overlapTrigger]="false">
   @for (option of localeOptions; track option.value) {
     <button mat-menu-item type="button" (click)="preferences.updateLocale(option.value)">
       {{ option.labelKey }}
-    </button>
-  }
-</mat-menu>
-
-<mat-menu #sidebarMenu="matMenu" panelClass="theme-menu-panel" xPosition="before" yPosition="below" [overlapTrigger]="false">
-  @for (option of sidebarOptions; track option.value) {
-    <button mat-menu-item type="button" (click)="preferences.updateSidebarMode(option.value)">
-      {{ i18n.t(option.labelKey) }}
     </button>
   }
 </mat-menu>
