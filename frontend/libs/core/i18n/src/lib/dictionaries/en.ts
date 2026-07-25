@@ -1273,7 +1273,6 @@ export const en = {
   'audit.hub.title': 'Audit',
   'audit.hub.subtitle': 'Pick a pack to see its observability and operations tools.',
   'audit.hub.label': 'Audit packs',
-  'audit.hub.back': 'Audit',
   'audit.workspace.modeQuery': 'Query',
   'audit.workspace.modeOperation': 'Governed operation',
   'audit.workspace.events': 'Events',

@@ -1,8 +1,4 @@
 <nav class="audit-ws" [attr.aria-label]="i18n.t('audit.workspace.label')">
-  <a class="audit-ws__back" routerLink="/audit">
-    <span aria-hidden="true">←</span> {{ i18n.t('audit.hub.back') }}
-  </a>
-
   @if (activeGroup(); as group) {
     @if (group.labelKey) {
       <span class="audit-ws__group-label">{{ i18n.t(group.labelKey) }}</span>

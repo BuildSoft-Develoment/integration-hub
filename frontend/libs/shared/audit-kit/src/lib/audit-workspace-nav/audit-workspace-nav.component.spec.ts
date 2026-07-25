@@ -61,9 +61,8 @@ describe('AuditWorkspaceNavComponent', () => {
     expect(group?.items.length).toBe(3);
   });
 
-  it('renderiza el volver al hub y solo las tools del pack activo', async () => {
+  it('renderiza solo las tools del pack activo', async () => {
     const nav: HTMLElement = (await renderAt('/swift-mt101/fragments')).nativeElement.querySelector('nav.audit-ws');
-    expect(nav.querySelector('.audit-ws__back')).toBeTruthy();
     expect(nav.querySelectorAll('a.audit-ws__item').length).toBe(2);
   });
 });

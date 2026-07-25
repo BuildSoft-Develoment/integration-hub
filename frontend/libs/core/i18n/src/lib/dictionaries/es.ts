@@ -1273,7 +1273,6 @@ export const es = {
   'audit.hub.title': 'Auditoria',
   'audit.hub.subtitle': 'Elegi un pack para ver sus herramientas de observabilidad y operacion.',
   'audit.hub.label': 'Packs de auditoria',
-  'audit.hub.back': 'Auditoria',
   'audit.workspace.modeQuery': 'Consulta',
   'audit.workspace.modeOperation': 'Operacion gobernada',
   'audit.workspace.events': 'Eventos',

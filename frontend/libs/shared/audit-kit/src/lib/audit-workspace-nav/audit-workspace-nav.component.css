@@ -5,19 +5,6 @@
   padding:.25rem 0;
 }
 
-.audit-ws__back {
-  align-self:flex-start;
-  font-size:.78rem;
-  font-weight:600;
-  color:var(--ih-text-soft);
-  text-decoration:none;
-  padding:.15rem .1rem;
-}
-.audit-ws__back:hover,
-.audit-ws__back:focus-visible {
-  color:var(--ih-accent);
-}
-
 .audit-ws__group {
   display:flex;
   flex-direction:column;
