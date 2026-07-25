@@ -42,12 +42,12 @@
       </div>
 
       <div class="row-type ih-catalog-row-meta">
-        <mat-chip-set>
-          <mat-chip class="status-chip" [class]="'status-chip status-chip--' + statusTone(execution.status)">{{ statusLabel(execution.status) }}</mat-chip>
+        <div class="status-row">
+          <span class="status-pill" [class]="'status-pill status-pill--' + statusTone(execution.status)">{{ statusLabel(execution.status) }}</span>
           @if (execution.triggerSource) {
-            <mat-chip>{{ triggerLabel(execution.triggerSource) }}</mat-chip>
+            <mat-chip-set><mat-chip>{{ triggerLabel(execution.triggerSource) }}</mat-chip></mat-chip-set>
           }
-        </mat-chip-set>
+        </div>
       </div>
 
       <div class="row-status ih-catalog-row-meta">

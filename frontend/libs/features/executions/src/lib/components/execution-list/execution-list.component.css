@@ -55,26 +55,29 @@
   color: var(--ih-color-warning, #b45309);
 }
 
-/* Chip de estado coloreado por tono, misma convencion que el detalle (summary-pill). */
-.status-chip {
-  font-weight: 600;
+/* Estado coloreado por tono, mismo pill que el detalle (summary-pill): span plano, sin internals de mat-chip. */
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 }
-.status-chip--success {
-  --mdc-chip-elevated-container-color: var(--ih-status-success-bg);
-  --mdc-chip-label-text-color: var(--ih-status-success);
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.28rem 0.66rem;
+  border-radius: 999px;
+  font-size: 0.77rem;
+  font-weight: 700;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--ih-surface) 88%, transparent);
+  color: var(--ih-text-soft);
 }
-.status-chip--warning {
-  --mdc-chip-elevated-container-color: var(--ih-status-warning-bg);
-  --mdc-chip-label-text-color: var(--ih-status-warning);
-}
-.status-chip--info {
-  --mdc-chip-elevated-container-color: var(--ih-status-info-bg);
-  --mdc-chip-label-text-color: var(--ih-status-info);
-}
-.status-chip--danger {
-  --mdc-chip-elevated-container-color: var(--ih-status-error-bg);
-  --mdc-chip-label-text-color: var(--ih-status-error);
-}
+.status-pill--success { background: var(--ih-status-success-bg); color: var(--ih-status-success); }
+.status-pill--warning { background: var(--ih-status-warning-bg); color: var(--ih-status-warning); }
+.status-pill--info { background: var(--ih-status-info-bg); color: var(--ih-status-info); }
+.status-pill--danger { background: var(--ih-status-error-bg); color: var(--ih-status-error); }
 @media (max-height: 700px) and (min-width: 761px) {
   .row-copy small,
   .row-status {
