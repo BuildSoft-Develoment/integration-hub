@@ -187,6 +187,27 @@ describe('FileWriteTaskProvider', () => {
     expect(configReq.layout.detail.quoteStrategy).toBeUndefined();
   });
 
+  it('TXT delimitado: serializa detail.mode + detail.delimiter y round-trip', () => {
+    const draft = { ...provider.createDraft(), format: 'TXT' as const, txtMode: 'delimited' as const,
+      delimiter: '|', columns: [{ field: 'dni' }, { field: 'monto' }] };
+    const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+    expect(config.layout.detail.mode).toBe('delimited');
+    expect(config.layout.detail.delimiter).toBe('|');
+
+    const rehydrated = provider.hydrateDraft({ taskType: 'FILE_WRITE', configurationJson: JSON.stringify(config) } as any);
+    expect(rehydrated.txtMode).toBe('delimited');
+    expect(rehydrated.delimiter).toBe('|');
+  });
+
+  it('TXT ancho fijo (default): NO emite detail.mode (compatibilidad con lo ya guardado)', () => {
+    const draft = { ...provider.createDraft(), format: 'TXT' as const, columns: [{ field: 'a', length: '3' }] };
+    const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+    expect(config.layout.detail.mode, 'fixed-length es el default del backend, no se serializa').toBeUndefined();
+
+    const rehydrated = provider.hydrateDraft({ taskType: 'FILE_WRITE', configurationJson: JSON.stringify(config) } as any);
+    expect(rehydrated.txtMode).toBe('fixed-length');
+  });
+
   it('serializa la config XLSX (solo no-defaults) y round-trip', () => {
     const draft = provider.createDraft();
     draft.format = 'XLSX';

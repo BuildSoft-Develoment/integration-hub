@@ -87,12 +87,16 @@ export interface FileWriteTableSourceDraft {
 /** Variables de metadata que el backend sustituye en el valor de un filtro (FileWriteTaskProvider.resolveFilterValue). */
 export const FILE_WRITE_FILTER_METADATA_VARS: readonly string[] = ['${_processExecutionId}', '${_taskDefinitionId}'];
 
+export type FileWriteTxtMode = 'fixed-length' | 'delimited';
+
 export interface FileWriteTaskDraft extends ProcessTaskRuntimeDraft {
   format: FileWriteFormat;
   encoding: string;
   lineEnding: 'LF' | 'CRLF';
   delimiter: string;
   quoteStrategy: FileWriteQuoteStrategy;
+  /** Modo del formato TXT (espejo de los readers): ancho fijo (length/align/pad) o delimitado (join por `delimiter`). */
+  txtMode: FileWriteTxtMode;
   xlsx: FileWriteXlsxDraft;
   columns: FileWriteColumnDraft[];
   header: FileWriteCellDraft[];
@@ -130,6 +134,7 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       lineEnding: 'LF',
       delimiter: ',',
       quoteStrategy: 'REQUIRED',
+      txtMode: 'fixed-length',
       xlsx: this.defaultXlsx(),
       columns: [],
       header: [],
@@ -159,6 +164,8 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       lineEnding: String(detail.lineEnding || 'LF').toUpperCase() === 'CRLF' ? 'CRLF' : 'LF',
       delimiter: String(detail.delimiter || ','),
       quoteStrategy: String(detail.quoteStrategy || 'REQUIRED').toUpperCase() === 'ALWAYS' ? 'ALWAYS' : 'REQUIRED',
+      // TXT: default fixed-length (compatibilidad con lo ya guardado, que no tenia `mode`).
+      txtMode: String(detail.mode || 'fixed-length').toLowerCase() === 'delimited' ? 'delimited' : 'fixed-length',
       xlsx: this.hydrateXlsx(config.xlsx),
       columns: this.hydrateColumns(detail.columns),
       header: this.hydrateCells(layout.header),
@@ -217,6 +224,11 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       if (draft.quoteStrategy === 'ALWAYS') {
         detail.quoteStrategy = 'ALWAYS';
       }
+    }
+    // TXT delimitado: emite mode + delimiter. El modo fixed-length es el default del backend, no se serializa.
+    if (draft.format === 'TXT' && draft.txtMode === 'delimited') {
+      detail.mode = 'delimited';
+      detail.delimiter = draft.delimiter || '|';
     }
     if (draft.lineEnding === 'CRLF') {
       detail.lineEnding = 'CRLF';

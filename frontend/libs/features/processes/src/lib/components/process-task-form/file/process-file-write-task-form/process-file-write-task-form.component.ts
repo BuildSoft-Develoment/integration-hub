@@ -104,6 +104,9 @@ export class ProcessFileWriteTaskFormComponent {
   readonly isTxt = computed(() => this.draft().format === 'TXT');
   readonly isCsv = computed(() => this.draft().format === 'CSV');
   readonly isXlsx = computed(() => this.draft().format === 'XLSX');
+  // TXT ancho fijo: muestra length/align/pad por columna. TXT delimitado: solo el campo + el delimitador.
+  readonly isFixedWidthTxt = computed(() => this.isTxt() && this.draft().txtMode === 'fixed-length');
+  readonly isDelimitedTxt = computed(() => this.isTxt() && this.draft().txtMode === 'delimited');
   // El modo se DERIVA (no hay toggle, paridad con DB_WRITE): con tarea de origen -> records; sin tarea -> tabla directa.
   readonly isTableSource = computed(() => !this.draft().input?.sourceTaskRef);
 

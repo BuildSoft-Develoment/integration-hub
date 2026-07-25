@@ -22,10 +22,15 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * ADR-016: escritor TXT de <b>ancho fijo</b> (espejo del reader fixed-length). Cada celda ocupa un ancho fijo
- * ({@code length}) con relleno ({@code pad}, por defecto espacio) y alineacion ({@code align}: {@code left}/{@code right}).
- * Header/detalle/trailer se emiten como registros de ancho fijo. Fail-loud si un valor excede su ancho (dato invalido
- * para un archivo de ancho fijo). Streaming, sin materializar el archivo en memoria.
+ * ADR-016: escritor TXT con dos modos, espejo del reader ({@code layout.detail.mode}):
+ * <ul>
+ *   <li><b>fixed-length</b> (default): cada celda ocupa un ancho fijo ({@code length}) con relleno ({@code pad},
+ *       por defecto espacio) y alineacion ({@code align}: {@code left}/{@code right}). Fail-loud si un valor
+ *       excede su ancho.</li>
+ *   <li><b>delimited</b>: las celdas se unen con {@code layout.detail.delimiter} (sin ancho ni relleno). A
+ *       diferencia de CSV, NO entrecomilla — es un join crudo, el contrapunto del reader delimitado.</li>
+ * </ul>
+ * Header/detalle/trailer se emiten segun el modo. Streaming, sin materializar el archivo en memoria.
  */
 @ApplicationScoped
 public class TxtWriter implements FileFormatWriter {
@@ -54,19 +59,38 @@ public class TxtWriter implements FileFormatWriter {
         if (columns.isEmpty()) {
             throw new IllegalArgumentException("TXT writer requires layout.detail.columns");
         }
-        // spec() valida length > 0 por columna (fail-fast al crear/actualizar).
-        columns.forEach(DetailColumn::spec);
+        if (isDelimited(configuration)) {
+            if (delimiterOf(configuration).isEmpty()) {
+                throw new IllegalArgumentException("TXT delimited mode requires a non-empty layout.detail.delimiter");
+            }
+        } else {
+            // fixed-length: spec() valida length > 0 por columna (fail-fast al crear/actualizar).
+            columns.forEach(DetailColumn::spec);
+        }
     }
 
     @Override
     public FileWriteSession open(OutputStream out, Map<String, Object> configuration) throws IOException {
         var encoding = String.valueOf(configuration.getOrDefault("encoding", "UTF-8"));
         var lineEnding = "CRLF".equalsIgnoreCase(detailOrLayoutString(configuration, "lineEnding", "LF")) ? "\r\n" : "\n";
+        var delimited = isDelimited(configuration);
+        var delimiter = delimiterOf(configuration);
         var detail = detailColumns(configuration);
-        var headerSpecs = specsOf(layoutList(configuration, "header"));
-        var trailerSpecs = specsOf(layoutList(configuration, "trailer"));
+        // En modo delimitado header/trailer no llevan ancho: se unen igual que el detalle.
+        var headerSpecs = delimited ? List.<ColumnSpec>of() : specsOf(layoutList(configuration, "header"));
+        var trailerSpecs = delimited ? List.<ColumnSpec>of() : specsOf(layoutList(configuration, "trailer"));
         var writer = new BufferedWriter(new OutputStreamWriter(nonClosing(out), Charset.forName(encoding)));
-        return new TxtWriteSession(writer, lineEnding, detail, headerSpecs, trailerSpecs);
+        return new TxtWriteSession(writer, lineEnding, delimited, delimiter, detail, headerSpecs, trailerSpecs);
+    }
+
+    /** {@code layout.detail.mode == 'delimited'} (default fixed-length, para compatibilidad con lo ya guardado). */
+    private static boolean isDelimited(Map<String, Object> configuration) {
+        return "delimited".equalsIgnoreCase(detailOrLayoutString(configuration, "mode", "fixed-length"));
+    }
+
+    private static String delimiterOf(Map<String, Object> configuration) {
+        var raw = detail(configuration).get("delimiter");
+        return raw == null ? "" : String.valueOf(raw);
     }
 
     /** Filtro que hace flush pero NO cierra el delegate (el {@code WritableArtifact} es el dueno del stream). */
@@ -199,21 +223,25 @@ public class TxtWriter implements FileFormatWriter {
         }
     }
 
-    /** Sesion streaming de ancho fijo. */
+    /** Sesion streaming: ancho fijo o delimitado segun {@code delimited}. */
     private static final class TxtWriteSession implements FileWriteSession {
 
         private final Writer writer;
         private final String lineEnding;
+        private final boolean delimited;
+        private final String delimiter;
         private final List<DetailColumn> detail;
         private final List<ColumnSpec> headerSpecs;
         private final List<ColumnSpec> trailerSpecs;
         // Formatter confinado a esta sesion (no thread-safe): cachea DecimalFormat por (patron, rounding).
         private final FieldValueFormatter formatter = new FieldValueFormatter();
 
-        private TxtWriteSession(Writer writer, String lineEnding, List<DetailColumn> detail,
-                               List<ColumnSpec> headerSpecs, List<ColumnSpec> trailerSpecs) {
+        private TxtWriteSession(Writer writer, String lineEnding, boolean delimited, String delimiter,
+                               List<DetailColumn> detail, List<ColumnSpec> headerSpecs, List<ColumnSpec> trailerSpecs) {
             this.writer = writer;
             this.lineEnding = lineEnding;
+            this.delimited = delimited;
+            this.delimiter = delimiter;
             this.detail = detail;
             this.headerSpecs = headerSpecs;
             this.trailerSpecs = trailerSpecs;
@@ -221,27 +249,27 @@ public class TxtWriter implements FileFormatWriter {
 
         @Override
         public void writeHeader(List<Object> headerCells) throws IOException {
-            writeFixedRow(headerCells, headerSpecs);
+            writeRow(headerCells, headerSpecs);
         }
 
         @Override
         public void writeDetail(List<ReadRecord> batch) throws IOException {
             for (var record : batch) {
                 var values = record.values();
-                var line = new StringBuilder();
+                var parts = new ArrayList<String>(detail.size());
                 for (var column : detail) {
-                    // ADR-016: formateo por tipo/patron/redondeo antes del ancho fijo (NUMBER decimal, DATE patron).
+                    // ADR-016: formateo por tipo/patron/redondeo (NUMBER decimal, DATE patron) antes de anchar/unir.
                     var formatted = formatter.format(values.get(column.field()), column.type(), column.format(), column.rounding());
-                    line.append(fixed(formatted, column.spec()));
+                    parts.add(delimited ? String.valueOf(formatted == null ? "" : formatted) : fixed(formatted, column.spec()));
                 }
-                writer.write(line.toString());
+                writer.write(delimited ? String.join(delimiter, parts) : String.join("", parts));
                 writer.write(lineEnding);
             }
         }
 
         @Override
         public void writeTrailer(List<Object> trailerCells) throws IOException {
-            writeFixedRow(trailerCells, trailerSpecs);
+            writeRow(trailerCells, trailerSpecs);
         }
 
         @Override
@@ -250,13 +278,21 @@ public class TxtWriter implements FileFormatWriter {
             writer.close();
         }
 
-        private void writeFixedRow(List<Object> cells, List<ColumnSpec> specs) throws IOException {
-            var line = new StringBuilder();
-            for (var i = 0; i < specs.size(); i++) {
-                var value = i < cells.size() ? cells.get(i) : "";
-                line.append(fixed(value, specs.get(i)));
+        private void writeRow(List<Object> cells, List<ColumnSpec> specs) throws IOException {
+            if (delimited) {
+                var parts = new ArrayList<String>(cells.size());
+                for (var cell : cells) {
+                    parts.add(cell == null ? "" : String.valueOf(cell));
+                }
+                writer.write(String.join(delimiter, parts));
+            } else {
+                var line = new StringBuilder();
+                for (var i = 0; i < specs.size(); i++) {
+                    var value = i < cells.size() ? cells.get(i) : "";
+                    line.append(fixed(value, specs.get(i)));
+                }
+                writer.write(line.toString());
             }
-            writer.write(line.toString());
             writer.write(lineEnding);
         }
     }

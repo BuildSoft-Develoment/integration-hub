@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -78,6 +79,52 @@ class TxtWriterTest {
     void validateRejectsColumnWithoutLength() {
         var config = Map.<String, Object>of("layout", Map.of(
                 "detail", Map.of("columns", List.of(Map.of("field", "dni")))));
+        assertThrows(IllegalArgumentException.class, () -> new TxtWriter().validateConfiguration(config));
+    }
+
+    // --- modo delimitado ---
+
+    @Test
+    void writesDelimitedHeaderDetailTrailer() throws Exception {
+        // Sin length: las celdas se unen con el delimitador, sin ancho ni relleno (a diferencia de fixed-length).
+        var config = Map.<String, Object>of("layout", Map.of("detail", Map.of(
+                "mode", "delimited", "delimiter", "|",
+                "columns", List.of(Map.of("field", "dni"), Map.of("field", "monto")))));
+        var out = new ByteArrayOutputStream();
+        try (var session = new TxtWriter().open(out, config)) {
+            session.writeHeader(List.of("DNI", "MONTO"));
+            session.writeDetail(List.of(new ReadRecord(Map.of("dni", "111", "monto", "1000.00"))));
+            session.writeTrailer(List.of("FIN", "2"));
+        }
+        assertEquals("DNI|MONTO\n111|1000.00\nFIN|2\n", out.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void delimitedAppliesFieldTypeFormatting() throws Exception {
+        // El formateo por tipo (NUMBER/DATE) se aplica igual antes de unir.
+        var config = Map.<String, Object>of("layout", Map.of("detail", Map.of(
+                "mode", "delimited", "delimiter", ";",
+                "columns", List.of(
+                        Map.of("field", "monto", "type", "NUMBER", "format", "0.00"),
+                        Map.of("field", "fecha", "type", "DATE", "format", "yyyyMMdd")))));
+        var out = new ByteArrayOutputStream();
+        try (var session = new TxtWriter().open(out, config)) {
+            session.writeDetail(List.of(new ReadRecord(Map.of("monto", "1000.5", "fecha", "2026-07-19"))));
+        }
+        assertEquals("1000.50;20260719\n", out.toString(StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void validateAllowsDelimitedColumnsWithoutLength() {
+        var config = Map.<String, Object>of("layout", Map.of("detail", Map.of(
+                "mode", "delimited", "delimiter", "|", "columns", List.of(Map.of("field", "dni")))));
+        assertDoesNotThrow(() -> new TxtWriter().validateConfiguration(config));
+    }
+
+    @Test
+    void validateRejectsDelimitedWithoutDelimiter() {
+        var config = Map.<String, Object>of("layout", Map.of("detail", Map.of(
+                "mode", "delimited", "columns", List.of(Map.of("field", "dni")))));
         assertThrows(IllegalArgumentException.class, () -> new TxtWriter().validateConfiguration(config));
     }
 }

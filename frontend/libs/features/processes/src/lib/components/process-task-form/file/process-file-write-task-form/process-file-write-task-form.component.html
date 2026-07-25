@@ -5,7 +5,7 @@
     <mat-label>{{ i18n.t('ui.write.format') }}</mat-label>
     <mat-select [disabled]="readonly()" [ngModel]="draft().format" (ngModelChange)="updateDraft({ format: $event })">
       <mat-option value="CSV">CSV</mat-option>
-      <mat-option value="TXT">TXT ({{ i18n.t('ui.write.fixedWidth') }})</mat-option>
+      <mat-option value="TXT">TXT</mat-option>
       <mat-option value="XLSX">XLSX ({{ i18n.t('ui.write.excel') }})</mat-option>
     </mat-select>
   </mat-form-field>
@@ -156,6 +156,23 @@
             </mat-form-field>
           }
 
+          @if (isTxt()) {
+            <!-- Modo del TXT (espejo de /readers): ancho fijo o delimitado. -->
+            <mat-form-field>
+              <mat-label>{{ i18n.t('ui.write.txtMode') }}</mat-label>
+              <mat-select [disabled]="readonly()" [ngModel]="draft().txtMode" (ngModelChange)="updateDraft({ txtMode: $event })">
+                <mat-option value="fixed-length">{{ i18n.t('ui.write.txtModeFixed') }}</mat-option>
+                <mat-option value="delimited">{{ i18n.t('ui.write.txtModeDelimited') }}</mat-option>
+              </mat-select>
+            </mat-form-field>
+            @if (isDelimitedTxt()) {
+              <mat-form-field>
+                <mat-label>{{ i18n.t('ui.delimiter') }}</mat-label>
+                <input matInput [disabled]="readonly()" [ngModel]="draft().delimiter" (ngModelChange)="updateDraft({ delimiter: $event })" placeholder="|" />
+              </mat-form-field>
+            }
+          }
+
           @if (isXlsx()) {
             <mat-form-field>
               <mat-label>{{ i18n.t('ui.write.sheetName') }}</mat-label>
@@ -248,7 +265,7 @@
                     </mat-select>
                   </mat-form-field>
                 }
-                @if (isTxt()) {
+                @if (isFixedWidthTxt()) {
                   <mat-form-field class="dt-length">
                     <mat-label>{{ i18n.t('ui.write.length') }}</mat-label>
                     <input matInput type="number" [disabled]="readonly()" [ngModel]="column.length" (ngModelChange)="updateColumn($index, { length: $event })" />
@@ -314,7 +331,7 @@
                       [value]="cell.field || ''"
                       (valueChange)="updateCell($any(section), $index, { field: $event })" />
                   }
-                  @if (isTxt()) {
+                  @if (isFixedWidthTxt()) {
                     <mat-form-field>
                       <mat-label>{{ i18n.t('ui.write.length') }}</mat-label>
                       <input matInput type="number" [disabled]="readonly()" [ngModel]="cell.length" (ngModelChange)="updateCell($any(section), $index, { length: $event })" />
