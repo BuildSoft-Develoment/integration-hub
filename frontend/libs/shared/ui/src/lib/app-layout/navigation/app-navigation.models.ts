@@ -35,6 +35,14 @@ export interface AppWorkspaceContribution {
   readonly descriptionKey?: string;
   readonly source?: string;
   readonly group?: string;
+  /**
+   * Dominio de la contribucion dentro de su `group` (ADR-019): separa la observabilidad generica de
+   * plataforma de las herramientas de un estandar (p.ej. `platform` vs `swift-mt101`). El shell agrupa
+   * por este eje de forma generica; un estandar nuevo declara su propio dominio sin tocar el shell.
+   */
+  readonly domain?: string;
+  readonly domainLabelKey?: string;
+  readonly domainOrder?: number;
   readonly mode?: 'query' | 'operation' | 'configuration';
   readonly order?: number;
   readonly requiredCapability?: AuthCapability | null;

@@ -132,6 +132,9 @@ export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {
     {
       id: 'audit-events',
       group: 'audit',
+      domain: 'platform',
+      domainLabelKey: 'audit.domain.platform',
+      domainOrder: 10,
       route: '/audit',
       labelKey: 'audit.workspace.events',
       descriptionKey: 'audit.workspace.eventsHint',
@@ -141,6 +144,9 @@ export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {
     {
       id: 'audit-record-lineage',
       group: 'audit',
+      domain: 'platform',
+      domainLabelKey: 'audit.domain.platform',
+      domainOrder: 10,
       route: '/audit/record-lineage',
       labelKey: 'audit.workspace.lineage',
       descriptionKey: 'audit.workspace.lineageHint',
@@ -150,6 +156,9 @@ export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {
     {
       id: 'audit-mt101-fragments',
       group: 'audit',
+      domain: 'swift-mt101',
+      domainLabelKey: 'audit.domain.swiftMt101',
+      domainOrder: 20,
       route: '/audit/mt101-fragments',
       labelKey: 'audit.workspace.fragments',
       descriptionKey: 'audit.workspace.fragmentsHint',
@@ -159,6 +168,9 @@ export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {
     {
       id: 'audit-spool',
       group: 'audit',
+      domain: 'platform',
+      domainLabelKey: 'audit.domain.platform',
+      domainOrder: 10,
       route: '/audit/spool',
       labelKey: 'audit.workspace.spool',
       descriptionKey: 'audit.workspace.spoolHint',
@@ -168,6 +180,9 @@ export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {
     {
       id: 'audit-mt101-quarantine',
       group: 'audit',
+      domain: 'swift-mt101',
+      domainLabelKey: 'audit.domain.swiftMt101',
+      domainOrder: 20,
       route: '/audit/mt101-quarantine',
       labelKey: 'audit.workspace.quarantine',
       descriptionKey: 'audit.workspace.quarantineHint',
@@ -177,6 +192,9 @@ export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {
     {
       id: 'audit-mt101-pay-dispatch',
       group: 'audit',
+      domain: 'swift-mt101',
+      domainLabelKey: 'audit.domain.swiftMt101',
+      domainOrder: 20,
       route: '/audit/mt101-pay-dispatch',
       labelKey: 'audit.workspace.payDispatch',
       descriptionKey: 'audit.workspace.payDispatchHint',
@@ -186,6 +204,9 @@ export const PLATFORM_PLUGIN_MANIFEST: AppPluginManifest = {
     {
       id: 'audit-mt101-pay-conflicts',
       group: 'audit',
+      domain: 'swift-mt101',
+      domainLabelKey: 'audit.domain.swiftMt101',
+      domainOrder: 20,
       route: '/audit/mt101-pay-conflicts',
       labelKey: 'audit.workspace.payConflicts',
       descriptionKey: 'audit.workspace.payConflictsHint',

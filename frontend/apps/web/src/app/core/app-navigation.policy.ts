@@ -60,33 +60,11 @@ export const APP_NAVIGATION_DEFINITIONS: readonly AppNavigationItem[] = [
     requiredCapability: APP_SECTION_CAPABILITIES.schedules,
   },
   {
+    // Entrada unica de auditoria (ADR-019): el hub /audit agrupa sus sub-auditorias por dominio
+    // (generico vs SWIFT MT101) via el workspace-nav; ya no se listan planas en el sidebar.
     id: 'audit',
     route: '/audit',
     labelKey: 'nav.audit',
-    requiredCapability: APP_SECTION_CAPABILITIES.audit,
-  },
-  {
-    id: 'recordLineage',
-    route: '/audit/record-lineage',
-    labelKey: 'nav.recordLineage',
-    requiredCapability: APP_SECTION_CAPABILITIES.audit,
-  },
-  {
-    id: 'auditSpool',
-    route: '/audit/spool',
-    labelKey: 'nav.auditSpool',
-    requiredCapability: APP_SECTION_CAPABILITIES.audit,
-  },
-  {
-    id: 'mt101Fragments',
-    route: '/audit/mt101-fragments',
-    labelKey: 'nav.mt101Fragments',
-    requiredCapability: APP_SECTION_CAPABILITIES.audit,
-  },
-  {
-    id: 'mt101Quarantine',
-    route: '/audit/mt101-quarantine',
-    labelKey: 'nav.mt101Quarantine',
     requiredCapability: APP_SECTION_CAPABILITIES.audit,
   },
   {

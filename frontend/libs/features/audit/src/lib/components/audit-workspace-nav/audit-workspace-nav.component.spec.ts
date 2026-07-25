@@ -23,6 +23,9 @@ describe('AuditWorkspaceNavComponent', () => {
               {
                 id: 'audit-events',
                 group: 'audit',
+                domain: 'platform',
+                domainLabelKey: 'audit.domain.platform',
+                domainOrder: 10,
                 route: '/audit',
                 labelKey: 'audit.workspace.events',
                 descriptionKey: 'audit.workspace.eventsHint',
@@ -32,6 +35,9 @@ describe('AuditWorkspaceNavComponent', () => {
               {
                 id: 'audit-record-lineage',
                 group: 'audit',
+                domain: 'platform',
+                domainLabelKey: 'audit.domain.platform',
+                domainOrder: 10,
                 route: '/audit/record-lineage',
                 labelKey: 'audit.workspace.lineage',
                 descriptionKey: 'audit.workspace.lineageHint',
@@ -41,6 +47,9 @@ describe('AuditWorkspaceNavComponent', () => {
               {
                 id: 'audit-mt101-fragments',
                 group: 'audit',
+                domain: 'swift-mt101',
+                domainLabelKey: 'audit.domain.swiftMt101',
+                domainOrder: 20,
                 route: '/audit/mt101-fragments',
                 labelKey: 'audit.workspace.fragments',
                 descriptionKey: 'audit.workspace.fragmentsHint',
@@ -50,6 +59,9 @@ describe('AuditWorkspaceNavComponent', () => {
               {
                 id: 'audit-spool',
                 group: 'audit',
+                domain: 'platform',
+                domainLabelKey: 'audit.domain.platform',
+                domainOrder: 10,
                 route: '/audit/spool',
                 labelKey: 'audit.workspace.spool',
                 descriptionKey: 'audit.workspace.spoolHint',
@@ -59,6 +71,9 @@ describe('AuditWorkspaceNavComponent', () => {
               {
                 id: 'audit-mt101-quarantine',
                 group: 'audit',
+                domain: 'swift-mt101',
+                domainLabelKey: 'audit.domain.swiftMt101',
+                domainOrder: 20,
                 route: '/audit/mt101-quarantine',
                 labelKey: 'audit.workspace.quarantine',
                 descriptionKey: 'audit.workspace.quarantineHint',
@@ -83,21 +98,30 @@ describe('AuditWorkspaceNavComponent', () => {
     return fixture;
   }
 
-  it('declara las cinco superficies del workspace audit', () => {
+  it('agrupa las superficies del workspace audit por dominio (ADR-019)', () => {
     const component = render().componentInstance;
+    const groups = component.groups();
 
-    expect(component.items().map((item) => item.route)).toEqual([
+    // Dos dominios, ordenados por domainOrder: platform (10) antes que swift-mt101 (20).
+    expect(groups.map((g) => g.domain)).toEqual(['platform', 'swift-mt101']);
+    // El generico agrupa events/lineage/spool aunque spool se declare despues de un item SWIFT.
+    expect(groups[0].items.map((item) => item.route)).toEqual([
       '/audit',
       '/audit/record-lineage',
-      '/audit/mt101-fragments',
       '/audit/spool',
+    ]);
+    expect(groups[1].items.map((item) => item.route)).toEqual([
+      '/audit/mt101-fragments',
       '/audit/mt101-quarantine',
     ]);
+    expect(groups[1].labelKey).toBe('audit.domain.swiftMt101');
   });
 
-  it('separa consulta de operacion gobernada', () => {
+  it('separa consulta de operacion gobernada (modo como tag secundario)', () => {
     const component = render().componentInstance;
-    const operationRoutes = component.items()
+    const operationRoutes = component
+      .groups()
+      .flatMap((g) => g.items)
       .filter((item) => item.mode === 'operation')
       .map((item) => item.route);
 
@@ -106,11 +130,13 @@ describe('AuditWorkspaceNavComponent', () => {
     expect(component.modeLabelKey('query')).toBe('audit.workspace.modeQuery');
   });
 
-  it('renderiza navegacion con nombre accesible', () => {
+  it('renderiza navegacion con nombre accesible, 2 grupos y 5 cajas', () => {
     const nav: HTMLElement = render().nativeElement.querySelector('nav.audit-ws');
 
     expect(nav).toBeTruthy();
     expect(nav.getAttribute('aria-label')).toBe('audit.workspace.label');
+    expect(nav.querySelectorAll('.audit-ws__group').length).toBe(2);
+    expect(nav.querySelectorAll('.audit-ws__group-label').length).toBe(2);
     expect(nav.querySelectorAll('a.audit-ws__item').length).toBe(5);
   });
 });
