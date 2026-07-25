@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, HostListener, OnDestroy, inject, signal } from '@angular/core';
+import { Component, HostListener, OnDestroy, computed, inject, signal } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSidenavModule } from '@angular/material/sidenav';
@@ -39,6 +39,19 @@ export class AppLayoutComponent implements OnDestroy {
   readonly desktopMode = signal(this.resolveDesktopMode());
   readonly mobileNavOpen = signal(false);
   private unregisterShortcuts: (() => void) | null = null;
+
+  /**
+   * Left inset of the content column, mirroring the side-nav width so that
+   * viewport-fixed overlays (e.g. the floating action bar) can align with the
+   * content instead of slipping behind the nav. `0px` when the nav overlays
+   * (mobile) rather than pushing content.
+   */
+  readonly contentLeftInset = computed(() => {
+    if (!this.desktopMode()) {
+      return '0px';
+    }
+    return this.theme.sidebarMode() === 'compact' ? '248px' : '308px';
+  });
 
   constructor() {
     this.unregisterShortcuts = this.shortcuts.register([
