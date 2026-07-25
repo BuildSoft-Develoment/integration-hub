@@ -13,9 +13,11 @@ import {
   FileWriteBindingOutput,
   FileWriteCellDraft,
   FileWriteColumnDraft,
+  FileWriteFilterDraft,
   FileWriteTableSourceDraft,
   FileWriteTaskDraft,
   FileWriteXlsxDraft,
+  FILE_WRITE_FILTER_METADATA_VARS,
   ProcessTaskBindingOption,
   ProcessTaskFormBridgeService,
   ProcessTaskOutputKind,
@@ -354,6 +356,27 @@ export class ProcessFileWriteTaskFormComponent {
 
   updateTableSource(patch: Partial<FileWriteTableSourceDraft>): void {
     this.updateDraft({ tableSource: { ...this.draft().tableSource, ...patch } });
+  }
+
+  // --- Filtro de filas (input.filters): igualdad columna = valor, valor literal o variable de metadata ---
+
+  /** Variables de metadata que el backend sustituye; se ofrecen como sugerencias en el valor. */
+  readonly filterMetadataVars = FILE_WRITE_FILTER_METADATA_VARS;
+
+  /** Nombres de columna introspectados (sugerencias para la columna del filtro). */
+  readonly columnNames = computed(() => this.columns().map((c) => c.name));
+
+  addFilter(): void {
+    this.updateTableSource({ filters: [...this.draft().tableSource.filters, { column: '', value: '' }] });
+  }
+
+  updateFilter(index: number, patch: Partial<FileWriteFilterDraft>): void {
+    const filters = this.draft().tableSource.filters.map((row, i) => (i === index ? { ...row, ...patch } : row));
+    this.updateTableSource({ filters });
+  }
+
+  removeFilter(index: number): void {
+    this.updateTableSource({ filters: this.draft().tableSource.filters.filter((_, i) => i !== index) });
   }
 
   handleConnectionChange(connectionRef: string): void {

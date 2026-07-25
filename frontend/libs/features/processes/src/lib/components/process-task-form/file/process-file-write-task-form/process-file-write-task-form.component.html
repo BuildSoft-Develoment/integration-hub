@@ -73,6 +73,45 @@
               <input matInput type="number" min="1" [disabled]="readonly()" [ngModel]="draft().tableSource.batchSize" (ngModelChange)="updateTableSource({ batchSize: $event })" placeholder="5000" />
             </mat-form-field>
           </div>
+
+          <!-- Filtro de filas: igualdad columna = valor (AND). Sin filtro se exporta la tabla completa. -->
+          <div class="fw-filters">
+            <div class="fw-filters__head">
+              <span class="fw-filters__title">{{ i18n.t('ui.write.filter.title') }}</span>
+              <span class="fw-filters__hint">{{ i18n.t('ui.write.filter.hint') }}</span>
+            </div>
+
+            @for (row of draft().tableSource.filters; track $index) {
+              <div class="fw-filters__row">
+                <ih-suggest-input
+                  class="fw-filters__col"
+                  [label]="i18n.t('ui.write.filter.column')"
+                  [value]="row.column"
+                  [suggestions]="columnNames()"
+                  [disabled]="readonly()"
+                  (valueChange)="updateFilter($index, { column: $event })" />
+                <span class="fw-filters__eq">=</span>
+                <ih-suggest-input
+                  class="fw-filters__val"
+                  [label]="i18n.t('ui.write.filter.value')"
+                  [value]="row.value"
+                  [suggestions]="filterMetadataVars"
+                  [hint]="i18n.t('ui.write.filter.valueHint')"
+                  [disabled]="readonly()"
+                  (valueChange)="updateFilter($index, { value: $event })" />
+                <button type="button" class="fw-filters__remove" [disabled]="readonly()"
+                  [attr.aria-label]="i18n.t('common.remove')" (click)="removeFilter($index)">✕</button>
+              </div>
+            }
+
+            @if (!draft().tableSource.filters.length) {
+              <p class="fw-filters__empty">{{ i18n.t('ui.write.filter.empty') }}</p>
+            }
+
+            <button type="button" class="fw-filters__add" [disabled]="readonly()" (click)="addFilter()">
+              + {{ i18n.t('ui.write.filter.add') }}
+            </button>
+          </div>
         }
       </div>
 

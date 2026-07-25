@@ -61,6 +61,12 @@ export interface FileWriteCellDraft {
 //  - con tarea de origen (input.sourceTaskRef, elegida en el runtime panel) -> records: la salida de una tarea
 //    previa (X -> FILE_WRITE).
 //  - SIN tarea de origen -> tabla DIRECTA (input.sourceOutput='table', paginacion keyset; escala a >1M).
+/** Un predicado de igualdad columna = valor. El valor puede ser un literal o una variable de metadata. */
+export interface FileWriteFilterDraft {
+  column: string;
+  value: string;
+}
+
 // Config de la tabla directa (se serializa bajo `input` cuando no hay tarea de origen):
 export interface FileWriteTableSourceDraft {
   table: string;
@@ -69,13 +75,17 @@ export interface FileWriteTableSourceDraft {
   payloadColumn: string;
   batchSize: string;
   /**
-   * Predicado que acota QUE filas se exportan. El backend lo pasa a `count` y a `readBatch`
-   * ({@code FileWriteTaskProvider:172}); tipicamente {@code {process_execution_id: '${_processExecutionId}'}}
-   * para exportar solo la corrida actual. La rama de tabla directa reconstruia `input` entero, asi que se
-   * PERDIA: el export pasaba a volcar la tabla COMPLETA en cada corrida. Ningun campo del form lo edita.
+   * Predicado que acota QUE filas se exportan (mapa columna = valor, AND). El backend lo pasa a `count` y a
+   * `readBatch` ({@code FileWriteTaskProvider.resolveFilters}) y sustituye {@code ${_processExecutionId}} y
+   * {@code ${_taskDefinitionId}}; tipicamente {@code {process_execution_id: '${_processExecutionId}'}} para
+   * exportar solo la corrida actual. Se edita como lista de filas; se serializa a mapa en {@code toTaskPatch}.
+   * Sin filtro, el export vuelca la tabla COMPLETA.
    */
-  filters?: Record<string, unknown>;
+  filters: FileWriteFilterDraft[];
 }
+
+/** Variables de metadata que el backend sustituye en el valor de un filtro (FileWriteTaskProvider.resolveFilterValue). */
+export const FILE_WRITE_FILTER_METADATA_VARS: readonly string[] = ['${_processExecutionId}', '${_taskDefinitionId}'];
 
 export interface FileWriteTaskDraft extends ProcessTaskRuntimeDraft {
   format: FileWriteFormat;
@@ -131,7 +141,7 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
   }
 
   private defaultTableSource(): FileWriteTableSourceDraft {
-    return { table: '', connectionRef: '', orderBy: 'id', payloadColumn: '', batchSize: '' };
+    return { table: '', connectionRef: '', orderBy: 'id', payloadColumn: '', batchSize: '', filters: [] };
   }
 
   private defaultXlsx(): FileWriteXlsxDraft {
@@ -184,9 +194,12 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
         orderBy: String(cursor.orderBy || 'id'),
         payloadColumn: String(input.payloadColumn || ''),
         batchSize: input.batchSize != null && String(input.batchSize).trim() ? String(input.batchSize) : '',
-        ...(input.filters && typeof input.filters === 'object' && !Array.isArray(input.filters)
-          ? { filters: input.filters as Record<string, unknown> }
-          : {}),
+        // El mapa guardado se abre a filas {columna, valor} para editarlo; toTaskPatch lo vuelve a cerrar a mapa.
+        filters: input.filters && typeof input.filters === 'object' && !Array.isArray(input.filters)
+          ? Object.entries(input.filters as Record<string, unknown>).map(([column, value]) => ({
+              column, value: value == null ? '' : String(value),
+            }))
+          : [],
       },
     };
   }
@@ -256,8 +269,9 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
         cursor: { orderBy: ts.orderBy?.trim() || 'id' },
         ...(ts.payloadColumn?.trim() ? { payloadColumn: ts.payloadColumn.trim() } : {}),
         ...(batchSize != null ? { batchSize } : {}),
-        // Se re-emite aparte porque esta rama RECONSTRUYE input entero (pisa lo que emitio withRuntime).
-        ...(ts.filters ? { filters: ts.filters } : {}),
+        // Las filas {columna, valor} se cierran a mapa {columna: valor}; solo las que tienen columna. Se re-emite
+        // aparte porque esta rama RECONSTRUYE input entero (pisa lo que emitio withRuntime).
+        ...this.serializeFilters(ts.filters),
       };
     } else if (payload.input && payload.input.sourceOutput === 'table' && !payload.input.cursor) {
       // Modo records donde la tarea de origen PRODUCE una tabla (p.ej. DB_WRITE -> FILE_WRITE): se conserva el
@@ -265,6 +279,19 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       payload.input.cursor = { orderBy: 'id' };
     }
     return { configurationJson: this.toPrettyJson(payload) };
+  }
+
+  // Cierra las filas de filtro a { filters: {columna: valor} }, o {} si no hay ninguna con columna (para no emitir
+  // un `filters` vacio). Una fila sin columna (recien agregada) no se serializa pero SI se conserva en el draft.
+  private serializeFilters(rows: FileWriteFilterDraft[]): { filters?: Record<string, string> } {
+    const map: Record<string, string> = {};
+    for (const row of rows || []) {
+      const column = row.column?.trim();
+      if (column) {
+        map[column] = row.value ?? '';
+      }
+    }
+    return Object.keys(map).length ? { filters: map } : {};
   }
 
   private numOrUndefined(value: unknown): number | undefined {

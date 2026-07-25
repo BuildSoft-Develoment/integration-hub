@@ -83,7 +83,7 @@ describe('FileWriteTaskProvider', () => {
 
   it('modo tabla: serializa table/connectionRef/cursor/payloadColumn/batchSize desde tableSource', () => {
     const draft = provider.createDraft();
-    draft.tableSource = { table: 'staging_record', connectionRef: 'bank-db', orderBy: 'record_id', payloadColumn: 'payload_json', batchSize: '2000' };
+    draft.tableSource = { table: 'staging_record', connectionRef: 'bank-db', orderBy: 'record_id', payloadColumn: 'payload_json', batchSize: '2000', filters: [] };
 
     const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
 
@@ -101,7 +101,7 @@ describe('FileWriteTaskProvider', () => {
 
   it('modo tabla: cursor.orderBy default a "id" cuando esta vacio', () => {
     const draft = provider.createDraft();
-    draft.tableSource = { table: 't', connectionRef: '', orderBy: '', payloadColumn: '', batchSize: '' };
+    draft.tableSource = { table: 't', connectionRef: '', orderBy: '', payloadColumn: '', batchSize: '', filters: [] };
 
     const config = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
 
@@ -111,7 +111,7 @@ describe('FileWriteTaskProvider', () => {
 
   it('round-trips el modo tabla (el modo se deriva de la ausencia de sourceTaskRef)', () => {
     const draft = provider.createDraft();
-    draft.tableSource = { table: 'staging_record', connectionRef: '', orderBy: 'id', payloadColumn: 'payload_json', batchSize: '' };
+    draft.tableSource = { table: 'staging_record', connectionRef: '', orderBy: 'id', payloadColumn: 'payload_json', batchSize: '', filters: [] };
 
     const rehydrated = roundTrip(draft);
 
@@ -226,6 +226,47 @@ it('modo tabla directa: conserva input.filters (si no, el export vuelca la tabla
     expect(saved.input.filters, 'se perdio el filtro: el export pasa a volcar la tabla entera')
       .toEqual({ process_execution_id: '' });
     expect(saved.input.table).toBe('mt101_archive');
+  });
+
+  it('modo tabla: el filtro se hidrata como filas y se re-cierra a mapa (valor = variable de metadata)', () => {
+    // El backend sustituye ${_processExecutionId}; el form lo edita como fila {columna, valor}.
+    const task: any = { taskType: 'FILE_WRITE', configurationJson: JSON.stringify({
+      taskRef: 'fw', executionMode: 'once', format: 'CSV',
+      layout: { detail: { columns: [{ field: 'id' }] } },
+      input: { source: 'task-output', sourceOutput: 'table', table: 'mt101_archive', cursor: { orderBy: 'id' },
+        filters: { process_execution_id: '${_processExecutionId}', status: 'SENT' } },
+    }) };
+
+    const draft = provider.hydrateDraft(task);
+    expect(draft.tableSource.filters).toEqual([
+      { column: 'process_execution_id', value: '${_processExecutionId}' },
+      { column: 'status', value: 'SENT' },
+    ]);
+
+    const saved = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+    expect(saved.input.filters).toEqual({ process_execution_id: '${_processExecutionId}', status: 'SENT' });
+  });
+
+  it('modo tabla: una fila de filtro sin columna NO se serializa (pero sobrevive en el draft para editarla)', () => {
+    const draft = provider.createDraft();
+    draft.tableSource = { table: 't', connectionRef: '', orderBy: 'id', payloadColumn: '', batchSize: '',
+      filters: [{ column: 'status', value: 'SENT' }, { column: '', value: '' }] };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const patch: any = provider.toTaskPatch(draft);
+    const saved = JSON.parse(patch.configurationJson as string);
+
+    expect(saved.input.filters, 'solo la fila con columna se cierra al mapa').toEqual({ status: 'SENT' });
+    // la fila vacia sobrevive en el round-trip del draft (para poder tipearla)
+    const rehydrated = provider.hydrateDraft({ taskType: 'FILE_WRITE', configurationJson: patch.configurationJson } as any);
+    expect(rehydrated.tableSource.filters).toEqual([{ column: 'status', value: 'SENT' }]);
+  });
+
+  it('modo tabla: sin filas de filtro no se emite input.filters', () => {
+    const draft = provider.createDraft();
+    draft.tableSource = { table: 't', connectionRef: '', orderBy: 'id', payloadColumn: '', batchSize: '', filters: [] };
+    const saved = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
+    expect(saved.input.filters).toBeUndefined();
   });
 
   it('conserva source y connectionRef de nivel superior (eslabones del fallback del backend)', () => {
