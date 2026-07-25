@@ -28,6 +28,7 @@
 - [ADR-016 Salida generica: escritura de archivos y entrega por transporte](ADR-016-salida-generica-escritura-archivo-y-entrega.md)
 - [ADR-017 Conexion de salida unificada: fuente OUTPUT reutilizada por FILE_DELIVER y MT101_PAY/STATUS (SFTP)](ADR-017-conexion-salida-unificada-file-deliver-mt101-pay.md)
 - [ADR-018 FILE_WRITE: binding de origenes y expresiones de detalle (paridad DB_WRITE + evaluador JEXL money-safe)](ADR-018-file-write-binding-origenes-y-expresiones-detalle.md)
+- [ADR-019 Auditoria por dominio: standard packs (limite plataforma <-> estandar)](ADR-019-auditoria-standard-packs-agrupacion-por-dominio.md)
 
 ## Regla
 

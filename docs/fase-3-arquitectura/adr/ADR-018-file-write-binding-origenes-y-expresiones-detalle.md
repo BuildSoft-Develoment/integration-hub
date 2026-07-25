@@ -5,7 +5,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [ADR-017 Conexion de salida unificada: fuente OUTPUT reutilizada por FILE_DELIVER y MT101_PAY/STATUS (SFTP)](ADR-017-conexion-salida-unificada-file-deliver-mt101-pay.md)
-- Siguiente: [Indice docs](../../README.md)
+- Siguiente: [ADR-019 Auditoria por dominio: standard packs (limite plataforma <-> estandar)](ADR-019-auditoria-standard-packs-agrupacion-por-dominio.md)
 <!-- nav-guided:end -->
 
 ## Estado
