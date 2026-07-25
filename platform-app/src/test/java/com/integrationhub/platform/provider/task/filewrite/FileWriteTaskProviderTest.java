@@ -20,11 +20,14 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import org.mockito.ArgumentCaptor;
 
 class FileWriteTaskProviderTest {
 
@@ -271,6 +274,36 @@ class FileWriteTaskProviderTest {
         assertEquals("H,3\n111,1000.00\n222,2000.00\n333,500.50\nT,3,3500.50\n",
                 Files.readString(Path.of(path), StandardCharsets.UTF_8));
         Files.deleteIfExists(Path.of(path));
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void resolvesFilterListSubstitutingMetadataAndSkippingEmptyRows() throws Exception {
+        var repository = mock(TaskInputRepository.class);
+        var dataSource = mock(DataSource.class);
+        // readBatch vacio -> el loop keyset termina de una; capturamos el mapa de filtros resuelto.
+        when(repository.readBatch(eq(dataSource), eq("ventas"), eq("id"), anyMap(), isNull(), anyInt()))
+                .thenReturn(List.of());
+
+        var provider = new FileWriteTaskProvider(
+                new FileFormatWriterRegistry(List.of(new CsvWriter())),
+                new ArtifactStoreRegistry(List.of(new LocalTempArtifactStore())),
+                repository, dataSource, null);
+        var context = new TaskContext(7L, 8L); // processExecutionId=7, taskDefinitionId=8
+        var config = Map.<String, Object>of(
+                "format", "CSV",
+                "input", Map.of("sourceOutput", "table", "table", "ventas", "cursor", Map.of("orderBy", "id"),
+                        "filters", List.of(
+                                Map.of("column", "process_execution_id", "value", "${_processExecutionId}"),
+                                Map.of("column", "", "value", ""))), // fila incompleta -> se ignora
+                "layout", Map.of("detail", Map.of("columns", List.of(Map.of("field", "dni")))));
+
+        var result = provider.execute(context, config);
+        assertTrue(result.success());
+
+        var captor = ArgumentCaptor.forClass(Map.class);
+        verify(repository).readBatch(eq(dataSource), eq("ventas"), eq("id"), captor.capture(), isNull(), anyInt());
+        assertEquals(Map.of("process_execution_id", 7L), captor.getValue());
     }
 
     @Test

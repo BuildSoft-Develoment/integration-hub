@@ -329,11 +329,21 @@ public class FileWriteTaskProvider implements TaskProvider {
     }
 
     private Map<String, Object> resolveFilters(Object raw, TaskContext context) {
-        if (!(raw instanceof Map<?, ?> rawMap)) {
-            return Map.of();
-        }
         var filters = new LinkedHashMap<String, Object>();
-        rawMap.forEach((key, value) -> filters.put(String.valueOf(key), resolveFilterValue(value, context)));
+        if (raw instanceof Map<?, ?> rawMap) {
+            // Forma legacy: mapa {columna: valor}.
+            rawMap.forEach((key, value) -> filters.put(String.valueOf(key), resolveFilterValue(value, context)));
+        } else if (raw instanceof List<?> rawList) {
+            // Forma actual del form: lista de filas {column, value}; se ignoran las filas sin columna (en edicion).
+            for (var item : rawList) {
+                if (item instanceof Map<?, ?> row) {
+                    var column = row.get("column");
+                    if (column != null && !String.valueOf(column).isBlank()) {
+                        filters.put(String.valueOf(column), resolveFilterValue(row.get("value"), context));
+                    }
+                }
+            }
+        }
         return filters;
     }
 

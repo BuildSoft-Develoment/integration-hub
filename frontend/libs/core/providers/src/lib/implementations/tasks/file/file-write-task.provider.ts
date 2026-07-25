@@ -201,14 +201,26 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
         orderBy: String(cursor.orderBy || 'id'),
         payloadColumn: String(input.payloadColumn || ''),
         batchSize: input.batchSize != null && String(input.batchSize).trim() ? String(input.batchSize) : '',
-        // El mapa guardado se abre a filas {columna, valor} para editarlo; toTaskPatch lo vuelve a cerrar a mapa.
-        filters: input.filters && typeof input.filters === 'object' && !Array.isArray(input.filters)
-          ? Object.entries(input.filters as Record<string, unknown>).map(([column, value]) => ({
-              column, value: value == null ? '' : String(value),
-            }))
-          : [],
+        // Se guarda como LISTA de filas {columna, valor} para que una fila recien agregada (columna vacia)
+        // sobreviva el round-trip por configurationJson y se pueda tipear (mismo patron que columns/rules). El
+        // backend acepta la lista y tambien el mapa legacy (configs viejas), que se abre a filas al hidratar.
+        filters: this.hydrateFilters(input.filters),
       },
     };
+  }
+
+  private hydrateFilters(raw: unknown): FileWriteFilterDraft[] {
+    if (Array.isArray(raw)) {
+      return raw
+        .filter((row): row is Record<string, unknown> => !!row && typeof row === 'object')
+        .map((row) => ({ column: String(row['column'] ?? ''), value: String(row['value'] ?? '') }));
+    }
+    if (raw && typeof raw === 'object') {
+      return Object.entries(raw as Record<string, unknown>).map(([column, value]) => ({
+        column, value: value == null ? '' : String(value),
+      }));
+    }
+    return [];
   }
 
   toTaskPatch(draft: FileWriteTaskDraft): Partial<ProcessTaskFormModel> {
@@ -281,9 +293,10 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
         cursor: { orderBy: ts.orderBy?.trim() || 'id' },
         ...(ts.payloadColumn?.trim() ? { payloadColumn: ts.payloadColumn.trim() } : {}),
         ...(batchSize != null ? { batchSize } : {}),
-        // Las filas {columna, valor} se cierran a mapa {columna: valor}; solo las que tienen columna. Se re-emite
-        // aparte porque esta rama RECONSTRUYE input entero (pisa lo que emitio withRuntime).
-        ...this.serializeFilters(ts.filters),
+        // Se emite la LISTA de filas tal cual (incluidas las incompletas en edicion): el draft round-trips por
+        // configurationJson, y cerrar a mapa aca borraba la fila recien agregada (columna vacia) antes de poder
+        // tipearla. El backend acepta la lista e ignora las filas sin columna (patron columns/rules).
+        ...(ts.filters.length ? { filters: ts.filters.map((f) => ({ column: f.column, value: f.value })) } : {}),
       };
     } else if (payload.input && payload.input.sourceOutput === 'table' && !payload.input.cursor) {
       // Modo records donde la tarea de origen PRODUCE una tabla (p.ej. DB_WRITE -> FILE_WRITE): se conserva el
@@ -291,19 +304,6 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       payload.input.cursor = { orderBy: 'id' };
     }
     return { configurationJson: this.toPrettyJson(payload) };
-  }
-
-  // Cierra las filas de filtro a { filters: {columna: valor} }, o {} si no hay ninguna con columna (para no emitir
-  // un `filters` vacio). Una fila sin columna (recien agregada) no se serializa pero SI se conserva en el draft.
-  private serializeFilters(rows: FileWriteFilterDraft[]): { filters?: Record<string, string> } {
-    const map: Record<string, string> = {};
-    for (const row of rows || []) {
-      const column = row.column?.trim();
-      if (column) {
-        map[column] = row.value ?? '';
-      }
-    }
-    return Object.keys(map).length ? { filters: map } : {};
   }
 
   private numOrUndefined(value: unknown): number | undefined {

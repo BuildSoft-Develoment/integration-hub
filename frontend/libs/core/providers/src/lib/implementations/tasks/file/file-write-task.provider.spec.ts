@@ -244,12 +244,13 @@ it('modo tabla directa: conserva input.filters (si no, el export vuelca la tabla
 
     const saved = JSON.parse(provider.toTaskPatch(provider.hydrateDraft(task)).configurationJson as string);
 
+    // Se re-emite como LISTA (el mapa legacy se abre a filas al hidratar). No se pierde el filtro.
     expect(saved.input.filters, 'se perdio el filtro: el export pasa a volcar la tabla entera')
-      .toEqual({ process_execution_id: '' });
+      .toEqual([{ column: 'process_execution_id', value: '' }]);
     expect(saved.input.table).toBe('mt101_archive');
   });
 
-  it('modo tabla: el filtro se hidrata como filas y se re-cierra a mapa (valor = variable de metadata)', () => {
+  it('modo tabla: el filtro (mapa legacy o lista) se hidrata a filas y se re-emite como lista', () => {
     // El backend sustituye ${_processExecutionId}; el form lo edita como fila {columna, valor}.
     const task: any = { taskType: 'FILE_WRITE', configurationJson: JSON.stringify({
       taskRef: 'fw', executionMode: 'once', format: 'CSV',
@@ -265,22 +266,25 @@ it('modo tabla directa: conserva input.filters (si no, el export vuelca la tabla
     ]);
 
     const saved = JSON.parse(provider.toTaskPatch(draft).configurationJson as string);
-    expect(saved.input.filters).toEqual({ process_execution_id: '${_processExecutionId}', status: 'SENT' });
+    expect(saved.input.filters).toEqual([
+      { column: 'process_execution_id', value: '${_processExecutionId}' },
+      { column: 'status', value: 'SENT' },
+    ]);
   });
 
-  it('modo tabla: una fila de filtro sin columna NO se serializa (pero sobrevive en el draft para editarla)', () => {
+  it('modo tabla: una fila de filtro RECIEN AGREGADA (columna vacia) SOBREVIVE el round-trip (bug "Agregar filtro")', () => {
+    // El bug: al agregar una fila (columna vacia) y round-tripear por configurationJson, la fila desaparecia y
+    // "Agregar filtro" no hacia nada. Ahora se serializa como lista, incluidas las filas incompletas en edicion.
     const draft = provider.createDraft();
     draft.tableSource = { table: 't', connectionRef: '', orderBy: 'id', payloadColumn: '', batchSize: '',
       filters: [{ column: 'status', value: 'SENT' }, { column: '', value: '' }] };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const patch: any = provider.toTaskPatch(draft);
-    const saved = JSON.parse(patch.configurationJson as string);
-
-    expect(saved.input.filters, 'solo la fila con columna se cierra al mapa').toEqual({ status: 'SENT' });
-    // la fila vacia sobrevive en el round-trip del draft (para poder tipearla)
     const rehydrated = provider.hydrateDraft({ taskType: 'FILE_WRITE', configurationJson: patch.configurationJson } as any);
-    expect(rehydrated.tableSource.filters).toEqual([{ column: 'status', value: 'SENT' }]);
+
+    expect(rehydrated.tableSource.filters, 'la fila vacia recien agregada se perdio en el round-trip')
+      .toEqual([{ column: 'status', value: 'SENT' }, { column: '', value: '' }]);
   });
 
   it('modo tabla: sin filas de filtro no se emite input.filters', () => {
