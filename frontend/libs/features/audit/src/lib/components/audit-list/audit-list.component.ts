@@ -1,7 +1,6 @@
 // @trace RF-001 (observabilidad: consultar eventos de auditoria por filtros)
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
-import { MatChipsModule } from '@angular/material/chips';
 import { PageEvent } from '@angular/material/paginator';
 import { I18nService } from '@integration-hub/core/services';
 import {
@@ -12,7 +11,6 @@ import {
 } from '@integration-hub/shared/ui';
 
 import { AuditPresentationService } from '../../utils/audit-presentation.service';
-import { timelineStatusKind } from '../../utils/timeline-format';
 import { AuditRecord } from '../../models/audit.models';
 
 export type SortDir = 'asc' | 'desc';
@@ -20,7 +18,7 @@ export type SortDir = 'asc' | 'desc';
 @Component({
   selector: 'ih-audit-list',
   standalone: true,
-  imports: [CommonModule, MatChipsModule, IconComponent, RelativeTimePipe, CatalogListComponent],
+  imports: [CommonModule, IconComponent, RelativeTimePipe, CatalogListComponent],
   templateUrl: './audit-list.component.html',
   styleUrl: './audit-list.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -59,14 +57,22 @@ export class AuditListComponent {
     return this.presentation.statusLabel(status);
   }
 
-  statusChipClass(status: string): string {
-    switch (timelineStatusKind(status)) {
-      case 'ok':
-        return 'audit-status-ch--ok';
-      case 'error':
-        return 'audit-status-ch--error';
+  /**
+   * Tono del estado, misma convencion que la lista de ejecuciones y el detalle (summary-pill):
+   * rojo solo para fallos, ambar solo cuando hay algo que mirar; el resto queda calmo (neutral).
+   */
+  statusTone(status: string): 'success' | 'warning' | 'info' | 'danger' | 'neutral' {
+    switch (status) {
+      case 'COMPLETED':
+        return 'success';
+      case 'FAILED':
+        return 'danger';
+      case 'COMPLETED_WITH_ERRORS':
+        return 'warning';
+      case 'RUNNING':
+        return 'info';
       default:
-        return 'audit-status-ch--pending';
+        return 'neutral';
     }
   }
 

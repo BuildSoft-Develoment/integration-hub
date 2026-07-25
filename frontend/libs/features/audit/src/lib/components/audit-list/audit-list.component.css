@@ -16,17 +16,21 @@
   color: var(--ih-text-soft);
 }
 
-.audit-status-ch--ok {
-  --mdc-chip-elevated-container-color: var(--ih-status-success-bg);
-  --mdc-chip-label-text-color: var(--ih-status-success);
+/* Estado coloreado por tono, mismo pill que la lista de ejecuciones y el detalle (summary-pill):
+   span plano (sin internals de mat-chip, que no aplican el color al label). */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.28rem 0.66rem;
+  border-radius: 999px;
+  font-size: 0.77rem;
+  font-weight: 700;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--ih-surface) 88%, transparent);
+  color: var(--ih-text-soft);
 }
-
-.audit-status-ch--error {
-  --mdc-chip-elevated-container-color: var(--ih-status-error-bg);
-  --mdc-chip-label-text-color: var(--ih-status-error);
-}
-
-.audit-status-ch--pending {
-  --mdc-chip-elevated-container-color: var(--ih-status-warning-bg);
-  --mdc-chip-label-text-color: var(--ih-status-warning);
-}
+.status-pill--success { background: var(--ih-status-success-bg); color: var(--ih-status-success); }
+.status-pill--warning { background: var(--ih-status-warning-bg); color: var(--ih-status-warning); }
+.status-pill--info { background: var(--ih-status-info-bg); color: var(--ih-status-info); }
+.status-pill--danger { background: var(--ih-status-error-bg); color: var(--ih-status-error); }

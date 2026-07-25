@@ -33,9 +33,7 @@
       </div>
 
       <div class="row-type ih-catalog-row-meta">
-        <mat-chip-set>
-          <mat-chip [class]="statusChipClass(event.status)">{{ statusLabel(event.status) }}</mat-chip>
-        </mat-chip-set>
+        <span class="status-pill" [class]="'status-pill status-pill--' + statusTone(event.status)">{{ statusLabel(event.status) }}</span>
       </div>
 
       <div class="row-status ih-catalog-row-meta"><time [attr.datetime]="event.createdAt" [title]="event.createdAt | ihTime:'absolute'" [attr.aria-label]="event.createdAt | ihTime:'absolute'">{{ event.createdAt | ihTime }}</time></div>

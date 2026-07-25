@@ -36,7 +36,7 @@ export class OverviewTableCardComponent {
         return 'success';
       case 'FAILED':
         return 'danger';
-      case 'PENDING':
+      case 'COMPLETED_WITH_ERRORS':
         return 'warning';
       case 'RUNNING':
         return 'info';
