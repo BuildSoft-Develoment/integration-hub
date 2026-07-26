@@ -343,6 +343,55 @@ public class Mt101FailedRecordRepository {
     }
 
     /**
+     * ADR-020 (C): filas para la planilla de correccion — cada fila en cuarentena joineada con su payload
+     * de staging (+ version para If-Match). El servicio aplana el payload en columnas editables. Ordenado
+     * por fila del archivo. Opcionalmente acotado a una causa (rule_code).
+     */
+    public List<CorrectionSheetRow> correctionSheetRows(DataSource dataSource, String fragmentSetId,
+                                                        String status, String ruleCode, int limit)
+            throws SQLException {
+        var sql = new StringBuilder(
+                "select f.staging_id, s.version, f.source_file_hash, f.source_record_number, "
+                + "f.senders_reference, f.rule_code, f.message, s.payload_json "
+                + "from mt101_failed_record f join staging_record s on s.id = f.staging_id "
+                + "where f.fragment_set_id = ? and f.status = ?");
+        if (ruleCode != null && !ruleCode.isBlank()) {
+            sql.append(" and f.rule_code = ?");
+        }
+        sql.append(" order by f.source_record_number asc nulls last, f.id asc limit ?");
+        var result = new ArrayList<CorrectionSheetRow>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql.toString())) {
+            var parameter = 1;
+            statement.setString(parameter++, fragmentSetId);
+            statement.setString(parameter++, status);
+            if (ruleCode != null && !ruleCode.isBlank()) {
+                statement.setString(parameter++, ruleCode);
+            }
+            statement.setInt(parameter, limit);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new CorrectionSheetRow(
+                            nullableLong(rs, "staging_id"),
+                            rs.getLong("version"),
+                            rs.getString("source_file_hash"),
+                            nullableLong(rs, "source_record_number"),
+                            rs.getString("senders_reference"),
+                            rs.getString("rule_code"),
+                            rs.getString("message"),
+                            rs.getString("payload_json")));
+                }
+            }
+        }
+        return result;
+    }
+
+    /** Una fila para la planilla de correccion: identidad para re-matchear + payload editable. */
+    public record CorrectionSheetRow(Long stagingId, long version, String sourceFileHash, Long recordNumber,
+                                     String sendersReference, String ruleCode, String message, String payloadJson) {
+    }
+
+    /**
      * Resuelve la cuarentena SOLO de las filas cubiertas por la seleccion del run
      * ({@code rebuild_run_id}), no por todo el set. Asi una fila nueva en cuarentena
      * insertada durante el run, o un run parcial, no se marca con el estado correctivo equivocado (P0.4).

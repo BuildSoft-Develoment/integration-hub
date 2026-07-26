@@ -10,6 +10,7 @@ import com.integrationhub.platform.service.payments.swift.Mt101ReconciliationClo
 import com.integrationhub.platform.service.payments.swift.Mt101LoteService;
 import com.integrationhub.platform.service.payments.swift.Mt101QuarantineService;
 import com.integrationhub.platform.service.payments.swift.Mt101RebuildService;
+import com.integrationhub.platform.service.payments.swift.Mt101CorrectionSheetService;
 import com.integrationhub.platform.service.payments.swift.Mt101StagingCorrectionService;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.BadRequestException;
@@ -26,6 +27,7 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.StreamingOutput;
 import jakarta.ws.rs.core.SecurityContext;
 
 import java.util.List;
@@ -53,6 +55,7 @@ public class Mt101QuarantineResource {
     private final Mt101CorrectiveLifecycleService correctiveLifecycleService;
     private final Mt101PayUncertainResolutionService payUncertainResolutionService;
     private final Mt101ReconciliationCloseService reconciliationCloseService;
+    private final Mt101CorrectionSheetService correctionSheetService;
 
     public Mt101QuarantineResource(Mt101QuarantineService service,
                                    Mt101RebuildService rebuildService,
@@ -60,7 +63,8 @@ public class Mt101QuarantineResource {
                                    Mt101StagingCorrectionService correctionService,
                                    Mt101CorrectiveLifecycleService correctiveLifecycleService,
                                    Mt101PayUncertainResolutionService payUncertainResolutionService,
-                                   Mt101ReconciliationCloseService reconciliationCloseService) {
+                                   Mt101ReconciliationCloseService reconciliationCloseService,
+                                   Mt101CorrectionSheetService correctionSheetService) {
         this.service = service;
         this.rebuildService = rebuildService;
         this.loteService = loteService;
@@ -68,6 +72,7 @@ public class Mt101QuarantineResource {
         this.correctiveLifecycleService = correctiveLifecycleService;
         this.payUncertainResolutionService = payUncertainResolutionService;
         this.reconciliationCloseService = reconciliationCloseService;
+        this.correctionSheetService = correctionSheetService;
     }
 
     /**
@@ -205,6 +210,30 @@ public class Mt101QuarantineResource {
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }
+    }
+
+    /** ADR-020 (C1): exporta la planilla de correccion (XLSX) de la cuarentena de un set (opcional por causa). Read-only. */
+    @GET
+    @Path("/correction-sheet")
+    @Produces("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
+    public Response correctionSheet(@QueryParam("connectionRef") String connectionRef,
+                                    @QueryParam("fragmentSetId") String fragmentSetId,
+                                    @QueryParam("ruleCode") String ruleCode,
+                                    @QueryParam("status") @DefaultValue("QUARANTINED") String status) {
+        // Valida ANTES de abrir el stream (para devolver 400, no romper a mitad de la descarga).
+        try {
+            correctionSheetService.validate(fragmentSetId);
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+        var safeSet = (fragmentSetId == null ? "set" : fragmentSetId).replaceAll("[^A-Za-z0-9._-]", "_");
+        var suffix = ruleCode == null || ruleCode.isBlank() ? "" : "-" + ruleCode.replaceAll("[^A-Za-z0-9._-]", "_");
+        StreamingOutput stream = out ->
+                correctionSheetService.writeSheet(out, connectionRef, fragmentSetId, status, ruleCode);
+        return Response.ok(stream)
+                .header("Content-Disposition", "attachment; filename=\"correccion-" + safeSet + suffix + ".xlsx\"")
+                .build();
     }
 
     @POST

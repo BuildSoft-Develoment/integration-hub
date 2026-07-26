@@ -94,6 +94,7 @@
         <div class="q__actions">
           <button mat-stroked-button type="button" (click)="list()" [disabled]="loading() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.applyFilters') }}</button>
           <button mat-button type="button" (click)="clearFilters()" [disabled]="loading() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.clearFilters') }}</button>
+          <button mat-stroked-button type="button" (click)="exportCorrectionSheet()" [disabled]="exportingSheet() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.exportSheet') }}</button>
         </div>
       </div>
 

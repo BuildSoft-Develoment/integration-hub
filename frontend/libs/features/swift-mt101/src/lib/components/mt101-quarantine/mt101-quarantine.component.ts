@@ -135,6 +135,8 @@ export class Mt101QuarantineComponent {
   readonly rows = signal<Mt101FailedRecord[]>([]);
   // ADR-020 (A): resumen de la cuarentena por causa (rule_code) — miles de fallos -> un puñado de decisiones.
   readonly causeSummary = signal<Mt101RuleSummary[]>([]);
+  // ADR-020 (C1): descarga de la planilla de correccion (XLSX).
+  readonly exportingSheet = signal(false);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly message = signal<string | null>(null);
@@ -443,6 +445,39 @@ export class Mt101QuarantineComponent {
   filterByCause(ruleCode: string): void {
     this.ruleCodeFilter = this.ruleCodeFilter === ruleCode ? '' : ruleCode;
     this.list(true);
+  }
+
+  /** ADR-020 (C1): descarga la planilla de correccion de la vista actual (set + causa/estado filtrados). */
+  exportCorrectionSheet(): void {
+    if (!this.fragmentSetId.trim()) {
+      return;
+    }
+    this.exportingSheet.set(true);
+    this.api.mt101CorrectionSheet({
+      fragmentSetId: this.fragmentSetId,
+      connectionRef: this.connectionRef,
+      ruleCode: this.ruleCodeFilter,
+      status: this.statusFilter?.trim() || 'QUARANTINED',
+    }).subscribe({
+      next: (blob) => {
+        const rule = this.ruleCodeFilter?.trim() ? '-' + this.ruleCodeFilter.trim() : '';
+        this.downloadBlob(blob, `correccion-${this.fragmentSetId}${rule}.xlsx`);
+        this.exportingSheet.set(false);
+      },
+      error: () => {
+        this.error.set(this.i18n.t('audit.quarantine.exportError'));
+        this.exportingSheet.set(false);
+      },
+    });
+  }
+
+  private downloadBlob(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   /** v60: carga la lista detallada de conflictos de pago del set (on-demand desde la alerta). */

@@ -1344,6 +1344,8 @@ export const es = {
   'audit.quarantine.applyFilters': 'Aplicar filtros',
   'audit.quarantine.clearFilters': 'Limpiar filtros',
   'audit.quarantine.causesTitle': 'Fallos por causa',
+  'audit.quarantine.exportSheet': 'Exportar planilla',
+  'audit.quarantine.exportError': 'No se pudo exportar la planilla de correccion.',
   'audit.quarantine.rebuild': 'Reprocesar filas corregidas',
   'audit.quarantine.runRequest': 'Solicitar reproceso',
   'audit.quarantine.runTitle': 'Reproceso correctivo (maker-checker)',

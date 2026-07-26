@@ -438,6 +438,27 @@ export class Mt101AuditApiService {
       '/api/query/mt101-quarantine/summary-by-rule', { params: httpParams });
   }
 
+  /** ADR-020 (C1): descarga la planilla de correccion (XLSX) de la cuarentena de un set (opcional por causa). */
+  mt101CorrectionSheet(query: {
+    connectionRef?: string;
+    fragmentSetId: string;
+    ruleCode?: string;
+    status?: string;
+  }): Observable<Blob> {
+    let httpParams = new HttpParams().set('fragmentSetId', query.fragmentSetId);
+    if (query.ruleCode?.trim()) {
+      httpParams = httpParams.set('ruleCode', query.ruleCode.trim());
+    }
+    if (query.status?.trim()) {
+      httpParams = httpParams.set('status', query.status.trim());
+    }
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.get('/api/query/mt101-quarantine/correction-sheet',
+      { params: httpParams, responseType: 'blob' });
+  }
+
   /** Construye la cuarentena resolviendo cada :21: fallido a su fila exacta del archivo. */
   mt101BuildQuarantine(query: {
     connectionRef?: string;
