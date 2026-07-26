@@ -75,7 +75,7 @@
                 <!-- Deep-link a la acción gobernada de conciliación por-set (quarantine). -->
                 <a mat-button [routerLink]="['/swift-mt101/quarantine']" [queryParams]="{ fragmentSetId: c.fragmentSetId }">{{ i18n.t('audit.payConflicts.reconcile') }}</a>
                 <!-- Deep-link al lineage E2E de la trama en conflicto (modo 'key' por :20: = paymentReference). -->
-                <a mat-button [routerLink]="['/audit/record-lineage']" [queryParams]="{ key: 'paymentReference', value: c.sendersReference }">{{ i18n.t('audit.lookup.viewLineage') }} ↗</a>
+                <a mat-button [routerLink]="['/audit/record-lineage']" [queryParams]="{ key: 'paymentReference', value: c.sendersReference, processExecutionId: c.processExecutionId }">{{ i18n.t('audit.lookup.viewLineage') }} ↗</a>
               </td>
             </tr>
             @if (resolvingKey() === trackConflict($index, c)) {

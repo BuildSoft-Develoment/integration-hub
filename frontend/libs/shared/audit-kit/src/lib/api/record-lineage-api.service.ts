@@ -31,6 +31,10 @@ export class RecordLineageApiService {
     }
     if (query.key?.trim() && query.value?.trim()) {
       httpParams = httpParams.set('key', query.key.trim()).set('value', query.value.trim());
+      // Acota la clave a una ejecucion (desambigua reprocesos del mismo :20:); si no viene, trae todas.
+      if (query.processExecutionId !== undefined && String(query.processExecutionId).trim()) {
+        httpParams = httpParams.set('processExecutionId', String(query.processExecutionId).trim());
+      }
     }
     if (query.sourceFileHash?.trim() && query.recordNumber !== undefined && String(query.recordNumber).trim()) {
       httpParams = httpParams

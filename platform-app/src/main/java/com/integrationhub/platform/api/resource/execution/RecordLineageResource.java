@@ -57,7 +57,8 @@ public class RecordLineageResource {
             events = repository.timelineBySourceRow(sourceFileHash, recordNumber, processExecutionId, capped);
         } else if (key != null && !key.isBlank() && value != null && !value.isBlank()) {
             try {
-                events = repository.timelineByOperationalKey(key, value, capped);
+                // processExecutionId (opcional) acota la clave a una ejecucion (desambigua reprocesos del mismo :20:).
+                events = repository.timelineByOperationalKey(key, value, processExecutionId, capped);
             } catch (IllegalArgumentException error) {
                 throw new BadRequestException(error.getMessage(), error);
             }

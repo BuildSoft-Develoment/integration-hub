@@ -24,25 +24,36 @@ public class AuditRecordEventRepository implements PanacheRepository<AuditRecord
     }
 
     /** Linea de tiempo por clave funcional consultable (:20:, :21:, UETR, archivo/fila, etc.). */
-    public List<AuditRecordEvent> timelineByOperationalKey(String key, String value, int limit) {
+    /**
+     * Timeline por clave operativa (:20:, :21:, UETR, hash...). {@code processExecutionId} opcional desambigua
+     * reprocesos: una misma {@code :20:} se repite entre corridas del mismo lote, asi que sin ejecucion trae todas;
+     * si viene, acota a esa ejecucion (igual que {@link #timelineBySourceRow}). Si es null, trae todas.
+     */
+    public List<AuditRecordEvent> timelineByOperationalKey(String key, String value, Long processExecutionId,
+                                                           int limit) {
         var normalized = key == null ? "" : key.trim().toLowerCase(Locale.ROOT);
-        return switch (normalized) {
-            case "sourcefilehash", "source_file_hash" ->
-                    find("sourceFileHash = ?1 order by eventTs asc, id asc", value).page(0, limit).list();
-            case "businesskeyhash", "business_key_hash" ->
-                    find("businessKeyHash = ?1 order by eventTs asc, id asc", value).page(0, limit).list();
+        String field;
+        Object typedValue = value;
+        switch (normalized) {
+            case "sourcefilehash", "source_file_hash" -> field = "sourceFileHash";
+            case "businesskeyhash", "business_key_hash" -> field = "businessKeyHash";
             case "paymentreference", "payment_reference", "sendersreference", "senders_reference", "20" ->
-                    find("paymentReference = ?1 order by eventTs asc, id asc", value).page(0, limit).list();
-            case "transactionreference", "transaction_reference", "21" ->
-                    find("transactionReference = ?1 order by eventTs asc, id asc", value).page(0, limit).list();
-            case "uetr" ->
-                    find("uetr = ?1 order by eventTs asc, id asc", value).page(0, limit).list();
-            case "gatewayreference", "gateway_reference" ->
-                    find("gatewayReference = ?1 order by eventTs asc, id asc", value).page(0, limit).list();
-            case "archiveid", "archive_id" ->
-                    find("archiveId = ?1 order by eventTs asc, id asc", Long.parseLong(value)).page(0, limit).list();
+                    field = "paymentReference";
+            case "transactionreference", "transaction_reference", "21" -> field = "transactionReference";
+            case "uetr" -> field = "uetr";
+            case "gatewayreference", "gateway_reference" -> field = "gatewayReference";
+            case "archiveid", "archive_id" -> {
+                field = "archiveId";
+                typedValue = Long.parseLong(value);
+            }
             default -> throw new IllegalArgumentException("Unsupported lineage key: " + key);
-        };
+        }
+        // El nombre del campo sale del switch (constante controlada), no del input -> sin riesgo de inyeccion.
+        if (processExecutionId == null) {
+            return find(field + " = ?1 order by eventTs asc, id asc", typedValue).page(0, limit).list();
+        }
+        return find(field + " = ?1 and processExecutionId = ?2 order by eventTs asc, id asc",
+                typedValue, processExecutionId).page(0, limit).list();
     }
 
     /**

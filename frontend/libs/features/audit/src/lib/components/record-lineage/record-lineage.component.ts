@@ -102,6 +102,8 @@ export class RecordLineageComponent {
     } else if (key && value) {
       this.key = key;
       this.value = value;
+      // Un deep-link por :20: puede acotar a su ejecucion (evita mezclar reprocesos del mismo :20:).
+      this.processExecutionId = qp.get('processExecutionId') ?? '';
       this.mode.set('key');
       this.searchByKey();
     }
