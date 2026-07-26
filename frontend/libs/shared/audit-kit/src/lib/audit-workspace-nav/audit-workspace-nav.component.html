@@ -8,6 +8,7 @@
         <a
           class="audit-ws__item audit-ws__item--{{ item.mode }}"
           [routerLink]="item.route"
+          queryParamsHandling="preserve"
           routerLinkActive="audit-ws__item--active"
           [attr.title]="item.descriptionKey ? i18n.t(item.descriptionKey) : null"
         >
