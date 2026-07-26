@@ -1,5 +1,6 @@
-import { computed, Injectable, signal } from '@angular/core';
+import { computed, inject, Injectable, signal } from '@angular/core';
 import Keycloak, { KeycloakProfile } from 'keycloak-js';
+import { I18nService } from '@integration-hub/core/i18n';
 
 declare global {
   interface Window {
@@ -27,6 +28,7 @@ const KEYCLOAK_DEFAULTS: AuthConfig = {
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
+  private readonly i18n = inject(I18nService);
   private keycloak: Keycloak | null = null;
 
   readonly ready = signal(false);
@@ -81,8 +83,11 @@ export class AuthService {
   }
 
   async login(): Promise<void> {
+    // El login de Keycloak abre en el idioma elegido en la app (bilingue es/en): keycloak-js manda
+    // `locale` como `ui_locales`, que Keycloak honra con i18n habilitado en el realm + messages_<locale>.
     await this.keycloak?.login({
       redirectUri: window.location.href,
+      locale: this.i18n.locale(),
     });
   }
 
