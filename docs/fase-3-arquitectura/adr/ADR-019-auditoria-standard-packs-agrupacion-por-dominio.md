@@ -5,7 +5,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [ADR-018 FILE_WRITE: binding de origenes y expresiones de detalle (paridad DB_WRITE + evaluador JEXL money-safe)](ADR-018-file-write-binding-origenes-y-expresiones-detalle.md)
-- Siguiente: [Indice docs](../../README.md)
+- Siguiente: [ADR-020 Correccion masiva de cuarentena MT101: agrupacion por causa + planilla de correccion](ADR-020-correccion-masiva-cuarentena-mt101-agrupacion-y-planilla.md)
 <!-- nav-guided:end -->
 
 ## Estado
