@@ -77,6 +77,28 @@ export interface Mt101CorrectionPreview {
   sample: Mt101CorrectionPreviewRow[];
 }
 
+/** ADR-020 (C3): una fila del resultado del apply (CORRECTED / UNCHANGED / SKIPPED / FAILED + motivo). */
+export interface Mt101CorrectionApplyRow {
+  stagingId: number | null;
+  recordNumber: number | null;
+  sendersReference: string | null;
+  outcome: 'CORRECTED' | 'UNCHANGED' | 'SKIPPED' | 'FAILED';
+  reason: string | null;
+  changedFields: string[];
+}
+
+/** ADR-020 (C3): resultado del apply — conteos por outcome + muestra de corregidas + issues (omitidas/fallidas). */
+export interface Mt101CorrectionApply {
+  total: number;
+  corrected: number;
+  unchanged: number;
+  skipped: number;
+  failed: number;
+  issuesTruncated: boolean;
+  correctedSample: Mt101CorrectionApplyRow[];
+  issues: Mt101CorrectionApplyRow[];
+}
+
 export interface Mt101QuarantineBuildResult {
   fragmentSetId: string;
   quarantined: number;

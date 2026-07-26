@@ -50,8 +50,8 @@ Se **descarta** como camino primario "corregir en origen + re-correr el archivo"
    - **Datos editables**: los campos del payload (dni, nombre, cuenta, moneda, monto, bic, concepto, cargos...).
 2. **Editar offline**: el operador corrige en Excel (aca es donde el bulk real ocurre: fill-down, buscar/reemplazar de un BIC, normalizar una columna).
 3. **Import + DRY-RUN** (`POST .../quarantine/correction-sheet:preview`): la plataforma parsea el XLSX, matchea por `stagingId`, calcula el **merge-patch por fila** (solo campos cambiados) y devuelve un **preview**: N a corregir, M sin cambios (patch vacio -> skip), K conflictos (`version` desfasada / fila `LOCKED` por rebuild activo / fragmento ya `SENT`), + una **muestra antes/despues**. **No aplica nada.**
-4. **Confirmar -> maker-checker**: la correccion masiva es una **operacion gobernada** (como el rebuild): un maker solicita, un checker distinto aprueba (si el flag esta activo).
-5. **Apply** (`POST .../quarantine/correction-sheet:apply`): itera `correctRow` por fila **reusando toda su semantica** (merge-patch + If-Match + skip de filas `NON_REPROCESSABLE`/locked + audit por fila con hash antes/despues, campos cambiados, actor, motivo, ticket). Devuelve un resumen (corregidas / omitidas / fallidas con motivo). **Sin apply parcial silencioso**: cada fila se audita o se reporta como omitida.
+4. **Confirmar (single-operator + dry-run)**: el operador revisa el dry-run y confirma con **motivo obligatorio** (+ ticket) y un dialogo explicito. El apply es de **un solo actor**, con la misma autoridad que la correccion 1-a-1 (`correctRow`, que tampoco exige aprobacion por correccion). **La segregacion de dos actores esta en el REBUILD** (paso 6): la correccion solo PREPARA datos — no mueve dinero — y ninguna reconstruccion/PAY ocurre sin que un checker distinto apruebe el rebuild run. Ver *Decision de gobernanza* mas abajo.
+5. **Apply** (`POST .../quarantine/correction-sheet/apply`): itera `correctRow` por fila **reusando toda su semantica** (merge-patch + If-Match + skip de filas `NON_REPROCESSABLE`/locked + audit por fila con hash antes/despues, campos cambiados, actor, motivo, ticket). **Coercion money-safe**: la planilla trae texto, pero cada campo cambiado vuelve al tipo del payload actual (`monto` -> BigDecimal exacto, no texto) para no cambiarle la forma al que consume el BUILD. Devuelve un resumen (corregidas / sin cambios / omitidas / fallidas con motivo) + las filas problematicas capadas. **Sin apply parcial silencioso**: cada fila se audita o se reporta como omitida.
 6. **Rebuild**: al terminar, el operador dispara el **rebuild run existente** (request->approve->execute) sobre lo corregido. El PAY correctivo sigue el camino gobernado de ADR-017 (`sinkRef`), y **nunca** toca los fragmentos ya `SENT`.
 
 ### Guardarraíles money-safety (obligatorios)
@@ -59,10 +59,20 @@ Se **descarta** como camino primario "corregir en origen + re-correr el archivo"
 - **Solo cuarentena**: el import ignora/rechaza filas cuyo fragmento este `SENT`/`CONFIRMED`/`RECONCILED`/`SUPERSEDED` (reusa `NON_REPROCESSABLE`).
 - **Locking optimista por fila** (`version`/If-Match): si la fila cambio desde el export, se reporta conflicto, no se pisa.
 - **Freeze maker-checker**: filas bloqueadas por un rebuild `APPROVED/BUILDING` se omiten (reusa `RowLockedForRebuildException`).
-- **Dry-run obligatorio** antes del apply; **maker-checker** sobre el apply.
+- **Dry-run obligatorio** antes del apply; **maker-checker de dos actores en el REBUILD** posterior (el apply es single-operator: la correccion prepara datos, no mueve dinero — ver *Decision de gobernanza*).
 - **Identidad bloqueada**: si se altero `stagingId`/`sourceFileHash` en la planilla, se rechaza la fila.
 - **Idempotente**: re-importar la misma planilla es no-op (patch vacio -> skip). Limite de tamaño por lote + reporte de fallidas.
 - **Audit por fila** (reusa la auditoria de `correctRow`): trazabilidad completa de quien cambio que.
+
+### Decision de gobernanza del apply (2026-07-26)
+
+Al implementar C3 se resolvio **no** poner un segundo actor (maker solicita / checker aprueba) **sobre el apply mismo**, sino apoyarse en el gate de dos actores que ya existe en el **rebuild**. Racional:
+
+- El apply **edita datos de staging** (dni, cuenta, bic, monto...) — es **preparacion**, no un movimiento de dinero. El dinero sale en el **PAY**, despues del **rebuild** (`request -> approve -> execute`), que es maker-checker: **ninguna** reconstruccion ni PAY correctivo ocurre sin que un checker distinto apruebe. Una correccion masiva erronea no puede mover dinero sin ese segundo actor.
+- Es **consistente** con la correccion 1-a-1 (`correctRow`), que tampoco exige aprobacion por correccion; el gate de segregacion siempre estuvo en el rebuild.
+- El **dry-run obligatorio** (C2) es la revision previa; el apply exige **motivo** + confirmacion explicita y **audita cada fila** (actor, hash antes/despues, campos, motivo, ticket).
+
+Si un control bancario exigiera segregacion de dos actores **tambien en el paso de edicion**, queda como **Fase C3b** (diferida): persistir la planilla/intencion como solicitud pendiente + endpoint `request`/`approve` + UI de dos pasos. No se implementa ahora.
 
 ## Consecuencias
 
@@ -79,7 +89,7 @@ Costos:
 ## Alcance / lo que NO entra
 
 - **No** "corregir en origen + re-correr el archivo completo" como camino de correccion masiva (hazard de doble pago con pagos parciales; solo valido si nada pago aun).
-- **No** bulk sin dry-run + maker-checker + audit por fila.
+- **No** bulk sin dry-run + audit por fila (+ el gate de dos actores del rebuild aguas abajo).
 - **No** tocar fragmentos `SENT`/cerrados (eso es cancelacion/reverso o un nuevo correctivo, fuera de este ADR).
 - **Opcion B (predicado/find-replace gobernado)** diferida a Fase 2 (power-users): *"a las filas de la cuarentena que cumplen P, aplicar el patch M"*, con los mismos guardarraíles.
 - Correccion de errores de **regla** (no de dato): se resuelve ajustando la regla + `resetByStatus REJECTED->BUILT` (ya soportado), fuera de este ADR.

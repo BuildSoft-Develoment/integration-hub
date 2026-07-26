@@ -78,3 +78,8 @@ td { font-size:.86rem; }
 .q__pv--danger { background:var(--ih-status-error-bg); color:var(--ih-status-error); }
 .q__pv-total { color:var(--ih-text-soft); font-size:.8rem; }
 .q__preview-list { margin:.1rem 0 0; padding-left:1.1rem; font-size:.8rem; color:var(--ih-text-soft); max-height:9rem; overflow:auto; }
+/* ADR-020 (C3): barra de apply gobernado (motivo + ticket + boton) dentro del preview + card de resultado. */
+.q__apply { display:flex; align-items:flex-end; flex-wrap:wrap; gap:.5rem; margin-top:.35rem; padding-top:.5rem; border-top:1px solid var(--ih-border); }
+.q__apply-reason { flex:1 1 16rem; }
+.q__apply-ticket { flex:0 1 9rem; }
+.q__apply-result { display:flex; flex-direction:column; gap:.45rem; margin:.5rem 0; padding:.6rem .8rem; border:1px solid var(--ih-border); border-radius:12px; background:var(--ih-surface); }

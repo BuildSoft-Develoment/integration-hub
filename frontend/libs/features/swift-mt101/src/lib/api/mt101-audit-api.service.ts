@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
   Mt101CorrectiveLifecycle,
+  Mt101CorrectionApply,
   Mt101CorrectionPreview,
   Mt101FailedRecord,
   Mt101RuleSummary,
@@ -472,6 +473,32 @@ export class Mt101AuditApiService {
     }
     return this.http.post<Mt101CorrectionPreview>(
       '/api/query/mt101-quarantine/correction-sheet/preview',
+      query.file,
+      { params: httpParams, headers: { 'Content-Type': 'application/octet-stream' } });
+  }
+
+  /**
+   * ADR-020 (C3): aplica la planilla — sube el XLSX (body raw) y devuelve el resultado (corregidas/omitidas/
+   * fallidas + issues). Muta el payload de las filas por el camino money-safe de correctRow. reason obligatorio.
+   */
+  mt101ApplyCorrectionSheet(query: {
+    connectionRef?: string;
+    fragmentSetId: string;
+    reason: string;
+    ticketRef?: string;
+    file: Blob;
+  }): Observable<Mt101CorrectionApply> {
+    let httpParams = new HttpParams()
+      .set('fragmentSetId', query.fragmentSetId)
+      .set('reason', query.reason.trim());
+    if (query.ticketRef?.trim()) {
+      httpParams = httpParams.set('ticketRef', query.ticketRef.trim());
+    }
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.post<Mt101CorrectionApply>(
+      '/api/query/mt101-quarantine/correction-sheet/apply',
       query.file,
       { params: httpParams, headers: { 'Content-Type': 'application/octet-stream' } });
   }

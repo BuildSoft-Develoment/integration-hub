@@ -121,6 +121,53 @@
               }
             </ul>
           }
+          @if (canAuditOperate() && preview.toCorrect > 0) {
+            <div class="q__apply">
+              <mat-form-field subscriptSizing="dynamic" class="q__apply-reason">
+                <mat-label>{{ i18n.t('audit.quarantine.applyReason') }}</mat-label>
+                <input matInput [(ngModel)]="bulkCorrectionReason" [disabled]="applyingSheet()" />
+              </mat-form-field>
+              <mat-form-field subscriptSizing="dynamic" class="q__apply-ticket">
+                <mat-label>{{ i18n.t('audit.quarantine.applyTicket') }}</mat-label>
+                <input matInput [(ngModel)]="bulkCorrectionTicketRef" [disabled]="applyingSheet()" />
+              </mat-form-field>
+              <button
+                mat-flat-button
+                color="primary"
+                type="button"
+                (click)="applyCorrectionSheet()"
+                [disabled]="applyingSheet() || !bulkCorrectionReason.trim()"
+              >
+                {{ i18n.t('audit.quarantine.applySheet') }} ({{ preview.toCorrect }})
+              </button>
+            </div>
+          }
+        </div>
+      }
+
+      @if (applyResult(); as result) {
+        <div class="q__apply-result" role="status">
+          <div class="q__preview-head">
+            <span class="q__causes-title">{{ i18n.t('audit.quarantine.applyResultTitle') }}</span>
+            <button mat-button type="button" (click)="clearApplyResult()">{{ i18n.t('audit.quarantine.clearFilters') }}</button>
+          </div>
+          <div class="q__preview-counts">
+            <span class="q__pv q__pv--ok">{{ result.corrected }} {{ i18n.t('audit.quarantine.applyCorrected') }}</span>
+            <span class="q__pv q__pv--muted">{{ result.unchanged }} {{ i18n.t('audit.quarantine.applyUnchanged') }}</span>
+            <span class="q__pv" [class.q__pv--danger]="result.skipped > 0">{{ result.skipped }} {{ i18n.t('audit.quarantine.applySkipped') }}</span>
+            <span class="q__pv" [class.q__pv--danger]="result.failed > 0">{{ result.failed }} {{ i18n.t('audit.quarantine.applyFailed') }}</span>
+            <span class="q__pv-total">/ {{ result.total }}</span>
+          </div>
+          @if (result.issues.length) {
+            <ul class="q__preview-list">
+              @for (row of result.issues; track $index) {
+                <li>#{{ row.recordNumber }} <span class="q__muted">({{ row.sendersReference }})</span> — {{ row.outcome }}: {{ row.reason }}</li>
+              }
+            </ul>
+            @if (result.issuesTruncated) {
+              <p class="q__muted">{{ i18n.t('audit.quarantine.applyIssuesTruncated') }}</p>
+            }
+          }
         </div>
       }
 

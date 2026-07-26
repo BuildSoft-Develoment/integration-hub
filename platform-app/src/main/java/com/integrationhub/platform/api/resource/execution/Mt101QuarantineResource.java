@@ -1,5 +1,6 @@
 package com.integrationhub.platform.api.resource.execution;
 
+import com.integrationhub.platform.api.response.execution.Mt101CorrectionApplyResponse;
 import com.integrationhub.platform.api.response.execution.Mt101CorrectionPreviewResponse;
 import com.integrationhub.platform.api.response.execution.Mt101FailedRecordResponse;
 import com.integrationhub.platform.api.response.execution.Mt101RuleSummaryResponse;
@@ -263,6 +264,40 @@ public class Mt101QuarantineResource {
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);
         }
+    }
+
+    /**
+     * ADR-020 (C3): aplica la planilla de correccion (body = XLSX). Muta el payload de las filas TO_CORRECT
+     * reusando el camino money-safe de {@code correctRow} (re-valida REJECTED + lock + version y audita por fila).
+     * {@code reason} es obligatorio (gobernanza de una mutacion masiva); el actor sale del token OIDC, no del query.
+     */
+    @POST
+    @Path("/correction-sheet/apply")
+    @Consumes(MediaType.APPLICATION_OCTET_STREAM)
+    @Produces(MediaType.APPLICATION_JSON)
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
+    public Mt101CorrectionApplyResponse applyCorrectionSheet(@QueryParam("connectionRef") String connectionRef,
+                                                             @QueryParam("fragmentSetId") String fragmentSetId,
+                                                             @QueryParam("reason") String reason,
+                                                             @QueryParam("ticketRef") String ticketRef,
+                                                             InputStream body,
+                                                             @Context SecurityContext securityContext) {
+        try {
+            var result = bulkCorrectionService.apply(connectionRef, fragmentSetId, body,
+                    actor(securityContext), reason, ticketRef);
+            return new Mt101CorrectionApplyResponse(
+                    result.total(), result.corrected(), result.unchanged(), result.skipped(), result.failed(),
+                    result.issuesTruncated(),
+                    result.correctedSample().stream().map(this::toApplyRow).toList(),
+                    result.issues().stream().map(this::toApplyRow).toList());
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    private Mt101CorrectionApplyResponse.Row toApplyRow(Mt101BulkCorrectionService.ApplyRow row) {
+        return new Mt101CorrectionApplyResponse.Row(row.stagingId(), row.recordNumber(), row.sendersReference(),
+                row.outcome(), row.reason(), row.changedFields());
     }
 
     @POST

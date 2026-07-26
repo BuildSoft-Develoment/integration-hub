@@ -4,14 +4,15 @@ import { CommonModule } from '@angular/common';
 import { Component, computed, HostListener, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
-import { ActionDispatcherService, IconComponent } from '@integration-hub/shared/ui';
+import { ActionDispatcherService, ConfirmDialogComponent, IconComponent } from '@integration-hub/shared/ui';
 import { Observable } from 'rxjs';
 import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
-import { Mt101CorrectionPreview, Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101NormalPayResolution, Mt101PayAction, Mt101PayConflict, Mt101RebuildRunSummary, Mt101RowTimelineEntry, Mt101RuleSummary, Mt101StagingRowView } from '../../models/mt101.models';
+import { Mt101CorrectionApply, Mt101CorrectionPreview, Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101NormalPayResolution, Mt101PayAction, Mt101PayConflict, Mt101RebuildRunSummary, Mt101RowTimelineEntry, Mt101RuleSummary, Mt101StagingRowView } from '../../models/mt101.models';
 import {
   AuditOperationRisk,
   AuditWorkspaceNavComponent,
@@ -30,6 +31,7 @@ import {
     FormsModule,
     RouterLink,
     MatButtonModule,
+    MatDialogModule,
     MatFormFieldModule,
     MatInputModule,
     ClipboardModule,
@@ -43,6 +45,7 @@ export class Mt101QuarantineComponent {
   private readonly api = inject(Mt101AuditApiService);
   private readonly route = inject(ActivatedRoute);
   private readonly breadcrumb = inject(BreadcrumbService);
+  private readonly dialog = inject(MatDialog);
   private readonly access = inject(AuthAccessService);
   readonly i18n = inject(I18nService);
   readonly canAuditAdmin = this.access.canAuditAdmin;
@@ -140,6 +143,12 @@ export class Mt101QuarantineComponent {
   // ADR-020 (C2): dry-run del import de la planilla (preview read-only).
   readonly previewingSheet = signal(false);
   readonly correctionPreview = signal<Mt101CorrectionPreview | null>(null);
+  // ADR-020 (C3): apply de la planilla ya revisada en el preview. Se guarda el mismo archivo para reenviarlo.
+  private lastCorrectionFile: File | null = null;
+  readonly applyingSheet = signal(false);
+  readonly applyResult = signal<Mt101CorrectionApply | null>(null);
+  bulkCorrectionReason = '';
+  bulkCorrectionTicketRef = '';
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly message = signal<string | null>(null);
@@ -493,6 +502,8 @@ export class Mt101QuarantineComponent {
     }
     this.previewingSheet.set(true);
     this.correctionPreview.set(null);
+    this.applyResult.set(null);
+    this.lastCorrectionFile = file;
     this.error.set(null);
     this.api.mt101PreviewCorrectionSheet({
       fragmentSetId: this.fragmentSetId,
@@ -510,8 +521,70 @@ export class Mt101QuarantineComponent {
     });
   }
 
+  /**
+   * ADR-020 (C3): aplica la planilla ya revisada en el preview. Exige rol de operacion + motivo + confirmacion
+   * explicita (mutacion masiva). Reenvia el MISMO archivo del preview (nada se reescribe entre revisar y aplicar).
+   */
+  applyCorrectionSheet(): void {
+    const preview = this.correctionPreview();
+    if (!this.canAuditOperate() || !preview || !this.lastCorrectionFile || preview.toCorrect <= 0) {
+      return;
+    }
+    if (!this.bulkCorrectionReason.trim()) {
+      this.error.set(this.i18n.t('audit.quarantine.applyReasonRequired'));
+      return;
+    }
+    this.dialog
+      .open(ConfirmDialogComponent, {
+        data: {
+          message: this.i18n.t('audit.quarantine.applyConfirm', { count: preview.toCorrect }),
+          confirmLabel: this.i18n.t('audit.quarantine.applySheet'),
+        },
+        autoFocus: false,
+      })
+      .afterClosed()
+      .subscribe((confirmed) => {
+        if (confirmed) {
+          this.runApplyCorrectionSheet();
+        }
+      });
+  }
+
+  private runApplyCorrectionSheet(): void {
+    if (!this.lastCorrectionFile) {
+      return;
+    }
+    this.applyingSheet.set(true);
+    this.applyResult.set(null);
+    this.error.set(null);
+    this.api.mt101ApplyCorrectionSheet({
+      fragmentSetId: this.fragmentSetId,
+      connectionRef: this.connectionRef,
+      reason: this.bulkCorrectionReason,
+      ticketRef: this.bulkCorrectionTicketRef,
+      file: this.lastCorrectionFile,
+    }).subscribe({
+      next: (result) => {
+        this.applyResult.set(result);
+        this.correctionPreview.set(null);
+        this.applyingSheet.set(false);
+        // La cuarentena cambio: refresca la lista y el resumen por causa.
+        this.list();
+      },
+      error: (err) => {
+        this.error.set(err?.error?.message || this.i18n.t('audit.quarantine.applyError'));
+        this.applyingSheet.set(false);
+      },
+    });
+  }
+
   clearCorrectionPreview(): void {
     this.correctionPreview.set(null);
+    this.lastCorrectionFile = null;
+  }
+
+  clearApplyResult(): void {
+    this.applyResult.set(null);
   }
 
   /** v60: carga la lista detallada de conflictos de pago del set (on-demand desde la alerta). */
