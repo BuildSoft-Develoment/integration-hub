@@ -1336,7 +1336,7 @@ export const es = {
   'audit.quarantine.loadLote': 'Cargar lote',
   'audit.quarantine.build': 'Construir cuarentena',
   'audit.quarantine.buildConfirm': 'Confirmar construccion?',
-  'audit.quarantine.list': 'Listar',
+  'audit.quarantine.advancedFilters': 'Filtros avanzados',
   'audit.quarantine.filterStatus': 'Estado',
   'audit.quarantine.filterHash': 'Hash archivo',
   'audit.quarantine.filterRow': 'Fila del archivo',

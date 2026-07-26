@@ -9,10 +9,19 @@
 .q__risk-pill--high { color:var(--ih-status-warning); border-color:var(--ih-status-warning); }
 .q__risk-pill--critical { color:var(--ih-status-error); border-color:var(--ih-status-error); }
 .q__risk-detail { margin:0; color:var(--ih-text-soft); font-size:.78rem; }
-.q__search { display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; }
+.q__search { display:flex; gap:.6rem; flex-wrap:wrap; align-items:flex-end; }
 .q__search mat-form-field { width:13rem; }
 .q__filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(11rem,1fr)); gap:.6rem; align-items:center; }
-.q__actions { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+.q__actions { display:flex; gap:.5rem; flex-wrap:wrap; align-items:flex-end; }
+/* Zona 3: barra de acciones (correccion | gobernado), alineada a la base del input. */
+.q__toolbar { display:flex; gap:.5rem; flex-wrap:wrap; align-items:flex-end; }
+.q__div { width:1px; align-self:stretch; min-height:2rem; background:var(--ih-border); margin:0 .35rem; }
+.q__reason-field { width:12rem; }
+/* Zona 4: filtros avanzados plegados (las causas son el filtro principal). */
+.q__advfilters { border:1px solid var(--ih-border); border-radius:8px; padding:.25rem .75rem; }
+.q__advfilters > summary { cursor:pointer; font-size:.82rem; font-weight:600; color:var(--ih-text-soft); padding:.4rem .1rem; list-style-position:inside; }
+.q__advfilters[open] > summary { margin-bottom:.5rem; }
+.q__filter-actions { display:flex; justify-content:flex-end; gap:.5rem; margin-top:.6rem; }
 .q__reason { max-width:28rem; width:100%; }
 .q__danger--armed { --mdc-outlined-button-label-text-color:var(--ih-status-error); --mdc-outlined-button-outline-color:var(--ih-status-error); }
 .q__confirm { border:1px solid var(--ih-status-error); background:var(--ih-status-error-bg); border-radius:8px; padding:.75rem .9rem; display:flex; flex-direction:column; gap:.5rem; }

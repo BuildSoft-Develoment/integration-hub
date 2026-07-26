@@ -33,72 +33,97 @@
         }
       </div>
 
+      <!-- Zona 1: contexto — qué lote miro. Cargar lote ya lista (loadLote -> list()), por eso no hay "Listar". -->
       <div class="q__search">
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('audit.quarantine.fieldExecution') }}</mat-label>
-          <input matInput type="number" min="1" [(ngModel)]="processExecutionId" placeholder="123" (keyup.enter)="loadLote()" />
-        </mat-form-field>
         <mat-form-field subscriptSizing="dynamic">
           <mat-label>{{ i18n.t('audit.quarantine.fieldSet') }}</mat-label>
           <input matInput [(ngModel)]="fragmentSetId" placeholder="E2E-123" (keyup.enter)="loadLote()" />
         </mat-form-field>
         <mat-form-field subscriptSizing="dynamic">
+          <mat-label>{{ i18n.t('audit.quarantine.fieldExecution') }}</mat-label>
+          <input matInput type="number" min="1" [(ngModel)]="processExecutionId" placeholder="123" (keyup.enter)="loadLote()" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic">
           <mat-label>{{ i18n.t('audit.common.connection') }}</mat-label>
           <input matInput [(ngModel)]="connectionRef" placeholder="default" />
         </mat-form-field>
-        @if (canAuditOperate()) {
-          <mat-form-field subscriptSizing="dynamic">
-            <mat-label>{{ i18n.t('audit.quarantine.fieldRequestReason') }}</mat-label>
-            <input matInput [(ngModel)]="rebuildRequestReason" placeholder="INC-123" />
-          </mat-form-field>
-        }
         <div class="q__actions">
           <button mat-flat-button color="primary" type="button" (click)="loadLote()" [disabled]="loading() || (!fragmentSetId.trim() && !processExecutionId.trim())">{{ i18n.t('audit.quarantine.loadLote') }}</button>
-          @if (canAuditOperate()) {
-            <button mat-stroked-button type="button" [class.q__danger--armed]="actions.armed() === 'quarantine:build'" [attr.aria-pressed]="actions.armed() === 'quarantine:build'" (click)="confirmBuild()" [disabled]="loading() || !fragmentSetId.trim()">
-              {{ actions.armed() === 'quarantine:build' ? i18n.t('audit.quarantine.buildConfirm') : i18n.t('audit.quarantine.build') }}
-            </button>
-          }
-          <button mat-stroked-button type="button" (click)="list()" [disabled]="loading() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.list') }}</button>
-          @if (canAuditOperate()) {
-            <button mat-flat-button color="primary" type="button" (click)="requestRebuild()" [disabled]="loading() || !!rebuildRun() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.runRequest') }}</button>
-          }
         </div>
       </div>
 
-      <div class="q__filters">
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('audit.quarantine.filterStatus') }}</mat-label>
-          <input matInput [(ngModel)]="statusFilter" placeholder="QUARANTINED" (keyup.enter)="list()" />
-        </mat-form-field>
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('audit.quarantine.filterHash') }}</mat-label>
-          <input matInput [(ngModel)]="sourceFileHashFilter" placeholder="SHA-256" (keyup.enter)="list()" />
-        </mat-form-field>
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('audit.quarantine.filterRow') }}</mat-label>
-          <input matInput type="number" min="1" [(ngModel)]="sourceRecordNumberFilter" placeholder="847192" (keyup.enter)="list()" />
-        </mat-form-field>
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>{{ i18n.t('audit.quarantine.filterRule') }}</mat-label>
-          <input matInput [(ngModel)]="ruleCodeFilter" placeholder="STRUCT.CHARGES" (keyup.enter)="list()" />
-        </mat-form-field>
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>:20:</mat-label>
-          <input matInput [(ngModel)]="sendersReferenceFilter" placeholder="P16944" (keyup.enter)="list()" />
-        </mat-form-field>
-        <mat-form-field subscriptSizing="dynamic">
-          <mat-label>:21:</mat-label>
-          <input matInput [(ngModel)]="transactionReferenceFilter" placeholder="TX847192" (keyup.enter)="list()" />
-        </mat-form-field>
-        <div class="q__actions">
+      <!-- Zona 3: acciones de cuarentena — correccion | gobernado (separados por divisor). -->
+      <div class="q__toolbar">
+        <button mat-stroked-button type="button" (click)="exportCorrectionSheet()" [disabled]="exportingSheet() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.exportSheet') }}</button>
+        <button mat-stroked-button type="button" (click)="correctionFileInput.click()" [disabled]="previewingSheet() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.importSheet') }}</button>
+        <input #correctionFileInput type="file" accept=".xlsx" hidden (change)="onCorrectionFile($event)" />
+        @if (canAuditOperate()) {
+          <span class="q__div"></span>
+          <button mat-stroked-button type="button" [class.q__danger--armed]="actions.armed() === 'quarantine:build'" [attr.aria-pressed]="actions.armed() === 'quarantine:build'" (click)="confirmBuild()" [disabled]="loading() || !fragmentSetId.trim()">
+            {{ actions.armed() === 'quarantine:build' ? i18n.t('audit.quarantine.buildConfirm') : i18n.t('audit.quarantine.build') }}
+          </button>
+          <mat-form-field subscriptSizing="dynamic" class="q__reason-field">
+            <mat-label>{{ i18n.t('audit.quarantine.fieldRequestReason') }}</mat-label>
+            <input matInput [(ngModel)]="rebuildRequestReason" placeholder="INC-123" />
+          </mat-form-field>
+          <button mat-flat-button color="primary" type="button" (click)="requestRebuild()" [disabled]="loading() || !!rebuildRun() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.runRequest') }}</button>
+        }
+      </div>
+
+      <!-- Zona 4: filtrado — las causas son el filtro principal; los 6 campos, avanzados y plegados. -->
+      @if (causeSummary().length) {
+        <div class="q__causes">
+          <span class="q__causes-title">{{ i18n.t('audit.quarantine.causesTitle') }}</span>
+          <div class="q__causes-chips">
+            @for (cause of causeSummary(); track cause.ruleCode) {
+              <button
+                type="button"
+                class="q__cause"
+                [class.q__cause--active]="ruleCodeFilter === cause.ruleCode"
+                (click)="filterByCause(cause.ruleCode)"
+                [attr.title]="(cause.ruleSet || '') + ' · filas ' + (cause.minSourceRecordNumber ?? '?') + '-' + (cause.maxSourceRecordNumber ?? '?')"
+              >
+                <span class="q__cause-code">{{ cause.ruleCode }}</span>
+                <span class="q__cause-count">{{ cause.count }}</span>
+              </button>
+            }
+          </div>
+        </div>
+      }
+
+      <details class="q__advfilters">
+        <summary>{{ i18n.t('audit.quarantine.advancedFilters') }}</summary>
+        <div class="q__filters">
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('audit.quarantine.filterStatus') }}</mat-label>
+            <input matInput [(ngModel)]="statusFilter" placeholder="QUARANTINED" (keyup.enter)="list()" />
+          </mat-form-field>
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('audit.quarantine.filterHash') }}</mat-label>
+            <input matInput [(ngModel)]="sourceFileHashFilter" placeholder="SHA-256" (keyup.enter)="list()" />
+          </mat-form-field>
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('audit.quarantine.filterRow') }}</mat-label>
+            <input matInput type="number" min="1" [(ngModel)]="sourceRecordNumberFilter" placeholder="847192" (keyup.enter)="list()" />
+          </mat-form-field>
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('audit.quarantine.filterRule') }}</mat-label>
+            <input matInput [(ngModel)]="ruleCodeFilter" placeholder="STRUCT.CHARGES" (keyup.enter)="list()" />
+          </mat-form-field>
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>:20:</mat-label>
+            <input matInput [(ngModel)]="sendersReferenceFilter" placeholder="P16944" (keyup.enter)="list()" />
+          </mat-form-field>
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>:21:</mat-label>
+            <input matInput [(ngModel)]="transactionReferenceFilter" placeholder="TX847192" (keyup.enter)="list()" />
+          </mat-form-field>
+        </div>
+        <div class="q__filter-actions">
           <button mat-stroked-button type="button" (click)="list()" [disabled]="loading() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.applyFilters') }}</button>
           <button mat-button type="button" (click)="clearFilters()" [disabled]="loading() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.clearFilters') }}</button>
-          <button mat-stroked-button type="button" (click)="exportCorrectionSheet()" [disabled]="exportingSheet() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.exportSheet') }}</button>
-          <button mat-stroked-button type="button" (click)="correctionFileInput.click()" [disabled]="previewingSheet() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.importSheet') }}</button>
-          <input #correctionFileInput type="file" accept=".xlsx" hidden (change)="onCorrectionFile($event)" />
         </div>
-      </div>
+      </details>
 
       @if (correctionPreview(); as preview) {
         <div class="q__preview" role="status">
@@ -168,26 +193,6 @@
               <p class="q__muted">{{ i18n.t('audit.quarantine.applyIssuesTruncated') }}</p>
             }
           }
-        </div>
-      }
-
-      @if (causeSummary().length) {
-        <div class="q__causes">
-          <span class="q__causes-title">{{ i18n.t('audit.quarantine.causesTitle') }}</span>
-          <div class="q__causes-chips">
-            @for (cause of causeSummary(); track cause.ruleCode) {
-              <button
-                type="button"
-                class="q__cause"
-                [class.q__cause--active]="ruleCodeFilter === cause.ruleCode"
-                (click)="filterByCause(cause.ruleCode)"
-                [attr.title]="(cause.ruleSet || '') + ' · filas ' + (cause.minSourceRecordNumber ?? '?') + '-' + (cause.maxSourceRecordNumber ?? '?')"
-              >
-                <span class="q__cause-code">{{ cause.ruleCode }}</span>
-                <span class="q__cause-count">{{ cause.count }}</span>
-              </button>
-            }
-          </div>
         </div>
       }
 
