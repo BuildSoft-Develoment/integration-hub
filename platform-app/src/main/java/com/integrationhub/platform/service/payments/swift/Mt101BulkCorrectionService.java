@@ -173,11 +173,16 @@ public class Mt101BulkCorrectionService {
         return result;
     }
 
-    /** Aplica una fila TO_CORRECT via correctRow y traduce cada excepcion a un outcome (sin abortar el lote). */
+    /**
+     * Aplica una fila TO_CORRECT via correctRow y traduce cada excepcion a un outcome. <b>Todo</b> el trabajo por
+     * fila (incluido el parseo/patch) va dentro del try y el catch final es {@link RuntimeException}: ninguna fila
+     * —por rara que sea— puede abortar el lote; se audita o se reporta como omitida/fallida (fail-loud por fila,
+     * nunca un 500 que pierda el reporte de lo ya aplicado).
+     */
     private void applyOne(String connectionRef, String set, String reason, String ticketRef, String correctedBy,
                           SheetRow row, PreviewRow classified, StagingPayload current, ApplyResult result) {
-        var patchJson = jsonConfigurationMapper.toJson(computePatch(current.payloadJson(), row));
         try {
+            var patchJson = jsonConfigurationMapper.toJson(computePatch(current.payloadJson(), row));
             correctionService.correctRow(connectionRef, set,
                     row.stringValue(Mt101CorrectionSheetService.COL_SOURCE_FILE_HASH),
                     classified.recordNumber() == null ? -1L : classified.recordNumber(),
@@ -191,7 +196,7 @@ public class Mt101BulkCorrectionService {
         } catch (Mt101StagingCorrectionService.RowLockedForRebuildException locked) {
             result.addSkipped(classified.stagingId(), classified.recordNumber(), classified.sendersReference(),
                     "LOCKED_BY_REBUILD");
-        } catch (IllegalArgumentException | IllegalStateException error) {
+        } catch (RuntimeException error) {
             result.addFailed(classified.stagingId(), classified.recordNumber(), classified.sendersReference(),
                     error.getMessage());
         }
