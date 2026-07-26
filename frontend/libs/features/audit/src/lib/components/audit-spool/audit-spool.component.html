@@ -53,7 +53,7 @@
         <div class="spool__filters">
           <mat-form-field subscriptSizing="dynamic">
             <mat-label>{{ i18n.t('audit.spool.deadLimit') }}</mat-label>
-            <input matInput type="number" min="1" max="1000" [(ngModel)]="deadLimit" />
+            <input matInput type="number" min="1" max="1000" [(ngModel)]="deadLimit" (change)="loadDead()" />
           </mat-form-field>
           @if (canAuditAdmin()) {
             <mat-form-field subscriptSizing="dynamic">
@@ -67,7 +67,6 @@
           }
         </div>
         <div class="spool__actions">
-          <button mat-stroked-button type="button" (click)="loadDead()" [disabled]="loading()">{{ i18n.t('audit.spool.viewDead') }}</button>
           @if (canAuditAdmin()) {
             <button mat-stroked-button type="button" [class.spool__danger--armed]="actions.armed() === 'spool:cleanup'" [attr.aria-pressed]="actions.armed() === 'spool:cleanup'" (click)="confirmCleanup()" [disabled]="loading()">
               {{ actions.armed() === 'spool:cleanup' ? i18n.t('audit.spool.cleanupConfirm') : i18n.t('audit.spool.cleanup') }}

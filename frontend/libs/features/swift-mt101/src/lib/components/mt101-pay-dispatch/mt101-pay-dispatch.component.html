@@ -8,12 +8,6 @@
 
   <div class="pd__actions">
     <button mat-stroked-button type="button" (click)="load()" [disabled]="loading()">{{ i18n.t('audit.common.refresh') }}</button>
-    @if (canAuditOperate()) {
-      <mat-form-field subscriptSizing="dynamic" class="pd__reason">
-        <mat-label>{{ i18n.t('audit.payDispatch.reasonLabel') }}</mat-label>
-        <input matInput [(ngModel)]="reason" [placeholder]="i18n.t('audit.payDispatch.reasonHint')" />
-      </mat-form-field>
-    }
   </div>
 
   @if (message()) {
@@ -80,14 +74,35 @@
                 } @else { - }
               </td>
               @if (canAuditOperate()) {
-                <td>
+                <td class="pd__row-actions">
+                  @if (row.sendersReference) {
+                    <a mat-button [routerLink]="['/audit/record-lineage']" [queryParams]="{ key: 'paymentReference', value: row.sendersReference, processExecutionId: row.processExecutionId }">{{ i18n.t('audit.lookup.viewLineage') }} ↗</a>
+                  }
                   <button mat-stroked-button type="button"
-                          [disabled]="!reason.trim() || reconciling() !== null"
+                          [disabled]="reconciling() !== null"
                           [title]="i18n.t('audit.payDispatch.reconcileHint')"
-                          (click)="reconcile(row)">{{ i18n.t('audit.payDispatch.reconcile') }}</button>
+                          (click)="startReconcile(row)">{{ i18n.t('audit.payDispatch.reconcile') }}</button>
                 </td>
               }
             </tr>
+            @if (activeKey() === row.dispatchKey) {
+              <tr class="pd__inline-row">
+                <td colspan="7">
+                  <div class="pd__reconcile">
+                    <strong>{{ i18n.t('audit.payDispatch.reconcileTitle') }} — <span class="pd__mono">{{ row.sendersReference || row.dispatchKey }}</span></strong>
+                    <p class="ih-muted">{{ i18n.t('audit.payDispatch.reconcileHint') }}</p>
+                    <div class="pd__reconcile-form">
+                      <mat-form-field subscriptSizing="dynamic" class="pd__reason">
+                        <mat-label>{{ i18n.t('audit.payDispatch.reasonLabel') }}</mat-label>
+                        <input matInput [(ngModel)]="reason" [placeholder]="i18n.t('audit.payDispatch.reasonHint')" [disabled]="reconciling() !== null" (keyup.enter)="reconcile(row)" />
+                      </mat-form-field>
+                      <button mat-flat-button color="primary" type="button" [disabled]="!reason.trim() || reconciling() !== null" (click)="reconcile(row)">{{ i18n.t('audit.payDispatch.reconcileConfirm') }}</button>
+                      <button mat-button type="button" [disabled]="reconciling() !== null" (click)="cancelReconcile()">{{ i18n.t('audit.common.cancel') }}</button>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            }
           }
         </tbody>
       </table>

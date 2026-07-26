@@ -1,5 +1,7 @@
 .lookup { display:flex; flex-direction:column; gap:1rem; }
     .lookup__search { display:flex; gap:.6rem; flex-wrap:wrap; align-items:flex-end; }
+    /* #5: rotulo del modo de busqueda inversa (fila logica / linea fisica / hoja+fila Excel). */
+    .lookup__mode-label { margin:.5rem 0 -.1rem; font-size:.7rem; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ih-text-soft); }
     .lookup__search mat-form-field { width:12rem; }
     .lookup__actions { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
     .lookup__table { overflow:auto; border:1px solid var(--ih-border); border-radius:8px; }

@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { RouterLink } from '@angular/router';
 import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { RelativeTimePipe } from '@integration-hub/shared/ui';
 import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
@@ -26,6 +27,7 @@ import { AuditWorkspaceNavComponent } from '@integration-hub/shared/audit-kit';
     MatButtonModule,
     MatFormFieldModule,
     MatInputModule,
+    RouterLink,
     AuditWorkspaceNavComponent,
     RelativeTimePipe,
   ],
@@ -47,6 +49,9 @@ export class Mt101PayDispatchComponent {
   // D2: reconcile gobernado. Motivo obligatorio (evidencia); una clave en vuelo a la vez.
   reason = '';
   readonly reconciling = signal<string | null>(null);
+  // #2 (UX): la fila con el panel de motivo abierto (una a la vez), pegado a su accion. Separado de
+  // reconciling (= la clave con la peticion en vuelo).
+  readonly activeKey = signal<string | null>(null);
 
   /** Conteo por estado como pares ordenados, para el desglose del resumen. */
   readonly statusEntries = computed(() => {
@@ -86,6 +91,22 @@ export class Mt101PayDispatchComponent {
     });
   }
 
+  /** #2: abre el panel inline de motivo para la fila (una a la vez), pegado a su boton. */
+  startReconcile(row: Mt101PayDispatchIntent): void {
+    if (!this.canAuditOperate()) {
+      return;
+    }
+    this.activeKey.set(row.dispatchKey);
+    this.reason = '';
+    this.error.set(null);
+    this.message.set(null);
+  }
+
+  cancelReconcile(): void {
+    this.activeKey.set(null);
+    this.reason = '';
+  }
+
   /**
    * D2 (gobernado): reconcilia una intención atascada desde el terminal del archive que STATUS ya dejó. Motivo
    * obligatorio. Traduce el outcome del backend a un mensaje y recarga (si algo cambió).
@@ -104,6 +125,7 @@ export class Mt101PayDispatchComponent {
         if (result.outcome === 'RECONCILED') {
           this.message.set(this.i18n.t('audit.payDispatch.reconcileOk', { ref, status: result.newStatus ?? '' }));
           this.reason = '';
+          this.activeKey.set(null);
           this.load();
         } else {
           // NOT_STUCK / NO_EXECUTION / NO_TERMINAL: sin cambio, se explica por qué queda manual.

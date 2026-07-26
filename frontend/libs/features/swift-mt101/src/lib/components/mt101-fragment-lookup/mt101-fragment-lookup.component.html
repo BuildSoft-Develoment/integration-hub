@@ -6,6 +6,7 @@
         <p class="ih-muted">{{ i18n.t('audit.lookup.subtitle') }}</p>
       </div>
 
+      <p class="lookup__mode-label">{{ i18n.t('audit.lookup.modeMain') }}</p>
       <div class="lookup__search">
         <mat-form-field subscriptSizing="dynamic">
           <mat-label>{{ i18n.t('audit.lookup.fieldRow') }}</mat-label>
@@ -38,6 +39,7 @@
       </div>
 
       <!-- G-A (búsqueda inversa enriquecida): "archivo + línea física" → registro(s) + cuarentena; auto-llena la fila. -->
+      <p class="lookup__mode-label">{{ i18n.t('audit.lookup.modePhysical') }}</p>
       <div class="lookup__search">
         <mat-form-field subscriptSizing="dynamic">
           <mat-label>{{ i18n.t('audit.lookup.fieldPhysicalLine') }}</mat-label>
@@ -52,6 +54,7 @@
       </div>
 
       <!-- #4 (Excel): "archivo + hoja + fila Excel" → registro(s). Reusa la tabla de matches de abajo. -->
+      <p class="lookup__mode-label">{{ i18n.t('audit.lookup.modeSheet') }}</p>
       <div class="lookup__search">
         <mat-form-field subscriptSizing="dynamic">
           <mat-label>{{ i18n.t('audit.lookup.fieldSheetName') }}</mat-label>
