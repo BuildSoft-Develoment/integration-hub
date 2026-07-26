@@ -1300,6 +1300,7 @@ export const es = {
   'audit.spool.retentionDays': 'Retencion SENT dias',
   'audit.spool.cleanupLimit': 'Cleanup limit',
   'audit.spool.cleanup': 'Limpiar SENT',
+  'audit.spool.cleanupGroup': 'Limpieza (admin)',
   'audit.spool.cleanupConfirm': 'Confirmar eliminacion?',
   'audit.spool.retry': 'Reprocesar',
   'audit.spool.retryAria': 'Reprocesar evento {id}',

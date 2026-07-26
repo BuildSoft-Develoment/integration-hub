@@ -55,7 +55,11 @@
             <mat-label>{{ i18n.t('audit.spool.deadLimit') }}</mat-label>
             <input matInput type="number" min="1" max="1000" [(ngModel)]="deadLimit" (change)="loadDead()" />
           </mat-form-field>
-          @if (canAuditAdmin()) {
+        </div>
+        @if (canAuditAdmin()) {
+          <!-- #4: los params de limpieza (retencion + limite) viven JUNTO a su boton, no mezclados con el limite DEAD. -->
+          <div class="spool__cleanup">
+            <span class="spool__cleanup-label">{{ i18n.t('audit.spool.cleanupGroup') }}</span>
             <mat-form-field subscriptSizing="dynamic">
               <mat-label>{{ i18n.t('audit.spool.retentionDays') }}</mat-label>
               <input matInput type="number" min="1" [(ngModel)]="retentionDays" />
@@ -64,15 +68,11 @@
               <mat-label>{{ i18n.t('audit.spool.cleanupLimit') }}</mat-label>
               <input matInput type="number" min="1" [(ngModel)]="cleanupLimit" />
             </mat-form-field>
-          }
-        </div>
-        <div class="spool__actions">
-          @if (canAuditAdmin()) {
             <button mat-stroked-button type="button" [class.spool__danger--armed]="actions.armed() === 'spool:cleanup'" [attr.aria-pressed]="actions.armed() === 'spool:cleanup'" (click)="confirmCleanup()" [disabled]="loading()">
               {{ actions.armed() === 'spool:cleanup' ? i18n.t('audit.spool.cleanupConfirm') : i18n.t('audit.spool.cleanup') }}
             </button>
-          }
-        </div>
+          </div>
+        }
       </div>
 
       @if (message()) { <p class="spool__ok" role="status">{{ message() }}</p> }

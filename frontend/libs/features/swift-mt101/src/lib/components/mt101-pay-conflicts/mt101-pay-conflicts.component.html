@@ -133,17 +133,27 @@
                           {{ i18n.t('audit.payConflicts.retrySettings') }}
                         </button>
                       } @else if (makerCheckerEnabled()) {
-                        <!-- B: SOLICITAR solo si el usuario tiene rol maker. -->
+                        <!-- B: SOLICITAR solo si el usuario tiene rol maker. El primario (relleno) sigue al estado:
+                             sin pendiente -> Solicitar; con pendiente -> Aprobar (abajo), y "Reemplazar" queda neutro. -->
                         @if (canRequestAck()) {
-                          <button mat-flat-button color="primary" type="button"
-                                  [disabled]="!resolveReason.trim() || !resolveTicket.trim() || resolveBusy()"
-                                  (click)="requestAck(c)">
-                            {{ hasPendingAck(c) ? i18n.t('audit.payConflicts.requestAckReplace') : i18n.t('audit.payConflicts.requestAck') }}
-                          </button>
+                          @if (hasPendingAck(c)) {
+                            <button mat-stroked-button type="button"
+                                    [disabled]="!resolveReason.trim() || !resolveTicket.trim() || resolveBusy()"
+                                    (click)="requestAck(c)">
+                              {{ i18n.t('audit.payConflicts.requestAckReplace') }}
+                            </button>
+                          } @else {
+                            <button mat-flat-button color="primary" type="button"
+                                    [disabled]="!resolveReason.trim() || !resolveTicket.trim() || resolveBusy()"
+                                    (click)="requestAck(c)">
+                              {{ i18n.t('audit.payConflicts.requestAck') }}
+                            </button>
+                          }
                         }
-                        <!-- B: APROBAR solo si hay PENDING y el usuario tiene rol checker (y no es el maker). -->
+                        <!-- B: APROBAR solo si hay PENDING y el usuario tiene rol checker (y no es el maker). Con pendiente,
+                             aprobar es LA accion del momento -> primario relleno (unico azul). -->
                         @if (hasPendingAck(c) && canApproveAck()) {
-                          <button mat-stroked-button color="primary" type="button"
+                          <button mat-flat-button color="primary" type="button"
                                   [disabled]="resolveBusy() || isMakerOf(c)"
                                   (click)="approveAck(c)"
                                   [matTooltip]="isMakerOf(c) ? i18n.t('audit.payConflicts.approveAckSelfBlocked') : i18n.t('audit.payConflicts.approveAckHint')">
