@@ -143,10 +143,12 @@ export class RecordLineageComponent {
     this.searchByRecord();
   }
 
-  pivotSourceRow(sourceFileHash: string, recordNumber: number): void {
+  pivotSourceRow(sourceFileHash: string, recordNumber: number, processExecutionId: number | null): void {
     this.mode.set('sourceRow');
     this.sourceFileHash = sourceFileHash;
     this.recordNumber = String(recordNumber);
+    // Acota a la ejecucion del hito (evita mezclar reprocesos del mismo archivo+fila); '' = todas.
+    this.processExecutionId = processExecutionId != null ? String(processExecutionId) : '';
     this.searchBySourceRow();
   }
 

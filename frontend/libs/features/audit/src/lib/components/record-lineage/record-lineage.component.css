@@ -1,6 +1,6 @@
 .lineage { display:flex; flex-direction:column; gap:1rem; }
     .lineage__search { display:flex; flex-direction:column; gap:.75rem; }
-    .lineage__inputs { display:flex; gap:.75rem; flex-wrap:wrap; align-items:center; }
+    .lineage__inputs { display:flex; gap:.75rem; flex-wrap:wrap; align-items:flex-end; }
     .lineage__inputs mat-form-field { width:15rem; }
     .lineage__tl { display:flex; flex-direction:column; }
     .lineage__row { display:grid; grid-template-columns:1.7rem minmax(0,1fr); gap:.65rem; }

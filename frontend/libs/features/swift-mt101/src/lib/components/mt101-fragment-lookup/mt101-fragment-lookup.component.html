@@ -192,7 +192,7 @@
                   </td>
                   <td>
                     @if (row.fragmentSetId) {
-                      <a mat-button [routerLink]="['/audit/mt101-quarantine']" [queryParams]="{ fragmentSetId: row.fragmentSetId }">{{ i18n.t('audit.lookup.goQuarantine') }}</a>
+                      <a mat-button [routerLink]="['/swift-mt101/quarantine']" [queryParams]="{ fragmentSetId: row.fragmentSetId }">{{ i18n.t('audit.lookup.goQuarantine') }}</a>
                     }
                   </td>
                 </tr>

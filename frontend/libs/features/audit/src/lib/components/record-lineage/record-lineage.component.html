@@ -84,12 +84,12 @@
                   @if (entry.archiveId) { <button type="button" class="lineage__key lineage__key--btn" [title]="i18n.t('audit.lineage.pivotHint')" (click)="pivotKey('archiveId', entry.archiveId)">archive {{ entry.archiveId }}</button> }
                   @if (entry.gatewayReference) { <button type="button" class="lineage__key lineage__key--btn" [title]="i18n.t('audit.lineage.pivotHint')" (click)="pivotKey('gatewayReference', entry.gatewayReference)">gateway {{ entry.gatewayReference }}</button> }
                   @if (entry.sourceFileHash && entry.recordNumber !== null) {
-                    <button type="button" class="lineage__key lineage__key--btn" [title]="i18n.t('audit.lineage.pivotHint')" (click)="pivotSourceRow(entry.sourceFileHash, entry.recordNumber)">{{ entry.sourceFileName || entry.sourceFileHash }} #{{ entry.recordNumber }}</button>
+                    <button type="button" class="lineage__key lineage__key--btn" [title]="i18n.t('audit.lineage.pivotHint')" (click)="pivotSourceRow(entry.sourceFileHash, entry.recordNumber, entry.processExecutionId)">{{ entry.sourceFileName || entry.sourceFileHash }} #{{ entry.recordNumber }}</button>
                   } @else if (entry.sourceFileName || entry.recordNumber !== null) {
                     <span class="lineage__key">{{ entry.sourceFileName || entry.sourceFileHash }} #{{ entry.recordNumber }}</span>
                   }
                   @if (entry.sourceFileHash && entry.recordNumber !== null) {
-                    <a class="lineage__link" [routerLink]="['/audit/mt101-fragments']" [queryParams]="{ sourceFileHash: entry.sourceFileHash, recordNumber: entry.recordNumber }">{{ i18n.t('audit.lineage.viewFragment') }}</a>
+                    <a class="lineage__link" [routerLink]="['/swift-mt101/fragments']" [queryParams]="{ sourceFileHash: entry.sourceFileHash, recordNumber: entry.recordNumber, processExecutionId: entry.processExecutionId }">{{ i18n.t('audit.lineage.viewFragment') }}</a>
                   }
                 </span>
               </div>

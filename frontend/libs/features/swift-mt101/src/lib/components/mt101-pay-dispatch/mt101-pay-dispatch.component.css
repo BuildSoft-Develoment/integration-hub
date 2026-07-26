@@ -1,5 +1,5 @@
 .pd { display:flex; flex-direction:column; gap:1rem; }
-.pd__actions { display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; }
+.pd__actions { display:flex; gap:.6rem; flex-wrap:wrap; align-items:flex-end; }
 .pd__reason { width:22rem; max-width:100%; }
 .pd__msg { padding:.75rem; color:var(--ih-accent-strong); }
 .pd__cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(7rem,1fr)); gap:.6rem; }

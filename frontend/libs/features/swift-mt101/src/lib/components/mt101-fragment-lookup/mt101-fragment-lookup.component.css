@@ -1,5 +1,5 @@
 .lookup { display:flex; flex-direction:column; gap:1rem; }
-    .lookup__search { display:flex; gap:.6rem; flex-wrap:wrap; align-items:center; }
+    .lookup__search { display:flex; gap:.6rem; flex-wrap:wrap; align-items:flex-end; }
     .lookup__search mat-form-field { width:12rem; }
     .lookup__actions { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
     .lookup__table { overflow:auto; border:1px solid var(--ih-border); border-radius:8px; }
