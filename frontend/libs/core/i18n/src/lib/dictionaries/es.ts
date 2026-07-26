@@ -1420,7 +1420,7 @@ export const es = {
   'audit.payConflicts.evidenceTitle': 'Confirmaciones del banco',
   'audit.payConflicts.evidenceEmpty': 'No hay confirmaciones del banco para esta referencia.',
   'audit.payConflicts.evidenceError': 'No se pudieron cargar las confirmaciones.',
-  'audit.payConflicts.resolve': 'Resolver',
+  'audit.payConflicts.resolve': 'Reconocer',
   'audit.payConflicts.resolveTitle': 'Reconocer conflicto',
   'audit.payConflicts.resolveHint': 'Limpia el conflicto conservando el terminal actual del ledger (NO cambia el pago). Registra quién y por qué.',
   'audit.payConflicts.resolveReason': 'Motivo',
@@ -1467,7 +1467,7 @@ export const es = {
   // D2: reconcile gobernado
   'audit.payDispatch.reasonLabel': 'Motivo de conciliación',
   'audit.payDispatch.reasonHint': 'Obligatorio para conciliar (evidencia)',
-  'audit.payDispatch.reconcile': 'Reconciliar',
+  'audit.payDispatch.reconcile': 'Conciliar',
   'audit.payDispatch.reconcileTitle': 'Conciliar intención',
   'audit.payDispatch.reconcileConfirm': 'Confirmar conciliación',
   'audit.payDispatch.reconcileHint':

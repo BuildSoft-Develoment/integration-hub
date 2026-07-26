@@ -1420,7 +1420,7 @@ export const en = {
   'audit.payConflicts.evidenceTitle': 'Bank confirmations',
   'audit.payConflicts.evidenceEmpty': 'No bank confirmations recorded for this reference.',
   'audit.payConflicts.evidenceError': 'Could not load the confirmations.',
-  'audit.payConflicts.resolve': 'Resolve',
+  'audit.payConflicts.resolve': 'Acknowledge',
   'audit.payConflicts.resolveTitle': 'Acknowledge conflict',
   'audit.payConflicts.resolveHint': 'Clears the conflict keeping the current ledger terminal (does NOT change the payment). Records who and why.',
   'audit.payConflicts.resolveReason': 'Reason',
