@@ -67,3 +67,14 @@ td { font-size:.86rem; }
 .q__cause--active { border-color:var(--ih-accent); background:color-mix(in srgb, var(--ih-accent) 12%, var(--ih-surface)); }
 .q__cause-code { font-weight:600; }
 .q__cause-count { font-variant-numeric:tabular-nums; font-weight:700; background:var(--ih-status-warning-bg); color:var(--ih-status-warning); padding:0 .4rem; border-radius:999px; font-size:.72rem; }
+
+/* ADR-020 (C2): card del dry-run del import de la planilla. */
+.q__preview { display:flex; flex-direction:column; gap:.45rem; margin:.5rem 0; padding:.6rem .8rem; border:1px solid var(--ih-border); border-radius:12px; background:var(--ih-surface); }
+.q__preview-head { display:flex; align-items:center; justify-content:space-between; gap:.5rem; }
+.q__preview-counts { display:flex; align-items:center; flex-wrap:wrap; gap:.5rem; }
+.q__pv { font-size:.82rem; font-weight:700; padding:.2rem .55rem; border-radius:999px; background:color-mix(in srgb, var(--ih-surface) 80%, transparent); }
+.q__pv--ok { background:var(--ih-status-success-bg); color:var(--ih-status-success); }
+.q__pv--muted { color:var(--ih-text-soft); }
+.q__pv--danger { background:var(--ih-status-error-bg); color:var(--ih-status-error); }
+.q__pv-total { color:var(--ih-text-soft); font-size:.8rem; }
+.q__preview-list { margin:.1rem 0 0; padding-left:1.1rem; font-size:.8rem; color:var(--ih-text-soft); max-height:9rem; overflow:auto; }

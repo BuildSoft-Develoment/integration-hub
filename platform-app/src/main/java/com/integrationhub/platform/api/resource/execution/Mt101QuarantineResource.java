@@ -1,5 +1,6 @@
 package com.integrationhub.platform.api.resource.execution;
 
+import com.integrationhub.platform.api.response.execution.Mt101CorrectionPreviewResponse;
 import com.integrationhub.platform.api.response.execution.Mt101FailedRecordResponse;
 import com.integrationhub.platform.api.response.execution.Mt101RuleSummaryResponse;
 import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRepository;
@@ -10,6 +11,7 @@ import com.integrationhub.platform.service.payments.swift.Mt101ReconciliationClo
 import com.integrationhub.platform.service.payments.swift.Mt101LoteService;
 import com.integrationhub.platform.service.payments.swift.Mt101QuarantineService;
 import com.integrationhub.platform.service.payments.swift.Mt101RebuildService;
+import com.integrationhub.platform.service.payments.swift.Mt101BulkCorrectionService;
 import com.integrationhub.platform.service.payments.swift.Mt101CorrectionSheetService;
 import com.integrationhub.platform.service.payments.swift.Mt101StagingCorrectionService;
 import jakarta.annotation.security.RolesAllowed;
@@ -28,6 +30,7 @@ import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.StreamingOutput;
+import java.io.InputStream;
 import jakarta.ws.rs.core.SecurityContext;
 
 import java.util.List;
@@ -56,6 +59,7 @@ public class Mt101QuarantineResource {
     private final Mt101PayUncertainResolutionService payUncertainResolutionService;
     private final Mt101ReconciliationCloseService reconciliationCloseService;
     private final Mt101CorrectionSheetService correctionSheetService;
+    private final Mt101BulkCorrectionService bulkCorrectionService;
 
     public Mt101QuarantineResource(Mt101QuarantineService service,
                                    Mt101RebuildService rebuildService,
@@ -64,7 +68,8 @@ public class Mt101QuarantineResource {
                                    Mt101CorrectiveLifecycleService correctiveLifecycleService,
                                    Mt101PayUncertainResolutionService payUncertainResolutionService,
                                    Mt101ReconciliationCloseService reconciliationCloseService,
-                                   Mt101CorrectionSheetService correctionSheetService) {
+                                   Mt101CorrectionSheetService correctionSheetService,
+                                   Mt101BulkCorrectionService bulkCorrectionService) {
         this.service = service;
         this.rebuildService = rebuildService;
         this.loteService = loteService;
@@ -73,6 +78,7 @@ public class Mt101QuarantineResource {
         this.payUncertainResolutionService = payUncertainResolutionService;
         this.reconciliationCloseService = reconciliationCloseService;
         this.correctionSheetService = correctionSheetService;
+        this.bulkCorrectionService = bulkCorrectionService;
     }
 
     /**
@@ -234,6 +240,29 @@ public class Mt101QuarantineResource {
         return Response.ok(stream)
                 .header("Content-Disposition", "attachment; filename=\"correccion-" + safeSet + suffix + ".xlsx\"")
                 .build();
+    }
+
+    /** ADR-020 (C2): dry-run del import de la planilla de correccion (body = XLSX). Read-only, no muta nada. */
+    @POST
+    @Path("/correction-sheet/preview")
+    @Consumes(MediaType.APPLICATION_OCTET_STREAM)
+    @Produces(MediaType.APPLICATION_JSON)
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR})
+    public Mt101CorrectionPreviewResponse previewCorrectionSheet(@QueryParam("connectionRef") String connectionRef,
+                                                                 @QueryParam("fragmentSetId") String fragmentSetId,
+                                                                 InputStream body) {
+        try {
+            var result = bulkCorrectionService.preview(connectionRef, fragmentSetId, body);
+            return new Mt101CorrectionPreviewResponse(
+                    result.total(), result.toCorrect(), result.unchanged(), result.conflicts(),
+                    result.editableColumns(),
+                    result.sample().stream()
+                            .map(row -> new Mt101CorrectionPreviewResponse.Row(row.stagingId(), row.recordNumber(),
+                                    row.sendersReference(), row.outcome(), row.reason(), row.changedFields()))
+                            .toList());
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
     }
 
     @POST

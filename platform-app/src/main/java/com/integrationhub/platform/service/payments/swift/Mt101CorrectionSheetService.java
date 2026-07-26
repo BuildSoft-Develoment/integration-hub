@@ -33,9 +33,20 @@ import java.util.Map;
 @ApplicationScoped
 public class Mt101CorrectionSheetService {
 
-    /** Columnas de identidad + diagnostico (prefijo {@code _} = no editable; el import las usa para re-matchear). */
+    // Nombres de las columnas de identidad + diagnostico (prefijo _ = no editable). UNICO dueno del formato:
+    // el export (writeSheet) las escribe y el import (parseSheet) las lee — sin duplicar literales en otra clase.
+    public static final String COL_STAGING_ID = "_stagingId";
+    public static final String COL_VERSION = "_version";
+    public static final String COL_SOURCE_FILE_HASH = "_sourceFileHash";
+    public static final String COL_RECORD_NUMBER = "_recordNumber";
+    public static final String COL_SENDERS_REFERENCE = "_sendersReference";
+    public static final String COL_RULE_CODE = "_ruleCode";
+    public static final String COL_ERROR = "_error";
+
+    /** Columnas de identidad + diagnostico, en orden (el import las reconoce por el prefijo {@code _}). */
     static final List<String> META_COLUMNS = List.of(
-            "_stagingId", "_version", "_sourceFileHash", "_recordNumber", "_sendersReference", "_ruleCode", "_error");
+            COL_STAGING_ID, COL_VERSION, COL_SOURCE_FILE_HASH, COL_RECORD_NUMBER, COL_SENDERS_REFERENCE,
+            COL_RULE_CODE, COL_ERROR);
 
     private static final int MAX_ROWS = 20000;
     private static final int BATCH = 500;
@@ -130,17 +141,106 @@ public class Mt101CorrectionSheetService {
 
     private ReadRecord toRecord(CorrectionSheetRow source, Map<String, Object> payload) {
         var values = new LinkedHashMap<String, Object>();
-        values.put("_stagingId", source.stagingId() == null ? "" : String.valueOf(source.stagingId()));
-        values.put("_version", String.valueOf(source.version()));
-        values.put("_sourceFileHash", nz(source.sourceFileHash()));
-        values.put("_recordNumber", source.recordNumber() == null ? "" : String.valueOf(source.recordNumber()));
-        values.put("_sendersReference", nz(source.sendersReference()));
-        values.put("_ruleCode", nz(source.ruleCode()));
-        values.put("_error", nz(source.message()));
+        values.put(COL_STAGING_ID, source.stagingId() == null ? "" : String.valueOf(source.stagingId()));
+        values.put(COL_VERSION, String.valueOf(source.version()));
+        values.put(COL_SOURCE_FILE_HASH, nz(source.sourceFileHash()));
+        values.put(COL_RECORD_NUMBER, source.recordNumber() == null ? "" : String.valueOf(source.recordNumber()));
+        values.put(COL_SENDERS_REFERENCE, nz(source.sendersReference()));
+        values.put(COL_RULE_CODE, nz(source.ruleCode()));
+        values.put(COL_ERROR, nz(source.message()));
         for (var entry : payload.entrySet()) {
             values.put(entry.getKey(), entry.getValue());
         }
         return new ReadRecord(values);
+    }
+
+    // ------------------------------------------------------------------ import: parseo header-driven (POI)
+
+    /**
+     * ADR-020 (C2/C3): parsea la planilla de correccion subida en filas por nombre de columna (header-driven).
+     * Este metodo es el DUENO del formato en lectura (simetrico a {@link #writeSheet}); el bulk-correction depende
+     * de el para el preview/apply. Fail-loud: rechaza una planilla que exceda {@value #MAX_ROWS} filas (no trunca
+     * en silencio filas del money-path). No usa el reader posicional de FILE_READ: la planilla es AUTO-DESCRIPTIVA
+     * (el header nombra las columnas dinamicas), asi que su lectura es una responsabilidad propia.
+     */
+    public List<SheetRow> parseSheet(java.io.InputStream xlsx) {
+        try (var workbook = org.apache.poi.ss.usermodel.WorkbookFactory.create(xlsx)) {
+            var sheet = workbook.getSheetAt(0);
+            if (sheet == null || sheet.getPhysicalNumberOfRows() == 0) {
+                throw new IllegalArgumentException("the uploaded correction sheet is empty");
+            }
+            var formatter = new org.apache.poi.ss.usermodel.DataFormatter();
+            var headerRow = sheet.getRow(sheet.getFirstRowNum());
+            var header = new ArrayList<String>();
+            for (var c = 0; c < headerRow.getLastCellNum(); c++) {
+                header.add(cellString(headerRow.getCell(c), formatter));
+            }
+            var rows = new ArrayList<SheetRow>();
+            for (var r = sheet.getFirstRowNum() + 1; r <= sheet.getLastRowNum(); r++) {
+                var dataRow = sheet.getRow(r);
+                if (dataRow == null) {
+                    continue;
+                }
+                var cells = new LinkedHashMap<String, String>();
+                for (var c = 0; c < header.size(); c++) {
+                    var name = header.get(c);
+                    if (name != null && !name.isBlank()) {
+                        cells.put(name, cellString(dataRow.getCell(c), formatter));
+                    }
+                }
+                rows.add(new SheetRow(cells));
+                if (rows.size() > MAX_ROWS) {
+                    throw new IllegalArgumentException("the correction sheet exceeds " + MAX_ROWS
+                            + " rows; split it and re-import (no rows are silently dropped)");
+                }
+            }
+            return rows;
+        } catch (IOException | RuntimeException error) {
+            if (error instanceof IllegalArgumentException iae) {
+                throw iae;
+            }
+            throw new IllegalArgumentException("Cannot read the uploaded correction sheet: " + error.getMessage(),
+                    error);
+        }
+    }
+
+    private String cellString(org.apache.poi.ss.usermodel.Cell cell,
+                              org.apache.poi.ss.usermodel.DataFormatter formatter) {
+        if (cell == null) {
+            return "";
+        }
+        return formatter.formatCellValue(cell).trim();
+    }
+
+    /** Una fila de la planilla: celdas por nombre de columna. Las {@code _}-prefijadas son identidad/diagnostico. */
+    public record SheetRow(Map<String, String> cells) {
+        public String stringValue(String column) {
+            var value = cells.get(column);
+            return value == null || value.isBlank() ? null : value.trim();
+        }
+
+        public Long longValue(String column) {
+            var value = stringValue(column);
+            if (value == null) {
+                return null;
+            }
+            try {
+                return Long.parseLong(value.contains(".") ? value.substring(0, value.indexOf('.')) : value);
+            } catch (NumberFormatException error) {
+                return null;
+            }
+        }
+
+        /** Columnas editables = las que NO empiezan con {@code _} (identidad/diagnostico). */
+        public java.util.Set<String> editableKeys() {
+            var keys = new LinkedHashSet<String>();
+            for (var key : cells.keySet()) {
+                if (key != null && !key.startsWith("_")) {
+                    keys.add(key);
+                }
+            }
+            return keys;
+        }
     }
 
     private String nz(String value) {

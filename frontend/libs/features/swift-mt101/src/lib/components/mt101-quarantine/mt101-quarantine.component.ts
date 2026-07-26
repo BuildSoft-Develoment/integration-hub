@@ -11,7 +11,7 @@ import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-
 import { ActionDispatcherService, IconComponent } from '@integration-hub/shared/ui';
 import { Observable } from 'rxjs';
 import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
-import { Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101NormalPayResolution, Mt101PayAction, Mt101PayConflict, Mt101RebuildRunSummary, Mt101RowTimelineEntry, Mt101RuleSummary, Mt101StagingRowView } from '../../models/mt101.models';
+import { Mt101CorrectionPreview, Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101NormalPayResolution, Mt101PayAction, Mt101PayConflict, Mt101RebuildRunSummary, Mt101RowTimelineEntry, Mt101RuleSummary, Mt101StagingRowView } from '../../models/mt101.models';
 import {
   AuditOperationRisk,
   AuditWorkspaceNavComponent,
@@ -137,6 +137,9 @@ export class Mt101QuarantineComponent {
   readonly causeSummary = signal<Mt101RuleSummary[]>([]);
   // ADR-020 (C1): descarga de la planilla de correccion (XLSX).
   readonly exportingSheet = signal(false);
+  // ADR-020 (C2): dry-run del import de la planilla (preview read-only).
+  readonly previewingSheet = signal(false);
+  readonly correctionPreview = signal<Mt101CorrectionPreview | null>(null);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly message = signal<string | null>(null);
@@ -478,6 +481,37 @@ export class Mt101QuarantineComponent {
     anchor.download = filename;
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  /** ADR-020 (C2): sube la planilla editada y muestra el dry-run (sin aplicar nada). */
+  onCorrectionFile(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = ''; // permite re-subir el mismo archivo
+    if (!file || !this.fragmentSetId.trim()) {
+      return;
+    }
+    this.previewingSheet.set(true);
+    this.correctionPreview.set(null);
+    this.error.set(null);
+    this.api.mt101PreviewCorrectionSheet({
+      fragmentSetId: this.fragmentSetId,
+      connectionRef: this.connectionRef,
+      file,
+    }).subscribe({
+      next: (preview) => {
+        this.correctionPreview.set(preview);
+        this.previewingSheet.set(false);
+      },
+      error: (err) => {
+        this.error.set(err?.error?.message || this.i18n.t('audit.quarantine.previewError'));
+        this.previewingSheet.set(false);
+      },
+    });
+  }
+
+  clearCorrectionPreview(): void {
+    this.correctionPreview.set(null);
   }
 
   /** v60: carga la lista detallada de conflictos de pago del set (on-demand desde la alerta). */

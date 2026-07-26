@@ -511,6 +511,31 @@ public class Mt101StagingRecordRepository {
     }
 
     /**
+     * ADR-020 (C2): payloads + version de muchas filas por id, en UNA query (dry-run de la planilla de correccion
+     * sin N idas a la BD). Devuelve un mapa id -&gt; payload (solo las que existen).
+     */
+    public java.util.Map<Long, StagingPayload> findStagingPayloadsByIds(Connection connection,
+                                                                        java.util.Collection<Long> ids)
+            throws SQLException {
+        var result = new java.util.LinkedHashMap<Long, StagingPayload>();
+        if (ids == null || ids.isEmpty()) {
+            return result;
+        }
+        var sql = "select id, payload_json, version, physical_line, sheet_name, sheet_row "
+                + "from staging_record where id = any(?)";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setArray(1, connection.createArrayOf("bigint", ids.toArray()));
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    var payload = stagingPayload(rs);
+                    result.put(payload.id(), payload);
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
      * Corrige el payload de una fila de staging con locking optimista: solo aplica si
      * {@code version} coincide e incrementa la version. Devuelve 0 si la fila no existe
      * o la version esta obsoleta (conflicto). Unico camino de update (sin variante

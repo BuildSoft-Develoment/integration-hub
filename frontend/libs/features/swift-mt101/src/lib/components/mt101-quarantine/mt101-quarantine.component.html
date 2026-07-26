@@ -95,8 +95,34 @@
           <button mat-stroked-button type="button" (click)="list()" [disabled]="loading() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.applyFilters') }}</button>
           <button mat-button type="button" (click)="clearFilters()" [disabled]="loading() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.clearFilters') }}</button>
           <button mat-stroked-button type="button" (click)="exportCorrectionSheet()" [disabled]="exportingSheet() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.exportSheet') }}</button>
+          <button mat-stroked-button type="button" (click)="correctionFileInput.click()" [disabled]="previewingSheet() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.importSheet') }}</button>
+          <input #correctionFileInput type="file" accept=".xlsx" hidden (change)="onCorrectionFile($event)" />
         </div>
       </div>
+
+      @if (correctionPreview(); as preview) {
+        <div class="q__preview" role="status">
+          <div class="q__preview-head">
+            <span class="q__causes-title">{{ i18n.t('audit.quarantine.previewTitle') }}</span>
+            <button mat-button type="button" (click)="clearCorrectionPreview()">{{ i18n.t('audit.quarantine.clearFilters') }}</button>
+          </div>
+          <div class="q__preview-counts">
+            <span class="q__pv q__pv--ok">{{ preview.toCorrect }} {{ i18n.t('audit.quarantine.previewToCorrect') }}</span>
+            <span class="q__pv q__pv--muted">{{ preview.unchanged }} {{ i18n.t('audit.quarantine.previewUnchanged') }}</span>
+            <span class="q__pv" [class.q__pv--danger]="preview.conflicts > 0">{{ preview.conflicts }} {{ i18n.t('audit.quarantine.previewConflicts') }}</span>
+            <span class="q__pv-total">/ {{ preview.total }}</span>
+          </div>
+          @if (preview.conflicts > 0) {
+            <ul class="q__preview-list">
+              @for (row of preview.sample; track $index) {
+                @if (row.outcome === 'CONFLICT') {
+                  <li>#{{ row.recordNumber }} <span class="q__muted">({{ row.sendersReference }})</span> — {{ row.reason }}</li>
+                }
+              }
+            </ul>
+          }
+        </div>
+      }
 
       @if (causeSummary().length) {
         <div class="q__causes">

@@ -57,6 +57,26 @@ export interface Mt101RuleSummary {
   maxSourceRecordNumber: number | null;
 }
 
+/** ADR-020 (C2): clasificacion de una fila del dry-run de la planilla de correccion. */
+export interface Mt101CorrectionPreviewRow {
+  stagingId: number | null;
+  recordNumber: number | null;
+  sendersReference: string | null;
+  outcome: 'TO_CORRECT' | 'UNCHANGED' | 'CONFLICT';
+  reason: string | null;
+  changedFields: string[];
+}
+
+/** ADR-020 (C2): resultado del dry-run del import (conteos + columnas editables + muestra). Read-only. */
+export interface Mt101CorrectionPreview {
+  total: number;
+  toCorrect: number;
+  unchanged: number;
+  conflicts: number;
+  editableColumns: string[];
+  sample: Mt101CorrectionPreviewRow[];
+}
+
 export interface Mt101QuarantineBuildResult {
   fragmentSetId: string;
   quarantined: number;

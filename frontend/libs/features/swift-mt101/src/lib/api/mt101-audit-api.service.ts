@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
   Mt101CorrectiveLifecycle,
+  Mt101CorrectionPreview,
   Mt101FailedRecord,
   Mt101RuleSummary,
   Mt101FragmentLink,
@@ -457,6 +458,22 @@ export class Mt101AuditApiService {
     }
     return this.http.get('/api/query/mt101-quarantine/correction-sheet',
       { params: httpParams, responseType: 'blob' });
+  }
+
+  /** ADR-020 (C2): dry-run del import de la planilla — sube el XLSX (body raw) y devuelve la clasificacion. */
+  mt101PreviewCorrectionSheet(query: {
+    connectionRef?: string;
+    fragmentSetId: string;
+    file: Blob;
+  }): Observable<Mt101CorrectionPreview> {
+    let httpParams = new HttpParams().set('fragmentSetId', query.fragmentSetId);
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.post<Mt101CorrectionPreview>(
+      '/api/query/mt101-quarantine/correction-sheet/preview',
+      query.file,
+      { params: httpParams, headers: { 'Content-Type': 'application/octet-stream' } });
   }
 
   /** Construye la cuarentena resolviendo cada :21: fallido a su fila exacta del archivo. */
