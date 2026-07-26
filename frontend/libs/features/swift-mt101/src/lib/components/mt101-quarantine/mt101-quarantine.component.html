@@ -97,6 +97,26 @@
         </div>
       </div>
 
+      @if (causeSummary().length) {
+        <div class="q__causes">
+          <span class="q__causes-title">{{ i18n.t('audit.quarantine.causesTitle') }}</span>
+          <div class="q__causes-chips">
+            @for (cause of causeSummary(); track cause.ruleCode) {
+              <button
+                type="button"
+                class="q__cause"
+                [class.q__cause--active]="ruleCodeFilter === cause.ruleCode"
+                (click)="filterByCause(cause.ruleCode)"
+                [attr.title]="(cause.ruleSet || '') + ' · filas ' + (cause.minSourceRecordNumber ?? '?') + '-' + (cause.maxSourceRecordNumber ?? '?')"
+              >
+                <span class="q__cause-code">{{ cause.ruleCode }}</span>
+                <span class="q__cause-count">{{ cause.count }}</span>
+              </button>
+            }
+          </div>
+        </div>
+      }
+
       @if (rebuildRun(); as run) {
         <div class="q__confirm" role="status">
           <div class="q__confirm-title"><ih-icon name="alert-triangle" /> {{ i18n.t('audit.quarantine.runTitle') }} · {{ run.status }}</div>

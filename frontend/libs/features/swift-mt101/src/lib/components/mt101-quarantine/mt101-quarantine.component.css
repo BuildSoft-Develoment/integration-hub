@@ -57,3 +57,13 @@ td { font-size:.86rem; }
 .q__status--QUARANTINED,.q__card--QUARANTINED strong { color:var(--ih-status-warning); }
 .q__status--REBUILD_PENDING_VALIDATION,.q__status--REBUILD_ARCHIVED,.q__status--PARTIALLY_SENT { color:var(--ih-status-warning); }
 .q__tl-icon--pending { color:var(--ih-status-neutral); }
+
+/* ADR-020 (A): panel de causas (rule_code) — miles de fallos -> un puñado de decisiones. */
+.q__causes { display:flex; flex-direction:column; gap:.4rem; margin:.5rem 0 .25rem; }
+.q__causes-title { font-size:.68rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:var(--ih-text-soft); }
+.q__causes-chips { display:flex; flex-wrap:wrap; gap:.4rem; }
+.q__cause { display:inline-flex; align-items:center; gap:.4rem; padding:.28rem .6rem; border:1px solid var(--ih-border); border-radius:999px; background:var(--ih-surface); color:var(--ih-text); cursor:pointer; font-size:.78rem; }
+.q__cause:hover,.q__cause:focus-visible { border-color:var(--ih-accent); }
+.q__cause--active { border-color:var(--ih-accent); background:color-mix(in srgb, var(--ih-accent) 12%, var(--ih-surface)); }
+.q__cause-code { font-weight:600; }
+.q__cause-count { font-variant-numeric:tabular-nums; font-weight:700; background:var(--ih-status-warning-bg); color:var(--ih-status-warning); padding:0 .4rem; border-radius:999px; font-size:.72rem; }

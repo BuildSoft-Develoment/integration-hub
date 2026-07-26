@@ -170,6 +170,20 @@ public class Mt101QuarantineService {
         }
     }
 
+    /** ADR-020 (A): resumen de cuarentena agrupado por causa (rule_code) para un set. */
+    public List<Mt101FailedRecordRepository.RuleSummaryRow> summaryByRule(String connectionRef, String fragmentSetId,
+                                                                          String status) {
+        if (fragmentSetId == null || fragmentSetId.isBlank()) {
+            throw new IllegalArgumentException("fragmentSetId is required");
+        }
+        try {
+            return failedRecordRepository.summaryByRule(resolveDataSource(connectionRef), fragmentSetId.trim(),
+                    blankToNull(status));
+        } catch (SQLException error) {
+            throw new IllegalStateException("Cannot summarize MT101 quarantine by rule for set " + fragmentSetId, error);
+        }
+    }
+
     private String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value.trim();
     }

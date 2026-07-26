@@ -301,6 +301,48 @@ public class Mt101FailedRecordRepository {
     }
 
     /**
+     * ADR-020 (A): agrega los fallos de un set por causa ({@code rule_code}) para convertir miles de
+     * filas en un puñado de decisiones. El operador luego filtra/exporta por causa. Ordenado por conteo
+     * desc (la causa mas grande primero).
+     */
+    public List<RuleSummaryRow> summaryByRule(DataSource dataSource, String fragmentSetId, String status)
+            throws SQLException {
+        var sql = new StringBuilder(
+                "select rule_code, max(rule_set) rule_set, max(severity) severity, count(*) cnt, "
+                + "min(source_record_number) min_row, max(source_record_number) max_row "
+                + "from mt101_failed_record where fragment_set_id = ?");
+        if (status != null && !status.isBlank()) {
+            sql.append(" and status = ?");
+        }
+        sql.append(" group by rule_code order by cnt desc, rule_code asc");
+        var result = new ArrayList<RuleSummaryRow>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql.toString())) {
+            statement.setString(1, fragmentSetId);
+            if (status != null && !status.isBlank()) {
+                statement.setString(2, status);
+            }
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new RuleSummaryRow(
+                            rs.getString("rule_code"),
+                            rs.getString("rule_set"),
+                            rs.getString("severity"),
+                            rs.getLong("cnt"),
+                            nullableLong(rs, "min_row"),
+                            nullableLong(rs, "max_row")));
+                }
+            }
+        }
+        return result;
+    }
+
+    /** Una causa de fallo agregada: cuantas filas la comparten + el rango de filas del archivo afectado. */
+    public record RuleSummaryRow(String ruleCode, String ruleSet, String severity, long count,
+                                 Long minSourceRecordNumber, Long maxSourceRecordNumber) {
+    }
+
+    /**
      * Resuelve la cuarentena SOLO de las filas cubiertas por la seleccion del run
      * ({@code rebuild_run_id}), no por todo el set. Asi una fila nueva en cuarentena
      * insertada durante el run, o un run parcial, no se marca con el estado correctivo equivocado (P0.4).

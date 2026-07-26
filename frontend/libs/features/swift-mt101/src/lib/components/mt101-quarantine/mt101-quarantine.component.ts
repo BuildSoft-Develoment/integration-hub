@@ -11,7 +11,7 @@ import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-
 import { ActionDispatcherService, IconComponent } from '@integration-hub/shared/ui';
 import { Observable } from 'rxjs';
 import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
-import { Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101NormalPayResolution, Mt101PayAction, Mt101PayConflict, Mt101RebuildRunSummary, Mt101RowTimelineEntry, Mt101StagingRowView } from '../../models/mt101.models';
+import { Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101NormalPayResolution, Mt101PayAction, Mt101PayConflict, Mt101RebuildRunSummary, Mt101RowTimelineEntry, Mt101RuleSummary, Mt101StagingRowView } from '../../models/mt101.models';
 import {
   AuditOperationRisk,
   AuditWorkspaceNavComponent,
@@ -133,6 +133,8 @@ export class Mt101QuarantineComponent {
   }
 
   readonly rows = signal<Mt101FailedRecord[]>([]);
+  // ADR-020 (A): resumen de la cuarentena por causa (rule_code) — miles de fallos -> un puñado de decisiones.
+  readonly causeSummary = signal<Mt101RuleSummary[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly message = signal<string | null>(null);
@@ -421,6 +423,28 @@ export class Mt101QuarantineComponent {
     });
   }
 
+  /** ADR-020 (A): carga el resumen de la cuarentena por causa (rule_code) del set. */
+  private loadCauseSummary(): void {
+    if (!this.fragmentSetId.trim()) {
+      this.causeSummary.set([]);
+      return;
+    }
+    this.api.mt101SummaryByRule({
+      fragmentSetId: this.fragmentSetId,
+      connectionRef: this.connectionRef,
+      status: this.statusFilter?.trim() || 'QUARANTINED',
+    }).subscribe({
+      next: (rows) => this.causeSummary.set(rows),
+      error: () => this.causeSummary.set([]),
+    });
+  }
+
+  /** ADR-020 (A): filtra la lista a una causa (chip del panel) y recarga. */
+  filterByCause(ruleCode: string): void {
+    this.ruleCodeFilter = this.ruleCodeFilter === ruleCode ? '' : ruleCode;
+    this.list(true);
+  }
+
   /** v60: carga la lista detallada de conflictos de pago del set (on-demand desde la alerta). */
   loadPayConflicts(): void {
     if (!this.fragmentSetId.trim()) {
@@ -489,6 +513,7 @@ export class Mt101QuarantineComponent {
       this.hasPreviousPage.set(false);
     }
     this.loadSummary();
+    this.loadCauseSummary();
     this.loading.set(true);
     this.error.set(null);
     this.api.mt101FailedRecords({

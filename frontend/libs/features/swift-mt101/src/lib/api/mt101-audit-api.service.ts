@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import {
   Mt101CorrectiveLifecycle,
   Mt101FailedRecord,
+  Mt101RuleSummary,
   Mt101FragmentLink,
   Mt101FragmentSetSummary,
   Mt101LoteHeader,
@@ -418,6 +419,23 @@ export class Mt101AuditApiService {
       httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
     }
     return this.http.get<Mt101FailedRecord[]>('/api/query/mt101-quarantine', { params: httpParams });
+  }
+
+  /** ADR-020 (A): resumen de la cuarentena agrupado por causa (rule_code) para un set. */
+  mt101SummaryByRule(query: {
+    connectionRef?: string;
+    fragmentSetId: string;
+    status?: string;
+  }): Observable<Mt101RuleSummary[]> {
+    let httpParams = new HttpParams().set('fragmentSetId', query.fragmentSetId);
+    if (query.status?.trim()) {
+      httpParams = httpParams.set('status', query.status.trim());
+    }
+    if (query.connectionRef?.trim()) {
+      httpParams = httpParams.set('connectionRef', query.connectionRef.trim());
+    }
+    return this.http.get<Mt101RuleSummary[]>(
+      '/api/query/mt101-quarantine/summary-by-rule', { params: httpParams });
   }
 
   /** Construye la cuarentena resolviendo cada :21: fallido a su fila exacta del archivo. */

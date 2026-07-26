@@ -1343,6 +1343,7 @@ export const en = {
   'audit.quarantine.filterRule': 'Rule',
   'audit.quarantine.applyFilters': 'Apply filters',
   'audit.quarantine.clearFilters': 'Clear filters',
+  'audit.quarantine.causesTitle': 'Failures by cause',
   'audit.quarantine.rebuild': 'Reprocess fixed rows',
   'audit.quarantine.runRequest': 'Request reprocess',
   'audit.quarantine.runTitle': 'Corrective reprocess (maker-checker)',

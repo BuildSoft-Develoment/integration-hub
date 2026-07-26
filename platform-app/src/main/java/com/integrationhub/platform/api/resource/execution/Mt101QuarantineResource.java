@@ -1,6 +1,7 @@
 package com.integrationhub.platform.api.resource.execution;
 
 import com.integrationhub.platform.api.response.execution.Mt101FailedRecordResponse;
+import com.integrationhub.platform.api.response.execution.Mt101RuleSummaryResponse;
 import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRepository;
 import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
 import com.integrationhub.platform.service.payments.swift.Mt101CorrectiveLifecycleService;
@@ -183,6 +184,23 @@ public class Mt101QuarantineResource {
             return service.list(connectionRef, fragmentSetId, status, sourceFileHash, sourceRecordNumber,
                             ruleCode, sendersReference, transactionReference, afterId, limit).stream()
                     .map(this::toResponse)
+                    .toList();
+        } catch (IllegalArgumentException error) {
+            throw new BadRequestException(error.getMessage(), error);
+        }
+    }
+
+    /** ADR-020 (A): resumen de la cuarentena por causa (rule_code) — miles de fallos -> un puñado de decisiones. */
+    @GET
+    @Path("/summary-by-rule")
+    @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN, OPERATOR, PAYMENTS_OPERATOR, AUDITOR})
+    public List<Mt101RuleSummaryResponse> summaryByRule(@QueryParam("connectionRef") String connectionRef,
+                                                        @QueryParam("fragmentSetId") String fragmentSetId,
+                                                        @QueryParam("status") @DefaultValue("QUARANTINED") String status) {
+        try {
+            return service.summaryByRule(connectionRef, fragmentSetId, status).stream()
+                    .map(row -> new Mt101RuleSummaryResponse(row.ruleCode(), row.ruleSet(), row.severity(),
+                            row.count(), row.minSourceRecordNumber(), row.maxSourceRecordNumber()))
                     .toList();
         } catch (IllegalArgumentException error) {
             throw new BadRequestException(error.getMessage(), error);

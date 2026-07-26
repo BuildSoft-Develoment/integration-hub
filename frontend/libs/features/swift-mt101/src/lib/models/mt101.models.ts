@@ -47,6 +47,16 @@ export interface Mt101FailedRecord {
   resolvedAt: string | null;
 }
 
+/** ADR-020 (A): una causa de fallo agregada en la cuarentena (rule_code + conteo + rango de filas del archivo). */
+export interface Mt101RuleSummary {
+  ruleCode: string;
+  ruleSet: string | null;
+  severity: string | null;
+  count: number;
+  minSourceRecordNumber: number | null;
+  maxSourceRecordNumber: number | null;
+}
+
 export interface Mt101QuarantineBuildResult {
   fragmentSetId: string;
   quarantined: number;
