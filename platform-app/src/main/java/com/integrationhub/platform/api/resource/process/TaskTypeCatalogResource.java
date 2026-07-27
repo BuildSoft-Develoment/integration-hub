@@ -42,6 +42,7 @@ public class TaskTypeCatalogResource {
                 entry.transport(),
                 entry.status(),
                 entry.reason(),
-                entry.asyncOffload());
+                entry.asyncOffload(),
+                entry.configurable());
     }
 }

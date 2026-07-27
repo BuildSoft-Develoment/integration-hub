@@ -56,7 +56,8 @@ public class TaskTypeCatalogService {
                     null,
                     STATUS_AVAILABLE,
                     null,
-                    asyncOffloadFor(type)));
+                    asyncOffloadFor(type),
+                    configurableFor(type)));
         }
 
         localProviders.entrySet().stream()
@@ -71,7 +72,8 @@ public class TaskTypeCatalogService {
                         null,
                         STATUS_AVAILABLE,
                         null,
-                        asyncOffloadFor(entry.getKey()))));
+                        asyncOffloadFor(entry.getKey()),
+                        configurableFor(entry.getKey()))));
 
         var degraded = remotePluginRegistry.degraded();
         remotePluginRegistry.descriptors().stream()
@@ -117,7 +119,22 @@ public class TaskTypeCatalogService {
                 reason,
                 // Los plugins remotos ya son async vía su propio transporte (y suspenden esperando el
                 // resultado del broker del plugin); el offload async genérico no aplica.
-                AsyncOffloadSupport.UNSUPPORTED.name());
+                AsyncOffloadSupport.UNSUPPORTED.name(),
+                configurableFor(normalizedType));
+    }
+
+    /**
+     * ADR-021: ¿el provider del tipo declara un config-schema no vacio? Es lo que habilita a la UI a
+     * ofrecer un tipo que NO trae formulario compilado en el frontend (lo renderiza con
+     * {@code ih-schema-form}). Conservador: si el tipo no resuelve a un provider, {@code false}.
+     */
+    private boolean configurableFor(String type) {
+        try {
+            var schema = taskProviderRegistry.resolve(type).configSchema();
+            return schema != null && !schema.isEmpty();
+        } catch (RuntimeException unresolved) {
+            return false;
+        }
     }
 
     /**

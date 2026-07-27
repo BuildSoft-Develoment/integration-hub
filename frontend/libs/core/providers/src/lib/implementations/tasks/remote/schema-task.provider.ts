@@ -6,7 +6,7 @@ import {
 } from '../../../tasks/process-task-provider.abstract';
 import { ProcessTaskFormModel } from '../../../tasks/process-task.models';
 
-export interface RemoteTaskCatalogItem {
+export interface TaskCatalogItem {
   readonly type: string;
   readonly origin?: string;
   readonly provider?: string;
@@ -15,6 +15,8 @@ export interface RemoteTaskCatalogItem {
   readonly transport?: string | null;
   readonly status?: string | null;
   readonly reason?: string | null;
+  /** ADR-021: el provider declara config-schema no vacio -> se puede configurar sin form compilado. */
+  readonly configurable?: boolean;
 }
 
 interface RemoteTaskDraft {
@@ -23,26 +25,34 @@ interface RemoteTaskDraft {
 }
 
 /**
- * Adaptador frontend para task types remotos publicados por backend.
+ * Adaptador frontend para task types que NO traen formulario compilado en el build Angular.
  *
  * No trae un formulario hardcoded: `ProcessTaskFormHostComponent` consulta el
  * config-schema del backend y renderiza `ih-schema-form`. Este provider solo hace
- * visible la capacidad en la paleta/editor y produce una configuracion inicial
- * minima, manteniendo OCP para plugins instalados fuera del build Angular.
+ * visible la capacidad en la paleta/editor y produce una configuracion inicial minima.
+ *
+ * ADR-021: sirve tanto a plugins REMOTE (instalados fuera del build) como a verticales
+ * LOCAL compilados en el backend — el `origin` viaja desde el catalogo, no se asume. Es lo
+ * que permite dar de alta un vertical nuevo (SBS, otro estandar) sin editar libs del core:
+ * le alcanza con declarar su `configSchema()` en el `TaskProvider`.
  */
-export class RemoteSchemaTaskProvider extends ProcessTaskProvider<RemoteTaskDraft> {
+export class SchemaTaskProvider extends ProcessTaskProvider<RemoteTaskDraft> {
   readonly descriptor: ProcessTaskProviderDescriptor;
 
-  constructor(item: RemoteTaskCatalogItem) {
+  constructor(item: TaskCatalogItem) {
     super();
     const type = normalizeType(item.type);
+    const origin = normalizeType(item.origin ?? '') === 'REMOTE' ? 'REMOTE' : 'LOCAL';
+    // Namespace de i18n por origen: un vertical local aporta sus claves con
+    // I18nService.registerMessages() bajo processTask.<TYPE>, igual que los tipos compilados.
+    const i18nBase = origin === 'REMOTE' ? `processTask.remote.${type}` : `processTask.${type}`;
     this.descriptor = {
       type,
-      labelKey: `processTask.remote.${type}`,
-      descriptionKey: `processTask.remote.${type}.description`,
-      label: humanizeRemoteType(type),
+      labelKey: i18nBase,
+      descriptionKey: `${i18nBase}.description`,
+      label: humanizeType(type),
       modalLayout: 'workspace',
-      origin: 'REMOTE',
+      origin,
       pluginId: item.pluginId ?? null,
       pluginVersion: item.pluginVersion ?? null,
       transport: item.transport ?? null,
@@ -107,7 +117,7 @@ function normalizeStatus(status: string | null | undefined): ProcessTaskProvider
     : 'AVAILABLE';
 }
 
-function humanizeRemoteType(type: string): string {
+function humanizeType(type: string): string {
   return type
     .split('_')
     .filter(Boolean)

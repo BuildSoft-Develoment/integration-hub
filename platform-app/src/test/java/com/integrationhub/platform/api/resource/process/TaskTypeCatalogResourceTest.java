@@ -24,7 +24,8 @@ class TaskTypeCatalogResourceTest {
                 "KAFKA",
                 "AVAILABLE",
                 null,
-                "UNSUPPORTED")));
+                "UNSUPPORTED",
+                true)));
         var resource = new TaskTypeCatalogResource(service);
 
         var response = resource.list();
@@ -34,5 +35,7 @@ class TaskTypeCatalogResourceTest {
         assertEquals("REMOTE", response.taskTypes().getFirst().origin());
         assertEquals("acme", response.taskTypes().getFirst().pluginId());
         assertEquals("UNSUPPORTED", response.taskTypes().getFirst().asyncOffload());
+        // ADR-021: el flag viaja al frontend para decidir si un tipo sin form compilado se puede ofrecer.
+        assertEquals(true, response.taskTypes().getFirst().configurable());
     }
 }

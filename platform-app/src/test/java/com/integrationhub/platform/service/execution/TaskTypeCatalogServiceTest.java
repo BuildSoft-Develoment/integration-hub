@@ -4,6 +4,8 @@ import com.integrationhub.platform.domain.TaskType;
 import com.integrationhub.platform.service.TaskProviderRegistry;
 import com.integrationhub.platform.service.plugin.RemotePluginDescriptor;
 import com.integrationhub.platform.service.plugin.RemotePluginRegistry;
+import com.integrationhub.platform.spi.config.PluginConfigField;
+import com.integrationhub.platform.spi.config.PluginConfigSchema;
 import com.integrationhub.platform.spi.task.AsyncOffloadSupport;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
@@ -109,10 +111,47 @@ class TaskTypeCatalogServiceTest {
         assertEquals("UNSUPPORTED", find(catalog, TaskType.FILE_READ, "BUILTIN").asyncOffload());
     }
 
+    @Test
+    void catalogExposesWhetherTheTypeDeclaresAConfigSchema() {
+        // ADR-021: es lo que habilita a la UI a ofrecer un vertical LOCAL sin formulario compilado.
+        var providerRegistry = mock(TaskProviderRegistry.class);
+        when(providerRegistry.localTaskTypeProviders())
+                .thenReturn(new LinkedHashMap<>(Map.of(
+                        "SCHEMA_LOCAL", "SchemaProvider",
+                        "BARE_LOCAL", "BareProvider")));
+        when(providerRegistry.resolve("SCHEMA_LOCAL")).thenReturn(new SchemaProvider());
+        when(providerRegistry.resolve("BARE_LOCAL")).thenReturn(new BareProvider());
+        var remotePlugins = new RemotePluginRegistry();
+
+        var catalog = new TaskTypeCatalogService(providerRegistry, remotePlugins).catalog();
+
+        // Un vertical que declara su schema es configurable -> la UI puede ofrecerlo.
+        assertEquals(true, find(catalog, "SCHEMA_LOCAL", "LOCAL").configurable());
+        // Sin schema no hay forma de configurarlo -> la UI no lo ofrece (no se puede completar).
+        assertEquals(false, find(catalog, "BARE_LOCAL", "LOCAL").configurable());
+        // Un tipo que no resuelve a provider degrada a false (conservador), no explota.
+        assertEquals(false, find(catalog, TaskType.FILE_READ, "BUILTIN").configurable());
+    }
+
     private static final class SliceOnlyProvider implements TaskProvider {
         @Override public String type() { return "SLICE_LOCAL"; }
         @Override public TaskResult execute(TaskContext c, Map<String, Object> cfg) { return TaskResult.success("ok"); }
         @Override public AsyncOffloadSupport asyncOffloadSupport() { return AsyncOffloadSupport.SLICE_ONLY; }
+    }
+
+    /** Vertical bien portado: declara su config-schema, asi la UI lo renderiza sin form compilado. */
+    private static final class SchemaProvider implements TaskProvider {
+        @Override public String type() { return "SCHEMA_LOCAL"; }
+        @Override public TaskResult execute(TaskContext c, Map<String, Object> cfg) { return TaskResult.success("ok"); }
+        @Override public PluginConfigSchema configSchema() {
+            return PluginConfigSchema.of(PluginConfigField.text("taskRef", "schemaLocal.taskRef", true));
+        }
+    }
+
+    /** Provider sin schema: existe en el motor pero no es configurable desde la UI. */
+    private static final class BareProvider implements TaskProvider {
+        @Override public String type() { return "BARE_LOCAL"; }
+        @Override public TaskResult execute(TaskContext c, Map<String, Object> cfg) { return TaskResult.success("ok"); }
     }
 
     private TaskTypeCatalogEntry find(Iterable<TaskTypeCatalogEntry> entries, String type, String origin) {

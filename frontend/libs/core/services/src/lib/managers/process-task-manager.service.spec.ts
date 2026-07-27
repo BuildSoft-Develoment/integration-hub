@@ -94,6 +94,47 @@ describe('ProcessTaskManagerService remote task catalog', () => {
     http.verify();
   });
 
+  it('adds LOCAL vertical task types that declare a config schema (ADR-021)', async () => {
+    const { manager, http } = setup();
+    const load = manager.loadRemoteTaskTypes();
+    http.expectOne('/api/task-types').flush({
+      taskTypes: [
+        // Vertical local bien portado: declara schema -> se ofrece, sin editar libs del core.
+        { type: 'SBS_BUILD', origin: 'LOCAL', status: 'AVAILABLE', configurable: true },
+        // Local sin schema: no hay forma de configurarlo -> no se ofrece.
+        { type: 'PAIN001_PARSE', origin: 'LOCAL', status: 'AVAILABLE', configurable: false },
+        // Los remotos siguen entrando aunque no declaren configurable (compatibilidad).
+        { type: 'DEMO_TRANSFORM_NODE', origin: 'REMOTE', status: 'AVAILABLE', pluginId: 'demo-node' },
+      ],
+    });
+    await load;
+
+    const types = manager.availableProviders().map((item) => item.type);
+    expect(types).toContain('SBS_BUILD');
+    expect(types).not.toContain('PAIN001_PARSE');
+    expect(types).toContain('DEMO_TRANSFORM_NODE');
+    // El origen viaja desde el catalogo: un vertical local no se rotula como plugin remoto.
+    expect(manager.availableProviders().find((item) => item.type === 'SBS_BUILD')?.origin).toBe('LOCAL');
+    http.verify();
+  });
+
+  it('keeps compiled forms for task types that already have a provider (ADR-021)', async () => {
+    const { manager, http } = setup();
+    const load = manager.loadRemoteTaskTypes();
+    http.expectOne('/api/task-types').flush({
+      taskTypes: [
+        // FILE_READ ya tiene provider compilado: aunque el catalogo lo marque configurable,
+        // NO se reemplaza por el form dinamico.
+        { type: 'FILE_READ', origin: 'BUILTIN', status: 'AVAILABLE', configurable: true },
+      ],
+    });
+    await load;
+
+    expect(manager.availableProviders().filter((item) => item.type === 'FILE_READ')).toHaveLength(1);
+    expect(manager.modalLayout('FILE_READ')).not.toBe('workspace');
+    http.verify();
+  });
+
   it('draftFor hydrates via the registered provider', () => {
     const { manager } = setup();
     const task: ProcessTaskFormModel = {

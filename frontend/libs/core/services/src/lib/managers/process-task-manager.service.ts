@@ -9,17 +9,17 @@ import {
   ProcessTaskSummaryContext,
   PlatformProcessTaskType,
   ProcessTaskType,
-  RemoteSchemaTaskProvider,
-  RemoteTaskCatalogItem,
+  SchemaTaskProvider,
+  TaskCatalogItem,
 } from '@integration-hub/core/providers';
 import { firstValueFrom } from 'rxjs';
 import { TASK_PRESENTATION } from '../presentation/resource-presentation.maps';
 
 interface TaskTypeCatalogResponse {
-  readonly taskTypes: RemoteTaskCatalogItem[];
+  readonly taskTypes: TaskCatalogItem[];
 }
 
-const REMOTE_TASK_PRESENTATION: ResourcePresentation = {
+const SCHEMA_TASK_PRESENTATION: ResourcePresentation = {
   icon: 'cpu',
   toneClass: 'ih-tone-integration',
 };
@@ -49,15 +49,21 @@ export class ProcessTaskManagerService {
       const response = await firstValueFrom(
         this.http.get<TaskTypeCatalogResponse>('/api/task-types')
       );
-      const localTypes = new Set(
+      const compiledTypes = new Set(
         this.providers.map((provider) => normalizeType(provider.descriptor.type))
       );
-      const remoteProviders = (response.taskTypes ?? [])
-        .filter((item) => normalizeType(item.origin) === 'REMOTE')
+      // ADR-021: se hidrata TODO tipo del catalogo que no tenga formulario compilado, no solo los
+      // REMOTE. Un vertical LOCAL (SBS u otro estandar) entra por el mismo camino que un plugin:
+      // le alcanza con declarar configSchema() en su TaskProvider. Los tipos con formulario
+      // compilado (los 12 MT101, los builtin) quedan excluidos y siguen resolviendo al suyo.
+      // Se exige `configurable` a los no-REMOTE: sin config-schema no hay forma de configurarlos,
+      // y ofrecer una tarea que no se puede completar es peor que no ofrecerla.
+      const schemaProviders = (response.taskTypes ?? [])
         .filter((item) => item.type?.trim())
-        .filter((item) => !localTypes.has(normalizeType(item.type)))
-        .map((item) => new RemoteSchemaTaskProvider(item));
-      this.remoteProviders.set(remoteProviders);
+        .filter((item) => !compiledTypes.has(normalizeType(item.type)))
+        .filter((item) => normalizeType(item.origin) === 'REMOTE' || item.configurable === true)
+        .map((item) => new SchemaTaskProvider(item));
+      this.remoteProviders.set(schemaProviders);
       this.remoteCatalogError.set(null);
     } catch (error) {
       this.remoteCatalogError.set('processTask.remoteCatalogError');
@@ -75,7 +81,7 @@ export class ProcessTaskManagerService {
   presentation(type: ProcessTaskType): ResourcePresentation {
     return isPlatformTaskType(type)
       ? TASK_PRESENTATION[type]
-      : REMOTE_TASK_PRESENTATION;
+      : SCHEMA_TASK_PRESENTATION;
   }
 
   resolve(type: ProcessTaskType): ProcessTaskProvider<any> | null {

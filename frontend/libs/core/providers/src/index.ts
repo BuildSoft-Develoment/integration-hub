@@ -35,7 +35,7 @@ export * from './lib/implementations/tasks/notification/notification-task.provid
 export * from './lib/implementations/tasks/file/file-compress-task.provider';
 export * from './lib/implementations/tasks/file/file-deliver-task.provider';
 export * from './lib/implementations/tasks/file/file-write-task.provider';
-export * from './lib/implementations/tasks/remote/remote-schema-task.provider';
+export * from './lib/implementations/tasks/remote/schema-task.provider';
 // --- Vertical mensajeria de pagos (spec 008, ADR-009) ---
 export * from './lib/tasks/process-task-form-registry';
 export * from './lib/tasks/process-task-form-bridge.service';

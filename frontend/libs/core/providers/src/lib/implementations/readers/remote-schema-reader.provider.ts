@@ -25,7 +25,7 @@ export interface RemoteReaderCatalogItem {
  * `ih-schema-form`. Este provider solo hace visible la capacidad en el selector y
  * round-trip-ea el `configuration_json` (el draft ES el objeto de configuracion),
  * manteniendo OCP para plugins instalados fuera del build Angular. Espejo de
- * `RemoteSchemaTaskProvider`.
+ * `SchemaTaskProvider`.
  */
 export class RemoteSchemaReaderProvider extends ReaderProvider {
   readonly descriptor: ReaderProviderDescriptor;
