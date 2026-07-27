@@ -653,10 +653,9 @@ export class Mt101QuarantineComponent {
       },
       width: '640px',
       autoFocus: false,
-    }).afterClosed().subscribe((result) => {
-      if (result) {
-        this.list();
-      }
+    }).afterClosed().subscribe(() => {
+      // Refresca siempre (aunque cierre por backdrop tras aplicar): un list() de mas es inocuo y evita UI stale.
+      this.list();
     });
   }
 
