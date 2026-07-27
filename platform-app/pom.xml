@@ -18,6 +18,13 @@
             <artifactId>platform-contract</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- ADR-021 parte 2: el vertical como modulo propio. Mismo deployable (monolito modular):
+             platform-app lo ensambla, no lo referencia por codigo. -->
+        <dependency>
+            <groupId>com.integrationhub</groupId>
+            <artifactId>vertical-swift-mt101</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>com.integrationhub</groupId>
             <artifactId>backend-plugin-sidecar-example</artifactId>
