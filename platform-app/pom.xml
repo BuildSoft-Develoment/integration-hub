@@ -31,6 +31,13 @@
             <artifactId>vertical-swift-mt101</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- ISO 20022 (PAIN.001): proyecto BASE, el estandar todavia no esta implementado.
+             Se ensambla igual para que su andamiaje compile y no se pudra fuera del build. -->
+        <dependency>
+            <groupId>com.integrationhub</groupId>
+            <artifactId>vertical-iso20022</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>com.integrationhub</groupId>
             <artifactId>backend-plugin-sidecar-example</artifactId>

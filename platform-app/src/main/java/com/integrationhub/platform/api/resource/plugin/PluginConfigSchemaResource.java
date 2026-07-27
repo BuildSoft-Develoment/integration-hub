@@ -14,9 +14,9 @@ import jakarta.ws.rs.core.MediaType;
 
 import java.util.function.Supplier;
 
-import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
-import static com.integrationhub.platform.api.security.PlatformRoles.OPERATOR;
-import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+import static com.integrationhub.platform.spi.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.spi.security.PlatformRoles.OPERATOR;
+import static com.integrationhub.platform.spi.security.PlatformRoles.PLATFORM_ADMIN;
 
 /**
  * Expone el schema de configuración de un tipo (task/source/reader) para que la UI lo renderice

@@ -10,9 +10,9 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 
-import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
-import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
-import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+import static com.integrationhub.platform.spi.security.PlatformRoles.AUDITOR;
+import static com.integrationhub.platform.spi.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.spi.security.PlatformRoles.PLATFORM_ADMIN;
 
 /**
  * Catalogo de source types (locales + remotos de plugin) con su estado. Espejo de

@@ -46,9 +46,33 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-jackson</artifactId>
         </dependency>
+        <!-- Excepcion deliberada al JDBC crudo: el catalogo de reglas de validacion
+             (`payment_validation_rule`). Los otros 13 repositorios son JDBC porque corren contra la
+             base del CLIENTE, resuelta en runtime por connectionRef — ahi un ORM no sirve. Este
+             corre contra la base de la plataforma y es CRUD de configuracion, no camino de datos;
+             Panache es lo adecuado y ADR-011 se cumple igual (el SQL vive en el repositorio). -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-hibernate-orm-panache</artifactId>
+        </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-scheduler</artifactId>
+        </dependency>
+        <!-- El vertical publica sus propios endpoints. `@Path` fija la URL, no el paquete: mover los
+             recursos aca no cambio ninguna ruta. Y los roles del maker-checker (@RolesAllowed) son
+             del dominio del vertical, no del motor. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-rest-jackson</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-security</artifactId>
         </dependency>
         <!-- ADR-020: la planilla de correccion la ESCRIBE el writer XLSX del motor (via el SPI), pero
              LEERLA es responsabilidad propia del vertical: es auto-descriptiva (el header nombra las

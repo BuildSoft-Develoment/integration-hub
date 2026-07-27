@@ -18,10 +18,10 @@ import jakarta.ws.rs.core.Response;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
-import static com.integrationhub.platform.api.security.PlatformRoles.OPERATOR;
-import static com.integrationhub.platform.api.security.PlatformRoles.PAYMENTS_OPERATOR;
-import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+import static com.integrationhub.platform.spi.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.spi.security.PlatformRoles.OPERATOR;
+import static com.integrationhub.platform.spi.security.PlatformRoles.PAYMENTS_OPERATOR;
+import static com.integrationhub.platform.spi.security.PlatformRoles.PLATFORM_ADMIN;
 
 /**
  * Callback endpoint para reanudar tareas suspendidas (M-2).

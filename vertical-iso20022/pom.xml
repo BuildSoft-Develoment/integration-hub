@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.integrationhub</groupId>
+        <artifactId>integration-hub-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+    </parent>
+    <artifactId>vertical-iso20022</artifactId>
+    <description>ADR-021: vertical ISO 20022 (PAIN.001). PROYECTO BASE — el andamiaje existe pero el
+        estandar NO esta implementado: PAIN001_PARSE no esta dado de alta como tipo de tarea y por
+        eso no aparece en la paleta. Vive aparte para que implementarlo no signifique volver a
+        desenredarlo de MT101.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.integrationhub</groupId>
+            <artifactId>platform-spi</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- DEPENDENCIA DELIBERADA ENTRE VERTICALES (ADR-021, opcion A).
+             PAIN.001 no tiene pipeline propio: `Pain001ToMt101Mapper` normaliza el mensaje a
+             `Mt101Message` para reusar el downstream de MT101 (validate -> archive -> pay). Esa
+             conversion ES lo que hace este vertical hoy, y el nombre de la clase lo dice.
+
+             Se prefirio esto a esconder el mapper en platform-app: ahi el MOTOR terminaria
+             conociendo dos verticales, que es justo lo que el trinquete existe para impedir. Aca
+             la dependencia es vertical -> vertical, declarada y en una sola direccion.
+
+             Al implementar ISO 20022 de verdad (pipeline propio, sin pasar por MT101), esta
+             dependencia debe desaparecer. Si no desaparece, la conversion dejo de ser transitoria
+             y hay que revisarla. -->
+        <dependency>
+            <groupId>com.integrationhub</groupId>
+            <artifactId>vertical-swift-mt101</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-arc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jackson</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Quarkus solo descubre beans CDI de una dependencia si trae indice Jandex. -->
+            <plugin>
+                <groupId>io.smallrye</groupId>
+                <artifactId>jandex-maven-plugin</artifactId>
+                <version>3.2.2</version>
+                <executions>
+                    <execution>
+                        <id>make-index</id>
+                        <goals><goal>jandex</goal></goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>

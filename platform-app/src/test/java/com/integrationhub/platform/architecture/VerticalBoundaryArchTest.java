@@ -59,8 +59,11 @@ class VerticalBoundaryArchTest {
     /** Paquetes del motor donde un literal de tipo de tarea de un vertical seria acoplamiento. */
     private static final Path ENGINE_SOURCE_ROOT =
             Path.of("src", "main", "java", "com", "integrationhub", "platform");
+    // `api/security` salio de la lista porque el paquete ya no existe: PlatformRoles se fue al SPI y
+    // los roles del maker-checker al vertical. Un paquete inexistente se saltaba en silencio, o sea
+    // que figurar aca daba una sensacion de cobertura que no era real.
     private static final List<String> ENGINE_SOURCE_PACKAGES =
-            List.of("service/execution", "service/process", "domain", "api/security");
+            List.of("service/execution", "service/process", "domain");
 
     /**
      * Literales de tipo de tarea de un vertical tolerados HOY en el motor (freeze-list manual:

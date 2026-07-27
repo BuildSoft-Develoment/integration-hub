@@ -19,9 +19,9 @@ import jakarta.ws.rs.core.MediaType;
 
 import java.util.List;
 
-import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
-import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
-import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+import static com.integrationhub.platform.spi.security.PlatformRoles.AUDITOR;
+import static com.integrationhub.platform.spi.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.spi.security.PlatformRoles.PLATFORM_ADMIN;
 
 @Path("/api/source-definitions")
 @Produces(MediaType.APPLICATION_JSON)

@@ -1,7 +1,7 @@
 package com.integrationhub.platform.service.catalog;
 
 import com.integrationhub.platform.api.mapper.process.ProcessDefinitionApiMapper;
-import com.integrationhub.platform.api.response.common.PageResponse;
+import com.integrationhub.platform.spi.api.PageResponse;
 import com.integrationhub.platform.api.response.process.ProcessDefinitionResponse;
 import com.integrationhub.platform.api.response.process.ProcessScheduleResponse;
 import com.integrationhub.platform.domain.ConnectionType;

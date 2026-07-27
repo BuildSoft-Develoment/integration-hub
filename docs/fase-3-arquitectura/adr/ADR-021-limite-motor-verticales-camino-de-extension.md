@@ -193,10 +193,11 @@ Lo hecho: los 10 endpoints/DTOs MT101 salen de `api.*.execution` a `api.*.paymen
 
 Las **2 violaciones restantes** son los readers `SwiftMtReaderProvider` y `Pain001XmlReaderProvider`, que viven en `provider/reader` por una decision documentada en el propio codigo (se registran en el catalogo de formatos como uno mas). Se dejan congeladas a proposito: revisarlas exige revisar esa decision, no solo mover archivos.
 
-**Fase 3 — modulo Maven propio.** Dos modulos nuevos, en tres olas:
+**Fase 3 — modulo Maven propio.** Tres modulos nuevos, en cuatro olas:
 
-- **`platform-spi`** (41 clases) — el contrato de extension. Se extrajo *entero* el paquete `platform.spi`, conservando su nombre: sin paquete partido y sin reescribir un solo import. Despues fue creciendo con lo que la migracion fue revelando como contrato y no como interioridad.
-- **`vertical-swift-mt101`** (101 clases + 48 pruebas) — el vertical, en paquete `com.integrationhub.vertical.swift.mt101`.
+- **`platform-spi`** — el contrato de extension. Se extrajo *entero* el paquete `platform.spi`, conservando su nombre: sin paquete partido y sin reescribir un solo import. Despues fue creciendo con lo que la migracion fue revelando como contrato y no como interioridad.
+- **`vertical-swift-mt101`** — el vertical, en paquete `com.integrationhub.vertical.swift.mt101`.
+- **`vertical-iso20022`** — proyecto base de PAIN.001, sin implementar (ver mas abajo).
 
 El orden importo: primero se invirtieron las dependencias, despues se movieron los archivos. Medida en tres pasadas, la superficie del vertical hacia el motor:
 
@@ -213,15 +214,33 @@ La primera pasada mostro que **tres clases concentraban 46 de las 46 referencias
 
 **Esto evito un `platform-core`.** La ola 3 parecia exigir sacar el motor entero de `platform-app` (~324 archivos) para que el vertical pudiera llevarse lo que le faltaba. Medir primero mostro que no hacia falta: el vertical no necesitaba *el motor*, necesitaba 7 metodos.
 
-Lo que **se queda en `platform-app` a proposito** — no es deuda, es donde va:
+#### Ola 4 — la revision que corrigio cuatro clasificaciones
+
+Al cerrar la ola 3 se listaron cinco cosas como "se quedan en `platform-app` a proposito". **Cuatro de las cinco estaban mal.** La revision del usuario las cuestiono una por una y, al medirlas, resulto que ninguna tenia dependencia del motor:
+
+| Lo que se dijo | Lo que decia el codigo | Donde quedo |
+|---|---|---|
+| `RestInboundDeliveryTransport` es un adaptador del motor | Implementa un puerto MT101, usa `SwiftInboundStore`, dice `"MT101_INBOUND_DELIVER via REST"` y su gemelo `DbInboundDeliveryTransport` ya estaba en el vertical. El unico bloqueo real era `HttpRequestSupport`, que se habia quedado en el motor mientras sus 3 hermanos subian al SPI | vertical (+ `HttpRequestSupport` al SPI) |
+| `PaymentValidationRule*` es catalogo de *pagos*, no de MT101 | Los tres consumidores de `payment_validation_rule` estan en el modulo del vertical. La clasificacion salio del prefijo `Payment` y de la columna `standard`, sin mirar quien lee | vertical |
+| `PaymentValidationRuleApiMapper` es capa API | Mapea entidad del vertical -> DTO del vertical. Cero dependencias del motor | vertical |
+| Los 5 recursos JAX-RS son "capa de composicion" | **Cero** imports del motor: solo `jakarta.ws.rs` y `jakarta.annotation.security`. `@Path` fija la URL, no el paquete: mover no cambio ninguna ruta | vertical |
+
+El patron de los cuatro errores es el mismo y vale registrarlo: **se clasifico por el nombre o por la capa, no por los consumidores.** El unico metodo que no fallo en toda la migracion fue medir quien depende de quien.
+
+De paso, `PlatformRoles` se partio: los 5 roles transversales al SPI (los usa el motor en 11-20 archivos cada uno) y los 2 del maker-checker al vertical (**el motor no los usaba nunca**).
+
+Lo que **si** se queda en `platform-app`:
 
 | Que | Por que |
 |---|---|
-| Los 4 recursos JAX-RS de MT101 | La capa REST es composicion: `@Path` + seguridad + el resto de la app |
-| `RestInboundDeliveryTransport`, `ProcessTaskDefinition{Build,Corrective}ConfigSource` | Adaptadores del motor que implementan puertos **del vertical** — la dependencia va en el sentido correcto |
-| `PaymentValidationRuleCatalogService` + entidad + repo + mapper | Catalogo CRUD de reglas de *pagos*, no de MT101 |
-| `Pain001*` (iso20022) | Es **otro vertical**; meterlo en `vertical-swift-mt101` seria un error |
+| `ProcessTaskDefinition{Build,Corrective}ConfigSource` | Adaptadores que implementan puertos **del vertical** leyendo `process_task_definition`, tabla del motor. Aca la dependencia si va en el sentido correcto. *(Pendiente: los puertos se llaman `Mt101*` y la necesidad es generica — subirlos al SPI como `ProcessTaskConfigSource` haria que SBS los reuse gratis.)* |
 | `Mt101ReflectionRegistrationsTest` | Prueba de guardia que compara contra el registro central del motor: necesita ver ambos modulos |
+
+#### Tercer modulo: `vertical-iso20022`
+
+PAIN.001 tenia 602 lineas de andamiaje en `platform-app` y **no esta implementado**: `PAIN001_PARSE` ni siquiera esta dado de alta como tipo de tarea (el propio spec del frontend lo afirma con `expect(types).not.toContain(...)`). Se saca a modulo propio como **proyecto base**, para que implementarlo mas adelante no signifique volver a desenredarlo de MT101.
+
+Trae una **dependencia deliberada entre verticales** (`vertical-iso20022` -> `vertical-swift-mt101`): `Pain001ToMt101Mapper` normaliza el mensaje a `Mt101Message` para reusar el pipeline downstream, y eso ES lo que hace este vertical hoy. Se prefirio a esconder el mapper en `platform-app`, donde el MOTOR terminaria conociendo dos verticales — justo lo que el trinquete existe para impedir. Al implementar ISO 20022 de verdad esa dependencia debe desaparecer; si no desaparece, la conversion dejo de ser transitoria y hay que revisarla.
 
 Las pruebas del vertical viajaron con el (48 archivos). Dejaron de instanciar `JsonConfigurationMapper` del motor — que arrastraba toda la resolucion de secretos solo para parsear un JSON — y usan un doble del contrato. La expansion real de `${secret:...}` se sigue probando donde vive, en `JsonConfigurationMapperTest`.
 

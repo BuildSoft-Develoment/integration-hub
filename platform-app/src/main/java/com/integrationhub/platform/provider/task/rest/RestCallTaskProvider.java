@@ -8,7 +8,7 @@ import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
-import com.integrationhub.platform.provider.task.http.HttpRequestSupport;
+import com.integrationhub.platform.spi.task.support.HttpRequestSupport;
 import com.integrationhub.platform.provider.task.http.ResilientHttpSender;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;

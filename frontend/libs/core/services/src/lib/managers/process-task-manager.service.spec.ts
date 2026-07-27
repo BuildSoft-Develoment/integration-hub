@@ -103,8 +103,10 @@ describe('ProcessTaskManagerService remote task catalog', () => {
       taskTypes: [
         // Vertical local bien portado: declara schema -> se ofrece, sin editar libs del core.
         { type: 'SBS_BUILD', origin: 'LOCAL', status: 'AVAILABLE', configurable: true },
-        // Local sin schema: no hay forma de configurarlo -> no se ofrece.
-        { type: 'PAIN001_PARSE', origin: 'LOCAL', status: 'AVAILABLE', configurable: false },
+        // Local sin schema: no hay forma de configurarlo -> no se ofrece. El nombre es ficticio a
+        // proposito: la regla no debe conocer ningun tipo concreto, y con un tipo real de fixture
+        // este test no distinguia "la regla es generica" de "ese tipo esta en una lista negra".
+        { type: 'FAKE_LOCAL_NO_SCHEMA', origin: 'LOCAL', status: 'AVAILABLE', configurable: false },
         // Los remotos siguen entrando aunque no declaren configurable (compatibilidad).
         { type: 'DEMO_TRANSFORM_NODE', origin: 'REMOTE', status: 'AVAILABLE', pluginId: 'demo-node' },
       ],
@@ -113,7 +115,7 @@ describe('ProcessTaskManagerService remote task catalog', () => {
 
     const types = manager.availableProviders().map((item) => item.type);
     expect(types).toContain('SBS_BUILD');
-    expect(types).not.toContain('PAIN001_PARSE');
+    expect(types).not.toContain('FAKE_LOCAL_NO_SCHEMA');
     expect(types).toContain('DEMO_TRANSFORM_NODE');
     // El origen viaja desde el catalogo: un vertical local no se rotula como plugin remoto.
     expect(manager.availableProviders().find((item) => item.type === 'SBS_BUILD')?.origin).toBe('LOCAL');

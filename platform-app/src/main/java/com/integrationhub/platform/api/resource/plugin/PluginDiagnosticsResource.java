@@ -33,9 +33,9 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
-import static com.integrationhub.platform.api.security.PlatformRoles.AUDITOR;
-import static com.integrationhub.platform.api.security.PlatformRoles.INTEGRATION_ADMIN;
-import static com.integrationhub.platform.api.security.PlatformRoles.PLATFORM_ADMIN;
+import static com.integrationhub.platform.spi.security.PlatformRoles.AUDITOR;
+import static com.integrationhub.platform.spi.security.PlatformRoles.INTEGRATION_ADMIN;
+import static com.integrationhub.platform.spi.security.PlatformRoles.PLATFORM_ADMIN;
 
 @Path("/api/plugins")
 @Produces(MediaType.APPLICATION_JSON)

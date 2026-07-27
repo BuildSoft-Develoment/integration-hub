@@ -12,6 +12,7 @@
         <module>platform-contract</module>
         <module>platform-spi</module>
         <module>vertical-swift-mt101</module>
+        <module>vertical-iso20022</module>
         <module>ejemplos/backend-plugin-sidecar</module>
         <module>platform-app</module>
         <module>audit-consumer</module>

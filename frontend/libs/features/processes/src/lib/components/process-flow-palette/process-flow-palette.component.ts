@@ -20,8 +20,7 @@ import { CATEGORY_PLUGIN, categoryLabelKey, getProcessFlowNodePresentation, task
  *   <li>Los 6 task types del motor (FILE_READ, DB_WRITE, ...).</li>
  *   <li>Los task types aportados por verticales via
  *       {@code provideProcessTaskProviders} y {@code providePaymentsSwiftForms}
- *       (los 10 MT101_* de spec 008, futuros PAIN001_* de spec 008 sub-catalogo
- *       iso20022/, etc).</li>
+ *       (los 10 MT101_* del modulo vertical-swift-mt101, los futuros SBS_*, etc).
  * </ul>
  */
 @Component({

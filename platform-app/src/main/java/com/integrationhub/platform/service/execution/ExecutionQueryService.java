@@ -3,7 +3,7 @@ package com.integrationhub.platform.service.execution;
 // @trace RF-002, RF-003 (reingenieria: clase que implementa el/los RF en produccion)
 
 import com.integrationhub.platform.api.mapper.execution.ExecutionApiMapper;
-import com.integrationhub.platform.api.response.common.PageResponse;
+import com.integrationhub.platform.spi.api.PageResponse;
 import com.integrationhub.platform.api.response.execution.AuditEventResponse;
 import com.integrationhub.platform.api.response.execution.AuditEventPageResponse;
 import com.integrationhub.platform.api.response.execution.OverviewMetricResponse;
