@@ -1,7 +1,7 @@
 package com.integrationhub.platform.integration;
 
-import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FailedRecordRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101RebuildRepository;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;

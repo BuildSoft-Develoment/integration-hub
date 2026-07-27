@@ -1,6 +1,6 @@
 package com.integrationhub.platform.service.payments.swift;
 
-import com.integrationhub.platform.provider.task.payments.swift.Mt101PayDispatchIntentStore;
+import com.integrationhub.vertical.swift.mt101.provider.Mt101PayDispatchIntentStore;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 

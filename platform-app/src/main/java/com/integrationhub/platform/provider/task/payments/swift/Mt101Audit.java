@@ -3,7 +3,7 @@ package com.integrationhub.platform.provider.task.payments.swift;
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.spi.task.TaskContext;
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;

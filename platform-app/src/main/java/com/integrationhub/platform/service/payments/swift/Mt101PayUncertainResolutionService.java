@@ -1,9 +1,12 @@
 package com.integrationhub.platform.service.payments.swift;
 
+import com.integrationhub.vertical.swift.mt101.service.Mt101CorrectiveTaskConfigSource;
+import com.integrationhub.vertical.swift.mt101.service.Mt101PayConflictAudit;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.provider.task.payments.swift.Mt101StatusQueryExecutor;
-import com.integrationhub.platform.repository.payments.swift.Mt101ConfirmationRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
+import com.integrationhub.vertical.swift.mt101.provider.Mt101StatusQueryExecutor;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101ConfirmationRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -48,7 +51,7 @@ public class Mt101PayUncertainResolutionService {
     // P1 (item 2): trama append-only PAY_CONFLICT cuando STATUS detecta SENT→REJECTED (nullable en tests sin audit).
     private final com.integrationhub.platform.service.execution.RecordAuditEmitter recordAuditEmitter;
 
-    private final com.integrationhub.platform.service.payments.swift.Mt101CorrectiveTaskConfigSource taskConfigSource;
+    private final com.integrationhub.vertical.swift.mt101.service.Mt101CorrectiveTaskConfigSource taskConfigSource;
 
     @Inject
     public Mt101PayUncertainResolutionService(DataSource defaultDataSource,

@@ -1,8 +1,8 @@
 package com.integrationhub.platform.service.payments.swift;
 
-import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101StagingRecordRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101StagingRecordRepository.StagingPayload;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository.StagingPayload;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.payments.swift.Mt101CorrectionSheetService.SheetRow;

@@ -1,5 +1,7 @@
 package com.integrationhub.platform.service.payments.swift;
 
+import com.integrationhub.vertical.swift.mt101.service.Mt101CorrectiveTaskConfigSource;
+
 import com.integrationhub.platform.repository.ProcessTaskDefinitionRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import jakarta.enterprise.context.ApplicationScoped;

@@ -1,6 +1,6 @@
 package com.integrationhub.platform.integration;
 
-import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
 import com.integrationhub.platform.service.payments.swift.Mt101PayConflictAcknowledgeService;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;

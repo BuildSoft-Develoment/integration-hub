@@ -1,6 +1,6 @@
 package com.integrationhub.platform.provider.task.payments.swift.validation;
 
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;

@@ -1,8 +1,8 @@
 package com.integrationhub.platform.service.payments;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.api.request.payments.PaymentValidationRuleImportRequest;
-import com.integrationhub.platform.api.request.payments.PaymentValidationRuleRequest;
+import com.integrationhub.vertical.swift.mt101.api.request.PaymentValidationRuleImportRequest;
+import com.integrationhub.vertical.swift.mt101.api.request.PaymentValidationRuleRequest;
 import com.integrationhub.platform.api.response.common.PageResponse;
 import com.integrationhub.platform.entity.PaymentValidationRule;
 import com.integrationhub.platform.repository.payments.validation.PaymentValidationRuleRepository;

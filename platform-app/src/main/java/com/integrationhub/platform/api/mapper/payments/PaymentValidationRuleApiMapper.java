@@ -1,6 +1,6 @@
 package com.integrationhub.platform.api.mapper.payments;
 
-import com.integrationhub.platform.api.response.payments.PaymentValidationRuleResponse;
+import com.integrationhub.vertical.swift.mt101.api.response.PaymentValidationRuleResponse;
 import com.integrationhub.platform.entity.PaymentValidationRule;
 import jakarta.enterprise.context.ApplicationScoped;
 

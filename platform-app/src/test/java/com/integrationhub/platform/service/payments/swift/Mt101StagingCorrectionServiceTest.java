@@ -1,8 +1,8 @@
 package com.integrationhub.platform.service.payments.swift;
 
 import com.integrationhub.platform.audit.AuditEnvelope;
-import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101StagingRecordRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;

@@ -1,12 +1,14 @@
 package com.integrationhub.platform.service.payments.swift;
 
+import com.integrationhub.vertical.swift.mt101.service.Mt101CorrectiveTaskConfigSource;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import com.integrationhub.platform.audit.AuditEnvelope;
-import com.integrationhub.platform.provider.task.payments.swift.Mt101StatusQueryExecutor;
-import com.integrationhub.platform.repository.payments.swift.Mt101ConfirmationRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
+import com.integrationhub.vertical.swift.mt101.provider.Mt101StatusQueryExecutor;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101ConfirmationRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

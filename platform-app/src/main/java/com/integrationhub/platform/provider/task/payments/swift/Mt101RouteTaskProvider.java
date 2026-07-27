@@ -4,7 +4,7 @@ import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;

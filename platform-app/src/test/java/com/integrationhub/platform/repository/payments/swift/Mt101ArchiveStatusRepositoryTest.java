@@ -1,5 +1,7 @@
 package com.integrationhub.platform.repository.payments.swift;
 
+import com.integrationhub.vertical.swift.mt101.repository.Mt101ArchiveStatusRepository;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;

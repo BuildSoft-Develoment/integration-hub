@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.integrationhub.platform.spi.task.TaskContext;
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;

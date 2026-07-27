@@ -1,9 +1,9 @@
 package com.integrationhub.platform.integration;
 
-import com.integrationhub.platform.spi.task.payments.ValidationIssue;
+import com.integrationhub.vertical.swift.mt101.spi.ValidationIssue;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101FragmentStore;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101ValidateTaskProvider;
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import com.integrationhub.platform.spi.task.TaskContext;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;

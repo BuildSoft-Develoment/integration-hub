@@ -3,10 +3,10 @@ package com.integrationhub.platform.provider.task.payments.swift.transport;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101PaymentCorrelation;
-import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
-import com.integrationhub.platform.spi.task.payments.PreDispatchTransportException;
-import com.integrationhub.platform.spi.task.payments.TransportResult;
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.PaymentMessageTransport;
+import com.integrationhub.vertical.swift.mt101.spi.PreDispatchTransportException;
+import com.integrationhub.vertical.swift.mt101.spi.TransportResult;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 

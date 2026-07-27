@@ -1,5 +1,7 @@
 package com.integrationhub.platform.repository.payments.validation;
 
+import com.integrationhub.vertical.swift.mt101.repository.PaymentValidationRuleReader;
+
 import com.integrationhub.platform.entity.PaymentValidationRule;
 import io.quarkus.hibernate.orm.panache.PanacheRepository;
 import jakarta.enterprise.context.ApplicationScoped;

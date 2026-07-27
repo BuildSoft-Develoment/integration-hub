@@ -1,9 +1,11 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
+
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.provider.task.dbwrite.DbTaskSupport;
-import com.integrationhub.platform.repository.payments.swift.Mt101StagingRecordRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
@@ -417,7 +419,7 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
         return row.recordIndex() + 1;
     }
 
-    private com.integrationhub.platform.spi.task.payments.Mt101Message buildFragment(
+    private com.integrationhub.vertical.swift.mt101.spi.Mt101Message buildFragment(
             TaskContext context,
             Map<String, Object> configuration,
             List<RowRecord> rows,
@@ -441,7 +443,7 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
         return messages.getFirst();
     }
 
-    private int payloadBytes(com.integrationhub.platform.spi.task.payments.Mt101Message message) {
+    private int payloadBytes(com.integrationhub.vertical.swift.mt101.spi.Mt101Message message) {
         return message.rawPayload() == null ? 0
                 : message.rawPayload().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
     }
@@ -595,12 +597,12 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     }
 
     @SuppressWarnings("unchecked")
-    private List<com.integrationhub.platform.spi.task.payments.Mt101Message> messagesFromBuild(TaskResult result) {
+    private List<com.integrationhub.vertical.swift.mt101.spi.Mt101Message> messagesFromBuild(TaskResult result) {
         var raw = result.outputs().get("records");
         if (!(raw instanceof List<?> rawList)) {
             return List.of();
         }
-        return (List<com.integrationhub.platform.spi.task.payments.Mt101Message>) rawList;
+        return (List<com.integrationhub.vertical.swift.mt101.spi.Mt101Message>) rawList;
     }
 
     private TaskContext fragmentContext(TaskContext original, int messageIndex, int messageTotal, long offset) {

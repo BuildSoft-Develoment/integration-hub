@@ -1,11 +1,11 @@
 package com.integrationhub.platform.api.resource.payments;
 
-import com.integrationhub.platform.api.response.payments.Mt101CorrectionApplyResponse;
-import com.integrationhub.platform.api.response.payments.Mt101CorrectionPreviewResponse;
-import com.integrationhub.platform.api.response.payments.Mt101FailedRecordResponse;
-import com.integrationhub.platform.api.response.payments.Mt101RuleSummaryResponse;
-import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
+import com.integrationhub.vertical.swift.mt101.api.response.Mt101CorrectionApplyResponse;
+import com.integrationhub.vertical.swift.mt101.api.response.Mt101CorrectionPreviewResponse;
+import com.integrationhub.vertical.swift.mt101.api.response.Mt101FailedRecordResponse;
+import com.integrationhub.vertical.swift.mt101.api.response.Mt101RuleSummaryResponse;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FailedRecordRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101RebuildRepository;
 import com.integrationhub.platform.service.payments.swift.Mt101CorrectiveLifecycleService;
 import com.integrationhub.platform.service.payments.swift.Mt101PayUncertainResolutionService;
 import com.integrationhub.platform.service.payments.swift.Mt101ReconciliationCloseService;

@@ -1,11 +1,11 @@
 package com.integrationhub.platform.api.resource.payments;
 
 import com.integrationhub.platform.api.mapper.payments.PaymentValidationRuleApiMapper;
-import com.integrationhub.platform.api.request.payments.PaymentValidationRuleImportRequest;
-import com.integrationhub.platform.api.request.payments.PaymentValidationRuleRequest;
+import com.integrationhub.vertical.swift.mt101.api.request.PaymentValidationRuleImportRequest;
+import com.integrationhub.vertical.swift.mt101.api.request.PaymentValidationRuleRequest;
 import com.integrationhub.platform.api.response.common.PageResponse;
-import com.integrationhub.platform.api.response.payments.PaymentValidationRuleImportResponse;
-import com.integrationhub.platform.api.response.payments.PaymentValidationRuleResponse;
+import com.integrationhub.vertical.swift.mt101.api.response.PaymentValidationRuleImportResponse;
+import com.integrationhub.vertical.swift.mt101.api.response.PaymentValidationRuleResponse;
 import com.integrationhub.platform.service.payments.PaymentValidationRuleCatalogService;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.Consumes;

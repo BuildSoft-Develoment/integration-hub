@@ -1,6 +1,7 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
-import com.integrationhub.platform.repository.payments.swift.InboundRoutedTransactionRepository;
+
+import com.integrationhub.vertical.swift.mt101.repository.InboundRoutedTransactionRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;

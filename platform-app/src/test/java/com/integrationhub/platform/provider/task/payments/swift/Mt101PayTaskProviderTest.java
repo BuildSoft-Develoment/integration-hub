@@ -1,11 +1,13 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.vertical.swift.mt101.spi.PreDispatchTransportException;
+
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
-import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
-import com.integrationhub.platform.spi.task.payments.TransportResult;
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.PaymentMessageTransport;
+import com.integrationhub.vertical.swift.mt101.spi.TransportResult;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import com.integrationhub.platform.spi.task.TaskContext;
 import jakarta.enterprise.inject.Instance;
 import org.junit.jupiter.api.Test;
@@ -299,7 +301,7 @@ class Mt101PayTaskProviderTest {
         var transport = new StubTransport("REST", null) {
             @Override
             public TransportResult send(Mt101Message message, Map<String, Object> configuration) {
-                throw new com.integrationhub.platform.spi.task.payments.PreDispatchTransportException(
+                throw new com.integrationhub.vertical.swift.mt101.spi.PreDispatchTransportException(
                         "missing rest.url");
             }
         };

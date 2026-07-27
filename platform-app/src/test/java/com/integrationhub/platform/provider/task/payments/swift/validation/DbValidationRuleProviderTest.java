@@ -1,10 +1,10 @@
 package com.integrationhub.platform.provider.task.payments.swift.validation;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.spi.task.payments.ValidationIssue;
-import com.integrationhub.platform.spi.task.payments.ValidationPredicate;
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
-import com.integrationhub.platform.repository.payments.validation.PaymentValidationRuleReader;
+import com.integrationhub.vertical.swift.mt101.spi.ValidationIssue;
+import com.integrationhub.vertical.swift.mt101.spi.ValidationPredicate;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.repository.PaymentValidationRuleReader;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;

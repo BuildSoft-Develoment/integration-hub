@@ -1,13 +1,16 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.vertical.swift.mt101.provider.Mt101PayDispatchIntentStore;
+import com.integrationhub.vertical.swift.mt101.service.Mt101PayConflictAudit;
+
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
-import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101RebuildRepository;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
-import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
-import com.integrationhub.platform.spi.task.payments.PreDispatchTransportException;
-import com.integrationhub.platform.spi.task.payments.TransportResult;
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.PaymentMessageTransport;
+import com.integrationhub.vertical.swift.mt101.spi.PreDispatchTransportException;
+import com.integrationhub.vertical.swift.mt101.spi.TransportResult;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -595,9 +598,9 @@ public class Mt101PayTaskProvider implements TaskProvider {
             String currentStatus, String incomingTerminal) {
         // DRY: misma trama PAY_CONFLICT que emite el resolver STATUS, con source=WORKER (contradicción detectada al
         // aplicar un resultado terminal tardío del despacho).
-        return com.integrationhub.platform.service.payments.swift.Mt101PayConflictAudit.envelope(
+        return com.integrationhub.vertical.swift.mt101.service.Mt101PayConflictAudit.envelope(
                 context.processExecutionId(), context.taskDefinitionId(), reference, currentStatus, incomingTerminal,
-                null, com.integrationhub.platform.service.payments.swift.Mt101PayConflictAudit.Source.WORKER, null);
+                null, com.integrationhub.vertical.swift.mt101.service.Mt101PayConflictAudit.Source.WORKER, null);
     }
 
     private record RoutedDispatchMessage(Mt101Message message, String routedAs, String routeError) {

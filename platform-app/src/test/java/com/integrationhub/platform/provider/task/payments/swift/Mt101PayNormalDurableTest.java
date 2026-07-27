@@ -1,14 +1,16 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
-import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
-import com.integrationhub.platform.spi.task.payments.TransportResult;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.PaymentMessageTransport;
+import com.integrationhub.vertical.swift.mt101.spi.TransportResult;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.util.TypeLiteral;
 import org.junit.jupiter.api.BeforeEach;
@@ -252,7 +254,7 @@ class Mt101PayNormalDurableTest {
         var fragmentSource = fragmentStore.source(null, setId, 2);
         fragmentStore.markPayConflict(fragmentSource, List.of("V1"), "late SENT vs prior REJECTED");
 
-        var repo = new com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository();
+        var repo = new com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository();
         assertEquals(1L, repo.payConflictCount(dataSource, setId), "un fragmento en conflicto en el set");
         var conflicts = repo.conflictedFragments(dataSource, setId);
         assertEquals(1, conflicts.size(), "solo V1 está en conflicto");

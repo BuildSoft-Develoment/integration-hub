@@ -1,5 +1,8 @@
 package com.integrationhub.platform.service.payments.swift;
 
+import com.integrationhub.vertical.swift.mt101.service.Mt101CorrectiveTaskConfigSource;
+import com.integrationhub.vertical.swift.mt101.spi.TransportResult;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
@@ -14,13 +17,13 @@ import com.integrationhub.platform.provider.task.payments.swift.Mt101RepairTaskP
 import com.integrationhub.platform.provider.task.payments.swift.Mt101RouteTaskProvider;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101StatusTaskProvider;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101ValidateTaskProvider;
-import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101RebuildRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 

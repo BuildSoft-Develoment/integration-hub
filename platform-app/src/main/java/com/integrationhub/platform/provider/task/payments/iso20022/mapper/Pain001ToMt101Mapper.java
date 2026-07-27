@@ -1,6 +1,6 @@
 package com.integrationhub.platform.provider.task.payments.iso20022.mapper;
 
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.math.BigDecimal;

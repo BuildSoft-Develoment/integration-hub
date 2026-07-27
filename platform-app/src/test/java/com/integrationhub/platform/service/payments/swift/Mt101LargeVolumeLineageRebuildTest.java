@@ -1,11 +1,13 @@
 package com.integrationhub.platform.service.payments.swift;
 
+import com.integrationhub.vertical.swift.mt101.service.Mt101BuildConfigSource;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101BuildFromTableTaskProvider;
-import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101ValidationIssueRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FailedRecordRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101RebuildRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101ValidationIssueRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;

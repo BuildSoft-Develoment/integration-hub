@@ -2,9 +2,9 @@ package com.integrationhub.platform.provider.task.payments.swift.validation;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.spi.task.payments.ValidationIssue;
-import com.integrationhub.platform.spi.task.payments.ValidationPredicate;
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.ValidationIssue;
+import com.integrationhub.vertical.swift.mt101.spi.ValidationPredicate;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import org.apache.commons.jexl3.JexlEngine;
 import org.apache.commons.jexl3.MapContext;
 

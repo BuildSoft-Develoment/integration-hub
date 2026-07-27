@@ -2,11 +2,11 @@ package com.integrationhub.platform.service.payments.swift;
 
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
-import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101StagingCorrectionRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101StagingRecordRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FailedRecordRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101RebuildRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingCorrectionRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;

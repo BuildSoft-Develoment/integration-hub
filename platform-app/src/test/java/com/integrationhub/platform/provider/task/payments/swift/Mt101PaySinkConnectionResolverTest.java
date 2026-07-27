@@ -3,7 +3,7 @@ package com.integrationhub.platform.provider.task.payments.swift;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.task.sink.SinkDefinitionService;
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;

@@ -1,10 +1,14 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.vertical.swift.mt101.provider.Mt101StatusGateway;
+import com.integrationhub.vertical.swift.mt101.provider.Mt101StatusQueryExecutor;
+import com.integrationhub.vertical.swift.mt101.provider.Mt101StatusSftpGateway;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
-import com.integrationhub.platform.repository.payments.swift.Mt101ConfirmationRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101RebuildRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101ConfirmationRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101RebuildRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.service.payments.swift.Mt101PayUncertainResolutionService;

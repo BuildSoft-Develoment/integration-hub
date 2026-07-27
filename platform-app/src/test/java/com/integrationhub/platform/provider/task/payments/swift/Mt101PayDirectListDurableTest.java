@@ -1,11 +1,13 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.vertical.swift.mt101.provider.Mt101PayDispatchIntentStore;
+
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
-import com.integrationhub.platform.spi.task.payments.PaymentMessageTransport;
-import com.integrationhub.platform.spi.task.payments.TransportResult;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.PaymentMessageTransport;
+import com.integrationhub.vertical.swift.mt101.spi.TransportResult;
 import jakarta.enterprise.inject.Instance;
 import jakarta.enterprise.util.TypeLiteral;
 import org.junit.jupiter.api.BeforeEach;

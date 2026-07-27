@@ -1,7 +1,9 @@
 package com.integrationhub.platform.service.payments.swift;
 
-import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository;
+
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FailedRecordRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;
@@ -43,7 +45,7 @@ class Mt101RowTimelineServiceTest {
         dataSource = dataSource();
         service = new Mt101RowTimelineService(dataSource, null,
                 new Mt101FragmentRepository(), new Mt101FailedRecordRepository(),
-                new com.integrationhub.platform.repository.payments.swift.Mt101StagingRecordRepository());
+                new com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository());
         prepareSchema();
     }
 

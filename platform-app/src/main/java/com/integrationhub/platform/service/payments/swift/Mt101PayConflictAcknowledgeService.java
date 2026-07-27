@@ -1,6 +1,8 @@
 package com.integrationhub.platform.service.payments.swift;
 
-import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
+import com.integrationhub.vertical.swift.mt101.service.Mt101PayConflictAudit;
+
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.execution.AuditSpoolWriter;
 import jakarta.enterprise.context.ApplicationScoped;

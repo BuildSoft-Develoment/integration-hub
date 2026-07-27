@@ -1,6 +1,6 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;

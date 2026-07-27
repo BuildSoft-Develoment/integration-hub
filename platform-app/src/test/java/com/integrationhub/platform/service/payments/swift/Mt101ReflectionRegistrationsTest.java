@@ -1,7 +1,7 @@
 package com.integrationhub.platform.service.payments.swift;
 
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
-import com.integrationhub.platform.spi.task.payments.ValidationIssue;
+import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
+import com.integrationhub.vertical.swift.mt101.spi.ValidationIssue;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 import org.junit.jupiter.api.Test;
 

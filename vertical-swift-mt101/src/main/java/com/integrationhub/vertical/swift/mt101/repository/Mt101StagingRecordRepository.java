@@ -1,0 +1,596 @@
+package com.integrationhub.vertical.swift.mt101.repository;
+
+import jakarta.enterprise.context.ApplicationScoped;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+
+/** Repository JDBC para leer staging de entrada de MT101 masivo. */
+@ApplicationScoped
+public class Mt101StagingRecordRepository {
+
+    public <T> T withConnection(DataSource dataSource, SqlFunction<Connection, T> function) throws SQLException {
+        try (var connection = dataSource.getConnection()) {
+            return function.apply(connection);
+        }
+    }
+
+    public long countRows(DataSource dataSource, SourceQuery source) throws SQLException {
+        return withConnection(dataSource, connection -> countRows(connection, source));
+    }
+
+    public long countRows(Connection connection, SourceQuery source) throws SQLException {
+        var sql = "select count(*) from " + source.table() + " src" + whereClause(source);
+        try (var statement = connection.prepareStatement(sql)) {
+            bindWhere(statement, source);
+            try (var rs = statement.executeQuery()) {
+                return rs.next() ? rs.getLong(1) : 0L;
+            }
+        }
+    }
+
+    public List<RowJson> readRowsAfter(Connection connection,
+                                       SourceQuery source,
+                                       long afterId,
+                                       int limit) throws SQLException {
+        var where = whereClause(source);
+        var sql = "select " + projection(source) + " from " + source.table() + " src"
+                + (where.isEmpty() ? " where " : where + " and ")
+                + column(source.idColumn()) + " > ?"
+                + " order by " + column(source.idColumn())
+                + " limit ?";
+        try (var statement = connection.prepareStatement(sql)) {
+            var parameter = bindWhere(statement, source);
+            statement.setLong(parameter++, afterId);
+            statement.setInt(parameter, limit);
+            return readRows(statement, source);
+        }
+    }
+
+    public List<RowJson> readRowsBetween(Connection connection,
+                                         SourceQuery source,
+                                         long firstId,
+                                         long lastId) throws SQLException {
+        var where = whereClause(source);
+        var sql = "select " + projection(source) + " from " + source.table() + " src"
+                + (where.isEmpty() ? " where " : where + " and ")
+                + column(source.idColumn()) + " >= ? and " + column(source.idColumn()) + " <= ?"
+                + " order by " + column(source.idColumn());
+        try (var statement = connection.prepareStatement(sql)) {
+            var parameter = bindWhere(statement, source);
+            statement.setLong(parameter++, firstId);
+            statement.setLong(parameter, lastId);
+            return readRows(statement, source);
+        }
+    }
+
+    /**
+     * Proyeccion id + payload, mas record_index y source_file_hash cuando la fuente
+     * los declara (ruta staging_record). Para tablas origen arbitrarias esas columnas
+     * no existen y la proyeccion se queda en id + payload.
+     */
+    private String projection(SourceQuery source) {
+        var columns = new StringBuilder(column(source.idColumn())).append(", ").append(column(source.payloadColumn()));
+        if (source.recordIndexColumn() != null) {
+            columns.append(", ").append(column(source.recordIndexColumn()));
+        }
+        if (source.sourceFileHashColumn() != null) {
+            columns.append(", ").append(column(source.sourceFileHashColumn()));
+        }
+        return columns.toString();
+    }
+
+    private List<RowJson> readRows(PreparedStatement statement, SourceQuery source) throws SQLException {
+        var rows = new ArrayList<RowJson>();
+        try (var rs = statement.executeQuery()) {
+            while (rs.next()) {
+                var column = 3;
+                Long recordIndex = null;
+                if (source.recordIndexColumn() != null) {
+                    var value = rs.getLong(column++);
+                    recordIndex = rs.wasNull() ? null : value;
+                }
+                String sourceFileHash = source.sourceFileHashColumn() != null ? rs.getString(column) : null;
+                rows.add(new RowJson(rs.getLong(1), rs.getString(2), recordIndex, sourceFileHash));
+            }
+        }
+        return rows;
+    }
+
+    private String whereClause(SourceQuery source) {
+        var clauses = new ArrayList<String>();
+        if (source.processExecutionId() != null) {
+            clauses.add(column("process_execution_id") + " = ?");
+        }
+        if (source.taskDefinitionId() != null) {
+            clauses.add(column("task_definition_id") + " = ?");
+        }
+        if (hasRebuildRunFilter(source)) {
+            var selection = "exists (select 1 from mt101_rebuild_selection sel "
+                    + "where sel.rebuild_run_id = ? "
+                    + "and sel.record_index = " + column(source.recordIndexColumn());
+            if (source.sourceFileHashColumn() != null) {
+                selection += " and (sel.source_file_hash is null or sel.source_file_hash = "
+                        + column(source.sourceFileHashColumn()) + ")";
+            }
+            selection += ")";
+            clauses.add(selection);
+        }
+        if (hasRecordIndexFilter(source)) {
+            // Rebuild selectivo: construir SOLO las filas corregidas (cuarentena).
+            var values = compactRecordIndexValues(source.recordIndexIn());
+            var ranges = compactRecordIndexRanges(values);
+            if (values.isEmpty()) {
+                clauses.add("1 = 0");
+            } else if (useRecordIndexRanges(values.size(), ranges)) {
+                var rangeClauses = new ArrayList<String>(ranges.size());
+                for (int i = 0; i < ranges.size(); i++) {
+                    rangeClauses.add(column(source.recordIndexColumn()) + " between ? and ?");
+                }
+                clauses.add("(" + String.join(" or ", rangeClauses) + ")");
+            } else {
+                clauses.add(column(source.recordIndexColumn()) + " in ("
+                        + String.join(", ", java.util.Collections.nCopies(values.size(), "?")) + ")");
+            }
+        }
+        if (clauses.isEmpty()) {
+            return "";
+        }
+        return " where " + String.join(" and ", clauses);
+    }
+
+    private boolean hasRecordIndexFilter(SourceQuery source) {
+        return source.recordIndexColumn() != null
+                && source.recordIndexIn() != null && !source.recordIndexIn().isEmpty();
+    }
+
+    private boolean hasRebuildRunFilter(SourceQuery source) {
+        return source.recordIndexColumn() != null
+                && source.rebuildRunId() != null && !source.rebuildRunId().isBlank();
+    }
+
+    private int bindWhere(PreparedStatement statement, SourceQuery source) throws SQLException {
+        var parameter = 1;
+        if (source.processExecutionId() != null) {
+            statement.setLong(parameter++, source.processExecutionId());
+        }
+        if (source.taskDefinitionId() != null) {
+            statement.setLong(parameter++, source.taskDefinitionId());
+        }
+        if (hasRebuildRunFilter(source)) {
+            statement.setString(parameter++, source.rebuildRunId().trim());
+        }
+        if (hasRecordIndexFilter(source)) {
+            var values = compactRecordIndexValues(source.recordIndexIn());
+            var ranges = compactRecordIndexRanges(values);
+            if (values.isEmpty()) {
+                return parameter;
+            }
+            if (useRecordIndexRanges(values.size(), ranges)) {
+                for (var range : ranges) {
+                    statement.setLong(parameter++, range.from());
+                    statement.setLong(parameter++, range.to());
+                }
+            } else {
+                for (var recordIndex : values) {
+                    statement.setLong(parameter++, recordIndex);
+                }
+            }
+        }
+        return parameter;
+    }
+
+    private String column(String name) {
+        return "src." + name;
+    }
+
+    private boolean useRecordIndexRanges(int valueCount, List<RecordIndexRange> ranges) {
+        return !ranges.isEmpty() && ranges.size() * 2 < valueCount;
+    }
+
+    private List<Long> compactRecordIndexValues(List<Long> recordIndexes) {
+        var sorted = new java.util.TreeSet<Long>();
+        for (var recordIndex : recordIndexes) {
+            if (recordIndex != null) {
+                sorted.add(recordIndex);
+            }
+        }
+        return new ArrayList<>(sorted);
+    }
+
+    private List<RecordIndexRange> compactRecordIndexRanges(List<Long> recordIndexes) {
+        if (recordIndexes.isEmpty()) {
+            return List.of();
+        }
+        var ranges = new ArrayList<RecordIndexRange>();
+        Long from = null;
+        Long to = null;
+        for (var recordIndex : recordIndexes) {
+            if (from == null) {
+                from = recordIndex;
+                to = recordIndex;
+            } else if (recordIndex == to + 1) {
+                to = recordIndex;
+            } else {
+                ranges.add(new RecordIndexRange(from, to));
+                from = recordIndex;
+                to = recordIndex;
+            }
+        }
+        ranges.add(new RecordIndexRange(from, to));
+        return ranges;
+    }
+
+    private record RecordIndexRange(long from, long to) {
+    }
+
+    @FunctionalInterface
+    public interface SqlFunction<T, R> {
+        R apply(T value) throws SQLException;
+    }
+
+    public record SourceQuery(
+            String table,
+            String payloadColumn,
+            String idColumn,
+            Long processExecutionId,
+            Long taskDefinitionId,
+            String recordIndexColumn,
+            String sourceFileHashColumn,
+            java.util.List<Long> recordIndexIn,
+            String rebuildRunId
+    ) {
+        /** Variante con columnas de trazabilidad pero sin filtro de filas. */
+        public SourceQuery(String table, String payloadColumn, String idColumn,
+                           Long processExecutionId, Long taskDefinitionId,
+                           String recordIndexColumn, String sourceFileHashColumn) {
+            this(table, payloadColumn, idColumn, processExecutionId, taskDefinitionId,
+                    recordIndexColumn, sourceFileHashColumn, java.util.List.of(), null);
+        }
+
+        /** Variante sin columnas de trazabilidad de fila (tablas origen arbitrarias). */
+        public SourceQuery(String table, String payloadColumn, String idColumn,
+                           Long processExecutionId, Long taskDefinitionId) {
+            this(table, payloadColumn, idColumn, processExecutionId, taskDefinitionId, null, null,
+                    java.util.List.of(), null);
+        }
+
+        public SourceQuery(String table, String payloadColumn, String idColumn,
+                           Long processExecutionId, Long taskDefinitionId,
+                           String recordIndexColumn, String sourceFileHashColumn,
+                           java.util.List<Long> recordIndexIn) {
+            this(table, payloadColumn, idColumn, processExecutionId, taskDefinitionId,
+                    recordIndexColumn, sourceFileHashColumn, recordIndexIn, null);
+        }
+    }
+
+    public record RowJson(long id, String payloadJson, Long recordIndex, String sourceFileHash) {
+    }
+
+    /** Nombre del archivo origen + total de filas de una ejecucion (cabecera del lote). */
+    public SourceInfo sourceInfo(DataSource dataSource, long processExecutionId) throws SQLException {
+        var sql = "select max(source_name) as name, count(*) as total from staging_record where process_execution_id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, processExecutionId);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return new SourceInfo(null, 0);
+                }
+                return new SourceInfo(rs.getString("name"), rs.getLong("total"));
+            }
+        }
+    }
+
+    public record SourceInfo(String sourceName, long rowCount) {
+    }
+
+    /**
+     * Fila de staging exacta por (ejecucion, record_index). Resuelve el staging_id
+     * real (no por formula stagingIdFrom+offset, que asume ids contiguos) y su
+     * created_at (timestamp del hito INGESTED). Null si la fila ya no esta.
+     */
+    public StagingRowInfo findStagingRow(DataSource dataSource,
+                                         long processExecutionId,
+                                         long recordIndex,
+                                         String sourceFileHash) throws SQLException {
+        var hash = requireSourceFileHash(sourceFileHash);
+        var sql = "select id, created_at from staging_record "
+                + "where process_execution_id = ? and record_index = ? and source_file_hash = ? limit 1";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, processExecutionId);
+            statement.setLong(2, recordIndex);
+            statement.setString(3, hash);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                var ts = rs.getTimestamp("created_at");
+                return new StagingRowInfo(rs.getLong("id"), ts == null ? null : ts.toLocalDateTime());
+            }
+        }
+    }
+
+    public record StagingRowInfo(long id, java.time.LocalDateTime createdAt) {
+    }
+
+    /**
+     * G-A (búsqueda inversa por línea física, enriquecida): resuelve una LÍNEA FÍSICA del archivo a <b>todos</b> sus
+     * registros de staging (uno por ejecución: un reproceso del mismo archivo produce varias filas con el mismo hash y
+     * línea → todas visibles, no solo la última). Cada match trae el <b>resumen de cuarentena</b> si el registro falló
+     * validación ({@code mt101_failed_record} por {@code (source_file_hash, source_record_number = record_index + 1)},
+     * con su índice): {@code rule_code}, {@code message}, {@code status}, {@code :20:}, {@code :21:}. Así, desde una
+     * línea física, soporte ve DIRECTAMENTE por qué se cuarentenó (un registro cuarentenado no tiene fragmento, así que
+     * el lookup por fragmento no lo mostraría). Usa el índice V90 {@code (source_file_hash, physical_line)}.
+     * {@code processExecutionId} opcional acota a una ejecución. Lista vacía si la línea no tiene registro.
+     */
+    public List<PhysicalLineLineage> findLineageByPhysicalLine(DataSource dataSource, String sourceFileHash,
+                                                               long physicalLine, Long processExecutionId)
+            throws SQLException {
+        var hash = requireSourceFileHash(sourceFileHash);
+        var sql = "select sr.id, sr.record_index, sr.physical_line, sr.source_file_hash, sr.process_execution_id, "
+                + "sr.sheet_name, sr.sheet_row, "
+                + "q.rule_code, q.message, q.status as quarantine_status, "
+                + "q.senders_reference, q.transaction_reference "
+                + "from staging_record sr "
+                + "left join lateral ("
+                + "  select rule_code, message, status, senders_reference, transaction_reference "
+                + "  from mt101_failed_record fr "
+                + "  where fr.source_file_hash = sr.source_file_hash and fr.source_record_number = sr.record_index + 1 "
+                + "  order by fr.id desc limit 1"
+                + ") q on true "
+                + "where sr.source_file_hash = ? and sr.physical_line = ? "
+                + "and (cast(? as bigint) is null or sr.process_execution_id = ?) "
+                + "order by sr.process_execution_id desc, sr.id desc";
+        var result = new ArrayList<PhysicalLineLineage>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, hash);
+            statement.setLong(2, physicalLine);
+            statement.setObject(3, processExecutionId);
+            statement.setObject(4, processExecutionId);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new PhysicalLineLineage(
+                            rs.getLong("id"),
+                            rs.getLong("record_index"),
+                            rs.getObject("physical_line", Long.class),
+                            rs.getString("source_file_hash"),
+                            rs.getObject("process_execution_id", Long.class),
+                            rs.getString("sheet_name"),
+                            rs.getObject("sheet_row", Long.class),
+                            rs.getString("rule_code"),
+                            rs.getString("message"),
+                            rs.getString("quarantine_status"),
+                            rs.getString("senders_reference"),
+                            rs.getString("transaction_reference")));
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Lineage de un registro localizado por línea física: identifica el registro exacto (staging_id + índice lógico +
+     * posición Excel) y, si falló validación, su resumen de cuarentena (regla + motivo + :20:/:21:).
+     */
+    public record PhysicalLineLineage(long stagingId, long recordIndex, Long physicalLine, String sourceFileHash,
+                                      Long processExecutionId, String sheetName, Long sheetRow,
+                                      String quarantineRuleCode, String quarantineMessage, String quarantineStatus,
+                                      String sendersReference, String transactionReference) {
+    }
+
+    /**
+     * #4 (búsqueda inversa por HOJA+FILA de Excel): resuelve "archivo + hoja + fila Excel" a <b>todos</b> sus registros
+     * de staging (uno por ejecución: reprocesos visibles), cada uno con su resumen de cuarentena si falló validación.
+     * Espejo de {@link #findLineageByPhysicalLine} pero para la clave operativa de Excel; usa el índice V93
+     * {@code (source_file_hash, sheet_name, sheet_row)}. Para Excel la línea física no aplica; la posición es hoja+fila.
+     */
+    public List<PhysicalLineLineage> findLineageBySheetRow(DataSource dataSource, String sourceFileHash,
+                                                           String sheetName, long sheetRow, Long processExecutionId)
+            throws SQLException {
+        var hash = requireSourceFileHash(sourceFileHash);
+        if (sheetName == null || sheetName.isBlank()) {
+            throw new IllegalArgumentException("sheetName is required for sheet-row staging access");
+        }
+        var sql = "select sr.id, sr.record_index, sr.physical_line, sr.source_file_hash, sr.process_execution_id, "
+                + "sr.sheet_name, sr.sheet_row, "
+                + "q.rule_code, q.message, q.status as quarantine_status, "
+                + "q.senders_reference, q.transaction_reference "
+                + "from staging_record sr "
+                + "left join lateral ("
+                + "  select rule_code, message, status, senders_reference, transaction_reference "
+                + "  from mt101_failed_record fr "
+                + "  where fr.source_file_hash = sr.source_file_hash and fr.source_record_number = sr.record_index + 1 "
+                + "  order by fr.id desc limit 1"
+                + ") q on true "
+                + "where sr.source_file_hash = ? and sr.sheet_name = ? and sr.sheet_row = ? "
+                + "and (cast(? as bigint) is null or sr.process_execution_id = ?) "
+                + "order by sr.process_execution_id desc, sr.id desc";
+        var result = new ArrayList<PhysicalLineLineage>();
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, hash);
+            statement.setString(2, sheetName.trim());
+            statement.setLong(3, sheetRow);
+            statement.setObject(4, processExecutionId);
+            statement.setObject(5, processExecutionId);
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    result.add(new PhysicalLineLineage(
+                            rs.getLong("id"),
+                            rs.getLong("record_index"),
+                            rs.getObject("physical_line", Long.class),
+                            rs.getString("source_file_hash"),
+                            rs.getObject("process_execution_id", Long.class),
+                            rs.getString("sheet_name"),
+                            rs.getObject("sheet_row", Long.class),
+                            rs.getString("rule_code"),
+                            rs.getString("message"),
+                            rs.getString("quarantine_status"),
+                            rs.getString("senders_reference"),
+                            rs.getString("transaction_reference")));
+                }
+            }
+        }
+        return result;
+    }
+
+    public StagingRowInfo findStagingRowById(DataSource dataSource, long stagingId) throws SQLException {
+        var sql = "select id, created_at from staging_record where id = ?";
+        try (var connection = dataSource.getConnection();
+             var statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, stagingId);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                var ts = rs.getTimestamp("created_at");
+                return new StagingRowInfo(rs.getLong("id"), ts == null ? null : ts.toLocalDateTime());
+            }
+        }
+    }
+
+    public StagingPayload findStagingPayload(DataSource dataSource,
+                                             long processExecutionId,
+                                             long recordIndex,
+                                             String sourceFileHash) throws SQLException {
+        try (var connection = dataSource.getConnection()) {
+            return findStagingPayload(connection, processExecutionId, recordIndex, sourceFileHash);
+        }
+    }
+
+    public StagingPayload findStagingPayload(Connection connection,
+                                             long processExecutionId,
+                                             long recordIndex,
+                                             String sourceFileHash) throws SQLException {
+        var hash = requireSourceFileHash(sourceFileHash);
+        var sql = "select id, payload_json, version, physical_line, sheet_name, sheet_row from staging_record "
+                + "where process_execution_id = ? and record_index = ? and source_file_hash = ? limit 1";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, processExecutionId);
+            statement.setLong(2, recordIndex);
+            statement.setString(3, hash);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return stagingPayload(rs);
+            }
+        }
+    }
+
+    /** item 2: proyeccion con la posicion FISICA (linea/hoja+fila) para el "que linea del archivo fallo". Nullables. */
+    public record StagingPayload(long id, String payloadJson, long version,
+                                 Long physicalLine, String sheetName, Long sheetRow) {
+    }
+
+    private StagingPayload stagingPayload(java.sql.ResultSet rs) throws SQLException {
+        return new StagingPayload(rs.getLong("id"), rs.getString("payload_json"), rs.getLong("version"),
+                rs.getObject("physical_line", Long.class), rs.getString("sheet_name"),
+                rs.getObject("sheet_row", Long.class));
+    }
+
+    /** Fila exacta por id tecnico de staging; camino requerido para archivos identicos. */
+    public StagingPayload findStagingPayloadById(Connection connection, long stagingId) throws SQLException {
+        var sql = "select id, payload_json, version, physical_line, sheet_name, sheet_row from staging_record where id = ?";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setLong(1, stagingId);
+            try (var rs = statement.executeQuery()) {
+                if (!rs.next()) {
+                    return null;
+                }
+                return stagingPayload(rs);
+            }
+        }
+    }
+
+    /**
+     * ADR-020 (C2): payloads + version de muchas filas por id, en UNA query (dry-run de la planilla de correccion
+     * sin N idas a la BD). Devuelve un mapa id -&gt; payload (solo las que existen).
+     */
+    public java.util.Map<Long, StagingPayload> findStagingPayloadsByIds(Connection connection,
+                                                                        java.util.Collection<Long> ids)
+            throws SQLException {
+        var result = new java.util.LinkedHashMap<Long, StagingPayload>();
+        if (ids == null || ids.isEmpty()) {
+            return result;
+        }
+        var sql = "select id, payload_json, version, physical_line, sheet_name, sheet_row "
+                + "from staging_record where id = any(?)";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setArray(1, connection.createArrayOf("bigint", ids.toArray()));
+            try (var rs = statement.executeQuery()) {
+                while (rs.next()) {
+                    var payload = stagingPayload(rs);
+                    result.put(payload.id(), payload);
+                }
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Corrige el payload de una fila de staging con locking optimista: solo aplica si
+     * {@code version} coincide e incrementa la version. Devuelve 0 si la fila no existe
+     * o la version esta obsoleta (conflicto). Unico camino de update (sin variante
+     * sin-lock).
+     */
+    public int updatePayload(DataSource dataSource,
+                             long processExecutionId,
+                             long recordIndex,
+                             String sourceFileHash,
+                             String payloadJson,
+                             long expectedVersion) throws SQLException {
+        try (var connection = dataSource.getConnection()) {
+            return updatePayload(connection, processExecutionId, recordIndex, sourceFileHash, payloadJson, expectedVersion);
+        }
+    }
+
+    public int updatePayload(Connection connection,
+                             long processExecutionId,
+                             long recordIndex,
+                             String sourceFileHash,
+                             String payloadJson,
+                             long expectedVersion) throws SQLException {
+        var hash = requireSourceFileHash(sourceFileHash);
+        var sql = "update staging_record set payload_json = ?, version = version + 1"
+                + " where process_execution_id = ? and record_index = ? and source_file_hash = ? and version = ?";
+        try (var statement = connection.prepareStatement(sql)) {
+            var parameter = 1;
+            statement.setString(parameter++, payloadJson);
+            statement.setLong(parameter++, processExecutionId);
+            statement.setLong(parameter++, recordIndex);
+            statement.setString(parameter++, hash);
+            statement.setLong(parameter, expectedVersion);
+            return statement.executeUpdate();
+        }
+    }
+
+    /** Update con locking optimista por id tecnico de staging. */
+    public int updatePayloadById(Connection connection,
+                                 long stagingId,
+                                 String payloadJson,
+                                 long expectedVersion) throws SQLException {
+        var sql = "update staging_record set payload_json = ?, version = version + 1 "
+                + "where id = ? and version = ?";
+        try (var statement = connection.prepareStatement(sql)) {
+            statement.setString(1, payloadJson);
+            statement.setLong(2, stagingId);
+            statement.setLong(3, expectedVersion);
+            return statement.executeUpdate();
+        }
+    }
+
+    private String requireSourceFileHash(String sourceFileHash) {
+        if (sourceFileHash == null || sourceFileHash.isBlank()) {
+            throw new IllegalArgumentException("sourceFileHash is required for staging row access");
+        }
+        return sourceFileHash.trim();
+    }
+}

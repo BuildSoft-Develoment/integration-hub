@@ -1,8 +1,8 @@
 package com.integrationhub.platform.api.resource.payments;
 
-import com.integrationhub.platform.api.response.payments.Mt101FragmentLinkResponse;
-import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101StagingRecordRepository;
+import com.integrationhub.vertical.swift.mt101.api.response.Mt101FragmentLinkResponse;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository;
 import com.integrationhub.platform.service.payments.swift.Mt101FragmentLookupService;
 import com.integrationhub.platform.service.payments.swift.Mt101PayConflictAcknowledgeService;
 import com.integrationhub.platform.service.payments.swift.Mt101RowTimelineService;

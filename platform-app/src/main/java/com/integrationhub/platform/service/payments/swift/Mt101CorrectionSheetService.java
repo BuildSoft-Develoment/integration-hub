@@ -1,7 +1,7 @@
 package com.integrationhub.platform.service.payments.swift;
 
-import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRepository;
-import com.integrationhub.platform.repository.payments.swift.Mt101FailedRecordRepository.CorrectionSheetRow;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FailedRecordRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101FailedRecordRepository.CorrectionSheetRow;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.task.writer.FileFormatWriterRegistry;
