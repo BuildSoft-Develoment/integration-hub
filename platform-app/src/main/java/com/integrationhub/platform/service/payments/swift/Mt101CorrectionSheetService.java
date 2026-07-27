@@ -2,8 +2,8 @@ package com.integrationhub.platform.service.payments.swift;
 
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FailedRecordRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FailedRecordRepository.CorrectionSheetRow;
-import com.integrationhub.platform.service.JsonConfigurationMapper;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.engine.ConfigurationMapper;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
 import com.integrationhub.platform.service.task.writer.FileFormatWriterRegistry;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -52,16 +52,16 @@ public class Mt101CorrectionSheetService {
     private static final int BATCH = 500;
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101FailedRecordRepository failedRecordRepository;
-    private final JsonConfigurationMapper jsonConfigurationMapper;
+    private final ConfigurationMapper jsonConfigurationMapper;
     private final FileFormatWriterRegistry writerRegistry;
 
     @Inject
     public Mt101CorrectionSheetService(DataSource defaultDataSource,
-                                       ConnectionPoolManager connectionPoolManager,
+                                       JdbcConnectionResolver connectionPoolManager,
                                        Mt101FailedRecordRepository failedRecordRepository,
-                                       JsonConfigurationMapper jsonConfigurationMapper,
+                                       ConfigurationMapper jsonConfigurationMapper,
                                        FileFormatWriterRegistry writerRegistry) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;

@@ -9,8 +9,8 @@ import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101ValidationIssueRepository;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
-import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
+import com.integrationhub.platform.spi.engine.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -76,7 +76,7 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
     private final Instance<ValidationRuleProvider> ruleProviders;
     private final Mt101FragmentStore fragmentStore;
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101ValidationIssueRepository issueRepository;
     private final RecordAuditEmitter recordAuditEmitter;
     private final SwiftInboundStore inboundStore;
@@ -85,7 +85,7 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
     public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
                                      Mt101FragmentStore fragmentStore,
                                      DataSource defaultDataSource,
-                                     ConnectionPoolManager connectionPoolManager,
+                                     JdbcConnectionResolver connectionPoolManager,
                                      Mt101ValidationIssueRepository issueRepository,
                                      RecordAuditEmitter recordAuditEmitter,
                                      SwiftInboundStore inboundStore) {
@@ -101,7 +101,7 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
     public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
                                      Mt101FragmentStore fragmentStore,
                                      DataSource defaultDataSource,
-                                     ConnectionPoolManager connectionPoolManager,
+                                     JdbcConnectionResolver connectionPoolManager,
                                      Mt101ValidationIssueRepository issueRepository) {
         this(ruleProviders, fragmentStore, defaultDataSource, connectionPoolManager, issueRepository, null, null);
     }
@@ -109,7 +109,7 @@ public class Mt101ValidateTaskProvider implements TaskProvider {
     public Mt101ValidateTaskProvider(Instance<ValidationRuleProvider> ruleProviders,
                                      Mt101FragmentStore fragmentStore,
                                      DataSource defaultDataSource,
-                                     ConnectionPoolManager connectionPoolManager) {
+                                     JdbcConnectionResolver connectionPoolManager) {
         this(ruleProviders, fragmentStore, defaultDataSource, connectionPoolManager,
                 new Mt101ValidationIssueRepository(), null, null);
     }

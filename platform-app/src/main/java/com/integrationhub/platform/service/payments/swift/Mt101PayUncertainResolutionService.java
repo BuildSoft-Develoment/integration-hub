@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.vertical.swift.mt101.provider.Mt101StatusQueryExecutor;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101ConfirmationRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -44,22 +44,22 @@ public class Mt101PayUncertainResolutionService {
     private static final String CONFIRMATION_TABLE = "mt101_confirmation";
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101FragmentRepository fragmentRepository;
     private final Mt101StatusQueryExecutor statusQueryExecutor;
     private final Mt101ConfirmationRepository confirmationRepository;
     // P1 (item 2): trama append-only PAY_CONFLICT cuando STATUS detecta SENT→REJECTED (nullable en tests sin audit).
-    private final com.integrationhub.platform.service.execution.RecordAuditEmitter recordAuditEmitter;
+    private final com.integrationhub.platform.spi.engine.RecordAuditEmitter recordAuditEmitter;
 
     private final com.integrationhub.vertical.swift.mt101.service.Mt101CorrectiveTaskConfigSource taskConfigSource;
 
     @Inject
     public Mt101PayUncertainResolutionService(DataSource defaultDataSource,
-                                              ConnectionPoolManager connectionPoolManager,
+                                              JdbcConnectionResolver connectionPoolManager,
                                               Mt101FragmentRepository fragmentRepository,
                                               ObjectMapper objectMapper,
                                               Mt101ConfirmationRepository confirmationRepository,
-                                              com.integrationhub.platform.service.execution.RecordAuditEmitter recordAuditEmitter,
+                                              com.integrationhub.platform.spi.engine.RecordAuditEmitter recordAuditEmitter,
                                               Mt101CorrectiveTaskConfigSource taskConfigSource) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
@@ -72,11 +72,11 @@ public class Mt101PayUncertainResolutionService {
 
     /** Constructor de test: permite inyectar el ejecutor de consulta (con gateways stub) y el emisor de auditoría. */
     Mt101PayUncertainResolutionService(DataSource defaultDataSource,
-                                       ConnectionPoolManager connectionPoolManager,
+                                       JdbcConnectionResolver connectionPoolManager,
                                        Mt101FragmentRepository fragmentRepository,
                                        Mt101StatusQueryExecutor statusQueryExecutor,
                                        Mt101ConfirmationRepository confirmationRepository,
-                                       com.integrationhub.platform.service.execution.RecordAuditEmitter recordAuditEmitter,
+                                       com.integrationhub.platform.spi.engine.RecordAuditEmitter recordAuditEmitter,
                                        Mt101CorrectiveTaskConfigSource taskConfigSource) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;

@@ -17,7 +17,7 @@ import com.integrationhub.platform.provider.task.payments.swift.Mt101StatusTaskP
 import com.integrationhub.platform.provider.task.payments.swift.Mt101ValidateTaskProvider;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101RebuildRepository;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -54,7 +54,7 @@ public class Mt101CorrectiveLifecycleService {
     private static final int PLAN_RESERVATION_STALE_SECONDS = 120;
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101RebuildRepository rebuildRepository;
     private final Mt101FragmentRepository fragmentRepository;
     private final Mt101RebuildService rebuildService;
@@ -73,7 +73,7 @@ public class Mt101CorrectiveLifecycleService {
 
     @Inject
     public Mt101CorrectiveLifecycleService(DataSource defaultDataSource,
-                                           ConnectionPoolManager connectionPoolManager,
+                                           JdbcConnectionResolver connectionPoolManager,
                                            Mt101RebuildRepository rebuildRepository,
                                            Mt101FragmentRepository fragmentRepository,
                                            Mt101RebuildService rebuildService,

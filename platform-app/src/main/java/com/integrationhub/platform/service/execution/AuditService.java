@@ -2,6 +2,7 @@ package com.integrationhub.platform.service.execution;
 
 // @trace RF-005 (reingenieria: clase que implementa el/los RF en produccion)
 
+import com.integrationhub.platform.spi.engine.RecordAuditEmitter;
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.entity.ProcessExecution;

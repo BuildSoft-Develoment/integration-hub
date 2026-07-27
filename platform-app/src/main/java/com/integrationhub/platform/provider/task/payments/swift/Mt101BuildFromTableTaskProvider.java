@@ -6,9 +6,9 @@ import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.provider.task.dbwrite.DbTaskSupport;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository;
-import com.integrationhub.platform.service.JsonConfigurationMapper;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
-import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.engine.ConfigurationMapper;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
+import com.integrationhub.platform.spi.engine.RecordAuditEmitter;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
@@ -77,8 +77,8 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     private static final long DEFAULT_INSERT_BATCH_MAX_BYTES = 200_000L;
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
-    private final JsonConfigurationMapper jsonConfigurationMapper;
+    private final JdbcConnectionResolver connectionPoolManager;
+    private final ConfigurationMapper jsonConfigurationMapper;
     private final Mt101BuildTaskProvider buildTaskProvider;
     private final Mt101FragmentStore fragmentStore;
     private final Mt101StagingRecordRepository stagingRepository;
@@ -100,8 +100,8 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
 
     @Inject
     public Mt101BuildFromTableTaskProvider(DataSource defaultDataSource,
-                                           ConnectionPoolManager connectionPoolManager,
-                                           JsonConfigurationMapper jsonConfigurationMapper,
+                                           JdbcConnectionResolver connectionPoolManager,
+                                           ConfigurationMapper jsonConfigurationMapper,
                                            Mt101BuildTaskProvider buildTaskProvider,
                                            Mt101FragmentStore fragmentStore,
                                            Mt101StagingRecordRepository stagingRepository,
@@ -116,8 +116,8 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     }
 
     public Mt101BuildFromTableTaskProvider(DataSource defaultDataSource,
-                                           ConnectionPoolManager connectionPoolManager,
-                                           JsonConfigurationMapper jsonConfigurationMapper,
+                                           JdbcConnectionResolver connectionPoolManager,
+                                           ConfigurationMapper jsonConfigurationMapper,
                                            Mt101BuildTaskProvider buildTaskProvider,
                                            Mt101FragmentStore fragmentStore,
                                            Mt101StagingRecordRepository stagingRepository) {
@@ -126,8 +126,8 @@ public class Mt101BuildFromTableTaskProvider implements TaskProvider {
     }
 
     public Mt101BuildFromTableTaskProvider(DataSource defaultDataSource,
-                                           ConnectionPoolManager connectionPoolManager,
-                                           JsonConfigurationMapper jsonConfigurationMapper,
+                                           JdbcConnectionResolver connectionPoolManager,
+                                           ConfigurationMapper jsonConfigurationMapper,
                                            Mt101BuildTaskProvider buildTaskProvider,
                                            Mt101FragmentStore fragmentStore) {
         this(defaultDataSource, connectionPoolManager, jsonConfigurationMapper, buildTaskProvider,

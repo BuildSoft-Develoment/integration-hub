@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -25,13 +25,13 @@ public class Mt101FragmentStore {
     public static final String DEFAULT_TABLE = "mt101_build_fragment";
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final ObjectMapper objectMapper;
     private final Mt101FragmentRepository fragmentRepository;
 
     @Inject
     public Mt101FragmentStore(DataSource defaultDataSource,
-                              ConnectionPoolManager connectionPoolManager,
+                              JdbcConnectionResolver connectionPoolManager,
                               ObjectMapper objectMapper,
                               Mt101FragmentRepository fragmentRepository) {
         this.defaultDataSource = defaultDataSource;
@@ -41,7 +41,7 @@ public class Mt101FragmentStore {
     }
 
     public Mt101FragmentStore(DataSource defaultDataSource,
-                              ConnectionPoolManager connectionPoolManager,
+                              JdbcConnectionResolver connectionPoolManager,
                               ObjectMapper objectMapper) {
         this(defaultDataSource, connectionPoolManager, objectMapper, new Mt101FragmentRepository());
     }

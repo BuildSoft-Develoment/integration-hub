@@ -9,8 +9,8 @@ import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101ConfirmationRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101RebuildRepository;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
-import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
+import com.integrationhub.platform.spi.engine.RecordAuditEmitter;
 import com.integrationhub.platform.service.payments.swift.Mt101PayUncertainResolutionService;
 import com.integrationhub.platform.spi.task.AsyncOffloadSupport;
 import com.integrationhub.platform.spi.task.SuspendableTaskProvider;
@@ -113,7 +113,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
 
     private final ObjectMapper objectMapper;
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101ArchiveStatusUpdater archiveStatusUpdater;
     private final Mt101ConfirmationRepository confirmationRepository;
     private final Mt101RebuildRepository rebuildRepository;
@@ -129,7 +129,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     @Inject
     public Mt101StatusTaskProvider(ObjectMapper objectMapper,
                                    DataSource defaultDataSource,
-                                   ConnectionPoolManager connectionPoolManager,
+                                   JdbcConnectionResolver connectionPoolManager,
                                    Mt101ArchiveStatusUpdater archiveStatusUpdater,
                                    Mt101ConfirmationRepository confirmationRepository,
                                    Mt101RebuildRepository rebuildRepository,
@@ -142,7 +142,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
 
     public Mt101StatusTaskProvider(ObjectMapper objectMapper,
                                    DataSource defaultDataSource,
-                                   ConnectionPoolManager connectionPoolManager,
+                                   JdbcConnectionResolver connectionPoolManager,
                                    Mt101ArchiveStatusUpdater archiveStatusUpdater,
                                    Mt101ConfirmationRepository confirmationRepository) {
         this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager,
@@ -153,7 +153,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     Mt101StatusTaskProvider(ObjectMapper objectMapper,
                             HttpClient httpClient,
                             DataSource defaultDataSource,
-                            ConnectionPoolManager connectionPoolManager) {
+                            JdbcConnectionResolver connectionPoolManager) {
         this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
                 new Mt101ArchiveStatusUpdater(defaultDataSource, connectionPoolManager),
                 new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null, null);
@@ -162,7 +162,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     /** Constructor de test (v59-item4): inyecta el servicio de resolucion para ejercitar {@code resolveNormalPay}. */
     Mt101StatusTaskProvider(ObjectMapper objectMapper,
                             DataSource defaultDataSource,
-                            ConnectionPoolManager connectionPoolManager,
+                            JdbcConnectionResolver connectionPoolManager,
                             Mt101PayUncertainResolutionService payUncertainResolutionService) {
         this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager,
                 new Mt101ArchiveStatusUpdater(defaultDataSource, connectionPoolManager),
@@ -173,7 +173,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     Mt101StatusTaskProvider(ObjectMapper objectMapper,
                             HttpClient httpClient,
                             DataSource defaultDataSource,
-                            ConnectionPoolManager connectionPoolManager,
+                            JdbcConnectionResolver connectionPoolManager,
                             Mt101ArchiveStatusUpdater archiveStatusUpdater) {
         this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
                 archiveStatusUpdater, new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null, null);
@@ -182,7 +182,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     Mt101StatusTaskProvider(ObjectMapper objectMapper,
                             HttpClient httpClient,
                             DataSource defaultDataSource,
-                            ConnectionPoolManager connectionPoolManager,
+                            JdbcConnectionResolver connectionPoolManager,
                             Mt101ArchiveStatusUpdater archiveStatusUpdater,
                             Mt101ConfirmationRepository confirmationRepository) {
         this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
@@ -192,7 +192,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     Mt101StatusTaskProvider(ObjectMapper objectMapper,
                             HttpClient httpClient,
                             DataSource defaultDataSource,
-                            ConnectionPoolManager connectionPoolManager,
+                            JdbcConnectionResolver connectionPoolManager,
                             Mt101ArchiveStatusUpdater archiveStatusUpdater,
                             Mt101ConfirmationRepository confirmationRepository,
                             Mt101RebuildRepository rebuildRepository,

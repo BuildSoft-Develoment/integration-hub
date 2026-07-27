@@ -3,7 +3,7 @@ package com.integrationhub.platform.service.payments.swift;
 import com.integrationhub.vertical.swift.mt101.service.Mt101PayConflictAudit;
 
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
 import com.integrationhub.platform.service.execution.AuditSpoolWriter;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -30,7 +30,7 @@ import java.sql.SQLException;
 public class Mt101PayConflictAcknowledgeService {
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101FragmentRepository repository;
     private final AuditSpoolWriter auditSpoolWriter;
     // Maker-checker OPT-IN (V99). Con false (default) el reconocimiento es single-actor (acknowledge). Con true se
@@ -40,7 +40,7 @@ public class Mt101PayConflictAcknowledgeService {
 
     @Inject
     public Mt101PayConflictAcknowledgeService(DataSource defaultDataSource,
-                                              ConnectionPoolManager connectionPoolManager,
+                                              JdbcConnectionResolver connectionPoolManager,
                                               Mt101FragmentRepository repository,
                                               AuditSpoolWriter auditSpoolWriter,
                                               @org.eclipse.microprofile.config.inject.ConfigProperty(

@@ -3,7 +3,7 @@ package com.integrationhub.platform.service.payments.swift;
 import com.integrationhub.vertical.swift.mt101.service.Mt101BuildConfigSource;
 
 import com.integrationhub.platform.repository.ProcessTaskDefinitionRepository;
-import com.integrationhub.platform.service.JsonConfigurationMapper;
+import com.integrationhub.platform.spi.engine.ConfigurationMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
 
@@ -14,10 +14,10 @@ import java.util.Map;
 public class ProcessTaskDefinitionBuildConfigSource implements Mt101BuildConfigSource {
 
     private final ProcessTaskDefinitionRepository taskDefinitionRepository;
-    private final JsonConfigurationMapper jsonConfigurationMapper;
+    private final ConfigurationMapper jsonConfigurationMapper;
 
     public ProcessTaskDefinitionBuildConfigSource(ProcessTaskDefinitionRepository taskDefinitionRepository,
-                                                  JsonConfigurationMapper jsonConfigurationMapper) {
+                                                  ConfigurationMapper jsonConfigurationMapper) {
         this.taskDefinitionRepository = taskDefinitionRepository;
         this.jsonConfigurationMapper = jsonConfigurationMapper;
     }

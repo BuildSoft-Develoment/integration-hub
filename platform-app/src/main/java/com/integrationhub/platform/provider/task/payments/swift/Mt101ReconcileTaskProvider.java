@@ -4,8 +4,8 @@ import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101ReconciliationRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101RebuildRepository;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
-import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
+import com.integrationhub.platform.spi.engine.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -65,7 +65,7 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
     private static final int DEFAULT_LOOKBACK_DAYS = 5;
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101ArchiveStatusUpdater archiveStatusUpdater;
     private final Mt101ReconciliationRepository reconciliationRepository;
     private final RecordAuditEmitter recordAuditEmitter;
@@ -73,7 +73,7 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
 
     @Inject
     public Mt101ReconcileTaskProvider(DataSource defaultDataSource,
-                                      ConnectionPoolManager connectionPoolManager,
+                                      JdbcConnectionResolver connectionPoolManager,
                                       Mt101ArchiveStatusUpdater archiveStatusUpdater,
                                       Mt101ReconciliationRepository reconciliationRepository,
                                       RecordAuditEmitter recordAuditEmitter) {
@@ -85,21 +85,21 @@ public class Mt101ReconcileTaskProvider implements TaskProvider {
     }
 
     public Mt101ReconcileTaskProvider(DataSource defaultDataSource,
-                                      ConnectionPoolManager connectionPoolManager,
+                                      JdbcConnectionResolver connectionPoolManager,
                                       Mt101ArchiveStatusUpdater archiveStatusUpdater,
                                       Mt101ReconciliationRepository reconciliationRepository) {
         this(defaultDataSource, connectionPoolManager, archiveStatusUpdater, reconciliationRepository, null);
     }
 
     public Mt101ReconcileTaskProvider(DataSource defaultDataSource,
-                                      ConnectionPoolManager connectionPoolManager,
+                                      JdbcConnectionResolver connectionPoolManager,
                                       Mt101ArchiveStatusUpdater archiveStatusUpdater) {
         this(defaultDataSource, connectionPoolManager, archiveStatusUpdater,
                 new Mt101ReconciliationRepository());
     }
 
     public Mt101ReconcileTaskProvider(DataSource defaultDataSource,
-                                      ConnectionPoolManager connectionPoolManager) {
+                                      JdbcConnectionResolver connectionPoolManager) {
         this(defaultDataSource, connectionPoolManager,
                 new Mt101ArchiveStatusUpdater(defaultDataSource, connectionPoolManager));
     }

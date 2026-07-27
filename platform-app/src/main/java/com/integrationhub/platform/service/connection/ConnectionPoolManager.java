@@ -1,4 +1,5 @@
 package com.integrationhub.platform.service.connection;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
 import com.integrationhub.platform.domain.ConnectionType;
 import com.integrationhub.platform.entity.ConnectionDefinition;
 import com.integrationhub.platform.repository.ConnectionDefinitionRepository;
@@ -19,7 +20,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 @ApplicationScoped
-public class ConnectionPoolManager {
+public class ConnectionPoolManager implements JdbcConnectionResolver {
     private final ConnectionDefinitionRepository connectionDefinitionRepository;
     private final JsonConfigurationMapper jsonConfigurationMapper;
     private final Map<Long, AgroalDataSource> dataSources = new ConcurrentHashMap<>();

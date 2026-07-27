@@ -1,4 +1,4 @@
-package com.integrationhub.platform.service.execution;
+package com.integrationhub.platform.spi.engine;
 
 import com.integrationhub.platform.audit.AuditEnvelope;
 

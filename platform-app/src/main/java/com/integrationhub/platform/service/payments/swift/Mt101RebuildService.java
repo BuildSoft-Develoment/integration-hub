@@ -6,7 +6,7 @@ import com.integrationhub.platform.provider.task.payments.swift.Mt101BuildFromTa
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FailedRecordRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101RebuildRepository;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
 import com.integrationhub.platform.spi.task.TaskContext;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -36,7 +36,7 @@ public class Mt101RebuildService {
     private static final int MAX_FRAGMENT_SET_ID_LENGTH = 80;
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101BuildFromTableTaskProvider buildProvider;
     private final Mt101BuildConfigSource buildConfigSource;
     private final Mt101FailedRecordRepository failedRecordRepository;
@@ -45,7 +45,7 @@ public class Mt101RebuildService {
 
     @Inject
     public Mt101RebuildService(DataSource defaultDataSource,
-                               ConnectionPoolManager connectionPoolManager,
+                               JdbcConnectionResolver connectionPoolManager,
                                Mt101BuildFromTableTaskProvider buildProvider,
                                Mt101BuildConfigSource buildConfigSource,
                                Mt101FailedRecordRepository failedRecordRepository,
@@ -61,7 +61,7 @@ public class Mt101RebuildService {
     }
 
     public Mt101RebuildService(DataSource defaultDataSource,
-                               ConnectionPoolManager connectionPoolManager,
+                               JdbcConnectionResolver connectionPoolManager,
                                Mt101BuildFromTableTaskProvider buildProvider,
                                Mt101BuildConfigSource buildConfigSource,
                                Mt101FailedRecordRepository failedRecordRepository,

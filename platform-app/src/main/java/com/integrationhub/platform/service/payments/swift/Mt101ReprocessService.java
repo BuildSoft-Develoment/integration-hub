@@ -3,7 +3,7 @@ package com.integrationhub.platform.service.payments.swift;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FailedRecordRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101ReprocessAuditRepository;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -42,14 +42,14 @@ public class Mt101ReprocessService {
     private static final int MAX_ROW_FRAGMENTS = 5000;
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101FragmentRepository repository;
     private final Mt101FailedRecordRepository failedRecordRepository;
     private final Mt101ReprocessAuditRepository auditRepository;
 
     @Inject
     public Mt101ReprocessService(DataSource defaultDataSource,
-                                 ConnectionPoolManager connectionPoolManager,
+                                 JdbcConnectionResolver connectionPoolManager,
                                  Mt101FragmentRepository repository,
                                  Mt101FailedRecordRepository failedRecordRepository,
                                  Mt101ReprocessAuditRepository auditRepository) {
@@ -61,7 +61,7 @@ public class Mt101ReprocessService {
     }
 
     public Mt101ReprocessService(DataSource defaultDataSource,
-                                 ConnectionPoolManager connectionPoolManager,
+                                 JdbcConnectionResolver connectionPoolManager,
                                  Mt101FragmentRepository repository) {
         this(defaultDataSource, connectionPoolManager, repository,
                 new Mt101FailedRecordRepository(), new Mt101ReprocessAuditRepository());

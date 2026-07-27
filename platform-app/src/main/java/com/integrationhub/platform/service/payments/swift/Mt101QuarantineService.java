@@ -6,8 +6,8 @@ import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FailedRecordRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101ValidationIssueRepository;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
-import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
+import com.integrationhub.platform.spi.engine.RecordAuditEmitter;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -34,7 +34,7 @@ public class Mt101QuarantineService {
     private static final int ISSUE_PAGE_SIZE = 1000;
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101ValidationIssueRepository issueRepository;
     private final Mt101FragmentRepository fragmentRepository;
     private final Mt101FailedRecordRepository failedRecordRepository;
@@ -42,7 +42,7 @@ public class Mt101QuarantineService {
 
     @Inject
     public Mt101QuarantineService(DataSource defaultDataSource,
-                                  ConnectionPoolManager connectionPoolManager,
+                                  JdbcConnectionResolver connectionPoolManager,
                                   Mt101ValidationIssueRepository issueRepository,
                                   Mt101FragmentRepository fragmentRepository,
                                   Mt101FailedRecordRepository failedRecordRepository,
@@ -58,7 +58,7 @@ public class Mt101QuarantineService {
 
     /** Conveniencia para tests sin auditoria (la emision es un enriquecimiento opcional). */
     public Mt101QuarantineService(DataSource defaultDataSource,
-                                  ConnectionPoolManager connectionPoolManager,
+                                  JdbcConnectionResolver connectionPoolManager,
                                   Mt101ValidationIssueRepository issueRepository,
                                   Mt101FragmentRepository fragmentRepository,
                                   Mt101FailedRecordRepository failedRecordRepository,

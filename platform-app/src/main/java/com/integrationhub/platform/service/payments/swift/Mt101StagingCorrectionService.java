@@ -7,9 +7,9 @@ import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepositor
 import com.integrationhub.vertical.swift.mt101.repository.Mt101RebuildRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingCorrectionRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository;
-import com.integrationhub.platform.service.JsonConfigurationMapper;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
-import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.engine.ConfigurationMapper;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
+import com.integrationhub.platform.spi.engine.RecordAuditEmitter;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -40,24 +40,24 @@ public class Mt101StagingCorrectionService {
     private static final String REJECTED = "REJECTED";
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101FragmentRepository fragmentRepository;
     private final Mt101StagingRecordRepository stagingRepository;
     private final Mt101FailedRecordRepository failedRecordRepository;
     private final Mt101StagingCorrectionRepository correctionRepository;
     private final Mt101RebuildRepository rebuildRepository;
-    private final JsonConfigurationMapper jsonConfigurationMapper;
+    private final ConfigurationMapper jsonConfigurationMapper;
     private final RecordAuditEmitter recordAuditEmitter;
 
     @Inject
     public Mt101StagingCorrectionService(DataSource defaultDataSource,
-                                         ConnectionPoolManager connectionPoolManager,
+                                         JdbcConnectionResolver connectionPoolManager,
                                           Mt101FragmentRepository fragmentRepository,
                                           Mt101StagingRecordRepository stagingRepository,
                                           Mt101FailedRecordRepository failedRecordRepository,
                                           Mt101StagingCorrectionRepository correctionRepository,
                                           Mt101RebuildRepository rebuildRepository,
-                                          JsonConfigurationMapper jsonConfigurationMapper,
+                                          ConfigurationMapper jsonConfigurationMapper,
                                           RecordAuditEmitter recordAuditEmitter) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
@@ -71,18 +71,18 @@ public class Mt101StagingCorrectionService {
     }
 
     public Mt101StagingCorrectionService(DataSource defaultDataSource,
-                                         ConnectionPoolManager connectionPoolManager,
+                                         JdbcConnectionResolver connectionPoolManager,
                                          Mt101FragmentRepository fragmentRepository,
                                           Mt101StagingRecordRepository stagingRepository,
                                           RecordAuditEmitter recordAuditEmitter) {
         this(defaultDataSource, connectionPoolManager, fragmentRepository, stagingRepository,
                 new Mt101FailedRecordRepository(), new Mt101StagingCorrectionRepository(),
-                new Mt101RebuildRepository(), new JsonConfigurationMapper(), recordAuditEmitter);
+                new Mt101RebuildRepository(), new com.integrationhub.platform.service.JsonConfigurationMapper(), recordAuditEmitter);
     }
 
     /** Conveniencia para tests sin auditoria. */
     public Mt101StagingCorrectionService(DataSource defaultDataSource,
-                                         ConnectionPoolManager connectionPoolManager,
+                                         JdbcConnectionResolver connectionPoolManager,
                                          Mt101FragmentRepository fragmentRepository,
                                          Mt101StagingRecordRepository stagingRepository) {
         this(defaultDataSource, connectionPoolManager, fragmentRepository, stagingRepository, null);

@@ -3,8 +3,8 @@ package com.integrationhub.platform.service.payments.swift;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository.StagingPayload;
-import com.integrationhub.platform.service.JsonConfigurationMapper;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.engine.ConfigurationMapper;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
 import com.integrationhub.platform.service.payments.swift.Mt101CorrectionSheetService.SheetRow;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -51,19 +51,19 @@ public class Mt101BulkCorrectionService {
     private static final int MAX_ISSUES = 500;
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101StagingRecordRepository stagingRepository;
     private final Mt101FragmentRepository fragmentRepository;
-    private final JsonConfigurationMapper jsonConfigurationMapper;
+    private final ConfigurationMapper jsonConfigurationMapper;
     private final Mt101CorrectionSheetService sheetService;
     private final Mt101StagingCorrectionService correctionService;
 
     @Inject
     public Mt101BulkCorrectionService(DataSource defaultDataSource,
-                                      ConnectionPoolManager connectionPoolManager,
+                                      JdbcConnectionResolver connectionPoolManager,
                                       Mt101StagingRecordRepository stagingRepository,
                                       Mt101FragmentRepository fragmentRepository,
-                                      JsonConfigurationMapper jsonConfigurationMapper,
+                                      ConfigurationMapper jsonConfigurationMapper,
                                       Mt101CorrectionSheetService sheetService,
                                       Mt101StagingCorrectionService correctionService) {
         this.defaultDataSource = defaultDataSource;

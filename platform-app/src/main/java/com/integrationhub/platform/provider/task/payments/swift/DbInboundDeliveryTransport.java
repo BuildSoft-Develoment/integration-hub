@@ -5,7 +5,7 @@ import com.integrationhub.vertical.swift.mt101.provider.InboundRoutedTransaction
 
 
 import com.integrationhub.vertical.swift.mt101.repository.InboundRoutedTransactionRepository;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -30,14 +30,14 @@ public class DbInboundDeliveryTransport implements InboundDeliveryTransport {
     private final SwiftInboundStore inboundStore;
     private final InboundRoutedTransactionRepository routedRepository;
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final InboundRoutedTransactionMapper rowMapper;
 
     @Inject
     public DbInboundDeliveryTransport(SwiftInboundStore inboundStore,
                                       InboundRoutedTransactionRepository routedRepository,
                                       DataSource defaultDataSource,
-                                      ConnectionPoolManager connectionPoolManager,
+                                      JdbcConnectionResolver connectionPoolManager,
                                       InboundRoutedTransactionMapper rowMapper) {
         this.inboundStore = inboundStore;
         this.routedRepository = routedRepository;

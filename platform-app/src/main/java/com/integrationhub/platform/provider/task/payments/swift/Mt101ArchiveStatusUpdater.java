@@ -1,7 +1,7 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
 import com.integrationhub.vertical.swift.mt101.repository.Mt101ArchiveStatusRepository;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -38,12 +38,12 @@ public class Mt101ArchiveStatusUpdater {
     public static final String DEFAULT_TABLE = "mt101_archive";
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101ArchiveStatusRepository repository;
 
     @Inject
     public Mt101ArchiveStatusUpdater(DataSource defaultDataSource,
-                                     ConnectionPoolManager connectionPoolManager,
+                                     JdbcConnectionResolver connectionPoolManager,
                                      Mt101ArchiveStatusRepository repository) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
@@ -51,7 +51,7 @@ public class Mt101ArchiveStatusUpdater {
     }
 
     public Mt101ArchiveStatusUpdater(DataSource defaultDataSource,
-                                     ConnectionPoolManager connectionPoolManager) {
+                                     JdbcConnectionResolver connectionPoolManager) {
         this(defaultDataSource, connectionPoolManager, new Mt101ArchiveStatusRepository());
     }
 

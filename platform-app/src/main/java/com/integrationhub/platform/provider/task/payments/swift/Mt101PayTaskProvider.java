@@ -11,7 +11,7 @@ import com.integrationhub.vertical.swift.mt101.service.Mt101PayConflictAudit;
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101RebuildRepository;
-import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.engine.RecordAuditEmitter;
 import com.integrationhub.vertical.swift.mt101.spi.PaymentMessageTransport;
 import com.integrationhub.vertical.swift.mt101.spi.PreDispatchTransportException;
 import com.integrationhub.vertical.swift.mt101.spi.TransportResult;
@@ -104,7 +104,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
                                 Mt101ArchiveStatusUpdater archiveStatusUpdater,
                                 RecordAuditEmitter recordAuditEmitter,
                                 Mt101CorrectivePayStore correctivePayStore,
-                                com.integrationhub.platform.service.JsonConfigurationMapper configurationMapper,
+                                com.integrationhub.platform.spi.engine.ConfigurationMapper configurationMapper,
                                 Mt101PayDispatchIntentStore dispatchIntentStore,
                                 Mt101PaySinkConnectionResolver sinkConnectionResolver) {
         this.transports = transports;
@@ -122,7 +122,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
                                 Mt101ArchiveStatusUpdater archiveStatusUpdater,
                                 RecordAuditEmitter recordAuditEmitter,
                                 Mt101CorrectivePayStore correctivePayStore,
-                                com.integrationhub.platform.service.JsonConfigurationMapper configurationMapper,
+                                com.integrationhub.platform.spi.engine.ConfigurationMapper configurationMapper,
                                 Mt101PayDispatchIntentStore dispatchIntentStore) {
         this(transports, fragmentStore, archiveStatusUpdater, recordAuditEmitter, correctivePayStore,
                 configurationMapper, dispatchIntentStore, null);
@@ -133,7 +133,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
                                 Mt101ArchiveStatusUpdater archiveStatusUpdater,
                                 RecordAuditEmitter recordAuditEmitter,
                                 Mt101CorrectivePayStore correctivePayStore,
-                                com.integrationhub.platform.service.JsonConfigurationMapper configurationMapper) {
+                                com.integrationhub.platform.spi.engine.ConfigurationMapper configurationMapper) {
         this(transports, fragmentStore, archiveStatusUpdater, recordAuditEmitter, correctivePayStore,
                 configurationMapper, null);
     }

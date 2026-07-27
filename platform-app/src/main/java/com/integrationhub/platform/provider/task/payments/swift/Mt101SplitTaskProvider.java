@@ -5,7 +5,7 @@ import com.integrationhub.vertical.swift.mt101.provider.Mt101Audit;
 
 import com.integrationhub.vertical.swift.mt101.spi.PaymentMessageFormatter;
 import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
-import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.engine.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;

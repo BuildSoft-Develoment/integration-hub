@@ -8,9 +8,9 @@ import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.provider.task.dbwrite.DbTaskSupport;
 import com.integrationhub.vertical.swift.mt101.provider.format.FinMt101Formatter;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository;
-import com.integrationhub.platform.service.JsonConfigurationMapper;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
-import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.engine.ConfigurationMapper;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
+import com.integrationhub.platform.spi.engine.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -51,8 +51,8 @@ public class Mt101ParseFromTableTaskProvider implements TaskProvider {
     private static final int INSERT_BATCH_SIZE = 200;
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
-    private final JsonConfigurationMapper jsonConfigurationMapper;
+    private final JdbcConnectionResolver connectionPoolManager;
+    private final ConfigurationMapper jsonConfigurationMapper;
     private final SwiftInboundStore inboundStore;
     private final Mt101StagingRecordRepository stagingRepository;
     private final FinMt101Formatter finFormatter;
@@ -60,8 +60,8 @@ public class Mt101ParseFromTableTaskProvider implements TaskProvider {
 
     @Inject
     public Mt101ParseFromTableTaskProvider(DataSource defaultDataSource,
-                                           ConnectionPoolManager connectionPoolManager,
-                                           JsonConfigurationMapper jsonConfigurationMapper,
+                                           JdbcConnectionResolver connectionPoolManager,
+                                           ConfigurationMapper jsonConfigurationMapper,
                                            SwiftInboundStore inboundStore,
                                            Mt101StagingRecordRepository stagingRepository,
                                            FinMt101Formatter finFormatter,

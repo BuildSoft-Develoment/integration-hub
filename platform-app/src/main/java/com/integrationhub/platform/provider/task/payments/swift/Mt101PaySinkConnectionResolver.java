@@ -1,7 +1,7 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
 
-import com.integrationhub.platform.service.JsonConfigurationMapper;
+import com.integrationhub.platform.spi.engine.ConfigurationMapper;
 import com.integrationhub.platform.service.task.sink.SinkDefinitionService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.context.control.ActivateRequestContext;
@@ -30,7 +30,7 @@ import java.util.Map;
  * </ul>
  *
  * <p>Las credenciales del source deben ser referencias {@code ${secret:...}} (QA-006 ya lo exige en {@code /sources}
- * y el compiler rechaza literales), por lo que se leen SIN resolver ({@link JsonConfigurationMapper#toMapUnresolved})
+ * y el compiler rechaza literales), por lo que se leen SIN resolver ({@link ConfigurationMapper#toMapUnresolved})
  * y viajan al spec como refs. {@code knownHostsPath} debe ser {@code ${config:...}} para ser compilable en el
  * correctivo (el compiler lo trata como campo-credencial).</p>
  */
@@ -50,11 +50,11 @@ public class Mt101PaySinkConnectionResolver {
     private static final String SFTP_TYPE = "SFTP";
 
     private final SinkDefinitionService sinkDefinitionService;
-    private final JsonConfigurationMapper jsonConfigurationMapper;
+    private final ConfigurationMapper jsonConfigurationMapper;
 
     @Inject
     public Mt101PaySinkConnectionResolver(SinkDefinitionService sinkDefinitionService,
-                                          JsonConfigurationMapper jsonConfigurationMapper) {
+                                          ConfigurationMapper jsonConfigurationMapper) {
         this.sinkDefinitionService = sinkDefinitionService;
         this.jsonConfigurationMapper = jsonConfigurationMapper;
     }

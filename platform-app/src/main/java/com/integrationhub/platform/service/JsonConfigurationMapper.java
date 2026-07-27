@@ -2,6 +2,7 @@ package com.integrationhub.platform.service;
 
 // @trace RF-003 (reingenieria: clase que implementa el/los RF en produccion)
 
+import com.integrationhub.platform.spi.engine.ConfigurationMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,7 +24,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @ApplicationScoped
-public class JsonConfigurationMapper {
+public class JsonConfigurationMapper implements ConfigurationMapper {
 
     private static final Pattern SECRET_PATTERN = Pattern.compile(
             "\\$\\{(env|config|secret|vault|vaultkv|awssecret|gcpsecret|azuresecret):([^}]+)}");

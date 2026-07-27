@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.vertical.swift.mt101.repository.SwiftInboundMessageRepository;
 import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -36,13 +36,13 @@ public class SwiftInboundStore {
     public static final List<String> READ_ROUTED = List.of("ROUTED");
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final ObjectMapper objectMapper;
     private final SwiftInboundMessageRepository repository;
 
     @Inject
     public SwiftInboundStore(DataSource defaultDataSource,
-                             ConnectionPoolManager connectionPoolManager,
+                             JdbcConnectionResolver connectionPoolManager,
                              ObjectMapper objectMapper,
                              SwiftInboundMessageRepository repository) {
         this.defaultDataSource = defaultDataSource;

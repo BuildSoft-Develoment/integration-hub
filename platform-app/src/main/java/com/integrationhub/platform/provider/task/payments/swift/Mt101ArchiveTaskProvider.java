@@ -8,8 +8,8 @@ import com.integrationhub.vertical.swift.mt101.provider.archive.AesGcmPayloadEnc
 import com.integrationhub.vertical.swift.mt101.provider.archive.PayloadEncryptor;
 import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101ArchiveRepository;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
-import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
+import com.integrationhub.platform.spi.engine.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
@@ -52,14 +52,14 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
     private static final int DEFAULT_MAX_RECORDS_IN_OUTPUT = 1000;
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101FragmentStore fragmentStore;
     private final Mt101ArchiveRepository archiveRepository;
     private final RecordAuditEmitter recordAuditEmitter;
 
     @Inject
     public Mt101ArchiveTaskProvider(DataSource defaultDataSource,
-                                    ConnectionPoolManager connectionPoolManager,
+                                    JdbcConnectionResolver connectionPoolManager,
                                     Mt101FragmentStore fragmentStore,
                                     Mt101ArchiveRepository archiveRepository,
                                     RecordAuditEmitter recordAuditEmitter) {
@@ -71,20 +71,20 @@ public class Mt101ArchiveTaskProvider implements TaskProvider {
     }
 
     public Mt101ArchiveTaskProvider(DataSource defaultDataSource,
-                                    ConnectionPoolManager connectionPoolManager,
+                                    JdbcConnectionResolver connectionPoolManager,
                                     Mt101FragmentStore fragmentStore,
                                     Mt101ArchiveRepository archiveRepository) {
         this(defaultDataSource, connectionPoolManager, fragmentStore, archiveRepository, null);
     }
 
     public Mt101ArchiveTaskProvider(DataSource defaultDataSource,
-                                    ConnectionPoolManager connectionPoolManager,
+                                    JdbcConnectionResolver connectionPoolManager,
                                     Mt101FragmentStore fragmentStore) {
         this(defaultDataSource, connectionPoolManager, fragmentStore, new Mt101ArchiveRepository(), null);
     }
 
     public Mt101ArchiveTaskProvider(DataSource defaultDataSource,
-                                    ConnectionPoolManager connectionPoolManager) {
+                                    JdbcConnectionResolver connectionPoolManager) {
         this(defaultDataSource, connectionPoolManager, null);
     }
 

@@ -2,7 +2,7 @@ package com.integrationhub.platform.service.payments.swift;
 
 import com.integrationhub.platform.domain.ExecutionStatus;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
 import com.integrationhub.platform.service.execution.ProcessExecutionStateService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -25,13 +25,13 @@ import java.sql.SQLException;
 public class Mt101ReconciliationCloseService {
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101FragmentRepository fragmentRepository;
     private final ProcessExecutionStateService processExecutionStateService;
 
     @Inject
     public Mt101ReconciliationCloseService(DataSource defaultDataSource,
-                                           ConnectionPoolManager connectionPoolManager,
+                                           JdbcConnectionResolver connectionPoolManager,
                                            Mt101FragmentRepository fragmentRepository,
                                            ProcessExecutionStateService processExecutionStateService) {
         this.defaultDataSource = defaultDataSource;

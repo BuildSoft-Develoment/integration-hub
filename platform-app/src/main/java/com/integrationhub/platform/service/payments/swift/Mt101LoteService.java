@@ -2,7 +2,7 @@ package com.integrationhub.platform.service.payments.swift;
 
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import javax.sql.DataSource;
@@ -20,12 +20,12 @@ import java.util.Map;
 public class Mt101LoteService {
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101FragmentRepository fragmentRepository;
     private final Mt101StagingRecordRepository stagingRepository;
 
     public Mt101LoteService(DataSource defaultDataSource,
-                            ConnectionPoolManager connectionPoolManager,
+                            JdbcConnectionResolver connectionPoolManager,
                             Mt101FragmentRepository fragmentRepository,
                             Mt101StagingRecordRepository stagingRepository) {
         this.defaultDataSource = defaultDataSource;

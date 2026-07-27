@@ -4,7 +4,7 @@ import com.integrationhub.vertical.swift.mt101.repository.Mt101ArchiveStatusRepo
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FailedRecordRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository;
-import com.integrationhub.platform.service.connection.ConnectionPoolManager;
+import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -26,7 +26,7 @@ public class Mt101RowTimelineService {
     private static final String DEFAULT_RECONCILIATION_EXCEPTION_TABLE = "mt101_reconciliation_exception";
 
     private final DataSource defaultDataSource;
-    private final ConnectionPoolManager connectionPoolManager;
+    private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101FragmentRepository fragmentRepository;
     private final Mt101FailedRecordRepository failedRecordRepository;
     private final Mt101StagingRecordRepository stagingRepository;
@@ -34,7 +34,7 @@ public class Mt101RowTimelineService {
 
     @Inject
     public Mt101RowTimelineService(DataSource defaultDataSource,
-                                   ConnectionPoolManager connectionPoolManager,
+                                   JdbcConnectionResolver connectionPoolManager,
                                    Mt101FragmentRepository fragmentRepository,
                                    Mt101FailedRecordRepository failedRecordRepository,
                                    Mt101StagingRecordRepository stagingRepository,
@@ -48,7 +48,7 @@ public class Mt101RowTimelineService {
     }
 
     public Mt101RowTimelineService(DataSource defaultDataSource,
-                                   ConnectionPoolManager connectionPoolManager,
+                                   JdbcConnectionResolver connectionPoolManager,
                                    Mt101FragmentRepository fragmentRepository,
                                    Mt101FailedRecordRepository failedRecordRepository,
                                    Mt101StagingRecordRepository stagingRepository) {
