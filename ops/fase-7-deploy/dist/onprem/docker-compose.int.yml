@@ -339,3 +339,17 @@ services:
     environment:
       PORT: "80"
     networks: [ihnet]
+
+  # Mock del gateway de STATUS del banco (casuistica pay-conflicts): responde GET /status/<ref> con
+  # {"status":ACCEPTED|REJECTED,...}. Rechaza refs terminadas en 2/3 -> el task MT101_STATUS de
+  # proc-mt101-payconflict-qa detecta la contradiccion SENT->REJECTED y genera el conflicto + evidencia.
+  # La app lo alcanza en http://ih-mock-gw (alias de red).
+  mock-gateway:
+    image: nginx:1.27-alpine
+    container_name: ih-int-mock-gw
+    volumes:
+      - ./int/mock-gateway.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      ihnet:
+        aliases:
+          - ih-mock-gw
