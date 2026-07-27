@@ -27,6 +27,9 @@ beforeAll(() => {
 });
 
 const managerStub = {
+  // ADR-021: el binding resuelve descriptores por el manager. Sin este metodo el stub explota
+  // ('resolve is not a function') apenas un test pase tareas origen; null = sin declaracion.
+  resolve: () => null,
   draftFor: (t: ProcessTaskFormModel) => ({
     taskRef: 'st', executionMode: 'per-record', mode: 'query',
     queryUrl: '', queryMethod: 'GET', queryTimeoutSeconds: 30,

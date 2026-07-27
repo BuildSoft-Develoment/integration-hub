@@ -1,4 +1,21 @@
 import { TestBed } from '@angular/core/testing';
+import { ProcessTaskManagerService } from '@integration-hub/core/services';
+import {
+  Mt101ArchiveTaskProvider,
+  Mt101BuildFromTableTaskProvider,
+  Mt101PayTaskProvider,
+  Mt101ValidateTaskProvider,
+  PROCESS_TASK_PROVIDERS,
+  provideProcessTaskProviders,
+} from '@integration-hub/core/providers';
+
+/** Los 4 tipos del vertical que encadena el template masivo, registrados como en produccion. */
+const MT101_TEMPLATE_PROVIDERS = [
+  Mt101BuildFromTableTaskProvider,
+  Mt101ValidateTaskProvider,
+  Mt101ArchiveTaskProvider,
+  Mt101PayTaskProvider,
+];
 
 import { AuthAccessService } from '@integration-hub/core/services';
 
@@ -13,6 +30,15 @@ describe('ProcessEditorStore', () => {
     TestBed.configureTestingModule({
       providers: [
         ProcessEditorStore,
+        ProcessTaskManagerService,
+        // Los tipos del motor + los del vertical que usa el template masivo.
+        ...provideProcessTaskProviders(),
+        ...MT101_TEMPLATE_PROVIDERS,
+        ...MT101_TEMPLATE_PROVIDERS.map((cls) => ({
+          provide: PROCESS_TASK_PROVIDERS,
+          useExisting: cls,
+          multi: true,
+        })),
         ProcessFlowApiService,
         {
           provide: AuthAccessService,
@@ -114,15 +140,30 @@ describe('ProcessEditorStore', () => {
     });
     store.updateTask(task.clientId, { taskType: 'DB_WRITE' });
 
-    expect(store.form().tasks[0]).toEqual(
+    const updated = store.form().tasks[0];
+    expect(updated).toEqual(
       expect.objectContaining({
         clientId: task.clientId,
         taskType: 'DB_WRITE',
         sourceDefinitionId: null,
         readerDefinitionId: null,
-        configurationJson: '{}',
       })
     );
+    // La config del tipo anterior no sobrevive: se reemplaza por la default del tipo nuevo.
+    // (Antes este spec esperaba '{}' porque no proveia el manager y el store caia al camino
+    // degradado; con el manager registrado, como en produccion, la default viene del provider.)
+    expect(updated.configurationJson).not.toContain('demo');
+    expect(JSON.parse(updated.configurationJson || '{}')).toMatchObject({ taskRef: expect.any(String) });
+  });
+
+  it('la salida sugerida al encadenar sale del descriptor, no de un switch propio (ADR-021)', () => {
+    // Regresion: el store tenia un clon del switch del binding context y ya estaba desincronizado
+    // (le faltaba MT101_BUILD_FROM_TABLE), asi que el editor de flujo sugeria 'summary' y el panel
+    // de runtime 'fragments' para la MISMA tarea origen. Ahora hay una sola fuente de verdad.
+    const manager = TestBed.inject(ProcessTaskManagerService);
+    const declared = manager.resolve('MT101_BUILD_FROM_TABLE')?.descriptor.defaultOutput;
+
+    expect(declared).toBe('fragments');
   });
 });
 

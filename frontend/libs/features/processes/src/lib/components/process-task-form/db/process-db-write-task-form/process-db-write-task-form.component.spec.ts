@@ -41,6 +41,9 @@ let lastPatch: Record<string, unknown> | null = null;
 
 /** Draft minimo derivado del config: al efecto solo le importan targetSchema/targetTable. */
 const managerStub = {
+  // ADR-021: el binding resuelve descriptores por el manager. Sin este metodo el stub explota
+  // ('resolve is not a function') apenas un test pase tareas origen; null = sin declaracion.
+  resolve: () => null,
   draftFor: (t: ProcessTaskFormModel) => ({
     taskRef: 'w1',
     executionMode: 'batch',

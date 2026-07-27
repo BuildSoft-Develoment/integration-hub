@@ -339,7 +339,20 @@ export class ProcessEditorStore {
     };
   }
 
+  /**
+   * ADR-021: misma resolucion que el panel de runtime — gana la salida que DECLARA el provider y
+   * si no declara, el default de los tipos propios del motor.
+   *
+   * <p>Antes esto era un clon del switch que vivia en el binding context, y ya estaba
+   * desincronizado: le faltaba el case de `MT101_BUILD_FROM_TABLE`, asi que encadenar desde el
+   * editor de flujo sugeria `summary` mientras el panel de runtime sugeria `fragments` para la
+   * MISMA tarea origen. Con una sola fuente de verdad (el descriptor) no puede volver a pasar.</p>
+   */
   private defaultSourceOutput(taskType: ProcessTaskType): ProcessTaskOutputKind {
+    const declared = this.taskManager?.resolve(taskType)?.descriptor.defaultOutput;
+    if (declared) {
+      return declared;
+    }
     switch (taskType) {
       case 'DB_WRITE':
         return 'table';
@@ -347,14 +360,6 @@ export class ProcessEditorStore {
       case 'DB_EXECUTE_FN':
         return 'out';
       case 'FILE_READ':
-      case 'MT101_PARSE':
-      case 'MT101_SPLIT':
-      case 'MT101_REPAIR':
-      case 'MT101_ARCHIVE':
-      case 'MT101_PAY':
-      case 'MT101_ROUTE':
-      case 'MT101_RECONCILE':
-      case 'MT101_STATUS':
         return 'records';
       default:
         return 'summary';
