@@ -4,7 +4,7 @@ import com.integrationhub.vertical.swift.mt101.repository.Mt101FailedRecordRepos
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FailedRecordRepository.CorrectionSheetRow;
 import com.integrationhub.platform.spi.engine.ConfigurationMapper;
 import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
-import com.integrationhub.platform.service.task.writer.FileFormatWriterRegistry;
+import com.integrationhub.platform.spi.task.writer.FileFormatWriterResolver;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -27,7 +27,7 @@ import java.util.Map;
  * offline (fill-down, buscar/reemplazar) y re-sube la planilla (C2/C3).
  *
  * <p><b>Streaming:</b> reusa el {@code XlsxWriter} de la capa de salida (POI SXSSF) via
- * {@link FileFormatWriterRegistry} y escribe DIRECTO al {@link OutputStream} de la respuesta HTTP — no
+ * {@link FileFormatWriterResolver} y escribe DIRECTO al {@link OutputStream} de la respuesta HTTP — no
  * materializa el XLSX en memoria (nada de {@code byte[]}). <b>Money-safety:</b> read-only, no muta nada.
  */
 @ApplicationScoped
@@ -55,19 +55,19 @@ public class Mt101CorrectionSheetService {
     private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101FailedRecordRepository failedRecordRepository;
     private final ConfigurationMapper jsonConfigurationMapper;
-    private final FileFormatWriterRegistry writerRegistry;
+    private final FileFormatWriterResolver writerResolver;
 
     @Inject
     public Mt101CorrectionSheetService(DataSource defaultDataSource,
                                        JdbcConnectionResolver connectionPoolManager,
                                        Mt101FailedRecordRepository failedRecordRepository,
                                        ConfigurationMapper jsonConfigurationMapper,
-                                       FileFormatWriterRegistry writerRegistry) {
+                                       FileFormatWriterResolver writerResolver) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.failedRecordRepository = failedRecordRepository;
         this.jsonConfigurationMapper = jsonConfigurationMapper;
-        this.writerRegistry = writerRegistry;
+        this.writerResolver = writerResolver;
     }
 
     /** Valida los parametros ANTES de empezar a streamear (para devolver 400, no romper a mitad del stream). */
@@ -109,7 +109,7 @@ public class Mt101CorrectionSheetService {
         columns.addAll(META_COLUMNS);
         columns.addAll(editable);
 
-        var writer = writerRegistry.resolve("XLSX");
+        var writer = writerResolver.resolve("XLSX");
         try (var session = writer.open(out, sheetConfig(columns))) {
             session.writeHeader(new ArrayList<>(columns));
             var batch = new ArrayList<ReadRecord>(BATCH);

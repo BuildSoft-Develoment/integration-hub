@@ -5,7 +5,7 @@ import com.integrationhub.vertical.swift.mt101.provider.Mt101Audit;
 import com.integrationhub.vertical.swift.mt101.provider.Mt101InboundMapper;
 
 import com.integrationhub.platform.audit.AuditEnvelope;
-import com.integrationhub.platform.provider.task.dbwrite.DbTaskSupport;
+import com.integrationhub.platform.spi.task.support.DbTaskSupport;
 import com.integrationhub.vertical.swift.mt101.provider.format.FinMt101Formatter;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository;
 import com.integrationhub.platform.spi.engine.ConfigurationMapper;

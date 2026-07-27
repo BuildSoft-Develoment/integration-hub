@@ -1,4 +1,4 @@
-package com.integrationhub.platform.provider.task.dbwrite;
+package com.integrationhub.platform.spi.task.support;
 
 import com.integrationhub.platform.spi.reader.ReadRecord;
 

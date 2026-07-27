@@ -6,7 +6,7 @@ import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.task.artifact.ArtifactStoreRegistry;
 import com.integrationhub.platform.service.task.sink.OutputSinkRegistry;
 import com.integrationhub.platform.service.task.sink.SinkDefinitionService;
-import com.integrationhub.platform.service.task.sink.SinkDefinitionService.SinkDefinition;
+import com.integrationhub.platform.spi.engine.SinkDefinitionResolver.SinkDefinition;
 import com.integrationhub.platform.spi.task.artifact.StoredArtifact;
 import com.integrationhub.platform.spi.task.TaskContext;
 import org.junit.jupiter.api.Test;

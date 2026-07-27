@@ -1,7 +1,7 @@
 package com.integrationhub.platform.provider.task.storedprocedure;
 
-import com.integrationhub.platform.provider.task.common.StoredProcedureRuntimeSupport;
-import com.integrationhub.platform.provider.task.dbwrite.DbTaskSupport;
+import com.integrationhub.platform.spi.task.support.StoredProcedureRuntimeSupport;
+import com.integrationhub.platform.spi.task.support.DbTaskSupport;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;

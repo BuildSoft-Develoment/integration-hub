@@ -1,7 +1,6 @@
 package com.integrationhub.platform.service.payments.swift;
 
 import com.integrationhub.vertical.swift.mt101.service.Mt101CorrectiveTaskConfigSource;
-import com.integrationhub.vertical.swift.mt101.spi.TransportResult;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;

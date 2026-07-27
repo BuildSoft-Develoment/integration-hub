@@ -1,9 +1,9 @@
 package com.integrationhub.platform.provider.task.storedprocedure;
 
 import com.integrationhub.platform.domain.ConnectionType;
-import com.integrationhub.platform.provider.task.common.StoredProcedureRuntimeSupport;
-import com.integrationhub.platform.provider.task.common.TaskOutputSupport;
-import com.integrationhub.platform.provider.task.dbwrite.DbTaskSupport;
+import com.integrationhub.platform.spi.task.support.StoredProcedureRuntimeSupport;
+import com.integrationhub.platform.spi.task.support.TaskOutputSupport;
+import com.integrationhub.platform.spi.task.support.DbTaskSupport;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.source.SourcePayload;

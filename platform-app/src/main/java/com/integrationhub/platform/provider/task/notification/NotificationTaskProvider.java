@@ -1,7 +1,7 @@
 package com.integrationhub.platform.provider.task.notification;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.provider.task.common.TaskOutputSupport;
+import com.integrationhub.platform.spi.task.support.TaskOutputSupport;
 import com.integrationhub.platform.provider.task.http.HttpRequestSupport;
 import com.integrationhub.platform.provider.task.http.ResilientHttpSender;
 import com.integrationhub.platform.service.execution.AuditService;

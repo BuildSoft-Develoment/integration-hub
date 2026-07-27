@@ -11,7 +11,7 @@ import com.integrationhub.platform.api.response.execution.ProcessedSourceFileRes
 import com.integrationhub.platform.api.response.execution.OverviewSummaryResponse;
 import com.integrationhub.platform.api.response.execution.ProcessExecutionResponse;
 import com.integrationhub.platform.api.response.execution.ProcessTaskExecutionResponse;
-import com.integrationhub.platform.domain.ExecutionStatus;
+import com.integrationhub.platform.spi.execution.ExecutionStatus;
 import com.integrationhub.platform.entity.AuditEvent;
 import com.integrationhub.platform.entity.ProcessTaskExecution;
 import com.integrationhub.platform.repository.AuditEventRepository;

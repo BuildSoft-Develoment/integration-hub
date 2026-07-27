@@ -53,7 +53,7 @@ public class ProcessTaskExecutionRepository implements PanacheRepository<Process
         return find("processExecution.id = ?1 and taskDefinition.id = ?2 and resumedAt is null and status = ?3 "
                         + "order by id desc",
                 processExecutionId, taskDefinitionId,
-                com.integrationhub.platform.domain.ExecutionStatus.SUSPENDED).firstResult();
+                com.integrationhub.platform.spi.execution.ExecutionStatus.SUSPENDED).firstResult();
     }
 
     /**
@@ -65,7 +65,7 @@ public class ProcessTaskExecutionRepository implements PanacheRepository<Process
      */
     public java.util.List<ProcessTaskExecution> findExpiredSuspensions(java.time.LocalDateTime now, int limit) {
         return find("status = ?1 and resumedAt is null and suspendExpiresAt is not null and suspendExpiresAt <= ?2",
-                com.integrationhub.platform.domain.ExecutionStatus.SUSPENDED, now)
+                com.integrationhub.platform.spi.execution.ExecutionStatus.SUSPENDED, now)
                 .page(0, Math.max(limit, 1))
                 .list();
     }

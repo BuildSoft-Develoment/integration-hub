@@ -4,7 +4,7 @@ import com.integrationhub.vertical.swift.mt101.service.Mt101PayConflictAudit;
 
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
 import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
-import com.integrationhub.platform.service.execution.AuditSpoolWriter;
+import com.integrationhub.platform.spi.engine.AuditSpoolGateway;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -22,7 +22,7 @@ import java.sql.SQLException;
  *
  * <p><b>Atomicidad de auditoría:</b> la limpieza del flag {@code pay_conflict} y la trama {@code PAY_CONFLICT_RESOLVED}
  * se escriben en <b>una sola transacción</b> (el servicio abre la {@code Connection}, escribe el {@code UPDATE} y la
- * trama al spool vía {@link AuditSpoolWriter#writeBatch(java.sql.Connection, java.util.Collection)}, y hace
+ * trama al spool vía {@link AuditSpoolGateway#writeBatch(java.sql.Connection, java.util.Collection)}, y hace
  * {@code commit}). Si el spool falla, hace {@code rollback}: nunca queda un conflicto "resuelto" sin su trama de
  * auditoría (a diferencia del emisor async del hot-path, que es best-effort y fuera de la tx de negocio).</p>
  */
@@ -32,7 +32,7 @@ public class Mt101PayConflictAcknowledgeService {
     private final DataSource defaultDataSource;
     private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101FragmentRepository repository;
-    private final AuditSpoolWriter auditSpoolWriter;
+    private final AuditSpoolGateway auditSpoolGateway;
     // Maker-checker OPT-IN (V99). Con false (default) el reconocimiento es single-actor (acknowledge). Con true se
     // exige el flujo de dos pasos (request-acknowledge del maker + approve-acknowledge del checker, actores distintos).
     // NO es un fallback: es el modo configurado por ambiente (off dev/UAT, on prod bancaria).
@@ -42,14 +42,14 @@ public class Mt101PayConflictAcknowledgeService {
     public Mt101PayConflictAcknowledgeService(DataSource defaultDataSource,
                                               JdbcConnectionResolver connectionPoolManager,
                                               Mt101FragmentRepository repository,
-                                              AuditSpoolWriter auditSpoolWriter,
+                                              AuditSpoolGateway auditSpoolGateway,
                                               @org.eclipse.microprofile.config.inject.ConfigProperty(
                                                       name = "mt101.pay.conflict.acknowledge.maker-checker.enabled",
                                                       defaultValue = "false") boolean makerCheckerEnabled) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.repository = repository;
-        this.auditSpoolWriter = auditSpoolWriter;
+        this.auditSpoolGateway = auditSpoolGateway;
         this.makerCheckerEnabled = makerCheckerEnabled;
     }
 
@@ -114,7 +114,7 @@ public class Mt101PayConflictAcknowledgeService {
                         .toList();
                 // Atomicidad: la limpieza del flag y la trama PAY_CONFLICT_RESOLVED se escriben en la MISMA tx.
                 // Si el spool falla, se hace rollback del flag → no queda un conflicto "resuelto" sin su trama.
-                auditSpoolWriter.writeBatch(connection, envelopes);
+                auditSpoolGateway.writeBatch(connection, envelopes);
                 connection.commit();
                 return new AcknowledgeResult(rows.size());
             } catch (SQLException | RuntimeException error) {
@@ -177,7 +177,7 @@ public class Mt101PayConflictAcknowledgeService {
                 envelopes.add(Mt101PayConflictAudit.requestedEnvelope(conflict.processExecutionId(),
                         conflict.taskDefinitionId(), conflict.sendersReference(), conflict.retainedStatus(),
                         maker, ackReason, ticket, conflict.originalReason()));
-                auditSpoolWriter.writeBatch(connection, envelopes);
+                auditSpoolGateway.writeBatch(connection, envelopes);
                 connection.commit();
             } catch (SQLException | RuntimeException error) {
                 connection.rollback();
@@ -247,7 +247,7 @@ public class Mt101PayConflictAcknowledgeService {
                                 row.processExecutionId(), row.taskDefinitionId(), row.sendersReference(),
                                 row.retainedStatus(), checker, makerChecker, pending.ticketRef(), row.originalReason()))
                         .toList();
-                auditSpoolWriter.writeBatch(connection, envelopes);
+                auditSpoolGateway.writeBatch(connection, envelopes);
                 connection.commit();
                 return new AcknowledgeResult(rows.size());
             } catch (SQLException | RuntimeException error) {

@@ -1,4 +1,4 @@
-package com.integrationhub.platform.provider.task.common;
+package com.integrationhub.platform.spi.task.support;
 
 import com.integrationhub.platform.spi.task.TaskContext;
 

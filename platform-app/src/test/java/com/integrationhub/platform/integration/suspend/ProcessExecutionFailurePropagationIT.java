@@ -1,6 +1,6 @@
 package com.integrationhub.platform.integration.suspend;
 
-import com.integrationhub.platform.domain.ExecutionStatus;
+import com.integrationhub.platform.spi.execution.ExecutionStatus;
 import com.integrationhub.platform.integration.IntegrationTestProfile;
 import com.integrationhub.platform.integration.PostgresTestResource;
 import com.integrationhub.platform.service.execution.ProcessExecutionService;

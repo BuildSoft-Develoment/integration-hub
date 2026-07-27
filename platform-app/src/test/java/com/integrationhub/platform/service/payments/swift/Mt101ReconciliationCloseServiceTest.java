@@ -1,9 +1,8 @@
 package com.integrationhub.platform.service.payments.swift;
 
-import com.integrationhub.platform.domain.ExecutionStatus;
-import com.integrationhub.platform.entity.ProcessExecution;
+import com.integrationhub.platform.spi.execution.ExecutionStatus;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
-import com.integrationhub.platform.service.execution.ProcessExecutionStateService;
+import com.integrationhub.platform.spi.engine.ExecutionReconciliationGateway;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -23,21 +22,15 @@ import static org.mockito.Mockito.when;
 class Mt101ReconciliationCloseServiceTest {
 
     private final Mt101FragmentRepository fragmentRepository = mock(Mt101FragmentRepository.class);
-    private final ProcessExecutionStateService stateService = mock(ProcessExecutionStateService.class);
+    private final ExecutionReconciliationGateway stateService = mock(ExecutionReconciliationGateway.class);
     private final Mt101ReconciliationCloseService service =
             new Mt101ReconciliationCloseService(null, null, fragmentRepository, stateService);
 
-    private ProcessExecution execution(ExecutionStatus status) {
-        var execution = new ProcessExecution();
-        execution.id = 77L;
-        execution.status = status;
-        return execution;
-    }
 
     @Test
     void blocksCloseWhenAnyFragmentIsNonTerminal() throws Exception {
         // Regla money-path: PAY inicio pero quedaron fragmentos ARCHIVED (nunca enviados) -> NO cerrar como completado.
-        when(stateService.getExecution(77L)).thenReturn(execution(ExecutionStatus.NEEDS_RECONCILIATION));
+        when(stateService.statusOf(77L)).thenReturn(ExecutionStatus.NEEDS_RECONCILIATION);
         when(fragmentRepository.reconciliationSummary(any(), eq(77L)))
                 .thenReturn(new Mt101FragmentRepository.ReconciliationSummary(5, 2, 0)); // 2 no-terminales
 
@@ -50,7 +43,7 @@ class Mt101ReconciliationCloseServiceTest {
 
     @Test
     void closesCompletedWhenAllFragmentsTerminalAndNoneRejected() throws Exception {
-        when(stateService.getExecution(77L)).thenReturn(execution(ExecutionStatus.NEEDS_RECONCILIATION));
+        when(stateService.statusOf(77L)).thenReturn(ExecutionStatus.NEEDS_RECONCILIATION);
         when(fragmentRepository.reconciliationSummary(any(), eq(77L)))
                 .thenReturn(new Mt101FragmentRepository.ReconciliationSummary(5, 0, 0));
         when(stateService.closeReconciled(eq(77L), eq(false), any())).thenReturn(true);
@@ -63,7 +56,7 @@ class Mt101ReconciliationCloseServiceTest {
 
     @Test
     void closesCompletedWithErrorsWhenSomeFragmentsRejected() throws Exception {
-        when(stateService.getExecution(77L)).thenReturn(execution(ExecutionStatus.NEEDS_RECONCILIATION));
+        when(stateService.statusOf(77L)).thenReturn(ExecutionStatus.NEEDS_RECONCILIATION);
         when(fragmentRepository.reconciliationSummary(any(), eq(77L)))
                 .thenReturn(new Mt101FragmentRepository.ReconciliationSummary(5, 0, 2)); // todos terminales, 2 rejected
         when(stateService.closeReconciled(eq(77L), eq(true), any())).thenReturn(true);
@@ -76,7 +69,7 @@ class Mt101ReconciliationCloseServiceTest {
 
     @Test
     void rejectsWhenExecutionIsNotInNeedsReconciliation() {
-        when(stateService.getExecution(77L)).thenReturn(execution(ExecutionStatus.RUNNING));
+        when(stateService.statusOf(77L)).thenReturn(ExecutionStatus.RUNNING);
 
         assertThrows(IllegalStateException.class,
                 () -> service.closeReconciledExecution(null, 77L, "ana", "post-reconcile"));

@@ -1,7 +1,7 @@
 package com.integrationhub.platform.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.integrationhub.platform.domain.ExecutionStatus;
+import com.integrationhub.platform.spi.execution.ExecutionStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;

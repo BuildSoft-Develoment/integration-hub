@@ -4,6 +4,7 @@ import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.platform.entity.AuditSpool;
 import com.integrationhub.platform.repository.AuditSpoolRepository;
+import com.integrationhub.platform.spi.engine.AuditSpoolGateway;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.transaction.Transactional;
@@ -23,7 +24,7 @@ import java.util.HexFormat;
  * {@code REQUIRES_NEW} pase por el proxy CDI.
  */
 @ApplicationScoped
-public class AuditSpoolWriter {
+public class AuditSpoolWriter implements AuditSpoolGateway {
 
     private static final int MAX_PARTITION_KEY_LENGTH = 120;
 
@@ -63,6 +64,7 @@ public class AuditSpoolWriter {
      * usado por acciones gobernadas (p. ej. acknowledge de PAY conflicts) donde perder la trama sería un hueco de
      * auditoría. Reusa {@link #row(AuditEnvelope)} (misma serialización JSON, partition key y {@code spool_status}).
      */
+    @Override
     public void writeBatch(Connection connection, Collection<AuditEnvelope> envelopes) throws SQLException {
         if (envelopes == null || envelopes.isEmpty()) {
             return;

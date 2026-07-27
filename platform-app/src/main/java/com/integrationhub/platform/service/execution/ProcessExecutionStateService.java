@@ -1,6 +1,7 @@
 package com.integrationhub.platform.service.execution;
 
-import com.integrationhub.platform.domain.ExecutionStatus;
+import com.integrationhub.platform.spi.engine.ExecutionReconciliationGateway;
+import com.integrationhub.platform.spi.execution.ExecutionStatus;
 import com.integrationhub.platform.entity.ProcessDefinition;
 import com.integrationhub.platform.entity.ProcessExecution;
 import com.integrationhub.platform.entity.ProcessTaskDefinition;
@@ -21,7 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 @ApplicationScoped
-public class ProcessExecutionStateService {
+public class ProcessExecutionStateService implements ExecutionReconciliationGateway {
 
     private final ProcessDefinitionRepository processDefinitionRepository;
     private final ProcessTaskDefinitionRepository processTaskDefinitionRepository;
@@ -408,12 +409,24 @@ public class ProcessExecutionStateService {
     }
 
     /**
+     * ADR-021: la version del puerto — devuelve solo el estado, no la entidad. Quien concilia no
+     * necesita (ni debe) tener en la mano un {@code ProcessExecution} de JPA.
+     */
+    @Override
+    @Transactional(Transactional.TxType.REQUIRES_NEW)
+    public ExecutionStatus statusOf(Long processExecutionId) {
+        var execution = processExecutionRepository.findById(processExecutionId);
+        return execution == null ? null : execution.status;
+    }
+
+    /**
      * v54-fix: cierra una ejecucion en {@code NEEDS_RECONCILIATION} (tras reconciliar sus fragmentos) hacia
      * {@code COMPLETED} o {@code COMPLETED_WITH_ERRORS}. Atomico ({@code WHERE status='NEEDS_RECONCILIATION'}): no
      * cierra dos veces ni desde otro estado. El guard de terminalidad de fragmentos vive en el caller MT101. NO
      * re-ejecuta ni reenvia; solo cierra el estado del motor. Devuelve false si ya no estaba en NEEDS_RECONCILIATION.
      */
     @Transactional(Transactional.TxType.REQUIRES_NEW)
+    @Override
     public boolean closeReconciled(Long processExecutionId, boolean withErrors, String details) {
         var target = withErrors ? ExecutionStatus.COMPLETED_WITH_ERRORS : ExecutionStatus.COMPLETED;
         if (processExecutionRepository.closeFromNeedsReconciliation(processExecutionId, target, details,

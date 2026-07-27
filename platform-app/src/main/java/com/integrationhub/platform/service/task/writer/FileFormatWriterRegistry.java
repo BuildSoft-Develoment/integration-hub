@@ -2,6 +2,7 @@ package com.integrationhub.platform.service.task.writer;
 
 import com.integrationhub.platform.spi.config.PluginConfigSchema;
 import com.integrationhub.platform.spi.task.writer.FileFormatWriter;
+import com.integrationhub.platform.spi.task.writer.FileFormatWriterResolver;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
@@ -18,7 +19,7 @@ import java.util.stream.Stream;
  * {@code format} (case-insensitive) sobre los beans CDI. Los escritores como plugin remoto son fase posterior.
  */
 @ApplicationScoped
-public class FileFormatWriterRegistry {
+public class FileFormatWriterRegistry implements FileFormatWriterResolver {
 
     private final Supplier<Stream<FileFormatWriter>> writers;
 
@@ -32,6 +33,7 @@ public class FileFormatWriterRegistry {
         this.writers = () -> writers == null ? Stream.empty() : writers.stream();
     }
 
+    @Override
     public FileFormatWriter resolve(String format) {
         return writers.get()
                 .filter(writer -> writer.format().equalsIgnoreCase(format))

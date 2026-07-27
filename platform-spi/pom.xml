@@ -30,6 +30,13 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
         </dependency>
+        <!-- Las utilidades de `spi.task.support` traen logica propia (saneo de identificadores SQL,
+             coercion de tipos JDBC) y sus pruebas viajan con ellas, no con el modulo que las usa. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

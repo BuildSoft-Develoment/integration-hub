@@ -9,7 +9,7 @@ import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.vertical.swift.mt101.provider.Mt101StatusQueryExecutor;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101ConfirmationRepository;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
-import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.engine.RecordAuditEmitter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.postgresql.ds.PGSimpleDataSource;

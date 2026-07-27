@@ -4,8 +4,9 @@ package com.integrationhub.platform.provider.task.dbwrite;
 
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
-import com.integrationhub.platform.provider.task.common.StoredProcedureRuntimeSupport;
-import com.integrationhub.platform.provider.task.common.TaskOutputSupport;
+import com.integrationhub.platform.spi.task.support.DbTaskSupport;
+import com.integrationhub.platform.spi.task.support.StoredProcedureRuntimeSupport;
+import com.integrationhub.platform.spi.task.support.TaskOutputSupport;
 import com.integrationhub.platform.repository.DbWriteRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.JsonConfigurationMapper;

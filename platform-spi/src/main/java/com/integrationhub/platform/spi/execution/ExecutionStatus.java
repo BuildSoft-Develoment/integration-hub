@@ -1,4 +1,4 @@
-package com.integrationhub.platform.domain;
+package com.integrationhub.platform.spi.execution;
 
 public enum ExecutionStatus {
     PENDING,

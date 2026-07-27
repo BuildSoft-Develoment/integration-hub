@@ -4,7 +4,7 @@ import com.integrationhub.vertical.swift.mt101.spi.PreDispatchTransportException
 
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
-import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.engine.RecordAuditEmitter;
 import com.integrationhub.vertical.swift.mt101.spi.PaymentMessageTransport;
 import com.integrationhub.vertical.swift.mt101.spi.TransportResult;
 import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;

@@ -1,6 +1,6 @@
 package com.integrationhub.platform.repository;
 
-import com.integrationhub.platform.provider.task.dbwrite.DbTaskSupport;
+import com.integrationhub.platform.spi.task.support.DbTaskSupport;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import jakarta.enterprise.context.ApplicationScoped;
 

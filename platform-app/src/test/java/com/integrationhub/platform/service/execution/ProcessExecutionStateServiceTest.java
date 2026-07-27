@@ -1,6 +1,6 @@
 package com.integrationhub.platform.service.execution;
 
-import com.integrationhub.platform.domain.ExecutionStatus;
+import com.integrationhub.platform.spi.execution.ExecutionStatus;
 import com.integrationhub.platform.entity.ProcessDefinition;
 import com.integrationhub.platform.entity.ProcessExecution;
 import com.integrationhub.platform.entity.ProcessTaskDefinition;

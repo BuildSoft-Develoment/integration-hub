@@ -4,7 +4,7 @@ import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
-import com.integrationhub.platform.provider.task.dbwrite.DbTaskSupport;
+import com.integrationhub.platform.spi.task.support.DbTaskSupport;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepository;
 import com.integrationhub.platform.spi.engine.ConfigurationMapper;
 import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;

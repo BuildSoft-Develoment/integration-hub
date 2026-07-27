@@ -1,9 +1,9 @@
 package com.integrationhub.platform.service.payments.swift;
 
-import com.integrationhub.platform.domain.ExecutionStatus;
+import com.integrationhub.platform.spi.execution.ExecutionStatus;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
 import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
-import com.integrationhub.platform.service.execution.ProcessExecutionStateService;
+import com.integrationhub.platform.spi.engine.ExecutionReconciliationGateway;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -27,17 +27,17 @@ public class Mt101ReconciliationCloseService {
     private final DataSource defaultDataSource;
     private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101FragmentRepository fragmentRepository;
-    private final ProcessExecutionStateService processExecutionStateService;
+    private final ExecutionReconciliationGateway executionGateway;
 
     @Inject
     public Mt101ReconciliationCloseService(DataSource defaultDataSource,
                                            JdbcConnectionResolver connectionPoolManager,
                                            Mt101FragmentRepository fragmentRepository,
-                                           ProcessExecutionStateService processExecutionStateService) {
+                                           ExecutionReconciliationGateway executionGateway) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.fragmentRepository = fragmentRepository;
-        this.processExecutionStateService = processExecutionStateService;
+        this.executionGateway = executionGateway;
     }
 
     public CloseResult closeReconciledExecution(String connectionRef, Long processExecutionId,
@@ -47,14 +47,14 @@ public class Mt101ReconciliationCloseService {
         }
         require(executedBy, "executedBy");
         var reasonText = require(reason, "reason");
-        var execution = processExecutionStateService.getExecution(processExecutionId);
-        if (execution == null) {
+        var status = executionGateway.statusOf(processExecutionId);
+        if (status == null) {
             throw new IllegalArgumentException("process execution not found: " + processExecutionId);
         }
-        if (execution.status != ExecutionStatus.NEEDS_RECONCILIATION) {
+        if (status != ExecutionStatus.NEEDS_RECONCILIATION) {
             throw new IllegalStateException("process execution " + processExecutionId
                     + " must be NEEDS_RECONCILIATION to close after reconciliation; current status is "
-                    + execution.status);
+                    + status);
         }
         Mt101FragmentRepository.ReconciliationSummary summary;
         try {
@@ -71,7 +71,7 @@ public class Mt101ReconciliationCloseService {
         var withErrors = summary.rejected() > 0;
         var details = reasonText + " | reconciled close by " + executedBy + " (total=" + summary.total()
                 + ", rejected=" + summary.rejected() + ")";
-        if (!processExecutionStateService.closeReconciled(processExecutionId, withErrors, details)) {
+        if (!executionGateway.closeReconciled(processExecutionId, withErrors, details)) {
             throw new IllegalStateException("process execution " + processExecutionId
                     + " was not in NEEDS_RECONCILIATION at close time (concurrent change)");
         }

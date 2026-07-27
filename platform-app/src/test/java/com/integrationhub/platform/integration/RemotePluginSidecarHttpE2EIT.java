@@ -3,7 +3,7 @@ package com.integrationhub.platform.integration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.examples.plugin.sidecar.EchoPluginTaskHandler;
 import com.integrationhub.examples.plugin.sidecar.ReferencePluginSidecar;
-import com.integrationhub.platform.domain.ExecutionStatus;
+import com.integrationhub.platform.spi.execution.ExecutionStatus;
 import com.integrationhub.platform.service.execution.ProcessExecutionService;
 import com.integrationhub.platform.service.execution.async.AsyncTaskMessageCodec;
 import com.integrationhub.platform.service.plugin.BackendPluginAdminService;

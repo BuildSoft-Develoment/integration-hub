@@ -1,7 +1,7 @@
 package com.integrationhub.platform.provider.task.storedprocedure;
 
 import com.integrationhub.platform.domain.ConnectionType;
-import com.integrationhub.platform.provider.task.common.StoredProcedureRuntimeSupport;
+import com.integrationhub.platform.spi.task.support.StoredProcedureRuntimeSupport;
 
 import javax.sql.DataSource;
 import java.sql.Connection;

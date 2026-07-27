@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.integrationhub.platform.audit.AuditEnvelope;
-import com.integrationhub.platform.service.execution.RecordAuditEmitter;
+import com.integrationhub.platform.spi.engine.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import com.integrationhub.vertical.swift.mt101.spi.PaymentMessageTransport;

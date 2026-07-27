@@ -1,6 +1,6 @@
 package com.integrationhub.platform.service.execution;
 
-import com.integrationhub.platform.provider.task.dbwrite.DbTaskSupport;
+import com.integrationhub.platform.spi.task.support.DbTaskSupport;
 import com.integrationhub.platform.repository.TaskInputRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.reader.ReadRecord;

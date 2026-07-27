@@ -2,7 +2,7 @@ package com.integrationhub.platform.provider.task.rest;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.provider.task.common.TaskOutputSupport;
+import com.integrationhub.platform.spi.task.support.TaskOutputSupport;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.task.TaskContext;
 

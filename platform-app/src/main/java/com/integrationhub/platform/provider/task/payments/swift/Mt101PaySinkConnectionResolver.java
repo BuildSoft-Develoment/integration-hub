@@ -2,7 +2,7 @@ package com.integrationhub.platform.provider.task.payments.swift;
 
 
 import com.integrationhub.platform.spi.engine.ConfigurationMapper;
-import com.integrationhub.platform.service.task.sink.SinkDefinitionService;
+import com.integrationhub.platform.spi.engine.SinkDefinitionResolver;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.context.control.ActivateRequestContext;
 import jakarta.inject.Inject;
@@ -14,7 +14,7 @@ import java.util.Map;
 /**
  * ADR-017: resuelve la CONEXION de salida SFTP de {@code MT101_PAY} desde una fuente {@code /sources}
  * OUTPUT/BOTH referenciada por {@code sftp.sinkRef}, reutilizando el mismo mecanismo que {@code FILE_DELIVER}
- * ({@link SinkDefinitionService}). Mergea la conexion (host/puerto/credenciales-como-refs/knownHostsPath) en el
+ * ({@link SinkDefinitionResolver}). Mergea la conexion (host/puerto/credenciales-como-refs/knownHostsPath) en el
  * bloque {@code sftp} de la task, conservando lo OPERACIONAL ({@code dropPathTemplate}/{@code tmpExtension}/
  * {@code remoteDuplicatePolicy}). Sin {@code sinkRef} devuelve la config intacta (modo inline, retrocompatible).
  *
@@ -49,13 +49,13 @@ public class Mt101PaySinkConnectionResolver {
 
     private static final String SFTP_TYPE = "SFTP";
 
-    private final SinkDefinitionService sinkDefinitionService;
+    private final SinkDefinitionResolver sinkDefinitionResolver;
     private final ConfigurationMapper jsonConfigurationMapper;
 
     @Inject
-    public Mt101PaySinkConnectionResolver(SinkDefinitionService sinkDefinitionService,
+    public Mt101PaySinkConnectionResolver(SinkDefinitionResolver sinkDefinitionResolver,
                                           ConfigurationMapper jsonConfigurationMapper) {
-        this.sinkDefinitionService = sinkDefinitionService;
+        this.sinkDefinitionResolver = sinkDefinitionResolver;
         this.jsonConfigurationMapper = jsonConfigurationMapper;
     }
 
@@ -121,7 +121,7 @@ public class Mt101PaySinkConnectionResolver {
         if (sinkRef == null) {
             return null;
         }
-        var definition = sinkDefinitionService.resolve(sinkRef);
+        var definition = sinkDefinitionResolver.resolve(sinkRef);
         if (!definition.allowsOutput()) {
             throw new IllegalArgumentException("MT101_PAY sftp.sinkRef " + sinkRef + " ('" + definition.name()
                     + "') is not an OUTPUT sink (direction=" + definition.direction() + "); set the source to OUTPUT or BOTH");
