@@ -1,4 +1,4 @@
-package com.integrationhub.platform.api.response.execution;
+package com.integrationhub.platform.api.response.payments;
 
 import java.time.LocalDateTime;
 

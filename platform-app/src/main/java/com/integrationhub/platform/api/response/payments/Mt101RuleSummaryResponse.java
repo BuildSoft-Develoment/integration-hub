@@ -1,4 +1,4 @@
-package com.integrationhub.platform.api.response.execution;
+package com.integrationhub.platform.api.response.payments;
 
 /**
  * ADR-020 (A): una causa de fallo agregada en la cuarentena de un set. Convierte miles de filas en un

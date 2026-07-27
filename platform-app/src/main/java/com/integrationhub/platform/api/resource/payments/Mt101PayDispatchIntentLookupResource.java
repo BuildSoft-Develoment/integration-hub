@@ -1,4 +1,4 @@
-package com.integrationhub.platform.api.resource.execution;
+package com.integrationhub.platform.api.resource.payments;
 
 import com.integrationhub.platform.provider.task.payments.swift.Mt101PayDispatchIntentStore;
 import com.integrationhub.platform.service.payments.swift.Mt101PayDispatchIntentLookupService;

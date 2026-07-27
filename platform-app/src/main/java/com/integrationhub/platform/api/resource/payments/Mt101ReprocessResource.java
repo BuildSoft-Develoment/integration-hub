@@ -1,7 +1,7 @@
-package com.integrationhub.platform.api.resource.execution;
+package com.integrationhub.platform.api.resource.payments;
 
-import com.integrationhub.platform.api.response.execution.Mt101FragmentLinkResponse;
-import com.integrationhub.platform.api.response.execution.Mt101ReprocessResponse;
+import com.integrationhub.platform.api.response.payments.Mt101FragmentLinkResponse;
+import com.integrationhub.platform.api.response.payments.Mt101ReprocessResponse;
 import com.integrationhub.platform.repository.payments.swift.Mt101FragmentRepository;
 import com.integrationhub.platform.service.payments.swift.Mt101ReprocessService;
 import jakarta.annotation.security.RolesAllowed;
