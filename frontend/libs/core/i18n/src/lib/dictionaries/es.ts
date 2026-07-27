@@ -1161,7 +1161,12 @@ export const es = {
   'executions.dlq.col.lastPage': 'Ultima pagina',
   'executions.dlq.col.lastProgress': 'Ultimo progreso',
   'executions.dlq.col.actions': 'Acciones',
+  'executionStatus.PENDING': 'Pendiente',
   'executionStatus.RUNNING': 'En ejecucion',
+  'executionStatus.SUSPENDED': 'Suspendida',
+  // Money-path: la ejecucion inicio un efecto NO idempotente (MT101_PAY) y no se pudo confirmar
+  // el resultado. No es un fallo: exige conciliar antes de cerrar. Nunca reprocesar a ciegas.
+  'executionStatus.NEEDS_RECONCILIATION': 'Requiere conciliacion',
   'executionStatus.COMPLETED': 'Completada',
   'executionStatus.FAILED': 'Fallida',
   'executionStatus.COMPLETED_WITH_ERRORS': 'Completada con errores',

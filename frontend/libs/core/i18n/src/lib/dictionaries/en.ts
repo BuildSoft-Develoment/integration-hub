@@ -1161,7 +1161,12 @@ export const en = {
   'executions.dlq.col.lastPage': 'Last page',
   'executions.dlq.col.lastProgress': 'Last progress',
   'executions.dlq.col.actions': 'Actions',
+  'executionStatus.PENDING': 'Pending',
   'executionStatus.RUNNING': 'Running',
+  'executionStatus.SUSPENDED': 'Suspended',
+  // Money-path: the execution started a NON-idempotent effect (MT101_PAY) whose outcome could not
+  // be confirmed. Not a failure: it must be reconciled before closing. Never blindly reprocess.
+  'executionStatus.NEEDS_RECONCILIATION': 'Needs reconciliation',
   'executionStatus.COMPLETED': 'Completed',
   'executionStatus.FAILED': 'Failed',
   'executionStatus.COMPLETED_WITH_ERRORS': 'Completed with errors',
