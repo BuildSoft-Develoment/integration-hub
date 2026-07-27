@@ -128,15 +128,20 @@ public class Mt101CorrectionSheetService {
         }
     }
 
-    /** Config del XlsxWriter: cada columna como {field} (texto) — identidad como texto para re-parsear sin sorpresas. */
+    /**
+     * Config del XlsxWriter: cada columna como {field} (texto) — identidad como texto para re-parsear sin sorpresas.
+     * Las columnas de IDENTIDAD/DIAGNOSTICO (prefijo {@code _}) van {@code locked=true} y la hoja se protege
+     * ({@code protect}): en Excel quedan read-only, asi el operador NO puede corromper la identidad de re-match por
+     * accidente (fill-down, buscar/reemplazar). Las columnas del payload quedan editables (locked=false).
+     */
     private Map<String, Object> sheetConfig(List<String> columns) {
         var columnList = new ArrayList<Map<String, Object>>(columns.size());
         for (var name : columns) {
-            columnList.add(Map.of("field", name));
+            columnList.add(Map.of("field", name, "locked", name.startsWith("_")));
         }
         return Map.of(
                 "layout", Map.of("detail", Map.of("columns", columnList)),
-                "xlsx", Map.of("sheetName", "Correccion", "freezeHeader", true));
+                "xlsx", Map.of("sheetName", "Correccion", "freezeHeader", true, "protect", true));
     }
 
     private ReadRecord toRecord(CorrectionSheetRow source, Map<String, Object> payload) {

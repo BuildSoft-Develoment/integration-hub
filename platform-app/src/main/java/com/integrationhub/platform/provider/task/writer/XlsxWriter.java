@@ -89,7 +89,8 @@ public class XlsxWriter implements FileFormatWriter {
                 !"PLAIN".equalsIgnoreCase(stringValue(xlsx.get("headerStyle"), "BOLD")),
                 boolValue(xlsx.get("freezeHeader"), true),
                 boolValue(xlsx.get("autoFilter"), false),
-                boolValue(xlsx.get("autoSizeColumns"), false));
+                boolValue(xlsx.get("autoSizeColumns"), false),
+                boolValue(xlsx.get("protect"), false));
     }
 
     // --- parsing de config (layout.detail.columns) ---
@@ -114,18 +115,21 @@ public class XlsxWriter implements FileFormatWriter {
             if (raw instanceof Map<?, ?> column) {
                 var field = column.get("field");
                 if (field != null && !String.valueOf(field).isBlank()) {
+                    var locked = column.get("locked");
                     result.add(new DetailColumn(String.valueOf(field),
                             column.get("type") == null ? null : String.valueOf(column.get("type")),
-                            column.get("format") == null ? null : String.valueOf(column.get("format"))));
+                            column.get("format") == null ? null : String.valueOf(column.get("format")),
+                            locked == null || Boolean.parseBoolean(String.valueOf(locked))));
                 }
             } else if (raw != null && !String.valueOf(raw).isBlank()) {
-                result.add(new DetailColumn(String.valueOf(raw), null, null));
+                result.add(new DetailColumn(String.valueOf(raw), null, null, true));
             }
         }
         return List.copyOf(result);
     }
 
-    private record DetailColumn(String field, String type, String format) {
+    /** {@code locked}: solo tiene efecto con {@code xlsx.protect=true}; una columna {@code locked=false} queda EDITABLE. */
+    private record DetailColumn(String field, String type, String format, boolean locked) {
     }
 
     @SuppressWarnings("unchecked")
@@ -159,24 +163,32 @@ public class XlsxWriter implements FileFormatWriter {
         private final SXSSFSheet sheet;
         private final DataFormat dataFormat;
         private final CellStyle headerStyle;
-        // Cache de estilos por (patron NUMBER / patron DATE) — POI limita la cantidad de CellStyle por workbook.
+        // Cache de estilos por (patron NUMBER / patron DATE + estado de bloqueo) — POI limita la cantidad de CellStyle.
         private final Map<String, CellStyle> numberStyles = new HashMap<>();
         private final Map<String, CellStyle> dateStyles = new HashMap<>();
         private final boolean freezeHeader;
         private final boolean autoFilter;
         private final boolean autoSize;
+        /** protect=on: protege la hoja y deja read-only las celdas de columnas {@code locked} (las editables van sueltas). */
+        private final boolean protect;
+        /** Estilo con {@code locked=false} para las celdas de columnas editables cuando la hoja esta protegida. */
+        private final CellStyle unlockedStyle;
+        /** Token de proteccion. NO es secreto: solo evita ediciones ACCIDENTALES de las celdas bloqueadas; el operador
+         *  nunca lo necesita (desproteger la hoja es un acto deliberado y explicito). */
+        private static final String LOCK_TOKEN = "ih-locked";
 
         private int rowIndex = 0;
         private int maxColumns = 0;
         private boolean headerWritten = false;
 
         private XlsxWriteSession(OutputStream out, List<DetailColumn> columns, String sheetName, boolean headerBold,
-                                 boolean freezeHeader, boolean autoFilter, boolean autoSize) {
+                                 boolean freezeHeader, boolean autoFilter, boolean autoSize, boolean protect) {
             this.out = out;
             this.columns = columns;
             this.freezeHeader = freezeHeader;
             this.autoFilter = autoFilter;
             this.autoSize = autoSize;
+            this.protect = protect;
             this.workbook = new SXSSFWorkbook(STREAM_WINDOW);
             this.sheet = this.workbook.createSheet(sheetName == null || sheetName.isBlank() ? "Sheet1" : sheetName);
             if (autoSize) {
@@ -191,6 +203,13 @@ public class XlsxWriter implements FileFormatWriter {
                 this.headerStyle = style;
             } else {
                 this.headerStyle = null;
+            }
+            if (protect) {
+                var unlocked = this.workbook.createCellStyle();
+                unlocked.setLocked(false);
+                this.unlockedStyle = unlocked;
+            } else {
+                this.unlockedStyle = null;
             }
         }
 
@@ -243,6 +262,10 @@ public class XlsxWriter implements FileFormatWriter {
                     sheet.autoSizeColumn(c);
                 }
             }
+            if (protect) {
+                // Protege la hoja: las celdas de columnas locked quedan read-only; las editables (locked=false), sueltas.
+                sheet.protectSheet(LOCK_TOKEN);
+            }
             try {
                 workbook.write(out); // NO cierra out (su dueno es el WritableArtifact)
             } finally {
@@ -268,11 +291,12 @@ public class XlsxWriter implements FileFormatWriter {
         /** Escribe una celda con el tipo nativo de Excel segun el {@code type} de la columna. */
         private void writeTypedCell(Cell cell, Object value, DetailColumn column) {
             var type = column.type() == null ? "STRING" : column.type().toUpperCase(java.util.Locale.ROOT);
+            var unlock = protect && !column.locked(); // protect=on + columna editable -> celda suelta (locked=false)
             if ("NUMBER".equals(type)) {
                 var number = toBigDecimal(value);
                 if (number != null) {
                     cell.setCellValue(number.doubleValue());
-                    var style = numberStyle(column.format());
+                    var style = numberStyle(column.format(), unlock);
                     if (style != null) {
                         cell.setCellStyle(style);
                     }
@@ -282,30 +306,39 @@ public class XlsxWriter implements FileFormatWriter {
                 var date = toLocalDate(value, column.format());
                 if (date != null) {
                     cell.setCellValue(date);
-                    cell.setCellStyle(dateStyle(column.format()));
+                    cell.setCellStyle(dateStyle(column.format(), unlock));
                     return;
                 }
             }
             cell.setCellValue(value == null ? "" : String.valueOf(value));
+            if (unlock) {
+                cell.setCellStyle(unlockedStyle);
+            }
         }
 
-        private CellStyle numberStyle(String pattern) {
+        private CellStyle numberStyle(String pattern, boolean unlock) {
             if (pattern == null || pattern.isBlank()) {
-                return null;
+                return unlock ? unlockedStyle : null; // sin formato: la celda editable solo necesita locked=false
             }
-            return numberStyles.computeIfAbsent(pattern, p -> {
+            return numberStyles.computeIfAbsent(pattern + (unlock ? "|U" : "|L"), k -> {
                 var style = workbook.createCellStyle();
-                style.setDataFormat(dataFormat.getFormat(p));
+                style.setDataFormat(dataFormat.getFormat(pattern));
+                if (unlock) {
+                    style.setLocked(false);
+                }
                 return style;
             });
         }
 
-        private CellStyle dateStyle(String pattern) {
+        private CellStyle dateStyle(String pattern, boolean unlock) {
             // El patron es de DateTimeFormatter (Java); Excel usa 'm'=mes/minuto y 'h'=hora en minusculas.
             var excelPattern = (pattern == null || pattern.isBlank() ? "yyyy-mm-dd" : pattern.replace('M', 'm').replace('H', 'h'));
-            return dateStyles.computeIfAbsent(excelPattern, p -> {
+            return dateStyles.computeIfAbsent(excelPattern + (unlock ? "|U" : "|L"), k -> {
                 var style = workbook.createCellStyle();
-                style.setDataFormat(dataFormat.getFormat(p));
+                style.setDataFormat(dataFormat.getFormat(excelPattern));
+                if (unlock) {
+                    style.setLocked(false);
+                }
                 return style;
             });
         }

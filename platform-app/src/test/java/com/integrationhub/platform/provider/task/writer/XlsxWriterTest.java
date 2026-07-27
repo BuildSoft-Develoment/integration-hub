@@ -126,6 +126,45 @@ class XlsxWriterTest {
     }
 
     @Test
+    void protectLocksMarkedColumnsAndUnlocksEditable() throws Exception {
+        // ADR-020 (C1): con protect=on, la columna de identidad (_stagingId) queda read-only y la editable (cargos) suelta.
+        var columns = List.of(
+                Map.of("field", "_stagingId", "locked", true),
+                Map.of("field", "cargos", "locked", false));
+        var config = new LinkedHashMap<String, Object>();
+        config.put("layout", Map.of("detail", Map.of("columns", columns)));
+        config.put("xlsx", Map.of("sheetName", "Correccion", "protect", true));
+
+        var identity = new LinkedHashMap<String, Object>();
+        identity.put("_stagingId", "42");
+        identity.put("cargos", "OUR");
+        var bos = new ByteArrayOutputStream();
+        try (var session = writer.open(bos, config)) {
+            session.writeHeader(List.of("_stagingId", "cargos"));
+            session.writeDetail(List.of(new ReadRecord(identity)));
+        }
+
+        try (var wb = new XSSFWorkbook(new ByteArrayInputStream(bos.toByteArray()))) {
+            var sheet = wb.getSheetAt(0);
+            assertTrue(sheet.getProtect(), "protect=true -> la hoja debe estar protegida");
+            var dataRow = sheet.getRow(1); // 0 = cabecera, 1 = detalle
+            assertTrue(dataRow.getCell(0).getCellStyle().getLocked(),
+                    "la columna de identidad (_stagingId) debe quedar bloqueada");
+            assertTrue(!dataRow.getCell(1).getCellStyle().getLocked(),
+                    "la columna editable (cargos) debe quedar desbloqueada");
+        }
+    }
+
+    @Test
+    void withoutProtectSheetStaysUnprotected() throws Exception {
+        // Regresion: sin protect, el comportamiento generico (FILE_WRITE) no cambia — la hoja NO se protege.
+        var bytes = write(Map.of(), List.of(record("A", "1.00", "2026-01-01")), null, null);
+        try (var wb = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
+            assertTrue(!wb.getSheetAt(0).getProtect(), "protect ausente -> la hoja NO debe estar protegida");
+        }
+    }
+
+    @Test
     void validateConfigurationRequiresColumns() {
         assertThrows(IllegalArgumentException.class, () -> writer.validateConfiguration(Map.of()));
     }
