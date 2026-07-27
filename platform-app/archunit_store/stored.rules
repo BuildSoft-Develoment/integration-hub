@@ -1,0 +1,4 @@
+#
+#Mon Jul 27 00:36:35 GMT-05:00 2026
+classes\ that\ tienen\ nombre\ de\ un\ vertical\ (Mt101/Swift/Pain001)\ should\ reside\ in\ a\ package\ '..payments..',\ because\ ADR-021\:\ el\ codigo\ de\ un\ vertical\ vive\ en\ el\ paquete\ del\ vertical,\ no\ en\ api.resource.execution\ /\ service.process\ /\ entity\ del\ motor=b3f28a17-eccd-45cc-8eae-83ae1bb439ad
+no\ classes\ that\ reside\ outside\ of\ package\ '..payments..'\ should\ depend\ on\ classes\ that\ reside\ in\ a\ package\ '..payments..',\ because\ ADR-021\:\ la\ dependencia\ va\ vertical\ ->\ motor,\ nunca\ al\ reves;\ un\ vertical\ nuevo\ debe\ darse\ de\ alta\ sin\ tocar\ el\ motor=50cc3088-bff9-4577-b7d9-ef2c3887fced
