@@ -1,5 +1,7 @@
-package com.integrationhub.platform.service.process;
+package com.integrationhub.platform.service.payments.swift;
 
+import com.integrationhub.platform.spi.process.ProcessDefinitionValidator;
+import com.integrationhub.platform.spi.process.ProcessTaskView;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -28,7 +30,7 @@ import java.util.List;
  * verificable en definición sin falsos positivos. Solo cubre el gap real y estático: el ledger/conexión.</p>
  */
 @ApplicationScoped
-public class Mt101PayStatusConnectionCoverageValidator {
+public class Mt101PayStatusConnectionCoverageValidator implements ProcessDefinitionValidator {
 
     private final Mt101PayResolverPairing pairing;
 
@@ -42,7 +44,7 @@ public class Mt101PayStatusConnectionCoverageValidator {
      * {@code MT101_STATUS(resolveNormalPay=true)} resuelve un {@code MT101_PAY} con {@code connectionRef} distinto, o
      * si con varios PAY el STATUS no declara a cuál resuelve ({@code resolvesPayTaskRef}).
      */
-    public void validate(List<Mt101PayResolutionValidator.TaskView> tasks) {
+    public void validate(List<ProcessTaskView> tasks) {
         if (tasks == null || tasks.isEmpty()) {
             return;
         }

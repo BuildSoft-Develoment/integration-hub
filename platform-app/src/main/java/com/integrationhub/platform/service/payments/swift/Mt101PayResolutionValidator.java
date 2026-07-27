@@ -1,5 +1,7 @@
-package com.integrationhub.platform.service.process;
+package com.integrationhub.platform.service.payments.swift;
 
+import com.integrationhub.platform.spi.process.ProcessDefinitionValidator;
+import com.integrationhub.platform.spi.process.ProcessTaskView;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -30,7 +32,7 @@ import java.util.List;
  * tiene sentido en ambientes cuya confirmación es síncrona/in-line.</p>
  */
 @ApplicationScoped
-public class Mt101PayResolutionValidator {
+public class Mt101PayResolutionValidator implements ProcessDefinitionValidator {
 
     private final Mt101PayResolverPairing pairing;
     /** #1: si el ambiente exige reconciliación in-line, cada MT101_PAY debe traer su MT101_STATUS(resolveNormalPay). */
@@ -50,15 +52,12 @@ public class Mt101PayResolutionValidator {
         this(objectMapper, false);
     }
 
-    /** Vista mínima de una tarea para validar el grafo (tipo + orden + config JSON). */
-    public record TaskView(String taskType, Integer taskOrder, String configurationJson) {
-    }
 
     /**
      * Valida el grafo. Lanza {@link IllegalArgumentException} (mapeada a 400 por el recurso) si un {@code MT101_PAY}
      * seguido de un {@code MT101_STATUS(resolveNormalPay=true)} no tiene {@code continueOnFailure=true}.
      */
-    public void validate(List<TaskView> tasks) {
+    public void validate(List<ProcessTaskView> tasks) {
         if (tasks == null || tasks.isEmpty()) {
             return;
         }

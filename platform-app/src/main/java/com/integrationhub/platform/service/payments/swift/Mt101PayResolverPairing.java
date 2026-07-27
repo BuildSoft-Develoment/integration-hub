@@ -1,5 +1,6 @@
-package com.integrationhub.platform.service.process;
+package com.integrationhub.platform.service.payments.swift;
 
+import com.integrationhub.platform.spi.process.ProcessTaskView;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.List;
@@ -28,21 +29,21 @@ final class Mt101PayResolverPairing {
         this.objectMapper = objectMapper;
     }
 
-    boolean isPay(Mt101PayResolutionValidator.TaskView task) {
+    boolean isPay(ProcessTaskView task) {
         return MT101_PAY.equalsIgnoreCase(task.taskType()) && task.taskOrder() != null;
     }
 
-    boolean isNormalPayResolver(Mt101PayResolutionValidator.TaskView task) {
+    boolean isNormalPayResolver(ProcessTaskView task) {
         return MT101_STATUS.equalsIgnoreCase(task.taskType())
                 && task.taskOrder() != null
                 && boolConfig(task.configurationJson(), "resolveNormalPay");
     }
 
-    List<Mt101PayResolutionValidator.TaskView> pays(List<Mt101PayResolutionValidator.TaskView> tasks) {
+    List<ProcessTaskView> pays(List<ProcessTaskView> tasks) {
         return tasks.stream().filter(this::isPay).toList();
     }
 
-    String connectionOf(Mt101PayResolutionValidator.TaskView task) {
+    String connectionOf(ProcessTaskView task) {
         return normalize(stringConfig(task.configurationJson(), "connectionRef"));
     }
 
@@ -51,8 +52,8 @@ final class Mt101PayResolverPairing {
      * PAY y el STATUS no declara {@code resolvesPayTaskRef}) o {@code resolvesPayTaskRef} que no casa con ningún PAY
      * anterior → {@link IllegalArgumentException}.
      */
-    Mt101PayResolutionValidator.TaskView payForResolver(Mt101PayResolutionValidator.TaskView status,
-                                                        List<Mt101PayResolutionValidator.TaskView> pays) {
+    ProcessTaskView payForResolver(ProcessTaskView status,
+                                                        List<ProcessTaskView> pays) {
         var earlier = pays.stream().filter(p -> p.taskOrder() < status.taskOrder()).toList();
         if (earlier.isEmpty()) {
             return null;
@@ -80,8 +81,8 @@ final class Mt101PayResolverPairing {
      * en el proceso → un resolutor pelado posterior lo satisface. Varios PAY → debe existir un resolutor que declare
      * {@code resolvesPayTaskRef} = el {@code taskRef} de este PAY.
      */
-    boolean hasResolverFor(Mt101PayResolutionValidator.TaskView pay,
-                           List<Mt101PayResolutionValidator.TaskView> tasks,
+    boolean hasResolverFor(ProcessTaskView pay,
+                           List<ProcessTaskView> tasks,
                            boolean multiPay) {
         var payRef = normalize(stringConfig(pay.configurationJson(), "taskRef"));
         return tasks.stream().anyMatch(status ->
@@ -90,7 +91,7 @@ final class Mt101PayResolverPairing {
                         && resolves(status, payRef, multiPay));
     }
 
-    private boolean resolves(Mt101PayResolutionValidator.TaskView status, String payRef, boolean multiPay) {
+    private boolean resolves(ProcessTaskView status, String payRef, boolean multiPay) {
         var resolvesRef = normalize(stringConfig(status.configurationJson(), "resolvesPayTaskRef"));
         if (multiPay) {
             // Con varios PAY, solo cuenta si nombra explícitamente a ESTE por taskRef (un resolutor pelado es

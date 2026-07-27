@@ -12,7 +12,10 @@ import com.integrationhub.platform.repository.ProcessTaskDefinitionRepository;
 import com.integrationhub.platform.repository.ReaderDefinitionRepository;
 import com.integrationhub.platform.repository.SourceDefinitionRepository;
 import com.integrationhub.platform.service.execution.TaskTypeRegistry;
+import com.integrationhub.platform.spi.process.ProcessDefinitionValidator;
+import com.integrationhub.platform.spi.process.ProcessTaskView;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.transaction.Transactional;
 
 import java.time.LocalDateTime;
@@ -29,9 +32,13 @@ public class ProcessCatalogService {
     private final ReaderDefinitionRepository readerDefinitionRepository;
     private final ProcessDefinitionApiMapper processDefinitionApiMapper;
     private final TaskTypeRegistry taskTypeRegistry;
-    private final Mt101PayResolutionValidator payResolutionValidator;
-    private final Mt101StatusRouteCoverageValidator routeCoverageValidator;
-    private final Mt101PayStatusConnectionCoverageValidator connectionCoverageValidator;
+    /**
+     * ADR-021: validadores de publicacion aportados por los verticales, descubiertos por CDI (mismo
+     * patron que {@code TaskProvider}). El motor no nombra a ninguno: antes inyectaba por tipo
+     * concreto los tres del money-path MT101, asi que el alta de CUALQUIER proceso pasaba por
+     * clases de un vertical.
+     */
+    private final Instance<ProcessDefinitionValidator> definitionValidators;
 
     public ProcessCatalogService(
             ProcessDefinitionRepository processDefinitionRepository,
@@ -40,9 +47,7 @@ public class ProcessCatalogService {
             ReaderDefinitionRepository readerDefinitionRepository,
             ProcessDefinitionApiMapper processDefinitionApiMapper,
             TaskTypeRegistry taskTypeRegistry,
-            Mt101PayResolutionValidator payResolutionValidator,
-            Mt101StatusRouteCoverageValidator routeCoverageValidator,
-            Mt101PayStatusConnectionCoverageValidator connectionCoverageValidator
+            Instance<ProcessDefinitionValidator> definitionValidators
     ) {
         this.processDefinitionRepository = processDefinitionRepository;
         this.processTaskDefinitionRepository = processTaskDefinitionRepository;
@@ -50,9 +55,7 @@ public class ProcessCatalogService {
         this.readerDefinitionRepository = readerDefinitionRepository;
         this.processDefinitionApiMapper = processDefinitionApiMapper;
         this.taskTypeRegistry = taskTypeRegistry;
-        this.payResolutionValidator = payResolutionValidator;
-        this.routeCoverageValidator = routeCoverageValidator;
-        this.connectionCoverageValidator = connectionCoverageValidator;
+        this.definitionValidators = definitionValidators;
     }
 
     @Transactional
@@ -157,34 +160,34 @@ public class ProcessCatalogService {
     }
 
     /**
-     * Valida el cableado money-path de un proceso RUNNABLE: G2 (resolutor sin continueOnFailure) + #1 (resolutor
-     * obligatorio por ambiente) + #2 (STATUS route-aware cubre las rutas declaradas). Cada validador es SRP; el orden
-     * no importa (todos lanzan {@link IllegalArgumentException} → 400).
+     * ADR-021: delega la validacion de publicacion en los validadores que aporten los verticales. Cada uno
+     * ignora los procesos que no le incumben y rechaza lanzando {@link IllegalArgumentException} (→ 400);
+     * el orden no importa. El motor no sabe cuales hay ni de que estandar son.
      */
-    private void validateMoneyPath(List<Mt101PayResolutionValidator.TaskView> views) {
-        payResolutionValidator.validate(views);
-        routeCoverageValidator.validate(views);
-        connectionCoverageValidator.validate(views);
+    private void validateMoneyPath(List<ProcessTaskView> views) {
+        for (var validator : definitionValidators) {
+            validator.validate(views);
+        }
     }
 
-    /** G2: vista de tareas desde el request (create/update). */
-    private List<Mt101PayResolutionValidator.TaskView> toTaskViews(List<ProcessTaskRequest> requests) {
+    /** Vista de tareas desde el request (create/update). */
+    private List<ProcessTaskView> toTaskViews(List<ProcessTaskRequest> requests) {
         if (requests == null) {
             return List.of();
         }
         return requests.stream()
-                .map(r -> new Mt101PayResolutionValidator.TaskView(r.taskType(), r.taskOrder(), r.configurationJson()))
+                .map(r -> new ProcessTaskView(r.taskType(), r.taskOrder(), r.configurationJson()))
                 .toList();
     }
 
-    /** G2: vista de tareas ACTIVAS persistidas (setActive) — ignora las desactivadas por un update previo. */
-    private List<Mt101PayResolutionValidator.TaskView> toTaskViewsFromEntities(List<ProcessTaskDefinition> tasks) {
+    /** Vista de tareas ACTIVAS persistidas (setActive) — ignora las desactivadas por un update previo. */
+    private List<ProcessTaskView> toTaskViewsFromEntities(List<ProcessTaskDefinition> tasks) {
         if (tasks == null) {
             return List.of();
         }
         return tasks.stream()
                 .filter(t -> t.active)
-                .map(t -> new Mt101PayResolutionValidator.TaskView(t.taskType, t.taskOrder, t.configurationJson))
+                .map(t -> new ProcessTaskView(t.taskType, t.taskOrder, t.configurationJson))
                 .toList();
     }
 }

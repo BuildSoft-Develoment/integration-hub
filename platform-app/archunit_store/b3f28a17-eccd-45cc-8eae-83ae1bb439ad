@@ -1,6 +1,2 @@
 Class <com.integrationhub.platform.provider.reader.Pain001XmlReaderProvider> does not reside in a package '..payments..' in (Pain001XmlReaderProvider.java:0)
 Class <com.integrationhub.platform.provider.reader.SwiftMtReaderProvider> does not reside in a package '..payments..' in (SwiftMtReaderProvider.java:0)
-Class <com.integrationhub.platform.service.process.Mt101PayResolutionValidator> does not reside in a package '..payments..' in (Mt101PayResolutionValidator.java:0)
-Class <com.integrationhub.platform.service.process.Mt101PayResolverPairing> does not reside in a package '..payments..' in (Mt101PayResolverPairing.java:0)
-Class <com.integrationhub.platform.service.process.Mt101PayStatusConnectionCoverageValidator> does not reside in a package '..payments..' in (Mt101PayStatusConnectionCoverageValidator.java:0)
-Class <com.integrationhub.platform.service.process.Mt101StatusRouteCoverageValidator> does not reside in a package '..payments..' in (Mt101StatusRouteCoverageValidator.java:0)

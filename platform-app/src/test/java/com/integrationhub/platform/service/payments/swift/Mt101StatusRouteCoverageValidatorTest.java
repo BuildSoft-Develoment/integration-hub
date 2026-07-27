@@ -1,7 +1,7 @@
-package com.integrationhub.platform.service.process;
+package com.integrationhub.platform.service.payments.swift;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.service.process.Mt101PayResolutionValidator.TaskView;
+import com.integrationhub.platform.spi.process.ProcessTaskView;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -26,16 +26,16 @@ class Mt101StatusRouteCoverageValidatorTest {
     @Test
     void routeAwareStatusMissingADeclaredRouteIsRejected() {
         var error = assertThrows(IllegalArgumentException.class, () -> validator.validate(List.of(
-                new TaskView("MT101_ROUTE", 1, ROUTE_TWO),
-                new TaskView("MT101_STATUS", 2, "{\"routeQuery\":{\"REST_A\":{\"url\":\"https://a\"}}}"))));
+                new ProcessTaskView("MT101_ROUTE", 1, ROUTE_TWO),
+                new ProcessTaskView("MT101_STATUS", 2, "{\"routeQuery\":{\"REST_A\":{\"url\":\"https://a\"}}}"))));
         assertTrue(error.getMessage().contains("SFTP_B"), () -> "mensaje: " + error.getMessage());
     }
 
     @Test
     void routeAwareStatusCoveringAllDeclaredRoutesIsAccepted() {
         assertDoesNotThrow(() -> validator.validate(List.of(
-                new TaskView("MT101_ROUTE", 1, ROUTE_TWO),
-                new TaskView("MT101_STATUS", 2,
+                new ProcessTaskView("MT101_ROUTE", 1, ROUTE_TWO),
+                new ProcessTaskView("MT101_STATUS", 2,
                         "{\"routeQuery\":{\"REST_A\":{\"url\":\"https://a\"},\"SFTP_B\":{\"url\":\"sftp://b\"}}}"))));
     }
 
@@ -43,33 +43,33 @@ class Mt101StatusRouteCoverageValidatorTest {
     void statusWithoutRouteQueryIsNotRouteAwareSoAccepted() {
         // Sin routeQuery: query.url único (caso aceptado); no se exige cobertura por ruta.
         assertDoesNotThrow(() -> validator.validate(List.of(
-                new TaskView("MT101_ROUTE", 1, ROUTE_TWO),
-                new TaskView("MT101_STATUS", 2, "{\"query\":{\"url\":\"https://single\"}}"))));
+                new ProcessTaskView("MT101_ROUTE", 1, ROUTE_TWO),
+                new ProcessTaskView("MT101_STATUS", 2, "{\"query\":{\"url\":\"https://single\"}}"))));
     }
 
     @Test
     void routeAwareStatusWithoutUpstreamRouteIsAccepted() {
         // Sin MT101_ROUTE upstream no se conocen rutas → no se inventa exigencia.
         assertDoesNotThrow(() -> validator.validate(List.of(
-                new TaskView("MT101_STATUS", 1, "{\"routeQuery\":{\"REST_A\":{\"url\":\"https://a\"}}}"))));
+                new ProcessTaskView("MT101_STATUS", 1, "{\"routeQuery\":{\"REST_A\":{\"url\":\"https://a\"}}}"))));
     }
 
     @Test
     void defaultRouteIsNotRequiredInRouteQuery() {
         // El defaultRoute (bucket "no matcheó ninguna regla") no es un destino nombrado: no se exige cubrirlo.
         assertDoesNotThrow(() -> validator.validate(List.of(
-                new TaskView("MT101_ROUTE", 1,
+                new ProcessTaskView("MT101_ROUTE", 1,
                         "{\"rules\":[{\"name\":\"a\",\"predicate\":\"x==1\",\"routeTo\":\"REST_A\"}],"
                         + "\"defaultRoute\":\"UNROUTED\"}"),
-                new TaskView("MT101_STATUS", 2, "{\"routeQuery\":{\"REST_A\":{\"url\":\"https://a\"}}}"))));
+                new ProcessTaskView("MT101_STATUS", 2, "{\"routeQuery\":{\"REST_A\":{\"url\":\"https://a\"}}}"))));
     }
 
     @Test
     void routeDeclaredAfterStatusDoesNotCount() {
         // Un MT101_ROUTE con orden mayor que el STATUS no es upstream → no aporta rutas exigibles.
         assertDoesNotThrow(() -> validator.validate(List.of(
-                new TaskView("MT101_STATUS", 1, "{\"routeQuery\":{\"REST_A\":{\"url\":\"https://a\"}}}"),
-                new TaskView("MT101_ROUTE", 2, ROUTE_TWO))));
+                new ProcessTaskView("MT101_STATUS", 1, "{\"routeQuery\":{\"REST_A\":{\"url\":\"https://a\"}}}"),
+                new ProcessTaskView("MT101_ROUTE", 2, ROUTE_TWO))));
     }
 
     @Test

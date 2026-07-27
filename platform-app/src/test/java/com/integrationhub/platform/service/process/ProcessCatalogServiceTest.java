@@ -13,8 +13,12 @@ import com.integrationhub.platform.repository.ProcessTaskDefinitionRepository;
 import com.integrationhub.platform.repository.ReaderDefinitionRepository;
 import com.integrationhub.platform.repository.SourceDefinitionRepository;
 import com.integrationhub.platform.service.execution.TaskTypeRegistry;
+import com.integrationhub.platform.spi.process.ProcessDefinitionValidator;
+import com.integrationhub.platform.spi.process.ProcessTaskView;
+import jakarta.enterprise.inject.Instance;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -38,6 +42,23 @@ class ProcessCatalogServiceTest {
     private final ProcessDefinitionApiMapper apiMapper = new ProcessDefinitionApiMapper();
     private final TaskTypeRegistry taskTypeRegistry = mock(TaskTypeRegistry.class);
 
+    /**
+     * ADR-021: el motor solo DELEGA en los validadores registrados. Este test ya no instancia los
+     * del money-path MT101 (su comportamiento se prueba en sus propios tests, junto al vertical):
+     * un validador de prueba que registra las invocaciones alcanza y deja al test del motor sin
+     * dependencia de ningun vertical.
+     */
+    private final List<List<ProcessTaskView>> validatedViews = new ArrayList<>();
+    private final ProcessDefinitionValidator recordingValidator = validatedViews::add;
+
+    @SuppressWarnings("unchecked")
+    private final Instance<ProcessDefinitionValidator> definitionValidators = mock(Instance.class);
+
+    {
+        // Un iterador nuevo por invocacion: validateMoneyPath recorre la coleccion cada vez.
+        when(definitionValidators.iterator()).thenAnswer(invocation -> List.of(recordingValidator).iterator());
+    }
+
     private final ProcessCatalogService service = new ProcessCatalogService(
             processDefinitionRepository,
             processTaskDefinitionRepository,
@@ -45,9 +66,7 @@ class ProcessCatalogServiceTest {
             readerDefinitionRepository,
             apiMapper,
             taskTypeRegistry,
-            new Mt101PayResolutionValidator(new com.fasterxml.jackson.databind.ObjectMapper()),
-            new Mt101StatusRouteCoverageValidator(new com.fasterxml.jackson.databind.ObjectMapper()),
-            new Mt101PayStatusConnectionCoverageValidator(new com.fasterxml.jackson.databind.ObjectMapper()));
+            definitionValidators);
 
     private ProcessDefinitionRequest request(boolean scheduled, String scheduleEvery, List<ProcessTaskRequest> tasks) {
         tasks.forEach(task -> when(taskTypeRegistry.isRegistered(task.taskType())).thenReturn(true));
@@ -65,6 +84,34 @@ class ProcessCatalogServiceTest {
         assertEquals(TaskType.REST_CALL, response.tasks().get(0).taskType());
         verify(processDefinitionRepository).persist(any(ProcessDefinition.class));
         verify(processTaskDefinitionRepository).persist(any(ProcessTaskDefinition.class));
+    }
+
+    @Test
+    void createDelegaLaValidacionDePublicacionEnLosValidadoresRegistrados() {
+        // ADR-021: el motor no conoce ninguna regla de vertical; solo pasa la vista de tareas a
+        // quien se haya registrado por CDI.
+        var task = new ProcessTaskRequest(1, TaskType.REST_CALL, null, null, "{\"taskRef\":\"t1\"}");
+
+        service.create(request(false, null, List.of(task)));
+
+        assertEquals(1, validatedViews.size(), "debe invocarse una vez al publicar");
+        var view = validatedViews.get(0);
+        assertEquals(1, view.size());
+        assertEquals(TaskType.REST_CALL, view.get(0).taskType());
+        assertEquals(1, view.get(0).taskOrder());
+        assertEquals("{\"taskRef\":\"t1\"}", view.get(0).configurationJson());
+    }
+
+    @Test
+    void createDeUnBorradorNoInvocaLosValidadores() {
+        // Contrato del SPI: la validacion de publicacion corre solo cuando el proceso queda RUNNABLE.
+        var task = new ProcessTaskRequest(1, TaskType.REST_CALL, null, null, "{}");
+        var draft = new ProcessDefinitionRequest("borrador", "desc", false, false, null, "{}", List.of(task));
+        when(taskTypeRegistry.isRegistered(TaskType.REST_CALL)).thenReturn(true);
+
+        service.create(draft);
+
+        assertTrue(validatedViews.isEmpty(), "un borrador se guarda sin validar el cableado");
     }
 
     @Test

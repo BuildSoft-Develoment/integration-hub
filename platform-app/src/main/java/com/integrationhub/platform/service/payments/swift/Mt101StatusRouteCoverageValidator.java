@@ -1,5 +1,7 @@
-package com.integrationhub.platform.service.process;
+package com.integrationhub.platform.service.payments.swift;
 
+import com.integrationhub.platform.spi.process.ProcessDefinitionValidator;
+import com.integrationhub.platform.spi.process.ProcessTaskView;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -27,7 +29,7 @@ import java.util.Set;
  * ninguna regla") se excluye de la exigencia: no es un destino de gateway nombrado por el diseñador.</p>
  */
 @ApplicationScoped
-public class Mt101StatusRouteCoverageValidator {
+public class Mt101StatusRouteCoverageValidator implements ProcessDefinitionValidator {
 
     private static final String MT101_ROUTE = "MT101_ROUTE";
     private static final String MT101_STATUS = "MT101_STATUS";
@@ -43,7 +45,7 @@ public class Mt101StatusRouteCoverageValidator {
      * Valida el grafo. Lanza {@link IllegalArgumentException} (mapeada a 400 por el recurso) si un {@code MT101_STATUS}
      * route-aware no cubre en {@code routeQuery} alguna ruta declarada por un {@code MT101_ROUTE} upstream.
      */
-    public void validate(List<Mt101PayResolutionValidator.TaskView> tasks) {
+    public void validate(List<ProcessTaskView> tasks) {
         if (tasks == null || tasks.isEmpty()) {
             return;
         }
@@ -86,7 +88,7 @@ public class Mt101StatusRouteCoverageValidator {
     }
 
     /** Rutas declaradas ({@code rules[].routeTo}) por los {@code MT101_ROUTE} con orden menor al del STATUS. */
-    private Set<String> upstreamDeclaredRoutes(List<Mt101PayResolutionValidator.TaskView> tasks, int statusOrder) {
+    private Set<String> upstreamDeclaredRoutes(List<ProcessTaskView> tasks, int statusOrder) {
         var routes = new LinkedHashSet<String>();
         for (var task : tasks) {
             if (!MT101_ROUTE.equalsIgnoreCase(task.taskType()) || task.taskOrder() == null
