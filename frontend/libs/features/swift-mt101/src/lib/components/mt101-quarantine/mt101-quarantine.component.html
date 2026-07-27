@@ -54,10 +54,11 @@
 
       <!-- Zona 3: acciones de cuarentena — correccion | gobernado (separados por divisor). -->
       <div class="q__toolbar">
-        <button mat-stroked-button type="button" (click)="exportCorrectionSheet()" [disabled]="exportingSheet() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.exportSheet') }}</button>
-        <button mat-stroked-button type="button" (click)="correctionFileInput.click()" [disabled]="previewingSheet() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.importSheet') }}</button>
+        <button mat-stroked-button type="button" (click)="exportCorrectionSheet()" [disabled]="flow.exportingSheet() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.exportSheet') }}</button>
+        <button mat-stroked-button type="button" (click)="correctionFileInput.click()" [disabled]="flow.previewingSheet() || !fragmentSetId.trim()">{{ i18n.t('audit.quarantine.importSheet') }}</button>
         <input #correctionFileInput type="file" accept=".xlsx" hidden (change)="onCorrectionFile($event)" />
         @if (canAuditOperate()) {
+          <button mat-flat-button color="primary" type="button" (click)="openBulkWizard()" [disabled]="!fragmentSetId.trim()">{{ i18n.t('audit.correctWizard.open') }}</button>
           <span class="q__div"></span>
           <button mat-stroked-button type="button" [class.q__danger--armed]="actions.armed() === 'quarantine:build'" [attr.aria-pressed]="actions.armed() === 'quarantine:build'" (click)="confirmBuild()" [disabled]="loading() || !fragmentSetId.trim()">
             {{ actions.armed() === 'quarantine:build' ? i18n.t('audit.quarantine.buildConfirm') : i18n.t('audit.quarantine.build') }}
@@ -125,7 +126,7 @@
         </div>
       </details>
 
-      @if (correctionPreview(); as preview) {
+      @if (flow.preview(); as preview) {
         <div class="q__preview" role="status">
           <div class="q__preview-head">
             <span class="q__causes-title">{{ i18n.t('audit.quarantine.previewTitle') }}</span>
@@ -150,18 +151,18 @@
             <div class="q__apply">
               <mat-form-field subscriptSizing="dynamic" class="q__apply-reason">
                 <mat-label>{{ i18n.t('audit.quarantine.applyReason') }}</mat-label>
-                <input matInput [(ngModel)]="bulkCorrectionReason" [disabled]="applyingSheet()" />
+                <input matInput [(ngModel)]="bulkCorrectionReason" [disabled]="flow.applyingSheet()" />
               </mat-form-field>
               <mat-form-field subscriptSizing="dynamic" class="q__apply-ticket">
                 <mat-label>{{ i18n.t('audit.quarantine.applyTicket') }}</mat-label>
-                <input matInput [(ngModel)]="bulkCorrectionTicketRef" [disabled]="applyingSheet()" />
+                <input matInput [(ngModel)]="bulkCorrectionTicketRef" [disabled]="flow.applyingSheet()" />
               </mat-form-field>
               <button
                 mat-flat-button
                 color="primary"
                 type="button"
                 (click)="applyCorrectionSheet()"
-                [disabled]="applyingSheet() || !bulkCorrectionReason.trim()"
+                [disabled]="flow.applyingSheet() || !bulkCorrectionReason.trim()"
               >
                 {{ i18n.t('audit.quarantine.applySheet') }} ({{ preview.toCorrect }})
               </button>
@@ -170,7 +171,7 @@
         </div>
       }
 
-      @if (applyResult(); as result) {
+      @if (flow.applyResult(); as result) {
         <div class="q__apply-result" role="status">
           <div class="q__preview-head">
             <span class="q__causes-title">{{ i18n.t('audit.quarantine.applyResultTitle') }}</span>

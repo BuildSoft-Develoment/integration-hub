@@ -13,7 +13,9 @@ import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-
 import { ActionDispatcherService, ConfirmDialogComponent, IconComponent } from '@integration-hub/shared/ui';
 import { Observable } from 'rxjs';
 import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
-import { Mt101CorrectionApply, Mt101CorrectionPreview, Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101NormalPayResolution, Mt101PayAction, Mt101PayConflict, Mt101RebuildRunSummary, Mt101RowTimelineEntry, Mt101RuleSummary, Mt101StagingRowView } from '../../models/mt101.models';
+import { CorrectionCtx, Mt101CorrectionSheetFlowService } from '../../services/mt101-correction-sheet-flow.service';
+import { Mt101BulkCorrectionWizardComponent } from '../mt101-bulk-correction-wizard/mt101-bulk-correction-wizard.component';
+import { Mt101CorrectiveLifecycle, Mt101FailedRecord, Mt101FragmentSetSummary, Mt101LoteHeader, Mt101NormalPayResolution, Mt101PayAction, Mt101PayConflict, Mt101RebuildRunSummary, Mt101RowTimelineEntry, Mt101RuleSummary, Mt101StagingRowView } from '../../models/mt101.models';
 import {
   AuditOperationRisk,
   AuditWorkspaceNavComponent,
@@ -42,6 +44,7 @@ import {
   ],
   styleUrl: './mt101-quarantine.component.css',
   templateUrl: './mt101-quarantine.component.html',
+  providers: [Mt101CorrectionSheetFlowService],
 })
 export class Mt101QuarantineComponent {
   private readonly api = inject(Mt101AuditApiService);
@@ -140,15 +143,9 @@ export class Mt101QuarantineComponent {
   readonly rows = signal<Mt101FailedRecord[]>([]);
   // ADR-020 (A): resumen de la cuarentena por causa (rule_code) — miles de fallos -> un puñado de decisiones.
   readonly causeSummary = signal<Mt101RuleSummary[]>([]);
-  // ADR-020 (C1): descarga de la planilla de correccion (XLSX).
-  readonly exportingSheet = signal(false);
-  // ADR-020 (C2): dry-run del import de la planilla (preview read-only).
-  readonly previewingSheet = signal(false);
-  readonly correctionPreview = signal<Mt101CorrectionPreview | null>(null);
-  // ADR-020 (C3): apply de la planilla ya revisada en el preview. Se guarda el mismo archivo para reenviarlo.
-  private lastCorrectionFile: File | null = null;
-  readonly applyingSheet = signal(false);
-  readonly applyResult = signal<Mt101CorrectionApply | null>(null);
+  // ADR-020 (C1/C2/C3): el flujo de la planilla (export/preview/apply) + su estado viven en el service
+  // compartido (mismo que usa el wizard C4). El componente solo tiene los campos del form + los wrappers.
+  readonly flow = inject(Mt101CorrectionSheetFlowService);
   bulkCorrectionReason = '';
   bulkCorrectionTicketRef = '';
   readonly loading = signal(false);
@@ -576,37 +573,19 @@ export class Mt101QuarantineComponent {
     this.list(true);
   }
 
-  /** ADR-020 (C1): descarga la planilla de correccion de la vista actual (set + causa/estado filtrados). */
-  exportCorrectionSheet(): void {
-    if (!this.fragmentSetId.trim()) {
-      return;
-    }
-    this.exportingSheet.set(true);
-    this.api.mt101CorrectionSheet({
+  /** Contexto de la vista para el flujo de correccion (set + causa/estado filtrados). */
+  private correctionCtx(): CorrectionCtx {
+    return {
       fragmentSetId: this.fragmentSetId,
       connectionRef: this.connectionRef,
       ruleCode: this.ruleCodeFilter,
-      status: this.statusFilter?.trim() || 'QUARANTINED',
-    }).subscribe({
-      next: (blob) => {
-        const rule = this.ruleCodeFilter?.trim() ? '-' + this.ruleCodeFilter.trim() : '';
-        this.downloadBlob(blob, `correccion-${this.fragmentSetId}${rule}.xlsx`);
-        this.exportingSheet.set(false);
-      },
-      error: () => {
-        this.error.set(this.i18n.t('audit.quarantine.exportError'));
-        this.exportingSheet.set(false);
-      },
-    });
+      status: this.statusFilter,
+    };
   }
 
-  private downloadBlob(blob: Blob, filename: string): void {
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    anchor.click();
-    URL.revokeObjectURL(url);
+  /** ADR-020 (C1): descarga la planilla de la vista actual (delega en el flow). */
+  exportCorrectionSheet(): void {
+    this.flow.exportSheet(this.correctionCtx(), (msg) => this.error.set(msg));
   }
 
   /** ADR-020 (C2): sube la planilla editada y muestra el dry-run (sin aplicar nada). */
@@ -617,34 +596,17 @@ export class Mt101QuarantineComponent {
     if (!file || !this.fragmentSetId.trim()) {
       return;
     }
-    this.previewingSheet.set(true);
-    this.correctionPreview.set(null);
-    this.applyResult.set(null);
-    this.lastCorrectionFile = file;
     this.error.set(null);
-    this.api.mt101PreviewCorrectionSheet({
-      fragmentSetId: this.fragmentSetId,
-      connectionRef: this.connectionRef,
-      file,
-    }).subscribe({
-      next: (preview) => {
-        this.correctionPreview.set(preview);
-        this.previewingSheet.set(false);
-      },
-      error: (err) => {
-        this.error.set(err?.error?.message || this.i18n.t('audit.quarantine.previewError'));
-        this.previewingSheet.set(false);
-      },
-    });
+    this.flow.loadPreview(this.correctionCtx(), file, (msg) => this.error.set(msg));
   }
 
   /**
-   * ADR-020 (C3): aplica la planilla ya revisada en el preview. Exige rol de operacion + motivo + confirmacion
-   * explicita (mutacion masiva). Reenvia el MISMO archivo del preview (nada se reescribe entre revisar y aplicar).
+   * ADR-020 (C3): aplica la planilla ya revisada. Exige rol + motivo + confirmacion explicita (mutacion masiva);
+   * el flow reenvia el MISMO archivo del preview. La confirmacion vive aca (concern de UI).
    */
   applyCorrectionSheet(): void {
-    const preview = this.correctionPreview();
-    if (!this.canAuditOperate() || !preview || !this.lastCorrectionFile || preview.toCorrect <= 0) {
+    const preview = this.flow.preview();
+    if (!this.canAuditOperate() || !preview || !this.flow.hasFile() || preview.toCorrect <= 0) {
       return;
     }
     if (!this.bulkCorrectionReason.trim()) {
@@ -662,46 +624,40 @@ export class Mt101QuarantineComponent {
       .afterClosed()
       .subscribe((confirmed) => {
         if (confirmed) {
-          this.runApplyCorrectionSheet();
+          this.error.set(null);
+          this.flow.apply(this.correctionCtx(), this.bulkCorrectionReason, this.bulkCorrectionTicketRef,
+              (msg) => this.error.set(msg), () => this.list());
         }
       });
   }
 
-  private runApplyCorrectionSheet(): void {
-    if (!this.lastCorrectionFile) {
-      return;
-    }
-    this.applyingSheet.set(true);
-    this.applyResult.set(null);
-    this.error.set(null);
-    this.api.mt101ApplyCorrectionSheet({
-      fragmentSetId: this.fragmentSetId,
-      connectionRef: this.connectionRef,
-      reason: this.bulkCorrectionReason,
-      ticketRef: this.bulkCorrectionTicketRef,
-      file: this.lastCorrectionFile,
-    }).subscribe({
-      next: (result) => {
-        this.applyResult.set(result);
-        this.correctionPreview.set(null);
-        this.applyingSheet.set(false);
-        // La cuarentena cambio: refresca la lista y el resumen por causa.
-        this.list();
-      },
-      error: (err) => {
-        this.error.set(err?.error?.message || this.i18n.t('audit.quarantine.applyError'));
-        this.applyingSheet.set(false);
-      },
-    });
-  }
-
   clearCorrectionPreview(): void {
-    this.correctionPreview.set(null);
-    this.lastCorrectionFile = null;
+    this.flow.clearPreview();
   }
 
   clearApplyResult(): void {
-    this.applyResult.set(null);
+    this.flow.clearApplyResult();
+  }
+
+  /** ADR-020 (C4): abre el asistente guiado (mismo flujo en pasos). Al aplicar, refresca la lista. */
+  openBulkWizard(): void {
+    if (!this.fragmentSetId.trim()) {
+      return;
+    }
+    this.dialog.open(Mt101BulkCorrectionWizardComponent, {
+      data: {
+        fragmentSetId: this.fragmentSetId,
+        connectionRef: this.connectionRef,
+        ruleCode: this.ruleCodeFilter,
+        status: this.statusFilter,
+      },
+      width: '640px',
+      autoFocus: false,
+    }).afterClosed().subscribe((result) => {
+      if (result) {
+        this.list();
+      }
+    });
   }
 
   /** v60: carga la lista detallada de conflictos de pago del set (on-demand desde la alerta). */

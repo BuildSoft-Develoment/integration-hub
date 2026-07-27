@@ -1,0 +1,81 @@
+<h2 mat-dialog-title>{{ i18n.t('audit.correctWizard.title') }} · {{ data.fragmentSetId }}</h2>
+<mat-dialog-content class="wz">
+  @if (error(); as e) { <p class="wz__error" role="alert">{{ e }}</p> }
+
+  <mat-stepper [linear]="true" orientation="vertical">
+
+    <mat-step [completed]="true" [label]="i18n.t('audit.correctWizard.step1')">
+      <p class="wz__hint">{{ i18n.t('audit.correctWizard.step1Hint') }}</p>
+      <button mat-stroked-button type="button" (click)="export()" [disabled]="flow.exportingSheet()">{{ i18n.t('audit.quarantine.exportSheet') }}</button>
+      <div class="wz__nav">
+        <button mat-flat-button color="primary" matStepperNext>{{ i18n.t('audit.correctWizard.next') }}</button>
+      </div>
+    </mat-step>
+
+    <mat-step [completed]="true" [label]="i18n.t('audit.correctWizard.step2')">
+      <p class="wz__hint">{{ i18n.t('audit.correctWizard.step2Hint') }}</p>
+      <div class="wz__nav">
+        <button mat-button matStepperPrevious>{{ i18n.t('audit.correctWizard.back') }}</button>
+        <button mat-flat-button color="primary" matStepperNext>{{ i18n.t('audit.correctWizard.next') }}</button>
+      </div>
+    </mat-step>
+
+    <mat-step [completed]="canApply()" [label]="i18n.t('audit.correctWizard.step3')">
+      <p class="wz__hint">{{ i18n.t('audit.correctWizard.step3Hint') }}</p>
+      <button mat-stroked-button type="button" (click)="fileInput.click()" [disabled]="flow.previewingSheet()">{{ i18n.t('audit.quarantine.importSheet') }}</button>
+      <input #fileInput type="file" accept=".xlsx" hidden (change)="onFile($event)" />
+      @if (flow.preview(); as preview) {
+        <div class="wz__counts">
+          <span class="wz__pv wz__pv--ok">{{ preview.toCorrect }} {{ i18n.t('audit.quarantine.previewToCorrect') }}</span>
+          <span class="wz__pv">{{ preview.unchanged }} {{ i18n.t('audit.quarantine.previewUnchanged') }}</span>
+          <span class="wz__pv" [class.wz__pv--danger]="preview.conflicts > 0">{{ preview.conflicts }} {{ i18n.t('audit.quarantine.previewConflicts') }}</span>
+        </div>
+        @if (preview.conflicts > 0) {
+          <ul class="wz__list">
+            @for (row of preview.sample; track $index) {
+              @if (row.outcome === 'CONFLICT') {
+                <li>#{{ row.recordNumber }} ({{ row.sendersReference }}) — {{ row.reason }}</li>
+              }
+            }
+          </ul>
+        }
+      }
+      <div class="wz__nav">
+        <button mat-button matStepperPrevious>{{ i18n.t('audit.correctWizard.back') }}</button>
+        <button mat-flat-button color="primary" matStepperNext [disabled]="!canApply()">{{ i18n.t('audit.correctWizard.next') }}</button>
+      </div>
+    </mat-step>
+
+    <mat-step [label]="i18n.t('audit.correctWizard.step4')">
+      @if (flow.applyResult(); as result) {
+        <p class="wz__hint">{{ i18n.t('audit.quarantine.applyResultTitle') }}</p>
+        <div class="wz__counts">
+          <span class="wz__pv wz__pv--ok">{{ result.corrected }} {{ i18n.t('audit.quarantine.applyCorrected') }}</span>
+          <span class="wz__pv">{{ result.unchanged }} {{ i18n.t('audit.quarantine.applyUnchanged') }}</span>
+          <span class="wz__pv" [class.wz__pv--danger]="result.skipped > 0">{{ result.skipped }} {{ i18n.t('audit.quarantine.applySkipped') }}</span>
+          <span class="wz__pv" [class.wz__pv--danger]="result.failed > 0">{{ result.failed }} {{ i18n.t('audit.quarantine.applyFailed') }}</span>
+        </div>
+        <div class="wz__nav">
+          <button mat-flat-button color="primary" (click)="close()">{{ i18n.t('common.close') }}</button>
+        </div>
+      } @else {
+        <p class="wz__hint">{{ i18n.t('audit.correctWizard.step4Hint') }}</p>
+        <mat-form-field subscriptSizing="dynamic" class="wz__field">
+          <mat-label>{{ i18n.t('audit.quarantine.applyReason') }}</mat-label>
+          <input matInput [(ngModel)]="reason" [disabled]="flow.applyingSheet()" />
+        </mat-form-field>
+        <mat-form-field subscriptSizing="dynamic" class="wz__field">
+          <mat-label>{{ i18n.t('audit.quarantine.applyTicket') }}</mat-label>
+          <input matInput [(ngModel)]="ticketRef" [disabled]="flow.applyingSheet()" />
+        </mat-form-field>
+        <div class="wz__nav">
+          <button mat-button matStepperPrevious [disabled]="flow.applyingSheet()">{{ i18n.t('audit.correctWizard.back') }}</button>
+          <button mat-flat-button color="primary" (click)="apply()" [disabled]="flow.applyingSheet() || !reason.trim()">
+            {{ i18n.t('audit.quarantine.applySheet') }} ({{ flow.preview()?.toCorrect }})
+          </button>
+        </div>
+      }
+    </mat-step>
+
+  </mat-stepper>
+</mat-dialog-content>
