@@ -19,6 +19,7 @@ export class Mt101SplitTaskProvider extends ProcessTaskProvider<Mt101SplitTaskDr
     type: 'MT101_SPLIT' as const,
     labelKey: 'processTask.MT101_SPLIT',
     descriptionKey: 'processTaskDescription.MT101_SPLIT',
+    category: 'swift-mt101',
     modalLayout: 'workspace' as const,
   };
 

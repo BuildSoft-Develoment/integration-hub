@@ -701,6 +701,10 @@ export const es = {
   'flow.editNode': 'Editar {name}',
   'flow.expandNode': 'Expandir {name}',
   'flow.collapseNode': 'Contraer {name}',
+  // ADR-021: etiqueta del grupo de la paleta. Un vertical nuevo aporta la suya (processTask.category.<id>).
+  'processTask.category.motor': 'Motor',
+  'processTask.category.swift-mt101': 'SWIFT MT101',
+  'processTask.category.plugin': 'Plugins',
   'processTask.MT101_BUILD_FROM_TABLE': 'Construir MT101 desde staging',
   'process.template.massiveMt101': 'MT101 masivo desde archivo',
   'processTask.MT101_VALIDATE': 'Validar MT101',

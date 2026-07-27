@@ -38,6 +38,7 @@ export class Mt101RouteTaskProvider extends ProcessTaskProvider<Mt101RouteTaskDr
     type: 'MT101_ROUTE' as const,
     labelKey: 'processTask.MT101_ROUTE',
     descriptionKey: 'processTaskDescription.MT101_ROUTE',
+    category: 'swift-mt101',
     modalLayout: 'workspace' as const,
   };
 

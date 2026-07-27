@@ -1,7 +1,18 @@
 import { PlatformProcessTaskType, ProcessTaskType } from '../models/process.models';
 
-export type TaskCategory = 'motor' | 'swift-mt101' | 'plugin';
+/**
+ * ADR-021: identificador de agrupacion, ABIERTO. Cada vertical usa el suyo (`swift-mt101`,
+ * `sbs`, ...) declarandolo en el descriptor de su provider; el motor solo conoce los dos
+ * cajones propios de abajo.
+ */
+export type TaskCategory = string;
 
+/** Cajon de los tipos del propio motor. */
+export const CATEGORY_MOTOR = 'motor';
+/** Cajon por defecto de lo que no declara categoria (plugins de terceros, tipos sueltos). */
+export const CATEGORY_PLUGIN = 'plugin';
+
+/** Tipos del motor. Es legitimo que el motor conozca los SUYOS; no conoce los de ningun vertical. */
 const PLATFORM_TASK_TYPES = new Set<string>([
   'FILE_READ',
   'FILE_WRITE',
@@ -14,18 +25,23 @@ const PLATFORM_TASK_TYPES = new Set<string>([
   'NOTIFICATION',
 ]);
 
-export function taskCategory(type: ProcessTaskType): TaskCategory {
-  if (type.startsWith('MT101_')) {
-    return 'swift-mt101';
+/**
+ * Categoria del tipo: la que DECLARA el provider y, si no declara, el cajon que corresponda.
+ * Antes se infería con `type.startsWith('MT101_')` — el motor tenia el nombre de un estandar
+ * SWIFT cableado como condicion de branching, y un vertical nuevo caia en "Plugins".
+ */
+export function taskCategory(descriptor: { type: ProcessTaskType; category?: string }): TaskCategory {
+  const declared = descriptor.category?.trim();
+  if (declared) {
+    return declared;
   }
-  return PLATFORM_TASK_TYPES.has(type) ? 'motor' : 'plugin';
+  return PLATFORM_TASK_TYPES.has(descriptor.type) ? CATEGORY_MOTOR : CATEGORY_PLUGIN;
 }
 
-export const CATEGORY_LABELS: Record<TaskCategory, string> = {
-  motor: 'Motor',
-  'swift-mt101': 'SWIFT MT101',
-  plugin: 'Plugins',
-};
+/** Clave i18n de la etiqueta del grupo. Un vertical aporta la suya por `registerMessages()`. */
+export function categoryLabelKey(category: TaskCategory): string {
+  return `processTask.category.${category}`;
+}
 
 export interface ProcessFlowNodePresentation {
   badge: string;

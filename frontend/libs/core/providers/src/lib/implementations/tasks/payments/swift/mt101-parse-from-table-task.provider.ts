@@ -60,6 +60,7 @@ export class Mt101ParseFromTableTaskProvider extends ProcessTaskProvider<Mt101Pa
     type: 'MT101_PARSE_FROM_TABLE' as const,
     labelKey: 'processTask.MT101_PARSE_FROM_TABLE',
     descriptionKey: 'processTaskDescription.MT101_PARSE_FROM_TABLE',
+    category: 'swift-mt101',
     modalLayout: 'workspace' as const,
   };
 

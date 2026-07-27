@@ -130,6 +130,7 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
     type: 'MT101_BUILD_FROM_TABLE' as const,
     labelKey: 'processTask.MT101_BUILD_FROM_TABLE',
     descriptionKey: 'processTaskDescription.MT101_BUILD_FROM_TABLE',
+    category: 'swift-mt101',
     modalLayout: 'workspace' as const,
   };
 

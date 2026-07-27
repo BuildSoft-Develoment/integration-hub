@@ -67,6 +67,7 @@ export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTask
     type: 'MT101_STATUS' as const,
     labelKey: 'processTask.MT101_STATUS',
     descriptionKey: 'processTaskDescription.MT101_STATUS',
+    category: 'swift-mt101',
     modalLayout: 'workspace' as const,
   };
 

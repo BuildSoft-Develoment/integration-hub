@@ -50,6 +50,7 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
     type: 'MT101_RECONCILE' as const,
     labelKey: 'processTask.MT101_RECONCILE',
     descriptionKey: 'processTaskDescription.MT101_RECONCILE',
+    category: 'swift-mt101',
     modalLayout: 'workspace' as const,
   };
 

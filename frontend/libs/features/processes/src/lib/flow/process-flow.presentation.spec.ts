@@ -1,25 +1,40 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  CATEGORY_LABELS,
+  categoryLabelKey,
   getProcessFlowNodePresentation,
   taskCategory,
 } from './process-flow.presentation';
 
 describe('process flow presentation', () => {
-  it('keeps platform and MT101 tasks in their canonical groups', () => {
-    expect(taskCategory('FILE_READ')).toBe('motor');
-    expect(taskCategory('REST_CALL')).toBe('motor');
-    expect(taskCategory('MT101_PAY')).toBe('swift-mt101');
+  it('keeps the engine own task types in the motor group', () => {
+    expect(taskCategory({ type: 'FILE_READ' })).toBe('motor');
+    expect(taskCategory({ type: 'REST_CALL' })).toBe('motor');
+  });
+
+  it('uses the category declared by the provider (ADR-021)', () => {
+    // El vertical declara su agrupacion; el motor ya no la infiere por prefijo del tipo.
+    expect(taskCategory({ type: 'MT101_PAY', category: 'swift-mt101' })).toBe('swift-mt101');
+    // Un vertical nuevo funciona igual, sin tocar el motor.
+    expect(taskCategory({ type: 'SBS_BUILD', category: 'sbs' })).toBe('sbs');
+  });
+
+  it('does not infer a vertical from the task type prefix anymore (ADR-021)', () => {
+    // Sin categoria declarada, un MT101_* cae al cajon por defecto: ya no hay startsWith('MT101_').
+    expect(taskCategory({ type: 'MT101_PAY' })).toBe('plugin');
   });
 
   it('groups externally installed backend tasks as plugin tasks', () => {
-    expect(taskCategory('DEMO_TRANSFORM_NODE')).toBe('plugin');
-    expect(CATEGORY_LABELS.plugin).toBe('Plugins');
+    expect(taskCategory({ type: 'DEMO_TRANSFORM_NODE' })).toBe('plugin');
 
     const presentation = getProcessFlowNodePresentation('DEMO_TRANSFORM_NODE');
     expect(presentation.badge).toBe('TN');
     expect(presentation.toneClass).toBe('task-node--integration');
     expect(presentation.iconPath).toContain('M12 2');
+  });
+
+  it('derives the group label key from the category', () => {
+    expect(categoryLabelKey('motor')).toBe('processTask.category.motor');
+    expect(categoryLabelKey('sbs')).toBe('processTask.category.sbs');
   });
 });

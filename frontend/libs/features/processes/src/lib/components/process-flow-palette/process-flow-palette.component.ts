@@ -6,8 +6,9 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { FFlowModule } from '@foblex/flow';
 import { ProcessTaskManagerService } from '@integration-hub/core/services';
+import { I18nService } from '@integration-hub/core/i18n';
 import { ProcessTaskType } from '../../models/process.models';
-import { CATEGORY_LABELS, getProcessFlowNodePresentation, taskCategory, TaskCategory } from '../../flow/process-flow.presentation';
+import { CATEGORY_PLUGIN, categoryLabelKey, getProcessFlowNodePresentation, taskCategory, TaskCategory } from '../../flow/process-flow.presentation';
 
 /**
  * Paleta del flow editor: muestra los task types disponibles para arrastrar al
@@ -33,31 +34,44 @@ import { CATEGORY_LABELS, getProcessFlowNodePresentation, taskCategory, TaskCate
 export class ProcessFlowPaletteComponent {
   private readonly manager = inject(ProcessTaskManagerService);
 
-  readonly expandedCategories = signal<Set<TaskCategory>>(new Set(['motor', 'swift-mt101']));
+  private readonly i18n = inject(I18nService);
+
+  /**
+   * Categorias que el usuario abrio/cerro explicitamente. Lo que no toco sigue el default de
+   * {@link isExpanded}: asi no hay que enumerar de antemano los verticales existentes.
+   */
+  private readonly expansionOverrides = signal<ReadonlyMap<TaskCategory, boolean>>(new Map());
 
   readonly groupedTaskTypes = computed(() => {
     const groups = new Map<TaskCategory, ProcessTaskType[]>();
-    for (const type of this.manager.availableProviders().map((d) => d.type)) {
-      const cat = taskCategory(type);
+    // ADR-021: se agrupa por la categoria que DECLARA cada provider (por eso se conserva el
+    // descriptor y no solo el type).
+    for (const descriptor of this.manager.availableProviders()) {
+      const cat = taskCategory(descriptor);
       if (!groups.has(cat)) { groups.set(cat, []); }
-      groups.get(cat)!.push(type);
+      groups.get(cat)!.push(descriptor.type);
     }
     return groups;
   });
 
   readonly categories = computed<TaskCategory[]>(() => Array.from(this.groupedTaskTypes().keys()));
 
-  toggleCategory(cat: TaskCategory): void {
-    const next = new Set(this.expandedCategories());
-    if (next.has(cat)) { next.delete(cat); } else { next.add(cat); }
-    this.expandedCategories.set(next);
+  /** Default: todo abierto salvo el cajon de plugins — sin nombrar ningun vertical. */
+  isExpanded(cat: TaskCategory): boolean {
+    return this.expansionOverrides().get(cat) ?? cat !== CATEGORY_PLUGIN;
   }
 
-  protected readonly CATEGORY_LABELS = CATEGORY_LABELS;
-  protected readonly taskCategory = taskCategory;
+  toggleCategory(cat: TaskCategory): void {
+    const next = new Map(this.expansionOverrides());
+    next.set(cat, !this.isExpanded(cat));
+    this.expansionOverrides.set(next);
+  }
 
+  /** Etiqueta del grupo por i18n; si el vertical no aporto la clave, muestra el identificador. */
   categoryLabel(cat: TaskCategory): string {
-    return CATEGORY_LABELS[cat];
+    const key = categoryLabelKey(cat);
+    const translated = this.i18n.t(key);
+    return translated === key ? cat : translated;
   }
 
   presentation(taskType: ProcessTaskType) {

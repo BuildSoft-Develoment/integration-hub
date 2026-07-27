@@ -28,6 +28,7 @@ export class Mt101RepairTaskProvider extends ProcessTaskProvider<Mt101RepairTask
     type: 'MT101_REPAIR' as const,
     labelKey: 'processTask.MT101_REPAIR',
     descriptionKey: 'processTaskDescription.MT101_REPAIR',
+    category: 'swift-mt101',
     modalLayout: 'workspace' as const,
   };
 

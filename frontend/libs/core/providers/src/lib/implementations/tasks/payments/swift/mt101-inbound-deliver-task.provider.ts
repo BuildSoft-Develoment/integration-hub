@@ -56,6 +56,7 @@ export class Mt101InboundDeliverTaskProvider extends ProcessTaskProvider<Mt101In
     type: 'MT101_INBOUND_DELIVER' as const,
     labelKey: 'processTask.MT101_INBOUND_DELIVER',
     descriptionKey: 'processTaskDescription.MT101_INBOUND_DELIVER',
+    category: 'swift-mt101',
     modalLayout: 'workspace' as const,
   };
 

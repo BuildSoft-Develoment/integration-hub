@@ -19,6 +19,13 @@ export interface ProcessTaskProviderDescriptor {
   descriptionKey: string;
   modalLayout?: 'workspace' | 'rest';
   label?: string;
+  /**
+   * ADR-021: agrupacion del tipo en la paleta, DECLARADA por el provider (no inferida por el
+   * motor). Un vertical usa su propio identificador (`swift-mt101`, `sbs`, ...) y aporta la
+   * etiqueta como clave i18n `processTask.category.<category>`. Sin declarar, el motor agrupa
+   * sus propios tipos en `motor` y el resto en `plugin`.
+   */
+  category?: string;
   origin?: 'BUILTIN' | 'LOCAL' | 'REMOTE';
   pluginId?: string | null;
   pluginVersion?: string | null;

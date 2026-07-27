@@ -3,11 +3,11 @@
     @let types = groupedTaskTypes().get(cat) ?? [];
     @if (types.length) {
       <section class="flow-palette__group">
-        <button type="button" class="flow-palette__group-header" (click)="toggleCategory(cat)" [attr.aria-expanded]="expandedCategories().has(cat)">
-          <span class="flow-palette__group-arrow" [class.flow-palette__group-arrow--open]="expandedCategories().has(cat)">▶</span>
+        <button type="button" class="flow-palette__group-header" (click)="toggleCategory(cat)" [attr.aria-expanded]="isExpanded(cat)">
+          <span class="flow-palette__group-arrow" [class.flow-palette__group-arrow--open]="isExpanded(cat)">▶</span>
           <span>{{ categoryLabel(cat) }}</span>
         </button>
-        @if (expandedCategories().has(cat)) {
+        @if (isExpanded(cat)) {
           <div class="flow-palette__group-items">
             @for (taskType of types; track taskType) {
               <button

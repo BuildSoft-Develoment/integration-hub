@@ -94,7 +94,15 @@ export class ProcessTaskManagerService {
     // disponibles): en vez de romper el render de la lista de tareas, muestra el
     // tipo crudo. La creacion de tareas sigue restringida a tipos registrados.
     if (!provider) return type;
-    return provider.descriptor.label ?? this.i18n.t(provider.descriptor.labelKey);
+    // ADR-021: gana la clave i18n cuando existe (i18n.t devuelve la propia clave si falta), y si no
+    // el label del descriptor. Asi un vertical puede rotular sus tipos con registerMessages() aunque
+    // el provider haya sido creado desde el catalogo (que solo sabe humanizar el type).
+    const key = provider.descriptor.labelKey;
+    const translated = this.i18n.t(key);
+    if (translated !== key) {
+      return translated;
+    }
+    return provider.descriptor.label ?? key;
   }
 
   status(type: ProcessTaskType): ProcessTaskProvider<unknown>['descriptor']['status'] {

@@ -701,6 +701,10 @@ export const en = {
   'flow.editNode': 'Edit {name}',
   'flow.expandNode': 'Expand {name}',
   'flow.collapseNode': 'Collapse {name}',
+  // ADR-021: palette group label. A new vertical contributes its own (processTask.category.<id>).
+  'processTask.category.motor': 'Engine',
+  'processTask.category.swift-mt101': 'SWIFT MT101',
+  'processTask.category.plugin': 'Plugins',
   'processTask.MT101_BUILD_FROM_TABLE': 'Build MT101 from staging',
   'process.template.massiveMt101': 'MT101 massive from file',
   'processTask.MT101_VALIDATE': 'Validate MT101',

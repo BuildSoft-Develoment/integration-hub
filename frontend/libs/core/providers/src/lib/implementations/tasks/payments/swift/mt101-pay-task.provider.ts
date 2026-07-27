@@ -99,6 +99,7 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
     type: 'MT101_PAY' as const,
     labelKey: 'processTask.MT101_PAY',
     descriptionKey: 'processTaskDescription.MT101_PAY',
+    category: 'swift-mt101',
     modalLayout: 'workspace' as const,
   };
 

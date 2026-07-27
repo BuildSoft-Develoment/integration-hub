@@ -4,6 +4,7 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { I18nService } from '@integration-hub/core/i18n';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -51,6 +52,7 @@ function setup() {
   return {
     manager: TestBed.inject(ProcessTaskManagerService),
     http: TestBed.inject(HttpTestingController),
+    i18n: TestBed.inject(I18nService),
   };
 }
 
@@ -132,6 +134,26 @@ describe('ProcessTaskManagerService remote task catalog', () => {
 
     expect(manager.availableProviders().filter((item) => item.type === 'FILE_READ')).toHaveLength(1);
     expect(manager.modalLayout('FILE_READ')).not.toBe('workspace');
+    http.verify();
+  });
+
+  it('un vertical puede rotular su tipo por registerMessages (ADR-021)', async () => {
+    const { manager, http, i18n } = setup();
+    // El vertical aporta su clave sin tocar el diccionario monolitico del core.
+    i18n.registerMessages('es', { 'processTask.SBS_BUILD': 'Construir archivo SBS' });
+    const load = manager.loadRemoteTaskTypes();
+    http.expectOne('/api/task-types').flush({
+      taskTypes: [
+        { type: 'SBS_BUILD', origin: 'LOCAL', status: 'AVAILABLE', configurable: true },
+        { type: 'SBS_SEND', origin: 'LOCAL', status: 'AVAILABLE', configurable: true },
+      ],
+    });
+    await load;
+
+    // Con clave registrada gana el i18n...
+    expect(manager.label('SBS_BUILD')).toBe('Construir archivo SBS');
+    // ...y sin clave cae al nombre humanizado, nunca a la clave cruda.
+    expect(manager.label('SBS_SEND')).toBe('Sbs Send');
     http.verify();
   });
 

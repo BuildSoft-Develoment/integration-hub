@@ -46,6 +46,7 @@ export class Mt101ArchiveTaskProvider extends ProcessTaskProvider<Mt101ArchiveTa
     type: 'MT101_ARCHIVE' as const,
     labelKey: 'processTask.MT101_ARCHIVE',
     descriptionKey: 'processTaskDescription.MT101_ARCHIVE',
+    category: 'swift-mt101',
     modalLayout: 'workspace' as const,
   };
 

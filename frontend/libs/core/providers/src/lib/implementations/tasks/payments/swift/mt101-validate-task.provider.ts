@@ -52,6 +52,7 @@ export class Mt101ValidateTaskProvider extends ProcessTaskProvider<Mt101Validate
     type: 'MT101_VALIDATE' as const,
     labelKey: 'processTask.MT101_VALIDATE',
     descriptionKey: 'processTaskDescription.MT101_VALIDATE',
+    category: 'swift-mt101',
     modalLayout: 'workspace' as const,
   };
 
