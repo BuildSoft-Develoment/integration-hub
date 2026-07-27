@@ -110,7 +110,7 @@ export class ProcessTaskListComponent {
   }
 
   nodePresentation(node: ProcessFlowNode) {
-    return getProcessFlowNodePresentation(node.type);
+    return getProcessFlowNodePresentation(node.type, this.manager.declaredNodePresentation(node.type));
   }
 
   openTask(clientId: string): void {

@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { ResourcePresentation } from '@integration-hub/shared/models';
+import { ProcessFlowNodePresentation, ResourcePresentation } from '@integration-hub/shared/models';
 import { I18nService } from '@integration-hub/core/i18n';
 import {
   PROCESS_TASK_PROVIDERS,
@@ -74,14 +74,24 @@ export class ProcessTaskManagerService {
   }
 
   /**
-   * Presentacion visual (icono + tono) del tipo de tarea. Resolucion total
-   * via {@link TASK_PRESENTATION}: siempre devuelve una presentacion
-   * concreta, sin fallback en runtime.
+   * Presentacion visual (icono + tono) del tipo de tarea. ADR-021: gana la que DECLARA el
+   * provider, luego el default de los tipos propios del motor, y por ultimo la generica. Siempre
+   * devuelve una presentacion concreta.
    */
   presentation(type: ProcessTaskType): ResourcePresentation {
-    return isPlatformTaskType(type)
-      ? TASK_PRESENTATION[type]
-      : SCHEMA_TASK_PRESENTATION;
+    const declared = this.resolve(type)?.descriptor.presentation;
+    if (declared) {
+      return declared;
+    }
+    return TASK_PRESENTATION[type as PlatformProcessTaskType] ?? SCHEMA_TASK_PRESENTATION;
+  }
+
+  /**
+   * ADR-021: visual del nodo de flujo DECLARADA por el provider, si la declara. El editor de
+   * procesos la combina con su propio mapa de defaults (vive en la feature, no en el core).
+   */
+  declaredNodePresentation(type: ProcessTaskType): ProcessFlowNodePresentation | undefined {
+    return this.resolve(type)?.descriptor.nodePresentation;
   }
 
   resolve(type: ProcessTaskType): ProcessTaskProvider<any> | null {
@@ -170,8 +180,4 @@ export class ProcessTaskManagerService {
 
 function normalizeType(value: unknown): string {
   return String(value || '').trim().toUpperCase();
-}
-
-function isPlatformTaskType(type: ProcessTaskType): type is PlatformProcessTaskType {
-  return Object.prototype.hasOwnProperty.call(TASK_PRESENTATION, type);
 }

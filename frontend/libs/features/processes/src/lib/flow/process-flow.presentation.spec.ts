@@ -33,6 +33,23 @@ describe('process flow presentation', () => {
     expect(presentation.iconPath).toContain('M12 2');
   });
 
+  it('prefers the node presentation declared by the provider (ADR-021)', () => {
+    // Un vertical trae su propio icono/badge sin editar el mapa del motor.
+    const declared = { badge: 'SBS', toneClass: 'task-node--payment', iconPath: 'M1 1h4' };
+    expect(getProcessFlowNodePresentation('SBS_BUILD', declared)).toEqual(declared);
+    // Y puede sobrescribir incluso un tipo que el motor ya conoce.
+    expect(getProcessFlowNodePresentation('FILE_READ', declared)).toEqual(declared);
+  });
+
+  it('falls back to the engine default and then to the generic one', () => {
+    // Sin declarar: el tipo propio del motor conserva su default...
+    expect(getProcessFlowNodePresentation('FILE_READ').badge).toBe('READ');
+    // ...y un tipo desconocido no rompe, deriva la presentacion del nombre.
+    const unknown = getProcessFlowNodePresentation('SBS_BUILD');
+    expect(unknown.badge).toBeTruthy();
+    expect(unknown.toneClass).toBe('task-node--integration');
+  });
+
   it('derives the group label key from the category', () => {
     expect(categoryLabelKey('motor')).toBe('processTask.category.motor');
     expect(categoryLabelKey('sbs')).toBe('processTask.category.sbs');

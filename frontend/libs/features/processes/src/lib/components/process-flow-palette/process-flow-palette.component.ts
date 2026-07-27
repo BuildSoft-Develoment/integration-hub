@@ -75,7 +75,7 @@ export class ProcessFlowPaletteComponent {
   }
 
   presentation(taskType: ProcessTaskType) {
-    return getProcessFlowNodePresentation(taskType);
+    return getProcessFlowNodePresentation(taskType, this.manager.declaredNodePresentation(taskType));
   }
 
   taskLabel(taskType: ProcessTaskType): string {

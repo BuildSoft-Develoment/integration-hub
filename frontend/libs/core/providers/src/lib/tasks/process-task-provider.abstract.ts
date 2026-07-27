@@ -1,4 +1,5 @@
 import { I18nService } from '@integration-hub/core/i18n';
+import { ProcessFlowNodePresentation, ResourcePresentation } from '@integration-hub/shared/models';
 import {
   ProcessTaskExecutionMode,
   ProcessTaskInputDraft,
@@ -26,6 +27,16 @@ export interface ProcessTaskProviderDescriptor {
    * sus propios tipos en `motor` y el resto en `plugin`.
    */
   category?: string;
+  /**
+   * ADR-021: icono + tono del tipo (catalogos, chips), DECLARADO por el provider. Sin declarar,
+   * el motor usa su mapa de tipos propios y, si tampoco esta, la presentacion generica.
+   */
+  presentation?: ResourcePresentation;
+  /**
+   * ADR-021: visual del nodo en el editor de flujo (badge + SVG), DECLARADO por el provider.
+   * Es lo que permite a un vertical tener su propio icono sin editar libs del motor.
+   */
+  nodePresentation?: ProcessFlowNodePresentation;
   origin?: 'BUILTIN' | 'LOCAL' | 'REMOTE';
   pluginId?: string | null;
   pluginVersion?: string | null;

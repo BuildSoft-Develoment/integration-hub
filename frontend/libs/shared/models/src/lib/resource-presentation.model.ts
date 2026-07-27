@@ -25,3 +25,20 @@ export interface ResourcePresentation {
    */
   toneClass: string;
 }
+
+/**
+ * ADR-021: presentacion de un nodo en el editor de flujo (badge + icono SVG propio). Vive aca
+ * — y no en {@code features/processes} — para que un provider pueda DECLARARLA en su descriptor:
+ * {@code core/providers} puede depender de {@code shared/models}, pero no de una feature.
+ *
+ * <p>Asi un vertical nuevo aporta sus visuales sin editar los mapas del motor. Si no la declara,
+ * el editor usa su mapa por defecto y, en ultima instancia, la presentacion generica.</p>
+ */
+export interface ProcessFlowNodePresentation {
+  /** Texto corto del nodo (2-6 caracteres). */
+  badge: string;
+  /** Clase tonal del nodo (tokens `--ih-*`). */
+  toneClass: string;
+  /** Path del SVG (viewBox 0 0 24 24), en linea: el proyecto no carga webfonts de iconos. */
+  iconPath: string;
+}

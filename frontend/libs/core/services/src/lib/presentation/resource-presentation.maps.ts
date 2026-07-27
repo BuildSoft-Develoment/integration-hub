@@ -47,7 +47,13 @@ export const READER_PRESENTATION: Record<ReaderProviderType, ResourcePresentatio
   SWIFT_MT: { icon: 'banknote', toneClass: 'ih-tone-payment' },
 };
 
-export const TASK_PRESENTATION: Record<PlatformProcessTaskType, ResourcePresentation> = {
+/**
+ * ADR-021: a diferencia de los otros mapas, este NO es total. Un task type puede venir de un
+ * vertical o de un plugin, y su presentacion la declara el provider (`descriptor.presentation`);
+ * este mapa es solo el default de los tipos que el motor ya conoce. Mantenerlo total obligaba a
+ * editar esta lib del core para dar de alta cualquier tipo nuevo.
+ */
+export const TASK_PRESENTATION: Partial<Record<PlatformProcessTaskType, ResourcePresentation>> = {
   FILE_READ: { icon: 'file-text', toneClass: 'ih-tone-document' },
   DB_WRITE: { icon: 'database', toneClass: 'ih-tone-database' },
   DB_EXECUTE_SP: { icon: 'database', toneClass: 'ih-tone-database' },

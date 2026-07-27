@@ -157,6 +157,14 @@ describe('ProcessTaskManagerService remote task catalog', () => {
     http.verify();
   });
 
+  it('un vertical puede declarar su icono sin editar los mapas del core (ADR-021)', () => {
+    const { manager } = setup();
+    // LocalTaskProvider no declara presentation -> cae al default del mapa del motor.
+    expect(manager.presentation('FILE_READ')).toEqual({ icon: 'file-text', toneClass: 'ih-tone-document' });
+    // Un tipo que el motor no conoce ni tiene provider -> presentacion generica, sin romper.
+    expect(manager.presentation('SBS_BUILD')).toEqual({ icon: 'cpu', toneClass: 'ih-tone-integration' });
+  });
+
   it('draftFor hydrates via the registered provider', () => {
     const { manager } = setup();
     const task: ProcessTaskFormModel = {

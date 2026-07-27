@@ -1,3 +1,4 @@
+import { ProcessFlowNodePresentation } from '@integration-hub/shared/models';
 import { PlatformProcessTaskType, ProcessTaskType } from '../models/process.models';
 
 /**
@@ -43,13 +44,14 @@ export function categoryLabelKey(category: TaskCategory): string {
   return `processTask.category.${category}`;
 }
 
-export interface ProcessFlowNodePresentation {
-  badge: string;
-  toneClass: string;
-  iconPath: string;
-}
+/** ADR-021: el contrato vive en shared/models para que un provider pueda declararlo. */
+export type { ProcessFlowNodePresentation } from '@integration-hub/shared/models';
 
-const NODE_PRESENTATION: Record<PlatformProcessTaskType, ProcessFlowNodePresentation> = {
+/**
+ * ADR-021: defaults de los tipos que el motor ya conoce. NO es total: un vertical o un plugin
+ * declara el suyo en el descriptor del provider, sin editar esta lib.
+ */
+const NODE_PRESENTATION: Partial<Record<PlatformProcessTaskType, ProcessFlowNodePresentation>> = {
   FILE_READ: {
     badge: 'READ',
     toneClass: 'task-node--source',
@@ -164,8 +166,15 @@ const NODE_PRESENTATION: Record<PlatformProcessTaskType, ProcessFlowNodePresenta
   },
 };
 
-export function getProcessFlowNodePresentation(taskType: ProcessTaskType): ProcessFlowNodePresentation {
-  return NODE_PRESENTATION[taskType as PlatformProcessTaskType] ?? remotePresentation(taskType);
+/**
+ * Visual del nodo. ADR-021: gana la que DECLARA el provider (`descriptor.nodePresentation`),
+ * luego el default de los tipos propios del motor, y por ultimo la generica derivada del nombre.
+ */
+export function getProcessFlowNodePresentation(
+  taskType: ProcessTaskType,
+  declared?: ProcessFlowNodePresentation,
+): ProcessFlowNodePresentation {
+  return declared ?? NODE_PRESENTATION[taskType as PlatformProcessTaskType] ?? remotePresentation(taskType);
 }
 
 function remotePresentation(taskType: ProcessTaskType): ProcessFlowNodePresentation {
