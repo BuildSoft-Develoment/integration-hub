@@ -7,6 +7,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatSelectModule } from '@angular/material/select';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuthAccessService, BreadcrumbService, I18nService } from '@integration-hub/core/services';
 import { ActionDispatcherService, ConfirmDialogComponent, IconComponent } from '@integration-hub/shared/ui';
@@ -34,6 +35,7 @@ import {
     MatDialogModule,
     MatFormFieldModule,
     MatInputModule,
+    MatSelectModule,
     ClipboardModule,
     IconComponent,
     AuditWorkspaceNavComponent,
@@ -167,6 +169,14 @@ export class Mt101QuarantineComponent {
   readonly correctionVersion = signal<number | null>(null);
   // item 2: posición FÍSICA de la fila cargada (línea física, o hoja+fila en Excel) para "qué línea del archivo".
   readonly correctionPosition = signal<Mt101StagingRowView | null>(null);
+  // Editor de campos (reemplaza el JSON crudo): un input por clave editable (no-_); los _ internos van read-only.
+  // El JSON crudo queda como modo "Avanzado". Al guardar se manda un merge-patch de SOLO los cambios (coercido).
+  readonly correctionEditableKeys = signal<string[]>([]);
+  correctionEdits: Record<string, string> = {};
+  readonly correctionMetaEntries = signal<{ key: string; value: string }[]>([]);
+  readonly correctionAdvanced = signal(false);
+  private correctionOriginal: Record<string, unknown> = {};
+  readonly cargosOptions = ['OUR', 'BEN', 'SHA'];
 
   // Copia al portapapeles con feedback efimero (CDK Clipboard) para valores
   // truncados como el hash del archivo, reutilizables en el modo Archivo+fila.
@@ -320,6 +330,11 @@ export class Mt101QuarantineComponent {
     this.correctionTicketRef = '';
     this.correctionVersion.set(null);
     this.correctionPosition.set(null);
+    this.correctionAdvanced.set(false);
+    this.correctionEditableKeys.set([]);
+    this.correctionEdits = {};
+    this.correctionMetaEntries.set([]);
+    this.correctionOriginal = {};
     this.correctingRow.set(row.id);
     const sourceFileHash = row.sourceFileHash?.trim();
     if (row.sourceRecordNumber === null || row.stagingId === null || !sourceFileHash) {
@@ -338,6 +353,10 @@ export class Mt101QuarantineComponent {
           this.correctionPayload = view.payloadJson ?? '';
           this.correctionVersion.set(view.version);
           this.correctionPosition.set(view);
+          // Si el payload no parsea, cae a modo Avanzado (JSON crudo) como única vía.
+          if (!this.parsePayloadIntoFields(view.payloadJson ?? '')) {
+            this.correctionAdvanced.set(true);
+          }
         }
       },
       error: () => {
@@ -351,17 +370,115 @@ export class Mt101QuarantineComponent {
     });
   }
 
+  /**
+   * Parsea el payload JSON en campos editables (claves no-_) + metadata _ (read-only). Devuelve false si el JSON no
+   * parsea (el caller cae a modo Avanzado). Guarda el objeto original para diff + coercion de tipos al guardar.
+   */
+  private parsePayloadIntoFields(json: string): boolean {
+    let obj: Record<string, unknown>;
+    try {
+      obj = json.trim() ? JSON.parse(json) : {};
+    } catch {
+      this.correctionEditableKeys.set([]);
+      this.correctionMetaEntries.set([]);
+      this.correctionOriginal = {};
+      return false;
+    }
+    this.correctionOriginal = obj;
+    const editable: string[] = [];
+    const edits: Record<string, string> = {};
+    const meta: { key: string; value: string }[] = [];
+    for (const [key, value] of Object.entries(obj)) {
+      const str = value === null || value === undefined ? '' : String(value);
+      if (key.startsWith('_')) {
+        meta.push({ key, value: str });
+      } else {
+        editable.push(key);
+        edits[key] = str;
+      }
+    }
+    this.correctionEditableKeys.set(editable);
+    this.correctionEdits = edits;
+    this.correctionMetaEntries.set(meta);
+    return true;
+  }
+
+  /** Alterna entre el editor de campos y el JSON crudo, sincronizando ambas representaciones. */
+  toggleCorrectionAdvanced(): void {
+    if (!this.correctionAdvanced()) {
+      // campos -> JSON: regenero el payload con los edits aplicados (para que el textarea los refleje).
+      this.correctionPayload = JSON.stringify(this.buildEditedPayload(), null, 2);
+      this.correctionAdvanced.set(true);
+    } else if (this.parsePayloadIntoFields(this.correctionPayload)) {
+      this.correctionAdvanced.set(false);
+    } else {
+      this.error.set(this.i18n.t('audit.quarantine.correctInvalidJson'));
+    }
+  }
+
+  /** Payload original con los edits aplicados (para el textarea Avanzado). */
+  private buildEditedPayload(): Record<string, unknown> {
+    const out: Record<string, unknown> = { ...this.correctionOriginal };
+    for (const key of this.correctionEditableKeys()) {
+      out[key] = this.coerceToOriginalType(key, this.correctionEdits[key] ?? '');
+    }
+    return out;
+  }
+
+  /** Merge-patch de SOLO los campos cambiados (coercidos al tipo original). No incluye los _ ni lo no tocado. */
+  private buildCorrectionPatch(): Record<string, unknown> {
+    const patch: Record<string, unknown> = {};
+    for (const key of this.correctionEditableKeys()) {
+      const edited = this.correctionEdits[key] ?? '';
+      const original = this.correctionOriginal[key];
+      const originalStr = original === null || original === undefined ? '' : String(original);
+      if (edited !== originalStr) {
+        patch[key] = this.coerceToOriginalType(key, edited);
+      }
+    }
+    return patch;
+  }
+
+  /** Coerce el valor de texto al tipo del valor original (money-safety: numero->number, boolean->boolean, resto texto). */
+  private coerceToOriginalType(key: string, value: string): unknown {
+    const original = this.correctionOriginal[key];
+    if (typeof original === 'number') {
+      const n = Number(value);
+      return value.trim() !== '' && !Number.isNaN(n) ? n : value;
+    }
+    if (typeof original === 'boolean') {
+      const lower = value.trim().toLowerCase();
+      return lower === 'true' || lower === 'false' ? lower === 'true' : value;
+    }
+    return value;
+  }
+
   saveCorrection(row: Mt101FailedRecord): void {
     if (!this.canAuditOperate()) {
       return;
     }
     const sourceFileHash = row.sourceFileHash?.trim();
-    if (row.sourceRecordNumber === null || row.stagingId === null || !sourceFileHash || !this.correctionPayload.trim()) {
+    if (row.sourceRecordNumber === null || row.stagingId === null || !sourceFileHash) {
       return;
     }
     if (this.correctionVersion() === null) {
       this.error.set(this.i18n.t('audit.quarantine.correctError'));
       return;
+    }
+    // Modo campos -> merge-patch de solo-cambios (coercido); modo Avanzado -> el JSON crudo tal cual.
+    let payload: string;
+    if (this.correctionAdvanced()) {
+      if (!this.correctionPayload.trim()) {
+        return;
+      }
+      payload = this.correctionPayload;
+    } else {
+      const patch = this.buildCorrectionPatch();
+      if (Object.keys(patch).length === 0) {
+        this.error.set(this.i18n.t('audit.quarantine.correctNoChanges'));
+        return;
+      }
+      payload = JSON.stringify(patch);
     }
     this.loading.set(true);
     this.error.set(null);
@@ -370,7 +487,7 @@ export class Mt101QuarantineComponent {
       sourceFileHash,
       recordNumber: row.sourceRecordNumber,
       stagingId: row.stagingId,
-      payload: this.correctionPayload,
+      payload,
       version: this.correctionVersion() as number,
       connectionRef: this.connectionRef,
       reason: this.correctionReason,

@@ -423,10 +423,42 @@
                   <tr class="q__tl-row">
                     <td colspan="9">
                       <div class="q__correct">
-                        <mat-form-field subscriptSizing="dynamic" class="q__correct-field">
-                          <mat-label>{{ i18n.t('audit.quarantine.correctLabel', { row: row.sourceRecordNumber ?? '' }) }}</mat-label>
-                          <textarea matInput [(ngModel)]="correctionPayload" rows="3" placeholder='{&quot;cargos&quot;:&quot;OUR&quot;, ...}'></textarea>
-                        </mat-form-field>
+                        @if (!correctionAdvanced()) {
+                          <div class="q__correct-grid">
+                            @for (key of correctionEditableKeys(); track key) {
+                              <mat-form-field subscriptSizing="dynamic">
+                                <mat-label>{{ key }}</mat-label>
+                                @if (key === 'cargos') {
+                                  <mat-select [(ngModel)]="correctionEdits[key]" [ngModelOptions]="{ standalone: true }">
+                                    @for (opt of cargosOptions; track opt) {
+                                      <mat-option [value]="opt">{{ opt }}</mat-option>
+                                    }
+                                  </mat-select>
+                                } @else {
+                                  <input matInput [(ngModel)]="correctionEdits[key]" [ngModelOptions]="{ standalone: true }" />
+                                }
+                              </mat-form-field>
+                            }
+                          </div>
+                          @if (correctionMetaEntries().length) {
+                            <details class="q__advfilters">
+                              <summary>{{ i18n.t('audit.quarantine.correctMeta', { count: correctionMetaEntries().length }) }}</summary>
+                              <div class="q__causes-chips">
+                                @for (m of correctionMetaEntries(); track m.key) {
+                                  <span class="q__chip q__mono">{{ m.key }}: {{ m.value }}</span>
+                                }
+                              </div>
+                            </details>
+                          }
+                        } @else {
+                          <mat-form-field subscriptSizing="dynamic" class="q__correct-field">
+                            <mat-label>{{ i18n.t('audit.quarantine.correctLabel', { row: row.sourceRecordNumber ?? '' }) }}</mat-label>
+                            <textarea matInput [(ngModel)]="correctionPayload" rows="6" placeholder='{&quot;cargos&quot;:&quot;OUR&quot;}'></textarea>
+                          </mat-form-field>
+                        }
+                        <button mat-button type="button" (click)="toggleCorrectionAdvanced()">
+                          {{ correctionAdvanced() ? i18n.t('audit.quarantine.correctFields') : i18n.t('audit.quarantine.correctAdvanced') }}
+                        </button>
                         <!-- item 2: posición física del registro en el archivo origen (para "qué línea abrir"). -->
                         @if (correctionPosition(); as pos) {
                           @if (pos.physicalLine !== null) {
@@ -445,7 +477,7 @@
                           <input matInput [(ngModel)]="correctionTicketRef" placeholder="INC-123" />
                         </mat-form-field>
                         <div class="q__actions">
-                          <button mat-flat-button color="primary" type="button" (click)="saveCorrection(row)" [disabled]="loading() || !correctionPayload.trim()">{{ i18n.t('audit.quarantine.saveCorrection') }}</button>
+                          <button mat-flat-button color="primary" type="button" (click)="saveCorrection(row)" [disabled]="loading()">{{ i18n.t('audit.quarantine.saveCorrection') }}</button>
                           <button mat-stroked-button type="button" (click)="toggleCorrect(row)">{{ i18n.t('audit.common.cancel') }}</button>
                         </div>
                       </div>

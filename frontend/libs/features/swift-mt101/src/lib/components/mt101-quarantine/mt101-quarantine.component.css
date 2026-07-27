@@ -52,6 +52,7 @@ td { font-size:.86rem; }
 .q__tl-dur { color:var(--ih-text-soft); font-size:.72rem; }
 .q__correct { display:flex; flex-direction:column; gap:.4rem; }
 .q__correct-field { width:100%; }
+.q__correct-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(11rem,1fr)); gap:.5rem; }
 .q__correct-field textarea { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:.82rem; }
 .q__pager { display:flex; justify-content:flex-end; gap:.5rem; margin-top:.6rem; }
 .q__cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(7rem,1fr)); gap:.6rem; }
