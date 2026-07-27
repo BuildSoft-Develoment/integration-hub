@@ -10,7 +10,9 @@
 
 ## Estado
 
-**Propuesto (2026-07-26).** Cierra la decision que [ADR-009](ADR-009-vertical-mensajeria-pagos.md) difirio explicitamente ("sub-modulo Maven opcional para 008; decision diferida") y complementa [ADR-014](ADR-014-backend-modular-extensible-plugins.md) (que reservo el modelo out-of-process para terceros y dejo las verticales de primera parte como modulos de build) y [ADR-019](ADR-019-auditoria-standard-packs-agrupacion-por-dominio.md) (que propuso el split de la lib Nx de auditoria como Fase 2).
+**Propuesto (2026-07-26); fases A, B y 2 implementadas (2026-07-27)** — ver *Alcance implementado*. Pendiente de gate humano para pasar a Aceptado.
+
+Cierra la decision que [ADR-009](ADR-009-vertical-mensajeria-pagos.md) difirio explicitamente ("sub-modulo Maven opcional para 008; decision diferida") y complementa [ADR-014](ADR-014-backend-modular-extensible-plugins.md) (que reservo el modelo out-of-process para terceros y dejo las verticales de primera parte como modulos de build) y [ADR-019](ADR-019-auditoria-standard-packs-agrupacion-por-dominio.md) (que propuso el split de la lib Nx de auditoria como Fase 2).
 
 Motivado por una necesidad concreta: se preven **nuevos verticales** (archivos regulatorios SBS y otros estandares) ademas de SWIFT MT101. El diagnostico se verifico contra codigo mediante una auditoria adversarial (ver *Contexto*); **una primera version de este analisis fue refutada y corregida** — los numeros de abajo son los de la version verificada.
 
@@ -36,7 +38,7 @@ Costo de extension medido en "archivos del core que hay que editar para dar de a
 
 ### Hallazgo 2 — Extraer MT101 es caro, y el acoplamiento no esta donde parecia
 
-Una primera lectura conto "6 costuras" de acoplamiento entrante (motor -> vertical). La auditoria adversarial encontro **24 puntos adicionales reales** (13 que rompen compilacion, 11 que rompen comportamiento), y sobre todo **un vector completo omitido**:
+Una primera lectura conto "6 costuras" de acoplamiento entrante (motor -> vertical). La auditoria adversarial encontro **24 puntos adicionales reales** (13 que rompen compilacion, 11 que rompen comportamiento), y sobre todo **un vector completo omitido**. *(Estos numeros son los del diagnostico inicial, leidos a ojo; ver **Correccion del diagnostico** mas abajo para la medicion real y lo que cambio.)*
 
 - **El modelo de auditoria de la plataforma tiene forma de pago.** `AuditEnvelope` (en `platform-contract`, el contrato compartido) declara 7 componentes SWIFT (`paymentReference`, `transactionReference`, `uetr`, `archiveId`, `gatewayReference`, `standard`, `messageType`); la entidad generica `AuditRecordEvent` los persiste; `V23__audit_record_operational_keys.sql` crea 4 indices sobre ellos; `AuditRecordEventRepository` los expone con `case "20"` / `case "21"` (los tags de campo MT101 como alias de query); y el DDL de ClickHouse de **otro modulo** (`audit-consumer`) ordena la tabla por `(record_id, payment_reference, transaction_reference, ...)`. El acoplamiento cruza el contrato compartido y llega al segundo deployable.
 - **`PAYMENTS_OPERATOR` esta importado en 12 resources genericos**: borrar la constante rompe la compilacion de media API.
@@ -53,9 +55,20 @@ El conteo de FKs es exacto y tranquilizador: **2 FKs declaradas cruzan el limite
 - **El `connectionRef` sella la cohabitacion**: el datasource del ledger MT101 debe contener `staging_record`.
 - **~60 de 101 migraciones Flyway** son del vertical, intercaladas con las del nucleo en una unica secuencia lineal.
 
+### Correccion del diagnostico (2026-07-27, medido con el trinquete)
+
+El conteo del Hallazgo 2 se hizo leyendo codigo. Al instalar el trinquete (fase B) y medir de verdad, la **cantidad** resulto mayor y la **naturaleza** distinta — y esto ultimo cambia el razonamiento:
+
+- Violaciones reales al arrancar: **205 dependencias** motor -> vertical + **16 clases** de vertical alojadas en paquetes del motor.
+- Pero **194 de esas 205 (95%) venian de 4 `Mt101*Resource` ubicados en `api.resource.execution`**, junto a los recursos genericos del motor. Solo **11** (todas de `NativeReflectionRegistrations`) eran acoplamiento de una clase genuina del motor.
+
+**El acoplamiento motor -> vertical era casi todo UBICACION DE ARCHIVOS, no diseño.** Eso reordena la prioridad: la reubicacion fisica, que este ADR habia tratado como higiene, resulto la palanca mas grande del backend — mecanica, sin tocar logica ni contratos, y verificable por el trinquete. Se ejecuta como *fase 2* (ver *Alcance implementado*).
+
+La leccion metodologica vale registrarla: **la deuda de acoplamiento hay que medirla, no estimarla**. Un conteo a ojo confunde "cuantos lugares duelen" con "cuanto trabajo es arreglarlo".
+
 ### Sintesis
 
-El motor **ya esta abierto a extension donde importa (backend)**; lo que falta es el camino equivalente en el frontend. Extraer MT101 es un trabajo grande que toca dinero y no es requisito para que exista el vertical #2. **Construir el camino es barato; reubicar al inquilino actual es caro.**
+El motor **ya esta abierto a extension donde importa (backend)**; lo que falta es el camino equivalente en el frontend. Extraer MT101 es un trabajo grande que toca dinero y no es requisito para que exista el vertical #2. **Construir el camino es barato; reubicar al inquilino actual es caro** — con el matiz de la correccion de arriba: la parte *mecanica* de reubicar resulto barata y de alto rendimiento; lo caro es el resto (esquema, auditoria, atomicidad).
 
 ## Decision
 
@@ -121,7 +134,7 @@ Positivas:
 - MT101 sigue funcionando sin ventana de riesgo sobre el money-path.
 
 Costos y riesgos aceptados:
-- **La deuda existente de MT101 no se paga**: los 24 puntos de acoplamiento y las ~60 migraciones intercaladas siguen ahi. Se congelan, no se limpian.
+- **La deuda existente de MT101 no se paga entera.** *(Corregido 2026-07-27: la parte de dependencias de codigo SI se pago — quedo en cero, ver Alcance implementado, porque resulto ser mudanza y no rediseño.)* Sigue en pie lo estructural: las ~60 migraciones Flyway intercaladas en una unica secuencia, `staging_record` compartida, la transaccion de money-path que cruza ambos dominios y el `connectionRef` que obliga a cohabitar.
 - **El modelo de auditoria sigue payment-shaped** hasta que se dispare el criterio de la decision 4.
 - Hidratar tipos `LOCAL` en el frontend cambia el comportamiento del catalogo de tareas: hay que verificar que los 12 tipos MT101 (que ya tienen componente TS propio) sigan resolviendo a su formulario dedicado y no al dinamico.
 - El build nativo no mejora con nada de esto (sigue siendo un binario unico, ~30 min).
@@ -129,7 +142,7 @@ Costos y riesgos aceptados:
 
 ## Alternativas consideradas
 
-1. **Extraer MT101 a modulo Maven propio primero (big-bang).** Rechazada *por ahora*. Es la opcion que parecia obvia y la auditoria mostro que es la mas cara: 24 puntos de acoplamiento entrante, contrato de auditoria compartido con otro deployable, `staging_record` capturada, y una transaccion de money-path que habria que partir. No es requisito para tener el vertical #2. Queda como decision 5 (migracion incremental posterior).
+1. **Extraer MT101 a modulo Maven propio primero (big-bang).** Rechazada *por ahora*, y la razon cambio en el camino — conviene registrarlo. El argumento original era el volumen de acoplamiento de codigo; medido y ejecutado, ese acoplamiento resulto barato (mudanza, no rediseño) y hoy esta **en cero**. Lo que sostiene el rechazo es lo estructural, que sigue intacto: el contrato de auditoria compartido con `audit-consumer`, `staging_record` capturada por el vertical, la transaccion de money-path que cruza ambos dominios, el `connectionRef` que obliga a cohabitar, y ~60 migraciones Flyway intercaladas en una unica secuencia. Nada de eso es requisito para tener el vertical #2. Queda como decision 5 (migracion incremental posterior).
 2. **MT101 como plugin instalable out-of-process.** Rechazada. Tecnicamente imposible hoy y ya descartada por ADR-014: un plugin no puede definir tablas propias (MT101 tiene 22), ni endpoints REST en el core (tiene 5 resources), ni entidades JPA, ni participar de transacciones del nucleo.
 3. **Repo separado / microservicio.** Rechazada. Comparte `process_execution`, auditoria y scheduler; convertiria consistencia transaccional del money-path en consistencia distribuida, a cambio de aislamiento nominal. Ademas duplica el costo del build nativo.
 4. **Schema Postgres separado para el vertical.** Rechazada. Rompe las 2 FKs reales, complica las queries de lineage y el control maker-checker (que compara contra `staging_record`), y no aporta beneficio operativo hoy.
@@ -138,15 +151,42 @@ Costos y riesgos aceptados:
 
 ## Plan por fases
 
-| Fase | Que | Gate |
-|---|---|---|
-| **A** | Abrir el camino en frontend: hidratar tipos `LOCAL`, categoria declarada por el provider, `Record` totales -> `Partial` + fallback, i18n por `registerMessages()` | ITs + specs de frontend verdes; los 12 tipos MT101 siguen resolviendo a su formulario dedicado |
-| **B** | Trinquete: ArchUnit con freeze-list de los puntos actuales | El build falla ante un acoplamiento nuevo |
-| **C** | Promover la correccion de staging al motor + politica aportada por el vertical (decision 3) | Suite de money-path verde; atomicidad de la transaccion intacta |
-| **D** | Construir el vertical #2 (SBS) usando A+B+C, como validacion real del camino | El alta del vertical no edita libs del core |
-| **E** | *(Opcional, posterior)* Migracion incremental de MT101 al camino, paquete por paquete | Sin big-bang; cada paso reversible |
+| Fase | Que | Gate | Estado |
+|---|---|---|---|
+| **A** | Abrir el camino en frontend: hidratar tipos `LOCAL`, categoria declarada por el provider, `Record` totales -> `Partial` + fallback, i18n por `registerMessages()` | ITs + specs de frontend verdes; los 12 tipos MT101 siguen resolviendo a su formulario dedicado | **Hecha** (2026-07-27) |
+| **B** | Trinquete: ArchUnit con freeze-list de los puntos actuales | El build falla ante un acoplamiento nuevo | **Hecha** (2026-07-27) |
+| **2** | *(Fase nueva, ver Correccion del diagnostico)* Reubicacion fisica de las clases del vertical alojadas en paquetes del motor + registry de validadores + reflexion nativa por vertical | Trinquete: regla de dependencias motor -> vertical en cero | **Hecha** (2026-07-27) |
+| **C** | Promover la correccion de staging al motor + politica aportada por el vertical (decision 3) | Suite de money-path verde; atomicidad de la transaccion intacta | Pendiente |
+| **D** | Construir el vertical #2 (SBS) usando A+B+C, como validacion real del camino | El alta del vertical no edita libs del core | Pendiente |
+| **E** | *(Opcional, posterior)* Migracion incremental de MT101 al camino, paquete por paquete | Sin big-bang; cada paso reversible | Pendiente |
 
 Las fases A y B son independientes entre si y ambas de bajo riesgo. C toca money-path y exige la suite completa. D es la validacion de que el camino sirve; si D obliga a editar libs del core, A quedo incompleta.
+
+## Alcance implementado (2026-07-27)
+
+**Fase A — camino de extension en el frontend.** El backend ya estaba abierto (`TaskType` es una clase de constantes, CDI descubre providers, `PluginConfigSchemaResource` resuelve el schema de providers LOCALES): el unico bloqueo era que el frontend filtraba `origin === 'REMOTE'` al hidratar `/api/task-types`, dejando invisible a cualquier vertical in-process. Ahora:
+
+- El catalogo expone `configurable` (el provider declara un config-schema no vacio) y el frontend hidrata todo tipo sin formulario compilado, con la regla "REMOTE siempre, o configurable". Un tipo sin schema no se ofrece: no habria forma de completarlo. La regla **no nombra ningun tipo concreto** — por eso `PAIN001_PARSE` sigue oculto (no declara schema) sin hardcodear su nombre.
+- La **categoria** de la paleta la declara el provider (`descriptor.category`); se elimino `type.startsWith('MT101_')` del motor de presentacion.
+- Los dos `Record<PlatformProcessTaskType, ...>` **totales** pasan a `Partial` con cadena de resolucion descriptor -> mapa del motor -> generica; un vertical puede traer icono y badge propios. Verificado: agregar un tipo a la union ya no rompe la compilacion de libs del core.
+- El i18n del vertical va por `registerMessages()`, no por el diccionario monolitico.
+
+**Fase B — trinquete.** Tres reglas congeladas (`FreezingArchRule` + escaneo de fuentes para literales, que ArchUnit no cubre). Verificado empiricamente con una sonda que introduce una violacion nueva: falla con mensaje accionable y **no** se auto-congela.
+
+**Fase 2 — reubicacion y cierre del acoplamiento backend.** Efecto medido por el trinquete:
+
+| Regla | Al instalar el trinquete | Tras fase 2 |
+|---|---|---|
+| Dependencias motor -> vertical | 205 | **0** |
+| Clases de vertical en paquetes del motor | 16 | **2** |
+
+Lo hecho: los 10 endpoints/DTOs MT101 salen de `api.*.execution` a `api.*.payments` (relocalizacion pura: `@Path` fija la URL, no el paquete); `ProcessCatalogService` deja de inyectar por tipo concreto los 3 validadores del money-path y pasa a `Instance<ProcessDefinitionValidator>` sobre un SPI nuevo (`spi/process`, con `ProcessTaskView` neutro), con lo que los 4 archivos se mudan al vertical sin convertir una violacion de ubicacion en una dependencia real; y cada vertical registra sus tipos para reflexion nativa (`Mt101ReflectionRegistrations`).
+
+Las **2 violaciones restantes** son los readers `SwiftMtReaderProvider` y `Pain001XmlReaderProvider`, que viven en `provider/reader` por una decision documentada en el propio codigo (se registran en el catalogo de formatos como uno mas). Se dejan congeladas a proposito: revisarlas exige revisar esa decision, no solo mover archivos.
+
+### Limitacion de verificacion conocida
+
+Las registraciones de `@RegisterForReflection` son **inertes en JVM**: solo actuan en la imagen nativa. Ni dev, ni los tests, ni un build JVM validan que sigan siendo efectivas (se intento inspeccionar `generated-bytecode.jar` y `quarkus-application.dat`; ninguno da evidencia confiable). La equivalencia se apoya en que la anotacion se resuelve por el indice del modulo, identico antes y despues. **La prueba real es el proximo build nativo.** Como mitigacion hay un test que falla si una entrada desaparece del vertical o si el registro central del motor vuelve a nombrar un tipo de vertical — prueba que sigan declaradas, no que GraalVM las use.
 
 ## Alcance / lo que NO entra
 
@@ -165,6 +205,8 @@ Las fases A y B son independientes entre si y ambas de bajo riesgo. C toca money
 - [ADR-019 Auditoria por dominio: standard packs](ADR-019-auditoria-standard-packs-agrupacion-por-dominio.md) — precedente de separacion de un vertical en el frontend (lib `features/swift-mt101`, ya implementada).
 - [ADR-011 Patron repository para el acceso a datos](ADR-011-patron-repository-acceso-datos.md) — capas que la decision 3 respeta al promover la correccion de staging.
 - Codigo verificado (backend abierto): `domain/TaskType.java` (constantes, no enum), `service/TaskProviderRegistry.java` (`Instance<TaskProvider>`), `service/execution/TaskTypeRegistry.java`.
+- Implementacion (2026-07-27): `spi/process/ProcessDefinitionValidator.java` + `spi/process/ProcessTaskView.java` (SPI de validacion de publicacion), `service/payments/swift/Mt101ReflectionRegistrations.java` (reflexion nativa por vertical), `api/resource/payments/` y `api/response/payments/` (endpoints/DTOs reubicados).
+- Trinquete: `src/test/java/.../architecture/VerticalBoundaryArchTest.java`, `src/test/resources/archunit.properties`, store versionado en `platform-app/archunit_store/`. Para descongelar lo que se arregla: `mvn -pl platform-app test -Dtest=VerticalBoundaryArchTest` (FreezingArchRule poda solo las violaciones que dejan de existir).
 - Codigo verificado (friccion frontend): `libs/core/services/src/lib/managers/process-task-manager.service.ts` (filtro `origin === 'REMOTE'`), `libs/features/processes/src/lib/flow/process-flow.presentation.ts` (`startsWith('MT101_')` + categorias fijas), `libs/features/processes/src/lib/catalog/process-catalog-page.ts` (composition-root con 12 imports), `libs/core/services/src/lib/presentation/resource-presentation.maps.ts` (`Record` total), `libs/core/i18n/src/lib/dictionaries/es.ts` / `en.ts` (247 claves MT101).
 - Codigo verificado (acoplamiento entrante): `service/NativeReflectionRegistrations.java`, `service/process/ProcessCatalogService.java` + 4 `Mt101*Validator`, `service/execution/async/BackgroundProcessExecutionDispatcher.java`, `service/execution/fastpath/FileReadTaskFastPath.java`, `api/security/PlatformRoles.java`, `api/resource/execution/Mt101*Resource.java`, `api/response/execution/Mt101*Response.java`.
 - Codigo verificado (auditoria payment-shaped): `platform-contract/.../audit/AuditEnvelope.java`, `entity/AuditRecordEvent.java`, `repository/AuditRecordEventRepository.java`, `db/migration/V23__audit_record_operational_keys.sql`, `audit-consumer/src/main/resources/clickhouse/audit_record_event.sql`.
