@@ -30,6 +30,7 @@
 - [ADR-018 FILE_WRITE: binding de origenes y expresiones de detalle (paridad DB_WRITE + evaluador JEXL money-safe)](ADR-018-file-write-binding-origenes-y-expresiones-detalle.md)
 - [ADR-019 Auditoria por dominio: standard packs (limite plataforma <-> estandar)](ADR-019-auditoria-standard-packs-agrupacion-por-dominio.md)
 - [ADR-020 Correccion masiva de cuarentena MT101: agrupacion por causa + planilla de correccion](ADR-020-correccion-masiva-cuarentena-mt101-agrupacion-y-planilla.md)
+- [ADR-021 Limite motor <-> verticales: camino de extension para nuevos estandares y ubicacion de MT101](ADR-021-limite-motor-verticales-camino-de-extension.md)
 
 ## Regla
 

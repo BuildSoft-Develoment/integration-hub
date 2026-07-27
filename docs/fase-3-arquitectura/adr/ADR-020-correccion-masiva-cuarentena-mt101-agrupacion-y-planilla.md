@@ -5,7 +5,7 @@
 <!-- nav-guided:start -->
 ## Navegacion guiada
 - Anterior: [ADR-019 Auditoria por dominio: standard packs (limite plataforma <-> estandar)](ADR-019-auditoria-standard-packs-agrupacion-por-dominio.md)
-- Siguiente: [Indice docs](../../README.md)
+- Siguiente: [ADR-021 Limite motor <-> verticales: camino de extension para nuevos estandares y ubicacion de MT101](ADR-021-limite-motor-verticales-camino-de-extension.md)
 <!-- nav-guided:end -->
 
 ## Estado
