@@ -11,8 +11,6 @@ import com.integrationhub.platform.spi.reader.ReadRecord;
 import com.integrationhub.platform.spi.reader.ReadResult;
 import com.integrationhub.platform.spi.reader.ReadSkip;
 import com.integrationhub.platform.spi.reader.SourcePosition;
-import com.integrationhub.platform.spi.task.payments.Mt101Message;
-import com.integrationhub.platform.spi.task.payments.ValidationIssue;
 import com.integrationhub.platform.task.AsyncTaskEnvelope;
 import io.quarkus.runtime.annotations.RegisterForReflection;
 
@@ -46,27 +44,8 @@ import io.quarkus.runtime.annotations.RegisterForReflection;
         AsyncTaskEnvelope.class,
         AsyncSliceWorkItem.class,
         AsyncPageWorkItem.class,
-        // Cuarentena MT101: Mt101QuarantineResource#stagingRow devuelve jakarta.ws.rs.core.Response
-        // (untyped) -> Quarkus NO auto-registra el DTO y en nativo el GET da 500
-        // ("No serializer found for StagingRowView") => el operador no puede ni LEER la fila para
-        // corregirla. Mismo patron que BrandingResponse. Cazado en el e2e de cuarentena 2026-07-14.
-        com.integrationhub.platform.service.payments.swift.Mt101StagingCorrectionService.StagingRowView.class,
-        com.integrationhub.platform.service.payments.swift.Mt101StagingCorrectionService.CorrectionResult.class,
-        // MT101_VALIDATE mete las issues en outputs["errors"] y el motor serializa los outputs
-        // de la tarea con Jackson. Sin registrar, en nativo falla "No serializer found for
-        // ValidationIssue" -> la tarea revienta. OJO: solo se manifiesta cuando HAY errores de
-        // validacion (con datos limpios la lista va vacia) -> cazado en el e2e de 10k con 100
-        // filas malas (2026-07-14). El enum anidado Severity tambien va.
-        ValidationIssue.class,
-        ValidationIssue.Severity.class,
-        // Money-path MT101: Mt101RouteTaskProvider convierte el mensaje a Map via Jackson
-        Mt101Message.class,
-        Mt101Message.Envelope.class,
-        Mt101Message.SequenceA.class,
-        Mt101Message.Transaction.class,
-        Mt101Message.Amount.class,
-        Mt101Message.Party.class,
-        Mt101Message.ControlTotals.class,
+        // ADR-021: los tipos del vertical SWIFT MT101 se registran en su propio paquete
+        // (Mt101ReflectionRegistrations). El motor no los nombra: asi no depende del vertical.
         // Catalogo remoto de plugins (HttpPluginMarketplaceCatalogClient)
         PluginMarketplaceCatalog.class,
         PluginMarketplaceCatalog.PluginMarketplaceEntry.class,
