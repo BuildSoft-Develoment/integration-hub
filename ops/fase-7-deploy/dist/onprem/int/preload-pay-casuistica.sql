@@ -14,6 +14,18 @@ UPDATE mt101_build_fragment
        updated_at = current_timestamp
  WHERE id IN (SELECT id FROM mt101_build_fragment WHERE status = 'SENT' ORDER BY id LIMIT 2);
 
+-- Evidencia del conflicto: la respuesta REJECTED del banco (mt101_confirmation), ligada al archive del
+-- fragmento por (senders_reference, process_execution_id) -> es lo que muestra el panel "Confirmaciones del
+-- banco" y explica POR QUE el fragmento quedo en conflicto. Idempotente (delete DEMO-GW-* + insert).
+DELETE FROM mt101_confirmation WHERE gateway_reference LIKE 'DEMO-GW-%';
+INSERT INTO mt101_confirmation (archive_id, confirmation_type, gateway_reference, confirmed_status, raw_payload, received_at)
+SELECT a.id, 'STATUS', 'DEMO-GW-' || a.senders_reference, 'REJECTED',
+       '{"status":"REJECTED","reasonCode":"AC04","reason":"cuenta del beneficiario cerrada"}', current_timestamp
+  FROM mt101_archive a
+  JOIN mt101_build_fragment f
+    ON f.senders_reference = a.senders_reference AND f.process_execution_id = a.process_execution_id
+ WHERE coalesce(f.pay_conflict, false) = true;
+
 -- === /pay-dispatch ===
 -- El ledger de dispatch del PAY directo. Los "atascados" son UNCERTAIN (no sabemos si se envio:
 -- timeout/crash durante el envio) o DISPATCHING colgado; bloquean el reenvio "hasta conciliar".
@@ -28,5 +40,6 @@ VALUES ('demo-uncertain-1',   61, 'P61-1', 'UNCERTAIN',   NULL,        3, 'timeo
        ('demo-sent-2',        61, 'P61-3', 'SENT',        'GW-REF-779', 1, NULL,                                                         now(), now(), 'demohash5');
 
 SELECT 'conflicts (pay_conflict=true)'            AS caso, count(*) FROM mt101_build_fragment  WHERE pay_conflict = true
+UNION ALL SELECT 'conflict confirmations (evidencia)',     count(*) FROM mt101_confirmation WHERE gateway_reference LIKE 'DEMO-GW-%'
 UNION ALL SELECT 'dispatch total',                         count(*) FROM mt101_pay_dispatch_intent
 UNION ALL SELECT 'dispatch stuck (UNCERTAIN/DISPATCHING)', count(*) FROM mt101_pay_dispatch_intent WHERE status IN ('UNCERTAIN','DISPATCHING');
