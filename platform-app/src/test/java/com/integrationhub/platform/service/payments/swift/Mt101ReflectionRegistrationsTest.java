@@ -1,6 +1,7 @@
 package com.integrationhub.platform.service.payments.swift;
 
-import com.integrationhub.platform.service.payments.swift.Mt101ReflectionRegistrations;
+import com.integrationhub.vertical.swift.mt101.service.Mt101StagingCorrectionService;
+import com.integrationhub.vertical.swift.mt101.service.Mt101ReflectionRegistrations;
 
 
 import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;

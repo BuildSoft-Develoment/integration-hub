@@ -10,7 +10,7 @@
 
 ## Estado
 
-**Propuesto (2026-07-26); fases A, B y 2 implementadas (2026-07-27)** — ver *Alcance implementado*. Pendiente de gate humano para pasar a Aceptado.
+**Propuesto (2026-07-26); fases A, B, 2 y 3 implementadas (2026-07-27)** — ver *Alcance implementado*. La **decision 5 quedo revertida** por la medicion: MT101 si se extrajo a su modulo. Pendiente de gate humano para pasar a Aceptado.
 
 Cierra la decision que [ADR-009](ADR-009-vertical-mensajeria-pagos.md) difirio explicitamente ("sub-modulo Maven opcional para 008; decision diferida") y complementa [ADR-014](ADR-014-backend-modular-extensible-plugins.md) (que reservo el modelo out-of-process para terceros y dejo las verticales de primera parte como modulos de build) y [ADR-019](ADR-019-auditoria-standard-packs-agrupacion-por-dominio.md) (que propuso el split de la lib Nx de auditoria como Fase 2).
 
@@ -88,6 +88,8 @@ El motor **ya esta abierto a extension donde importa (backend)**; lo que falta e
 
 **5. MT101 NO se extrae ahora, ni como big-bang.** Se mantiene en `platform-app`. Una vez que el camino de extension este probado por un vertical real, MT101 puede migrar **de forma incremental y oportunista** (paquete por paquete), sin ventana de riesgo unica sobre el money-path.
 
+   > **REVERTIDA el 2026-07-27 — ver *Correccion de la decision 5*.** MT101 **si** se extrajo a `vertical-swift-mt101`, en tres olas incrementales (no big-bang: cada ola con build y suite verdes). Lo que hizo caer el argumento fue la medicion: con las dependencias motor -> vertical en cero, extraer dejo de ser un rediseño y paso a ser mudanza. Todo lo demas de esta decision sigue vigente — mismo deployable, misma base de datos, monolito modular.
+
 **6. Se instala un trinquete (ArchUnit) con freeze-list.** Se congelan los puntos de acoplamiento actuales como excepciones explicitas y se falla el build ante cualquier **nuevo** acoplamiento motor -> vertical. Hoy no existe ningun control automatico de capas (ni ArchUnit, ni Checkstyle, ni Enforcer): sin trinquete, el vertical #2 repite el patron y la deuda se duplica.
 
 ## Diseno
@@ -158,11 +160,16 @@ Costos y riesgos aceptados:
 | **A** | Abrir el camino en frontend: hidratar tipos `LOCAL`, categoria declarada por el provider, `Record` totales -> `Partial` + fallback, i18n por `registerMessages()` | ITs + specs de frontend verdes; los 12 tipos MT101 siguen resolviendo a su formulario dedicado | **Hecha** (2026-07-27) |
 | **B** | Trinquete: ArchUnit con freeze-list de los puntos actuales | El build falla ante un acoplamiento nuevo | **Hecha** (2026-07-27) |
 | **2** | *(Fase nueva, ver Correccion del diagnostico)* Reubicacion fisica de las clases del vertical alojadas en paquetes del motor + registry de validadores + reflexion nativa por vertical | Trinquete: regla de dependencias motor -> vertical en cero | **Hecha** (2026-07-27) |
+| **3** | *(Fase nueva, ver Correccion de la decision 5)* Modulo Maven propio: `platform-spi` + `vertical-swift-mt101`, en tres olas | El vertical compila contra el SPI, sin ver `platform-app` | **Hecha** (2026-07-27) |
 | **C** | Promover la correccion de staging al motor + politica aportada por el vertical (decision 3) | Suite de money-path verde; atomicidad de la transaccion intacta | Pendiente |
 | **D** | Construir el vertical #2 (SBS) usando A+B+C, como validacion real del camino | El alta del vertical no edita libs del core | Pendiente |
-| **E** | *(Opcional, posterior)* Migracion incremental de MT101 al camino, paquete por paquete | Sin big-bang; cada paso reversible | Pendiente |
+| **E** | ~~Migracion incremental de MT101~~ | — | **Absorbida por la fase 3** |
 
 Las fases A y B son independientes entre si y ambas de bajo riesgo. C toca money-path y exige la suite completa. D es la validacion de que el camino sirve; si D obliga a editar libs del core, A quedo incompleta.
+
+### Correccion de la decision 5 (2026-07-27)
+
+La decision 5 dijo *"no se extrae MT101 a un modulo Maven"*, con el argumento de que el costo no se justificaba. Ese argumento se apoyaba en el diagnostico previo a la medicion: 205 dependencias motor -> vertical hacian ver la extraccion como un rediseño. Cuando la fase 2 llevo esas dependencias a **cero**, el costo real de extraer paso a ser mudanza de archivos, y el usuario pidio dejar el camino listo antes de construir el vertical SBS. La decision se revierte de forma explicita: **el vertical SI vive en su modulo Maven** (fase 3). Sigue en pie todo lo demas de la decision — mismo deployable, misma base de datos, monolito modular.
 
 ## Alcance implementado (2026-07-27)
 
@@ -186,13 +193,47 @@ Lo hecho: los 10 endpoints/DTOs MT101 salen de `api.*.execution` a `api.*.paymen
 
 Las **2 violaciones restantes** son los readers `SwiftMtReaderProvider` y `Pain001XmlReaderProvider`, que viven en `provider/reader` por una decision documentada en el propio codigo (se registran en el catalogo de formatos como uno mas). Se dejan congeladas a proposito: revisarlas exige revisar esa decision, no solo mover archivos.
 
+**Fase 3 — modulo Maven propio.** Dos modulos nuevos, en tres olas:
+
+- **`platform-spi`** (41 clases) — el contrato de extension. Se extrajo *entero* el paquete `platform.spi`, conservando su nombre: sin paquete partido y sin reescribir un solo import. Despues fue creciendo con lo que la migracion fue revelando como contrato y no como interioridad.
+- **`vertical-swift-mt101`** (101 clases + 48 pruebas) — el vertical, en paquete `com.integrationhub.vertical.swift.mt101`.
+
+El orden importo: primero se invirtieron las dependencias, despues se movieron los archivos. Medida en tres pasadas, la superficie del vertical hacia el motor:
+
+| | Entradas distintas | Referencias |
+|---|---|---|
+| Antes de la ola 3 | 15 | 46 |
+| Tras invertir las 3 grandes | 12 | 17 |
+| Tras el segundo barrido | 4 | 4 |
+
+La primera pasada mostro que **tres clases concentraban 46 de las 46 referencias** y su API usada eran 7 metodos: `ConnectionPoolManager` -> `JdbcConnectionResolver`, `JsonConfigurationMapper` -> `ConfigurationMapper`, y `RecordAuditEmitter` que ya era interfaz y solo habia que mudar. La segunda pasada separo lo que era **utilidad mal ubicada** de lo que necesitaba un puerto:
+
+- Al SPI, tal cual: `DbTaskSupport`, `TaskOutputSupport`, `StoredProcedureRuntimeSupport` (dependen solo del JDK y del propio SPI) y `ExecutionStatus`. Que el motor tambien las use es la señal de que son contrato de autor de tareas, no interioridades.
+- Puertos nuevos que el motor implementa: `SinkDefinitionResolver`, `AuditSpoolGateway`, `ExecutionReconciliationGateway`, `FileFormatWriterResolver`. Los registries se quedan en el motor con sus 10 hermanos; solo viaja el contrato.
+
+**Esto evito un `platform-core`.** La ola 3 parecia exigir sacar el motor entero de `platform-app` (~324 archivos) para que el vertical pudiera llevarse lo que le faltaba. Medir primero mostro que no hacia falta: el vertical no necesitaba *el motor*, necesitaba 7 metodos.
+
+Lo que **se queda en `platform-app` a proposito** — no es deuda, es donde va:
+
+| Que | Por que |
+|---|---|
+| Los 4 recursos JAX-RS de MT101 | La capa REST es composicion: `@Path` + seguridad + el resto de la app |
+| `RestInboundDeliveryTransport`, `ProcessTaskDefinition{Build,Corrective}ConfigSource` | Adaptadores del motor que implementan puertos **del vertical** — la dependencia va en el sentido correcto |
+| `PaymentValidationRuleCatalogService` + entidad + repo + mapper | Catalogo CRUD de reglas de *pagos*, no de MT101 |
+| `Pain001*` (iso20022) | Es **otro vertical**; meterlo en `vertical-swift-mt101` seria un error |
+| `Mt101ReflectionRegistrationsTest` | Prueba de guardia que compara contra el registro central del motor: necesita ver ambos modulos |
+
+Las pruebas del vertical viajaron con el (48 archivos). Dejaron de instanciar `JsonConfigurationMapper` del motor — que arrastraba toda la resolucion de secretos solo para parsear un JSON — y usan un doble del contrato. La expansion real de `${secret:...}` se sigue probando donde vive, en `JsonConfigurationMapperTest`.
+
+Se añadio una **guardia al propio trinquete**: falla si el importador deja de ver alguno de los dos espacios de paquetes. Sin ella, mover el vertical a otro paquete deja todas las reglas pasando por vacio — que es exactamente lo que paso en la fase 2 y dejo colarse 14 dependencias nuevas. Un trinquete ciego reporta verde.
+
 ### Limitacion de verificacion conocida
 
 Las registraciones de `@RegisterForReflection` son **inertes en JVM**: solo actuan en la imagen nativa. Ni dev, ni los tests, ni un build JVM validan que sigan siendo efectivas (se intento inspeccionar `generated-bytecode.jar` y `quarkus-application.dat`; ninguno da evidencia confiable). La equivalencia se apoya en que la anotacion se resuelve por el indice del modulo, identico antes y despues. **La prueba real es el proximo build nativo.** Como mitigacion hay un test que falla si una entrada desaparece del vertical o si el registro central del motor vuelve a nombrar un tipo de vertical — prueba que sigan declaradas, no que GraalVM las use.
 
 ## Alcance / lo que NO entra
 
-- **No** se extrae MT101 a modulo Maven en este ADR (decision 5; queda la fase E como opcional posterior).
+- ~~**No** se extrae MT101 a modulo Maven en este ADR (decision 5; queda la fase E como opcional posterior).~~ **Ya no aplica**: se extrajo en la fase 3 (ver *Correccion de la decision 5*). Lo que sigue sin entrar es separar el deployable o la base de datos.
 - **No** se renumeran, mueven ni reescriben las 101 migraciones historicas.
 - **No** se generaliza el modelo de auditoria a claves key/value ahora (decision 4, con disparador).
 - **No** se cambia el modelo de plugins de terceros (ADR-012/013/014 siguen vigentes sin modificacion).

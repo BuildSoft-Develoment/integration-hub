@@ -3,7 +3,7 @@ package com.integrationhub.platform.api.resource.payments;
 import com.integrationhub.vertical.swift.mt101.api.response.Mt101FragmentLinkResponse;
 import com.integrationhub.vertical.swift.mt101.api.response.Mt101ReprocessResponse;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FragmentRepository;
-import com.integrationhub.platform.service.payments.swift.Mt101ReprocessService;
+import com.integrationhub.vertical.swift.mt101.service.Mt101ReprocessService;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.DefaultValue;

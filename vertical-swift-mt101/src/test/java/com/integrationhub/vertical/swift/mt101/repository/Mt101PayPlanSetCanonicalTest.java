@@ -1,6 +1,5 @@
 package com.integrationhub.vertical.swift.mt101.repository;
 
-import com.integrationhub.vertical.swift.mt101.repository.Mt101RebuildRepository;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;

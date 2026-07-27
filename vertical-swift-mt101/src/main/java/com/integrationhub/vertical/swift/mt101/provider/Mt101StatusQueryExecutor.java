@@ -11,7 +11,7 @@ import java.util.Map;
 /**
  * v55-fix (opción A) — ejecutor COMPARTIDO de la consulta de STATUS por transporte y ruta, extraído de
  * {@link Mt101StatusTaskProvider} para reusarlo en la resolución del UNCERTAIN normal
- * ({@link com.integrationhub.platform.service.payments.swift.Mt101PayUncertainResolutionService}) sin duplicar la
+ * ({@link com.integrationhub.vertical.swift.mt101.service.Mt101PayUncertainResolutionService}) sin duplicar la
  * lógica. Dado un registro ({@code sendersReference}, {@code route}, …) y la config de consulta, resuelve el plan
  * (REST por HTTP o SFTP leyendo el ACK/NACK del banco, route-aware si hay {@code routeQuery}) y devuelve el
  * {@code confirmedStatus} crudo (o pendiente/error). NO clasifica a SENT/REJECTED ni persiste: eso lo hace cada

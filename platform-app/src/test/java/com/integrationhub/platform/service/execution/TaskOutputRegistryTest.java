@@ -1,6 +1,6 @@
 package com.integrationhub.platform.service.execution;
 
-import com.integrationhub.platform.provider.task.payments.swift.Mt101MessageInputResolver;
+import com.integrationhub.vertical.swift.mt101.provider.task.Mt101MessageInputResolver;
 
 
 

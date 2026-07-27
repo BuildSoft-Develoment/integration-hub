@@ -50,9 +50,49 @@
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-scheduler</artifactId>
         </dependency>
+        <!-- ADR-020: la planilla de correccion la ESCRIBE el writer XLSX del motor (via el SPI), pero
+             LEERLA es responsabilidad propia del vertical: es auto-descriptiva (el header nombra las
+             columnas dinamicas), asi que no sirve el reader posicional generico. De ahi POI directo. -->
+        <dependency>
+            <groupId>io.quarkiverse.poi</groupId>
+            <artifactId>quarkus-poi</artifactId>
+            <version>2.2.1</version>
+        </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-junit5</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-junit5-mockito</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Las pruebas del vertical viajan CON el vertical (ADR-021): son suyas, no del motor.
+             Ninguna es @QuarkusTest — son unitarias con dobles a mano — pero las del money-path
+             levantan Postgres real (testcontainers) y un banco falso por HTTP (WireMock) porque
+             probar el envio contra mocks de driver no probaria nada. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>${testcontainers.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-jdbc-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock</artifactId>
+            <version>3.9.2</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

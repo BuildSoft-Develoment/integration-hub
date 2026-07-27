@@ -85,6 +85,31 @@ class VerticalBoundaryArchTest {
                 .importPackages("com.integrationhub.platform", "com.integrationhub.vertical");
     }
 
+    /**
+     * Guardia del propio trinquete: si el importador dejara de VER un espacio de paquetes, todas las
+     * reglas de abajo pasarian por vacio y el limite quedaria sin vigilancia — que es exactamente lo
+     * que paso al mover el vertical a su modulo (las reglas solo miraban `com.integrationhub.platform`
+     * y no lo notaron: se colaron 14 dependencias nuevas del motor hacia el vertical).
+     *
+     * <p>Un trinquete que se queda ciego es peor que no tenerlo: reporta verde. Los umbrales son
+     * deliberadamente bajos — no verifican cuantas clases hay, verifican que AMBOS lados se estan
+     * escaneando.</p>
+     */
+    @Test
+    void elTrinqueteVeAmbosEspaciosDePaquetes() {
+        var motor = platformClasses.stream()
+                .filter(clazz -> clazz.getPackageName().startsWith("com.integrationhub.platform"))
+                .count();
+        var vertical = platformClasses.stream()
+                .filter(clazz -> clazz.getPackageName().startsWith("com.integrationhub.vertical"))
+                .count();
+
+        assertTrue(motor > 100, "el trinquete no esta viendo el motor (" + motor + " clases): "
+                + "revisar el classpath del ClassFileImporter antes de confiar en las reglas");
+        assertTrue(vertical > 50, "el trinquete no esta viendo el modulo del vertical (" + vertical
+                + " clases): las reglas pasarian por vacio");
+    }
+
     @Test
     void elMotorNoDependeDelModuloDelVertical() {
         // Complementa la regla de `..payments..`: los verticales YA migrados viven en otro espacio
