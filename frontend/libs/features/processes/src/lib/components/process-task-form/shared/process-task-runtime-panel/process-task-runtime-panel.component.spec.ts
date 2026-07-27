@@ -1,6 +1,9 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { ProcessTaskManagerService } from '@integration-hub/core/services';
+import { ProcessTaskBindingContextService } from '../../../../forms/process-task-binding-context.service';
+import { ProcessSchemaFieldContextService } from '../../../../forms/process-schema-field-context.service';
 
 import { AsyncState } from '../../../../api/messaging-transports.service';
 import { ProcessTaskRuntimePanelComponent } from './process-task-runtime-panel.component';
@@ -16,7 +19,14 @@ function setup(
 ) {
   TestBed.configureTestingModule({
     imports: [ProcessTaskRuntimePanelComponent],
-    providers: [provideHttpClient(), provideHttpClientTesting()],
+    providers: [
+      provideHttpClient(),
+      provideHttpClientTesting(),
+      // ADR-021: bajaron a scope de componente; el TestBed hace de ancestro que los provee.
+      ProcessTaskManagerService,
+      ProcessTaskBindingContextService,
+      ProcessSchemaFieldContextService,
+    ],
   });
   const fixture = TestBed.createComponent(ProcessTaskRuntimePanelComponent);
   fixture.componentRef.setInput('task', {

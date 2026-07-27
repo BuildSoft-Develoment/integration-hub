@@ -8,9 +8,13 @@ import { ProcessTaskBindingContextService } from './process-task-binding-context
  * schema-form (p.ej. `token-text`): la tarea actual, las demás tareas y los readers, para que el
  * renderer pueda ofrecer el autocompletado de tokens `{fuente.output.campo}` sin acoplarse al host.
  *
- * `providedIn: 'root'` con estado por signals: el host lo actualiza y los renderers lo leen.
+ * Estado por signals: el host lo actualiza y los renderers lo leen. ADR-021: se provee UNA vez en
+ * la pagina del catalogo de procesos (junto a `ProcessTaskManagerService`), no en root — asi puede
+ * consultar los descriptores de los providers, que viven en ese mismo injector. Todos los
+ * consumidores cuelgan de esa pagina, de modo que siguen compartiendo la misma instancia; y el
+ * estado se descarta al salir de la pantalla en vez de vivir para siempre.
  */
-@Injectable({ providedIn: 'root' })
+@Injectable()
 export class ProcessSchemaFieldContextService {
   private readonly bindingContext = inject(ProcessTaskBindingContextService);
 

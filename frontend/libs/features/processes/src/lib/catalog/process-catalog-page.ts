@@ -16,6 +16,8 @@ import { ProcessMt101SplitTaskFormComponent } from '../components/process-task-f
 import { ProcessMt101StatusTaskFormComponent } from '../components/process-task-form/payments/swift/process-mt101-status-task-form/process-mt101-status-task-form.component';
 import { ProcessMt101ValidateTaskFormComponent } from '../components/process-task-form/payments/swift/process-mt101-validate-task-form/process-mt101-validate-task-form.component';
 import { ProcessTaskManagerService } from '@integration-hub/core/services';
+import { ProcessTaskBindingContextService } from '../forms/process-task-binding-context.service';
+import { ProcessSchemaFieldContextService } from '../forms/process-schema-field-context.service';
 import { ProcessCatalogStore } from './process-catalog.store';
 import { ProcessCatalogCommandService } from './process-catalog-command.service';
 import { ProcessCatalogQueryStore } from './process-catalog-query.store';
@@ -43,6 +45,12 @@ import { ProcessToolbarComponent } from '../components/process-toolbar/process-t
     ProcessEditorStore,
     ProcessReferenceStore,
     ProcessTaskManagerService,
+    // ADR-021: bajan de `providedIn: 'root'` a este injector para poder consultar los descriptores
+    // de los task providers, que se registran aca abajo. Van en el MISMO nivel que el manager: si
+    // colgaran de la ruta (por encima) no lo verian. Todos sus consumidores son formularios de
+    // tarea que cuelgan de esta pagina, asi que siguen compartiendo una sola instancia.
+    ProcessTaskBindingContextService,
+    ProcessSchemaFieldContextService,
     ProcessFlowApiService,
     // Task providers (serializacion config_json) del motor y verticales.
     ...provideProcessTaskProviders(),

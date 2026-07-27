@@ -12,7 +12,7 @@ import {
 import { ReaderManagerService, SourceManagerService } from '@integration-hub/core/services';
 import { DB_WRITE_METADATA_ITEMS } from '../models/process-db-write.models';
 
-@Injectable({ providedIn: 'root' })
+@Injectable()
 export class ProcessTaskBindingContextService {
   private readonly readerManager = inject(ReaderManagerService);
   private readonly sourceManager = inject(SourceManagerService);
