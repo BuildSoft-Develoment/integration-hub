@@ -362,14 +362,21 @@
       @if (message()) {
         <p class="q__ok" role="status">{{ message() }}</p>
       }
-      @if (loading()) {
+      <!-- v61: la recarga NO desmonta la tabla si ya hay filas (evita flicker de iconos/numeros en cada accion). -->
+      @if (loading() && rows().length === 0) {
         <p class="q__empty" role="status">{{ i18n.t('audit.quarantine.processing') }}</p>
-      } @else if (error()) {
+      }
+      @if (error()) {
         <p class="q__error" role="alert">{{ error() }}</p>
-      } @else if (rows().length === 0) {
+      }
+      @if (!loading() && !error() && rows().length === 0) {
         <p class="q__empty">{{ fragmentSetId.trim() ? i18n.t('audit.quarantine.emptyWithSet') : i18n.t('audit.quarantine.emptyNoSet') }}</p>
-      } @else {
-        <p class="ih-muted">{{ i18n.t('audit.quarantine.pending', { count: pendingCount() }) }}</p>
+      }
+      @if (rows().length > 0) {
+        <p class="ih-muted">
+          {{ i18n.t('audit.quarantine.pending', { count: pendingCount() }) }}
+          @if (loading()) { · <span class="q__muted">{{ i18n.t('audit.quarantine.processing') }}</span> }
+        </p>
         <div class="q__table">
           <table class="ih-dense-table">
             <caption class="ih-visually-hidden">{{ i18n.t('audit.quarantine.caption', { set: fragmentSetId }) }}</caption>

@@ -1533,6 +1533,7 @@ export const en = {
   'audit.correctWizard.step3Hint': 'Upload the edited sheet. It shows what would be corrected, without applying anything.',
   'audit.correctWizard.step4': 'Confirm and apply',
   'audit.correctWizard.step4Hint': 'Enter a reason (required) and apply. Each row is audited.',
+  'audit.correctWizard.noChanges': 'No rows to correct: the sheet has no changes from the original. Edit at least one editable cell (non-_ columns) and re-import to enable "Next".',
   'audit.quarantine.correctReason': 'Correction reason',
   'audit.quarantine.ticketRef': 'Ticket',
   'audit.quarantine.saveCorrection': 'Save fix',

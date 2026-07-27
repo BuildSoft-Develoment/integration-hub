@@ -1533,6 +1533,7 @@ export const es = {
   'audit.correctWizard.step3Hint': 'Subí la planilla editada. Se muestra qué se corregiría, sin aplicar nada.',
   'audit.correctWizard.step4': 'Confirmar y aplicar',
   'audit.correctWizard.step4Hint': 'Indicá un motivo (obligatorio) y aplicá. Cada fila queda auditada.',
+  'audit.correctWizard.noChanges': 'No hay filas para corregir: la planilla no tiene cambios respecto del original. Editá al menos una celda editable (columnas sin _) y reimportá para habilitar "Siguiente".',
   'audit.quarantine.correctReason': 'Motivo de correccion',
   'audit.quarantine.ticketRef': 'Ticket',
   'audit.quarantine.saveCorrection': 'Guardar correccion',

@@ -30,6 +30,9 @@
           <span class="wz__pv">{{ preview.unchanged }} {{ i18n.t('audit.quarantine.previewUnchanged') }}</span>
           <span class="wz__pv" [class.wz__pv--danger]="preview.conflicts > 0">{{ preview.conflicts }} {{ i18n.t('audit.quarantine.previewConflicts') }}</span>
         </div>
+        @if (preview.toCorrect === 0) {
+          <p class="wz__hint" role="status">{{ i18n.t('audit.correctWizard.noChanges') }}</p>
+        }
         @if (preview.conflicts > 0) {
           <ul class="wz__list">
             @for (row of preview.sample; track $index) {
