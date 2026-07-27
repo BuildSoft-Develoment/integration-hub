@@ -1,6 +1,5 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
-import com.integrationhub.vertical.swift.mt101.provider.InboundDeliverySupport;
 import com.integrationhub.vertical.swift.mt101.provider.InboundDeliveryTransport;
 import com.integrationhub.vertical.swift.mt101.provider.InboundRoutedTransactionMapper;
 

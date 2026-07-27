@@ -1,6 +1,5 @@
 package com.integrationhub.platform.provider.reader;
 
-import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 
 import com.integrationhub.platform.spi.reader.ReadBatch;
 import com.integrationhub.platform.spi.reader.ReadBatchConsumer;

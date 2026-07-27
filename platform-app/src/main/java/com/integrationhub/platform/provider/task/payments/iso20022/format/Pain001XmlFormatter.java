@@ -1,6 +1,5 @@
 package com.integrationhub.platform.provider.task.payments.iso20022.format;
 
-import com.integrationhub.vertical.swift.mt101.spi.ValidationPredicate;
 
 import com.integrationhub.vertical.swift.mt101.spi.PaymentMessageFormatter;
 import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;

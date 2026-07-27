@@ -1,7 +1,6 @@
 package com.integrationhub.platform.service.payments.swift;
 
 import com.integrationhub.vertical.swift.mt101.service.Mt101CorrectiveTaskConfigSource;
-import com.integrationhub.vertical.swift.mt101.spi.TransportResult;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -11,7 +10,6 @@ import com.integrationhub.platform.provider.task.payments.swift.Mt101PayTaskProv
 import com.integrationhub.vertical.swift.mt101.provider.Mt101DispatchPlanCompiler;
 import com.integrationhub.vertical.swift.mt101.provider.Mt101PayRouteResolver;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101PaySinkConnectionResolver;
-import com.integrationhub.vertical.swift.mt101.provider.Mt101PaymentCorrelation;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101ReconcileTaskProvider;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101RepairTaskProvider;
 import com.integrationhub.platform.provider.task.payments.swift.Mt101RouteTaskProvider;

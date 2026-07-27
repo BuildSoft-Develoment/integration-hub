@@ -38,8 +38,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 // @covers ADR-021
 class VerticalBoundaryArchTest {
 
-    /** Paquetes de los verticales de negocio (pagos SWIFT/ISO20022 hoy). */
+    /** Paquetes de los verticales que todavia viven DENTRO de platform-app (migracion en curso). */
     private static final String VERTICAL_PACKAGES = "..payments..";
+
+    /**
+     * ADR-021 parte 2: el vertical ya migrado a su modulo propio. Hay que nombrarlo aparte porque
+     * al cambiar de paquete (`com.integrationhub.vertical..`) salio del radar de las reglas de
+     * arriba, que solo miran `com.integrationhub.platform`. Sin esta regla, una dependencia nueva
+     * del motor hacia el vertical seria INVISIBLE — de hecho asi se colaron 14 imports espurios
+     * que un script agrego por menciones en javadoc.
+     */
+    private static final String VERTICAL_MODULE_PACKAGES = "com.integrationhub.vertical..";
+
+    /** El motor: todo `platform` que no sea un vertical en migracion. */
+    private static final String ENGINE_PACKAGES = "com.integrationhub.platform..";
 
     /** Prefijos de nombre que delatan a un vertical, para detectar clases mal ubicadas. */
     private static final List<String> VERTICAL_CLASS_PREFIXES = List.of("Mt101", "Swift", "Pain001");
@@ -67,7 +79,26 @@ class VerticalBoundaryArchTest {
     static void importClasses() {
         platformClasses = new ClassFileImporter()
                 .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
-                .importPackages("com.integrationhub.platform");
+                // ADR-021 parte 2: se importan AMBOS espacios de paquetes. Si solo se mirara
+                // `platform`, mover el vertical a su modulo lo sacaria del alcance del trinquete
+                // justo cuando mas hace falta vigilarlo.
+                .importPackages("com.integrationhub.platform", "com.integrationhub.vertical");
+    }
+
+    @Test
+    void elMotorNoDependeDelModuloDelVertical() {
+        // Complementa la regla de `..payments..`: los verticales YA migrados viven en otro espacio
+        // de paquetes. Se exceptuan las clases del propio vertical que siguen en platform-app
+        // (migracion en curso) — esas SI pueden usar su modulo.
+        ArchRule rule = noClasses()
+                .that().resideInAPackage(ENGINE_PACKAGES)
+                .and().resideOutsideOfPackage(VERTICAL_PACKAGES)
+                .and(new NotVerticalNamedClasses())
+                .should().dependOnClassesThat().resideInAPackage(VERTICAL_MODULE_PACKAGES)
+                .because("ADR-021: el motor no conoce verticales, vivan en platform-app o en su "
+                        + "propio modulo");
+
+        FreezingArchRule.freeze(rule).check(platformClasses);
     }
 
     @Test
@@ -85,11 +116,15 @@ class VerticalBoundaryArchTest {
     void lasClasesDeUnVerticalVivenEnSuPaquete() {
         // Complementa la regla anterior: una clase Mt101* ubicada en un paquete del motor no
         // aparece como "dependencia cruzada", pero es acoplamiento igual (y el caso mas comun aca).
+        // ADR-021 parte 2: hay DOS hogares validos mientras dura la migracion — el modulo propio
+        // del vertical (destino final) y `..payments..` dentro de platform-app (lo aun no movido).
+        // Lo que la regla persigue es lo mal ubicado: un Mt101* suelto en api.resource.execution,
+        // service.process o entity del motor.
         ArchRule rule = classes()
                 .that(new VerticalNamedClasses())
-                .should().resideInAPackage(VERTICAL_PACKAGES)
-                .because("ADR-021: el codigo de un vertical vive en el paquete del vertical, "
-                        + "no en api.resource.execution / service.process / entity del motor");
+                .should().resideInAnyPackage(VERTICAL_PACKAGES, VERTICAL_MODULE_PACKAGES)
+                .because("ADR-021: el codigo de un vertical vive en su modulo (o, mientras migra, "
+                        + "en el paquete del vertical), no en paquetes genericos del motor");
 
         FreezingArchRule.freeze(rule).check(platformClasses);
     }
@@ -140,6 +175,21 @@ class VerticalBoundaryArchTest {
 
     private static String relativeToPlatform(Path file) {
         return ENGINE_SOURCE_ROOT.relativize(file).toString().replace('\\', '/');
+    }
+
+    /** Negacion de {@link VerticalNamedClasses}: lo que NO delata pertenencia a un vertical. */
+    private static final class NotVerticalNamedClasses
+            extends com.tngtech.archunit.base.DescribedPredicate<com.tngtech.archunit.core.domain.JavaClass> {
+
+        private NotVerticalNamedClasses() {
+            super("no tienen nombre de un vertical");
+        }
+
+        @Override
+        public boolean test(com.tngtech.archunit.core.domain.JavaClass javaClass) {
+            var simpleName = javaClass.getSimpleName();
+            return VERTICAL_CLASS_PREFIXES.stream().noneMatch(simpleName::startsWith);
+        }
     }
 
     /** Clases cuyo nombre delata pertenencia a un vertical. */

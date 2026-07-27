@@ -1,6 +1,5 @@
 package com.integrationhub.platform.service.execution;
 
-import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;

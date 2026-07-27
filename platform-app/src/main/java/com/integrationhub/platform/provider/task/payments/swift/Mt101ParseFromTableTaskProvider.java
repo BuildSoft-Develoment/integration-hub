@@ -14,7 +14,6 @@ import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
-import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
