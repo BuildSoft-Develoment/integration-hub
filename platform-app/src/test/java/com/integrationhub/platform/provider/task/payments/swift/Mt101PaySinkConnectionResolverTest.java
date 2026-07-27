@@ -1,5 +1,7 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.vertical.swift.mt101.provider.Mt101DispatchPlanCompiler;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.task.sink.SinkDefinitionService;

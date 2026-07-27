@@ -1,5 +1,9 @@
 package com.integrationhub.platform.service.execution;
 
+import com.integrationhub.platform.provider.task.payments.swift.Mt101MessageInputResolver;
+
+
+
 import com.integrationhub.platform.domain.TaskType;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import org.junit.jupiter.api.Test;

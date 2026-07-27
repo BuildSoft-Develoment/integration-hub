@@ -1,5 +1,7 @@
 package com.integrationhub.platform.service.payments.swift;
 
+import com.integrationhub.vertical.swift.mt101.service.Mt101PayStatusConnectionCoverageValidator;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.spi.process.ProcessTaskView;
 import org.junit.jupiter.api.Test;

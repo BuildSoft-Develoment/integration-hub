@@ -1,8 +1,8 @@
 package com.integrationhub.platform.api.resource.payments;
 
 import com.integrationhub.vertical.swift.mt101.provider.Mt101PayDispatchIntentStore;
-import com.integrationhub.platform.service.payments.swift.Mt101PayDispatchIntentLookupService;
-import com.integrationhub.platform.service.payments.swift.Mt101PayDispatchIntentReconcileService;
+import com.integrationhub.vertical.swift.mt101.service.Mt101PayDispatchIntentLookupService;
+import com.integrationhub.vertical.swift.mt101.service.Mt101PayDispatchIntentReconcileService;
 import jakarta.annotation.security.RolesAllowed;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.GET;

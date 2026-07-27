@@ -1,5 +1,7 @@
 package com.integrationhub.platform.provider.task.payments.swift.format;
 
+import com.integrationhub.vertical.swift.mt101.provider.format.XmlMt101Formatter;
+
 import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

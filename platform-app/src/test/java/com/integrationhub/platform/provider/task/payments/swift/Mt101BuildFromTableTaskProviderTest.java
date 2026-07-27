@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.integrationhub.vertical.swift.mt101.spi.PaymentMessageFormatter;
-import com.integrationhub.platform.provider.task.payments.swift.format.JsonMt101Formatter;
+import com.integrationhub.vertical.swift.mt101.provider.format.JsonMt101Formatter;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.spi.task.TaskContext;
 import jakarta.enterprise.inject.Instance;

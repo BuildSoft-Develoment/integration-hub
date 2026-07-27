@@ -18,6 +18,12 @@
             <artifactId>platform-contract</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- ADR-021: contrato de extension del motor. Lo comparten el motor y los verticales. -->
+        <dependency>
+            <groupId>com.integrationhub</groupId>
+            <artifactId>platform-spi</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <!-- ADR-021 parte 2: el vertical como modulo propio. Mismo deployable (monolito modular):
              platform-app lo ensambla, no lo referencia por codigo. -->
         <dependency>

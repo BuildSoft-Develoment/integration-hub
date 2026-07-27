@@ -1,5 +1,8 @@
 package com.integrationhub.platform.service.payments.swift;
 
+import com.integrationhub.platform.service.payments.swift.Mt101ReflectionRegistrations;
+
+
 import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import com.integrationhub.vertical.swift.mt101.spi.ValidationIssue;
 import io.quarkus.runtime.annotations.RegisterForReflection;

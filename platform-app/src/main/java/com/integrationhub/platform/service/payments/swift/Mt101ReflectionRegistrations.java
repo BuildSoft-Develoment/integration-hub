@@ -1,5 +1,6 @@
 package com.integrationhub.platform.service.payments.swift;
 
+
 import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import com.integrationhub.vertical.swift.mt101.spi.ValidationIssue;
 import io.quarkus.runtime.annotations.RegisterForReflection;
@@ -20,8 +21,8 @@ import io.quarkus.runtime.annotations.RegisterForReflection;
         // (untyped) -> Quarkus NO auto-registra el DTO y en nativo el GET da 500
         // ("No serializer found for StagingRowView") => el operador no puede ni LEER la fila para
         // corregirla. Mismo patron que BrandingResponse. Cazado en el e2e de cuarentena 2026-07-14.
-        Mt101StagingCorrectionService.StagingRowView.class,
-        Mt101StagingCorrectionService.CorrectionResult.class,
+        com.integrationhub.platform.service.payments.swift.Mt101StagingCorrectionService.StagingRowView.class,
+        com.integrationhub.platform.service.payments.swift.Mt101StagingCorrectionService.CorrectionResult.class,
         // MT101_VALIDATE mete las issues en outputs["errors"] y el motor serializa los outputs
         // de la tarea con Jackson. Sin registrar, en nativo falla "No serializer found for
         // ValidationIssue" -> la tarea revienta. OJO: solo se manifiesta cuando HAY errores de

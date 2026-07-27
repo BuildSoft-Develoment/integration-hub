@@ -1,11 +1,13 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+
+
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
 import com.integrationhub.vertical.swift.mt101.provider.archive.AesGcmPayloadEncryptor;
 import com.integrationhub.vertical.swift.mt101.provider.archive.PayloadEncryptor;
 import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
-import com.integrationhub.platform.repository.payments.swift.Mt101ArchiveRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101ArchiveRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.service.execution.RecordAuditEmitter;
 import com.integrationhub.platform.spi.task.TaskContext;

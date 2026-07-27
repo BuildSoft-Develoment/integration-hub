@@ -18,9 +18,22 @@
             <artifactId>platform-contract</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- ADR-021: el contrato del motor. Es lo unico que el vertical necesita para aportar
+             sus capacidades (TaskProvider, readers, writers, sinks, config). -->
+        <dependency>
+            <groupId>com.integrationhub</groupId>
+            <artifactId>platform-spi</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-arc</artifactId>
+        </dependency>
+        <!-- Reglas de validacion con expresiones (ADR-018). -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-jexl3</artifactId>
+            <version>3.4.0</version>
         </dependency>
         <!-- El gateway de STATUS del banco consulta por SFTP. -->
         <dependency>

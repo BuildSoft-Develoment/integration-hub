@@ -1,5 +1,8 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.vertical.swift.mt101.provider.InboundDeliverySupport;
+import com.integrationhub.vertical.swift.mt101.provider.InboundDeliveryTransport;
+
 import com.integrationhub.vertical.swift.mt101.spi.PaymentMessageTransport;
 
 import com.integrationhub.platform.spi.task.TaskContext;
@@ -12,8 +15,8 @@ import jakarta.transaction.Transactional;
 
 import java.util.Map;
 
-import static com.integrationhub.platform.provider.task.payments.swift.InboundDeliverySupport.intValue;
-import static com.integrationhub.platform.provider.task.payments.swift.InboundDeliverySupport.stringValue;
+import static com.integrationhub.vertical.swift.mt101.provider.InboundDeliverySupport.intValue;
+import static com.integrationhub.vertical.swift.mt101.provider.InboundDeliverySupport.stringValue;
 
 /**
  * Task provider {@code MT101_INBOUND_DELIVER}: sink final del inbound (espejo de {@code MT101_PAY}). Lee del

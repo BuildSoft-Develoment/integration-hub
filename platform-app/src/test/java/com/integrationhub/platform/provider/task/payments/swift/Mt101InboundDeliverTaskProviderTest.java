@@ -1,5 +1,9 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.platform.provider.task.payments.swift.Mt101InboundDeliverTaskProvider;
+
+import com.integrationhub.vertical.swift.mt101.provider.InboundDeliveryTransport;
+
 import com.integrationhub.platform.spi.task.TaskContext;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.inject.Instance;

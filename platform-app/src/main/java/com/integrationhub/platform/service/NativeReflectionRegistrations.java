@@ -1,5 +1,6 @@
 package com.integrationhub.platform.service;
 
+
 import com.integrationhub.platform.api.response.branding.BrandingResponse;
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;

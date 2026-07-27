@@ -1,5 +1,7 @@
 package com.integrationhub.platform.provider.task.payments.swift.validation;
 
+import com.integrationhub.vertical.swift.mt101.provider.validation.DbValidationRuleProvider;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.vertical.swift.mt101.spi.ValidationIssue;
 import com.integrationhub.vertical.swift.mt101.spi.ValidationPredicate;

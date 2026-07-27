@@ -1,5 +1,6 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+
 import com.integrationhub.vertical.swift.mt101.spi.Mt101Message;
 import com.integrationhub.platform.spi.task.TaskContext;
 
@@ -17,21 +18,21 @@ import java.util.Map;
  * {@code {fragmentSetId, connectionRef}} publicada por {@code MT101_BUILD_FROM_TABLE}.
  * Esta clase mantiene ese contrato uniforme.</p>
  */
-final class Mt101MessageInputResolver {
+public final class Mt101MessageInputResolver {
 
     private Mt101MessageInputResolver() {
         // Utility class.
     }
 
     @SuppressWarnings("unchecked")
-    static List<Mt101Message> readMessages(TaskContext context,
+    public static List<Mt101Message> readMessages(TaskContext context,
                                            Map<String, Object> configuration,
                                            String taskType) {
         return readMessages(context, configuration, taskType, null);
     }
 
     @SuppressWarnings("unchecked")
-    static List<Mt101Message> readMessages(TaskContext context,
+    public static List<Mt101Message> readMessages(TaskContext context,
                                            Map<String, Object> configuration,
                                            String taskType,
                                            Mt101FragmentStore fragmentStore) {
@@ -42,7 +43,7 @@ final class Mt101MessageInputResolver {
     }
 
     @SuppressWarnings("unchecked")
-    static List<ResolvedMessage> readResolvedMessages(TaskContext context,
+    public static List<ResolvedMessage> readResolvedMessages(TaskContext context,
                                                       Map<String, Object> configuration,
                                                       String taskType,
                                                       Mt101FragmentStore fragmentStore) {
@@ -86,7 +87,7 @@ final class Mt101MessageInputResolver {
     }
 
     @SuppressWarnings("unchecked")
-    static Map<String, Object> fragmentSource(TaskContext context,
+    public static Map<String, Object> fragmentSource(TaskContext context,
                                               Map<String, Object> configuration,
                                               String taskType) {
         var raw = rawSource(context, configuration, taskType);
@@ -103,7 +104,7 @@ final class Mt101MessageInputResolver {
      * como {@code {inboundSetId, table, connectionRef}}). Vacio si el input no es inbound.
      */
     @SuppressWarnings("unchecked")
-    static Map<String, Object> inboundSource(TaskContext context,
+    public static Map<String, Object> inboundSource(TaskContext context,
                                              Map<String, Object> configuration,
                                              String taskType) {
         var raw = rawSource(context, configuration, taskType);

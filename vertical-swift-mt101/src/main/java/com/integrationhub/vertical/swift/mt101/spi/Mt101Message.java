@@ -10,7 +10,7 @@ import java.util.List;
  * <p>El mensaje se descompone en {@link Envelope} (blocks 1/2/3/5 SWIFT) +
  * {@link SequenceA} (cabecera comun) + lista de {@link Transaction} (Sequence B
  * repetitiva). Es la salida de {@link com.integrationhub.platform.provider.task.payments.swift.Mt101BuildTaskProvider}
- * y la entrada de {@link com.integrationhub.platform.provider.task.payments.swift.format.JsonMt101Formatter},
+ * y la entrada de {@link com.integrationhub.vertical.swift.mt101.provider.format.JsonMt101Formatter},
  * de los validadores y del task de pago.</p>
  *
  * <p>El {@code rawPayload} se rellena solo despues de formatear (no antes); es

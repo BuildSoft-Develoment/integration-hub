@@ -1,5 +1,9 @@
 package com.integrationhub.platform.provider.task.payments.swift;
 
+import com.integrationhub.vertical.swift.mt101.provider.InboundDeliverySupport;
+import com.integrationhub.vertical.swift.mt101.provider.InboundDeliveryTransport;
+import com.integrationhub.vertical.swift.mt101.provider.InboundRoutedTransactionMapper;
+
 
 import com.integrationhub.vertical.swift.mt101.repository.InboundRoutedTransactionRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
@@ -14,7 +18,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-import static com.integrationhub.platform.provider.task.payments.swift.InboundDeliverySupport.stringValue;
+import static com.integrationhub.vertical.swift.mt101.provider.InboundDeliverySupport.stringValue;
 
 /**
  * Transporte DB de {@code MT101_INBOUND_DELIVER}: aplana cada transaccion de los mensajes ruteados a la tabla

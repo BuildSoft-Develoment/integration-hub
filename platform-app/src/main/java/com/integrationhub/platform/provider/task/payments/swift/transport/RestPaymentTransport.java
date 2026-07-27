@@ -2,7 +2,7 @@ package com.integrationhub.platform.provider.task.payments.swift.transport;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.integrationhub.platform.provider.task.payments.swift.Mt101PaymentCorrelation;
+import com.integrationhub.vertical.swift.mt101.provider.Mt101PaymentCorrelation;
 import com.integrationhub.vertical.swift.mt101.spi.PaymentMessageTransport;
 import com.integrationhub.vertical.swift.mt101.spi.PreDispatchTransportException;
 import com.integrationhub.vertical.swift.mt101.spi.TransportResult;
