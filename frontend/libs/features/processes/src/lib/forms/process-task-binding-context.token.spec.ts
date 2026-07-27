@@ -1,6 +1,12 @@
 import { TestBed } from '@angular/core/testing';
 import { ReaderManagerService, SourceManagerService } from '@integration-hub/core/services';
 import { ProcessTaskBindingOption, ProcessTaskFormModel, SourceRef } from '@integration-hub/core/providers';
+import { ProcessTaskManagerService } from '@integration-hub/core/services';
+import {
+  Mt101ArchiveTaskProvider,
+  Mt101BuildFromTableTaskProvider,
+  PROCESS_TASK_PROVIDERS,
+} from '@integration-hub/core/providers';
 import { ProcessTaskBindingContextService } from './process-task-binding-context.service';
 
 /**
@@ -19,6 +25,13 @@ describe('ProcessTaskBindingContextService.tokenForOption (P1.c)', () => {
         ProcessTaskBindingContextService,
         { provide: ReaderManagerService, useValue: {} },
         { provide: SourceManagerService, useValue: { hydrateDraft: () => sourceDraft } },
+        // ADR-021: las salidas de una tarea ya no las infiere el motor: las declara el provider,
+        // asi que el binding necesita el manager con los providers del vertical registrados.
+        ProcessTaskManagerService,
+        Mt101ArchiveTaskProvider,
+        Mt101BuildFromTableTaskProvider,
+        { provide: PROCESS_TASK_PROVIDERS, useExisting: Mt101ArchiveTaskProvider, multi: true },
+        { provide: PROCESS_TASK_PROVIDERS, useExisting: Mt101BuildFromTableTaskProvider, multi: true },
       ],
     });
     service = TestBed.inject(ProcessTaskBindingContextService);

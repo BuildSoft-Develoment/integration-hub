@@ -26,6 +26,9 @@ export class Mt101ParseTaskProvider extends ProcessTaskProvider<Mt101ParseTaskDr
     labelKey: 'processTask.MT101_PARSE',
     descriptionKey: 'processTaskDescription.MT101_PARSE',
     category: 'swift-mt101',
+    availableOutputs: ['metadata', 'summary', 'records', 'errors'] as const,
+    defaultOutput: 'records' as const,
+    recordFields: ['sendersReference', 'messageIndex', 'messageTotal', 'format'] as const,
     modalLayout: 'workspace' as const,
   };
 

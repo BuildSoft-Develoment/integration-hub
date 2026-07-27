@@ -131,6 +131,8 @@ export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDr
     labelKey: 'processTask.MT101_BUILD_FROM_TABLE',
     descriptionKey: 'processTaskDescription.MT101_BUILD_FROM_TABLE',
     category: 'swift-mt101',
+    availableOutputs: ['metadata', 'summary', 'fragments'] as const,
+    defaultOutput: 'fragments' as const,
     modalLayout: 'workspace' as const,
   };
 

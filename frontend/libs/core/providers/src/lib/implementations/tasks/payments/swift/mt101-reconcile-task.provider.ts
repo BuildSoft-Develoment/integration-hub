@@ -51,6 +51,9 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
     labelKey: 'processTask.MT101_RECONCILE',
     descriptionKey: 'processTaskDescription.MT101_RECONCILE',
     category: 'swift-mt101',
+    availableOutputs: ['metadata', 'summary', 'records', 'errors'] as const,
+    defaultOutput: 'records' as const,
+    recordFields: ['sendersReference', 'status', 'matchedReference', 'mismatchReason'] as const,
     modalLayout: 'workspace' as const,
   };
 

@@ -37,6 +37,19 @@ export interface ProcessTaskProviderDescriptor {
    * Es lo que permite a un vertical tener su propio icono sin editar libs del motor.
    */
   nodePresentation?: ProcessFlowNodePresentation;
+  /**
+   * ADR-021: salidas que produce la tarea, DECLARADAS por el provider. El motor las ofrece para
+   * encadenar sin saber de que estandar son. Sin declarar, usa su default generico.
+   */
+  availableOutputs?: readonly ProcessTaskOutputKind[];
+  /** ADR-021: salida natural al encadenar (la que el editor sugiere por defecto). */
+  defaultOutput?: ProcessTaskOutputKind;
+  /**
+   * ADR-021: nombres de campo del output `records`, para poblar el binding. Antes el motor tenia
+   * una tabla con los campos de cada tarea MT101 (archiveId, gatewayReference, matchedReference...):
+   * vocabulario de un vertical dentro del motor de binding generico.
+   */
+  recordFields?: readonly string[];
   origin?: 'BUILTIN' | 'LOCAL' | 'REMOTE';
   pluginId?: string | null;
   pluginVersion?: string | null;

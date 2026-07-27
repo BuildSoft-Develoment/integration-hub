@@ -29,6 +29,9 @@ export class Mt101RepairTaskProvider extends ProcessTaskProvider<Mt101RepairTask
     labelKey: 'processTask.MT101_REPAIR',
     descriptionKey: 'processTaskDescription.MT101_REPAIR',
     category: 'swift-mt101',
+    availableOutputs: ['metadata', 'summary', 'records', 'errors'] as const,
+    defaultOutput: 'records' as const,
+    recordFields: ['sendersReference', 'messageIndex', 'messageTotal', 'format'] as const,
     modalLayout: 'workspace' as const,
   };
 

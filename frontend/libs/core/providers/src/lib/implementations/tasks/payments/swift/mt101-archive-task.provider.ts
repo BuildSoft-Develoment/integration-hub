@@ -47,6 +47,9 @@ export class Mt101ArchiveTaskProvider extends ProcessTaskProvider<Mt101ArchiveTa
     labelKey: 'processTask.MT101_ARCHIVE',
     descriptionKey: 'processTaskDescription.MT101_ARCHIVE',
     category: 'swift-mt101',
+    availableOutputs: ['metadata', 'summary', 'records', 'fragments', 'errors'] as const,
+    defaultOutput: 'records' as const,
+    recordFields: ['archiveId', 'envelopeId', 'hash', 'encrypted', 'sendersReference', 'messageIndex', 'messageTotal', 'format'] as const,
     modalLayout: 'workspace' as const,
   };
 

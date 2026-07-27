@@ -68,6 +68,9 @@ export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTask
     labelKey: 'processTask.MT101_STATUS',
     descriptionKey: 'processTaskDescription.MT101_STATUS',
     category: 'swift-mt101',
+    availableOutputs: ['metadata', 'summary', 'records', 'errors'] as const,
+    defaultOutput: 'records' as const,
+    recordFields: ['sendersReference', 'status', 'gatewayReference', 'lastUpdatedAt'] as const,
     modalLayout: 'workspace' as const,
   };
 

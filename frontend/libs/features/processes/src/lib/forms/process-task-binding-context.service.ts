@@ -9,13 +9,15 @@ import {
   SourceRef,
   SourceDraft,
 } from '@integration-hub/core/providers';
-import { ReaderManagerService, SourceManagerService } from '@integration-hub/core/services';
+import { ProcessTaskManagerService, ReaderManagerService, SourceManagerService } from '@integration-hub/core/services';
 import { DB_WRITE_METADATA_ITEMS } from '../models/process-db-write.models';
 
 @Injectable()
 export class ProcessTaskBindingContextService {
   private readonly readerManager = inject(ReaderManagerService);
   private readonly sourceManager = inject(SourceManagerService);
+  /** ADR-021: resuelve el descriptor del provider para leer lo que la tarea DECLARA de sus salidas. */
+  private readonly manager = inject(ProcessTaskManagerService);
 
   buildOptions(task: ProcessTaskFormModel, tasks: readonly ProcessTaskFormModel[], readers: readonly ReaderRef[], input?: ProcessTaskInputDraft): ProcessTaskBindingOption[] {
     const options: ProcessTaskBindingOption[] = [];
@@ -48,9 +50,18 @@ export class ProcessTaskBindingContextService {
       });
   }
 
+  /**
+   * ADR-021: gana lo que DECLARA el provider; si no declara, los defaults de los tipos propios del
+   * motor. Antes este switch enumeraba los 10 tipos MT101 — el motor de binding sabia que salidas
+   * produce cada tarea de un estandar de pagos.
+   */
   availableOutputsForTask(task: ProcessTaskFormModel | null): ProcessTaskOutputKind[] {
     if (!task) {
       return [];
+    }
+    const declared = this.manager.resolve(task.taskType)?.descriptor.availableOutputs;
+    if (declared?.length) {
+      return [...declared];
     }
     switch (task.taskType) {
       case 'FILE_READ':
@@ -60,22 +71,6 @@ export class ProcessTaskBindingContextService {
       case 'DB_EXECUTE_SP':
       case 'DB_EXECUTE_FN':
         return ['metadata', 'summary', 'out', 'errors'];
-      case 'MT101_PARSE':
-      case 'MT101_SPLIT':
-      case 'MT101_REPAIR':
-      case 'MT101_PAY':
-      case 'MT101_ROUTE':
-      case 'MT101_RECONCILE':
-      case 'MT101_STATUS':
-        return ['metadata', 'summary', 'records', 'errors'];
-      // Flujo masivo (RNF-04): el fragment source pasa de tarea en tarea
-      // por referencia, sin cargar los mensajes en los outputs.
-      case 'MT101_BUILD_FROM_TABLE':
-        return ['metadata', 'summary', 'fragments'];
-      case 'MT101_ARCHIVE':
-        return ['metadata', 'summary', 'records', 'fragments', 'errors'];
-      case 'MT101_VALIDATE':
-        return ['metadata', 'summary', 'fragments', 'errors'];
       case 'REST_CALL':
       case 'NOTIFICATION':
         return ['metadata', 'summary', 'errors'];
@@ -88,24 +83,18 @@ export class ProcessTaskBindingContextService {
     if (!task) {
       return 'metadata';
     }
+    // ADR-021: la salida natural la declara el provider; el motor solo conoce la de sus tipos.
+    const declared = this.manager.resolve(task.taskType)?.descriptor.defaultOutput;
+    if (declared) {
+      return declared;
+    }
     switch (task.taskType) {
       case 'DB_WRITE':
         return 'table';
       case 'DB_EXECUTE_SP':
       case 'DB_EXECUTE_FN':
         return 'out';
-      // En el flujo masivo el encadenamiento natural es por fragment source.
-      case 'MT101_BUILD_FROM_TABLE':
-        return 'fragments';
       case 'FILE_READ':
-      case 'MT101_PARSE':
-      case 'MT101_SPLIT':
-      case 'MT101_REPAIR':
-      case 'MT101_ARCHIVE':
-      case 'MT101_PAY':
-      case 'MT101_ROUTE':
-      case 'MT101_RECONCILE':
-      case 'MT101_STATUS':
         return 'records';
       default:
         return 'summary';
@@ -265,10 +254,8 @@ export class ProcessTaskBindingContextService {
         if (sourceTask.taskType === 'FILE_READ') {
           return this.readerFieldOptions(sourceTask, readers);
         }
-        if (this.isMt101Task(sourceTask.taskType)) {
-          return this.mt101RecordOptions(sourceTask.taskType);
-        }
-        return [];
+        // ADR-021: los campos del output `records` los declara el provider de la tarea.
+        return this.declaredRecordOptions(sourceTask.taskType);
       case 'table': {
         const columns = this.tableColumnOptions(config);
         if (columns.length > 0) {
@@ -428,20 +415,15 @@ export class ProcessTaskBindingContextService {
       : 'records';
   }
 
-  private isMt101Task(taskType: string): boolean {
-    return taskType.startsWith('MT101_');
-  }
-
-  private mt101RecordOptions(taskType: string): ProcessTaskBindingOption[] {
-    const common = ['sendersReference', 'messageIndex', 'messageTotal', 'format'];
-    const byType: Record<string, string[]> = {
-      MT101_ARCHIVE: ['archiveId', 'envelopeId', 'hash', 'encrypted', ...common],
-      MT101_PAY: ['sendersReference', 'status', 'gatewayReference', 'attempts', 'durationMs', 'lastError'],
-      MT101_ROUTE: ['sendersReference', 'route', 'status', 'reason'],
-      MT101_RECONCILE: ['sendersReference', 'status', 'matchedReference', 'mismatchReason'],
-      MT101_STATUS: ['sendersReference', 'status', 'gatewayReference', 'lastUpdatedAt'],
-    };
-    return (byType[taskType] ?? common).map((name) => ({
+  /**
+   * ADR-021: campos del output `records` declarados por el provider. Antes el motor tenia embebida
+   * una tabla con los campos de cada tarea MT101 (archiveId, gatewayReference, matchedReference...)
+   * y un `taskType.startsWith('MT101_')` para elegirla: vocabulario de un estandar de pagos dentro
+   * del motor de binding generico.
+   */
+  private declaredRecordOptions(taskType: string): ProcessTaskBindingOption[] {
+    const fields = this.manager.resolve(taskType)?.descriptor.recordFields ?? [];
+    return fields.map((name) => ({
       key: name,
       label: name,
       kind: 'records' as const,

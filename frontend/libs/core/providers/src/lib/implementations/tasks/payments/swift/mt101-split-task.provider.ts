@@ -20,6 +20,9 @@ export class Mt101SplitTaskProvider extends ProcessTaskProvider<Mt101SplitTaskDr
     labelKey: 'processTask.MT101_SPLIT',
     descriptionKey: 'processTaskDescription.MT101_SPLIT',
     category: 'swift-mt101',
+    availableOutputs: ['metadata', 'summary', 'records', 'errors'] as const,
+    defaultOutput: 'records' as const,
+    recordFields: ['sendersReference', 'messageIndex', 'messageTotal', 'format'] as const,
     modalLayout: 'workspace' as const,
   };
 

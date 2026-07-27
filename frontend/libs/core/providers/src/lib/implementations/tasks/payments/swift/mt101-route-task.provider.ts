@@ -39,6 +39,9 @@ export class Mt101RouteTaskProvider extends ProcessTaskProvider<Mt101RouteTaskDr
     labelKey: 'processTask.MT101_ROUTE',
     descriptionKey: 'processTaskDescription.MT101_ROUTE',
     category: 'swift-mt101',
+    availableOutputs: ['metadata', 'summary', 'records', 'errors'] as const,
+    defaultOutput: 'records' as const,
+    recordFields: ['sendersReference', 'route', 'status', 'reason'] as const,
     modalLayout: 'workspace' as const,
   };
 

@@ -100,6 +100,9 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
     labelKey: 'processTask.MT101_PAY',
     descriptionKey: 'processTaskDescription.MT101_PAY',
     category: 'swift-mt101',
+    availableOutputs: ['metadata', 'summary', 'records', 'errors'] as const,
+    defaultOutput: 'records' as const,
+    recordFields: ['sendersReference', 'status', 'gatewayReference', 'attempts', 'durationMs', 'lastError'] as const,
     modalLayout: 'workspace' as const,
   };
 
