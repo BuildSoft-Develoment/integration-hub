@@ -6,6 +6,7 @@ import { of } from 'rxjs';
 import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
 import { Mt101FailedRecord } from '../../models/mt101.models';
 import { Mt101QuarantineComponent } from './mt101-quarantine.component';
+import { Mt101CorrectionSheetFlowService } from '../../services/mt101-correction-sheet-flow.service';
 
 function failed(p: Partial<Mt101FailedRecord>): Mt101FailedRecord {
   return {
@@ -64,6 +65,9 @@ describe('Mt101QuarantineComponent', () => {
       },
       mt101FragmentSetSummary: () => of({ fragmentSetId: 'S', total: 0, byStatus: {} }),
       mt101FailedRecords: () => of([] as Mt101FailedRecord[]),
+      // ADR-020 (A): el resumen por causa se carga junto con la lista; sin stub, list() reventaba
+      // como unhandled error dentro de los subscribe de rebuild/correctivo.
+      mt101SummaryByRule: () => of([]),
       mt101BuildQuarantine: () => of({ fragmentSetId: 'S', quarantined: 0 }),
       mt101RebuildRuns: () => of([]),
       mt101StagingRow: () => of({
@@ -99,6 +103,9 @@ describe('Mt101QuarantineComponent', () => {
         { provide: Mt101AuditApiService, useValue: api },
         { provide: ActivatedRoute, useValue: route },
         { provide: AuthAccessService, useValue: access },
+        // El componente lo declara en su propio `providers`, pero el spec lo instancia a mano
+        // (runInInjectionContext usa el injector raiz del TestBed, no el del nodo del componente).
+        Mt101CorrectionSheetFlowService,
       ],
     });
     component = TestBed.runInInjectionContext(() => new Mt101QuarantineComponent());
@@ -232,8 +239,9 @@ describe('Mt101QuarantineComponent', () => {
       expect(correctCalls).toBe(0);
     });
 
-    it('envia la version cargada al guardar', () => {
+    it('envia la version cargada al guardar (modo avanzado / JSON crudo)', () => {
       component.fragmentSetId = 'S';
+      component.correctionAdvanced.set(true);
       component.correctionPayload = '{"cargos":"OUR"}';
       component.correctionVersion.set(7);
 
@@ -246,6 +254,42 @@ describe('Mt101QuarantineComponent', () => {
 
       expect(correctCalls).toBe(1);
       expect(lastCorrectionVersion).toBe(7);
+    });
+
+    it('en modo campos envia solo los campos editados y respeta el If-Match', () => {
+      component.fragmentSetId = 'S';
+      component.correctionVersion.set(7);
+      // Editor 1-a-1: el modo por defecto arma un merge-patch con SOLO lo que cambio.
+      component.correctionAdvanced.set(false);
+      component.correctionEditableKeys.set(['cargos', 'moneda']);
+      component.correctionEdits = { cargos: 'OUR', moneda: 'PEN' };
+
+      component.saveCorrection(failed({
+        id: 1,
+        sourceFileHash: 'hashA',
+        sourceRecordNumber: 25,
+        stagingId: 10025,
+      }));
+
+      expect(correctCalls).toBe(1);
+      expect(lastCorrectionVersion).toBe(7);
+    });
+
+    it('en modo campos no llama al backend si no se edito nada (patch vacio)', () => {
+      component.fragmentSetId = 'S';
+      component.correctionVersion.set(7);
+      component.correctionAdvanced.set(false);
+      component.correctionEditableKeys.set([]);
+      component.correctionEdits = {};
+
+      component.saveCorrection(failed({
+        id: 1,
+        sourceFileHash: 'hashA',
+        sourceRecordNumber: 25,
+        stagingId: 10025,
+      }));
+
+      expect(correctCalls).toBe(0);
     });
   });
 });

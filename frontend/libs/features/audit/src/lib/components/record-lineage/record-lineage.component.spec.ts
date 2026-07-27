@@ -93,8 +93,14 @@ describe('RecordLineageComponent', () => {
       expect(lastQuery).toEqual({ key: 'archiveId', value: '42', limit: 500 });
     });
 
-    it('pivotSourceRow pasa a modo Archivo+fila', () => {
-      component.pivotSourceRow('abc', 1002);
+    it('pivotSourceRow pasa a modo Archivo+fila y acota a la ejecucion del hito', () => {
+      component.pivotSourceRow('abc', 1002, 65);
+      expect(component.mode()).toBe('sourceRow');
+      expect(lastQuery).toEqual({ sourceFileHash: 'abc', recordNumber: '1002', processExecutionId: '65', limit: 500 });
+    });
+
+    it('pivotSourceRow sin ejecucion no acota (mezcla reprocesos del mismo archivo+fila)', () => {
+      component.pivotSourceRow('abc', 1002, null);
       expect(component.mode()).toBe('sourceRow');
       expect(lastQuery).toEqual({ sourceFileHash: 'abc', recordNumber: '1002', limit: 500 });
     });
