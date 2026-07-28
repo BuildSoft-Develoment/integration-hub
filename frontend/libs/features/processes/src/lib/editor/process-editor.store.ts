@@ -1,6 +1,7 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
 
 import { AuthAccessService, ProcessTaskManagerService } from '@integration-hub/core/services';
+import { PROCESS_TEMPLATE_REGISTRY } from '@integration-hub/core/providers';
 
 import { ProcessFlowApiService } from '../api/process-flow-api.service';
 import { ProcessFlowNodePosition } from '../models/process-flow.models';
@@ -27,6 +28,8 @@ export class ProcessEditorStore {
   // M-1a: el config inicial sale del provider registrado via el manager.
   // Optional: true para tests que no proveen el servicio.
   private readonly taskManager = inject(ProcessTaskManagerService, { optional: true });
+  /** ADR-021: plantillas de proceso que aportan los verticales; el editor solo las ensambla. */
+  private readonly templates = inject(PROCESS_TEMPLATE_REGISTRY, { optional: true }) ?? [];
 
   readonly saving = signal(false);
   readonly executing = signal(false);
@@ -44,6 +47,8 @@ export class ProcessEditorStore {
   });
 
   readonly canEdit = computed(() => this.access.canAdmin());
+  /** ADR-021: plantillas que el editor puede ofrecer; las aporta cada vertical, no el motor. */
+  readonly availableTemplates = this.templates;
   readonly canOperate = computed(() => this.access.canOperate());
   readonly formTitle = computed(() =>
     this.viewMode() === 'edit'
@@ -165,50 +170,18 @@ export class ProcessEditorStore {
    * MT101 downstream consumen `<build>.fragments` (la referencia al set
    * persistido); cada etapa filtra por su gate de estado.
    */
-  applyMassiveMt101Template(): void {
-    const buildRef = 'build-mt101-masivo';
-    const fragmentsInput = {
-      source: 'task-output' as const,
-      sourceTaskRef: buildRef,
-      sourceOutput: 'fragments' as const,
-    };
-    const specs: Array<{ taskType: ProcessTaskType; ref: string; overrides: Record<string, unknown> }> = [
-      { taskType: 'FILE_READ', ref: 'leer-archivo', overrides: { executionMode: 'batch' } },
-      { taskType: 'DB_WRITE', ref: 'staging', overrides: {
-          executionMode: 'batch',
-          mode: 'insert',
-          targetTable: 'staging_record',
-          jdbcBatchSize: 5000,
-          input: { source: 'task-output', sourceTaskRef: 'leer-archivo', sourceOutput: 'records' },
-        } },
-      { taskType: 'MT101_BUILD_FROM_TABLE', ref: buildRef, overrides: {
-          executionMode: 'once',
-          input: { source: 'task-output', sourceTaskRef: 'staging', sourceOutput: 'table' },
-          fragmentSetIdTemplate: 'MT101-${_processExecutionId}',
-          replaceExisting: true,
-          maxTransactionsPerMessage: 100,
-          maxBytesPerMessage: 10000,
-        } },
-      { taskType: 'MT101_VALIDATE', ref: 'validar', overrides: {
-          executionMode: 'once',
-          input: fragmentsInput,
-          pageSize: 200,
-          publishIssuesTo: 'table:mt101_validation_issue',
-          maxIssuesInOutput: 1000,
-        } },
-      { taskType: 'MT101_ARCHIVE', ref: 'archivar', overrides: {
-          executionMode: 'once',
-          input: fragmentsInput,
-          pageSize: 200,
-          maxRecordsInOutput: 1000,
-        } },
-      { taskType: 'MT101_PAY', ref: 'pagar', overrides: {
-          executionMode: 'once',
-          input: fragmentsInput,
-          pageSize: 200,
-          maxRecordsInOutput: 1000,
-        } },
-    ];
+  /**
+   * ADR-021: aplica una plantilla REGISTRADA por un vertical. Antes este metodo se llamaba
+   * `applyMassiveMt101Template` y traia los 6 tipos de MT101 con sus configs escritos aca:
+   * una store generica que conocia un estandar. Ahora aporta solo el ensamblado.
+   */
+  applyTemplate(templateId: string): void {
+    const template = this.templates.find((item) => item.id === templateId);
+    if (!template) {
+      // Politica no-fallback: una plantilla ausente es un error de cableado, no un no-op.
+      throw new Error(`process template not registered: ${templateId}`);
+    }
+    const specs = template.tasks;
 
     const tasks = normalizeTaskOrders(specs.map((spec, index) => {
       const base = this.defaultConfigurationJson(spec.taskType, spec.ref);

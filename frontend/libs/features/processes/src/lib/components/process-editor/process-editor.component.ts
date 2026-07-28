@@ -1,6 +1,7 @@
 // @trace RF-001 (procesos: editor de definicion de proceso con tareas ordenadas)
 import { CommonModule } from '@angular/common';
 import { Component, inject, input, output } from '@angular/core';
+import { ProcessTemplateRegistration } from '@integration-hub/core/providers';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { I18nService } from '@integration-hub/core/services';
@@ -46,7 +47,9 @@ export class ProcessEditorComponent {
   readonly flowStateChange = output<{ layout: ProcessFlowLayout; tasks: ProcessTaskFormModel[] }>();
   readonly addTask = output<ProcessTaskType>();
   readonly addTaskAt = output<{ taskType: ProcessTaskType; position?: { x: number; y: number } }>();
-  readonly applyMassiveTemplate = output<void>();
+  /** ADR-021: plantillas registradas por los verticales; el editor solo las ofrece. */
+  readonly templates = input<readonly ProcessTemplateRegistration[]>([]);
+  readonly applyTemplate = output<string>();
   readonly patchTask = output<{ clientId: string; patch: Partial<ProcessTaskFormModel> }>();
   readonly removeTask = output<string>();
   readonly save = output<void>();

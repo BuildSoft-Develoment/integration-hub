@@ -9,9 +9,9 @@ import { DbExecuteStoredProcedureTaskDraft, ProcessTaskFormBridgeService, Proces
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { firstValueFrom } from 'rxjs';
 import { ConnectionRef, ProcessTaskFormModel, ReaderRef } from '../../../../models/process.models';
-import { ProcessApiService } from '../../../../api/process-api.service';
+import { ConnectionIntrospectionApiService } from '@integration-hub/shared/process-form-kit';
 import { ProcessTaskBindingContextService } from '@integration-hub/shared/process-form-kit';
-import { DbRoutineRef } from '../../../../models/process-db-routine.models';
+import { DbRoutineRef } from '@integration-hub/shared/process-form-kit';
 import { DbWriteSchemaRef } from '@integration-hub/shared/process-form-kit';
 import { ProcessDbRoutineSelectorComponent } from '../process-db-routine-selector/process-db-routine-selector.component';
 import { ProcessTaskBindingBoardComponent } from '@integration-hub/shared/process-form-kit';
@@ -28,7 +28,7 @@ import { TaskFormShellComponent } from '@integration-hub/shared/process-form-kit
 })
 export class ProcessDbExecuteSpTaskFormComponent {
   readonly i18n = inject(I18nService);
-  private readonly api = inject(ProcessApiService);
+  private readonly api = inject(ConnectionIntrospectionApiService);
   private readonly manager = inject(ProcessTaskManagerService);
   private readonly bindingContext = inject(ProcessTaskBindingContextService);
   // M-1b: outputs viajan al host via bridge.

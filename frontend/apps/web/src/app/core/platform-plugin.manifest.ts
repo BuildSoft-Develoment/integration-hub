@@ -53,9 +53,19 @@ export const PLATFORM_ROUTE_CONTRIBUTIONS: readonly AppRouteContribution[] = [
     path: '/processes',
     titleKey: 'processes.title',
     requiredCapability: APP_SECTION_CAPABILITIES.processes,
+    // ADR-021: la APP ensambla el catalogo con lo que aporta cada vertical. Es la unica capa que
+    // puede ver dos features a la vez (feature -> feature esta prohibido por las fronteras Nx), y
+    // por eso el cableado vive aca y no dentro de `features/processes`. Dar de alta SBS es agregar
+    // un import y su `provideSbs...()` — sin tocar el motor.
+    //
+    // Los dos imports estan DENTRO de loadChildren: el vertical viaja en el chunk de la ruta, no
+    // en el bundle inicial.
     loadChildren: () =>
-      import('@integration-hub/features/processes').then(
-        (module) => module.processCatalogRoutes
+      Promise.all([
+        import('@integration-hub/features/processes'),
+        import('@integration-hub/features/swift-mt101'),
+      ]).then(([processes, swiftMt101]) =>
+        processes.buildProcessCatalogRoutes(swiftMt101.provideSwiftMt101ProcessTasks())
       ),
   },
   {
@@ -64,7 +74,7 @@ export const PLATFORM_ROUTE_CONTRIBUTIONS: readonly AppRouteContribution[] = [
     titleKey: 'paymentRules.title',
     requiredCapability: APP_SECTION_CAPABILITIES.paymentRules,
     loadChildren: () =>
-      import('@integration-hub/features/payments').then(
+      import('@integration-hub/features/swift-mt101').then(
         (module) => module.paymentValidationRulesRoutes
       ),
   },

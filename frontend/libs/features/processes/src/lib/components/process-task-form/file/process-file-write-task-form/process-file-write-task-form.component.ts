@@ -25,7 +25,7 @@ import {
 import { COMMON_ENCODINGS, SuggestInputComponent } from '@integration-hub/shared/ui';
 import { firstValueFrom } from 'rxjs';
 import { ConnectionRef, ProcessTaskFormModel, ReaderRef } from '../../../../models/process.models';
-import { ProcessApiService } from '../../../../api/process-api.service';
+import { ConnectionIntrospectionApiService } from '@integration-hub/shared/process-form-kit';
 import { DbWriteColumnRef, DbWriteSourceItem, DbWriteTableRef } from '@integration-hub/shared/process-form-kit';
 import { ProcessTaskBindingContextService } from '@integration-hub/shared/process-form-kit';
 import { BindingOriginSelectComponent } from '@integration-hub/shared/process-form-kit';
@@ -82,7 +82,7 @@ export class ProcessFileWriteTaskFormComponent {
   readonly i18n = inject(I18nService);
   private readonly manager = inject(ProcessTaskManagerService);
   private readonly bridge = inject(ProcessTaskFormBridgeService);
-  private readonly api = inject(ProcessApiService);
+  private readonly api = inject(ConnectionIntrospectionApiService);
   private readonly bindingContext = inject(ProcessTaskBindingContextService);
 
   readonly task = input.required<ProcessTaskFormModel>();

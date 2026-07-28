@@ -42,6 +42,8 @@ export class ProcessCatalogStore {
   readonly form = this.editor.form;
   readonly dirty = this.editor.dirty;
   readonly canEdit = this.editor.canEdit;
+  /** ADR-021: plantillas de proceso registradas por los verticales. */
+  readonly availableTemplates = this.editor.availableTemplates;
   readonly canOperate = this.editor.canOperate;
   readonly pagedProcesses = computed(() => this.query.pagedProcesses());
   readonly formTitle = this.editor.formTitle;
@@ -113,8 +115,8 @@ export class ProcessCatalogStore {
     this.editor.addTaskAt(taskType, position);
   }
 
-  applyMassiveMt101Template(): void {
-    this.editor.applyMassiveMt101Template();
+  applyTemplate(templateId: string): void {
+    this.editor.applyTemplate(templateId);
   }
 
   updateTask(clientId: string, patch: Partial<ProcessTaskFormModel>): void {

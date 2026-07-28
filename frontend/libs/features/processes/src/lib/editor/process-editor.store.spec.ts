@@ -1,21 +1,52 @@
 import { TestBed } from '@angular/core/testing';
 import { ProcessTaskManagerService } from '@integration-hub/core/services';
 import {
-  Mt101ArchiveTaskProvider,
-  Mt101BuildFromTableTaskProvider,
-  Mt101PayTaskProvider,
-  Mt101ValidateTaskProvider,
   PROCESS_TASK_PROVIDERS,
+  ProcessTaskFormModel,
+  ProcessTaskProvider,
+  ProcessTaskProviderDescriptor,
+  provideProcessTemplate,
   provideProcessTaskProviders,
 } from '@integration-hub/core/providers';
 
-/** Los 4 tipos del vertical que encadena el template masivo, registrados como en produccion. */
-const MT101_TEMPLATE_PROVIDERS = [
-  Mt101BuildFromTableTaskProvider,
-  Mt101ValidateTaskProvider,
-  Mt101ArchiveTaskProvider,
-  Mt101PayTaskProvider,
-];
+/** ADR-021: provider ficticio que DECLARA su salida por defecto (antes el caso era un tipo MT101). */
+class FakeDeclaresOutputProvider extends ProcessTaskProvider<Record<string, unknown>> {
+  override readonly descriptor: ProcessTaskProviderDescriptor = {
+    type: 'FAKE_DECLARES_OUTPUT',
+    labelKey: 'processTask.FAKE_DECLARES_OUTPUT',
+    descriptionKey: 'processTaskDescription.FAKE_DECLARES_OUTPUT',
+    defaultOutput: 'fragments',
+  };
+
+  createDraft(): Record<string, unknown> {
+    return {};
+  }
+
+  hydrateDraft(): Record<string, unknown> {
+    return {};
+  }
+
+  toTaskPatch(): Partial<ProcessTaskFormModel> {
+    return {};
+  }
+}
+
+/** ADR-021: plantilla FICTICIA — el editor solo ensambla; el contenido lo aporta cada vertical. */
+const FAKE_TEMPLATE = {
+  id: 'fake-template',
+  labelKey: 'processes.template.fake',
+  tasks: [
+    { taskType: 'FILE_READ' as const, ref: 'leer', overrides: { executionMode: 'batch' } },
+    {
+      taskType: 'DB_WRITE' as const,
+      ref: 'guardar',
+      overrides: {
+        targetTable: 'staging_record',
+        input: { source: 'task-output', sourceTaskRef: 'leer', sourceOutput: 'records' },
+      },
+    },
+  ],
+};
 
 import { AuthAccessService } from '@integration-hub/core/services';
 
@@ -31,14 +62,11 @@ describe('ProcessEditorStore', () => {
       providers: [
         ProcessEditorStore,
         ProcessTaskManagerService,
-        // Los tipos del motor + los del vertical que usa el template masivo.
+        // Solo los tipos del motor: el editor ya no conoce ninguno de un vertical.
         ...provideProcessTaskProviders(),
-        ...MT101_TEMPLATE_PROVIDERS,
-        ...MT101_TEMPLATE_PROVIDERS.map((cls) => ({
-          provide: PROCESS_TASK_PROVIDERS,
-          useExisting: cls,
-          multi: true,
-        })),
+        provideProcessTemplate(FAKE_TEMPLATE),
+        FakeDeclaresOutputProvider,
+        { provide: PROCESS_TASK_PROVIDERS, useExisting: FakeDeclaresOutputProvider, multi: true },
         ProcessFlowApiService,
         {
           provide: AuthAccessService,
@@ -67,55 +95,33 @@ describe('ProcessEditorStore', () => {
     expect(store.form().tasks[0].readerDefinitionId).toBe(21);
   });
 
-  it('applyMassiveMt101Template scaffolds the full chain with fragments bindings', () => {
-    store.applyMassiveMt101Template();
+  it('applyTemplate ensambla la plantilla REGISTRADA: orden, refs, merge y cadena (ADR-021)', () => {
+    // Plantilla ficticia a proposito: lo que se prueba es el ENSAMBLADO del editor, no el contenido
+    // de ningun estandar. Antes este test aplicaba la cadena MT101 escrita dentro de la store; ahora
+    // el QUE lo aporta el vertical (y lo prueba el vertical) y el COMO se prueba aca.
+    store.applyTemplate('fake-template');
 
     const tasks = store.form().tasks;
-    expect(tasks.map((t) => t.taskType)).toEqual([
-      'FILE_READ', 'DB_WRITE', 'MT101_BUILD_FROM_TABLE',
-      'MT101_VALIDATE', 'MT101_ARCHIVE', 'MT101_PAY',
-    ]);
+    expect(tasks.map((t) => t.taskType)).toEqual(['FILE_READ', 'DB_WRITE']);
+    expect(tasks.map((t) => t.taskOrder)).toEqual([1, 2]);
 
     const configOf = (index: number) => JSON.parse(tasks[index].configurationJson || '{}');
-    // DB_WRITE consume los records del FILE_READ hacia staging_record.
-    expect(configOf(1).input).toMatchObject({ sourceTaskRef: 'leer-archivo', sourceOutput: 'records' });
-    expect(configOf(1).targetTable).toBe('staging_record');
-    expect(configOf(1).jdbcBatchSize).toBe(5000);
-    // BUILD_FROM_TABLE lee la tabla staging.
-    expect(configOf(2).input).toMatchObject({ sourceTaskRef: 'staging', sourceOutput: 'table' });
-    expect(configOf(2)).toMatchObject({
-      fragmentSetIdTemplate: 'MT101-${_processExecutionId}',
-      replaceExisting: true,
-      maxTransactionsPerMessage: 100,
-      maxBytesPerMessage: 10000,
+    // El ref se persiste como taskRef, y los overrides pisan al config por defecto del provider.
+    expect(configOf(0).taskRef).toBe('leer');
+    expect(configOf(1)).toMatchObject({
+      taskRef: 'guardar',
+      targetTable: 'staging_record',
+      input: { sourceTaskRef: 'leer', sourceOutput: 'records' },
     });
-    // BUILD_FROM_TABLE no lee maxRecordsInOutput (solo lo leen ARCHIVE y PAY): sembrarlo aca era config muerta.
-    expect(configOf(2).maxRecordsInOutput).toBeUndefined();
-    expect(configOf(3)).toMatchObject({
-      pageSize: 200,
-      publishIssuesTo: 'table:mt101_validation_issue',
-      maxIssuesInOutput: 1000,
-    });
-    expect(configOf(4)).toMatchObject({ pageSize: 200, maxRecordsInOutput: 1000 });
-    expect(configOf(5)).toMatchObject({ pageSize: 200, maxRecordsInOutput: 1000 });
-    // VALIDATE / ARCHIVE / PAY encadenan fragments del build (no records/summary).
-    for (const i of [3, 4, 5]) {
-      expect(configOf(i).input).toMatchObject({
-        sourceTaskRef: 'build-mt101-masivo',
-        sourceOutput: 'fragments',
-      });
-      expect(configOf(i).executionMode).toBe('once');
-    }
 
-    // El flujo queda CONECTADO en cadena (regresion: antes los nodos aparecian
-    // sueltos, sin conectores, al aplicar el template masivo).
+    // El flujo queda CONECTADO en cadena (regresion: antes los nodos aparecian sueltos).
     const edges = store.form().flowLayout.edges;
     expect(edges).toHaveLength(tasks.length - 1);
-    for (let i = 0; i < tasks.length - 1; i++) {
-      expect(
-        edges.some((e) => e.source === tasks[i].clientId && e.target === tasks[i + 1].clientId)
-      ).toBe(true);
-    }
+    expect(edges.some((e) => e.source === tasks[0].clientId && e.target === tasks[1].clientId)).toBe(true);
+  });
+
+  it('applyTemplate falla fuerte si la plantilla no esta registrada (politica no-fallback)', () => {
+    expect(() => store.applyTemplate('no-existe')).toThrow(/not registered/);
   });
 
   it('should clear scheduleEvery when scheduled is disabled', () => {
@@ -157,11 +163,14 @@ describe('ProcessEditorStore', () => {
   });
 
   it('la salida sugerida al encadenar sale del descriptor, no de un switch propio (ADR-021)', () => {
-    // Regresion: el store tenia un clon del switch del binding context y ya estaba desincronizado
-    // (le faltaba MT101_BUILD_FROM_TABLE), asi que el editor de flujo sugeria 'summary' y el panel
-    // de runtime 'fragments' para la MISMA tarea origen. Ahora hay una sola fuente de verdad.
+    // Regresion: el store tenia un clon del switch del binding context y ya estaba desincronizado,
+    // asi que el editor de flujo sugeria 'summary' y el panel de runtime otra cosa para la MISMA
+    // tarea origen. Ahora hay una sola fuente de verdad: el descriptor del provider.
+    //
+    // El caso concreto era un tipo de MT101; con un provider FICTICIO la prueba dice lo que de
+    // verdad importa — que gana lo declarado — y no depende de ningun vertical.
     const manager = TestBed.inject(ProcessTaskManagerService);
-    const declared = manager.resolve('MT101_BUILD_FROM_TABLE')?.descriptor.defaultOutput;
+    const declared = manager.resolve('FAKE_DECLARES_OUTPUT')?.descriptor.defaultOutput;
 
     expect(declared).toBe('fragments');
   });

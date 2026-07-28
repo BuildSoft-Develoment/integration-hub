@@ -36,9 +36,6 @@
       "@integration-hub/features/processes": [
         "libs/features/processes/src/index.ts"
       ],
-      "@integration-hub/features/payments": [
-        "libs/features/payments/src/index.ts"
-      ],
       "@integration-hub/features/executions": [
         "libs/features/executions/src/index.ts"
       ],

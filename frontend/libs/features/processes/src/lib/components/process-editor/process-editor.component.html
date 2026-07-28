@@ -46,7 +46,9 @@
             <div class="form-actions">
               <button mat-flat-button type="submit" [disabled]="saving() || !dirty()">{{ form().id ? i18n.t('common.saveChanges') : i18n.t('common.create') }}</button>
               <button mat-stroked-button type="button" (click)="cancel.emit()">{{ i18n.t('common.cancel') }}</button>
-              <button mat-stroked-button type="button" (click)="applyMassiveTemplate.emit()">{{ i18n.t('process.template.massiveMt101') }}</button>
+              @for (template of templates(); track template.id) {
+                <button mat-stroked-button type="button" (click)="applyTemplate.emit(template.id)">{{ i18n.t(template.labelKey) }}</button>
+              }
             </div>
           }
         </form>

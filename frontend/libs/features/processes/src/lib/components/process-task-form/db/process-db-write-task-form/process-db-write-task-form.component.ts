@@ -11,7 +11,7 @@ import { DbWriteMappingDraft, DbWriteTaskDraft, DB_WRITE_DEFAULT_PLATFORM_TABLE,
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { firstValueFrom } from 'rxjs';
 import { ConnectionRef, ProcessTaskFormModel, ReaderRef } from '../../../../models/process.models';
-import { ProcessApiService } from '../../../../api/process-api.service';
+import { ConnectionIntrospectionApiService } from '@integration-hub/shared/process-form-kit';
 import {
   DbWriteColumnRef,
   DbWriteSchemaRef,
@@ -50,7 +50,7 @@ import { TaskFormShellComponent } from '@integration-hub/shared/process-form-kit
 })
 export class ProcessDbWriteTaskFormComponent {
   readonly i18n = inject(I18nService);
-  private readonly api = inject(ProcessApiService);
+  private readonly api = inject(ConnectionIntrospectionApiService);
   private readonly manager = inject(ProcessTaskManagerService);
   private readonly bindingContext = inject(ProcessTaskBindingContextService);
   // M-1b: outputs viajan al host via bridge (no via @Output()).

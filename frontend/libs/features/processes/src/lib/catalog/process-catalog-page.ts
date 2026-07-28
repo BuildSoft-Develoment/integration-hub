@@ -1,20 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit } from '@angular/core';
 import { MatSidenavModule } from '@angular/material/sidenav';
-import { providePaymentsSwiftForms, provideProcessTaskProviders } from '@integration-hub/core/providers';
-import { provideMotorProcessForms } from '../processes.providers';
-import { ProcessMt101ArchiveTaskFormComponent } from '../components/process-task-form/payments/swift/process-mt101-archive-task-form/process-mt101-archive-task-form.component';
-import { ProcessMt101BuildTaskFormComponent } from '../components/process-task-form/payments/swift/process-mt101-build-task-form/process-mt101-build-task-form.component';
-import { ProcessMt101ParseTaskFormComponent } from '../components/process-task-form/payments/swift/process-mt101-parse-task-form/process-mt101-parse-task-form.component';
-import { ProcessMt101ParseFromTableTaskFormComponent } from '../components/process-task-form/payments/swift/process-mt101-parse-from-table-task-form/process-mt101-parse-from-table-task-form.component';
-import { ProcessMt101PayTaskFormComponent } from '../components/process-task-form/payments/swift/process-mt101-pay-task-form/process-mt101-pay-task-form.component';
-import { ProcessMt101InboundDeliverTaskFormComponent } from '../components/process-task-form/payments/swift/process-mt101-inbound-deliver-task-form/process-mt101-inbound-deliver-task-form.component';
-import { ProcessMt101ReconcileTaskFormComponent } from '../components/process-task-form/payments/swift/process-mt101-reconcile-task-form/process-mt101-reconcile-task-form.component';
-import { ProcessMt101RepairTaskFormComponent } from '../components/process-task-form/payments/swift/process-mt101-repair-task-form/process-mt101-repair-task-form.component';
-import { ProcessMt101RouteTaskFormComponent } from '../components/process-task-form/payments/swift/process-mt101-route-task-form/process-mt101-route-task-form.component';
-import { ProcessMt101SplitTaskFormComponent } from '../components/process-task-form/payments/swift/process-mt101-split-task-form/process-mt101-split-task-form.component';
-import { ProcessMt101StatusTaskFormComponent } from '../components/process-task-form/payments/swift/process-mt101-status-task-form/process-mt101-status-task-form.component';
-import { ProcessMt101ValidateTaskFormComponent } from '../components/process-task-form/payments/swift/process-mt101-validate-task-form/process-mt101-validate-task-form.component';
+
 import { ProcessTaskManagerService } from '@integration-hub/core/services';
 import { ProcessTaskBindingContextService } from '@integration-hub/shared/process-form-kit';
 import { ProcessSchemaFieldContextService } from '@integration-hub/shared/process-form-kit';
@@ -46,31 +33,16 @@ import { ProcessToolbarComponent } from '../components/process-toolbar/process-t
     ProcessReferenceStore,
     ProcessTaskManagerService,
     // ADR-021: bajan de `providedIn: 'root'` a este injector para poder consultar los descriptores
-    // de los task providers, que se registran aca abajo. Van en el MISMO nivel que el manager: si
-    // colgaran de la ruta (por encima) no lo verian. Todos sus consumidores son formularios de
-    // tarea que cuelgan de esta pagina, asi que siguen compartiendo una sola instancia.
+    // de los task providers. Esos se registran en la RUTA — un injector PADRE, visible desde aca.
+    // Lo que no funcionaba era al reves: un servicio en root no ve providers de componente. Sus
+    // consumidores son formularios que cuelgan de esta pagina, asi que siguen compartiendo una
+    // sola instancia.
     ProcessTaskBindingContextService,
     ProcessSchemaFieldContextService,
     ProcessFlowApiService,
-    // Task providers (serializacion config_json) del motor y verticales.
-    ...provideProcessTaskProviders(),
-    // M-1b: registracion de formularios del motor (FILE_READ + 5 DB/HTTP/notif).
-    ...provideMotorProcessForms(),
-    // Vertical 008 mensajeria de pagos - sub-catalogo swift/ (10 task types tras sprint 3).
-    ...providePaymentsSwiftForms({
-      mt101Build: ProcessMt101BuildTaskFormComponent,
-      mt101Validate: ProcessMt101ValidateTaskFormComponent,
-      mt101Archive: ProcessMt101ArchiveTaskFormComponent,
-      mt101Pay: ProcessMt101PayTaskFormComponent,
-      mt101InboundDeliver: ProcessMt101InboundDeliverTaskFormComponent,
-      mt101Route: ProcessMt101RouteTaskFormComponent,
-      mt101Reconcile: ProcessMt101ReconcileTaskFormComponent,
-      mt101Status: ProcessMt101StatusTaskFormComponent,
-      mt101Parse: ProcessMt101ParseTaskFormComponent,
-      mt101ParseFromTable: ProcessMt101ParseFromTableTaskFormComponent,
-      mt101Split: ProcessMt101SplitTaskFormComponent,
-      mt101Repair: ProcessMt101RepairTaskFormComponent,
-    }),
+    // Los task providers y los formularios (motor + verticales) se registran en la RUTA, no aca:
+    // los multi-providers no se fusionan entre injectors, asi que declararlos en el componente
+    // eclipsaria los del vertical. Ver buildProcessCatalogRoutes.
   ],
   imports: [CommonModule, MatSidenavModule, ProcessToolbarComponent, ProcessListComponent, ProcessEditorComponent],
   templateUrl: './process-catalog-page.html',
@@ -108,6 +80,7 @@ export class ProcessCatalogPageComponent implements OnInit {
       canEdit: this.store.canEdit(),
       canOperate: this.store.canOperate(),
       selectedProcess: this.store.selectedProcess(),
+      templates: this.store.availableTemplates,
     },
   }));
 
@@ -163,8 +136,8 @@ export class ProcessCatalogPageComponent implements OnInit {
     this.store.addTaskAt(event.taskType, event.position);
   }
 
-  applyMassiveTemplate(): void {
-    this.store.applyMassiveMt101Template();
+  applyTemplate(templateId: string): void {
+    this.store.applyTemplate(templateId);
   }
 
   patchTask(event: {

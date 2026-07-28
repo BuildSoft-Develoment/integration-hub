@@ -25,3 +25,5 @@ export * from './lib/components/binding-origin-select/binding-origin-select.comp
 export * from './lib/components/process-http-request-field/process-http-request-field.component';
 export * from './lib/components/process-runtime-field/process-runtime-field.component';
 export * from './lib/components/process-token-field/process-token-field.component';
+export * from './lib/models/process-db-routine.models';
+export * from './lib/services/connection-introspection-api.service';
