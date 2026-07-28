@@ -2,7 +2,9 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
-    "types": ["vitest/globals"]
+    // `node`: la prueba de arquitectura (ADR-021) recorre el arbol de libs con `node:fs`. Vitest
+    // corre en Node aunque el entorno sea jsdom, asi que solo faltaban los tipos.
+    "types": ["vitest/globals", "node"]
   },
   "include": [
     "src/**/*.ts",
