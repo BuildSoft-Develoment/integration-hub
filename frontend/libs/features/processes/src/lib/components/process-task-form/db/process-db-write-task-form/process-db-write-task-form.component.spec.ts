@@ -1,8 +1,8 @@
 import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { ProcessTaskBindingContextService } from '../../../../forms/process-task-binding-context.service';
-import { ProcessSchemaFieldContextService } from '../../../../forms/process-schema-field-context.service';
+import { ProcessTaskBindingContextService } from '@integration-hub/shared/process-form-kit';
+import { ProcessSchemaFieldContextService } from '@integration-hub/shared/process-form-kit';
 import { provideNoopAnimations } from '@angular/platform-browser/animations';
 import { ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
 import { ProcessTaskManagerService } from '@integration-hub/core/services';

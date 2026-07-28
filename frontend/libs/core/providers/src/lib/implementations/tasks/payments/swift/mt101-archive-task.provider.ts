@@ -44,6 +44,7 @@ const ARCHIVE_ENCRYPTION_KEYS = ['encryptColumn', 'encryptionSecretRef'] as cons
 export class Mt101ArchiveTaskProvider extends ProcessTaskProvider<Mt101ArchiveTaskDraft> {
   readonly descriptor = {
     type: 'MT101_ARCHIVE' as const,
+    summaryFields: ['archivedCount', 'targetTable'],
     labelKey: 'processTask.MT101_ARCHIVE',
     descriptionKey: 'processTaskDescription.MT101_ARCHIVE',
     category: 'swift-mt101',

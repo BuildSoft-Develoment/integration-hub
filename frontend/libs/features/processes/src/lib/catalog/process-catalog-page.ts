@@ -16,8 +16,8 @@ import { ProcessMt101SplitTaskFormComponent } from '../components/process-task-f
 import { ProcessMt101StatusTaskFormComponent } from '../components/process-task-form/payments/swift/process-mt101-status-task-form/process-mt101-status-task-form.component';
 import { ProcessMt101ValidateTaskFormComponent } from '../components/process-task-form/payments/swift/process-mt101-validate-task-form/process-mt101-validate-task-form.component';
 import { ProcessTaskManagerService } from '@integration-hub/core/services';
-import { ProcessTaskBindingContextService } from '../forms/process-task-binding-context.service';
-import { ProcessSchemaFieldContextService } from '../forms/process-schema-field-context.service';
+import { ProcessTaskBindingContextService } from '@integration-hub/shared/process-form-kit';
+import { ProcessSchemaFieldContextService } from '@integration-hub/shared/process-form-kit';
 import { ProcessCatalogStore } from './process-catalog.store';
 import { ProcessCatalogCommandService } from './process-catalog-command.service';
 import { ProcessCatalogQueryStore } from './process-catalog-query.store';

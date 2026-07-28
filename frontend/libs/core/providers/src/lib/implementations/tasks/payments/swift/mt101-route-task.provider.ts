@@ -36,6 +36,7 @@ const ROUTE_PRESERVED_KEYS = ['pageSize'] as const;
 export class Mt101RouteTaskProvider extends ProcessTaskProvider<Mt101RouteTaskDraft> {
   readonly descriptor = {
     type: 'MT101_ROUTE' as const,
+    summaryFields: ['routedCount', 'manualReviewCount'],
     labelKey: 'processTask.MT101_ROUTE',
     descriptionKey: 'processTaskDescription.MT101_ROUTE',
     category: 'swift-mt101',

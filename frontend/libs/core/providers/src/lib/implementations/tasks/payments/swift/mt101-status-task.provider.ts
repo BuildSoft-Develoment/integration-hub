@@ -65,6 +65,7 @@ const PRESERVED_KEYS = [
 export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTaskDraft> {
   readonly descriptor = {
     type: 'MT101_STATUS' as const,
+    summaryFields: ['updatedCount', 'pendingCount'],
     labelKey: 'processTask.MT101_STATUS',
     descriptionKey: 'processTaskDescription.MT101_STATUS',
     category: 'swift-mt101',

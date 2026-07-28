@@ -26,6 +26,7 @@ export interface Mt101RepairTaskDraft extends ProcessTaskRuntimeDraft {
 export class Mt101RepairTaskProvider extends ProcessTaskProvider<Mt101RepairTaskDraft> {
   readonly descriptor = {
     type: 'MT101_REPAIR' as const,
+    summaryFields: ['inputMessageCount', 'repairedMessageCount', 'totalChanges', 'repairAttempt'],
     labelKey: 'processTask.MT101_REPAIR',
     descriptionKey: 'processTaskDescription.MT101_REPAIR',
     category: 'swift-mt101',

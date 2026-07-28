@@ -97,6 +97,7 @@ const PAY_PRESERVED_KEYS = [
 export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft> {
   readonly descriptor: ProcessTaskProviderDescriptor = {
     type: 'MT101_PAY' as const,
+    summaryFields: ['dispatchCount', 'sentCount', 'acceptedCount', 'rejectedCount', 'retriedCount', 'transport'],
     labelKey: 'processTask.MT101_PAY',
     descriptionKey: 'processTaskDescription.MT101_PAY',
     category: 'swift-mt101',

@@ -17,6 +17,7 @@ export interface Mt101SplitTaskDraft extends ProcessTaskRuntimeDraft {
 export class Mt101SplitTaskProvider extends ProcessTaskProvider<Mt101SplitTaskDraft> {
   readonly descriptor = {
     type: 'MT101_SPLIT' as const,
+    summaryFields: ['inputMessageCount', 'splitMessageCount', 'passthroughCount', 'outputFragmentCount'],
     labelKey: 'processTask.MT101_SPLIT',
     descriptionKey: 'processTaskDescription.MT101_SPLIT',
     category: 'swift-mt101',

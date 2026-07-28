@@ -23,6 +23,7 @@ export interface Mt101ParseTaskDraft extends ProcessTaskRuntimeDraft {
 export class Mt101ParseTaskProvider extends ProcessTaskProvider<Mt101ParseTaskDraft> {
   readonly descriptor: ProcessTaskProviderDescriptor = {
     type: 'MT101_PARSE' as const,
+    summaryFields: ['parsedCount', 'messageCount', 'transactionCount'],
     labelKey: 'processTask.MT101_PARSE',
     descriptionKey: 'processTaskDescription.MT101_PARSE',
     category: 'swift-mt101',

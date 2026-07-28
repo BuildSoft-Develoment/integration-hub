@@ -2,7 +2,7 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { ConnectionRef, ProcessRecord, ReaderRef, SourceRef } from '../models/process.models';
-import { DbWriteColumnRef, DbWriteSchemaRef, DbWriteTableRef } from '../models/process-db-write.models';
+import { DbWriteColumnRef, DbWriteSchemaRef, DbWriteTableRef } from '@integration-hub/shared/process-form-kit';
 import { DbRoutineParameterRef, DbRoutineRef } from '../models/process-db-routine.models';
 
 export interface ProcessPageResponse {

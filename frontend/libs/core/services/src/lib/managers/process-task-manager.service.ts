@@ -94,6 +94,11 @@ export class ProcessTaskManagerService {
     return this.resolve(type)?.descriptor.nodePresentation;
   }
 
+  /** ADR-021: campos del output `summary` que declara el provider, si los declara. */
+  declaredSummaryFields(type: ProcessTaskType): readonly string[] | undefined {
+    return this.resolve(type)?.descriptor.summaryFields;
+  }
+
   resolve(type: ProcessTaskType): ProcessTaskProvider<any> | null {
     return this.allProviders().find((provider) => provider.supports(type)) ?? null;
   }

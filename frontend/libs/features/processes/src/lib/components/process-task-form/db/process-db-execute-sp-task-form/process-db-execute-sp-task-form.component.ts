@@ -10,14 +10,14 @@ import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/se
 import { firstValueFrom } from 'rxjs';
 import { ConnectionRef, ProcessTaskFormModel, ReaderRef } from '../../../../models/process.models';
 import { ProcessApiService } from '../../../../api/process-api.service';
-import { ProcessTaskBindingContextService } from '../../../../forms/process-task-binding-context.service';
+import { ProcessTaskBindingContextService } from '@integration-hub/shared/process-form-kit';
 import { DbRoutineRef } from '../../../../models/process-db-routine.models';
-import { DbWriteSchemaRef } from '../../../../models/process-db-write.models';
+import { DbWriteSchemaRef } from '@integration-hub/shared/process-form-kit';
 import { ProcessDbRoutineSelectorComponent } from '../process-db-routine-selector/process-db-routine-selector.component';
-import { ProcessTaskBindingBoardComponent } from '../../shared/process-task-binding-board/process-task-binding-board.component';
-import { ProcessTaskRuntimePanelComponent } from '../../shared/process-task-runtime-panel/process-task-runtime-panel.component';
-import { ConnectionSelectComponent } from '../../shared/connection-select/connection-select.component';
-import { TaskFormShellComponent } from '../../shared/task-form-shell/task-form-shell.component';
+import { ProcessTaskBindingBoardComponent } from '@integration-hub/shared/process-form-kit';
+import { ProcessTaskRuntimePanelComponent } from '@integration-hub/shared/process-form-kit';
+import { ConnectionSelectComponent } from '@integration-hub/shared/process-form-kit';
+import { TaskFormShellComponent } from '@integration-hub/shared/process-form-kit';
 
 @Component({
   selector: 'ih-process-db-execute-sp-task-form',

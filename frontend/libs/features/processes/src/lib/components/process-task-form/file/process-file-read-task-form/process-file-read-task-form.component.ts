@@ -9,10 +9,10 @@ import { I18nService } from '@integration-hub/core/services';
 import { ProcessTaskFormModel, ReaderRef, SourceRef } from '../../../../models/process.models';
 import { FileReadTaskDraft, ProcessTaskFormBridgeService, ReaderFieldDraft, ReaderProviderType } from '@integration-hub/core/providers';
 import { ProcessTaskManagerService, ReaderManagerService } from '@integration-hub/core/services';
-import { ProcessTaskBindingContextService } from '../../../../forms/process-task-binding-context.service';
+import { ProcessTaskBindingContextService } from '@integration-hub/shared/process-form-kit';
 import { ProcessReaderFieldsViewComponent } from '../process-reader-fields-view/process-reader-fields-view.component';
-import { ProcessTaskRuntimePanelComponent } from '../../shared/process-task-runtime-panel/process-task-runtime-panel.component';
-import { TaskFormShellComponent } from '../../shared/task-form-shell/task-form-shell.component';
+import { ProcessTaskRuntimePanelComponent } from '@integration-hub/shared/process-form-kit';
+import { TaskFormShellComponent } from '@integration-hub/shared/process-form-kit';
 
 @Component({
   selector: 'ih-process-file-read-task-form',

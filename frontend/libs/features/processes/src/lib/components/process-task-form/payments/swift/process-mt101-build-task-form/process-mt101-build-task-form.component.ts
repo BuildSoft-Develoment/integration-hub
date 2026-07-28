@@ -16,20 +16,20 @@ import {
 } from '@integration-hub/core/providers';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { firstValueFrom } from 'rxjs';
-import { ProcessTaskBindingContextService } from '../../../../../forms/process-task-binding-context.service';
+import { ProcessTaskBindingContextService } from '@integration-hub/shared/process-form-kit';
 import { ConnectionRef, ProcessTaskFormModel, ReaderRef } from '../../../../../models/process.models';
-import { DbWriteTableRef } from '../../../../../models/process-db-write.models';
+import { DbWriteTableRef } from '@integration-hub/shared/process-form-kit';
 import { ProcessApiService } from '../../../../../api/process-api.service';
-import { ConnectionSelectComponent } from '../../../shared/connection-select/connection-select.component';
-import { ProcessDbWriteTableSelectorComponent } from '../../../shared/process-db-write-table-selector/process-db-write-table-selector.component';
-import { ProcessDbWriteSourcePaletteComponent } from '../../../shared/process-db-write-source-palette/process-db-write-source-palette.component';
+import { ConnectionSelectComponent } from '@integration-hub/shared/process-form-kit';
+import { ProcessDbWriteTableSelectorComponent } from '@integration-hub/shared/process-form-kit';
+import { ProcessDbWriteSourcePaletteComponent } from '@integration-hub/shared/process-form-kit';
 import {
   Mt101BuildMappingField,
   Mt101BuildMappingTarget,
   ProcessMt101FieldMappingBoardComponent,
 } from '../process-mt101-field-mapping-board/process-mt101-field-mapping-board.component';
-import { ProcessTaskRuntimePanelComponent } from '../../../shared/process-task-runtime-panel/process-task-runtime-panel.component';
-import { TaskFormShellComponent } from '../../../shared/task-form-shell/task-form-shell.component';
+import { ProcessTaskRuntimePanelComponent } from '@integration-hub/shared/process-form-kit';
+import { TaskFormShellComponent } from '@integration-hub/shared/process-form-kit';
 
 /**
  * Formulario de configuracion para la construccion MT101 (base compartida, usada por

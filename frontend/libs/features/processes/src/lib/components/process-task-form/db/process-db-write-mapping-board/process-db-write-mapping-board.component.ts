@@ -6,8 +6,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { DbWriteMappingDraft, ProcessTaskBindingOption } from '@integration-hub/core/providers';
 import { I18nService } from '@integration-hub/core/services';
-import { DbWriteColumnRef, DbWriteSourceItem } from '../../../../models/process-db-write.models';
-import { BindingOriginSelectComponent } from '../../shared/binding-origin-select/binding-origin-select.component';
+import { DbWriteColumnRef, DbWriteSourceItem } from '@integration-hub/shared/process-form-kit';
+import { BindingOriginSelectComponent } from '@integration-hub/shared/process-form-kit';
 
 @Component({
   selector: 'ih-process-db-write-mapping-board',

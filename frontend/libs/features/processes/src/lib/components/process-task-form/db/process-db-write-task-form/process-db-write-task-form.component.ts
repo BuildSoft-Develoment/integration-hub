@@ -17,14 +17,14 @@ import {
   DbWriteSchemaRef,
   DbWriteSourceItem,
   DbWriteTableRef,
-} from '../../../../models/process-db-write.models';
-import { ProcessTaskBindingContextService } from '../../../../forms/process-task-binding-context.service';
+} from '@integration-hub/shared/process-form-kit';
+import { ProcessTaskBindingContextService } from '@integration-hub/shared/process-form-kit';
 import { ProcessDbWriteMappingBoardComponent } from '../process-db-write-mapping-board/process-db-write-mapping-board.component';
-import { ProcessDbWriteSourcePaletteComponent } from '../../shared/process-db-write-source-palette/process-db-write-source-palette.component';
-import { ProcessDbWriteTableSelectorComponent } from '../../shared/process-db-write-table-selector/process-db-write-table-selector.component';
-import { ProcessTaskRuntimePanelComponent } from '../../shared/process-task-runtime-panel/process-task-runtime-panel.component';
-import { ConnectionSelectComponent } from '../../shared/connection-select/connection-select.component';
-import { TaskFormShellComponent } from '../../shared/task-form-shell/task-form-shell.component';
+import { ProcessDbWriteSourcePaletteComponent } from '@integration-hub/shared/process-form-kit';
+import { ProcessDbWriteTableSelectorComponent } from '@integration-hub/shared/process-form-kit';
+import { ProcessTaskRuntimePanelComponent } from '@integration-hub/shared/process-form-kit';
+import { ConnectionSelectComponent } from '@integration-hub/shared/process-form-kit';
+import { TaskFormShellComponent } from '@integration-hub/shared/process-form-kit';
 
 @Component({
   selector: 'ih-process-db-write-task-form',

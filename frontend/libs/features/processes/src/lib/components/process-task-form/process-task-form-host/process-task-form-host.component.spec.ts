@@ -5,8 +5,8 @@ import {
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { ProcessTaskManagerService } from '@integration-hub/core/services';
-import { ProcessTaskBindingContextService } from '../../../forms/process-task-binding-context.service';
-import { ProcessSchemaFieldContextService } from '../../../forms/process-schema-field-context.service';
+import { ProcessTaskBindingContextService } from '@integration-hub/shared/process-form-kit';
+import { ProcessSchemaFieldContextService } from '@integration-hub/shared/process-form-kit';
 
 import { ProcessTaskFormHostComponent } from './process-task-form-host.component';
 import { ProcessTaskFormModel } from '../../../models/process.models';

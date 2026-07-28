@@ -48,6 +48,7 @@ const DEFAULT_EXCEPTION_TABLE = 'mt101_reconciliation_exception';
 export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101ReconcileTaskDraft> {
   readonly descriptor = {
     type: 'MT101_RECONCILE' as const,
+    summaryFields: ['matchedCount', 'unmatchedCount', 'mismatchCount'],
     labelKey: 'processTask.MT101_RECONCILE',
     descriptionKey: 'processTaskDescription.MT101_RECONCILE',
     category: 'swift-mt101',

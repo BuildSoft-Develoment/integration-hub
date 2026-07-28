@@ -7,10 +7,10 @@ import { MatSelectModule } from '@angular/material/select';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { ProcessTaskFormModel, ReaderRef } from '../../../../models/process.models';
 import { NotificationTaskDraft, ProcessTaskBindingOption, ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
-import { ProcessTaskBindingContextService } from '../../../../forms/process-task-binding-context.service';
-import { ProcessHttpRequestComponent } from '../../shared/process-http-request/process-http-request.component';
-import { ProcessTaskRuntimePanelComponent } from '../../shared/process-task-runtime-panel/process-task-runtime-panel.component';
-import { TaskFormShellComponent } from '../../shared/task-form-shell/task-form-shell.component';
+import { ProcessTaskBindingContextService } from '@integration-hub/shared/process-form-kit';
+import { ProcessHttpRequestComponent } from '@integration-hub/shared/process-form-kit';
+import { ProcessTaskRuntimePanelComponent } from '@integration-hub/shared/process-form-kit';
+import { TaskFormShellComponent } from '@integration-hub/shared/process-form-kit';
 
 @Component({
   selector: 'ih-process-notification-task-form',

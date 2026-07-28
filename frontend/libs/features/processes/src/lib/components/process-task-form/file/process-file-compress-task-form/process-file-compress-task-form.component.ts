@@ -9,8 +9,8 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { FileCompressTaskDraft, ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
 import { ProcessTaskFormModel } from '../../../../models/process.models';
-import { ProcessTaskRuntimePanelComponent } from '../../shared/process-task-runtime-panel/process-task-runtime-panel.component';
-import { TaskFormShellComponent } from '../../shared/task-form-shell/task-form-shell.component';
+import { ProcessTaskRuntimePanelComponent } from '@integration-hub/shared/process-form-kit';
+import { TaskFormShellComponent } from '@integration-hub/shared/process-form-kit';
 
 @Component({
   selector: 'ih-process-file-compress-task-form',

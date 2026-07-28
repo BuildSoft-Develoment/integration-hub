@@ -128,6 +128,7 @@ export const DEFAULT_MAX_BYTES = 10000;
 export class Mt101BuildTaskProvider extends ProcessTaskProvider<Mt101BuildTaskDraft> {
   readonly descriptor: ProcessTaskProviderDescriptor = {
     type: 'MT101_BUILD_FROM_TABLE' as const,
+    summaryFields: ['fragmentSetId', 'fragmentCount', 'transactionCount', 'totalBytes', 'format'],
     labelKey: 'processTask.MT101_BUILD_FROM_TABLE',
     descriptionKey: 'processTaskDescription.MT101_BUILD_FROM_TABLE',
     category: 'swift-mt101',

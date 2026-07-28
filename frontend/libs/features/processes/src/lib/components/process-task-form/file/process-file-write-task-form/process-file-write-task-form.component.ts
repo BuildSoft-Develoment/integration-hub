@@ -26,14 +26,14 @@ import { COMMON_ENCODINGS, SuggestInputComponent } from '@integration-hub/shared
 import { firstValueFrom } from 'rxjs';
 import { ConnectionRef, ProcessTaskFormModel, ReaderRef } from '../../../../models/process.models';
 import { ProcessApiService } from '../../../../api/process-api.service';
-import { DbWriteColumnRef, DbWriteSourceItem, DbWriteTableRef } from '../../../../models/process-db-write.models';
-import { ProcessTaskBindingContextService } from '../../../../forms/process-task-binding-context.service';
-import { BindingOriginSelectComponent } from '../../shared/binding-origin-select/binding-origin-select.component';
-import { ProcessDbWriteSourcePaletteComponent } from '../../shared/process-db-write-source-palette/process-db-write-source-palette.component';
-import { ProcessDbWriteTableSelectorComponent } from '../../shared/process-db-write-table-selector/process-db-write-table-selector.component';
-import { ProcessTaskRuntimePanelComponent } from '../../shared/process-task-runtime-panel/process-task-runtime-panel.component';
-import { TaskFormShellComponent } from '../../shared/task-form-shell/task-form-shell.component';
-import { ConnectionSelectComponent } from '../../shared/connection-select/connection-select.component';
+import { DbWriteColumnRef, DbWriteSourceItem, DbWriteTableRef } from '@integration-hub/shared/process-form-kit';
+import { ProcessTaskBindingContextService } from '@integration-hub/shared/process-form-kit';
+import { BindingOriginSelectComponent } from '@integration-hub/shared/process-form-kit';
+import { ProcessDbWriteSourcePaletteComponent } from '@integration-hub/shared/process-form-kit';
+import { ProcessDbWriteTableSelectorComponent } from '@integration-hub/shared/process-form-kit';
+import { ProcessTaskRuntimePanelComponent } from '@integration-hub/shared/process-form-kit';
+import { TaskFormShellComponent } from '@integration-hub/shared/process-form-kit';
+import { ConnectionSelectComponent } from '@integration-hub/shared/process-form-kit';
 
 type CellSection = 'header' | 'trailer';
 // Origenes que FILE_WRITE consume como STREAM de filas (van al detalle).

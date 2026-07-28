@@ -16,11 +16,11 @@ import {
   provideSchemaFieldRenderers,
 } from '@integration-hub/shared/ui';
 import { PluginConfigSchemaService } from '../../../api/plugin-config-schema.service';
-import { ProcessSchemaFieldContextService } from '../../../forms/process-schema-field-context.service';
+import { ProcessSchemaFieldContextService } from '@integration-hub/shared/process-form-kit';
 import { ConnectionRef, ProcessTaskFormModel, ReaderRef, SourceRef } from '../../../models/process.models';
-import { ProcessTokenFieldComponent } from '../shared/process-token-field/process-token-field.component';
-import { ProcessHttpRequestFieldComponent } from '../shared/process-http-request-field/process-http-request-field.component';
-import { ProcessRuntimeFieldComponent } from '../shared/process-runtime-field/process-runtime-field.component';
+import { ProcessTokenFieldComponent } from '@integration-hub/shared/process-form-kit';
+import { ProcessHttpRequestFieldComponent } from '@integration-hub/shared/process-form-kit';
+import { ProcessRuntimeFieldComponent } from '@integration-hub/shared/process-form-kit';
 
 /**
  * Host del formulario de configuracion de tarea.

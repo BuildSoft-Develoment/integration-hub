@@ -9,12 +9,12 @@ import { Mt101ParseFromTableTaskDraft, ProcessTaskFormBridgeService } from '@int
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
 import { firstValueFrom } from 'rxjs';
 import { ConnectionRef, ProcessTaskFormModel } from '../../../../../models/process.models';
-import { DbWriteTableRef } from '../../../../../models/process-db-write.models';
+import { DbWriteTableRef } from '@integration-hub/shared/process-form-kit';
 import { ProcessApiService } from '../../../../../api/process-api.service';
-import { ProcessTaskRuntimePanelComponent } from '../../../shared/process-task-runtime-panel/process-task-runtime-panel.component';
-import { TaskFormShellComponent } from '../../../shared/task-form-shell/task-form-shell.component';
-import { ConnectionSelectComponent } from '../../../shared/connection-select/connection-select.component';
-import { ProcessDbWriteTableSelectorComponent } from '../../../shared/process-db-write-table-selector/process-db-write-table-selector.component';
+import { ProcessTaskRuntimePanelComponent } from '@integration-hub/shared/process-form-kit';
+import { TaskFormShellComponent } from '@integration-hub/shared/process-form-kit';
+import { ConnectionSelectComponent } from '@integration-hub/shared/process-form-kit';
+import { ProcessDbWriteTableSelectorComponent } from '@integration-hub/shared/process-form-kit';
 
 /**
  * Form propio de MT101_PARSE_FROM_TABLE (ya no reusa el de MT101_PARSE). Expone lo que el backend table-backed
