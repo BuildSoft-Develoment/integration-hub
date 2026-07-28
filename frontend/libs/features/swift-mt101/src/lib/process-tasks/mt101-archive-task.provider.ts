@@ -44,6 +44,12 @@ const ARCHIVE_ENCRYPTION_KEYS = ['encryptColumn', 'encryptionSecretRef'] as cons
 export class Mt101ArchiveTaskProvider extends ProcessTaskProvider<Mt101ArchiveTaskDraft> {
   readonly descriptor = {
     type: 'MT101_ARCHIVE' as const,
+    presentation: { icon: 'download' as const, toneClass: 'ih-tone-payment' },
+    nodePresentation: {
+      badge: 'ARCHIVE',
+      toneClass: 'task-node--payment-archive',
+      iconPath: 'M5 8h14v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2zm0 0V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3M9 12h6M9 16h6',
+    },
     summaryFields: ['archivedCount', 'targetTable'],
     labelKey: 'processTask.MT101_ARCHIVE',
     descriptionKey: 'processTaskDescription.MT101_ARCHIVE',

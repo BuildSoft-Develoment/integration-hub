@@ -54,6 +54,12 @@ const DEFAULT_TIMEOUT = 15;
 export class Mt101InboundDeliverTaskProvider extends ProcessTaskProvider<Mt101InboundDeliverTaskDraft> {
   readonly descriptor: ProcessTaskProviderDescriptor = {
     type: 'MT101_INBOUND_DELIVER' as const,
+    presentation: { icon: 'send' as const, toneClass: 'ih-tone-payment' },
+    nodePresentation: {
+      badge: 'DELIVER',
+      toneClass: 'task-node--payment-dispatch',
+      iconPath: 'M3 10h18M3 14h18M5 7h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM16 14h2',
+    },
     labelKey: 'processTask.MT101_INBOUND_DELIVER',
     descriptionKey: 'processTaskDescription.MT101_INBOUND_DELIVER',
     category: 'swift-mt101',

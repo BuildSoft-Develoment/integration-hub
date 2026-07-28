@@ -23,7 +23,7 @@ const VERTICAL_FILE_PATTERNS = [/(^|[-.])mt101/i, /(^|[-.])swift/i, /(^|[-.])pai
 const VERTICAL_CONTENT_PATTERN = /MT101_|'mt101-|"mt101-/;
 
 /** Libs que NO deben albergar código de un vertical: el core y lo compartido. */
-const WATCHED_LIBS = ['libs/core', 'libs/shared'];
+const WATCHED_LIBS = ['libs/core', 'libs/shared', 'libs/features/processes'];
 
 /**
  * Deuda registrada (ADR-021, migración del frontend en olas): archivos de MT101 que todavía viven
@@ -33,14 +33,9 @@ const WATCHED_LIBS = ['libs/core', 'libs/shared'];
 const FROZEN: readonly string[] = [
   'libs/core/i18n/src/lib/dictionaries/en.ts',
   'libs/core/i18n/src/lib/dictionaries/es.ts',
-  'libs/core/providers/src/lib/implementations/tasks/rest/rest-call-task.provider.ts',
   'libs/core/providers/src/lib/tasks/process-task-form-registry.spec.ts',
-  'libs/core/providers/src/lib/tasks/process-task-form-registry.ts',
   'libs/core/providers/src/lib/tasks/process-task.models.ts',
   'libs/core/services/src/lib/managers/process-task-manager.service.spec.ts',
-  'libs/core/services/src/lib/managers/process-task-manager.service.ts',
-  'libs/core/services/src/lib/presentation/resource-presentation.maps.spec.ts',
-  'libs/core/services/src/lib/presentation/resource-presentation.maps.ts',
   'libs/shared/audit-kit/src/lib/audit-operation-risk.spec.ts',
   'libs/shared/audit-kit/src/lib/audit-operation-risk.ts',
   'libs/shared/audit-kit/src/lib/audit-workspace-nav/audit-workspace-nav.component.spec.ts',
@@ -72,9 +67,17 @@ function isVertical(file: string): boolean {
   if (VERTICAL_FILE_PATTERNS.some((pattern) => pattern.test(name))) {
     return true;
   }
-  // El nombre no alcanza: MT101 también se cuela como claves o entradas dentro de archivos
-  // genéricos — los diccionarios i18n y los mapas de presentación son el caso real.
-  return VERTICAL_CONTENT_PATTERN.test(readFileSync(file, 'utf8'));
+  // El nombre no alcanza: un vertical también se cuela como claves o entradas dentro de archivos
+  // genéricos (los diccionarios i18n son el caso real). Se miran solo líneas de CÓDIGO: un
+  // comentario que explica por qué algo dejó de estar acá es documentación, no acoplamiento —
+  // misma regla que el trinquete del backend, que ignora `//` y javadoc.
+  return readFileSync(file, 'utf8')
+    .split(/\r?\n/)
+    .filter((line) => {
+      const trimmed = line.trimStart();
+      return !trimmed.startsWith('//') && !trimmed.startsWith('*') && !trimmed.startsWith('/*');
+    })
+    .some((line) => VERTICAL_CONTENT_PATTERN.test(line));
 }
 
 describe('ADR-021 · límite core <-> verticales (frontend)', () => {

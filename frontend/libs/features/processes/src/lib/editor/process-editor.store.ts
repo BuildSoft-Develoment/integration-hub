@@ -164,13 +164,6 @@ export class ProcessEditorStore {
   }
 
   /**
-   * Plantilla "MT101 masivo desde archivo": scaffolda la cadena completa con
-   * los bindings de fragments PRE-CABLEADOS, evitando que el auto-binding elija
-   * records/summary cuando corresponde fragments (hallazgo H2). Todas las tareas
-   * MT101 downstream consumen `<build>.fragments` (la referencia al set
-   * persistido); cada etapa filtra por su gate de estado.
-   */
-  /**
    * ADR-021: aplica una plantilla REGISTRADA por un vertical. Antes este metodo se llamaba
    * `applyMassiveMt101Template` y traia los 6 tipos de MT101 con sus configs escritos aca:
    * una store generica que conocia un estandar. Ahora aporta solo el ensamblado.

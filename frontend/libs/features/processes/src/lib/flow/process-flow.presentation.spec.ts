@@ -14,14 +14,14 @@ describe('process flow presentation', () => {
 
   it('uses the category declared by the provider (ADR-021)', () => {
     // El vertical declara su agrupacion; el motor ya no la infiere por prefijo del tipo.
-    expect(taskCategory({ type: 'MT101_PAY', category: 'swift-mt101' })).toBe('swift-mt101');
+    expect(taskCategory({ type: 'FAKE_PAY', category: 'un-vertical' })).toBe('un-vertical');
     // Un vertical nuevo funciona igual, sin tocar el motor.
     expect(taskCategory({ type: 'SBS_BUILD', category: 'sbs' })).toBe('sbs');
   });
 
   it('does not infer a vertical from the task type prefix anymore (ADR-021)', () => {
-    // Sin categoria declarada, un MT101_* cae al cajon por defecto: ya no hay startsWith('MT101_').
-    expect(taskCategory({ type: 'MT101_PAY' })).toBe('plugin');
+    // Sin categoria declarada cae al cajon por defecto: ya no hay branch por prefijo de tipo.
+    expect(taskCategory({ type: 'FAKE_PAY' })).toBe('plugin');
   });
 
   it('groups externally installed backend tasks as plugin tasks', () => {

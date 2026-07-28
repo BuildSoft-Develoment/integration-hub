@@ -53,6 +53,9 @@ export const READER_PRESENTATION: Record<ReaderProviderType, ResourcePresentatio
  * este mapa es solo el default de los tipos que el motor ya conoce. Mantenerlo total obligaba a
  * editar esta lib del core para dar de alta cualquier tipo nuevo.
  */
+// ADR-021: SOLO los tipos del motor. La visual de un vertical la declara su provider en
+// `descriptor.presentation` — antes los 12 tipos MT101 estaban aca, asi que un vertical no podia
+// traer su propio icono sin editar una lib del core.
 export const TASK_PRESENTATION: Partial<Record<PlatformProcessTaskType, ResourcePresentation>> = {
   FILE_READ: { icon: 'file-text', toneClass: 'ih-tone-document' },
   DB_WRITE: { icon: 'database', toneClass: 'ih-tone-database' },
@@ -63,16 +66,4 @@ export const TASK_PRESENTATION: Partial<Record<PlatformProcessTaskType, Resource
   FILE_WRITE: { icon: 'file-text', toneClass: 'ih-tone-document' },
   FILE_COMPRESS: { icon: 'download', toneClass: 'ih-tone-document' },
   FILE_DELIVER: { icon: 'send', toneClass: 'ih-tone-integration' },
-  MT101_BUILD_FROM_TABLE: { icon: 'table', toneClass: 'ih-tone-payment' },
-  MT101_VALIDATE: { icon: 'check', toneClass: 'ih-tone-payment' },
-  MT101_ARCHIVE: { icon: 'download', toneClass: 'ih-tone-payment' },
-  MT101_PAY: { icon: 'send', toneClass: 'ih-tone-payment' },
-  MT101_ROUTE: { icon: 'git-branch', toneClass: 'ih-tone-payment' },
-  MT101_RECONCILE: { icon: 'list', toneClass: 'ih-tone-payment' },
-  MT101_STATUS: { icon: 'clock', toneClass: 'ih-tone-payment' },
-  MT101_PARSE: { icon: 'code', toneClass: 'ih-tone-payment' },
-  MT101_SPLIT: { icon: 'git-branch', toneClass: 'ih-tone-payment' },
-  MT101_REPAIR: { icon: 'alert-triangle', toneClass: 'ih-tone-payment' },
-  MT101_PARSE_FROM_TABLE: { icon: 'table', toneClass: 'ih-tone-payment' },
-  MT101_INBOUND_DELIVER: { icon: 'send', toneClass: 'ih-tone-payment' },
 };

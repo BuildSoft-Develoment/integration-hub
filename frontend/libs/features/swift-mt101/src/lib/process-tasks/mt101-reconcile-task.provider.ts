@@ -48,6 +48,12 @@ const DEFAULT_EXCEPTION_TABLE = 'mt101_reconciliation_exception';
 export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101ReconcileTaskDraft> {
   readonly descriptor = {
     type: 'MT101_RECONCILE' as const,
+    presentation: { icon: 'list' as const, toneClass: 'ih-tone-payment' },
+    nodePresentation: {
+      badge: 'RECON',
+      toneClass: 'task-node--payment-reconcile',
+      iconPath: 'M4 8h6m0 0L7 5m3 3L7 11m13 5h-6m0 0l3-3m-3 3l3 3',
+    },
     summaryFields: ['matchedCount', 'unmatchedCount', 'mismatchCount'],
     labelKey: 'processTask.MT101_RECONCILE',
     descriptionKey: 'processTaskDescription.MT101_RECONCILE',

@@ -36,6 +36,12 @@ const ROUTE_PRESERVED_KEYS = ['pageSize'] as const;
 export class Mt101RouteTaskProvider extends ProcessTaskProvider<Mt101RouteTaskDraft> {
   readonly descriptor = {
     type: 'MT101_ROUTE' as const,
+    presentation: { icon: 'git-branch' as const, toneClass: 'ih-tone-payment' },
+    nodePresentation: {
+      badge: 'ROUTE',
+      toneClass: 'task-node--payment-route',
+      iconPath: 'M4 6h8a4 4 0 0 1 0 8H6a4 4 0 0 0 0 8h6m4-16h4l-3-3M16 14h4l-3 3',
+    },
     summaryFields: ['routedCount', 'manualReviewCount'],
     labelKey: 'processTask.MT101_ROUTE',
     descriptionKey: 'processTaskDescription.MT101_ROUTE',

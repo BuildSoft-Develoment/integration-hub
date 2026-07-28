@@ -17,6 +17,12 @@ export interface Mt101SplitTaskDraft extends ProcessTaskRuntimeDraft {
 export class Mt101SplitTaskProvider extends ProcessTaskProvider<Mt101SplitTaskDraft> {
   readonly descriptor = {
     type: 'MT101_SPLIT' as const,
+    presentation: { icon: 'git-branch' as const, toneClass: 'ih-tone-payment' },
+    nodePresentation: {
+      badge: 'SPLIT',
+      toneClass: 'task-node--payment-split',
+      iconPath: 'M12 4v16M4 8l8 8 8-8M4 16h16',
+    },
     summaryFields: ['inputMessageCount', 'splitMessageCount', 'passthroughCount', 'outputFragmentCount'],
     labelKey: 'processTask.MT101_SPLIT',
     descriptionKey: 'processTaskDescription.MT101_SPLIT',

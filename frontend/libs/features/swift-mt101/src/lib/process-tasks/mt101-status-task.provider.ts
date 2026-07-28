@@ -65,6 +65,12 @@ const PRESERVED_KEYS = [
 export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTaskDraft> {
   readonly descriptor = {
     type: 'MT101_STATUS' as const,
+    presentation: { icon: 'clock' as const, toneClass: 'ih-tone-payment' },
+    nodePresentation: {
+      badge: 'STATUS',
+      toneClass: 'task-node--payment-status',
+      iconPath: 'M12 8v4l3 2m6-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
+    },
     summaryFields: ['updatedCount', 'pendingCount'],
     labelKey: 'processTask.MT101_STATUS',
     descriptionKey: 'processTaskDescription.MT101_STATUS',

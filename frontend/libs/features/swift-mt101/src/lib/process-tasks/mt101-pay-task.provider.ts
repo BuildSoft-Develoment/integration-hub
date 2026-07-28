@@ -97,6 +97,12 @@ const PAY_PRESERVED_KEYS = [
 export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft> {
   readonly descriptor: ProcessTaskProviderDescriptor = {
     type: 'MT101_PAY' as const,
+    presentation: { icon: 'send' as const, toneClass: 'ih-tone-payment' },
+    nodePresentation: {
+      badge: 'PAY',
+      toneClass: 'task-node--payment-dispatch',
+      iconPath: 'M3 10h18M3 14h18M5 7h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM16 14h2',
+    },
     summaryFields: ['dispatchCount', 'sentCount', 'acceptedCount', 'rejectedCount', 'retriedCount', 'transport'],
     labelKey: 'processTask.MT101_PAY',
     descriptionKey: 'processTaskDescription.MT101_PAY',

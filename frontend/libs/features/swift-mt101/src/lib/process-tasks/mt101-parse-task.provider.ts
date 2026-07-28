@@ -23,6 +23,12 @@ export interface Mt101ParseTaskDraft extends ProcessTaskRuntimeDraft {
 export class Mt101ParseTaskProvider extends ProcessTaskProvider<Mt101ParseTaskDraft> {
   readonly descriptor: ProcessTaskProviderDescriptor = {
     type: 'MT101_PARSE' as const,
+    presentation: { icon: 'code' as const, toneClass: 'ih-tone-payment' },
+    nodePresentation: {
+      badge: 'PARSE',
+      toneClass: 'task-node--payment-parse',
+      iconPath: 'M4 4h16v6H4zM4 14h16v6H4zM8 7h2M8 17h2M14 7h2M14 17h2',
+    },
     summaryFields: ['parsedCount', 'messageCount', 'transactionCount'],
     labelKey: 'processTask.MT101_PARSE',
     descriptionKey: 'processTaskDescription.MT101_PARSE',

@@ -50,6 +50,12 @@ const DEFAULT_ISSUE_TABLE = 'mt101_validation_issue';
 export class Mt101ValidateTaskProvider extends ProcessTaskProvider<Mt101ValidateTaskDraft> {
   readonly descriptor = {
     type: 'MT101_VALIDATE' as const,
+    presentation: { icon: 'check' as const, toneClass: 'ih-tone-payment' },
+    nodePresentation: {
+      badge: 'NVR',
+      toneClass: 'task-node--payment-validate',
+      iconPath: 'M9 12l2 2 4-4m6 2a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
+    },
     summaryFields: ['validCount', 'invalidCount', 'issueCount'],
     labelKey: 'processTask.MT101_VALIDATE',
     descriptionKey: 'processTaskDescription.MT101_VALIDATE',

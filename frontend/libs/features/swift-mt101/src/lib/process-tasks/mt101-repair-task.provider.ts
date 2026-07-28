@@ -26,6 +26,12 @@ export interface Mt101RepairTaskDraft extends ProcessTaskRuntimeDraft {
 export class Mt101RepairTaskProvider extends ProcessTaskProvider<Mt101RepairTaskDraft> {
   readonly descriptor = {
     type: 'MT101_REPAIR' as const,
+    presentation: { icon: 'alert-triangle' as const, toneClass: 'ih-tone-payment' },
+    nodePresentation: {
+      badge: 'REPAIR',
+      toneClass: 'task-node--payment-repair',
+      iconPath: 'M14 3l7 7-11 11H3v-7zM14 3l-3 3 7 7 3-3z',
+    },
     summaryFields: ['inputMessageCount', 'repairedMessageCount', 'totalChanges', 'repairAttempt'],
     labelKey: 'processTask.MT101_REPAIR',
     descriptionKey: 'processTaskDescription.MT101_REPAIR',

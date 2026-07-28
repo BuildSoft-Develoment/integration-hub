@@ -9,12 +9,13 @@ import {
 const CONNECTION_TYPES = ['ORACLE', 'POSTGRESQL', 'SQLSERVER', 'MYSQL', 'MONGODB'] as const;
 const SOURCE_TYPES = ['FILESYSTEM', 'FTP', 'SFTP', 'REST', 'S3', 'GCS', 'AZURE_BLOB', 'OCI_OBJECT_STORAGE'] as const;
 const READER_TYPES = ['TXT', 'CSV', 'XLS', 'XLSX', 'JSON', 'XML', 'SWIFT_MT'] as const;
+// ADR-021: SOLO los tipos del motor. Antes la lista incluia los 12 de MT101, o sea que la prueba
+// EXIGIA que el mapa del core conociera un estandar — el acoplamiento convertido en regla. La
+// visual de un vertical la declara su provider (`descriptor.presentation`) y la verifica el
+// vertical.
 const TASK_TYPES = [
   'FILE_READ', 'DB_WRITE', 'DB_EXECUTE_SP', 'DB_EXECUTE_FN', 'REST_CALL', 'NOTIFICATION',
   'FILE_WRITE', 'FILE_COMPRESS', 'FILE_DELIVER',
-  'MT101_BUILD_FROM_TABLE', 'MT101_VALIDATE', 'MT101_ARCHIVE', 'MT101_PAY',
-  'MT101_ROUTE', 'MT101_RECONCILE', 'MT101_STATUS', 'MT101_PARSE',
-  'MT101_SPLIT', 'MT101_REPAIR', 'MT101_PARSE_FROM_TABLE', 'MT101_INBOUND_DELIVER',
 ] as const;
 
 const VALID_ICONS = [

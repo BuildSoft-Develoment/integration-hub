@@ -706,7 +706,6 @@ export const es = {
   'processTask.category.swift-mt101': 'SWIFT MT101',
   'processTask.category.plugin': 'Plugins',
   'processTask.MT101_BUILD_FROM_TABLE': 'Construir MT101 desde staging',
-  'process.template.massiveMt101': 'MT101 masivo desde archivo',
   'processTask.MT101_VALIDATE': 'Validar MT101',
   'processTask.MT101_ARCHIVE': 'Archivar MT101',
   'processTask.MT101_PAY': 'Pagar MT101',

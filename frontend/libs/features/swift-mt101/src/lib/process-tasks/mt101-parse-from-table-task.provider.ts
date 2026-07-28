@@ -58,6 +58,12 @@ const DEFAULT_ID_COLUMN = 'id';
 export class Mt101ParseFromTableTaskProvider extends ProcessTaskProvider<Mt101ParseFromTableTaskDraft> {
   readonly descriptor: ProcessTaskProviderDescriptor = {
     type: 'MT101_PARSE_FROM_TABLE' as const,
+    presentation: { icon: 'table' as const, toneClass: 'ih-tone-payment' },
+    nodePresentation: {
+      badge: 'PARSE',
+      toneClass: 'task-node--payment-parse',
+      iconPath: 'M4 4h16v6H4zM4 14h16v6H4zM8 7h2M8 17h2M14 7h2M14 17h2',
+    },
     labelKey: 'processTask.MT101_PARSE_FROM_TABLE',
     descriptionKey: 'processTaskDescription.MT101_PARSE_FROM_TABLE',
     category: 'swift-mt101',
