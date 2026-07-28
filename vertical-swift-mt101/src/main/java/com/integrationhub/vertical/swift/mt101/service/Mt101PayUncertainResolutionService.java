@@ -1,6 +1,6 @@
 package com.integrationhub.vertical.swift.mt101.service;
 
-import com.integrationhub.vertical.swift.mt101.service.Mt101CorrectiveTaskConfigSource;
+import com.integrationhub.platform.spi.engine.ProcessTaskConfigSource;
 import com.integrationhub.vertical.swift.mt101.service.Mt101PayConflictAudit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -51,7 +51,7 @@ public class Mt101PayUncertainResolutionService {
     // P1 (item 2): trama append-only PAY_CONFLICT cuando STATUS detecta SENT→REJECTED (nullable en tests sin audit).
     private final com.integrationhub.platform.spi.engine.RecordAuditEmitter recordAuditEmitter;
 
-    private final com.integrationhub.vertical.swift.mt101.service.Mt101CorrectiveTaskConfigSource taskConfigSource;
+    private final ProcessTaskConfigSource taskConfigSource;
 
     @Inject
     public Mt101PayUncertainResolutionService(DataSource defaultDataSource,
@@ -60,7 +60,7 @@ public class Mt101PayUncertainResolutionService {
                                               ObjectMapper objectMapper,
                                               Mt101ConfirmationRepository confirmationRepository,
                                               com.integrationhub.platform.spi.engine.RecordAuditEmitter recordAuditEmitter,
-                                              Mt101CorrectiveTaskConfigSource taskConfigSource) {
+                                              ProcessTaskConfigSource taskConfigSource) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.fragmentRepository = fragmentRepository;
@@ -77,7 +77,7 @@ public class Mt101PayUncertainResolutionService {
                                        Mt101StatusQueryExecutor statusQueryExecutor,
                                        Mt101ConfirmationRepository confirmationRepository,
                                        com.integrationhub.platform.spi.engine.RecordAuditEmitter recordAuditEmitter,
-                                       Mt101CorrectiveTaskConfigSource taskConfigSource) {
+                                       ProcessTaskConfigSource taskConfigSource) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.fragmentRepository = fragmentRepository;
@@ -98,7 +98,7 @@ public class Mt101PayUncertainResolutionService {
             if (meta == null || meta.taskDefinitionId() == null) {
                 throw new IllegalArgumentException("no MT101 fragment set (with task definition) found: " + set);
             }
-            var config = taskConfigSource.taskConfig(meta.taskDefinitionId(), "MT101_STATUS");
+            var config = taskConfigSource.siblingConfigOf(meta.taskDefinitionId(), "MT101_STATUS");
             if (config == null) {
                 throw new IllegalStateException("the process of set " + set
                         + " has no MT101_STATUS task; cannot resolve the uncertain PAY status");

@@ -1,6 +1,8 @@
 package com.integrationhub.vertical.swift.mt101.service;
 
-import com.integrationhub.vertical.swift.mt101.service.Mt101CorrectiveTaskConfigSource;
+import com.integrationhub.platform.spi.engine.ProcessTaskConfigSource;
+import com.integrationhub.vertical.swift.mt101.support.TestConfigurationMapper;
+import com.integrationhub.vertical.swift.mt101.support.TestProcessTaskConfigSource;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -318,21 +320,11 @@ class Mt101CorrectiveLifecycleServiceTest {
                 return TaskResult.success("fake reconcile");
             }
         };
-        Mt101CorrectiveTaskConfigSource configSource = new Mt101CorrectiveTaskConfigSource() {
-            @Override
-            public Map<String, Object> taskConfig(long buildTaskDefinitionId, String taskType) {
-                // v27 P0.2: la config "viva" = sin resolver + secretos resueltos (como JsonConfigurationMapper).
-                return resolveConfig(taskConfigUnresolved(buildTaskDefinitionId, taskType));
-            }
-
-            @Override
-            @SuppressWarnings("unchecked")
-            public Map<String, Object> resolveConfig(Map<String, Object> config) {
-                return config == null ? null : (Map<String, Object>) resolveTestSecrets(config);
-            }
-
-            @Override
-            public Map<String, Object> taskConfigUnresolved(long buildTaskDefinitionId, String taskType) {
+        // v27 P0.2: el doble declara las DOS versiones — la lambda devuelve la config SIN resolver y
+        // el segundo argumento la resuelve, igual que hace el motor. `forSiblings` obliga a decirlo:
+        // ya no existe un default que devuelva la resuelta por omision.
+        ProcessTaskConfigSource configSource = TestProcessTaskConfigSource.forSiblings(
+                (buildTaskDefinitionId, taskType) -> {
             var config = new java.util.LinkedHashMap<String, Object>();
             config.put("input", Map.of("sourceTaskRef", "build-mt101", "sourceOutput", "fragments"));
             if ("MT101_PAY".equals(taskType)) {
@@ -378,12 +370,13 @@ class Mt101CorrectiveLifecycleServiceTest {
                 config.put("token", "${secret:status_token}");
             }
             return config;
-            }
-        };
+                },
+                Mt101CorrectiveLifecycleServiceTest::resolveTestSecretsInConfig);
 
         service = new Mt101CorrectiveLifecycleService(dataSource, null,
                 new Mt101RebuildRepository(), new Mt101FragmentRepository(), rebuildService,
-                configSource, validate, repair, route, archive, pay, status, reconcile, null);
+                configSource, new TestConfigurationMapper(reference -> "RESOLVED:" + reference),
+                validate, repair, route, archive, pay, status, reconcile, null);
     }
 
     @Test
@@ -1965,8 +1958,13 @@ class Mt101CorrectiveLifecycleServiceTest {
         assertEquals(1, reconcileInvocations.get(), "RECONCILE no se omite por el fallo de STATUS");
     }
 
-    /** v27 P0.2: simula la re-resolucion de secretos del snapshot ({@code ${secret:X}} -> {@code RESOLVED:X}). */
+    /** Version tipada para el doble: config sin resolver -> config con secretos resueltos. */
     @SuppressWarnings("unchecked")
+    private static Map<String, Object> resolveTestSecretsInConfig(Map<String, Object> config) {
+        return config == null ? null : (Map<String, Object>) resolveTestSecrets(config);
+    }
+
+    /** v27 P0.2: simula la re-resolucion de secretos del snapshot ({@code ${secret:X}} -> {@code RESOLVED:X}). */
     private static Object resolveTestSecrets(Object value) {
         if (value instanceof Map<?, ?> map) {
             var result = new java.util.LinkedHashMap<String, Object>();

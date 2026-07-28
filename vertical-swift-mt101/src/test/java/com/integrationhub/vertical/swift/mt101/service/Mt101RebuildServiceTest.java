@@ -1,6 +1,7 @@
 package com.integrationhub.vertical.swift.mt101.service;
 
-import com.integrationhub.vertical.swift.mt101.service.Mt101BuildConfigSource;
+import com.integrationhub.platform.spi.engine.ProcessTaskConfigSource;
+import com.integrationhub.vertical.swift.mt101.support.TestProcessTaskConfigSource;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
@@ -73,10 +74,10 @@ class Mt101RebuildServiceTest {
                 return TaskResult.success("fake build", Map.of("fragmentCount", 1));
             }
         };
-        Mt101BuildConfigSource configSource = taskDefinitionId -> Map.of(
+        ProcessTaskConfigSource configSource = TestProcessTaskConfigSource.forTask(Map.of(
                 "sequenceA", Map.of("sendersReferenceTemplate", "P${messageIndex}"),
                 "transactionMappings", Map.of("transactionReferenceTemplate", "TX-${recordNumber}"),
-                "format", "JSON");
+                "format", "JSON"));
         service = new Mt101RebuildService(dataSource, null, fakeBuild, configSource,
                 new Mt101FailedRecordRepository(), new Mt101FragmentRepository());
         prepareSchema();

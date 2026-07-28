@@ -1,6 +1,6 @@
 package com.integrationhub.vertical.swift.mt101.service;
 
-import com.integrationhub.vertical.swift.mt101.service.Mt101BuildConfigSource;
+import com.integrationhub.platform.spi.engine.ProcessTaskConfigSource;
 
 import com.integrationhub.vertical.swift.mt101.provider.task.Mt101BuildFromTableTaskProvider;
 import com.integrationhub.vertical.swift.mt101.repository.Mt101FailedRecordRepository;
@@ -38,7 +38,7 @@ public class Mt101RebuildService {
     private final DataSource defaultDataSource;
     private final JdbcConnectionResolver connectionPoolManager;
     private final Mt101BuildFromTableTaskProvider buildProvider;
-    private final Mt101BuildConfigSource buildConfigSource;
+    private final ProcessTaskConfigSource taskConfigSource;
     private final Mt101FailedRecordRepository failedRecordRepository;
     private final Mt101FragmentRepository fragmentRepository;
     private final Mt101RebuildRepository rebuildRepository;
@@ -47,14 +47,14 @@ public class Mt101RebuildService {
     public Mt101RebuildService(DataSource defaultDataSource,
                                JdbcConnectionResolver connectionPoolManager,
                                Mt101BuildFromTableTaskProvider buildProvider,
-                               Mt101BuildConfigSource buildConfigSource,
+                               ProcessTaskConfigSource taskConfigSource,
                                Mt101FailedRecordRepository failedRecordRepository,
                                Mt101FragmentRepository fragmentRepository,
                                Mt101RebuildRepository rebuildRepository) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.buildProvider = buildProvider;
-        this.buildConfigSource = buildConfigSource;
+        this.taskConfigSource = taskConfigSource;
         this.failedRecordRepository = failedRecordRepository;
         this.fragmentRepository = fragmentRepository;
         this.rebuildRepository = rebuildRepository;
@@ -63,10 +63,10 @@ public class Mt101RebuildService {
     public Mt101RebuildService(DataSource defaultDataSource,
                                JdbcConnectionResolver connectionPoolManager,
                                Mt101BuildFromTableTaskProvider buildProvider,
-                               Mt101BuildConfigSource buildConfigSource,
+                               ProcessTaskConfigSource taskConfigSource,
                                Mt101FailedRecordRepository failedRecordRepository,
                                Mt101FragmentRepository fragmentRepository) {
-        this(defaultDataSource, connectionPoolManager, buildProvider, buildConfigSource,
+        this(defaultDataSource, connectionPoolManager, buildProvider, taskConfigSource,
                 failedRecordRepository, fragmentRepository, new Mt101RebuildRepository());
     }
 
@@ -336,7 +336,7 @@ public class Mt101RebuildService {
             }
             try {
                 var config = correctiveConfig(
-                        buildConfigSource.buildConfig(metadata.taskDefinitionId()),
+                        taskConfigSource.configOf(metadata.taskDefinitionId()),
                         metadata, connectionRef, corrective, runId, referenceCode);
 
                 var context = new TaskContext(metadata.processExecutionId(), metadata.taskDefinitionId());

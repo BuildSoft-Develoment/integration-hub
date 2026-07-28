@@ -10,7 +10,7 @@
 
 ## Estado
 
-**Propuesto (2026-07-26); fases A, B, 2 y 3 implementadas (2026-07-27)** — ver *Alcance implementado*. La **decision 5 quedo revertida** por la medicion: MT101 si se extrajo a su modulo. Pendiente de gate humano para pasar a Aceptado.
+**Propuesto (2026-07-26); fases A, B, 2 y 3 implementadas (2026-07-27)** — ver *Alcance implementado*. La **decision 5 quedo revertida** por la medicion: MT101 si se extrajo a su modulo, y `platform-app` quedo sin una sola clase de vertical. Pendiente de gate humano para pasar a Aceptado.
 
 Cierra la decision que [ADR-009](ADR-009-vertical-mensajeria-pagos.md) difirio explicitamente ("sub-modulo Maven opcional para 008; decision diferida") y complementa [ADR-014](ADR-014-backend-modular-extensible-plugins.md) (que reservo el modelo out-of-process para terceros y dejo las verticales de primera parte como modulos de build) y [ADR-019](ADR-019-auditoria-standard-packs-agrupacion-por-dominio.md) (que propuso el split de la lib Nx de auditoria como Fase 2).
 
@@ -193,7 +193,7 @@ Lo hecho: los 10 endpoints/DTOs MT101 salen de `api.*.execution` a `api.*.paymen
 
 Las **2 violaciones restantes** son los readers `SwiftMtReaderProvider` y `Pain001XmlReaderProvider`, que viven en `provider/reader` por una decision documentada en el propio codigo (se registran en el catalogo de formatos como uno mas). Se dejan congeladas a proposito: revisarlas exige revisar esa decision, no solo mover archivos.
 
-**Fase 3 — modulo Maven propio.** Tres modulos nuevos, en cuatro olas:
+**Fase 3 — modulo Maven propio.** Tres modulos nuevos, en cinco olas:
 
 - **`platform-spi`** — el contrato de extension. Se extrajo *entero* el paquete `platform.spi`, conservando su nombre: sin paquete partido y sin reescribir un solo import. Despues fue creciendo con lo que la migracion fue revelando como contrato y no como interioridad.
 - **`vertical-swift-mt101`** — el vertical, en paquete `com.integrationhub.vertical.swift.mt101`.
@@ -229,11 +229,22 @@ El patron de los cuatro errores es el mismo y vale registrarlo: **se clasifico p
 
 De paso, `PlatformRoles` se partio: los 5 roles transversales al SPI (los usa el motor en 11-20 archivos cada uno) y los 2 del maker-checker al vertical (**el motor no los usaba nunca**).
 
+#### Ola 5 — el ultimo puerto, y por que NO se hizo por REST
+
+Quedaban dos adaptadores en `platform-app` (`ProcessTaskDefinition{Build,Corrective}ConfigSource`), correctos en sentido de dependencia pero satisfaciendo puertos llamados `Mt101*`. Se evaluaron dos caminos para llegar a cero.
+
+**Descartado: que el vertical lea el config por REST.** El dato que devuelven esos puertos termina en `provider.execute(context, config)` — el envio al banco — y sale de `ConfigurationMapper.toMap()`, que **resuelve los `${secret:...}`**. Las claves de un config de PAY son `host, port, username, password, privateKeyPath, passphrase`. Ponerlo en un cable HTTP contradice una invariante que el propio codigo ya cuida (*"las refs viajan INTACTAS: el spec persistido nunca lleva secretos resueltos"*), y ademas ese mismo config se hashea para el freeze del maker-checker: una lectura no transaccional abriria una ventana TOCTOU en un control de cuatro ojos. REST seria la respuesta si el vertical fuera otro deployable; dentro del mismo JVM paga serializacion, pierde la transaccion y expone secretos a cambio de un desacople que ya da una interfaz.
+
+**Hecho: un puerto generico en el SPI.** `ProcessTaskConfigSource` (`configOf`, `siblingConfigOf`, `siblingConfigOfUnresolved`), implementado UNA vez por el motor en `ProcessTaskDefinitionConfigSource`. Las dos interfaces del vertical y sus dos adaptadores desaparecen; SBS lo hereda sin escribir el suyo. `resolveConfig` tambien se fue: `ConfigurationMapper.resolveSecretsIn` del SPI ya hacia exactamente eso.
+
+**Y se cerro un fail-open.** La interfaz vieja traia `taskConfigUnresolved` como `default` que delegaba en la version resuelta: quien no lo sobreescribiera persistia secretos en claro en el snapshot congelado. Con una sola implementacion se aguantaba (la unica productiva si lo sobreescribia); con un SPI que cada vertical nuevo implementa, no. Ahora es **abstracto**: el compilador obliga a decidir. El precio es que los dobles de test dejan de ser lambdas — y ese es el punto, la eleccion resuelto/sin-resolver queda escrita en cada prueba.
+
+Con esto `platform-app/src/main` queda en **cero clases de vertical**.
+
 Lo que **si** se queda en `platform-app`:
 
 | Que | Por que |
 |---|---|
-| `ProcessTaskDefinition{Build,Corrective}ConfigSource` | Adaptadores que implementan puertos **del vertical** leyendo `process_task_definition`, tabla del motor. Aca la dependencia si va en el sentido correcto. *(Pendiente: los puertos se llaman `Mt101*` y la necesidad es generica — subirlos al SPI como `ProcessTaskConfigSource` haria que SBS los reuse gratis.)* |
 | `Mt101ReflectionRegistrationsTest` | Prueba de guardia que compara contra el registro central del motor: necesita ver ambos modulos |
 
 #### Tercer modulo: `vertical-iso20022`

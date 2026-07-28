@@ -1,6 +1,7 @@
 package com.integrationhub.vertical.swift.mt101.service;
 
-import com.integrationhub.vertical.swift.mt101.service.Mt101CorrectiveTaskConfigSource;
+import com.integrationhub.platform.spi.engine.ConfigurationMapper;
+import com.integrationhub.platform.spi.engine.ProcessTaskConfigSource;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -58,7 +59,9 @@ public class Mt101CorrectiveLifecycleService {
     private final Mt101RebuildRepository rebuildRepository;
     private final Mt101FragmentRepository fragmentRepository;
     private final Mt101RebuildService rebuildService;
-    private final Mt101CorrectiveTaskConfigSource taskConfigSource;
+    private final ProcessTaskConfigSource taskConfigSource;
+    /** v27 P0.2: re-resuelve los ${secret:...} de un snapshot congelado, con Vault fresco al ejecutar. */
+    private final ConfigurationMapper configurationMapper;
     private final Mt101ValidateTaskProvider validateProvider;
     private final Mt101RepairTaskProvider repairProvider;
     private final Mt101RouteTaskProvider routeProvider;
@@ -77,7 +80,8 @@ public class Mt101CorrectiveLifecycleService {
                                            Mt101RebuildRepository rebuildRepository,
                                            Mt101FragmentRepository fragmentRepository,
                                            Mt101RebuildService rebuildService,
-                                           Mt101CorrectiveTaskConfigSource taskConfigSource,
+                                           ProcessTaskConfigSource taskConfigSource,
+                                           ConfigurationMapper configurationMapper,
                                            Mt101ValidateTaskProvider validateProvider,
                                            Mt101RepairTaskProvider repairProvider,
                                            Mt101RouteTaskProvider routeProvider,
@@ -92,6 +96,7 @@ public class Mt101CorrectiveLifecycleService {
         this.fragmentRepository = fragmentRepository;
         this.rebuildService = rebuildService;
         this.taskConfigSource = taskConfigSource;
+        this.configurationMapper = configurationMapper;
         this.validateProvider = validateProvider;
         this.repairProvider = repairProvider;
         this.routeProvider = routeProvider;
@@ -210,7 +215,7 @@ public class Mt101CorrectiveLifecycleService {
                 // spec falla a mitad, el run NO queda atascado: el finally libera la reserva (re-solicitable).
                 // La compilacion (resolver de ruta) vive solo aqui, en la preparacion.
                 rebuildRepository.refreshPayFragmentsFromCorrectiveSet(dataSource, runId, reservationId, run.correctiveSetId());
-                var unresolvedPayConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_PAY");
+                var unresolvedPayConfig = taskConfigSource.siblingConfigOfUnresolved(prep.buildTaskDefinitionId(), "MT101_PAY");
                 preparePayIntents(dataSource, runId, reservationId, run.correctiveSetId(), payConfig, unresolvedPayConfig);
                 // v41 (modelo versionado): snapshot INMUTABLE del conjunto preparado como una revision DRAFT
                 // (bajo la reserva exclusiva; ningun otro maker escribe en paralelo). La revision se ACTIVA en la
@@ -339,11 +344,11 @@ public class Mt101CorrectiveLifecycleService {
             // v28 #3: exige secretRef/Vault para STATUS y RECONCILE ANTES de reclamar. Un secreto LITERAL se
             // redactaria al congelar el snapshot y seria IRRECUPERABLE para autenticar un PAY_UNCERTAIN
             // diferido; se rechaza pre-claim (sin dejar el run en EXECUTING) y se exige una ref re-resoluble.
-            var unresolvedStatusConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_STATUS");
+            var unresolvedStatusConfig = taskConfigSource.siblingConfigOfUnresolved(prep.buildTaskDefinitionId(), "MT101_STATUS");
             if (unresolvedStatusConfig != null) {
                 assertSecretsAreResolvableRefs(unresolvedStatusConfig, "STATUS", "");
             }
-            var unresolvedReconcileConfig = taskConfigSource.taskConfigUnresolved(prep.buildTaskDefinitionId(), "MT101_RECONCILE");
+            var unresolvedReconcileConfig = taskConfigSource.siblingConfigOfUnresolved(prep.buildTaskDefinitionId(), "MT101_RECONCILE");
             if (unresolvedReconcileConfig != null) {
                 assertSecretsAreResolvableRefs(unresolvedReconcileConfig, "RECONCILE", "");
             }
@@ -705,7 +710,7 @@ public class Mt101CorrectiveLifecycleService {
             throw new IllegalStateException(taskType + " provider is not available");
         }
         var baseConfig = frozenBaseConfig != null ? frozenBaseConfig
-                : taskConfigSource.taskConfig(prep.buildTaskDefinitionId(), taskType);
+                : taskConfigSource.siblingConfigOf(prep.buildTaskDefinitionId(), taskType);
         if (baseConfig == null) {
             throw new IllegalStateException("the original process has no " + taskType
                     + " task; cannot orchestrate the corrective lifecycle for set " + prep.correctiveSetId());
@@ -725,7 +730,7 @@ public class Mt101CorrectiveLifecycleService {
     }
 
     private Map<String, Object> stageConfig(StagePrep prep, String taskType) {
-        return taskConfigSource.taskConfig(prep.buildTaskDefinitionId(), taskType);
+        return taskConfigSource.siblingConfigOf(prep.buildTaskDefinitionId(), taskType);
     }
 
     private String payConfigHash(StagePrep prep) {
@@ -786,7 +791,7 @@ public class Mt101CorrectiveLifecycleService {
         try {
             // v27 P0.2: el snapshot tiene refs ${secret:...} sin resolver; se RE-RESUELVEN ahora (Vault
             // fresco) para que la consulta SFTP/STATUS diferida pueda autenticarse.
-            return taskConfigSource.resolveConfig(objectMapper.readValue(snapshot, LinkedHashMap.class));
+            return configurationMapper.resolveSecretsIn(objectMapper.readValue(snapshot, LinkedHashMap.class));
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("cannot read frozen MT101_STATUS config for run " + runId, error);
         }
@@ -800,7 +805,7 @@ public class Mt101CorrectiveLifecycleService {
             return null;
         }
         try {
-            return taskConfigSource.resolveConfig(objectMapper.readValue(snapshot, LinkedHashMap.class));
+            return configurationMapper.resolveSecretsIn(objectMapper.readValue(snapshot, LinkedHashMap.class));
         } catch (JsonProcessingException error) {
             throw new IllegalStateException("cannot read frozen MT101_RECONCILE config for run " + runId, error);
         }

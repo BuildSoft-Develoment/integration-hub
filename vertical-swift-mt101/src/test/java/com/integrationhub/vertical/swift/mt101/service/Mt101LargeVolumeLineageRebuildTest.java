@@ -1,6 +1,7 @@
 package com.integrationhub.vertical.swift.mt101.service;
 
-import com.integrationhub.vertical.swift.mt101.service.Mt101BuildConfigSource;
+import com.integrationhub.platform.spi.engine.ProcessTaskConfigSource;
+import com.integrationhub.vertical.swift.mt101.support.TestProcessTaskConfigSource;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.vertical.swift.mt101.provider.task.Mt101BuildFromTableTaskProvider;
@@ -41,11 +42,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @Testcontainers
 class Mt101LargeVolumeLineageRebuildTest {
 
-    private static final int TOTAL_ROWS = 100_000;
+    /**
+     * Por defecto 20k (corrida rapida); la carga original de 100k queda opt-in con
+     * {@code -Dlineage.rows=100000}. Mismo patron que {@code Mt101MassivePipelinePerfIT} y
+     * {@code Mt101MillionFileProcessE2EIT}, que ya eran parametrizables.
+     *
+     * <p>Lo que la prueba vigila es la <b>paginacion</b> del linaje y del rebuild, no un umbral de
+     * rendimiento: con 20k siguen siendo 400 fragmentos, suficiente para que un recorrido no paginado
+     * se caiga. Para cazar una regresion cuadratica hay que correrla con 100k.</p>
+     */
+    private static final int TOTAL_ROWS = Integer.getInteger("lineage.rows", 20_000);
     private static final int ROWS_PER_FRAGMENT = 50;
-    private static final String SET_ID = "SET-100K";
-    private static final String HASH = "hash-100k";
-    private static final List<Long> BAD_ROWS = List.of(123L, 126L, 50_250L, 77_777L, 99_999L);
+    private static final String SET_ID = "SET-LINEAGE-" + TOTAL_ROWS;
+    private static final String HASH = "hash-lineage-" + TOTAL_ROWS;
+
+    /**
+     * Filas malas DERIVADAS del total (antes eran absolutas y fijaban el volumen a 100k). Se conserva
+     * lo que cada una prueba: dos en el MISMO fragmento (se cuenta un fragmento afectado, no dos),
+     * una al medio, una a tres cuartos y una en el ULTIMO fragmento.
+     */
+    private static final List<Long> BAD_ROWS = List.of(
+            123L,
+            126L,
+            TOTAL_ROWS / 2L + 250L,
+            TOTAL_ROWS * 3L / 4L,
+            TOTAL_ROWS - 1L);
 
     @Container
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
@@ -81,10 +102,10 @@ class Mt101LargeVolumeLineageRebuildTest {
                 return TaskResult.success("fake corrective build", Map.of("fragmentCount", affectedReferences().size()));
             }
         };
-        Mt101BuildConfigSource configSource = taskDefinitionId -> Map.of(
+        ProcessTaskConfigSource configSource = TestProcessTaskConfigSource.forTask(Map.of(
                 "sequenceA", Map.of("sendersReferenceTemplate", "P${messageIndex}"),
                 "transactionMappings", Map.of("transactionReferenceTemplate", "TX-${recordNumber}"),
-                "format", "JSON");
+                "format", "JSON"));
         rebuildService = new Mt101RebuildService(
                 dataSource,
                 null,
@@ -114,13 +135,20 @@ class Mt101LargeVolumeLineageRebuildTest {
         assertEquals(affectedReferences().size(), requested.affectedFragments());
         assertEquals(affectedReferences().size() * ROWS_PER_FRAGMENT, requested.selectedRows());
 
+        // La fila mala "del medio" y los limites de SU fragmento, derivados igual que BAD_ROWS: antes
+        // estaban escritos a mano (50_201/50_250/50_251) y eran lo que ataba la prueba a 100k filas.
+        var midBadRow = BAD_ROWS.get(2);
+        var midFragmentStart = (midBadRow - 1) / ROWS_PER_FRAGMENT * ROWS_PER_FRAGMENT + 1;
+        var rowAfterMidFragment = midFragmentStart + ROWS_PER_FRAGMENT;
+
         assertTrue(selectionContains(101), "incluye filas hermanas validas del fragmento P3");
         assertTrue(selectionContains(150), "incluye el cierre del fragmento P3");
-        assertTrue(selectionContains(50_201), "incluye el inicio del fragmento de la fila 50250");
-        assertTrue(selectionContains(50_250), "incluye la fila fallida 50250");
+        assertTrue(selectionContains(midFragmentStart), "incluye el inicio del fragmento de la fila " + midBadRow);
+        assertTrue(selectionContains(midBadRow), "incluye la fila fallida " + midBadRow);
         assertFalse(selectionContains(100), "no inventa rango antes del fragmento afectado");
         assertFalse(selectionContains(151), "no inventa rango entre fragmentos no contiguos");
-        assertFalse(selectionContains(50_251), "no toma la fila valida posterior al fragmento afectado");
+        assertFalse(selectionContains(rowAfterMidFragment),
+                "no toma la fila valida posterior al fragmento afectado");
 
         rebuildService.approveRebuildRun(null, fixSetId, "approver");
         var result = rebuildService.executeApprovedRebuildRun(null, fixSetId, "executor");

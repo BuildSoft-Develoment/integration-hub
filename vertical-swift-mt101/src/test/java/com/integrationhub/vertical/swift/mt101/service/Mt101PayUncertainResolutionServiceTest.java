@@ -1,6 +1,7 @@
 package com.integrationhub.vertical.swift.mt101.service;
 
-import com.integrationhub.vertical.swift.mt101.service.Mt101CorrectiveTaskConfigSource;
+import com.integrationhub.platform.spi.engine.ProcessTaskConfigSource;
+import com.integrationhub.vertical.swift.mt101.support.TestProcessTaskConfigSource;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
@@ -68,8 +69,10 @@ class Mt101PayUncertainResolutionServiceTest {
                 "expectedGatewayResponse", Map.of("statusField", "$.status"),
                 "acceptedStatuses", List.of("ACCEPTED"),
                 "rejectedStatuses", List.of("REJECTED"));
-        Mt101CorrectiveTaskConfigSource configSource = (taskDefinitionId, taskType) ->
-                "MT101_STATUS".equals(taskType) ? statusConfig : null;
+        // Sin secretos: esta prueba no usa ${secret:...}, resuelta y sin resolver son la misma.
+        ProcessTaskConfigSource configSource = TestProcessTaskConfigSource.forSiblingsWithoutSecrets(
+                (taskDefinitionId, taskType) ->
+                        "MT101_STATUS".equals(taskType) ? statusConfig : null);
         auditEmitter = new CapturingAuditEmitter();
         service = new Mt101PayUncertainResolutionService(dataSource, null, repository, executor,
                 new Mt101ConfirmationRepository(), auditEmitter, configSource);
@@ -185,8 +188,10 @@ class Mt101PayUncertainResolutionServiceTest {
                 "routeQuery", Map.of("REST_A",
                         Map.of("url", baseUrl + "/route-a/${sendersReference}", "statusField", "$.state")),
                 "acceptedStatuses", List.of("OK"));
-        Mt101CorrectiveTaskConfigSource configSource = (taskDefinitionId, taskType) ->
-                "MT101_STATUS".equals(taskType) ? routeConfig : null;
+        // Sin secretos: esta prueba no usa ${secret:...}, resuelta y sin resolver son la misma.
+        ProcessTaskConfigSource configSource = TestProcessTaskConfigSource.forSiblingsWithoutSecrets(
+                (taskDefinitionId, taskType) ->
+                        "MT101_STATUS".equals(taskType) ? routeConfig : null);
         var routeService = new Mt101PayUncertainResolutionService(dataSource, null, repository,
                 new Mt101StatusQueryExecutor(new ObjectMapper()), new Mt101ConfirmationRepository(), null, configSource);
 
