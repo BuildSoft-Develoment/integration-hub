@@ -77,12 +77,3 @@ export const SWIFT_MT101_MASSIVE_TEMPLATE: ProcessTemplateRegistration = {
 export function provideSwiftMt101ProcessTemplate(): Provider[] {
   return [provideProcessTemplate(SWIFT_MT101_MASSIVE_TEMPLATE)];
 }
-
-/**
- * Etiquetas del vertical, por `registerMessages()` y no por el diccionario monolitico del core
- * (ADR-021 fase A). Se registran al ensamblar la ruta, junto con los providers.
- */
-export const SWIFT_MT101_TEMPLATE_MESSAGES: Record<'es' | 'en', Record<string, string>> = {
-  es: { 'processes.template.swiftMt101Massive': 'MT101 masivo desde archivo' },
-  en: { 'processes.template.swiftMt101Massive': 'MT101 massive from file' },
-};

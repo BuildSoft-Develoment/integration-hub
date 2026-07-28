@@ -1,12 +1,8 @@
 // @trace spec 008-mensajeria-pagos T-011, T-021, T-026 (registracion de la vertical)
 // @trace ADR-009
 import { Provider } from '@angular/core';
-import { ENVIRONMENT_INITIALIZER, inject } from '@angular/core';
-import { I18nService } from '@integration-hub/core/i18n';
-import {
-  SWIFT_MT101_TEMPLATE_MESSAGES,
-  provideSwiftMt101ProcessTemplate,
-} from './swift-mt101-process-template';
+import { provideSwiftMt101I18n } from '../swift-mt101-i18n';
+import { provideSwiftMt101ProcessTemplate } from './swift-mt101-process-template';
 import { PROCESS_TASK_PROVIDERS } from '@integration-hub/core/providers';
 import { ProcessTaskFormBridgeService } from '@integration-hub/core/providers';
 import {
@@ -61,16 +57,8 @@ export function provideSwiftMt101ProcessTasks(): Provider[] {
     Mt101InboundDeliverTaskProvider,
   ];
   return [
-    // ADR-021: las etiquetas del vertical van por registerMessages, no por el diccionario del core.
-    {
-      provide: ENVIRONMENT_INITIALIZER,
-      multi: true,
-      useValue: () => {
-        const i18n = inject(I18nService);
-        i18n.registerMessages('es', SWIFT_MT101_TEMPLATE_MESSAGES.es);
-        i18n.registerMessages('en', SWIFT_MT101_TEMPLATE_MESSAGES.en);
-      },
-    },
+    // ADR-021: las etiquetas del vertical, por registerMessages y no por el diccionario del core.
+    ...provideSwiftMt101I18n(),
     // ADR-021: la cadena masiva, aportada por el vertical (antes vivia en la store del editor).
     ...provideSwiftMt101ProcessTemplate(),
     // Servicio puente para outputs de formularios dinamicos.

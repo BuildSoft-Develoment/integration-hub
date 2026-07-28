@@ -8,3 +8,5 @@ export * from './lib/process-tasks/swift-mt101-process-tasks.providers';
 // `payment_validation_rule` solo la leen las clases del vertical.
 export * from './lib/validation-rules/catalog/payment-validation-rules.routes';
 export * from './lib/process-tasks/swift-mt101-process-template';
+export * from './lib/swift-mt101-i18n';
+export * from './lib/swift-mt101-audit-risks';

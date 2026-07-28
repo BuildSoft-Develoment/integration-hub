@@ -1,14 +1,9 @@
-import { auditEvidenceLabelKey, auditOperationRisk } from './audit-operation-risk';
+import { auditEvidenceLabelKey, auditOperationRisk, registerAuditOperationRisks } from './audit-operation-risk';
 
 describe('auditOperationRisk', () => {
-  it('clasifica PAY como operacion critica con maker-checker', () => {
-    const risk = auditOperationRisk('mt101-corrective-pay-approve');
-
-    expect(risk.severity).toBe('critical');
-    expect(risk.requiredCapability).toBe('audit-admin');
-    expect(risk.evidence).toContain('maker-checker');
-    expect(risk.evidence).toContain('append-only-history');
-  });
+  // ADR-021: solo operaciones de la PLATAFORMA. La de MT101 que se verificaba aca se fue con el
+  // vertical (`swift-mt101-audit-risks.spec.ts`): el kit aporta el contrato, no la lista de
+  // operaciones gobernadas de cada estandar.
 
   it('mantiene limpieza de spool como operacion admin con confirmacion', () => {
     const risk = auditOperationRisk('audit-spool-cleanup-sent');
@@ -19,5 +14,29 @@ describe('auditOperationRisk', () => {
 
   it('resuelve keys i18n de evidencia sin acoplar componentes', () => {
     expect(auditEvidenceLabelKey('optimistic-lock')).toBe('audit.risk.evidence.optimistic-lock');
+  });
+});
+
+describe('registro de verticales (ADR-021)', () => {
+  it('falla fuerte ante una operacion no registrada', () => {
+    // Politica no-fallback: una accion gobernada sin riesgo declarado se renderizaria SIN sus
+    // controles (confirmacion, motivo, maker-checker). Romper es mas seguro que degradar.
+    expect(() => auditOperationRisk('un-vertical-no-registrado')).toThrow(/not registered/);
+  });
+
+  it('un vertical aporta las suyas y quedan resolubles', () => {
+    registerAuditOperationRisks([
+      {
+        id: 'fake-vertical-op',
+        mode: 'governed-operation',
+        severity: 'critical',
+        requiredCapability: 'audit-admin',
+        labelKey: 'x.label',
+        summaryKey: 'x.summary',
+        evidence: ['maker-checker'],
+      },
+    ]);
+
+    expect(auditOperationRisk('fake-vertical-op').severity).toBe('critical');
   });
 });

@@ -9,10 +9,10 @@ import {
 } from './process-task-form-registry';
 
 @Component({ standalone: true, template: '' })
-class TestMt101BuildFormComponent {}
+class TestBuildFormComponent {}
 
 @Component({ standalone: true, template: '' })
-class TestMt101ValidateFormComponent {}
+class TestValidateFormComponent {}
 
 describe('PROCESS_TASK_FORM_REGISTRY (M-1b)', () => {
   it('returns empty when nothing registered (host has @optional fallback)', () => {
@@ -24,41 +24,41 @@ describe('PROCESS_TASK_FORM_REGISTRY (M-1b)', () => {
   it('collects a single registration via provideProcessTaskForm', () => {
     TestBed.configureTestingModule({
       providers: [
-        provideProcessTaskForm({ type: 'MT101_BUILD_FROM_TABLE', component: TestMt101BuildFormComponent }),
+        provideProcessTaskForm({ type: 'FAKE_BUILD', component: TestBuildFormComponent }),
       ],
     });
 
     const registrations = TestBed.inject(PROCESS_TASK_FORM_REGISTRY);
     expect(registrations).toHaveLength(1);
-    expect(registrations[0].type).toBe('MT101_BUILD_FROM_TABLE');
-    expect(registrations[0].component).toBe(TestMt101BuildFormComponent);
+    expect(registrations[0].type).toBe('FAKE_BUILD');
+    expect(registrations[0].component).toBe(TestBuildFormComponent);
   });
 
   it('aggregates multiple registrations via provideProcessTaskForms', () => {
     TestBed.configureTestingModule({
       providers: [
         ...provideProcessTaskForms(
-          { type: 'MT101_BUILD_FROM_TABLE', component: TestMt101BuildFormComponent, layout: 'workspace' },
-          { type: 'MT101_VALIDATE', component: TestMt101ValidateFormComponent, layout: 'compact' },
+          { type: 'FAKE_BUILD', component: TestBuildFormComponent, layout: 'workspace' },
+          { type: 'FAKE_VALIDATE', component: TestValidateFormComponent, layout: 'compact' },
         ),
       ],
     });
 
     const registrations = TestBed.inject(PROCESS_TASK_FORM_REGISTRY);
     expect(registrations).toHaveLength(2);
-    expect(registrations.map((r) => r.type).sort()).toEqual(['MT101_BUILD_FROM_TABLE', 'MT101_VALIDATE']);
+    expect(registrations.map((r) => r.type).sort()).toEqual(['FAKE_BUILD', 'FAKE_VALIDATE']);
 
-    const build = registrations.find((r) => r.type === 'MT101_BUILD_FROM_TABLE')!;
+    const build = registrations.find((r) => r.type === 'FAKE_BUILD')!;
     expect(build.layout).toBe('workspace');
-    const validate = registrations.find((r) => r.type === 'MT101_VALIDATE')!;
+    const validate = registrations.find((r) => r.type === 'FAKE_VALIDATE')!;
     expect(validate.layout).toBe('compact');
   });
 
   it('preserves multi: true behaviour across separate provider entries', () => {
     TestBed.configureTestingModule({
       providers: [
-        provideProcessTaskForm({ type: 'MT101_BUILD_FROM_TABLE', component: TestMt101BuildFormComponent }),
-        provideProcessTaskForm({ type: 'MT101_VALIDATE', component: TestMt101ValidateFormComponent }),
+        provideProcessTaskForm({ type: 'FAKE_BUILD', component: TestBuildFormComponent }),
+        provideProcessTaskForm({ type: 'FAKE_VALIDATE', component: TestValidateFormComponent }),
       ],
     });
 
@@ -70,15 +70,15 @@ describe('PROCESS_TASK_FORM_REGISTRY (M-1b)', () => {
     TestBed.configureTestingModule({
       providers: [
         ...provideProcessTaskForms(
-          { type: 'MT101_BUILD_FROM_TABLE', component: TestMt101BuildFormComponent },
-          { type: 'MT101_VALIDATE', component: TestMt101ValidateFormComponent },
+          { type: 'FAKE_BUILD', component: TestBuildFormComponent },
+          { type: 'FAKE_VALIDATE', component: TestValidateFormComponent },
         ),
       ],
     });
 
     const registrations = TestBed.inject(PROCESS_TASK_FORM_REGISTRY);
     const resolved: ProcessTaskFormRegistration | undefined = registrations.find(
-      (r) => r.type === 'MT101_VALIDATE',
+      (r) => r.type === 'FAKE_VALIDATE',
     );
     expect(resolved).toBeDefined();
     expect((resolved!.component as Type<unknown>).name).toContain('Validate');

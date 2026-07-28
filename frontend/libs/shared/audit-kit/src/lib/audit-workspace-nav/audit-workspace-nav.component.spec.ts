@@ -18,8 +18,8 @@ describe('AuditWorkspaceNavComponent', () => {
           { path: 'audit/events', component: DummyComponent },
           { path: 'audit/record-lineage', component: DummyComponent },
           { path: 'audit/spool', component: DummyComponent },
-          { path: 'swift-mt101/fragments', component: DummyComponent },
-          { path: 'swift-mt101/quarantine', component: DummyComponent },
+          { path: 'un-vertical/fragments', component: DummyComponent },
+          { path: 'un-vertical/quarantine', component: DummyComponent },
         ]),
         { provide: I18nService, useValue: { t: (key: string) => key } },
         { provide: AuthAccessService, useValue: { hasCapability: () => true } },
@@ -33,8 +33,8 @@ describe('AuditWorkspaceNavComponent', () => {
               { id: 'audit-events', group: 'audit', domain: 'platform', domainLabelKey: 'audit.domain.platform', domainOrder: 10, route: '/audit/events', labelKey: 'audit.workspace.events', mode: 'query', requiredCapability: 'audit' },
               { id: 'audit-lineage', group: 'audit', domain: 'platform', domainLabelKey: 'audit.domain.platform', domainOrder: 10, route: '/audit/record-lineage', labelKey: 'audit.workspace.lineage', mode: 'query', requiredCapability: 'audit' },
               { id: 'audit-spool', group: 'audit', domain: 'platform', domainLabelKey: 'audit.domain.platform', domainOrder: 10, route: '/audit/spool', labelKey: 'audit.workspace.spool', mode: 'operation', requiredCapability: 'audit' },
-              { id: 'mt101-fragments', group: 'audit', domain: 'swift-mt101', domainLabelKey: 'audit.domain.swiftMt101', domainOrder: 20, route: '/swift-mt101/fragments', labelKey: 'audit.workspace.fragments', mode: 'query', requiredCapability: 'audit' },
-              { id: 'mt101-quarantine', group: 'audit', domain: 'swift-mt101', domainLabelKey: 'audit.domain.swiftMt101', domainOrder: 20, route: '/swift-mt101/quarantine', labelKey: 'audit.workspace.quarantine', mode: 'operation', requiredCapability: 'audit' },
+              { id: 'vertical-fragments', group: 'audit', domain: 'un-vertical', domainLabelKey: 'audit.domain.unVertical', domainOrder: 20, route: '/un-vertical/fragments', labelKey: 'audit.workspace.fragments', mode: 'query', requiredCapability: 'audit' },
+              { id: 'vertical-quarantine', group: 'audit', domain: 'un-vertical', domainLabelKey: 'audit.domain.unVertical', domainOrder: 20, route: '/un-vertical/quarantine', labelKey: 'audit.workspace.quarantine', mode: 'operation', requiredCapability: 'audit' },
             ],
           },
         ]),
@@ -46,12 +46,12 @@ describe('AuditWorkspaceNavComponent', () => {
     return fixture;
   }
 
-  it('scopes al pack SWIFT MT101 cuando la ruta es /swift-mt101/*', async () => {
-    const group = (await renderAt('/swift-mt101/fragments')).componentInstance.activeGroup();
-    expect(group?.domain).toBe('swift-mt101');
+  it('scopea al pack de un vertical cuando la ruta es la suya', async () => {
+    const group = (await renderAt('/un-vertical/fragments')).componentInstance.activeGroup();
+    expect(group?.domain).toBe('un-vertical');
     expect(group?.items.map((item) => item.route)).toEqual([
-      '/swift-mt101/fragments',
-      '/swift-mt101/quarantine',
+      '/un-vertical/fragments',
+      '/un-vertical/quarantine',
     ]);
   });
 
@@ -62,7 +62,7 @@ describe('AuditWorkspaceNavComponent', () => {
   });
 
   it('renderiza solo las tools del pack activo', async () => {
-    const nav: HTMLElement = (await renderAt('/swift-mt101/fragments')).nativeElement.querySelector('nav.audit-ws');
+    const nav: HTMLElement = (await renderAt('/un-vertical/fragments')).nativeElement.querySelector('nav.audit-ws');
     expect(nav.querySelectorAll('a.audit-ws__item').length).toBe(2);
   });
 });

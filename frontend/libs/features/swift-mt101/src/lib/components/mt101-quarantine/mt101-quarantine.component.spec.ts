@@ -7,6 +7,13 @@ import { Mt101AuditApiService } from '../../api/mt101-audit-api.service';
 import { Mt101FailedRecord } from '../../models/mt101.models';
 import { Mt101QuarantineComponent } from './mt101-quarantine.component';
 import { Mt101CorrectionSheetFlowService } from '../../services/mt101-correction-sheet-flow.service';
+import { registerAuditOperationRisks } from '@integration-hub/shared/audit-kit';
+import { SWIFT_MT101_AUDIT_RISKS } from '../../swift-mt101-audit-risks';
+
+// ADR-021: en produccion los registra la ruta del vertical; el componente los resuelve al
+// construirse y FALLA FUERTE si faltan (politica no-fallback: una accion gobernada sin su riesgo
+// se renderizaria sin confirmacion ni maker-checker).
+registerAuditOperationRisks(SWIFT_MT101_AUDIT_RISKS);
 
 function failed(p: Partial<Mt101FailedRecord>): Mt101FailedRecord {
   return {

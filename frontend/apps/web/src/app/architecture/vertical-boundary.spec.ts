@@ -26,19 +26,11 @@ const VERTICAL_CONTENT_PATTERN = /MT101_|'mt101-|"mt101-/;
 const WATCHED_LIBS = ['libs/core', 'libs/shared', 'libs/features/processes'];
 
 /**
- * Deuda registrada (ADR-021, migración del frontend en olas): archivos de MT101 que todavía viven
- * en una lib del core o compartida. Se borran de acá a medida que migran; agregar una entrada nueva
- * tiene que ser una decisión consciente, no un descuido.
+ * ADR-021: la deuda quedó en CERO. Cada entrada que hubo aquí (45 al instalar el trinquete) fue un
+ * archivo de MT101 dentro del core; hoy no queda ninguno. La lista se conserva vacía a propósito:
+ * volver a llenarla tiene que ser una decisión consciente y visible en el diff, no un descuido.
  */
 const FROZEN: readonly string[] = [
-  'libs/core/i18n/src/lib/dictionaries/en.ts',
-  'libs/core/i18n/src/lib/dictionaries/es.ts',
-  'libs/core/providers/src/lib/tasks/process-task-form-registry.spec.ts',
-  'libs/core/providers/src/lib/tasks/process-task.models.ts',
-  'libs/core/services/src/lib/managers/process-task-manager.service.spec.ts',
-  'libs/shared/audit-kit/src/lib/audit-operation-risk.spec.ts',
-  'libs/shared/audit-kit/src/lib/audit-operation-risk.ts',
-  'libs/shared/audit-kit/src/lib/audit-workspace-nav/audit-workspace-nav.component.spec.ts',
 ];
 
 /** Vitest corre desde la raíz del workspace de frontend. */
