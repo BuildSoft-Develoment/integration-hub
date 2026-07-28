@@ -61,6 +61,7 @@ const FROZEN: readonly string[] = [
   'libs/core/providers/src/lib/implementations/tasks/payments/swift/mt101-split-task.provider.ts',
   'libs/core/providers/src/lib/implementations/tasks/payments/swift/mt101-status-task.provider.spec.ts',
   'libs/core/providers/src/lib/implementations/tasks/payments/swift/mt101-status-task.provider.ts',
+  'libs/core/providers/src/lib/implementations/tasks/payments/swift/mt101-summary-fields.spec.ts',
   'libs/core/providers/src/lib/implementations/tasks/payments/swift/mt101-validate-task.provider.spec.ts',
   'libs/core/providers/src/lib/implementations/tasks/payments/swift/mt101-validate-task.provider.ts',
   'libs/core/providers/src/lib/implementations/tasks/payments/swift/payments-swift.providers.ts',

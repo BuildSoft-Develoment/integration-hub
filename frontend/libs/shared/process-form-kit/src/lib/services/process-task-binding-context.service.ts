@@ -362,7 +362,7 @@ export class ProcessTaskBindingContextService {
 
   private summaryOptions(task: ProcessTaskFormModel): ProcessTaskBindingOption[] {
     // Solo los tipos del MOTOR. Los de un vertical los declara su provider en
-    // `descriptor.summaryFields`: antes esta tabla listaba los 11 tipos MT101 con sus contadores,
+    // `descriptor.summaryFields`: antes esta tabla listaba los 10 tipos MT101 con sus contadores,
     // o sea vocabulario de un estandar dentro de una lib compartida, y agregar SBS obligaba a
     // editarla.
     const byType: Record<string, string[]> = {

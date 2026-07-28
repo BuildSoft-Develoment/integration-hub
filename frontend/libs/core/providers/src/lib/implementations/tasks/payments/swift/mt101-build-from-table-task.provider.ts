@@ -13,6 +13,7 @@ export class Mt101BuildFromTableTaskProvider extends Mt101BuildTaskProvider {
     type: 'MT101_BUILD_FROM_TABLE' as const,
     labelKey: 'processTask.MT101_BUILD_FROM_TABLE',
     descriptionKey: 'processTaskDescription.MT101_BUILD_FROM_TABLE',
+    summaryFields: ['fragmentSetId', 'fragmentCount', 'transactionCount', 'totalBytes', 'format'],
     category: 'swift-mt101',
     availableOutputs: ['metadata', 'summary', 'fragments'] as const,
     defaultOutput: 'fragments' as const,

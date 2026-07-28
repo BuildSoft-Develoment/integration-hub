@@ -52,7 +52,7 @@ export interface ProcessTaskProviderDescriptor {
   recordFields?: readonly string[];
   /**
    * ADR-021: nombres de campo del output `summary`, DECLARADOS por el provider. Antes el motor de
-   * binding traia una tabla con los 11 tipos MT101 y sus contadores (validCount, dispatchCount,
+   * binding traia una tabla con los 10 tipos MT101 y sus contadores (validCount, dispatchCount,
    * fragmentSetId...): vocabulario de un vertical dentro de una lib compartida. Sin declarar, el
    * motor usa su default generico.
    */
