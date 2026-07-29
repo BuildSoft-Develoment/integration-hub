@@ -34,6 +34,14 @@ import java.util.List;
  * compararla habría exigido cotejar host, puerto y credenciales, y cualquier diferencia cosmética habría rechazado
  * un grafo válido. Con {@code sinkRef} la conexión es una referencia numérica a una fuente {@code /sources}, así que
  * comparar dos rutas del mismo nombre es comparar dos números — sin falsos positivos. Ver {@code validateRouteSinks}.</p>
+ *
+ * <p><b>Alcance de esa segunda regla (corregido 2026-07-29).</b> La simetría de sinks NO depende de
+ * {@code resolveNormalPay}: un {@code MT101_STATUS} que no concilia igual consulta al banco por ruta, así que
+ * pagarle a uno y preguntarle a otro rompe lo mismo. Estaba detrás de ese flag, y como el formulario no lo expone
+ * —sale ausente en todo proceso armado por la UI— la comprobación quedaba dormida justo en el camino que usa el
+ * operador. Ahora se aplica a todo STATUS route-aware, el mismo criterio de disparo que ya usa
+ * {@link Mt101StatusRouteCoverageValidator} para la cobertura de rutas. La regla del {@code connectionRef}, en
+ * cambio, sí sigue atada al resolutor: solo el que concilia lee el set de fragmentos.</p>
  */
 @ApplicationScoped
 public class Mt101PayStatusConnectionCoverageValidator implements ProcessDefinitionValidator {
@@ -60,6 +68,11 @@ public class Mt101PayStatusConnectionCoverageValidator implements ProcessDefinit
         }
         for (var status : tasks) {
             if (!pairing.isNormalPayResolver(status)) {
+                // Un STATUS que NO concilia el PAY normal igual consulta al banco por ruta, asi que su
+                // simetria de sinks importa lo mismo. Antes todo este metodo estaba detras del
+                // `resolveNormalPay`, de modo que la comprobacion quedaba dormida justo para los procesos
+                // armados desde la UI —que no expone ese flag y lo deja ausente—.
+                validateRouteSinksAgainstEveryPay(status, pays);
                 continue;
             }
             var pay = pairing.payForResolver(status, pays);
@@ -101,6 +114,44 @@ public class Mt101PayStatusConnectionCoverageValidator implements ProcessDefinit
      * uno solo, se omite: ahi no hay nada que cotejar y exigirlo rechazaria configuraciones legitimas —
      * incluida la mixta, con unas rutas migradas a fuente y otras todavia inline.</p>
      */
+    /**
+     * Simetria de sinks para un STATUS que NO concilia el PAY normal.
+     *
+     * <p>Sin par explicito no se puede senalar UN pay, asi que se compara contra la union de los sinks
+     * que los PAY del grafo usan para esa misma ruta: si ninguno despacha esa ruta al sink que el STATUS
+     * consulta, el pago y su confirmacion van a bancos distintos. Comparar contra la union —y no contra
+     * cada PAY por separado— es lo que evita el falso positivo del grafo legitimo PAY_A/PAY_B, donde cada
+     * uno atiende su propia ruta.</p>
+     *
+     * <p>Cuando el STATUS <b>si</b> declara a que PAY resuelve, se usa {@link #validateRouteSinks} contra
+     * ese PAY, que es mas preciso: detecta el desvio aunque OTRO pay del grafo use ese sink.</p>
+     */
+    private void validateRouteSinksAgainstEveryPay(ProcessTaskView status, List<ProcessTaskView> pays) {
+        var statusSinks = pairing.routeSinkRefs(status, "routeQuery");
+        if (statusSinks.isEmpty()) {
+            return;
+        }
+        for (var route : statusSinks.entrySet()) {
+            var sinksDelPay = new java.util.LinkedHashSet<Long>();
+            for (var pay : pays) {
+                var sink = pairing.routeSinkRefs(pay, "routeTransports").get(route.getKey());
+                if (sink != null) {
+                    sinksDelPay.add(sink);
+                }
+            }
+            if (sinksDelPay.isEmpty() || sinksDelPay.contains(route.getValue())) {
+                continue;
+            }
+            throw new IllegalArgumentException(
+                    "MT101_STATUS (task order " + status.taskOrder() + ") queries route '" + route.getKey()
+                    + "' against sink " + route.getValue() + ", but no MT101_PAY in this process dispatches "
+                    + "that route to it (they use " + sinksDelPay + "). Payment and confirmation would use "
+                    + "different bank connections: the ACK/NACK would never be found, the fragment would stay "
+                    + "UNCERTAIN and the operator could not tell it apart from a bank that is down. "
+                    + "Point both at the same OUTPUT/BOTH source.");
+        }
+    }
+
     private void validateRouteSinks(ProcessTaskView pay, ProcessTaskView status) {
         var paySinks = pairing.routeSinkRefs(pay, "routeTransports");
         if (paySinks.isEmpty()) {

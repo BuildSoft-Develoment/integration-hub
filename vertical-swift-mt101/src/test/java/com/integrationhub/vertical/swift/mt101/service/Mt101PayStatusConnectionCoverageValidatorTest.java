@@ -176,14 +176,57 @@ class Mt101PayStatusConnectionCoverageValidatorTest {
     }
 
     @Test
-    void ignoresRouteSinksWhenTheStatusDoesNotResolveTheNormalPay() {
-        // La regla vive dentro del emparejamiento PAY -> STATUS resolutor. Un STATUS que no concilia el PAY
-        // normal no lee el ledger de fragmentos, asi que su conexion por ruta no es asunto de este validador.
+    void rejectsADivergentRouteSinkEvenWhenTheStatusDoesNotResolveTheNormalPay() {
+        // Este test aseveraba lo contrario: que sin `resolveNormalPay` no se miraban los sinks. Era un hueco,
+        // no una decision — y el peor posible, porque el formulario no expone ese flag, asi que TODO proceso
+        // armado desde la UI caia por aqui con la comprobacion apagada. El STATUS consulta BANCO_A contra el
+        // sink 33 mientras el PAY lo despacha al 11: se paga en un banco y se pregunta en otro.
+        var error = assertThrows(IllegalArgumentException.class, () -> validator.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1, PAY_ROUTES_A11_B22),
+                new ProcessTaskView("MT101_STATUS", 2,
+                        "{\"connectionRef\":\"12\",\"routeQuery\":{"
+                        + "\"BANCO_A\":{\"transport\":\"SFTP\",\"sftp\":{\"sinkRef\":33}}}}"))));
+        assertTrue(error.getMessage().contains("BANCO_A"), () -> "mensaje: " + error.getMessage());
+        assertTrue(error.getMessage().contains("UNCERTAIN"), () -> "mensaje: " + error.getMessage());
+    }
+
+    @Test
+    void acceptsANonResolvingStatusThatQueriesTheSameSinkThePayDispatchesTo() {
+        // La contraparte: sin conciliar, pero apuntando al mismo banco. No hay nada que objetar.
         validator.validate(List.of(
                 new ProcessTaskView("MT101_PAY", 1, PAY_ROUTES_A11_B22),
                 new ProcessTaskView("MT101_STATUS", 2,
                         "{\"connectionRef\":\"12\",\"routeQuery\":{"
-                        + "\"BANCO_A\":{\"transport\":\"SFTP\",\"sftp\":{\"sinkRef\":33}}}}")));
+                        + "\"BANCO_A\":{\"transport\":\"SFTP\",\"sftp\":{\"sinkRef\":11}}}}")));
+    }
+
+    @Test
+    void acceptsMultiBankGraphsWhereEachPayServesItsOwnRoute() {
+        // Sin `resolvesPayTaskRef` no se puede senalar UN pay, asi que se compara contra la UNION de los sinks
+        // que los PAY usan para esa ruta. Comparar contra cada PAY por separado rechazaria este grafo legitimo:
+        // PAY_A atiende BANCO_A y PAY_B atiende BANCO_B, y el STATUS consulta ambos donde corresponde.
+        validator.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1,
+                        "{\"taskRef\":\"pay-a\",\"connectionRef\":\"12\","
+                        + "\"routeTransports\":{\"BANCO_A\":{\"sftp\":{\"sinkRef\":11}}}}"),
+                new ProcessTaskView("MT101_PAY", 2,
+                        "{\"taskRef\":\"pay-b\",\"connectionRef\":\"12\","
+                        + "\"routeTransports\":{\"BANCO_B\":{\"sftp\":{\"sinkRef\":22}}}}"),
+                new ProcessTaskView("MT101_STATUS", 3,
+                        "{\"connectionRef\":\"12\",\"routeQuery\":{"
+                        + "\"BANCO_A\":{\"sftp\":{\"sinkRef\":11}},"
+                        + "\"BANCO_B\":{\"sftp\":{\"sinkRef\":22}}}}")));
+    }
+
+    @Test
+    void ignoresARouteThatNoPayDispatches() {
+        // El STATUS consulta una ruta que ningun PAY despacha por sinkRef: no hay con que comparar y exigirlo
+        // rechazaria la migracion gradual. Es el mismo criterio que acceptsARouteThatOnlyOneSideDeclaresBySinkRef.
+        validator.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1, PAY_ROUTES_A11_B22),
+                new ProcessTaskView("MT101_STATUS", 2,
+                        "{\"connectionRef\":\"12\",\"routeQuery\":{"
+                        + "\"BANCO_Z\":{\"transport\":\"SFTP\",\"sftp\":{\"sinkRef\":99}}}}")));
     }
 
     @Test
