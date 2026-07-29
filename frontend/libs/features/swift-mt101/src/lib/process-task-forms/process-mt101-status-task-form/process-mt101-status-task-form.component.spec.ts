@@ -100,6 +100,13 @@ describe('ProcessMt101StatusTaskFormComponent — conciliacion del PAY normal', 
     expect(fixture.componentInstance.payTaskRefs()).toEqual(['pay-a', 'pay-b']);
   });
 
+  it('no repite el mismo taskRef aunque el proceso tenga varios PAY iguales', () => {
+    // `taskRef` es un slug por TIPO: en los procesos sembrados los cuatro MT101_PAY del proceso 2 son
+    // todos `pay-mt101`. Sin deduplicar, el selector ofrecia la misma opcion cuatro veces.
+    const fixture = setup({ mode: 'query' }, [pay('pay-mt101'), pay('pay-mt101'), pay('pay-mt101')]);
+    expect(fixture.componentInstance.payTaskRefs()).toEqual(['pay-mt101']);
+  });
+
   it('ignora un PAY con JSON a medio escribir en vez de romper el formulario', () => {
     const fixture = setup({ mode: 'query' }, [pay('pay-a'), { taskType: 'MT101_PAY', configurationJson: '{roto' }]);
     expect(fixture.componentInstance.payTaskRefs()).toEqual(['pay-a']);

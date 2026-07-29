@@ -93,24 +93,32 @@ export class ProcessMt101StatusTaskFormComponent {
   // ---- Conciliacion in-line del PAY normal ----
 
   /**
-   * `taskRef` de los MT101_PAY del proceso, para que el operador elija a cual concilia este STATUS.
+   * `taskRef` DISTINTOS de los MT101_PAY del proceso, para que el operador elija a cual concilia.
    *
    * <p>Se leen del `configurationJson` crudo en vez de hidratar el draft de cada PAY: aca solo hace falta
    * el `taskRef`, y hacerlo bien —resolver el provider de cada tipo— traeria la feature entera al bundle.
    * Un JSON a medio escribir se ignora en lugar de romper el formulario.</p>
+   *
+   * <p><b>Se deduplica a proposito.</b> `taskRef` es un slug por TIPO, no por tarea: en los procesos
+   * sembrados todos los MT101_PAY son `pay-mt101`, asi que un proceso con cuatro pagos ofreceria la misma
+   * opcion cuatro veces. OJO, la deduplicacion es cosmetica: con `taskRef` repetidos el backend tampoco
+   * puede desambiguar —`Mt101PayResolverPairing` toma el primero que coincide—, asi que nombrarlos
+   * distinto es responsabilidad de quien arma el proceso. Ver el analisis de los bloques C/D/E.</p>
    */
-  readonly payTaskRefs = computed<readonly string[]>(() =>
-    this.tasks()
-      .filter((task) => task.taskType === 'MT101_PAY')
-      .map((task) => {
-        try {
-          return String(JSON.parse(task.configurationJson || '{}')['taskRef'] ?? '').trim();
-        } catch {
-          return '';
-        }
-      })
-      .filter((taskRef) => taskRef.length > 0),
-  );
+  readonly payTaskRefs = computed<readonly string[]>(() => [
+    ...new Set(
+      this.tasks()
+        .filter((task) => task.taskType === 'MT101_PAY')
+        .map((task) => {
+          try {
+            return String(JSON.parse(task.configurationJson || '{}')['taskRef'] ?? '').trim();
+          } catch {
+            return '';
+          }
+        })
+        .filter((taskRef) => taskRef.length > 0),
+    ),
+  ]);
 
   /**
    * Activar la conciliacion fuerza `executionMode: 'once'` EN EL MISMO PATCH.
