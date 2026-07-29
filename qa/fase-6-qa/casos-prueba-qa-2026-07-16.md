@@ -8,6 +8,223 @@ Documento de casos de prueba **exhaustivo** para el Equipo de QA. Acompaña al t
 - **Tecnico/Dev** — requiere apoyo de dev/ops (inducir fallos, comandos, backend).
 - **Automatizado-IT** — ya cubierto por una prueba automática (se nombra); QA no lo repite manual.
 
+---
+
+## Ejecución v2 — 2026-07-29
+
+Segunda pasada del mismo CP sobre el build actual (ADR-021 fases C/3/4 + ADR-017 completo, nativo
+`integration-hub:native-appih` id `2b549c859e88`, desplegado en el stack de integración).
+
+**El tracker de esta pasada es `casos-prueba-qa-v2-2026-07-29.xlsx`**, que agrega tres columnas a la
+hoja `Casos` **sin tocar el estado de v1**:
+
+| Columna | Valores | Para qué |
+|---|---|---|
+| `Ejecucion v2` | `Si` / `No` | Qué se volvió a ejecutar en esta pasada |
+| `Resultado v2` | `Pass` / `Fail` / `Blocked` / `N/A` | El resultado obtenido |
+| `Coincide v1-v2` | `Si` / `NO` / `-` | Comparación contra el `Estado` de v1 |
+
+El original `casos-prueba-qa-2026-07-16.xlsx` **no se modifica**: es la evidencia de la primera pasada.
+
+### Resultado hasta ahora
+
+| Ejecutor | Casos | v1 | v2 ejecutados | Coinciden | Discrepancias |
+|---|---|---|---|---|---|
+| Automatizado-IT | 32 | 32 Pass | **32** | **32** | **0** |
+| Tecnico/Dev | 93 | 43 Pass · 46 Blocked · 4 N/A | **91** | **86** | **5** (todas a favor) |
+| Manual-QA | 111 | 67 Pass · 44 Blocked | **62** | **41** | **21** (19 a favor, 2 en contra) |
+| **Total** | **236** | | **185** | **159** | **26** |
+
+Los 2 técnicos que faltan son E2E-21 y E2E-22 (escala 1 000 000), reservados para el final de la
+tanda por decisión del usuario. El `Mt101MillionFileProcessE2EIT` de esta misma tanda ya está verde
+(3/3, `evidencias/1M-v73-20260728/`), pero se re-ejecutará al cierre para dejarlos con evidencia propia.
+
+Los 32 automatizados se cubren con seis clases, todas verdes en esta pasada:
+
+| Clase | Resultado v2 |
+|---|---|
+| `Mt101PayDirectListDurableTest` | 8/8 |
+| `Mt101PayNormalDurableTest` | 8/8 |
+| `Mt101CorrectiveLifecycleServiceTest` | verde |
+| `Mt101PayConflictMakerCheckerIT` | verde |
+| `AsyncInboxClaimIT` | verde |
+| `Mt101MillionFileProcessE2EIT` | 3/3 |
+
+**Nota sobre los 90 `Blocked` de v1** (44 manuales + 46 técnicos): nunca llegaron a ejecutarse en la
+primera pasada, así que para ellos **no hay contra qué comparar** — su `Coincide v1-v2` queda en `-`
+aunque se ejecuten ahora. Un `Pass` en v2 sobre un `Blocked` de v1 es cobertura nueva, no una
+regresión resuelta.
+
+### Los 93 Tecnico/Dev
+
+Se ejecutaron sobre el stack de integración desplegado, disparando procesos reales por el scheduler
+(`next_run_at` sembrado en hora local) y completando con las suites automatizadas donde el caso lo
+exige. **Cero `Fail`**: 44 `Pass`, 43 `Blocked`, 4 `N/A`, 2 pendientes (el 1M).
+
+**Las 3 discrepancias son todas a favor** — casos que v1 no pudo ejecutar y v2 sí:
+
+| Caso | v1 | v2 | Evidencia |
+|---|---|---|---|
+| MP-01 camino feliz E2E | Blocked | **Pass** | exec 70/71/72: todos los mensajes terminan en `SENT` |
+| MP-13 enrutado al canal | Blocked | **Pass** | exec 70 despacha por SFTP; exec 74/77 por REST, cada uno según su config |
+| STAT-02 NACK del banco | Blocked | **Pass** | exec 78 convierte los 2 `REJECTED` en conflictos `SENT`-vs-`REJECTED` y cierra en `NEEDS_RECONCILIATION` |
+
+**Determinismo del money-path frente a v1.** El proceso `proc-mt101-qa` corrió con el mismo archivo
+(`cp-mt101.csv`, 60 registros) y dio salida idéntica tarea por tarea:
+
+| Tarea | v1 (exec 61) | v2 (exec 70) |
+|---|---|---|
+| FILE_READ | 60 válidos, 0 descartados | 60 válidos, 0 descartados |
+| DB_WRITE | 60 registros | 60 registros |
+| BUILD_FROM_TABLE | 3 fragmentos / 60 filas | 3 fragmentos / 60 filas |
+| VALIDATE | messages=3 invalid=0 issues=0 | messages=3 invalid=0 issues=0 |
+| ARCHIVE | 3 mensajes, **8244 bytes** | 3 mensajes, **8244 bytes** |
+| PAY | dispatch=3 sent=3 accepted=3 | dispatch=3 sent=3 accepted=3 |
+
+En los `.fin` entregados al banco, de **167 líneas por mensaje solo 2 difieren**: el UETR `{121:}` y la
+referencia `:20:` — exactamente los dos campos que *deben* ser únicos por despacho. Los importes cuadran
+al céntimo contra v1: PEN 202 800,000 en 48 transacciones y USD 54 825,000 en 12. Las otras fuentes dan
+el mismo byte-count que v1: FTP 844 bytes (= `F64-1.fin`), S3 499 bytes (= `S63-1.fin`).
+
+### Hallazgos de esta pasada
+
+1. **Los 3 `*IT` del vertical no los ejecuta nadie.** `vertical-swift-mt101` es el único módulo con
+   clases `*IT.java` y **sin `maven-failsafe-plugin`** (lo tienen `platform-app` y `audit-consumer`).
+   Surefire no incluye `*IT` por defecto y failsafe no está enlazado, así que
+   `Mt101OutboundEndToEndIT`, `Mt101SplitRepairIT` y `Mt101MassivePipelinePerfIT` se compilan y nunca
+   corren. Forzados a mano pasan (2/2 y 5/5), o sea que son tests sanos, sólo huérfanos del build.
+   Es un agujero de cobertura en el vertical del money-path.
+2. **Tres procesos QA usan plantilla `:20:` fija** (`PC${messageIndex}`, `X${messageIndex}` en dos
+   procesos distintos), así que sólo se pueden ejecutar una vez por año natural: el índice
+   `ux_mt101_archive_operational_idempotency` rechaza el segundo intento. Se observó en vivo (exec 75
+   y 76 fallaron ahí). Se alinearon con el patrón re-ejecutable que ya usaban los procesos 1/8/9
+   (`P${_processExecutionId}-${messageIndex}`) y ambos completaron. El delta de bytes cuadra exacto con
+   el cambio: 1239 vs 1230 = 3 mensajes × 3 chars; 1 346 701 vs 1 345 901 = 200 × 4 chars.
+   *El control anti-duplicado funcionó: ningún pago salió en los intentos rechazados.*
+3. **`physical_line`, `sheet_name` y `sheet_row` vienen NULL en todas las ejecuciones**, también en las
+   de v1. SRC-07 y SRC-09 piden explícitamente la posición física (línea, hoja+fila). El parseo a
+   staging sí funciona; lo que falta es la posición. Es carencia preexistente, no regresión.
+4. **La confirmación positiva del banco no se persiste.** En exec 78 el gateway devolvió `ACCEPTED`
+   para `PC78-1` y no quedó fila en `mt101_confirmation`: sólo se guardan las contradicciones. El estado
+   sigue siendo correcto (el archivo ya estaba `SENT`), pero no hay rastro de que el banco confirmara.
+   Es el motivo por el que STAT-01 sigue `Blocked`.
+5. **No existe dedupe por hash de archivo** (SRC-11). `SourceFingerprintService` calcula el SHA-256
+   sólo para linaje y `ProcessedSourceFileService` únicamente registra, nunca consulta. El mismo
+   `cp-mt101.csv` se reprocesó 3 veces y generó pagos nuevos cada vez, porque la referencia `:20:` de
+   ese proceso lleva el id de ejecución. En producción el disparo lo gobierna el operador, pero conviene
+   tenerlo presente.
+6. **El scheduler tira un `ERROR` al disparar**: `Enlisted connection used without active transaction`
+   → `RollbackException` en `ProcessSchedulerService.pollScheduledProcesses`. Sin daño funcional —
+   `next_run_at` y `last_run_at` avanzan bien y no hay re-disparo— pero ensucia el log en cada disparo
+   (1 ocurrencia por disparo, 0 en los polls en vacío).
+7. **El botón "Probar" de una fuente REST no prueba nada.** `RestSourceProvider.selectFiles()` arma el
+   descriptor a partir de la URL y **no hace ninguna petición HTTP** — la llamada real vive en
+   `openFile()`, que el endpoint `/test` nunca invoca. Resultado: una URL apuntando a un host
+   inexistente devuelve `{"code":"OK","success":true}`. Es asimétrico con el resto, que sí conectan y
+   fallan alto: SFTP con clave mala da `AUTH_FAILED` y JDBC con clave mala da 500 `Cannot connect`.
+   La garantía de CSRC-07 (*fail-loud, no dar la fuente por buena*) **no se cumple para REST**: el
+   operador recibe un verde falso.
+
+### Controles que quedaron demostrados en esta pasada
+
+Vale la pena separarlos de los hallazgos, porque son la contraparte: cosas que se verificaron y
+**funcionan**.
+
+- **Segregación de funciones real.** El maker no puede aprobar y el checker no puede solicitar (403
+  cruzado). Y, contra la intuición habitual, **`platform-admin` no queda implícitamente autorizado**:
+  `admin` recibe 403 tanto en `request-acknowledge` como en `approve-acknowledge`.
+- **El auditor no mueve dinero.** 200 en todas las lecturas, 403 en las tres acciones gobernadas.
+- **Gobernanza completa del reconocimiento.** Sin motivo → 400; sin ticket → 400; single-actor con el
+  modo ON → 400; aprobar sin solicitud → 400; solicitar sobre un no-conflicto → 400. Ninguno de los
+  cinco cambió estado.
+- **El reemplazo conserva historial.** Un segundo pedido deja el anterior en `SUPERSEDED` y emite la
+  trama `PAY_CONFLICT_ACK_SUPERSEDED` con el ticket y el maker reemplazados, anotando *"sin cambios en
+  el dinero; historial de gobernanza"*.
+- **Bloqueo optimista en la corrección de staging.** Sin `If-Match` → 400; con el ETag obsoleto → 409
+  `was modified concurrently`; con el correcto → `{"updated":1,"version":1}`.
+- **La cuarentena aísla de verdad.** Con un archivo mixto de 6 filas buenas y 2 malas, quedan en
+  cuarentena exactamente las 2 malas (filas 3 y 6).
+- **El spool es un outbox honesto.** El `payload` nunca se muta; el único `UPDATE` toca el estado de
+  entrega y el único `DELETE` purga filas ya entregadas.
+
+### Los Manual-QA: 62 por API, 49 pendientes de pantalla
+
+**El navegador está cerrado por política del entorno.** Las dos superficies disponibles (la integrada
+y la extensión de Chrome) responden `Navigation to this domain is not allowed` — y también con
+`example.com`, así que no es el dominio ni el certificado self-signed.
+
+La primera vía alterna no alcanzó: el service account `integration-hub-api` (`client_credentials`,
+secreto en el fixture del repo) **obtiene token**, pero devuelve `403` en todos los endpoints
+protegidos porque no lleva roles de aplicación. *Eso es el fail-closed funcionando.*
+
+**Con autorización explícita del usuario** se usó el **direct access grant** del cliente
+`integration-hub-ui` con las seis cuentas de prueba versionadas en el repo. Eso permitió ejecutar
+**62 de los 111** contra la API real, incluyendo el flujo maker-checker completo con las dos
+identidades separadas. Los **49 restantes son de pantalla** (botones, columnas, avisos, wizard,
+drill-in, cambio visual de idioma) y **no se marcaron**: un `Pass` desde una llamada HTTP sería falso.
+
+Dos casos **bajaron** respecto de v1 por esta misma razón, y conviene leerlos como límite del método,
+no como regresión: **MC-19** (estado "cargando modo") y **UI-10** (los textos cambian entre es/en) son
+observaciones visuales. Los catálogos existen con paridad (`dictionaries/es.ts` y `en.ts`, con
+`dictionary-parity.spec.ts`) y el switch está cubierto por `i18n.service.spec.ts`, pero *ver* el
+cambio exige navegador.
+
+**Cómo se ejecutaron** (por si hay que repetirlo): tokens por
+`POST /iam/realms/integration-hub/protocol/openid-connect/token` con
+`grant_type=password&client_id=integration-hub-ui`, y las llamadas contra
+`https://<host>/appih/api/...`. El access token dura 300 s, así que el cliente lo re-acuña solo.
+
+**Usuarios ya sembrados en el realm de integración:**
+
+| Usuario | Clave | Roles |
+|---|---|---|
+| `admin` | `admin123` | platform-admin, integration-admin, operator, auditor |
+| `operator` | `operator123` | operator |
+| `auditor` | `auditor123` | auditor |
+| `payments-operator` | `payments123` | payments-operator |
+| `pay-maker` | `maker123` | payments-operator, pay-conflict-maker |
+| `pay-checker` | `checker123` | payments-operator, pay-conflict-checker |
+
+**Orden sugerido, agrupando por identidad para no re-loguear** (el reparto es orientativo: sale del
+enunciado de cada caso, revísalo si alguno pide otro rol):
+
+| Identidad | Casos | Cuántos |
+|---|---|---|
+| `admin` | CSRC-02..05 · CCON-02 · CRDR-02..05 · CPRO-03 · E2E-01..03 | 13 |
+| `operator` | INFRA-01/02/05/07 · CSRC-01/06/07/09/10/12 · CCON-01/03/04 · CRDR-01/06/07 · CPRO-01/04/05/06/08 · E2E-06/07/10/12/13/20 · MP-02/08/09 · UI-01..08/10/11/12 · PLG-05 · AUD-02 | 43 |
+| `auditor` | AUTH-10 · CSRC-08 · CCON-05 · CPRO-02 · E2E-08/09/11/14/16/17/18/23 · AUD-03 · BANK-05/19 | 15 |
+| `payments-operator` | CORR-02 · STAT-04 · BANK-02/06/22 | 5 |
+| `pay-maker` + `pay-checker` | AUTH-09/11/12/13 · E2E-15/19 · MC-01..16, MC-19, MC-21..23 · UI-09 · AUD-05 · BANK-04/20 | 30 |
+| varios según el caso | AUTH-01/02/03/06/14 | 5 |
+
+Para registrar los resultados: abrir `casos-prueba-qa-v2-2026-07-29.xlsx`, hoja `Casos`, y llenar
+`Ejecucion v2` (P), `Resultado v2` (Q) y `Coincide v1-v2` (R) comparando contra la columna `Estado`
+de v1.
+
+### Cobertura de esta pasada, y su límite
+
+Además del CP, el build se validó con el 1M post-refactor (**3 tests, 0 failures, 1046 s, Java 25**),
+cuyo reporte crudo está en `evidencias/1M-v73-20260728/`.
+
+**Corrección (2026-07-29).** Una redacción anterior de esta sección daba por verdes el reactor
+completo y los 735 tests de frontend. Al reejecutarlos, ninguno de los dos lo está:
+
+| Suite | Estado real | Causa |
+|---|---|---|
+| Reactor completo | `BUILD FAILURE` (`platform-app`, 558 tests, 1 error) | `mysql:8.4` agota reintentos a los 383 s. **No es la imagen**: el mismo test pasa aislado en 237 s y otro contenedor de la misma imagen pasó en esa misma corrida en 118 s |
+| `nx test web` | **734 / 735** | `swift-mt101-i18n.spec.ts`: `Hook timed out in 10000ms` en el `import()` en frío del chunk lazy. No es discrepancia de claves — los otros 2 tests del archivo pasan con el módulo ya cacheado |
+
+Ambos son el mismo problema de fondo: **timeouts calibrados por debajo de la latencia real de esta
+máquina**, así que el verde depende de la carga. El análisis y el plan de arreglo están en
+[analisis-v74-verificado-20260729.md](../../docs/analisis-v74-verificado-20260729.md), bloque B.
+
+**Los 111 casos Manual-QA no se pudieron automatizar desde esta sesión**: el entorno responde
+`Navigation to this domain is not allowed` al intentar alcanzar `https://192.168.100.25:8443` desde
+el navegador controlado, tanto en el integrado como en Chrome. No es el certificado self-signed —
+es política del entorno. Quedan para ejecución manual con esta misma guía.
+
+---
+
 ## Preparación (leer antes de ejecutar)
 
 **Acceso:** abrir `https://<host>/appih` (local: `https://192.168.0.15:8443/appih`). El navegador avisa por el **cert self-signed** → Firefox: *Avanzado → Aceptar el riesgo*; Chrome: teclear `thisisunsafe`. Una vez por origen.
