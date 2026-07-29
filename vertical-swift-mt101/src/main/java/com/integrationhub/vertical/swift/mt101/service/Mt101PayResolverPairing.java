@@ -4,6 +4,7 @@ import com.integrationhub.platform.spi.process.ProcessTaskView;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Regla ÚNICA de emparejamiento {@code MT101_PAY} ↔ {@code MT101_STATUS(resolveNormalPay=true)} para el money-path
@@ -117,6 +118,38 @@ public final class Mt101PayResolverPairing {
         } catch (Exception malformed) {
             return null;
         }
+    }
+
+    /**
+     * ADR-017: {@code ruta -> sinkRef} declarados bajo {@code <container>.<ruta>.sftp.sinkRef}.
+     * El contenedor es {@code routeTransports} en MT101_PAY y {@code routeQuery} en MT101_STATUS.
+     *
+     * <p>Solo devuelve las rutas que declaran {@code sinkRef}. Una ruta en modo INLINE (host y
+     * credenciales escritos en la tarea) no aparece: su conexion no es comparable en definicion, y
+     * exigirla rechazaria configuraciones validas. Esa es la razon por la que esta comprobacion no
+     * existia — hasta que el sinkRef convirtio la conexion bancaria en una referencia enumerable.</p>
+     */
+    Map<String, Long> routeSinkRefs(ProcessTaskView task, String routeContainerKey) {
+        var result = new java.util.LinkedHashMap<String, Long>();
+        if (task == null || task.configurationJson() == null || task.configurationJson().isBlank()) {
+            return result;
+        }
+        try {
+            var routes = objectMapper.readTree(task.configurationJson()).get(routeContainerKey);
+            if (routes == null || !routes.isObject()) {
+                return result;
+            }
+            routes.fields().forEachRemaining(entry -> {
+                var sftp = entry.getValue() == null ? null : entry.getValue().get("sftp");
+                var sinkRef = sftp == null ? null : sftp.get("sinkRef");
+                if (sinkRef != null && !sinkRef.isNull() && sinkRef.canConvertToLong()) {
+                    result.put(entry.getKey(), sinkRef.asLong());
+                }
+            });
+        } catch (Exception malformed) {
+            return result;
+        }
+        return result;
     }
 
     boolean boolConfig(String configurationJson, String key) {

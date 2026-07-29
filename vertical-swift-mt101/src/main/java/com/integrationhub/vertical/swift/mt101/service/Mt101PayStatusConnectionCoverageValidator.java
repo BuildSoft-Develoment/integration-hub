@@ -26,8 +26,14 @@ import java.util.List;
  *
  * <p><b>Alcance (por qué es sano):</b> el {@code connectionRef} es config estática de ambos providers, enumerable en
  * definición. {@code null}/blank normaliza a "conexión por defecto" (ambos sin {@code connectionRef} = misma conexión).
- * NO valida transporte/banco por ruta ni {@code fragmentSetId} (derivado en runtime del output upstream): eso no es
- * verificable en definición sin falsos positivos. Solo cubre el gap real y estático: el ledger/conexión.</p>
+ * NO valida {@code fragmentSetId} (derivado en runtime del output upstream): eso no es verificable en definición sin
+ * falsos positivos.</p>
+ *
+ * <p><b>Segunda regla (ADR-017, 2026-07-29): la CONEXIÓN BANCARIA por ruta.</b> Este javadoc decía que el
+ * transporte por ruta tampoco era verificable, y era cierto mientras la conexión se escribía INLINE en cada tarea:
+ * compararla habría exigido cotejar host, puerto y credenciales, y cualquier diferencia cosmética habría rechazado
+ * un grafo válido. Con {@code sinkRef} la conexión es una referencia numérica a una fuente {@code /sources}, así que
+ * comparar dos rutas del mismo nombre es comparar dos números — sin falsos positivos. Ver {@code validateRouteSinks}.</p>
  */
 @ApplicationScoped
 public class Mt101PayStatusConnectionCoverageValidator implements ProcessDefinitionValidator {
@@ -74,6 +80,45 @@ public class Mt101PayStatusConnectionCoverageValidator implements ProcessDefinit
                         + "same connectionRef as the MT101_PAY; otherwise it reads an empty fragment set from the "
                         + "wrong ledger and would falsely close the process while the money is still UNCERTAIN.");
             }
+            validateRouteSinks(pay, status);
+        }
+    }
+
+    /**
+     * ADR-017: si PAY y STATUS declaran {@code sinkRef} para la MISMA ruta, tiene que ser la misma fuente.
+     *
+     * <p>Cuando difieren, el pago sale hacia un banco y su confirmacion se busca en otro: el ACK nunca
+     * aparece, el fragmento se queda {@code UNCERTAIN} y el operador ve "el banco no respondio" sin nada
+     * que lo distinga de un banco realmente caido.</p>
+     *
+     * <p><b>Por que ahora si se puede.</b> El javadoc de esta clase decia que el transporte por ruta "no es
+     * verificable en definicion sin falsos positivos", y era cierto: la conexion se escribia INLINE en cada
+     * tarea, asi que comparar habria exigido cotejar host, puerto y credenciales — con cualquier diferencia
+     * cosmetica rechazando un grafo valido. Con {@code sinkRef} la conexion es una referencia numerica a una
+     * fuente, y comparar dos numeros no tiene falsos positivos.</p>
+     *
+     * <p>Solo se comparan las rutas donde AMBOS declaran {@code sinkRef}. Una en modo inline, o presente en
+     * uno solo, se omite: ahi no hay nada que cotejar y exigirlo rechazaria configuraciones legitimas —
+     * incluida la mixta, con unas rutas migradas a fuente y otras todavia inline.</p>
+     */
+    private void validateRouteSinks(ProcessTaskView pay, ProcessTaskView status) {
+        var paySinks = pairing.routeSinkRefs(pay, "routeTransports");
+        if (paySinks.isEmpty()) {
+            return;
+        }
+        var statusSinks = pairing.routeSinkRefs(status, "routeQuery");
+        for (var route : paySinks.entrySet()) {
+            var statusSink = statusSinks.get(route.getKey());
+            if (statusSink == null || statusSink.equals(route.getValue())) {
+                continue;
+            }
+            throw new IllegalArgumentException(
+                    "MT101_STATUS (task order " + status.taskOrder() + ") queries route '" + route.getKey()
+                    + "' against sink " + statusSink + ", but the MT101_PAY (task order " + pay.taskOrder()
+                    + ") dispatches that same route to sink " + route.getValue() + ". Payment and confirmation "
+                    + "would use different bank connections: the ACK/NACK would never be found, the fragment "
+                    + "would stay UNCERTAIN and the operator could not tell it apart from a bank that is down. "
+                    + "Point both at the same OUTPUT/BOTH source.");
         }
     }
 }

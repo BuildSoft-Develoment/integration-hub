@@ -119,4 +119,82 @@ class Mt101PayStatusConnectionCoverageValidatorTest {
                 new ProcessTaskView("MT101_STATUS", 3, "{\"resolveNormalPay\":true,\"resolvesPayTaskRef\":\"pay-b\",\"connectionRef\":\"A\"}"))));
         assertTrue(error.getMessage().contains("connectionRef"), () -> "mensaje: " + error.getMessage());
     }
+
+    // ===== ADR-017: la conexion BANCARIA por ruta (sinkRef), no solo el ledger =====
+
+    private static final String PAY_ROUTES_A11_B22 =
+            "{\"taskRef\":\"pay\",\"connectionRef\":\"12\",\"routeTransports\":{"
+            + "\"BANCO_A\":{\"transport\":\"SFTP\",\"sftp\":{\"sinkRef\":11}},"
+            + "\"BANCO_B\":{\"transport\":\"SFTP\",\"sftp\":{\"sinkRef\":22}}}}";
+
+    @Test
+    void acceptsWhenEachRouteQueriesTheSameBankSinkItDispatchedTo() {
+        validator.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1, PAY_ROUTES_A11_B22),
+                new ProcessTaskView("MT101_STATUS", 2,
+                        "{\"resolveNormalPay\":true,\"connectionRef\":\"12\",\"routeQuery\":{"
+                        + "\"BANCO_A\":{\"transport\":\"SFTP\",\"sftp\":{\"sinkRef\":11}},"
+                        + "\"BANCO_B\":{\"transport\":\"SFTP\",\"sftp\":{\"sinkRef\":22}}}}")));
+    }
+
+    @Test
+    void rejectsWhenARouteIsPaidToOneBankAndQueriedAgainstAnother() {
+        // El pago de BANCO_A sale al sink 11 y su confirmacion se busca en el 33: el ACK no aparece nunca,
+        // el fragmento se queda UNCERTAIN y en pantalla es indistinguible de un banco caido.
+        var error = assertThrows(IllegalArgumentException.class, () -> validator.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1, PAY_ROUTES_A11_B22),
+                new ProcessTaskView("MT101_STATUS", 2,
+                        "{\"resolveNormalPay\":true,\"connectionRef\":\"12\",\"routeQuery\":{"
+                        + "\"BANCO_A\":{\"transport\":\"SFTP\",\"sftp\":{\"sinkRef\":33}}}}"))));
+
+        assertTrue(error.getMessage().contains("BANCO_A"), () -> "mensaje: " + error.getMessage());
+        assertTrue(error.getMessage().contains("UNCERTAIN"), () -> "mensaje: " + error.getMessage());
+    }
+
+    @Test
+    void acceptsARouteThatOnlyOneSideDeclaresBySinkRef() {
+        // BANCO_B no declara sinkRef en el STATUS (sigue inline o se consulta por REST): no hay nada que
+        // cotejar. Exigirlo rechazaria la migracion gradual, que es como esto se adopta en la practica.
+        validator.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1, PAY_ROUTES_A11_B22),
+                new ProcessTaskView("MT101_STATUS", 2,
+                        "{\"resolveNormalPay\":true,\"connectionRef\":\"12\",\"routeQuery\":{"
+                        + "\"BANCO_A\":{\"transport\":\"SFTP\",\"sftp\":{\"sinkRef\":11}},"
+                        + "\"BANCO_B\":{\"transport\":\"SFTP\",\"sftp\":{\"host\":\"legacy\"}}}}")));
+    }
+
+    @Test
+    void acceptsFullyInlineConfigurationsBecauseThereIsNothingComparable() {
+        // Sin ningun sinkRef la regla no aplica. Es el caso de todos los procesos anteriores a ADR-017:
+        // no se puede comparar host/credenciales sin falsos positivos, y por eso esto no se validaba.
+        validator.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1,
+                        "{\"connectionRef\":\"12\",\"routeTransports\":{\"BANCO_A\":{\"sftp\":{\"host\":\"a\"}}}}"),
+                new ProcessTaskView("MT101_STATUS", 2,
+                        "{\"resolveNormalPay\":true,\"connectionRef\":\"12\","
+                        + "\"routeQuery\":{\"BANCO_A\":{\"sftp\":{\"host\":\"b\"}}}}")));
+    }
+
+    @Test
+    void ignoresRouteSinksWhenTheStatusDoesNotResolveTheNormalPay() {
+        // La regla vive dentro del emparejamiento PAY -> STATUS resolutor. Un STATUS que no concilia el PAY
+        // normal no lee el ledger de fragmentos, asi que su conexion por ruta no es asunto de este validador.
+        validator.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1, PAY_ROUTES_A11_B22),
+                new ProcessTaskView("MT101_STATUS", 2,
+                        "{\"connectionRef\":\"12\",\"routeQuery\":{"
+                        + "\"BANCO_A\":{\"transport\":\"SFTP\",\"sftp\":{\"sinkRef\":33}}}}")));
+    }
+
+    @Test
+    void malformedRouteConfigurationDoesNotBreakTheValidator() {
+        // Config a medio escribir desde la UI (sinkRef como texto vacio, ruta sin bloque sftp): la regla se
+        // salta esas rutas en vez de reventar. Un validador que explota con JSON raro bloquea el guardado.
+        validator.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1,
+                        "{\"connectionRef\":\"12\",\"routeTransports\":{"
+                        + "\"BANCO_A\":{\"sftp\":{\"sinkRef\":\"\"}},\"BANCO_B\":{\"transport\":\"REST\"}}}"),
+                new ProcessTaskView("MT101_STATUS", 2,
+                        "{\"resolveNormalPay\":true,\"connectionRef\":\"12\",\"routeQuery\":{\"BANCO_A\":{}}}")));
+    }
 }
