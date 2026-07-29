@@ -74,6 +74,7 @@
                         "rootUrl":  "https://app.buildsoft.com.pe/appih",
                         "baseUrl":  "https://app.buildsoft.com.pe/appih/",
                         "redirectUris":  [
+                                             "https://192.168.100.25:8443/appih/*",
                                              "https://192.168.0.15:8443/appih/*",
                                              "https://localhost:8443/appih/*",
                                              "https://app.buildsoft.com.pe/appih/*",
@@ -82,6 +83,7 @@
                                              "https://localhost/appih/*"
                                          ],
                         "webOrigins":  [
+                                           "https://192.168.100.25:8443",
                                            "https://192.168.0.15:8443",
                                            "https://localhost:8443",
                                            "https://app.buildsoft.com.pe",
@@ -91,7 +93,7 @@
                                        ],
                         "attributes":  {
                                            "pkce.code.challenge.method":  "S256",
-                                           "post.logout.redirect.uris":  "https://192.168.0.15:8443##https://192.168.0.15:8443/*##https://localhost:8443##https://localhost:8443/*##https://app.buildsoft.com.pe##https://app.buildsoft.com.pe/*##https://190.234.81.197##https://190.234.81.197/*##https://192.168.1.38##https://192.168.1.38/*##https://localhost##https://localhost/*"
+                                           "post.logout.redirect.uris":  "https://192.168.100.25:8443##https://192.168.100.25:8443/*##https://192.168.0.15:8443##https://192.168.0.15:8443/*##https://localhost:8443##https://localhost:8443/*##https://app.buildsoft.com.pe##https://app.buildsoft.com.pe/*##https://190.234.81.197##https://190.234.81.197/*##https://192.168.1.38##https://192.168.1.38/*##https://localhost##https://localhost/*"
                                        },
                         "protocolMappers":  [
                                                 {
