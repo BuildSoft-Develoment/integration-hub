@@ -150,4 +150,37 @@ describe('Mt101StatusTaskProvider', () => {
     // gobierna. Acá va vacía porque la config del caso solo trae claves gobernadas.
     expect(rehydrated).toEqual({ ...initial, ungoverned: {} });
   });
+
+  it('gobierna routeQuery sin perder las claves por ruta que el form no expone', () => {
+    // routeQuery paso de bolsa preservada a campo TIPADO: el formulario expone ruta, transporte,
+    // endpoint/sinkRef y tokens, pero el backend lee mas por ruta (method, timeoutSeconds,
+    // statusField...). Esas viajan en la bolsa por ruta; sin ella, gobernar seria retroceder.
+    const p = new Mt101StatusTaskProvider();
+    const config = {
+      mode: 'query',
+      routeQuery: {
+        BANCO_A: {
+          transport: 'SFTP',
+          responseFileTemplate: '/ack/x.ack',
+          acceptedTokens: ['ACCP'],
+          sftp: { sinkRef: 11 },
+          statusField: '$.custom',
+          timeoutSeconds: 45,
+        },
+      },
+    };
+    const task = { ...baseTask, configurationJson: JSON.stringify(config) };
+
+    const draft = p.hydrateDraft(task);
+    expect(draft.routeQuery).toHaveLength(1);
+    expect(draft.routeQuery[0].route).toBe('BANCO_A');
+    expect(draft.routeQuery[0].sinkRef, 'el picker lee el sinkRef').toBe('11');
+    expect(draft.routeQuery[0].acceptedTokens).toBe('ACCP');
+
+    const out = JSON.parse(p.toTaskPatch(draft).configurationJson as string);
+    const ruta = out.routeQuery.BANCO_A;
+    expect(ruta.statusField, 'clave no expuesta por el form: sobrevive').toBe('$.custom');
+    expect(ruta.timeoutSeconds, 'clave no expuesta por el form: sobrevive').toBe(45);
+    expect(ruta.sftp, 'la conexion sigue saliendo de la fuente').toEqual({ sinkRef: 11 });
+  });
 });

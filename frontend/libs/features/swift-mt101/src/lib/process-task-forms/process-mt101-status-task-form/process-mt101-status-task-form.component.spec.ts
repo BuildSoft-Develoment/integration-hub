@@ -35,7 +35,9 @@ const managerStub = {
     queryUrl: '', queryMethod: 'GET', queryTimeoutSeconds: 30,
     statusField: '$.status', referenceField: '$.gatewayReference', errorMessageField: '$.error.message',
     connectionRef: '', confirmationTable: 'mt101_confirmation',
-    resolveNormalPay: false, resolvesPayTaskRef: '', preserved: {},
+    // `preserved` quedo obsoleto (la clase base preserva por `ungoverned`); `routeQuery` es lo que el
+    // formulario ahora gobierna, y sin el la pestaña de rutas revienta al renderizar.
+    resolveNormalPay: false, resolvesPayTaskRef: '', routeQuery: [],
     ...JSON.parse(t.configurationJson || '{}'),
   }),
   toTaskPatch: () => ({}),

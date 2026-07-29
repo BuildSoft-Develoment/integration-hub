@@ -100,6 +100,112 @@
       </div>
     </mat-tab>
 
+    <mat-tab [label]="i18n.t('mt101Status.section.routes')">
+      <div class="mt101-status__grid">
+        <p class="mt101-status__hint">{{ i18n.t('mt101Status.routes.intro') }}</p>
+
+        @if (draft().routeQuery.length === 0) {
+          <p class="mt101-status__empty">{{ i18n.t('mt101Status.routes.empty') }}</p>
+        }
+
+        @for (route of draft().routeQuery; track $index) {
+          <div class="mt101-status__route">
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Status.routes.name') }}</mat-label>
+              <input
+                matInput
+                type="text"
+                [ngModel]="route.route"
+                (ngModelChange)="updateRoute($index, { route: $event })"
+                [disabled]="readonly()" />
+              <mat-hint>{{ i18n.t('mt101Status.routes.nameHint') }}</mat-hint>
+            </mat-form-field>
+
+            <mat-form-field subscriptSizing="dynamic">
+              <mat-label>{{ i18n.t('mt101Status.routes.transport') }}</mat-label>
+              <mat-select
+                [ngModel]="route.transport"
+                (ngModelChange)="updateRoute($index, { transport: $event })"
+                [disabled]="readonly()">
+                @for (transport of routeTransports; track transport) {
+                  <mat-option [value]="transport">{{ transport }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            @if (route.transport === 'REST') {
+              <mat-form-field class="mt101-status__route-wide" subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('mt101Status.routes.url') }}</mat-label>
+                <input
+                  matInput
+                  type="text"
+                  [ngModel]="route.url"
+                  (ngModelChange)="updateRoute($index, { url: $event })"
+                  [disabled]="readonly()" />
+              </mat-form-field>
+            } @else {
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('mt101Status.routes.sink') }}</mat-label>
+                <mat-select
+                  [ngModel]="route.sinkRef"
+                  (ngModelChange)="updateRoute($index, { sinkRef: $event })"
+                  [disabled]="readonly()">
+                  <mat-option value="">{{ i18n.t('mt101Status.routes.sinkInline') }}</mat-option>
+                  @for (sink of sinkOptions(); track sink.id) {
+                    <mat-option [value]="String(sink.id)">{{ sink.id }} - {{ sink.name }}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>{{ i18n.t('mt101Status.routes.sinkHint') }}</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field class="mt101-status__route-wide" subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('mt101Status.routes.responseFile') }}</mat-label>
+                <input
+                  matInput
+                  type="text"
+                  [ngModel]="route.responseFileTemplate"
+                  (ngModelChange)="updateRoute($index, { responseFileTemplate: $event })"
+                  [disabled]="readonly()" />
+                <mat-hint>{{ i18n.t('mt101Status.routes.responseFileHint') }}</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('mt101Status.routes.acceptedTokens') }}</mat-label>
+                <input
+                  matInput
+                  type="text"
+                  [ngModel]="route.acceptedTokens"
+                  (ngModelChange)="updateRoute($index, { acceptedTokens: $event })"
+                  [disabled]="readonly()" />
+              </mat-form-field>
+
+              <mat-form-field subscriptSizing="dynamic">
+                <mat-label>{{ i18n.t('mt101Status.routes.rejectedTokens') }}</mat-label>
+                <input
+                  matInput
+                  type="text"
+                  [ngModel]="route.rejectedTokens"
+                  (ngModelChange)="updateRoute($index, { rejectedTokens: $event })"
+                  [disabled]="readonly()" />
+              </mat-form-field>
+            }
+
+            <button
+              type="button"
+              class="mt101-status__route-remove"
+              (click)="removeRoute($index)"
+              [disabled]="readonly()">
+              {{ i18n.t('mt101Status.routes.remove') }}
+            </button>
+          </div>
+        }
+
+        <button type="button" (click)="addRoute()" [disabled]="readonly()">
+          {{ i18n.t('mt101Status.routes.add') }}
+        </button>
+      </div>
+    </mat-tab>
+
     <mat-tab [label]="i18n.t('mt101Status.section.persistence')">
       <div class="mt101-status__grid">
         <ih-connection-select

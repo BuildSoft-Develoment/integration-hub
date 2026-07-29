@@ -23,7 +23,44 @@ export interface Mt101StatusTaskDraft extends ProcessTaskRuntimeDraft {
   resolveNormalPay: boolean;
   /** taskRef del MT101_PAY que resuelve este STATUS; obligatorio en procesos multi-PAY. */
   resolvesPayTaskRef: string;
+  /** STATUS por ruta: cada banco/ruta con su propio endpoint o su propio ACK por SFTP. */
+  routeQuery: Mt101StatusRouteDraft[];
 }
+
+/**
+ * Una entrada de `routeQuery`. El formulario gobierna lo que el operador necesita ver —a que banco se
+ * consulta y como se clasifica su respuesta— y transporta el resto en `rest`.
+ *
+ * <p>Esa bolsa no es opcional: el backend lee mas claves por ruta de las que el form expone
+ * (`method`, `timeoutSeconds`, `statusField`, `referenceField`...). Modelar unas pocas y reconstruir el
+ * objeto desde cero borraria las demas — el mismo fallo que ya costo `resolveNormalPay` e
+ * `input.filters`.</p>
+ */
+export interface Mt101StatusRouteDraft {
+  /** Nombre de la ruta tal como la marca MT101_ROUTE (`routed_as`). */
+  route: string;
+  transport: 'REST' | 'SFTP';
+  /** REST: endpoint de consulta de esa ruta. */
+  url: string;
+  /** SFTP: fuente OUTPUT/BOTH con la conexion del banco (ADR-017). Vacio = conexion inline heredada. */
+  sinkRef: string;
+  /** SFTP: ruta del archivo ACK/NACK que deja el banco. */
+  responseFileTemplate: string;
+  /** SFTP: tokens que clasifican la respuesta, separados por coma. */
+  acceptedTokens: string;
+  rejectedTokens: string;
+  /** Claves de la ruta que el formulario no gobierna (incluido el bloque `sftp` inline). */
+  rest: Record<string, unknown>;
+}
+
+/** Claves de una entrada de routeQuery que el formulario SI gobierna; el resto viaja en `rest`. */
+const ROUTE_GOVERNED_KEYS = [
+  'transport',
+  'url',
+  'responseFileTemplate',
+  'acceptedTokens',
+  'rejectedTokens',
+] as const;
 
 /**
  * Claves de primer nivel que ESTE formulario gobierna. Todo lo demas que traiga la configuracion
@@ -44,6 +81,7 @@ const GOVERNED_KEYS = [
   'confirmationTable',
   'resolveNormalPay',
   'resolvesPayTaskRef',
+  'routeQuery',
 ] as const;
 
 /**
@@ -93,7 +131,77 @@ export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTask
       confirmationTable: 'mt101_confirmation',
       resolveNormalPay: false,
       resolvesPayTaskRef: '',
+      routeQuery: [],
     };
+  }
+
+  /** `routeQuery` es un objeto {ruta -> config}; el formulario lo maneja como lista ordenable. */
+  private hydrateRouteQuery(raw: unknown): Mt101StatusRouteDraft[] {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return [];
+    }
+    return Object.entries(raw as Record<string, unknown>).map(([route, value]) => {
+      const entry = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>;
+      const sftp = (entry['sftp'] && typeof entry['sftp'] === 'object' ? entry['sftp'] : {}) as Record<string, unknown>;
+      return {
+        route,
+        transport: String(entry['transport'] ?? 'REST').toUpperCase() === 'SFTP' ? 'SFTP' : 'REST',
+        url: String(entry['url'] ?? ''),
+        sinkRef: sftp['sinkRef'] == null ? '' : String(sftp['sinkRef']),
+        responseFileTemplate: String(entry['responseFileTemplate'] ?? ''),
+        acceptedTokens: this.tokensToText(entry['acceptedTokens']),
+        rejectedTokens: this.tokensToText(entry['rejectedTokens']),
+        // Todo lo demas viaja verbatim. El bloque `sftp` se saca aparte porque el form gobierna SOLO su
+        // `sinkRef`: si la ruta trae una conexion INLINE (host/credenciales, sin sinkRef) hay que
+        // conservarla entera o guardar desde la UI dejaria al STATUS sin a donde consultar.
+        rest: {
+          ...this.omitKeys(entry, [...ROUTE_GOVERNED_KEYS, 'sftp']),
+          ...(sftp['sinkRef'] == null && Object.keys(sftp).length > 0 ? { __inlineSftp: sftp } : {}),
+        },
+      } satisfies Mt101StatusRouteDraft;
+    });
+  }
+
+  private serializeRouteQuery(routes: readonly Mt101StatusRouteDraft[]): Record<string, unknown> | undefined {
+    const named = routes.filter((route) => route.route.trim());
+    if (named.length === 0) {
+      // Ausente != vacio: `routeQuery: {}` apagaria el modo route-aware en el backend.
+      return undefined;
+    }
+    const result: Record<string, unknown> = {};
+    for (const route of named) {
+      const inlineSftp = (route.rest['__inlineSftp'] ?? undefined) as Record<string, unknown> | undefined;
+      const entry: Record<string, unknown> = this.omitKeys(route.rest, ['__inlineSftp']);
+      // Se emite lo MINIMO. Añadir claves es tan riesgoso como perderlas: una ruta que solo traia su
+      // bloque `sftp` volveria del editor con `transport` y `url:''` que nadie escribio, y el operador
+      // no tiene como saber si eso cambia a que endpoint se consulta.
+      if (route.transport === 'SFTP') {
+        entry['transport'] = 'SFTP';
+        if (route.responseFileTemplate.trim()) entry['responseFileTemplate'] = route.responseFileTemplate;
+        if (route.acceptedTokens.trim()) entry['acceptedTokens'] = this.textToTokens(route.acceptedTokens);
+        if (route.rejectedTokens.trim()) entry['rejectedTokens'] = this.textToTokens(route.rejectedTokens);
+      } else if (route.url.trim()) {
+        entry['url'] = route.url;
+      }
+      // El bloque de conexion se re-emite en AMBAS ramas. Solo en la de SFTP se perderia lo evidente;
+      // el caso silencioso es una ruta con `sftp` inline y sin `transport` declarado —que el backend
+      // trata como REST— donde guardar desde la UI borraba host y credenciales del banco.
+      if (route.sinkRef.trim()) {
+        entry['sftp'] = { sinkRef: Number(route.sinkRef) };
+      } else if (inlineSftp) {
+        entry['sftp'] = inlineSftp;
+      }
+      result[route.route.trim()] = entry;
+    }
+    return result;
+  }
+
+  private tokensToText(raw: unknown): string {
+    return Array.isArray(raw) ? raw.map((token) => String(token)).join(', ') : String(raw ?? '');
+  }
+
+  private textToTokens(text: string): string[] {
+    return text.split(',').map((token) => token.trim()).filter(Boolean);
   }
 
   hydrateDraft(task: ProcessTaskFormModel): Mt101StatusTaskDraft {
@@ -114,6 +222,7 @@ export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTask
       confirmationTable: String(config['confirmationTable'] || 'mt101_confirmation'),
       resolveNormalPay: this.parseBackendBoolean(config['resolveNormalPay']),
       resolvesPayTaskRef: String(config['resolvesPayTaskRef'] || ''),
+      routeQuery: this.hydrateRouteQuery(config['routeQuery']),
     };
   }
 
@@ -134,6 +243,7 @@ export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTask
   }
 
   toTaskPatch(draft: Mt101StatusTaskDraft): Partial<ProcessTaskFormModel> {
+    const routeQuery = this.serializeRouteQuery(draft.routeQuery);
     const payload: Record<string, unknown> = this.withRuntime(
       {
         mode: draft.mode,
@@ -155,6 +265,8 @@ export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTask
         ...(draft.resolveNormalPay && draft.resolvesPayTaskRef
           ? { resolvesPayTaskRef: draft.resolvesPayTaskRef }
           : {}),
+        // Route-aware: solo se emite si hay rutas con nombre (ver serializeRouteQuery).
+        ...(routeQuery ? { routeQuery } : {}),
       },
       draft,
       'per-record',

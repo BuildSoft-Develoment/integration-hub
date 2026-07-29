@@ -12,10 +12,11 @@ import {
 } from '@integration-hub/core/providers';
 import {
   Mt101StatusMode,
+  Mt101StatusRouteDraft,
   Mt101StatusTaskDraft,
 } from '../../process-tasks';
 import { I18nService, ProcessTaskManagerService } from '@integration-hub/core/services';
-import { ConnectionRef, ProcessTaskFormModel } from '@integration-hub/core/providers';
+import { ConnectionRef, ProcessTaskFormModel, SourceRef } from '@integration-hub/core/providers';
 import { ProcessTaskRuntimePanelComponent } from '@integration-hub/shared/process-form-kit';
 import { ConnectionSelectComponent } from '@integration-hub/shared/process-form-kit';
 import { TaskFormShellComponent } from '@integration-hub/shared/process-form-kit';
@@ -45,6 +46,8 @@ export class ProcessMt101StatusTaskFormComponent {
   readonly task = input.required<ProcessTaskFormModel>();
   readonly tasks = input.required<readonly ProcessTaskFormModel[]>();
   readonly connections = input.required<readonly ConnectionRef[]>();
+  /** ADR-017: fuentes para el picker de `sinkRef` por ruta. Opcional: el host ya lo pasa a todos los forms. */
+  readonly sources = input<readonly SourceRef[]>([]);
   readonly readonly = input(false);
 
   readonly draft = computed<Mt101StatusTaskDraft>(
@@ -82,5 +85,55 @@ export class ProcessMt101StatusTaskFormComponent {
   updateDraft(patch: Partial<Mt101StatusTaskDraft>): void {
     const next: Mt101StatusTaskDraft = { ...this.draft(), ...patch };
     this.bridge.emit(this.manager.toTaskPatch(this.task().taskType, next));
+  }
+
+  // ---- ADR-017: STATUS por ruta ----
+
+  readonly routeTransports: ReadonlyArray<Mt101StatusRouteDraft['transport']> = ['REST', 'SFTP'];
+
+  /**
+   * Mismo filtro que MT101_PAY y FILE_DELIVER: la conexion del banco es una fuente OUTPUT/BOTH activa.
+   * Una fuente de LECTURA aqui haria que el STATUS consultara el ACK contra otro servidor y reportara
+   * "sin respuesta del banco" en silencio — el backend la rechaza, pero no hay razon para ofrecerla.
+   */
+  readonly sinkOptions = computed(() =>
+    this.sources().filter((source) => source.active !== false && this.isSink(source.direction)),
+  );
+
+  private isSink(direction?: string): boolean {
+    const normalized = (direction ?? 'INPUT').toUpperCase();
+    return normalized === 'OUTPUT' || normalized === 'BOTH';
+  }
+
+  /** El template usa `String(...)` para comparar el valor del select con el sinkRef del draft. */
+  readonly String = String;
+
+  addRoute(): void {
+    this.updateDraft({
+      routeQuery: [
+        ...this.draft().routeQuery,
+        {
+          route: '',
+          transport: 'REST',
+          url: '',
+          sinkRef: '',
+          responseFileTemplate: '',
+          acceptedTokens: '',
+          rejectedTokens: '',
+          rest: {},
+        },
+      ],
+    });
+  }
+
+  updateRoute(index: number, patch: Partial<Mt101StatusRouteDraft>): void {
+    const routeQuery = this.draft().routeQuery.map((route, position) =>
+      position === index ? { ...route, ...patch } : route,
+    );
+    this.updateDraft({ routeQuery });
+  }
+
+  removeRoute(index: number): void {
+    this.updateDraft({ routeQuery: this.draft().routeQuery.filter((_, position) => position !== index) });
   }
 }
