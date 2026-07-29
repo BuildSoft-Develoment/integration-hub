@@ -46,6 +46,8 @@ import java.util.List;
 @ApplicationScoped
 public class Mt101PayStatusConnectionCoverageValidator implements ProcessDefinitionValidator {
 
+    private static final String MT101_STATUS = "MT101_STATUS";
+
     private final Mt101PayResolverPairing pairing;
     private final boolean strictRouteSinks;
 
@@ -92,7 +94,14 @@ public class Mt101PayStatusConnectionCoverageValidator implements ProcessDefinit
         if (pays.isEmpty()) {
             return;
         }
+        // "toda ruta de pago nombra su banco" es una propiedad del PAY, no del par PAY-STATUS: se
+        // comprueba una vez por pago y no depende de que exista un STATUS ni de que este concilie.
+        // Colgarla del emparejamiento la habria dejado dormida justo donde no hay resolutor.
+        pays.forEach(this::requireEveryPayRouteDeclaresItsBank);
         for (var status : tasks) {
+            // Espejo de la regla del PAY, y por el mismo motivo: es propiedad del STATUS, asi que se
+            // aplica concilie o no. Va antes del emparejamiento para no repetirla en los dos caminos.
+            requireEveryStatusRouteNamesItsBank(status);
             if (!pairing.isNormalPayResolver(status)) {
                 // Un STATUS que NO concilia el PAY normal igual consulta al banco por ruta, asi que su
                 // simetria de sinks importa lo mismo. Antes todo este metodo estaba detras del
@@ -170,6 +179,29 @@ public class Mt101PayStatusConnectionCoverageValidator implements ProcessDefinit
     }
 
     /**
+     * C-2, cara del STATUS: toda ruta que se consulta nombra su banco por {@code sinkRef}.
+     *
+     * <p>Espejo de {@link #requireEveryPayRouteDeclaresItsBank}. Sin esto la politica quedaba a medias:
+     * el PAY estaba obligado a nombrar su banco pero el STATUS podia consultar la misma ruta contra un
+     * host inline, que es exactamente el desvio que la politica existe para impedir.</p>
+     */
+    private void requireEveryStatusRouteNamesItsBank(ProcessTaskView status) {
+        if (!strictRouteSinks || !MT101_STATUS.equalsIgnoreCase(status.taskType())) {
+            return;
+        }
+        var inline = new java.util.LinkedHashSet<>(pairing.routeNames(status, "routeQuery"));
+        inline.removeAll(pairing.routeSinkRefs(status, "routeQuery").keySet());
+        if (inline.isEmpty()) {
+            return;
+        }
+        throw new IllegalArgumentException(
+                "MT101_STATUS (task order " + status.taskOrder() + ") queries route(s) " + inline
+                + " with an inline bank connection. With mt101.pay.route-sink.strict every queried route must "
+                + "name its bank by sinkRef (an /sources OUTPUT/BOTH definition), so it can be checked against "
+                + "the sink the MT101_PAY dispatched that route to.");
+    }
+
+    /**
      * Simetria de sinks para un STATUS que NO concilia el PAY normal.
      *
      * <p>Sin par explicito no se puede senalar UN pay, asi que se compara contra la union de los sinks
@@ -210,25 +242,15 @@ public class Mt101PayStatusConnectionCoverageValidator implements ProcessDefinit
     private void validateRouteSinks(ProcessTaskView pay, ProcessTaskView status) {
         var paySinks = pairing.routeSinkRefs(pay, "routeTransports");
         if (paySinks.isEmpty()) {
-            requireEveryPayRouteDeclaresItsBank(pay);
             return;
         }
-        requireEveryPayRouteDeclaresItsBank(pay);
         var statusSinks = pairing.routeSinkRefs(status, "routeQuery");
         for (var route : paySinks.entrySet()) {
             var statusSink = statusSinks.get(route.getKey());
-            if (statusSink == null) {
-                if (strictRouteSinks) {
-                    throw new IllegalArgumentException(
-                            "MT101_STATUS (task order " + status.taskOrder() + ") queries route '" + route.getKey()
-                            + "' with an inline connection while the MT101_PAY (task order " + pay.taskOrder()
-                            + ") dispatches it to sink " + route.getValue() + ". With mt101.pay.route-sink.strict "
-                            + "both sides must name the SAME OUTPUT/BOTH source: an inline host cannot be compared, "
-                            + "so nothing would stop the confirmation from being read off a different bank.");
-                }
-                continue;
-            }
-            if (statusSink.equals(route.getValue())) {
+            // Sin sink del lado del STATUS no hay dos numeros que comparar. En modo estricto ese caso ya
+            // lo rechazo `requireEveryStatusRouteNamesItsBank` antes de llegar aca, asi que este `continue`
+            // solo cubre la migracion.
+            if (statusSink == null || statusSink.equals(route.getValue())) {
                 continue;
             }
             throw new IllegalArgumentException(

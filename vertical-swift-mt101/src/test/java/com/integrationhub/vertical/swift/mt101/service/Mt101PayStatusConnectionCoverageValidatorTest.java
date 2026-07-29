@@ -312,6 +312,31 @@ class Mt101PayStatusConnectionCoverageValidatorTest {
     }
 
     @Test
+    void strictRejectsAPayWithInlineRoutesEvenWithoutAnyStatus() {
+        // Hueco del doble check: la regla colgaba del emparejamiento PAY-STATUS, asi que un PAY con rutas
+        // inline pasaba si el proceso no tenia STATUS. "Toda ruta de pago nombra su banco" es propiedad
+        // del PAY: no depende de que alguien lea la confirmacion.
+        var error = assertThrows(IllegalArgumentException.class, () -> estricto.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1,
+                        "{\"taskRef\":\"pay\",\"connectionRef\":\"12\",\"routeTransports\":{"
+                        + "\"BANCO_B\":{\"sftp\":{\"host\":\"legacy\"}}}}"))));
+        assertTrue(error.getMessage().contains("BANCO_B"), () -> "mensaje: " + error.getMessage());
+    }
+
+    @Test
+    void strictRejectsAnInlineStatusRouteEvenWhenItDoesNotResolveTheNormalPay() {
+        // Espejo del anterior. La regla estricta del STATUS solo corria por el camino del resolutor, que es
+        // justo el que la UI deja apagado: la politica quedaba a medias en el camino real del operador.
+        var error = assertThrows(IllegalArgumentException.class, () -> estricto.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1, PAY_ROUTES_A11_B22),
+                new ProcessTaskView("MT101_STATUS", 2,
+                        "{\"connectionRef\":\"12\",\"routeQuery\":{"
+                        + "\"BANCO_A\":{\"sftp\":{\"sinkRef\":11}},"
+                        + "\"BANCO_B\":{\"sftp\":{\"host\":\"legacy\"}}}}"))));
+        assertTrue(error.getMessage().contains("BANCO_B"), () -> "mensaje: " + error.getMessage());
+    }
+
+    @Test
     void permissiveKeepsAcceptingWhatStrictRejects() {
         // El mismo grafo que strictRejectsAStatusRouteThatStaysInlineWhileThePayNamesItsBank, con la
         // politica apagada: si esto fallara, el default habria dejado de ser el de migracion.
