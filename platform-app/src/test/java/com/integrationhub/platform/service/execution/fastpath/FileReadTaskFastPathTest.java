@@ -259,6 +259,16 @@ class FileReadTaskFastPathTest {
             super(null);
         }
 
+        /**
+         * ADR-021: el fast path ya no consulta una lista de literales del motor sino esta capacidad,
+         * que declara el provider. El doble responde por MT101_PARSE igual que lo haria el provider
+         * real ({@code producesConsumableRecords() == true}).
+         */
+        @Override
+        public boolean producesConsumableRecords(String type) {
+            return "MT101_PARSE".equalsIgnoreCase(type);
+        }
+
         @Override
         public com.integrationhub.platform.spi.task.TaskProvider resolve(String type) {
             return new BatchTaskProvider() {

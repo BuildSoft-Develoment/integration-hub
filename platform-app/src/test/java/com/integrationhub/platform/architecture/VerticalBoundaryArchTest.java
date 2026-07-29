@@ -66,15 +66,20 @@ class VerticalBoundaryArchTest {
             List.of("service/execution", "service/process", "domain");
 
     /**
-     * Literales de tipo de tarea de un vertical tolerados HOY en el motor (freeze-list manual:
-     * ArchUnit razona sobre tipos, no sobre strings). Cada entrada es deuda registrada en ADR-021;
-     * al arreglarla hay que borrarla de aca para que no pueda reaparecer.
+     * Literales de tipo de tarea de un vertical tolerados en el motor (freeze-list manual: ArchUnit
+     * razona sobre tipos, no sobre strings).
+     *
+     * <p><b>Vacia desde el 2026-07-28</b>. Tenia dos archivos del motor que preguntaban por el
+     * tipo de tarea de un vertical: {@code BackgroundProcessExecutionDispatcher} con {@code "MT101_PAY"}
+     * y {@code FileReadTaskFastPath} con {@code "MT101_PARSE"}. Ahora el motor pregunta por CAPACIDADES
+     * que declara el provider ({@code movesMoney()}, {@code producesConsumableRecords()}).
+     *
+     * <p>No era solo estetica: el literal del despachador protegia a UN tipo, asi que la tarea de pago
+     * de un vertical nuevo se habria re-encolado a ciegas tras una caida de nodo.</p>
+     *
+     * <p>Se conserva vacia a proposito: volver a llenarla tiene que ser una decision visible en el diff.</p>
      */
-    private static final Set<String> FROZEN_LITERAL_FILES = Set.of(
-            // "MT101_PAY": el dispatcher de recuperacion decide NEEDS_RECONCILIATION por tipo de tarea.
-            "service/execution/async/BackgroundProcessExecutionDispatcher.java",
-            // "MT101_PARSE": el fast-path generico excluye el sink que produce records.
-            "service/execution/fastpath/FileReadTaskFastPath.java");
+    private static final Set<String> FROZEN_LITERAL_FILES = Set.of();
 
     private static JavaClasses platformClasses;
 

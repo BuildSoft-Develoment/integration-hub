@@ -20,12 +20,6 @@ import java.util.Set;
 @ApplicationScoped
 public class FileReadTaskFastPath implements ExecutionFastPath {
 
-    // Transforms que publican un output `records` consumido por tareas downstream
-    // (p.ej. MT101_PARSE -> MT101_ROUTE). El fast path solo materializa un summary
-    // (processedCount), no la lista de records, asi que fusionarlos romperia la
-    // resolucion de `<taskRef>.records` aguas abajo. Su sink natural en el fast path
-    // es DB_WRITE (staging), que no produce records consumibles.
-    private static final Set<String> RECORDS_PRODUCING_SINKS = Set.of("MT101_PARSE");
 
     private final StreamingPipelineService pipelineService;
     private final ProcessExecutionStateService stateService;
@@ -61,7 +55,12 @@ public class FileReadTaskFastPath implements ExecutionFastPath {
         if (!readerSupportsStreamingPipeline(current.readerType())) return false;
         if (!declaresCurrentReadRecordsInput(current, next)) return false;
 
-        if (next.taskType() != null && RECORDS_PRODUCING_SINKS.contains(next.taskType().toUpperCase())) {
+        // ADR-021: el provider declara si publica `records` consumibles aguas abajo (p.ej. MT101_PARSE
+        // -> MT101_ROUTE). El fast path solo materializa un summary (processedCount), asi que fusionar
+        // una tarea cuyos records alguien lee romperia la resolucion de `<taskRef>.records`. Su sink
+        // natural aca es DB_WRITE (staging), que no produce records consumibles. Antes esto era una
+        // lista de literales de un vertical dentro del motor.
+        if (taskProviderRegistry.producesConsumableRecords(next.taskType())) {
             return false;
         }
 

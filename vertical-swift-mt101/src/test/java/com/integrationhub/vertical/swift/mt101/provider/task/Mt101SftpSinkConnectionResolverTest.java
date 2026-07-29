@@ -32,7 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * configurada.</p>
  */
 // @covers ADR-017
-class Mt101PaySinkConnectionResolverTest {
+class Mt101SftpSinkConnectionResolverTest {
 
     // Fuente /sources SFTP bien configurada: credenciales como refs (QA-006), knownHostsPath como ${config:...}.
     // Incluye claves de LECTURA (remotePath/fileNamePattern) que NO deben copiarse al bloque sftp del pago.
@@ -48,14 +48,14 @@ class Mt101PaySinkConnectionResolverTest {
             {"host":"sftp-bank","port":22,"username":"bank","password":"plaintext-oops",
              "strictHostKeyChecking":true}""";
 
-    private Mt101PaySinkConnectionResolver resolver(String type, String direction, String sourceJson) {
+    private Mt101SftpSinkConnectionResolver resolver(String type, String direction, String sourceJson) {
         var sinkService = new SinkDefinitionResolver() {
             @Override
             public SinkDefinition resolve(Long id) {
                 return new SinkDefinition(id, "bank-sink", type, sourceJson, direction);
             }
         };
-        return new Mt101PaySinkConnectionResolver(sinkService, new TestConfigurationMapper());
+        return new Mt101SftpSinkConnectionResolver(sinkService, new TestConfigurationMapper());
     }
 
     private Map<String, Object> payConfigWithSinkRef() {
@@ -137,7 +137,7 @@ class Mt101PaySinkConnectionResolverTest {
                 throw new AssertionError("no se debe resolver la fuente en modo inline");
             }
         };
-        var resolver = new Mt101PaySinkConnectionResolver(throwingSink, new TestConfigurationMapper());
+        var resolver = new Mt101SftpSinkConnectionResolver(throwingSink, new TestConfigurationMapper());
 
         var inline = payConfigInlineEquivalent();
         var result = resolver.withResolvedSink(inline);
@@ -261,5 +261,76 @@ class Mt101PaySinkConnectionResolverTest {
                 new Mt101Message.ControlTotals(1, Map.of("PEN", new BigDecimal("100.00"))),
                 "{\"sendersReference\":\"" + sendersReference + "\",\"transactions\":1}",
                 "JSON");
+    }
+
+    // ---- ADR-017: MT101_STATUS resuelve su conexion desde la MISMA fuente que el PAY ----
+
+    @Test
+    void statusResolvesTheRouteSftpConnectionFromTheSourceLikePayDoes() {
+        // El STATUS por ruta guardaba la conexion INLINE en routeQuery.<ruta>.sftp, o sea aparte de la del
+        // PAY del mismo banco: cambiar el host en la fuente arreglaba el envio y dejaba la consulta apuntando
+        // al host viejo. Con sinkRef ambas salen de la misma fuente OUTPUT/BOTH.
+        var sftp = new LinkedHashMap<String, Object>();
+        sftp.put("sinkRef", 11);
+        var ruta = new LinkedHashMap<String, Object>();
+        ruta.put("transport", "SFTP");
+        ruta.put("sftp", sftp);
+        ruta.put("responseFileTemplate", "/ack/${sendersReference}.ack");
+        var routeQuery = new LinkedHashMap<String, Object>();
+        routeQuery.put("BANCO_A", ruta);
+        var config = new LinkedHashMap<String, Object>();
+        config.put("mode", "query");
+        config.put("routeQuery", routeQuery);
+
+        var resolved = resolver("SFTP", "OUTPUT", SFTP_SOURCE_JSON).withResolvedStatusSink(config);
+
+        var resolvedRuta = (Map<String, Object>) ((Map<String, Object>) resolved.get("routeQuery")).get("BANCO_A");
+        var resolvedSftp = (Map<String, Object>) resolvedRuta.get("sftp");
+        assertEquals("sftp-bank", resolvedSftp.get("host"), "la conexion sale de la fuente, no inline");
+        assertEquals("${secret:tasks/sftp/bank/password}", resolvedSftp.get("password"),
+                "las credenciales viajan como refs, nunca resueltas");
+        assertNull(resolvedSftp.get("sinkRef"), "el sinkRef no sobrevive en el bloque resuelto");
+        assertNull(resolvedSftp.get("remotePath"),
+                "las claves de LECTURA de la fuente no contaminan el bloque de la task");
+        assertEquals("/ack/${sendersReference}.ack", resolvedRuta.get("responseFileTemplate"),
+                "lo operacional de la ruta se conserva");
+    }
+
+    @Test
+    void statusWithoutSinkRefKeepsTheInlineConnection() {
+        // Retrocompatible: los procesos que ya tienen la conexion inline siguen funcionando igual.
+        var sftp = new LinkedHashMap<String, Object>();
+        sftp.put("host", "host-inline");
+        var ruta = new LinkedHashMap<String, Object>();
+        ruta.put("transport", "SFTP");
+        ruta.put("sftp", sftp);
+        var routeQuery = new LinkedHashMap<String, Object>();
+        routeQuery.put("BANCO_A", ruta);
+        var config = new LinkedHashMap<String, Object>();
+        config.put("routeQuery", routeQuery);
+
+        var resolved = resolver("SFTP", "OUTPUT", SFTP_SOURCE_JSON).withResolvedStatusSink(config);
+
+        var resolvedRuta = (Map<String, Object>) ((Map<String, Object>) resolved.get("routeQuery")).get("BANCO_A");
+        assertEquals("host-inline", ((Map<String, Object>) resolvedRuta.get("sftp")).get("host"));
+    }
+
+    @Test
+    void statusRejectsAnInputOnlySourceLikePayDoes() {
+        var sftp = new LinkedHashMap<String, Object>();
+        sftp.put("sinkRef", 11);
+        var ruta = new LinkedHashMap<String, Object>();
+        ruta.put("sftp", sftp);
+        var routeQuery = new LinkedHashMap<String, Object>();
+        routeQuery.put("BANCO_A", ruta);
+        var config = new LinkedHashMap<String, Object>();
+        config.put("routeQuery", routeQuery);
+
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> resolver("SFTP", "INPUT", SFTP_SOURCE_JSON).withResolvedStatusSink(config));
+
+        assertTrue(error.getMessage().contains("MT101_STATUS"),
+                "el mensaje nombra la tarea real, no MT101_PAY");
+        assertTrue(error.getMessage().contains("not an OUTPUT sink"));
     }
 }

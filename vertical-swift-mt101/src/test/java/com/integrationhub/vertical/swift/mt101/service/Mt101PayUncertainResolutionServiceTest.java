@@ -462,4 +462,40 @@ class Mt101PayUncertainResolutionServiceTest {
             return captured.stream().filter(envelope -> stage.equals(envelope.stage())).findFirst();
         }
     }
+
+    @Test
+    void normalPayReconciliationResolvesTheRouteSinkRefBeforePlanningQueries() throws Exception {
+        // ADR-021/ADR-017 — doble check del money-path NORMAL. La resolucion de `sinkRef` se cableo primero solo
+        // en el camino CORRECTIVO; este camino (resolveNormalPay) construye su PROPIO plan de consulta y se habia
+        // quedado sin ella. Sin resolver, una ruta con `sftp.sinkRef` llega al gateway SIN host: la conciliacion
+        // falla y el dinero queda UNCERTAIN — justo el estado que esta tarea existe para cerrar.
+        var setId = "PAY-UNC-SINKREF";
+        seedRouted(setId, "R1", 1, "UNCERTAIN", "REST_A");
+        stubFor(get(urlEqualTo("/route-a/R1")).willReturn(aResponse().withHeader("Content-Type", "application/json")
+                .withBody("{\"state\":\"OK\"}")));
+        var routeConfig = Map.<String, Object>of(
+                "routeQuery", Map.of("REST_A",
+                        Map.of("url", baseUrl + "/route-a/${sendersReference}", "statusField", "$.state")),
+                "acceptedStatuses", List.of("OK"));
+        ProcessTaskConfigSource configSource = TestProcessTaskConfigSource.forSiblingsWithoutSecrets(
+                (taskDefinitionId, taskType) -> "MT101_STATUS".equals(taskType) ? routeConfig : null);
+
+        var consultado = new java.util.concurrent.atomic.AtomicBoolean(false);
+        var espia = new com.integrationhub.vertical.swift.mt101.provider.task.Mt101SftpSinkConnectionResolver(null, null) {
+            @Override
+            public Map<String, Object> withResolvedStatusSink(Map<String, Object> statusConfig) {
+                consultado.set(true);
+                return statusConfig;
+            }
+        };
+        var service = new Mt101PayUncertainResolutionService(dataSource, null, repository,
+                new Mt101StatusQueryExecutor(new ObjectMapper()), new Mt101ConfirmationRepository(), null,
+                configSource, espia);
+
+        var result = service.resolveUncertainNormalPay(null, setId, "ana", "sinkRef en el camino normal");
+
+        assertTrue(consultado.get(),
+                "el camino de conciliacion del money-path debe resolver sinkRef antes de planificar");
+        assertEquals(1, result.resolvedSent());
+    }
 }

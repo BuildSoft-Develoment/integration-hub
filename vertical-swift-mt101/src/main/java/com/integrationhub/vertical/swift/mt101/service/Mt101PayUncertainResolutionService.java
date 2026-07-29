@@ -52,6 +52,8 @@ public class Mt101PayUncertainResolutionService {
     private final com.integrationhub.platform.spi.engine.RecordAuditEmitter recordAuditEmitter;
 
     private final ProcessTaskConfigSource taskConfigSource;
+    /** ADR-017: resuelve `routeQuery.<ruta>.sftp.sinkRef`. Nullable en tests (sin CDI). */
+    private final com.integrationhub.vertical.swift.mt101.provider.task.Mt101SftpSinkConnectionResolver sinkConnectionResolver;
 
     @Inject
     public Mt101PayUncertainResolutionService(DataSource defaultDataSource,
@@ -60,7 +62,8 @@ public class Mt101PayUncertainResolutionService {
                                               ObjectMapper objectMapper,
                                               Mt101ConfirmationRepository confirmationRepository,
                                               com.integrationhub.platform.spi.engine.RecordAuditEmitter recordAuditEmitter,
-                                              ProcessTaskConfigSource taskConfigSource) {
+                                              ProcessTaskConfigSource taskConfigSource,
+                                              com.integrationhub.vertical.swift.mt101.provider.task.Mt101SftpSinkConnectionResolver sinkConnectionResolver) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.fragmentRepository = fragmentRepository;
@@ -68,6 +71,7 @@ public class Mt101PayUncertainResolutionService {
         this.confirmationRepository = confirmationRepository;
         this.recordAuditEmitter = recordAuditEmitter;
         this.taskConfigSource = taskConfigSource;
+        this.sinkConnectionResolver = sinkConnectionResolver;
     }
 
     /** Constructor de test: permite inyectar el ejecutor de consulta (con gateways stub) y el emisor de auditoría. */
@@ -78,6 +82,22 @@ public class Mt101PayUncertainResolutionService {
                                        Mt101ConfirmationRepository confirmationRepository,
                                        com.integrationhub.platform.spi.engine.RecordAuditEmitter recordAuditEmitter,
                                        ProcessTaskConfigSource taskConfigSource) {
+        this(defaultDataSource, connectionPoolManager, fragmentRepository, statusQueryExecutor,
+                confirmationRepository, recordAuditEmitter, taskConfigSource, null);
+    }
+
+    /**
+     * Constructor de test que permite inyectar el resolver de {@code sinkRef} (ADR-017), para verificar que el
+     * camino de conciliacion del money-path lo consulta ANTES de planificar las consultas por ruta.
+     */
+    Mt101PayUncertainResolutionService(DataSource defaultDataSource,
+                                       JdbcConnectionResolver connectionPoolManager,
+                                       Mt101FragmentRepository fragmentRepository,
+                                       Mt101StatusQueryExecutor statusQueryExecutor,
+                                       Mt101ConfirmationRepository confirmationRepository,
+                                       com.integrationhub.platform.spi.engine.RecordAuditEmitter recordAuditEmitter,
+                                       ProcessTaskConfigSource taskConfigSource,
+                                       com.integrationhub.vertical.swift.mt101.provider.task.Mt101SftpSinkConnectionResolver sinkConnectionResolver) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.fragmentRepository = fragmentRepository;
@@ -85,6 +105,7 @@ public class Mt101PayUncertainResolutionService {
         this.confirmationRepository = confirmationRepository;
         this.recordAuditEmitter = recordAuditEmitter;
         this.taskConfigSource = taskConfigSource;
+        this.sinkConnectionResolver = sinkConnectionResolver;
     }
 
     public NormalPayResolution resolveUncertainNormalPay(String connectionRef, String fragmentSetId,
@@ -108,7 +129,15 @@ public class Mt101PayUncertainResolutionService {
             // (routeQuery presente) la URL compartida es opcional; si NO hay routeQuery ni query.url, no hay como
             // consultar -> error claro. Restriccion documentada: en el path normal solo hay ${sendersReference} y
             // ${route} disponibles en el registro (build_fragment no persiste gatewayReference/idempotencyKey).
-            var routeQuery = mapValue(config.get("routeQuery"));
+            // ADR-017: igual que el camino correctivo, la conexion SFTP de cada ruta puede venir de una fuente
+            // OUTPUT/BOTH (`routeQuery.<ruta>.sftp.sinkRef`). Resolverlo TAMBIEN aca no es simetria decorativa:
+            // este es el camino de conciliacion del money-path (resolveNormalPay), y sin la resolucion una
+            // config con sinkRef llegaria al gateway SFTP sin host -> la conciliacion falla y el dinero queda
+            // UNCERTAIN. Nullable en constructores de test (sin CDI).
+            var resolvedConfig = sinkConnectionResolver == null
+                    ? config
+                    : sinkConnectionResolver.withResolvedStatusSink(config);
+            var routeQuery = mapValue(resolvedConfig.get("routeQuery"));
             var routeAware = !routeQuery.isEmpty();
             var urlTemplate = stringOrNull(query.get("url"));
             if (!routeAware && (urlTemplate == null || urlTemplate.isBlank())) {

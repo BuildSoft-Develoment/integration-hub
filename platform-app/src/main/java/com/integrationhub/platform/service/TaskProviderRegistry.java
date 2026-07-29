@@ -99,6 +99,48 @@ public class TaskProviderRegistry {
     }
 
     /**
+     * ADR-021: tipos de tarea que MUEVEN DINERO, declarados por sus providers
+     * ({@link TaskProvider#movesMoney()}).
+     *
+     * <p>Lo consume la recuperacion de ejecuciones huerfanas: si una ejecucion con lease vencido ya
+     * arranco alguno de estos tipos, no se re-encola. Antes el motor traia el literal
+     * {@code "MT101_PAY"}, de modo que el fail-safe cubria a UN vertical; ahora cubre a todos los que
+     * declaren la capacidad.</p>
+     *
+     * <p>Solo providers CDI locales: un plugin remoto no puede auto-declararse como movedor de dinero
+     * —seria una decision de seguridad tomada por codigo de terceros—.</p>
+     */
+    public Set<String> moneyMovementTaskTypes() {
+        var types = new LinkedHashSet<String>();
+        providers.forEach(provider -> {
+            if (provider.movesMoney() && provider.type() != null && !provider.type().isBlank()) {
+                types.add(provider.type());
+            }
+        });
+        return types;
+    }
+
+    /**
+     * ADR-021: ¿el tipo publica un output {@code records} que las tareas siguientes consumen?
+     * Declarado por el provider ({@link TaskProvider#producesConsumableRecords()}).
+     *
+     * <p>Un tipo desconocido responde {@code false}: es el mismo comportamiento que tenia la lista de
+     * literales, que solo nombraba lo que si producia records. Se consulta el stream local y no
+     * {@code resolve}, que lanza ante un tipo desconocido y ademas materializaria un invoker remoto
+     * solo para preguntar una capacidad.</p>
+     */
+    public boolean producesConsumableRecords(String type) {
+        if (type == null || type.isBlank()) {
+            return false;
+        }
+        return providerStream()
+                .filter(provider -> type.equalsIgnoreCase(provider.type()))
+                .findFirst()
+                .map(TaskProvider::producesConsumableRecords)
+                .orElse(false);
+    }
+
+    /**
      * Tipos aportados por providers CDI locales y la clase que los publica.
      * No incluye plugins remotos; se usa para diagnostico y para detectar shadowing.
      */

@@ -84,27 +84,46 @@ class ProcessExecutionStateServiceTest {
         // Regla de seguridad money-path: una huerfana que YA inicio MT101_PAY NO se re-ejecuta -> NEEDS_RECONCILIATION.
         var execution = pendingExecution(30L);
         when(processExecutionRepository.listExpiredRunningIds(any(), eq(50))).thenReturn(java.util.List.of(30L));
-        when(processExecutionRepository.hasStartedTaskType(30L, "MT101_PAY")).thenReturn(true);
+        when(processExecutionRepository.hasStartedAnyTaskType(30L, java.util.Set.of("MT101_PAY"))).thenReturn(true);
         when(processExecutionRepository.recoverExpiredRunning(eq(30L), eq(ExecutionStatus.NEEDS_RECONCILIATION), any(), any()))
                 .thenReturn(1);
         when(processExecutionRepository.findById(30L)).thenReturn(execution);
 
-        var recovered = service.recoverExpiredExecutions(50, "MT101_PAY");
+        var recovered = service.recoverExpiredExecutions(50, java.util.Set.of("MT101_PAY"));
 
         assertEquals(1, recovered);
         verify(processExecutionRepository).recoverExpiredRunning(eq(30L), eq(ExecutionStatus.NEEDS_RECONCILIATION), any(), any());
     }
 
     @Test
+    void recoverProtectsTheMoneyTaskOfEveryVerticalNotJustMt101() {
+        // ADR-021: antes el motor traia el literal "MT101_PAY", asi que la tarea de pago de un vertical
+        // NUEVO se habria re-encolado a ciegas — doble pago. Ahora los tipos los declaran los providers
+        // (`movesMoney()`) y el barrido recibe el conjunto completo.
+        var execution = pendingExecution(32L);
+        var tiposQueMuevenDinero = java.util.Set.of("MT101_PAY", "SBS_ENVIO");
+        when(processExecutionRepository.listExpiredRunningIds(any(), eq(50))).thenReturn(java.util.List.of(32L));
+        when(processExecutionRepository.hasStartedAnyTaskType(32L, tiposQueMuevenDinero)).thenReturn(true);
+        when(processExecutionRepository.recoverExpiredRunning(eq(32L), eq(ExecutionStatus.NEEDS_RECONCILIATION), any(), any()))
+                .thenReturn(1);
+        when(processExecutionRepository.findById(32L)).thenReturn(execution);
+
+        var recovered = service.recoverExpiredExecutions(50, tiposQueMuevenDinero);
+
+        assertEquals(1, recovered);
+        verify(processExecutionRepository).recoverExpiredRunning(eq(32L), eq(ExecutionStatus.NEEDS_RECONCILIATION), any(), any());
+    }
+
+    @Test
     void recoverReQueuesAnExpiredExecutionThatDidNotStartPay() {
         var execution = pendingExecution(31L);
         when(processExecutionRepository.listExpiredRunningIds(any(), eq(50))).thenReturn(java.util.List.of(31L));
-        when(processExecutionRepository.hasStartedTaskType(31L, "MT101_PAY")).thenReturn(false);
+        when(processExecutionRepository.hasStartedAnyTaskType(31L, java.util.Set.of("MT101_PAY"))).thenReturn(false);
         when(processExecutionRepository.recoverExpiredRunning(eq(31L), eq(ExecutionStatus.PENDING), any(), any()))
                 .thenReturn(1);
         when(processExecutionRepository.findById(31L)).thenReturn(execution);
 
-        var recovered = service.recoverExpiredExecutions(50, "MT101_PAY");
+        var recovered = service.recoverExpiredExecutions(50, java.util.Set.of("MT101_PAY"));
 
         assertEquals(1, recovered);
         verify(processExecutionRepository).recoverExpiredRunning(eq(31L), eq(ExecutionStatus.PENDING), any(), any());

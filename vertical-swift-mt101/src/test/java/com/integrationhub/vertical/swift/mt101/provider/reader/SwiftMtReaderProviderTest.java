@@ -1,4 +1,4 @@
-package com.integrationhub.platform.provider.reader;
+package com.integrationhub.vertical.swift.mt101.provider.reader;
 
 import com.integrationhub.platform.spi.reader.ReadBatch;
 import com.integrationhub.platform.spi.reader.ReadRecord;

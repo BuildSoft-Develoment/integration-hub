@@ -96,7 +96,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
     // ADR-017: resuelve la conexion SFTP desde una fuente OUTPUT/BOTH (sftp.sinkRef) en el dispatch EN VIVO del pago
     // normal/lista. Nullable en constructores de test (sin CDI) -> se omite el merge (modo inline). El correctivo NO
     // usa esto (materializa el spec congelado): la resolucion+congelado del correctivo ocurre en preparePayIntents.
-    private final Mt101PaySinkConnectionResolver sinkConnectionResolver;
+    private final Mt101SftpSinkConnectionResolver sinkConnectionResolver;
 
     @Inject
     public Mt101PayTaskProvider(Instance<PaymentMessageTransport> transports,
@@ -106,7 +106,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
                                 Mt101CorrectivePayStore correctivePayStore,
                                 com.integrationhub.platform.spi.engine.ConfigurationMapper configurationMapper,
                                 Mt101PayDispatchIntentStore dispatchIntentStore,
-                                Mt101PaySinkConnectionResolver sinkConnectionResolver) {
+                                Mt101SftpSinkConnectionResolver sinkConnectionResolver) {
         this.transports = transports;
         this.fragmentStore = fragmentStore;
         this.archiveStatusUpdater = archiveStatusUpdater;
@@ -171,6 +171,16 @@ public class Mt101PayTaskProvider implements TaskProvider {
     @Override
     public String type() {
         return "MT101_PAY";
+    }
+
+    /**
+     * ADR-021: esta tarea entrega ordenes de pago al banco. Declararlo hace que el motor NO re-encole
+     * a ciegas una ejecucion huerfana que ya la arranco (pasa a NEEDS_RECONCILIATION). Antes el motor
+     * lo sabia por un literal {@code "MT101_PAY"} propio; ahora lo pregunta.
+     */
+    @Override
+    public boolean movesMoney() {
+        return true;
     }
 
     @Override

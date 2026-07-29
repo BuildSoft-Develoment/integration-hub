@@ -10,7 +10,7 @@ import com.integrationhub.vertical.swift.mt101.provider.task.Mt101ArchiveTaskPro
 import com.integrationhub.vertical.swift.mt101.provider.task.Mt101PayTaskProvider;
 import com.integrationhub.vertical.swift.mt101.provider.Mt101DispatchPlanCompiler;
 import com.integrationhub.vertical.swift.mt101.provider.Mt101PayRouteResolver;
-import com.integrationhub.vertical.swift.mt101.provider.task.Mt101PaySinkConnectionResolver;
+import com.integrationhub.vertical.swift.mt101.provider.task.Mt101SftpSinkConnectionResolver;
 import com.integrationhub.vertical.swift.mt101.provider.task.Mt101ReconcileTaskProvider;
 import com.integrationhub.vertical.swift.mt101.provider.task.Mt101RepairTaskProvider;
 import com.integrationhub.vertical.swift.mt101.provider.task.Mt101RouteTaskProvider;
@@ -71,7 +71,7 @@ public class Mt101CorrectiveLifecycleService {
     private final Mt101ReconcileTaskProvider reconcileProvider;
     // ADR-017: resuelve+congela la conexion SFTP desde una fuente OUTPUT/BOTH (sftp.sinkRef) ANTES de compilar el
     // spec ejecutable del correctivo, para que el host resuelto quede snapshotteado (no el sinkRef como ref viva).
-    private final Mt101PaySinkConnectionResolver sinkConnectionResolver;
+    private final Mt101SftpSinkConnectionResolver sinkConnectionResolver;
     private final ObjectMapper objectMapper = new ObjectMapper().registerModule(new JavaTimeModule());
 
     @Inject
@@ -89,7 +89,7 @@ public class Mt101CorrectiveLifecycleService {
                                            Mt101PayTaskProvider payProvider,
                                            Mt101StatusTaskProvider statusProvider,
                                            Mt101ReconcileTaskProvider reconcileProvider,
-                                           Mt101PaySinkConnectionResolver sinkConnectionResolver) {
+                                           Mt101SftpSinkConnectionResolver sinkConnectionResolver) {
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.rebuildRepository = rebuildRepository;

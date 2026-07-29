@@ -7,6 +7,7 @@ import io.quarkus.hibernate.orm.panache.PanacheRepository;
 import jakarta.enterprise.context.ApplicationScoped;
 
 import java.util.Map;
+import java.util.Collection;
 import java.util.List;
 
 @ApplicationScoped
@@ -103,13 +104,22 @@ public class ProcessExecutionRepository implements PanacheRepository<ProcessExec
         return query.list().stream().map(execution -> execution.id).toList();
     }
 
-    /** v53-fix: ¿la ejecucion ya inicio (o corrio) una tarea de {@code taskType} (p.ej. MT101_PAY)? */
-    public boolean hasStartedTaskType(Long executionId, String taskType) {
+    /**
+     * v53-fix: ¿la ejecucion ya inicio (o corrio) una tarea de alguno de estos tipos?
+     *
+     * <p>ADR-021: recibe un conjunto y no un tipo suelto Recibe un conjunto y no un tipo suelto
+     * porque los tipos que mueven dinero los declaran los providers y puede haber varios (uno por
+     * vertical). Un conjunto vacio responde {@code false} sin ir a la BD.
+     */
+    public boolean hasStartedAnyTaskType(Long executionId, Collection<String> taskTypes) {
+        if (taskTypes == null || taskTypes.isEmpty()) {
+            return false;
+        }
         var count = getEntityManager().createQuery(
                         "select count(t) from ProcessTaskExecution t "
-                                + "where t.processExecution.id = ?1 and t.taskDefinition.taskType = ?2", Long.class)
+                                + "where t.processExecution.id = ?1 and t.taskDefinition.taskType in ?2", Long.class)
                 .setParameter(1, executionId)
-                .setParameter(2, taskType)
+                .setParameter(2, taskTypes)
                 .getSingleResult();
         return count != null && count > 0;
     }

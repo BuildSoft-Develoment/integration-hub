@@ -10,28 +10,27 @@ import com.integrationhub.vertical.swift.mt101.repository.Mt101StagingRecordRepo
 import com.integrationhub.platform.spi.engine.ConfigurationMapper;
 import com.integrationhub.platform.spi.engine.JdbcConnectionResolver;
 import com.integrationhub.platform.spi.engine.RecordAuditEmitter;
+import com.integrationhub.platform.spi.staging.StagingCorrectionCommand;
+import com.integrationhub.platform.spi.staging.StagingCorrectionOutcome;
+import com.integrationhub.platform.spi.staging.StagingRowCorrectionService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import javax.sql.DataSource;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.sql.SQLException;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.TreeSet;
 import java.util.UUID;
 
 /**
- * Corrige una fila de staging en cuarentena antes del rebuild correctivo. La
- * correccion usa semantica JSON Merge Patch sobre el payload actual y valida que
- * la fila pertenezca al set/fragmento rechazado.
+ * Corrige una fila de staging en cuarentena antes del rebuild correctivo.
+ *
+ * <p>ADR-021 (decision 3): <b>este servicio ya no escribe {@code staging_record}</b>. El algoritmo
+ * generico —transaccion, If-Match, merge-patch, bump de version, hashes de evidencia— se promovio a
+ * {@link StagingRowCorrectionService}, en el motor. Aca queda lo que si es de SWIFT MT101: resolver
+ * a que fragmento pertenece la fila y exigir que el fragmento este RECHAZADO, vetar la edicion si un
+ * rebuild aprobado la congelo, y archivar la evidencia en la tabla del estandar.
  */
 @ApplicationScoped
 public class Mt101StagingCorrectionService {
@@ -48,6 +47,7 @@ public class Mt101StagingCorrectionService {
     private final Mt101RebuildRepository rebuildRepository;
     private final ConfigurationMapper jsonConfigurationMapper;
     private final RecordAuditEmitter recordAuditEmitter;
+    private final StagingRowCorrectionService stagingCorrectionService;
 
     @Inject
     public Mt101StagingCorrectionService(DataSource defaultDataSource,
@@ -59,6 +59,7 @@ public class Mt101StagingCorrectionService {
                                           Mt101RebuildRepository rebuildRepository,
                                           ConfigurationMapper jsonConfigurationMapper,
                                           RecordAuditEmitter recordAuditEmitter) {
+        this.stagingCorrectionService = new StagingRowCorrectionService(jsonConfigurationMapper);
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
         this.fragmentRepository = fragmentRepository;
@@ -95,76 +96,48 @@ public class Mt101StagingCorrectionService {
                                        String patchJson, String correctedBy, Long expectedVersion,
                                        String correctionReason, String ticketRef) {
         var hash = validateInputs(fragmentSetId, sourceFileHash, recordNumber, stagingId);
-        if (patchJson == null || patchJson.isBlank()) {
-            throw new IllegalArgumentException("payload patch is required");
-        }
+        // El comando valida el patch, y se arma antes de resolver la fila para que un patch vacio
+        // siga fallando sin haber tocado la BD.
+        var command = new StagingCorrectionCommand(stagingId, patchJson, expectedVersion);
         var set = fragmentSetId.trim();
         var dataSource = resolveDataSource(connectionRef);
+        var actor = normalizeActor(correctedBy);
         try {
             var row = resolve(dataSource, set, hash, recordNumber, stagingId);
-            try (var connection = dataSource.getConnection()) {
-                var previousAutoCommit = connection.getAutoCommit();
-                connection.setAutoCommit(false);
-                try {
+            var outcome = stagingCorrectionService.correct(dataSource, command,
                     // B2: si la fila esta en un rebuild APPROVED/BUILDING, sus datos ya fueron
                     // congelados por el checker. No se admite corregirla hasta cerrar/invalidar
                     // ese run, para no romper la segregacion maker-checker.
-                    if (rebuildRepository.isRowLockedByActiveRun(connection, set, row.sourceFileHash(), recordNumber, row.stagingId())) {
-                        throw new RowLockedForRebuildException(recordNumber, set);
-                    }
-                    var current = stagingRepository.findStagingPayloadById(connection, row.stagingId());
-                    if (current == null) {
-                        throw new IllegalArgumentException("no staging row " + row.stagingId()
-                                + " for set " + set + " and source file " + sourceFileHash);
-                    }
-                    // Locking optimista: si el cliente trae la version que leyo (If-Match) y ya
-                    // cambio, abortamos sin pisar la correccion de otro operador.
-                    if (expectedVersion != null && current.version() != expectedVersion) {
-                        throw new StaleStagingRowException(recordNumber, expectedVersion, current.version());
-                    }
-                    var checkVersion = expectedVersion != null ? expectedVersion : current.version();
+                    connection -> {
+                        if (rebuildRepository.isRowLockedByActiveRun(connection, set, row.sourceFileHash(),
+                                recordNumber, row.stagingId())) {
+                            throw new RowLockedForRebuildException(recordNumber, set);
+                        }
+                    },
+                    (connection, evidence) -> correctionRepository.insert(connection,
+                            new Mt101StagingCorrectionRepository.CorrectionAuditRow(
+                                    set,
+                                    row.processExecutionId(),
+                                    row.sourceFileHash(),
+                                    recordNumber,
+                                    row.recordIndex(),
+                                    row.stagingId(),
+                                    evidence.oldPayloadHash(),
+                                    evidence.newPayloadHash(),
+                                    String.join(",", evidence.changedFields()),
+                                    actor,
+                                    blankToNull(correctionReason),
+                                    blankToNull(ticketRef),
+                                    evidence.oldVersion(),
+                                    evidence.newVersion())));
 
-                    var before = jsonConfigurationMapper.toMap(current.payloadJson());
-                    var patch = jsonConfigurationMapper.toMap(patchJson);
-                    var after = mergePatch(before, patch);
-                    var newPayload = jsonConfigurationMapper.toJson(after);
-                    var changedFields = changedFields(before, after);
-                    var updated = stagingRepository.updatePayloadById(
-                            connection, row.stagingId(), newPayload, checkVersion);
-                    if (updated == 0) {
-                        throw new StaleStagingRowException(recordNumber, checkVersion, current.version());
-                    }
-                    correctionRepository.insert(connection, new Mt101StagingCorrectionRepository.CorrectionAuditRow(
-                            set,
-                            row.processExecutionId(),
-                            row.sourceFileHash(),
-                            recordNumber,
-                            row.recordIndex(),
-                            row.stagingId(),
-                            sha256Hex(current.payloadJson() == null ? "" : current.payloadJson()),
-                            sha256Hex(newPayload == null ? "" : newPayload),
-                            String.join(",", changedFields),
-                            normalizeActor(correctedBy),
-                            blankToNull(correctionReason),
-                            blankToNull(ticketRef),
-                            checkVersion,
-                            checkVersion + 1));
-                    connection.commit();
-                    emit(set, row.processExecutionId(), row.sourceFileHash(), recordNumber, row.stagingId(),
-                            row.sourceTaskDefinitionId(), row.sourceName(),
-                            before, after, current.payloadJson(), newPayload, normalizeActor(correctedBy));
-                    return new CorrectionResult(set, recordNumber, updated, checkVersion + 1);
-                } catch (SQLException | RuntimeException error) {
-                    try {
-                        connection.rollback();
-                    } catch (SQLException rollbackError) {
-                        error.addSuppressed(rollbackError);
-                    }
-                    throw error;
-                } finally {
-                    connection.setAutoCommit(previousAutoCommit);
-                }
-            }
+            emit(set, row.processExecutionId(), row.sourceFileHash(), recordNumber, row.stagingId(),
+                    row.sourceTaskDefinitionId(), row.sourceName(), outcome, actor);
+            return new CorrectionResult(set, recordNumber, outcome.updated(), outcome.evidence().newVersion());
+        } catch (com.integrationhub.platform.spi.staging.StaleStagingRowException conflict) {
+            // El motor identifica la fila por stagingId; el operador corrige "la fila N del archivo".
+            // Traducimos para que el 409 siga nombrando lo que el vio en pantalla.
+            throw new StaleStagingRowException(recordNumber, conflict.expectedVersion(), conflict.actualVersion());
         } catch (SQLException error) {
             throw new IllegalStateException("Cannot correct staging row " + recordNumber + " for set " + set, error);
         }
@@ -248,31 +221,6 @@ public class Mt101StagingCorrectionService {
                                Mt101StagingRecordRepository.StagingPayload current) {
     }
 
-    private Map<String, Object> mergePatch(Map<String, Object> original, Map<String, Object> patch) {
-        var result = new LinkedHashMap<String, Object>(original);
-        for (var entry : patch.entrySet()) {
-            var key = entry.getKey();
-            var patchValue = entry.getValue();
-            if (patchValue == null) {
-                result.remove(key);
-                continue;
-            }
-            var currentValue = result.get(key);
-            if (currentValue instanceof Map<?, ?> currentMap && patchValue instanceof Map<?, ?> patchMap) {
-                result.put(key, mergePatch(asStringKeyed(currentMap), asStringKeyed(patchMap)));
-            } else {
-                result.put(key, patchValue);
-            }
-        }
-        return result;
-    }
-
-    private Map<String, Object> asStringKeyed(Map<?, ?> raw) {
-        var result = new LinkedHashMap<String, Object>();
-        raw.forEach((key, value) -> result.put(String.valueOf(key), value));
-        return result;
-    }
-
     private String normalizeActor(String actor) {
         return actor == null || actor.isBlank() ? "unknown" : actor.trim();
     }
@@ -281,6 +229,14 @@ public class Mt101StagingCorrectionService {
         return value == null || value.isBlank() ? null : value.trim();
     }
 
+    /**
+     * Auditoria del vertical, <b>despues</b> del commit (best-effort, igual que antes de ADR-021: si
+     * el emisor falla no se deshace una correccion ya persistida — la evidencia durable es el journal,
+     * que si va dentro de la transaccion).
+     *
+     * <p>Los hashes y los campos cambiados llegan calculados por el motor. Recalcularlos aca abriria
+     * la posibilidad de que la traza diga algo distinto de lo que se archivo.</p>
+     */
     private void emit(String fragmentSetId,
                       Long processExecutionId,
                       String sourceFileHash,
@@ -288,10 +244,7 @@ public class Mt101StagingCorrectionService {
                       long stagingId,
                       Long sourceTaskDefinitionId,
                       String sourceName,
-                      Map<String, Object> before,
-                      Map<String, Object> after,
-                      String rawBefore,
-                      String rawAfter,
+                      StagingCorrectionOutcome outcome,
                       String correctedBy) {
         if (recordAuditEmitter == null) {
             return;
@@ -299,9 +252,9 @@ public class Mt101StagingCorrectionService {
         var attrs = new LinkedHashMap<String, String>();
         attrs.put("correctionMode", "merge-patch");
         attrs.put("correctedBy", correctedBy);
-        attrs.put("oldPayloadHash", sha256Hex(rawBefore == null ? "" : rawBefore));
-        attrs.put("newPayloadHash", sha256Hex(rawAfter == null ? "" : rawAfter));
-        attrs.put("changedFields", String.join(",", changedFields(before, after)));
+        attrs.put("oldPayloadHash", outcome.evidence().oldPayloadHash());
+        attrs.put("newPayloadHash", outcome.evidence().newPayloadHash());
+        attrs.put("changedFields", String.join(",", outcome.evidence().changedFields()));
         attrs.put("stagingId", String.valueOf(stagingId));
         attrs.put("sourceRecordNumber", String.valueOf(recordNumber));
         if (sourceTaskDefinitionId != null) {
@@ -337,28 +290,6 @@ public class Mt101StagingCorrectionService {
                 Instant.now(),
                 AuditEnvelope.CURRENT_SCHEMA_VERSION);
         recordAuditEmitter.emitRecords(List.of(envelope));
-    }
-
-    private List<String> changedFields(Map<String, Object> before, Map<String, Object> after) {
-        var keys = new TreeSet<String>();
-        keys.addAll(before.keySet());
-        keys.addAll(after.keySet());
-        var changed = new ArrayList<String>();
-        for (var key : keys) {
-            if (!Objects.equals(before.get(key), after.get(key))) {
-                changed.add(key);
-            }
-        }
-        return changed;
-    }
-
-    private String sha256Hex(String input) {
-        try {
-            var digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(input.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException error) {
-            throw new IllegalStateException("SHA-256 not available", error);
-        }
     }
 
     private DataSource resolveDataSource(String connectionRef) {

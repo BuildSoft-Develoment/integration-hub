@@ -161,7 +161,7 @@ Costos y riesgos aceptados:
 | **B** | Trinquete: ArchUnit con freeze-list de los puntos actuales | El build falla ante un acoplamiento nuevo | **Hecha** (2026-07-27) |
 | **2** | *(Fase nueva, ver Correccion del diagnostico)* Reubicacion fisica de las clases del vertical alojadas en paquetes del motor + registry de validadores + reflexion nativa por vertical | Trinquete: regla de dependencias motor -> vertical en cero | **Hecha** (2026-07-27) |
 | **3** | *(Fase nueva, ver Correccion de la decision 5)* Modulo Maven propio: `platform-spi` + `vertical-swift-mt101`, en tres olas | El vertical compila contra el SPI, sin ver `platform-app` | **Hecha** (2026-07-27) |
-| **C** | Promover la correccion de staging al motor + politica aportada por el vertical (decision 3) | Suite de money-path verde; atomicidad de la transaccion intacta | Pendiente |
+| **C** | Promover la correccion de staging al motor + politica aportada por el vertical (decision 3) | Suite de money-path verde; atomicidad de la transaccion intacta | **Hecha** (2026-07-28) |
 | **D** | Construir el vertical #2 (SBS) usando A+B+C, como validacion real del camino | El alta del vertical no edita libs del core | Pendiente |
 | **E** | ~~Migracion incremental de MT101~~ | — | **Absorbida por la fase 3** |
 
@@ -256,6 +256,32 @@ Trae una **dependencia deliberada entre verticales** (`vertical-iso20022` -> `ve
 Las pruebas del vertical viajaron con el (48 archivos). Dejaron de instanciar `JsonConfigurationMapper` del motor — que arrastraba toda la resolucion de secretos solo para parsear un JSON — y usan un doble del contrato. La expansion real de `${secret:...}` se sigue probando donde vive, en `JsonConfigurationMapperTest`.
 
 Se añadio una **guardia al propio trinquete**: falla si el importador deja de ver alguno de los dos espacios de paquetes. Sin ella, mover el vertical a otro paquete deja todas las reglas pasando por vacio — que es exactamente lo que paso en la fase 2 y dejo colarse 14 dependencias nuevas. Un trinquete ciego reporta verde.
+
+### Fase C — la correccion de staging pasa a ser capacidad del motor (2026-07-28)
+
+La decision 3 decia que `staging_record` es del nucleo y que su correccion debia promoverse. Estaba sin hacer: el vertical abria la transaccion, aplicaba el merge-patch, hacia el `update ... where version = ?` y commiteaba, todo con SQL propio contra una tabla que no es suya.
+
+Se partio en tres piezas, en `platform-spi`:
+
+- **`StagingRowCorrectionService`** (motor) — el algoritmo entero: transaccion, If-Match, merge-patch RFC 7386, bump de version con lock optimista, hashes de evidencia y commit/rollback.
+- **`StagingCorrectionPolicy`** (puerto) — *si* la fila puede editarse. MT101 aporta el veto por rebuild APPROVED/BUILDING.
+- **`StagingCorrectionJournal`** (puerto) — *donde* se archiva la evidencia. Cada vertical tiene su tabla con las columnas de su estandar.
+
+Ambos puertos se invocan **dentro** de la transaccion, con la misma conexion. No es estilo: chequear el veto en otra conexion abriria una ventana TOCTOU —el rebuild podria aprobarse entre el chequeo y el `UPDATE`— y archivar la evidencia fuera dejaria correcciones sin rastro. Son **parametros y no beans inyectados**: no existe un discriminador de vertical que el motor pueda resolver, y fingir que existe termina en ambiguedad de CDI o en un registro por nombre.
+
+Efecto medible: `Mt101StagingRecordRepository` perdio sus **tres** metodos de escritura (dos ya estaban muertos desde antes) y quedo de solo lectura sobre `staging_record`. El vertical no tiene ni una sentencia de escritura contra la tabla del nucleo.
+
+Lo que **no** se movio, a proposito: resolver a que fragmento pertenece la fila y exigir que este RECHAZADO es logica de SWIFT (usa la referencia `:20:`), y sigue en el vertical. El motor identifica la fila por `stagingId` y nada mas; el vertical traduce el conflicto a su vocabulario (`fila N del archivo`) para que el 409 siga nombrando lo que el operador vio en pantalla.
+
+El gate se verifico con dos suites que prueban cosas distintas: la del vertical (7 casos contra Postgres real) cubre el SQL; `StagingRowCorrectionServiceTest` (9 casos con dobles de JDBC) cubre el **orden** de las llamadas y el rollback en cada modo de fallo —veto, If-Match, carrera perdida en el `UPDATE`, journal caido, fila inexistente— que contra una BD real no se puede afirmar. Costo por fila corregida sin cambios: 5 conexiones antes y despues.
+
+### Los readers de vertical salen del motor (2026-07-28)
+
+Quedaban dos clases ENTERAS de vertical viviendo en `com.integrationhub.platform.provider.reader`: `SwiftMtReaderProvider` y `Pain001XmlReaderProvider`. Eran las unicas cuatro entradas del freeze store de ArchUnit (dos reglas × dos clases) y pesaban mas que los literales sueltos: un vertical nuevo que trajera su propio formato de lectura no tenia donde ponerlo salvo el paquete del motor.
+
+Se movieron a `vertical-swift-mt101/…/provider/reader` y `vertical-iso20022/…/provider/reader`, con sus pruebas. La mudanza resulto ser **solo relocacion**: ambas dependian exclusivamente de `platform-spi` (`ReaderProvider`, `ReadBatch`, `SourcePayload`) y ningun codigo las referenciaba por clase —los verticales usan sus constantes de tipo (`"SWIFT_MT"`, `"PAIN001_XML"`) y solo las nombran en comentarios—. El descubrimiento sigue siendo por CDI, ahora desde el indice Jandex de cada vertical.
+
+**El freeze store de ArchUnit quedo en CERO** para las cuatro reglas. La deuda congelada que queda son los dos literales de `FROZEN_LITERAL_FILES` (`BackgroundProcessExecutionDispatcher` con `"MT101_PAY"`, `FileReadTaskFastPath` con `"MT101_PARSE"`), que se cierran declarando capacidades en el SPI en vez de preguntar por el tipo.
 
 ### Limitacion de verificacion conocida
 

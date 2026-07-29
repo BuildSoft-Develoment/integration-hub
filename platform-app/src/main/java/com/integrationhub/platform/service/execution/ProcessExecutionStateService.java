@@ -18,6 +18,7 @@ import jakarta.transaction.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.Comparator;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 
@@ -144,15 +145,16 @@ public class ProcessExecutionStateService implements ExecutionReconciliationGate
      * re-ejecuta a ciegas; se resuelve por STATUS/RECONCILE); si NO -> {@code PENDING} (re-encolar). Atomico por fila.
      */
     @Transactional(Transactional.TxType.REQUIRES_NEW)
-    public int recoverExpiredExecutions(int limit, String payTaskType) {
+    public int recoverExpiredExecutions(int limit, Collection<String> moneyMovementTaskTypes) {
         var now = LocalDateTime.now();
         var expiredIds = processExecutionRepository.listExpiredRunningIds(now, limit);
         var recovered = 0;
         for (var id : expiredIds) {
-            var startedPay = processExecutionRepository.hasStartedTaskType(id, payTaskType);
+            var startedPay = processExecutionRepository.hasStartedAnyTaskType(id, moneyMovementTaskTypes);
             var target = startedPay ? ExecutionStatus.NEEDS_RECONCILIATION : ExecutionStatus.PENDING;
             var detail = startedPay
-                    ? "Recovered orphaned execution (lease expired) that already started " + payTaskType
+                    ? "Recovered orphaned execution (lease expired) that already started a money-movement task "
+                            + moneyMovementTaskTypes
                             + "; NEEDS_RECONCILIATION (no blind re-run; resolve via STATUS/RECONCILE)"
                     : "Recovered orphaned execution (lease expired); re-queued for a fresh atomic claim";
             if (processExecutionRepository.recoverExpiredRunning(id, target, detail, now) == 1) {

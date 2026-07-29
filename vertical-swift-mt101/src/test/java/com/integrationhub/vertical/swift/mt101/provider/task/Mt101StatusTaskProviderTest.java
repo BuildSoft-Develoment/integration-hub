@@ -691,7 +691,7 @@ class Mt101StatusTaskProviderTest {
         // Subclase de captura: solo intercepta resolveUncertainNormalPay para verificar la delegacion (los tests de
         // la logica real viven en Mt101PayUncertainResolutionServiceTest). Los colaboradores van null: el metodo se
         // sobreescribe y no toca super.
-        return new Mt101PayUncertainResolutionService(null, null, null, new ObjectMapper(), null, null, null) {
+        return new Mt101PayUncertainResolutionService(null, null, null, new ObjectMapper(), null, null, null, null) {
             @Override
             public NormalPayResolution resolveUncertainNormalPay(String connectionRef, String fragmentSetId,
                                                                  String executedBy, String reason) {

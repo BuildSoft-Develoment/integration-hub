@@ -535,57 +535,10 @@ public class Mt101StagingRecordRepository {
         return result;
     }
 
-    /**
-     * Corrige el payload de una fila de staging con locking optimista: solo aplica si
-     * {@code version} coincide e incrementa la version. Devuelve 0 si la fila no existe
-     * o la version esta obsoleta (conflicto). Unico camino de update (sin variante
-     * sin-lock).
-     */
-    public int updatePayload(DataSource dataSource,
-                             long processExecutionId,
-                             long recordIndex,
-                             String sourceFileHash,
-                             String payloadJson,
-                             long expectedVersion) throws SQLException {
-        try (var connection = dataSource.getConnection()) {
-            return updatePayload(connection, processExecutionId, recordIndex, sourceFileHash, payloadJson, expectedVersion);
-        }
-    }
-
-    public int updatePayload(Connection connection,
-                             long processExecutionId,
-                             long recordIndex,
-                             String sourceFileHash,
-                             String payloadJson,
-                             long expectedVersion) throws SQLException {
-        var hash = requireSourceFileHash(sourceFileHash);
-        var sql = "update staging_record set payload_json = ?, version = version + 1"
-                + " where process_execution_id = ? and record_index = ? and source_file_hash = ? and version = ?";
-        try (var statement = connection.prepareStatement(sql)) {
-            var parameter = 1;
-            statement.setString(parameter++, payloadJson);
-            statement.setLong(parameter++, processExecutionId);
-            statement.setLong(parameter++, recordIndex);
-            statement.setString(parameter++, hash);
-            statement.setLong(parameter, expectedVersion);
-            return statement.executeUpdate();
-        }
-    }
-
-    /** Update con locking optimista por id tecnico de staging. */
-    public int updatePayloadById(Connection connection,
-                                 long stagingId,
-                                 String payloadJson,
-                                 long expectedVersion) throws SQLException {
-        var sql = "update staging_record set payload_json = ?, version = version + 1 "
-                + "where id = ? and version = ?";
-        try (var statement = connection.prepareStatement(sql)) {
-            statement.setString(1, payloadJson);
-            statement.setLong(2, stagingId);
-            statement.setLong(3, expectedVersion);
-            return statement.executeUpdate();
-        }
-    }
+    // ADR-021 (decision 3): aca vivian los tres updates a `staging_record` de este vertical. La tabla
+    // es del nucleo y su correccion con lock optimista se promovio a StagingRowCorrectionService, en
+    // el motor. Este repositorio quedo de solo lectura sobre staging_record: consulta lo que el
+    // vertical necesita mostrar, y escribir es responsabilidad del motor.
 
     private String requireSourceFileHash(String sourceFileHash) {
         if (sourceFileHash == null || sourceFileHash.isBlank()) {

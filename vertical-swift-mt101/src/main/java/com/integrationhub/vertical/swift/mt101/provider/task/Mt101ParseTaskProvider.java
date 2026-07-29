@@ -54,6 +54,16 @@ public class Mt101ParseTaskProvider implements BatchTaskProvider {
         return "MT101_PARSE";
     }
 
+    /**
+     * ADR-021: publica {@code records} que MT101_ROUTE y las demas consumen por
+     * {@code <taskRef>.records}, asi que el motor no puede fusionar esta tarea al fast path de lectura
+     * —ese camino solo materializa un summary—. Antes el motor lo sabia por un literal propio.
+     */
+    @Override
+    public boolean producesConsumableRecords() {
+        return true;
+    }
+
     @Override
     public TaskResult executeRecords(TaskContext context,
                                      Map<String, Object> configuration,

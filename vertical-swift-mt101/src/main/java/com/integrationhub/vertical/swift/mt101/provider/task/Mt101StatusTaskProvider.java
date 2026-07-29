@@ -125,6 +125,8 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
     // v59-item4: la reconciliacion automatica del PAY normal (UNCERTAIN->SENT/REJECTED + SENT vs banco) esta
     // encapsulada en su servicio; el flag resolveNormalPay delega en el (nullable en tests que no lo ejercitan).
     private final Mt101PayUncertainResolutionService payUncertainResolutionService;
+    /** ADR-017: resuelve `routeQuery.<ruta>.sftp.sinkRef` a la fuente OUTPUT/BOTH. Nullable en tests (sin CDI). */
+    private final Mt101SftpSinkConnectionResolver sinkConnectionResolver;
 
     @Inject
     public Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -134,10 +136,11 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                                    Mt101ConfirmationRepository confirmationRepository,
                                    Mt101RebuildRepository rebuildRepository,
                                    RecordAuditEmitter recordAuditEmitter,
-                                   Mt101PayUncertainResolutionService payUncertainResolutionService) {
+                                   Mt101PayUncertainResolutionService payUncertainResolutionService,
+                                   Mt101SftpSinkConnectionResolver sinkConnectionResolver) {
         this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager,
                 archiveStatusUpdater, confirmationRepository, rebuildRepository, recordAuditEmitter,
-                payUncertainResolutionService);
+                payUncertainResolutionService, sinkConnectionResolver);
     }
 
     public Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -146,7 +149,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                                    Mt101ArchiveStatusUpdater archiveStatusUpdater,
                                    Mt101ConfirmationRepository confirmationRepository) {
         this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager,
-                archiveStatusUpdater, confirmationRepository, new Mt101RebuildRepository(), null, null);
+                archiveStatusUpdater, confirmationRepository, new Mt101RebuildRepository(), null, null, null);
     }
 
     /** Constructor de test: permite inyectar un HttpClient custom. */
@@ -156,7 +159,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             JdbcConnectionResolver connectionPoolManager) {
         this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
                 new Mt101ArchiveStatusUpdater(defaultDataSource, connectionPoolManager),
-                new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null, null);
+                new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null, null, null);
     }
 
     /** Constructor de test (v59-item4): inyecta el servicio de resolucion para ejercitar {@code resolveNormalPay}. */
@@ -167,7 +170,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         this(objectMapper, HttpClient.newBuilder().build(), defaultDataSource, connectionPoolManager,
                 new Mt101ArchiveStatusUpdater(defaultDataSource, connectionPoolManager),
                 new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null,
-                payUncertainResolutionService);
+                payUncertainResolutionService, null);
     }
 
     Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -176,7 +179,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             JdbcConnectionResolver connectionPoolManager,
                             Mt101ArchiveStatusUpdater archiveStatusUpdater) {
         this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
-                archiveStatusUpdater, new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null, null);
+                archiveStatusUpdater, new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null, null, null);
     }
 
     Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -186,7 +189,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             Mt101ArchiveStatusUpdater archiveStatusUpdater,
                             Mt101ConfirmationRepository confirmationRepository) {
         this(objectMapper, httpClient, defaultDataSource, connectionPoolManager,
-                archiveStatusUpdater, confirmationRepository, new Mt101RebuildRepository(), null, null);
+                archiveStatusUpdater, confirmationRepository, new Mt101RebuildRepository(), null, null, null);
     }
 
     Mt101StatusTaskProvider(ObjectMapper objectMapper,
@@ -197,7 +200,8 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
                             Mt101ConfirmationRepository confirmationRepository,
                             Mt101RebuildRepository rebuildRepository,
                             RecordAuditEmitter recordAuditEmitter,
-                            Mt101PayUncertainResolutionService payUncertainResolutionService) {
+                            Mt101PayUncertainResolutionService payUncertainResolutionService,
+                            Mt101SftpSinkConnectionResolver sinkConnectionResolver) {
         this.objectMapper = objectMapper;
         this.defaultDataSource = defaultDataSource;
         this.connectionPoolManager = connectionPoolManager;
@@ -208,6 +212,7 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         this.statusQueryExecutor = new Mt101StatusQueryExecutor(gateway, new Mt101StatusSftpGateway());
         this.recordAuditEmitter = recordAuditEmitter;
         this.payUncertainResolutionService = payUncertainResolutionService;
+        this.sinkConnectionResolver = sinkConnectionResolver;
     }
 
     @Override
@@ -733,7 +738,13 @@ public class Mt101StatusTaskProvider implements SuspendableTaskProvider {
         // cada fragmento se consulta contra el endpoint de SU ruta. Sin routeQuery, todas las
         // rutas comparten query.url (caso aceptado por el v22). Sin fallback: en modo route-aware,
         // una ruta sin entrada en routeQuery es error ruidoso (no se consulta contra otro endpoint).
-        var routeQuery = mapValue(configuration.get("routeQuery"));
+        // ADR-017: la conexion SFTP de cada ruta puede venir de una fuente OUTPUT/BOTH (`routeQuery.<ruta>.
+        // sftp.sinkRef`) en vez de inline, para que sea LA MISMA que usa el PAY de ese banco. Sin sinkRef la
+        // config vuelve intacta (modo inline). Nullable en constructores de test (sin CDI).
+        var resolvedConfiguration = sinkConnectionResolver == null
+                ? configuration
+                : sinkConnectionResolver.withResolvedStatusSink(configuration);
+        var routeQuery = mapValue(resolvedConfiguration.get("routeQuery"));
         var routeAware = !routeQuery.isEmpty();
         var urlTemplate = routeAware
                 ? stringOrNull(queryCfg.get("url"))

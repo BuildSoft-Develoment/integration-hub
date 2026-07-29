@@ -5,6 +5,7 @@ import io.quarkus.scheduler.Scheduled;
 import jakarta.enterprise.context.ApplicationScoped;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.context.ManagedExecutor;
+import com.integrationhub.platform.service.TaskProviderRegistry;
 import org.jboss.logging.Logger;
 
 import java.util.UUID;
@@ -16,11 +17,11 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class BackgroundProcessExecutionDispatcher {
 
     private static final Logger LOG = Logger.getLogger(BackgroundProcessExecutionDispatcher.class);
-    private static final String PAY_TASK_TYPE = "MT101_PAY";
 
     private final ProcessExecutionStateService processExecutionStateService;
     private final ProcessExecutionRunner processExecutionRunner;
     private final ManagedExecutor managedExecutor;
+    private final TaskProviderRegistry taskProviderRegistry;
     private final int maxConcurrentExecutions;
     private final int maxPendingExecutions;
     private final int leaseSeconds;
@@ -35,6 +36,7 @@ public class BackgroundProcessExecutionDispatcher {
     public BackgroundProcessExecutionDispatcher(ProcessExecutionStateService processExecutionStateService,
                                                 ProcessExecutionRunner processExecutionRunner,
                                                 ManagedExecutor managedExecutor,
+                                                TaskProviderRegistry taskProviderRegistry,
                                                 @ConfigProperty(name = "integrationhub.execution.async.max-concurrent", defaultValue = "2") int maxConcurrentExecutions,
                                                 @ConfigProperty(name = "integrationhub.execution.async.max-pending", defaultValue = "20") int maxPendingExecutions,
                                                 @ConfigProperty(name = "integrationhub.execution.async.lease-seconds", defaultValue = "30") int leaseSeconds,
@@ -42,6 +44,7 @@ public class BackgroundProcessExecutionDispatcher {
         this.processExecutionStateService = processExecutionStateService;
         this.processExecutionRunner = processExecutionRunner;
         this.managedExecutor = managedExecutor;
+        this.taskProviderRegistry = taskProviderRegistry;
         this.maxConcurrentExecutions = Math.max(maxConcurrentExecutions, 1);
         this.maxPendingExecutions = Math.max(maxPendingExecutions, 1);
         this.leaseSeconds = Math.max(leaseSeconds, 2);
@@ -111,7 +114,11 @@ public class BackgroundProcessExecutionDispatcher {
     @Scheduled(every = "{integrationhub.execution.async.recovery-every:30s}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void recoverOrphanedExecutions() {
         try {
-            var recovered = processExecutionStateService.recoverExpiredExecutions(recoveryLimit, PAY_TASK_TYPE);
+            // ADR-021: los tipos que mueven dinero los declaran los providers (`movesMoney()`), no un
+            // literal del motor. Se consultan en cada barrido y no una vez al arrancar: los plugins
+            // locales de un vertical pueden registrarse despues del arranque del despachador.
+            var recovered = processExecutionStateService.recoverExpiredExecutions(
+                    recoveryLimit, taskProviderRegistry.moneyMovementTaskTypes());
             if (recovered > 0) {
                 LOG.infov("Recovered {0} orphaned process execution(s) with expired lease", recovered);
             }

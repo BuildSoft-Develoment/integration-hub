@@ -35,7 +35,7 @@ import java.util.Map;
  * correctivo (el compiler lo trata como campo-credencial).</p>
  */
 @ApplicationScoped
-public class Mt101PaySinkConnectionResolver {
+public class Mt101SftpSinkConnectionResolver {
 
     /**
      * Claves de CONEXION que se copian de la definicion {@code /sources} SFTP al bloque {@code sftp} de la task.
@@ -53,7 +53,7 @@ public class Mt101PaySinkConnectionResolver {
     private final ConfigurationMapper jsonConfigurationMapper;
 
     @Inject
-    public Mt101PaySinkConnectionResolver(SinkDefinitionResolver sinkDefinitionResolver,
+    public Mt101SftpSinkConnectionResolver(SinkDefinitionResolver sinkDefinitionResolver,
                                           ConfigurationMapper jsonConfigurationMapper) {
         this.sinkDefinitionResolver = sinkDefinitionResolver;
         this.jsonConfigurationMapper = jsonConfigurationMapper;
@@ -70,17 +70,38 @@ public class Mt101PaySinkConnectionResolver {
      */
     @ActivateRequestContext
     public Map<String, Object> withResolvedSink(Map<String, Object> payConfig) {
-        if (payConfig == null) {
+        return withResolvedSink(payConfig, "routeTransports", "MT101_PAY");
+    }
+
+    /**
+     * ADR-017: misma resolucion para {@code MT101_STATUS}. El STATUS por ruta guarda su conexion SFTP en
+     * {@code routeQuery.<ruta>.sftp} —el archivo ACK/NACK que el banco deja— y hasta ahora solo admitia el
+     * bloque inline, asi que la conexion del PAY y la del STATUS del MISMO banco se mantenian por separado y
+     * podian derivar. Referenciando la misma fuente OUTPUT/BOTH quedan atadas.
+     *
+     * <p>A diferencia del PAY, aca NO hay congelado: el STATUS consulta, no mueve dinero. Resolver en vivo es
+     * lo correcto —si el banco cambia de host, la consulta debe seguir al host nuevo—; el PAY congela porque
+     * su spec es la evidencia de a donde se mando el dinero.</p>
+     */
+    @ActivateRequestContext
+    public Map<String, Object> withResolvedStatusSink(Map<String, Object> statusConfig) {
+        return withResolvedSink(statusConfig, "routeQuery", "MT101_STATUS");
+    }
+
+    private Map<String, Object> withResolvedSink(Map<String, Object> config,
+                                                 String routeContainerKey,
+                                                 String taskType) {
+        if (config == null) {
             return null;
         }
-        var result = new LinkedHashMap<String, Object>(payConfig);
+        var result = new LinkedHashMap<String, Object>(config);
         // top-level sftp (transport=SFTP)
-        var mergedTop = mergedSftpBlock(result.get("sftp"));
+        var mergedTop = mergedSftpBlock(result.get("sftp"), taskType);
         if (mergedTop != null) {
             result.put("sftp", mergedTop);
         }
-        // routeTransports.<ruta>.sftp (transport=ROUTED con SFTP por ruta)
-        if (result.get("routeTransports") instanceof Map<?, ?> rawRoutes) {
+        // <routeContainerKey>.<ruta>.sftp (SFTP por ruta)
+        if (result.get(routeContainerKey) instanceof Map<?, ?> rawRoutes) {
             var newRoutes = new LinkedHashMap<String, Object>();
             var changed = false;
             for (var entry : rawRoutes.entrySet()) {
@@ -88,7 +109,7 @@ public class Mt101PaySinkConnectionResolver {
                 if (entry.getValue() instanceof Map<?, ?> rawRouteConfig) {
                     var routeConfig = new LinkedHashMap<String, Object>();
                     rawRouteConfig.forEach((k, v) -> routeConfig.put(String.valueOf(k), v));
-                    var mergedRoute = mergedSftpBlock(routeConfig.get("sftp"));
+                    var mergedRoute = mergedSftpBlock(routeConfig.get("sftp"), taskType);
                     if (mergedRoute != null) {
                         routeConfig.put("sftp", mergedRoute);
                         changed = true;
@@ -99,7 +120,7 @@ public class Mt101PaySinkConnectionResolver {
                 }
             }
             if (changed) {
-                result.put("routeTransports", newRoutes);
+                result.put(routeContainerKey, newRoutes);
             }
         }
         return result;
@@ -111,7 +132,7 @@ public class Mt101PaySinkConnectionResolver {
      * inline o sin bloque sftp).
      */
     @SuppressWarnings("unchecked")
-    private Map<String, Object> mergedSftpBlock(Object rawSftp) {
+    private Map<String, Object> mergedSftpBlock(Object rawSftp, String taskType) {
         if (!(rawSftp instanceof Map<?, ?> rawMap)) {
             return null;
         }
@@ -123,11 +144,11 @@ public class Mt101PaySinkConnectionResolver {
         }
         var definition = sinkDefinitionResolver.resolve(sinkRef);
         if (!definition.allowsOutput()) {
-            throw new IllegalArgumentException("MT101_PAY sftp.sinkRef " + sinkRef + " ('" + definition.name()
+            throw new IllegalArgumentException(taskType + " sftp.sinkRef " + sinkRef + " ('" + definition.name()
                     + "') is not an OUTPUT sink (direction=" + definition.direction() + "); set the source to OUTPUT or BOTH");
         }
         if (!SFTP_TYPE.equalsIgnoreCase(definition.type())) {
-            throw new IllegalArgumentException("MT101_PAY sftp.sinkRef " + sinkRef + " ('" + definition.name()
+            throw new IllegalArgumentException(taskType + " sftp.sinkRef " + sinkRef + " ('" + definition.name()
                     + "') is a " + definition.type() + " source; MT101_PAY transport=SFTP requires an SFTP sink");
         }
         // Refs ${secret:...}/${config:...} INTACTAS: el spec persistido nunca lleva secretos resueltos.
