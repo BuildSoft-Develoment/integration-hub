@@ -1,6 +1,10 @@
 package com.integrationhub.vertical.swift.mt101.provider.task;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.integrationhub.platform.spi.engine.SinkDefinitionResolver;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101ConfirmationRepository;
+import com.integrationhub.vertical.swift.mt101.repository.Mt101RebuildRepository;
+import com.integrationhub.vertical.swift.mt101.support.TestConfigurationMapper;
 import com.github.tomakehurst.wiremock.junit5.WireMockRuntimeInfo;
 import com.github.tomakehurst.wiremock.junit5.WireMockTest;
 import com.integrationhub.vertical.swift.mt101.service.Mt101PayUncertainResolutionService;
@@ -913,5 +917,115 @@ class Mt101StatusTaskProviderTest {
                 return rs.getInt(1);
             }
         }
+    }
+
+    // ================= ADR-017 · E2E de sinkRef contra un SFTP real, en los DOS caminos =================
+
+    /**
+     * Fuente {@code /sources} SFTP OUTPUT/BOTH que apunta al contenedor real, con las credenciales como
+     * literales (en produccion son {@code ${secret:...}}; aca el contenedor de test no tiene vault).
+     */
+    private SinkDefinitionResolver bankSinkPointingAtTheContainer() {
+        var json = "{\"host\":\"" + SFTP.getHost() + "\",\"port\":" + SFTP.getMappedPort(22)
+                + ",\"username\":\"" + SFTP_USER + "\",\"password\":\"" + SFTP_PASSWORD + "\""
+                + ",\"strictHostKeyChecking\":false,\"timeoutMillis\":15000"
+                // Claves de LECTURA de la fuente: NO deben contaminar el bloque de la task.
+                + ",\"remotePath\":\"/upload\",\"fileNamePattern\":\"*.ack\"}";
+        return id -> new SinkDefinitionResolver.SinkDefinition(id, "banco-a", "SFTP", json, "BOTH");
+    }
+
+    /** STATUS con el resolver real cableado, como en produccion. */
+    private Mt101StatusTaskProvider providerWithSinkResolution() {
+        var resolver = new Mt101SftpSinkConnectionResolver(
+                bankSinkPointingAtTheContainer(), new TestConfigurationMapper());
+        return new Mt101StatusTaskProvider(new ObjectMapper(), HttpClient.newHttpClient(), dataSource, null,
+                new Mt101ArchiveStatusUpdater(dataSource, null), new Mt101ConfirmationRepository(),
+                new Mt101RebuildRepository(), null, null, resolver);
+    }
+
+    @Test
+    void correctivePathResolvesTheBankAckOverSftpUsingSinkRefInsteadOfAnInlineConnection() throws Exception {
+        // E2E del camino CORRECTIVO: la ruta NO trae host/credenciales, solo `sinkRef`. El provider las
+        // resuelve desde la fuente OUTPUT/BOTH y lee el ACK del SFTP REAL. Es el mismo escenario que
+        // `correctiveStatusResolvesSftpRouteFromBankAckFile`, pero con la conexion en la fuente — que es
+        // lo que evita que la del PAY y la del STATUS del mismo banco deriven.
+        insertCorrectiveStatusRecord("RUN-SINKREF", "SET-FIX", "K1", "KEY-K1", 411L, "UNCERTAIN", "SFTP_BANK");
+        writeSftpFile("/upload/K1.ack", "PaymentStatusReport: STATUS=ACCP (ACK) ref=K1");
+
+        var result = providerWithSinkResolution().execute(contextWith("pay-mt101.records",
+                Map.of("correctivePayRunId", "RUN-SINKREF")), Map.of(
+                "mode", "query",
+                "correctivePayStatuses", List.of("UNCERTAIN"),
+                "resolveCorrectivePay", true,
+                "acceptedStatuses", List.of("ACCEPTED"),
+                "input", Map.of("sourceTaskRef", "pay-mt101", "sourceOutput", "records"),
+                "routeQuery", Map.of("SFTP_BANK", Map.of(
+                        "transport", "SFTP",
+                        "responseFileTemplate", "/upload/${sendersReference}.ack",
+                        "acceptedTokens", List.of("ACCP", "ACK"),
+                        "rejectedTokens", List.of("RJCT", "NACK"),
+                        // Sin host ni credenciales: solo la referencia a la fuente.
+                        "sftp", Map.of("sinkRef", 11)))));
+
+        assertTrue(result.success(), () -> "expected success, got: " + result.details());
+        assertEquals(1, result.outputs().get("resolvedPayCount"));
+        assertEquals(1, countRowsWithPayStatus("SENT"),
+                "el ACK leido del SFTP real via sinkRef resuelve el fragmento a SENT");
+        assertEquals(0, countRowsWithPayStatus("UNCERTAIN"));
+    }
+
+    @Test
+    void correctivePathWithSinkRefStillLeavesTheFragmentPendingWhenTheBankHasNotAckedYet() throws Exception {
+        // La resolucion por sinkRef no debe volver optimista al camino: sin archivo del banco, el dinero
+        // sigue UNCERTAIN. Un "resuelto" aqui seria dar por bueno un pago que nadie confirmo.
+        insertCorrectiveStatusRecord("RUN-SINKREF-2", "SET-FIX", "K2", "KEY-K2", 412L, "UNCERTAIN", "SFTP_BANK");
+
+        var result = providerWithSinkResolution().execute(contextWith("pay-mt101.records",
+                Map.of("correctivePayRunId", "RUN-SINKREF-2")), Map.of(
+                "mode", "query",
+                "correctivePayStatuses", List.of("UNCERTAIN"),
+                "resolveCorrectivePay", true,
+                "acceptedStatuses", List.of("ACCEPTED"),
+                "input", Map.of("sourceTaskRef", "pay-mt101", "sourceOutput", "records"),
+                "routeQuery", Map.of("SFTP_BANK", Map.of(
+                        "transport", "SFTP",
+                        "responseFileTemplate", "/upload/${sendersReference}.ack",
+                        "acceptedTokens", List.of("ACCP", "ACK"),
+                        "sftp", Map.of("sinkRef", 11)))));
+
+        assertTrue(result.success(), () -> "expected success, got: " + result.details());
+        assertEquals(1, countRowsWithPayStatus("UNCERTAIN"),
+                "sin ACK del banco el fragmento sigue UNCERTAIN, tambien con sinkRef");
+        assertEquals(0, countRowsWithPayStatus("SENT"));
+    }
+
+    @Test
+    void sinkRefPointingAtAnInputOnlySourceFailsLoudInsteadOfQueryingTheWrongPlace() throws Exception {
+        // Fail-loud: una fuente de LECTURA no puede usarse como conexion de consulta al banco. Sin esto,
+        // un sinkRef mal elegido consultaria contra otro servidor y reportaria "sin ACK" en silencio.
+        insertCorrectiveStatusRecord("RUN-SINKREF-3", "SET-FIX", "K3", "KEY-K3", 413L, "UNCERTAIN", "SFTP_BANK");
+        var inputOnly = new Mt101SftpSinkConnectionResolver(
+                id -> new SinkDefinitionResolver.SinkDefinition(id, "solo-lectura", "SFTP",
+                        "{\"host\":\"x\"}", "INPUT"),
+                new TestConfigurationMapper());
+        var providerWithInputSource = new Mt101StatusTaskProvider(new ObjectMapper(), HttpClient.newHttpClient(),
+                dataSource, null, new Mt101ArchiveStatusUpdater(dataSource, null),
+                new Mt101ConfirmationRepository(), new Mt101RebuildRepository(), null, null, inputOnly);
+
+        var error = assertThrows(IllegalArgumentException.class, () -> providerWithInputSource.execute(
+                contextWith("pay-mt101.records", Map.of("correctivePayRunId", "RUN-SINKREF-3")), Map.of(
+                        "mode", "query",
+                        "correctivePayStatuses", List.of("UNCERTAIN"),
+                        "resolveCorrectivePay", true,
+                        "input", Map.of("sourceTaskRef", "pay-mt101", "sourceOutput", "records"),
+                        "routeQuery", Map.of("SFTP_BANK", Map.of(
+                                "transport", "SFTP",
+                                "responseFileTemplate", "/upload/${sendersReference}.ack",
+                                "sftp", Map.of("sinkRef", 11))))));
+
+        assertTrue(error.getMessage().contains("MT101_STATUS"),
+                "el error nombra la tarea real: " + error.getMessage());
+        assertTrue(error.getMessage().contains("not an OUTPUT sink"), error.getMessage());
+        assertEquals(1, countRowsWithPayStatus("UNCERTAIN"), "el fragmento no se toca ante config invalida");
     }
 }
