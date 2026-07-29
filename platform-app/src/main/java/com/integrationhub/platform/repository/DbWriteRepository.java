@@ -1,5 +1,6 @@
 package com.integrationhub.platform.repository;
 
+import com.integrationhub.platform.provider.task.dbwrite.DbWriteUpsertDialect;
 import com.integrationhub.platform.spi.task.support.DbTaskSupport;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -125,22 +126,18 @@ public class DbWriteRepository {
     }
 
     public int upsertDynamic(DataSource dataSource, String targetTable, List<ReadRecord> records,
-                             List<DbTaskSupport.ColumnAssignment> assignments, List<String> keyColumns, int batchSize) {
+                             List<DbTaskSupport.ColumnAssignment> assignments, List<String> keyColumns, int batchSize,
+                             DbWriteUpsertDialect dialect) {
         if (keyColumns.isEmpty()) {
             throw new IllegalArgumentException("DB_WRITE upsert mode requires keyColumns");
         }
         var assignmentsByColumn = DbTaskSupport.assignmentIndex(assignments);
         validateKeyColumns(assignmentsByColumn, keyColumns);
         var insertColumns = DbTaskSupport.insertColumns(assignments);
-        var updateAssignments = DbTaskSupport.updateAssignments(assignments, keyColumns);
-        var valuesClause = String.join(", ", assignments.stream().map(this::insertExpression).toList());
-        var conflictClause = String.join(", ", keyColumns);
-        var updateClause = updateAssignments.isEmpty()
-                ? " do nothing"
-                : " do update set " + String.join(", ", updateAssignments.stream()
-                        .map(assignment -> assignment.column() + " = excluded." + assignment.column()).toList());
-        var sql = "insert into " + targetTable + " (" + String.join(", ", insertColumns) + ") values ("
-                + valuesClause + ") on conflict (" + conflictClause + ")" + updateClause;
+        var updateColumns = DbTaskSupport.updateAssignments(assignments, keyColumns).stream()
+                .map(DbTaskSupport.ColumnAssignment::column).toList();
+        var valueExpressions = assignments.stream().map(this::insertExpression).toList();
+        var sql = dialect.upsertStatement(targetTable, insertColumns, valueExpressions, keyColumns, updateColumns);
         try (Connection connection = dataSource.getConnection();
              PreparedStatement statement = connection.prepareStatement(sql)) {
             var count = 0;

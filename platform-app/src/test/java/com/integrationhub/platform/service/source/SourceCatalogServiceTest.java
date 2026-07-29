@@ -24,7 +24,9 @@ import java.util.Map;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 // @covers RF-001, RF-002 (reingenieria: prueba que cubre el/los RF en produccion)
 class SourceCatalogServiceTest {
@@ -103,12 +105,35 @@ class SourceCatalogServiceTest {
         var repository = org.mockito.Mockito.mock(com.integrationhub.platform.repository.SourceDefinitionRepository.class);
         var service = new SourceCatalogService(repository, new StubSourceProviderRegistry(new NoopSourceProvider()), mapper());
 
-        var definition = service.create("Remota", "remote_fs", true, "{}", "output");
+        var definition = service.create("Remota", "remote_fs", true, "{}", "output", false);
 
         assertEquals("REMOTE_FS", definition.sourceType);
         // ADR-016: la direccion se normaliza (case-insensitive) para el sink de FILE_DELIVER.
         assertEquals("OUTPUT", definition.direction);
         org.mockito.Mockito.verify(repository).persist(definition);
+    }
+
+    @Test
+    void aBankMarkOnAnOutputSourceIsKept() {
+        var repository = org.mockito.Mockito.mock(com.integrationhub.platform.repository.SourceDefinitionRepository.class);
+        var service = new SourceCatalogService(repository, new StubSourceProviderRegistry(new NoopSourceProvider()), mapper());
+
+        var definition = service.create("Banco", "sftp", true, "{}", "OUTPUT", true);
+
+        assertTrue(definition.moneyCritical);
+    }
+
+    @Test
+    void aBankMarkOnAReadSourceIsDropped() {
+        // ADR-021 (E): nadie ENTREGA a una fuente de lectura, asi que la marca no protegeria nada — pero
+        // dejarla guardada sugeriria una proteccion que no existe. Se normaliza a false en vez de rechazar:
+        // es una combinacion sin sentido, no un intento de hacer algo peligroso.
+        var repository = org.mockito.Mockito.mock(com.integrationhub.platform.repository.SourceDefinitionRepository.class);
+        var service = new SourceCatalogService(repository, new StubSourceProviderRegistry(new NoopSourceProvider()), mapper());
+
+        var definition = service.create("Lectura", "sftp", true, "{}", "INPUT", true);
+
+        assertFalse(definition.moneyCritical);
     }
 
     @Test
@@ -125,7 +150,8 @@ class SourceCatalogServiceTest {
         // CSRC-09: no se puede crear una fuente con el nombre vacio/en blanco (validacion server-side).
         var service = new SourceCatalogService(null, new StubSourceProviderRegistry(new NoopSourceProvider()), mapper());
 
-        var error = assertThrows(IllegalArgumentException.class, () -> service.create("   ", "sftp", true, "{}", "INPUT"));
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> service.create("   ", "sftp", true, "{}", "INPUT", false));
 
         assertEquals("Source name is required", error.getMessage());
     }

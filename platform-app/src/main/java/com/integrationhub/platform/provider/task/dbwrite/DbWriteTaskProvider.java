@@ -4,6 +4,7 @@ package com.integrationhub.platform.provider.task.dbwrite;
 
 import com.integrationhub.platform.audit.AuditEnvelope;
 import com.integrationhub.platform.audit.AuditLevel;
+import com.integrationhub.platform.domain.ConnectionType;
 import com.integrationhub.platform.spi.task.support.DbTaskSupport;
 import com.integrationhub.platform.spi.task.support.StoredProcedureRuntimeSupport;
 import com.integrationhub.platform.spi.task.support.TaskOutputSupport;
@@ -20,6 +21,7 @@ import com.integrationhub.platform.spi.task.BatchTaskProvider;
 import com.integrationhub.platform.spi.task.TaskProvider;
 import com.integrationhub.platform.spi.task.TaskResult;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 
 import javax.sql.DataSource;
@@ -40,6 +42,7 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
     private final RecordAuditEmitter recordAuditEmitter;
     private final DbWriteRepository dbWriteRepository;
     private final SourceFingerprintService sourceFingerprintService;
+    private final List<DbWriteUpsertDialect> upsertDialects;
 
     @Inject
     public DbWriteTaskProvider(DataSource dataSource,
@@ -47,35 +50,53 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
                                ConnectionPoolManager connectionPoolManager,
                                RecordAuditEmitter recordAuditEmitter,
                                DbWriteRepository dbWriteRepository,
-                               SourceFingerprintService sourceFingerprintService) {
-        this.dataSource = dataSource;
-        this.jsonConfigurationMapper = jsonConfigurationMapper;
-        this.connectionPoolManager = connectionPoolManager;
-        this.recordAuditEmitter = recordAuditEmitter;
-        this.dbWriteRepository = dbWriteRepository;
-        this.sourceFingerprintService = sourceFingerprintService;
+                               SourceFingerprintService sourceFingerprintService,
+                               Instance<DbWriteUpsertDialect> upsertDialects) {
+        this(dataSource, jsonConfigurationMapper, connectionPoolManager, recordAuditEmitter,
+                dbWriteRepository, sourceFingerprintService, upsertDialects.stream().toList());
     }
 
     public DbWriteTaskProvider(DataSource dataSource,
                                JsonConfigurationMapper jsonConfigurationMapper,
                                ConnectionPoolManager connectionPoolManager,
                                RecordAuditEmitter recordAuditEmitter,
-                               DbWriteRepository dbWriteRepository) {
-        this(dataSource, jsonConfigurationMapper, connectionPoolManager, recordAuditEmitter,
-                dbWriteRepository, new SourceFingerprintService());
+                               DbWriteRepository dbWriteRepository,
+                               SourceFingerprintService sourceFingerprintService,
+                               List<DbWriteUpsertDialect> upsertDialects) {
+        this.dataSource = dataSource;
+        this.jsonConfigurationMapper = jsonConfigurationMapper;
+        this.connectionPoolManager = connectionPoolManager;
+        this.recordAuditEmitter = recordAuditEmitter;
+        this.dbWriteRepository = dbWriteRepository;
+        this.sourceFingerprintService = sourceFingerprintService;
+        this.upsertDialects = upsertDialects;
     }
 
     public DbWriteTaskProvider(DataSource dataSource,
                                JsonConfigurationMapper jsonConfigurationMapper,
                                ConnectionPoolManager connectionPoolManager,
-                               RecordAuditEmitter recordAuditEmitter) {
-        this(dataSource, jsonConfigurationMapper, connectionPoolManager, recordAuditEmitter, new DbWriteRepository());
+                               RecordAuditEmitter recordAuditEmitter,
+                               DbWriteRepository dbWriteRepository,
+                               List<DbWriteUpsertDialect> upsertDialects) {
+        this(dataSource, jsonConfigurationMapper, connectionPoolManager, recordAuditEmitter,
+                dbWriteRepository, new SourceFingerprintService(), upsertDialects);
     }
 
     public DbWriteTaskProvider(DataSource dataSource,
                                JsonConfigurationMapper jsonConfigurationMapper,
-                               ConnectionPoolManager connectionPoolManager) {
-        this(dataSource, jsonConfigurationMapper, connectionPoolManager, null, new DbWriteRepository());
+                               ConnectionPoolManager connectionPoolManager,
+                               RecordAuditEmitter recordAuditEmitter,
+                               List<DbWriteUpsertDialect> upsertDialects) {
+        this(dataSource, jsonConfigurationMapper, connectionPoolManager, recordAuditEmitter,
+                new DbWriteRepository(), upsertDialects);
+    }
+
+    public DbWriteTaskProvider(DataSource dataSource,
+                               JsonConfigurationMapper jsonConfigurationMapper,
+                               ConnectionPoolManager connectionPoolManager,
+                               List<DbWriteUpsertDialect> upsertDialects) {
+        this(dataSource, jsonConfigurationMapper, connectionPoolManager, null,
+                new DbWriteRepository(), upsertDialects);
     }
 
     @Override
@@ -107,7 +128,8 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
             );
         }
 
-        var targetDataSource = resolveDataSource(configuration);
+        var target = resolveTarget(configuration);
+        var targetDataSource = target.dataSource();
         var assignments = DbTaskSupport.assignments(configuration, effectiveRecords);
         if (assignments.isEmpty()) {
             throw new IllegalArgumentException("DB_WRITE requires columnMappings, columnFunctions or readable record fields");
@@ -121,7 +143,8 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
             case "update", "batch-update" ->
                     dbWriteRepository.updateDynamic(targetDataSource, targetTable, effectiveRecords, assignments, keyColumns, batchSize);
             case "upsert" ->
-                    dbWriteRepository.upsertDynamic(targetDataSource, targetTable, effectiveRecords, assignments, keyColumns, batchSize);
+                    dbWriteRepository.upsertDynamic(targetDataSource, targetTable, effectiveRecords, assignments,
+                            keyColumns, batchSize, resolveUpsertDialect(target.connectionType()));
             default -> throw new IllegalArgumentException("Unsupported DB_WRITE mode: " + mode);
         };
         return TaskResult.success(
@@ -171,9 +194,30 @@ public class DbWriteTaskProvider implements BatchTaskProvider {
         }).toList();
     }
     private DataSource resolveDataSource(Map<String, Object> configuration) {
+        return resolveTarget(configuration).dataSource();
+    }
+
+    /**
+     * Destino de la escritura junto con su motor. Sin {@code connectionRef} se escribe contra la base
+     * interna de la plataforma, que es PostgreSQL por diseno.
+     */
+    private ConnectionPoolManager.JdbcConnectionTarget resolveTarget(Map<String, Object> configuration) {
         return DbTaskSupport.connectionRef(configuration)
-                .map(connectionPoolManager::resolveJdbcDataSource)
-                .orElse(dataSource);
+                .map(connectionPoolManager::resolveJdbcTarget)
+                .orElseGet(() -> new ConnectionPoolManager.JdbcConnectionTarget(dataSource, ConnectionType.POSTGRESQL));
+    }
+
+    /**
+     * ADR-022: el upsert no tiene forma portable, asi que cada motor aporta la suya. Si el tipo de
+     * conexion no declara dialecto (por ejemplo MONGODB) se falla en el acto en vez de emitir SQL de
+     * otro motor y dejar que reviente mas abajo con un mensaje que no senala la causa.
+     */
+    private DbWriteUpsertDialect resolveUpsertDialect(ConnectionType connectionType) {
+        return upsertDialects.stream()
+                .filter(dialect -> dialect.connectionType() == connectionType)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "Unsupported connection type for DB_WRITE upsert mode: " + connectionType));
     }
 
     private boolean isInsertLike(String mode) {

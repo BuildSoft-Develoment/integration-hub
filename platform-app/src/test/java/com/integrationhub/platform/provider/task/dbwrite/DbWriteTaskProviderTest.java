@@ -40,6 +40,15 @@ class DbWriteTaskProviderTest {
 
     private DbWriteTaskProvider provider;
 
+    /** Los cuatro dialectos de upsert, igual que los registraria CDI en produccion (ADR-022). */
+    private static List<DbWriteUpsertDialect> upsertDialects() {
+        return List.of(
+                new PostgreSqlDbWriteUpsertDialect(),
+                new MySqlDbWriteUpsertDialect(),
+                new OracleDbWriteUpsertDialect(),
+                new SqlServerDbWriteUpsertDialect());
+    }
+
     @BeforeEach
     void setUpSchema() throws Exception {
         var mapper = new JsonConfigurationMapper();
@@ -48,8 +57,13 @@ class DbWriteTaskProviderTest {
             public DataSource resolveJdbcDataSource(String connectionRef) {
                 return dataSource();
             }
+
+            @Override
+            public JdbcConnectionTarget resolveJdbcTarget(String connectionRef) {
+                return new JdbcConnectionTarget(dataSource(), ConnectionType.POSTGRESQL);
+            }
         };
-        provider = new DbWriteTaskProvider(dataSource(), mapper, connectionPoolManager);
+        provider = new DbWriteTaskProvider(dataSource(), mapper, connectionPoolManager, upsertDialects());
 
         try (Connection connection = dataSource().getConnection();
              Statement statement = connection.createStatement()) {
@@ -254,7 +268,7 @@ class DbWriteTaskProviderTest {
         };
 
         var realConnectionPoolManager = new ConnectionPoolManager(repository, mapper);
-        var realProvider = new DbWriteTaskProvider(dataSource(), mapper, realConnectionPoolManager);
+        var realProvider = new DbWriteTaskProvider(dataSource(), mapper, realConnectionPoolManager, upsertDialects());
 
         var context = taskContext();
         context.attributes().put("readResult", new ReadResult(List.of(

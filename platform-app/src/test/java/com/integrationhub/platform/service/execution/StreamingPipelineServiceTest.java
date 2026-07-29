@@ -2,6 +2,7 @@ package com.integrationhub.platform.service.execution;
 
 import com.integrationhub.platform.domain.TaskType;
 import com.integrationhub.platform.provider.task.dbwrite.DbWriteTaskProvider;
+import com.integrationhub.platform.provider.task.dbwrite.DbWriteUpsertDialect;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.TaskProviderRegistry;
 import com.integrationhub.platform.service.reader.ReaderProviderRegistry;
@@ -284,7 +285,9 @@ class StreamingPipelineServiceTest {
             }
         };
 
-        var dbWriteProvider = new DbWriteTaskProvider(null, null, null) {
+        // Subclase anonima que sustituye la escritura entera: nunca llega a resolver un dialecto de
+        // upsert, asi que la lista vacia es lo honesto (si algun dia lo alcanzara, fallaria ruidoso).
+        var dbWriteProvider = new DbWriteTaskProvider(null, null, null, List.<DbWriteUpsertDialect>of()) {
             @Override
             public String type() { return "DB_WRITE"; }
 
