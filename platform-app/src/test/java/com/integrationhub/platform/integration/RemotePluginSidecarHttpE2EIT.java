@@ -28,10 +28,10 @@ import org.junit.jupiter.api.Test;
 import javax.sql.DataSource;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
+import java.security.KeyFactory;
+import java.security.PrivateKey;
 import java.security.Signature;
-import java.security.spec.ECGenParameterSpec;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.util.Base64;
 import java.sql.Connection;
 import java.sql.Statement;
@@ -62,7 +62,6 @@ class RemotePluginSidecarHttpE2EIT {
     private static final String PLUGIN_INTEGRITY = "sha256-c2lkZWNhci1lMmU=";
     private static final String SIGNING_KEY_ID = "sidecar-e2e";
     private static final String RESUME_SECRET = "sidecar-http-secret";
-    private static final KeyPair SIGNING_KEY_PAIR = signingKeyPair();
 
     @Inject
     DataSource dataSource;
@@ -219,13 +218,13 @@ class RemotePluginSidecarHttpE2EIT {
     }
 
     private static String trustedPublicKeyConfig() {
-        return SIGNING_KEY_ID + ":" + Base64.getEncoder().encodeToString(SIGNING_KEY_PAIR.getPublic().getEncoded());
+        return SIGNING_KEY_ID + ":" + PUBLIC_KEY_X509_BASE64;
     }
 
     private static String descriptorSignature() {
         try {
             var signature = Signature.getInstance("SHA256withECDSA");
-            signature.initSign(SIGNING_KEY_PAIR.getPrivate());
+            signature.initSign(signingPrivateKey());
             signature.update((PLUGIN_ID + "@" + PLUGIN_VERSION + ":" + PLUGIN_INTEGRITY)
                     .getBytes(StandardCharsets.UTF_8));
             return SIGNING_KEY_ID + ":" + Base64.getEncoder().encodeToString(signature.sign());
@@ -234,13 +233,34 @@ class RemotePluginSidecarHttpE2EIT {
         }
     }
 
-    private static KeyPair signingKeyPair() {
+    /**
+     * Clave privada del par de prueba, FIJA a proposito.
+     *
+     * <p>Antes se generaba con {@code KeyPairGenerator} en un campo estatico. Eso rompia el test de
+     * forma no-determinista: {@code Profile} es una clase anidada, y Quarkus la carga en el
+     * classloader de despliegue para armar la config, mientras el test corre en el classloader de
+     * runtime. El estatico se inicializaba UNA VEZ POR CLASSLOADER, o sea dos pares distintos: la
+     * clave publica que iba a {@code trusted-public-keys} no correspondia a la privada que firmaba
+     * el descriptor, y la verificacion fallaba con "signature is invalid".</p>
+     *
+     * <p>Con material fijo los dos classloaders derivan la misma clave y el test es determinista.
+     * Es material de prueba: no abre ningun riesgo porque solo declara confianza dentro del propio
+     * test, contra un descriptor de prueba.</p>
+     */
+    private static final String PRIVATE_KEY_PKCS8_BASE64 =
+            "MEECAQAwEwYHKoZIzj0CAQYIKoZIzj0DAQcEJzAlAgEBBCBG6WzCxgrzVtiqXMsP0MYweG5xoU8DqeMu5Qxc59z6/Q==";
+
+    /** Publica del mismo par; es la que se declara como confiable en el perfil. */
+    private static final String PUBLIC_KEY_X509_BASE64 =
+            "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE7jlKqQbhLAwzwuvD2g1n5XxY8hTKxK4ntVTjfX3xEvqmGXGd6cQlZ88ueIItgkIn2X1"
+                    + "+vxzO6aWVw+pINhm7aw==";
+
+    private static PrivateKey signingPrivateKey() {
         try {
-            var generator = KeyPairGenerator.getInstance("EC");
-            generator.initialize(new ECGenParameterSpec("secp256r1"));
-            return generator.generateKeyPair();
+            var spec = new PKCS8EncodedKeySpec(Base64.getDecoder().decode(PRIVATE_KEY_PKCS8_BASE64));
+            return KeyFactory.getInstance("EC").generatePrivate(spec);
         } catch (Exception error) {
-            throw new IllegalStateException("Cannot create test plugin signing key", error);
+            throw new IllegalStateException("Cannot load test plugin signing key", error);
         }
     }
 
