@@ -26,6 +26,11 @@ export class FileCompressTaskProvider extends ProcessTaskProvider<FileCompressTa
     modalLayout: 'workspace' as const,
   };
 
+  /** Todo lo que emite `toTaskPatch`; el resto lo preserva la clase base. */
+  override get governedKeys(): readonly string[] {
+    return ['algorithm','compressionLevel','entryNameTemplate','deleteSourcesAfter','archiveNameTemplate','encryption','password'];
+  }
+
   createDraft(): FileCompressTaskDraft {
     return {
       taskRef: '',

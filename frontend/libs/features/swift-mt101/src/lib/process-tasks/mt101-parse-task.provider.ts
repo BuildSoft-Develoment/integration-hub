@@ -39,6 +39,11 @@ export class Mt101ParseTaskProvider extends ProcessTaskProvider<Mt101ParseTaskDr
     modalLayout: 'workspace' as const,
   };
 
+  /** Todo lo que emite `toTaskPatch`; el resto lo preserva la clase base. */
+  override get governedKeys(): readonly string[] {
+    return ['interpretSequenceAB', 'publishMultiOutput'];
+  }
+
   createDraft(): Mt101ParseTaskDraft {
     return {
       taskRef: '',

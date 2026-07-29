@@ -40,6 +40,20 @@ export class DbWriteTaskProvider extends ProcessTaskProvider<DbWriteTaskDraft> {
     modalLayout: 'workspace' as const,
   };
 
+  /** Todo lo que emite `toTaskPatch`; el resto de la config lo preserva la clase base. */
+  override get governedKeys(): readonly string[] {
+    return [
+      'mode',
+      'targetTable',
+      'jdbcBatchSize',
+      'connectionRef',
+      'keyColumns',
+      'columnMappings',
+      'columnSources',
+      'columnFunctions',
+    ];
+  }
+
   createDraft(): DbWriteTaskDraft {
     return {
       taskRef: '',

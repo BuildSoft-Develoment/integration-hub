@@ -23,18 +23,9 @@ export interface Mt101ParseFromTableTaskDraft extends ProcessTaskRuntimeDraft {
   replaceExisting: boolean;
   inboundSetIdTemplate: string;
   source: Mt101ParseFromTableSourceDraft;
-  /** Claves top-level que el backend lee y el form no gobierna; viajan verbatim. */
-  preserved: Record<string, unknown>;
   /** Idem DENTRO de `source`: el form reconstruye ese objeto entero y borraba el resto. */
   preservedSource: Record<string, unknown>;
 }
-
-/**
- * `connectionRef` top-level es el ultimo eslabon de la cadena de fallback que resuelve el datasource
- * (`Mt101ParseFromTableTaskProvider:189`); al perderlo, la lectura cae al datasource POR DEFECTO de la
- * plataforma: cambia de que base se lee el staging.
- */
-const PARSE_FROM_TABLE_PRESERVED_KEYS = ['connectionRef'] as const;
 
 /**
  * Claves de `source` que el backend lee y el form no expone:
@@ -70,6 +61,11 @@ export class Mt101ParseFromTableTaskProvider extends ProcessTaskProvider<Mt101Pa
     modalLayout: 'workspace' as const,
   };
 
+  /** Todo lo que emite `toTaskPatch`; el resto lo preserva la clase base. */
+  override get governedKeys(): readonly string[] {
+    return ['pageSize','replaceExisting','inboundSetIdTemplate','source'];
+  }
+
   createDraft(): Mt101ParseFromTableTaskDraft {
     return {
       taskRef: '',
@@ -78,7 +74,6 @@ export class Mt101ParseFromTableTaskProvider extends ProcessTaskProvider<Mt101Pa
       replaceExisting: true,
       inboundSetIdTemplate: DEFAULT_INBOUND_SET_ID,
       source: { table: '', connectionRef: '', payloadColumn: DEFAULT_PAYLOAD_COLUMN, idColumn: DEFAULT_ID_COLUMN },
-      preserved: {},
       preservedSource: {},
     };
   }
@@ -98,7 +93,6 @@ export class Mt101ParseFromTableTaskProvider extends ProcessTaskProvider<Mt101Pa
         payloadColumn: String(source['payloadColumn'] || DEFAULT_PAYLOAD_COLUMN),
         idColumn: String(source['idColumn'] || DEFAULT_ID_COLUMN),
       },
-      preserved: this.preserveKeys(config, PARSE_FROM_TABLE_PRESERVED_KEYS),
       preservedSource: this.preserveKeys(source, PARSE_FROM_TABLE_PRESERVED_SOURCE_KEYS),
     };
   }
@@ -106,7 +100,6 @@ export class Mt101ParseFromTableTaskProvider extends ProcessTaskProvider<Mt101Pa
   toTaskPatch(draft: Mt101ParseFromTableTaskDraft): Partial<ProcessTaskFormModel> {
     const payload: Record<string, unknown> = this.withRuntime(
       {
-        ...draft.preserved,
         pageSize: draft.pageSize,
         replaceExisting: draft.replaceExisting,
         inboundSetIdTemplate: draft.inboundSetIdTemplate,

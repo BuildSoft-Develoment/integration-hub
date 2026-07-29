@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { ProcessTaskProvider, ProcessTaskProviderDescriptor, ProcessTaskSummaryContext } from '@integration-hub/core/providers';
 import { HttpRequestDraft, ProcessTaskRuntimeDraft } from '@integration-hub/core/providers';
-import { applyHttpRequestToPayload, createHttpRequestDraft, hydrateHttpRequest } from '@integration-hub/core/providers';
+import { HTTP_REQUEST_KEYS, applyHttpRequestToPayload, createHttpRequestDraft, hydrateHttpRequest } from '@integration-hub/core/providers';
 import { ProcessTaskFormModel } from '@integration-hub/core/providers';
 import { I18nService } from '@integration-hub/core/i18n';
 
@@ -65,6 +65,16 @@ export class Mt101InboundDeliverTaskProvider extends ProcessTaskProvider<Mt101In
     category: 'swift-mt101',
     modalLayout: 'workspace' as const,
   };
+
+  /**
+   * Lo que gobierna en alguna rama: transporte, paginado y el slice HTTP (solo activo en REST).
+   *
+   * <p>Su bolsa `preserved` se mantiene: distingue REST de DB, donde el slice HTTP no lo gobierna
+   * nadie y por lo tanto debe sobrevivir. Esa condicionalidad no cabe en una lista plana.</p>
+   */
+  override get governedKeys(): readonly string[] {
+    return ['transport', 'pageSize', ...HTTP_REQUEST_KEYS];
+  }
 
   createDraft(): Mt101InboundDeliverTaskDraft {
     return {

@@ -22,12 +22,6 @@ export interface Mt101ArchiveTaskDraft extends ProcessTaskRuntimeDraft {
 }
 
 /**
- * Tuning que el backend lee ({@code Mt101ArchiveTaskProvider:152,158}) y el form no expone: cap de la muestra
- * de registros en el output y tamano de pagina del streaming. Sin transportarlos volvian a sus defaults.
- */
-const ARCHIVE_PRESERVED_KEYS = ['maxRecordsInOutput', 'pageSize'] as const;
-
-/**
  * El backend solo cifra si {@code encryptColumn} Y {@code encryptionSecretRef} estan presentes
  * ({@code resolveEncryptor}), asi que {@code encryptionEnabled} deriva del par completo. Cuando el par esta a
  * MEDIAS (tipico: la columna elegida, el secreto todavia sin dar de alta) el round-trip borraba las dos claves.
@@ -60,6 +54,15 @@ export class Mt101ArchiveTaskProvider extends ProcessTaskProvider<Mt101ArchiveTa
     modalLayout: 'workspace' as const,
   };
 
+  /**
+   * Todo lo que emite `toTaskPatch`. El par de cifrado va acá porque el form SI lo gobierna cuando
+   * está completo: desmarcar la casilla tiene que poder apagarlo de verdad. El caso a medias lo
+   * sigue cubriendo la bolsa propia.
+   */
+  override get governedKeys(): readonly string[] {
+    return ['connectionRef', 'table', 'hashAlgorithm', 'encryptColumn', 'encryptionSecretRef', 'retentionDays'];
+  }
+
   createDraft(): Mt101ArchiveTaskDraft {
     return {
       taskRef: '',
@@ -90,10 +93,11 @@ export class Mt101ArchiveTaskProvider extends ProcessTaskProvider<Mt101ArchiveTa
       encryptColumn: String(config['encryptColumn'] || 'raw_payload'),
       encryptionSecretRef: String(config['encryptionSecretRef'] || ''),
       retentionDays: Number(config['retentionDays']) || 3650,
-      preserved: {
-        ...this.preserveKeys(config, ARCHIVE_PRESERVED_KEYS),
-        ...(hasEncryptColumn !== hasSecretRef ? this.preserveKeys(config, ARCHIVE_ENCRYPTION_KEYS) : {}),
-      },
+      // Solo queda el caso del cifrado a medias: `maxRecordsInOutput`/`pageSize` ya no hacen falta
+      // acá, los preserva la clase base como cualquier otra clave no gobernada.
+      preserved: hasEncryptColumn !== hasSecretRef
+        ? this.preserveKeys(config, ARCHIVE_ENCRYPTION_KEYS)
+        : {},
     };
   }
 

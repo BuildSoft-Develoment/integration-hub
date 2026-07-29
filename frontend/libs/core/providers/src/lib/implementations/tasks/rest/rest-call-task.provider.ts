@@ -2,6 +2,7 @@
 import { Injectable } from '@angular/core';
 import { HttpRequestDraft, ProcessTaskBodyFieldBindingDraft, ProcessTaskExecutionMode, ProcessTaskRuntimeDraft } from '../../../tasks/process-task-binding.models';
 import {
+  HTTP_REQUEST_KEYS,
   applyHttpRequestToPayload,
   buildUrl,
   createHttpRequestDraft,
@@ -15,18 +16,7 @@ export interface RestCallTaskDraft extends ProcessTaskRuntimeDraft, HttpRequestD
   mode: string;
   bodyMappings: ProcessTaskBodyFieldBindingDraft[];
   headersJson: string;
-  /** Claves que el backend lee y NINGUN campo del form escribe; viajan verbatim. */
-  preserved: Record<string, unknown>;
 }
-
-/**
- * {@code HttpRequestSupport} lee estas dos, pero no existen en {@code HttpRequestDraft}, asi que
- * {@code applyHttpRequestToPayload} nunca las emite: se perdian en CADA guardado. {@code tokenTtlSeconds}
- * gobierna cuanto se cachea el token del login; volver a su default puede multiplicar los logins contra el
- * gateway del banco (o dejar de refrescar antes de tiempo). Mismo caso ya corregido en NOTIFICATION y
- * MT101_INBOUND_DELIVER.
- */
-const REST_CALL_PRESERVED_KEYS = ['loginTimeoutSeconds', 'tokenTtlSeconds'] as const;
 
 @Injectable()
 export class RestCallTaskProvider extends ProcessTaskProvider<RestCallTaskDraft> {
@@ -37,6 +27,15 @@ export class RestCallTaskProvider extends ProcessTaskProvider<RestCallTaskDraft>
     modalLayout: 'rest' as const,
   };
 
+  /**
+   * `mode` mas el slice HTTP completo. Reemplaza a `REST_CALL_PRESERVED_KEYS`, que solo protegia
+   * `loginTimeoutSeconds` y `tokenTtlSeconds` —las dos que el backend lee y ningun campo escribe—:
+   * ahora sobrevive cualquier clave que el formulario no gobierne, no solo esas dos.
+   */
+  override get governedKeys(): readonly string[] {
+    return ['mode', ...HTTP_REQUEST_KEYS];
+  }
+
   createDraft(): RestCallTaskDraft {
     return {
       ...createHttpRequestDraft('POST', '20'),
@@ -45,7 +44,6 @@ export class RestCallTaskProvider extends ProcessTaskProvider<RestCallTaskDraft>
       mode: 'per-record',
       bodyMappings: [],
       headersJson: '{}',
-      preserved: {},
     };
   }
 
@@ -57,16 +55,13 @@ export class RestCallTaskProvider extends ProcessTaskProvider<RestCallTaskDraft>
       mode: String(config.executionMode || config.mode || 'per-record'),
       bodyMappings: [],
       headersJson: JSON.stringify(config.headers || {}, null, 2),
-      preserved: this.preserveKeys(config, REST_CALL_PRESERVED_KEYS),
     };
   }
 
   toTaskPatch(draft: RestCallTaskDraft): Partial<ProcessTaskFormModel> {
     const executionMode = normalizeExecutionMode(draft.executionMode || draft.mode);
-    // `preserved` solo trae claves que applyHttpRequestToPayload NO escribe, asi que no puede resucitar un
-    // token borrado ni un authType apagado (el fallo que si aparecia al preservar el slice HTTP completo).
     const payload: any = this.withRuntime(
-      { ...draft.preserved, mode: executionMode }, { ...draft, executionMode }, 'per-record');
+      { mode: executionMode }, { ...draft, executionMode }, 'per-record');
     applyHttpRequestToPayload(draft, payload, 20);
     return { configurationJson: this.toPrettyJson(payload) };
   }

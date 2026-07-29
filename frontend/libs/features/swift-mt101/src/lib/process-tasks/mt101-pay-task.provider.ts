@@ -65,8 +65,6 @@ export interface Mt101PayTaskDraft extends ProcessTaskRuntimeDraft {
   retryPolicy: Mt101PayRetryPolicyDraft;
   confirmationMode: Mt101PayConfirmationMode;
   expectedGatewayResponse: Mt101PayExpectedResponseDraft;
-  /** Claves que el backend lee pero el formulario no gobierna; viajan verbatim (ver PAY_PRESERVED_KEYS). */
-  preserved: Record<string, unknown>;
 }
 
 /**
@@ -78,15 +76,6 @@ export interface Mt101PayTaskDraft extends ProcessTaskRuntimeDraft {
  * operador apago— y perder {@code archiveStatusTable}/{@code archiveStatusConnectionRef} manda el SENT/REJECTED
  * a la tabla/conexion por DEFECTO en vez de la configurada. No se les inventa default por eso mismo.</p>
  */
-const PAY_PRESERVED_KEYS = [
-  'archiveStatusConnectionRef',
-  'archiveStatusSync',
-  'archiveStatusTable',
-  'connectionRef',
-  'maxRecordsInOutput',
-  'pageSize',
-] as const;
-
 /**
  * Provider del task type {@code MT101_PAY}.
  *
@@ -112,6 +101,26 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
     recordFields: ['sendersReference', 'status', 'gatewayReference', 'attempts', 'durationMs', 'lastError'] as const,
     modalLayout: 'workspace' as const,
   };
+
+  /**
+   * Todo lo que emite `toTaskPatch`. Reemplaza a la lista blanca `PAY_PRESERVED_KEYS`, que solo
+   * protegia 6 claves anotadas a mano; ahora sobrevive cualquiera que traiga la config.
+   *
+   * <p>Limite conocido: el payload sale por `compactObject`, que descarta `undefined`, string vacio
+   * y array vacio. Una clave preservada con valor vacio se pierde igual — ya pasaba antes, no lo
+   * introduce la preservacion generica.</p>
+   */
+  override get governedKeys(): readonly string[] {
+    return [
+      'transport',
+      'rest',
+      'sftp',
+      'idempotencyKeyTemplate',
+      'retryPolicy',
+      'confirmationMode',
+      'expectedGatewayResponse',
+    ];
+  }
 
   createDraft(): Mt101PayTaskDraft {
     return {
@@ -147,7 +156,6 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
         referenceField: '$.gatewayReference',
         errorMessageField: '$.error.message',
       },
-      preserved: {},
     };
   }
 
@@ -207,12 +215,6 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
         referenceField: String(expected['referenceField'] || '$.gatewayReference'),
         errorMessageField: String(expected['errorMessageField'] || '$.error.message'),
       },
-      preserved: PAY_PRESERVED_KEYS.reduce<Record<string, unknown>>((acc, key) => {
-        if (config[key] !== undefined) {
-          acc[key] = config[key];
-        }
-        return acc;
-      }, {}),
     };
   }
 
@@ -273,9 +275,6 @@ export class Mt101PayTaskProvider extends ProcessTaskProvider<Mt101PayTaskDraft>
           referenceField: draft.expectedGatewayResponse.referenceField,
           errorMessageField: draft.expectedGatewayResponse.errorMessageField,
         }),
-        // Sin esto, editar cualquier campo del form devolvia archiveStatusSync/Table/ConnectionRef,
-        // connectionRef, pageSize y maxRecordsInOutput a sus defaults (ver PAY_PRESERVED_KEYS).
-        ...draft.preserved,
       },
       draft,
       'once',

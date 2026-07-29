@@ -2,7 +2,7 @@
 import { Injectable } from '@angular/core';
 import { I18nService } from '@integration-hub/core/i18n';
 import { HttpRequestDraft, ProcessTaskRuntimeDraft } from '../../../tasks/process-task-binding.models';
-import { applyHttpRequestToPayload, createHttpRequestDraft, hydrateHttpRequest } from '../../../tasks/http-request-task.support';
+import { HTTP_REQUEST_KEYS, applyHttpRequestToPayload, createHttpRequestDraft, hydrateHttpRequest } from '../../../tasks/http-request-task.support';
 import { ProcessTaskProvider, ProcessTaskSummaryContext } from '../../../tasks/process-task-provider.abstract';
 import { ProcessTaskFormModel } from '../../../tasks/process-task.models';
 
@@ -34,18 +34,6 @@ const NOTIFICATION_CHANNEL_KEYS = [
   'loginTimeoutSeconds', 'tokenTtlSeconds',
 ] as const;
 
-/**
- * Subconjunto HTTP: en el canal webhook lo gobierna {@code applyHttpRequestToPayload}, que escribe varias de
- * estas claves de forma CONDICIONAL ({@code if (authType === 'bearer' && token)}, etc.). Si ademas se
- * spreadeara lo preservado, borrar un token —o apagar {@code authType}— no surtiria efecto: el valor viejo
- * sobreviviria debajo. Por eso en webhook se preserva solo el contenido de los OTROS canales, no esto.
- */
-const NOTIFICATION_HTTP_KEYS: readonly string[] = [
-  'url', 'method', 'timeoutSeconds', 'headers', 'bodyTemplate',
-  'authType', 'username', 'password', 'token',
-  'loginUrl', 'loginMethod', 'loginBodyTemplate', 'tokenPath', 'loginHeaders',
-];
-
 @Injectable()
 export class NotificationTaskProvider extends ProcessTaskProvider<NotificationTaskDraft> {
   readonly descriptor = {
@@ -54,6 +42,19 @@ export class NotificationTaskProvider extends ProcessTaskProvider<NotificationTa
     descriptionKey: 'processTaskDescription.NOTIFICATION',
     modalLayout: 'rest' as const,
   };
+
+  /**
+   * Claves que este formulario gobierna en ALGUNA de sus ramas: las del canal activo mas las de los
+   * otros dos, porque cambiar de canal y volver tiene que devolverte lo que tenias.
+   *
+   * <p>Su bolsa `preserved` propia NO se elimina, a diferencia de otros providers: expresa algo que
+   * una lista plana no puede — que `to`/`subject`/`body` se gobiernan solo en la rama email y deben
+   * SOBREVIVIR mientras estas en webhook. Las dos se componen: la de la clase base cubre las claves
+   * que nadie conoce, esta cubre las de los canales inactivos.</p>
+   */
+  override get governedKeys(): readonly string[] {
+    return ['channel', 'message', 'to', 'subject', 'body', ...HTTP_REQUEST_KEYS];
+  }
 
   createDraft(): NotificationTaskDraft {
     return {
@@ -97,7 +98,7 @@ export class NotificationTaskProvider extends ProcessTaskProvider<NotificationTa
     if (draft.channel === 'webhook') {
       // En webhook el form gobierna el HTTP: se preserva solo el contenido de los otros canales.
       const soloOtrosCanales = Object.fromEntries(
-        Object.entries(draft.preserved).filter(([key]) => !NOTIFICATION_HTTP_KEYS.includes(key)),
+        Object.entries(draft.preserved).filter(([key]) => !HTTP_REQUEST_KEYS.includes(key)),
       );
       const payload: any = this.withRuntime(
         { ...soloOtrosCanales, channel: 'webhook', message: draft.message || '' }, draft, 'once');

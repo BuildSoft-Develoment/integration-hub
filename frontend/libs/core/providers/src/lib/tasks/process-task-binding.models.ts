@@ -35,6 +35,20 @@ export interface ProcessTaskRuntimeDraft {
   async?: boolean;
   asyncTransport?: string;
   continueOnFailure?: boolean;
+  /**
+   * Claves del `configurationJson` que el backend lee y este formulario NO gobierna. Las captura
+   * `hydrateRuntime` y las re-emite `withRuntime` verbatim, para que abrir y guardar una tarea no
+   * borre configuración sembrada por API o por seed.
+   *
+   * <p>Nunca contiene una clave declarada en `governedKeys`: si la contuviera, apagar una opción
+   * desde la UI la resucitaría con su valor viejo.</p>
+   *
+   * <p>No se llama `preserved` a propósito. Varios providers ya tenían un campo con ese nombre y
+   * semántica DISTINTA —bolsas por canal que descartan claves adrede al cambiar de transporte, para
+   * que borrar un token lo borre de verdad—. Compartir el nombre hacía que la clase base las
+   * resucitara; lo detectaron sus propias pruebas.</p>
+   */
+  ungoverned?: Record<string, unknown>;
 }
 
 export interface ProcessTaskBindingOption {

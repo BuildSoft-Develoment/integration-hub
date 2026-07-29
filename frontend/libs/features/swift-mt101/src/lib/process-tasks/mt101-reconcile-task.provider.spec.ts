@@ -74,6 +74,7 @@ describe('Mt101ReconcileTaskProvider', () => {
     };
     const patch = p.toTaskPatch(initial);
     const rehydrated = p.hydrateDraft({ ...baseTask, configurationJson: patch.configurationJson as string });
-    expect(rehydrated).toEqual(initial);
+    // `ungoverned` lo agrega la clase base: bolsa de claves que este formulario no gobierna.
+    expect(rehydrated).toEqual({ ...initial, ungoverned: {} });
   });
 });

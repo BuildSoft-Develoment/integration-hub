@@ -103,8 +103,6 @@ export interface FileWriteTaskDraft extends ProcessTaskRuntimeDraft {
   trailer: FileWriteCellDraft[];
   archiveNameTemplate: string;
   tableSource: FileWriteTableSourceDraft;
-  /** Claves de nivel superior que el backend lee y ningun campo del form escribe (ver FILE_WRITE_PRESERVED_KEYS). */
-  preserved: Record<string, unknown>;
 }
 
 /**
@@ -114,7 +112,6 @@ export interface FileWriteTaskDraft extends ProcessTaskRuntimeDraft {
  * - `connectionRef`: ULTIMO eslabon del fallback del datasource; sin el, la lectura cae al datasource de la
  *   plataforma.
  */
-const FILE_WRITE_PRESERVED_KEYS = ['source', 'connectionRef'] as const;
 
 @Injectable()
 export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraft> {
@@ -124,6 +121,11 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
     descriptionKey: 'processTaskDescription.FILE_WRITE',
     modalLayout: 'workspace' as const,
   };
+
+  /** Todo lo que emite `toTaskPatch`; `source`/`connectionRef` de primer nivel los preserva la clase base. */
+  override get governedKeys(): readonly string[] {
+    return ['format','encoding','layout','archiveNameTemplate','xlsx'];
+  }
 
   createDraft(): FileWriteTaskDraft {
     return {
@@ -141,7 +143,6 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       trailer: [],
       archiveNameTemplate: '',
       tableSource: this.defaultTableSource(),
-      preserved: {},
     };
   }
 
@@ -172,7 +173,6 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
       trailer: this.hydrateCells(layout.trailer),
       archiveNameTemplate: String(config.archiveNameTemplate || ''),
       ...this.hydrateSource(config.input),
-      preserved: this.preserveKeys(config, FILE_WRITE_PRESERVED_KEYS),
     };
   }
 
@@ -256,7 +256,6 @@ export class FileWriteTaskProvider extends ProcessTaskProvider<FileWriteTaskDraf
     }
     const payload: any = this.withRuntime(
       {
-        ...draft.preserved,
         format: draft.format,
         ...(draft.encoding?.trim() ? { encoding: draft.encoding.trim() } : {}),
         layout,

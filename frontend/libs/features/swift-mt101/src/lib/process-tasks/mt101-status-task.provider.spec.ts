@@ -146,6 +146,8 @@ describe('Mt101StatusTaskProvider', () => {
     };
     const patch = p.toTaskPatch(initial);
     const rehydrated = p.hydrateDraft({ ...baseTask, configurationJson: patch.configurationJson as string });
-    expect(rehydrated).toEqual(initial);
+    // `ungoverned` lo agrega la clase base al hidratar: es la bolsa de claves que este formulario no
+    // gobierna. Acá va vacía porque la config del caso solo trae claves gobernadas.
+    expect(rehydrated).toEqual({ ...initial, ungoverned: {} });
   });
 });

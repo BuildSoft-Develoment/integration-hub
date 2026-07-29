@@ -105,6 +105,7 @@ describe('Mt101ArchiveTaskProvider', () => {
     };
     const patch = provider.toTaskPatch(initial);
     const rehydrated = provider.hydrateDraft({ ...baseTask, configurationJson: patch.configurationJson as string });
-    expect(rehydrated).toEqual(initial);
+    // `ungoverned` lo agrega la clase base: bolsa de claves que este formulario no gobierna.
+    expect(rehydrated).toEqual({ ...initial, ungoverned: {} });
   });
 });

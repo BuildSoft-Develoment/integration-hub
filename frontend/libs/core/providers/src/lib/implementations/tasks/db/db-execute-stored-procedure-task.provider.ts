@@ -22,6 +22,11 @@ export class DbExecuteStoredProcedureTaskProvider extends ProcessTaskProvider<Db
     modalLayout: 'workspace' as const,
   };
 
+  /** Todo lo que emite `toTaskPatch`; el resto de la config lo preserva la clase base. */
+  override get governedKeys(): readonly string[] {
+    return ['procedureName', 'timeoutSeconds', 'connectionRef', 'procedureSchema', 'parameters'];
+  }
+
   createDraft(): DbExecuteStoredProcedureTaskDraft {
     return {
       taskRef: '',

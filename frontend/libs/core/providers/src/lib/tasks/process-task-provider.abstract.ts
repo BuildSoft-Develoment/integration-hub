@@ -65,8 +65,43 @@ export interface ProcessTaskProviderDescriptor {
   transport?: string | null;
 }
 
+/**
+ * Claves del `configurationJson` que gestiona el propio runtime (`hydrateRuntime`/`withRuntime`).
+ * No entran en la bolsa de preservados porque ya viajan tipadas en el draft.
+ */
+export const RUNTIME_OWNED_KEYS: readonly string[] = [
+  'taskRef',
+  'executionMode',
+  'input',
+  'async',
+  'asyncTransport',
+  'continueOnFailure',
+];
+
 export abstract class ProcessTaskProvider<TDraft> {
   abstract readonly descriptor: ProcessTaskProviderDescriptor;
+
+  /**
+   * Claves de primer nivel del `configurationJson` que ESTE formulario gobierna: las lee al hidratar
+   * y las vuelve a escribir al guardar.
+   *
+   * <p>Declararlas no es burocracia, es lo que hace segura la preservación automática. Todo lo que
+   * NO esté acá se copia verbatim de la config anterior; si una clave gobernada se colara en esa
+   * copia, apagar la opción desde la UI la resucitaría —el provider dejaría de emitirla y el valor
+   * viejo volvería a ganar. En `MT101_STATUS` eso significaría re-encender la conciliación del
+   * money-path que el operador acaba de apagar.</p>
+   *
+   * <p>El trinquete `task-config-roundtrip.spec.ts` verifica que toda clave que un provider emite
+   * esté declarada acá, así que olvidarse de una rompe el build en vez de resucitar valores.</p>
+   *
+   * <p><b>`null` = provider sin migrar</b>: no se preserva nada y se comporta como antes. La
+   * preservación es opt-in a propósito. Activarla con una lista incompleta es PEOR que no tenerla:
+   * sin ella se pierde configuración que el operador no tocó; con una lista mal declarada vuelve
+   * configuración que el operador apagó a mano. Lo primero se nota al ejecutar; lo segundo, no.</p>
+   */
+  get governedKeys(): readonly string[] | null {
+    return null;
+  }
 
   supports(type: ProcessTaskType): boolean {
     return this.descriptor.type === type;
@@ -133,6 +168,10 @@ export abstract class ProcessTaskProvider<TDraft> {
   protected hydrateRuntime(task: ProcessTaskFormModel, defaultExecutionMode: ProcessTaskExecutionMode): ProcessTaskRuntimeDraft {
     const config = this.parseJson(task.configurationJson);
     return {
+      // Solo los providers migrados (governedKeys != null) preservan; ver la nota en `governedKeys`.
+      ...(this.governedKeys
+        ? { ungoverned: this.omitKeys(config, [...RUNTIME_OWNED_KEYS, ...this.governedKeys]) }
+        : {}),
       taskRef: String(config['taskRef'] || task.clientId || `task-${task.taskOrder}`),
       executionMode: this.normalizeExecutionMode(config['executionMode'], defaultExecutionMode),
       input: this.normalizeInput(config['input']),
@@ -150,6 +189,9 @@ export abstract class ProcessTaskProvider<TDraft> {
     const executionMode = this.normalizeExecutionMode(draft.executionMode, defaultExecutionMode);
     const input = this.normalizeInput(draft.input);
     const next: Record<string, unknown> = {
+      // Primero lo NO gobernado, para que el payload del formulario siempre gane. El orden es la
+      // mitad de la garantía: al revés, una clave vieja pisaría lo que el operador acaba de editar.
+      ...(draft.ungoverned ?? {}),
       taskRef,
       executionMode,
       ...payload,

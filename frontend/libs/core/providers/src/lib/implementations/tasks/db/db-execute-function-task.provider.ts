@@ -23,6 +23,11 @@ export class DbExecuteFunctionTaskProvider extends ProcessTaskProvider<DbExecute
     modalLayout: 'workspace' as const,
   };
 
+  /** Todo lo que emite `toTaskPatch`; el resto de la config lo preserva la clase base. */
+  override get governedKeys(): readonly string[] {
+    return ['functionName', 'timeoutSeconds', 'connectionRef', 'functionSchema', 'resultAlias', 'parameters'];
+  }
+
   createDraft(): DbExecuteFunctionTaskDraft {
     return {
       taskRef: '',

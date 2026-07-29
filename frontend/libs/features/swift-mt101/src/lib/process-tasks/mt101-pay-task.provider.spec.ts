@@ -130,7 +130,9 @@ describe('Mt101PayTaskProvider', () => {
     };
     const patch = provider.toTaskPatch(initial);
     const rehydrated = provider.hydrateDraft({ ...baseTask, configurationJson: patch.configurationJson as string });
-    expect(rehydrated).toEqual(initial);
+    // `ungoverned` lo agrega la clase base: la bolsa de claves que este formulario no gobierna. Vacía
+    // acá porque la config del caso solo trae claves gobernadas.
+    expect(rehydrated).toEqual({ ...initial, ungoverned: {} });
   });
 
   it('serializes SFTP transport with sinkRef and operational fields (ADR-017)', () => {

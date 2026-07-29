@@ -43,6 +43,25 @@ export class Mt101BuildFromTableTaskProvider extends Mt101BuildTaskProvider {
     };
   }
 
+  /**
+   * Lo que emite este provider mas lo que emite su clase base. `fragmentSetIdTemplate` NO va: el
+   * formulario no lo gobierna y lo preserva la clase base como cualquier otra clave ajena.
+   */
+  override get governedKeys(): readonly string[] {
+    return [
+      'format',
+      'debitAccountMode',
+      'envelope',
+      'sequenceA',
+      'transactionMappings',
+      'splitBy',
+      'connectionRef',
+      'maxTransactionsPerMessage',
+      'maxBytesPerMessage',
+      'replaceExisting',
+    ];
+  }
+
   override toTaskPatch(draft: Mt101BuildTaskDraft): Partial<ProcessTaskFormModel> {
     const patch = super.toTaskPatch(draft);
     const config = this.parseJson(patch.configurationJson as string) as Record<string, unknown>;

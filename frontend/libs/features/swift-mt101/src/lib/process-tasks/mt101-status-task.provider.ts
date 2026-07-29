@@ -23,34 +23,27 @@ export interface Mt101StatusTaskDraft extends ProcessTaskRuntimeDraft {
   resolveNormalPay: boolean;
   /** taskRef del MT101_PAY que resuelve este STATUS; obligatorio en procesos multi-PAY. */
   resolvesPayTaskRef: string;
-  /** Claves que el backend lee pero el formulario todavia no gobierna; viajan verbatim (ver PRESERVED_KEYS). */
-  preserved: Record<string, unknown>;
 }
 
 /**
- * Claves de configuracion que el backend LEE pero el formulario aun no expone. Se transportan verbatim en el
- * draft para que un round-trip por la UI no las borre.
+ * Claves de primer nivel que ESTE formulario gobierna. Todo lo demas que traiga la configuracion
+ * —`poll`, `callback`, `routeQuery`, `resolveCorrectivePay`, `acceptedStatuses`…— lo preserva la clase
+ * base verbatim.
  *
- * <p>No se tipan con un default propio a proposito: varias son tri-estado o listas cuyo "ausente" tiene
- * semantica propia en el backend ({@code archiveStatusSync} default true, {@code correctivePayStatuses},
- * {@code acceptedStatuses}…). Inventarles un valor al serializar CAMBIARIA el comportamiento; copiarlas tal
- * cual lo preserva. Cuando el formulario pase a gobernar alguna, se saca de esta lista y se tipa arriba.</p>
+ * <p>Antes esto era al reves: una lista blanca de las 14 claves NO gobernadas, que solo protegia lo
+ * que alguien se habia acordado de anotar. La declaracion se invirtio porque enumerar lo propio es
+ * finito y verificable —el trinquete comprueba que toda clave emitida este aca— mientras que
+ * enumerar lo ajeno es una apuesta contra el backend: la clave que nadie anticipo es justo la que se
+ * perdia.</p>
  */
-const PRESERVED_KEYS = [
-  'acceptedStatuses',
-  'archiveStatusSync',
-  'archiveStatusTable',
-  'callback',
-  'correctivePayStatuses',
-  'executedBy',
-  'fragmentSetId',
-  'maxRecordsInOutput',
-  'pageSize',
-  'poll',
-  'reason',
-  'rejectedStatuses',
-  'resolveCorrectivePay',
-  'routeQuery',
+const GOVERNED_KEYS = [
+  'mode',
+  'query',
+  'expectedGatewayResponse',
+  'connectionRef',
+  'confirmationTable',
+  'resolveNormalPay',
+  'resolvesPayTaskRef',
 ] as const;
 
 /**
@@ -81,6 +74,10 @@ export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTask
     modalLayout: 'workspace' as const,
   };
 
+  override get governedKeys(): readonly string[] {
+    return GOVERNED_KEYS;
+  }
+
   createDraft(): Mt101StatusTaskDraft {
     return {
       taskRef: '',
@@ -96,7 +93,6 @@ export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTask
       confirmationTable: 'mt101_confirmation',
       resolveNormalPay: false,
       resolvesPayTaskRef: '',
-      preserved: {},
     };
   }
 
@@ -118,7 +114,6 @@ export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTask
       confirmationTable: String(config['confirmationTable'] || 'mt101_confirmation'),
       resolveNormalPay: this.parseBackendBoolean(config['resolveNormalPay']),
       resolvesPayTaskRef: String(config['resolvesPayTaskRef'] || ''),
-      preserved: this.readPreserved(config),
     };
   }
 
@@ -136,17 +131,6 @@ export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTask
       return false;
     }
     return String(raw).trim().toLowerCase() === 'true';
-  }
-
-  /** Copia verbatim las claves de {@link PRESERVED_KEYS} presentes en el config (ausente sigue ausente). */
-  private readPreserved(config: Record<string, any>): Record<string, unknown> {
-    const preserved: Record<string, unknown> = {};
-    PRESERVED_KEYS.forEach((key) => {
-      if (config[key] !== undefined) {
-        preserved[key] = config[key];
-      }
-    });
-    return preserved;
   }
 
   toTaskPatch(draft: Mt101StatusTaskDraft): Partial<ProcessTaskFormModel> {
@@ -171,9 +155,6 @@ export class Mt101StatusTaskProvider extends ProcessTaskProvider<Mt101StatusTask
         ...(draft.resolveNormalPay && draft.resolvesPayTaskRef
           ? { resolvesPayTaskRef: draft.resolvesPayTaskRef }
           : {}),
-        // Claves que el formulario aun no gobierna: se re-emiten tal cual llegaron. Sin esto, editar cualquier
-        // campo del form BORRABA poll/callback/routeQuery/resolveCorrectivePay y 10 mas.
-        ...draft.preserved,
       },
       draft,
       'per-record',

@@ -25,14 +25,12 @@ export interface Mt101ValidateTaskDraft extends ProcessTaskRuntimeDraft {
    */
   publishIssuesToRaw: unknown;
   /** Claves de tuning que el backend lee y el form no expone. */
-  preserved: Record<string, unknown>;
 }
 
 /**
  * Tuning que el backend lee y el form no expone: cap de la muestra de incidencias en el output y tamano de
  * pagina del streaming. Sin transportarlos volvian a sus defaults en cada guardado.
  */
-const VALIDATE_PRESERVED_KEYS = ['maxIssuesInOutput', 'pageSize'] as const;
 
 /**
  * Tabla por defecto del sink de incidencias. El backend ({@code IssueSink.enabled}) SOLO acepta esta tabla:
@@ -64,6 +62,11 @@ export class Mt101ValidateTaskProvider extends ProcessTaskProvider<Mt101Validate
     modalLayout: 'workspace' as const,
   };
 
+  /** Todo lo que emite `toTaskPatch`; el resto lo preserva la clase base. */
+  override get governedKeys(): readonly string[] {
+    return ['rules','ruleSet','standard','appliesTo','businessCalendar','failOn','publishIssuesTo'];
+  }
+
   createDraft(): Mt101ValidateTaskDraft {
     return {
       taskRef: '',
@@ -79,7 +82,6 @@ export class Mt101ValidateTaskProvider extends ProcessTaskProvider<Mt101Validate
       // apagar el sink, vaciar la tabla.
       publishIssuesTable: DEFAULT_ISSUE_TABLE,
       publishIssuesToRaw: undefined,
-      preserved: {},
     };
   }
 
@@ -104,7 +106,6 @@ export class Mt101ValidateTaskProvider extends ProcessTaskProvider<Mt101Validate
       publishIssuesTable: table || (rawPresent ? '' : DEFAULT_ISSUE_TABLE),
       // El crudo se guarda SOLO si vino y el parseo fallo. Si parseo, manda el form (y se puede vaciar).
       publishIssuesToRaw: table ? undefined : (rawPresent ? rawIssues : undefined),
-      preserved: this.preserveKeys(config, VALIDATE_PRESERVED_KEYS),
     };
   }
 
@@ -118,7 +119,6 @@ export class Mt101ValidateTaskProvider extends ProcessTaskProvider<Mt101Validate
       : undefined;
     const payload: Record<string, unknown> = this.withRuntime(
       {
-        ...draft.preserved,
         rules: ['__catalog__'],
         ruleSet: draft.ruleSet,
         standard: draft.standard,

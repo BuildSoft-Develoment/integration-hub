@@ -42,6 +42,11 @@ export class Mt101RepairTaskProvider extends ProcessTaskProvider<Mt101RepairTask
     modalLayout: 'workspace' as const,
   };
 
+  /** Todo lo que emite `toTaskPatch`; `newReferenceTemplate` sale solo cuando tiene valor. */
+  override get governedKeys(): readonly string[] {
+    return ['repairs', 'newReferenceTemplate', 'repairAttempt'];
+  }
+
   createDraft(): Mt101RepairTaskDraft {
     return {
       taskRef: '',

@@ -68,6 +68,36 @@ export function hydrateHttpRequest(config: any, defaultTimeout = 20): HttpReques
  * No incluye runtime (`taskRef`/`executionMode`/`input`): eso lo agrega el provider con
  * `withRuntime`. Devuelve el mismo payload por conveniencia.
  */
+/**
+ * Claves de primer nivel que escribe {@link applyHttpRequestToPayload}. Todo provider que use el
+ * helper las gobierna, asi que las declara en su `governedKeys`: si quedaran fuera, apagar la
+ * autenticacion o borrar un token desde la UI los resucitaria con su valor anterior.
+ *
+ * <p>Vive junto al helper y no copiada en cada provider para que agregar una clave al bloque HTTP
+ * no obligue a acordarse de tres archivos.</p>
+ */
+export const HTTP_REQUEST_KEYS: readonly string[] = [
+  'method',
+  'baseUrl',
+  'pathTemplate',
+  'url',
+  'queryParameters',
+  'pathParameters',
+  'headers',
+  'headerMappings',
+  'bodyTemplate',
+  'timeoutSeconds',
+  'authType',
+  'username',
+  'password',
+  'token',
+  'loginUrl',
+  'loginMethod',
+  'loginHeaders',
+  'loginBodyTemplate',
+  'tokenPath',
+];
+
 export function applyHttpRequestToPayload(
   draft: HttpRequestDraft,
   payload: Record<string, any>,

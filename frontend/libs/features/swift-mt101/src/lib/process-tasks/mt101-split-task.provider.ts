@@ -33,6 +33,11 @@ export class Mt101SplitTaskProvider extends ProcessTaskProvider<Mt101SplitTaskDr
     modalLayout: 'workspace' as const,
   };
 
+  /** Todo lo que emite `toTaskPatch`; el resto lo preserva la clase base. */
+  override get governedKeys(): readonly string[] {
+    return ['maxTransactionsPerFragment', 'maxBytesPerFragment', 'rebuildIndexTotal', 'fragmentReferenceTemplate'];
+  }
+
   createDraft(): Mt101SplitTaskDraft {
     return {
       taskRef: '',

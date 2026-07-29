@@ -23,7 +23,6 @@ export interface Mt101ReconcileTaskDraft extends ProcessTaskRuntimeDraft {
    */
   publishExceptionsToRaw: unknown;
   /** Claves que el backend lee y el form no gobierna; viajan verbatim. */
-  preserved: Record<string, unknown>;
 }
 
 /**
@@ -31,7 +30,6 @@ export interface Mt101ReconcileTaskDraft extends ProcessTaskRuntimeDraft {
  * REACTIVA la escritura de vuelta a la tabla de archivo que el operador apago — misma clave y mismo modo de
  * fallo ya corregidos en MT101_PAY.
  */
-const RECONCILE_PRESERVED_KEYS = ['archiveStatusSync'] as const;
 
 /**
  * Tabla por defecto del sink de excepciones. El backend ({@code parseExceptionTable}) cae a ella cuando la
@@ -64,6 +62,11 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
     modalLayout: 'workspace' as const,
   };
 
+  /** Todo lo que emite `toTaskPatch`; el resto lo preserva la clase base. */
+  override get governedKeys(): readonly string[] {
+    return ['connectionRef','sentTable','confirmationTable','matchKeys','asOfDate','lookbackDays','publishExceptionsTo'];
+  }
+
   createDraft(): Mt101ReconcileTaskDraft {
     return {
       taskRef: '',
@@ -79,7 +82,6 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
       // staging_record: hace visible en el form el destino real de las excepciones (el backend cae ahi igual).
       exceptionTable: DEFAULT_EXCEPTION_TABLE,
       publishExceptionsToRaw: undefined,
-      preserved: {},
     };
   }
 
@@ -106,7 +108,6 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
       exceptionTable: exceptionRef.table || (rawPresent ? '' : DEFAULT_EXCEPTION_TABLE),
       // El crudo se guarda SOLO si vino y el parseo fallo. Si parseo, manda el form.
       publishExceptionsToRaw: exceptionRef.table ? undefined : (rawPresent ? rawExc : undefined),
-      preserved: this.preserveKeys(config, RECONCILE_PRESERVED_KEYS),
     };
   }
 
@@ -124,7 +125,6 @@ export class Mt101ReconcileTaskProvider extends ProcessTaskProvider<Mt101Reconci
       : undefined;
     const payload: Record<string, unknown> = this.withRuntime(
       {
-        ...draft.preserved,
         connectionRef: draft.connectionRef || undefined,
         sentTable: draft.sentTable,
         confirmationTable: draft.confirmationTable,

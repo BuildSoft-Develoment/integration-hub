@@ -18,6 +18,11 @@ export class FileDeliverTaskProvider extends ProcessTaskProvider<FileDeliverTask
     modalLayout: 'workspace' as const,
   };
 
+  /** Todo lo que emite `toTaskPatch`; el resto lo preserva la clase base. */
+  override get governedKeys(): readonly string[] {
+    return ['sinkRef','dropPathTemplate'];
+  }
+
   createDraft(): FileDeliverTaskDraft {
     return { taskRef: '', executionMode: 'once', sinkRef: '', dropPathTemplate: '${originalName}' };
   }

@@ -23,6 +23,11 @@ export class FileReadTaskProvider extends ProcessTaskProvider<FileReadTaskDraft>
     descriptionKey: 'processTaskDescription.FILE_READ',
   };
 
+  /** Todo lo que emite `toTaskPatch`; el resto lo preserva la clase base. */
+  override get governedKeys(): readonly string[] {
+    return ['sourceVariables','batchSize','parallel','parallelMode','maxConcurrency'];
+  }
+
   createDraft(): FileReadTaskDraft {
     return {
       taskRef: '',
