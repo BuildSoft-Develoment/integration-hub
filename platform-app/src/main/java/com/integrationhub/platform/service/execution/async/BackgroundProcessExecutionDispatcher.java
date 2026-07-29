@@ -114,11 +114,11 @@ public class BackgroundProcessExecutionDispatcher {
     @Scheduled(every = "{integrationhub.execution.async.recovery-every:30s}", concurrentExecution = Scheduled.ConcurrentExecution.SKIP)
     void recoverOrphanedExecutions() {
         try {
-            // ADR-021: los tipos que mueven dinero los declaran los providers (`movesMoney()`), no un
-            // literal del motor. Se consultan en cada barrido y no una vez al arrancar: los plugins
-            // locales de un vertical pueden registrarse despues del arranque del despachador.
-            var recovered = processExecutionStateService.recoverExpiredExecutions(
-                    recoveryLimit, taskProviderRegistry.moneyMovementTaskTypes());
+            // ADR-021 (E): ya no hace falta pasarle los tipos. La decision "esta tarea movio dinero" se
+            // tomo AL ARRANCAR cada tarea —con el provider y la config a la vista, incluida la entrega a
+            // una fuente marcada como critica— y quedo persistida. Pasar los tipos aca obligaba a
+            // re-derivarla de la definicion ACTUAL, que pudo cambiar entre la caida y este barrido.
+            var recovered = processExecutionStateService.recoverExpiredExecutions(recoveryLimit);
             if (recovered > 0) {
                 LOG.infov("Recovered {0} orphaned process execution(s) with expired lease", recovered);
             }

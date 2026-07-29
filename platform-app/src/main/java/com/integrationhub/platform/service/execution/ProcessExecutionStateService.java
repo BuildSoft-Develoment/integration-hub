@@ -32,6 +32,7 @@ public class ProcessExecutionStateService implements ExecutionReconciliationGate
     private final AuditService auditService;
     private final TaskOutboxStore taskOutboxStore;
     private final AsyncSliceDispatchService sliceDispatchService;
+    private final MoneyMovementDetector moneyMovementDetector;
 
     public ProcessExecutionStateService(
             ProcessDefinitionRepository processDefinitionRepository,
@@ -40,7 +41,8 @@ public class ProcessExecutionStateService implements ExecutionReconciliationGate
             ProcessTaskExecutionRepository processTaskExecutionRepository,
             AuditService auditService,
             TaskOutboxStore taskOutboxStore,
-            AsyncSliceDispatchService sliceDispatchService
+            AsyncSliceDispatchService sliceDispatchService,
+            MoneyMovementDetector moneyMovementDetector
     ) {
         this.processDefinitionRepository = processDefinitionRepository;
         this.processTaskDefinitionRepository = processTaskDefinitionRepository;
@@ -49,6 +51,7 @@ public class ProcessExecutionStateService implements ExecutionReconciliationGate
         this.auditService = auditService;
         this.taskOutboxStore = taskOutboxStore;
         this.sliceDispatchService = sliceDispatchService;
+        this.moneyMovementDetector = moneyMovementDetector;
     }
 
     @Transactional(Transactional.TxType.REQUIRES_NEW)
@@ -141,21 +144,27 @@ public class ProcessExecutionStateService implements ExecutionReconciliationGate
 
     /**
      * v53-fix: recupera ejecuciones RUNNING huerfanas (lease vencido = nodo caido). REGLA DE SEGURIDAD: si la
-     * ejecucion YA inicio {@code payTaskType} (efecto no-idempotente) -> {@code NEEDS_RECONCILIATION} (nunca se
-     * re-ejecuta a ciegas; se resuelve por STATUS/RECONCILE); si NO -> {@code PENDING} (re-encolar). Atomico por fila.
+     * ejecucion YA inicio una tarea que mueve dinero (efecto no-idempotente) -> {@code NEEDS_RECONCILIATION}
+     * (nunca se re-ejecuta a ciegas; se resuelve por STATUS/RECONCILE); si NO -> {@code PENDING} (re-encolar).
+     * Atomico por fila.
+     *
+     * <p>ADR-021 (E): la pregunta se le hace a la COLUMNA {@code moves_money} de la ejecucion de tarea, no al
+     * tipo de la definicion. El tipo cubre lo que se sabe de pago por su nombre, pero deja fuera a la tarea
+     * generica que entrega a un banco ({@code FILE_DELIVER} a un sink critico), y ademas se lee de la
+     * definicion ACTUAL — que pudo cambiar entre la caida y este barrido. La columna se escribio al arrancar
+     * la tarea, asi que dice lo que realmente paso.</p>
      */
     @Transactional(Transactional.TxType.REQUIRES_NEW)
-    public int recoverExpiredExecutions(int limit, Collection<String> moneyMovementTaskTypes) {
+    public int recoverExpiredExecutions(int limit) {
         var now = LocalDateTime.now();
         var expiredIds = processExecutionRepository.listExpiredRunningIds(now, limit);
         var recovered = 0;
         for (var id : expiredIds) {
-            var startedPay = processExecutionRepository.hasStartedAnyTaskType(id, moneyMovementTaskTypes);
+            var startedPay = processExecutionRepository.hasStartedMoneyMovement(id);
             var target = startedPay ? ExecutionStatus.NEEDS_RECONCILIATION : ExecutionStatus.PENDING;
             var detail = startedPay
-                    ? "Recovered orphaned execution (lease expired) that already started a money-movement task "
-                            + moneyMovementTaskTypes
-                            + "; NEEDS_RECONCILIATION (no blind re-run; resolve via STATUS/RECONCILE)"
+                    ? "Recovered orphaned execution (lease expired) that already started a money-movement task; "
+                            + "NEEDS_RECONCILIATION (no blind re-run; resolve via STATUS/RECONCILE)"
                     : "Recovered orphaned execution (lease expired); re-queued for a fresh atomic claim";
             if (processExecutionRepository.recoverExpiredRunning(id, target, detail, now) == 1) {
                 recovered++;
@@ -185,6 +194,7 @@ public class ProcessExecutionStateService implements ExecutionReconciliationGate
         var taskExecution = new ProcessTaskExecution();
         taskExecution.processExecution = execution;
         taskExecution.taskDefinition = taskDefinition;
+        taskExecution.movesMoney = moneyMovementDetector.movesMoney(taskType, taskDefinition.configurationJson);
         taskExecution.status = ExecutionStatus.RUNNING;
         taskExecution.executedAt = LocalDateTime.now();
         taskExecution.startedAt = taskExecution.executedAt;

@@ -111,15 +111,20 @@ public class ProcessExecutionRepository implements PanacheRepository<ProcessExec
      * porque los tipos que mueven dinero los declaran los providers y puede haber varios (uno por
      * vertical). Un conjunto vacio responde {@code false} sin ir a la BD.
      */
-    public boolean hasStartedAnyTaskType(Long executionId, Collection<String> taskTypes) {
-        if (taskTypes == null || taskTypes.isEmpty()) {
-            return false;
-        }
+    /**
+     * ADR-021 (E): ¿esta ejecucion arranco alguna tarea que MOVIO DINERO?
+     *
+     * <p>Sustituye a {@code hasStartedAnyTaskType(id, tipos)}, que preguntaba por el tipo de la definicion
+     * ACTUAL. Eso dejaba fuera a la tarea generica que entrega a un banco ({@code FILE_DELIVER} a un sink
+     * critico) y ademas daba una respuesta que podia cambiar si alguien editaba el proceso entre la caida
+     * del nodo y el barrido. La columna la escribio {@code startTask} con el provider y la config a la
+     * vista, asi que dice lo que realmente paso.</p>
+     */
+    public boolean hasStartedMoneyMovement(Long executionId) {
         var count = getEntityManager().createQuery(
                         "select count(t) from ProcessTaskExecution t "
-                                + "where t.processExecution.id = ?1 and t.taskDefinition.taskType in ?2", Long.class)
+                                + "where t.processExecution.id = ?1 and t.movesMoney = true", Long.class)
                 .setParameter(1, executionId)
-                .setParameter(2, taskTypes)
                 .getSingleResult();
         return count != null && count > 0;
     }

@@ -205,7 +205,7 @@ class FileReadTaskFastPathTest {
         private final AtomicInteger sequence = new AtomicInteger();
 
         private RecordingStateService(ProcessExecution execution) {
-            super(null, null, null, null, null, null, null);
+            super(null, null, null, null, null, null, null, null);
             this.execution = execution;
         }
 

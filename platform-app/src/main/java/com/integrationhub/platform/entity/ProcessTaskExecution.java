@@ -34,6 +34,15 @@ public class ProcessTaskExecution {
     @Column(nullable = false, length = 30)
     public ExecutionStatus status = ExecutionStatus.PENDING;
 
+    /**
+     * ADR-021 (E): esta ejecucion movio dinero hacia afuera. Se decide AL ARRANCAR la tarea —cuando el
+     * motor tiene el provider y la config resuelta— y se persiste, en vez de re-evaluarse en el barrido
+     * de huerfanas: asi la recuperacion lee lo que REALMENTE paso y no la definicion actual, que pudo
+     * cambiar entre la caida y el barrido.
+     */
+    @Column(name = "moves_money", nullable = false)
+    public boolean movesMoney = false;
+
     @Column(name = "executed_at")
     public LocalDateTime executedAt;
 
