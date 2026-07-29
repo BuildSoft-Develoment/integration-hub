@@ -1,6 +1,6 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 /**
  * ADR-021: red de seguridad de la migracion de i18n del vertical.
@@ -41,7 +41,12 @@ describe('ADR-021 · i18n del vertical SWIFT MT101', () => {
   let declared: Record<'es' | 'en', Record<string, string>>;
   let baseEs: string;
 
-  beforeEach(async () => {
+  // `beforeAll`, no `beforeEach`: los diccionarios y el fichero son de SOLO LECTURA, asi que
+  // reimportarlos por test no compraba nada y costaba caro. El `import()` del chunk lazy en frio
+  // superaba los 10 s de timeout de hook en una maquina cargada y tumbaba el PRIMER test del
+  // archivo — los otros dos pasaban porque reusaban el modulo ya cacheado. Importar una sola vez
+  // quita el trabajo repetido y, con el, la fragilidad.
+  beforeAll(async () => {
     // Dinamico: importar la lib lazy de forma estatica la traeria al bundle inicial.
     const { SWIFT_MT101_MESSAGES } = await import('@integration-hub/features/swift-mt101');
     declared = SWIFT_MT101_MESSAGES;

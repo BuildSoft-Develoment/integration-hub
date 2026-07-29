@@ -1,5 +1,6 @@
 package com.integrationhub.platform.provider.task.dbfunction;
 
+import com.integrationhub.platform.provider.task.CompatibilityContainerTimeouts;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -20,7 +21,9 @@ class DatabaseFunctionTaskProviderPostgreSqlCompatibilityTest extends DatabaseFu
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("integration_hub_pg_fn")
             .withUsername("postgres")
-            .withPassword("postgres");
+            .withPassword("postgres")
+            // Politica unica de la suite multi-BD: ver CompatibilityContainerTimeouts.
+            .withStartupTimeoutSeconds(CompatibilityContainerTimeouts.STARTUP_SECONDS);
 
     @Test
     void executesFunctionAndPublishesFirstRowAsOutputs() throws Exception {

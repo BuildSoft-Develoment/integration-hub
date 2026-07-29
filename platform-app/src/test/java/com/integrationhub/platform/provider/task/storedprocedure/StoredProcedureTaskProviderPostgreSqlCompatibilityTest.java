@@ -1,6 +1,7 @@
 package com.integrationhub.platform.provider.task.storedprocedure;
 
 import com.integrationhub.platform.domain.ConnectionType;
+import com.integrationhub.platform.provider.task.CompatibilityContainerTimeouts;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -21,7 +22,9 @@ class StoredProcedureTaskProviderPostgreSqlCompatibilityTest extends StoredProce
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("integration_hub_pg")
             .withUsername("postgres")
-            .withPassword("postgres");
+            .withPassword("postgres")
+            // Politica unica de la suite multi-BD: ver CompatibilityContainerTimeouts.
+            .withStartupTimeoutSeconds(CompatibilityContainerTimeouts.STARTUP_SECONDS);
 
     @Test
     void executesProcedureWithOutputsOnPostgreSql() throws Exception {

@@ -1,5 +1,6 @@
 package com.integrationhub.platform.provider.task.dbfunction;
 
+import com.integrationhub.platform.provider.task.CompatibilityContainerTimeouts;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -21,7 +22,10 @@ class DatabaseFunctionTaskProviderMySqlCompatibilityTest extends DatabaseFunctio
             .withDatabaseName("integration_hub_mysql_fn")
             .withUsername("mysql")
             .withPassword("mysql")
-            .withCommand("--log-bin-trust-function-creators=1");
+            .withCommand("--log-bin-trust-function-creators=1")
+            // Este es el contenedor que tumbaba el reactor: agotaba los reintentos a los 383 s.
+            // Ver CompatibilityContainerTimeouts para los tiempos medidos y por que 8 minutos.
+            .withStartupTimeoutSeconds(CompatibilityContainerTimeouts.STARTUP_SECONDS);
 
     @Test
     void executesScalarFunctionOnMySqlUsingDynamicAlias() throws Exception {

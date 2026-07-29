@@ -1,5 +1,6 @@
 package com.integrationhub.platform.provider.task.dbfunction;
 
+import com.integrationhub.platform.provider.task.CompatibilityContainerTimeouts;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MSSQLServerContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -18,7 +19,9 @@ class DatabaseFunctionTaskProviderSqlServerCompatibilityTest extends DatabaseFun
 
     @Container
     static final MSSQLServerContainer<?> SQLSERVER = new MSSQLServerContainer<>("mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04")
-            .acceptLicense();
+            .acceptLicense()
+            // Politica unica de la suite multi-BD: ver CompatibilityContainerTimeouts.
+            .withStartupTimeoutSeconds(CompatibilityContainerTimeouts.STARTUP_SECONDS);
 
     @Test
     void executesTableValuedFunctionOnSqlServer() throws Exception {

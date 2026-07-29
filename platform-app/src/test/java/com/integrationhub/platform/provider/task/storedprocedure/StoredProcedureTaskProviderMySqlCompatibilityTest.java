@@ -1,6 +1,7 @@
 package com.integrationhub.platform.provider.task.storedprocedure;
 
 import com.integrationhub.platform.domain.ConnectionType;
+import com.integrationhub.platform.provider.task.CompatibilityContainerTimeouts;
 import org.junit.jupiter.api.Test;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
@@ -21,7 +22,9 @@ class StoredProcedureTaskProviderMySqlCompatibilityTest extends StoredProcedureT
     static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
             .withDatabaseName("integration_hub_mysql")
             .withUsername("test")
-            .withPassword("test");
+            .withPassword("test")
+            // Politica unica de la suite multi-BD: ver CompatibilityContainerTimeouts.
+            .withStartupTimeoutSeconds(CompatibilityContainerTimeouts.STARTUP_SECONDS);
 
     @Test
     void executesProcedureWithOutputsOnMySql() throws Exception {
