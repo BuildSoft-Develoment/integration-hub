@@ -85,13 +85,59 @@ columnas clave —justo lo que Oracle exige, porque prohibe actualizar una colum
 - **Simular el upsert con `select` + `insert`/`update`.** Deja de ser atomico y abre una ventana de
   carrera en una escritura sobre la base del cliente.
 
+## Ampliacion: paginacion de entrada por tabla
+
+`TaskInputRepository` (lectura paginada en modo tabla: FILE_WRITE y BUILD_FROM_TABLE) resolvia el
+motor leyendo `getDatabaseProductName()` de la conexion viva — un cuarto mecanismo de deteccion en la
+misma base de codigo, y una segunda fuente de verdad para la misma pregunta. Ademas devolvia `LIMIT`
+como "default seguro" tanto al fallar la lectura de metadatos como para cualquier motor no
+contemplado: contra un motor que no lo entiende (DB2 necesita `FETCH FIRST`) eso emitia SQL invalido
+en silencio.
+
+Ahora el dialecto sale del `ConnectionType` declarado, igual que el resto. **Se resuelve con un
+`switch` exhaustivo sin `default`, y no con dialectos CDI como en el upsert**: la diferencia entre
+motores es un sufijo de una linea, y a cambio se gana algo que CDI no puede dar — anadir un motor a
+`ConnectionType` deja de compilar hasta que alguien decida su paginacion. Fallo en compilacion en vez
+de en ejecucion.
+
+Los tres llamantes (`TaskInputResolver`, `AsyncPageChainService`, `FileWriteTaskProvider`) tenian la
+misma perdida de informacion que DB_WRITE y ahora resuelven `JdbcConnectionTarget`.
+
+## Ampliacion: lectura de campos tolerante al caso
+
+Las pruebas multi-motor de la paginacion destaparon un segundo defecto, independiente del SQL: las
+claves de un registro leido de tabla son las etiquetas que devuelve el driver, y **Oracle pone en
+MAYUSCULAS los identificadores no entrecomillados** mientras PostgreSQL los pasa a minusculas. Los
+consumidores hacian `values().get(...)` exacto (`DbTaskSupport.value`, y en `FileWriteTaskProvider` la
+columna de payload y el agregado `sum` del trailer), de modo que una configuracion redactada contra
+PostgreSQL y reapuntada a Oracle encontraba el campo vacio **en silencio**. Que
+`TaskInputResolver.cursorValue` ya llevase su propio rodeo case-insensitive indicaba que alguien
+choco con esto y parcheo solo el cursor.
+
+No esta roto siempre: la introspeccion devuelve `COLUMN_NAME` tal cual, asi que quien elige la columna
+del autocompletado guarda `ID` y coincide. Rompe con config redactada contra otro motor, nombres
+tecleados a mano y defaults en minuscula (`payload_json`).
+
+Decision: un accesor canonico `ReadRecord.value(String)`; ningun `values().get(...)` queda en `main`.
+
+- **La coincidencia exacta tiene prioridad**, de modo que una tabla con columnas entrecomilladas
+  distinguibles (`"id"` y `"ID"`) se sigue resolviendo sin ambiguedad y nada del comportamiento actual
+  cambia.
+- **La ambiguedad falla ruidosa**: si dos columnas coinciden solo ignorando el caso, lanza en vez de
+  elegir — escoger una daria un resultado distinto segun el orden de las columnas.
+- Usa `containsKey` y no `get() != null`: una columna presente con valor NULL devuelve null sin caer a
+  la busqueda por caso, que podria acabar devolviendo el valor de *otra* columna.
+- Se elimina el rodeo propio de `cursorValue`: una sola forma canonica, sin fallback paralelo.
+
+**Alternativa descartada: normalizar las claves a minusculas en `readRecords`.** Habria roto el caso
+que hoy funciona —config `ID` tomada del autocompletado contra una clave normalizada a `id`—
+introduciendo una regresion a quien ya opera contra Oracle.
+
+**Alternativa descartada: `TreeMap` con `CASE_INSENSITIVE_ORDER` en `ReadRecord`.** Ordena las claves
+alfabeticamente y los escritores de fichero dependen del orden de columnas.
+
 ## Deuda relacionada que este ADR NO resuelve
 
-- `TaskInputRepository` (lectura paginada en modo tabla: FILE_WRITE, BUILD_FROM_TABLE) resuelve el
-  motor por `getDatabaseProductName()` — un mecanismo distinto del de SP, FN y ahora DB_WRITE — y no
-  tiene pruebas de compatibilidad multi-motor.
-- `TaskInputRepository.paginationDialect` devuelve `LIMIT` como "default seguro" cuando falla la
-  lectura de metadatos. Es un fallback silencioso: contra Oracle o SQL Server produce SQL invalido.
 - `ConnectionMetadataService` usa la API portable `DatabaseMetaData`, pero pasa el schema como
   `schemaPattern` con catalogo nulo; en MySQL la base de datos es el *catalogo*. Hipotesis sin
   comprobar: el autocompletado de tablas podria devolver vacio contra MySQL.

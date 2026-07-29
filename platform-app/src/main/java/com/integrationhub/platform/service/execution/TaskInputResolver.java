@@ -1,6 +1,7 @@
 package com.integrationhub.platform.service.execution;
 
 import com.integrationhub.platform.spi.task.support.DbTaskSupport;
+import com.integrationhub.platform.domain.ConnectionType;
 import com.integrationhub.platform.repository.TaskInputRepository;
 import com.integrationhub.platform.service.connection.ConnectionPoolManager;
 import com.integrationhub.platform.spi.reader.ReadRecord;
@@ -156,8 +157,10 @@ public class TaskInputResolver {
     }
 
     private List<ReadRecord> readTableBatch(TableInput tableInput, int batchSize, Object lastKey) {
+        var target = resolveTarget(tableInput.connectionRef());
         return taskInputRepository.readBatch(
-                resolveDataSource(tableInput.connectionRef()),
+                target.dataSource(),
+                target.connectionType(),
                 tableInput.tableName(),
                 tableInput.orderBy(),
                 tableInput.filters(),
@@ -165,28 +168,33 @@ public class TaskInputResolver {
                 batchSize);
     }
 
-    /** Key del cursor keyset = valor de {@code orderBy} en el último record de la página (o null). */
+    /**
+     * Key del cursor keyset = valor de {@code orderBy} en el último record de la página (o null).
+     *
+     * <p>La tolerancia al caso vivía aquí como un rodeo propio —era el único sitio donde alguien había
+     * chocado con que Oracle devuelve las etiquetas en MAYÚSCULAS— y ahora la aporta
+     * {@link ReadRecord#value(String)}, que es la forma canónica y la aplican por igual todos los
+     * consumidores de un registro.
+     */
     public static Object cursorValue(List<ReadRecord> records, String orderBy) {
         var last = records.get(records.size() - 1);
         var column = orderBy.contains(".") ? orderBy.substring(orderBy.lastIndexOf('.') + 1) : orderBy;
-        var values = last.values();
-        var direct = values.get(column);
-        if (direct != null) {
-            return direct;
-        }
-        for (var entry : values.entrySet()) {
-            if (entry.getKey() != null && entry.getKey().equalsIgnoreCase(column)) {
-                return entry.getValue();
-            }
-        }
-        return null;
+        return last.value(column);
     }
 
     private DataSource resolveDataSource(String connectionRef) {
+        return resolveTarget(connectionRef).dataSource();
+    }
+
+    /**
+     * ADR-022: el destino viaja junto con su motor. Sin {@code connectionRef} se lee de la base interna
+     * de la plataforma, que es PostgreSQL por diseno.
+     */
+    private ConnectionPoolManager.JdbcConnectionTarget resolveTarget(String connectionRef) {
         if (connectionRef == null || connectionRef.isBlank()) {
-            return dataSource;
+            return new ConnectionPoolManager.JdbcConnectionTarget(dataSource, ConnectionType.POSTGRESQL);
         }
-        return connectionPoolManager.resolveJdbcDataSource(connectionRef);
+        return connectionPoolManager.resolveJdbcTarget(connectionRef);
     }
 
     private String resolveTableName(Map<String, Object> input, String sourceTaskRef, Map<String, Object> taskOutputs) {

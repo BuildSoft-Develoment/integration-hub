@@ -1,5 +1,6 @@
 package com.integrationhub.platform.repository;
 
+import com.integrationhub.platform.domain.ConnectionType;
 import com.integrationhub.platform.spi.task.support.DbTaskSupport;
 import com.integrationhub.platform.spi.reader.ReadRecord;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -57,13 +58,13 @@ public class TaskInputRepository {
         }
     }
 
-    public List<ReadRecord> readBatch(DataSource dataSource, String table, String orderBy,
-                                      Map<String, Object> filters, Object lastKey, int batchSize) {
+    public List<ReadRecord> readBatch(DataSource dataSource, ConnectionType connectionType, String table,
+                                      String orderBy, Map<String, Object> filters, Object lastKey, int batchSize) {
         var tableName = DbTaskSupport.sanitizeQualifiedIdentifier(table);
         var orderByColumn = DbTaskSupport.sanitizeQualifiedIdentifier(orderBy);
         var effectiveFilters = filters == null ? Map.<String, Object>of() : filters;
+        var dialect = paginationDialect(connectionType);
         try (Connection connection = dataSource.getConnection()) {
-            var dialect = paginationDialect(connection);
             var conditions = new ArrayList<String>();
             for (var column : effectiveFilters.keySet()) {
                 conditions.add(DbTaskSupport.sanitizeIdentifier(column) + " = ?");
@@ -97,24 +98,29 @@ public class TaskInputRepository {
     }
 
     /**
-     * Dialecto de paginacion por motor. SQL Server NO admite `FETCH FIRST ... ROWS ONLY`
-     * suelto: exige `OFFSET 0 ROWS FETCH NEXT ? ROWS ONLY` (con ORDER BY). Oracle 12c+ si
-     * admite `FETCH FIRST ... ROWS ONLY`. El resto (postgresql/mysql/mariadb/h2) usa `LIMIT`.
+     * Dialecto de paginacion a partir del motor <em>declarado en la Conexion</em>, igual que resuelven
+     * su dialecto SP, FN y DB_WRITE (ADR-022). Antes se deducia leyendo
+     * {@code getDatabaseProductName()} de la conexion viva, lo que suponia un cuarto mecanismo de
+     * deteccion en la misma base de codigo y una segunda fuente de verdad para la misma pregunta.
+     *
+     * <p>SQL Server NO admite {@code FETCH FIRST ... ROWS ONLY} suelto: exige
+     * {@code OFFSET 0 ROWS FETCH NEXT ? ROWS ONLY} (con ORDER BY). Oracle 12c+ si admite
+     * {@code FETCH FIRST}. PostgreSQL y MySQL usan {@code LIMIT}.
+     *
+     * <p>El {@code switch} es exhaustivo <b>a proposito y no lleva {@code default}</b>: si algun dia se
+     * anade un motor a {@link ConnectionType}, esto deja de compilar hasta que alguien decida su
+     * paginacion. Un default habria emitido {@code limit ?} en silencio contra un motor que quiza no lo
+     * entiende — por ejemplo DB2, que necesita {@code FETCH FIRST} — y el fallo habria aparecido en
+     * ejecucion como un error de sintaxis que no senala la causa.
      */
-    public PaginationDialect paginationDialect(Connection connection) {
-        try {
-            var product = connection.getMetaData().getDatabaseProductName();
-            var normalized = product == null ? "" : product.toLowerCase();
-            if (normalized.contains("sql server") || normalized.contains("sqlserver")) {
-                return PaginationDialect.OFFSET_FETCH;
-            }
-            if (normalized.contains("oracle")) {
-                return PaginationDialect.FETCH_FIRST;
-            }
-            return PaginationDialect.LIMIT;
-        } catch (SQLException error) {
-            return PaginationDialect.LIMIT; // default seguro (mysql/postgresql/h2/mariadb)
-        }
+    public PaginationDialect paginationDialect(ConnectionType connectionType) {
+        return switch (connectionType) {
+            case SQLSERVER -> PaginationDialect.OFFSET_FETCH;
+            case ORACLE -> PaginationDialect.FETCH_FIRST;
+            case POSTGRESQL, MYSQL -> PaginationDialect.LIMIT;
+            case MONGODB -> throw new IllegalStateException(
+                    "Unsupported connection type for paginated table input: " + connectionType);
+        };
     }
 
     /** Sufijo de limite parametrizado (`?` = tamano de lote) segun dialecto. */

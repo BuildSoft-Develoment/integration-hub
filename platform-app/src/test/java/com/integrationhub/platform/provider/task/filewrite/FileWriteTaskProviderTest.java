@@ -1,5 +1,6 @@
 package com.integrationhub.platform.provider.task.filewrite;
 
+import com.integrationhub.platform.domain.ConnectionType;
 import com.integrationhub.platform.provider.task.artifact.LocalTempArtifactStore;
 import com.integrationhub.platform.provider.task.writer.CsvWriter;
 import com.integrationhub.platform.repository.TaskInputRepository;
@@ -243,9 +244,9 @@ class FileWriteTaskProviderTest {
         var repository = mock(TaskInputRepository.class);
         var dataSource = mock(DataSource.class);
         // batchSize=2: pagina 1 (llena) -> pagina 2 (corta, corta el loop)
-        when(repository.readBatch(eq(dataSource), eq("ventas"), eq("id"), anyMap(), isNull(), eq(2)))
+        when(repository.readBatch(eq(dataSource), eq(ConnectionType.POSTGRESQL), eq("ventas"), eq("id"), anyMap(), isNull(), eq(2)))
                 .thenReturn(List.of(row(1, "111", "1000.00"), row(2, "222", "2000.00")));
-        when(repository.readBatch(eq(dataSource), eq("ventas"), eq("id"), anyMap(), eq(2L), eq(2)))
+        when(repository.readBatch(eq(dataSource), eq(ConnectionType.POSTGRESQL), eq("ventas"), eq("id"), anyMap(), eq(2L), eq(2)))
                 .thenReturn(List.of(row(3, "333", "500.50")));
         when(repository.count(eq(dataSource), eq("ventas"), anyMap())).thenReturn(3L);
 
@@ -282,7 +283,7 @@ class FileWriteTaskProviderTest {
         var repository = mock(TaskInputRepository.class);
         var dataSource = mock(DataSource.class);
         // readBatch vacio -> el loop keyset termina de una; capturamos el mapa de filtros resuelto.
-        when(repository.readBatch(eq(dataSource), eq("ventas"), eq("id"), anyMap(), isNull(), anyInt()))
+        when(repository.readBatch(eq(dataSource), eq(ConnectionType.POSTGRESQL), eq("ventas"), eq("id"), anyMap(), isNull(), anyInt()))
                 .thenReturn(List.of());
 
         var provider = new FileWriteTaskProvider(
@@ -302,7 +303,7 @@ class FileWriteTaskProviderTest {
         assertTrue(result.success());
 
         var captor = ArgumentCaptor.forClass(Map.class);
-        verify(repository).readBatch(eq(dataSource), eq("ventas"), eq("id"), captor.capture(), isNull(), anyInt());
+        verify(repository).readBatch(eq(dataSource), eq(ConnectionType.POSTGRESQL), eq("ventas"), eq("id"), captor.capture(), isNull(), anyInt());
         assertEquals(Map.of("process_execution_id", 7L), captor.getValue());
     }
 
@@ -328,7 +329,7 @@ class FileWriteTaskProviderTest {
         var dataSource = mock(DataSource.class);
         // fila sin columna 'id' -> cursorValue null -> guard fail-loud (evita el re-leer la primera pagina)
         var rowWithoutId = new ReadRecord(new LinkedHashMap<>(Map.of("dni", "1")));
-        when(repository.readBatch(eq(dataSource), eq("t"), eq("id"), anyMap(), isNull(), eq(5000)))
+        when(repository.readBatch(eq(dataSource), eq(ConnectionType.POSTGRESQL), eq("t"), eq("id"), anyMap(), isNull(), eq(5000)))
                 .thenReturn(List.of(rowWithoutId));
         var provider = new FileWriteTaskProvider(
                 new FileFormatWriterRegistry(List.of(new CsvWriter())),

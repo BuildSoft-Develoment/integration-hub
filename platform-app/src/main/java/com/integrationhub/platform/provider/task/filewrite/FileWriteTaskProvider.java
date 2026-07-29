@@ -2,6 +2,7 @@ package com.integrationhub.platform.provider.task.filewrite;
 
 // @trace ADR-016 (salida generica: tarea FILE_WRITE - serializa registros/tabla a un archivo)
 
+import com.integrationhub.platform.domain.ConnectionType;
 import com.integrationhub.platform.repository.TaskInputRepository;
 import com.integrationhub.platform.service.JsonConfigurationMapper;
 import com.integrationhub.platform.service.task.artifact.ArtifactStoreRegistry;
@@ -170,7 +171,8 @@ public class FileWriteTaskProvider implements TaskProvider {
         var payloadColumn = stringValue(firstNonBlank(input.get("payloadColumn"), source.get("payloadColumn")), "");
         var batchSize = Math.min(Math.max(intValue(input.get("batchSize"), DEFAULT_BATCH_SIZE), 1), MAX_BATCH_SIZE);
         var filters = resolveFilters(input.get("filters"), context);
-        var dataSource = resolveDataSource(connectionRef);
+        var target = resolveTarget(connectionRef);
+        var dataSource = target.dataSource();
 
         // Cabecera: sum sobre tabla no se soporta (requeriria SQL/JSON por dialecto); usar el trailer. count via pre-query.
         guardNoTableHeaderSum(layout);
@@ -184,7 +186,8 @@ public class FileWriteTaskProvider implements TaskProvider {
         Object lastKey = null;
         long total = 0;
         while (true) {
-            var rawPage = taskInputRepository.readBatch(dataSource, table, orderBy, filters, lastKey, batchSize);
+            var rawPage = taskInputRepository.readBatch(dataSource, target.connectionType(), table, orderBy,
+                    filters, lastKey, batchSize);
             if (rawPage.isEmpty()) {
                 break;
             }
@@ -213,7 +216,7 @@ public class FileWriteTaskProvider implements TaskProvider {
     private List<ReadRecord> parsePayloadColumn(List<ReadRecord> rawPage, String payloadColumn) {
         var parsed = new ArrayList<ReadRecord>(rawPage.size());
         for (var row : rawPage) {
-            var payload = row.values().get(payloadColumn);
+            var payload = row.value(payloadColumn);
             if (payload == null || String.valueOf(payload).isBlank()) {
                 parsed.add(new ReadRecord(new LinkedHashMap<>()));
             } else {
@@ -321,11 +324,16 @@ public class FileWriteTaskProvider implements TaskProvider {
         return projected;
     }
 
-    private DataSource resolveDataSource(String connectionRef) {
+    /**
+     * ADR-022: el destino viaja junto con su motor, para que la paginacion se resuelva desde el tipo
+     * declarado en la Conexion. Sin {@code connectionRef} se lee de la base interna de la plataforma,
+     * que es PostgreSQL por diseno.
+     */
+    private ConnectionPoolManager.JdbcConnectionTarget resolveTarget(String connectionRef) {
         if (connectionRef == null || connectionRef.isBlank() || connectionPoolManager == null) {
-            return defaultDataSource;
+            return new ConnectionPoolManager.JdbcConnectionTarget(defaultDataSource, ConnectionType.POSTGRESQL);
         }
-        return connectionPoolManager.resolveJdbcDataSource(connectionRef);
+        return connectionPoolManager.resolveJdbcTarget(connectionRef);
     }
 
     private Map<String, Object> resolveFilters(Object raw, TaskContext context) {
@@ -503,7 +511,7 @@ public class FileWriteTaskProvider implements TaskProvider {
         }
         for (var record : records) {
             for (var field : sums.keySet()) {
-                var amount = toBigDecimal(record.values().get(field));
+                var amount = toBigDecimal(record.value(field));
                 if (amount != null) {
                     sums.put(field, sums.get(field).add(amount));
                 }

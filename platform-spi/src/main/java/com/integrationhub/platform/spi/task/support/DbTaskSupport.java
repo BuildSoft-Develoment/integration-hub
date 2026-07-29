@@ -160,7 +160,7 @@ public final class DbTaskSupport {
     }
 
     public static Object value(ReadRecord record, String sourceField) {
-        return record.values().get(sourceField);
+        return record.value(sourceField);
     }
 
     public record ColumnAssignment(String column, String sourceField, String dbFunction) {

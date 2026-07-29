@@ -1,5 +1,6 @@
 package com.integrationhub.platform.service.execution.async;
 
+import com.integrationhub.platform.domain.ConnectionType;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.integrationhub.platform.repository.TaskAsyncDispatchRepository;
@@ -68,8 +69,10 @@ public class AsyncPageChainService {
      */
     @Transactional
     public Page readAndChain(AsyncTaskEnvelope envelope, AsyncPageWorkItem item) {
+        var target = resolveTarget(item.connectionRef());
         var records = taskInputRepository.readBatch(
-                resolveDataSource(item.connectionRef()),
+                target.dataSource(),
+                target.connectionType(),
                 item.table(),
                 item.orderBy(),
                 item.filters(),
@@ -112,11 +115,15 @@ public class AsyncPageChainService {
         tracker.recordDispatchedPage(processExecutionId, taskDefinitionId, page.pageIndex(), json);
     }
 
-    private DataSource resolveDataSource(String connectionRef) {
+    /**
+     * ADR-022: el destino viaja junto con su motor. Sin {@code connectionRef} se lee de la base interna
+     * de la plataforma, que es PostgreSQL por diseno.
+     */
+    private ConnectionPoolManager.JdbcConnectionTarget resolveTarget(String connectionRef) {
         if (connectionRef == null || connectionRef.isBlank()) {
-            return dataSource;
+            return new ConnectionPoolManager.JdbcConnectionTarget(dataSource, ConnectionType.POSTGRESQL);
         }
-        return connectionPoolManager.resolveJdbcDataSource(connectionRef);
+        return connectionPoolManager.resolveJdbcTarget(connectionRef);
     }
 
     private String serialize(AsyncPageWorkItem page) {
