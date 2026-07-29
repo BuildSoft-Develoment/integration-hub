@@ -152,6 +152,36 @@ export function normalizeTaskOrders(tasks: readonly ProcessTaskFormModel[]): Pro
   return tasks.map((task, index) => ({ ...task, taskOrder: index + 1 }));
 }
 
+/** `taskRef` de una tarea, o `null` si no tiene o su configuracion no parsea. */
+function taskRefOf(task: ProcessTaskFormModel): string | null {
+  try {
+    const ref = String(JSON.parse(task.configurationJson || '{}')['taskRef'] ?? '').trim();
+    return ref.length > 0 ? ref : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Primer `<base>-N` que no este tomado por otra tarea del proceso.
+ *
+ * <p>El `taskRef` es el identificador de cableado: `input.sourceTaskRef` apunta a el, y en el money-path
+ * `resolvesPayTaskRef` nombra a que MT101_PAY concilia un MT101_STATUS. Duplicado, la referencia se
+ * resuelve por "el primero que coincida", asi que el pipeline armado no es el dibujado — y en el
+ * money-path se concilia contra un pago que no es. El backend lo rechaza (TaskRefUniquenessValidator);
+ * esto evita que el operador llegue a ese error por un default del editor.</p>
+ *
+ * <p>Antes se derivaba de `tasks.length + 1`, que colisiona apenas se borra una tarea del medio.</p>
+ */
+export function nextFreeTaskRef(base: string, tasks: readonly ProcessTaskFormModel[]): string {
+  const enUso = new Set(tasks.map(taskRefOf).filter((ref): ref is string => ref !== null));
+  let sufijo = 1;
+  while (enUso.has(`${base}-${sufijo}`)) {
+    sufijo += 1;
+  }
+  return `${base}-${sufijo}`;
+}
+
 export function summarizeTask(task: ProcessTaskFormModel, sources: readonly SourceRef[], readers: readonly ReaderRef[]): string {
   const parts: string[] = [task.taskType];
   if (task.taskType === 'FILE_READ') {

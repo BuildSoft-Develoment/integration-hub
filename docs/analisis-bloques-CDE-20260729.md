@@ -289,6 +289,63 @@ usa `mode: query` con una URL única.
 La muestra es el stack de QA, no producción — pero dice que el cambio entra sin romper nada de lo que
 hay hoy, y que la regla protege un camino que todavía no se está usando. Mejor momento para ponerla.
 
+---
+
+## `taskRef` único: el análisis, y dos correcciones a lo que dije antes
+
+### Corrección 1 — no hay ningún proceso con más de un PAY
+
+Dije que *"solo un proceso tiene >1 PAY (el 2, con cuatro)"*. **Estaba mal: conté filas inactivas.**
+
+El proceso 2 tiene **cuatro tareas en cada `task_order`**, y al mirarlas de cerca, tres de cada cuatro
+están en `active = false`. No son cuatro pagos: es **un pago vigente y tres versiones dadas de baja
+lógicamente** — el mismo patrón "sin borrado físico" que verifican CCON-05, CRDR-07 y CPRO-06.
+
+Medido correctamente: **los 8 procesos con `MT101_PAY` tienen exactamente 1 activo.** El escenario
+multi-PAY que motivaba toda la desambiguación **no existe en ningún proceso del stack**.
+
+Como control, verifiqué que el motor no cuente las inactivas al validar. No lo hace:
+`ProcessCatalogService.toTaskViewsFromEntities` filtra por `t.active` con javadoc explícito. Si no lo
+hiciera, cualquier proceso editado varias veces habría empezado a fallar exigiendo
+`resolvesPayTaskRef`.
+
+### Corrección 2 — `taskRef` no es un nombre, es el cableado
+
+Lo traté como una etiqueta. **Es el identificador con el que se arma el pipeline**: `input.sourceTaskRef`
+apunta a él para consumir la salida de otra tarea, y hay **63 tareas** en el stack que lo usan.
+
+Eso cambia el riesgo de renombrar: cambiar un `taskRef` obliga a propagar el cambio a cada
+`sourceTaskRef` que lo referencie, o el pipeline queda roto. En un money-path, una cascada de renombres
+es un mal negocio para resolver una ambigüedad que —según la corrección 1— no ocurre.
+
+### Lo que sí se hizo, y por qué es seguro
+
+**Validar sin renombrar nada.** `TaskRefUniquenessValidator` en el motor (no en el vertical: `taskRef`
+es un concepto del motor) rechaza dos tareas del mismo proceso con el mismo `taskRef` no vacío.
+
+- **Vacío se permite**: una tarea terminal que nadie referencia no necesita nombre, y exigirlo
+  rechazaría definiciones válidas que existen hoy (el `FILE_WRITE` final del proceso 2).
+- **Cero rotura, medido**: en los 11 procesos del stack, `refs_distintos == con_ref == tareas_activas`.
+  Todos pasan.
+- El beneficio es hacia adelante: `sourceTaskRef` y `resolvesPayTaskRef` quedan inequívocos **por
+  construcción**, que era el objetivo original.
+
+**Autogenerar solo para tareas nuevas.** Y ahí apareció un bug que no estaba en el plan: el editor ya
+autogeneraba, con `task-${tasks.length + 1}`. Deriva del **conteo**, no de los nombres en uso, así que
+basta agregar tres tareas, borrar la del medio y agregar otra para **volver a generar `task-3`** y
+chocar con la que sigue viva. Ahora se deriva del conjunto ocupado (`nextFreeTaskRef`).
+
+Es exactamente la misma familia que un bug ya documentado en `process.models.spec.ts`: el `clientId`
+por contador colisionaba con el `task-<id de BD>` de una tarea cargada. El mismo error, en el
+identificador de al lado.
+
+### Lo que queda abierto
+
+`resolvesPayTaskRef` sigue resolviéndose con `findFirst()` sobre los que coinciden. Con la unicidad
+garantizada ya no puede haber empate, así que en la práctica deja de adivinar — pero el código sigue
+diciendo "el primero que coincida" en vez de "el único". Vale endurecerlo a "exactamente uno o error"
+cuando se toque esa clase, para que la garantía esté en el código y no solo en el validador de al lado.
+
 ## Orden propuesto
 
 | # | Bloque | Por qué en ese lugar |

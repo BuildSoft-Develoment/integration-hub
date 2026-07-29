@@ -9,6 +9,7 @@ import { ProcessFlowSyncService } from '../flow/process-flow-sync.service';
 import { ProcessFormFactoryService } from '../forms/process-form-factory.service';
 import {
   createTaskForm,
+  nextFreeTaskRef,
   normalizeTaskOrders,
   ProcessFormModel,
   ProcessRecord,
@@ -139,7 +140,12 @@ export class ProcessEditorStore {
   ): void {
     this.form.update((current) => {
       const nextOrder = current.tasks.length + 1;
-      const provisionalRef = `task-${nextOrder}`;
+      // El taskRef se deriva de los nombres EN USO, no de la cantidad de tareas. Con `task-${length+1}`
+      // bastaba agregar tres, borrar la del medio y agregar otra para volver a generar `task-3` y chocar
+      // con la que ya existia. Y taskRef no es decorativo: `input.sourceTaskRef` cablea el pipeline por el
+      // y `resolvesPayTaskRef` nombra a que PAY concilia un STATUS, asi que un duplicado hace que la
+      // referencia se resuelva por "el primero que coincida" — o sea que adivina.
+      const provisionalRef = nextFreeTaskRef('task', current.tasks);
       const tasks = normalizeTaskOrders([
         ...current.tasks,
         this.withSuggestedInput(
