@@ -40,10 +40,16 @@ const managerStub = {
     resolveNormalPay: false, resolvesPayTaskRef: '', routeQuery: [],
     ...JSON.parse(t.configurationJson || '{}'),
   }),
-  toTaskPatch: () => ({}),
+  // Guarda el ultimo draft serializado: es la unica forma de comprobar que un control emite lo que
+  // dice emitir (p.ej. que activar la conciliacion fuerce executionMode en el MISMO patch).
+  ultimoDraft: null as Record<string, unknown> | null,
+  toTaskPatch: (_taskType: string, draft: Record<string, unknown>) => {
+    managerStub.ultimoDraft = draft;
+    return {};
+  },
 };
 
-function setup(config: Record<string, unknown>) {
+function setup(config: Record<string, unknown>, tasks: readonly unknown[] = []) {
   TestBed.configureTestingModule({
     imports: [ProcessMt101StatusTaskFormComponent],
     providers: [
@@ -60,7 +66,7 @@ function setup(config: Record<string, unknown>) {
   fixture.componentRef.setInput('task', {
     clientId: 'c1', taskType: 'MT101_STATUS', configurationJson: JSON.stringify(config),
   } as unknown as ProcessTaskFormModel);
-  fixture.componentRef.setInput('tasks', []);
+  fixture.componentRef.setInput('tasks', tasks);
   fixture.componentRef.setInput('connections', []);
   fixture.detectChanges();
   return fixture;
@@ -83,5 +89,38 @@ describe('ProcessMt101StatusTaskFormComponent — executionMode por camino', () 
     // Este camino emite la señal de conciliacion y el backend lo guarda igual. Antes el selector miraba solo
     // `mode`, asi que dejaba elegir per-record y la tarea reventaba recien al ejecutarse, en el money-path.
     expect(setup({ mode: 'query', resolveNormalPay: true }).componentInstance.executionModes()).toEqual(['once']);
+  });
+});
+
+describe('ProcessMt101StatusTaskFormComponent — conciliacion del PAY normal', () => {
+  const pay = (taskRef: string) => ({ taskType: 'MT101_PAY', configurationJson: JSON.stringify({ taskRef }) });
+
+  it('ofrece los MT101_PAY del proceso para elegir cual concilia', () => {
+    const fixture = setup({ mode: 'query' }, [pay('pay-a'), { taskType: 'MT101_ARCHIVE', configurationJson: '{}' }, pay('pay-b')]);
+    expect(fixture.componentInstance.payTaskRefs()).toEqual(['pay-a', 'pay-b']);
+  });
+
+  it('ignora un PAY con JSON a medio escribir en vez de romper el formulario', () => {
+    const fixture = setup({ mode: 'query' }, [pay('pay-a'), { taskType: 'MT101_PAY', configurationJson: '{roto' }]);
+    expect(fixture.componentInstance.payTaskRefs()).toEqual(['pay-a']);
+  });
+
+  it('activar la conciliacion fuerza executionMode once EN EL MISMO patch', () => {
+    // Sin esto se podia guardar resolveNormalPay + per-record, que el backend acepta y solo revienta
+    // AL EJECUTARSE, en pleno money-path. El selector ya lo restringia, pero el valor guardado seguia
+    // siendo el viejo hasta que el operador tocara el otro control.
+    const fixture = setup({ mode: 'query', executionMode: 'per-record' });
+    managerStub.ultimoDraft = null;
+    fixture.componentInstance.updateResolveNormalPay(true);
+    expect(managerStub.ultimoDraft).toMatchObject({ resolveNormalPay: true, executionMode: 'once' });
+  });
+
+  it('desactivarla limpia el PAY apuntado y NO pisa el executionMode elegido', () => {
+    // `resolvesPayTaskRef` colgando se reemitiria sin conciliacion. Y devolver el modo a un default
+    // seria pisarle al operador una decision suya.
+    const fixture = setup({ mode: 'query', executionMode: 'once', resolveNormalPay: true, resolvesPayTaskRef: 'pay-a' });
+    managerStub.ultimoDraft = null;
+    fixture.componentInstance.updateResolveNormalPay(false);
+    expect(managerStub.ultimoDraft).toMatchObject({ resolveNormalPay: false, resolvesPayTaskRef: '', executionMode: 'once' });
   });
 });

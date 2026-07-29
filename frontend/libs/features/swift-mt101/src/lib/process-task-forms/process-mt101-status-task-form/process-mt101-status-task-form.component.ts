@@ -4,6 +4,7 @@ import { Component, computed, inject, input } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTabsModule } from '@angular/material/tabs';
 import {
@@ -27,6 +28,7 @@ import { TaskFormShellComponent } from '@integration-hub/shared/process-form-kit
   imports: [
     CommonModule,
     FormsModule,
+    MatCheckboxModule,
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
@@ -66,7 +68,8 @@ export class ProcessMt101StatusTaskFormComponent {
    * <p>Tambien se restringe cuando la tarea trae {@code resolveNormalPay} (conciliacion in-line del PAY
    * normal), porque ese camino EMITE la señal de conciliacion y el backend lo guarda igual. Sin esto se podia
    * guardar un STATUS con resolveNormalPay + per-record que solo reventaba AL EJECUTARSE, en pleno money-path.
-   * El flag hoy llega por config sembrada (el form todavia no lo expone), pero el selector ya lo respeta.</p>
+   * Desde que el form expone el flag (pestaña Conciliacion), activarlo ya fuerza 'once' en el mismo patch;
+   * esta restriccion del selector cubre ademas la config sembrada por API/seed.</p>
    */
   readonly executionModes = computed<readonly ProcessTaskExecutionMode[]>(() =>
     this.draft().mode === 'query' && !this.draft().resolveNormalPay
@@ -85,6 +88,47 @@ export class ProcessMt101StatusTaskFormComponent {
   updateDraft(patch: Partial<Mt101StatusTaskDraft>): void {
     const next: Mt101StatusTaskDraft = { ...this.draft(), ...patch };
     this.bridge.emit(this.manager.toTaskPatch(this.task().taskType, next));
+  }
+
+  // ---- Conciliacion in-line del PAY normal ----
+
+  /**
+   * `taskRef` de los MT101_PAY del proceso, para que el operador elija a cual concilia este STATUS.
+   *
+   * <p>Se leen del `configurationJson` crudo en vez de hidratar el draft de cada PAY: aca solo hace falta
+   * el `taskRef`, y hacerlo bien —resolver el provider de cada tipo— traeria la feature entera al bundle.
+   * Un JSON a medio escribir se ignora en lugar de romper el formulario.</p>
+   */
+  readonly payTaskRefs = computed<readonly string[]>(() =>
+    this.tasks()
+      .filter((task) => task.taskType === 'MT101_PAY')
+      .map((task) => {
+        try {
+          return String(JSON.parse(task.configurationJson || '{}')['taskRef'] ?? '').trim();
+        } catch {
+          return '';
+        }
+      })
+      .filter((taskRef) => taskRef.length > 0),
+  );
+
+  /**
+   * Activar la conciliacion fuerza `executionMode: 'once'` EN EL MISMO PATCH.
+   *
+   * <p>El camino que concilia emite la señal de reconciliacion, y el motor la descarta fuera de 'once'
+   * (cerraria COMPLETADA sin esperar al banco). Sin forzarlo aqui se podia guardar un STATUS con
+   * resolveNormalPay + per-record que solo reventaba AL EJECUTARSE, en pleno money-path.</p>
+   *
+   * <p>Al desactivarla NO se toca el executionMode: el operador eligio ese modo y devolverlo a un default
+   * seria pisarle una decision suya.</p>
+   */
+  updateResolveNormalPay(resolveNormalPay: boolean): void {
+    if (!resolveNormalPay) {
+      // Se limpia el PAY apuntado: dejarlo colgando reemitiria `resolvesPayTaskRef` sin conciliacion.
+      this.updateDraft({ resolveNormalPay, resolvesPayTaskRef: '' });
+      return;
+    }
+    this.updateDraft({ resolveNormalPay, executionMode: 'once' });
   }
 
   // ---- ADR-017: STATUS por ruta ----

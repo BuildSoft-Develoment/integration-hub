@@ -240,6 +240,14 @@ export const SWIFT_MT101_MESSAGES: Record<'es' | 'en', Record<string, string>> =
   'mt101Status.routes.add': 'Agregar ruta',
   'mt101Status.routes.remove': 'Quitar',
   'mt101Status.section.persistence': 'Persistencia',
+  'mt101Status.section.reconciliation': 'Conciliacion',
+  'mt101Status.resolveNormalPay': 'Conciliar el pago normal con esta tarea',
+  'mt101Status.resolveNormalPay.hint':
+    'Esta tarea cierra el ciclo de dinero: resuelve los pagos que quedaron inciertos leyendo la respuesta del banco. Al activarla el modo de ejecucion pasa a "una vez".',
+  'mt101Status.resolvesPayTaskRef': 'Pago que concilia',
+  'mt101Status.resolvesPayTaskRef.auto': 'Automatico (el unico pago del proceso)',
+  'mt101Status.resolvesPayTaskRef.required':
+    'Hay mas de un pago en el proceso: elegi cual concilia esta tarea, o el proceso no se podra guardar.',
   'mt101Status.query.url': 'URL de consulta',
   'mt101Status.query.method': 'Metodo',
   'mt101Status.query.timeoutSeconds': 'Timeout en segundos',
@@ -496,6 +504,14 @@ export const SWIFT_MT101_MESSAGES: Record<'es' | 'en', Record<string, string>> =
   'mt101Status.routes.add': 'Add route',
   'mt101Status.routes.remove': 'Remove',
   'mt101Status.section.persistence': 'Persistence',
+  'mt101Status.section.reconciliation': 'Reconciliation',
+  'mt101Status.resolveNormalPay': 'Reconcile the normal payment with this task',
+  'mt101Status.resolveNormalPay.hint':
+    'This task closes the money loop: it resolves payments left uncertain by reading the bank response. Turning it on switches the execution mode to "once".',
+  'mt101Status.resolvesPayTaskRef': 'Payment it reconciles',
+  'mt101Status.resolvesPayTaskRef.auto': 'Automatic (the only payment in the process)',
+  'mt101Status.resolvesPayTaskRef.required':
+    'There is more than one payment in this process: pick which one this task reconciles, or the process cannot be saved.',
   'mt101Status.query.url': 'Query URL',
   'mt101Status.query.method': 'Method',
   'mt101Status.query.timeoutSeconds': 'Timeout seconds',

@@ -41,6 +41,15 @@
   font-size: 0.85rem;
 }
 
+/* Variante para lo que BLOQUEA el guardado (p.ej. multi-PAY sin elegir cual concilia). Mismo
+   bloque que __notice pero en color de error: el operador tiene que distinguir "esto es contexto"
+   de "esto no te va a dejar guardar". */
+.mt101-status__notice--blocking {
+  border-style: solid;
+  border-color: var(--ih-danger, #b3261e);
+  color: var(--ih-danger, #b3261e);
+}
+
 @media (max-width: 720px) {
   .mt101-status__grid {
     grid-template-columns: 1fr;

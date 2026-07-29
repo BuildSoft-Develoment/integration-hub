@@ -228,5 +228,40 @@
         </mat-form-field>
       </div>
     </mat-tab>
+
+    <mat-tab [label]="i18n.t('mt101Status.section.reconciliation')">
+      <div class="mt101-status__grid">
+        <mat-checkbox
+          [ngModel]="draft().resolveNormalPay"
+          (ngModelChange)="updateResolveNormalPay($event)"
+          [disabled]="readonly()">
+          {{ i18n.t('mt101Status.resolveNormalPay') }}
+        </mat-checkbox>
+        <p class="mt101-status__notice mt101-status__col-2">
+          {{ i18n.t('mt101Status.resolveNormalPay.hint') }}
+        </p>
+
+        @if (draft().resolveNormalPay) {
+          <mat-form-field subscriptSizing="dynamic">
+            <mat-label>{{ i18n.t('mt101Status.resolvesPayTaskRef') }}</mat-label>
+            <mat-select
+              [ngModel]="draft().resolvesPayTaskRef"
+              (ngModelChange)="updateDraft({ resolvesPayTaskRef: $event })"
+              [disabled]="readonly()">
+              <mat-option value="">{{ i18n.t('mt101Status.resolvesPayTaskRef.auto') }}</mat-option>
+              @for (payTaskRef of payTaskRefs(); track payTaskRef) {
+                <mat-option [value]="payTaskRef">{{ payTaskRef }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          @if (payTaskRefs().length > 1 && !draft().resolvesPayTaskRef) {
+            <p class="mt101-status__notice mt101-status__notice--blocking mt101-status__col-2">
+              {{ i18n.t('mt101Status.resolvesPayTaskRef.required') }}
+            </p>
+          }
+        }
+      </div>
+    </mat-tab>
   </mat-tab-group>
 </ih-task-form-shell>
