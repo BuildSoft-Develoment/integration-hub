@@ -129,6 +129,29 @@ public final class Mt101PayResolverPairing {
      * exigirla rechazaria configuraciones validas. Esa es la razon por la que esta comprobacion no
      * existia — hasta que el sinkRef convirtio la conexion bancaria en una referencia enumerable.</p>
      */
+    /**
+     * Nombres de TODAS las rutas declaradas en el contenedor, tengan o no {@code sinkRef}.
+     *
+     * <p>{@link #routeSinkRefs} solo devuelve las que si lo declaran, asi que por si sola no distingue
+     * "no hay rutas" de "hay rutas, todas inline". La politica estricta necesita esa diferencia.</p>
+     */
+    java.util.Set<String> routeNames(ProcessTaskView task, String routeContainerKey) {
+        var result = new java.util.LinkedHashSet<String>();
+        if (task == null || task.configurationJson() == null || task.configurationJson().isBlank()) {
+            return result;
+        }
+        try {
+            var routes = objectMapper.readTree(task.configurationJson()).get(routeContainerKey);
+            if (routes == null || !routes.isObject()) {
+                return result;
+            }
+            routes.fieldNames().forEachRemaining(result::add);
+        } catch (com.fasterxml.jackson.core.JsonProcessingException ignored) {
+            // Config a medio escribir: se trata como "sin rutas", igual que routeSinkRefs.
+        }
+        return result;
+    }
+
     Map<String, Long> routeSinkRefs(ProcessTaskView task, String routeContainerKey) {
         var result = new java.util.LinkedHashMap<String, Long>();
         if (task == null || task.configurationJson() == null || task.configurationJson().isBlank()) {

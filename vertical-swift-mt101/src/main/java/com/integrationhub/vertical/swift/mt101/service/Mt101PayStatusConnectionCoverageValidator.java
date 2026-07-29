@@ -47,10 +47,36 @@ import java.util.List;
 public class Mt101PayStatusConnectionCoverageValidator implements ProcessDefinitionValidator {
 
     private final Mt101PayResolverPairing pairing;
+    private final boolean strictRouteSinks;
 
     @Inject
     public Mt101PayStatusConnectionCoverageValidator(ObjectMapper objectMapper) {
+        this(objectMapper, resolveStrictRouteSinks());
+    }
+
+    /** Para tests: fija la politica sin depender del contexto de configuracion. */
+    Mt101PayStatusConnectionCoverageValidator(ObjectMapper objectMapper, boolean strictRouteSinks) {
         this.pairing = new Mt101PayResolverPairing(objectMapper);
+        this.strictRouteSinks = strictRouteSinks;
+    }
+
+    /**
+     * Politica ESTRICTA de conexion bancaria por ruta (C-2). Default {@code false} para no bloquear la
+     * migracion; el template de produccion la pone en {@code true}, igual que
+     * {@code maker-checker.enabled} y {@code direct-list.enabled}.
+     *
+     * <p>Con la politica activa, una ruta de pago tiene que declarar su banco por {@code sinkRef} y el
+     * STATUS que la consulta tiene que declarar el MISMO. En modo permisivo solo se rechaza la
+     * divergencia explicita —dos {@code sinkRef} distintos—, que es lo que ya hacia.</p>
+     */
+    private static boolean resolveStrictRouteSinks() {
+        try {
+            return org.eclipse.microprofile.config.ConfigProvider.getConfig()
+                    .getOptionalValue("mt101.pay.route-sink.strict", Boolean.class).orElse(false);
+        } catch (RuntimeException ignored) {
+            // Sin contexto de config (tests planos): permisivo, para no cambiar el comportamiento por accidente.
+            return false;
+        }
     }
 
     /**
@@ -115,6 +141,35 @@ public class Mt101PayStatusConnectionCoverageValidator implements ProcessDefinit
      * incluida la mixta, con unas rutas migradas a fuente y otras todavia inline.</p>
      */
     /**
+     * C-2, politica estricta: TODA ruta de pago declara su banco por {@code sinkRef}.
+     *
+     * <p>Una ruta con la conexion escrita inline mete host y credenciales del banco dentro de la
+     * definicion del proceso —problema de higiene de secretos por si solo— y ademas deja la simetria
+     * sin nada que comparar. En modo permisivo se acepta para migrar; en produccion no.</p>
+     *
+     * <p>Se mira {@code routeTransports}, no el transporte simple: un PAY sin rutas (un solo banco por
+     * {@code sinkRef} o config inline global) no entra en esta regla, que es sobre el modelo por ruta.</p>
+     */
+    private void requireEveryPayRouteDeclaresItsBank(ProcessTaskView pay) {
+        if (!strictRouteSinks) {
+            return;
+        }
+        var declaredRoutes = pairing.routeNames(pay, "routeTransports");
+        var withSink = pairing.routeSinkRefs(pay, "routeTransports").keySet();
+        var inline = new java.util.LinkedHashSet<>(declaredRoutes);
+        inline.removeAll(withSink);
+        if (inline.isEmpty()) {
+            return;
+        }
+        throw new IllegalArgumentException(
+                "MT101_PAY (task order " + pay.taskOrder() + ") dispatches route(s) " + inline
+                + " with an inline bank connection. With mt101.pay.route-sink.strict every payment route must "
+                + "name its bank by sinkRef (an /sources OUTPUT/BOTH definition): inline puts host and "
+                + "credentials inside the process definition and leaves nothing to compare against the "
+                + "MT101_STATUS that reads the confirmation.");
+    }
+
+    /**
      * Simetria de sinks para un STATUS que NO concilia el PAY normal.
      *
      * <p>Sin par explicito no se puede senalar UN pay, asi que se compara contra la union de los sinks
@@ -155,12 +210,25 @@ public class Mt101PayStatusConnectionCoverageValidator implements ProcessDefinit
     private void validateRouteSinks(ProcessTaskView pay, ProcessTaskView status) {
         var paySinks = pairing.routeSinkRefs(pay, "routeTransports");
         if (paySinks.isEmpty()) {
+            requireEveryPayRouteDeclaresItsBank(pay);
             return;
         }
+        requireEveryPayRouteDeclaresItsBank(pay);
         var statusSinks = pairing.routeSinkRefs(status, "routeQuery");
         for (var route : paySinks.entrySet()) {
             var statusSink = statusSinks.get(route.getKey());
-            if (statusSink == null || statusSink.equals(route.getValue())) {
+            if (statusSink == null) {
+                if (strictRouteSinks) {
+                    throw new IllegalArgumentException(
+                            "MT101_STATUS (task order " + status.taskOrder() + ") queries route '" + route.getKey()
+                            + "' with an inline connection while the MT101_PAY (task order " + pay.taskOrder()
+                            + ") dispatches it to sink " + route.getValue() + ". With mt101.pay.route-sink.strict "
+                            + "both sides must name the SAME OUTPUT/BOTH source: an inline host cannot be compared, "
+                            + "so nothing would stop the confirmation from being read off a different bank.");
+                }
+                continue;
+            }
+            if (statusSink.equals(route.getValue())) {
                 continue;
             }
             throw new IllegalArgumentException(

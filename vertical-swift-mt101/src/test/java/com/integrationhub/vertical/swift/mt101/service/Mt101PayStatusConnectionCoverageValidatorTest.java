@@ -240,4 +240,86 @@ class Mt101PayStatusConnectionCoverageValidatorTest {
                 new ProcessTaskView("MT101_STATUS", 2,
                         "{\"resolveNormalPay\":true,\"connectionRef\":\"12\",\"routeQuery\":{\"BANCO_A\":{}}}")));
     }
+
+    // ---- C-2: politica estricta (mt101.pay.route-sink.strict) ----
+    //
+    // Las cuatro combinaciones de una ruta —ambos sink iguales / ambos distintos / uno inline / ninguno—
+    // cruzadas con los dos perfiles. Lo que cambia entre perfiles es SOLO el caso "uno inline": en
+    // migracion no hay nada que cotejar, en produccion es justo lo que no puede quedar sin cotejar.
+
+    private final Mt101PayStatusConnectionCoverageValidator estricto =
+            new Mt101PayStatusConnectionCoverageValidator(new ObjectMapper(), true);
+
+    private static final String STATUS_A11 =
+            "{\"resolveNormalPay\":true,\"connectionRef\":\"12\",\"routeQuery\":{"
+            + "\"BANCO_A\":{\"transport\":\"SFTP\",\"sftp\":{\"sinkRef\":11}},"
+            + "\"BANCO_B\":{\"transport\":\"SFTP\",\"sftp\":{\"sinkRef\":22}}}}";
+
+    @Test
+    void strictAcceptsWhenBothSidesNameTheSameSink() {
+        estricto.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1, PAY_ROUTES_A11_B22),
+                new ProcessTaskView("MT101_STATUS", 2, STATUS_A11)));
+    }
+
+    @Test
+    void strictRejectsAPayRouteWithAnInlineBankConnection() {
+        // Inline mete host y credenciales del banco DENTRO de la definicion del proceso, y ademas deja la
+        // simetria sin nada que comparar. Es el caso que la migracion tolera y produccion no.
+        var error = assertThrows(IllegalArgumentException.class, () -> estricto.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1,
+                        "{\"taskRef\":\"pay\",\"connectionRef\":\"12\",\"routeTransports\":{"
+                        + "\"BANCO_A\":{\"sftp\":{\"sinkRef\":11}},"
+                        + "\"BANCO_B\":{\"sftp\":{\"host\":\"legacy\"}}}}"),
+                new ProcessTaskView("MT101_STATUS", 2, STATUS_A11))));
+        assertTrue(error.getMessage().contains("BANCO_B"), () -> "mensaje: " + error.getMessage());
+        assertTrue(error.getMessage().contains("sinkRef"), () -> "mensaje: " + error.getMessage());
+    }
+
+    @Test
+    void strictRejectsAStatusRouteThatStaysInlineWhileThePayNamesItsBank() {
+        // El espejo del anterior: el pago nombra su banco, la confirmacion se busca en un host inline que
+        // nadie puede cotejar. En permisivo esto pasa (acceptsARouteThatOnlyOneSideDeclaresBySinkRef).
+        var error = assertThrows(IllegalArgumentException.class, () -> estricto.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1, PAY_ROUTES_A11_B22),
+                new ProcessTaskView("MT101_STATUS", 2,
+                        "{\"resolveNormalPay\":true,\"connectionRef\":\"12\",\"routeQuery\":{"
+                        + "\"BANCO_A\":{\"sftp\":{\"sinkRef\":11}},"
+                        + "\"BANCO_B\":{\"sftp\":{\"host\":\"legacy\"}}}}"))));
+        assertTrue(error.getMessage().contains("BANCO_B"), () -> "mensaje: " + error.getMessage());
+        assertTrue(error.getMessage().contains("inline"), () -> "mensaje: " + error.getMessage());
+    }
+
+    @Test
+    void strictStillRejectsTwoDifferentSinksForTheSameRoute() {
+        // La regla permisiva sigue valiendo en estricto: divergencia explicita es error en los dos perfiles.
+        assertThrows(IllegalArgumentException.class, () -> estricto.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1, PAY_ROUTES_A11_B22),
+                new ProcessTaskView("MT101_STATUS", 2,
+                        "{\"resolveNormalPay\":true,\"connectionRef\":\"12\",\"routeQuery\":{"
+                        + "\"BANCO_A\":{\"sftp\":{\"sinkRef\":99}},"
+                        + "\"BANCO_B\":{\"sftp\":{\"sinkRef\":22}}}}"))));
+    }
+
+    @Test
+    void strictIgnoresAPayWithoutPerRouteTransports() {
+        // La politica es sobre el MODELO POR RUTA. Un PAY de un solo banco (sin routeTransports) no entra:
+        // exigirle rutas seria inventar una regla que nadie pidio.
+        estricto.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1, "{\"taskRef\":\"pay\",\"connectionRef\":\"12\"}"),
+                new ProcessTaskView("MT101_STATUS", 2,
+                        "{\"resolveNormalPay\":true,\"connectionRef\":\"12\"}")));
+    }
+
+    @Test
+    void permissiveKeepsAcceptingWhatStrictRejects() {
+        // El mismo grafo que strictRejectsAStatusRouteThatStaysInlineWhileThePayNamesItsBank, con la
+        // politica apagada: si esto fallara, el default habria dejado de ser el de migracion.
+        validator.validate(List.of(
+                new ProcessTaskView("MT101_PAY", 1, PAY_ROUTES_A11_B22),
+                new ProcessTaskView("MT101_STATUS", 2,
+                        "{\"resolveNormalPay\":true,\"connectionRef\":\"12\",\"routeQuery\":{"
+                        + "\"BANCO_A\":{\"sftp\":{\"sinkRef\":11}},"
+                        + "\"BANCO_B\":{\"sftp\":{\"host\":\"legacy\"}}}}")));
+    }
 }
