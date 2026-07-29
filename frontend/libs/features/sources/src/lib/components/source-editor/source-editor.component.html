@@ -41,6 +41,17 @@
             </mat-select>
             <mat-hint>{{ i18n.t('sources.directionHint') }}</mat-hint>
           </mat-form-field>
+
+          @if (form().direction !== 'INPUT') {
+            <mat-checkbox
+              [ngModel]="form().moneyCritical"
+              [ngModelOptions]="{ standalone: true }"
+              (ngModelChange)="patchForm.emit({ moneyCritical: $event })"
+              [disabled]="readonly()">
+              {{ i18n.t('sources.moneyCritical') }}
+            </mat-checkbox>
+            <p class="source-direction-hint">{{ i18n.t('sources.moneyCriticalHint') }}</p>
+          }
         </ih-managed-editor-section>
 
         <ih-managed-editor-section [eyebrowKey]="'ui.provider'" [title]="providerLabel()">

@@ -14,7 +14,8 @@ public class SourceApiMapper {
                 definition.sourceType,
                 definition.active,
                 definition.configurationJson,
-                definition.direction
+                definition.direction,
+                definition.moneyCritical
         );
     }
 }

@@ -29,17 +29,17 @@ public class SourceCatalogService {
     }
 
     @Transactional
-    public SourceDefinition create(String name, String sourceType, boolean active, String configurationJson, String direction) {
+    public SourceDefinition create(String name, String sourceType, boolean active, String configurationJson, String direction, boolean moneyCritical) {
         var definition = new SourceDefinition();
-        apply(definition, name, sourceType, active, configurationJson, direction);
+        apply(definition, name, sourceType, active, configurationJson, direction, moneyCritical);
         sourceDefinitionRepository.persist(definition);
         return definition;
     }
 
     @Transactional
-    public SourceDefinition update(Long sourceDefinitionId, String name, String sourceType, boolean active, String configurationJson, String direction) {
+    public SourceDefinition update(Long sourceDefinitionId, String name, String sourceType, boolean active, String configurationJson, String direction, boolean moneyCritical) {
         var definition = sourceDefinitionRepository.findRequired(sourceDefinitionId);
-        apply(definition, name, sourceType, active, configurationJson, direction);
+        apply(definition, name, sourceType, active, configurationJson, direction, moneyCritical);
         return definition;
     }
 
@@ -96,12 +96,16 @@ public class SourceCatalogService {
         return "GENERIC";
     }
 
-    private void apply(SourceDefinition definition, String name, String sourceType, boolean active, String configurationJson, String direction) {
+    private void apply(SourceDefinition definition, String name, String sourceType, boolean active, String configurationJson, String direction, boolean moneyCritical) {
         definition.name = requireName(name);
         definition.sourceType = requireType(sourceType, "Source type is required");
         definition.active = active;
         definition.configurationJson = configurationJson;
         definition.direction = normalizeDirection(direction);
+        // ADR-021 (E): marcar como banco una fuente de LECTURA no significa nada —nadie entrega ahi— y
+        // dejaria una marca que sugiere una proteccion inexistente. Se normaliza a false en vez de
+        // rechazar: es una combinacion sin sentido, no un intento de hacer algo peligroso.
+        definition.moneyCritical = moneyCritical && !"INPUT".equals(definition.direction);
     }
 
     /** ADR-016: INPUT (default) / OUTPUT / BOTH. null/blank/desconocido -> INPUT (compat + fail-safe). */

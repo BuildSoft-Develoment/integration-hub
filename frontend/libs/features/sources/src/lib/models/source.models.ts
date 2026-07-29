@@ -10,6 +10,8 @@ export interface SourceRecord {
   configurationJson: string;
   // ADR-016: INPUT (lectura) / OUTPUT (sink de FILE_DELIVER) / BOTH.
   direction?: SourceDirection;
+  /** ADR-021 (E): entregar aqui MUEVE DINERO. Solo tiene sentido con direction de salida. */
+  moneyCritical?: boolean;
 }
 
 export interface SourceFormModel {
@@ -19,6 +21,7 @@ export interface SourceFormModel {
   active: boolean;
   configurationJson: string;
   direction: SourceDirection;
+  moneyCritical: boolean;
 }
 
 export interface SourceTestResult {
@@ -36,6 +39,7 @@ export function toSourceFormModel(source: SourceRecord): SourceFormModel {
     active: source.active,
     configurationJson: source.configurationJson,
     direction: source.direction ?? 'INPUT',
+    moneyCritical: source.moneyCritical ?? false,
   };
 }
 
@@ -47,6 +51,8 @@ export function createSourceForm(sourceType: SourceProviderType): SourceFormMode
     active: true,
     configurationJson: '{}',
     direction: 'INPUT',
+    // Default seguro: una fuente nace sin marcar. Declarar que es un banco es una decision explicita.
+    moneyCritical: false,
   };
 }
 

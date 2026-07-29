@@ -229,6 +229,9 @@ export const es = {
   'sources.directionOutput': 'Salida (sink)',
   'sources.directionBoth': 'Ambas',
   'sources.directionHint': 'OUTPUT/BOTH habilita esta fuente como destino de FILE_DELIVER.',
+  'sources.moneyCritical': 'Entregar aqui mueve dinero (es un banco)',
+  'sources.moneyCriticalHint':
+    'El motor NO re-encola a ciegas una entrega interrumpida hacia aqui: la deja para conciliar. Marcalo en la conexion del banco, aunque la tarea que entrega sea generica.',
   'sources.directionSectionTitle': 'Direccion de la fuente',
   'sources.allDirections': 'Todas las direcciones',
   'sources.directionBadgeOutput': 'Salida',

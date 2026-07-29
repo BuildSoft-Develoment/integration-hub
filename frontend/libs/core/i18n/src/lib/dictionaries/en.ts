@@ -229,6 +229,9 @@ export const en = {
   'sources.directionOutput': 'Output (sink)',
   'sources.directionBoth': 'Both',
   'sources.directionHint': 'OUTPUT/BOTH makes this source available as a FILE_DELIVER target.',
+  'sources.moneyCritical': 'Delivering here moves money (this is a bank)',
+  'sources.moneyCriticalHint':
+    'The engine will NOT blindly re-queue an interrupted delivery to this target — it leaves it for reconciliation. Mark it on the bank connection, even when the delivering task is a generic one.',
   'sources.directionSectionTitle': 'Source direction',
   'sources.allDirections': 'All directions',
   'sources.directionBadgeOutput': 'Output',

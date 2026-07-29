@@ -48,7 +48,7 @@ public class SourceDefinitionResource {
     @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public SourceDefinitionResponse create(SourceDefinitionRequest request) {
         return sourceApiMapper.toResponse(
-                sourceCatalogService.create(request.name(), request.sourceType(), request.active(), request.configurationJson(), request.direction())
+                sourceCatalogService.create(request.name(), request.sourceType(), request.active(), request.configurationJson(), request.direction(), request.moneyCritical())
         );
     }
 
@@ -64,7 +64,7 @@ public class SourceDefinitionResource {
     @RolesAllowed({PLATFORM_ADMIN, INTEGRATION_ADMIN})
     public SourceDefinitionResponse update(@PathParam("sourceDefinitionId") Long sourceDefinitionId, SourceDefinitionRequest request) {
         return sourceApiMapper.toResponse(
-                sourceCatalogService.update(sourceDefinitionId, request.name(), request.sourceType(), request.active(), request.configurationJson(), request.direction())
+                sourceCatalogService.update(sourceDefinitionId, request.name(), request.sourceType(), request.active(), request.configurationJson(), request.direction(), request.moneyCritical())
         );
     }
 
