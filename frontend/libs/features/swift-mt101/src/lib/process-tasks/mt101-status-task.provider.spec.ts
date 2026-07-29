@@ -183,4 +183,53 @@ describe('Mt101StatusTaskProvider', () => {
     expect(ruta.timeoutSeconds, 'clave no expuesta por el form: sobrevive').toBe(45);
     expect(ruta.sftp, 'la conexion sigue saliendo de la fuente').toEqual({ sinkRef: 11 });
   });
+
+  it('emite la forma EXACTA que parsea el backend (contrato front <-> Mt101StatusQueryExecutor)', () => {
+    // Este es el hueco que ni los tests del front ni los del backend cubren solos: cada lado prueba su
+    // mitad y la forma del JSON queda sin duenno. La misma estructura que se afirma aca es la que usa el
+    // E2E contra SFTP real (Mt101StatusTaskProviderTest#correctivePathResolvesTheBankAck...): si alguien
+    // renombra una clave en la serializacion, esto rompe antes de que el banco no responda en produccion.
+    const p = new Mt101StatusTaskProvider();
+    const draft = {
+      ...p.createDraft(),
+      taskRef: 'st',
+      routeQuery: [{
+        route: 'SFTP_BANK',
+        transport: 'SFTP' as const,
+        url: '',
+        sinkRef: '11',
+        responseFileTemplate: '/upload/x.ack',
+        acceptedTokens: 'ACCP, ACK',
+        rejectedTokens: 'RJCT',
+        rest: { statusField: '$.s', timeoutSeconds: 30 },
+      }],
+    };
+
+    const out = JSON.parse(p.toTaskPatch(draft).configurationJson as string);
+
+    expect(out.routeQuery.SFTP_BANK).toEqual({
+      transport: 'SFTP',
+      responseFileTemplate: '/upload/x.ack',
+      acceptedTokens: ['ACCP', 'ACK'],
+      rejectedTokens: ['RJCT'],
+      sftp: { sinkRef: 11 },
+      statusField: '$.s',
+      timeoutSeconds: 30,
+    });
+  });
+
+  it('una ruta sin nombre no se emite: routeQuery ausente != vacio', () => {
+    //  NO es lo mismo que no tenerlo: un objeto vacio deja el modo route-aware apagado
+    // pero deja la clave escrita, y una fila a medio llenar en la UI no debe cambiar el modo de consulta.
+    const p = new Mt101StatusTaskProvider();
+    const draft = {
+      ...p.createDraft(),
+      taskRef: 'st',
+      routeQuery: [{ route: '  ', transport: 'REST' as const, url: 'https://x',
+        sinkRef: '', responseFileTemplate: '', acceptedTokens: '', rejectedTokens: '', rest: {} }],
+    };
+
+    const out = JSON.parse(p.toTaskPatch(draft).configurationJson as string);
+    expect(out.routeQuery).toBeUndefined();
+  });
 });
