@@ -69,12 +69,28 @@ public final class Mt101PayResolverPairing {
             }
             return earlier.get(0);
         }
-        return earlier.stream()
+        var matches = earlier.stream()
                 .filter(p -> resolvesRef.equals(normalize(stringConfig(p.configurationJson(), "taskRef"))))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException(
-                        "MT101_STATUS (task order " + status.taskOrder() + ") declares resolvesPayTaskRef='"
-                        + resolvesRef + "' but no earlier MT101_PAY with that taskRef exists in the process."));
+                .toList();
+        if (matches.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "MT101_STATUS (task order " + status.taskOrder() + ") declares resolvesPayTaskRef='"
+                    + resolvesRef + "' but no earlier MT101_PAY with that taskRef exists in the process.");
+        }
+        if (matches.size() > 1) {
+            // No se coge el primero. Esta ruta es de VALIDACION AL GUARDAR (unico llamante:
+            // Mt101PayStatusConnectionCoverageValidator), no de ejecucion: coger uno haria que la
+            // cobertura de conexiones se validara contra el PAY equivocado y diera un verde falso.
+            // TaskRefUniquenessValidator ya rechaza los duplicados, pero el orden de iteracion de
+            // Instance<ProcessDefinitionValidator> no esta garantizado y nada asegura que siga
+            // registrado: esto es defensa en profundidad, no la barrera principal.
+            throw new IllegalArgumentException(
+                    "MT101_STATUS (task order " + status.taskOrder() + ") declares resolvesPayTaskRef='"
+                    + resolvesRef + "' but " + matches.size() + " earlier MT101_PAY tasks share that taskRef"
+                    + " (task orders " + matches.stream().map(p -> String.valueOf(p.taskOrder())).toList()
+                    + "); taskRef must identify exactly one task within its process.");
+        }
+        return matches.get(0);
     }
 
     /**
