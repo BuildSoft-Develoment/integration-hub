@@ -51,7 +51,7 @@ const managerStub = {
     mode: 'insert',
     targetSchema: '',
     targetTable: '',
-    jdbcBatchSize: '1000',
+    jdbcBatchSize: '500',
     mappings: [],
     ...JSON.parse(t.configurationJson || '{}'),
   }),

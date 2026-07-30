@@ -39,8 +39,11 @@ export const DB_WRITE_DEFAULT_PLATFORM_TABLE = 'staging_record';
  * tarea se comportaba distinto segun por donde entrara: creada por API sin la clave usaba 500, creada
  * o editada por el formulario usaba 1000. Se alinea al backend, que es la fuente de verdad.
  *
- * Ojo al cambiarlo: las tareas ya guardadas llevan el valor explicito dentro de su configurationJson,
- * asi que no se ven afectadas; esto solo gobierna las nuevas y las que nunca declararon la clave.
+ * Ojo al cambiarlo: NO es un no-op. Medido en el entorno de integracion, 0 de 18 tareas DB_WRITE guardadas
+ * declaran la clave, o sea que la poblacion real cae entera en el caso "nunca la declararon" y el backend ya
+ * las venia ejecutando a 500. El riesgo que esto elimina es el INVERSO al que parece: abrir una de esas
+ * tareas en el formulario y guardarla le inyectaba jdbcBatchSize=1000 y le duplicaba en silencio el lote
+ * efectivo. Una tarea que SI trae el valor explicito conserva el suyo y no se ve afectada.
  *
  * No confundir con `batchSize` (lote FUNCIONAL de registros que trocea el motor, default 1000 en
  * ProcessTaskRuntimeService) ni con `input.batchSize`, que tiene prioridad sobre aquel. Son tres
