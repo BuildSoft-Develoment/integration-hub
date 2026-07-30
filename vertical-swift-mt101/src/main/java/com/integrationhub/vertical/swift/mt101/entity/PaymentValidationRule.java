@@ -7,8 +7,17 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
+/**
+ * ADR-023: el schema se declara aqui explicitamente y no se deja al {@code search_path}.
+ *
+ * <p>El {@code search_path} de la conexion incluye ambos schemas, lo que basta para el SQL crudo —las
+ * ~231 sentencias del vertical siguen resolviendo sus tablas sin cualificar— pero <b>no</b> para
+ * Hibernate: su validacion de esquema inspecciona unicamente el schema por defecto, que es el primero
+ * del {@code search_path} ({@code public}). Sin este {@code schema}, la aplicacion no arranca con
+ * {@code Schema validation: missing table [payment_validation_rule]}.
+ */
 @Entity
-@Table(name = "payment_validation_rule")
+@Table(name = "payment_validation_rule", schema = "vertical_mt101")
 public class PaymentValidationRule {
 
     @Id

@@ -293,6 +293,16 @@
             <version>${testcontainers.version}</version>
             <scope>test</scope>
         </dependency>
+        <!--
+            ADR-023: SchemaSeparationCompatibilityTest invoca la API de Flyway directamente para aplicar
+            las migraciones sobre un contenedor y comprobar el reparto por schemas. La extension de
+            Quarkus aporta este plugin en runtime, pero no queda en el classpath de test.
+        -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>mysql</artifactId>

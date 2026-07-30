@@ -3,13 +3,13 @@
 -- por ambiente desde guias H2H licenciadas.
 --
 -- Requisitos:
--- - La migracion V12 debe haber creado public.payment_validation_rule.
+-- - La migracion V12 debe haber creado payment_validation_rule.
 -- - La migracion V14 debe haber ampliado payment_validation_rule.code a 80.
 --
 -- Uso local:
 -- psql -h localhost -p 5432 -U postgres -d integration_hub -f qa/fase-6-qa/perfiles-simulados/payment-validation-rule-seed.sql
 
-insert into public.payment_validation_rule
+insert into payment_validation_rule
     (rule_set, code, standard, applies_to, severity, predicate_kind, predicate_body, active)
 values
     ('bank:SIM-ESTRICTO', 'SIM.DATE_REQUIRED', 'SWIFT', 'MT101', 'E', 'FIELD_REQUIRED', '{"path": "sequenceA.requestedExecutionDate"}', true),
@@ -33,7 +33,7 @@ on conflict (rule_set, code, applies_to) do update set
     active = excluded.active;
 
 select rule_set, count(*) as rules
-from public.payment_validation_rule
+from payment_validation_rule
 where rule_set in ('bank:SIM-ESTRICTO', 'bank:SIM-FLEXIBLE')
 group by rule_set
 order by rule_set;
