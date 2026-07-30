@@ -95,6 +95,10 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
         // re-solicitable (transportFailure), distinto de un rechazo de negocio (duplicado/hash, politica FAIL).
         // Solo aplica si NUNCA hubo un intento incierto.
         boolean lastRetriable = false;
+        // El bucle reconstruye el resultado al final, asi que la causa TIPADA del ultimo intento hay que
+        // arrastrarla explicitamente: si se pierde, el provider no puede distinguir "el banco rechazo" de
+        // "no se despacho nada porque el destino estaba ocupado" y deja de marcar el conflicto.
+        var lastReasonCode = TransportResult.ReasonCode.NONE;
         for (int attempt = 1; attempt <= retry.maxRetries() + 1; attempt++) {
             var result = attemptUpload(message, configuration);
             if (result.accepted()) {
@@ -102,6 +106,7 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
                         System.currentTimeMillis() - startedAt);
             }
             lastError = result.lastError();
+            lastReasonCode = result.reasonCode();
             if (result.uncertain()) {
                 anyUncertain = true;
                 uncertainError = result.lastError();
@@ -122,7 +127,7 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
                 ? TransportResult.transportFailure(retry.maxRetries() + 1,
                         System.currentTimeMillis() - startedAt, lastError)
                 : TransportResult.rejected(retry.maxRetries() + 1,
-                        System.currentTimeMillis() - startedAt, lastError);
+                        System.currentTimeMillis() - startedAt, lastError, lastReasonCode);
     }
 
     // Package-private (no private) para que los tests puedan scriptear la secuencia de resultados por-intento y
@@ -146,6 +151,19 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
         var duplicatePolicy = stringValue(sftpCfg.get("remoteDuplicatePolicy"), DEFAULT_DUPLICATE_POLICY)
                 .toUpperCase(java.util.Locale.ROOT);
         var dropPath = resolveTemplate(dropPathTemplate, message);
+        // Money-safety: jsch interpreta el path remoto como GLOB. Un '?' es caracter LEGAL del set X de SWIFT y
+        // el :20: solo se valida por longitud, asi que el comodin puede llegar por DATO, no solo por una
+        // plantilla mal escrita. Con exactamente una coincidencia, el put y el rename se redirigen a un fichero
+        // AJENO ya existente: se pisaria el pago de otro. Se corta ANTES de tocar la red, de forma determinista y
+        // en el primer intento, asi que no puede degradar la agregacion STICKY del incierto.
+        for (var metaChar : new char[] {'*', '?', '\\'}) {
+            if (dropPath.indexOf(metaChar) >= 0) {
+                throw new PreDispatchTransportException("MT101_PAY transport=SFTP resolved dropPath contains the "
+                        + "glob metacharacter '" + metaChar + "': \"" + dropPath + "\". SFTP would resolve it as a "
+                        + "pattern and could deliver this payment over ANOTHER file. Nothing was sent — fix the "
+                        + "sendersReference or sftp.dropPathTemplate.");
+            }
+        }
         var tmpPath = dropPath + tmpExtension;
 
         var startedAt = System.currentTimeMillis();
@@ -192,11 +210,21 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
                 var durationMs = System.currentTimeMillis() - startedAt;
                 switch (duplicatePolicy) {
                     case "SKIP_IF_SAME_HASH" -> {
+                        // Las dos ramas de "hay bytes AJENOS bajo nuestro destino" se quedan en rejected, con
+                        // causa TIPADA. No pasan a uncertain: el auto-cierre de un UNCERTAIN correlaciona solo
+                        // por :20:, asi que el banco acusaria el OTRO fichero y el pago quedaria SENT sin haber
+                        // salido. Y tampoco a transportFailure, que revierte a ARCHIVED y lo reintenta solo.
+                        // rejected es hoy el unico estado a la vez terminal para el cierre, invisible para el
+                        // auto-cierre, y con ruta de reproceso auditada.
                         if (existing.getSize() != bytes.length) {
+                            // El UETR es un UUID de longitud fija, o sea que cambiarlo NO cambia el tamano: un
+                            // tamano distinto DEMUESTRA contenido materialmente distinto. Nuestros bytes nunca
+                            // se escribieron.
                             return TransportResult.rejected(1, durationMs,
                                     "SFTP remote file " + dropPath + " exists with different size ("
                                             + existing.getSize() + " vs " + bytes.length
-                                            + "); manual review required");
+                                            + "); nothing was dispatched, the destination holds a foreign payload",
+                                    TransportResult.ReasonCode.REMOTE_PRE_EXISTING);
                         }
                         try (var remoteInput = channel.get(dropPath)) {
                             if (sha256Hex(remoteInput).equals(sha256Hex(bytes))) {
@@ -206,8 +234,9 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
                             }
                         }
                         return TransportResult.rejected(1, durationMs,
-                                "SFTP remote file " + dropPath
-                                        + " exists with different hash; manual review required");
+                                "SFTP remote file " + dropPath + " exists with different content; nothing was "
+                                        + "dispatched, the destination holds a foreign payload",
+                                TransportResult.ReasonCode.REMOTE_PRE_EXISTING);
                     }
                     case "FAIL" -> {
                         return TransportResult.rejected(1, durationMs,
@@ -268,12 +297,35 @@ public class SftpPaymentTransport implements PaymentMessageTransport {
         }
     }
 
-    /** {@code stat} del archivo remoto; {@code null} si no existe. */
-    private com.jcraft.jsch.SftpATTRS statRemote(ChannelSftp channel, String path) {
+    /**
+     * {@code stat} del archivo remoto; {@code null} SOLO si el servidor AFIRMA que no existe
+     * ({@code SSH_FX_NO_SUCH_FILE}).
+     *
+     * <p>Este stat es la UNICA defensa antiduplicado del transporte: de su resultado depende entero el switch de
+     * {@code remoteDuplicatePolicy}. Tragarse cualquier {@code SftpException} como "no existe" convertia un
+     * permiso denegado, un fallo del servidor o una conexion caida en "no hay duplicado, adelante" —fail-open
+     * sobre dinero—. Y si el fichero final SI existia, el {@code rename} de jsch usa
+     * {@code posix-rename@openssh.com} contra servidores OpenSSH, que SOBRESCRIBE en silencio: re-entrega de un
+     * pago que el banco pudo haber consumido ya. Regla: si no se puede COMPROBAR que no hay duplicado, el pago
+     * no se entrega.</p>
+     *
+     * <p>La excepcion se propaga como {@link SftpException} a proposito, NO como
+     * {@code PreDispatchTransportException}: esta ultima escaparia de {@code send()} saltandose el bucle de
+     * reintentos y, sobre todo, la agregacion STICKY del incierto, con lo que un intento previo INCIERTO se
+     * degradaria a re-solicitable y abriria la puerta al doble pago. El catch de {@code attemptUpload} la
+     * clasifica segun la fase: aqui, todavia pre-despacho, {@code transportFailure} -> INVALIDATED.</p>
+     *
+     * <p>Mismo idioma que {@code Mt101StatusSftpGateway.remoteFileExists}: el camino de solo lectura ya era
+     * fail-loud y el del dinero no lo era.</p>
+     */
+    private com.jcraft.jsch.SftpATTRS statRemote(ChannelSftp channel, String path) throws SftpException {
         try {
             return channel.stat(path);
-        } catch (SftpException notFound) {
-            return null;
+        } catch (SftpException error) {
+            if (error.id == ChannelSftp.SSH_FX_NO_SUCH_FILE) {
+                return null;
+            }
+            throw error;
         }
     }
 

@@ -110,8 +110,11 @@ class SftpPaymentTransportTest {
         var result = transport.send(message, configuration);
 
         assertFalse(result.accepted(), "mismo tamano con hash distinto debe rechazarse");
-        assertTrue(result.lastError().contains("different hash"),
-                () -> "mensaje inesperado: " + result.lastError());
+        assertFalse(result.uncertain(), "no puede quedar incierto: el auto-cierre lo movería a SENT por :20:");
+        // Se asserta la causa TIPADA, no el texto: clasificar dinero por sniffing del mensaje es fragil, y es
+        // justo lo que el reasonCode viene a sustituir.
+        assertEquals(TransportResult.ReasonCode.REMOTE_PRE_EXISTING, result.reasonCode(),
+                "el destino tenia un payload ajeno: no se despacho nada, el banco no vio el mensaje");
         assertEquals(remoteContent, readFile("/upload/hash-PROC-HASH.json"),
                 "el archivo remoto no debe sobrescribirse bajo SKIP_IF_SAME_HASH");
     }
@@ -245,6 +248,41 @@ class SftpPaymentTransportTest {
                 () -> transport.send(sampleMessage("X"),
                         Map.of("sftp", Map.of("host", "h", "username", "u"))));
         assertTrue(error.getMessage().contains("sftp.dropPathTemplate"));
+    }
+
+    @Test
+    void aGlobMetacharacterInTheResolvedDropPathNeverReachesTheBank() throws Exception {
+        // jsch interpreta el path remoto como GLOB, y '?' es caracter LEGAL del set X de SWIFT: el :20: solo se
+        // valida por longitud, asi que el comodin puede llegar por DATO. Con una sola coincidencia, el put y el
+        // rename se redirigen a un fichero AJENO ya existente y se pisaria el pago de otro.
+        writeFile("/upload/glob-VICTIMA.json", "PAGO AJENO QUE NO SE DEBE PISAR");
+        var configuration = configurationFor("/upload/glob-${sendersReference}.json");
+        configuration.put("retryPolicy", Map.of("maxRetries", 0));
+
+        var error = assertThrows(IllegalArgumentException.class,
+                () -> transport.send(sampleMessage("VICTIM?"), configuration));
+
+        assertTrue(error.getMessage().contains("Nothing was sent"), error.getMessage());
+        assertEquals("PAGO AJENO QUE NO SE DEBE PISAR", readFile("/upload/glob-VICTIMA.json"),
+                "el fichero ajeno debe quedar intacto");
+    }
+
+    @Test
+    void aStatThatCannotProveAbsenceDoesNotDeliverThePayment() throws Exception {
+        // statRemote se tragaba CUALQUIER SftpException como "no existe", asi que un permiso denegado se leia
+        // como "no hay duplicado, adelante". Peor: si el fichero final si existia, el rename de jsch usa
+        // posix-rename@openssh.com contra OpenSSH, que SOBRESCRIBE en silencio -> re-entrega de un pago que el
+        // banco pudo haber consumido. Ahora, si no se puede COMPROBAR que no hay duplicado, no se entrega.
+        SFTP.execInContainer("sh", "-c",
+                "mkdir -p /home/" + SFTP_USER + "/upload/sinpermiso && chmod 000 /home/" + SFTP_USER + "/upload/sinpermiso");
+        var configuration = configurationFor("/upload/sinpermiso/${sendersReference}.json");
+        configuration.put("retryPolicy", Map.of("maxRetries", 0));
+
+        var result = transport.send(sampleMessage("PROC-DENIED"), configuration);
+
+        assertFalse(result.accepted(), "un stat que no puede afirmar ausencia no autoriza la entrega");
+        assertTrue(result.retriable(), "es fallo PRE-despacho: re-solicitable (INVALIDATED), nada salio al banco");
+        assertFalse(result.uncertain(), "no se despacho nada, asi que no hay incertidumbre que conciliar");
     }
 
     @Test

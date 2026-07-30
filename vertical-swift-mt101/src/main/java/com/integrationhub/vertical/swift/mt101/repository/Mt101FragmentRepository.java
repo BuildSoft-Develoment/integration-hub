@@ -201,6 +201,11 @@ public class Mt101FragmentRepository {
                 + "and a.process_execution_id = f.process_execution_id) as archive_id "
                 + "from mt101_build_fragment f "
                 + "where f.fragment_set_id = ? and f.status in (" + placeholders(effectiveStatuses.size()) + ") "
+                // Simetria con unconflictedPayStatusRecords: un fragmento en conflicto NO es auto-resoluble. El
+                // cierre automatico de un UNCERTAIN correlaciona solo por :20:, asi que sin este filtro marcar
+                // pay_conflict sobre un UNCERTAIN/DISPATCHING no lo frenaba: la siguiente pasada lo movia a SENT
+                // igual. Es la precondicion de que "marcar conflicto" signifique algo aqui.
+                + "and coalesce(f.pay_conflict, false) = false "
                 + "and f.fragment_index > ? order by f.fragment_index asc limit ?";
         var page = new ArrayList<Map<String, Object>>(Math.max(pageSize, 1));
         try (var connection = dataSource.getConnection();

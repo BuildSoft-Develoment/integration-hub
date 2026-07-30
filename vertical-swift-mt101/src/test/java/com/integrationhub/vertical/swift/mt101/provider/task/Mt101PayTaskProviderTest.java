@@ -259,7 +259,8 @@ class Mt101PayTaskProviderTest {
     void treatsNotAcceptedWithoutErrorAsRejected() {
         var transport = new StubTransport("REST", List.of(
                 // accepted=false, uncertain=false, retriable=false -> rechazo de negocio
-                new TransportResult(false, false, false, null, 1, 25L, null)
+                new TransportResult(false, false, false, null, 1, 25L, null,
+                        TransportResult.ReasonCode.NONE)
         ));
         var provider = new Mt101PayTaskProvider(new InstanceOfOne<>(transport));
         var context = contextWith(List.of(sampleMessage("PROC-NACK")));

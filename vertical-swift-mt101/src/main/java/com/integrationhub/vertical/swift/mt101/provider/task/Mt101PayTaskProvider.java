@@ -338,6 +338,10 @@ public class Mt101PayTaskProvider implements TaskProvider {
         var rejectedTargets = new ArrayList<Mt101ArchiveStatusUpdater.StatusTarget>();
         // Mapa de errores acotado a la pagina (no a la ejecucion completa).
         var rejectedByRef = new LinkedHashMap<String, String>();
+        // Subconjunto de los rechazados en que NO se despacho nada: el destino remoto ya contenia un payload
+        // ajeno. Van a REJECTED como el resto -es el unico estado terminal, no auto-cerrable y reprocesable-
+        // pero ademas se marcan pay_conflict, porque el banco jamas miro el mensaje.
+        var preExistingRemoteByRef = new LinkedHashMap<String, String>();
         var pageAudit = new ArrayList<AuditEnvelope>(page.size());
         // P0.1 v21: resultado durable POR FRAGMENTO de toda la pagina (no la muestra
         // acotada): el ledger es la fuente de verdad para 20k fragmentos correctivos.
@@ -469,6 +473,13 @@ public class Mt101PayTaskProvider implements TaskProvider {
             } else {
                 rejectedByRef.put(reference, result.lastError());
                 rejectedTargets.add(archiveTarget(message));
+                if (result.reasonCode() == TransportResult.ReasonCode.REMOTE_PRE_EXISTING) {
+                    // El estado dice REJECTED -que es lo correcto: terminal, invisible para el auto-cierre y
+                    // reprocesable- pero el hecho real es "no se entrego nada; el destino ya estaba ocupado por
+                    // un payload ajeno". El banco nunca miro este mensaje. Se marca conflicto para que salga por
+                    // el inbox transversal con su acknowledge gobernado, en vez de pasar por un rechazo bancario.
+                    preExistingRemoteByRef.put(reference, result.lastError());
+                }
             }
             pageAudit.add(recordEnvelope(context, reference, result));
             var payStatus = payStatusOf(result);
@@ -487,6 +498,7 @@ public class Mt101PayTaskProvider implements TaskProvider {
             sentRefs.removeAll(conflicts);
             sentTargets.removeIf(target -> conflicts.contains(target.sendersReference()));
             rejectedByRef.keySet().removeAll(conflicts);
+            preExistingRemoteByRef.keySet().removeAll(conflicts);
             rejectedTargets.removeIf(target -> conflicts.contains(target.sendersReference()));
         }
         if (rebuildRunId == null) {
@@ -504,6 +516,33 @@ public class Mt101PayTaskProvider implements TaskProvider {
             syncArchive(configuration, fragmentSource, sentTargets, "SENT");
             syncArchive(configuration, fragmentSource, rejectedTargets, "REJECTED");
         }
+        markPreExistingRemoteConflicts(context, fragmentSource, preExistingRemoteByRef);
+    }
+
+    /**
+     * Superpone {@code pay_conflict} sobre los fragmentos que quedaron REJECTED porque el destino remoto ya
+     * contenia un payload ajeno. Va DESPUES de la transicion terminal a proposito: la bandera se superpone a un
+     * estado ya escrito, no lo sustituye.
+     *
+     * <p>El estado REJECTED es el correcto —terminal para el cierre de la ejecucion, invisible para el
+     * auto-cierre de UNCERTAIN, y con ruta de reproceso auditada— pero su ETIQUETA miente: dice que el banco
+     * rechazo, y el banco nunca vio el mensaje. La bandera y la trama {@code PAY_CONFLICT} cuentan el hecho
+     * real, y sacan el caso por el inbox transversal de conflictos con su acknowledge gobernado.</p>
+     */
+    private void markPreExistingRemoteConflicts(TaskContext context, Map<String, Object> fragmentSource,
+                                                Map<String, String> preExistingRemoteByRef) {
+        if (preExistingRemoteByRef.isEmpty()) {
+            return;
+        }
+        var refs = new ArrayList<>(preExistingRemoteByRef.keySet());
+        fragmentStore.markPayConflict(fragmentSource, refs,
+                "el destino remoto ya contenia un payload AJENO: no se despacho nada y el banco nunca vio este "
+                        + "mensaje. Queda REJECTED (terminal, no auto-resoluble) — conciliar antes de re-pagar");
+        var audit = new ArrayList<AuditEnvelope>(refs.size());
+        for (var ref : refs) {
+            audit.add(payConflictEnvelope(context, ref, "REJECTED", "REMOTE_PRE_EXISTING"));
+        }
+        emitRecordAudit(audit);
     }
 
     /**
