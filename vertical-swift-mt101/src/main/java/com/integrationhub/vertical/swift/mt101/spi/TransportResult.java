@@ -26,21 +26,58 @@ public record TransportResult(
         String gatewayReference,
         int attempts,
         long durationMs,
-        String lastError
+        String lastError,
+        ReasonCode reasonCode
 ) {
 
     public static TransportResult accepted(String gatewayReference, int attempts, long durationMs) {
-        return new TransportResult(true, false, false, gatewayReference, attempts, durationMs, null);
+        return new TransportResult(true, false, false, gatewayReference, attempts, durationMs, null,
+                ReasonCode.NONE);
+    }
+
+    /**
+     * Causa TIPADA del resultado. Existe para que el provider discrimine por TIPO y no por el texto de
+     * {@code lastError}: clasificar dinero por sniffing de mensajes es fragil y el propio SftpPaymentTransport
+     * lo prohibe explicitamente.
+     */
+    public enum ReasonCode {
+        /** Sin causa distinguible; comportamiento historico. */
+        NONE,
+        /**
+         * NO se despacho NADA en esta corrida: el destino remoto YA contenia bytes que no son los nuestros.
+         * El banco nunca miro este mensaje. Se clasifica {@code rejected} -terminal, invisible para el
+         * auto-cierre de UNCERTAIN, y con ruta de reproceso auditada- y ademas se marca {@code pay_conflict},
+         * porque la etiqueta del estado dice "rechazado" pero el hecho real es "no entregado, destino ocupado".
+         */
+        REMOTE_PRE_EXISTING
     }
 
     /** Rechazo de NEGOCIO del banco: terminal, no re-solicitable a ciegas. */
     public static TransportResult rejected(int attempts, long durationMs, String lastError) {
-        return new TransportResult(false, false, false, null, attempts, durationMs, lastError);
+        return rejected(attempts, durationMs, lastError, ReasonCode.NONE);
+    }
+
+    public static TransportResult rejected(int attempts, long durationMs, String lastError, ReasonCode reasonCode) {
+        return new TransportResult(false, false, false, null, attempts, durationMs, lastError, reasonCode);
     }
 
     /** Resultado INCIERTO: pudo llegar al gateway pero no hubo confirmacion clara. */
     public static TransportResult uncertain(int attempts, long durationMs, String reason) {
-        return new TransportResult(false, true, false, null, attempts, durationMs, reason);
+        return new TransportResult(false, true, false, null, attempts, durationMs, reason, ReasonCode.NONE);
+    }
+
+    /**
+     * Incierto que SI trae la referencia del gateway: el banco respondio 2xx y acuso el pago, pero la prueba de
+     * aceptacion declarada no fue concluyente.
+     *
+     * <p>La referencia se conserva a proposito. El cierre automatico de un UNCERTAIN correlaciona UNICAMENTE por
+     * {@code ${sendersReference}} -{@code mt101_build_fragment} no persiste ni gatewayReference ni
+     * idempotencyKey-, asi que tirar el acuse que el banco acaba de darnos deja el caso resoluble solo por
+     * referencia. Persistirlo es lo unico que abre la puerta a cerrarlo algun dia por IDENTIDAD.</p>
+     */
+    public static TransportResult uncertain(String gatewayReference, int attempts, long durationMs, String reason) {
+        return new TransportResult(false, true, false, gatewayReference, attempts, durationMs, reason,
+                ReasonCode.NONE);
     }
 
     /**
@@ -48,7 +85,7 @@ public record TransportResult(
      * Se distingue de {@link #rejected} para no cerrar un correctivo en FAILED terminal por un problema técnico.
      */
     public static TransportResult transportFailure(int attempts, long durationMs, String reason) {
-        return new TransportResult(false, false, true, null, attempts, durationMs, reason);
+        return new TransportResult(false, false, true, null, attempts, durationMs, reason, ReasonCode.NONE);
     }
 
     /** true sólo si es un rechazo de NEGOCIO del banco (ninguna otra clasificación aplica). */

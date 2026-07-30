@@ -157,7 +157,16 @@ public class RestPaymentTransport implements PaymentMessageTransport {
     private AcceptanceProof resolveAcceptanceProof(Map<String, Object> expected) {
         var rawField = expected.get("successField");
         var declaredField = rawField != null && !String.valueOf(rawField).isBlank();
-        var acceptOn2xx = Boolean.parseBoolean(stringValue(expected.get("acceptOn2xx"), "false").trim());
+        // Boolean.parseBoolean convierte cualquier cosa que no sea "true" en false, asi que un acceptOn2xx:"yes"
+        // se leeria como "no declarado" y aterrizaria en la rama mas permisiva. Un typo del operador no puede
+        // decidir dinero en la direccion permisiva: se exige el literal.
+        var rawAcceptOn2xx = expected.get("acceptOn2xx");
+        var acceptOn2xxText = rawAcceptOn2xx == null ? "" : String.valueOf(rawAcceptOn2xx).trim().toLowerCase(Locale.ROOT);
+        if (!acceptOn2xxText.isEmpty() && !"true".equals(acceptOn2xxText) && !"false".equals(acceptOn2xxText)) {
+            throw new PreDispatchTransportException("MT101_PAY expectedGatewayResponse.acceptOn2xx must be true or "
+                    + "false (got: \"" + rawAcceptOn2xx + "\"). Nothing was sent.");
+        }
+        var acceptOn2xx = "true".equals(acceptOn2xxText);
         if (declaredField && acceptOn2xx) {
             throw new PreDispatchTransportException("MT101_PAY expectedGatewayResponse declares BOTH successField "
                     + "and acceptOn2xx=true; declare exactly one. Nothing was sent.");
@@ -172,9 +181,17 @@ public class RestPaymentTransport implements PaymentMessageTransport {
                         + "JSON path starting with \"$.\" naming a field (got: \"" + path + "\"). A malformed path "
                         + "silently disabled the acceptance check and accepted every payment. Nothing was sent.");
             }
-            return new AcceptanceProof(path, false, false,
-                    literalSet(expected.get("successValues"), DEFAULT_SUCCESS_VALUES),
-                    literalSet(expected.get("rejectedValues"), DEFAULT_REJECTED_VALUES));
+            var successValues = literalSet(expected.get("successValues"), DEFAULT_SUCCESS_VALUES);
+            var rejectedValues = literalSet(expected.get("rejectedValues"), DEFAULT_REJECTED_VALUES);
+            // successValues se consulta antes que rejectedValues, asi que un literal declarado en AMBAS listas
+            // se resolveria en silencio hacia ACEPTADO. Es una ambiguedad de configuracion decidiendo dinero en
+            // la direccion permisiva: se rechaza en el canal de configuracion, como el resto de este metodo.
+            if (!java.util.Collections.disjoint(successValues, rejectedValues)) {
+                throw new PreDispatchTransportException("MT101_PAY expectedGatewayResponse declares the same literal "
+                        + "in successValues and rejectedValues; a value cannot mean accepted and rejected at once. "
+                        + "Nothing was sent.");
+            }
+            return new AcceptanceProof(path, false, false, successValues, rejectedValues);
         }
         if (acceptOn2xx) {
             return new AcceptanceProof(null, true, false, Set.of(), Set.of());
@@ -380,8 +397,11 @@ public class RestPaymentTransport implements PaymentMessageTransport {
                         // re-solicitable, porque eso abriria la puerta al doble pago. Se resuelve por STATUS.
                         uncertainError = "gateway returned 2xx but the declared acceptance proof is not conclusive: "
                                 + verdict.detail();
-                        return TransportResult.uncertain(attempt, System.currentTimeMillis() - startedAt,
-                                uncertainError);
+                        // Se conserva la referencia que el banco acaba de darnos: el auto-cierre de un UNCERTAIN
+                        // correlaciona solo por ${sendersReference}, asi que tirar el acuse aqui deja el caso
+                        // resoluble unicamente por referencia. Es la unica evidencia de identidad que tenemos.
+                        return TransportResult.uncertain(gatewayRef, attempt,
+                                System.currentTimeMillis() - startedAt, uncertainError);
                     }
                     lastError = "gateway returned 2xx and the declared proof says rejected (" + verdict.detail()
                             + "): " + extractField(bodyResponse, expected, "errorMessageField", "$.error.message");
